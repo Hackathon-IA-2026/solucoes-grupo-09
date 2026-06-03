@@ -1,10 +1,26 @@
 import { launch, launchPersistentContext } from "cloakbrowser";
-import type { Browser, BrowserContext, Page } from "playwright-core";
+import { config } from "./config.js";
 import type { ScrapeOptions, StealthPreset, StealthProfile } from "./types.js";
+
+// In containers Chromium runs as root with a tiny /dev/shm, so it needs these.
+// Off locally (config.noSandbox=false) to keep the real sandbox + full stealth.
+const CONTAINER_ARGS = config.noSandbox
+  ? ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+  : [];
+
+// cloakbrowser is built on Playwright and returns Playwright-compatible objects
+// but doesn't re-export their types, so we derive them straight from
+// cloakbrowser's own API. This keeps our source referencing only cloakbrowser —
+// playwright-core stays installed solely as cloakbrowser's engine (peer dep).
+type Browser = Awaited<ReturnType<typeof launch>>;
+type BrowserContext = Awaited<ReturnType<Browser["newContext"]>>;
+export type Page = Awaited<ReturnType<BrowserContext["newPage"]>>;
 
 export const STEALTH: Record<StealthPreset, StealthProfile> = {
   max: {
     humanize: true,
+    humanPreset: "careful",
+    geoip: true,
     pageDelayMs: [1400, 3200],
     warmupScroll: true,
     maxRetries: 5,
@@ -12,6 +28,8 @@ export const STEALTH: Record<StealthPreset, StealthProfile> = {
   },
   balanced: {
     humanize: true,
+    humanPreset: "default",
+    geoip: false,
     pageDelayMs: [600, 1400],
     warmupScroll: false,
     maxRetries: 4,
@@ -19,6 +37,7 @@ export const STEALTH: Record<StealthPreset, StealthProfile> = {
   },
   fast: {
     humanize: false,
+    geoip: false,
     pageDelayMs: [150, 400],
     warmupScroll: false,
     maxRetries: 3,
@@ -52,11 +71,18 @@ export async function openSession(
   opts: ScrapeOptions,
   profile: StealthProfile,
 ): Promise<Session> {
+  // Maximum stealth: real human emulation, source-level fingerprint patches,
+  // and (with a proxy) timezone/locale matched to the exit IP.
   const launchOpts = {
     headless: !opts.headed,
     humanize: profile.humanize,
+    stealthArgs: true, // cloakbrowser's default fingerprint flags
+    geoip: profile.geoip || Boolean(opts.geoip),
+    ...(profile.humanize && profile.humanPreset
+      ? { humanPreset: profile.humanPreset }
+      : {}),
+    ...(CONTAINER_ARGS.length ? { args: CONTAINER_ARGS } : {}),
     ...(opts.proxy ? { proxy: opts.proxy } : {}),
-    ...(opts.geoip ? { geoip: true } : {}),
   };
 
   let browser: Browser | null = null;

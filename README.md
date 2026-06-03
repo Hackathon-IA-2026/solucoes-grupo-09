@@ -21,8 +21,14 @@ Runs on [Bun](https://bun.sh) — the CLI, scripts, and tests all use it.
 
 ```bash
 bun install
-# cloakbrowser ships its own patched Chromium; first run downloads it (~140 MB).
+# cloakbrowser ships its own patched Chromium; first run downloads it (~200 MB).
 ```
+
+> **Why is `playwright-core` a dependency?** cloakbrowser is built on Playwright —
+> it returns Playwright `Browser`/`Page` objects and lists `playwright-core` as a
+> required peer. We never call raw Playwright; our code imports only cloakbrowser
+> and derives the types from it. `mmdb-lib`/`socks-proxy-agent` back geoip/SOCKS
+> proxies.
 
 ## CLI
 
@@ -129,6 +135,50 @@ and `Strict-Transport-Security` in production; a 10 MB request-body limit (413);
 CORS; `Server-Timing`; a consistent JSON error envelope; and graceful shutdown on
 `SIGTERM`/`SIGINT`.
 
+## Configuration (`.env`)
+
+Bun auto-loads `.env` (copy `.env.example`). All env reads live in `src/config.ts`.
+
+| Var | Default | Purpose |
+| --- | --- | --- |
+| `PORT` | `3000` | API port |
+| `NODE_ENV` | `development` | `production` enables HSTS + same-origin CORS |
+| `NOVIQ_PROXY` | — | upstream proxy applied to scrapes (not client-settable) |
+| `NOVIQ_GEOIP` | `false` | match browser geo/locale to the proxy exit IP |
+| `NOVIQ_STEALTH` | `max` | default stealth preset |
+| `NOVIQ_NO_SANDBOX` | `false` | Chromium `--no-sandbox` (set automatically in Docker) |
+
+## Docker
+
+The runtime needs a real Chromium, so the image is built **`FROM cloakhq/cloakbrowser`**
+— CloakHQ's official image (Debian 13 + the patched stealth Chromium + all OS
+libraries, fonts and Python, preinstalled and verified) — with Bun added on top.
+
+> A slim/compiled runtime (e.g. `debian:bookworm-slim` + `bun build --compile`)
+> **cannot run the browser** — no Chromium, no system libs — so we don't use that
+> pattern here. `bun build --compile` is also risky with cloakbrowser/playwright,
+> which spawn an external Chromium process.
+
+```bash
+bun run docker:build           # docker build -t noviq:latest .
+bun run docker:run             # run on :3000 (1 GB shm for Chromium)
+bun run docker:up              # docker compose up --build
+```
+
+`NOVIQ_NO_SANDBOX=1` is baked into the image (Chromium runs as root in the
+container); locally the full sandbox + stealth stays on. To avoid shipping a
+second copy of Chromium, the entrypoint points `CLOAKBROWSER_BINARY_PATH` at the
+patched Chromium already in the base image (resolved at runtime, so base-image
+bumps don't break it) — keeping the image at **~2.9 GB**. Verified end-to-end:
+the container scrapes both stores and the `HEALTHCHECK` reports healthy.
+
+### Cluster mode? No.
+
+Elysia can cluster (Bun `SO_REUSEPORT`), but noviq is **browser-bound** — each
+request drives a real Chromium (hundreds of MB). Forking processes multiplies
+browser memory without raising throughput. Instead, **bound concurrent sessions
+and scale horizontally** (more containers behind a load balancer).
+
 ## Architecture
 
 Everything store-specific lives behind one small interface, so the humanized
@@ -138,6 +188,7 @@ written once and shared:
 ```
 src/
   types.ts     unified Review + ScrapeOptions
+  config.ts    single .env reader (port, proxy, stealth, geoip, …)
   browser.ts   cloakbrowser session, stealth presets, in-page fetch  (shared)
   engine.ts    StoreAdapter interface + runScraper() stream engine    (shared)
   apple.ts     Apple adapter  (amp-api same-origin proxy, offset paging)

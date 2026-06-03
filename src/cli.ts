@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { join } from "node:path";
 import { parseArgs } from "node:util";
+import { config } from "./config.js";
 import { createCsvSink } from "./output.js";
 import { inferStore, streamReviews } from "./scrape.js";
 import type { ReviewSort, StealthPreset, Store } from "./types.js";
@@ -99,10 +100,10 @@ async function main(): Promise<void> {
     sort: values.sort as ReviewSort | undefined,
     limit: values.limit ? Number(values.limit) : undefined,
     since: values.since,
-    stealth: values.stealth as StealthPreset | undefined,
+    stealth: (values.stealth as StealthPreset | undefined) ?? config.defaultStealth,
     headed: values.headed,
-    proxy: values.proxy,
-    geoip: values.geoip,
+    proxy: values.proxy ?? config.defaultProxy,
+    geoip: values.geoip || config.geoip,
     profileDir: values["profile-dir"],
     onProgress: ({ collected }) => {
       process.stderr.write(`\r  collected ${collected} reviews…`);

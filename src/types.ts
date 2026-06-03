@@ -99,7 +99,12 @@ export interface ProgressInfo {
 
 /** Internal tuning derived from a StealthPreset. */
 export interface StealthProfile {
+  /** cloakbrowser human-like mouse/keyboard/scroll emulation. */
   humanize: boolean;
+  /** cloakbrowser humanize preset (only meaningful when `humanize` is true). */
+  humanPreset?: "default" | "careful";
+  /** Auto-match timezone/locale to the (proxy) exit IP via cloakbrowser geoip. */
+  geoip: boolean;
   /** [min, max] ms to wait between review-page fetches. */
   pageDelayMs: [number, number];
   /** Scroll the landing page before fetching to mimic a real visit. */

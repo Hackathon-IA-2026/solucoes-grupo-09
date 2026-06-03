@@ -1,3 +1,4 @@
+import { config } from "../../config.js";
 import { getReviews, inferStore } from "../../scrape.js";
 import type { Review, ScrapeOptions } from "../../types.js";
 
@@ -20,7 +21,15 @@ export const ReviewService = {
     // Throws on un-inferable ids; the controller maps that to a 400.
     const store = query.store ?? inferStore(query.appId);
     const country = (query.country ?? "us").toLowerCase();
-    const reviews = await getReviews({ ...query, store, country });
+    const reviews = await getReviews({
+      ...query,
+      store,
+      country,
+      // Operator-controlled defaults from .env (proxy/geoip aren't client-settable).
+      stealth: query.stealth ?? config.defaultStealth,
+      proxy: query.proxy ?? config.defaultProxy,
+      geoip: query.geoip ?? config.geoip,
+    });
     return { store, appId: query.appId, country, count: reviews.length, reviews };
   },
 };

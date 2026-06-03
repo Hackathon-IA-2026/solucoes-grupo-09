@@ -1,0 +1,28 @@
+services:
+  noviq:
+    build: .
+    image: noviq:latest
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      # Chromium runs as root in the container.
+      NOVIQ_NO_SANDBOX: "1"
+    # Optional overrides (NOVIQ_PROXY / NOVIQ_GEOIP / NOVIQ_STEALTH).
+    env_file:
+      - path: .env
+        required: false
+    # Chromium needs more shared memory than Docker's 64 MB default.
+    shm_size: "1gb"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - bun
+        - -e
+        - "await fetch('http://localhost:3000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

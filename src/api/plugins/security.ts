@@ -1,4 +1,5 @@
 import { Elysia } from "elysia";
+import { config } from "../../config.js";
 
 // Strict default policy for the JSON API: only same-origin anything.
 const API_CSP = "default-src 'self'";
@@ -30,7 +31,7 @@ export const securityHeaders = new Elysia({ name: "security-headers" })
     set.headers["x-frame-options"] = "DENY";
     set.headers["x-xss-protection"] = "1; mode=block";
     set.headers["referrer-policy"] = "strict-origin-when-cross-origin";
-    if (process.env.NODE_ENV === "production") {
+    if (config.isProd) {
       set.headers["strict-transport-security"] = "max-age=31536000; includeSubDomains";
     }
   })

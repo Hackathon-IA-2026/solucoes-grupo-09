@@ -2,12 +2,13 @@ import { cors } from "@elysiajs/cors";
 import { serverTiming } from "@elysiajs/server-timing";
 import { swagger } from "@elysiajs/swagger";
 import { Elysia } from "elysia";
+import { config } from "../config.js";
 import { bodyLimit, MAX_BODY_BYTES } from "./plugins/body-limit.js";
 import { errorHandler } from "./plugins/errors.js";
 import { securityHeaders } from "./plugins/security.js";
 import { reviews } from "./reviews/controller.js";
 
-const isProd = process.env.NODE_ENV === "production";
+const isProd = config.isProd;
 
 /**
  * The noviq HTTP API. Composed from feature modules (each a controller +
@@ -56,9 +57,7 @@ export type App = typeof app;
 
 // Only start the server when run directly (not when imported by tests).
 if (import.meta.main) {
-  const port = Number(process.env.PORT ?? 3000);
-
-  app.listen(port, (server) => {
+  app.listen(config.port, (server) => {
     const url = String(server.url);
     console.log(`🚀 noviq API listening on ${url}`);
     console.log(`📚 Docs: ${url}docs`);

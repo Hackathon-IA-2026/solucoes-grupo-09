@@ -1,5 +1,4 @@
-import type { Page } from "playwright-core";
-import { jitter, openSession, STEALTH, sleep } from "./browser.js";
+import { jitter, openSession, type Page, STEALTH, sleep } from "./browser.js";
 import type { Review, ScrapeOptions, Store } from "./types.js";
 
 /** Outcome of fetching a single page of reviews from a store. */
