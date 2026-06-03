@@ -92,6 +92,36 @@ for await (const review of streamGoogleReviews({ appId: "com.spotify.music" })) 
 | `balanced` | yes | 0.6–1.4 s | no | everyday scraping |
 | `fast` | no | 0.15–0.4 s | no | quick small pulls |
 
+## HTTP API (Elysia)
+
+An [Elysia](https://elysiajs.com) server exposes the scraper over HTTP, with
+Swagger/OpenAPI docs. It follows Elysia's structure conventions — the Elysia
+instance *is* the controller, business logic lives in a stateless service, and
+DTOs are `t.Object` models registered with `.model()`.
+
+```bash
+bun run api          # start on :3000  (PORT env to override)
+bun run api:dev      # same, with --watch
+```
+
+| Route | Description |
+| --- | --- |
+| `GET /` | API info |
+| `GET /health` | health check |
+| `GET /docs` | Swagger UI (OpenAPI JSON at `/docs/json`) |
+| `GET /reviews` | scrape reviews — query params below |
+
+`GET /reviews` query: `appId` (required), `store`, `country`, `lang`, `sort`,
+`limit` (1–500, default 50), `since`, `stealth`. The store is auto-detected from
+`appId` unless given. Returns `{ store, appId, country, count, reviews[] }`.
+
+```bash
+curl "http://localhost:3000/reviews?appId=com.spotify.music&limit=20&stealth=fast"
+curl "http://localhost:3000/reviews?appId=284882215&sort=mostHelpful&limit=50"
+```
+
+> Each request drives a real browser session, so larger `limit`s take longer.
+
 ## Architecture
 
 Everything store-specific lives behind one small interface, so the humanized
@@ -108,6 +138,12 @@ src/
   scrape.ts    store dispatcher + convenience wrappers
   output.ts    JSON / CSV / streaming CSV sink
   cli.ts       command-line entry point
+  api/
+    index.ts             Elysia app: swagger + module composition
+    reviews/
+      model.ts           t.Object DTOs, registered via .model()
+      service.ts         ReviewService — request-independent logic
+      controller.ts      Elysia instance (the controller) + routes
 ```
 
 Adding a third store is just another `StoreAdapter`: give it a `landingUrl`, an
@@ -139,7 +175,7 @@ interface Review {
 ## Testing
 
 ```bash
-bun test          # unit + pipeline (fast, offline) — 32 tests
+bun test          # unit + pipeline + api (fast, offline) — 39 tests
 bun run test:live # end-to-end against the real stores (slower, network)
 ```
 
@@ -148,6 +184,9 @@ bun run test:live # end-to-end against the real stores (slower, network)
 - **Pipeline** (`test/pipeline.test.ts`) — mocks `cloakbrowser` so the whole
   engine + adapters run **with no network**: de-dup, `limit`, `since`, offset &
   token pagination, dry-page guard, 429 retry, streaming & `onReview`.
+- **API** (`test/api.test.ts`) — Elysia routes via **Eden Treaty** (Elysia's
+  type-safe test client): health, info, model validation (422s), and the
+  Swagger/OpenAPI schema — all in-process, no server, no scrape.
 - **Live** (`test/live.test.ts`) — real Apple + Google pulls and a CSV
   round-trip. Skipped unless `NOVIQ_LIVE=1` (set by `bun run test:live`).
 
