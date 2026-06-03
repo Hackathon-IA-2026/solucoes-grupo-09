@@ -1,16 +1,18 @@
 /**
  * Streaming example: pipe reviews into your own sink as they arrive,
- * without buffering the whole dataset in memory.
+ * without buffering the whole dataset in memory. Works for either store —
+ * the unified `Review` shape is identical.
  *
- * Run with:  npx tsx examples/stream.ts
+ * Run with:  bun run examples/stream.ts [appId-or-package]
  */
-import { streamAppleReviews } from "../src/index.js";
+import { streamReviews } from "../src/index.js";
 
-const APP_ID = "284882215"; // Facebook
+// Apple numeric id, or a Google package name — the store is auto-detected.
+const APP = process.argv[2] ?? "284882215"; // Facebook (Apple)
 
 let count = 0;
-for await (const review of streamAppleReviews({
-  appId: APP_ID,
+for await (const review of streamReviews({
+  appId: APP,
   country: "us",
   sort: "mostRecent",
   limit: 100,
@@ -19,8 +21,10 @@ for await (const review of streamAppleReviews({
   count++;
   // Replace this with a DB insert, queue publish, etc.
   console.log(
-    `[${count}] ${"★".repeat(review.rating)}${"☆".repeat(5 - review.rating)} ` +
-      `${review.title} — ${review.userName} (${review.date.slice(0, 10)})`,
+    `[${count}] (${review.store}) ` +
+      `${"★".repeat(review.rating)}${"☆".repeat(5 - review.rating)} ` +
+      `${review.userName} — ${review.date.slice(0, 10)}: ` +
+      `${(review.title || review.body).slice(0, 60)}`,
   );
 }
 

@@ -1,46 +1,59 @@
 # noviq
 
-Humanized **Apple App Store review scraper** for Node.js / TypeScript, powered by
-[cloakbrowser](https://github.com/CloakHQ/cloakbrowser).
+Humanized **App Store & Google Play review scraper** for Node.js / TypeScript,
+powered by [cloakbrowser](https://github.com/CloakHQ/cloakbrowser).
 
-Instead of hitting Apple's API with a bare HTTP client, noviq drives a stealth
-Chromium browser to the app's real storefront page, then issues the review calls
-**from inside that browser context** against Apple's own same-origin API proxy
-(`apps.apple.com/api/...`). Because the calls share the page's session, every
-request carries a real fingerprint, cookies, `Origin` and `Referer` — and no
-bearer token ever has to be scraped (the proxy injects auth server-side). With
-`humanize` on, mouse/scroll/timing all look human.
+Instead of hitting the stores' APIs with a bare HTTP client, noviq drives a
+stealth Chromium browser to the app's real store page, then issues the review
+calls **from inside that browser context**:
 
-> Google Play support is planned — this first cut is Apple-only.
+- **Apple** → the same-origin API proxy `apps.apple.com/api/...` (no bearer
+  token to scrape — the proxy injects auth server-side).
+- **Google Play** → the `batchexecute` RPC the Play web app itself uses.
+
+Because the calls share the page's session, every request carries a real
+fingerprint, cookies, `Origin` and `Referer`. With `humanize` on, mouse/scroll/
+timing all look human. Both stores return the **same unified `Review` shape**.
+
+Runs on [Bun](https://bun.sh) — the CLI, scripts, and tests all use it.
 
 ## Install
 
 ```bash
-npm install
-# cloakbrowser ships its own patched Chromium; first run downloads it.
+bun install
+# cloakbrowser ships its own patched Chromium; first run downloads it (~140 MB).
 ```
 
 ## CLI
 
-```bash
-# by numeric app id
-npx tsx src/cli.ts 284882215 --country us --limit 500
+The store is auto-detected from the id: numeric → Apple, package name → Google.
+Override with `--store`.
 
-# by App Store URL, sorted by most helpful, CSV only, visible browser
-npx tsx src/cli.ts https://apps.apple.com/us/app/instagram/id389801252 \
-  --sort mostHelpful --format csv --headed
+```bash
+# Apple, by numeric id
+bun run scrape 284882215 --country us --limit 500
+
+# Google Play, by package name
+bun run scrape com.facebook.katana --limit 500
+
+# by store URL (Apple or Google)
+bun run scrape https://apps.apple.com/us/app/instagram/id389801252 --sort mostHelpful
+bun run scrape "https://play.google.com/store/apps/details?id=com.spotify.music"
 
 # only reviews since a date (works with the default mostRecent sort)
-npx tsx src/cli.ts 284882215 --since 2025-01-01
+bun run scrape com.spotify.music --since 2025-01-01
 ```
 
-Output lands in `./output/apple-<appId>-<country>.{json,csv}`.
+The CLI streams **CSV** to `./output/<store>-<appId>-<country>.csv`, writing rows
+as reviews arrive (constant memory, any size). For JSON, use the library
+(`getReviews` + `writeJson`).
 
 | Option | Default | Notes |
 | --- | --- | --- |
+| `--store <name>` | inferred | `apple` / `google` |
 | `--country <cc>` | `us` | Storefront country code |
-| `--lang <tag>` | `en-US` | BCP-47 review language |
-| `--sort <order>` | `mostRecent` | or `mostHelpful` |
+| `--lang <tag>` | per store | Apple `en-US`, Google `en` |
+| `--sort <order>` | `mostRecent` | `mostRecent` / `mostHelpful` / `rating` (Google only) |
 | `--limit <n>` | all | stop after n reviews |
 | `--since <date>` | — | stop at reviews older than this (mostRecent only) |
 | `--stealth <preset>` | `max` | `max` / `balanced` / `fast` |
@@ -48,20 +61,25 @@ Output lands in `./output/apple-<appId>-<country>.{json,csv}`.
 | `--proxy <url>` | — | `http://user:pass@host:8080` |
 | `--geoip` | off | align browser geo/locale to proxy exit IP |
 | `--profile-dir <p>` | — | reuse a persistent profile across runs |
-| `--out <dir>` | `output` | output directory |
-| `--format <fmt>` | `both` | `json` / `csv` / `both` |
+| `--out <dir>` | `output` | output directory (CSV is written here) |
 
 ## Library
 
 ```ts
-import { getAppleReviews, streamAppleReviews, writeJson } from "noviq";
+import {
+  streamReviews,    // unified, store auto-detected
+  getReviews,
+  streamGoogleReviews,
+  getAppleReviews,
+  writeJson,
+} from "noviq";
 
-// Buffer everything into an array:
-const reviews = await getAppleReviews({ appId: "284882215", limit: 200 });
+// Buffer into an array (store inferred from the id):
+const reviews = await getReviews({ appId: "284882215", limit: 200 });
 await writeJson("out.json", reviews);
 
-// Or stream (no buffering — pipe straight into a DB/queue):
-for await (const review of streamAppleReviews({ appId: "284882215" })) {
+// Stream from Google Play — no buffering, pipe straight into a DB/queue:
+for await (const review of streamGoogleReviews({ appId: "com.spotify.music" })) {
   await db.insert(review);
 }
 ```
@@ -74,46 +92,81 @@ for await (const review of streamAppleReviews({ appId: "284882215" })) {
 | `balanced` | yes | 0.6–1.4 s | no | everyday scraping |
 | `fast` | no | 0.15–0.4 s | no | quick small pulls |
 
-## How it works
+## Architecture
 
-1. **Launch** cloakbrowser (optionally headed, proxied, geoip-matched, or with a
-   persistent profile).
-2. **Navigate** to `apps.apple.com/<cc>/app/id<appId>` and (max stealth) scroll a
-   bit like a real visitor.
-3. **Capture** the `bearer` token from the first `amp-api.apps.apple.com` request
-   the page makes; fall back to parsing the embedded config if needed.
-4. **Paginate** `…/v1/catalog/<cc>/apps/<appId>/reviews` 20 at a time via in-page
-   `fetch`, following amp-api's `next` offsets, with 429 backoff and jittered
-   delays, until exhausted (HTTP 404) or your `limit`/`since` is hit.
+Everything store-specific lives behind one small interface, so the humanized
+session, de-duplication, `limit`/`since` cutoffs, delays and 429 backoff are
+written once and shared:
 
-## Review shape
+```
+src/
+  types.ts     unified Review + ScrapeOptions
+  browser.ts   cloakbrowser session, stealth presets, in-page fetch  (shared)
+  engine.ts    StoreAdapter interface + runScraper() stream engine    (shared)
+  apple.ts     Apple adapter  (amp-api same-origin proxy, offset paging)
+  google.ts    Google adapter (batchexecute RPC, token paging)
+  scrape.ts    store dispatcher + convenience wrappers
+  output.ts    JSON / CSV / streaming CSV sink
+  cli.ts       command-line entry point
+```
+
+Adding a third store is just another `StoreAdapter`: give it a `landingUrl`, an
+`initialCursor`, and a `fetchBatch()` that returns normalized `Review`s plus the
+next cursor.
+
+## Unified review shape
 
 ```ts
-interface AppleReview {
+interface Review {
+  store: "apple" | "google";
   id: string;
   userName: string;
-  title: string;
+  title: string;        // "" for Google (Play has no titles)
   body: string;
-  rating: number;        // 1–5
-  date: string;          // ISO-8601
-  isEdited: boolean;
+  rating: number;       // 1–5
+  date: string;         // ISO-8601
   developerResponse: { body: string; modified: string } | null;
-  appId: string;
+  // store-specific extras:
+  thumbsUp?: number;    // Google
+  appVersion?: string;  // Google
+  isEdited?: boolean;   // Apple
+  // provenance:
+  appId: string;        // numeric id (Apple) or package (Google)
   country: string;
 }
 ```
 
+## Testing
+
+```bash
+bun test          # unit + pipeline (fast, offline) — 32 tests
+bun run test:live # end-to-end against the real stores (slower, network)
+```
+
+- **Unit** (`test/unit.test.ts`) — pure logic: store inference, URL/`f.req`
+  building, `batchexecute` parsing, field normalization, CSV quoting.
+- **Pipeline** (`test/pipeline.test.ts`) — mocks `cloakbrowser` so the whole
+  engine + adapters run **with no network**: de-dup, `limit`, `since`, offset &
+  token pagination, dry-page guard, 429 retry, streaming & `onReview`.
+- **Live** (`test/live.test.ts`) — real Apple + Google pulls and a CSV
+  round-trip. Skipped unless `NOVIQ_LIVE=1` (set by `bun run test:live`).
+
+Verified live: a max-stealth Google pull of **2,000 reviews** across 20
+token-paginated pages came back 100% unique with strictly descending dates.
+
 ## Notes & limits
 
-- **No token needed** — calls go through Apple's same-origin `/api/...` proxy
-  from inside the browser session, which injects auth server-side.
-- **Reviews are de-duplicated by id** in the core stream. Offset pagination can
-  return the same review twice (e.g. when new reviews arrive mid-scrape and
-  shift later offsets), so every review is emitted at most once.
-- **No practical record cap.** For popular apps the feed paginates into the tens
-  of thousands (verified past offset 20,000); the real ceiling is the app's
-  actual review count. Use `--limit` to bound a run.
+- **No token needed for Apple** — calls go through the same-origin `/api/...`
+  proxy, which injects auth server-side. **Google** uses the public web app's
+  `batchexecute` RPC.
+- **Reviews are de-duplicated by id** in the core stream. Offset/token paging can
+  return the same review twice (e.g. when new reviews arrive mid-scrape), so each
+  review is emitted at most once.
+- **No practical record cap.** Apple paginates into the tens of thousands
+  (verified past offset 20,000); Google chains continuation tokens until the feed
+  ends. The real ceiling is the app's actual review count — use `--limit`.
 - **Rate limiting is the real constraint.** Large pulls eventually hit HTTP 429;
-  the `max` preset's jittered delays + exponential backoff are built for this.
-  If you get throttled, slow down or add a `--proxy`.
-- Respect Apple's Terms of Service and applicable laws; scrape responsibly.
+  the `max` preset's jittered delays + exponential backoff are built for this. If
+  you get throttled, slow down or add a `--proxy`.
+- Respect each store's Terms of Service and applicable laws; scrape responsibly.
+```

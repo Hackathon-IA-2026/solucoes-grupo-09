@@ -1,22 +1,25 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { createWriteStream, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { AppleReview } from "./types.js";
+import type { Review } from "./types.js";
 
-const CSV_COLUMNS: (keyof AppleReview | "developerResponseBody")[] = [
+const CSV_COLUMNS: (keyof Review | "developerResponseBody")[] = [
+  "store",
   "id",
   "date",
   "rating",
   "userName",
   "title",
   "body",
+  "thumbsUp",
+  "appVersion",
   "isEdited",
   "developerResponseBody",
   "appId",
   "country",
 ];
 
-function csvCell(value: unknown): string {
+export function csvCell(value: unknown): string {
   if (value === null || value === undefined) return "";
   const s = String(value);
   // Quote if the cell contains a delimiter, quote, or newline.
@@ -24,19 +27,21 @@ function csvCell(value: unknown): string {
   return s;
 }
 
-function csvRow(review: AppleReview): string {
+export const CSV_HEADER = CSV_COLUMNS.join(",");
+
+export function csvRow(review: Review): string {
   return CSV_COLUMNS.map((col) => {
     if (col === "developerResponseBody") {
       return csvCell(review.developerResponse?.body ?? "");
     }
-    return csvCell(review[col as keyof AppleReview]);
+    return csvCell(review[col as keyof Review]);
   }).join(",");
 }
 
 /** Write the full array to a pretty-printed JSON file. */
 export async function writeJson(
   path: string,
-  reviews: AppleReview[],
+  reviews: Review[],
 ): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, JSON.stringify(reviews, null, 2), "utf8");
@@ -45,7 +50,7 @@ export async function writeJson(
 /** Write the full array to a CSV file. */
 export async function writeCsv(
   path: string,
-  reviews: AppleReview[],
+  reviews: Review[],
 ): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   const lines = [CSV_COLUMNS.join(","), ...reviews.map(csvRow)];
@@ -57,7 +62,7 @@ export async function writeCsv(
  * whole dataset. Useful for very large pulls.
  */
 export function createCsvSink(path: string): {
-  write: (review: AppleReview) => void;
+  write: (review: Review) => void;
   close: () => Promise<void>;
 } {
   mkdirSync(dirname(path), { recursive: true });

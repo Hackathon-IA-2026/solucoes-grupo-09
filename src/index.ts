@@ -1,10 +1,19 @@
 export {
+  streamReviews,
+  getReviews,
+  inferStore,
   streamAppleReviews,
   getAppleReviews,
-} from "./apple.js";
+  streamGoogleReviews,
+  getGoogleReviews,
+} from "./scrape.js";
 export { writeJson, writeCsv, createCsvSink } from "./output.js";
+export { appleAdapter } from "./apple.js";
+export { googleAdapter } from "./google.js";
+export type { StoreAdapter, FetchResult } from "./engine.js";
 export type {
-  AppleReview,
+  Review,
+  Store,
   ScrapeOptions,
   ReviewSort,
   StealthPreset,
