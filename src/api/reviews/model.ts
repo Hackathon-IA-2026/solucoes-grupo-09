@@ -74,6 +74,25 @@ export const scrapeResponse = t.Object({
 
 export const errorResponse = t.Object({ error: t.String() });
 
+/** Returned when an async scrape job is accepted (202). */
+export const jobAccepted = t.Object({
+  id: t.String(),
+  status: t.Literal("waiting"),
+});
+
+/** A job's status/result (GET /reviews/jobs/:id). */
+export const jobRecord = t.Object({
+  id: t.String(),
+  status: t.Union([
+    t.Literal("waiting"),
+    t.Literal("active"),
+    t.Literal("completed"),
+    t.Literal("failed"),
+  ]),
+  result: t.Optional(scrapeResponse),
+  error: t.Optional(t.String()),
+});
+
 /**
  * Reference models, injected with `.model()` so routes can refer to them by
  * name (and they show up in the OpenAPI schema as named components).
@@ -82,4 +101,6 @@ export const reviewModel = new Elysia({ name: "reviews.model" }).model({
   "reviews.query": scrapeQuery,
   "reviews.response": scrapeResponse,
   "reviews.error": errorResponse,
+  "reviews.job.accepted": jobAccepted,
+  "reviews.job": jobRecord,
 });

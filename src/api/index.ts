@@ -8,7 +8,8 @@ import { bodyLimit, MAX_BODY_BYTES } from "./plugins/body-limit.js";
 import { errorHandler } from "./plugins/errors.js";
 import { requestContext } from "./plugins/request-context.js";
 import { securityHeaders } from "./plugins/security.js";
-import { reviews } from "./reviews/controller.js";
+import { reviewsRoutes } from "./reviews/controller.js";
+import { jobRunner } from "./reviews/runner.js";
 import { scrapeStats } from "./reviews/service.js";
 
 const isProd = config.isProd;
@@ -79,7 +80,13 @@ export const app = new Elysia()
     },
     { detail: { summary: "Readiness — Chromium binary available" } },
   )
-  .use(reviews);
+  .use(reviewsRoutes(jobRunner));
+
+// Opt-in BullMQ dashboard at /jobs (requires Redis). Protect it in production.
+if (config.dashboard && config.redisUrl) {
+  const { jobsDashboard } = await import("./jobs-dashboard.js");
+  app.mount("/jobs", jobsDashboard(config.redisUrl));
+}
 
 export type App = typeof app;
 
@@ -99,6 +106,9 @@ if (import.meta.main) {
     console.log("   • X-Frame-Options: DENY, X-Content-Type-Options: nosniff");
     console.log(`   • XSS protection, Referrer-Policy${isProd ? ", HSTS" : ""}`);
     console.log(`   • ${MAX_BODY_BYTES / (1024 * 1024)} MB request body limit, CORS`);
+    console.log(
+      `⚙️  Job runner: ${jobRunner.mode}${config.redisUrl ? ` (Redis, role=${config.role})` : ""}`,
+    );
   });
 
   const shutdown = async (signal: string) => {
@@ -109,6 +119,7 @@ if (import.meta.main) {
     }, 10_000);
     force.unref();
     await app.stop();
+    await jobRunner.close().catch(() => {});
     console.log("✅ Server closed");
     process.exit(0);
   };

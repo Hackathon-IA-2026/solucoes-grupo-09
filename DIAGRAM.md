@@ -136,3 +136,37 @@ classDiagram
   StoreAdapter <|.. googleAdapter
   runScraper ..> StoreAdapter : drives
 ```
+
+## 5. Async jobs (pluggable runner)
+
+`POST /reviews/jobs` enqueues; a worker runs the same `ReviewService.scrape`;
+clients poll `GET /reviews/jobs/:id`. The backend is chosen by config.
+
+```mermaid
+flowchart LR
+  Client -->|"POST /reviews/jobs"| C[reviewsRoutes]
+  C -->|validate · 400 if bad| C
+  C -->|submit| R{{JobRunner}}
+  R -->|"REDIS_URL set"| B[BullMQ + Redis<br/>durable · multi-worker]
+  R -->|else| I[in-process<br/>Map · single box]
+  B --> W[Worker]
+  I --> W
+  W -->|execute| S[ReviewService.scrape]
+  S --> St[(App Store / Google Play)]
+  Client -->|"GET /reviews/jobs/:id"| C2[reviewsRoutes] --> R
+  R -.->|status + result| Client
+```
+
+```mermaid
+classDiagram
+  class JobRunner {
+    +mode
+    +submit(query) id
+    +status(id) JobRecord?
+    +close()
+  }
+  class InProcessRunner { Map store · background exec }
+  class BullMqRunner { Queue + Worker + Redis }
+  JobRunner <|.. InProcessRunner
+  JobRunner <|.. BullMqRunner
+```

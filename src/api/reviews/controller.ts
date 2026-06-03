@@ -1,46 +1,95 @@
-import { Elysia } from "elysia";
+import { Elysia, t } from "elysia";
 import { toHttpError } from "../../errors.js";
+import type { JobRunner } from "../../jobs/index.js";
 import { reviewModel } from "./model.js";
 import { ReviewService } from "./service.js";
 
 /**
  * The reviews controller — an Elysia instance (per best practice, the instance
- * *is* the controller). It wires the route to the service and maps domain
- * errors to safe HTTP statuses (400/502/503/504), logging only 5xx internals.
+ * *is* the controller). The job runner is injected so the routes can be tested
+ * with a fake runner (no browser). Domain errors map to safe HTTP statuses
+ * (400/502/503/504); only 5xx internals are logged.
  */
-export const reviews = new Elysia({
-  name: "reviews.controller",
-  tags: ["Reviews"],
-})
-  .use(reviewModel)
-  .get(
-    "/reviews",
-    async ({ query, status }) => {
-      try {
-        return await ReviewService.scrape(query);
-      } catch (error) {
-        const { status: code, body } = toHttpError(error);
-        if (code >= 500) console.error("scrape error:", error);
-        return status(code, body);
-      }
-    },
-    {
-      query: "reviews.query",
-      response: {
-        200: "reviews.response",
-        400: "reviews.error",
-        500: "reviews.error",
-        502: "reviews.error",
-        503: "reviews.error",
-        504: "reviews.error",
-      },
-      detail: {
-        summary: "Scrape app reviews",
-        description:
-          "Drives a humanized cloakbrowser session to fetch reviews for an app " +
-          "from the App Store or Google Play. The store is auto-detected from the " +
-          "app id unless `store` is given. Larger `limit` values take longer. " +
-          "Returns `partial: true` if a timeout or mid-stream error cut results short.",
-      },
-    },
+export function reviewsRoutes(jobRunner: JobRunner) {
+  return (
+    new Elysia({ name: "reviews.controller", tags: ["Reviews"] })
+      .use(reviewModel)
+      .get(
+        "/reviews",
+        async ({ query, status }) => {
+          try {
+            return await ReviewService.scrape(query);
+          } catch (error) {
+            const { status: code, body } = toHttpError(error);
+            if (code >= 500) console.error("scrape error:", error);
+            return status(code, body);
+          }
+        },
+        {
+          query: "reviews.query",
+          response: {
+            200: "reviews.response",
+            400: "reviews.error",
+            500: "reviews.error",
+            502: "reviews.error",
+            503: "reviews.error",
+            504: "reviews.error",
+          },
+          detail: {
+            summary: "Scrape app reviews (synchronous)",
+            description:
+              "Drives a humanized cloakbrowser session to fetch reviews from the " +
+              "App Store or Google Play. Store auto-detected from the app id unless " +
+              "`store` is given. Returns `partial: true` if a timeout or mid-stream " +
+              "error cut results short. For large pulls, prefer the async job API.",
+          },
+        },
+      )
+      // --- async job API (durable on BullMQ; in-memory otherwise) ---
+      .post(
+        "/reviews/jobs",
+        async ({ body, status }) => {
+          try {
+            ReviewService.validate(body); // reject bad input before enqueue (400)
+            const id = await jobRunner.submit(body);
+            return status(202, { id, status: "waiting" as const });
+          } catch (error) {
+            const { status: code, body: errBody } = toHttpError(error);
+            if (code >= 500) console.error("job submit error:", error);
+            return status(code, errBody);
+          }
+        },
+        {
+          body: "reviews.query",
+          response: {
+            202: "reviews.job.accepted",
+            400: "reviews.error",
+            500: "reviews.error",
+            502: "reviews.error",
+            503: "reviews.error",
+            504: "reviews.error",
+          },
+          detail: {
+            summary: "Submit an async scrape job",
+            description:
+              "Enqueues a scrape and returns a job id immediately (202). Poll " +
+              "GET /reviews/jobs/:id for status and result. Use this for large pulls " +
+              "that would exceed an HTTP request timeout.",
+          },
+        },
+      )
+      .get(
+        "/reviews/jobs/:id",
+        async ({ params, status }) => {
+          const record = await jobRunner.status(params.id);
+          if (!record) return status(404, { error: "Job not found" });
+          return record;
+        },
+        {
+          params: t.Object({ id: t.String() }),
+          response: { 200: "reviews.job", 404: "reviews.error" },
+          detail: { summary: "Get an async scrape job's status / result" },
+        },
+      )
   );
+}

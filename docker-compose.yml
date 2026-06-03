@@ -1,20 +1,38 @@
+# Production topology: Redis + API (enqueue) + worker(s) (scrape).
+#   docker compose up --build            # one of each
+#   docker compose up --build --scale worker=3   # scale scraping out
 services:
-  noviq:
-    build: .
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"] # persist jobs across restarts
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build: . # builds noviq:latest; the worker reuses this image
     image: noviq:latest
+    depends_on:
+      redis:
+        condition: service_healthy
     ports:
       - "${PORT:-3000}:3000"
     environment:
       NODE_ENV: production
       PORT: "3000"
-      # Chromium runs as root in the container.
-      NOVIQ_NO_SANDBOX: "1"
-    # Optional overrides (NOVIQ_PROXY / NOVIQ_GEOIP / NOVIQ_STEALTH).
+      NOVIQ_NO_SANDBOX: "1" # Chromium runs as root in the container
+      REDIS_URL: redis://redis:6379 # overrides any .env value → in-compose Redis
+      NOVIQ_ROLE: api # enqueue async jobs; the worker service processes them
+      # NOVIQ_DASHBOARD: "true"   # optional BullMQ dashboard at /jobs (protect it!)
     env_file:
       - path: .env
         required: false
-    # Chromium needs more shared memory than Docker's 64 MB default.
-    shm_size: "1gb"
+    shm_size: "1gb" # Chromium needs more than Docker's 64 MB /dev/shm default
     restart: unless-stopped
     healthcheck:
       test:
@@ -26,3 +44,29 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+
+  worker:
+    image: noviq:latest # reuses the image built by `api`
+    command: ["bun", "run", "src/worker.ts"]
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started # ensures noviq:latest is built first
+    environment:
+      NODE_ENV: production
+      NOVIQ_NO_SANDBOX: "1"
+      REDIS_URL: redis://redis:6379
+      NOVIQ_ROLE: worker
+    env_file:
+      - path: .env
+        required: false
+    shm_size: "1gb"
+    restart: unless-stopped
+    # The worker has no HTTP server, so disable the image's /health probe;
+    # liveness is "process running" (restart on crash).
+    healthcheck:
+      disable: true
+
+volumes:
+  redis-data:

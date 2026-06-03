@@ -90,6 +90,17 @@ export interface ScrapeOptions {
   signal?: AbortSignal;
 }
 
+/** The result of a completed scrape (returned by the API + job runners). */
+export interface ScrapeResult {
+  store: Store;
+  appId: string;
+  country: string;
+  count: number;
+  /** True if results were cut short by a timeout or a mid-stream error. */
+  partial: boolean;
+  reviews: Review[];
+}
+
 export interface ProgressInfo {
   /** Reviews collected so far (after de-duplication). */
   collected: number;

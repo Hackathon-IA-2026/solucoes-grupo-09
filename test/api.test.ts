@@ -74,6 +74,24 @@ describe("api · typed routes (Eden Treaty)", () => {
     });
     expect(error?.status).toBe(400);
   });
+
+  it("GET /reviews/jobs/:id → 404 for an unknown id", async () => {
+    const res = await app.handle(
+      new Request("http://localhost/reviews/jobs/does-not-exist"),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("POST /reviews/jobs rejects bad input at submit (400, no enqueue)", async () => {
+    const res = await app.handle(
+      new Request("http://localhost/reviews/jobs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ appId: "284882215", since: "not-a-date" }),
+      }),
+    );
+    expect(res.status).toBe(400);
+  });
 });
 
 describe("api · error mapping (global handler)", () => {

@@ -56,4 +56,37 @@ export const config = {
   fetchTimeoutMs: int(process.env.NOVIQ_FETCH_TIMEOUT_MS, 30_000, 2_000, 120_000),
   /** Bounded retries on transient navigation/network failures. */
   navRetries: int(process.env.NOVIQ_NAV_RETRIES, 2, 0, 5),
+  /**
+   * Redis connection URL. When set, scrape jobs run on a durable BullMQ queue
+   * (async API + multi-worker); otherwise an in-process runner is used.
+   */
+  redisUrl: process.env.REDIS_URL || undefined,
+  /**
+   * Process role for the BullMQ setup:
+   * - `all` (default): API also runs an embedded worker (single process).
+   * - `api`: API only enqueues/reads — run workers separately (`bun run worker`).
+   * - `worker`: used by the worker entrypoint.
+   */
+  role: (["all", "api", "worker"].includes(process.env.NOVIQ_ROLE ?? "")
+    ? process.env.NOVIQ_ROLE
+    : "all") as "all" | "api" | "worker",
+  /** Keep completed jobs (with their result) this long, then auto-remove. */
+  jobRetentionSec: int(process.env.NOVIQ_JOB_RETENTION_SEC, 3_600, 60, 2_592_000),
+  /** Keep failed jobs this long (longer, for debugging), then auto-remove. */
+  jobFailedRetentionSec: int(
+    process.env.NOVIQ_JOB_FAILED_RETENTION_SEC,
+    86_400,
+    60,
+    2_592_000,
+  ),
+  /** Attempts per job before it's marked failed (scrapes are idempotent → safe). */
+  jobAttempts: int(process.env.NOVIQ_JOB_ATTEMPTS, 3, 1, 10),
+  /** Base backoff (ms) between job retries (exponential). */
+  jobBackoffMs: int(process.env.NOVIQ_JOB_BACKOFF_MS, 5_000, 100, 120_000),
+  /**
+   * Mount the BullMQ Workbench dashboard at /jobs (requires Redis). Off by
+   * default — it exposes queue data/controls, so enable only behind your own
+   * auth/network protection.
+   */
+  dashboard: bool(process.env.NOVIQ_DASHBOARD),
 } as const;

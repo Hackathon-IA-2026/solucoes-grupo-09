@@ -115,13 +115,16 @@ bun run api:dev      # same, with --watch
 ```
 
 
-| Route          | Description                                       |
-| -------------- | ------------------------------------------------- |
-| `GET /`        | API info                                          |
-| `GET /health`  | liveness + live scrape concurrency stats          |
-| `GET /ready`   | readiness — Chromium binary available (503 if not)|
-| `GET /docs`    | Swagger UI (OpenAPI JSON at `/docs/json`)         |
-| `GET /reviews` | scrape reviews — query params below               |
+| Route                  | Description                                       |
+| ---------------------- | ------------------------------------------------- |
+| `GET /`                | API info                                          |
+| `GET /health`          | liveness + live scrape concurrency stats          |
+| `GET /ready`           | readiness — Chromium binary available (503 if not)|
+| `GET /docs`            | Swagger UI (OpenAPI JSON at `/docs/json`)         |
+| `GET /reviews`         | scrape reviews (synchronous) — query params below |
+| `POST /reviews/jobs`   | submit an async scrape job → `202 {id}`           |
+| `GET /reviews/jobs/:id`| async job status / result                         |
+| `GET /jobs`            | BullMQ dashboard (opt-in; `NOVIQ_DASHBOARD=true`) |
 
 
 `GET /reviews` query: `appId` (required), `store`, `country` (2 letters), `lang`,
@@ -135,6 +138,44 @@ curl "http://localhost:3000/reviews?appId=284882215&sort=mostHelpful&limit=50"
 ```
 
 > Each request drives a real browser session, so larger `limit`s take longer.
+
+### Async jobs (for large pulls)
+
+A big scrape can outlive a safe HTTP request. Submit it as a **job** instead —
+the work runs in the background and you poll for the result:
+
+```bash
+# submit → 202 { "id": "...", "status": "waiting" }
+curl -X POST http://localhost:3000/reviews/jobs \
+  -H 'content-type: application/json' \
+  -d '{"appId":"com.spotify.music","store":"google","limit":2000}'
+
+# poll → { "id", "status": "waiting|active|completed|failed", "result"? }
+curl http://localhost:3000/reviews/jobs/<id>
+```
+
+The backend is a **pluggable `JobRunner` (Strategy)**: set **`REDIS_URL`** to run
+jobs on a durable **BullMQ** queue (survives restarts, scales to N workers);
+leave it unset for a zero-dependency in-process runner (dev/single box). The API
+is identical either way.
+
+- **Cleanup:** finished jobs auto-remove from Redis after a retention window
+  (`NOVIQ_JOB_RETENTION_SEC`, default 1 h for completed; 24 h for failed) with a
+  count cap as a backstop — so results stay poll-able for a while, then Redis is
+  cleaned automatically. (We can't delete on completion: the *result lives in the
+  job*, so `GET /reviews/jobs/:id` must be able to read it first.)
+- **Scaling:** by default the API process also runs an embedded worker
+  (`NOVIQ_ROLE=all`). To scale scraping separately, set `NOVIQ_ROLE=api` and run
+  dedicated workers: `bun run worker` (each caps at `NOVIQ_MAX_CONCURRENCY`).
+- **Dashboard:** `NOVIQ_DASHBOARD=true` mounts BullMQ **Workbench** at `/jobs`
+  (protect it — it exposes queue controls).
+- **Retries:** failed jobs retry with exponential backoff (`NOVIQ_JOB_ATTEMPTS`,
+  default 3). Safe because the handler is **idempotent** — scraping is read-only,
+  so a retry (or BullMQ's at-least-once redelivery after a crash) just re-scrapes,
+  nothing to corrupt. Only *total* failures retry; partial results complete.
+- **Resilience:** failed jobs store only a client-safe message; queue ops are
+  time-bounded so a Redis stall returns an error instead of hanging; `close()`
+  drains in-flight work on shutdown.
 
 **Hardening** (global Elysia plugins): security headers (CSP relaxed only for
 `/docs`, `X-Frame-Options: DENY`, `nosniff`, `X-XSS-Protection`, `Referrer-Policy`,
@@ -180,6 +221,8 @@ Bun auto-loads `.env` (copy `.env.example`). All env reads live in `src/config.t
 | `NOVIQ_NAV_TIMEOUT_MS` | `60000`   | page navigation timeout                                 |
 | `NOVIQ_FETCH_TIMEOUT_MS` | `30000` | per in-page fetch timeout                               |
 | `NOVIQ_NAV_RETRIES` | `2`          | bounded retries on transient navigation failures        |
+| `REDIS_URL`        | —             | enable durable BullMQ job queue (else in-process)       |
+| `NOVIQ_DASHBOARD`  | `false`       | mount BullMQ Workbench dashboard at `/jobs` (protect it) |
 
 
 ## Docker
@@ -195,9 +238,22 @@ libraries, fonts and Python, preinstalled and verified) — with Bun added on to
 
 ```bash
 bun run docker:build           # docker build -t noviq:latest .
-bun run docker:run             # run on :3000 (1 GB shm for Chromium)
-bun run docker:up              # docker compose up --build
+bun run docker:run             # single container on :3000 (1 GB shm)
+bun run docker:up              # full stack: Redis + API + worker
 ```
+
+`docker compose` runs the **production topology** — three services sharing one
+image: `redis` (durable queue), `api` (`NOVIQ_ROLE=api`, enqueues async jobs +
+serves sync `/reviews`), and `worker` (`NOVIQ_ROLE=worker`, pulls jobs and
+scrapes). Compose points `REDIS_URL` at the in-compose Redis (overriding any
+`.env`). Scale scraping out independently:
+
+```bash
+docker compose up --build --scale worker=3
+```
+
+Verified end-to-end: a job POSTed to the API is enqueued to Redis and processed
+by the separate worker container (`waiting → active → completed`).
 
 `NOVIQ_NO_SANDBOX=1` is baked into the image (Chromium runs as root in the
 container); locally the full sandbox + stealth stays on. To avoid shipping a
@@ -221,28 +277,35 @@ written once and shared:
 
 ```
 src/
-  types.ts     unified Review + ScrapeOptions
-  config.ts    single .env reader (port, proxy, stealth, geoip, …)
+  types.ts     unified Review + ScrapeOptions + ScrapeResult
+  config.ts    single .env reader (port, proxy, stealth, limits, redis, …)
+  errors.ts    domain errors (Bad/Upstream/Timeout/Busy) + toHttpError
+  concurrency.ts  Semaphore (resource ceiling, queue → 503)
   resolve.ts   Chain of Responsibility: id/package/URL → { store, appId }
   pipeline.ts  Pipeline + CoR: dedupe → notOlderThan → limit review stages
   pagination.ts State Machine: Paginator owns the cursor + keep-going decision
-  browser.ts   cloakbrowser session, stealth presets, in-page fetch  (shared)
+  browser.ts   cloakbrowser session, stealth, retrying nav, in-page fetch  (shared)
   engine.ts    StoreAdapter (Strategy) + runScraper() stream engine   (shared)
   apple.ts     Apple adapter  (amp-api same-origin proxy, offset paging)
   google.ts    Google adapter (batchexecute RPC, token paging)
   scrape.ts    store dispatcher + convenience wrappers
   output.ts    JSON / CSV / streaming CSV sink
   cli.ts       command-line entry point
+  jobs/        JobRunner (Strategy): in-process + BullMQ/Redis backends
+    types.ts · inprocess.ts · bullmq.ts · index.ts (factory)
   api/
     index.ts             Elysia app: plugins + swagger + module composition
+    jobs-dashboard.ts    opt-in BullMQ Workbench mount (/jobs)
     plugins/
       security.ts        security headers (CSP, HSTS, …) — global
+      request-context.ts x-request-id + structured request logging — global
       body-limit.ts      reject oversized bodies (413) — global
-      errors.ts          consistent JSON error envelope — global
+      errors.ts          maps domain errors → safe HTTP responses — global
     reviews/
       model.ts           t.Object DTOs, registered via .model()
-      service.ts         ReviewService — request-independent logic
-      controller.ts      Elysia instance (the controller) + routes
+      service.ts         ReviewService — validate + gated, timed scrape
+      controller.ts      reviewsRoutes(runner) — sync + async job routes
+      runner.ts          process-wide JobRunner singleton (from config)
 ```
 
 See `[DIAGRAM.md](./DIAGRAM.md)` for mermaid charts of the architecture, API
