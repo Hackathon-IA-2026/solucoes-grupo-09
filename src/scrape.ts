@@ -1,15 +1,12 @@
 import { appleAdapter } from "./apple.js";
 import { runScraper } from "./engine.js";
 import { googleAdapter } from "./google.js";
+import { resolveTarget } from "./resolve.js";
 import type { Review, ScrapeOptions, Store } from "./types.js";
 
-/** Infer the store from the appId shape: all-digits → Apple, has a dot → Google. */
+/** Infer the store from an app id / package / store URL (Chain of Responsibility). */
 export function inferStore(appId: string): Store {
-  if (/^\d+$/.test(appId)) return "apple";
-  if (/[a-z]/i.test(appId) && appId.includes(".")) return "google";
-  throw new Error(
-    `Cannot infer store from appId "${appId}". Pass { store: "apple" | "google" }.`,
-  );
+  return resolveTarget(appId).store;
 }
 
 /**
@@ -19,7 +16,7 @@ export function inferStore(appId: string): Store {
 export function streamReviews(
   opts: ScrapeOptions,
 ): AsyncGenerator<Review, void, unknown> {
-  const store = opts.store ?? inferStore(opts.appId);
+  const store = opts.store ?? resolveTarget(opts.appId).store;
   const resolved = { ...opts, store };
   // Dispatch per-store so each runScraper call binds a concrete adapter type
   // (StoreAdapter<number> vs StoreAdapter<Cursor>) without an `any` cast.

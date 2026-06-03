@@ -28,7 +28,7 @@
     "lint": "bunx biome check",
     "lint:check": "bunx biome check --write",
     "lint:format": "bunx biome format --write",
-    "test": "bun test test/unit.test.ts test/pipeline.test.ts test/api.test.ts",
+    "test": "bun test test/unit.test.ts test/patterns.test.ts test/pipeline.test.ts test/api.test.ts",
     "test:live": "NOVIQ_LIVE=1 bun test test/live.test.ts",
     "docker:build": "docker build -t noviq:latest .",
     "docker:run": "docker run --rm -p 3000:3000 --shm-size=1gb noviq:latest",

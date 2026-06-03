@@ -196,8 +196,11 @@ written once and shared:
 src/
   types.ts     unified Review + ScrapeOptions
   config.ts    single .env reader (port, proxy, stealth, geoip, …)
+  resolve.ts   Chain of Responsibility: id/package/URL → { store, appId }
+  pipeline.ts  Pipeline + CoR: dedupe → notOlderThan → limit review stages
+  pagination.ts State Machine: Paginator owns the cursor + keep-going decision
   browser.ts   cloakbrowser session, stealth presets, in-page fetch  (shared)
-  engine.ts    StoreAdapter interface + runScraper() stream engine    (shared)
+  engine.ts    StoreAdapter (Strategy) + runScraper() stream engine   (shared)
   apple.ts     Apple adapter  (amp-api same-origin proxy, offset paging)
   google.ts    Google adapter (batchexecute RPC, token paging)
   scrape.ts    store dispatcher + convenience wrappers
@@ -221,6 +224,21 @@ request lifecycle, and the scraping engine loop.
 Adding a third store is just another `StoreAdapter`: give it a `landingUrl`, an
 `initialCursor`, and a `fetchBatch()` that returns normalized `Review`s plus the
 next cursor.
+
+### Design patterns
+
+The engine is composed from four classic patterns, each isolated in its own
+module and unit-tested without a browser (`test/patterns.test.ts`):
+
+| Pattern | Where | Why |
+| --- | --- | --- |
+| **Strategy** | `StoreAdapter` + `appleAdapter`/`googleAdapter` | swap store-specific fetch/paginate logic behind one interface |
+| **Chain of Responsibility** | `resolve.ts` (`RESOLVERS`) | id / package / store-URL → `{store, appId}`; first link that recognizes the input wins |
+| **Pipeline + Chain of Responsibility** | `pipeline.ts` (`ReviewPipeline`) | each review flows `dedupe → notOlderThan → limit`; first `drop`/`stop` short-circuits |
+| **State Machine** | `pagination.ts` (`Paginator`) | owns the cursor and the keep-going / dry-page / stop transitions |
+
+`runScraper` just wires them together, so its loop stays a flat
+`while (paginator.state === "fetch")`.
 
 ## Unified review shape
 

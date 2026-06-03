@@ -1,4 +1,6 @@
 import { jitter, openSession, type Page, STEALTH, sleep } from "./browser.js";
+import { Paginator } from "./pagination.js";
+import { dedupe, limit, notOlderThan, ReviewPipeline } from "./pipeline.js";
 import type { Review, ScrapeOptions, Store } from "./types.js";
 
 /** Outcome of fetching a single page of reviews from a store. */
@@ -47,9 +49,15 @@ async function fetchWithRetry<C>(
 }
 
 /**
- * The shared scraping engine. Streams reviews one at a time, de-duplicated by
- * id, honoring `limit` and `since`, with jittered delays and 429 backoff. Both
- * the Apple and Google scrapers are just thin adapters over this.
+ * The shared scraping engine, composed from three patterns so the loop stays
+ * flat and every policy is independently testable:
+ * - **Strategy** — the `StoreAdapter` decides how to fetch/paginate a store.
+ * - **Pipeline + Chain of Responsibility** — `ReviewPipeline` runs each review
+ *   through `dedupe → notOlderThan → limit`, short-circuiting on drop/stop.
+ * - **State Machine** — `Paginator` owns the cursor and the keep-going decision.
+ *
+ * Streams reviews one at a time, with jittered delays and 429 backoff. The
+ * Apple and Google scrapers are just thin adapters over this.
  */
 export async function* runScraper<C>(
   adapter: StoreAdapter<C>,
@@ -57,58 +65,51 @@ export async function* runScraper<C>(
 ): AsyncGenerator<Review, void, unknown> {
   if (!opts.appId) throw new Error("appId is required");
   const profile = STEALTH[opts.stealth ?? "max"];
-  const since = opts.since ? new Date(opts.since).getTime() : null;
+
+  const pipeline = new ReviewPipeline([
+    dedupe(),
+    notOlderThan(opts.since ? new Date(opts.since) : null),
+    limit(opts.limit),
+  ]);
+  const paginator = new Paginator<C>(adapter.initialCursor);
 
   const session = await openSession(adapter.landingUrl(opts), opts, profile);
-  // Offset/token pagination can return the same review twice (e.g. when new
-  // reviews arrive mid-scrape and shift later pages). Emit each id once.
-  const seen = new Set<string>();
   let collected = 0;
-  let dryPages = 0; // consecutive pages that added nothing new
-  let cursor: C | null = adapter.initialCursor;
 
   try {
-    while (cursor !== null) {
+    while (paginator.state === "fetch") {
       const res: SettledResult<C> = await fetchWithRetry(
         adapter,
         session.page,
         opts,
-        cursor,
+        paginator.cursor,
         profile.backoffBaseMs,
         profile.maxRetries,
       );
       if (res.kind === "end") break;
 
-      let stop = false;
-      const before = collected;
+      let added = 0;
+      let halted = false;
       for (const review of res.reviews) {
-        if (seen.has(review.id)) continue; // drop cross-page duplicates
-        seen.add(review.id);
-
-        if (since && review.date && new Date(review.date).getTime() < since) {
-          stop = true;
+        const verdict = pipeline.run(review);
+        if (verdict === "stop") {
+          halted = true;
           break;
         }
-
+        if (verdict === "drop") continue;
         yield review;
         opts.onReview?.(review, collected);
         collected++;
-
-        if (opts.limit && collected >= opts.limit) {
-          stop = true;
-          break;
-        }
+        added++;
       }
 
-      // If a whole page was duplicates, the feed has wrapped or bottomed out.
-      dryPages = collected === before ? dryPages + 1 : 0;
-
-      const hasMore = !stop && res.next !== null && dryPages < 2;
-      opts.onProgress?.({ collected, batch: res.reviews.length, hasMore });
-      if (!hasMore) break;
-
-      cursor = res.next;
-      await jitter(profile.pageDelayMs);
+      paginator.advance({ added, next: res.next, halted });
+      opts.onProgress?.({
+        collected,
+        batch: res.reviews.length,
+        hasMore: paginator.state === "fetch",
+      });
+      if (paginator.state === "fetch") await jitter(profile.pageDelayMs);
     }
   } finally {
     await session.close();

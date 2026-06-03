@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { config } from "./config.js";
 import { createCsvSink } from "./output.js";
-import { inferStore, streamReviews } from "./scrape.js";
+import { resolveTarget } from "./resolve.js";
+import { streamReviews } from "./scrape.js";
 import type { ReviewSort, StealthPreset, Store } from "./types.js";
 
 const HELP = `
@@ -37,22 +38,6 @@ Examples:
   noviq com.spotify.music --since 2025-01-01 --headed
 `;
 
-/**
- * Resolve the app id from a raw id, package name, or store URL.
- * - apps.apple.com URL → numeric id
- * - play.google.com URL → ?id=<package>
- * - otherwise returned as-is (numeric id or package name)
- */
-function parseAppId(input: string): string {
-  if (/^\d+$/.test(input)) return input; // apple numeric id
-  if (/^[a-z][\w.]+\.[\w.]+$/i.test(input)) return input; // google package
-  const apple = input.match(/\/id(\d+)/);
-  if (apple) return apple[1];
-  const google = input.match(/[?&]id=([\w.]+)/);
-  if (google) return google[1];
-  throw new Error(`Could not find an app id or package in "${input}"`);
-}
-
 async function main(): Promise<void> {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
@@ -78,8 +63,11 @@ async function main(): Promise<void> {
     process.exit(values.help ? 0 : 1);
   }
 
-  const appId = parseAppId(positionals[0]);
-  const store = (values.store as Store | undefined) ?? inferStore(appId);
+  // One Chain-of-Responsibility pass turns the id/package/URL into a target;
+  // an explicit --store overrides the inferred store.
+  const resolved = resolveTarget(positionals[0]);
+  const appId = resolved.appId;
+  const store = (values.store as Store | undefined) ?? resolved.store;
   const country = (values.country ?? "us").toLowerCase();
 
   // CSV only — rows are streamed to disk as reviews arrive, so a run uses
