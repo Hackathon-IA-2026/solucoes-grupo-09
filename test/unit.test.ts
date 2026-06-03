@@ -1,8 +1,8 @@
-import { test, expect, describe } from "bun:test";
+import { describe, expect, test } from "bun:test";
+import { nextOffset, normalizeAppleReview, reviewsUrl } from "../src/apple.js";
+import { buildBody, normalizeGoogleReview, parseBatch } from "../src/google.js";
+import { CSV_HEADER, csvCell, csvRow } from "../src/output.js";
 import { inferStore } from "../src/scrape.js";
-import { reviewsUrl, nextOffset, normalizeAppleReview } from "../src/apple.js";
-import { buildBody, parseBatch, normalizeGoogleReview } from "../src/google.js";
-import { csvCell, csvRow, CSV_HEADER } from "../src/output.js";
 import type { Review, ScrapeOptions } from "../src/types.js";
 
 describe("inferStore", () => {
@@ -33,12 +33,18 @@ describe("apple: reviewsUrl", () => {
   });
 
   test("maps sort, including rating → mostRecent (Apple has no rating sort)", () => {
-    expect(new URL(reviewsUrl({ ...base, sort: "mostHelpful" }, 0)).searchParams.get("sort")).toBe("mostHelpful");
-    expect(new URL(reviewsUrl({ ...base, sort: "rating" }, 0)).searchParams.get("sort")).toBe("mostRecent");
+    expect(
+      new URL(reviewsUrl({ ...base, sort: "mostHelpful" }, 0)).searchParams.get("sort"),
+    ).toBe("mostHelpful");
+    expect(
+      new URL(reviewsUrl({ ...base, sort: "rating" }, 0)).searchParams.get("sort"),
+    ).toBe("mostRecent");
   });
 
   test("honors lang override", () => {
-    expect(new URL(reviewsUrl({ ...base, lang: "fr-FR" }, 0)).searchParams.get("l")).toBe("fr-FR");
+    expect(new URL(reviewsUrl({ ...base, lang: "fr-FR" }, 0)).searchParams.get("l")).toBe(
+      "fr-FR",
+    );
   });
 });
 
@@ -122,16 +128,20 @@ describe("google: buildBody", () => {
   });
 
   test("maps sort codes", () => {
-    expect(decodeFreq(buildBody({ ...opts, sort: "mostHelpful" }, null)).inner[2][1]).toBe(1);
+    expect(
+      decodeFreq(buildBody({ ...opts, sort: "mostHelpful" }, null)).inner[2][1],
+    ).toBe(1);
     expect(decodeFreq(buildBody({ ...opts, sort: "rating" }, null)).inner[2][1]).toBe(3);
   });
 });
 
 describe("google: parseBatch", () => {
-  function envelope(rows: any[], token: string | null): string {
+  function envelope(rows: unknown[], token: string | null): string {
     const payload = JSON.stringify([rows, token ? [null, token] : []]);
-    const env = JSON.stringify([["wrb.fr", "UsvDTd", payload, null, null, null, "generic"]]);
-    return ")]}'\n\n" + env.length + "\n" + env + "\n";
+    const env = JSON.stringify([
+      ["wrb.fr", "UsvDTd", payload, null, null, null, "generic"],
+    ]);
+    return `)]}'\n\n${env.length}\n${env}\n`;
   }
 
   test("unwraps the chunked envelope and pulls rows + token", () => {
@@ -157,7 +167,7 @@ describe("google: normalizeGoogleReview", () => {
   const opts: ScrapeOptions = { appId: "com.x.y", country: "US" };
 
   test("maps the review tuple into the unified shape", () => {
-    const r: any[] = [];
+    const r: unknown[] = [];
     r[0] = "abc";
     r[1] = ["Alice"];
     r[2] = 4;
@@ -177,14 +187,17 @@ describe("google: normalizeGoogleReview", () => {
       date: new Date(1700000000 * 1000).toISOString(),
       thumbsUp: 12,
       appVersion: "9.1.0",
-      developerResponse: { body: "Thanks!", modified: new Date(1700100000 * 1000).toISOString() },
+      developerResponse: {
+        body: "Thanks!",
+        modified: new Date(1700100000 * 1000).toISOString(),
+      },
       appId: "com.x.y",
       country: "us",
     });
   });
 
   test("null reply → developerResponse null", () => {
-    const r: any[] = ["id", ["U"], 5, null, "body", [1700000000, 0], 0, null];
+    const r: unknown[] = ["id", ["U"], 5, null, "body", [1700000000, 0], 0, null];
     expect(normalizeGoogleReview(r, opts)?.developerResponse).toBeNull();
   });
 

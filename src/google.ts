@@ -29,7 +29,7 @@ export function buildBody(opts: ScrapeOptions, token: string | null): string {
     [opts.appId, 7],
   ]);
   const freq = JSON.stringify([[[REVIEWS_RPC, inner, null, "generic"]]]);
-  return "f.req=" + encodeURIComponent(freq);
+  return `f.req=${encodeURIComponent(freq)}`;
 }
 
 function batchUrl(opts: ScrapeOptions): string {
@@ -50,12 +50,12 @@ function batchUrl(opts: ScrapeOptions): string {
  * length-prefixed framing, then pull out our RPC's payload. Returns the raw
  * review tuples plus the next continuation token.
  */
-export function parseBatch(body: string): { rows: any[]; token: string | null } {
+export function parseBatch(body: string): { rows: unknown[]; token: string | null } {
   const stripped = body.replace(/^\)\]\}'/, "");
   const line = stripped.split("\n").find((l) => l.startsWith('[["wrb.fr"'));
   if (!line) return { rows: [], token: null };
-  const frame = JSON.parse(line).find((e: any[]) => e[1] === REVIEWS_RPC);
-  if (!frame || !frame[2]) return { rows: [], token: null };
+  const frame = JSON.parse(line).find((e: unknown[]) => e[1] === REVIEWS_RPC);
+  if (!frame?.[2]) return { rows: [], token: null };
   const data = JSON.parse(frame[2]);
   return { rows: data[0] ?? [], token: data[1]?.[1] ?? null };
 }
@@ -65,7 +65,7 @@ function isoFromSeconds(seconds: unknown): string {
   return Number.isFinite(n) && n > 0 ? new Date(n * 1000).toISOString() : "";
 }
 
-export function normalizeGoogleReview(r: any, opts: ScrapeOptions): Review | null {
+export function normalizeGoogleReview(r: unknown, opts: ScrapeOptions): Review | null {
   if (!Array.isArray(r) || r[0] == null) return null;
   const reply = r[7];
   return {

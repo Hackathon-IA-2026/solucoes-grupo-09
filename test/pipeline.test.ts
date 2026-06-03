@@ -1,8 +1,9 @@
-import { test, expect, describe, mock, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { Review } from "../src/types.js";
 
 // A canned "server": maps an in-page fetch (url, init) to an HTTP-ish response.
-type Server = (url: string, init?: any) => { status: number; body: string };
+type FetchInit = { method?: string; headers?: Record<string, string>; body?: string };
+type Server = (url: string, init?: FetchInit) => { status: number; body: string };
 let server: Server;
 
 // --- mock cloakbrowser so runScraper exercises the real pipeline, no network ---
@@ -13,16 +14,26 @@ function makePage() {
     },
     mouse: { async wheel() {} },
     // pageFetch calls page.evaluate(fn, { url, init }); we ignore fn and serve.
-    async evaluate(_fn: any, arg: any) {
+    async evaluate(_fn: unknown, arg: { url: string; init?: FetchInit }) {
       return server(arg.url, arg.init);
     },
   };
 }
 function makeContext() {
-  return { async newPage() { return makePage(); }, async close() {} };
+  return {
+    async newPage() {
+      return makePage();
+    },
+    async close() {},
+  };
 }
 mock.module("cloakbrowser", () => ({
-  launch: async () => ({ async newContext() { return makeContext(); }, async close() {} }),
+  launch: async () => ({
+    async newContext() {
+      return makeContext();
+    },
+    async close() {},
+  }),
   launchPersistentContext: async () => makeContext(),
 }));
 
@@ -34,14 +45,14 @@ function appleServer(total: number): Server {
   return (url) => {
     const offset = Number(new URL(url).searchParams.get("offset"));
     if (offset >= total) return { status: 404, body: "" };
-    const data: any[] = [];
+    const data: unknown[] = [];
     for (let i = offset; i < Math.min(offset + 20, total); i++) {
       data.push({
         id: String(1000 + i),
         attributes: {
-          userName: "u" + i,
-          title: "t" + i,
-          review: "b" + i,
+          userName: `u${i}`,
+          title: `t${i}`,
+          review: `b${i}`,
           rating: (i % 5) + 1,
           date: new Date(Date.UTC(2025, 0, 1) - i * 86_400_000).toISOString(),
           isEdited: false,
@@ -49,33 +60,38 @@ function appleServer(total: number): Server {
       });
     }
     const nextOff = offset + 20;
-    const next = nextOff < total ? `/v1/catalog/us/apps/1/reviews?offset=${nextOff}` : undefined;
+    const next =
+      nextOff < total ? `/v1/catalog/us/apps/1/reviews?offset=${nextOff}` : undefined;
     return { status: 200, body: JSON.stringify({ data, next }) };
   };
 }
 
 function googleServer(pages: string[][]): Server {
   return (_url, init) => {
-    const outer = JSON.parse(decodeURIComponent(String(init.body).slice("f.req=".length)));
+    const outer = JSON.parse(
+      decodeURIComponent(String(init?.body ?? "").slice("f.req=".length)),
+    );
     const inner = JSON.parse(outer[0][0][1]);
     const token = inner[2][2][2]; // null on first page, else "T<idx>"
     const idx = token == null ? 0 : Number(String(token).slice(1));
     const rows = (pages[idx] ?? []).map((id, k) => {
-      const r: any[] = [];
+      const r: unknown[] = [];
       r[0] = id;
-      r[1] = ["user" + id];
+      r[1] = [`user${id}`];
       r[2] = ((idx + k) % 5) + 1;
-      r[4] = "body" + id;
+      r[4] = `body${id}`;
       r[5] = [1_700_000_000 - (idx * 100 + k) * 86_400, 0];
       r[6] = 0;
       r[7] = null;
       r[10] = "1.0";
       return r;
     });
-    const nextToken = idx + 1 < pages.length ? "T" + (idx + 1) : null;
+    const nextToken = idx + 1 < pages.length ? `T${idx + 1}` : null;
     const payload = JSON.stringify([rows, nextToken ? [null, nextToken] : []]);
-    const env = JSON.stringify([["wrb.fr", "UsvDTd", payload, null, null, null, "generic"]]);
-    return { status: 200, body: ")]}'\n\n" + env.length + "\n" + env + "\n" };
+    const env = JSON.stringify([
+      ["wrb.fr", "UsvDTd", payload, null, null, null, "generic"],
+    ]);
+    return { status: 200, body: `)]}'\n\n${env.length}\n${env}\n` };
   };
 }
 
@@ -109,7 +125,7 @@ describe("pipeline · apple (offset pagination)", () => {
     server = (url) => {
       const offset = Number(new URL(url).searchParams.get("offset"));
       const data = Array.from({ length: 5 }, (_, i) => ({
-        id: "dup" + i,
+        id: `dup${i}`,
         attributes: { rating: 3, date: "2025-01-01T00:00:00Z" },
       }));
       const next = offset < 200 ? `/r?offset=${offset + 20}` : undefined;
@@ -126,7 +142,7 @@ describe("pipeline · apple (offset pagination)", () => {
       const offset = Number(new URL(url).searchParams.get("offset"));
       if (offset >= 5) return { status: 404, body: "" };
       const data = Array.from({ length: 5 }, (_, i) => ({
-        id: "r" + i,
+        id: `r${i}`,
         attributes: { rating: 4, date: "2025-01-01T00:00:00Z" },
       }));
       return { status: 200, body: JSON.stringify({ data }) };
@@ -146,8 +162,16 @@ describe("pipeline · google (token pagination)", () => {
   });
 
   test("honors limit mid-stream", async () => {
-    server = googleServer([["1", "2", "3"], ["4", "5", "6"]]);
-    const reviews = await getReviews({ appId: "com.x.y", store: "google", limit: 4, ...FAST });
+    server = googleServer([
+      ["1", "2", "3"],
+      ["4", "5", "6"],
+    ]);
+    const reviews = await getReviews({
+      appId: "com.x.y",
+      store: "google",
+      limit: 4,
+      ...FAST,
+    });
     expect(reviews.length).toBe(4);
   });
 

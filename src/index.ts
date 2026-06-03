@@ -1,21 +1,21 @@
+export { appleAdapter } from "./apple.js";
+export type { FetchResult, StoreAdapter } from "./engine.js";
+export { googleAdapter } from "./google.js";
+export { createCsvSink, writeCsv, writeJson } from "./output.js";
 export {
-  streamReviews,
+  getAppleReviews,
+  getGoogleReviews,
   getReviews,
   inferStore,
   streamAppleReviews,
-  getAppleReviews,
   streamGoogleReviews,
-  getGoogleReviews,
+  streamReviews,
 } from "./scrape.js";
-export { writeJson, writeCsv, createCsvSink } from "./output.js";
-export { appleAdapter } from "./apple.js";
-export { googleAdapter } from "./google.js";
-export type { StoreAdapter, FetchResult } from "./engine.js";
 export type {
-  Review,
-  Store,
-  ScrapeOptions,
-  ReviewSort,
-  StealthPreset,
   ProgressInfo,
+  Review,
+  ReviewSort,
+  ScrapeOptions,
+  StealthPreset,
+  Store,
 } from "./types.js";

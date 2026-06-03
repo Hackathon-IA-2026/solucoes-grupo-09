@@ -1,5 +1,5 @@
-import { mkdir, writeFile } from "node:fs/promises";
 import { createWriteStream, mkdirSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { Review } from "./types.js";
 
@@ -39,22 +39,16 @@ export function csvRow(review: Review): string {
 }
 
 /** Write the full array to a pretty-printed JSON file. */
-export async function writeJson(
-  path: string,
-  reviews: Review[],
-): Promise<void> {
+export async function writeJson(path: string, reviews: Review[]): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, JSON.stringify(reviews, null, 2), "utf8");
 }
 
 /** Write the full array to a CSV file. */
-export async function writeCsv(
-  path: string,
-  reviews: Review[],
-): Promise<void> {
+export async function writeCsv(path: string, reviews: Review[]): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   const lines = [CSV_COLUMNS.join(","), ...reviews.map(csvRow)];
-  await writeFile(path, lines.join("\n") + "\n", "utf8");
+  await writeFile(path, `${lines.join("\n")}\n`, "utf8");
 }
 
 /**
@@ -67,9 +61,9 @@ export function createCsvSink(path: string): {
 } {
   mkdirSync(dirname(path), { recursive: true });
   const stream = createWriteStream(path, { encoding: "utf8" });
-  stream.write(CSV_COLUMNS.join(",") + "\n");
+  stream.write(`${CSV_COLUMNS.join(",")}\n`);
   return {
-    write: (review) => stream.write(csvRow(review) + "\n"),
+    write: (review) => stream.write(`${csvRow(review)}\n`),
     close: () =>
       new Promise<void>((resolve, reject) => {
         stream.end((err: unknown) => (err ? reject(err) : resolve()));

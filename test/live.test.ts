@@ -1,9 +1,9 @@
-import { test, expect, describe } from "bun:test";
+import { describe, expect, test } from "bun:test";
+import { readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readFileSync, rmSync } from "node:fs";
-import { getReviews, streamReviews } from "../src/scrape.js";
 import { createCsvSink } from "../src/output.js";
+import { getReviews, streamReviews } from "../src/scrape.js";
 import type { Review } from "../src/types.js";
 
 // Live tests hit the real stores via cloakbrowser. Opt in with NOVIQ_LIVE=1

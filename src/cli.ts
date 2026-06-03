@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import { parseArgs } from "node:util";
 import { join } from "node:path";
-import { streamReviews, inferStore } from "./scrape.js";
+import { parseArgs } from "node:util";
 import { createCsvSink } from "./output.js";
+import { inferStore, streamReviews } from "./scrape.js";
 import type { ReviewSort, StealthPreset, Store } from "./types.js";
 
 const HELP = `
@@ -83,7 +83,7 @@ async function main(): Promise<void> {
 
   // CSV only — rows are streamed to disk as reviews arrive, so a run uses
   // constant memory no matter how many reviews it pulls.
-  const path = join(values.out!, `${store}-${appId}-${country}.csv`);
+  const path = join(values.out ?? "output", `${store}-${appId}-${country}.csv`);
   const csvSink = createCsvSink(path);
 
   const startedAt = Date.now();

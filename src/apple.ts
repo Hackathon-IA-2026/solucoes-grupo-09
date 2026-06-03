@@ -36,9 +36,26 @@ export function nextOffset(next: string | undefined): number | null {
   return m ? Number(m[1]) : null;
 }
 
-export function normalizeAppleReview(raw: any, opts: ScrapeOptions): Review | null {
-  const a = raw?.attributes;
-  if (!a) return null;
+/** The subset of Apple's raw review JSON we read. */
+interface RawAppleReview {
+  id?: string | number;
+  attributes?: {
+    userName?: string;
+    title?: string;
+    review?: string;
+    rating?: number;
+    date?: string;
+    isEdited?: boolean;
+    developerResponse?: { body?: string; modified?: string } | null;
+  };
+}
+
+export function normalizeAppleReview(
+  raw: RawAppleReview | null | undefined,
+  opts: ScrapeOptions,
+): Review | null {
+  if (!raw?.attributes) return null;
+  const a = raw.attributes;
   const dev = a.developerResponse;
   return {
     store: "apple",
@@ -71,8 +88,8 @@ export const appleAdapter: StoreAdapter<number> = {
       throw new Error(`reviews API returned HTTP ${status}: ${body.slice(0, 200)}`);
     }
 
-    const json = JSON.parse(body);
-    const data: any[] = json.data ?? [];
+    const json = JSON.parse(body) as { data?: RawAppleReview[]; next?: string };
+    const data = json.data ?? [];
     if (data.length === 0) return { kind: "end" };
 
     const reviews = data
