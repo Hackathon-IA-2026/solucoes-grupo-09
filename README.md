@@ -122,6 +122,13 @@ curl "http://localhost:3000/reviews?appId=284882215&sort=mostHelpful&limit=50"
 
 > Each request drives a real browser session, so larger `limit`s take longer.
 
+**Production hardening** (all global Elysia plugins): security headers on every
+response — `Content-Security-Policy` (relaxed only for `/docs`), `X-Frame-Options:
+DENY`, `X-Content-Type-Options: nosniff`, `X-XSS-Protection`, `Referrer-Policy`,
+and `Strict-Transport-Security` in production; a 10 MB request-body limit (413);
+CORS; `Server-Timing`; a consistent JSON error envelope; and graceful shutdown on
+`SIGTERM`/`SIGINT`.
+
 ## Architecture
 
 Everything store-specific lives behind one small interface, so the humanized
@@ -139,12 +146,19 @@ src/
   output.ts    JSON / CSV / streaming CSV sink
   cli.ts       command-line entry point
   api/
-    index.ts             Elysia app: swagger + module composition
+    index.ts             Elysia app: plugins + swagger + module composition
+    plugins/
+      security.ts        security headers (CSP, HSTS, …) — global
+      body-limit.ts      reject oversized bodies (413) — global
+      errors.ts          consistent JSON error envelope — global
     reviews/
       model.ts           t.Object DTOs, registered via .model()
       service.ts         ReviewService — request-independent logic
       controller.ts      Elysia instance (the controller) + routes
 ```
+
+See [`DIAGRAM.md`](./DIAGRAM.md) for mermaid charts of the architecture, API
+request lifecycle, and the scraping engine loop.
 
 Adding a third store is just another `StoreAdapter`: give it a `landingUrl`, an
 `initialCursor`, and a `fetchBatch()` that returns normalized `Review`s plus the
@@ -175,7 +189,7 @@ interface Review {
 ## Testing
 
 ```bash
-bun test          # unit + pipeline + api (fast, offline) — 39 tests
+bun test          # unit + pipeline + api (fast, offline) — 45 tests
 bun run test:live # end-to-end against the real stores (slower, network)
 ```
 
@@ -185,8 +199,10 @@ bun run test:live # end-to-end against the real stores (slower, network)
   engine + adapters run **with no network**: de-dup, `limit`, `since`, offset &
   token pagination, dry-page guard, 429 retry, streaming & `onReview`.
 - **API** (`test/api.test.ts`) — Elysia routes via **Eden Treaty** (Elysia's
-  type-safe test client): health, info, model validation (422s), and the
-  Swagger/OpenAPI schema — all in-process, no server, no scrape.
+  type-safe test client): health, info, model validation (422s), Swagger/OpenAPI
+  schema, security headers (incl. relaxed CSP for `/docs` and header coverage on
+  errors), and the body-size limit (413). Mostly in-process; the 413 case boots
+  an ephemeral server so a real `Content-Length` is present.
 - **Live** (`test/live.test.ts`) — real Apple + Google pulls and a CSV
   round-trip. Skipped unless `NOVIQ_LIVE=1` (set by `bun run test:live`).
 
