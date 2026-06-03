@@ -7,6 +7,13 @@ function bool(value: string | undefined): boolean {
   return value === "1" || value?.toLowerCase() === "true";
 }
 
+/** Parse an int env var, clamped to [min, max], falling back to `def`. */
+function int(value: string | undefined, def: number, min: number, max: number): number {
+  const n = Number.parseInt(value ?? "", 10);
+  if (!Number.isFinite(n)) return def;
+  return Math.min(max, Math.max(min, n));
+}
+
 const stealth = process.env.NOVIQ_STEALTH;
 const VALID_STEALTH: StealthPreset[] = ["max", "balanced", "fast"];
 
@@ -35,4 +42,18 @@ export const config = {
    * containers; left off locally so the sandbox (and full stealth) stays on.
    */
   noSandbox: bool(process.env.NOVIQ_NO_SANDBOX),
+
+  // --- resilience / resource control ---
+  /** Max scrapes running at once (each launches a Chromium). Tune to host RAM. */
+  maxConcurrency: int(process.env.NOVIQ_MAX_CONCURRENCY, 2, 1, 64),
+  /** Max scrapes allowed to queue before returning 503. */
+  maxQueue: int(process.env.NOVIQ_MAX_QUEUE, 20, 0, 10_000),
+  /** Hard time budget per scrape (ms); partial results returned, else 504. */
+  scrapeTimeoutMs: int(process.env.NOVIQ_SCRAPE_TIMEOUT_MS, 120_000, 5_000, 600_000),
+  /** Page-navigation timeout (ms). */
+  navTimeoutMs: int(process.env.NOVIQ_NAV_TIMEOUT_MS, 60_000, 5_000, 180_000),
+  /** Per in-page fetch timeout (ms) — bounds a stalled network. */
+  fetchTimeoutMs: int(process.env.NOVIQ_FETCH_TIMEOUT_MS, 30_000, 2_000, 120_000),
+  /** Bounded retries on transient navigation/network failures. */
+  navRetries: int(process.env.NOVIQ_NAV_RETRIES, 2, 0, 5),
 } as const;

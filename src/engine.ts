@@ -41,9 +41,15 @@ async function fetchWithRetry<C>(
   maxRetries: number,
 ): Promise<SettledResult<C>> {
   for (let attempt = 1; ; attempt++) {
-    const res = await adapter.fetchBatch(page, opts, cursor);
-    if (res.kind !== "rateLimited") return res;
-    if (attempt > maxRetries) return { kind: "end" }; // give up gracefully
+    try {
+      const res = await adapter.fetchBatch(page, opts, cursor);
+      if (res.kind !== "rateLimited") return res;
+      if (attempt > maxRetries) return { kind: "end" }; // throttled out — stop cleanly
+    } catch (err) {
+      // Transient blip (network/timeout/parse) — retry a bounded number of
+      // times, then surface the error so the caller can keep partial results.
+      if (attempt > maxRetries) throw err;
+    }
     await sleep(backoffBaseMs * attempt);
   }
 }
@@ -78,6 +84,7 @@ export async function* runScraper<C>(
 
   try {
     while (paginator.state === "fetch") {
+      if (opts.signal?.aborted) break; // timeout/cancel — stop and close cleanly
       const res: SettledResult<C> = await fetchWithRetry(
         adapter,
         session.page,

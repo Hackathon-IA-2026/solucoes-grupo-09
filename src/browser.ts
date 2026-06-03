@@ -1,5 +1,6 @@
 import { launch, launchPersistentContext } from "cloakbrowser";
 import { config } from "./config.js";
+import { BadInputError, UpstreamError } from "./errors.js";
 import type { ScrapeOptions, StealthPreset, StealthProfile } from "./types.js";
 
 // In containers Chromium runs as root with a tiny /dev/shm, so it needs these.
@@ -104,16 +105,7 @@ export async function openSession(
 
   try {
     const page = await context.newPage();
-    const resp = await page.goto(landingUrl, {
-      waitUntil: "domcontentloaded",
-      timeout: 60_000,
-    });
-    if (resp && resp.status() >= 400) {
-      throw new Error(
-        `Store returned HTTP ${resp.status()} for ${landingUrl}. ` +
-          `Check the app id and country code.`,
-      );
-    }
+    await navigate(page, landingUrl);
 
     if (profile.warmupScroll) {
       // Mimic a visitor skimming the page before we start fetching.
@@ -134,6 +126,38 @@ export async function openSession(
   }
 }
 
+/**
+ * Navigate to the landing page with bounded retries. A 4xx (e.g. 404) means the
+ * app/country doesn't exist → `BadInputError` (not retried). A 5xx, navigation
+ * timeout or network error is transient → retried, then `UpstreamError`.
+ */
+async function navigate(page: Page, url: string): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const resp = await page.goto(url, {
+        waitUntil: "domcontentloaded",
+        timeout: config.navTimeoutMs,
+      });
+      const httpStatus = resp?.status() ?? 0;
+      if (httpStatus >= 500) throw new UpstreamError(`store responded ${httpStatus}`);
+      if (httpStatus >= 400) {
+        throw new BadInputError(
+          `App not found (store returned ${httpStatus}) — check the app id and country`,
+        );
+      }
+      return; // loaded ok
+    } catch (err) {
+      if (err instanceof BadInputError) throw err; // not retryable
+      if (attempt >= config.navRetries) {
+        throw err instanceof UpstreamError
+          ? err
+          : new UpstreamError("Failed to load the store page", { cause: err });
+      }
+      await sleep(500 * (attempt + 1));
+    }
+  }
+}
+
 export interface RawFetch {
   status: number;
   body: string;
@@ -141,7 +165,9 @@ export interface RawFetch {
 
 /**
  * Run a fetch from inside the page so it carries page-origin context (cookies,
- * Origin, Referer). `init` must be JSON-serializable (no functions).
+ * Origin, Referer). `init` must be JSON-serializable (no functions). The fetch
+ * is aborted after `fetchTimeoutMs` so a stalled connection can't hang the
+ * request (the engine's `finally` then closes the browser).
  */
 export async function pageFetch(
   page: Page,
@@ -149,10 +175,16 @@ export async function pageFetch(
   init?: { method?: string; headers?: Record<string, string>; body?: string },
 ): Promise<RawFetch> {
   return page.evaluate(
-    async ({ url, init }) => {
-      const res = await fetch(url, init);
-      return { status: res.status, body: await res.text() };
+    async ({ url, init, timeoutMs }) => {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+      try {
+        const res = await fetch(url, { ...init, signal: ctrl.signal });
+        return { status: res.status, body: await res.text() };
+      } finally {
+        clearTimeout(timer);
+      }
     },
-    { url, init: init ?? {} },
+    { url, init: init ?? {}, timeoutMs: config.fetchTimeoutMs },
   );
 }

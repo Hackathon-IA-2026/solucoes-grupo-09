@@ -1,14 +1,27 @@
 import { cors } from "@elysiajs/cors";
 import { serverTiming } from "@elysiajs/server-timing";
 import { swagger } from "@elysiajs/swagger";
+import { binaryInfo } from "cloakbrowser";
 import { Elysia } from "elysia";
 import { config } from "../config.js";
 import { bodyLimit, MAX_BODY_BYTES } from "./plugins/body-limit.js";
 import { errorHandler } from "./plugins/errors.js";
+import { requestContext } from "./plugins/request-context.js";
 import { securityHeaders } from "./plugins/security.js";
 import { reviews } from "./reviews/controller.js";
+import { scrapeStats } from "./reviews/service.js";
 
 const isProd = config.isProd;
+
+/** Readiness: the Chromium binary must resolve before we accept traffic. */
+async function browserReady(): Promise<boolean> {
+  if (process.env.CLOAKBROWSER_BINARY_PATH) return true; // container: baked in
+  try {
+    return Boolean((await binaryInfo())?.installed);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * The noviq HTTP API. Composed from feature modules (each a controller +
@@ -17,6 +30,7 @@ const isProd = config.isProd;
  */
 export const app = new Elysia()
   .use(securityHeaders)
+  .use(requestContext)
   .use(bodyLimit())
   .use(
     cors({
@@ -53,9 +67,18 @@ export const app = new Elysia()
   .get("/", () => ({ name: "noviq", version: "0.1.0", docs: "/docs" }), {
     detail: { summary: "API info" },
   })
-  .get("/health", () => ({ status: "ok" as const }), {
-    detail: { summary: "Health check" },
+  .get("/health", () => ({ status: "ok" as const, scrapes: scrapeStats() }), {
+    detail: { summary: "Liveness + live scrape concurrency stats" },
   })
+  .get(
+    "/ready",
+    async ({ set }) => {
+      const ready = await browserReady();
+      if (!ready) set.status = 503;
+      return { ready };
+    },
+    { detail: { summary: "Readiness — Chromium binary available" } },
+  )
   .use(reviews);
 
 export type App = typeof app;
@@ -92,12 +115,17 @@ if (import.meta.main) {
 
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
   process.on("SIGINT", () => void shutdown("SIGINT"));
-  process.on("uncaughtException", (err) => {
-    console.error("💥 Uncaught exception:", err);
-    process.exit(1);
-  });
+
+  // A rejected promise somewhere must NOT take the whole server down — log it
+  // and keep serving every other in-flight request.
   process.on("unhandledRejection", (reason) => {
-    console.error("💥 Unhandled rejection:", reason);
-    process.exit(1);
+    console.error("⚠️  Unhandled rejection (continuing):", reason);
+  });
+
+  // After an uncaught exception the process state is undefined, so the safe
+  // move is a graceful shutdown then exit (a supervisor restarts us).
+  process.on("uncaughtException", (err) => {
+    console.error("💥 Uncaught exception — shutting down:", err);
+    void shutdown("uncaughtException");
   });
 }

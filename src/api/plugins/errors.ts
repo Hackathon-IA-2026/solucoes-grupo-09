@@ -1,9 +1,11 @@
 import { Elysia } from "elysia";
+import { toHttpError } from "../../errors.js";
 
 /**
- * Consistent JSON error envelope for the whole API. Validation errors keep
- * Elysia's detailed 422; everything else is normalized so internal failures
- * never leak a stack trace to clients.
+ * Consistent JSON error envelope for the whole API and the safety net for any
+ * error a route didn't handle itself. Validation keeps Elysia's detailed 422;
+ * domain errors map to their status; anything else is a 500 whose detail is
+ * logged server-side but never leaked to the client.
  */
 export const errorHandler = new Elysia({ name: "error-handler" })
   .onError(({ code, error, set }) => {
@@ -12,8 +14,9 @@ export const errorHandler = new Elysia({ name: "error-handler" })
       set.status = 404;
       return { error: "Not found" };
     }
-    console.error("💥 Unhandled API error:", error);
-    set.status = 500;
-    return { error: "Internal server error" };
+    const { status, body } = toHttpError(error);
+    if (status >= 500) console.error("💥 Unhandled API error:", error);
+    set.status = status;
+    return body;
   })
   .as("global");

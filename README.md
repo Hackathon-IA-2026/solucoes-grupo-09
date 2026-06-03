@@ -115,17 +115,19 @@ bun run api:dev      # same, with --watch
 ```
 
 
-| Route          | Description                               |
-| -------------- | ----------------------------------------- |
-| `GET /`        | API info                                  |
-| `GET /health`  | health check                              |
-| `GET /docs`    | Swagger UI (OpenAPI JSON at `/docs/json`) |
-| `GET /reviews` | scrape reviews — query params below       |
+| Route          | Description                                       |
+| -------------- | ------------------------------------------------- |
+| `GET /`        | API info                                          |
+| `GET /health`  | liveness + live scrape concurrency stats          |
+| `GET /ready`   | readiness — Chromium binary available (503 if not)|
+| `GET /docs`    | Swagger UI (OpenAPI JSON at `/docs/json`)         |
+| `GET /reviews` | scrape reviews — query params below               |
 
 
-`GET /reviews` query: `appId` (required), `store`, `country`, `lang`, `sort`,
-`limit` (1–500, default 50), `since`, `stealth`. The store is auto-detected from
-`appId` unless given. Returns `{ store, appId, country, count, reviews[] }`.
+`GET /reviews` query: `appId` (required), `store`, `country` (2 letters), `lang`,
+`sort`, `limit` (1–500, default 50), `since` (date), `stealth`. The store is
+auto-detected from `appId` unless given. Returns
+`{ store, appId, country, count, partial, reviews[] }`.
 
 ```bash
 curl "http://localhost:3000/reviews?appId=com.spotify.music&limit=20&stealth=fast"
@@ -134,11 +136,30 @@ curl "http://localhost:3000/reviews?appId=284882215&sort=mostHelpful&limit=50"
 
 > Each request drives a real browser session, so larger `limit`s take longer.
 
-**Production hardening** (all global Elysia plugins): security headers on every
-response — `Content-Security-Policy` (relaxed only for `/docs`), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `X-XSS-Protection`, `Referrer-Policy`,
-and `Strict-Transport-Security` in production; a 10 MB request-body limit (413);
-CORS; `Server-Timing`; a consistent JSON error envelope; and graceful shutdown on
-`SIGTERM`/`SIGINT`.
+**Hardening** (global Elysia plugins): security headers (CSP relaxed only for
+`/docs`, `X-Frame-Options: DENY`, `nosniff`, `X-XSS-Protection`, `Referrer-Policy`,
+HSTS in prod); 10 MB body limit (413); CORS; `Server-Timing`.
+
+### Error resistance
+
+Every request is guaranteed to terminate cleanly with a correct status, and the
+browser is always released:
+
+- **Timeouts** — 30 s per in-page fetch + a hard per-scrape budget; on timeout the
+  scrape aborts and the browser is closed (no leaks).
+- **Concurrency cap** — a semaphore bounds simultaneous scrapes; excess **queues**,
+  then **503** when the queue is full (protects host RAM).
+- **Typed errors → correct codes** — bad input **400**, upstream/store failure
+  **502**, timeout **504**, capacity **503**, unknown **500** — never leaking
+  internal messages or stacks.
+- **Bounded retries** — transient navigation (5xx/network) and mid-stream blips
+  (429 + transient throws) retry with backoff, then give up gracefully.
+- **Partial results** — a timeout / mid-stream failure returns what was collected
+  with `partial: true` instead of all-or-nothing.
+- **Survives stray rejections** — an `unhandledRejection` is logged, not fatal;
+  only `uncaughtException` triggers a graceful shutdown.
+- **Correlation** — `x-request-id` on every response and in structured logs.
+- **Readiness** — `/ready` so orchestrators don't route traffic to a broken node.
 
 ## Configuration (`.env`)
 
@@ -153,6 +174,12 @@ Bun auto-loads `.env` (copy `.env.example`). All env reads live in `src/config.t
 | `NOVIQ_GEOIP`      | `false`       | match browser geo/locale to the proxy exit IP           |
 | `NOVIQ_STEALTH`    | `max`         | default stealth preset                                  |
 | `NOVIQ_NO_SANDBOX` | `false`       | Chromium `--no-sandbox` (set automatically in Docker)   |
+| `NOVIQ_MAX_CONCURRENCY` | `2`      | max simultaneous scrapes (tune to host RAM)             |
+| `NOVIQ_MAX_QUEUE`  | `20`          | queued scrapes before 503                               |
+| `NOVIQ_SCRAPE_TIMEOUT_MS` | `120000` | per-scrape budget (→ partial or 504)                  |
+| `NOVIQ_NAV_TIMEOUT_MS` | `60000`   | page navigation timeout                                 |
+| `NOVIQ_FETCH_TIMEOUT_MS` | `30000` | per in-page fetch timeout                               |
+| `NOVIQ_NAV_RETRIES` | `2`          | bounded retries on transient navigation failures        |
 
 
 ## Docker

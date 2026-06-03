@@ -43,7 +43,13 @@ export const scrapeQuery = t.Object({
       "Numeric id (Apple, e.g. 284882215) or package name (Google, e.g. com.spotify.music)",
   }),
   store: t.Optional(storeEnum),
-  country: t.Optional(t.String({ default: "us", description: "Storefront code" })),
+  country: t.Optional(
+    t.String({
+      default: "us",
+      pattern: "^[A-Za-z]{2}$",
+      description: "2-letter storefront code",
+    }),
+  ),
   lang: t.Optional(t.String({ description: "Apple BCP-47 (en-US), Google short (en)" })),
   sort: t.Optional(sortEnum),
   limit: t.Optional(
@@ -61,6 +67,8 @@ export const scrapeResponse = t.Object({
   appId: t.String(),
   country: t.String(),
   count: t.Number(),
+  /** True when results were cut short by a timeout or a mid-stream error. */
+  partial: t.Boolean(),
   reviews: t.Array(reviewSchema),
 });
 

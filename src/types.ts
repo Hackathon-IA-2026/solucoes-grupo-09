@@ -86,6 +86,8 @@ export interface ScrapeOptions {
   onReview?: (review: Review, index: number) => void;
   /** Called once per fetched page with progress info. */
   onProgress?: (info: ProgressInfo) => void;
+  /** Abort the scrape early (timeout/cancel); the browser is closed cleanly. */
+  signal?: AbortSignal;
 }
 
 export interface ProgressInfo {

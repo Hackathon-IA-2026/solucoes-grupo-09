@@ -207,4 +207,21 @@ describe("pipeline · streaming + callbacks", () => {
     expect(seen[0][1]).toBe(0);
     expect(seen[29][1]).toBe(29);
   });
+
+  test("stops early and closes when the abort signal fires (timeout/cancel)", async () => {
+    server = appleServer(200);
+    const ac = new AbortController();
+    const ids: string[] = [];
+    for await (const r of streamReviews({
+      appId: "1",
+      store: "apple",
+      ...FAST,
+      signal: ac.signal,
+    })) {
+      ids.push(r.id);
+      if (ids.length === 20) ac.abort(); // abort after the first page
+    }
+    // Engine checks the signal at the page boundary → no further pages fetched.
+    expect(ids.length).toBe(20);
+  });
 });

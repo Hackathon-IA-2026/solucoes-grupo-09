@@ -1,8 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import { treaty } from "@elysiajs/eden";
+import { Elysia } from "elysia";
 import { app } from "../src/api/index.js";
 import { exceedsLimit, MAX_BODY_BYTES } from "../src/api/plugins/body-limit.js";
+import { errorHandler } from "../src/api/plugins/errors.js";
 import { cspFor } from "../src/api/plugins/security.js";
+import { BadInputError, UpstreamError } from "../src/errors.js";
 
 // Eden Treaty — Elysia's recommended type-safe testing client. It runs requests
 // through the app in-process (no network, no server), so these stay fast and
@@ -10,16 +13,28 @@ import { cspFor } from "../src/api/plugins/security.js";
 const api = treaty(app);
 
 describe("api · typed routes (Eden Treaty)", () => {
-  it("GET /health returns ok", async () => {
+  it("GET /health returns ok with concurrency stats", async () => {
     const { data, status } = await api.health.get();
     expect(status).toBe(200);
-    expect(data).toEqual({ status: "ok" });
+    expect(data?.status).toBe("ok");
+    expect(data?.scrapes?.max).toBeGreaterThanOrEqual(1);
+  });
+
+  it("GET /ready reports a boolean readiness", async () => {
+    const { data, status } = await api.ready.get();
+    expect([200, 503]).toContain(status);
+    expect(typeof data?.ready === "boolean" || data === null).toBe(true);
   });
 
   it("GET / returns api info with a docs link", async () => {
     const { data } = await api.get();
     expect(data?.name).toBe("noviq");
     expect(data?.docs).toBe("/docs");
+  });
+
+  it("echoes an x-request-id header for correlation", async () => {
+    const res = await app.handle(new Request("http://localhost/health"));
+    expect(res.headers.get("x-request-id")).toBeTruthy();
   });
 
   it("rejects a missing appId with 422", async () => {
@@ -44,6 +59,46 @@ describe("api · typed routes (Eden Treaty)", () => {
       query: { appId: "undefined", store: "google" },
     });
     expect(error?.status).toBe(422);
+  });
+
+  it("rejects a non-2-letter country with 422", async () => {
+    const { error } = await api.reviews.get({
+      query: { appId: "284882215", country: "usa" },
+    });
+    expect(error?.status).toBe(422);
+  });
+
+  it("rejects an invalid `since` date with 400 (before any scrape)", async () => {
+    const { error } = await api.reviews.get({
+      query: { appId: "284882215", since: "not-a-date" },
+    });
+    expect(error?.status).toBe(400);
+  });
+});
+
+describe("api · error mapping (global handler)", () => {
+  const errApp = new Elysia()
+    .use(errorHandler)
+    .get("/bad", () => {
+      throw new BadInputError("nope");
+    })
+    .get("/up", () => {
+      throw new UpstreamError();
+    })
+    .get("/boom", () => {
+      throw new Error("ECONN internal-db dsn=secret");
+    });
+  const hit = (p: string) => errApp.handle(new Request(`http://localhost${p}`));
+
+  it("maps domain errors to their status", async () => {
+    expect((await hit("/bad")).status).toBe(400);
+    expect((await hit("/up")).status).toBe(502);
+  });
+
+  it("maps unknown errors to 500 without leaking the message", async () => {
+    const res = await hit("/boom");
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "Internal server error" });
   });
 });
 
