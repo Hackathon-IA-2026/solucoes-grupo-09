@@ -40,7 +40,12 @@ export const app = new Elysia()
           contact: { name: "noviq" },
           license: { name: "MIT" },
         },
-        servers: [{ url: "http://localhost:3000", description: "Local" }],
+        // No hardcoded server: Swagger UI uses the origin it was loaded from, so
+        // "Execute" hits the right host on localhost and in production alike.
+        // Set NOVIQ_PUBLIC_URL to pin it explicitly.
+        ...(config.publicUrl
+          ? { servers: [{ url: config.publicUrl, description: "Public" }] }
+          : {}),
         tags: [{ name: "Reviews", description: "Scrape app store reviews" }],
       },
     }),

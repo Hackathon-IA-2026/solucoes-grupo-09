@@ -38,6 +38,13 @@ describe("api · typed routes (Eden Treaty)", () => {
     const { error } = await api.reviews.get({ query: { appId: "1", limit: 99999 } });
     expect(error?.status).toBe(422);
   });
+
+  it("rejects a junk appId like 'undefined' with 422 (Swagger examples bug)", async () => {
+    const { error } = await api.reviews.get({
+      query: { appId: "undefined", store: "google" },
+    });
+    expect(error?.status).toBe(422);
+  });
 });
 
 describe("api · swagger", () => {

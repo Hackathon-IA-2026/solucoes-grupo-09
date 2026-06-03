@@ -34,8 +34,13 @@ export const reviewSchema = t.Object({
 /** Query string for the scrape endpoint. */
 export const scrapeQuery = t.Object({
   appId: t.String({
-    description: "Numeric id (Apple) or package name (Google)",
-    examples: ["284882215", "com.spotify.music"],
+    // Numeric id (Apple, e.g. 284882215) OR dotted package name (Google,
+    // e.g. com.spotify.music). The pattern rejects junk like "undefined".
+    // NOTE: no `examples` array here — that emits invalid OpenAPI 3.0 parameter
+    // examples, which makes Swagger UI send the literal string "undefined".
+    pattern: "^(\\d+|[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z0-9_]+)+)$",
+    description:
+      "Numeric id (Apple, e.g. 284882215) or package name (Google, e.g. com.spotify.music)",
   }),
   store: t.Optional(storeEnum),
   country: t.Optional(t.String({ default: "us", description: "Storefront code" })),

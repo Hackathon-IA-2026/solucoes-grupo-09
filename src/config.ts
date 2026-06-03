@@ -16,6 +16,12 @@ export const config = {
   /** Node environment. */
   nodeEnv: process.env.NODE_ENV ?? "development",
   isProd: process.env.NODE_ENV === "production",
+  /**
+   * Public base URL for the OpenAPI `servers` entry (e.g.
+   * https://noviq.up.railway.app). Omit to let Swagger UI use the origin it was
+   * loaded from — correct for both localhost and most deployments.
+   */
+  publicUrl: process.env.NOVIQ_PUBLIC_URL || undefined,
   /** Default upstream proxy applied to scrapes when the caller omits one. */
   defaultProxy: process.env.NOVIQ_PROXY || undefined,
   /** Match browser geo/locale to the (proxy) exit IP by default. */
