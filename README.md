@@ -124,6 +124,7 @@ bun run api:dev      # same, with --watch
 | `GET /reviews`         | scrape reviews (synchronous) — query params below |
 | `POST /reviews/jobs`   | submit an async scrape job → `202 {id}`           |
 | `GET /reviews/jobs/:id`| async job status / result                         |
+| `GET /reviews/stored`  | query persisted reviews (Postgres; no browser)    |
 | `GET /jobs`            | BullMQ dashboard (opt-in; `NOVIQ_DASHBOARD=true`) |
 
 
@@ -177,6 +178,38 @@ is identical either way.
   time-bounded so a Redis stall returns an error instead of hanging; `close()`
   drains in-flight work on shutdown.
 
+### Persistence (Postgres + Drizzle)
+
+Set **`DATABASE_URL`** and every scrape's reviews are saved durably (best-effort
+— a DB blip never fails the scrape). Query them later with no browser:
+
+```bash
+curl "http://localhost:3000/reviews/stored?appId=com.spotify.music&store=google&limit=50"
+```
+
+- **Drizzle + drizzle-typebox**: the `reviews`/`scrape_runs` tables (`src/database/schema.ts`)
+  are the single source of truth — the `/reviews/stored` response model is derived
+  from the table via `createSelectSchema`.
+- **Dedup**: reviews upsert on `(store, id)`, so re-scraping refreshes rows (e.g. a
+  new developer response) instead of duplicating.
+- **Migrations**: `bun run db:generate` (create) / `bun run db:migrate` (apply).
+
+#### What lives where — Redis vs Postgres
+
+They're **complementary layers, not either/or**:
+
+| | Redis (BullMQ) | Postgres (Drizzle) |
+| --- | --- | --- |
+| Role | the **queue** + ephemeral coordination | **durable data** |
+| Holds | pending/active jobs, retries, backoff, locks, worker distribution, and the *transient* job result (TTL'd so you can poll it) | the **reviews** themselves (deduped, queryable forever) + a `scrape_runs` audit log |
+| Lifetime | minutes–hours (auto-cleaned) | permanent until you delete |
+| Required | only for the async job API | only to persist/query reviews |
+
+So it's **not** "only data in the DB": Redis *must* keep the queue (it's the queue
+engine), and Postgres keeps the durable reviews + run history that outlive Redis's
+retention. A scrape flows: enqueue (Redis) → worker scrapes → **save reviews
+(Postgres)** → result cached briefly (Redis) for polling.
+
 **Hardening** (global Elysia plugins): security headers (CSP relaxed only for
 `/docs`, `X-Frame-Options: DENY`, `nosniff`, `X-XSS-Protection`, `Referrer-Policy`,
 HSTS in prod); 10 MB body limit (413); CORS; `Server-Timing`.
@@ -222,6 +255,7 @@ Bun auto-loads `.env` (copy `.env.example`). All env reads live in `src/config.t
 | `NOVIQ_FETCH_TIMEOUT_MS` | `30000` | per in-page fetch timeout                               |
 | `NOVIQ_NAV_RETRIES` | `2`          | bounded retries on transient navigation failures        |
 | `REDIS_URL`        | —             | enable durable BullMQ job queue (else in-process)       |
+| `DATABASE_URL`     | —             | Postgres URL — persist + query reviews (else off)       |
 | `NOVIQ_DASHBOARD`  | `false`       | mount BullMQ Workbench dashboard at `/jobs` (protect it) |
 
 
@@ -293,6 +327,10 @@ src/
   cli.ts       command-line entry point
   jobs/        JobRunner (Strategy): in-process + BullMQ/Redis backends
     types.ts · inprocess.ts · bullmq.ts · index.ts (factory)
+  worker.ts    dedicated BullMQ worker entrypoint (`bun run worker`)
+  database/    Postgres + Drizzle (durable reviews)
+    schema.ts (tables + drizzle-typebox) · connection.ts · repository.ts
+    plugin.ts (decorate repo) · index.ts (barrel)
   api/
     index.ts             Elysia app: plugins + swagger + module composition
     jobs-dashboard.ts    opt-in BullMQ Workbench mount (/jobs)

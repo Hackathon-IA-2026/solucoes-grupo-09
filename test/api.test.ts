@@ -92,6 +92,11 @@ describe("api · typed routes (Eden Treaty)", () => {
     );
     expect(res.status).toBe(400);
   });
+
+  it("GET /reviews/stored → 503 when no database is configured", async () => {
+    const res = await app.handle(new Request("http://localhost/reviews/stored?appId=1"));
+    expect(res.status).toBe(503);
+  });
 });
 
 describe("api · error mapping (global handler)", () => {

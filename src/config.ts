@@ -84,6 +84,12 @@ export const config = {
   /** Base backoff (ms) between job retries (exponential). */
   jobBackoffMs: int(process.env.NOVIQ_JOB_BACKOFF_MS, 5_000, 100, 120_000),
   /**
+   * Postgres URL. When set, scraped reviews are persisted (durable, queryable
+   * via GET /reviews/stored); unset → scraping still works, results are just
+   * transient (response + Redis job result).
+   */
+  databaseUrl: process.env.DATABASE_URL || undefined,
+  /**
    * Mount the BullMQ Workbench dashboard at /jobs (requires Redis). Off by
    * default — it exposes queue data/controls, so enable only behind your own
    * auth/network protection.

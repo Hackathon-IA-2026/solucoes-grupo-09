@@ -4,6 +4,7 @@ import { swagger } from "@elysiajs/swagger";
 import { binaryInfo } from "cloakbrowser";
 import { Elysia } from "elysia";
 import { config } from "../config.js";
+import { database } from "../database/connection.js";
 import { bodyLimit, MAX_BODY_BYTES } from "./plugins/body-limit.js";
 import { errorHandler } from "./plugins/errors.js";
 import { requestContext } from "./plugins/request-context.js";
@@ -109,6 +110,9 @@ if (import.meta.main) {
     console.log(
       `⚙️  Job runner: ${jobRunner.mode}${config.redisUrl ? ` (Redis, role=${config.role})` : ""}`,
     );
+    console.log(
+      `🗄️  Persistence: ${database ? "Postgres (Drizzle)" : "off (no DATABASE_URL)"}`,
+    );
   });
 
   const shutdown = async (signal: string) => {
@@ -120,6 +124,7 @@ if (import.meta.main) {
     force.unref();
     await app.stop();
     await jobRunner.close().catch(() => {});
+    await database?.close().catch(() => {});
     console.log("✅ Server closed");
     process.exit(0);
   };

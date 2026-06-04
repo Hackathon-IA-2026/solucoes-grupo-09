@@ -1,5 +1,6 @@
 import { Semaphore } from "../../concurrency.js";
 import { config } from "../../config.js";
+import { reviewRepository } from "../../database/repository.js";
 import { BadInputError, ScrapeTimeoutError } from "../../errors.js";
 import { resolveTarget } from "../../resolve.js";
 import { streamReviews } from "../../scrape.js";
@@ -86,6 +87,22 @@ export const ReviewService = {
   scrapeStats,
   async scrape(query: ScrapeOptions): Promise<ScrapeResult> {
     const { store, country } = validate(query);
-    return gate.run(() => streamWithBudget(query, store, country));
+    const result = await gate.run(() => streamWithBudget(query, store, country));
+    await persist(result);
+    return result;
   },
 };
+
+/**
+ * Persist scraped reviews durably (best-effort): a DB blip must not fail the
+ * scrape — the caller still gets its results. No-op when no DATABASE_URL.
+ */
+async function persist(result: ScrapeResult): Promise<void> {
+  if (!reviewRepository) return;
+  try {
+    if (result.reviews.length > 0) await reviewRepository.saveReviews(result.reviews);
+    await reviewRepository.recordRun({ id: crypto.randomUUID(), ...result });
+  } catch (err) {
+    console.error("persist failed (results still returned):", err);
+  }
+}

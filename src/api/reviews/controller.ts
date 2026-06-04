@@ -1,8 +1,12 @@
 import { Elysia, t } from "elysia";
+import { databasePlugin } from "../../database/plugin.js";
+import { storedReview } from "../../database/schema.js";
 import { toHttpError } from "../../errors.js";
 import type { JobRunner } from "../../jobs/index.js";
 import { reviewModel } from "./model.js";
 import { ReviewService } from "./service.js";
+
+const storeEnum = t.Union([t.Literal("apple"), t.Literal("google")]);
 
 /**
  * The reviews controller — an Elysia instance (per best practice, the instance
@@ -14,6 +18,7 @@ export function reviewsRoutes(jobRunner: JobRunner) {
   return (
     new Elysia({ name: "reviews.controller", tags: ["Reviews"] })
       .use(reviewModel)
+      .use(databasePlugin)
       .get(
         "/reviews",
         async ({ query, status }) => {
@@ -89,6 +94,38 @@ export function reviewsRoutes(jobRunner: JobRunner) {
           params: t.Object({ id: t.String() }),
           response: { 200: "reviews.job", 404: "reviews.error" },
           detail: { summary: "Get an async scrape job's status / result" },
+        },
+      )
+      // --- query persisted reviews from Postgres (no browser) ---
+      .get(
+        "/reviews/stored",
+        async ({ query, reviewStore, status }) => {
+          if (!reviewStore) {
+            return status(503, {
+              error: "Persistence not configured (set DATABASE_URL)",
+            });
+          }
+          return reviewStore.listReviews({
+            store: query.store,
+            appId: query.appId,
+            country: query.country,
+            limit: query.limit ?? 50,
+          });
+        },
+        {
+          query: t.Object({
+            appId: t.Optional(t.String()),
+            store: t.Optional(storeEnum),
+            country: t.Optional(t.String({ pattern: "^[A-Za-z]{2}$" })),
+            limit: t.Optional(t.Numeric({ default: 50, minimum: 1, maximum: 500 })),
+          }),
+          response: { 200: t.Array(storedReview), 503: "reviews.error" },
+          detail: {
+            summary: "Query persisted reviews (durable, no scrape)",
+            description:
+              "Reads reviews already saved to Postgres by prior scrapes. Fast, no " +
+              "browser. Requires DATABASE_URL.",
+          },
         },
       )
   );
