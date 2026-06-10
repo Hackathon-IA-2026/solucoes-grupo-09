@@ -21,7 +21,10 @@ export const reviewSchema = t.Object({
   userName: t.String(),
   title: t.String(),
   body: t.String(),
-  rating: t.Number({ minimum: 1, maximum: 5 }),
+  // 1–5; normalizers emit 0 when the store omits the rating. No bounds here —
+  // this is an *output* schema, and one odd upstream review must not turn a
+  // successful scrape into a response-validation 500.
+  rating: t.Number({ description: "1-5 (0 if missing upstream)" }),
   date: t.String({ description: "ISO-8601 timestamp" }),
   developerResponse: t.Nullable(t.Object({ body: t.String(), modified: t.String() })),
   thumbsUp: t.Optional(t.Number({ description: "Google only" })),

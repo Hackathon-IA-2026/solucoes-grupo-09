@@ -19,7 +19,7 @@ const VALID_STEALTH: StealthPreset[] = ["max", "balanced", "fast"];
 
 export const config = {
   /** API server port (Railway/most PaaS inject PORT). */
-  port: Number(process.env.PORT ?? 3000),
+  port: int(process.env.PORT, 3000, 1, 65_535),
   /** Node environment. */
   nodeEnv: process.env.NODE_ENV ?? "development",
   isProd: process.env.NODE_ENV === "production",

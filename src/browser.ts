@@ -46,13 +46,27 @@ export const STEALTH: Record<StealthPreset, StealthProfile> = {
   },
 };
 
-export function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
+/** Sleep `ms`, resolving early if `signal` aborts (so a timeout/cancel isn't
+ * stuck waiting out a long stealth delay or 429 backoff). */
+export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) return resolve();
+    const done = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener("abort", done, { once: true });
+  });
 }
 
 /** Random delay in an inclusive [min, max] window — avoids fixed cadence. */
-export function jitter([min, max]: [number, number]): Promise<void> {
-  return sleep(min + Math.random() * (max - min));
+export function jitter(
+  [min, max]: [number, number],
+  signal?: AbortSignal,
+): Promise<void> {
+  return sleep(min + Math.random() * (max - min), signal);
 }
 
 export interface Session {
@@ -95,7 +109,12 @@ export async function openSession(
     });
   } else {
     browser = await launch(launchOpts);
-    context = await browser.newContext();
+    try {
+      context = await browser.newContext();
+    } catch (err) {
+      await browser.close().catch(() => {});
+      throw err;
+    }
   }
 
   const close = async () => {

@@ -3,6 +3,7 @@ import { treaty } from "@elysiajs/eden";
 import { Elysia } from "elysia";
 import { reviewsRoutes } from "../src/api/reviews/controller.js";
 import { createInProcessRunner } from "../src/jobs/inprocess.js";
+import type { JobRunner } from "../src/jobs/types.js";
 import type { ScrapeResult } from "../src/types.js";
 
 // Inject a fake runner whose executor returns canned data — exercises the full
@@ -55,5 +56,25 @@ describe("api · async jobs (injected runner, no browser)", () => {
       since: "not-a-date",
     });
     expect(error?.status).toBe(400);
+  });
+
+  it("maps a dead queue backend to 503 (retryable), not a generic 500", async () => {
+    const broken: JobRunner = {
+      mode: "bullmq",
+      submit: async () => {
+        throw new Error("enqueue timed out after 10000ms");
+      },
+      status: async () => {
+        throw new Error("job lookup timed out after 10000ms");
+      },
+      close: async () => {},
+    };
+    const brokenApi = treaty(new Elysia().use(reviewsRoutes(broken)));
+
+    const submit = await brokenApi.reviews.jobs.post({ appId: "com.x.y" });
+    expect(submit.error?.status).toBe(503);
+
+    const poll = await brokenApi.reviews.jobs({ id: "any" }).get();
+    expect(poll.error?.status).toBe(503);
   });
 });

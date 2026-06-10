@@ -101,6 +101,12 @@ describe("apple: normalizeAppleReview", () => {
     expect(normalizeAppleReview({ id: 1 }, opts)).toBeNull();
     expect(normalizeAppleReview(null, opts)).toBeNull();
   });
+
+  test("returns null when the id is missing (would poison dedupe as 'undefined')", () => {
+    expect(
+      normalizeAppleReview({ attributes: { rating: 3, date: "x" } }, opts),
+    ).toBeNull();
+  });
 });
 
 describe("google: buildBody", () => {

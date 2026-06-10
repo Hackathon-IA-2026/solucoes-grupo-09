@@ -67,8 +67,24 @@ async function main(): Promise<void> {
   // an explicit --store overrides the inferred store.
   const resolved = resolveTarget(positionals[0]);
   const appId = resolved.appId;
+  if (values.store && values.store !== "apple" && values.store !== "google") {
+    console.error(`Error: --store must be "apple" or "google" (got "${values.store}")`);
+    process.exit(1);
+  }
   const store = (values.store as Store | undefined) ?? resolved.store;
   const country = (values.country ?? "us").toLowerCase();
+
+  // Reject unparseable numbers/dates up front — a NaN limit would silently
+  // mean "unlimited" and a NaN since would silently be ignored.
+  const limit = values.limit ? Number(values.limit) : undefined;
+  if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) {
+    console.error(`Error: --limit must be a positive integer (got "${values.limit}")`);
+    process.exit(1);
+  }
+  if (values.since && Number.isNaN(Date.parse(values.since))) {
+    console.error(`Error: --since is not a valid date (got "${values.since}")`);
+    process.exit(1);
+  }
 
   // CSV only — rows are streamed to disk as reviews arrive, so a run uses
   // constant memory no matter how many reviews it pulls.
@@ -80,29 +96,33 @@ async function main(): Promise<void> {
   console.error(`Scraping ${label} reviews for ${appId} (${country})…`);
 
   let total = 0;
-  for await (const review of streamReviews({
-    appId,
-    store,
-    country,
-    lang: values.lang,
-    sort: values.sort as ReviewSort | undefined,
-    limit: values.limit ? Number(values.limit) : undefined,
-    since: values.since,
-    stealth: (values.stealth as StealthPreset | undefined) ?? config.defaultStealth,
-    headed: values.headed,
-    proxy: values.proxy ?? config.defaultProxy,
-    geoip: values.geoip || config.geoip,
-    profileDir: values["profile-dir"],
-    onProgress: ({ collected }) => {
-      process.stderr.write(`\r  collected ${collected} reviews…`);
-    },
-  })) {
-    csvSink.write(review);
-    total++;
+  try {
+    for await (const review of streamReviews({
+      appId,
+      store,
+      country,
+      lang: values.lang,
+      sort: values.sort as ReviewSort | undefined,
+      limit,
+      since: values.since,
+      stealth: (values.stealth as StealthPreset | undefined) ?? config.defaultStealth,
+      headed: values.headed,
+      proxy: values.proxy ?? config.defaultProxy,
+      geoip: values.geoip || config.geoip,
+      profileDir: values["profile-dir"],
+      onProgress: ({ collected }) => {
+        process.stderr.write(`\r  collected ${collected} reviews…`);
+      },
+    })) {
+      csvSink.write(review);
+      total++;
+    }
+  } finally {
+    // Flush buffered rows even if the stream dies mid-pull — what was
+    // collected is on disk, not lost in the write buffer.
+    process.stderr.write("\n");
+    await csvSink.close();
   }
-
-  process.stderr.write("\n");
-  await csvSink.close();
 
   const secs = ((Date.now() - startedAt) / 1000).toFixed(1);
   console.error(`Done in ${secs}s. ${total} reviews streamed to ${path}`);

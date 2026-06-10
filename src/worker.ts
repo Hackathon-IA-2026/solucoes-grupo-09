@@ -40,3 +40,10 @@ process.on("SIGINT", () => void shutdown("SIGINT"));
 process.on("unhandledRejection", (reason) => {
   console.error("⚠️  Unhandled rejection (continuing):", reason);
 });
+
+// After an uncaught exception the process state is undefined — drain in-flight
+// jobs (runner.close() waits for them) and exit so the supervisor restarts us.
+process.on("uncaughtException", (err) => {
+  console.error("💥 Uncaught exception — shutting down:", err);
+  void shutdown("uncaughtException");
+});

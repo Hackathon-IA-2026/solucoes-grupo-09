@@ -44,13 +44,14 @@ async function fetchWithRetry<C>(
     try {
       const res = await adapter.fetchBatch(page, opts, cursor);
       if (res.kind !== "rateLimited") return res;
-      if (attempt > maxRetries) return { kind: "end" }; // throttled out — stop cleanly
+      // Aborted mid-backoff there's no point retrying — stop cleanly.
+      if (attempt > maxRetries || opts.signal?.aborted) return { kind: "end" };
     } catch (err) {
       // Transient blip (network/timeout/parse) — retry a bounded number of
       // times, then surface the error so the caller can keep partial results.
-      if (attempt > maxRetries) throw err;
+      if (attempt > maxRetries || opts.signal?.aborted) throw err;
     }
-    await sleep(backoffBaseMs * attempt);
+    await sleep(backoffBaseMs * attempt, opts.signal);
   }
 }
 
@@ -110,13 +111,17 @@ export async function* runScraper<C>(
         added++;
       }
 
+      // Limit reached exactly at a page boundary — halt now instead of paying
+      // another page delay + fetch just to have the limit stage say "stop".
+      if (!halted && opts.limit && collected >= opts.limit) halted = true;
+
       paginator.advance({ added, next: res.next, halted });
       opts.onProgress?.({
         collected,
         batch: res.reviews.length,
         hasMore: paginator.state === "fetch",
       });
-      if (paginator.state === "fetch") await jitter(profile.pageDelayMs);
+      if (paginator.state === "fetch") await jitter(profile.pageDelayMs, opts.signal);
     }
   } finally {
     await session.close();

@@ -135,6 +135,18 @@ describe("pipeline · apple (offset pagination)", () => {
     expect(reviews.length).toBe(5); // deduped; dry-page guard prevents a loop
   });
 
+  test("does not fetch an extra page when limit lands on a page boundary", async () => {
+    let pagesFetched = 0;
+    const backend = appleServer(200);
+    server = (url, init) => {
+      pagesFetched++;
+      return backend(url, init);
+    };
+    const reviews = await getReviews({ appId: "1", store: "apple", limit: 20, ...FAST });
+    expect(reviews.length).toBe(20); // exactly one page of 20
+    expect(pagesFetched).toBe(1);
+  });
+
   test("retries on HTTP 429 then succeeds", async () => {
     let hit = 0;
     server = (url) => {
@@ -206,6 +218,23 @@ describe("pipeline · streaming + callbacks", () => {
     expect(seen.length).toBe(30);
     expect(seen[0][1]).toBe(0);
     expect(seen[29][1]).toBe(29);
+  });
+
+  test("abort interrupts the 429 backoff sleep instead of waiting it out", async () => {
+    // Every fetch is throttled; with the fast preset the backoff sleeps alone
+    // are 3s+6s+9s — an abort must cut through them, not wait them out.
+    server = () => ({ status: 429, body: "" });
+    const ac = new AbortController();
+    setTimeout(() => ac.abort(), 100);
+    const started = performance.now();
+    const reviews = await getReviews({
+      appId: "1",
+      store: "apple",
+      ...FAST,
+      signal: ac.signal,
+    });
+    expect(reviews.length).toBe(0);
+    expect(performance.now() - started).toBeLessThan(2_500);
   });
 
   test("stops early and closes when the abort signal fires (timeout/cancel)", async () => {

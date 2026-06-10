@@ -42,27 +42,31 @@ export function createReviewRepository(db: Database): ReviewRepository {
         isEdited: r.isEdited ?? null,
       }));
       // Re-scraping refreshes the row (e.g. a new developer response) rather
-      // than inserting a duplicate.
-      await db
-        .insert(reviews)
-        .values(values)
-        .onConflictDoUpdate({
-          target: [reviews.store, reviews.id],
-          set: {
-            appId: sql`excluded.app_id`,
-            country: sql`excluded.country`,
-            userName: sql`excluded.user_name`,
-            title: sql`excluded.title`,
-            body: sql`excluded.body`,
-            rating: sql`excluded.rating`,
-            date: sql`excluded.date`,
-            developerResponse: sql`excluded.developer_response`,
-            thumbsUp: sql`excluded.thumbs_up`,
-            appVersion: sql`excluded.app_version`,
-            isEdited: sql`excluded.is_edited`,
-            scrapedAt: sql`excluded.scraped_at`,
-          },
-        });
+      // than inserting a duplicate. Chunked so a large library-side pull can't
+      // exceed Postgres's 65,534 bind-parameter cap (13 params per row).
+      const CHUNK = 1_000;
+      for (let i = 0; i < values.length; i += CHUNK) {
+        await db
+          .insert(reviews)
+          .values(values.slice(i, i + CHUNK))
+          .onConflictDoUpdate({
+            target: [reviews.store, reviews.id],
+            set: {
+              appId: sql`excluded.app_id`,
+              country: sql`excluded.country`,
+              userName: sql`excluded.user_name`,
+              title: sql`excluded.title`,
+              body: sql`excluded.body`,
+              rating: sql`excluded.rating`,
+              date: sql`excluded.date`,
+              developerResponse: sql`excluded.developer_response`,
+              thumbsUp: sql`excluded.thumbs_up`,
+              appVersion: sql`excluded.app_version`,
+              isEdited: sql`excluded.is_edited`,
+              scrapedAt: sql`excluded.scraped_at`,
+            },
+          });
+      }
       return values.length;
     },
 

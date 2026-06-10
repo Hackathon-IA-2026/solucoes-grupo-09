@@ -47,6 +47,7 @@ async function streamWithBudget(
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), config.scrapeTimeoutMs);
   const reviews: Review[] = [];
+  let failed = false;
   try {
     for await (const review of streamReviews({
       ...query,
@@ -62,6 +63,7 @@ async function streamWithBudget(
     }
   } catch (err) {
     if (reviews.length === 0) throw err; // total failure → surfaced to caller
+    failed = true; // mid-stream failure → keep what we have, flag it partial
   } finally {
     clearTimeout(timer);
   }
@@ -72,7 +74,7 @@ async function streamWithBudget(
     appId: query.appId,
     country,
     count: reviews.length,
-    partial: ac.signal.aborted,
+    partial: ac.signal.aborted || failed,
     reviews,
   };
 }

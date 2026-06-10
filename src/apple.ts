@@ -54,7 +54,8 @@ export function normalizeAppleReview(
   raw: RawAppleReview | null | undefined,
   opts: ScrapeOptions,
 ): Review | null {
-  if (!raw?.attributes) return null;
+  // No id → can't dedupe or persist it (String(undefined) would poison both).
+  if (!raw?.attributes || raw.id == null) return null;
   const a = raw.attributes;
   const dev = a.developerResponse;
   return {

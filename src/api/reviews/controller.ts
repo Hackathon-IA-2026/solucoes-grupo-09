@@ -1,7 +1,7 @@
 import { Elysia, t } from "elysia";
 import { databasePlugin } from "../../database/plugin.js";
 import { storedReview } from "../../database/schema.js";
-import { toHttpError } from "../../errors.js";
+import { AppError, toHttpError } from "../../errors.js";
 import type { JobRunner } from "../../jobs/index.js";
 import { reviewModel } from "./model.js";
 import { ReviewService } from "./service.js";
@@ -59,9 +59,14 @@ export function reviewsRoutes(jobRunner: JobRunner) {
             const id = await jobRunner.submit(body);
             return status(202, { id, status: "waiting" as const });
           } catch (error) {
-            const { status: code, body: errBody } = toHttpError(error);
-            if (code >= 500) console.error("job submit error:", error);
-            return status(code, errBody);
+            if (error instanceof AppError) {
+              const { status: code, body: errBody } = toHttpError(error);
+              return status(code, errBody);
+            }
+            // Anything else here is queue-backend trouble (e.g. a Redis stall)
+            // — transient and retryable, so 503 rather than a generic 500.
+            console.error("job submit error:", error);
+            return status(503, { error: "Job queue unavailable — try again shortly" });
           }
         },
         {
@@ -86,13 +91,20 @@ export function reviewsRoutes(jobRunner: JobRunner) {
       .get(
         "/reviews/jobs/:id",
         async ({ params, status }) => {
-          const record = await jobRunner.status(params.id);
-          if (!record) return status(404, { error: "Job not found" });
-          return record;
+          try {
+            const record = await jobRunner.status(params.id);
+            if (!record) return status(404, { error: "Job not found" });
+            return record;
+          } catch (error) {
+            // Queue backend unreachable — the job may well exist, so a
+            // retryable 503 (not 404/500) is the honest answer.
+            console.error("job status error:", error);
+            return status(503, { error: "Job queue unavailable — try again shortly" });
+          }
         },
         {
           params: t.Object({ id: t.String() }),
-          response: { 200: "reviews.job", 404: "reviews.error" },
+          response: { 200: "reviews.job", 404: "reviews.error", 503: "reviews.error" },
           detail: { summary: "Get an async scrape job's status / result" },
         },
       )
@@ -105,12 +117,20 @@ export function reviewsRoutes(jobRunner: JobRunner) {
               error: "Persistence not configured (set DATABASE_URL)",
             });
           }
-          return reviewStore.listReviews({
-            store: query.store,
-            appId: query.appId,
-            country: query.country,
-            limit: query.limit ?? 50,
-          });
+          try {
+            return await reviewStore.listReviews({
+              store: query.store,
+              appId: query.appId,
+              country: query.country,
+              limit: query.limit ?? 50,
+            });
+          } catch (error) {
+            // Database unreachable — transient and retryable, so 503.
+            console.error("stored reviews query error:", error);
+            return status(503, {
+              error: "Review storage unavailable — try again shortly",
+            });
+          }
         },
         {
           query: t.Object({
