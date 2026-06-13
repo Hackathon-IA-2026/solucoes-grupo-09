@@ -76,6 +76,20 @@ suite("database · review repository (real Postgres)", () => {
     expect(await repo.saveReviews([])).toBe(0);
   });
 
+  it("chunks a large batch under the bind-parameter cap and writes them all", async () => {
+    // 1500 rows > the 1000-row chunk size, so this exercises the chunk loop.
+    const big = Array.from({ length: 1500 }, (_, i) =>
+      review({ id: `big-${i}`, appId: "bulk-app", store: "google" }),
+    );
+    expect(await repo.saveReviews(big)).toBe(1500);
+    const rows = await repo.listReviews({
+      store: "google",
+      appId: "bulk-app",
+      limit: 2000,
+    });
+    expect(rows).toHaveLength(1500);
+  });
+
   it("records a scrape run", async () => {
     await repo.recordRun({
       id: crypto.randomUUID(),

@@ -173,6 +173,16 @@ describe("google: parseBatch", () => {
     // Returning empty here would silently truncate the pull and report success.
     expect(() => parseBatch(")]}'\n\ngarbage")).toThrow(UpstreamError);
   });
+
+  test("throws when the RPC frame carries no payload", () => {
+    expect(() => parseBatch(`)]}'\n\n[["wrb.fr","UsvDTd"]]`)).toThrow(UpstreamError);
+  });
+
+  test("throws when the frame payload is not valid JSON", () => {
+    expect(() => parseBatch(`)]}'\n\n[["wrb.fr","UsvDTd","notjson"]]`)).toThrow(
+      UpstreamError,
+    );
+  });
 });
 
 describe("google: normalizeGoogleReview", () => {

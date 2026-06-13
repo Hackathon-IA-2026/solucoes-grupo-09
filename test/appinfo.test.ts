@@ -180,6 +180,100 @@ describe("appinfo · parseAppInfo", () => {
     expect(info?.ratingCount).toBe(101);
   });
 
+  test("reads developer from creator / publisher when author is absent", () => {
+    const creator = parseAppInfo(
+      [
+        ld({
+          "@type": "SoftwareApplication",
+          name: "A",
+          creator: { name: "Creator Co" },
+        }),
+      ],
+      PROV,
+    );
+    expect(creator?.developer).toBe("Creator Co");
+    const publisher = parseAppInfo(
+      [ld({ "@type": "SoftwareApplication", name: "A", publisher: "Publisher Co" })],
+      PROV,
+    );
+    expect(publisher?.developer).toBe("Publisher Co");
+  });
+
+  test("picks the first named entry when author is an array", () => {
+    const info = parseAppInfo(
+      [
+        ld({
+          "@type": "SoftwareApplication",
+          name: "A",
+          author: [{ url: "x" }, { name: "Second Author" }],
+        }),
+      ],
+      PROV,
+    );
+    expect(info?.developer).toBe("Second Author");
+  });
+
+  test("reads category from genre when applicationCategory is absent; OS from an array", () => {
+    const info = parseAppInfo(
+      [
+        ld({
+          "@type": "SoftwareApplication",
+          name: "A",
+          genre: ["Games", "Arcade"],
+          operatingSystem: ["iOS", "macOS"],
+        }),
+      ],
+      PROV,
+    );
+    expect(info?.category).toBe("Games");
+    expect(info?.operatingSystem).toBe("iOS");
+  });
+
+  test("reads icon from an image array, then falls back to screenshot", () => {
+    const fromImage = parseAppInfo(
+      [
+        ld({
+          "@type": "SoftwareApplication",
+          name: "A",
+          image: ["", { url: "https://i/x.png" }],
+        }),
+      ],
+      PROV,
+    );
+    expect(fromImage?.icon).toBe("https://i/x.png");
+    const fromShot = parseAppInfo(
+      [ld({ "@type": "SoftwareApplication", name: "A", screenshot: "https://i/s.png" })],
+      PROV,
+    );
+    expect(fromShot?.icon).toBe("https://i/s.png");
+  });
+
+  test("falls back to @id for the URL when url is absent", () => {
+    const info = parseAppInfo(
+      [ld({ "@type": "SoftwareApplication", name: "A", "@id": "https://store/app/1" })],
+      PROV,
+    );
+    expect(info?.url).toBe("https://store/app/1");
+  });
+
+  test("array fields with no usable entry fall back to null", () => {
+    const info = parseAppInfo(
+      [
+        ld({
+          "@type": "SoftwareApplication",
+          name: "A", // keeps the node "usable" so it isn't discarded
+          author: [{ url: "x" }, { note: "no name here" }],
+          applicationCategory: [],
+          image: [{ note: "no url here" }],
+        }),
+      ],
+      PROV,
+    );
+    expect(info?.developer).toBeNull();
+    expect(info?.category).toBeNull();
+    expect(info?.icon).toBeNull();
+  });
+
   test("treats an app node with no usable fields as not-found (null)", () => {
     expect(parseAppInfo([ld({ "@type": "SoftwareApplication" })], PROV)).toBeNull();
   });
@@ -187,6 +281,10 @@ describe("appinfo · parseAppInfo", () => {
   test("returns null when no app node is present", () => {
     expect(
       parseAppInfo([ld({ "@type": "Organization", name: "ACME" })], PROV),
+    ).toBeNull();
+    // a nested array containing only non-app nodes still resolves to null
+    expect(
+      parseAppInfo([ld([[{ "@type": "Organization", name: "X" }]])], PROV),
     ).toBeNull();
     expect(parseAppInfo([], PROV)).toBeNull();
     expect(parseAppInfo(["totally not json"], PROV)).toBeNull();

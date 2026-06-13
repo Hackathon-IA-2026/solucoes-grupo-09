@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { Review } from "../src/types.js";
 
 // A canned "server": maps an in-page fetch (url, init) to an HTTP-ish response.
@@ -11,12 +11,15 @@ let server: Server;
 let jsonLd: string[] = [];
 let jsonLdThrows = false;
 let jsonLdReads = 0; // how many times the page's JSON-LD was read
+let gotoStatus = 200; // HTTP status the landing-page navigation returns
+let gotoAttempts = 0; // how many times goto() was called (navigation retries)
 
 // --- mock cloakbrowser so runScraper exercises the real pipeline, no network ---
 function makePage() {
   return {
     async goto() {
-      return { status: () => 200 };
+      gotoAttempts++;
+      return { status: () => gotoStatus };
     },
     mouse: { async wheel() {} },
     // pageFetch calls page.evaluate(fn, { url, init }); readJsonLdScripts calls
@@ -50,7 +53,16 @@ mock.module("cloakbrowser", () => ({
 }));
 
 // Import AFTER the mock is registered so browser.ts binds to it.
-const { streamReviews, getReviews, getAppInfo } = await import("../src/scrape.js");
+const {
+  streamReviews,
+  getReviews,
+  getAppInfo,
+  streamAppleReviews,
+  getAppleReviews,
+  streamGoogleReviews,
+  getGoogleReviews,
+} = await import("../src/scrape.js");
+const { BadInputError, UpstreamError } = await import("../src/errors.js");
 
 const APP_LD = JSON.stringify({
   "@type": "SoftwareApplication",
@@ -350,4 +362,83 @@ describe("pipeline · app metadata", () => {
     expect(fetchHits).toBe(0); // landing page + JSON-LD only, no review fetches
     expect(jsonLdReads).toBe(1); // metadata read exactly once
   });
+
+  test("getAppInfo works for Google and infers the store from the appId", async () => {
+    const gInfo = await getAppInfo({
+      appId: "com.x.y",
+      store: "google",
+      stealth: "fast",
+    });
+    expect(gInfo?.name).toBe("Test App");
+    const inferred = await getAppInfo({ appId: "284882215", stealth: "fast" }); // → apple
+    expect(inferred?.store).toBe("apple");
+  });
+});
+
+describe("pipeline · landing-page navigation errors", () => {
+  beforeEach(() => {
+    server = appleServer(5);
+    jsonLd = [];
+    gotoStatus = 200;
+    gotoAttempts = 0;
+  });
+  afterEach(() => {
+    gotoStatus = 200; // don't leak into other suites
+  });
+
+  test("a 4xx landing page → BadInputError, not retried", async () => {
+    gotoStatus = 404;
+    await expect(getReviews({ appId: "1", store: "apple", ...FAST })).rejects.toThrow(
+      BadInputError,
+    );
+    expect(gotoAttempts).toBe(1); // 4xx is a hard error — no retry
+  });
+
+  test("a 5xx landing page → UpstreamError after bounded retries", async () => {
+    gotoStatus = 503;
+    await expect(getReviews({ appId: "1", store: "apple", ...FAST })).rejects.toThrow(
+      UpstreamError,
+    );
+    expect(gotoAttempts).toBeGreaterThan(1); // retried, then gave up
+  });
+});
+
+describe("pipeline · convenience wrappers", () => {
+  beforeEach(() => {
+    jsonLd = [];
+  });
+
+  test("getAppleReviews / streamAppleReviews fix the store to apple", async () => {
+    server = appleServer(5);
+    const reviews = await getAppleReviews({ appId: "1", ...FAST });
+    expect(reviews.length).toBe(5);
+    expect(reviews.every((r) => r.store === "apple")).toBe(true);
+
+    const ids: string[] = [];
+    for await (const r of streamAppleReviews({ appId: "1", ...FAST })) ids.push(r.id);
+    expect(ids.length).toBe(5);
+  });
+
+  test("getGoogleReviews / streamGoogleReviews fix the store to google", async () => {
+    server = googleServer([["1", "2", "3"]]);
+    const reviews = await getGoogleReviews({ appId: "com.x.y", ...FAST });
+    expect(reviews.map((r) => r.id)).toEqual(["1", "2", "3"]);
+    expect(reviews.every((r) => r.store === "google")).toBe(true);
+
+    server = googleServer([["9"]]);
+    const ids: string[] = [];
+    for await (const r of streamGoogleReviews({ appId: "com.x.y", ...FAST }))
+      ids.push(r.id);
+    expect(ids).toEqual(["9"]);
+  });
+});
+
+describe("pipeline · max-stealth warm-up", () => {
+  test("the warm-up scroll path runs (stealth=max) and still extracts metadata", async () => {
+    server = appleServer(1);
+    jsonLd = [APP_LD];
+    // stealth "max" is the only preset with warmupScroll — exercise that branch.
+    const info = await getAppInfo({ appId: "1", store: "apple", stealth: "max" });
+    expect(info?.name).toBe("Test App");
+  }, 15_000);
 });
