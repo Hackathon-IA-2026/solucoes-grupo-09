@@ -41,6 +41,48 @@ export interface Review {
 }
 
 /**
+ * App-level metadata, unified across stores. Sourced from the schema.org
+ * `SoftwareApplication` JSON-LD that both stores embed in their landing page —
+ * a stable, standard format (not reverse-engineered internals), and free to
+ * read since the session already loads that page. Best-effort: any field the
+ * page omits is `null`, and the whole object is `null` if no structured data
+ * is found, so it never blocks a scrape.
+ */
+export interface AppInfo {
+  store: Store;
+  /** App identifier: numeric id (Apple) or package name (Google). */
+  appId: string;
+  /** Two-letter storefront country code (e.g. "us"). */
+  country: string;
+  /** Display name of the app. */
+  name: string | null;
+  /** Developer / publisher name. */
+  developer: string | null;
+  /** Primary category (e.g. "Music", "Social Networking"). */
+  category: string | null;
+  /** Short marketing description, when present. */
+  description: string | null;
+  /** Aggregate star rating across all reviews (e.g. 4.7). */
+  averageRating: number | null;
+  /** Number of ratings behind `averageRating`. */
+  ratingCount: number | null;
+  /** Price in `currency`; `0` means free, `null` means unknown. */
+  price: number | null;
+  /** ISO-4217 currency code for `price` (e.g. "USD"). */
+  currency: string | null;
+  /** Latest published version string, when the page exposes it. */
+  version: string | null;
+  /** Age / content rating (e.g. "4+", "Everyone"). */
+  contentRating: string | null;
+  /** Target platform/OS (e.g. "iOS", "Android"). */
+  operatingSystem: string | null;
+  /** Icon image URL, when present. */
+  icon: string | null;
+  /** Canonical store URL for the app, when present. */
+  url: string | null;
+}
+
+/**
  * Unified sort order. Not every store supports every value:
  * - `mostRecent`  — both (Apple `mostRecent`, Google NEWEST)
  * - `mostHelpful` — both (Apple `mostHelpful`, Google HELPFULNESS)
@@ -86,6 +128,12 @@ export interface ScrapeOptions {
   onReview?: (review: Review, index: number) => void;
   /** Called once per fetched page with progress info. */
   onProgress?: (info: ProgressInfo) => void;
+  /**
+   * Called once, early in the scrape, with the app's metadata read from the
+   * landing page (or `null` if none was found). Setting this opts a scrape into
+   * metadata extraction; leaving it unset skips the work entirely.
+   */
+  onAppInfo?: (info: AppInfo | null) => void;
   /** Abort the scrape early (timeout/cancel); the browser is closed cleanly. */
   signal?: AbortSignal;
 }
@@ -99,6 +147,16 @@ export interface ScrapeResult {
   /** True if results were cut short by a timeout or a mid-stream error. */
   partial: boolean;
   reviews: Review[];
+  /** App-level metadata captured alongside the reviews (`null` if unavailable). */
+  appInfo?: AppInfo | null;
+}
+
+/** Metadata-only result (returned by the standalone app-info endpoint). */
+export interface AppInfoResult {
+  store: Store;
+  appId: string;
+  country: string;
+  appInfo: AppInfo | null;
 }
 
 export interface ProgressInfo {

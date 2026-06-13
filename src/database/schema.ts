@@ -5,6 +5,7 @@ import {
   jsonb,
   pgTable,
   primaryKey,
+  real,
   text,
 } from "drizzle-orm/pg-core";
 import { createSelectSchema } from "drizzle-typebox";
@@ -45,6 +46,37 @@ export const reviews = pgTable(
   ],
 );
 
+/**
+ * Persisted app-level metadata. Primary key is (store, app_id, country) so each
+ * storefront entry upserts (the same app differs by country: price, rating,
+ * localized name). Floats for price/rating; the rest mirror the `AppInfo` shape.
+ */
+export const apps = pgTable(
+  "apps",
+  {
+    store: text("store").notNull(), // "apple" | "google"
+    appId: text("app_id").notNull(),
+    country: text("country").notNull(),
+    name: text("name"),
+    developer: text("developer"),
+    category: text("category"),
+    description: text("description"),
+    averageRating: real("average_rating"),
+    ratingCount: integer("rating_count"),
+    price: real("price"),
+    currency: text("currency"),
+    version: text("version"),
+    contentRating: text("content_rating"),
+    operatingSystem: text("operating_system"),
+    icon: text("icon"),
+    url: text("url"),
+    scrapedAt: text("scraped_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => [primaryKey({ columns: [table.store, table.appId, table.country] })],
+);
+
 /** Durable audit of scrape runs (Redis job records expire; these don't). */
 export const scrapeRuns = pgTable("scrape_runs", {
   id: text("id").primaryKey(),
@@ -66,3 +98,8 @@ const _reviewSelect = createSelectSchema(reviews);
 
 /** A stored review row (response model for GET /reviews/stored). */
 export const storedReview = _reviewSelect as unknown as TSchema;
+
+const _appSelect = createSelectSchema(apps);
+
+/** A stored app row (response model for GET /apps/stored). */
+export const storedApp = _appSelect as unknown as TSchema;

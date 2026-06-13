@@ -1,12 +1,20 @@
 import { and, desc, eq, sql } from "drizzle-orm";
-import type { Review, ScrapeResult, Store } from "../types.js";
+import type { AppInfo, Review, ScrapeResult, Store } from "../types.js";
 import type { Database } from "./connection.js";
 import { database } from "./connection.js";
-import { reviews, scrapeRuns } from "./schema.js";
+import { apps, reviews, scrapeRuns } from "./schema.js";
 
 export type StoredReview = typeof reviews.$inferSelect;
+export type StoredApp = typeof apps.$inferSelect;
 
 export interface ListFilter {
+  store?: Store;
+  appId?: string;
+  country?: string;
+  limit: number;
+}
+
+export interface AppFilter {
   store?: Store;
   appId?: string;
   country?: string;
@@ -20,6 +28,10 @@ export interface ReviewRepository {
   listReviews(filter: ListFilter): Promise<StoredReview[]>;
   /** Append a durable record of a scrape run. */
   recordRun(run: { id: string } & ScrapeResult): Promise<void>;
+  /** Upsert one app's metadata (dedup on store+appId+country). */
+  saveApp(info: AppInfo): Promise<void>;
+  /** Query persisted app metadata, most-recently-scraped first. */
+  listApps(filter: AppFilter): Promise<StoredApp[]>;
 }
 
 export function createReviewRepository(db: Database): ReviewRepository {
@@ -92,6 +104,63 @@ export function createReviewRepository(db: Database): ReviewRepository {
         count: run.count,
         partial: run.partial,
       });
+    },
+
+    async saveApp(info) {
+      // Re-scraping refreshes the row (price/rating drift over time) rather than
+      // duplicating; one row per storefront (store, appId, country).
+      await db
+        .insert(apps)
+        .values({
+          store: info.store,
+          appId: info.appId,
+          country: info.country,
+          name: info.name,
+          developer: info.developer,
+          category: info.category,
+          description: info.description,
+          averageRating: info.averageRating,
+          ratingCount: info.ratingCount,
+          price: info.price,
+          currency: info.currency,
+          version: info.version,
+          contentRating: info.contentRating,
+          operatingSystem: info.operatingSystem,
+          icon: info.icon,
+          url: info.url,
+        })
+        .onConflictDoUpdate({
+          target: [apps.store, apps.appId, apps.country],
+          set: {
+            name: sql`excluded.name`,
+            developer: sql`excluded.developer`,
+            category: sql`excluded.category`,
+            description: sql`excluded.description`,
+            averageRating: sql`excluded.average_rating`,
+            ratingCount: sql`excluded.rating_count`,
+            price: sql`excluded.price`,
+            currency: sql`excluded.currency`,
+            version: sql`excluded.version`,
+            contentRating: sql`excluded.content_rating`,
+            operatingSystem: sql`excluded.operating_system`,
+            icon: sql`excluded.icon`,
+            url: sql`excluded.url`,
+            scrapedAt: sql`excluded.scraped_at`,
+          },
+        });
+    },
+
+    async listApps({ store, appId, country, limit }) {
+      const conds = [];
+      if (store) conds.push(eq(apps.store, store));
+      if (appId) conds.push(eq(apps.appId, appId));
+      if (country) conds.push(eq(apps.country, country.toLowerCase()));
+      return db
+        .select()
+        .from(apps)
+        .where(conds.length ? and(...conds) : undefined)
+        .orderBy(desc(apps.scrapedAt))
+        .limit(limit);
     },
   };
 }

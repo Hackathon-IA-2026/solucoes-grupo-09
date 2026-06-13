@@ -3,10 +3,17 @@ import { config } from "../../config.js";
 import { reviewRepository } from "../../database/repository.js";
 import { BadInputError, ScrapeTimeoutError } from "../../errors.js";
 import { resolveTarget } from "../../resolve.js";
-import { streamReviews } from "../../scrape.js";
-import type { Review, ScrapeOptions, ScrapeResult, Store } from "../../types.js";
+import { getAppInfo, streamReviews } from "../../scrape.js";
+import type {
+  AppInfo,
+  AppInfoResult,
+  Review,
+  ScrapeOptions,
+  ScrapeResult,
+  Store,
+} from "../../types.js";
 
-export type { ScrapeResult } from "../../types.js";
+export type { AppInfoResult, ScrapeResult } from "../../types.js";
 
 // Each scrape launches a real Chromium, so bound concurrency (excess requests
 // queue, then 503) — protects the host from OOM under load.
@@ -47,6 +54,7 @@ async function streamWithBudget(
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), config.scrapeTimeoutMs);
   const reviews: Review[] = [];
+  let appInfo: AppInfo | null = null;
   let failed = false;
   try {
     for await (const review of streamReviews({
@@ -58,6 +66,10 @@ async function streamWithBudget(
       stealth: query.stealth ?? config.defaultStealth,
       proxy: query.proxy ?? config.defaultProxy,
       geoip: query.geoip ?? config.geoip,
+      // Capture the app's metadata from the landing page in the same session.
+      onAppInfo: (info) => {
+        appInfo = info;
+      },
     })) {
       reviews.push(review);
     }
@@ -76,7 +88,31 @@ async function streamWithBudget(
     count: reviews.length,
     partial: ac.signal.aborted || failed,
     reviews,
+    appInfo,
   };
+}
+
+/** Fetch app metadata under the same gate + time budget as a scrape. */
+async function appInfoWithBudget(
+  query: ScrapeOptions,
+  store: Store,
+  country: string,
+): Promise<AppInfo | null> {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), config.scrapeTimeoutMs);
+  try {
+    return await getAppInfo({
+      ...query,
+      store,
+      country,
+      signal: ac.signal,
+      stealth: query.stealth ?? config.defaultStealth,
+      proxy: query.proxy ?? config.defaultProxy,
+      geoip: query.geoip ?? config.geoip,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
@@ -93,6 +129,12 @@ export const ReviewService = {
     await persist(result);
     return result;
   },
+  async appInfo(query: ScrapeOptions): Promise<AppInfoResult> {
+    const { store, country } = validate(query);
+    const appInfo = await gate.run(() => appInfoWithBudget(query, store, country));
+    await persistApp(appInfo);
+    return { store, appId: query.appId, country, appInfo };
+  },
 };
 
 /**
@@ -103,8 +145,19 @@ async function persist(result: ScrapeResult): Promise<void> {
   if (!reviewRepository) return;
   try {
     if (result.reviews.length > 0) await reviewRepository.saveReviews(result.reviews);
+    if (result.appInfo) await reviewRepository.saveApp(result.appInfo);
     await reviewRepository.recordRun({ id: crypto.randomUUID(), ...result });
   } catch (err) {
     console.error("persist failed (results still returned):", err);
+  }
+}
+
+/** Best-effort persistence of app metadata (no-op without a database). */
+async function persistApp(info: AppInfo | null): Promise<void> {
+  if (!reviewRepository || !info) return;
+  try {
+    await reviewRepository.saveApp(info);
+  } catch (err) {
+    console.error("app persist failed (result still returned):", err);
   }
 }

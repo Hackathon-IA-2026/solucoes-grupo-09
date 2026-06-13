@@ -6,6 +6,12 @@ type FetchInit = { method?: string; headers?: Record<string, string>; body?: str
 type Server = (url: string, init?: FetchInit) => { status: number; body: string };
 let server: Server;
 
+// JSON-LD that readJsonLdScripts() returns from the (arg-less) page.evaluate.
+// Tests set these to exercise app-metadata extraction.
+let jsonLd: string[] = [];
+let jsonLdThrows = false;
+let jsonLdReads = 0; // how many times the page's JSON-LD was read
+
 // --- mock cloakbrowser so runScraper exercises the real pipeline, no network ---
 function makePage() {
   return {
@@ -13,8 +19,14 @@ function makePage() {
       return { status: () => 200 };
     },
     mouse: { async wheel() {} },
-    // pageFetch calls page.evaluate(fn, { url, init }); we ignore fn and serve.
-    async evaluate(_fn: unknown, arg: { url: string; init?: FetchInit }) {
+    // pageFetch calls page.evaluate(fn, { url, init }); readJsonLdScripts calls
+    // page.evaluate(fn) with no arg. We ignore fn and dispatch on the arg shape.
+    async evaluate(_fn: unknown, arg?: { url: string; init?: FetchInit }) {
+      if (arg === undefined) {
+        jsonLdReads++;
+        if (jsonLdThrows) throw new Error("evaluate failed");
+        return jsonLd;
+      }
       return server(arg.url, arg.init);
     },
   };
@@ -38,7 +50,16 @@ mock.module("cloakbrowser", () => ({
 }));
 
 // Import AFTER the mock is registered so browser.ts binds to it.
-const { streamReviews, getReviews } = await import("../src/scrape.js");
+const { streamReviews, getReviews, getAppInfo } = await import("../src/scrape.js");
+
+const APP_LD = JSON.stringify({
+  "@type": "SoftwareApplication",
+  name: "Test App",
+  author: { name: "Test Dev" },
+  applicationCategory: "Utilities",
+  aggregateRating: { ratingValue: "4.2", ratingCount: "999" },
+  offers: { price: "0", priceCurrency: "USD" },
+});
 
 // --- fake store backends ---
 function appleServer(total: number): Server {
@@ -252,5 +273,81 @@ describe("pipeline · streaming + callbacks", () => {
     }
     // Engine checks the signal at the page boundary → no further pages fetched.
     expect(ids.length).toBe(20);
+  });
+});
+
+describe("pipeline · app metadata", () => {
+  beforeEach(() => {
+    server = appleServer(10);
+    jsonLd = [APP_LD];
+    jsonLdThrows = false;
+    jsonLdReads = 0;
+  });
+
+  test("onAppInfo fires once with parsed metadata; reviews still complete", async () => {
+    const seen: Array<unknown> = [];
+    const reviews = await getReviews({
+      appId: "1",
+      store: "apple",
+      ...FAST,
+      onAppInfo: (info) => seen.push(info),
+    });
+    expect(reviews.length).toBe(10); // reviews unaffected
+    expect(seen.length).toBe(1); // called exactly once
+    expect(seen[0]).toMatchObject({
+      store: "apple",
+      appId: "1",
+      name: "Test App",
+      developer: "Test Dev",
+      averageRating: 4.2,
+      ratingCount: 999,
+      price: 0,
+    });
+  });
+
+  test("without onAppInfo, extraction is skipped (the page is never read)", async () => {
+    const reviews = await getReviews({ appId: "1", store: "apple", ...FAST });
+    expect(reviews.length).toBe(10);
+    expect(jsonLdReads).toBe(0); // no callback → no JSON-LD read at all
+  });
+
+  test("a page with no structured data yields onAppInfo(null)", async () => {
+    jsonLd = [];
+    const seen: Array<unknown> = [];
+    const reviews = await getReviews({
+      appId: "1",
+      store: "apple",
+      ...FAST,
+      onAppInfo: (info) => seen.push(info),
+    });
+    expect(reviews.length).toBe(10);
+    expect(seen).toEqual([null]);
+  });
+
+  test("an extraction failure is non-fatal — onAppInfo(null), reviews intact", async () => {
+    jsonLdThrows = true;
+    const seen: Array<unknown> = [];
+    const reviews = await getReviews({
+      appId: "1",
+      store: "apple",
+      ...FAST,
+      onAppInfo: (info) => seen.push(info),
+    });
+    expect(reviews.length).toBe(10);
+    expect(seen).toEqual([null]);
+  });
+
+  test("getAppInfo fetches metadata only (no reviews pulled)", async () => {
+    // appleServer would serve reviews, but getAppInfo must never call fetchBatch.
+    let fetchHits = 0;
+    const backend = appleServer(10);
+    server = (url, init) => {
+      fetchHits++;
+      return backend(url, init);
+    };
+    const info = await getAppInfo({ appId: "1", store: "apple", ...FAST });
+    expect(info?.name).toBe("Test App");
+    expect(fetchHits).toBe(0); // landing page + JSON-LD only, no review fetches
+    expect(jsonLdReads).toBe(1); // metadata read exactly once
   });
 });

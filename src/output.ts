@@ -38,10 +38,10 @@ export function csvRow(review: Review): string {
   }).join(",");
 }
 
-/** Write the full array to a pretty-printed JSON file. */
-export async function writeJson(path: string, reviews: Review[]): Promise<void> {
+/** Write any serializable value to a pretty-printed JSON file. */
+export async function writeJson(path: string, data: unknown): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, JSON.stringify(reviews, null, 2), "utf8");
+  await writeFile(path, JSON.stringify(data, null, 2), "utf8");
 }
 
 /** Write the full array to a CSV file. */

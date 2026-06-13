@@ -78,6 +78,7 @@ as reviews arrive (constant memory, any size). For JSON, use the library
 import {
   streamReviews,    // unified, store auto-detected
   getReviews,
+  getAppInfo,       // app metadata only (no reviews)
   streamGoogleReviews,
   getAppleReviews,
   writeJson,
@@ -91,6 +92,16 @@ await writeJson("out.json", reviews);
 for await (const review of streamGoogleReviews({ appId: "com.spotify.music" })) {
   await db.insert(review);
 }
+
+// Just the app's metadata (one landing-page visit, no review pagination):
+const app = await getAppInfo({ appId: "284882215" });
+console.log(app?.name, app?.developer, app?.averageRating, app?.ratingCount);
+
+// Or capture metadata alongside a stream via the onAppInfo callback:
+for await (const review of streamReviews({
+  appId: "com.spotify.music",
+  onAppInfo: (info) => console.log("app:", info?.name),
+})) { /* … */ }
 ```
 
 ### Stealth presets
@@ -121,18 +132,22 @@ bun run api:dev      # same, with --watch
 | `GET /`                | API info                                          |
 | `GET /health`          | liveness + live scrape concurrency stats          |
 | `GET /ready`           | readiness — Chromium binary available (503 if not)|
-| `GET /docs`            | Swagger UI (OpenAPI JSON at `/docs/json`)         |
 | `GET /reviews`         | scrape reviews (synchronous) — query params below |
+| `GET /app`             | app metadata only (no reviews) — fast, one page   |
 | `POST /reviews/jobs`   | submit an async scrape job → `202 {id}`           |
 | `GET /reviews/jobs/:id`| async job status / result                         |
 | `GET /reviews/stored`  | query persisted reviews (Postgres; no browser)    |
+| `GET /apps/stored`     | query persisted app metadata (Postgres; no browser)|
+| `GET /docs`            | Swagger UI (OpenAPI JSON at `/docs/json`)         |
 | `GET /jobs`            | BullMQ dashboard (opt-in; `NOVIQ_DASHBOARD=true`) |
 
 
 `GET /reviews` query: `appId` (required), `store`, `country` (2 letters), `lang`,
 `sort`, `limit` (1–500, default 50), `since` (date), `stealth`. The store is
 auto-detected from `appId` unless given. Returns
-`{ store, appId, country, count, partial, reviews[] }`.
+`{ store, appId, country, count, partial, reviews[], appInfo }` — where `appInfo`
+is the app's metadata (see [App metadata](#app-metadata) below) captured in the
+same session, or `null` if the page exposed none.
 
 ```bash
 curl "http://localhost:3000/reviews?appId=com.spotify.music&limit=20&stealth=fast"
@@ -140,6 +155,25 @@ curl "http://localhost:3000/reviews?appId=284882215&sort=mostHelpful&limit=50"
 ```
 
 > Each request drives a real browser session, so larger `limit`s take longer.
+
+### App metadata
+
+Beyond individual reviews, noviq captures **app-level metadata** — name,
+developer, category, aggregate rating + count, price, version, content rating —
+read from the schema.org `SoftwareApplication` JSON-LD that both stores embed in
+their landing page. It's a stable, standard format (not reverse-engineered
+internals) and free to read, since the session already loads that page. It rides
+along on every `GET /reviews` (in `appInfo`), or fetch it alone — no review
+pagination, so it's fast:
+
+```bash
+# metadata only → { store, appId, country, appInfo }
+curl "http://localhost:3000/app?appId=com.spotify.music"
+curl "http://localhost:3000/app?appId=284882215&country=gb"
+```
+
+`appInfo` is best-effort: any field the page omits is `null`, and the whole
+object is `null` if no structured data is found — it never blocks a scrape.
 
 ### Async jobs (for large pulls)
 
@@ -181,19 +215,25 @@ is identical either way.
 
 ### Persistence (Postgres + Drizzle)
 
-Set **`DATABASE_URL`** and every scrape's reviews are saved durably (best-effort
-— a DB blip never fails the scrape). Query them later with no browser:
+Set **`DATABASE_URL`** and every scrape's reviews **and the app's metadata** are
+saved durably (best-effort — a DB blip never fails the scrape). Query them later
+with no browser:
 
 ```bash
 curl "http://localhost:3000/reviews/stored?appId=com.spotify.music&store=google&limit=50"
+curl "http://localhost:3000/apps/stored?appId=com.spotify.music&store=google"
 ```
 
-- **Drizzle + drizzle-typebox**: the `reviews`/`scrape_runs` tables (`src/database/schema.ts`)
-  are the single source of truth — the `/reviews/stored` response model is derived
-  from the table via `createSelectSchema`.
-- **Dedup**: reviews upsert on `(store, id)`, so re-scraping refreshes rows (e.g. a
-  new developer response) instead of duplicating.
-- **Migrations**: `bun run db:generate` (create) / `bun run db:migrate` (apply).
+- **Drizzle + drizzle-typebox**: the `reviews` / `apps` / `scrape_runs` tables
+  (`src/database/schema.ts`) are the single source of truth — the `/reviews/stored`
+  and `/apps/stored` response models are derived from the tables via
+  `createSelectSchema`.
+- **Dedup**: reviews upsert on `(store, id)`; app metadata upserts on
+  `(store, appId, country)` (the same app differs per storefront — price, rating,
+  localized name), so re-scraping refreshes rows instead of duplicating.
+- **Schema**: `bun run db:push` applies `schema.ts` straight to the database
+  (the workflow used here). Migration files (`bun run db:generate` /
+  `db:migrate`) remain available but aren't the source of truth.
 
 #### What lives where — Redis vs Postgres
 
@@ -202,7 +242,7 @@ They're **complementary layers, not either/or**:
 | | Redis (BullMQ) | Postgres (Drizzle) |
 | --- | --- | --- |
 | Role | the **queue** + ephemeral coordination | **durable data** |
-| Holds | pending/active jobs, retries, backoff, locks, worker distribution, and the *transient* job result (TTL'd so you can poll it) | the **reviews** themselves (deduped, queryable forever) + a `scrape_runs` audit log |
+| Holds | pending/active jobs, retries, backoff, locks, worker distribution, and the *transient* job result (TTL'd so you can poll it) | the **reviews** + **app metadata** (both deduped, queryable forever) + a `scrape_runs` audit log |
 | Lifetime | minutes–hours (auto-cleaned) | permanent until you delete |
 | Required | only for the async job API | only to persist/query reviews |
 
@@ -316,25 +356,26 @@ written once and shared:
 
 ```
 src/
-  types.ts     unified Review + ScrapeOptions + ScrapeResult
+  types.ts     unified Review + AppInfo + ScrapeOptions + ScrapeResult
   config.ts    single .env reader (port, proxy, stealth, limits, redis, …)
   errors.ts    domain errors (Bad/Upstream/Timeout/Busy) + toHttpError
   concurrency.ts  Semaphore (resource ceiling, queue → 503)
-  resolve.ts   Chain of Responsibility: id/package/URL → { store, appId }
+  resolve.ts   Chain of Responsibility: id/package/URL → { store, appId, country? }
   pipeline.ts  Pipeline + CoR: dedupe → notOlderThan → limit review stages
   pagination.ts State Machine: Paginator owns the cursor + keep-going decision
-  browser.ts   cloakbrowser session, stealth, retrying nav, in-page fetch  (shared)
-  engine.ts    StoreAdapter (Strategy) + runScraper() stream engine   (shared)
+  appinfo.ts   pure JSON-LD (schema.org) → unified AppInfo parser  (shared)
+  browser.ts   cloakbrowser session, stealth, retrying nav, in-page fetch, JSON-LD read  (shared)
+  engine.ts    StoreAdapter (Strategy) + runScraper() + fetchAppInfo()   (shared)
   apple.ts     Apple adapter  (amp-api same-origin proxy, offset paging)
   google.ts    Google adapter (batchexecute RPC, token paging)
-  scrape.ts    store dispatcher + convenience wrappers
+  scrape.ts    store dispatcher + convenience wrappers + getAppInfo
   output.ts    JSON / CSV / streaming CSV sink
-  cli.ts       command-line entry point
+  cli.ts       command-line entry point (CSV reviews + app.json sidecar)
   jobs/        JobRunner (Strategy): in-process + BullMQ/Redis backends
     types.ts · inprocess.ts · bullmq.ts · index.ts (factory)
   worker.ts    dedicated BullMQ worker entrypoint (`bun run worker`)
-  database/    Postgres + Drizzle (durable reviews)
-    schema.ts (tables + drizzle-typebox) · connection.ts · repository.ts
+  database/    Postgres + Drizzle (durable reviews + app metadata)
+    schema.ts (reviews/apps/scrape_runs + drizzle-typebox) · connection.ts · repository.ts
     plugin.ts (decorate repo) · index.ts (barrel)
   api/
     index.ts             Elysia app: plugins + swagger + module composition
@@ -345,9 +386,9 @@ src/
       body-limit.ts      reject oversized bodies (413) — global
       errors.ts          maps domain errors → safe HTTP responses — global
     reviews/
-      model.ts           t.Object DTOs, registered via .model()
-      service.ts         ReviewService — validate + gated, timed scrape
-      controller.ts      reviewsRoutes(runner) — sync + async job routes
+      model.ts           t.Object DTOs (reviews + appInfo), registered via .model()
+      service.ts         ReviewService — validate + gated scrape + appInfo
+      controller.ts      reviewsRoutes(runner) — sync, async job, /app, stored routes
       runner.ts          process-wide JobRunner singleton (from config)
 ```
 
@@ -356,7 +397,9 @@ request lifecycle, and the scraping engine loop.
 
 Adding a third store is just another `StoreAdapter`: give it a `landingUrl`, an
 `initialCursor`, and a `fetchBatch()` that returns normalized `Review`s plus the
-next cursor.
+next cursor. App metadata comes for free — the engine reads the landing page's
+schema.org JSON-LD generically (`appinfo.ts`), so a new store needs no
+metadata-specific code as long as its page embeds the standard structured data.
 
 ### Design patterns
 
@@ -373,7 +416,7 @@ module and unit-tested without a browser (`test/patterns.test.ts`):
 `runScraper` just wires them together, so its loop stays a flat
 `while (paginator.state === "fetch")`.
 
-## Unified review shape
+## Unified shapes
 
 ```ts
 interface Review {
@@ -395,23 +438,58 @@ interface Review {
 }
 ```
 
+App-level metadata, unified across stores (every field is best-effort — `null`
+when the store's landing page doesn't expose it):
+
+```ts
+interface AppInfo {
+  store: "apple" | "google";
+  appId: string;
+  country: string;
+  name: string | null;
+  developer: string | null;
+  category: string | null;
+  description: string | null;
+  averageRating: number | null;  // aggregate stars, e.g. 4.7
+  ratingCount: number | null;
+  price: number | null;          // 0 = free, null = unknown
+  currency: string | null;       // ISO-4217, e.g. "USD"
+  version: string | null;
+  contentRating: string | null;  // age rating, e.g. "4+"
+  operatingSystem: string | null;
+  icon: string | null;           // image URL
+  url: string | null;            // canonical store URL
+}
+```
+
 ## Testing
 
 ```bash
-bun test          # unit + pipeline + api (fast, offline) — 45 tests
+bun test          # unit + pipeline + api (fast, offline) — 119 tests
+bun run test:db   # repository against a real Postgres (push schema first)
+bun run test:redis # BullMQ runner against a real Redis
 bun run test:live # end-to-end against the real stores (slower, network)
 ```
 
 - **Unit** (`test/unit.test.ts`) — pure logic: store inference, URL/`f.req`
 building, `batchexecute` parsing, field normalization, CSV quoting.
+- **App metadata** (`test/appinfo.test.ts`) — the pure `parseAppInfo` JSON-LD
+parser: App Store / Google Play shapes, `@graph` and multi-node arrays, `@type`
+arrays, structural fallback, number/price coercion, malformed-script tolerance,
+and the "no usable fields → null" guard.
 - **Pipeline** (`test/pipeline.test.ts`) — mocks `cloakbrowser` so the whole
 engine + adapters run **with no network**: de-dup, `limit`, `since`, offset &
-token pagination, dry-page guard, 429 retry, streaming & `onReview`.
+token pagination, dry-page guard, 429 retry, streaming & `onReview`, plus app
+metadata (extraction opt-in via `onAppInfo`, best-effort failure, `getAppInfo`).
 - **API** (`test/api.test.ts`) — Elysia routes via **Eden Treaty** (Elysia's
-type-safe test client): health, info, model validation (422s), Swagger/OpenAPI
-schema, security headers (incl. relaxed CSP for `/docs` and header coverage on
-errors), and the body-size limit (413). Mostly in-process; the 413 case boots
-an ephemeral server so a real `Content-Length` is present.
+type-safe test client): health, info, model validation (422s) for `/reviews`,
+`/app` and the stored endpoints, Swagger/OpenAPI schema, security headers (incl.
+relaxed CSP for `/docs` and header coverage on errors), and the body-size limit
+(413). Mostly in-process; the 413 case boots an ephemeral server so a real
+`Content-Length` is present.
+- **Database** (`test/database.test.ts`) — the repository against a real
+Postgres: review + app-metadata upsert/dedup and filtering. Schema is applied by
+`db push` (the `test:db` script does this first). Skipped without a test DB.
 - **Live** (`test/live.test.ts`) — real Apple + Google pulls and a CSV
 round-trip. Skipped unless `NOVIQ_LIVE=1` (set by `bun run test:live`).
 

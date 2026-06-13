@@ -128,14 +128,14 @@ export async function openSession(
 
     if (profile.warmupScroll) {
       // Mimic a visitor skimming the page before we start fetching.
-      await jitter([500, 1200]);
+      await jitter([500, 1200], opts.signal);
       for (let i = 0; i < 3; i++) {
         await page.mouse.wheel(0, 600 + Math.random() * 400);
-        await jitter([300, 900]);
+        await jitter([300, 900], opts.signal);
       }
     } else {
       // Let the SPA settle its session cookies.
-      await sleep(800);
+      await sleep(800, opts.signal);
     }
 
     return { context, page, close };
@@ -180,6 +180,19 @@ async function navigate(page: Page, url: string): Promise<void> {
 export interface RawFetch {
   status: number;
   body: string;
+}
+
+/**
+ * Read the text of every `<script type="application/ld+json">` on the page.
+ * Store landing pages embed schema.org metadata there; returning the raw
+ * strings keeps JSON parsing in testable Node code (see `parseAppInfo`).
+ */
+export async function readJsonLdScripts(page: Page): Promise<string[]> {
+  return page.evaluate(() =>
+    Array.from(document.querySelectorAll('script[type="application/ld+json"]'))
+      .map((el) => el.textContent ?? "")
+      .filter((text) => text.trim().length > 0),
+  );
 }
 
 /**

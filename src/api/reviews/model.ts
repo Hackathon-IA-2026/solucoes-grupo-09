@@ -64,6 +64,26 @@ export const scrapeQuery = t.Object({
   stealth: t.Optional(stealthEnum),
 });
 
+/** App-level metadata, unified across stores (every field may be null). */
+export const appInfoSchema = t.Object({
+  store: storeEnum,
+  appId: t.String(),
+  country: t.String(),
+  name: t.Nullable(t.String()),
+  developer: t.Nullable(t.String()),
+  category: t.Nullable(t.String()),
+  description: t.Nullable(t.String()),
+  averageRating: t.Nullable(t.Number({ description: "Aggregate stars, e.g. 4.7" })),
+  ratingCount: t.Nullable(t.Number()),
+  price: t.Nullable(t.Number({ description: "0 = free" })),
+  currency: t.Nullable(t.String()),
+  version: t.Nullable(t.String()),
+  contentRating: t.Nullable(t.String()),
+  operatingSystem: t.Nullable(t.String()),
+  icon: t.Nullable(t.String()),
+  url: t.Nullable(t.String()),
+});
+
 /** Successful scrape response envelope. */
 export const scrapeResponse = t.Object({
   store: storeEnum,
@@ -73,6 +93,27 @@ export const scrapeResponse = t.Object({
   /** True when results were cut short by a timeout or a mid-stream error. */
   partial: t.Boolean(),
   reviews: t.Array(reviewSchema),
+  /** App metadata captured in the same session (null if the page exposed none). */
+  appInfo: t.Optional(t.Nullable(appInfoSchema)),
+});
+
+/** Query string for the metadata-only endpoint (no review knobs). */
+export const appQuery = t.Object({
+  appId: scrapeQuery.properties.appId,
+  store: t.Optional(storeEnum),
+  country: t.Optional(
+    t.String({ default: "us", pattern: "^[A-Za-z]{2}$", description: "2-letter code" }),
+  ),
+  lang: t.Optional(t.String({ description: "Apple BCP-47 (en-US), Google short (en)" })),
+  stealth: t.Optional(stealthEnum),
+});
+
+/** Metadata-only response envelope (GET /app). */
+export const appResponse = t.Object({
+  store: storeEnum,
+  appId: t.String(),
+  country: t.String(),
+  appInfo: t.Nullable(appInfoSchema),
 });
 
 export const errorResponse = t.Object({ error: t.String() });
@@ -106,4 +147,6 @@ export const reviewModel = new Elysia({ name: "reviews.model" }).model({
   "reviews.error": errorResponse,
   "reviews.job.accepted": jobAccepted,
   "reviews.job": jobRecord,
+  "reviews.app.query": appQuery,
+  "reviews.app.response": appResponse,
 });

@@ -1,8 +1,8 @@
 import { appleAdapter } from "./apple.js";
-import { runScraper } from "./engine.js";
+import { fetchAppInfo, runScraper } from "./engine.js";
 import { googleAdapter } from "./google.js";
 import { resolveTarget } from "./resolve.js";
-import type { Review, ScrapeOptions, Store } from "./types.js";
+import type { AppInfo, Review, ScrapeOptions, Store } from "./types.js";
 
 /** Infer the store from an app id / package / store URL (Chain of Responsibility). */
 export function inferStore(appId: string): Store {
@@ -30,6 +30,19 @@ export async function getReviews(opts: ScrapeOptions): Promise<Review[]> {
   const out: Review[] = [];
   for await (const review of streamReviews(opts)) out.push(review);
   return out;
+}
+
+/**
+ * Fetch only the app's metadata (no reviews) — one landing-page visit. Returns
+ * `null` if the page exposes no structured data. The store is inferred from the
+ * appId unless given.
+ */
+export function getAppInfo(opts: ScrapeOptions): Promise<AppInfo | null> {
+  const store = opts.store ?? resolveTarget(opts.appId).store;
+  const resolved = { ...opts, store };
+  return store === "apple"
+    ? fetchAppInfo(appleAdapter, resolved)
+    : fetchAppInfo(googleAdapter, resolved);
 }
 
 // --- store-specific convenience wrappers ---

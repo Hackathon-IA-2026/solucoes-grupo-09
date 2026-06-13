@@ -97,6 +97,21 @@ describe("api · typed routes (Eden Treaty)", () => {
     const res = await app.handle(new Request("http://localhost/reviews/stored?appId=1"));
     expect(res.status).toBe(503);
   });
+
+  it("GET /app rejects a missing appId with 422", async () => {
+    const res = await app.handle(new Request("http://localhost/app"));
+    expect(res.status).toBe(422);
+  });
+
+  it("GET /app rejects a junk appId with 422", async () => {
+    const res = await app.handle(new Request("http://localhost/app?appId=instagram"));
+    expect(res.status).toBe(422);
+  });
+
+  it("GET /apps/stored → 503 when no database is configured", async () => {
+    const res = await app.handle(new Request("http://localhost/apps/stored?appId=1"));
+    expect(res.status).toBe(503);
+  });
 });
 
 describe("api · error mapping (global handler)", () => {
@@ -132,10 +147,11 @@ describe("api · swagger", () => {
     expect((await req("/docs")).status).toBe(200);
   });
 
-  it("exposes the OpenAPI schema including the /reviews path", async () => {
+  it("exposes the OpenAPI schema including the /reviews and /app paths", async () => {
     const res = await req("/docs/json");
     const spec = (await res.json()) as { paths: Record<string, unknown> };
     expect(spec.paths["/reviews"]).toBeDefined();
+    expect(spec.paths["/app"]).toBeDefined();
   });
 });
 

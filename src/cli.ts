@@ -2,10 +2,10 @@
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { config } from "./config.js";
-import { createCsvSink } from "./output.js";
+import { createCsvSink, writeJson } from "./output.js";
 import { resolveTarget } from "./resolve.js";
 import { streamReviews } from "./scrape.js";
-import type { ReviewSort, StealthPreset, Store } from "./types.js";
+import type { AppInfo, ReviewSort, StealthPreset, Store } from "./types.js";
 
 const HELP = `
 noviq — humanized App Store & Google Play review scraper (powered by cloakbrowser)
@@ -98,6 +98,7 @@ async function main(): Promise<void> {
   console.error(`Scraping ${label} reviews for ${appId} (${country})…`);
 
   let total = 0;
+  let appInfo: AppInfo | null = null;
   try {
     for await (const review of streamReviews({
       appId,
@@ -115,6 +116,9 @@ async function main(): Promise<void> {
       onProgress: ({ collected }) => {
         process.stderr.write(`\r  collected ${collected} reviews…`);
       },
+      onAppInfo: (info) => {
+        appInfo = info;
+      },
     })) {
       csvSink.write(review);
       total++;
@@ -124,6 +128,21 @@ async function main(): Promise<void> {
     // collected is on disk, not lost in the write buffer.
     process.stderr.write("\n");
     await csvSink.close();
+  }
+
+  // Write the app's metadata beside the CSV (one record → a small JSON sidecar).
+  if (appInfo) {
+    const app = appInfo as AppInfo;
+    const appPath = join(values.out ?? "output", `${store}-${appId}-${country}.app.json`);
+    await writeJson(appPath, app);
+    const rating =
+      app.averageRating != null
+        ? `${app.averageRating}★${app.ratingCount != null ? ` (${app.ratingCount})` : ""}`
+        : "no rating";
+    console.error(
+      `App: ${app.name ?? appId}${app.developer ? ` by ${app.developer}` : ""} — ${rating}` +
+        `${app.version ? `, v${app.version}` : ""} → ${appPath}`,
+    );
   }
 
   const secs = ((Date.now() - startedAt) / 1000).toFixed(1);

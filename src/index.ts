@@ -1,5 +1,7 @@
+export { parseAppInfo } from "./appinfo.js";
 export { appleAdapter } from "./apple.js";
 export type { FetchResult, StoreAdapter } from "./engine.js";
+export { fetchAppInfo } from "./engine.js";
 export { googleAdapter } from "./google.js";
 export { createCsvSink, writeCsv, writeJson } from "./output.js";
 export { Paginator } from "./pagination.js";
@@ -8,6 +10,7 @@ export { dedupe, limit, notOlderThan, ReviewPipeline } from "./pipeline.js";
 export type { Resolver, Target } from "./resolve.js";
 export { RESOLVERS, resolveTarget } from "./resolve.js";
 export {
+  getAppInfo,
   getAppleReviews,
   getGoogleReviews,
   getReviews,
@@ -17,10 +20,13 @@ export {
   streamReviews,
 } from "./scrape.js";
 export type {
+  AppInfo,
+  AppInfoResult,
   ProgressInfo,
   Review,
   ReviewSort,
   ScrapeOptions,
+  ScrapeResult,
   StealthPreset,
   Store,
 } from "./types.js";

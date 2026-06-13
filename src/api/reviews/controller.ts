@@ -1,6 +1,6 @@
 import { Elysia, t } from "elysia";
 import { databasePlugin } from "../../database/plugin.js";
-import { storedReview } from "../../database/schema.js";
+import { storedApp, storedReview } from "../../database/schema.js";
 import { AppError, toHttpError } from "../../errors.js";
 import type { JobRunner } from "../../jobs/index.js";
 import { reviewModel } from "./model.js";
@@ -47,6 +47,37 @@ export function reviewsRoutes(jobRunner: JobRunner) {
               "App Store or Google Play. Store auto-detected from the app id unless " +
               "`store` is given. Returns `partial: true` if a timeout or mid-stream " +
               "error cut results short. For large pulls, prefer the async job API.",
+          },
+        },
+      )
+      // --- app metadata only (one landing-page visit, no review pagination) ---
+      .get(
+        "/app",
+        async ({ query, status }) => {
+          try {
+            return await ReviewService.appInfo(query);
+          } catch (error) {
+            const { status: code, body } = toHttpError(error);
+            if (code >= 500) console.error("app info error:", error);
+            return status(code, body);
+          }
+        },
+        {
+          query: "reviews.app.query",
+          response: {
+            200: "reviews.app.response",
+            400: "reviews.error",
+            500: "reviews.error",
+            502: "reviews.error",
+            503: "reviews.error",
+            504: "reviews.error",
+          },
+          detail: {
+            summary: "Fetch app metadata (no reviews)",
+            description:
+              "Loads the app's store page and returns its metadata (name, developer, " +
+              "category, aggregate rating, price, version, …) read from the page's " +
+              "schema.org structured data. `appInfo` is null if the page exposed none.",
           },
         },
       )
@@ -145,6 +176,45 @@ export function reviewsRoutes(jobRunner: JobRunner) {
             description:
               "Reads reviews already saved to Postgres by prior scrapes. Fast, no " +
               "browser. Requires DATABASE_URL.",
+          },
+        },
+      )
+      // --- query persisted app metadata from Postgres (no browser) ---
+      .get(
+        "/apps/stored",
+        async ({ query, reviewStore, status }) => {
+          if (!reviewStore) {
+            return status(503, {
+              error: "Persistence not configured (set DATABASE_URL)",
+            });
+          }
+          try {
+            return await reviewStore.listApps({
+              store: query.store,
+              appId: query.appId,
+              country: query.country,
+              limit: query.limit ?? 50,
+            });
+          } catch (error) {
+            console.error("stored apps query error:", error);
+            return status(503, {
+              error: "App storage unavailable — try again shortly",
+            });
+          }
+        },
+        {
+          query: t.Object({
+            appId: t.Optional(t.String()),
+            store: t.Optional(storeEnum),
+            country: t.Optional(t.String({ pattern: "^[A-Za-z]{2}$" })),
+            limit: t.Optional(t.Numeric({ default: 50, minimum: 1, maximum: 500 })),
+          }),
+          response: { 200: t.Array(storedApp), 503: "reviews.error" },
+          detail: {
+            summary: "Query persisted app metadata (durable, no scrape)",
+            description:
+              "Reads app metadata already saved to Postgres by prior scrapes. " +
+              "Requires DATABASE_URL.",
           },
         },
       )

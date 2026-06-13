@@ -1,7 +1,15 @@
-import { jitter, openSession, type Page, STEALTH, sleep } from "./browser.js";
+import { parseAppInfo } from "./appinfo.js";
+import {
+  jitter,
+  openSession,
+  type Page,
+  readJsonLdScripts,
+  STEALTH,
+  sleep,
+} from "./browser.js";
 import { Paginator } from "./pagination.js";
 import { dedupe, limit, notOlderThan, ReviewPipeline } from "./pipeline.js";
-import type { Review, ScrapeOptions, Store } from "./types.js";
+import type { AppInfo, Review, ScrapeOptions, Store } from "./types.js";
 
 /** Outcome of fetching a single page of reviews from a store. */
 export type FetchResult<C> =
@@ -31,6 +39,52 @@ export interface StoreAdapter<C> {
 type SettledResult<C> =
   | { kind: "page"; reviews: Review[]; next: C | null }
   | { kind: "end" };
+
+/** Storefront country, normalized the same way the adapters build their URLs. */
+function countryOf(opts: ScrapeOptions): string {
+  return (opts.country ?? "us").toLowerCase();
+}
+
+/**
+ * Read the app's metadata from the already-loaded landing page. Best-effort: a
+ * read/parse failure resolves to `null` rather than throwing, so metadata never
+ * jeopardizes the reviews. Shared by `runScraper` and `fetchAppInfo`.
+ */
+async function extractAppInfo<C>(
+  adapter: StoreAdapter<C>,
+  page: Page,
+  opts: ScrapeOptions,
+): Promise<AppInfo | null> {
+  try {
+    const scripts = await readJsonLdScripts(page);
+    return parseAppInfo(scripts, {
+      store: adapter.store,
+      appId: opts.appId,
+      country: countryOf(opts),
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Open a session, read the app's metadata from the landing page, and close —
+ * no review pagination. Powers `getAppInfo` / `GET /app` for callers that want
+ * the aggregate context without pulling reviews.
+ */
+export async function fetchAppInfo<C>(
+  adapter: StoreAdapter<C>,
+  opts: ScrapeOptions,
+): Promise<AppInfo | null> {
+  if (!opts.appId) throw new Error("appId is required");
+  const profile = STEALTH[opts.stealth ?? "max"];
+  const session = await openSession(adapter.landingUrl(opts), opts, profile);
+  try {
+    return await extractAppInfo(adapter, session.page, opts);
+  } finally {
+    await session.close();
+  }
+}
 
 async function fetchWithRetry<C>(
   adapter: StoreAdapter<C>,
@@ -84,6 +138,12 @@ export async function* runScraper<C>(
   let collected = 0;
 
   try {
+    // Opt-in: read the app's metadata from the loaded landing page before
+    // paginating. Best-effort and one-shot — never blocks the reviews.
+    if (opts.onAppInfo && !opts.signal?.aborted) {
+      opts.onAppInfo(await extractAppInfo(adapter, session.page, opts));
+    }
+
     while (paginator.state === "fetch") {
       if (opts.signal?.aborted) break; // timeout/cancel — stop and close cleanly
       const res: SettledResult<C> = await fetchWithRetry(

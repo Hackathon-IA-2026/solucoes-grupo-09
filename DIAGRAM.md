@@ -14,9 +14,10 @@ flowchart TD
   end
 
   subgraph Core["Scraping core"]
-    Dispatch["streamReviews / getReviews<br/>src/scrape.ts"]
-    Engine["runScraper engine<br/>src/engine.ts"]
+    Dispatch["streamReviews / getReviews / getAppInfo<br/>src/scrape.ts"]
+    Engine["runScraper · fetchAppInfo<br/>src/engine.ts"]
     Browser["cloakbrowser session<br/>src/browser.ts"]
+    AppInfoP["parseAppInfo (JSON-LD)<br/>src/appinfo.ts"]
     subgraph Adapters["StoreAdapter implementations"]
       Apple["appleAdapter<br/>amp-api proxy · offset paging"]
       Google["googleAdapter<br/>batchexecute · token paging"]
@@ -25,6 +26,7 @@ flowchart TD
 
   subgraph Output
     Stream["AsyncGenerator&lt;Review&gt;"]
+    Meta["AppInfo (onAppInfo)"]
     CSV["CSV / JSON sinks<br/>src/output.ts"]
   end
 
@@ -37,10 +39,14 @@ flowchart TD
   Engine --> Google
   Apple --> Browser
   Google --> Browser
+  Engine -->|"landing-page JSON-LD"| AppInfoP
+  AppInfoP --> Meta
   Browser -->|"in-page fetch"| Stores
   Engine --> Stream
   Stream --> CSV
+  Meta --> CSV
   Stream --> API
+  Meta --> API
 ```
 
 ## 2. API request lifecycle
@@ -74,13 +80,14 @@ sequenceDiagram
     else valid
       V->>C: handler({ query })
       C->>S: ReviewService.scrape(query)
-      S->>Core: getReviews(opts)
-      Core-->>S: Review[]
-      S-->>C: { store, appId, country, count, reviews }
+      S->>Core: streamReviews(opts) + onAppInfo
+      Core-->>S: Review[] + AppInfo
+      S-->>C: { store, appId, country, count, partial, reviews, appInfo }
       C-->>Client: 200 JSON (+ Server-Timing)
     end
   end
-  Note over EH: any thrown error → 404 / 500 JSON envelope
+  Note over EH: any thrown error → typed status / 500 JSON envelope
+  Note over C,S: GET /app is the metadata-only variant — same gate + budget,<br/>returns { store, appId, country, appInfo } without paginating reviews
 ```
 
 ## 3. Scraping engine loop
@@ -92,7 +99,10 @@ implements `landingUrl`, `initialCursor` and `fetchBatch`.
 ```mermaid
 flowchart TD
   Start(["streamReviews(opts)"]) --> Open["openSession()<br/>launch cloakbrowser · navigate landing page"]
-  Open --> Fetch["adapter.fetchBatch(page, opts, cursor)"]
+  Open --> AppInfo{"onAppInfo set?"}
+  AppInfo -->|yes| Read["read landing-page JSON-LD<br/>parseAppInfo → onAppInfo() (best-effort)"]
+  AppInfo -->|no| Fetch
+  Read --> Fetch["adapter.fetchBatch(page, opts, cursor)"]
   Fetch --> Status{HTTP status}
   Status -->|429| Backoff["sleep(base × attempt)"] --> Fetch
   Status -->|404 / empty| Close
