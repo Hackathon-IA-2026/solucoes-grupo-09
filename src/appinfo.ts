@@ -89,6 +89,13 @@ function int(value: unknown): number | null {
   return n === null ? null : Math.round(n);
 }
 
+/** Round to 2 decimals — stores publish high-precision rating floats (e.g.
+ * 4.334024…) but only ~1–2 places are meaningful, and it reads cleaner. */
+function round2(value: unknown): number | null {
+  const n = num(value);
+  return n === null ? null : Math.round(n * 100) / 100;
+}
+
 /** A name from a Person/Organization that may be a string, object or array. */
 function nameOf(value: unknown): string | null {
   if (typeof value === "string") return str(value);
@@ -162,7 +169,7 @@ function normalize(app: Record<string, unknown>, prov: Provenance): AppInfo {
     developer: nameOf(app.author) ?? nameOf(app.creator) ?? nameOf(app.publisher),
     category: firstStr(app.applicationCategory) ?? firstStr(app.genre),
     description: str(app.description),
-    averageRating: num(rating.ratingValue),
+    averageRating: round2(rating.ratingValue),
     ratingCount: int(rating.ratingCount) ?? int(rating.reviewCount),
     price: num(offer.price),
     currency: str(offer.priceCurrency),

@@ -151,6 +151,20 @@ describe("appinfo · parseAppInfo", () => {
     expect(zero?.price).toBe(0);
   });
 
+  test("rounds a high-precision averageRating to 2 decimals", () => {
+    const info = parseAppInfo(
+      [
+        ld({
+          "@type": "SoftwareApplication",
+          name: "A",
+          aggregateRating: { ratingValue: 4.334024429321289 },
+        }),
+      ],
+      PROV,
+    );
+    expect(info?.averageRating).toBe(4.33);
+  });
+
   test("rounds a fractional ratingCount to an integer", () => {
     const info = parseAppInfo(
       [
