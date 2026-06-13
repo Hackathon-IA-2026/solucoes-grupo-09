@@ -4,6 +4,12 @@ import type { Store } from "./types.js";
 export interface Target {
   store: Store;
   appId: string;
+  /**
+   * Storefront country, when the input carried one (the `/us/` path segment of
+   * an App Store URL, the `gl=` param of a Play URL). Omitted for bare ids,
+   * where the country can't be inferred and the caller's default applies.
+   */
+  country?: string;
 }
 
 /** One link in the resolution chain: recognize the input, or pass (`null`). */
@@ -21,14 +27,28 @@ export const RESOLVERS: Resolver[] = [
   // Apple numeric id — "284882215"
   (input) => (/^\d+$/.test(input) ? { store: "apple", appId: input } : null),
   // Apple store URL — https://apps.apple.com/us/app/instagram/id389801252
+  // The 2-letter segment right after the host is the storefront country.
   (input) => {
     const m = input.match(/\/id(\d+)/);
-    return m ? { store: "apple", appId: m[1] } : null;
+    if (!m) return null;
+    const cc = input.match(/apps\.apple\.com\/([a-z]{2})(?:[/?#]|$)/i);
+    return {
+      store: "apple",
+      appId: m[1],
+      ...(cc ? { country: cc[1].toLowerCase() } : {}),
+    };
   },
   // Google store URL — https://play.google.com/store/apps/details?id=com.x.y
+  // The storefront country is the `gl` query param (`hl` is language, not it).
   (input) => {
     const m = input.match(/[?&]id=([\w.]+)/);
-    return m ? { store: "google", appId: m[1] } : null;
+    if (!m) return null;
+    const gl = input.match(/[?&]gl=([A-Za-z]{2})(?:[&#]|$)/);
+    return {
+      store: "google",
+      appId: m[1],
+      ...(gl ? { country: gl[1].toLowerCase() } : {}),
+    };
   },
   // Google package name — "com.spotify.music"
   (input) =>

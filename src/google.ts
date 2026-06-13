@@ -1,5 +1,6 @@
 import { pageFetch } from "./browser.js";
 import type { FetchResult, StoreAdapter } from "./engine.js";
+import { UpstreamError } from "./errors.js";
 import type { Review, ReviewSort, ScrapeOptions } from "./types.js";
 
 const PLAY = "https://play.google.com";
@@ -49,15 +50,33 @@ function batchUrl(opts: ScrapeOptions): string {
  * Unwrap a batchexecute response: strip the `)]}'` XSSI guard and the
  * length-prefixed framing, then pull out our RPC's payload. Returns the raw
  * review tuples plus the next continuation token.
+ *
+ * A 200 from batchexecute MUST carry our RPC's `wrb.fr` frame. If it doesn't
+ * (the framing/format changed, or we were soft-blocked behind a 200), that's an
+ * upstream failure — we throw rather than return empty, because returning empty
+ * is indistinguishable from "the feed ended" and would silently truncate the
+ * pull and report it as a clean success. An empty-but-valid frame (genuinely no
+ * more reviews) still returns `{ rows: [], token: null }` and ends normally.
  */
 export function parseBatch(body: string): { rows: unknown[]; token: string | null } {
   const stripped = body.replace(/^\)\]\}'/, "");
   const line = stripped.split("\n").find((l) => l.startsWith('[["wrb.fr"'));
-  if (!line) return { rows: [], token: null };
-  const frame = JSON.parse(line).find((e: unknown[]) => e[1] === REVIEWS_RPC);
-  if (!frame?.[2]) return { rows: [], token: null };
-  const data = JSON.parse(frame[2]);
-  return { rows: data[0] ?? [], token: data[1]?.[1] ?? null };
+  if (!line) {
+    throw new UpstreamError(
+      "Play response missing the reviews frame (format change or block)",
+    );
+  }
+  try {
+    const frame = JSON.parse(line).find((e: unknown[]) => e[1] === REVIEWS_RPC);
+    if (!frame?.[2]) {
+      throw new UpstreamError("Play response carried no reviews payload");
+    }
+    const data = JSON.parse(frame[2]);
+    return { rows: data[0] ?? [], token: data[1]?.[1] ?? null };
+  } catch (err) {
+    if (err instanceof UpstreamError) throw err;
+    throw new UpstreamError("Could not parse the Play reviews response", { cause: err });
+  }
 }
 
 function isoFromSeconds(seconds: unknown): string {
@@ -101,7 +120,9 @@ export const googleAdapter: StoreAdapter<Cursor> = {
     });
     if (status === 429) return { kind: "rateLimited" };
     if (status !== 200) {
-      throw new Error(`batchexecute returned HTTP ${status}: ${body.slice(0, 200)}`);
+      throw new UpstreamError(
+        `batchexecute returned HTTP ${status}: ${body.slice(0, 200)}`,
+      );
     }
 
     const { rows, token } = parseBatch(body);

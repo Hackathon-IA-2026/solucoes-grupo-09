@@ -42,9 +42,10 @@ bun run scrape 284882215 --country us --limit 500
 # Google Play, by package name
 bun run scrape com.facebook.katana --limit 500
 
-# by store URL (Apple or Google)
-bun run scrape https://apps.apple.com/us/app/instagram/id389801252 --sort mostHelpful
-bun run scrape "https://play.google.com/store/apps/details?id=com.spotify.music"
+# by store URL (Apple or Google) — the storefront country in the URL is honored
+# (Apple's /gb/ path segment, Google's gl= param), unless you pass --country
+bun run scrape https://apps.apple.com/gb/app/instagram/id389801252 --sort mostHelpful
+bun run scrape "https://play.google.com/store/apps/details?id=com.spotify.music&gl=br"
 
 # only reviews since a date (works with the default mostRecent sort)
 bun run scrape com.spotify.music --since 2025-01-01
@@ -58,7 +59,7 @@ as reviews arrive (constant memory, any size). For JSON, use the library
 | Option               | Default      | Notes                                                 |
 | -------------------- | ------------ | ----------------------------------------------------- |
 | `--store <name>`     | inferred     | `apple` / `google`                                    |
-| `--country <cc>`     | `us`         | Storefront country code                               |
+| `--country <cc>`     | `us`         | Storefront country code (overrides a country in the URL) |
 | `--lang <tag>`       | per store    | Apple `en-US`, Google `en`                            |
 | `--sort <order>`     | `mostRecent` | `mostRecent` / `mostHelpful` / `rating` (Google only) |
 | `--limit <n>`        | all          | stop after n reviews                                  |
@@ -230,6 +231,10 @@ browser is always released:
   (429 + transient throws) retry with backoff, then give up gracefully.
 - **Partial results** — a timeout / mid-stream failure returns what was collected
   with `partial: true` instead of all-or-nothing.
+- **No silent truncation** — if a store returns a `200` whose body doesn't carry
+  the expected reviews payload (format change or a soft-block behind a `200`), the
+  parse **fails loudly** (→ retry, then **502**/`partial`) rather than being
+  mistaken for "no more reviews" and quietly cutting the pull short.
 - **Survives stray rejections** — an `unhandledRejection` is logged, not fatal;
   only `uncaughtException` triggers a graceful shutdown.
 - **Correlation** — `x-request-id` on every response and in structured logs.

@@ -28,16 +28,33 @@ describe("Chain of Responsibility · resolveTarget", () => {
       appId: "com.spotify.music",
     });
   });
-  it("extracts the id from an App Store URL", () => {
+  it("extracts the id and country from an App Store URL", () => {
     expect(resolveTarget("https://apps.apple.com/us/app/instagram/id389801252")).toEqual({
       store: "apple",
       appId: "389801252",
+      country: "us",
     });
   });
-  it("extracts the package from a Play Store URL", () => {
+  it("reads a non-US App Store country instead of silently defaulting to US", () => {
+    expect(resolveTarget("https://apps.apple.com/gb/app/whatsapp/id310633997")).toEqual({
+      store: "apple",
+      appId: "310633997",
+      country: "gb",
+    });
+  });
+  it("extracts the package from a Play Store URL (hl is language, not country)", () => {
     expect(
       resolveTarget("https://play.google.com/store/apps/details?id=com.x.y&hl=en"),
     ).toEqual({ store: "google", appId: "com.x.y" });
+  });
+  it("reads the Play storefront country from the gl param", () => {
+    expect(
+      resolveTarget("https://play.google.com/store/apps/details?id=com.x.y&hl=en&gl=br"),
+    ).toEqual({ store: "google", appId: "com.x.y", country: "br" });
+  });
+  it("omits country for a bare id (caller's default applies)", () => {
+    expect(resolveTarget("284882215").country).toBeUndefined();
+    expect(resolveTarget("com.spotify.music").country).toBeUndefined();
   });
   it("throws on unrecognized input (e.g. 'undefined')", () => {
     expect(() => resolveTarget("undefined")).toThrow();

@@ -1,5 +1,6 @@
 import { pageFetch } from "./browser.js";
 import type { FetchResult, StoreAdapter } from "./engine.js";
+import { UpstreamError } from "./errors.js";
 import type { Review, ReviewSort, ScrapeOptions } from "./types.js";
 
 const STOREFRONT = "https://apps.apple.com";
@@ -86,11 +87,28 @@ export const appleAdapter: StoreAdapter<number> = {
     if (status === 429) return { kind: "rateLimited" };
     if (status === 404) return { kind: "end" }; // past the last page
     if (status !== 200) {
-      throw new Error(`reviews API returned HTTP ${status}: ${body.slice(0, 200)}`);
+      throw new UpstreamError(
+        `reviews API returned HTTP ${status}: ${body.slice(0, 200)}`,
+      );
     }
 
-    const json = JSON.parse(body) as { data?: RawAppleReview[]; next?: string };
-    const data = json.data ?? [];
+    let json: { data?: RawAppleReview[]; next?: string };
+    try {
+      json = JSON.parse(body);
+    } catch (err) {
+      throw new UpstreamError("App Store reviews response was not valid JSON", {
+        cause: err,
+      });
+    }
+    // A 200 reviews response always carries a `data` array — the feed ends with
+    // a 404 (handled above). A missing array means the shape changed or we were
+    // blocked behind a 200; surface it instead of silently stopping the pull.
+    if (!Array.isArray(json.data)) {
+      throw new UpstreamError(
+        "App Store response missing the reviews array (format change or block)",
+      );
+    }
+    const data = json.data;
     if (data.length === 0) return { kind: "end" };
 
     const reviews = data

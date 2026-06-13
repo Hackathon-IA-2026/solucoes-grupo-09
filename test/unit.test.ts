@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { nextOffset, normalizeAppleReview, reviewsUrl } from "../src/apple.js";
+import { UpstreamError } from "../src/errors.js";
 import { buildBody, normalizeGoogleReview, parseBatch } from "../src/google.js";
 import { CSV_HEADER, csvCell, csvRow } from "../src/output.js";
 import { inferStore } from "../src/scrape.js";
@@ -162,10 +163,15 @@ describe("google: parseBatch", () => {
     expect(out.token).toBeNull();
   });
 
-  test("tolerates a junk body", () => {
-    const out = parseBatch(")]}'\n\ngarbage");
+  test("a valid-but-empty frame is a clean end, not an error", () => {
+    const out = parseBatch(envelope([], null));
     expect(out.rows).toEqual([]);
     expect(out.token).toBeNull();
+  });
+
+  test("throws on a junk body instead of masquerading as 'feed ended'", () => {
+    // Returning empty here would silently truncate the pull and report success.
+    expect(() => parseBatch(")]}'\n\ngarbage")).toThrow(UpstreamError);
   });
 });
 

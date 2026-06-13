@@ -72,7 +72,9 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   const store = (values.store as Store | undefined) ?? resolved.store;
-  const country = (values.country ?? "us").toLowerCase();
+  // Precedence: explicit --country > the country in a store URL > default "us".
+  // Without this, pasting a regional URL (…/gb/… or gl=gb) silently scraped US.
+  const country = (values.country ?? resolved.country ?? "us").toLowerCase();
 
   // Reject unparseable numbers/dates up front — a NaN limit would silently
   // mean "unlimited" and a NaN since would silently be ignored.
