@@ -110,6 +110,12 @@ test.describe("scrape flow", () => {
     await expect(page.getByTestId("progress-panel")).toBeVisible();
     await expect(page.getByTestId("progress-panel")).toContainText("com.spotify.music");
 
+    // Determinate progress once the backend reports collected counts.
+    await expect(page.getByTestId("scrape-progress-bar")).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByTestId("scrape-progress-bar")).toContainText("of 100 reviews");
+
     // Results arrive after the scripted waiting → active → completed polls.
     await expect(page.getByTestId("results-panel")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId("results-panel")).toContainText("3 reviews scraped");

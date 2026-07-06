@@ -135,6 +135,13 @@ export const jobRecord = t.Object({
   ]),
   result: t.Optional(scrapeResponse),
   error: t.Optional(t.String()),
+  /** Live progress while active — drives client progress bars. */
+  progress: t.Optional(
+    t.Object({
+      collected: t.Number({ description: "Reviews collected so far" }),
+      limit: t.Optional(t.Number({ description: "Requested cap (bar denominator)" })),
+    }),
+  ),
 });
 
 /**

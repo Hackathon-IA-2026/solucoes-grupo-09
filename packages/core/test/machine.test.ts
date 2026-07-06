@@ -186,3 +186,36 @@ describe("isBusy", () => {
     );
   });
 });
+
+describe("progress reporting", () => {
+  test("active updates carry progress into the scraping state", () => {
+    const state = run([
+      { type: "SUBMIT", request },
+      { type: "SUBMIT_OK", jobId: "job-1" },
+      {
+        type: "JOB_UPDATE",
+        record: { ...record("active"), progress: { collected: 40, limit: 100 } },
+      },
+    ]);
+    expect(state).toMatchObject({
+      phase: "scraping",
+      progress: { collected: 40, limit: 100 },
+    });
+  });
+
+  test("a poll without progress keeps the last known value", () => {
+    const state = run([
+      { type: "SUBMIT", request },
+      { type: "SUBMIT_OK", jobId: "job-1" },
+      {
+        type: "JOB_UPDATE",
+        record: { ...record("active"), progress: { collected: 40, limit: 100 } },
+      },
+      { type: "JOB_UPDATE", record: record("active") },
+    ]);
+    expect(state).toMatchObject({
+      phase: "scraping",
+      progress: { collected: 40, limit: 100 },
+    });
+  });
+});

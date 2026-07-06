@@ -1,9 +1,10 @@
 import type { ScrapeState } from "@noviq/core";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Easing, Platform, Text, View } from "react-native";
+import { ActivityIndicator, Animated, Easing, Platform, Text, View } from "react-native";
 import { usePalette } from "@/hooks/use-palette";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
-import { radius, space } from "@/theme/tokens";
+import { webTransition } from "@/lib/focus-ring";
+import { motion, radius, space } from "@/theme/tokens";
 import { Button } from "./button";
 import { FadeIn } from "./fade-in";
 
@@ -82,6 +83,77 @@ function Dot({ state }: { state: "done" | "active" | "pending" }) {
           justifyContent: "center",
         }}
       />
+    </View>
+  );
+}
+
+/**
+ * Determinate progress: collected/limit as a bar + count + percent. Without a
+ * limit it shows the running count with a partial bar; before any progress
+ * report arrives, the active-step spinner covers the gap.
+ */
+function ProgressBar({ collected, limit }: { collected: number; limit?: number }) {
+  const colors = usePalette();
+  const total = limit && limit > 0 ? limit : undefined;
+  const percent = total ? Math.min(100, Math.round((collected / total) * 100)) : null;
+  return (
+    <View
+      testID="scrape-progress-bar"
+      accessibilityRole="progressbar"
+      accessibilityValue={
+        percent != null ? { min: 0, max: 100, now: percent } : { min: 0 }
+      }
+      style={{ gap: space.sm }}
+    >
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <Text
+          accessibilityLiveRegion="polite"
+          style={{
+            color: colors.inkMuted,
+            fontSize: 13,
+            fontWeight: "600",
+            fontVariant: ["tabular-nums"],
+          }}
+        >
+          {total ? `${collected} of ${total} reviews` : `${collected} reviews collected`}
+        </Text>
+        {percent != null ? (
+          <Text
+            style={{
+              color: colors.ink,
+              fontSize: 13,
+              fontWeight: "800",
+              fontVariant: ["tabular-nums"],
+            }}
+          >
+            {percent}%
+          </Text>
+        ) : null}
+      </View>
+      <View
+        style={{
+          height: 8,
+          borderRadius: 4,
+          backgroundColor: colors.surfaceSunken,
+          overflow: "hidden",
+        }}
+      >
+        <View
+          style={{
+            width: percent != null ? `${percent}%` : "18%",
+            height: "100%",
+            borderRadius: 4,
+            backgroundColor: colors.accent,
+            ...webTransition("width", motion.slow),
+          }}
+        />
+      </View>
     </View>
   );
 }
@@ -175,6 +247,9 @@ export function ProgressPanel({
                   </Text>
                 ) : null}
               </View>
+              {status === "active" ? (
+                <ActivityIndicator size="small" color={colors.accent} />
+              ) : null}
               {status === "done" ? (
                 <Text style={{ color: colors.success, fontSize: 14, fontWeight: "700" }}>
                   ✓
@@ -184,6 +259,11 @@ export function ProgressPanel({
           );
         })}
       </View>
+
+      {/* Real progress once the backend reports collected counts. */}
+      {state.phase === "scraping" && state.progress ? (
+        <ProgressBar collected={state.progress.collected} limit={state.progress.limit} />
+      ) : null}
 
       {state.phase !== "submitting" && state.pollErrors > 0 ? (
         <Text

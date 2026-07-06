@@ -2,7 +2,7 @@
  * Deterministic stand-in for the noviq API, used by the Playwright suite.
  * Speaks the exact wire contract (see packages/core/src/types.ts) on the dev
  * API's default port so the exported bundle needs no rebuild. Job lifecycle is
- * scripted: poll 1 → waiting, poll 2 → active, poll 3+ → terminal.
+ * scripted: poll 1 → waiting, polls 2-3 → active (with progress), poll 4+ → terminal.
  *
  * Magic app ids:
  *   com.e2e.fail   — job ends in `failed`
@@ -136,7 +136,20 @@ Bun.serve({
       if (!job) return json({ error: "Job not found" }, 404);
       job.polls++;
       if (job.polls === 1) return json({ id: jobMatch[1], status: "waiting" });
-      if (job.polls === 2) return json({ id: jobMatch[1], status: "active" });
+      if (job.polls === 2) {
+        return json({
+          id: jobMatch[1],
+          status: "active",
+          progress: { collected: 42, limit: 100 },
+        });
+      }
+      if (job.polls === 3) {
+        return json({
+          id: jobMatch[1],
+          status: "active",
+          progress: { collected: 87, limit: 100 },
+        });
+      }
       if (job.appId === "com.e2e.fail") {
         return json({
           id: jobMatch[1],

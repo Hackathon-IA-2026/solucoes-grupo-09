@@ -2,7 +2,7 @@ import { type ConnectionOptions, Queue, Worker } from "bullmq";
 import { Redis } from "ioredis";
 import { toHttpError } from "../errors.js";
 import type { ScrapeOptions, ScrapeResult } from "../types.js";
-import type { Execute, JobRecord, JobRunner, JobStatus } from "./types.js";
+import type { Execute, JobProgress, JobRecord, JobRunner, JobStatus } from "./types.js";
 
 export const QUEUE_NAME = "noviq-reviews";
 
@@ -95,7 +95,16 @@ export function createBullMqRunner(
       // corrupt. Throwing rejects the job so BullMQ retries up to `attempts`.
       async (job) => {
         try {
-          return await execute(job.data);
+          return await execute({
+            ...job.data,
+            // Publish per-page progress to Redis (fire-and-forget — a progress
+            // write failure must never fail the scrape itself).
+            onProgress: (info) => {
+              void job
+                .updateProgress({ collected: info.collected, limit: job.data.limit })
+                .catch(() => {});
+            },
+          });
         } catch (err) {
           // Persist only a client-safe message as the job's failedReason.
           throw new Error(toHttpError(err).body.error);
@@ -125,6 +134,14 @@ export function createBullMqRunner(
       const record: JobRecord = { id, status };
       if (status === "completed") record.result = job.returnvalue;
       if (status === "failed") record.error = job.failedReason || "Scrape failed";
+      if (
+        status === "active" &&
+        job.progress &&
+        typeof job.progress === "object" &&
+        "collected" in job.progress
+      ) {
+        record.progress = job.progress as JobProgress;
+      }
       return record;
     },
     async close() {

@@ -1,4 +1,4 @@
-import type { JobRecord, ScrapeRequest, ScrapeResult } from "./types";
+import type { JobProgress, JobRecord, ScrapeRequest, ScrapeResult } from "./types";
 
 /**
  * The scrape-flow finite-state machine, as a *pure* reducer. All UI state for
@@ -34,6 +34,8 @@ export type ScrapeState =
       request: ScrapeRequest;
       jobId: string;
       pollErrors: number;
+      /** Live progress from the job record, when the backend reports it. */
+      progress?: JobProgress;
     }
   | { phase: "completed"; request: ScrapeRequest; jobId: string; result: ScrapeResult }
   | {
@@ -108,7 +110,16 @@ export function transition(state: ScrapeState, event: ScrapeEvent): ScrapeState 
           case "waiting":
             return { ...state, phase: "queued", pollErrors: 0 };
           case "active":
-            return { ...state, phase: "scraping", pollErrors: 0 };
+            return {
+              ...state,
+              phase: "scraping",
+              pollErrors: 0,
+              // Keep the last known progress if a poll omits it (progress is
+              // best-effort and must never move backwards to undefined).
+              progress:
+                record.progress ??
+                (state.phase === "scraping" ? state.progress : undefined),
+            };
           case "completed":
             if (!record.result) {
               // A completed job must carry a result; treat the contract

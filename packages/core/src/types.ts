@@ -87,10 +87,19 @@ export interface ScrapeRequest {
 /** Lifecycle states of an async scrape job. */
 export type JobStatus = "waiting" | "active" | "completed" | "failed";
 
+/** Live progress of an active scrape (best-effort, drives progress bars). */
+export interface JobProgress {
+  /** Reviews collected so far (deduplicated). */
+  collected: number;
+  /** The requested cap, when one was set (denominator for a bar). */
+  limit?: number;
+}
+
 /** A job's point-in-time record (GET /reviews/jobs/:id). */
 export interface JobRecord {
   id: string;
   status: JobStatus;
   result?: ScrapeResult;
   error?: string;
+  progress?: JobProgress;
 }

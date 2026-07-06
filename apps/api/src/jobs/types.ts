@@ -3,6 +3,14 @@ import type { ScrapeOptions, ScrapeResult } from "../types.js";
 /** Lifecycle states of a scrape job (an ADT — see `JobRecord`). */
 export type JobStatus = "waiting" | "active" | "completed" | "failed";
 
+/** Live progress of an active scrape, for client progress bars. */
+export interface JobProgress {
+  /** Reviews collected so far (deduplicated). */
+  collected: number;
+  /** The requested cap, when the client set one (denominator for a bar). */
+  limit?: number;
+}
+
 /** A point-in-time view of a job. */
 export interface JobRecord {
   id: string;
@@ -11,6 +19,8 @@ export interface JobRecord {
   result?: ScrapeResult;
   /** Client-safe message when `status === "failed"`. */
   error?: string;
+  /** Live progress while `status === "active"` (best-effort). */
+  progress?: JobProgress;
 }
 
 /** Executes the actual scrape for a queued job. Injected for composability/testing. */

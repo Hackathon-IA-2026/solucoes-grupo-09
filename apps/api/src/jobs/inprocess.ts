@@ -27,7 +27,17 @@ export function createInProcessRunner(execute: Execute): JobRunner {
     const existing = jobs.get(id);
     if (existing) existing.status = "active";
     try {
-      const result = await execute(query);
+      const result = await execute({
+        ...query,
+        // Surface per-page progress on the record so pollers can render a
+        // real progress bar instead of an indeterminate spinner.
+        onProgress: (info) => {
+          const record = jobs.get(id);
+          if (record && record.status === "active") {
+            record.progress = { collected: info.collected, limit: query.limit };
+          }
+        },
+      });
       remember({ id, status: "completed", result });
     } catch (err) {
       remember({ id, status: "failed", error: toHttpError(err).body.error });

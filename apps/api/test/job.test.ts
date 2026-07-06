@@ -54,3 +54,40 @@ describe("jobs · in-process runner", () => {
     expect(await runner.status("nope")).toBeNull();
   });
 });
+
+describe("in-process runner · progress", () => {
+  it("exposes live progress on the record while active", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const runner = createInProcessRunner(async (query) => {
+      // Simulate two scraped pages, then hold until the test has observed.
+      query.onProgress?.({ collected: 20, batch: 20, hasMore: true });
+      query.onProgress?.({ collected: 40, batch: 20, hasMore: false });
+      await gate;
+      return ok(40);
+    });
+
+    const id = await runner.submit({ appId: "42", store: "apple", limit: 100 });
+    // Poll until the progress write is visible (the job runs on a microtask).
+    let record: JobRecord | null = null;
+    for (let i = 0; i < 50; i++) {
+      record = await runner.status(id);
+      if (record?.progress) break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    expect(record?.status).toBe("active");
+    expect(record?.progress).toEqual({ collected: 40, limit: 100 });
+
+    release();
+    for (let i = 0; i < 50; i++) {
+      record = await runner.status(id);
+      if (record?.status === "completed") break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    // Completed records don't carry stale progress.
+    expect(record?.status).toBe("completed");
+    expect(record?.progress).toBeUndefined();
+  });
+});
