@@ -1,45 +1,37 @@
 /**
- * Deterministic brand-asset generator: renders each asset as HTML in headless
- * Chromium and screenshots it at exact pixel size. Rerun after any brand
- * change: `bun scripts/generate-assets.ts` (from apps/web).
- *
- * Outputs:
- *   assets/images/icon.png                    1024  app icon (iOS + fallback)
- *   assets/images/favicon.png                   64  browser tab
- *   assets/images/splash-icon.png              512  splash logo (transparent)
- *   assets/images/android-icon-foreground.png 1024  adaptive fg (transparent)
- *   assets/images/android-icon-background.png 1024  adaptive bg (solid)
- *   assets/images/android-icon-monochrome.png 1024  adaptive mono (white)
- *   public/og.png                         1200×630  social share card
+ * Deterministic brand-asset generator (design system v3, ported from the
+ * reference app): the NoviqMark — lime rounded square with the stroked
+ * N-path — on charcoal. Rerun after any brand change:
+ * `bun scripts/generate-assets.ts` (from apps/web).
  */
 import { join } from "node:path";
 import { chromium } from "@playwright/test";
 
 const ROOT = join(import.meta.dir, "..");
-const VIOLET = "#6428E0";
-const VIOLET_LIGHT = "#8E5CF6";
-const PAPER = "#FFFFFF";
-const INK = "#20243C";
-const GOLD = "#A87805";
-const INK_MUTED = "#4E5470";
+const LIME = "#D0F244";
+const ON_LIME = "#1E2B10";
+const CHARCOAL = "#131316";
+const CARD = "#1B1B1F";
+const FG = "#F7F7F7";
+const MUTED = "#A2A2AC";
+const GRAPE = "#8D5DF6";
+const BORDER = "rgba(255,255,255,0.08)";
 
 const FONT =
   "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
-/** The wordmark glyph: rounded emerald square with a bold white N. */
-function mark(size: number, options: { bg?: string; fg?: string; radius?: number } = {}) {
-  const {
-    bg = `linear-gradient(140deg, ${VIOLET_LIGHT} 0%, ${VIOLET} 100%)`,
-    fg = "#fff",
-  } = options;
-  const radius = options.radius ?? Math.round(size * 0.24);
+/** The reference NoviqMark: rounded square + stroked N-path. */
+function mark(
+  size: number,
+  opts: { bg?: string; stroke?: string; radius?: number } = {},
+) {
+  const { bg = LIME, stroke = ON_LIME } = opts;
+  const rx = opts.radius ?? 9;
   return `
-    <div style="width:${size}px;height:${size}px;background:${bg};border-radius:${radius}px;
-                display:flex;align-items:center;justify-content:center;">
-      <span style="font-family:${FONT};font-weight:900;color:${fg};
-                   font-size:${Math.round(size * 0.58)}px;line-height:1;
-                   letter-spacing:${-size * 0.02}px;">N</span>
-    </div>`;
+  <svg width="${size}" height="${size}" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:${size}px;height:${size}px">
+    <rect width="32" height="32" rx="${rx}" fill="${bg}"/>
+    <path d="M9 23V9l14 14V9" stroke="${stroke}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
 }
 
 interface Asset {
@@ -69,65 +61,66 @@ const ASSETS: Asset[] = [
     width: 512,
     height: 512,
     transparent: true,
-    // White-on-transparent logo; the splash background supplies the emerald.
-    html: `<div style="width:512px;height:512px;display:flex;align-items:center;justify-content:center;">
-             ${mark(340, { bg: "rgba(255,255,255,0.14)", fg: "#fff" })}
-           </div>`,
+    html: `<div style="width:512px;height:512px;display:grid;place-items:center">${mark(320)}</div>`,
   },
   {
     file: "assets/images/android-icon-foreground.png",
     width: 1024,
     height: 1024,
     transparent: true,
-    // Adaptive-icon safe zone: keep the glyph inside the central ~66%.
-    html: `<div style="width:1024px;height:1024px;display:flex;align-items:center;justify-content:center;">
-             <span style="font-family:${FONT};font-weight:900;color:#fff;font-size:380px;line-height:1;">N</span>
-           </div>`,
+    // Adaptive safe zone: N-path only, centered (background layer is lime).
+    html: `<div style="width:1024px;height:1024px;display:grid;place-items:center">
+      <svg width="560" height="560" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M9 23V9l14 14V9" stroke="${ON_LIME}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg></div>`,
   },
   {
     file: "assets/images/android-icon-background.png",
     width: 1024,
     height: 1024,
-    html: `<div style="width:1024px;height:1024px;background:linear-gradient(140deg, ${VIOLET_LIGHT} 0%, ${VIOLET} 100%);"></div>`,
+    html: `<div style="width:1024px;height:1024px;background:${LIME}"></div>`,
   },
   {
     file: "assets/images/android-icon-monochrome.png",
     width: 1024,
     height: 1024,
     transparent: true,
-    html: `<div style="width:1024px;height:1024px;display:flex;align-items:center;justify-content:center;">
-             <span style="font-family:${FONT};font-weight:900;color:#fff;font-size:380px;line-height:1;">N</span>
-           </div>`,
+    html: `<div style="width:1024px;height:1024px;display:grid;place-items:center">
+      <svg width="560" height="560" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M9 23V9l14 14V9" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg></div>`,
   },
   {
     file: "public/og.png",
     width: 1200,
     height: 630,
     html: `
-      <div style="width:1200px;height:630px;background:${PAPER};position:relative;overflow:hidden;
+      <div style="width:1200px;height:630px;background:${CHARCOAL};position:relative;overflow:hidden;
                   font-family:${FONT};box-sizing:border-box;padding:72px 80px;
-                  display:flex;flex-direction:column;justify-content:space-between;">
-        <div style="position:absolute;top:-220px;right:-160px;width:640px;height:640px;border-radius:50%;
-                    background:radial-gradient(circle, rgba(100,40,224,0.12) 0%, rgba(100,40,224,0) 70%);"></div>
-        <div style="display:flex;align-items:center;gap:20px;">
-          ${mark(64)}
-          <span style="font-size:34px;font-weight:800;color:${INK};letter-spacing:-0.5px;">Noviq</span>
+                  display:flex;flex-direction:column;justify-content:space-between">
+        <div style="position:absolute;top:-260px;left:50%;transform:translateX(-50%);width:640px;height:520px;border-radius:50%;
+                    background:radial-gradient(closest-side, ${LIME}, transparent);opacity:0.18;filter:blur(60px)"></div>
+        <div style="position:absolute;bottom:-160px;right:-80px;width:420px;height:420px;border-radius:50%;
+                    background:radial-gradient(closest-side, ${GRAPE}, transparent);opacity:0.22;filter:blur(60px)"></div>
+        <div style="display:flex;align-items:center;gap:16px;position:relative">
+          ${mark(56)}
+          <span style="font-size:30px;font-weight:600;color:${FG};letter-spacing:-0.5px">Noviq</span>
         </div>
-        <div>
-          <div style="font-size:88px;line-height:1.04;font-weight:800;color:${INK};letter-spacing:-3px;">
-            Every app review.<br/><span style="color:${GOLD}">One paste away.</span>
+        <div style="position:relative">
+          <div style="font-size:80px;line-height:1.06;font-weight:600;color:${FG};letter-spacing:-2.5px">
+            Turn any app's reviews<br/>into <span style="color:${LIME}">clean data.</span>
           </div>
-          <div style="margin-top:28px;font-size:30px;line-height:1.4;color:${INK_MUTED};max-width:860px;">
-            Scrape App Store &amp; Google Play reviews to CSV — free, no signup.
+          <div style="margin-top:26px;font-size:28px;line-height:1.4;color:${MUTED};max-width:820px">
+            App Store &amp; Google Play review scraping — free, no signup.
           </div>
         </div>
-        <div style="display:flex;gap:14px;">
-          ${["App Store + Google Play", "CSV & JSON", "150+ storefronts"]
+        <div style="display:flex;gap:12px;position:relative">
+          ${["Every rating & version", "Developer responses", "CSV & JSON"]
             .map(
               (
                 chip,
-              ) => `<span style="border:2px solid #E7E7F2;border-radius:999px;background:#fff;
-                           padding:12px 26px;font-size:24px;font-weight:600;color:${INK_MUTED};">${chip}</span>`,
+              ) => `<span style="border:2px solid ${BORDER};border-radius:999px;background:${CARD};
+                           padding:12px 26px;font-size:22px;font-weight:500;color:${MUTED}">${chip}</span>`,
             )
             .join("")}
         </div>
@@ -140,7 +133,7 @@ const page = await browser.newPage({ deviceScaleFactor: 1 });
 for (const asset of ASSETS) {
   await page.setViewportSize({ width: asset.width, height: asset.height });
   await page.setContent(
-    `<!doctype html><html><body style="margin:0;${asset.transparent ? "background:transparent;" : ""}">${asset.html}</body></html>`,
+    `<!doctype html><html><body style="margin:0;${asset.transparent ? "background:transparent;" : ""}display:grid;place-items:center">${asset.html}</body></html>`,
   );
   await page.screenshot({
     path: join(ROOT, asset.file),

@@ -16,7 +16,7 @@ export default function Root({ children }: PropsWithChildren) {
           name="viewport"
           content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover"
         />
-        <meta name="color-scheme" content="light dark" />
+        <meta name="color-scheme" content="dark" />
         <meta
           name="theme-color"
           media="(prefers-color-scheme: light)"
@@ -29,8 +29,8 @@ export default function Root({ children }: PropsWithChildren) {
           // biome-ignore lint/security/noDangerouslySetInnerHtml: static critical CSS
           dangerouslySetInnerHTML={{
             __html: `
-              body { background-color: #FFFFFF; }
-              @media (prefers-color-scheme: dark) { body { background-color: #131522; } }
+              body { background-color: #131316; }
+              
               @media (prefers-reduced-motion: reduce) {
                 *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
               }

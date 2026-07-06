@@ -1,51 +1,59 @@
 /**
- * Noviq design tokens v2 — violet SaaS system.
- * References: AppFollow brand language (vivid purple primary, amber-highlighted
- * display phrases, lilac pill kickers, floating white cards) refined with a
- * modern dashboard aesthetic (soft pastel status pills, lavender-gray panels,
- * hairline borders, layered shadows).
+ * Noviq design tokens v3 — ported 1:1 from the reference app
+ * (`reference/review-data-scraper/app/globals.css`). Dark-only, like the
+ * reference (`color-scheme: dark`): charcoal canvas, near-black raised cards,
+ * lime primary with dark-olive text, grape violet secondary, hairline
+ * white/8% borders, 24px cards and pill controls.
  *
- * 60-30-10: white/lavender canvas (60), indigo-navy ink + surfaces (30),
- * violet accent (10) with one gold display highlight per screen.
- * Every text/background pair meets WCAG AA in both schemes
- * (≥4.5:1 body, ≥3:1 large/bold display).
+ * oklch values from the reference converted to hex:
+ *   background oklch(0.17 .005 285)  → #131316
+ *   card       oklch(0.215 .006 285) → #1B1B1F
+ *   secondary  oklch(0.27 .006 285)  → #26262B
+ *   foreground oklch(0.97 0 0)       → #F7F7F7
+ *   muted-fg   oklch(0.68 .01 285)   → #A2A2AC
+ *   lime       oklch(0.9 .19 120)    → #D0F244  (on-lime oklch(0.2 .03 130) → #1E2B10)
+ *   grape      oklch(0.62 .2 285)    → #8D5DF6
+ *   destructive oklch(0.63 .21 25)   → #EA4A3D
+ *   chart-3/4/5 → cyan #38C3DD · orange #EDA23F · pink #ED6BB0
  */
 
 export interface Palette {
-  /** Page canvas (the 60%). */
+  /** Page background (ref `--background`). */
   canvas: string;
-  /** Soft lavender wash behind the hero. */
+  /** Slightly lifted wash for glows/zebra zones. */
   canvasTint: string;
-  /** Cards and raised surfaces. */
+  /** Raised cards (ref `--card`). */
   surface: string;
-  /** Sunken panels (inputs, seg controls, alternate sections). */
+  /** Inset panels, chips, input fields (ref `--secondary`/`--muted`). */
   surfaceSunken: string;
-  /** Primary text — deep indigo navy. */
+  /** Primary text (ref `--foreground`). */
   ink: string;
-  /** Secondary text. */
+  /** Secondary text (ref `--muted-foreground`). */
   inkMuted: string;
-  /** Tertiary text / placeholders (still ≥4.5:1 on surface). */
+  /** Tertiary text — muted at 70%. */
   inkFaint: string;
-  /** Hairline borders. */
+  /** Hairline borders (ref `--border`, white/8%). */
   border: string;
-  /** Stronger border (secondary buttons, focused input). */
+  /** Input borders (ref `--input`, white/12%). */
   borderStrong: string;
-  /** The 10%: brand violet. */
+  /** Primary action — lime (ref `--lime`/`--primary`). */
   accent: string;
-  /** Accent hover/pressed. */
   accentStrong: string;
-  /** Text on accent fills. */
+  /** Text on lime fills (ref `--lime-foreground`). */
   onAccent: string;
-  /** Soft lilac wash (kicker pills, active chips, scraping state). */
+  /** Lime at 15% for tinted chips (ref `bg-lime/15`). */
   accentSoft: string;
-  /** Text on the soft lilac wash. */
   onAccentSoft: string;
-  /** Gold display highlight — one phrase per screen (large/bold text only). */
+  /** Secondary accent — grape violet (ref `--grape`). */
+  violet: string;
+  violetSoft: string;
+  onVioletSoft: string;
+  /** Display highlight = lime text on dark (ref hero `text-lime`). */
   highlight: string;
-  /** Semantic: success (mint pills, done states). */
   success: string;
   successSoft: string;
   onSuccessSoft: string;
+  /** ref `--destructive`. */
   danger: string;
   dangerSoft: string;
   onDangerSoft: string;
@@ -55,91 +63,59 @@ export interface Palette {
   info: string;
   infoSoft: string;
   onInfoSoft: string;
-  /** Star gold. */
+  /** Stars are lime in the reference. */
   star: string;
-  /** Focus ring. */
   focus: string;
-  /** Brand gradient for icon chips / logo mark (CSS gradient string). */
+  /** Grape gradient (ref timeline active bar). */
   gradient: string;
-  /** Layered card shadow. */
   shadowCard: string;
-  /** Bigger floating shadow (hero card). */
   shadowFloat: string;
 }
 
-export const light: Palette = {
-  canvas: "#FFFFFF",
-  canvasTint: "#F3F1FC",
-  surface: "#FFFFFF",
-  surfaceSunken: "#F5F5FB",
-  ink: "#20243C",
-  inkMuted: "#4E5470",
-  inkFaint: "#666D8C",
-  border: "#E7E7F2",
-  borderStrong: "#C3C4DE",
-  accent: "#6428E0",
-  accentStrong: "#4E1DB8",
-  onAccent: "#FFFFFF",
-  accentSoft: "#EDE8FC",
-  onAccentSoft: "#4E1DB8",
-  highlight: "#A87805",
-  success: "#157F3D",
-  successSoft: "#E1F6EA",
-  onSuccessSoft: "#116232",
-  danger: "#C01F14",
-  dangerSoft: "#FDE9E7",
-  onDangerSoft: "#96190F",
-  warning: "#8A6100",
-  warningSoft: "#FFF2D2",
-  onWarningSoft: "#6E4E00",
-  info: "#1D4ED8",
-  infoSoft: "#E8F0FE",
-  onInfoSoft: "#1A44BC",
-  star: "#E8A200",
-  focus: "#6428E0",
-  gradient: "linear-gradient(140deg, #8E5CF6 0%, #6428E0 100%)",
-  shadowCard: "0 1px 2px rgba(32, 28, 80, 0.05), 0 4px 16px rgba(32, 28, 80, 0.06)",
-  shadowFloat: "0 24px 60px rgba(50, 22, 128, 0.14), 0 4px 14px rgba(50, 22, 128, 0.07)",
+const dark: Palette = {
+  canvas: "#131316",
+  canvasTint: "#18181C",
+  surface: "#1B1B1F",
+  surfaceSunken: "#26262B",
+  ink: "#F7F7F7",
+  inkMuted: "#A2A2AC",
+  inkFaint: "#87878F",
+  border: "rgba(255, 255, 255, 0.08)",
+  borderStrong: "rgba(255, 255, 255, 0.14)",
+  accent: "#D0F244",
+  accentStrong: "#DDFA62",
+  onAccent: "#1E2B10",
+  accentSoft: "rgba(208, 242, 68, 0.15)",
+  onAccentSoft: "#D0F244",
+  violet: "#8D5DF6",
+  violetSoft: "rgba(141, 93, 246, 0.15)",
+  onVioletSoft: "#B393FF",
+  highlight: "#D0F244",
+  success: "#D0F244",
+  successSoft: "rgba(208, 242, 68, 0.15)",
+  onSuccessSoft: "#D0F244",
+  danger: "#EA4A3D",
+  dangerSoft: "rgba(234, 74, 61, 0.15)",
+  onDangerSoft: "#FF8A7E",
+  warning: "#EDA23F",
+  warningSoft: "rgba(237, 162, 63, 0.15)",
+  onWarningSoft: "#F5BE74",
+  info: "#38C3DD",
+  infoSoft: "rgba(56, 195, 221, 0.15)",
+  onInfoSoft: "#7FDCEE",
+  star: "#D0F244",
+  focus: "#D0F244",
+  gradient: "linear-gradient(180deg, #8D5DF6 0%, rgba(141, 93, 246, 0.35) 100%)",
+  shadowCard: "0 1px 2px rgba(0, 0, 0, 0.35), 0 6px 20px rgba(0, 0, 0, 0.30)",
+  shadowFloat: "0 24px 60px rgba(0, 0, 0, 0.55), 0 4px 14px rgba(0, 0, 0, 0.40)",
 };
 
-export const dark: Palette = {
-  canvas: "#131522",
-  canvasTint: "#191C2E",
-  surface: "#1E2138",
-  surfaceSunken: "#181B2D",
-  ink: "#F2F2FA",
-  inkMuted: "#B9BCD8",
-  inkFaint: "#9EA2C4",
-  border: "#2C2F4A",
-  borderStrong: "#4B4F76",
-  accent: "#977CFF",
-  accentStrong: "#B09BFF",
-  onAccent: "#180E45",
-  accentSoft: "#2B2452",
-  onAccentSoft: "#C9BCFF",
-  highlight: "#FFC94D",
-  success: "#4ADE80",
-  successSoft: "#12301F",
-  onSuccessSoft: "#7EE2A8",
-  danger: "#F97066",
-  dangerSoft: "#3A1512",
-  onDangerSoft: "#FDA29B",
-  warning: "#FDB022",
-  warningSoft: "#38290C",
-  onWarningSoft: "#FEC84B",
-  info: "#7DA8F8",
-  infoSoft: "#16233F",
-  onInfoSoft: "#A6C4FA",
-  star: "#FFC94D",
-  focus: "#977CFF",
-  gradient: "linear-gradient(140deg, #A98BFF 0%, #7B52F0 100%)",
-  shadowCard: "0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.35)",
-  shadowFloat: "0 24px 60px rgba(0, 0, 0, 0.5), 0 4px 14px rgba(0, 0, 0, 0.4)",
-};
-
-export function palette(scheme: string | null | undefined): Palette {
-  return scheme === "dark" ? dark : light;
+/** The reference is dark-only (`color-scheme: dark`) — both schemes resolve dark. */
+export function palette(_scheme: string | null | undefined): Palette {
+  return dark;
 }
+
+export { dark };
 
 /** 4-pt spacing scale. */
 export const space = {
@@ -153,39 +129,35 @@ export const space = {
   huge: 72,
 } as const;
 
+/** Ref: --radius 1rem; cards are rounded-3xl (24), inner blocks 2xl (16). */
 export const radius = {
-  sm: 8,
-  md: 12,
+  sm: 10,
+  md: 13,
   lg: 16,
   xl: 24,
   pill: 999,
 } as const;
 
-/** Type scale (hero sizes chosen per breakpoint in components). */
 export const type = {
-  hero: { fontSize: 44, lineHeight: 48, fontWeight: "800" },
-  heroLarge: { fontSize: 64, lineHeight: 66, fontWeight: "800" },
-  h2: { fontSize: 28, lineHeight: 34, fontWeight: "800" },
-  h3: { fontSize: 20, lineHeight: 26, fontWeight: "700" },
+  hero: { fontSize: 40, lineHeight: 42, fontWeight: "600" },
+  heroLarge: { fontSize: 60, lineHeight: 63, fontWeight: "600" },
+  h2: { fontSize: 28, lineHeight: 34, fontWeight: "600" },
+  h3: { fontSize: 20, lineHeight: 26, fontWeight: "600" },
   body: { fontSize: 16, lineHeight: 26, fontWeight: "400" },
-  bodySmall: { fontSize: 14, lineHeight: 21, fontWeight: "400" },
+  bodySmall: { fontSize: 14, lineHeight: 22, fontWeight: "400" },
   caption: { fontSize: 12, lineHeight: 17, fontWeight: "500" },
   label: { fontSize: 13, lineHeight: 18, fontWeight: "600" },
 } as const;
 
-/** Motion durations (ms) — short and purposeful (150–300ms). */
 export const motion = {
   fast: 150,
   base: 220,
   slow: 300,
 } as const;
 
-/** Content max-widths. */
 export const layout = {
-  page: 1120,
+  page: 1152,
   prose: 680,
-  /** Breakpoint where the hero goes two-column. */
   desktop: 1024,
-  /** Minimum touch target. */
   touch: 44,
 } as const;

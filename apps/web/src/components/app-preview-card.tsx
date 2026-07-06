@@ -3,8 +3,8 @@ import { Image } from "expo-image";
 import { Text, View } from "react-native";
 import { usePalette } from "@/hooks/use-palette";
 import { motion, radius, space } from "@/theme/tokens";
+import { Stars } from "./brand";
 import { FadeIn } from "./fade-in";
-import { StarRating } from "./star-rating";
 
 /**
  * The "that's my app!" moment: as soon as a pasted link resolves we show the
@@ -67,7 +67,7 @@ export function AppPreviewCard({ appInfo }: { appInfo: AppInfo }) {
         </Text>
         {appInfo.averageRating != null ? (
           <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-            <StarRating rating={appInfo.averageRating} size={13} />
+            <Stars value={appInfo.averageRating} size={13} />
             <Text
               style={{
                 color: colors.inkMuted,

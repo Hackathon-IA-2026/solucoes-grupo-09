@@ -11,33 +11,20 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test.describe("landing page", () => {
-  test("renders SEO content and the scrape card", async ({ page }) => {
+test.describe("hero", () => {
+  test("renders SEO content and the scrape capsule", async ({ page }) => {
     await page.goto("/");
-    await expect(page).toHaveTitle(/Noviq — Scrape App Store & Google Play reviews/);
+    await expect(page).toHaveTitle(/Noviq — App Review Intelligence/);
     await expect(page.getByRole("heading", { level: 1 })).toContainText(
-      "Every app review",
+      "Turn any app's reviews into",
     );
     await expect(page.getByTestId("scrape-button")).toBeVisible();
-    // Structured data ships in the static HTML.
+    await expect(page.getByText("Scraper online")).toBeVisible();
     const jsonLd = page.locator('script[type="application/ld+json"]');
-    // One script per schema: WebApplication + FAQPage.
-    await expect(jsonLd).toHaveCount(2);
+    await expect(jsonLd).toHaveCount(1);
   });
 
-  test("FAQ is keyboard-operable", async ({ page }) => {
-    await page.goto("/");
-    const question = page
-      .getByRole("button")
-      .filter({ hasText: "Is this legal?" })
-      .first();
-    await question.scrollIntoViewIfNeeded();
-    await question.focus();
-    await page.keyboard.press("Enter");
-    await expect(page.getByText(/public store pages anyone can open/)).toBeVisible();
-  });
-
-  test("social/OG tags including the share image are prerendered", async ({ page }) => {
+  test("social/OG tags and static assets ship", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator('meta[property="og:image"]')).toHaveAttribute(
       "content",
@@ -47,23 +34,16 @@ test.describe("landing page", () => {
       "content",
       /og\.png$/,
     );
-    // The referenced assets actually ship in the export.
     for (const path of ["/og.png", "/robots.txt", "/sitemap.xml", "/favicon.ico"]) {
       const response = await page.request.get(path);
       expect(response.status(), path).toBe(200);
     }
   });
 
-  test("marketing sections are present and FAQ expands", async ({ page }) => {
+  test("sample chips fill the input", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByText("From link to dataset in three steps")).toBeVisible();
-    await expect(
-      page.getByText("Built for people who live in review data"),
-    ).toBeVisible();
-    const question = page.getByText("Is this legal?", { exact: true });
-    await question.scrollIntoViewIfNeeded();
-    await question.click();
-    await expect(page.getByText(/public store pages anyone can open/)).toBeVisible();
+    await page.getByRole("button", { name: "Use Google Play sample link" }).click();
+    await expect(page.getByTestId("url-input")).toHaveValue(PLAY_URL);
   });
 });
 
@@ -93,7 +73,8 @@ test.describe("input validation", () => {
   test("a valid link shows the detected store and app preview", async ({ page }) => {
     await page.goto("/");
     await page.getByTestId("url-input").fill(PLAY_URL);
-    await expect(page.getByText("Google Play", { exact: true })).toBeVisible();
+    // The detected-store chip (distinct from the "Google Play" sample button).
+    await expect(page.getByLabel("Google Play", { exact: true })).toBeVisible();
     await expect(page.getByTestId("app-preview")).toContainText("Spotify", {
       timeout: 5_000,
     });
@@ -101,52 +82,71 @@ test.describe("input validation", () => {
 });
 
 test.describe("scrape flow", () => {
-  test("happy path: progress states, results, export, reset", async ({ page }) => {
+  test("happy path: live progress, dashboard, export, reset", async ({ page }) => {
     await page.goto("/");
     await page.getByTestId("url-input").fill(PLAY_URL);
     await page.getByTestId("scrape-button").click();
 
-    // Visible system status while the job runs.
-    await expect(page.getByTestId("progress-panel")).toBeVisible();
-    await expect(page.getByTestId("progress-panel")).toContainText("com.spotify.music");
-
-    // Determinate progress once the backend reports collected counts.
-    await expect(page.getByTestId("scrape-progress-bar")).toBeVisible({
+    // Live status under the capsule while the job runs.
+    await expect(page.getByTestId("scrape-progress")).toBeVisible();
+    // Determinate progress once the backend reports counts.
+    await expect(page.getByTestId("scrape-progress")).toContainText("of 100 reviews", {
       timeout: 10_000,
     });
-    await expect(page.getByTestId("scrape-progress-bar")).toContainText("of 100 reviews");
 
-    // Results arrive after the scripted waiting → active → completed polls.
+    // The dashboard replaces the hero on completion.
     await expect(page.getByTestId("results-panel")).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId("results-panel")).toContainText("3 reviews scraped");
+    await expect(page.getByTestId("results-panel")).toContainText(
+      "Spotify: Music and Podcasts",
+    );
+    await expect(page.getByTestId("results-panel")).toContainText("Scraped reviews");
+    await expect(page.getByTestId("results-panel")).toContainText("3 of 3 shown");
     await expect(
       page.getByText("Love the playlists, hate the shuffle. Five stars anyway."),
     ).toBeVisible();
-    await expect(page.getByText("Developer response · May 29, 2026")).toBeVisible();
+    await expect(page.getByText("3 reviews processed")).toBeVisible();
 
-    // CSV export triggers a real browser download with the right name…
+    // CSV export triggers a real download with the right name…
     const downloadPromise = page.waitForEvent("download");
     await page.getByTestId("export-csv").click();
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toBe("noviq-reviews-com.spotify.music-us.csv");
-    // …and a visible success confirmation (micro-interaction feedback).
+    // …and a visible success confirmation.
     await expect(page.getByTestId("export-toast")).toContainText(
       "Saved noviq-reviews-com.spotify.music-us.csv",
     );
 
-    // Reset returns to a fresh scrape card.
+    // Reset returns to a fresh hero.
     await page.getByTestId("new-scrape").click();
-    await expect(page.getByTestId("scrape-card")).toBeVisible();
+    await expect(page.getByTestId("scrape-button")).toBeVisible();
     await expect(page.getByTestId("url-input")).toHaveValue("");
   });
 
-  test("cancel returns to the form", async ({ page }) => {
+  test("review feed filters work", async ({ page }) => {
     await page.goto("/");
     await page.getByTestId("url-input").fill(PLAY_URL);
     await page.getByTestId("scrape-button").click();
-    await expect(page.getByTestId("progress-panel")).toBeVisible();
+    await expect(page.getByTestId("results-panel")).toBeVisible({ timeout: 15_000 });
+
+    // Filter to replied-only: exactly one mock review has a dev response.
+    await page.getByRole("radio", { name: "Filter Replied" }).click();
+    await expect(page.getByTestId("results-panel")).toContainText("1 of 3 shown");
+    await expect(page.getByText("Thanks for the report — fixed in 9.0.1!")).toBeVisible();
+
+    // Search narrows further.
+    await page.getByRole("radio", { name: "Filter All" }).click();
+    await page.getByLabel("Search reviews").fill("offline");
+    await expect(page.getByTestId("results-panel")).toContainText("1 of 3 shown");
+  });
+
+  test("cancel returns to the idle hero", async ({ page }) => {
+    await page.goto("/");
+    await page.getByTestId("url-input").fill(PLAY_URL);
+    await page.getByTestId("scrape-button").click();
+    await expect(page.getByTestId("scrape-progress")).toBeVisible();
     await page.getByTestId("cancel-button").click();
-    await expect(page.getByTestId("scrape-card")).toBeVisible();
+    await expect(page.getByTestId("scrape-progress")).not.toBeVisible();
+    await expect(page.getByTestId("scrape-button")).toBeVisible();
   });
 
   test("a rejected submit surfaces the API error", async ({ page }) => {
@@ -155,13 +155,10 @@ test.describe("scrape flow", () => {
     await page.getByTestId("scrape-button").click();
     await expect(page.getByTestId("error-banner")).toContainText(
       "rejected by the store",
-      {
-        timeout: 10_000,
-      },
+      { timeout: 10_000 },
     );
-    // Dismiss recovers to the form.
     await page.getByRole("button", { name: "Dismiss" }).click();
-    await expect(page.getByTestId("scrape-card")).toBeVisible();
+    await expect(page.getByTestId("error-banner")).not.toBeVisible();
   });
 
   test("a failed job surfaces the job error", async ({ page }) => {

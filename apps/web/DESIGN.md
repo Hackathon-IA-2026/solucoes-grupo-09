@@ -1,71 +1,58 @@
-# Noviq design system
+# Noviq design system (v3)
 
-Single source of truth: `src/theme/tokens.ts`. Everything visual derives from
-those tokens — no ad-hoc colors, sizes, or durations in components.
+Ported 1:1 from `reference/review-data-scraper` — the canonical design source.
+Single source of truth for values: `src/theme/tokens.ts`. Dark-only
+(`color-scheme: dark`), like the reference.
 
-## Color — 60-30-10
+## Color
 
-| Role | Light | Dark | Share |
-| --- | --- | --- | --- |
-| Canvas (`canvas`, `canvasTint`) | white + lavender ice `#F3F1FC` | indigo-black `#131522` | ~60% |
-| Surfaces + ink (`surface`, `ink*`, `border*`) | white cards, indigo-navy text `#20243C` | raised indigo `#1E2138`, off-white text | ~30% |
-| Accent (`accent*`) | violet `#6428E0` | periwinkle `#977CFF` | ~10% |
+| Token | Value | Ref variable |
+| --- | --- | --- |
+| `canvas` | `#131316` | `--background` oklch(0.17 .005 285) |
+| `surface` | `#1B1B1F` | `--card` oklch(0.215 .006 285) |
+| `surfaceSunken` | `#26262B` | `--secondary`/`--muted` |
+| `ink` | `#F7F7F7` | `--foreground` |
+| `inkMuted` | `#A2A2AC` | `--muted-foreground` |
+| `border` | `white/8%` | `--border` |
+| `accent` (lime) | `#D0F244` on `#1E2B10` | `--lime` / `--lime-foreground` |
+| `violet` (grape) | `#8D5DF6` | `--grape` |
+| `danger` | `#EA4A3D` | `--destructive` |
 
-Plus one **gold display highlight** (`highlight`, `#A87805` / `#FFC94D`) reserved
-for a single hero phrase per screen, and the brand `gradient` used only on icon
-chips and the logo mark (via `gradientBg()` — platform-gated with a solid
-fallback).
+Rules: lime = primary actions, active pills, positive bars, stars, brand mark.
+Grape = charts/neutral tones. Red = negative only. Soft tints are the color at
+10–15% opacity with the color itself as text (ref `bg-lime/15 text-lime`).
 
-- Every `on*` pairing meets WCAG AA (≥4.5:1 body text) in both schemes.
-- Semantic colors: `success` (mint), `danger`, `warning`, `info` — soft-pill
-  pairs (`*Soft` + `on*Soft`) for statuses, Dribbble-style. Meaning is never carried by color alone — pair with text/icons.
-- Exactly one saturated accent element (the CTA) and one gold phrase per screen (Von Restorff).
+## Shape & type
 
-## Spacing, radius, type
+- Cards: `radius.xl` (24, ref rounded-3xl) with 1px `border`; inner blocks 16.
+- Controls are pills. Active pill = solid lime with `onAccent` text.
+- System font; headings weight 600 with tight tracking; ALL numbers
+  `fontVariant: ["tabular-nums"]`; stat numbers 40–48px.
 
-- 4-pt spacing scale (`space.xs`=4 … `space.huge`=72). Prefer `gap` over margins.
-- Radii: 8/12/16/24/pill, always with `borderCurve: "continuous"`.
-- One type family (system stack — zero font-download cost). Scale in `type`:
-  body 16/26 (1.63 line-height), measure capped at 520–680px, counters use
-  `fontVariant: ["tabular-nums"]`, caps reserved for kickers.
+## Brand
 
-## Layout
+`NoviqMark` (`src/components/brand.tsx`): lime rounded square (rx 9/32) with
+the stroked N-path `M9 23V9l14 14V9`. Never redraw by hand — assets regenerate
+via `bun scripts/generate-assets.ts`.
 
-- Mobile-first, content-driven breakpoints measured with
-  `useContainerWidth()` (onLayout container queries) — **never**
-  `useWindowDimensions`, which is unreliable under static-render hydration.
-- Page container: `layout.page` (1120px) max-width + flexbox. No fixed widths.
-- Touch targets ≥ `layout.touch` (44px).
+## Structure
 
-## Motion
+- **Hero** (`scraper-hero.tsx`): full-viewport centered; ambient lime/grape
+  radial glows; wordmark + "Scraper online" pill; input capsule (icon chip +
+  input + lime CTA); sample chips; options pills; feature dots. While a job
+  runs the capsule row shows the live status line + real progress bar.
+- **Dashboard** (`dashboard.tsx`): export pills + lime "New scrape"; app
+  identity card; stat cards (first = lime); timeline chart (hatched grape SVG
+  bars, gradient active bar, dark tooltip); sentiment ring; rating/version/
+  keyword panels; filterable reviews feed; footer dot line.
+- All analytics are computed from the real scraped reviews
+  (`src/lib/analytics.ts`) — nothing is mocked. Sentiment is a rating proxy
+  and is labeled "from star ratings".
 
-- Durations from `motion` (150/220/300ms); transform + opacity only.
-- Mount transitions use `<FadeIn>` (`src/components/fade-in.tsx`, RN core
-  `Animated` — Reanimated is deliberately not imported by web-reachable code;
-  it costs ~800KB of bundle).
-- `useReducedMotion()` gates all JS animation; `+html.tsx` ships a CSS
-  `prefers-reduced-motion` kill-switch for the pre-hydration window.
+## Gotchas
 
-## Accessibility
-
-- Real heading hierarchy (one h1, h2 per section) — enforced by e2e.
-- Explicit focus rings (`colors.focus`) on every interactive element.
-- Live regions on validation errors, progress, and export confirmation.
-- Inputs labelled via `nativeID`/`accessibilityLabelledBy`.
-
-## Brand assets
-
-Generated deterministically — never hand-edited:
-
-```bash
-bun scripts/generate-assets.ts   # icons, favicon, splash, adaptive, og.png
-```
-
-## Interaction principles (the laws, operationalized)
-
-- One visible primary action; ≤5 options per control (Hick, Miller).
-- Everything else behind "More options" (Tesler).
-- Liberal input, strict output (Postel): see `@noviq/core` `validateInput`.
-- Errors: specific, cause-first, shown only after typing settles.
-- Status always visible: preview → progress timeline → results/partial banner.
-- Cancel/dismiss/retry available in every non-idle state (user control).
+- `useWindowDimensions` is unreliable post-hydration → `useContainerWidth()`.
+- Gradients: `gradientBg()` (RNW needs CSS `backgroundImage`).
+- `outline*`/`transition*` style props are native-rendered in RN 0.86 →
+  always go through `focusRing()`/`webTransition()`.
+- SVG `<Text>` needs an explicit `fontFamily` or web renders serif.
