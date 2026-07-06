@@ -49,7 +49,12 @@ function Dot({ state }: { state: "done" | "active" | "pending" }) {
     return () => loop.stop();
   }, [state, reducedMotion, pulse]);
 
-  const fill = state === "pending" ? colors.border : colors.accent;
+  const fill =
+    state === "pending"
+      ? colors.border
+      : state === "done"
+        ? colors.success
+        : colors.accent;
 
   return (
     <View
@@ -171,7 +176,7 @@ export function ProgressPanel({
                 ) : null}
               </View>
               {status === "done" ? (
-                <Text style={{ color: colors.accent, fontSize: 14, fontWeight: "700" }}>
+                <Text style={{ color: colors.success, fontSize: 14, fontWeight: "700" }}>
                   ✓
                 </Text>
               ) : null}

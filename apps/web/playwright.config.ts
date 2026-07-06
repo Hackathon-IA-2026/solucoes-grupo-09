@@ -20,8 +20,8 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: "bun e2e/mock-api.ts",
-      url: "http://localhost:3000/health",
+      command: "MOCK_API_PORT=3210 bun e2e/mock-api.ts",
+      url: "http://localhost:3210/health",
       reuseExistingServer: false,
     },
     {

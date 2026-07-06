@@ -2,6 +2,15 @@ import { expect, test } from "@playwright/test";
 
 const PLAY_URL = "https://play.google.com/store/apps/details?id=com.spotify.music";
 
+// Point the built bundle at the mock API (runtime override — the bundle's
+// build-time EXPO_PUBLIC_API_URL must never be trusted by tests).
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    (globalThis as { __NOVIQ_API_URL__?: string }).__NOVIQ_API_URL__ =
+      "http://localhost:3210";
+  });
+});
+
 test.describe("landing page", () => {
   test("renders SEO content and the scrape card", async ({ page }) => {
     await page.goto("/");

@@ -17,6 +17,7 @@ import { useContainerWidth } from "@/hooks/use-container-width";
 import { usePalette } from "@/hooks/use-palette";
 import { useScrape } from "@/hooks/use-scrape";
 import { SITE_URL } from "@/lib/config";
+import { gradientBg } from "@/lib/gradient";
 import { layout, radius, space } from "@/theme/tokens";
 
 const TITLE = "Noviq — Scrape App Store & Google Play reviews to CSV";
@@ -138,7 +139,10 @@ export default function Home() {
             left: 0,
             right: 0,
             height: 640,
-            experimental_backgroundImage: `linear-gradient(180deg, ${colors.canvasTint} 0%, ${colors.canvas} 100%)`,
+            ...gradientBg(
+              `linear-gradient(180deg, ${colors.canvasTint} 0%, ${colors.canvas} 100%)`,
+              colors.canvasTint,
+            ),
           }}
         />
 
@@ -178,7 +182,9 @@ export default function Home() {
                       letterSpacing: desktop ? -1.5 : -0.8,
                     }}
                   >
-                    Every app review.{"\n"}One paste away.
+                    Every app review.{"\n"}
+                    {/* Gold display highlight — the one Von Restorff moment. */}
+                    <Text style={{ color: colors.highlight }}>One paste away.</Text>
                   </Text>
                   <Text
                     style={{
@@ -208,6 +214,7 @@ export default function Home() {
                           borderRadius: radius.pill,
                           paddingHorizontal: space.md,
                           paddingVertical: 6,
+                          boxShadow: colors.shadowCard,
                         }}
                       >
                         <Text

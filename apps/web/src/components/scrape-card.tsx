@@ -8,7 +8,9 @@ import { focusRing } from "@/lib/focus-ring";
 import { motion, radius, space } from "@/theme/tokens";
 import { AppPreviewCard } from "./app-preview-card";
 import { Button } from "./button";
+import { KickerPill } from "./kicker-pill";
 import { SegControl } from "./seg-control";
+import { SparkChip } from "./spark-chip";
 import { StoreChip } from "./store-chip";
 
 const LIMITS = [
@@ -61,6 +63,7 @@ export function ScrapeCard({ busy, onSubmit }: ScrapeCardProps) {
   const [showOptions, setShowOptions] = useState(false);
   const [attempted, setAttempted] = useState(false);
   const [settled, setSettled] = useState(false);
+  const [inputFocused, setInputFocused] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
   const validation = useMemo(() => validateInput(input), [input]);
@@ -110,24 +113,24 @@ export function ScrapeCard({ busy, onSubmit }: ScrapeCardProps) {
         padding: space.xl,
         gap: space.lg,
         width: "100%",
-        boxShadow: "0 12px 40px rgba(23, 20, 10, 0.10), 0 2px 8px rgba(23, 20, 10, 0.05)",
+        boxShadow: colors.shadowFloat,
       }}
     >
-      <View style={{ gap: space.xs }}>
-        <Text
-          style={{
-            color: colors.accent,
-            fontSize: 12,
-            fontWeight: "800",
-            letterSpacing: 1.2,
-            textTransform: "uppercase",
-          }}
-        >
-          Free — no signup
-        </Text>
-        <Text style={{ color: colors.ink, fontSize: 22, fontWeight: "800" }}>
-          Start a scrape
-        </Text>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: space.md,
+        }}
+      >
+        <View style={{ gap: space.sm, flexShrink: 1 }}>
+          <KickerPill label="Free — no signup" />
+          <Text style={{ color: colors.ink, fontSize: 22, fontWeight: "800" }}>
+            Start a scrape
+          </Text>
+        </View>
+        <SparkChip size={44} />
       </View>
 
       <View style={{ gap: space.sm }}>
@@ -165,11 +168,18 @@ export function ScrapeCard({ busy, onSubmit }: ScrapeCardProps) {
             backgroundColor: colors.surfaceSunken,
             ...(Platform.OS === "web"
               ? ({
-                  outlineColor: colors.focus,
+                  // Soft violet focus glow instead of a hard outline.
+                  outlineStyle: "none",
+                  boxShadow: inputFocused
+                    ? `0 0 0 3px ${colors.accentSoft}, 0 0 0 1.5px ${colors.focus}`
+                    : undefined,
+                  transitionProperty: "box-shadow, border-color",
                   transitionDuration: `${motion.fast}ms`,
                 } as object)
               : null),
           }}
+          onFocus={() => setInputFocused(true)}
+          onBlur={() => setInputFocused(false)}
         />
 
         {/* Live feedback row: detected store chip, or a specific error. */}

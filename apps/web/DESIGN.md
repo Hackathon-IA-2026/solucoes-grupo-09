@@ -7,14 +7,19 @@ those tokens — no ad-hoc colors, sizes, or durations in components.
 
 | Role | Light | Dark | Share |
 | --- | --- | --- | --- |
-| Canvas (`canvas`, `canvasTint`) | warm paper `#FAF8F4` | near-black `#0E1113` | ~60% |
-| Surfaces + ink (`surface`, `ink*`, `border*`) | white cards, near-black text | raised graphite, off-white text | ~30% |
-| Accent (`accent*`) | emerald `#047857` | mint `#2FBE8B` | ~10% |
+| Canvas (`canvas`, `canvasTint`) | white + lavender ice `#F3F1FC` | indigo-black `#131522` | ~60% |
+| Surfaces + ink (`surface`, `ink*`, `border*`) | white cards, indigo-navy text `#20243C` | raised indigo `#1E2138`, off-white text | ~30% |
+| Accent (`accent*`) | violet `#6428E0` | periwinkle `#977CFF` | ~10% |
+
+Plus one **gold display highlight** (`highlight`, `#A87805` / `#FFC94D`) reserved
+for a single hero phrase per screen, and the brand `gradient` used only on icon
+chips and the logo mark (via `gradientBg()` — platform-gated with a solid
+fallback).
 
 - Every `on*` pairing meets WCAG AA (≥4.5:1 body text) in both schemes.
-- Semantic colors: `danger`, `warning`, `info`, plus the accent doubling as
-  success. Meaning is never carried by color alone — pair with text/icons.
-- Exactly one saturated accent element per screen state (Von Restorff): the CTA.
+- Semantic colors: `success` (mint), `danger`, `warning`, `info` — soft-pill
+  pairs (`*Soft` + `on*Soft`) for statuses, Dribbble-style. Meaning is never carried by color alone — pair with text/icons.
+- Exactly one saturated accent element (the CTA) and one gold phrase per screen (Von Restorff).
 
 ## Spacing, radius, type
 

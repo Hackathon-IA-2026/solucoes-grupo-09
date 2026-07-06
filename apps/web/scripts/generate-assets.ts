@@ -16,11 +16,12 @@ import { join } from "node:path";
 import { chromium } from "@playwright/test";
 
 const ROOT = join(import.meta.dir, "..");
-const EMERALD = "#047857";
-const EMERALD_DEEP = "#065F46";
-const PAPER = "#FAF8F4";
-const INK = "#191C1F";
-const INK_MUTED = "#4A5158";
+const VIOLET = "#6428E0";
+const VIOLET_LIGHT = "#8E5CF6";
+const PAPER = "#FFFFFF";
+const INK = "#20243C";
+const GOLD = "#A87805";
+const INK_MUTED = "#4E5470";
 
 const FONT =
   "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
@@ -28,7 +29,7 @@ const FONT =
 /** The wordmark glyph: rounded emerald square with a bold white N. */
 function mark(size: number, options: { bg?: string; fg?: string; radius?: number } = {}) {
   const {
-    bg = `linear-gradient(160deg, ${EMERALD} 0%, ${EMERALD_DEEP} 100%)`,
+    bg = `linear-gradient(140deg, ${VIOLET_LIGHT} 0%, ${VIOLET} 100%)`,
     fg = "#fff",
   } = options;
   const radius = options.radius ?? Math.round(size * 0.24);
@@ -87,7 +88,7 @@ const ASSETS: Asset[] = [
     file: "assets/images/android-icon-background.png",
     width: 1024,
     height: 1024,
-    html: `<div style="width:1024px;height:1024px;background:linear-gradient(160deg, ${EMERALD} 0%, ${EMERALD_DEEP} 100%);"></div>`,
+    html: `<div style="width:1024px;height:1024px;background:linear-gradient(140deg, ${VIOLET_LIGHT} 0%, ${VIOLET} 100%);"></div>`,
   },
   {
     file: "assets/images/android-icon-monochrome.png",
@@ -107,14 +108,14 @@ const ASSETS: Asset[] = [
                   font-family:${FONT};box-sizing:border-box;padding:72px 80px;
                   display:flex;flex-direction:column;justify-content:space-between;">
         <div style="position:absolute;top:-220px;right:-160px;width:640px;height:640px;border-radius:50%;
-                    background:radial-gradient(circle, rgba(4,120,87,0.14) 0%, rgba(4,120,87,0) 70%);"></div>
+                    background:radial-gradient(circle, rgba(100,40,224,0.12) 0%, rgba(100,40,224,0) 70%);"></div>
         <div style="display:flex;align-items:center;gap:20px;">
           ${mark(64)}
           <span style="font-size:34px;font-weight:800;color:${INK};letter-spacing:-0.5px;">Noviq</span>
         </div>
         <div>
           <div style="font-size:88px;line-height:1.04;font-weight:800;color:${INK};letter-spacing:-3px;">
-            Every app review.<br/>One paste away.
+            Every app review.<br/><span style="color:${GOLD}">One paste away.</span>
           </div>
           <div style="margin-top:28px;font-size:30px;line-height:1.4;color:${INK_MUTED};max-width:860px;">
             Scrape App Store &amp; Google Play reviews to CSV — free, no signup.
@@ -125,7 +126,7 @@ const ASSETS: Asset[] = [
             .map(
               (
                 chip,
-              ) => `<span style="border:2px solid #E5E1D8;border-radius:999px;background:#fff;
+              ) => `<span style="border:2px solid #E7E7F2;border-radius:999px;background:#fff;
                            padding:12px 26px;font-size:24px;font-weight:600;color:${INK_MUTED};">${chip}</span>`,
             )
             .join("")}

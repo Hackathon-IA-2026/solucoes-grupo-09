@@ -11,7 +11,7 @@
     "export": "expo export --platform web",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.tools.json --noEmit",
     "test": "bun test test",
-    "test:e2e": "playwright test",
+    "test:e2e": "expo export --platform web && playwright test",
     "lint": "expo lint"
   },
   "dependencies": {

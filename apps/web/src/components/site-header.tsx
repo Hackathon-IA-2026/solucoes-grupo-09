@@ -1,5 +1,6 @@
 import { Text, View } from "react-native";
 import { usePalette } from "@/hooks/use-palette";
+import { gradientBg } from "@/lib/gradient";
 import { radius, space } from "@/theme/tokens";
 
 /** Minimal header: wordmark only — nothing competes with the hero CTA. */
@@ -16,16 +17,17 @@ export function SiteHeader() {
     >
       <View
         style={{
-          width: 32,
-          height: 32,
-          borderRadius: radius.sm,
+          width: 34,
+          height: 34,
+          borderRadius: radius.sm + 2,
           borderCurve: "continuous",
-          backgroundColor: colors.accent,
           alignItems: "center",
           justifyContent: "center",
+          ...gradientBg(colors.gradient, colors.accent),
+          boxShadow: "0 3px 10px rgba(80, 40, 200, 0.30)",
         }}
       >
-        <Text style={{ color: colors.onAccent, fontSize: 17, fontWeight: "900" }}>N</Text>
+        <Text style={{ color: "#FFFFFF", fontSize: 18, fontWeight: "900" }}>N</Text>
       </View>
       <Text
         style={{

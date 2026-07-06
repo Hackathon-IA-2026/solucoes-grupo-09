@@ -44,7 +44,8 @@ export function Button({
 
   const fills: Record<string, { bg: string; text: string; border: string }> = {
     primary: { bg: colors.accent, text: colors.onAccent, border: colors.accent },
-    secondary: { bg: colors.surface, text: colors.ink, border: colors.borderStrong },
+    // Violet-outline secondary — the "Contact sales" pattern.
+    secondary: { bg: colors.surface, text: colors.accent, border: colors.accent },
     ghost: { bg: "transparent", text: colors.inkMuted, border: "transparent" },
     danger: { bg: "transparent", text: colors.danger, border: colors.borderStrong },
   };
@@ -77,14 +78,29 @@ export function Button({
           paddingVertical: space.md,
           borderRadius: radius.md,
           borderCurve: "continuous",
-          borderWidth: 1,
+          borderWidth: variant === "secondary" ? 1.5 : 1,
           borderColor: fill.border,
           backgroundColor:
-            variant === "primary" && (pressed || hovered) ? colors.accentStrong : fill.bg,
+            variant === "primary" && (pressed || hovered)
+              ? colors.accentStrong
+              : variant === "secondary" && (pressed || hovered)
+                ? colors.accentSoft
+                : fill.bg,
           opacity: blocked && !loading ? 0.45 : pressed ? 0.92 : 1,
           alignSelf: fluid ? "stretch" : "auto",
+          // Hover lift micro-interaction (web only; native gets press opacity).
+          transform: [{ translateY: hovered && !pressed && !blocked ? -1 : 0 }],
+          boxShadow:
+            variant === "primary" && !blocked
+              ? hovered
+                ? "0 8px 20px rgba(80, 40, 200, 0.35)"
+                : "0 2px 8px rgba(80, 40, 200, 0.25)"
+              : undefined,
           ...focusRing(focused, colors.focus),
-          ...webTransition("background-color, opacity, box-shadow", motion.fast),
+          ...webTransition(
+            "background-color, opacity, box-shadow, transform",
+            motion.fast,
+          ),
           ...(Platform.OS === "web"
             ? ({ cursor: blocked ? "default" : "pointer" } as object)
             : null),

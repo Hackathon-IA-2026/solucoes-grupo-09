@@ -4,6 +4,8 @@ import { useContainerWidth } from "@/hooks/use-container-width";
 import { usePalette } from "@/hooks/use-palette";
 import { focusRing } from "@/lib/focus-ring";
 import { layout, radius, space, type } from "@/theme/tokens";
+import { KickerPill } from "./kicker-pill";
+import { SparkChip } from "./spark-chip";
 
 /* ---------------------------------- shared ---------------------------------- */
 
@@ -18,18 +20,8 @@ export function SectionHeading({
 }) {
   const colors = usePalette();
   return (
-    <View style={{ gap: space.sm, maxWidth: layout.prose }}>
-      <Text
-        style={{
-          color: colors.accent,
-          fontSize: 12,
-          fontWeight: "800",
-          letterSpacing: 1.2,
-          textTransform: "uppercase",
-        }}
-      >
-        {kicker}
-      </Text>
+    <View style={{ gap: space.md, maxWidth: layout.prose }}>
+      <KickerPill label={kicker} />
       <Text
         accessibilityRole="header"
         aria-level={2}
@@ -37,7 +29,8 @@ export function SectionHeading({
           color: colors.ink,
           fontSize: type.h2.fontSize,
           lineHeight: type.h2.lineHeight,
-          fontWeight: "700",
+          fontWeight: "800",
+          letterSpacing: -0.4,
         }}
       >
         {title}
@@ -88,24 +81,10 @@ export function HowItWorks() {
               borderCurve: "continuous",
               padding: space.xl,
               gap: space.md,
+              boxShadow: colors.shadowCard,
             }}
           >
-            <View
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: 18,
-                backgroundColor: colors.accentSoft,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Text
-                style={{ color: colors.onAccentSoft, fontSize: 16, fontWeight: "800" }}
-              >
-                {index + 1}
-              </Text>
-            </View>
+            <SparkChip size={38} glyph={String(index + 1)} />
             <Text style={{ color: colors.ink, fontSize: 17, fontWeight: "700" }}>
               {step.title}
             </Text>
@@ -173,6 +152,7 @@ export function FeatureGrid() {
               borderCurve: "continuous",
               padding: space.xl,
               gap: space.sm,
+              boxShadow: colors.shadowCard,
             }}
           >
             <Text style={{ color: colors.ink, fontSize: 16, fontWeight: "700" }}>

@@ -38,6 +38,7 @@ function StatTile({ label, value }: { label: string; value: string }) {
         borderCurve: "continuous",
         padding: space.lg,
         gap: 2,
+        boxShadow: colors.shadowCard,
       }}
     >
       <Text
@@ -96,7 +97,7 @@ function RatingBars({ result }: { result: ScrapeResult }) {
                 height: "100%",
                 borderRadius: 4,
                 backgroundColor:
-                  stars >= 4 ? colors.accent : stars === 3 ? colors.star : colors.danger,
+                  stars >= 4 ? colors.success : stars === 3 ? colors.star : colors.danger,
               }}
             />
           </View>
@@ -287,7 +288,7 @@ export function ResultsPanel({
             <Text
               testID="export-toast"
               accessibilityLiveRegion="polite"
-              style={{ color: colors.accent, fontSize: 13, fontWeight: "600" }}
+              style={{ color: colors.success, fontSize: 13, fontWeight: "600" }}
             >
               ✓ Saved {exported}
             </Text>

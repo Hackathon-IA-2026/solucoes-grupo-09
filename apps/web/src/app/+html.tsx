@@ -20,17 +20,17 @@ export default function Root({ children }: PropsWithChildren) {
         <meta
           name="theme-color"
           media="(prefers-color-scheme: light)"
-          content="#FAF8F4"
+          content="#FFFFFF"
         />
-        <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0E1113" />
+        <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131522" />
         <ScrollViewStyleReset />
         {/* Match the page background before hydration to avoid a white flash. */}
         <style
           // biome-ignore lint/security/noDangerouslySetInnerHtml: static critical CSS
           dangerouslySetInnerHTML={{
             __html: `
-              body { background-color: #FAF8F4; }
-              @media (prefers-color-scheme: dark) { body { background-color: #0E1113; } }
+              body { background-color: #FFFFFF; }
+              @media (prefers-color-scheme: dark) { body { background-color: #131522; } }
               @media (prefers-reduced-motion: reduce) {
                 *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
               }
