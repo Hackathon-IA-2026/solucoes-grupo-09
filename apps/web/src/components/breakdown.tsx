@@ -169,7 +169,7 @@ export function SentimentRing({ result }: { result: ScrapeResult }) {
               />
             </Pattern>
           </Defs>
-          <G rotation={rotation} origin={`${cx}, ${cy}`}>
+          <G transform={`rotate(${rotation} ${cx} ${cy})`}>
             {/* track */}
             <Circle
               cx={cx}
