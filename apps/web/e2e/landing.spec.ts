@@ -12,7 +12,8 @@ test.describe("landing page", () => {
     await expect(page.getByTestId("scrape-button")).toBeVisible();
     // Structured data ships in the static HTML.
     const jsonLd = page.locator('script[type="application/ld+json"]');
-    await expect(jsonLd).toHaveCount(1);
+    // One script per schema: WebApplication + FAQPage.
+    await expect(jsonLd).toHaveCount(2);
   });
 
   test("FAQ is keyboard-operable", async ({ page }) => {

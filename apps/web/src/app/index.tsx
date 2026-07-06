@@ -23,8 +23,11 @@ const TITLE = "Noviq — Scrape App Store & Google Play reviews to CSV";
 const DESCRIPTION =
   "Paste any App Store or Google Play link and get every review — ratings, dates, developer responses — exported to CSV or JSON in about a minute. Free, no signup.";
 
-const JSON_LD = JSON.stringify([
-  {
+// One <script> per schema (not an array in a single tag): the most
+// compatible shape for third-party JSON-LD consumers — several browser
+// SEO extensions and older parsers assume one top-level object per tag.
+const JSON_LD_SCHEMAS = [
+  JSON.stringify({
     "@context": "https://schema.org",
     "@type": "WebApplication",
     name: "Noviq",
@@ -33,8 +36,8 @@ const JSON_LD = JSON.stringify([
     operatingSystem: "Web",
     description: DESCRIPTION,
     offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-  },
-  {
+  }),
+  JSON.stringify({
     "@context": "https://schema.org",
     "@type": "FAQPage",
     mainEntity: FAQ_ENTRIES.map((entry) => ({
@@ -42,8 +45,8 @@ const JSON_LD = JSON.stringify([
       name: entry.q,
       acceptedAnswer: { "@type": "Answer", text: entry.a },
     })),
-  },
-]);
+  }),
+];
 
 function ErrorBanner({ message, onDismiss }: { message: string; onDismiss: () => void }) {
   const colors = usePalette();
@@ -106,12 +109,15 @@ export default function Home() {
         <meta name="twitter:title" content={TITLE} />
         <meta name="twitter:description" content={DESCRIPTION} />
         <meta name="twitter:image" content={`${SITE_URL}/og.png`} />
-        {/* Web only: expo-router's native Head parses ld+json for iOS Handoff
-            and assumes a single object — an array of schemas crashes it. The
-            structured data is for search engines, which only see the web build. */}
-        {Platform.OS === "web" ? (
-          <script type="application/ld+json">{JSON_LD}</script>
-        ) : null}
+        {/* Web only: structured data is for search engines, which only see
+            the web build; native Head consumers assume single objects. */}
+        {Platform.OS === "web"
+          ? JSON_LD_SCHEMAS.map((schema) => (
+              <script key={schema.slice(0, 60)} type="application/ld+json">
+                {schema}
+              </script>
+            ))
+          : null}
       </Head>
 
       <ScrollView
