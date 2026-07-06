@@ -40,6 +40,21 @@ test.describe("hero", () => {
     }
   });
 
+  test("showcase renders interactive dashboard components on sample data", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await expect(page.getByTestId("showcase")).toContainText("Every scrape ends in");
+    await expect(page.getByText("Live preview · sample data")).toBeVisible();
+    // Real components, real interactivity: heatmap + timeline render sample analytics.
+    await expect(page.getByTestId("showcase")).toContainText("When reviews land");
+    await expect(page.getByTestId("showcase")).toContainText("Review volume");
+    await expect(page.getByTestId("showcase")).toContainText("reviews analyzed");
+    // CTA scrolls back to the input.
+    await page.getByTestId("showcase-cta").click();
+    await expect(page.getByTestId("url-input")).toBeInViewport({ timeout: 5_000 });
+  });
+
   test("sample chips fill the input", async ({ page }) => {
     await page.goto("/");
     await page.getByRole("button", { name: "Use Google Play sample link" }).click();

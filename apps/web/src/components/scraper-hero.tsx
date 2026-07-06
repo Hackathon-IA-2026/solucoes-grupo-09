@@ -296,8 +296,9 @@ export function ScraperHero({
             maxWidth: 512,
           }}
         >
-          Paste an App Store or Google Play link. Noviq scrapes every review — ratings,
-          dates, developer responses — and hands you a jaw-dropping dashboard.
+          Noviq pulls every review from the App Store and Google Play, scores sentiment,
+          and tracks trends, versions and busy hours — a full analytics dashboard from a
+          single link.
         </Text>
 
         {/* Input capsule */}
@@ -653,9 +654,9 @@ export function ScraperHero({
             rowGap: 12,
           }}
         >
-          <FeatureDot label="Every rating & version" />
-          <FeatureDot label="Developer responses" />
-          <FeatureDot label="Sentiment scoring" />
+          <FeatureDot label="Sentiment split" />
+          <FeatureDot label="Trend & version tracking" />
+          <FeatureDot label="Activity heatmap" />
           <FeatureDot label="CSV / JSON export" />
         </View>
       </View>

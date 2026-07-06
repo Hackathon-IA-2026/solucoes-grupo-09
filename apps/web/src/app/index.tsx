@@ -1,14 +1,16 @@
 import { usePalette } from "@noviq/ui";
 import Head from "expo-router/head";
+import { useRef } from "react";
 import { Platform, ScrollView } from "react-native";
 import { Dashboard } from "@/components/dashboard";
 import { ScraperHero } from "@/components/scraper-hero";
+import { Showcase } from "@/components/showcase";
 import { useScrape } from "@/hooks/use-scrape";
 import { SITE_URL } from "@/lib/config";
 
 const TITLE = "Noviq — App Review Intelligence";
 const DESCRIPTION =
-  "Paste an App Store or Google Play link. Noviq scrapes every review — ratings, dates, developer responses — into clean, jaw-dropping data. Free, no signup.";
+  "Scrape every App Store & Google Play review, score sentiment, and track trends, versions and activity — all in one jaw-dropping dashboard with CSV/JSON export. Free, no signup.";
 
 // One <script> per schema: the most compatible shape for JSON-LD consumers.
 const JSON_LD_SCHEMAS = [
@@ -27,6 +29,7 @@ const JSON_LD_SCHEMAS = [
 export default function Home() {
   const colors = usePalette();
   const { state, busy, submit, cancel, reset } = useScrape();
+  const scrollRef = useRef<ScrollView>(null);
 
   return (
     <>
@@ -60,6 +63,7 @@ export default function Home() {
       </Head>
 
       <ScrollView
+        ref={scrollRef}
         contentInsetAdjustmentBehavior="automatic"
         style={{ backgroundColor: colors.canvas }}
         contentContainerStyle={{ flexGrow: 1 }}
@@ -67,13 +71,21 @@ export default function Home() {
         {state.phase === "completed" ? (
           <Dashboard result={state.result} onNewScrape={reset} />
         ) : (
-          <ScraperHero
-            state={state}
-            busy={busy}
-            onSubmit={submit}
-            onCancel={cancel}
-            onDismissError={reset}
-          />
+          <>
+            <ScraperHero
+              state={state}
+              busy={busy}
+              onSubmit={submit}
+              onCancel={cancel}
+              onDismissError={reset}
+            />
+            {/* The product, shown — real dashboard components on sample data. */}
+            {!busy ? (
+              <Showcase
+                onTryIt={() => scrollRef.current?.scrollTo({ y: 0, animated: true })}
+              />
+            ) : null}
+          </>
         )}
       </ScrollView>
     </>
