@@ -1,5 +1,5 @@
 import Head from "expo-router/head";
-import { ScrollView, Text, View } from "react-native";
+import { Platform, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button } from "@/components/button";
 import { ProgressPanel } from "@/components/progress-panel";
@@ -106,7 +106,12 @@ export default function Home() {
         <meta name="twitter:title" content={TITLE} />
         <meta name="twitter:description" content={DESCRIPTION} />
         <meta name="twitter:image" content={`${SITE_URL}/og.png`} />
-        <script type="application/ld+json">{JSON_LD}</script>
+        {/* Web only: expo-router's native Head parses ld+json for iOS Handoff
+            and assumes a single object — an array of schemas crashes it. The
+            structured data is for search engines, which only see the web build. */}
+        {Platform.OS === "web" ? (
+          <script type="application/ld+json">{JSON_LD}</script>
+        ) : null}
       </Head>
 
       <ScrollView
