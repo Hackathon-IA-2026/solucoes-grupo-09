@@ -177,3 +177,112 @@ export function reviewTone(review: Review): "positive" | "neutral" | "negative" 
   if (review.rating === 3) return "neutral";
   return "negative";
 }
+
+export interface HeatmapData {
+  /** 7 row labels (clock hours, descending like the reference). */
+  hours: string[];
+  /** Sun..Sat column labels. */
+  days: string[];
+  /** [row][col] intensity 0–4. */
+  levels: number[][];
+  /** Ascending legend labels for levels 1–4. */
+  legend: string[];
+}
+
+export const HEATMAP_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function hourLabel(hour: number): string {
+  const h = ((hour + 11) % 12) + 1;
+  return `${h}${hour < 12 ? "am" : "pm"}`;
+}
+
+function quantile(sorted: number[], q: number): number {
+  if (sorted.length === 0) return 0;
+  const idx = Math.min(sorted.length - 1, Math.floor(q * sorted.length));
+  return sorted[idx];
+}
+
+/**
+ * "When reviews land": real review timestamps bucketed by hour-of-day ×
+ * weekday. The 7 busiest hours become rows (descending clock order, like the
+ * reference's 2pm→8am). `dim`:
+ * - reviews: cell intensity = review count, thresholds from count quantiles;
+ * - ratings: cell intensity = average star rating in fixed bands.
+ */
+export function heatmap(
+  reviews: Review[],
+  dim: "reviews" | "ratings" = "reviews",
+): HeatmapData | null {
+  const counts = Array.from({ length: 24 }, () => new Array<number>(7).fill(0));
+  const sums = Array.from({ length: 24 }, () => new Array<number>(7).fill(0));
+  let valid = 0;
+  for (const review of reviews) {
+    const date = new Date(review.date);
+    if (Number.isNaN(date.getTime())) continue;
+    counts[date.getHours()][date.getDay()]++;
+    sums[date.getHours()][date.getDay()] += review.rating;
+    valid++;
+  }
+  if (valid === 0) return null;
+
+  const hourTotals = counts.map((row, hour) => ({
+    hour,
+    total: row.reduce((a, b) => a + b, 0),
+  }));
+  const topHours = hourTotals
+    .filter((h) => h.total > 0)
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 7)
+    .map((h) => h.hour)
+    .sort((a, b) => b - a);
+  while (topHours.length < 7) {
+    // Pad sparse datasets with quiet hours so the grid stays 7×7.
+    const missing = hourTotals.find((h) => !topHours.includes(h.hour) && h.total === 0);
+    if (!missing) break;
+    topHours.push(missing.hour);
+    topHours.sort((a, b) => b - a);
+  }
+
+  if (dim === "ratings") {
+    const bands = [3, 3.75, 4.25, 4.6];
+    return {
+      hours: topHours.map(hourLabel),
+      days: HEATMAP_DAYS,
+      levels: topHours.map((hour) =>
+        HEATMAP_DAYS.map((_, day) => {
+          const n = counts[hour][day];
+          if (n === 0) return 0;
+          const avg = sums[hour][day] / n;
+          if (avg >= bands[3]) return 4;
+          if (avg >= bands[2]) return 3;
+          if (avg >= bands[1]) return 2;
+          return 1;
+        }),
+      ),
+      legend: ["<3.0★", "≥3.0★", "≥4.3★", "≥4.6★"],
+    };
+  }
+
+  const nonzero = topHours
+    .flatMap((hour) => counts[hour])
+    .filter((n) => n > 0)
+    .sort((a, b) => a - b);
+  const t2 = Math.max(2, quantile(nonzero, 0.5));
+  const t3 = Math.max(t2 + 1, quantile(nonzero, 0.75));
+  const t4 = Math.max(t3 + 1, quantile(nonzero, 0.9));
+  return {
+    hours: topHours.map(hourLabel),
+    days: HEATMAP_DAYS,
+    levels: topHours.map((hour) =>
+      HEATMAP_DAYS.map((_, day) => {
+        const n = counts[hour][day];
+        if (n === 0) return 0;
+        if (n >= t4) return 4;
+        if (n >= t3) return 3;
+        if (n >= t2) return 2;
+        return 1;
+      }),
+    ),
+    legend: ["≥1", `≥${t2}`, `≥${t3}`, `≥${t4}`],
+  };
+}

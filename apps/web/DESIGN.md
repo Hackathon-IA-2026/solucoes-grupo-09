@@ -1,8 +1,11 @@
 # Noviq design system (v3)
 
-Ported 1:1 from `reference/review-data-scraper` — the canonical design source.
-Single source of truth for values: `src/theme/tokens.ts`. Dark-only
-(`color-scheme: dark`), like the reference.
+Ported 1:1 from `reference/` — the canonical design source. The system is
+**isolated in `packages/ui` (`@noviq/ui`)** for reuse: tokens, brand, icons,
+pill/panel primitives, hooks (`usePalette`, `useContainerWidth`,
+`useReducedMotion`), and the `focusRing`/`gradientBg`/`hatchGrape` helpers.
+App screens (hero, dashboard, charts, feed) compose those primitives and are
+the only place product logic lives. Dark-only (`color-scheme: dark`).
 
 ## Color
 
@@ -31,7 +34,7 @@ Grape = charts/neutral tones. Red = negative only. Soft tints are the color at
 
 ## Brand
 
-`NoviqMark` (`src/components/brand.tsx`): lime rounded square (rx 9/32) with
+`NoviqMark` (`@noviq/ui` brand): lime rounded square (rx 9/32) with
 the stroked N-path `M9 23V9l14 14V9`. Never redraw by hand — assets regenerate
 via `bun scripts/generate-assets.ts`.
 

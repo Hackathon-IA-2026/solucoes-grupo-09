@@ -1,7 +1,6 @@
 import { type Store, storeLabel } from "@noviq/core";
+import { radius, space, usePalette } from "@noviq/ui";
 import { Text, View } from "react-native";
-import { usePalette } from "@/hooks/use-palette";
-import { radius, space } from "@/theme/tokens";
 
 /**
  * Typographic store badge — a colored dot + label reads instantly on every

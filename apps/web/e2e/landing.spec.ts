@@ -99,8 +99,15 @@ test.describe("scrape flow", () => {
     await expect(page.getByTestId("results-panel")).toContainText(
       "Spotify: Music and Podcasts",
     );
+    await expect(page.getByTestId("results-panel")).toContainText("Scraped results for");
     await expect(page.getByTestId("results-panel")).toContainText("Scraped reviews");
     await expect(page.getByTestId("results-panel")).toContainText("3 of 3 shown");
+
+    // The redesigned analytics blocks render from the real reviews.
+    await expect(page.getByTestId("timeline-panel")).toContainText("Review volume");
+    await expect(page.getByTestId("heatmap-panel")).toContainText("When reviews land");
+    await expect(page.getByTestId("sentiment-panel")).toContainText("reviews analyzed");
+    await expect(page.getByText("% love it")).toBeVisible();
     await expect(
       page.getByText("Love the playlists, hate the shuffle. Five stars anyway."),
     ).toBeVisible();
@@ -120,6 +127,43 @@ test.describe("scrape flow", () => {
     await page.getByTestId("new-scrape").click();
     await expect(page.getByTestId("scrape-button")).toBeVisible();
     await expect(page.getByTestId("url-input")).toHaveValue("");
+  });
+
+  test("view pills filter the dashboard sections", async ({ page }) => {
+    await page.goto("/");
+    await page.getByTestId("url-input").fill(PLAY_URL);
+    await page.getByTestId("scrape-button").click();
+    await expect(page.getByTestId("results-panel")).toBeVisible({ timeout: 15_000 });
+
+    await page.getByTestId("view-reviews").click();
+    await expect(page.getByTestId("timeline-panel")).not.toBeVisible();
+    await expect(page.getByTestId("results-panel")).toContainText("Scraped reviews");
+
+    await page.getByTestId("view-trends").click();
+    await expect(page.getByTestId("timeline-panel")).toBeVisible();
+    await expect(page.getByTestId("results-panel")).not.toContainText("Scraped reviews");
+
+    await page.getByTestId("view-all").click();
+    await expect(page.getByTestId("timeline-panel")).toBeVisible();
+    await expect(page.getByTestId("results-panel")).toContainText("Scraped reviews");
+  });
+
+  test("timeline range toggle and heatmap dimension toggle work", async ({ page }) => {
+    await page.goto("/");
+    await page.getByTestId("url-input").fill(PLAY_URL);
+    await page.getByTestId("scrape-button").click();
+    await expect(page.getByTestId("results-panel")).toBeVisible({ timeout: 15_000 });
+
+    await expect(page.getByTestId("timeline-panel")).toContainText("Last 12 months");
+    await page.getByRole("radio", { name: "Monthly" }).click();
+    await expect(page.getByTestId("timeline-panel")).toContainText("Last 6 months");
+
+    await expect(page.getByTestId("heatmap-panel")).toContainText("Reviews");
+    await page
+      .getByTestId("heatmap-panel")
+      .getByRole("button", { name: "Reviews" })
+      .click();
+    await expect(page.getByTestId("heatmap-panel")).toContainText("Ratings");
   });
 
   test("review feed filters work", async ({ page }) => {

@@ -1,23 +1,25 @@
 import { averageRating, formatCompact, type ScrapeResult } from "@noviq/core";
-import type { ReactNode } from "react";
-import { Text, View } from "react-native";
-import { useContainerWidth } from "@/hooks/use-container-width";
-import { usePalette } from "@/hooks/use-palette";
-import { responseRate, sentimentMix } from "@/lib/analytics";
-import { radius, space } from "@/theme/tokens";
-import { Stars } from "./brand";
 import {
   ArrowUpRightIcon,
-  MessageSquareIcon,
+  IconCircle,
+  IconCircleButton,
+  MessageSquareReplyIcon,
+  radius,
+  SmileIcon,
   StarIcon,
-  TrendingUpIcon,
+  space,
   UsersIcon,
-} from "./icons";
+  useContainerWidth,
+  usePalette,
+} from "@noviq/ui";
+import type { ReactNode } from "react";
+import { Text, View } from "react-native";
+import { responseRate, sentimentMix } from "@/lib/analytics";
 
 /**
- * Reference `StatCards`: a 4-up grid where the first (average rating) is the
- * highlighted lime card with big tabular numbers; the rest are dark cards
- * with icon labels, corner arrow chips, and pill trends.
+ * Reference `StatCards` (redesigned): uniform layout — outlined icon circle
+ * top-left, round arrow button top-right, muted label, huge tabular value,
+ * and a bold-delta + muted-label footer. First card is the lime highlight.
  */
 export function StatCards({ result }: { result: ScrapeResult }) {
   const colors = usePalette();
@@ -27,109 +29,53 @@ export function StatCards({ result }: { result: ScrapeResult }) {
   const average = averageRating(result.reviews);
   const mix = sentimentMix(result.reviews);
   const replies = responseRate(result.reviews);
-  const storeRating = result.appInfo?.averageRating ?? null;
-  const storeCount = result.appInfo?.ratingCount ?? null;
+  const storeRating = result.appInfo?.averageRating;
 
   return (
     <View
       onLayout={onLayout}
       style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}
     >
-      {/* Average rating — the lime hero card. */}
-      <View
-        style={{
-          flexBasis: basis,
-          flexGrow: 1,
-          borderRadius: radius.xl,
-          borderCurve: "continuous",
-          backgroundColor: colors.accent,
-          padding: 20,
-        }}
-      >
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "flex-start",
-            justifyContent: "space-between",
-          }}
-        >
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <StarIcon size={16} color={colors.onAccent} filled />
-            <Text style={{ fontSize: 14, fontWeight: "500", color: colors.onAccent }}>
-              Average rating
-            </Text>
-          </View>
-          <View
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: 16,
-              backgroundColor: "rgba(30, 43, 16, 0.1)",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <ArrowUpRightIcon size={16} color={colors.onAccent} />
-          </View>
-        </View>
-        <Text
-          selectable
-          style={{
-            marginTop: 24,
-            fontSize: 48,
-            lineHeight: 52,
-            fontWeight: "600",
-            letterSpacing: -1,
-            fontVariant: ["tabular-nums"],
-            color: colors.onAccent,
-          }}
-        >
-          {average > 0 ? average.toFixed(1) : "—"}
-        </Text>
-        <View
-          style={{
-            marginTop: 12,
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <Stars value={average} size={15} color={colors.onAccent} />
-          <Text style={{ fontSize: 12, fontWeight: "600", color: colors.onAccent }}>
-            in this scrape
-          </Text>
-        </View>
-      </View>
-
+      <StatCard
+        highlight
+        basis={basis}
+        icon={<StarIcon size={18} color={colors.onAccent} filled />}
+        label="Average rating"
+        value={average > 0 ? average.toFixed(1) : "—"}
+        deltaValue={
+          storeRating != null
+            ? `${(average - storeRating >= 0 ? "+" : "") + (average - storeRating).toFixed(2)}`
+            : "—"
+        }
+        deltaPositive={storeRating != null ? average >= storeRating : true}
+        deltaLabel="vs store average"
+      />
       <StatCard
         basis={basis}
-        icon={<UsersIcon size={16} color={colors.inkMuted} />}
+        icon={<UsersIcon size={18} color={colors.inkMuted} />}
         label="Reviews scraped"
         value={formatCompact(result.count)}
-        sub={result.partial ? "partial result" : "complete pull"}
-        trend={result.partial ? "Partial" : "Complete"}
-        trendTone={result.partial ? "neg" : "pos"}
+        deltaValue={result.partial ? "Partial" : "Complete"}
+        deltaPositive={!result.partial}
+        deltaLabel={result.partial ? "pull was cut short" : "full pull"}
       />
       <StatCard
         basis={basis}
-        icon={<MessageSquareIcon size={16} color={colors.inkMuted} />}
+        icon={<MessageSquareReplyIcon size={18} color={colors.inkMuted} />}
         label="Response rate"
         value={`${replies}%`}
-        sub="developer replies"
-        trend={replies > 45 ? "Healthy" : "Low"}
-        trendTone={replies > 45 ? "pos" : "neg"}
+        deltaValue={replies > 45 ? "Healthy" : "Low"}
+        deltaPositive={replies > 45}
+        deltaLabel="developer replies"
       />
       <StatCard
         basis={basis}
-        icon={<TrendingUpIcon size={16} color={colors.violet} />}
+        icon={<SmileIcon size={18} color={colors.inkMuted} />}
         label="Positive sentiment"
         value={`${mix.positive}%`}
-        sub={`${mix.negative}% negative`}
-        trend={
-          storeRating != null
-            ? `Store ${storeRating.toFixed(1)}★${storeCount ? ` · ${formatCompact(storeCount)}` : ""}`
-            : undefined
-        }
+        deltaValue={`${mix.negative}%`}
+        deltaPositive={false}
+        deltaLabel="negative"
       />
     </View>
   );
@@ -140,17 +86,19 @@ function StatCard({
   icon,
   label,
   value,
-  sub,
-  trend,
-  trendTone = "pos",
+  deltaValue,
+  deltaPositive,
+  deltaLabel,
+  highlight = false,
 }: {
   basis: `${number}%`;
   icon: ReactNode;
   label: string;
   value: string;
-  sub: string;
-  trend?: string;
-  trendTone?: "pos" | "neg";
+  deltaValue: string;
+  deltaPositive: boolean;
+  deltaLabel: string;
+  highlight?: boolean;
 }) {
   const colors = usePalette();
   return (
@@ -160,10 +108,14 @@ function StatCard({
         flexGrow: 1,
         borderRadius: radius.xl,
         borderCurve: "continuous",
-        borderWidth: 1,
-        borderColor: colors.border,
-        backgroundColor: colors.surface,
         padding: 20,
+        ...(highlight
+          ? { backgroundColor: colors.accent }
+          : {
+              borderWidth: 1,
+              borderColor: colors.border,
+              backgroundColor: colors.surface,
+            }),
       }}
     >
       <View
@@ -173,71 +125,64 @@ function StatCard({
           justifyContent: "space-between",
         }}
       >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          {icon}
-          <Text style={{ fontSize: 14, fontWeight: "500", color: colors.inkMuted }}>
-            {label}
-          </Text>
-        </View>
-        <View
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: 16,
-            backgroundColor: colors.surfaceSunken,
-            alignItems: "center",
-            justifyContent: "center",
-          }}
+        <IconCircle tone={highlight ? "onAccent" : "outline"}>{icon}</IconCircle>
+        <IconCircleButton
+          label={`Open ${label}`}
+          size={36}
+          tone="inverse"
+          backgroundColor={highlight ? colors.onAccent : colors.ink}
+          onPress={() => {}}
         >
-          <ArrowUpRightIcon size={16} color={colors.inkMuted} />
-        </View>
+          <ArrowUpRightIcon size={16} color={highlight ? colors.accent : colors.canvas} />
+        </IconCircleButton>
       </View>
+
+      <Text
+        style={{
+          marginTop: 20,
+          fontSize: 14,
+          fontWeight: "500",
+          color: highlight ? "rgba(30, 43, 16, 0.7)" : colors.inkMuted,
+        }}
+      >
+        {label}
+      </Text>
       <Text
         selectable
         style={{
-          marginTop: 24,
+          marginTop: 4,
           fontSize: 40,
           lineHeight: 44,
           fontWeight: "600",
           letterSpacing: -0.8,
           fontVariant: ["tabular-nums"],
-          color: colors.ink,
+          color: highlight ? colors.onAccent : colors.ink,
         }}
       >
         {value}
       </Text>
-      <View
+
+      <Text
         style={{
           marginTop: 12,
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: space.sm,
+          fontSize: 12,
+          color: highlight ? "rgba(30, 43, 16, 0.7)" : colors.inkMuted,
         }}
       >
-        <Text style={{ fontSize: 12, color: colors.inkMuted }}>{sub}</Text>
-        {trend ? (
-          <View
-            style={{
-              borderRadius: radius.pill,
-              paddingHorizontal: 8,
-              paddingVertical: 2,
-              backgroundColor:
-                trendTone === "pos" ? colors.accentSoft : colors.dangerSoft,
-            }}
-          >
-            <Text
-              style={{
-                fontSize: 12,
-                fontWeight: "600",
-                color: trendTone === "pos" ? colors.onAccentSoft : colors.onDangerSoft,
-              }}
-            >
-              {trend}
-            </Text>
-          </View>
-        ) : null}
-      </View>
+        <Text
+          style={{
+            fontWeight: "700",
+            color: highlight
+              ? colors.onAccent
+              : deltaPositive
+                ? colors.accent
+                : colors.danger,
+          }}
+        >
+          {deltaValue}
+        </Text>{" "}
+        {deltaLabel}
+      </Text>
     </View>
   );
 }

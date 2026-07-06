@@ -4,6 +4,20 @@ import {
   type ScrapeState,
   validateInput,
 } from "@noviq/core";
+import {
+  ArrowRightIcon,
+  focusRing,
+  gradientBg,
+  LinkIcon,
+  layout,
+  motion,
+  NoviqWordmark,
+  radius,
+  SparklesIcon,
+  space,
+  usePalette,
+  ZapIcon,
+} from "@noviq/ui";
 import * as Haptics from "expo-haptics";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -16,13 +30,7 @@ import {
   View,
 } from "react-native";
 import { useAppPreview } from "@/hooks/use-app-preview";
-import { usePalette } from "@/hooks/use-palette";
-import { focusRing } from "@/lib/focus-ring";
-import { gradientBg } from "@/lib/gradient";
-import { layout, motion, radius, space } from "@/theme/tokens";
 import { AppPreviewCard } from "./app-preview-card";
-import { NoviqWordmark } from "./brand";
-import { ArrowRightIcon, LinkIcon, SparklesIcon, ZapIcon } from "./icons";
 import { StoreChip } from "./store-chip";
 
 const SAMPLES = [

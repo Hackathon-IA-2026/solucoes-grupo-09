@@ -1,10 +1,7 @@
 import { type AppInfo, formatCompact, formatRating } from "@noviq/core";
+import { FadeIn, motion, radius, Stars, space, usePalette } from "@noviq/ui";
 import { Image } from "expo-image";
 import { Text, View } from "react-native";
-import { usePalette } from "@/hooks/use-palette";
-import { motion, radius, space } from "@/theme/tokens";
-import { Stars } from "./brand";
-import { FadeIn } from "./fade-in";
 
 /**
  * The "that's my app!" moment: as soon as a pasted link resolves we show the

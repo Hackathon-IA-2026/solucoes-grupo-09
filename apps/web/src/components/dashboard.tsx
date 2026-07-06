@@ -5,94 +5,50 @@ import {
   reviewsToCsv,
   reviewsToJson,
   type ScrapeResult,
-  storeLabel,
 } from "@noviq/core";
+import {
+  AppleIcon,
+  CalendarDaysIcon,
+  DownloadIcon,
+  FadeIn,
+  IconCircleButton,
+  layout,
+  Pill,
+  PillButton,
+  PlayIcon,
+  RotateCcwIcon,
+  radius,
+  SlidersHorizontalIcon,
+  Stars,
+  space,
+  useContainerWidth,
+  usePalette,
+} from "@noviq/ui";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Platform, Pressable, Text, View } from "react-native";
-import { useContainerWidth } from "@/hooks/use-container-width";
-import { usePalette } from "@/hooks/use-palette";
+import { Text, View } from "react-native";
 import { exportText } from "@/lib/download";
-import { focusRing } from "@/lib/focus-ring";
-import { layout, radius, space } from "@/theme/tokens";
-import { NoviqWordmark, Stars } from "./brand";
 import {
   KeywordPanel,
   RatingDistribution,
   SentimentRing,
   VersionPanel,
 } from "./breakdown";
-import { FadeIn } from "./fade-in";
-import { DownloadIcon, RotateCcwIcon } from "./icons";
+import { Heatmap } from "./heatmap";
 import { ReviewsFeed } from "./reviews-feed";
 import { StatCards } from "./stat-cards";
 import { TimelineChart } from "./timeline-chart";
+import { TopNav } from "./top-nav";
 
-function PillButton({
-  label,
-  icon,
-  onPress,
-  primary = false,
-  testID,
-}: {
-  label: string;
-  icon: React.ReactNode;
-  onPress: () => void;
-  primary?: boolean;
-  testID?: string;
-}) {
-  const colors = usePalette();
-  return (
-    <Pressable
-      testID={testID}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      onPress={onPress}
-      style={(pressState) => {
-        const { pressed } = pressState;
-        const { focused = false } = pressState as { focused?: boolean };
-        return {
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 6,
-          borderRadius: radius.pill,
-          borderWidth: 1,
-          borderColor: primary ? colors.accent : colors.border,
-          backgroundColor: primary ? colors.accent : colors.surface,
-          paddingHorizontal: 14,
-          paddingVertical: 8,
-          minHeight: 36,
-          transform: [{ scale: pressed ? 0.95 : 1 }],
-          ...focusRing(focused, colors.focus),
-          ...(Platform.OS === "web"
-            ? ({
-                cursor: "pointer",
-                transitionProperty: "transform, filter",
-                transitionDuration: "150ms",
-              } as object)
-            : null),
-        };
-      }}
-    >
-      {icon}
-      <Text
-        style={{
-          fontSize: 14,
-          fontWeight: primary ? "600" : "500",
-          color: primary ? colors.onAccent : colors.ink,
-        }}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
+const VIEWS = ["All", "Trends", "Sentiment", "Reviews"] as const;
+type View_ = (typeof VIEWS)[number];
 
 /**
- * Reference `Dashboard`, fed by the real scrape result: top bar with export
- * pills + lime "New scrape", app identity card, stat cards, timeline +
- * sentiment ring, breakdown panels, and the filterable review feed.
+ * Reference `Dashboard` (redesigned): TopNav, oversized hero header with the
+ * grape store pill, stat cards, a functional view-filter row (All / Trends /
+ * Sentiment / Reviews), timeline + heatmap, gauge + breakdowns, keyword
+ * cloud, the reviews feed, and the dot footer — all from the real scrape.
  */
 export function Dashboard({
   result,
@@ -104,6 +60,7 @@ export function Dashboard({
   const colors = usePalette();
   const [width, onLayout] = useContainerWidth();
   const wide = width >= 900;
+  const [view, setView] = useState<View_>("All");
   const average = useMemo(() => averageRating(result.reviews), [result.reviews]);
   const [exported, setExported] = useState<string | null>(null);
   const exportTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -128,6 +85,10 @@ export function Dashboard({
   }
 
   const appName = result.appInfo?.name ?? result.appId;
+  const isApple = result.store === "apple";
+  const showTrends = view === "All" || view === "Trends";
+  const showSentiment = view === "All" || view === "Sentiment";
+  const showReviews = view === "All" || view === "Reviews";
 
   return (
     <FadeIn
@@ -135,33 +96,122 @@ export function Dashboard({
       onLayout={onLayout}
       style={{
         width: "100%",
-        maxWidth: layout.page,
+        maxWidth: layout.page + 128,
         alignSelf: "center",
         paddingHorizontal: space.lg,
-        paddingVertical: space.xl,
+        paddingVertical: 20,
         gap: space.xl,
       }}
     >
-      {/* Top bar */}
+      <TopNav />
+
+      {/* Hero header */}
       <View
         style={{
+          marginTop: 12,
           flexDirection: "row",
           flexWrap: "wrap",
-          alignItems: "center",
+          alignItems: "flex-end",
           justifyContent: "space-between",
-          gap: space.lg,
+          gap: space.xl,
         }}
       >
-        <NoviqWordmark />
-        <View
-          style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}
-        >
-          <PillButton
-            testID="export-csv"
-            label="CSV"
-            icon={<DownloadIcon size={15} color={colors.ink} />}
-            onPress={() => download("csv")}
-          />
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space.lg }}>
+          {result.appInfo?.icon ? (
+            <Image
+              source={{ uri: result.appInfo.icon }}
+              style={{ width: 64, height: 64, borderRadius: radius.lg }}
+              contentFit="cover"
+              accessibilityLabel={`${appName} icon`}
+              transition={150}
+            />
+          ) : (
+            <View
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: radius.lg,
+                borderCurve: "continuous",
+                backgroundColor: colors.accent,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text style={{ fontSize: 24, fontWeight: "700", color: colors.onAccent }}>
+                {appName.slice(0, 1).toUpperCase()}
+              </Text>
+            </View>
+          )}
+          <View>
+            <Text style={{ fontSize: 14, color: colors.inkMuted }}>
+              Scraped results for
+            </Text>
+            <View
+              style={{
+                flexDirection: "row",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: 12,
+              }}
+            >
+              <Text
+                accessibilityRole="header"
+                aria-level={1}
+                style={{
+                  fontSize: wide ? 44 : 34,
+                  lineHeight: wide ? 48 : 38,
+                  fontWeight: "600",
+                  letterSpacing: -1,
+                  color: colors.ink,
+                }}
+              >
+                {appName}
+              </Text>
+              {/* grape store pill */}
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 6,
+                  borderRadius: radius.pill,
+                  backgroundColor: colors.violet,
+                  paddingHorizontal: 12,
+                  paddingVertical: 4,
+                }}
+              >
+                {isApple ? (
+                  <AppleIcon size={12} color="#FFFFFF" />
+                ) : (
+                  <PlayIcon size={12} color="#FFFFFF" />
+                )}
+                <Text style={{ fontSize: 12, fontWeight: "600", color: "#FFFFFF" }}>
+                  {isApple ? "App Store" : "Google Play"}
+                </Text>
+              </View>
+            </View>
+            <View
+              style={{
+                marginTop: 6,
+                flexDirection: "row",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <Stars value={result.appInfo?.averageRating ?? average} size={15} />
+              <Text style={{ fontSize: 14, color: colors.inkMuted }}>
+                {(result.appInfo?.averageRating ?? average).toFixed(1)}
+                {result.appInfo?.ratingCount
+                  ? ` · ${formatCompact(result.appInfo.ratingCount)} ratings`
+                  : ` · ${formatCompact(result.count)} scraped`}
+                {result.appInfo?.developer ? ` · ${result.appInfo.developer}` : ""} ·{" "}
+                {result.country.toUpperCase()}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           <PillButton
             testID="export-json"
             label="JSON"
@@ -177,6 +227,7 @@ export function Dashboard({
           />
         </View>
       </View>
+
       {exported ? (
         <FadeIn duration={150} distance={4}>
           <Text
@@ -216,130 +267,75 @@ export function Dashboard({
         </View>
       ) : null}
 
-      {/* App identity card */}
+      <StatCards result={result} />
+
+      {/* Filter row: functional view pills + tool cluster */}
       <View
         style={{
           flexDirection: "row",
           flexWrap: "wrap",
           alignItems: "center",
-          gap: space.lg,
-          borderRadius: radius.xl,
-          borderCurve: "continuous",
-          borderWidth: 1,
-          borderColor: colors.border,
-          backgroundColor: colors.surface,
-          padding: 20,
+          justifyContent: "space-between",
+          gap: 12,
         }}
       >
-        {result.appInfo?.icon ? (
-          <Image
-            source={{ uri: result.appInfo.icon }}
-            style={{ width: 64, height: 64, borderRadius: radius.lg }}
-            contentFit="cover"
-            accessibilityLabel={`${appName} icon`}
-            transition={150}
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+          {VIEWS.map((v) => (
+            <Pill
+              key={v}
+              accessibilityRole="tab"
+              label={v}
+              active={view === v}
+              onPress={() => setView(v)}
+              testID={`view-${v.toLowerCase()}`}
+            />
+          ))}
+        </View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <IconCircleButton label="Filter" tone="outline" size={40} onPress={() => {}}>
+            <SlidersHorizontalIcon size={16} color={colors.inkMuted} />
+          </IconCircleButton>
+          <IconCircleButton
+            label="Date range"
+            tone="outline"
+            size={40}
+            onPress={() => {}}
+          >
+            <CalendarDaysIcon size={16} color={colors.inkMuted} />
+          </IconCircleButton>
+          <PillButton
+            testID="export-csv"
+            label="Download reports"
+            icon={<DownloadIcon size={15} color={colors.ink} />}
+            onPress={() => download("csv")}
           />
-        ) : (
-          <View
-            style={{
-              width: 64,
-              height: 64,
-              borderRadius: radius.lg,
-              backgroundColor: colors.accent,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Text style={{ fontSize: 24, fontWeight: "700", color: colors.onAccent }}>
-              {appName.slice(0, 1).toUpperCase()}
-            </Text>
-          </View>
-        )}
-        <View style={{ flex: 1, minWidth: 200 }}>
-          <View
-            style={{
-              flexDirection: "row",
-              flexWrap: "wrap",
-              alignItems: "center",
-              gap: 8,
-            }}
-          >
-            <Text
-              accessibilityRole="header"
-              aria-level={2}
-              style={{
-                fontSize: 24,
-                fontWeight: "600",
-                letterSpacing: -0.5,
-                color: colors.ink,
-              }}
-            >
-              {appName}
-            </Text>
-            <View
-              style={{
-                borderRadius: radius.pill,
-                backgroundColor: colors.surfaceSunken,
-                paddingHorizontal: 10,
-                paddingVertical: 4,
-              }}
-            >
-              <Text style={{ fontSize: 12, fontWeight: "500", color: colors.inkMuted }}>
-                {storeLabel(result.store)} · {result.country.toUpperCase()}
-              </Text>
-            </View>
-          </View>
-          {result.appInfo?.developer || result.appInfo?.category ? (
-            <Text style={{ marginTop: 4, fontSize: 14, color: colors.inkMuted }}>
-              {[result.appInfo?.developer, result.appInfo?.category]
-                .filter(Boolean)
-                .join(" · ")}
-            </Text>
-          ) : null}
-        </View>
-        <View style={{ alignItems: "flex-end" }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <Text
-              style={{
-                fontSize: 24,
-                fontWeight: "600",
-                fontVariant: ["tabular-nums"],
-                color: colors.ink,
-              }}
-            >
-              {result.appInfo?.averageRating?.toFixed(1) ??
-                (average > 0 ? average.toFixed(1) : "—")}
-            </Text>
-            <Stars value={result.appInfo?.averageRating ?? average} size={16} />
-          </View>
-          <Text style={{ marginTop: 4, fontSize: 12, color: colors.inkMuted }}>
-            {result.appInfo?.ratingCount
-              ? `${formatCompact(result.appInfo.ratingCount)} ratings`
-              : `${formatCompact(result.count)} scraped`}
-          </Text>
         </View>
       </View>
 
-      <StatCards result={result} />
-
-      {/* Charts row */}
-      <View style={{ flexDirection: wide ? "row" : "column", gap: space.lg }}>
-        <View style={{ flex: wide ? 1.5 : undefined }}>
-          <TimelineChart result={result} />
+      {/* Charts */}
+      {showTrends ? (
+        <View style={{ flexDirection: wide ? "row" : "column", gap: space.lg }}>
+          <View style={{ flex: wide ? 1.5 : undefined }}>
+            <TimelineChart result={result} />
+          </View>
+          <View style={{ flex: wide ? 1 : undefined }}>
+            <Heatmap result={result} />
+          </View>
         </View>
-        <View style={{ flex: wide ? 1 : undefined }}>
-          <SentimentRing result={result} />
-        </View>
-      </View>
+      ) : null}
 
-      {/* Breakdown row */}
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
-        <RatingDistribution result={result} />
-        <VersionPanel result={result} />
-        <KeywordPanel result={result} />
-      </View>
+      {showSentiment ? (
+        <>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
+            <SentimentRing result={result} />
+            <RatingDistribution result={result} />
+            <VersionPanel result={result} />
+          </View>
+          <KeywordPanel result={result} />
+        </>
+      ) : null}
 
-      <ReviewsFeed result={result} />
+      {showReviews ? <ReviewsFeed result={result} /> : null}
 
       <View
         style={{

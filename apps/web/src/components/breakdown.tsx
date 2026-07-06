@@ -1,45 +1,34 @@
-import type { ScrapeResult } from "@noviq/core";
+import { formatCompact, type ScrapeResult } from "@noviq/core";
+import {
+  HashIcon,
+  hatchGrape,
+  IconCircleButton,
+  LayersIcon,
+  MoreHorizontalIcon,
+  Panel,
+  PanelHeader,
+  PieChartIcon,
+  radius,
+  usePalette,
+} from "@noviq/ui";
 import { useMemo } from "react";
 import { Text, View } from "react-native";
-import Svg, { Circle } from "react-native-svg";
-import { usePalette } from "@/hooks/use-palette";
+import Svg, { Circle, Defs, G, Line, Pattern, Rect } from "react-native-svg";
 import { distributionPct, keywords, sentimentMix, versionStats } from "@/lib/analytics";
-import { radius, space } from "@/theme/tokens";
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
-  const colors = usePalette();
-  return (
-    <View
-      style={{
-        flexGrow: 1,
-        flexBasis: 280,
-        borderRadius: radius.xl,
-        borderCurve: "continuous",
-        borderWidth: 1,
-        borderColor: colors.border,
-        backgroundColor: colors.surface,
-        padding: 20,
-      }}
-    >
-      <Text style={{ fontSize: 14, fontWeight: "500", color: colors.inkMuted }}>
-        {title}
-      </Text>
-      {children}
-    </View>
-  );
-}
-
-/** Reference `RatingDistribution`: 5→1 star bars, lime/grape/red by band. */
+/** Reference `RatingDistribution`: icon-circle header, 5→1 star bars. */
 export function RatingDistribution({ result }: { result: ScrapeResult }) {
   const colors = usePalette();
   const dist = useMemo(() => distributionPct(result.reviews), [result.reviews]);
   const max = Math.max(1, ...dist);
   return (
-    <Panel title="Rating breakdown">
-      <Text style={{ marginTop: 4, fontSize: 18, fontWeight: "600", color: colors.ink }}>
-        {dist[4].toFixed(0)}% love it
-      </Text>
-      <View style={{ marginTop: 20, gap: 12 }}>
+    <Panel style={{ flexGrow: 1, flexBasis: 300 }}>
+      <PanelHeader
+        icon={<LayersIcon size={18} color={colors.inkMuted} />}
+        title="Rating breakdown"
+        subtitle={`${dist[4].toFixed(0)}% love it`}
+      />
+      <View style={{ marginTop: 20, gap: 14 }}>
         {[5, 4, 3, 2, 1].map((star) => {
           const pct = dist[star - 1];
           const fill =
@@ -99,136 +88,211 @@ export function RatingDistribution({ result }: { result: ScrapeResult }) {
   );
 }
 
-/** Reference `SentimentRing`: segmented donut + legend (rating-proxy tones). */
+/**
+ * Reference `SentimentRing` (redesigned): a 259° arc gauge with rounded caps
+ * and a bottom gap — lime positive, grape neutral, HATCHED negative — the
+ * total scraped count in the center, and a 3-column legend with counts.
+ */
 export function SentimentRing({ result }: { result: ScrapeResult }) {
   const colors = usePalette();
   const mix = useMemo(() => sentimentMix(result.reviews), [result.reviews]);
-  const r = 54;
-  const c = 2 * Math.PI * r;
+  const total = result.count;
   const segs = [
-    { value: mix.positive, color: colors.accent, label: "Positive" },
-    { value: mix.neutral, color: colors.violet, label: "Neutral" },
-    { value: mix.negative, color: colors.danger, label: "Negative" },
+    {
+      key: "positive",
+      value: mix.positive,
+      color: colors.accent,
+      hatch: false,
+      label: "Positive",
+      count: Math.round((mix.positive / 100) * total),
+    },
+    {
+      key: "neutral",
+      value: mix.neutral,
+      color: colors.violet,
+      hatch: false,
+      label: "Neutral",
+      count: Math.round((mix.neutral / 100) * total),
+    },
+    {
+      key: "negative",
+      value: mix.negative,
+      color: colors.violet,
+      hatch: true,
+      label: "Negative",
+      count: Math.round((mix.negative / 100) * total),
+    },
   ];
-  let offset = 0;
+
+  const size = 200;
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = 74;
+  const stroke = 22;
+  const c = 2 * Math.PI * r;
+  const sweep = 0.72; // 259° arc, gap at the bottom
+  const rotation = 90 + ((1 - sweep) * 360) / 2;
+
+  let acc = 0;
   return (
-    <Panel title="Sentiment mix">
-      <View
-        style={{ marginTop: 12, flexDirection: "row", alignItems: "center", gap: 20 }}
-      >
-        <View style={{ width: 132, height: 132 }}>
-          <Svg
-            viewBox="0 0 132 132"
-            width={132}
-            height={132}
-            rotation={-90}
-            origin="66,66"
-          >
+    <Panel testID="sentiment-panel" style={{ flexGrow: 1, flexBasis: 300 }}>
+      <PanelHeader
+        icon={<PieChartIcon size={18} color={colors.inkMuted} />}
+        title="Sentiment split"
+        subtitle="Across all reviews"
+        right={
+          <IconCircleButton label="More" size={32} onPress={() => {}}>
+            <MoreHorizontalIcon size={16} color={colors.ink} />
+          </IconCircleButton>
+        }
+      />
+
+      <View style={{ alignSelf: "center", marginTop: 12, width: size, height: size }}>
+        <Svg viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
+          <Defs>
+            <Pattern
+              id="gauge-hatch"
+              width={7}
+              height={7}
+              patternTransform="rotate(45)"
+              patternUnits="userSpaceOnUse"
+            >
+              <Rect width={7} height={7} fill={colors.violet} opacity={0.18} />
+              <Line
+                x1={0}
+                y1={0}
+                x2={0}
+                y2={7}
+                stroke={colors.violet}
+                strokeWidth={3.5}
+                opacity={0.7}
+              />
+            </Pattern>
+          </Defs>
+          <G rotation={rotation} origin={`${cx}, ${cy}`}>
+            {/* track */}
             <Circle
-              cx={66}
-              cy={66}
+              cx={cx}
+              cy={cy}
               r={r}
               fill="none"
               stroke={colors.surfaceSunken}
-              strokeWidth={14}
+              strokeWidth={stroke}
+              strokeLinecap="round"
+              strokeDasharray={`${sweep * c} ${c}`}
             />
             {segs.map((seg) => {
-              const len = (seg.value / 100) * c;
+              const len = (seg.value / 100) * sweep * c;
               const el = (
                 <Circle
-                  key={seg.label}
-                  cx={66}
-                  cy={66}
+                  key={seg.key}
+                  cx={cx}
+                  cy={cy}
                   r={r}
                   fill="none"
-                  stroke={seg.color}
-                  strokeWidth={14}
+                  stroke={seg.hatch ? "url(#gauge-hatch)" : seg.color}
+                  strokeWidth={stroke}
                   strokeLinecap="round"
-                  strokeDasharray={`${Math.max(len - 4, 0)} ${c}`}
-                  strokeDashoffset={-offset}
+                  strokeDasharray={`${Math.max(len - 6, 0)} ${c}`}
+                  strokeDashoffset={-acc}
                 />
               );
-              offset += len;
+              acc += len;
               return el;
             })}
-          </Svg>
-          <View
+          </G>
+        </Svg>
+        <View
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Text
             style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              alignItems: "center",
-              justifyContent: "center",
+              fontSize: 30,
+              fontWeight: "600",
+              fontVariant: ["tabular-nums"],
+              color: colors.ink,
             }}
           >
+            {formatCompact(total)}
+          </Text>
+          <Text style={{ fontSize: 12, color: colors.inkMuted }}>reviews analyzed</Text>
+        </View>
+      </View>
+
+      {/* legend stats */}
+      <View
+        style={{
+          marginTop: 8,
+          flexDirection: "row",
+          borderTopWidth: 1,
+          borderTopColor: colors.border,
+          paddingTop: 16,
+        }}
+      >
+        {segs.map((seg) => (
+          <View key={seg.key} style={{ flex: 1, alignItems: "center" }}>
             <Text
               style={{
-                fontSize: 24,
+                fontSize: 18,
                 fontWeight: "600",
                 fontVariant: ["tabular-nums"],
                 color: colors.ink,
               }}
             >
-              {mix.positive}%
+              {formatCompact(seg.count)}
             </Text>
-            <Text style={{ fontSize: 10, color: colors.inkMuted }}>positive</Text>
-          </View>
-        </View>
-        <View style={{ flex: 1, gap: 10 }}>
-          {segs.map((seg) => (
             <View
-              key={seg.label}
               style={{
+                marginTop: 4,
                 flexDirection: "row",
                 alignItems: "center",
-                justifyContent: "space-between",
+                gap: 6,
               }}
             >
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                <View
-                  style={{
-                    width: 10,
-                    height: 10,
-                    borderRadius: 5,
-                    backgroundColor: seg.color,
-                  }}
-                />
-                <Text style={{ fontSize: 14, color: colors.inkMuted }}>{seg.label}</Text>
-              </View>
-              <Text
+              <View
                 style={{
-                  fontSize: 14,
-                  fontWeight: "600",
-                  fontVariant: ["tabular-nums"],
-                  color: colors.ink,
+                  width: 10,
+                  height: 10,
+                  borderRadius: 5,
+                  ...(seg.hatch ? hatchGrape() : { backgroundColor: seg.color }),
                 }}
-              >
-                {seg.value}%
-              </Text>
+              />
+              <Text style={{ fontSize: 11, color: colors.inkMuted }}>{seg.label}</Text>
             </View>
-          ))}
-          <Text style={{ marginTop: 2, fontSize: 10, color: colors.inkFaint }}>
-            from star ratings
-          </Text>
-        </View>
+          </View>
+        ))}
       </View>
+      <Text style={{ marginTop: 10, fontSize: 10, color: colors.inkFaint }}>
+        from star ratings
+      </Text>
     </Panel>
   );
 }
 
-/** Reference `KeywordPanel`: tone-tinted pills sized by mention count. */
+/** Reference `KeywordPanel`: icon-circle header + tone-tinted pills. */
 export function KeywordPanel({ result }: { result: ScrapeResult }) {
   const colors = usePalette();
   const words = useMemo(() => keywords(result.reviews), [result.reviews]);
   if (words.length === 0) return null;
   const max = Math.max(...words.map((w) => w.count));
   return (
-    <Panel title="What people mention">
+    <Panel>
+      <PanelHeader
+        icon={<HashIcon size={18} color={colors.inkMuted} />}
+        title="What people mention"
+        subtitle="Top keywords"
+      />
       <View style={{ marginTop: 16, flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
         {words.map((word) => {
-          const scale = 0.8 + (word.count / max) * 0.7;
+          const scale = 0.85 + (word.count / max) * 0.55;
           const tone =
             word.tone === "positive"
               ? {
@@ -258,7 +322,7 @@ export function KeywordPanel({ result }: { result: ScrapeResult }) {
                 borderColor: tone.border,
                 backgroundColor: tone.bg,
                 paddingHorizontal: 12,
-                paddingVertical: Math.round(scale * 5.5),
+                paddingVertical: 6,
               }}
             >
               <Text
@@ -289,13 +353,18 @@ export function KeywordPanel({ result }: { result: ScrapeResult }) {
   );
 }
 
-/** Reference `VersionPanel`: per-version lime rating bars (real appVersions). */
+/** Reference `VersionPanel`: icon-circle header + lime rating bars per release. */
 export function VersionPanel({ result }: { result: ScrapeResult }) {
   const colors = usePalette();
   const versions = useMemo(() => versionStats(result.reviews), [result.reviews]);
   if (versions.length === 0) return null;
   return (
-    <Panel title="Ratings by version">
+    <Panel style={{ flexGrow: 1, flexBasis: 300 }}>
+      <PanelHeader
+        icon={<LayersIcon size={18} color={colors.inkMuted} />}
+        title="Ratings by version"
+        subtitle="Recent releases"
+      />
       <View style={{ marginTop: 16, gap: 4 }}>
         {versions.map((v) => (
           <View
@@ -312,7 +381,7 @@ export function VersionPanel({ result }: { result: ScrapeResult }) {
             <Text
               numberOfLines={1}
               style={{
-                width: 64,
+                width: 56,
                 fontSize: 11,
                 color: colors.inkMuted,
                 fontVariant: ["tabular-nums"],
@@ -364,9 +433,6 @@ export function VersionPanel({ result }: { result: ScrapeResult }) {
           </View>
         ))}
       </View>
-      <Text style={{ marginTop: space.md, fontSize: 10, color: colors.inkFaint }}>
-        versions reported by Google Play reviews
-      </Text>
     </Panel>
   );
 }

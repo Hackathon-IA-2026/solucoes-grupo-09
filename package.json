@@ -2,7 +2,7 @@
   "name": "noviq-monorepo",
   "private": true,
   "version": "0.1.0",
-  "description": "Noviq — App Store & Google Play review scraping SaaS (API, web app, shared core).",
+  "description": "Noviq \u2014 App Store & Google Play review scraping SaaS (API, web app, shared core).",
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -19,7 +19,7 @@
     "test:core": "bun run --cwd packages/core test",
     "test:web": "bun run --cwd apps/web test",
     "test:e2e": "bun run --cwd apps/web test:e2e",
-    "typecheck": "bun run --cwd packages/core typecheck && bun run --cwd apps/api typecheck && bun run --cwd apps/web typecheck",
+    "typecheck": "bun run --cwd packages/core typecheck && bun run --cwd packages/ui typecheck && bun run --cwd apps/api typecheck && bun run --cwd apps/web typecheck",
     "lint": "bunx biome check",
     "lint:fix": "bunx biome check --write",
     "docker:up": "docker compose up --build"

@@ -1,8 +1,8 @@
+import { usePalette } from "@noviq/ui";
 import Head from "expo-router/head";
 import { Platform, ScrollView } from "react-native";
 import { Dashboard } from "@/components/dashboard";
 import { ScraperHero } from "@/components/scraper-hero";
-import { usePalette } from "@/hooks/use-palette";
 import { useScrape } from "@/hooks/use-scrape";
 import { SITE_URL } from "@/lib/config";
 

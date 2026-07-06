@@ -139,3 +139,52 @@ describe("responseRate / tone / initials", () => {
     expect(initials("  ")).toBe("?");
   });
 });
+
+describe("heatmap", () => {
+  const at = (day: number, hour: number, rating = 5) =>
+    review({
+      // 2026-06-07 is a Sunday; add days/hours from there (UTC parsing shifts
+      // by local TZ, so build via local-time constructor instead).
+      date: new Date(2026, 5, 7 + day, hour, 30).toISOString(),
+      rating,
+    });
+  // Import lazily to keep the existing import block untouched.
+  const { heatmap } =
+    require("../src/lib/analytics") as typeof import("../src/lib/analytics");
+
+  test("7×7 grid from real timestamps, busiest hours as rows", () => {
+    const reviews = [
+      ...Array.from({ length: 6 }, () => at(0, 14)), // Sun 2pm ×6
+      ...Array.from({ length: 3 }, () => at(3, 14)), // Wed 2pm ×3
+      at(1, 9),
+      at(2, 10),
+      at(4, 11),
+      at(5, 12),
+      at(6, 13),
+      at(0, 8),
+    ];
+    const data = heatmap(reviews, "reviews");
+    expect(data).not.toBeNull();
+    expect(data?.levels).toHaveLength(7);
+    expect(data?.levels[0]).toHaveLength(7);
+    expect(data?.days[0]).toBe("Sun");
+    // 2pm is the busiest hour → a row label "2pm" exists.
+    expect(data?.hours).toContain("2pm");
+    // The Sun 2pm cell is the hottest (level 4); empty cells are 0.
+    const row2pm = data?.hours.indexOf("2pm") ?? -1;
+    expect(data?.levels[row2pm][0]).toBe(4);
+    expect(data?.legend).toHaveLength(4);
+  });
+
+  test("ratings dimension maps averages to bands", () => {
+    const data = heatmap([at(0, 14, 5), at(0, 14, 5), at(1, 14, 1)], "ratings");
+    const row = data?.hours.indexOf("2pm") ?? -1;
+    expect(data?.levels[row][0]).toBe(4); // avg 5 → top band
+    expect(data?.levels[row][1]).toBe(1); // avg 1 → bottom band
+    expect(data?.levels[row][2]).toBe(0); // no reviews
+  });
+
+  test("null when no valid dates", () => {
+    expect(heatmap([review({ date: "garbage" })], "reviews")).toBeNull();
+  });
+});
