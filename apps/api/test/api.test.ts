@@ -208,3 +208,35 @@ describe("api · body limit", () => {
     }
   });
 });
+
+describe("api · CORS (browser frontend contract)", () => {
+  // These run with NODE_ENV != production, so every origin is allowed. The
+  // critical regression guard is POST: the web app's async job submission
+  // (POST /reviews/jobs) must survive a browser preflight.
+  it("preflights POST /reviews/jobs successfully", async () => {
+    const res = await app.handle(
+      new Request("http://localhost/reviews/jobs", {
+        method: "OPTIONS",
+        headers: {
+          Origin: "http://localhost:8081",
+          "Access-Control-Request-Method": "POST",
+          "Access-Control-Request-Headers": "content-type",
+        },
+      }),
+    );
+    expect(res.status).toBeLessThan(400);
+    expect(res.headers.get("access-control-allow-methods")).toContain("POST");
+    const allowedHeaders = res.headers.get("access-control-allow-headers") ?? "";
+    expect(allowedHeaders.toLowerCase()).toContain("content-type");
+    expect(res.headers.get("access-control-allow-origin")).toBeTruthy();
+  });
+
+  it("sends allow-origin on simple GETs from a browser origin", async () => {
+    const res = await app.handle(
+      new Request("http://localhost/health", {
+        headers: { Origin: "http://localhost:8081" },
+      }),
+    );
+    expect(res.headers.get("access-control-allow-origin")).toBeTruthy();
+  });
+});

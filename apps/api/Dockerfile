@@ -11,20 +11,28 @@ RUN npm install -g bun
 
 WORKDIR /app
 
-# Install production dependencies only (skips biome, tsx, eden, type packages)
-# with a frozen lockfile for reproducible builds. If this fails with "lockfile
-# had changes, but lockfile is frozen", run `bun install` and commit bun.lock.
+# Monorepo-aware install: the build context is the repo root (see
+# docker-compose.yml), where the lockfile lives. Bun needs every workspace
+# manifest present to validate a frozen lockfile; installing with
+# --filter=noviq keeps the web app's Expo tree out of the image. If this fails
+# with "lockfile had changes, but lockfile is frozen", run `bun install` at the
+# repo root and commit bun.lock.
 COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile --production
+COPY apps/api/package.json ./apps/api/
+COPY apps/web/package.json ./apps/web/
+COPY packages/core/package.json ./packages/core/
+RUN bun install --frozen-lockfile --production --filter=noviq
+
+WORKDIR /app/apps/api
 
 # No Chromium download: we reuse the patched Chromium already in the base image
 # (see docker-entrypoint.sh, which points CLOAKBROWSER_BINARY_PATH at it). This
 # avoids baking a second ~400 MB copy into the image.
 
 # Application source + entrypoint.
-COPY tsconfig.json ./
-COPY src ./src
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY apps/api/tsconfig.json ./
+COPY apps/api/src ./src
+COPY apps/api/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Production env. NOVIQ_NO_SANDBOX is required because Chromium runs as root

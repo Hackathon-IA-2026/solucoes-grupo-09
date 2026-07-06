@@ -36,8 +36,13 @@ export const app = new Elysia()
   .use(bodyLimit())
   .use(
     cors({
-      origin: !isProd,
-      methods: ["GET"],
+      // Dev: any origin (local Expo web runs on arbitrary ports). Prod: only
+      // the origins listed in NOVIQ_CORS_ORIGINS — the deployed web app's
+      // origin must be there or its browser calls fail preflight.
+      origin: isProd ? config.corsOrigins : true,
+      // POST is required by the async job API (POST /reviews/jobs).
+      methods: ["GET", "POST", "OPTIONS"],
+      allowedHeaders: ["Content-Type"],
       exposeHeaders: ["Content-Type", "Server-Timing"],
     }),
   )

@@ -8,3 +8,12 @@ output/
 .env.*
 !.env.example
 .clauge-worktrees/
+
+# Expo / web
+.expo/
+expo-env.d.ts
+apps/web/dist/
+
+# Playwright
+test-results/
+playwright-report/

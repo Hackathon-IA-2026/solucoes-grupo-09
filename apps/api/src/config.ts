@@ -29,6 +29,16 @@ export const config = {
    * loaded from — correct for both localhost and most deployments.
    */
   publicUrl: process.env.NOVIQ_PUBLIC_URL || undefined,
+  /**
+   * Browser origins allowed by CORS in production (comma-separated), e.g.
+   * "https://noviq.app,https://www.noviq.app". In development every origin is
+   * allowed. Empty in production → no browser origin is allowed (server-to-
+   * server callers are unaffected; CORS only gates browsers).
+   */
+  corsOrigins: (process.env.NOVIQ_CORS_ORIGINS ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
   /** Default upstream proxy applied to scrapes when the caller omits one. */
   defaultProxy: process.env.NOVIQ_PROXY || undefined,
   /** Match browser geo/locale to the (proxy) exit IP by default. */

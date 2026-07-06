@@ -15,8 +15,10 @@ services:
       retries: 5
 
   api:
-    build: . # builds noviq:latest; the worker reuses this image
-    image: noviq:latest
+    build:
+      context: . # repo root — the Dockerfile needs the root bun.lock + workspace manifests
+      dockerfile: apps/api/Dockerfile
+    image: noviq:latest # the worker reuses this image
     depends_on:
       redis:
         condition: service_healthy
@@ -28,6 +30,7 @@ services:
       NOVIQ_NO_SANDBOX: "1" # Chromium runs as root in the container
       REDIS_URL: redis://redis:6379 # overrides any .env value → in-compose Redis
       NOVIQ_ROLE: api # enqueue async jobs; the worker service processes them
+      # NOVIQ_CORS_ORIGINS: https://noviq.app # REQUIRED for a deployed web frontend
       # NOVIQ_DASHBOARD: "true"   # optional BullMQ dashboard at /jobs (protect it!)
     env_file:
       - path: .env
