@@ -10,7 +10,7 @@ import {
   usePalette,
 } from "@noviq/ui";
 import { useMemo, useState } from "react";
-import { Platform, Text, View } from "react-native";
+import { Platform, Pressable, Text, View } from "react-native";
 import { heatmap } from "@/lib/analytics";
 
 /** Cell + legend styles per intensity level (reference `cellProps`). */
@@ -108,22 +108,26 @@ export function Heatmap({ result }: { result: ScrapeResult }) {
               // biome-ignore lint/suspicious/noArrayIndexKey: grid rows are positional
               <View key={r} style={{ flexDirection: "row", gap: 6 }}>
                 {row.map((level, c) => (
-                  <View
+                  <Pressable
                     // biome-ignore lint/suspicious/noArrayIndexKey: grid cells are positional
                     key={c}
                     accessibilityLabel={`${data.days[c]} ${data.hours[r]}: level ${level}`}
-                    style={{
-                      flex: 1,
-                      aspectRatio: 1,
-                      borderRadius: 6,
-                      borderCurve: "continuous",
-                      ...levelStyle(level, colors),
-                      ...(Platform.OS === "web"
-                        ? ({
-                            transitionProperty: "transform",
-                            transitionDuration: "150ms",
-                          } as object)
-                        : null),
+                    style={(state) => {
+                      const { hovered = false } = state as { hovered?: boolean };
+                      return {
+                        flex: 1,
+                        aspectRatio: 1,
+                        borderRadius: 6,
+                        borderCurve: "continuous",
+                        transform: [{ scale: hovered ? 1.1 : 1 }],
+                        ...levelStyle(level, colors),
+                        ...(Platform.OS === "web"
+                          ? ({
+                              transitionProperty: "transform",
+                              transitionDuration: "150ms",
+                            } as object)
+                          : null),
+                      };
                     }}
                   />
                 ))}

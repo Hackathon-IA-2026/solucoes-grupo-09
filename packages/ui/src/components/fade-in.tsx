@@ -7,6 +7,10 @@ interface FadeInProps extends ViewProps {
   /** Slide-up distance in px (0 = pure fade). */
   distance?: number;
   duration?: number;
+  /** Stagger delay before the animation starts (reference animate-rise). */
+  delay?: number;
+  /** Add a 0.9→1 scale (reference animate-pop, for bubbles/tooltips). */
+  pop?: boolean;
 }
 
 /**
@@ -18,6 +22,8 @@ export function FadeIn({
   children,
   distance = 12,
   duration = motion.slow,
+  delay = 0,
+  pop = false,
   style,
   ...rest
 }: PropsWithChildren<FadeInProps>) {
@@ -32,12 +38,13 @@ export function FadeIn({
     const animation = Animated.timing(progress, {
       toValue: 1,
       duration,
+      delay,
       // The native driver doesn't exist on web; RNW animates on the JS thread.
       useNativeDriver: Platform.OS !== "web",
     });
     animation.start();
     return () => animation.stop();
-  }, [progress, duration, reducedMotion]);
+  }, [progress, duration, delay, reducedMotion]);
 
   return (
     <Animated.View
@@ -53,6 +60,16 @@ export function FadeIn({
                 outputRange: [distance, 0],
               }),
             },
+            ...(pop
+              ? [
+                  {
+                    scale: progress.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.9, 1],
+                    }),
+                  },
+                ]
+              : []),
           ],
         },
       ]}

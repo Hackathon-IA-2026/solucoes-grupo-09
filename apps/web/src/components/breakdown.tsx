@@ -12,7 +12,7 @@ import {
   usePalette,
 } from "@noviq/ui";
 import { useMemo } from "react";
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import Svg, { Circle, Defs, G, Line, Pattern, Rect } from "react-native-svg";
 import { distributionPct, keywords, sentimentMix, versionStats } from "@/lib/analytics";
 
@@ -367,15 +367,19 @@ export function VersionPanel({ result }: { result: ScrapeResult }) {
       />
       <View style={{ marginTop: 16, gap: 4 }}>
         {versions.map((v) => (
-          <View
+          <Pressable
             key={v.version}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 12,
-              borderRadius: radius.md,
-              paddingHorizontal: 8,
-              paddingVertical: 8,
+            style={(state) => {
+              const { hovered = false } = state as { hovered?: boolean };
+              return {
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 12,
+                borderRadius: radius.md,
+                paddingHorizontal: 8,
+                paddingVertical: 8,
+                backgroundColor: hovered ? "rgba(38, 38, 43, 0.6)" : "transparent",
+              };
             }}
           >
             <Text
@@ -430,7 +434,7 @@ export function VersionPanel({ result }: { result: ScrapeResult }) {
             >
               {v.reviews}
             </Text>
-          </View>
+          </Pressable>
         ))}
       </View>
     </Panel>

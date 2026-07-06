@@ -1,6 +1,7 @@
 import { averageRating, formatCompact, type ScrapeResult } from "@noviq/core";
 import {
   ArrowUpRightIcon,
+  FadeIn,
   IconCircle,
   IconCircleButton,
   MessageSquareReplyIcon,
@@ -38,6 +39,7 @@ export function StatCards({ result }: { result: ScrapeResult }) {
     >
       <StatCard
         highlight
+        delay={0}
         basis={basis}
         icon={<StarIcon size={18} color={colors.onAccent} filled />}
         label="Average rating"
@@ -51,6 +53,7 @@ export function StatCards({ result }: { result: ScrapeResult }) {
         deltaLabel="vs store average"
       />
       <StatCard
+        delay={70}
         basis={basis}
         icon={<UsersIcon size={18} color={colors.inkMuted} />}
         label="Reviews scraped"
@@ -60,6 +63,7 @@ export function StatCards({ result }: { result: ScrapeResult }) {
         deltaLabel={result.partial ? "pull was cut short" : "full pull"}
       />
       <StatCard
+        delay={140}
         basis={basis}
         icon={<MessageSquareReplyIcon size={18} color={colors.inkMuted} />}
         label="Response rate"
@@ -69,6 +73,7 @@ export function StatCards({ result }: { result: ScrapeResult }) {
         deltaLabel="developer replies"
       />
       <StatCard
+        delay={210}
         basis={basis}
         icon={<SmileIcon size={18} color={colors.inkMuted} />}
         label="Positive sentiment"
@@ -90,6 +95,7 @@ function StatCard({
   deltaPositive,
   deltaLabel,
   highlight = false,
+  delay = 0,
 }: {
   basis: `${number}%`;
   icon: ReactNode;
@@ -99,10 +105,13 @@ function StatCard({
   deltaPositive: boolean;
   deltaLabel: string;
   highlight?: boolean;
+  delay?: number;
 }) {
   const colors = usePalette();
   return (
-    <View
+    <FadeIn
+      duration={500}
+      delay={delay}
       style={{
         flexBasis: basis,
         flexGrow: 1,
@@ -183,6 +192,6 @@ function StatCard({
         </Text>{" "}
         {deltaLabel}
       </Text>
-    </View>
+    </FadeIn>
   );
 }

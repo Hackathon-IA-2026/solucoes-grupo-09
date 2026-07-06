@@ -2,13 +2,21 @@ import type { ReactNode } from "react";
 import { Text, View, type ViewProps } from "react-native";
 import { usePalette } from "../hooks/use-palette";
 import { radius } from "../tokens";
+import { FadeIn } from "./fade-in";
 import { IconCircle } from "./pill";
 
-/** Rounded-3xl card with hairline border — every dashboard block. */
-export function Panel({ children, style, ...rest }: { children: ReactNode } & ViewProps) {
+/** Rounded-3xl card with hairline border — every dashboard block (rises in). */
+export function Panel({
+  children,
+  style,
+  delay = 0,
+  ...rest
+}: { children: ReactNode; delay?: number } & ViewProps) {
   const colors = usePalette();
   return (
-    <View
+    <FadeIn
+      duration={500}
+      delay={delay}
       {...rest}
       style={[
         {
@@ -23,7 +31,7 @@ export function Panel({ children, style, ...rest }: { children: ReactNode } & Vi
       ]}
     >
       {children}
-    </View>
+    </FadeIn>
   );
 }
 

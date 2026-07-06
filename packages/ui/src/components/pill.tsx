@@ -240,7 +240,7 @@ export function IconCircleButton({
                   : "transparent"),
           borderWidth: tone === "outline" ? 1 : 0,
           borderColor: colors.border,
-          transform: [{ scale: pressed ? 0.92 : 1 }],
+          transform: [{ scale: pressed ? 0.92 : hovered && onPress ? 1.05 : 1 }],
           ...focusRing(focused, colors.focus),
           ...(Platform.OS === "web" && onPress
             ? ({

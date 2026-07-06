@@ -1,5 +1,6 @@
 import { formatCompact, type ScrapeResult } from "@noviq/core";
 import {
+  FadeIn,
   IconCircleButton,
   MoreHorizontalIcon,
   Panel,
@@ -225,8 +226,12 @@ export function TimelineChart({ result }: { result: ScrapeResult }) {
 
         {scale > 0 ? (
           <>
-            {/* lime delta bubble with a downward tail */}
-            <View
+            {/* lime delta bubble with a downward tail (pops on change) */}
+            <FadeIn
+              key={`delta-${active}-${range}`}
+              pop
+              duration={320}
+              distance={6}
               pointerEvents="none"
               testID="timeline-delta"
               style={{
@@ -270,10 +275,14 @@ export function TimelineChart({ result }: { result: ScrapeResult }) {
                   borderTopColor: colors.accent,
                 }}
               />
-            </View>
+            </FadeIn>
 
-            {/* glass tooltip, offset right of the bar */}
-            <View
+            {/* glass tooltip, offset right of the bar (pops on change) */}
+            <FadeIn
+              key={`tip-${active}-${range}`}
+              pop
+              duration={320}
+              distance={6}
               pointerEvents="none"
               testID="timeline-tooltip"
               style={{
@@ -308,7 +317,7 @@ export function TimelineChart({ result }: { result: ScrapeResult }) {
               >
                 {cur.count.toLocaleString("en-US")}
               </RNText>
-            </View>
+            </FadeIn>
           </>
         ) : null}
       </View>
