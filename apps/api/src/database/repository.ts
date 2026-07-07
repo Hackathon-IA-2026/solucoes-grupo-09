@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, type SQL, sql } from "drizzle-orm";
 import type { AppInfo, Review, ScrapeResult, Store } from "../types.js";
 import type { Database } from "./connection.js";
 import { database } from "./connection.js";
@@ -37,7 +37,9 @@ export interface ReviewRepository {
 export function createReviewRepository(db: Database): ReviewRepository {
   return {
     async saveReviews(rows) {
-      if (rows.length === 0) return 0;
+      if (rows.length === 0) {
+        return 0;
+      }
       const values = rows.map((r) => ({
         store: r.store,
         id: r.id,
@@ -56,11 +58,11 @@ export function createReviewRepository(db: Database): ReviewRepository {
       // Re-scraping refreshes the row (e.g. a new developer response) rather
       // than inserting a duplicate. Chunked so a large library-side pull can't
       // exceed Postgres's 65,534 bind-parameter cap (13 params per row).
-      const CHUNK = 1_000;
-      for (let i = 0; i < values.length; i += CHUNK) {
+      const Chunk = 1000;
+      for (let i = 0; i < values.length; i += Chunk) {
         await db
           .insert(reviews)
-          .values(values.slice(i, i + CHUNK))
+          .values(values.slice(i, i + Chunk))
           .onConflictDoUpdate({
             target: [reviews.store, reviews.id],
             set: {
@@ -83,14 +85,20 @@ export function createReviewRepository(db: Database): ReviewRepository {
     },
 
     async listReviews({ store, appId, country, limit }) {
-      const conds = [];
-      if (store) conds.push(eq(reviews.store, store));
-      if (appId) conds.push(eq(reviews.appId, appId));
-      if (country) conds.push(eq(reviews.country, country.toLowerCase()));
+      const conds: SQL[] = [];
+      if (store) {
+        conds.push(eq(reviews.store, store));
+      }
+      if (appId) {
+        conds.push(eq(reviews.appId, appId));
+      }
+      if (country) {
+        conds.push(eq(reviews.country, country.toLowerCase()));
+      }
       return db
         .select()
         .from(reviews)
-        .where(conds.length ? and(...conds) : undefined)
+        .where(conds.length > 0 ? and(...conds) : undefined)
         .orderBy(desc(reviews.date))
         .limit(limit);
     },
@@ -151,14 +159,20 @@ export function createReviewRepository(db: Database): ReviewRepository {
     },
 
     async listApps({ store, appId, country, limit }) {
-      const conds = [];
-      if (store) conds.push(eq(apps.store, store));
-      if (appId) conds.push(eq(apps.appId, appId));
-      if (country) conds.push(eq(apps.country, country.toLowerCase()));
+      const conds: SQL[] = [];
+      if (store) {
+        conds.push(eq(apps.store, store));
+      }
+      if (appId) {
+        conds.push(eq(apps.appId, appId));
+      }
+      if (country) {
+        conds.push(eq(apps.country, country.toLowerCase()));
+      }
       return db
         .select()
         .from(apps)
-        .where(conds.length ? and(...conds) : undefined)
+        .where(conds.length > 0 ? and(...conds) : undefined)
         .orderBy(desc(apps.scrapedAt))
         .limit(limit);
     },

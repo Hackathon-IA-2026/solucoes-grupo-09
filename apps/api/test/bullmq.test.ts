@@ -25,7 +25,9 @@ async function waitFor(
 ): Promise<JobRecord | null> {
   for (let i = 0; i < tries; i++) {
     const r = await runner.status(id);
-    if (r?.status === want) return r;
+    if (r?.status === want) {
+      return r;
+    }
     await new Promise((res) => setTimeout(res, 25));
   }
   return runner.status(id);
@@ -36,7 +38,9 @@ suite("jobs · bullmq runner (real Redis)", () => {
   // returns ok(limit). Closed once in afterAll to avoid create/close churn.
   const runner = createBullMqRunner(
     async (q) => {
-      if (q.appId === "FAIL") throw new Error("ECONN dsn=secret leak");
+      if (q.appId === "FAIL") {
+        throw new Error("ECONN dsn=secret leak");
+      }
       return ok(q.limit ?? 0);
     },
     REDIS as string,
@@ -72,7 +76,9 @@ suite("jobs · bullmq runner (real Redis)", () => {
     const retryRunner = createBullMqRunner(
       async (q) => {
         attempts++;
-        if (attempts < 2) throw new Error("transient blip");
+        if (attempts < 2) {
+          throw new Error("transient blip");
+        }
         return ok(q.limit ?? 0);
       },
       REDIS as string,

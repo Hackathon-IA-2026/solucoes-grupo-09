@@ -20,11 +20,10 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "output": "static"
     },
     "plugins": [
-      "expo-router",
+      ["expo-router", { "sitemap": false }],
       [
         "expo-splash-screen",
         {

@@ -11,7 +11,7 @@ import {
 } from "@noviq/ui";
 import { Image } from "expo-image";
 import { useState } from "react";
-import { Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { FlatList, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 const TABS = [
   { label: "Overview", icon: true },
@@ -20,6 +20,10 @@ const TABS = [
   { label: "Audiences" },
   { label: "Reports" },
 ] as const;
+
+// Stable array instance for FlatList `data` (a fresh spread each render would
+// redraw every row).
+const TAB_DATA = [...TABS];
 
 /**
  * Reference `TopNav`: grape logo tile, scrollable tab pills (lime active,
@@ -50,18 +54,18 @@ export function TopNavFull() {
       </View>
 
       {/* tab pills */}
-      <ScrollView
-        horizontal
+      <FlatList
+        horizontal={true}
+        data={TAB_DATA}
+        keyExtractor={(tab) => tab.label}
         showsHorizontalScrollIndicator={false}
         style={{ flex: 1 }}
         contentContainerStyle={{ flexDirection: "row", alignItems: "center", gap: 8 }}
-      >
-        {TABS.map((tab) => {
+        renderItem={({ item: tab }) => {
           const isActive = active === tab.label;
           const fg = isActive ? colors.onAccent : colors.inkMuted;
           return (
             <Pill
-              key={tab.label}
               accessibilityRole="tab"
               label={tab.label}
               active={isActive}
@@ -87,7 +91,7 @@ export function TopNavFull() {
                     }}
                   >
                     <Text
-                      style={{ fontSize: 11, fontWeight: "700", color: colors.onAccent }}
+                      style={{ fontSize: 12, fontWeight: "700", color: colors.onAccent }}
                     >
                       {tab.badge}
                     </Text>
@@ -100,8 +104,8 @@ export function TopNavFull() {
               }
             />
           );
-        })}
-      </ScrollView>
+        }}
+      />
 
       {/* right cluster */}
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -112,17 +116,10 @@ export function TopNavFull() {
           <View>
             <BellIcon size={18} color={colors.inkMuted} />
             <View
-              style={{
-                position: "absolute",
-                top: -2,
-                right: -2,
-                width: 8,
-                height: 8,
-                borderRadius: 4,
-                backgroundColor: colors.accent,
-                borderWidth: 2,
-                borderColor: colors.surface,
-              }}
+              style={[
+                styles.bellDot,
+                { backgroundColor: colors.accent, borderColor: colors.surface },
+              ]}
             />
           </View>
         </IconCircleButton>
@@ -154,6 +151,18 @@ export function TopNavFull() {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  bellDot: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 2,
+  },
+});
 
 /**
  * Current dashboard header: just the bolt mark, centered — tapping it

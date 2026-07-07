@@ -32,7 +32,7 @@
     "lint": "bunx biome check",
     "lint:check": "bunx biome check --write",
     "lint:format": "bunx biome format --write",
-    "test": "REDIS_URL= DATABASE_URL= bun test test/unit.test.ts test/patterns.test.ts test/errors.test.ts test/concurrency.test.ts test/service.test.ts test/appinfo.test.ts test/adapters.test.ts test/output.test.ts test/job.test.ts test/job-api.test.ts test/pipeline.test.ts test/service-scrape.test.ts test/api.test.ts",
+    "test": "REDIS_URL= DATABASE_URL= bun test test/unit.test.ts test/patterns.test.ts test/errors.test.ts test/concurrency.test.ts test/service.test.ts test/appinfo.test.ts test/adapters.test.ts test/output.test.ts test/job.test.ts test/job-api.test.ts test/pipeline.test.ts test/service-scrape.test.ts test/rate-limit.test.ts test/api.test.ts",
     "test:redis": "NOVIQ_TEST_REDIS_URL=redis://localhost:6390 REDIS_URL= DATABASE_URL= bun test test/bullmq.test.ts",
     "test:db": "DATABASE_URL=postgres://postgres:noviq@localhost:5433/noviq bun run db:push && NOVIQ_TEST_DATABASE_URL=postgres://postgres:noviq@localhost:5433/noviq DATABASE_URL= REDIS_URL= bun test test/database.test.ts",
     "test:live": "NOVIQ_LIVE=1 bun test test/live.test.ts",

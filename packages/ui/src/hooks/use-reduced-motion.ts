@@ -12,7 +12,9 @@ export function useReducedMotion(): boolean {
 
   useEffect(() => {
     if (Platform.OS === "web") {
-      if (typeof window === "undefined" || !window.matchMedia) return;
+      if (typeof window === "undefined" || !window.matchMedia) {
+        return;
+      }
       const query = window.matchMedia("(prefers-reduced-motion: reduce)");
       setReduced(query.matches);
       const onChange = (event: MediaQueryListEvent) => setReduced(event.matches);
@@ -21,7 +23,9 @@ export function useReducedMotion(): boolean {
     }
     let mounted = true;
     void AccessibilityInfo.isReduceMotionEnabled().then((value) => {
-      if (mounted) setReduced(value);
+      if (mounted) {
+        setReduced(value);
+      }
     });
     const subscription = AccessibilityInfo.addEventListener(
       "reduceMotionChanged",

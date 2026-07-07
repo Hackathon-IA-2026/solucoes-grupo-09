@@ -11,22 +11,22 @@ import {
   radius,
   usePalette,
 } from "@noviq/ui";
-import { useMemo } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, Defs, G, Line, Pattern, Rect } from "react-native-svg";
 import { distributionPct, keywords, sentimentMix, versionStats } from "@/lib/analytics";
 
 /** Reference `RatingDistribution`: icon-circle header, 5→1 star bars. */
 export function RatingDistribution({ result }: { result: ScrapeResult }) {
   const colors = usePalette();
-  const dist = useMemo(() => distributionPct(result.reviews), [result.reviews]);
+  const dist = distributionPct(result.reviews);
   // Store-wide histogram (crawled from the product page) → comparison ticks.
-  const storeDist = useMemo(() => {
-    const h = result.appInfo?.histogram;
-    if (h?.length !== 5) return null;
-    const total = h.reduce((a, b) => a + b, 0);
-    return total > 0 ? h.map((n) => (n / total) * 100) : null;
-  }, [result.appInfo?.histogram]);
+  const histogram = result.appInfo?.histogram;
+  const histogramTotal =
+    histogram?.length === 5 ? histogram.reduce((a, b) => a + b, 0) : 0;
+  const storeDist =
+    histogram?.length === 5 && histogramTotal > 0
+      ? histogram.map((n) => (n / histogramTotal) * 100)
+      : null;
   // Bars and store markers must share ONE scale or marker positions lie
   // (and an all-zero scrape would pin every marker at the bar edge).
   const max = Math.max(1, ...dist, ...(storeDist ?? []));
@@ -79,6 +79,8 @@ export function RatingDistribution({ result }: { result: ScrapeResult }) {
                 {storeDist ? (
                   // Store-wide marker: where the whole store sits for this star.
                   <View
+                    // `img` role: aria-label is prohibited on a bare div.
+                    accessibilityRole="image"
                     accessibilityLabel={`Store-wide: ${storeDist[star - 1].toFixed(1)}%`}
                     style={{
                       position: "absolute",
@@ -115,7 +117,7 @@ export function RatingDistribution({ result }: { result: ScrapeResult }) {
           <View
             style={{ width: 2, height: 10, backgroundColor: colors.ink, opacity: 0.55 }}
           />
-          <Text style={{ fontSize: 10, color: colors.inkFaint }}>
+          <Text style={{ fontSize: 12, color: colors.inkFaint }}>
             store-wide distribution marker — your scrape vs all ratings
           </Text>
         </View>
@@ -131,7 +133,7 @@ export function RatingDistribution({ result }: { result: ScrapeResult }) {
  */
 export function SentimentRing({ result }: { result: ScrapeResult }) {
   const colors = usePalette();
-  const mix = useMemo(() => sentimentMix(result.reviews), [result.reviews]);
+  const mix = sentimentMix(result.reviews);
   const total = result.count;
   const segs = [
     {
@@ -301,12 +303,12 @@ export function SentimentRing({ result }: { result: ScrapeResult }) {
                   ...(seg.hatch ? hatchGrape() : { backgroundColor: seg.color }),
                 }}
               />
-              <Text style={{ fontSize: 11, color: colors.inkMuted }}>{seg.label}</Text>
+              <Text style={{ fontSize: 12, color: colors.inkMuted }}>{seg.label}</Text>
             </View>
           </View>
         ))}
       </View>
-      <Text style={{ marginTop: 10, fontSize: 10, color: colors.inkFaint }}>
+      <Text style={{ marginTop: 10, fontSize: 12, color: colors.inkFaint }}>
         from star ratings + review-text analysis
       </Text>
     </Panel>
@@ -316,8 +318,10 @@ export function SentimentRing({ result }: { result: ScrapeResult }) {
 /** Reference `KeywordPanel`: icon-circle header + tone-tinted pills. */
 export function KeywordPanel({ result }: { result: ScrapeResult }) {
   const colors = usePalette();
-  const words = useMemo(() => keywords(result.reviews), [result.reviews]);
-  if (words.length === 0) return null;
+  const words = keywords(result.reviews);
+  if (words.length === 0) {
+    return null;
+  }
   const max = Math.max(...words.map((w) => w.count));
   return (
     <Panel>
@@ -350,16 +354,10 @@ export function KeywordPanel({ result }: { result: ScrapeResult }) {
           return (
             <View
               key={word.word}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                borderRadius: radius.pill,
-                borderWidth: 1,
-                borderColor: tone.border,
-                backgroundColor: tone.bg,
-                paddingHorizontal: 12,
-                paddingVertical: 6,
-              }}
+              style={[
+                styles.keywordPill,
+                { borderColor: tone.border, backgroundColor: tone.bg },
+              ]}
             >
               <Text
                 style={{
@@ -389,15 +387,25 @@ export function KeywordPanel({ result }: { result: ScrapeResult }) {
   );
 }
 
+const styles = StyleSheet.create({
+  keywordPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+});
+
 /** Reference `VersionPanel`: icon-circle header + lime rating bars per release. */
 export function VersionPanel({ result }: { result: ScrapeResult }) {
   const colors = usePalette();
-  const breakdown = useMemo(
-    () => versionStats(result.reviews, result.appInfo?.versionHistory),
-    [result.reviews, result.appInfo?.versionHistory],
-  );
+  const breakdown = versionStats(result.reviews, result.appInfo?.versionHistory);
   const versions = breakdown.stats;
-  if (versions.length === 0) return null;
+  if (versions.length === 0) {
+    return null;
+  }
   return (
     <Panel style={{ flexGrow: 1, flexBasis: 300 }}>
       <PanelHeader
@@ -406,7 +414,7 @@ export function VersionPanel({ result }: { result: ScrapeResult }) {
         subtitle="Recent releases"
       />
       {breakdown.approximate ? (
-        <Text style={{ marginTop: 8, fontSize: 10, color: colors.inkFaint }}>
+        <Text style={{ marginTop: 8, fontSize: 12, color: colors.inkFaint }}>
           approximated from App Store release dates
           {breakdown.excluded > 0
             ? ` · ${breakdown.excluded} older ${
@@ -436,7 +444,7 @@ export function VersionPanel({ result }: { result: ScrapeResult }) {
               numberOfLines={1}
               style={{
                 width: 56,
-                fontSize: 11,
+                fontSize: 12,
                 color: colors.inkMuted,
                 fontVariant: ["tabular-nums"],
               }}

@@ -102,7 +102,9 @@ describe("Pipeline + Chain of Responsibility · ReviewPipeline", () => {
 
   it("limit(0) / undefined is unlimited", () => {
     const stage = limit(undefined);
-    for (let i = 0; i < 5; i++) expect(stage(review())).toBe("accept");
+    for (let i = 0; i < 5; i++) {
+      expect(stage(review())).toBe("accept");
+    }
   });
 
   it("short-circuits on the first non-accept verdict (order matters)", () => {

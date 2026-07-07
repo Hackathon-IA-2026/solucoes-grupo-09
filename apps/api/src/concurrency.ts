@@ -39,8 +39,11 @@ export class Semaphore {
 
   private release(): void {
     const next = this.waiters.shift();
-    if (next) next();
-    else this.active--;
+    if (next) {
+      next();
+    } else {
+      this.active--;
+    }
   }
 
   get stats(): { active: number; queued: number; max: number } {

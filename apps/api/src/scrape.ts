@@ -28,7 +28,9 @@ export function streamReviews(
 /** Collect every matching review into an array. */
 export async function getReviews(opts: ScrapeOptions): Promise<Review[]> {
   const out: Review[] = [];
-  for await (const review of streamReviews(opts)) out.push(review);
+  for await (const review of streamReviews(opts)) {
+    out.push(review);
+  }
   return out;
 }
 

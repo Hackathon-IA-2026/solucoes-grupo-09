@@ -29,16 +29,16 @@ describe("formatCompact", () => {
     expect(formatCompact(950)).toBe("950");
   });
   test("thousands / millions / billions", () => {
-    expect(formatCompact(1_400)).toBe("1.4K");
+    expect(formatCompact(1400)).toBe("1.4K");
     expect(formatCompact(14_000)).toBe("14K");
     expect(formatCompact(2_100_000)).toBe("2.1M");
     expect(formatCompact(3_000_000_000)).toBe("3B");
   });
   test("drops the pointless .0", () => {
-    expect(formatCompact(2_000)).toBe("2K");
+    expect(formatCompact(2000)).toBe("2K");
   });
   test("negative and non-finite inputs are safe", () => {
-    expect(formatCompact(-1_500)).toBe("-1.5K");
+    expect(formatCompact(-1500)).toBe("-1.5K");
     expect(formatCompact(Number.NaN)).toBe("0");
   });
 });

@@ -27,7 +27,7 @@ import {
 } from "@noviq/ui";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { exportText } from "@/lib/download";
 import {
@@ -62,12 +62,13 @@ export function Dashboard({
   const [width, onLayout] = useContainerWidth();
   const wide = width >= 900;
   const [view, setView] = useState<View_>("All");
-  const average = useMemo(() => averageRating(result.reviews), [result.reviews]);
   const [exported, setExported] = useState<string | null>(null);
   const exportTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(
     () => () => {
-      if (exportTimer.current) clearTimeout(exportTimer.current);
+      if (exportTimer.current) {
+        clearTimeout(exportTimer.current);
+      }
     },
     [],
   );
@@ -81,12 +82,12 @@ export function Dashboard({
     const filename = exportFilename(result.appId, result.country, kind);
     void exportText(content, filename, kind === "csv" ? "text/csv" : "application/json");
     setExported(filename);
-    if (exportTimer.current) clearTimeout(exportTimer.current);
-    exportTimer.current = setTimeout(() => setExported(null), 4_000);
+    if (exportTimer.current) {
+      clearTimeout(exportTimer.current);
+    }
+    exportTimer.current = setTimeout(() => setExported(null), 4000);
   }
 
-  const appName = result.appInfo?.name ?? result.appId;
-  const isApple = result.store === "apple";
   const showTrends = view === "All" || view === "Trends";
   const showSentiment = view === "All" || view === "Sentiment";
   const showReviews = view === "All" || view === "Reviews";
@@ -107,133 +108,12 @@ export function Dashboard({
       <TopNav onHome={onNewScrape} />
 
       {/* Hero header */}
-      <View
-        style={{
-          marginTop: 12,
-          flexDirection: "row",
-          flexWrap: "wrap",
-          alignItems: "flex-end",
-          justifyContent: "space-between",
-          gap: space.xl,
-        }}
-      >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: space.lg }}>
-          {result.appInfo?.icon ? (
-            <Image
-              source={{ uri: result.appInfo.icon }}
-              style={{ width: 64, height: 64, borderRadius: radius.lg }}
-              contentFit="cover"
-              accessibilityLabel={`${appName} icon`}
-              transition={150}
-            />
-          ) : (
-            <View
-              style={{
-                width: 64,
-                height: 64,
-                borderRadius: radius.lg,
-                borderCurve: "continuous",
-                backgroundColor: colors.accent,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Text style={{ fontSize: 24, fontWeight: "700", color: colors.onAccent }}>
-                {appName.slice(0, 1).toUpperCase()}
-              </Text>
-            </View>
-          )}
-          <View>
-            <Text style={{ fontSize: 14, color: colors.inkMuted }}>
-              Scraped results for
-            </Text>
-            <View
-              style={{
-                flexDirection: "row",
-                flexWrap: "wrap",
-                alignItems: "center",
-                gap: 12,
-              }}
-            >
-              <Text
-                accessibilityRole="header"
-                aria-level={1}
-                style={{
-                  fontSize: wide ? 44 : 34,
-                  lineHeight: wide ? 48 : 38,
-                  fontWeight: "600",
-                  letterSpacing: -1,
-                  color: colors.ink,
-                }}
-              >
-                {appName}
-              </Text>
-              {/* grape store pill */}
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 6,
-                  borderRadius: radius.pill,
-                  backgroundColor: colors.violet,
-                  paddingHorizontal: 12,
-                  paddingVertical: 4,
-                }}
-              >
-                {isApple ? (
-                  <AppleIcon size={12} color="#FFFFFF" />
-                ) : (
-                  <PlayIcon size={12} color="#FFFFFF" />
-                )}
-                <Text style={{ fontSize: 12, fontWeight: "600", color: "#FFFFFF" }}>
-                  {isApple ? "App Store" : "Google Play"}
-                </Text>
-              </View>
-            </View>
-            <View
-              style={{
-                marginTop: 6,
-                flexDirection: "row",
-                flexWrap: "wrap",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
-              <Stars value={result.appInfo?.averageRating ?? average} size={15} />
-              <Text style={{ fontSize: 14, color: colors.inkMuted }}>
-                {(result.appInfo?.averageRating ?? average).toFixed(1)}
-                {result.appInfo?.ratingCount
-                  ? ` · ${formatCompact(result.appInfo.ratingCount)} ratings`
-                  : ` · ${formatCompact(result.count)} scraped`}
-                {result.appInfo?.developer ? ` · ${result.appInfo.developer}` : ""}
-                {result.appInfo?.installsText
-                  ? ` · ${result.appInfo.installsText} installs`
-                  : ""}
-                {result.appInfo?.updated
-                  ? ` · updated ${formatDate(result.appInfo.updated)}`
-                  : ""}{" "}
-                · {result.country.toUpperCase()}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <PillButton
-            testID="export-json"
-            label="JSON"
-            icon={<DownloadIcon size={15} color={colors.ink} />}
-            onPress={() => download("json")}
-          />
-          <PillButton
-            testID="new-scrape"
-            label="New scrape"
-            primary
-            icon={<RotateCcwIcon size={15} color={colors.onAccent} />}
-            onPress={onNewScrape}
-          />
-        </View>
-      </View>
+      <HeroHeader
+        result={result}
+        wide={wide}
+        onNewScrape={onNewScrape}
+        onExportJson={() => download("json")}
+      />
 
       {exported ? (
         <FadeIn duration={150} distance={4}>
@@ -265,7 +145,7 @@ export function Dashboard({
           }}
         >
           <Text
-            selectable
+            selectable={true}
             style={{ fontSize: 14, lineHeight: 20, color: colors.onWarningSoft }}
           >
             Partial result — the scrape was cut short, so this is what we could safely
@@ -277,47 +157,7 @@ export function Dashboard({
       <StatCards result={result} />
 
       {/* Filter row: functional view pills + tool cluster */}
-      <View
-        style={{
-          flexDirection: "row",
-          flexWrap: "wrap",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 12,
-        }}
-      >
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          {VIEWS.map((v) => (
-            <Pill
-              key={v}
-              accessibilityRole="tab"
-              label={v}
-              active={view === v}
-              onPress={() => setView(v)}
-              testID={`view-${v.toLowerCase()}`}
-            />
-          ))}
-        </View>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <IconCircleButton label="Filter" tone="outline" size={40} onPress={() => {}}>
-            <SlidersHorizontalIcon size={16} color={colors.inkMuted} />
-          </IconCircleButton>
-          <IconCircleButton
-            label="Date range"
-            tone="outline"
-            size={40}
-            onPress={() => {}}
-          >
-            <CalendarDaysIcon size={16} color={colors.inkMuted} />
-          </IconCircleButton>
-          <PillButton
-            testID="export-csv"
-            label="Download reports"
-            icon={<DownloadIcon size={15} color={colors.ink} />}
-            onPress={() => download("csv")}
-          />
-        </View>
-      </View>
+      <FilterRow view={view} onView={setView} onExportCsv={() => download("csv")} />
 
       {/* Charts */}
       {showTrends ? (
@@ -361,5 +201,204 @@ export function Dashboard({
         </Text>
       </View>
     </FadeIn>
+  );
+}
+
+/** Oversized hero header: app icon, name + grape store pill, rating line, actions. */
+function HeroHeader({
+  result,
+  wide,
+  onNewScrape,
+  onExportJson,
+}: {
+  result: ScrapeResult;
+  wide: boolean;
+  onNewScrape: () => void;
+  onExportJson: () => void;
+}) {
+  const colors = usePalette();
+  const average = averageRating(result.reviews);
+  const appName = result.appInfo?.name ?? result.appId;
+  const isApple = result.store === "apple";
+
+  return (
+    <View
+      style={{
+        marginTop: 12,
+        flexDirection: "row",
+        flexWrap: "wrap",
+        alignItems: "flex-end",
+        justifyContent: "space-between",
+        gap: space.xl,
+      }}
+    >
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space.lg }}>
+        {result.appInfo?.icon ? (
+          <Image
+            source={{ uri: result.appInfo.icon }}
+            style={{ width: 64, height: 64, borderRadius: radius.lg }}
+            contentFit="cover"
+            accessibilityLabel={`${appName} icon`}
+            transition={150}
+          />
+        ) : (
+          <View
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: radius.lg,
+              borderCurve: "continuous",
+              backgroundColor: colors.accent,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Text style={{ fontSize: 24, fontWeight: "700", color: colors.onAccent }}>
+              {appName.slice(0, 1).toUpperCase()}
+            </Text>
+          </View>
+        )}
+        <View>
+          <Text style={{ fontSize: 14, color: colors.inkMuted }}>
+            Scraped results for
+          </Text>
+          <View
+            style={{
+              flexDirection: "row",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: 12,
+            }}
+          >
+            <Text
+              accessibilityRole="header"
+              aria-level={1}
+              style={{
+                fontSize: wide ? 44 : 34,
+                lineHeight: wide ? 48 : 38,
+                fontWeight: "600",
+                letterSpacing: -1,
+                color: colors.ink,
+              }}
+            >
+              {appName}
+            </Text>
+            {/* grape store pill */}
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+                borderRadius: radius.pill,
+                backgroundColor: colors.violet,
+                paddingHorizontal: 12,
+                paddingVertical: 4,
+              }}
+            >
+              {isApple ? (
+                <AppleIcon size={12} color="#FFFFFF" />
+              ) : (
+                <PlayIcon size={12} color="#FFFFFF" />
+              )}
+              <Text style={{ fontSize: 12, fontWeight: "600", color: "#FFFFFF" }}>
+                {isApple ? "App Store" : "Google Play"}
+              </Text>
+            </View>
+          </View>
+          <View
+            style={{
+              marginTop: 6,
+              flexDirection: "row",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <Stars value={result.appInfo?.averageRating ?? average} size={15} />
+            <Text style={{ fontSize: 14, color: colors.inkMuted }}>
+              {(result.appInfo?.averageRating ?? average).toFixed(1)}
+              {result.appInfo?.ratingCount
+                ? ` · ${formatCompact(result.appInfo.ratingCount)} ratings`
+                : ` · ${formatCompact(result.count)} scraped`}
+              {result.appInfo?.developer ? ` · ${result.appInfo.developer}` : ""}
+              {result.appInfo?.installsText
+                ? ` · ${result.appInfo.installsText} installs`
+                : ""}
+              {result.appInfo?.updated
+                ? ` · updated ${formatDate(result.appInfo.updated)}`
+                : ""}{" "}
+              · {result.country.toUpperCase()}
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <PillButton
+          testID="export-json"
+          label="JSON"
+          icon={<DownloadIcon size={15} color={colors.ink} />}
+          onPress={onExportJson}
+        />
+        <PillButton
+          testID="new-scrape"
+          label="New scrape"
+          primary={true}
+          icon={<RotateCcwIcon size={15} color={colors.onAccent} />}
+          onPress={onNewScrape}
+        />
+      </View>
+    </View>
+  );
+}
+
+/** View-filter pills (All / Trends / Sentiment / Reviews) + the tool cluster. */
+function FilterRow({
+  view,
+  onView,
+  onExportCsv,
+}: {
+  view: View_;
+  onView: (view: View_) => void;
+  onExportCsv: () => void;
+}) {
+  const colors = usePalette();
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        flexWrap: "wrap",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 12,
+      }}
+    >
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        {VIEWS.map((v) => (
+          <Pill
+            key={v}
+            accessibilityRole="tab"
+            label={v}
+            active={view === v}
+            onPress={() => onView(v)}
+            testID={`view-${v.toLowerCase()}`}
+          />
+        ))}
+      </View>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <IconCircleButton label="Filter" tone="outline" size={40} onPress={() => {}}>
+          <SlidersHorizontalIcon size={16} color={colors.inkMuted} />
+        </IconCircleButton>
+        <IconCircleButton label="Date range" tone="outline" size={40} onPress={() => {}}>
+          <CalendarDaysIcon size={16} color={colors.inkMuted} />
+        </IconCircleButton>
+        <PillButton
+          testID="export-csv"
+          label="Download reports"
+          icon={<DownloadIcon size={15} color={colors.ink} />}
+          onPress={onExportCsv}
+        />
+      </View>
+    </View>
   );
 }

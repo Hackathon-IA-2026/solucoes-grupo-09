@@ -1,0 +1,12 @@
+{
+  "$schema": "https://react.doctor/schema/config.json",
+  // Rationale lives in docs/lint-policy.md (repo root).
+  "ignore": {
+    "rules": [
+      // Deliberate: FadeIn uses the built-in RN Animated API — pulling in
+      // react-native-reanimated would add ~½MB to the web bundle for a mount
+      // fade, working against the Lighthouse performance budget.
+      "react-doctor/rn-prefer-reanimated"
+    ]
+  }
+}

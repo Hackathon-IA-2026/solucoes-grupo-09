@@ -176,11 +176,15 @@ export function analyzeSentiment(text: string): SentimentAnalysis {
       .filter(Boolean);
     for (let i = 0; i < words.length; i++) {
       const base = LEXICON[words[i]];
-      if (base === undefined) continue;
+      if (base === undefined) {
+        continue;
+      }
       let score = base;
       const prev = words[i - 1];
       const prev2 = words[i - 2];
-      if (prev && INTENSIFIERS.has(prev)) score *= 1.5;
+      if (prev && INTENSIFIERS.has(prev)) {
+        score *= 1.5;
+      }
       if ((prev && NEGATORS.has(prev)) || (prev2 && NEGATORS.has(prev2))) {
         score = -score * 0.8;
       }
@@ -188,7 +192,9 @@ export function analyzeSentiment(text: string): SentimentAnalysis {
       hits++;
     }
   }
-  if (hits === 0) return { score: 0, hits: 0 };
+  if (hits === 0) {
+    return { score: 0, hits: 0 };
+  }
   // Normalize: average word score mapped into [-1, 1] (±4 is the scale cap).
   return { score: Math.max(-1, Math.min(1, total / hits / 4)), hits };
 }
@@ -220,6 +226,8 @@ export function classifySentiment(review: {
     return hits >= 2 && score >= 0.35 ? "positive" : "negative";
   }
   // 3★ (or unrated): any clear text signal decides; otherwise neutral.
-  if (hits > 0 && Math.abs(score) >= 0.1) return score > 0 ? "positive" : "negative";
+  if (hits > 0 && Math.abs(score) >= 0.1) {
+    return score > 0 ? "positive" : "negative";
+  }
   return "neutral";
 }

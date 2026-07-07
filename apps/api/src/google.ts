@@ -41,7 +41,7 @@ function batchUrl(opts: ScrapeOptions): string {
     hl: opts.lang ?? "en",
     gl: (opts.country ?? "us").toLowerCase(),
     // _reqid varies per request like a real client; randomness is fine here.
-    _reqid: String(100000 + Math.floor(Math.random() * 900000)),
+    _reqid: String(100_000 + Math.floor(Math.random() * 900_000)),
     rt: "c",
   });
   return `${BATCH_URL}?${params}`;
@@ -75,7 +75,9 @@ export function parseBatch(body: string): { rows: unknown[]; token: string | nul
     const data = JSON.parse(frame[2]);
     return { rows: data[0] ?? [], token: data[1]?.[1] ?? null };
   } catch (err) {
-    if (err instanceof UpstreamError) throw err;
+    if (err instanceof UpstreamError) {
+      throw err;
+    }
     throw new UpstreamError("Could not parse the Play reviews response", { cause: err });
   }
 }
@@ -86,7 +88,9 @@ function isoFromSeconds(seconds: unknown): string {
 }
 
 export function normalizeGoogleReview(r: unknown, opts: ScrapeOptions): Review | null {
-  if (!Array.isArray(r) || r[0] == null) return null;
+  if (!Array.isArray(r) || r[0] == null) {
+    return null;
+  }
   const reply = r[7];
   // Reviewer avatar lives at r[1][1][3][2] (verified live 2026-07-06).
   const avatar = r[1]?.[1]?.[3]?.[2];
@@ -117,7 +121,9 @@ export async function readDs5(page: Page): Promise<string | null> {
       if (text.includes("AF_initDataCallback") && text.includes("'ds:5'")) {
         const start = text.indexOf("data:");
         const end = text.lastIndexOf(", sideChannel");
-        if (start >= 0 && end > start) return text.slice(start + 5, end);
+        if (start >= 0 && end > start) {
+          return text.slice(start + 5, end);
+        }
       }
     }
     return null;
@@ -147,7 +153,9 @@ export function parseGoogleExtras(ds5raw: string): Partial<AppInfo> {
   }
   // biome-ignore lint/suspicious/noExplicitAny: reverse-engineered positional blob
   const root = (data as any)?.[1]?.[2];
-  if (!root) return {};
+  if (!root) {
+    return {};
+  }
   const extras: Partial<AppInfo> = {};
 
   const ratings = root[51];
@@ -155,26 +163,40 @@ export function parseGoogleExtras(ds5raw: string): Partial<AppInfo> {
     const counts: number[] = [];
     for (let star = 1; star <= 5; star++) {
       const n = ratings[1][star]?.[1];
-      if (typeof n !== "number" || !Number.isFinite(n) || n < 0) break;
+      if (typeof n !== "number" || !Number.isFinite(n) || n < 0) {
+        break;
+      }
       counts.push(n);
     }
-    if (counts.length === 5) extras.histogram = counts;
+    if (counts.length === 5) {
+      extras.histogram = counts;
+    }
   }
   if (typeof ratings?.[0]?.[1] === "number") {
     extras.averageRating = Math.round(ratings[0][1] * 100) / 100;
   }
-  if (typeof ratings?.[2]?.[1] === "number") extras.ratingCount = ratings[2][1];
+  if (typeof ratings?.[2]?.[1] === "number") {
+    extras.ratingCount = ratings[2][1];
+  }
 
   const installs = root[13];
   // Only [2] is the real count — [1] is the display bucket's floor, and a
   // bucket floor must never be published in a field documented as exact.
-  if (typeof installs?.[2] === "number") extras.installs = installs[2];
-  if (typeof installs?.[0] === "string") extras.installsText = installs[0];
+  if (typeof installs?.[2] === "number") {
+    extras.installs = installs[2];
+  }
+  if (typeof installs?.[0] === "string") {
+    extras.installsText = installs[0];
+  }
 
   const updated = isoFromUnix(root[145]?.[0]?.[1]?.[0]);
-  if (updated) extras.updated = updated;
+  if (updated) {
+    extras.updated = updated;
+  }
   const released = isoFromUnix(root[10]?.[1]?.[0]);
-  if (released) extras.released = released;
+  if (released) {
+    extras.released = released;
+  }
 
   return extras;
 }
@@ -197,7 +219,9 @@ export const googleAdapter: StoreAdapter<Cursor> = {
       headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
       body: buildBody(opts, cursor.token),
     });
-    if (status === 429) return { kind: "rateLimited" };
+    if (status === 429) {
+      return { kind: "rateLimited" };
+    }
     if (status !== 200) {
       throw new UpstreamError(
         `batchexecute returned HTTP ${status}: ${body.slice(0, 200)}`,
@@ -205,7 +229,9 @@ export const googleAdapter: StoreAdapter<Cursor> = {
     }
 
     const { rows, token } = parseBatch(body);
-    if (rows.length === 0) return { kind: "end" };
+    if (rows.length === 0) {
+      return { kind: "end" };
+    }
 
     const reviews = rows
       .map((r) => normalizeGoogleReview(r, opts))

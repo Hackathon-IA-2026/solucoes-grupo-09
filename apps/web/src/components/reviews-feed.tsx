@@ -9,8 +9,8 @@ import {
   usePalette,
 } from "@noviq/ui";
 import { Image } from "expo-image";
-import { useMemo, useState } from "react";
-import { Platform, Pressable, Text, TextInput, View } from "react-native";
+import { useState } from "react";
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { initials, reviewTone } from "@/lib/analytics";
 
 type Filter = "all" | "5" | "4" | "3" | "2" | "1" | "responded";
@@ -46,27 +46,29 @@ export function ReviewsFeed({ result }: { result: ScrapeResult }) {
   const [query, setQuery] = useState("");
   const [visible, setVisible] = useState(PAGE_SIZE);
 
-  const filtered = useMemo(() => {
-    let list = [...result.reviews];
-    if (filter === "responded") list = list.filter((r) => r.developerResponse);
-    else if (filter !== "all")
-      list = list.filter((r) => Math.round(r.rating) === Number(filter));
-    if (query.trim()) {
-      const q = query.toLowerCase();
-      list = list.filter(
-        (r) =>
-          r.title.toLowerCase().includes(q) ||
-          r.body.toLowerCase().includes(q) ||
-          r.userName.toLowerCase().includes(q),
-      );
-    }
-    if (sort === "recent")
-      list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    else if (sort === "helpful")
-      list.sort((a, b) => (b.thumbsUp ?? 0) - (a.thumbsUp ?? 0));
-    else list.sort((a, b) => a.rating - b.rating);
-    return list;
-  }, [result.reviews, filter, sort, query]);
+  let list = [...result.reviews];
+  if (filter === "responded") {
+    list = list.filter((r) => r.developerResponse);
+  } else if (filter !== "all") {
+    list = list.filter((r) => Math.round(r.rating) === Number(filter));
+  }
+  if (query.trim()) {
+    const q = query.toLowerCase();
+    list = list.filter(
+      (r) =>
+        r.title.toLowerCase().includes(q) ||
+        r.body.toLowerCase().includes(q) ||
+        r.userName.toLowerCase().includes(q),
+    );
+  }
+  if (sort === "recent") {
+    list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  } else if (sort === "helpful") {
+    list.sort((a, b) => (b.thumbsUp ?? 0) - (a.thumbsUp ?? 0));
+  } else {
+    list.sort((a, b) => a.rating - b.rating);
+  }
+  const filtered = list;
 
   const shown = filtered.slice(0, visible);
 
@@ -102,17 +104,10 @@ export function ReviewsFeed({ result }: { result: ScrapeResult }) {
           style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}
         >
           <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 8,
-              borderRadius: radius.pill,
-              borderWidth: 1,
-              borderColor: colors.border,
-              backgroundColor: colors.surfaceSunken,
-              paddingHorizontal: 12,
-              paddingVertical: 6,
-            }}
+            style={[
+              styles.searchBox,
+              { borderColor: colors.border, backgroundColor: colors.surfaceSunken },
+            ]}
           >
             <SearchIcon size={14} color={colors.inkMuted} />
             <TextInput
@@ -139,7 +134,7 @@ export function ReviewsFeed({ result }: { result: ScrapeResult }) {
               <Pressable
                 key={s.id}
                 accessibilityRole="radio"
-                accessibilityState={{ selected: active }}
+                aria-checked={active}
                 onPress={() => setSort(s.id)}
                 style={(pressState) => {
                   const { focused = false } = pressState as { focused?: boolean };
@@ -177,7 +172,7 @@ export function ReviewsFeed({ result }: { result: ScrapeResult }) {
             <Pressable
               key={f.id}
               accessibilityRole="radio"
-              accessibilityState={{ selected: active }}
+              aria-checked={active}
               accessibilityLabel={`Filter ${f.label}`}
               onPress={() => {
                 setFilter(f.id);
@@ -255,6 +250,18 @@ export function ReviewsFeed({ result }: { result: ScrapeResult }) {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  searchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+});
 
 /**
  * Reviewer avatar: the crawled image when it loads, the tone-tinted initials
@@ -358,7 +365,7 @@ function FeedReviewCard({ review }: { review: Review }) {
             <Text
               style={{
                 marginTop: 2,
-                fontSize: 10,
+                fontSize: 12,
                 color: colors.inkFaint,
                 fontVariant: ["tabular-nums"],
               }}
@@ -371,14 +378,14 @@ function FeedReviewCard({ review }: { review: Review }) {
 
       {review.title ? (
         <Text
-          selectable
+          selectable={true}
           style={{ marginTop: 12, fontSize: 14, fontWeight: "600", color: colors.ink }}
         >
           {review.title}
         </Text>
       ) : null}
       <Text
-        selectable
+        selectable={true}
         style={{
           marginTop: review.title ? 4 : 12,
           fontSize: 14,
@@ -421,7 +428,7 @@ function FeedReviewCard({ review }: { review: Review }) {
             </Text>
           </View>
           <Text
-            selectable
+            selectable={true}
             style={{ marginTop: 6, fontSize: 14, lineHeight: 22, color: colors.inkMuted }}
           >
             {review.developerResponse.body}

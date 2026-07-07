@@ -1,0 +1,22 @@
+{
+  "$schema": "https://react.doctor/schema/config.json",
+  // Rationale for every suppression lives in docs/lint-policy.md (repo root).
+  "ignore": {
+    "rules": [
+      // Deliberate architecture choice: the hero float/fade animations use the
+      // built-in RN Animated API instead of react-native-reanimated. Adding
+      // reanimated would grow the web bundle substantially for two decorative
+      // loops, working against the Lighthouse performance budget.
+      "react-doctor/rn-prefer-reanimated"
+    ],
+    "overrides": [
+      {
+        // `TopNavFull` is intentionally exported-but-unused: the full
+        // reference top nav is preserved (per product decision) for when the
+        // dashboard grows real sections. See the component's doc comment.
+        "files": ["src/components/top-nav.tsx"],
+        "rules": ["deslop/unused-export"]
+      }
+    ]
+  }
+}

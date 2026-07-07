@@ -18,7 +18,9 @@ async function parseError(res: Response): Promise<ApiError> {
   let message = `Request failed (${res.status})`;
   try {
     const body = (await res.json()) as { error?: string };
-    if (body.error) message = body.error;
+    if (body.error) {
+      message = body.error;
+    }
   } catch {
     // non-JSON error body — keep the status-based message
   }
@@ -41,10 +43,14 @@ export class NoviqClient {
     try {
       res = await fetch(`${this.baseUrl}${path}`, { signal });
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") throw error;
+      if (error instanceof DOMException && error.name === "AbortError") {
+        throw error;
+      }
       throw new ApiError(0, "Could not reach the server. Check your connection.");
     }
-    if (!res.ok) throw await parseError(res);
+    if (!res.ok) {
+      throw await parseError(res);
+    }
     return (await res.json()) as T;
   }
 
@@ -54,8 +60,12 @@ export class NoviqClient {
     signal?: AbortSignal,
   ): Promise<AppInfoResult> {
     const query = new URLSearchParams({ appId: params.appId });
-    if (params.store) query.set("store", params.store);
-    if (params.country) query.set("country", params.country);
+    if (params.store) {
+      query.set("store", params.store);
+    }
+    if (params.country) {
+      query.set("country", params.country);
+    }
     return this.get<AppInfoResult>(`/app?${query}`, signal);
   }
 
@@ -70,10 +80,14 @@ export class NoviqClient {
         signal,
       });
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") throw error;
+      if (error instanceof DOMException && error.name === "AbortError") {
+        throw error;
+      }
       throw new ApiError(0, "Could not reach the server. Check your connection.");
     }
-    if (!res.ok) throw await parseError(res);
+    if (!res.ok) {
+      throw await parseError(res);
+    }
     const body = (await res.json()) as { id: string };
     return body.id;
   }
@@ -90,7 +104,11 @@ export class NoviqClient {
  * server on long jobs. Pure function of the attempt number for testability.
  */
 export function pollDelayMs(attempt: number): number {
-  if (attempt < 5) return 1_000;
-  if (attempt < 15) return 2_000;
-  return 5_000;
+  if (attempt < 5) {
+    return 1000;
+  }
+  if (attempt < 15) {
+    return 2000;
+  }
+  return 5000;
 }

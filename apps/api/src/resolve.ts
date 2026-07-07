@@ -30,7 +30,9 @@ export const RESOLVERS: Resolver[] = [
   // The 2-letter segment right after the host is the storefront country.
   (input) => {
     const m = input.match(/\/id(\d+)/);
-    if (!m) return null;
+    if (!m) {
+      return null;
+    }
     const cc = input.match(/apps\.apple\.com\/([a-z]{2})(?:[/?#]|$)/i);
     return {
       store: "apple",
@@ -42,7 +44,9 @@ export const RESOLVERS: Resolver[] = [
   // The storefront country is the `gl` query param (`hl` is language, not it).
   (input) => {
     const m = input.match(/[?&]id=([\w.]+)/);
-    if (!m) return null;
+    if (!m) {
+      return null;
+    }
     const gl = input.match(/[?&]gl=([A-Za-z]{2})(?:[&#]|$)/);
     return {
       store: "google",
@@ -63,10 +67,12 @@ export function resolveTarget(input: string, resolvers: Resolver[] = RESOLVERS):
   const trimmed = input.trim();
   for (const resolve of resolvers) {
     const target = resolve(trimmed);
-    if (target) return target;
+    if (target) {
+      return target;
+    }
   }
   throw new Error(
     `Could not resolve a store + app id from "${input}". Pass a numeric Apple ` +
-      `id, a Google package name (com.x.y), or an App Store / Play Store URL.`,
+      "id, a Google package name (com.x.y), or an App Store / Play Store URL.",
   );
 }

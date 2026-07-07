@@ -25,13 +25,17 @@ const APP_TYPE = /(?:Software|Mobile|Web)Application|VideoGame/i;
 
 function typesOf(node: Record<string, unknown>): string[] {
   const t = node["@type"];
-  if (Array.isArray(t)) return t.map(String);
+  if (Array.isArray(t)) {
+    return t.map(String);
+  }
   return t == null ? [] : [String(t)];
 }
 
 /** Is this node an app? By `@type`, or structurally (named + app-ish fields). */
 function isAppNode(node: Record<string, unknown>): boolean {
-  if (typesOf(node).some((t) => APP_TYPE.test(t))) return true;
+  if (typesOf(node).some((t) => APP_TYPE.test(t))) {
+    return true;
+  }
   return (
     typeof node.name === "string" &&
     ("applicationCategory" in node ||
@@ -45,21 +49,31 @@ function findAppNode(value: unknown): Record<string, unknown> | null {
   if (Array.isArray(value)) {
     for (const item of value) {
       const found = findAppNode(item);
-      if (found) return found;
+      if (found) {
+        return found;
+      }
     }
     return null;
   }
   if (value && typeof value === "object") {
     const node = value as Record<string, unknown>;
-    if (isAppNode(node)) return node;
-    if (Array.isArray(node["@graph"])) return findAppNode(node["@graph"]);
+    if (isAppNode(node)) {
+      return node;
+    }
+    if (Array.isArray(node["@graph"])) {
+      return findAppNode(node["@graph"]);
+    }
   }
   return null;
 }
 
 function str(value: unknown): string | null {
-  if (typeof value === "string") return value.trim() || null;
-  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value === "string") {
+    return value.trim() || null;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
   return null;
 }
 
@@ -68,7 +82,9 @@ function firstStr(value: unknown): string | null {
   if (Array.isArray(value)) {
     for (const item of value) {
       const s = firstStr(item);
-      if (s) return s;
+      if (s) {
+        return s;
+      }
     }
     return null;
   }
@@ -76,7 +92,9 @@ function firstStr(value: unknown): string | null {
 }
 
 function num(value: unknown): number | null {
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
   if (typeof value === "string" && value.trim() !== "") {
     const n = Number(value);
     return Number.isFinite(n) ? n : null;
@@ -98,26 +116,35 @@ function round2(value: unknown): number | null {
 
 /** A name from a Person/Organization that may be a string, object or array. */
 function nameOf(value: unknown): string | null {
-  if (typeof value === "string") return str(value);
+  if (typeof value === "string") {
+    return str(value);
+  }
   if (Array.isArray(value)) {
     for (const item of value) {
       const n = nameOf(item);
-      if (n) return n;
+      if (n) {
+        return n;
+      }
     }
     return null;
   }
-  if (value && typeof value === "object")
+  if (value && typeof value === "object") {
     return str((value as Record<string, unknown>).name);
+  }
   return null;
 }
 
 /** An image URL from a string, an ImageObject, or an array of either. */
 function imageOf(value: unknown): string | null {
-  if (typeof value === "string") return str(value);
+  if (typeof value === "string") {
+    return str(value);
+  }
   if (Array.isArray(value)) {
     for (const item of value) {
       const u = imageOf(item);
-      if (u) return u;
+      if (u) {
+        return u;
+      }
     }
     return null;
   }
@@ -206,7 +233,9 @@ export function parseAppInfo(scripts: string[], prov: Provenance): AppInfo | nul
     const app = findAppNode(parsed);
     if (app) {
       const info = normalize(app, prov);
-      if (hasMetadata(info)) return info;
+      if (hasMetadata(info)) {
+        return info;
+      }
     }
   }
   return null;

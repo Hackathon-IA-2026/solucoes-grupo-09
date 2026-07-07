@@ -31,10 +31,14 @@ export type ValidationError =
  */
 export function resolveTarget(raw: string): Target | null {
   const input = raw.trim();
-  if (!input) return null;
+  if (!input) {
+    return null;
+  }
 
   // Apple numeric id — "284882215"
-  if (/^\d+$/.test(input)) return { store: "apple", appId: input };
+  if (/^\d+$/.test(input)) {
+    return { store: "apple", appId: input };
+  }
 
   // Apple store URL — apps.apple.com/us/app/instagram/id389801252 (also the
   // legacy itunes.apple.com host, with or without a scheme).
@@ -61,7 +65,9 @@ export function resolveTarget(raw: string): Target | null {
   }
 
   // Google package name — "com.spotify.music"
-  if (/^[A-Za-z]\w*(?:\.\w+)+$/.test(input)) return { store: "google", appId: input };
+  if (/^[A-Za-z]\w*(?:\.\w+)+$/.test(input)) {
+    return { store: "google", appId: input };
+  }
 
   return null;
 }
@@ -83,7 +89,9 @@ export function validateInput(raw: string): Validation {
   }
 
   const target = resolveTarget(input);
-  if (target) return { ok: true, target, input };
+  if (target) {
+    return { ok: true, target, input };
+  }
 
   // Diagnose *why* it failed so the message points at the fix.
   if (/(?:apps|itunes)\.apple\.com/i.test(input)) {
@@ -91,6 +99,7 @@ export function validateInput(raw: string): Validation {
       ok: false,
       reason: "apple-no-id",
       message:
+        // biome-ignore lint/security/noSecrets: user-facing example id in help copy, not a credential
         "That looks like an App Store link, but it's missing the app id (the “id123456789” part). Open the app's page and copy the full URL.",
       input,
     };

@@ -1,0 +1,19 @@
+# Noviq
+
+> Noviq turns any app's App Store or Google Play reviews into clean, structured
+> data — sentiment analysis, rating trends, version history, activity heatmaps,
+> and CSV/JSON export. Free, no signup required.
+
+Paste an App Store or Google Play link on the homepage to scrape an app's
+reviews and explore them in an interactive dashboard.
+
+## Pages
+
+- [Home](https://noviq.app/): paste a store link, scrape reviews, explore the dashboard, export CSV/JSON.
+
+## Facts
+
+- Supports both Apple App Store and Google Play storefronts.
+- Extracts ratings, review text, developer replies, app versions, and reviewer names.
+- Computes sentiment (positive/neutral/negative), rating distribution, review-volume trends, and an activity heatmap.
+- Exports results as CSV or JSON.

@@ -14,7 +14,7 @@ declare global {
  * 2. `EXPO_PUBLIC_API_URL` — inlined at build time.
  * 3. localhost dev default (`bun run api` at the repo root).
  */
-export const API_URL =
+const API_URL =
   globalThis.__NOVIQ_API_URL__ ??
   process.env.EXPO_PUBLIC_API_URL ??
   "http://localhost:3000";

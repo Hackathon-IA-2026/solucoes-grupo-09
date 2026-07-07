@@ -103,11 +103,11 @@ describe("NoviqClient", () => {
 
 describe("pollDelayMs", () => {
   test("fast at first, backing off for long jobs", () => {
-    expect(pollDelayMs(0)).toBe(1_000);
-    expect(pollDelayMs(4)).toBe(1_000);
-    expect(pollDelayMs(5)).toBe(2_000);
-    expect(pollDelayMs(14)).toBe(2_000);
-    expect(pollDelayMs(15)).toBe(5_000);
-    expect(pollDelayMs(100)).toBe(5_000);
+    expect(pollDelayMs(0)).toBe(1000);
+    expect(pollDelayMs(4)).toBe(1000);
+    expect(pollDelayMs(5)).toBe(2000);
+    expect(pollDelayMs(14)).toBe(2000);
+    expect(pollDelayMs(15)).toBe(5000);
+    expect(pollDelayMs(100)).toBe(5000);
   });
 });

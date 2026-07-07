@@ -4,10 +4,19 @@ import type { Review } from "./types";
  * RFC 4180 field escaping: quote when the value contains a comma, quote, or
  * newline; double any embedded quotes. Values are emitted as-is otherwise —
  * conservative in what we send.
+ *
+ * Scraped text is untrusted, so cells that a spreadsheet would evaluate as a
+ * formula (leading `=`, `+`, `-`, `@`, tab, or CR) are prefixed with `'` —
+ * the standard defense against CSV formula injection in Excel/Sheets.
  */
 function escapeField(value: string | number | boolean | null | undefined): string {
-  if (value === null || value === undefined) return "";
-  const text = String(value);
+  if (value === null || value === undefined) {
+    return "";
+  }
+  let text = String(value);
+  if (typeof value === "string" && /^[=+\-@\t\r]/.test(text)) {
+    text = `'${text}`;
+  }
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 

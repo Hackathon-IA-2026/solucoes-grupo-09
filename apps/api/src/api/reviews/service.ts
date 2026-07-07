@@ -74,13 +74,17 @@ async function streamWithBudget(
       reviews.push(review);
     }
   } catch (err) {
-    if (reviews.length === 0) throw err; // total failure → surfaced to caller
+    if (reviews.length === 0) {
+      throw err; // total failure → surfaced to caller
+    }
     failed = true; // mid-stream failure → keep what we have, flag it partial
   } finally {
     clearTimeout(timer);
   }
 
-  if (ac.signal.aborted && reviews.length === 0) throw new ScrapeTimeoutError();
+  if (ac.signal.aborted && reviews.length === 0) {
+    throw new ScrapeTimeoutError();
+  }
   return {
     store,
     appId: query.appId,
@@ -142,10 +146,16 @@ export const ReviewService = {
  * scrape — the caller still gets its results. No-op when no DATABASE_URL.
  */
 async function persist(result: ScrapeResult): Promise<void> {
-  if (!reviewRepository) return;
+  if (!reviewRepository) {
+    return;
+  }
   try {
-    if (result.reviews.length > 0) await reviewRepository.saveReviews(result.reviews);
-    if (result.appInfo) await reviewRepository.saveApp(result.appInfo);
+    if (result.reviews.length > 0) {
+      await reviewRepository.saveReviews(result.reviews);
+    }
+    if (result.appInfo) {
+      await reviewRepository.saveApp(result.appInfo);
+    }
     await reviewRepository.recordRun({ id: crypto.randomUUID(), ...result });
   } catch (err) {
     console.error("persist failed (results still returned):", err);
@@ -154,7 +164,9 @@ async function persist(result: ScrapeResult): Promise<void> {
 
 /** Best-effort persistence of app metadata (no-op without a database). */
 async function persistApp(info: AppInfo | null): Promise<void> {
-  if (!reviewRepository || !info) return;
+  if (!(reviewRepository && info)) {
+    return;
+  }
   try {
     await reviewRepository.saveApp(info);
   } catch (err) {

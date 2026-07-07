@@ -37,7 +37,7 @@ describe("appinfo · parseAppInfo", () => {
       category: "Photo & Video",
       description: "Connect with friends.",
       averageRating: 4.7,
-      ratingCount: 12345678,
+      ratingCount: 12_345_678,
       price: 0,
       currency: "USD",
       version: "302.0",
@@ -65,7 +65,7 @@ describe("appinfo · parseAppInfo", () => {
             author: "Spotify AB", // author as a bare string
             applicationCategory: "MUSIC_AND_AUDIO",
             operatingSystem: "Android",
-            aggregateRating: { ratingValue: 4.3, reviewCount: 30000000 },
+            aggregateRating: { ratingValue: 4.3, reviewCount: 30_000_000 },
             offers: [{ price: 0, priceCurrency: "USD" }], // offers as an array
             image: { url: "https://play.example/spotify.png" },
           },
@@ -78,7 +78,7 @@ describe("appinfo · parseAppInfo", () => {
     expect(info?.category).toBe("MUSIC_AND_AUDIO");
     expect(info?.operatingSystem).toBe("Android");
     expect(info?.averageRating).toBe(4.3);
-    expect(info?.ratingCount).toBe(30000000); // falls back to reviewCount
+    expect(info?.ratingCount).toBe(30_000_000); // falls back to reviewCount
     expect(info?.price).toBe(0);
     expect(info?.icon).toBe("https://play.example/spotify.png");
     expect(info?.store).toBe("google");
@@ -169,7 +169,7 @@ describe("appinfo · parseAppInfo", () => {
         ld({
           "@type": "SoftwareApplication",
           name: "A",
-          aggregateRating: { ratingValue: 4.334024429321289 },
+          aggregateRating: { ratingValue: 4.334_024_429_321_289 },
         }),
       ],
       PROV,

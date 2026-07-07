@@ -16,7 +16,7 @@ export function NoviqMark({
 }) {
   const colors = usePalette();
   return (
-    <Svg width={size} height={size} viewBox="0 0 32 32" aria-hidden>
+    <Svg width={size} height={size} viewBox="0 0 32 32" aria-hidden={true}>
       <Rect width={32} height={32} rx={9} fill={tint ?? colors.accent} />
       <Path
         d="M9 23V9l14 14V9"
@@ -54,7 +54,7 @@ const STAR_PATH =
 
 function StarSvg({ size, color }: { size: number; color: string }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" aria-hidden>
+    <Svg width={size} height={size} viewBox="0 0 24 24" aria-hidden={true}>
       <Path d={STAR_PATH} fill={color} />
     </Svg>
   );

@@ -10,7 +10,7 @@ const storeEnum = t.Union([t.Literal("apple"), t.Literal("google")]);
 
 /**
  * The reviews controller — an Elysia instance (per best practice, the instance
- * *is* the controller). The job runner is injected so the routes can be tested
+ *is* the controller). The job runner is injected so the routes can be tested
  * with a fake runner (no browser). Domain errors map to safe HTTP statuses
  * (400/502/503/504); only 5xx internals are logged.
  */
@@ -26,7 +26,9 @@ export function reviewsRoutes(jobRunner: JobRunner) {
             return await ReviewService.scrape(query);
           } catch (error) {
             const { status: code, body } = toHttpError(error);
-            if (code >= 500) console.error("scrape error:", error);
+            if (code >= 500) {
+              console.error("scrape error:", error);
+            }
             return status(code, body);
           }
         },
@@ -58,7 +60,9 @@ export function reviewsRoutes(jobRunner: JobRunner) {
             return await ReviewService.appInfo(query);
           } catch (error) {
             const { status: code, body } = toHttpError(error);
-            if (code >= 500) console.error("app info error:", error);
+            if (code >= 500) {
+              console.error("app info error:", error);
+            }
             return status(code, body);
           }
         },
@@ -124,7 +128,9 @@ export function reviewsRoutes(jobRunner: JobRunner) {
         async ({ params, status }) => {
           try {
             const record = await jobRunner.status(params.id);
-            if (!record) return status(404, { error: "Job not found" });
+            if (!record) {
+              return status(404, { error: "Job not found" });
+            }
             return record;
           } catch (error) {
             // Queue backend unreachable — the job may well exist, so a

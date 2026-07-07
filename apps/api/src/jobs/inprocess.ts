@@ -18,14 +18,18 @@ export function createInProcessRunner(execute: Execute): JobRunner {
     jobs.set(record.id, record);
     while (jobs.size > MAX_RECORDS) {
       const oldest = jobs.keys().next().value;
-      if (oldest === undefined) break;
+      if (oldest === undefined) {
+        break;
+      }
       jobs.delete(oldest);
     }
   }
 
   async function process(id: string, query: ScrapeOptions): Promise<void> {
     const existing = jobs.get(id);
-    if (existing) existing.status = "active";
+    if (existing) {
+      existing.status = "active";
+    }
     try {
       const result = await execute({
         ...query,

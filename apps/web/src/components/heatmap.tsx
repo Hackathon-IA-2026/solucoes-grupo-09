@@ -9,7 +9,7 @@ import {
   Pill,
   usePalette,
 } from "@noviq/ui";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
 import { heatmap } from "@/lib/analytics";
 
@@ -37,8 +37,10 @@ function levelStyle(level: number, colors: { accent: string; surfaceSunken: stri
 export function Heatmap({ result }: { result: ScrapeResult }) {
   const colors = usePalette();
   const [dim, setDim] = useState<"reviews" | "ratings">("reviews");
-  const data = useMemo(() => heatmap(result.reviews, dim), [result.reviews, dim]);
-  if (!data) return null;
+  const data = heatmap(result.reviews, dim);
+  if (!data) {
+    return null;
+  }
 
   return (
     <Panel testID="heatmap-panel" style={{ flex: 1 }}>
@@ -92,7 +94,7 @@ export function Heatmap({ result }: { result: ScrapeResult }) {
             <Text
               key={hour}
               style={{
-                fontSize: 11,
+                fontSize: 12,
                 textAlign: "right",
                 color: colors.inkMuted,
                 fontVariant: ["tabular-nums"],
@@ -111,6 +113,9 @@ export function Heatmap({ result }: { result: ScrapeResult }) {
                   <Pressable
                     // biome-ignore lint/suspicious/noArrayIndexKey: grid cells are positional
                     key={c}
+                    // `img` role: aria-label is prohibited on a bare div, and
+                    // these cells are informational, not interactive controls.
+                    accessibilityRole="image"
                     accessibilityLabel={`${data.days[c]} ${data.hours[r]}: level ${level}`}
                     style={(state) => {
                       const { hovered = false } = state as { hovered?: boolean };
@@ -141,7 +146,7 @@ export function Heatmap({ result }: { result: ScrapeResult }) {
                 style={{
                   flex: 1,
                   textAlign: "center",
-                  fontSize: 11,
+                  fontSize: 12,
                   color: colors.inkMuted,
                 }}
               >

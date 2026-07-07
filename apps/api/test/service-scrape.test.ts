@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 
 // Canned in-page responses, mirroring the pipeline test's cloakbrowser mock.
-type FetchInit = { method?: string; headers?: Record<string, string>; body?: string };
+interface FetchInit {
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
+}
 let server: (url: string, init?: FetchInit) => { status: number; body: string };
 let jsonLd: string[] = [];
 
@@ -12,7 +16,9 @@ function makePage() {
     },
     mouse: { async wheel() {} },
     async evaluate(_fn: unknown, arg?: { url: string; init?: FetchInit }) {
-      if (arg === undefined) return jsonLd;
+      if (arg === undefined) {
+        return jsonLd;
+      }
       return server(arg.url, arg.init);
     },
   };
@@ -51,8 +57,10 @@ const APP_LD = JSON.stringify({
 function appleServer(total: number) {
   return (url: string) => {
     const offset = Number(new URL(url).searchParams.get("offset"));
-    if (offset >= total) return { status: 404, body: "" };
-    const data = [];
+    if (offset >= total) {
+      return { status: 404, body: "" };
+    }
+    const data: unknown[] = [];
     for (let i = offset; i < Math.min(offset + 20, total); i++) {
       data.push({
         id: String(1000 + i),

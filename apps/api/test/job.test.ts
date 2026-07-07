@@ -19,7 +19,9 @@ async function poll(
 ): Promise<JobRecord | null> {
   for (let i = 0; i < tries; i++) {
     const r = await get();
-    if (r?.status === want) return r;
+    if (r?.status === want) {
+      return r;
+    }
     await new Promise((res) => setTimeout(res, 5));
   }
   return get();
@@ -74,7 +76,9 @@ describe("in-process runner · progress", () => {
     let record: JobRecord | null = null;
     for (let i = 0; i < 50; i++) {
       record = await runner.status(id);
-      if (record?.progress) break;
+      if (record?.progress) {
+        break;
+      }
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
     expect(record?.status).toBe("active");
@@ -83,7 +87,9 @@ describe("in-process runner · progress", () => {
     release();
     for (let i = 0; i < 50; i++) {
       record = await runner.status(id);
-      if (record?.status === "completed") break;
+      if (record?.status === "completed") {
+        break;
+      }
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
     // Completed records don't carry stale progress.

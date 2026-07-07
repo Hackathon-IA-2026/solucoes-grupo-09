@@ -8,9 +8,12 @@ import { Showcase } from "@/components/showcase";
 import { useScrape } from "@/hooks/use-scrape";
 import { SITE_URL } from "@/lib/config";
 
-const TITLE = "Noviq — App Review Intelligence";
+const TITLE = "App Store & Google Play Review Scraper — Free CSV Export | Noviq";
 const DESCRIPTION =
-  "Scrape every App Store & Google Play review, score sentiment, and track trends, versions and activity — all in one jaw-dropping dashboard with CSV/JSON export. Free, no signup.";
+  "Scrape every App Store and Google Play review into clean data — sentiment, trends, version history, CSV/JSON export. Free, no signup required.";
+
+/** Canonical URL: one unambiguous form (trailing slash, matching sitemap.xml). */
+const CANONICAL_URL = `${SITE_URL}/`;
 
 // One <script> per schema: the most compatible shape for JSON-LD consumers.
 const JSON_LD_SCHEMAS = [
@@ -18,11 +21,27 @@ const JSON_LD_SCHEMAS = [
     "@context": "https://schema.org",
     "@type": "WebApplication",
     name: "Noviq",
-    url: SITE_URL,
+    url: CANONICAL_URL,
     applicationCategory: "BusinessApplication",
     operatingSystem: "Web",
     description: DESCRIPTION,
     offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+    screenshot: `${SITE_URL}/og.png`,
+    featureList:
+      "App Store review scraping, Google Play review scraping, sentiment analysis, rating trends, version history, activity heatmap, CSV export, JSON export",
+  }),
+  JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: "Noviq",
+    url: CANONICAL_URL,
+    logo: `${SITE_URL}/icon-512.png`,
+  }),
+  JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "Noviq",
+    url: CANONICAL_URL,
   }),
 ];
 
@@ -36,11 +55,12 @@ export default function Home() {
       <Head>
         <title>{TITLE}</title>
         <meta name="description" content={DESCRIPTION} />
-        <link rel="canonical" href={SITE_URL} />
+        <link rel="canonical" href={CANONICAL_URL} />
         <meta property="og:type" content="website" />
+        <meta property="og:locale" content="en_US" />
         <meta property="og:title" content={TITLE} />
         <meta property="og:description" content={DESCRIPTION} />
-        <meta property="og:url" content={SITE_URL} />
+        <meta property="og:url" content={CANONICAL_URL} />
         <meta property="og:site_name" content="Noviq" />
         <meta property="og:image" content={`${SITE_URL}/og.png`} />
         <meta property="og:image:width" content="1200" />
@@ -53,6 +73,10 @@ export default function Home() {
         <meta name="twitter:title" content={TITLE} />
         <meta name="twitter:description" content={DESCRIPTION} />
         <meta name="twitter:image" content={`${SITE_URL}/og.png`} />
+        <meta
+          name="twitter:image:alt"
+          content="Noviq — turn any app's reviews into clean data."
+        />
         {Platform.OS === "web"
           ? JSON_LD_SCHEMAS.map((schema) => (
               <script key={schema.slice(0, 60)} type="application/ld+json">
@@ -80,11 +104,11 @@ export default function Home() {
               onDismissError={reset}
             />
             {/* The product, shown — real dashboard components on sample data. */}
-            {!busy ? (
+            {busy ? null : (
               <Showcase
                 onTryIt={() => scrollRef.current?.scrollTo({ y: 0, animated: true })}
               />
-            ) : null}
+            )}
           </>
         )}
       </ScrollView>

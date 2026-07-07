@@ -111,10 +111,13 @@ Bun.serve({
   fetch(request) {
     const url = new URL(request.url);
 
-    if (request.method === "OPTIONS")
+    if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: CORS });
+    }
 
-    if (url.pathname === "/health") return json({ status: "ok" });
+    if (url.pathname === "/health") {
+      return json({ status: "ok" });
+    }
 
     if (url.pathname === "/app") {
       const appId = url.searchParams.get("appId") ?? "";
@@ -140,9 +143,13 @@ Bun.serve({
     const jobMatch = url.pathname.match(/^\/reviews\/jobs\/(.+)$/);
     if (jobMatch) {
       const job = jobs.get(jobMatch[1]);
-      if (!job) return json({ error: "Job not found" }, 404);
+      if (!job) {
+        return json({ error: "Job not found" }, 404);
+      }
       job.polls++;
-      if (job.polls === 1) return json({ id: jobMatch[1], status: "waiting" });
+      if (job.polls === 1) {
+        return json({ id: jobMatch[1], status: "waiting" });
+      }
       if (job.polls === 2) {
         return json({
           id: jobMatch[1],

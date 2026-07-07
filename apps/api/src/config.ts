@@ -10,7 +10,9 @@ function bool(value: string | undefined): boolean {
 /** Parse an int env var, clamped to [min, max], falling back to `def`. */
 function int(value: string | undefined, def: number, min: number, max: number): number {
   const n = Number.parseInt(value ?? "", 10);
-  if (!Number.isFinite(n)) return def;
+  if (!Number.isFinite(n)) {
+    return def;
+  }
   return Math.min(max, Math.max(min, n));
 }
 
@@ -58,12 +60,21 @@ export const config = {
   maxConcurrency: int(process.env.NOVIQ_MAX_CONCURRENCY, 2, 1, 64),
   /** Max scrapes allowed to queue before returning 503. */
   maxQueue: int(process.env.NOVIQ_MAX_QUEUE, 20, 0, 10_000),
+  /**
+   * Per-client requests allowed on the scrape surface (/reviews*, /app) per
+   * window. Bounds request *rate* (the semaphore only bounds concurrency), so
+   * an anonymous client can't monopolize the queue or burn proxy budget.
+   * 0 disables the limiter.
+   */
+  rateLimitMax: int(process.env.NOVIQ_RATE_LIMIT, 30, 0, 100_000),
+  /** Rate-limit window length (ms). */
+  rateLimitWindowMs: int(process.env.NOVIQ_RATE_WINDOW_MS, 60_000, 1000, 3_600_000),
   /** Hard time budget per scrape (ms); partial results returned, else 504. */
-  scrapeTimeoutMs: int(process.env.NOVIQ_SCRAPE_TIMEOUT_MS, 120_000, 5_000, 600_000),
+  scrapeTimeoutMs: int(process.env.NOVIQ_SCRAPE_TIMEOUT_MS, 120_000, 5000, 600_000),
   /** Page-navigation timeout (ms). */
-  navTimeoutMs: int(process.env.NOVIQ_NAV_TIMEOUT_MS, 60_000, 5_000, 180_000),
+  navTimeoutMs: int(process.env.NOVIQ_NAV_TIMEOUT_MS, 60_000, 5000, 180_000),
   /** Per in-page fetch timeout (ms) — bounds a stalled network. */
-  fetchTimeoutMs: int(process.env.NOVIQ_FETCH_TIMEOUT_MS, 30_000, 2_000, 120_000),
+  fetchTimeoutMs: int(process.env.NOVIQ_FETCH_TIMEOUT_MS, 30_000, 2000, 120_000),
   /** Bounded retries on transient navigation/network failures. */
   navRetries: int(process.env.NOVIQ_NAV_RETRIES, 2, 0, 5),
   /**
@@ -81,7 +92,7 @@ export const config = {
     ? process.env.NOVIQ_ROLE
     : "all") as "all" | "api" | "worker",
   /** Keep completed jobs (with their result) this long, then auto-remove. */
-  jobRetentionSec: int(process.env.NOVIQ_JOB_RETENTION_SEC, 3_600, 60, 2_592_000),
+  jobRetentionSec: int(process.env.NOVIQ_JOB_RETENTION_SEC, 3600, 60, 2_592_000),
   /** Keep failed jobs this long (longer, for debugging), then auto-remove. */
   jobFailedRetentionSec: int(
     process.env.NOVIQ_JOB_FAILED_RETENTION_SEC,
@@ -92,7 +103,7 @@ export const config = {
   /** Attempts per job before it's marked failed (scrapes are idempotent → safe). */
   jobAttempts: int(process.env.NOVIQ_JOB_ATTEMPTS, 3, 1, 10),
   /** Base backoff (ms) between job retries (exponential). */
-  jobBackoffMs: int(process.env.NOVIQ_JOB_BACKOFF_MS, 5_000, 100, 120_000),
+  jobBackoffMs: int(process.env.NOVIQ_JOB_BACKOFF_MS, 5000, 100, 120_000),
   /**
    * Postgres URL. When set, scraped reviews are persisted (durable, queryable
    * via GET /reviews/stored); unset → scraping still works, results are just

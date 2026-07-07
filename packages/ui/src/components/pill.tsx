@@ -39,9 +39,11 @@ export function Pill({
     <Pressable
       testID={testID}
       accessibilityRole={accessibilityRole}
-      accessibilityState={
-        accessibilityRole === "button" ? undefined : { selected: active }
-      }
+      // Direct aria props: radios require aria-checked, tabs use
+      // aria-selected (RN maps these to native state; accessibilityState is
+      // not rendered by the static-web pass).
+      aria-checked={accessibilityRole === "radio" ? active : undefined}
+      aria-selected={accessibilityRole === "tab" ? active : undefined}
       accessibilityLabel={label}
       onPress={onPress}
       disabled={!onPress}

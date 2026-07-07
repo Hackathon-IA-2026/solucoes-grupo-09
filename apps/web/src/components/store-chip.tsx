@@ -1,6 +1,6 @@
 import { type Store, storeLabel } from "@noviq/core";
 import { radius, space, usePalette } from "@noviq/ui";
-import { Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 /**
  * Typographic store badge — a colored dot + label reads instantly on every
@@ -12,18 +12,10 @@ export function StoreChip({ store, country }: { store: Store; country?: string }
   return (
     <View
       accessibilityLabel={`${storeLabel(store)}${country ? `, storefront ${country.toUpperCase()}` : ""}`}
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        gap: space.sm,
-        backgroundColor: colors.surfaceSunken,
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: radius.pill,
-        paddingHorizontal: space.md,
-        paddingVertical: 5,
-        alignSelf: "flex-start",
-      }}
+      style={[
+        styles.chip,
+        { backgroundColor: colors.surfaceSunken, borderColor: colors.border },
+      ]}
     >
       <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: dot }} />
       <Text style={{ color: colors.ink, fontSize: 13, fontWeight: "600" }}>
@@ -37,3 +29,16 @@ export function StoreChip({ store, country }: { store: Store; country?: string }
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    borderWidth: 1,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.md,
+    paddingVertical: 5,
+    alignSelf: "flex-start",
+  },
+});

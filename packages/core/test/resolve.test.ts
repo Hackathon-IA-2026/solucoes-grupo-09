@@ -89,8 +89,9 @@ describe("validateInput", () => {
   test("valid input yields the target", () => {
     const result = validateInput("https://apps.apple.com/us/app/x/id42");
     expect(result.ok).toBe(true);
-    if (result.ok)
+    if (result.ok) {
       expect(result.target).toEqual({ store: "apple", appId: "42", country: "us" });
+    }
   });
 
   test("empty input", () => {
@@ -101,7 +102,9 @@ describe("validateInput", () => {
   test("apple URL missing the id gets a targeted message", () => {
     const result = validateInput("https://apps.apple.com/us/app/instagram");
     expect(result).toMatchObject({ ok: false, reason: "apple-no-id" });
-    if (!result.ok) expect(result.message).toContain("id123456789");
+    if (!result.ok) {
+      expect(result.message).toContain("id123456789");
+    }
   });
 
   test("play URL missing ?id= gets a targeted message", () => {

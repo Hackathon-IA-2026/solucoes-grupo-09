@@ -18,7 +18,9 @@ export const requestContext = new Elysia({ name: "request-context" })
   })
   .onAfterResponse(({ request, set }) => {
     const path = new URL(request.url).pathname;
-    if (path === "/health" || path === "/ready" || path.startsWith("/docs")) return;
+    if (path === "/health" || path === "/ready" || path.startsWith("/docs")) {
+      return;
+    }
     const start = starts.get(request);
     const ms = start ? Math.round(performance.now() - start) : 0;
     console.log(

@@ -28,9 +28,14 @@ function countCsvRows(csv: string): number {
   for (let i = 0; i < csv.length; i++) {
     const c = csv[i];
     if (c === '"') {
-      if (inQuote && csv[i + 1] === '"') i++;
-      else inQuote = !inQuote;
-    } else if (c === "\n" && !inQuote) rows++;
+      if (inQuote && csv[i + 1] === '"') {
+        i++;
+      } else {
+        inQuote = !inQuote;
+      }
+    } else if (c === "\n" && !inQuote) {
+      rows++;
+    }
   }
   return rows;
 }

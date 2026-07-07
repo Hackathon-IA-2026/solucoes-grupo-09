@@ -1,4 +1,4 @@
-import { type PropsWithChildren, useEffect, useRef } from "react";
+import { type PropsWithChildren, useEffect, useState } from "react";
 import { Animated, Platform, type ViewProps } from "react-native";
 import { useReducedMotion } from "../hooks/use-reduced-motion";
 import { motion } from "../tokens";
@@ -28,7 +28,9 @@ export function FadeIn({
   ...rest
 }: PropsWithChildren<FadeInProps>) {
   const reducedMotion = useReducedMotion();
-  const progress = useRef(new Animated.Value(0)).current;
+  // Lazy useState (not useRef) so the Animated.Value is created exactly once
+  // without a ref initializer running on every render.
+  const [progress] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     if (reducedMotion) {

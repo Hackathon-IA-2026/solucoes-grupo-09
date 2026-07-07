@@ -71,7 +71,9 @@ export function isBusy(state: ScrapeState): boolean {
  */
 export function transition(state: ScrapeState, event: ScrapeEvent): ScrapeState {
   // Universal escapes first: they apply from any state.
-  if (event.type === "RESET" || event.type === "CANCEL") return { phase: "idle" };
+  if (event.type === "RESET" || event.type === "CANCEL") {
+    return { phase: "idle" };
+  }
 
   switch (state.phase) {
     case "idle":
@@ -105,7 +107,9 @@ export function transition(state: ScrapeState, event: ScrapeEvent): ScrapeState 
     case "scraping":
       if (event.type === "JOB_UPDATE") {
         const { record } = event;
-        if (record.id !== state.jobId) return state; // stale response for an old job
+        if (record.id !== state.jobId) {
+          return state; // stale response for an old job
+        }
         switch (record.status) {
           case "waiting":
             return { ...state, phase: "queued", pollErrors: 0 };
@@ -144,6 +148,9 @@ export function transition(state: ScrapeState, event: ScrapeEvent): ScrapeState 
               message: record.error ?? "The scrape failed. Please try again.",
               retryable: true,
             };
+          default:
+            // Unknown job status from a newer API — hold the current state.
+            return state;
         }
       }
       if (event.type === "POLL_ERROR") {
@@ -159,6 +166,9 @@ export function transition(state: ScrapeState, event: ScrapeEvent): ScrapeState 
         }
         return { ...state, pollErrors };
       }
+      return state;
+    default:
+      // Exhaustive today; a future phase must be handled deliberately.
       return state;
   }
 }

@@ -20,11 +20,12 @@ import {
 } from "@noviq/ui";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
   Pressable,
+  StyleSheet,
   Text,
   TextInput,
   useWindowDimensions,
@@ -66,6 +67,47 @@ const COUNTRIES = [
 /** Errors only surface once typing settles — never mid-keystroke. */
 const ERROR_SETTLE_MS = 800;
 
+/** Static shells for the larger style objects (dynamic bits merge at render). */
+const styles = StyleSheet.create({
+  kicker: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginBottom: space.xl,
+  },
+  capsule: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    padding: 8,
+  },
+  chip: {
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    minHeight: 28,
+    justifyContent: "center",
+  },
+  errorBanner: {
+    marginTop: space.md,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    flexWrap: "wrap",
+    gap: space.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    padding: space.md,
+  },
+});
+
 /** Live status line per machine phase (the reference's step ticker, for real). */
 function phaseLabel(state: ScrapeState): string {
   switch (state.phase) {
@@ -83,8 +125,12 @@ function phaseLabel(state: ScrapeState): string {
 }
 
 function phasePercent(state: ScrapeState): number {
-  if (state.phase === "submitting") return 6;
-  if (state.phase === "queued") return 12;
+  if (state.phase === "submitting") {
+    return 6;
+  }
+  if (state.phase === "queued") {
+    return 12;
+  }
   if (state.phase === "scraping") {
     if (state.progress?.limit) {
       return Math.min(96, 15 + (state.progress.collected / state.progress.limit) * 80);
@@ -97,7 +143,7 @@ function phasePercent(state: ScrapeState): number {
 function Glow({ color, size, style }: { color: string; size: number; style: object }) {
   return (
     <View
-      aria-hidden
+      aria-hidden={true}
       style={{
         pointerEvents: "none",
         position: "absolute",
@@ -125,6 +171,256 @@ function FeatureDot({ label }: { label: string }) {
       />
       <Text style={{ fontSize: 12, color: colors.inkMuted }}>{label}</Text>
     </View>
+  );
+}
+
+/** Brand block: bolt mark over the glow, kicker pill, and the headline. */
+function HeroBrand({ wideHeadline }: { wideHeadline: boolean }) {
+  const colors = usePalette();
+  return (
+    <>
+      <Image
+        testID="hero-logo"
+        source={require("../../assets/images/bolt-logo.png")}
+        style={{ width: 76, height: 82, marginBottom: space.xl }}
+        contentFit="contain"
+        accessibilityLabel="Noviq"
+        transition={200}
+      />
+      {/* Kicker */}
+      <View
+        style={[
+          styles.kicker,
+          { borderColor: colors.border, backgroundColor: colors.surface },
+        ]}
+      >
+        <SparklesIcon size={14} color={colors.accent} />
+        <Text style={{ fontSize: 12, fontWeight: "500", color: colors.inkMuted }}>
+          Review intelligence, in seconds
+        </Text>
+      </View>
+
+      <Text
+        accessibilityRole="header"
+        aria-level={1}
+        // data-hero-headline: the static render can't know the viewport, so
+        // a media query in +html.tsx forces the wide variant (44px, one line)
+        // from first paint on ≥960px screens — otherwise the post-hydration
+        // flip from the narrow variant registers as layout shift (CLS).
+        {...({ dataSet: { "hero-headline": "true" } } as object)}
+        style={{
+          textAlign: "center",
+          color: colors.ink,
+          fontSize: wideHeadline ? 44 : 34,
+          lineHeight: wideHeadline ? 50 : 40,
+          fontWeight: "600",
+          letterSpacing: -1.2,
+          // Wide: one line (the hero column is widened past the 672px
+          // content column just for the headline). Narrow: a controlled
+          // break so "clean data." owns the second line.
+          maxWidth: wideHeadline ? 1000 : 640,
+        }}
+      >
+        Turn any app's reviews{wideHeadline ? " " : "\n"}into{" "}
+        <Text style={{ color: colors.accent }}>clean data.</Text>
+      </Text>
+    </>
+  );
+}
+
+/** While a job runs: spinner, real progress bar, phase label, cancel. */
+function ScrapeProgress({
+  state,
+  onCancel,
+}: {
+  state: ScrapeState;
+  onCancel: () => void;
+}) {
+  const colors = usePalette();
+  return (
+    <View
+      testID="scrape-progress"
+      accessibilityLiveRegion="polite"
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 10,
+      }}
+    >
+      <ActivityIndicator size="small" color={colors.accent} />
+      <View
+        style={{
+          width: 96,
+          height: 6,
+          borderRadius: 3,
+          backgroundColor: colors.surfaceSunken,
+          overflow: "hidden",
+        }}
+      >
+        <View
+          style={{
+            width: `${phasePercent(state)}%`,
+            height: "100%",
+            borderRadius: 3,
+            backgroundColor: colors.accent,
+            ...(Platform.OS === "web"
+              ? ({
+                  transitionProperty: "width",
+                  transitionDuration: `${motion.slow}ms`,
+                } as object)
+              : null),
+          }}
+        />
+      </View>
+      <Text
+        style={{
+          fontSize: 13,
+          color: colors.inkMuted,
+          fontVariant: ["tabular-nums"],
+        }}
+      >
+        {phaseLabel(state)}
+      </Text>
+      <Pressable
+        testID="cancel-button"
+        accessibilityRole="button"
+        onPress={onCancel}
+        style={{ minHeight: 28, justifyContent: "center" }}
+      >
+        <Text style={{ fontSize: 13, fontWeight: "600", color: colors.danger }}>
+          Cancel
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+/** Idle row under the capsule: sample links plus the Options toggle. */
+function SampleRow({
+  showOptions,
+  onPick,
+  onToggleOptions,
+}: {
+  showOptions: boolean;
+  onPick: (url: string) => void;
+  onToggleOptions: () => void;
+}) {
+  const colors = usePalette();
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        flexWrap: "wrap",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+      }}
+    >
+      <Text style={{ fontSize: 12, color: colors.inkMuted }}>Try:</Text>
+      {SAMPLES.map((sample) => (
+        <Pressable
+          key={sample.label}
+          accessibilityRole="button"
+          accessibilityLabel={`Use ${sample.label} sample link`}
+          onPress={() => onPick(sample.url)}
+          style={[
+            styles.chip,
+            { borderColor: colors.border, backgroundColor: colors.surface },
+          ]}
+        >
+          <Text style={{ fontSize: 12, color: colors.inkMuted }}>{sample.label}</Text>
+        </Pressable>
+      ))}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: showOptions }}
+        onPress={onToggleOptions}
+        style={[
+          styles.chip,
+          {
+            borderColor: showOptions ? "rgba(208, 242, 68, 0.4)" : colors.border,
+            backgroundColor: colors.surface,
+          },
+        ]}
+      >
+        <Text
+          style={{
+            fontSize: 12,
+            color: showOptions ? colors.accent : colors.inkMuted,
+          }}
+        >
+          Options {showOptions ? "▴" : "▾"}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+/** Errors under the capsule: failed-scrape banner and validation message. */
+function HeroErrors({
+  state,
+  message,
+  onDismissError,
+}: {
+  state: ScrapeState;
+  message: string | null;
+  onDismissError: () => void;
+}) {
+  const colors = usePalette();
+  return (
+    <>
+      {state.phase === "failed" ? (
+        <View
+          testID="error-banner"
+          accessibilityLiveRegion="assertive"
+          style={[
+            styles.errorBanner,
+            {
+              borderColor: "rgba(234, 74, 61, 0.3)",
+              backgroundColor: colors.dangerSoft,
+            },
+          ]}
+        >
+          <Text
+            selectable={true}
+            style={{
+              color: colors.onDangerSoft,
+              fontSize: 13,
+              lineHeight: 19,
+              flexShrink: 1,
+            }}
+          >
+            {state.message}
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={onDismissError}
+            style={{ minHeight: 28, justifyContent: "center" }}
+          >
+            <Text style={{ fontSize: 13, fontWeight: "600", color: colors.ink }}>
+              Dismiss
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
+      {message !== null ? (
+        <Text
+          testID="input-error"
+          accessibilityLiveRegion="polite"
+          selectable={true}
+          style={{
+            marginTop: space.md,
+            textAlign: "center",
+            color: colors.danger,
+            fontSize: 13,
+            lineHeight: 19,
+          }}
+        >
+          {message}
+        </Text>
+      ) : null}
+    </>
   );
 }
 
@@ -160,28 +456,45 @@ export function ScraperHero({
   const [countryOverride, setCountryOverride] = useState<string | null>(null);
   const [showOptions, setShowOptions] = useState(false);
   const [attempted, setAttempted] = useState(false);
-  const [settled, setSettled] = useState(false);
+  // The exact input value the settle timer last confirmed — "settled" is
+  // derived (settledInput === input), so no setState inside the effect body.
+  const [settledInput, setSettledInput] = useState("");
+  const [prevInput, setPrevInput] = useState("");
   const [inputFocused, setInputFocused] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
-  const validation = useMemo(() => validateInput(input), [input]);
-  const target = useMemo(() => (validation.ok ? validation.target : null), [validation]);
+  // Adjust-during-render (the React-endorsed "previous render" pattern):
+  // any keystroke un-settles immediately, even when the text transiently
+  // equals an earlier settled value — errors must never flash mid-typing.
+  if (prevInput !== input) {
+    setPrevInput(input);
+    setSettledInput("");
+  }
+
+  const validation = validateInput(input);
+  const target = validation.ok ? validation.target : null;
   const preview = useAppPreview(target);
 
   useEffect(() => {
-    setSettled(false);
-    if (!input.trim()) return;
-    const timer = setTimeout(() => setSettled(true), ERROR_SETTLE_MS);
+    if (!input.trim()) {
+      return;
+    }
+    const timer = setTimeout(() => setSettledInput(input), ERROR_SETTLE_MS);
     return () => clearTimeout(timer);
   }, [input]);
 
+  const settled = input.trim().length > 0 && settledInput === input;
   const showError =
     !validation.ok && validation.reason !== "empty" && (attempted || settled);
   const emptyAttempt = attempted && !validation.ok && validation.reason === "empty";
+  const inputErrorMessage =
+    (showError || emptyAttempt) && !validation.ok ? validation.message : null;
 
   function handleSubmit() {
     setAttempted(true);
-    if (busy) return;
+    if (busy) {
+      return;
+    }
     if (!validation.ok) {
       inputRef.current?.focus();
       return;
@@ -219,72 +532,22 @@ export function ScraperHero({
 
       <View style={{ width: "100%", maxWidth: 1000, alignItems: "center" }}>
         {/* Brand: the bolt mark, centered over the glow. */}
-        <Image
-          testID="hero-logo"
-          source={require("../../assets/images/bolt-logo.png")}
-          style={{ width: 76, height: 82, marginBottom: space.xl }}
-          contentFit="contain"
-          accessibilityLabel="Noviq"
-          transition={200}
-        />
-        {/* Kicker */}
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 8,
-            borderRadius: radius.pill,
-            borderWidth: 1,
-            borderColor: colors.border,
-            backgroundColor: colors.surface,
-            paddingHorizontal: 12,
-            paddingVertical: 6,
-            marginBottom: space.xl,
-          }}
-        >
-          <SparklesIcon size={14} color={colors.accent} />
-          <Text style={{ fontSize: 12, fontWeight: "500", color: colors.inkMuted }}>
-            Review intelligence, in seconds
-          </Text>
-        </View>
-
-        <Text
-          accessibilityRole="header"
-          aria-level={1}
-          style={{
-            textAlign: "center",
-            color: colors.ink,
-            fontSize: wideHeadline ? 44 : 34,
-            lineHeight: wideHeadline ? 50 : 40,
-            fontWeight: "600",
-            letterSpacing: -1.2,
-            // Wide: one line (the hero column is widened past the 672px
-            // content column just for the headline). Narrow: a controlled
-            // break so "clean data." owns the second line.
-            maxWidth: wideHeadline ? 1000 : 640,
-          }}
-        >
-          Turn any app's reviews{wideHeadline ? " " : "\n"}into{" "}
-          <Text style={{ color: colors.accent }}>clean data.</Text>
-        </Text>
+        <HeroBrand wideHeadline={wideHeadline} />
 
         {/* Input capsule */}
         <View style={{ width: "100%", maxWidth: 576, marginTop: 40 }}>
           <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 8,
-              borderRadius: radius.lg,
-              borderWidth: 1,
-              borderColor: inputFocused
-                ? "rgba(208, 242, 68, 0.6)"
-                : showError || emptyAttempt
-                  ? colors.danger
-                  : colors.border,
-              backgroundColor: colors.surface,
-              padding: 8,
-              ...(Platform.OS === "web"
+            style={[
+              styles.capsule,
+              {
+                borderColor: inputFocused
+                  ? "rgba(208, 242, 68, 0.6)"
+                  : showError || emptyAttempt
+                    ? colors.danger
+                    : colors.border,
+                backgroundColor: colors.surface,
+              },
+              Platform.OS === "web"
                 ? ({
                     boxShadow: inputFocused
                       ? "0 0 0 4px rgba(208, 242, 68, 0.1)"
@@ -292,8 +555,8 @@ export function ScraperHero({
                     transitionProperty: "border-color, box-shadow",
                     transitionDuration: `${motion.fast}ms`,
                   } as object)
-                : null),
-            }}
+                : null,
+            ]}
           >
             <View
               style={{
@@ -390,179 +653,22 @@ export function ScraperHero({
           {/* Below the capsule: progress while scraping, samples otherwise. */}
           <View style={{ marginTop: space.lg, minHeight: 28 }}>
             {busy ? (
-              <View
-                testID="scrape-progress"
-                accessibilityLiveRegion="polite"
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 10,
-                }}
-              >
-                <ActivityIndicator size="small" color={colors.accent} />
-                <View
-                  style={{
-                    width: 96,
-                    height: 6,
-                    borderRadius: 3,
-                    backgroundColor: colors.surfaceSunken,
-                    overflow: "hidden",
-                  }}
-                >
-                  <View
-                    style={{
-                      width: `${phasePercent(state)}%`,
-                      height: "100%",
-                      borderRadius: 3,
-                      backgroundColor: colors.accent,
-                      ...(Platform.OS === "web"
-                        ? ({
-                            transitionProperty: "width",
-                            transitionDuration: `${motion.slow}ms`,
-                          } as object)
-                        : null),
-                    }}
-                  />
-                </View>
-                <Text
-                  style={{
-                    fontSize: 13,
-                    color: colors.inkMuted,
-                    fontVariant: ["tabular-nums"],
-                  }}
-                >
-                  {phaseLabel(state)}
-                </Text>
-                <Pressable
-                  testID="cancel-button"
-                  accessibilityRole="button"
-                  onPress={onCancel}
-                  style={{ minHeight: 28, justifyContent: "center" }}
-                >
-                  <Text style={{ fontSize: 13, fontWeight: "600", color: colors.danger }}>
-                    Cancel
-                  </Text>
-                </Pressable>
-              </View>
+              <ScrapeProgress state={state} onCancel={onCancel} />
             ) : (
-              <View
-                style={{
-                  flexDirection: "row",
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 8,
-                }}
-              >
-                <Text style={{ fontSize: 12, color: colors.inkMuted }}>Try:</Text>
-                {SAMPLES.map((sample) => (
-                  <Pressable
-                    key={sample.label}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Use ${sample.label} sample link`}
-                    onPress={() => setInput(sample.url)}
-                    style={{
-                      borderRadius: radius.pill,
-                      borderWidth: 1,
-                      borderColor: colors.border,
-                      backgroundColor: colors.surface,
-                      paddingHorizontal: 12,
-                      paddingVertical: 5,
-                      minHeight: 28,
-                      justifyContent: "center",
-                    }}
-                  >
-                    <Text style={{ fontSize: 12, color: colors.inkMuted }}>
-                      {sample.label}
-                    </Text>
-                  </Pressable>
-                ))}
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityState={{ expanded: showOptions }}
-                  onPress={() => setShowOptions((open) => !open)}
-                  style={{
-                    borderRadius: radius.pill,
-                    borderWidth: 1,
-                    borderColor: showOptions ? "rgba(208, 242, 68, 0.4)" : colors.border,
-                    backgroundColor: colors.surface,
-                    paddingHorizontal: 12,
-                    paddingVertical: 5,
-                    minHeight: 28,
-                    justifyContent: "center",
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      color: showOptions ? colors.accent : colors.inkMuted,
-                    }}
-                  >
-                    Options {showOptions ? "▴" : "▾"}
-                  </Text>
-                </Pressable>
-              </View>
+              <SampleRow
+                showOptions={showOptions}
+                onPick={setInput}
+                onToggleOptions={() => setShowOptions((open) => !open)}
+              />
             )}
           </View>
 
           {/* Errors (validation or a failed scrape). */}
-          {state.phase === "failed" ? (
-            <View
-              testID="error-banner"
-              accessibilityLiveRegion="assertive"
-              style={{
-                marginTop: space.md,
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "center",
-                flexWrap: "wrap",
-                gap: space.md,
-                borderRadius: radius.md,
-                borderWidth: 1,
-                borderColor: "rgba(234, 74, 61, 0.3)",
-                backgroundColor: colors.dangerSoft,
-                padding: space.md,
-              }}
-            >
-              <Text
-                selectable
-                style={{
-                  color: colors.onDangerSoft,
-                  fontSize: 13,
-                  lineHeight: 19,
-                  flexShrink: 1,
-                }}
-              >
-                {state.message}
-              </Text>
-              <Pressable
-                accessibilityRole="button"
-                onPress={onDismissError}
-                style={{ minHeight: 28, justifyContent: "center" }}
-              >
-                <Text style={{ fontSize: 13, fontWeight: "600", color: colors.ink }}>
-                  Dismiss
-                </Text>
-              </Pressable>
-            </View>
-          ) : null}
-          {showError || emptyAttempt ? (
-            <Text
-              testID="input-error"
-              accessibilityLiveRegion="polite"
-              selectable
-              style={{
-                marginTop: space.md,
-                textAlign: "center",
-                color: colors.danger,
-                fontSize: 13,
-                lineHeight: 19,
-              }}
-            >
-              {validation.ok ? "" : validation.message}
-            </Text>
-          ) : null}
+          <HeroErrors
+            state={state}
+            message={inputErrorMessage}
+            onDismissError={onDismissError}
+          />
 
           {/* Detected app + live preview. */}
           {target && !busy ? (
@@ -665,7 +771,7 @@ function PillRow({
           <Pressable
             key={option.key}
             accessibilityRole="radio"
-            accessibilityState={{ selected: active }}
+            aria-checked={active}
             accessibilityLabel={`${label} ${option.label}`}
             onPress={() => onSelect(option.key)}
             style={(pressState) => {

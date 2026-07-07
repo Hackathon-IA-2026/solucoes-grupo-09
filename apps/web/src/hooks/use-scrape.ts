@@ -5,7 +5,7 @@ import {
   type ScrapeState,
   transition,
 } from "@noviq/core";
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useEffect, useReducer, useRef } from "react";
 import { client } from "@/lib/config";
 import { runScrape } from "@/lib/scrape-controller";
 
@@ -30,23 +30,23 @@ export function useScrape(): UseScrape {
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  const submit = useCallback((request: ScrapeRequest) => {
+  const submit = (request: ScrapeRequest) => {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     dispatch({ type: "SUBMIT", request });
     void runScrape(client, request, dispatch, { signal: controller.signal });
-  }, []);
+  };
 
-  const cancel = useCallback(() => {
+  const cancel = () => {
     abortRef.current?.abort();
     dispatch({ type: "CANCEL" });
-  }, []);
+  };
 
-  const reset = useCallback(() => {
+  const reset = () => {
     abortRef.current?.abort();
     dispatch({ type: "RESET" });
-  }, []);
+  };
 
   return { state, busy: isBusy(state), submit, cancel, reset };
 }

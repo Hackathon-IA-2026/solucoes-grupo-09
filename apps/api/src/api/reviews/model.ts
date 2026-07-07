@@ -54,7 +54,13 @@ export const scrapeQuery = t.Object({
       description: "2-letter storefront code",
     }),
   ),
-  lang: t.Optional(t.String({ description: "Apple BCP-47 (en-US), Google short (en)" })),
+  lang: t.Optional(
+    t.String({
+      description: "Apple BCP-47 (en-US), Google short (en)",
+      pattern: "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+      maxLength: 35,
+    }),
+  ),
   sort: t.Optional(sortEnum),
   limit: t.Optional(
     t.Numeric({ default: 50, minimum: 1, maximum: 500, description: "Max reviews" }),
@@ -126,7 +132,13 @@ export const appQuery = t.Object({
   country: t.Optional(
     t.String({ default: "us", pattern: "^[A-Za-z]{2}$", description: "2-letter code" }),
   ),
-  lang: t.Optional(t.String({ description: "Apple BCP-47 (en-US), Google short (en)" })),
+  lang: t.Optional(
+    t.String({
+      description: "Apple BCP-47 (en-US), Google short (en)",
+      pattern: "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+      maxLength: 35,
+    }),
+  ),
   stealth: t.Optional(stealthEnum),
 });
 

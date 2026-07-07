@@ -50,7 +50,9 @@ describe("appleAdapter.fetchBatch", () => {
     });
     const res = await appleAdapter.fetchBatch(stubPage({ status: 200, body }), opts, 0);
     expect(res).toMatchObject({ kind: "page", next: 20 });
-    if (res.kind === "page") expect(res.reviews).toHaveLength(1);
+    if (res.kind === "page") {
+      expect(res.reviews).toHaveLength(1);
+    }
   });
 
   test("200 with an empty data array → end", async () => {
@@ -103,14 +105,16 @@ describe("googleAdapter.fetchBatch", () => {
   });
 
   test("200 with rows → reviews + next cursor", async () => {
-    const rows = [["id1", ["Alice"], 5, null, "great", [1700000000, 0], 0, null]];
+    const rows = [["id1", ["Alice"], 5, null, "great", [1_700_000_000, 0], 0, null]];
     const res = await googleAdapter.fetchBatch(
       stubPage({ status: 200, body: envelope(rows, "TOKEN2") }),
       gOpts,
       { token: null },
     );
     expect(res).toMatchObject({ kind: "page", next: { token: "TOKEN2" } });
-    if (res.kind === "page") expect(res.reviews[0].id).toBe("id1");
+    if (res.kind === "page") {
+      expect(res.reviews[0].id).toBe("id1");
+    }
   });
 
   test("200 with a valid-but-empty frame → end", async () => {

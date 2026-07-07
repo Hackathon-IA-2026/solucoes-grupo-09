@@ -12,8 +12,7 @@ import {
   useContainerWidth,
   usePalette,
 } from "@noviq/ui";
-import { useMemo } from "react";
-import { Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { sampleResult } from "@/lib/sample-data";
 import { RatingDistribution, SentimentRing } from "./breakdown";
 import { Heatmap } from "./heatmap";
@@ -29,7 +28,7 @@ export function Showcase({ onTryIt }: { onTryIt: () => void }) {
   const colors = usePalette();
   const [width, onLayout] = useContainerWidth();
   const wide = width >= 900;
-  const result = useMemo(() => sampleResult(), []);
+  const result = sampleResult();
 
   return (
     <View
@@ -47,17 +46,10 @@ export function Showcase({ onTryIt }: { onTryIt: () => void }) {
       {/* Section heading */}
       <View style={{ alignItems: "center", gap: space.md, marginTop: space.xl }}>
         <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 8,
-            borderRadius: radius.pill,
-            borderWidth: 1,
-            borderColor: colors.border,
-            backgroundColor: colors.surface,
-            paddingHorizontal: 12,
-            paddingVertical: 6,
-          }}
+          style={[
+            styles.previewBadge,
+            { borderColor: colors.border, backgroundColor: colors.surface },
+          ]}
         >
           <View
             style={{
@@ -163,7 +155,7 @@ export function Showcase({ onTryIt }: { onTryIt: () => void }) {
         <PillButton
           testID="showcase-cta"
           label="Scrape your first app — free"
-          primary
+          primary={true}
           icon={<ArrowRightIcon size={16} color={colors.onAccent} />}
           onPress={onTryIt}
         />
@@ -171,6 +163,18 @@ export function Showcase({ onTryIt }: { onTryIt: () => void }) {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  previewBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+});
 
 function Feature({
   icon,

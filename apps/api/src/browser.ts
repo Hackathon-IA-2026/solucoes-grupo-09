@@ -34,7 +34,7 @@ export const STEALTH: Record<StealthPreset, StealthProfile> = {
     pageDelayMs: [600, 1400],
     warmupScroll: false,
     maxRetries: 4,
-    backoffBaseMs: 6_000,
+    backoffBaseMs: 6000,
   },
   fast: {
     humanize: false,
@@ -42,7 +42,7 @@ export const STEALTH: Record<StealthPreset, StealthProfile> = {
     pageDelayMs: [150, 400],
     warmupScroll: false,
     maxRetries: 3,
-    backoffBaseMs: 3_000,
+    backoffBaseMs: 3000,
   },
 };
 
@@ -50,7 +50,9 @@ export const STEALTH: Record<StealthPreset, StealthProfile> = {
  * stuck waiting out a long stealth delay or 429 backoff). */
 export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
-    if (signal?.aborted) return resolve();
+    if (signal?.aborted) {
+      return resolve();
+    }
     const done = () => {
       clearTimeout(timer);
       signal?.removeEventListener("abort", done);
@@ -96,7 +98,7 @@ export async function openSession(
     ...(profile.humanize && profile.humanPreset
       ? { humanPreset: profile.humanPreset }
       : {}),
-    ...(CONTAINER_ARGS.length ? { args: CONTAINER_ARGS } : {}),
+    ...(CONTAINER_ARGS.length > 0 ? { args: CONTAINER_ARGS } : {}),
     ...(opts.proxy ? { proxy: opts.proxy } : {}),
   };
 
@@ -158,7 +160,9 @@ async function navigate(page: Page, url: string): Promise<void> {
         timeout: config.navTimeoutMs,
       });
       const httpStatus = resp?.status() ?? 0;
-      if (httpStatus >= 500) throw new UpstreamError(`store responded ${httpStatus}`);
+      if (httpStatus >= 500) {
+        throw new UpstreamError(`store responded ${httpStatus}`);
+      }
       if (httpStatus >= 400) {
         throw new BadInputError(
           `App not found (store returned ${httpStatus}) — check the app id and country`,
@@ -166,7 +170,9 @@ async function navigate(page: Page, url: string): Promise<void> {
       }
       return; // loaded ok
     } catch (err) {
-      if (err instanceof BadInputError) throw err; // not retryable
+      if (err instanceof BadInputError) {
+        throw err; // not retryable
+      }
       if (attempt >= config.navRetries) {
         throw err instanceof UpstreamError
           ? err

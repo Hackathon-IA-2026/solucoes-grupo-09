@@ -10,10 +10,10 @@ import type { Review, ScrapeResult } from "@noviq/core";
 function mulberry32(seed: number) {
   let s = seed | 0;
   return () => {
-    s = (s + 0x6d2b79f5) | 0;
+    s = (s + 0x6d_2b_79_f5) | 0;
     let t = Math.imul(s ^ (s >>> 15), 1 | s);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+    return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
   };
 }
 
@@ -56,7 +56,7 @@ const NEGATIVE = [
 const VERSIONS = ["4.2.1", "4.2.0", "4.1.3", "4.1.0", "4.0.2"];
 
 function buildReviews(): Review[] {
-  const rand = mulberry32(20260706);
+  const rand = mulberry32(20_260_706);
   const now = Date.now();
   const reviews: Review[] = [];
   for (let i = 0; i < 180; i++) {
@@ -101,7 +101,9 @@ let cached: ScrapeResult | null = null;
 
 /** The showcase dataset (memoized — built once per session). */
 export function sampleResult(): ScrapeResult {
-  if (cached) return cached;
+  if (cached) {
+    return cached;
+  }
   const reviews = buildReviews();
   cached = {
     store: "google",
@@ -127,7 +129,7 @@ export function sampleResult(): ScrapeResult {
       operatingSystem: "Android",
       icon: null,
       url: null,
-      histogram: [7300, 4100, 9800, 26400, 80800],
+      histogram: [7300, 4100, 9800, 26_400, 80_800],
       installs: 5_412_338,
       installsText: "5,000,000+",
       released: "2023-03-14T00:00:00.000Z",

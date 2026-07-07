@@ -13,7 +13,7 @@ import {
   useContainerWidth,
   usePalette,
 } from "@noviq/ui";
-import { type ReactNode, useMemo } from "react";
+import type { ReactNode } from "react";
 import { Text, View } from "react-native";
 import { responseRate, sentimentMix } from "@/lib/analytics";
 
@@ -29,9 +29,9 @@ export function StatCards({ result }: { result: ScrapeResult }) {
   const basis: `${number}%` = columns === 4 ? "23%" : columns === 2 ? "47%" : "100%";
   // Memoized: sentimentMix runs the lexicon over every review body, and this
   // component re-renders on every onLayout/resize pass.
-  const average = useMemo(() => averageRating(result.reviews), [result.reviews]);
-  const mix = useMemo(() => sentimentMix(result.reviews), [result.reviews]);
-  const replies = useMemo(() => responseRate(result.reviews), [result.reviews]);
+  const average = averageRating(result.reviews);
+  const mix = sentimentMix(result.reviews);
+  const replies = responseRate(result.reviews);
   const storeRating = result.appInfo?.averageRating;
 
   return (
@@ -40,18 +40,18 @@ export function StatCards({ result }: { result: ScrapeResult }) {
       style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}
     >
       <StatCard
-        highlight
+        highlight={true}
         delay={0}
         basis={basis}
-        icon={<StarIcon size={18} color={colors.onAccent} filled />}
+        icon={<StarIcon size={18} color={colors.onAccent} filled={true} />}
         label="Average rating"
         value={average > 0 ? average.toFixed(1) : "—"}
         deltaValue={
-          storeRating != null
-            ? `${(average - storeRating >= 0 ? "+" : "") + (average - storeRating).toFixed(2)}`
-            : "—"
+          storeRating == null
+            ? "—"
+            : `${(average - storeRating >= 0 ? "+" : "") + (average - storeRating).toFixed(2)}`
         }
-        deltaPositive={storeRating != null ? average >= storeRating : true}
+        deltaPositive={storeRating == null ? true : average >= storeRating}
         deltaLabel="vs store average"
       />
       <StatCard
@@ -159,7 +159,7 @@ function StatCard({
         {label}
       </Text>
       <Text
-        selectable
+        selectable={true}
         style={{
           marginTop: 4,
           fontSize: 40,

@@ -136,9 +136,9 @@ async function main(): Promise<void> {
     const appPath = join(values.out ?? "output", `${store}-${appId}-${country}.app.json`);
     await writeJson(appPath, app);
     const rating =
-      app.averageRating != null
-        ? `${app.averageRating}★${app.ratingCount != null ? ` (${app.ratingCount})` : ""}`
-        : "no rating";
+      app.averageRating == null
+        ? "no rating"
+        : `${app.averageRating}★${app.ratingCount == null ? "" : ` (${app.ratingCount})`}`;
     console.error(
       `App: ${app.name ?? appId}${app.developer ? ` by ${app.developer}` : ""} — ${rating}` +
         `${app.version ? `, v${app.version}` : ""} → ${appPath}`,

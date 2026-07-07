@@ -4,7 +4,7 @@
  * N-path — on charcoal. Rerun after any brand change:
  * `bun scripts/generate-assets.ts` (from apps/web).
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { chromium } from "@playwright/test";
 
@@ -17,6 +17,18 @@ const FG = "#F7F7F7";
 const MUTED = "#A2A2AC";
 const GRAPE = "#8D5DF6";
 const BORDER = "rgba(255,255,255,0.08)";
+
+/** Hi-res bolt mark, base64-encoded once and shared by every badge asset. */
+const BOLT_B64 = readFileSync(join(ROOT, "assets/images/bolt-logo-source.png")).toString(
+  "base64",
+);
+
+/** Charcoal rounded badge + bolt mark at any size (favicon/PWA/touch icons). */
+function badge(size: number, radius: number) {
+  return `<div style="width:${size}px;height:${size}px;border-radius:${radius}px;background:${CHARCOAL};display:grid;place-items:center">
+      <img src="data:image/png;base64,${BOLT_B64}" style="width:${Math.round(size * 0.66)}px;height:${Math.round(size * 0.72)}px;object-fit:contain" />
+    </div>`;
+}
 
 const FONT =
   "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
@@ -51,16 +63,16 @@ const ASSETS: Asset[] = [
     html: mark(1024, { radius: 0 }),
   },
   {
-    // Favicon = charcoal rounded badge + the bolt mark (extracted from the
-    // brand image). A badge, not a bare glyph — lime-on-transparent is
-    // invisible on light browser tabs.
+    // Favicon = charcoal rounded badge + the bolt mark. A badge, not a bare
+    // glyph — lime-on-transparent is invisible on light browser tabs.
+    // Icons render from bolt-logo-source.png (hi-res, extracted from the
+    // brand image); the bundled bolt-logo.png is the same mark downscaled to
+    // 2x its largest display size to keep the web payload small.
     file: "assets/images/favicon.png",
     width: 64,
     height: 64,
     transparent: true,
-    html: `<div style="width:64px;height:64px;border-radius:14px;background:${CHARCOAL};display:grid;place-items:center">
-      <img src="data:image/png;base64,${readFileSync(join(ROOT, "assets/images/bolt-logo.png")).toString("base64")}" style="width:42px;height:46px;object-fit:contain" />
-    </div>`,
+    html: badge(64, 14),
   },
   {
     file: "assets/images/splash-icon.png",
@@ -96,6 +108,18 @@ const ASSETS: Asset[] = [
         <path d="M9 23V9l14 14V9" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg></div>`,
   },
+  // PWA-manifest + apple-touch icons: the favicon badge, scaled. Opaque
+  // (iOS fills transparent touch-icon pixels with black anyway).
+  ...[
+    { file: "public/icon-192.png", size: 192 },
+    { file: "public/icon-512.png", size: 512 },
+    { file: "public/apple-touch-icon.png", size: 180 },
+  ].map(({ file, size }) => ({
+    file,
+    width: size,
+    height: size,
+    html: badge(size, 0),
+  })),
   {
     file: "public/og.png",
     width: 1200,
@@ -148,4 +172,30 @@ for (const asset of ASSETS) {
   });
   console.log(`✓ ${asset.file} (${asset.width}×${asset.height})`);
 }
+// favicon.ico — a PNG-in-ICO (valid everywhere modern) so the versioned
+// <link rel="icon" href="/favicon.ico?v=2"> in +html.tsx resolves. Rendered
+// at 32x32 from the same badge.
+await page.setViewportSize({ width: 32, height: 32 });
+await page.setContent(
+  `<!doctype html><html><body style="margin:0;background:transparent;display:grid;place-items:center">${badge(32, 7)}</body></html>`,
+);
+const png = await page.screenshot({
+  omitBackground: true,
+  clip: { x: 0, y: 0, width: 32, height: 32 },
+});
+const header = Buffer.alloc(6 + 16);
+header.writeUInt16LE(0, 0); // reserved
+header.writeUInt16LE(1, 2); // type: icon
+header.writeUInt16LE(1, 4); // one image
+header.writeUInt8(32, 6); // width
+header.writeUInt8(32, 7); // height
+header.writeUInt8(0, 8); // palette
+header.writeUInt8(0, 9); // reserved
+header.writeUInt16LE(1, 10); // color planes
+header.writeUInt16LE(32, 12); // bits per pixel
+header.writeUInt32LE(png.length, 14); // image data size
+header.writeUInt32LE(22, 18); // image data offset
+writeFileSync(join(ROOT, "public/favicon.ico"), Buffer.concat([header, png]));
+console.log("✓ public/favicon.ico (32×32)");
+
 await browser.close();

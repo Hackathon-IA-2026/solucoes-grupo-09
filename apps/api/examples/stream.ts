@@ -5,6 +5,7 @@
  *
  * Run with:  bun run examples/stream.ts [appId-or-package]
  */
+
 import { streamReviews } from "../src/index.js";
 
 // Apple numeric id, or a Google package name — the store is auto-detected.

@@ -7,6 +7,7 @@ import { config } from "../config.js";
 import { database } from "../database/connection.js";
 import { bodyLimit, MAX_BODY_BYTES } from "./plugins/body-limit.js";
 import { errorHandler } from "./plugins/errors.js";
+import { rateLimit } from "./plugins/rate-limit.js";
 import { requestContext } from "./plugins/request-context.js";
 import { securityHeaders } from "./plugins/security.js";
 import { reviewsRoutes } from "./reviews/controller.js";
@@ -17,7 +18,9 @@ const isProd = config.isProd;
 
 /** Readiness: the Chromium binary must resolve before we accept traffic. */
 async function browserReady(): Promise<boolean> {
-  if (process.env.CLOAKBROWSER_BINARY_PATH) return true; // container: baked in
+  if (process.env.CLOAKBROWSER_BINARY_PATH) {
+    return true; // container: baked in
+  }
   try {
     return Boolean((await binaryInfo())?.installed);
   } catch {
@@ -34,6 +37,18 @@ export const app = new Elysia()
   .use(securityHeaders)
   .use(requestContext)
   .use(bodyLimit())
+  .use(
+    // Scrape *submissions* only — each one may launch a Chromium. Cheap reads
+    // (job polling, stored reviews, /, /health, /ready, /docs) are exempt so
+    // a legitimate client polling its job is never throttled.
+    rateLimit({
+      max: config.rateLimitMax,
+      windowMs: config.rateLimitWindowMs,
+      counts: (method, pathname) =>
+        (method === "GET" && (pathname === "/reviews" || pathname === "/app")) ||
+        (method === "POST" && pathname === "/reviews/jobs"),
+    }),
+  )
   .use(
     cors({
       // Dev: any origin (local Expo web runs on arbitrary ports). Prod: only
@@ -81,7 +96,9 @@ export const app = new Elysia()
     "/ready",
     async ({ set }) => {
       const ready = await browserReady();
-      if (!ready) set.status = 503;
+      if (!ready) {
+        set.status = 503;
+      }
       return { ready };
     },
     { detail: { summary: "Readiness — Chromium binary available" } },

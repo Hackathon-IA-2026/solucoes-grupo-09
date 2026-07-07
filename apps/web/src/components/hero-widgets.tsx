@@ -9,8 +9,8 @@ import {
   usePalette,
   useReducedMotion,
 } from "@noviq/ui";
-import { type PropsWithChildren, useEffect, useMemo, useRef } from "react";
-import { Animated, Easing, Platform, Text, View } from "react-native";
+import { type PropsWithChildren, useEffect, useState } from "react";
+import { Animated, Easing, Platform, StyleSheet, Text, View } from "react-native";
 import Svg, {
   Circle,
   Defs,
@@ -31,6 +31,19 @@ import { sampleResult } from "@/lib/sample-data";
  * `noviq-float` idle animation (reduced-motion aware).
  */
 
+const styles = StyleSheet.create({
+  sentimentChip: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderRadius: radius.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+});
+
 /** Gentle vertical float loop (ref `noviq-float`), phase-shifted per widget. */
 function Floaty({
   children,
@@ -38,7 +51,9 @@ function Floaty({
   duration = 5200,
 }: PropsWithChildren<{ delay?: number; duration?: number }>) {
   const reducedMotion = useReducedMotion();
-  const progress = useRef(new Animated.Value(0)).current;
+  // Lazy useState (not useRef) so the Animated.Value is created exactly once
+  // without reading/writing a ref during render.
+  const [progress] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     if (reducedMotion) {
@@ -100,7 +115,7 @@ function MiniStat() {
       }}
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-        <StarIcon size={13} color={colors.onAccent} filled />
+        <StarIcon size={13} color={colors.onAccent} filled={true} />
         <Text style={{ fontSize: 12, fontWeight: "600", color: colors.onAccent }}>
           Average rating
         </Text>
@@ -128,7 +143,7 @@ function MiniStat() {
 function MiniBars() {
   const colors = usePalette();
   const result = sampleResult();
-  const points = useMemo(() => timeline(result.reviews).slice(-6), [result.reviews]);
+  const points = timeline(result.reviews).slice(-6);
   const W = 196;
   const H = 96;
   const max = Math.max(1, ...points.map((p) => p.count)) * 1.15;
@@ -185,9 +200,9 @@ function MiniBars() {
                   rx={barW / 2}
                   fill={isActive ? "url(#hw-active)" : "url(#hw-hatch)"}
                 />
-                {!isActive ? (
+                {isActive ? null : (
                   <Circle cx={x + barW / 2} cy={y} r={3} fill={colors.violet} />
-                ) : null}
+                )}
               </G>
             );
           })}
@@ -206,7 +221,7 @@ function MiniBars() {
         >
           <Text
             style={{
-              fontSize: 10,
+              fontSize: 12,
               fontWeight: "700",
               color: colors.onAccent,
               fontVariant: ["tabular-nums"],
@@ -224,7 +239,7 @@ function MiniBars() {
 function MiniRing() {
   const colors = usePalette();
   const result = sampleResult();
-  const mix = useMemo(() => sentimentMix(result.reviews), [result.reviews]);
+  const mix = sentimentMix(result.reviews);
   const size = 92;
   const r = 34;
   const stroke = 11;
@@ -313,7 +328,8 @@ function MiniRing() {
         >
           {mix.positive}%
         </Text>
-        <Text style={{ fontSize: 11, color: colors.inkMuted }}>
+        <Text style={{ fontSize: 12, color: colors.inkMuted }}>
+          {/* biome-ignore lint/style/useConsistentCurlyBraces: the \n escape needs an expression container */}
           positive{"\n"}sentiment
         </Text>
       </View>
@@ -336,7 +352,7 @@ function MiniReview() {
             justifyContent: "center",
           }}
         >
-          <Text style={{ fontSize: 10, fontWeight: "600", color: colors.onAccentSoft }}>
+          <Text style={{ fontSize: 12, fontWeight: "600", color: colors.onAccentSoft }}>
             MC
           </Text>
         </View>
@@ -349,24 +365,12 @@ function MiniReview() {
       </View>
       <Text
         numberOfLines={2}
-        style={{ marginTop: 8, fontSize: 11, lineHeight: 16, color: colors.inkMuted }}
+        style={{ marginTop: 8, fontSize: 12, lineHeight: 17, color: colors.inkMuted }}
       >
         Best focus timer I've used — the insights genuinely changed my routine.
       </Text>
-      <View
-        style={{
-          marginTop: 8,
-          alignSelf: "flex-start",
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 5,
-          borderRadius: radius.pill,
-          paddingHorizontal: 8,
-          paddingVertical: 3,
-          ...hatchGrape(),
-        }}
-      >
-        <Text style={{ fontSize: 9, fontWeight: "600", color: colors.onVioletSoft }}>
+      <View style={[styles.sentimentChip, hatchGrape()]}>
+        <Text style={{ fontSize: 12, fontWeight: "600", color: colors.onVioletSoft }}>
           sentiment: positive
         </Text>
       </View>
@@ -383,7 +387,7 @@ export function HeroWidgets() {
   return (
     <View
       testID="hero-widgets"
-      aria-hidden
+      aria-hidden={true}
       style={{
         position: "absolute",
         top: 0,

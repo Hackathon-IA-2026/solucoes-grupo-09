@@ -120,7 +120,9 @@ export function mergeAppInfo(
   prov: { store: Store; appId: string; country: string },
 ): AppInfo | null {
   const carried = Object.entries(extras).filter(([, v]) => v != null);
-  if (carried.length === 0) return base;
+  if (carried.length === 0) {
+    return base;
+  }
   const merged = base ?? emptyAppInfo(prov);
   for (const [key, value] of carried) {
     (merged as unknown as Record<string, unknown>)[key] = value;
@@ -137,7 +139,9 @@ export async function fetchAppInfo<C>(
   adapter: StoreAdapter<C>,
   opts: ScrapeOptions,
 ): Promise<AppInfo | null> {
-  if (!opts.appId) throw new Error("appId is required");
+  if (!opts.appId) {
+    throw new Error("appId is required");
+  }
   const profile = STEALTH[opts.stealth ?? "max"];
   const session = await openSession(adapter.landingUrl(opts), opts, profile);
   try {
@@ -158,13 +162,19 @@ async function fetchWithRetry<C>(
   for (let attempt = 1; ; attempt++) {
     try {
       const res = await adapter.fetchBatch(page, opts, cursor);
-      if (res.kind !== "rateLimited") return res;
+      if (res.kind !== "rateLimited") {
+        return res;
+      }
       // Aborted mid-backoff there's no point retrying — stop cleanly.
-      if (attempt > maxRetries || opts.signal?.aborted) return { kind: "end" };
+      if (attempt > maxRetries || opts.signal?.aborted) {
+        return { kind: "end" };
+      }
     } catch (err) {
       // Transient blip (network/timeout/parse) — retry a bounded number of
       // times, then surface the error so the caller can keep partial results.
-      if (attempt > maxRetries || opts.signal?.aborted) throw err;
+      if (attempt > maxRetries || opts.signal?.aborted) {
+        throw err;
+      }
     }
     await sleep(backoffBaseMs * attempt, opts.signal);
   }
@@ -185,7 +195,9 @@ export async function* runScraper<C>(
   adapter: StoreAdapter<C>,
   opts: ScrapeOptions,
 ): AsyncGenerator<Review, void, unknown> {
-  if (!opts.appId) throw new Error("appId is required");
+  if (!opts.appId) {
+    throw new Error("appId is required");
+  }
   const profile = STEALTH[opts.stealth ?? "max"];
 
   const pipeline = new ReviewPipeline([
@@ -206,7 +218,9 @@ export async function* runScraper<C>(
     }
 
     while (paginator.state === "fetch") {
-      if (opts.signal?.aborted) break; // timeout/cancel — stop and close cleanly
+      if (opts.signal?.aborted) {
+        break; // timeout/cancel — stop and close cleanly
+      }
       const res: SettledResult<C> = await fetchWithRetry(
         adapter,
         session.page,
@@ -215,7 +229,9 @@ export async function* runScraper<C>(
         profile.backoffBaseMs,
         profile.maxRetries,
       );
-      if (res.kind === "end") break;
+      if (res.kind === "end") {
+        break;
+      }
 
       let added = 0;
       let halted = false;
@@ -225,7 +241,9 @@ export async function* runScraper<C>(
           halted = true;
           break;
         }
-        if (verdict === "drop") continue;
+        if (verdict === "drop") {
+          continue;
+        }
         yield review;
         opts.onReview?.(review, collected);
         collected++;
@@ -234,7 +252,9 @@ export async function* runScraper<C>(
 
       // Limit reached exactly at a page boundary — halt now instead of paying
       // another page delay + fetch just to have the limit stage say "stop".
-      if (!halted && opts.limit && collected >= opts.limit) halted = true;
+      if (!halted && opts.limit && collected >= opts.limit) {
+        halted = true;
+      }
 
       paginator.advance({ added, next: res.next, halted });
       opts.onProgress?.({
@@ -242,7 +262,9 @@ export async function* runScraper<C>(
         batch: res.reviews.length,
         hasMore: paginator.state === "fetch",
       });
-      if (paginator.state === "fetch") await jitter(profile.pageDelayMs, opts.signal);
+      if (paginator.state === "fetch") {
+        await jitter(profile.pageDelayMs, opts.signal);
+      }
     }
   } finally {
     await session.close();

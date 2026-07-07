@@ -194,9 +194,9 @@ describe("google: normalizeGoogleReview", () => {
     r[1] = ["Alice"];
     r[2] = 4;
     r[4] = "Great app";
-    r[5] = [1700000000, 0];
+    r[5] = [1_700_000_000, 0];
     r[6] = 12;
-    r[7] = ["", "Thanks!", [1700100000, 0]];
+    r[7] = ["", "Thanks!", [1_700_100_000, 0]];
     r[10] = "9.1.0";
     const out = normalizeGoogleReview(r, opts);
     expect(out).toEqual({
@@ -206,12 +206,12 @@ describe("google: normalizeGoogleReview", () => {
       title: "",
       body: "Great app",
       rating: 4,
-      date: new Date(1700000000 * 1000).toISOString(),
+      date: new Date(1_700_000_000 * 1000).toISOString(),
       thumbsUp: 12,
       appVersion: "9.1.0",
       developerResponse: {
         body: "Thanks!",
-        modified: new Date(1700100000 * 1000).toISOString(),
+        modified: new Date(1_700_100_000 * 1000).toISOString(),
       },
       appId: "com.x.y",
       country: "us",
@@ -219,7 +219,7 @@ describe("google: normalizeGoogleReview", () => {
   });
 
   test("null reply → developerResponse null", () => {
-    const r: unknown[] = ["id", ["U"], 5, null, "body", [1700000000, 0], 0, null];
+    const r: unknown[] = ["id", ["U"], 5, null, "body", [1_700_000_000, 0], 0, null];
     expect(normalizeGoogleReview(r, opts)?.developerResponse).toBeNull();
   });
 

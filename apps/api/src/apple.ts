@@ -38,7 +38,9 @@ export function reviewsUrl(opts: ScrapeOptions, offset: number): string {
 
 /** Parse the `offset` query param out of the API's `next` link. */
 export function nextOffset(next: string | undefined): number | null {
-  if (!next) return null;
+  if (!next) {
+    return null;
+  }
   const m = next.match(/[?&]offset=(\d+)/);
   return m ? Number(m[1]) : null;
 }
@@ -62,7 +64,9 @@ export function normalizeAppleReview(
   opts: ScrapeOptions,
 ): Review | null {
   // No id → can't dedupe or persist it (String(undefined) would poison both).
-  if (!raw?.attributes || raw.id == null) return null;
+  if (!raw?.attributes || raw.id == null) {
+    return null;
+  }
   const a = raw.attributes;
   const dev = a.developerResponse;
   return {
@@ -117,7 +121,9 @@ export function parseAppleExtras(body: string): Partial<AppInfo> {
   }
   const attrs = (json as { data?: Array<{ attributes?: Record<string, unknown> }> })
     ?.data?.[0]?.attributes;
-  if (!attrs || typeof attrs !== "object") return {};
+  if (!attrs || typeof attrs !== "object") {
+    return {};
+  }
   const extras: Partial<AppInfo> = {};
 
   const userRating = attrs.userRating as
@@ -160,7 +166,9 @@ export function parseAppleExtras(body: string): Partial<AppInfo> {
           : typeof e.releaseDate === "string"
             ? e.releaseDate
             : null;
-      if (!version || !released) continue;
+      if (!(version && released)) {
+        continue;
+      }
       releases.push({
         version,
         released,
@@ -183,14 +191,20 @@ export const appleAdapter: StoreAdapter<number> = {
 
   async fetchAppExtras(page, opts) {
     const { status, body } = await pageFetch(page, appResourceUrl(opts));
-    if (status !== 200) return {};
+    if (status !== 200) {
+      return {};
+    }
     return parseAppleExtras(body);
   },
 
   async fetchBatch(page, opts, offset): Promise<FetchResult<number>> {
     const { status, body } = await pageFetch(page, reviewsUrl(opts, offset));
-    if (status === 429) return { kind: "rateLimited" };
-    if (status === 404) return { kind: "end" }; // past the last page
+    if (status === 429) {
+      return { kind: "rateLimited" };
+    }
+    if (status === 404) {
+      return { kind: "end" }; // past the last page
+    }
     if (status !== 200) {
       throw new UpstreamError(
         `reviews API returned HTTP ${status}: ${body.slice(0, 200)}`,
@@ -214,7 +228,9 @@ export const appleAdapter: StoreAdapter<number> = {
       );
     }
     const data = json.data;
-    if (data.length === 0) return { kind: "end" };
+    if (data.length === 0) {
+      return { kind: "end" };
+    }
 
     const reviews = data
       .map((r) => normalizeAppleReview(r, opts))

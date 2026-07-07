@@ -32,13 +32,18 @@ export interface VersionStat {
 }
 
 export function sentimentMix(reviews: Review[]): SentimentMix {
-  if (reviews.length === 0) return { positive: 0, neutral: 0, negative: 0 };
+  if (reviews.length === 0) {
+    return { positive: 0, neutral: 0, negative: 0 };
+  }
   let positive = 0;
   let negative = 0;
   for (const review of reviews) {
     const tone = classifySentiment(review);
-    if (tone === "positive") positive++;
-    else if (tone === "negative") negative++;
+    if (tone === "positive") {
+      positive++;
+    } else if (tone === "negative") {
+      negative++;
+    }
   }
   const pct = (n: number) => Math.round((n / reviews.length) * 100);
   const p = pct(positive);
@@ -58,7 +63,9 @@ export function distributionPct(reviews: Review[]): number[] {
       rated++;
     }
   }
-  if (rated === 0) return counts;
+  if (rated === 0) {
+    return counts;
+  }
   return counts.map((c) => (c / rated) * 100);
 }
 
@@ -82,7 +89,9 @@ export function timeline(reviews: Review[]): TimelinePoint[] {
   const buckets = new Map<string, { count: number; sum: number; when: number }>();
   for (const review of reviews) {
     const date = new Date(review.date);
-    if (Number.isNaN(date.getTime())) continue;
+    if (Number.isNaN(date.getTime())) {
+      continue;
+    }
     const key = `${date.getFullYear()}-${date.getMonth()}`;
     const bucket = buckets.get(key) ?? {
       count: 0,
@@ -116,7 +125,9 @@ export function keywords(reviews: Review[], top = 10): KeywordStat[] {
     const seen = new Set<string>();
     for (const raw of review.body.toLowerCase().split(/[^a-z']+/)) {
       const word = raw.replace(/^'+|'+$/g, "");
-      if (word.length < 4 || STOPWORDS.has(word) || seen.has(word)) continue;
+      if (word.length < 4 || STOPWORDS.has(word) || seen.has(word)) {
+        continue;
+      }
       seen.add(word);
       const stat = stats.get(word) ?? { count: 0, sum: 0 };
       stat.count++;
@@ -161,7 +172,9 @@ export function versionStats(
 ): VersionBreakdown {
   const direct = new Map<string, { count: number; sum: number }>();
   for (const review of reviews) {
-    if (!review.appVersion) continue;
+    if (!review.appVersion) {
+      continue;
+    }
     const stat = direct.get(review.appVersion) ?? { count: 0, sum: 0 };
     stat.count++;
     stat.sum += review.rating;
@@ -184,16 +197,24 @@ export function versionStats(
   // Release windows: history is newest-first; a review belongs to the newest
   // release published before it. Reviews older than the oldest known release
   // are dropped rather than misattributed.
-  const releases = history
-    .map((r) => ({ version: r.version, at: new Date(r.released).getTime() }))
-    .filter((r) => Number.isFinite(r.at))
-    .sort((a, b) => b.at - a.at);
-  if (releases.length === 0) return { approximate: false, excluded: 0, stats: [] };
+  const releases: Array<{ version: string; at: number }> = [];
+  for (const r of history) {
+    const at = new Date(r.released).getTime();
+    if (Number.isFinite(at)) {
+      releases.push({ version: r.version, at });
+    }
+  }
+  releases.sort((a, b) => b.at - a.at);
+  if (releases.length === 0) {
+    return { approximate: false, excluded: 0, stats: [] };
+  }
   const windows = new Map<string, { count: number; sum: number; at: number }>();
   let excluded = 0;
   for (const review of reviews) {
     const when = new Date(review.date).getTime();
-    if (!Number.isFinite(when)) continue;
+    if (!Number.isFinite(when)) {
+      continue;
+    }
     const release = releases.find((r) => when >= r.at);
     if (!release) {
       excluded++;
@@ -216,7 +237,9 @@ export function versionStats(
 
 /** % of reviews with a developer response. */
 export function responseRate(reviews: Review[]): number {
-  if (reviews.length === 0) return 0;
+  if (reviews.length === 0) {
+    return 0;
+  }
   const responded = reviews.filter((r) => r.developerResponse).length;
   return Math.round((responded / reviews.length) * 100);
 }
@@ -224,7 +247,9 @@ export function responseRate(reviews: Review[]): number {
 /** Initials for the avatar circle ("Jane D." → "JD"). */
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
+  if (parts.length === 0) {
+    return "?";
+  }
   return ((parts[0][0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase();
 }
 
@@ -252,7 +277,9 @@ function hourLabel(hour: number): string {
 }
 
 function quantile(sorted: number[], q: number): number {
-  if (sorted.length === 0) return 0;
+  if (sorted.length === 0) {
+    return 0;
+  }
   const idx = Math.min(sorted.length - 1, Math.floor(q * sorted.length));
   return sorted[idx];
 }
@@ -273,12 +300,16 @@ export function heatmap(
   let valid = 0;
   for (const review of reviews) {
     const date = new Date(review.date);
-    if (Number.isNaN(date.getTime())) continue;
+    if (Number.isNaN(date.getTime())) {
+      continue;
+    }
     counts[date.getHours()][date.getDay()]++;
     sums[date.getHours()][date.getDay()] += review.rating;
     valid++;
   }
-  if (valid === 0) return null;
+  if (valid === 0) {
+    return null;
+  }
 
   const hourTotals = counts.map((row, hour) => ({
     hour,
@@ -290,11 +321,15 @@ export function heatmap(
     .slice(0, 7)
     .map((h) => h.hour)
     .sort((a, b) => b - a);
+  const topHourSet = new Set(topHours);
   while (topHours.length < 7) {
     // Pad sparse datasets with quiet hours so the grid stays 7×7.
-    const missing = hourTotals.find((h) => !topHours.includes(h.hour) && h.total === 0);
-    if (!missing) break;
+    const missing = hourTotals.find((h) => !topHourSet.has(h.hour) && h.total === 0);
+    if (!missing) {
+      break;
+    }
     topHours.push(missing.hour);
+    topHourSet.add(missing.hour);
     topHours.sort((a, b) => b - a);
   }
 
@@ -306,11 +341,19 @@ export function heatmap(
       levels: topHours.map((hour) =>
         HEATMAP_DAYS.map((_, day) => {
           const n = counts[hour][day];
-          if (n === 0) return 0;
+          if (n === 0) {
+            return 0;
+          }
           const avg = sums[hour][day] / n;
-          if (avg >= bands[3]) return 4;
-          if (avg >= bands[2]) return 3;
-          if (avg >= bands[1]) return 2;
+          if (avg >= bands[3]) {
+            return 4;
+          }
+          if (avg >= bands[2]) {
+            return 3;
+          }
+          if (avg >= bands[1]) {
+            return 2;
+          }
           return 1;
         }),
       ),
@@ -318,10 +361,15 @@ export function heatmap(
     };
   }
 
-  const nonzero = topHours
-    .flatMap((hour) => counts[hour])
-    .filter((n) => n > 0)
-    .sort((a, b) => a - b);
+  const nonzero: number[] = [];
+  for (const hour of topHours) {
+    for (const n of counts[hour]) {
+      if (n > 0) {
+        nonzero.push(n);
+      }
+    }
+  }
+  nonzero.sort((a, b) => a - b);
   const t2 = Math.max(2, quantile(nonzero, 0.5));
   const t3 = Math.max(t2 + 1, quantile(nonzero, 0.75));
   const t4 = Math.max(t3 + 1, quantile(nonzero, 0.9));
@@ -331,10 +379,18 @@ export function heatmap(
     levels: topHours.map((hour) =>
       HEATMAP_DAYS.map((_, day) => {
         const n = counts[hour][day];
-        if (n === 0) return 0;
-        if (n >= t4) return 4;
-        if (n >= t3) return 3;
-        if (n >= t2) return 2;
+        if (n === 0) {
+          return 0;
+        }
+        if (n >= t4) {
+          return 4;
+        }
+        if (n >= t3) {
+          return 3;
+        }
+        if (n >= t2) {
+          return 2;
+        }
         return 1;
       }),
     ),

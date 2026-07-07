@@ -15,7 +15,9 @@ export interface ControllerOptions {
 
 function defaultSleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
-    if (signal.aborted) return resolve();
+    if (signal.aborted) {
+      return resolve();
+    }
     const timer = setTimeout(done, ms);
     function done() {
       signal.removeEventListener("abort", done);
@@ -43,7 +45,9 @@ export async function runScrape(
   try {
     jobId = await client.submitJob(request, signal);
   } catch (error) {
-    if (signal.aborted) return;
+    if (signal.aborted) {
+      return;
+    }
     const apiError = error instanceof ApiError ? error : null;
     dispatch({
       type: "SUBMIT_ERROR",
@@ -52,22 +56,32 @@ export async function runScrape(
     });
     return;
   }
-  if (signal.aborted) return;
+  if (signal.aborted) {
+    return;
+  }
   dispatch({ type: "SUBMIT_OK", jobId });
 
   let consecutiveErrors = 0;
   for (let attempt = 0; ; attempt++) {
     await sleep(pollDelayMs(attempt), signal);
-    if (signal.aborted) return;
+    if (signal.aborted) {
+      return;
+    }
 
     try {
       const record = await client.jobStatus(jobId, signal);
-      if (signal.aborted) return;
+      if (signal.aborted) {
+        return;
+      }
       consecutiveErrors = 0;
       dispatch({ type: "JOB_UPDATE", record });
-      if (record.status === "completed" || record.status === "failed") return;
+      if (record.status === "completed" || record.status === "failed") {
+        return;
+      }
     } catch (error) {
-      if (signal.aborted) return;
+      if (signal.aborted) {
+        return;
+      }
       consecutiveErrors++;
       dispatch({
         type: "POLL_ERROR",
@@ -75,7 +89,9 @@ export async function runScrape(
       });
       // Mirrors the machine's threshold: it has already moved to `failed`,
       // so polling further would dispatch into a dead state.
-      if (consecutiveErrors >= MAX_POLL_ERRORS) return;
+      if (consecutiveErrors >= MAX_POLL_ERRORS) {
+        return;
+      }
     }
   }
 }

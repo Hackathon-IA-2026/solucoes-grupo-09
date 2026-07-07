@@ -26,7 +26,9 @@ export interface BullMqOptions {
 }
 
 function mapState(state: string): JobStatus {
-  if (state === "completed" || state === "failed" || state === "active") return state;
+  if (state === "completed" || state === "failed" || state === "active") {
+    return state;
+  }
   return "waiting"; // waiting | delayed | prioritized | paused | waiting-children
 }
 
@@ -73,12 +75,12 @@ export function createBullMqRunner(
     defaultJobOptions: {
       // Keep results poll-able for a window, then auto-clean (also count-capped
       // as a backstop). Failed jobs linger longer for debugging.
-      removeOnComplete: { age: opts.completedRetentionSec ?? 3_600, count: 1_000 },
-      removeOnFail: { age: opts.failedRetentionSec ?? 86_400, count: 5_000 },
+      removeOnComplete: { age: opts.completedRetentionSec ?? 3600, count: 1000 },
+      removeOnFail: { age: opts.failedRetentionSec ?? 86_400, count: 5000 },
       // Retry failed jobs with exponential backoff. Safe because the scrape
       // handler is idempotent (read-only — no side effects to replay).
       attempts: opts.attempts ?? 1,
-      backoff: { type: "exponential", delay: opts.backoffMs ?? 5_000 },
+      backoff: { type: "exponential", delay: opts.backoffMs ?? 5000 },
     },
   });
 
@@ -127,13 +129,19 @@ export function createBullMqRunner(
     },
     async status(id) {
       const job = await withOpTimeout(queue.getJob(id), opTimeoutMs, "job lookup");
-      if (!job) return null;
+      if (!job) {
+        return null;
+      }
       const status = mapState(
         await withOpTimeout(job.getState(), opTimeoutMs, "job state"),
       );
       const record: JobRecord = { id, status };
-      if (status === "completed") record.result = job.returnvalue;
-      if (status === "failed") record.error = job.failedReason || "Scrape failed";
+      if (status === "completed") {
+        record.result = job.returnvalue;
+      }
+      if (status === "failed") {
+        record.error = job.failedReason || "Scrape failed";
+      }
       if (
         status === "active" &&
         job.progress &&
@@ -145,7 +153,9 @@ export function createBullMqRunner(
       return record;
     },
     async close() {
-      if (worker) await worker.close();
+      if (worker) {
+        await worker.close();
+      }
       await queue.close();
       queueConn.disconnect();
       workerConn?.disconnect();

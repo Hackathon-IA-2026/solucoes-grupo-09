@@ -38,7 +38,9 @@ describe("api · async jobs (injected runner, no browser)", () => {
       const { data } = await api.reviews.jobs({ id: id as string }).get();
       status = data?.status;
       count = data?.result?.count;
-      if (status === "completed" || status === "failed") break;
+      if (status === "completed" || status === "failed") {
+        break;
+      }
       await new Promise((res) => setTimeout(res, 5));
     }
     expect(status).toBe("completed");

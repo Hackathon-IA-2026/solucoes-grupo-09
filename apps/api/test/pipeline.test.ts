@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { Review } from "../src/types.js";
 
 // A canned "server": maps an in-page fetch (url, init) to an HTTP-ish response.
-type FetchInit = { method?: string; headers?: Record<string, string>; body?: string };
+interface FetchInit {
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
+}
 type Server = (url: string, init?: FetchInit) => { status: number; body: string };
 let server: Server;
 
@@ -27,7 +31,9 @@ function makePage() {
     async evaluate(_fn: unknown, arg?: { url: string; init?: FetchInit }) {
       if (arg === undefined) {
         jsonLdReads++;
-        if (jsonLdThrows) throw new Error("evaluate failed");
+        if (jsonLdThrows) {
+          throw new Error("evaluate failed");
+        }
         return jsonLd;
       }
       return server(arg.url, arg.init);
@@ -77,7 +83,9 @@ const APP_LD = JSON.stringify({
 function appleServer(total: number): Server {
   return (url) => {
     const offset = Number(new URL(url).searchParams.get("offset"));
-    if (offset >= total) return { status: 404, body: "" };
+    if (offset >= total) {
+      return { status: 404, body: "" };
+    }
     const data: unknown[] = [];
     for (let i = offset; i < Math.min(offset + 20, total); i++) {
       data.push({
@@ -183,9 +191,13 @@ describe("pipeline · apple (offset pagination)", () => {
   test("retries on HTTP 429 then succeeds", async () => {
     let hit = 0;
     server = (url) => {
-      if (hit++ === 0) return { status: 429, body: "" };
+      if (hit++ === 0) {
+        return { status: 429, body: "" };
+      }
       const offset = Number(new URL(url).searchParams.get("offset"));
-      if (offset >= 5) return { status: 404, body: "" };
+      if (offset >= 5) {
+        return { status: 404, body: "" };
+      }
       const data = Array.from({ length: 5 }, (_, i) => ({
         id: `r${i}`,
         attributes: { rating: 4, date: "2025-01-01T00:00:00Z" },
@@ -241,7 +253,7 @@ describe("pipeline · streaming + callbacks", () => {
   });
 
   test("onReview fires once per emitted review with its index", async () => {
-    const seen: Array<[string, number]> = [];
+    const seen: [string, number][] = [];
     await getReviews({
       appId: "1",
       store: "apple",
@@ -267,7 +279,7 @@ describe("pipeline · streaming + callbacks", () => {
       signal: ac.signal,
     });
     expect(reviews.length).toBe(0);
-    expect(performance.now() - started).toBeLessThan(2_500);
+    expect(performance.now() - started).toBeLessThan(2500);
   });
 
   test("stops early and closes when the abort signal fires (timeout/cancel)", async () => {
@@ -281,7 +293,9 @@ describe("pipeline · streaming + callbacks", () => {
       signal: ac.signal,
     })) {
       ids.push(r.id);
-      if (ids.length === 20) ac.abort(); // abort after the first page
+      if (ids.length === 20) {
+        ac.abort(); // abort after the first page
+      }
     }
     // Engine checks the signal at the page boundary → no further pages fetched.
     expect(ids.length).toBe(20);
@@ -297,7 +311,7 @@ describe("pipeline · app metadata", () => {
   });
 
   test("onAppInfo fires once with parsed metadata; reviews still complete", async () => {
-    const seen: Array<unknown> = [];
+    const seen: unknown[] = [];
     const reviews = await getReviews({
       appId: "1",
       store: "apple",
@@ -325,7 +339,7 @@ describe("pipeline · app metadata", () => {
 
   test("a page with no structured data yields onAppInfo(null)", async () => {
     jsonLd = [];
-    const seen: Array<unknown> = [];
+    const seen: unknown[] = [];
     const reviews = await getReviews({
       appId: "1",
       store: "apple",
@@ -338,7 +352,7 @@ describe("pipeline · app metadata", () => {
 
   test("an extraction failure is non-fatal — onAppInfo(null), reviews intact", async () => {
     jsonLdThrows = true;
-    const seen: Array<unknown> = [];
+    const seen: unknown[] = [];
     const reviews = await getReviews({
       appId: "1",
       store: "apple",
@@ -419,7 +433,9 @@ describe("pipeline · convenience wrappers", () => {
     expect(reviews.every((r) => r.store === "apple")).toBe(true);
 
     const ids: string[] = [];
-    for await (const r of streamAppleReviews({ appId: "1", ...FAST })) ids.push(r.id);
+    for await (const r of streamAppleReviews({ appId: "1", ...FAST })) {
+      ids.push(r.id);
+    }
     expect(ids.length).toBe(5);
   });
 
@@ -431,8 +447,9 @@ describe("pipeline · convenience wrappers", () => {
 
     server = googleServer([["9"]]);
     const ids: string[] = [];
-    for await (const r of streamGoogleReviews({ appId: "com.x.y", ...FAST }))
+    for await (const r of streamGoogleReviews({ appId: "com.x.y", ...FAST })) {
       ids.push(r.id);
+    }
     expect(ids).toEqual(["9"]);
   });
 });

@@ -22,8 +22,9 @@ export function gradientBg(gradient: string, fallback: string): object {
  */
 export function hatchBg(rgb: string, lineAlpha: number, baseAlpha: number): object {
   const base = `rgba(${rgb}, ${baseAlpha})`;
-  if (Platform.OS !== "web")
+  if (Platform.OS !== "web") {
     return { backgroundColor: `rgba(${rgb}, ${baseAlpha + 0.22})` };
+  }
   return {
     backgroundColor: base,
     backgroundImage: `repeating-linear-gradient(45deg, rgba(${rgb}, ${lineAlpha}) 0, rgba(${rgb}, ${lineAlpha}) 1.5px, transparent 1.5px, transparent 6px)`,

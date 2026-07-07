@@ -50,7 +50,7 @@ describe("api · typed routes (Eden Treaty)", () => {
   });
 
   it("rejects a limit above the max with 422 (runtime validation)", async () => {
-    const { error } = await api.reviews.get({ query: { appId: "1", limit: 99999 } });
+    const { error } = await api.reviews.get({ query: { appId: "1", limit: 99_999 } });
     expect(error?.status).toBe(422);
   });
 

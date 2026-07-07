@@ -6,7 +6,9 @@ import { Platform } from "react-native";
  * would show permanently. Native focus visibility comes from the platform.
  */
 export function focusRing(focused: boolean, color: string, offset = 2): object {
-  if (Platform.OS !== "web") return {};
+  if (Platform.OS !== "web") {
+    return {};
+  }
   return {
     outlineStyle: focused ? "solid" : "none",
     outlineWidth: 2,
@@ -17,6 +19,8 @@ export function focusRing(focused: boolean, color: string, offset = 2): object {
 
 /** Web-only CSS transition props (native animates via Animated instead). */
 export function webTransition(properties: string, durationMs: number): object {
-  if (Platform.OS !== "web") return {};
+  if (Platform.OS !== "web") {
+    return {};
+  }
   return { transitionProperty: properties, transitionDuration: `${durationMs}ms` };
 }

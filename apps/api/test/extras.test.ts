@@ -12,14 +12,16 @@ describe("apple · parseAppleExtras", () => {
   const extras = parseAppleExtras(JSON.stringify(appleFixture));
 
   it("reads the store-wide histogram (index 0 = 1★)", () => {
-    expect(extras.histogram).toEqual([1214659, 271878, 691924, 1989144, 25070201]);
+    expect(extras.histogram).toEqual([
+      1_214_659, 271_878, 691_924, 1_989_144, 25_070_201,
+    ]);
     // 5★-heavy for a 4.7 app — sanity check the star order.
     expect(extras.histogram?.[4]).toBeGreaterThan(extras.histogram?.[0] ?? 0);
   });
 
   it("reads rating aggregate, release date and version history", () => {
     expect(extras.averageRating).toBe(4.7);
-    expect(extras.ratingCount).toBe(29237806);
+    expect(extras.ratingCount).toBe(29_237_806);
     expect(extras.released).toBe("2010-10-06");
     expect(extras.versionHistory?.[0]).toEqual({
       version: "437.1",
@@ -44,11 +46,13 @@ describe("google · parseGoogleExtras", () => {
   const extras = parseGoogleExtras(JSON.stringify(googleDs5));
 
   it("reads histogram, installs, dates", () => {
-    expect(extras.histogram).toEqual([3714863, 1083164, 1331088, 3061651, 26692025]);
-    expect(extras.installs).toBe(3032313142);
+    expect(extras.histogram).toEqual([
+      3_714_863, 1_083_164, 1_331_088, 3_061_651, 26_692_025,
+    ]);
+    expect(extras.installs).toBe(3_032_313_142);
     expect(extras.installsText).toBe("1,000,000,000+");
     expect(extras.averageRating).toBe(4.34);
-    expect(extras.ratingCount).toBe(35882813);
+    expect(extras.ratingCount).toBe(35_882_813);
     expect(extras.updated).toMatch(/^2026-07-06T/);
     expect(extras.released).toMatch(/^2014-05-27T/);
   });

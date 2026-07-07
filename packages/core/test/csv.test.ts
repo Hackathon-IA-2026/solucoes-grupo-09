@@ -59,6 +59,28 @@ describe("reviewsToCsv", () => {
     expect(reviewsToCsv([]).split("\r\n")).toHaveLength(1);
   });
 
+  test("neutralizes spreadsheet formula injection in scraped text", () => {
+    const hostile: Review = {
+      ...base,
+      userName: '=HYPERLINK("http://evil.example","click")',
+      title: "+1234567890",
+      body: "@SUM(A1:A9)",
+    };
+    const row = reviewsToCsv([hostile]).split("\r\n")[1];
+    // Each formula-leading cell gains a leading apostrophe so Excel/Sheets
+    // treat it as text, and quoting still applies where RFC 4180 demands it.
+    expect(row).toContain("'=HYPERLINK(");
+    expect(row).toContain("'+1234567890");
+    expect(row).toContain("'@SUM(A1:A9)");
+  });
+
+  test("does not touch numeric fields or benign text", () => {
+    const negative: Review = { ...base, rating: 1, thumbsUp: -1 as number };
+    const row = reviewsToCsv([negative]).split("\r\n")[1];
+    expect(row).toContain(",-1,"); // numbers are never apostrophe-prefixed
+    expect(row).toContain("Works well"); // plain text unchanged
+  });
+
   test("round-trips through a strict CSV parse (quoted fields intact)", () => {
     const tricky: Review = { ...base, body: 'has "quotes", commas\nand newlines' };
     const csv = reviewsToCsv([tricky]);

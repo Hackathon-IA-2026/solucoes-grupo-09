@@ -14,7 +14,7 @@ test.beforeEach(async ({ page }) => {
 test.describe("hero", () => {
   test("renders SEO content and the scrape capsule", async ({ page }) => {
     await page.goto("/");
-    await expect(page).toHaveTitle(/Noviq — App Review Intelligence/);
+    await expect(page).toHaveTitle(/Review Scraper — Free CSV Export \| Noviq/);
     await expect(page.getByRole("heading", { level: 1 })).toContainText(
       "Turn any app's reviews into",
     );
@@ -32,7 +32,8 @@ test.describe("hero", () => {
       ).toBeVisible();
     }
     const jsonLd = page.locator('script[type="application/ld+json"]');
-    await expect(jsonLd).toHaveCount(1);
+    // WebApplication + Organization + WebSite, one object per script.
+    await expect(jsonLd).toHaveCount(3);
   });
 
   test("social/OG tags and static assets ship", async ({ page }) => {
@@ -63,7 +64,7 @@ test.describe("hero", () => {
     await expect(page.getByTestId("showcase")).toContainText("reviews analyzed");
     // CTA scrolls back to the input.
     await page.getByTestId("showcase-cta").click();
-    await expect(page.getByTestId("url-input")).toBeInViewport({ timeout: 5_000 });
+    await expect(page.getByTestId("url-input")).toBeInViewport({ timeout: 5000 });
   });
 
   test("sample chips fill the input", async ({ page }) => {
@@ -78,7 +79,7 @@ test.describe("input validation", () => {
     await page.goto("/");
     await page.getByTestId("url-input").fill("definitely not an app link");
     await expect(page.getByTestId("input-error")).toContainText("couldn't recognize", {
-      timeout: 3_000,
+      timeout: 3000,
     });
   });
 
@@ -86,7 +87,7 @@ test.describe("input validation", () => {
     await page.goto("/");
     await page.getByTestId("url-input").fill("https://apps.apple.com/us/app/instagram");
     await expect(page.getByTestId("input-error")).toContainText("missing the app id", {
-      timeout: 3_000,
+      timeout: 3000,
     });
   });
 
@@ -102,7 +103,7 @@ test.describe("input validation", () => {
     // The detected-store chip (distinct from the "Google Play" sample button).
     await expect(page.getByLabel("Google Play", { exact: true })).toBeVisible();
     await expect(page.getByTestId("app-preview")).toContainText("Spotify", {
-      timeout: 5_000,
+      timeout: 5000,
     });
   });
 });

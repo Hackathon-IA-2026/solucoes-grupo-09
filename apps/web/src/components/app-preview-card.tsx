@@ -1,7 +1,7 @@
 import { type AppInfo, formatCompact, formatRating } from "@noviq/core";
 import { FadeIn, motion, radius, Stars, space, usePalette } from "@noviq/ui";
 import { Image } from "expo-image";
-import { Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 /**
  * The "that's my app!" moment: as soon as a pasted link resolves we show the
@@ -16,17 +16,10 @@ export function AppPreviewCard({ appInfo }: { appInfo: AppInfo }) {
     <FadeIn
       duration={motion.base}
       testID="app-preview"
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        gap: space.md,
-        backgroundColor: colors.surfaceSunken,
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: radius.md,
-        borderCurve: "continuous",
-        padding: space.md,
-      }}
+      style={[
+        styles.card,
+        { backgroundColor: colors.surfaceSunken, borderColor: colors.border },
+      ]}
     >
       {appInfo.icon ? (
         <Image
@@ -62,7 +55,7 @@ export function AppPreviewCard({ appInfo }: { appInfo: AppInfo }) {
             .filter(Boolean)
             .join(" · ")}
         </Text>
-        {appInfo.averageRating != null ? (
+        {appInfo.averageRating == null ? null : (
           <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
             <Stars value={appInfo.averageRating} size={13} />
             <Text
@@ -76,8 +69,20 @@ export function AppPreviewCard({ appInfo }: { appInfo: AppInfo }) {
               {appInfo.ratingCount ? ` (${formatCompact(appInfo.ratingCount)})` : ""}
             </Text>
           </View>
-        ) : null}
+        )}
       </View>
     </FadeIn>
   );
 }
+
+const styles = StyleSheet.create({
+  card: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    borderCurve: "continuous",
+    padding: space.md,
+  },
+});

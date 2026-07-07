@@ -23,7 +23,9 @@ export class ReviewPipeline {
   run(review: Review): Verdict {
     for (const stage of this.stages) {
       const verdict = stage(review);
-      if (verdict !== "accept") return verdict;
+      if (verdict !== "accept") {
+        return verdict;
+      }
     }
     return "accept";
   }
@@ -35,7 +37,9 @@ export class ReviewPipeline {
 export function dedupe(): Stage {
   const seen = new Set<string>();
   return (review) => {
-    if (seen.has(review.id)) return "drop";
+    if (seen.has(review.id)) {
+      return "drop";
+    }
     seen.add(review.id);
     return "accept";
   };
@@ -45,17 +49,23 @@ export function dedupe(): Stage {
 export function notOlderThan(cutoff: Date | null): Stage {
   const ms = cutoff ? cutoff.getTime() : null;
   return (review) => {
-    if (ms === null || Number.isNaN(ms) || !review.date) return "accept";
+    if (ms === null || Number.isNaN(ms) || !review.date) {
+      return "accept";
+    }
     return new Date(review.date).getTime() < ms ? "stop" : "accept";
   };
 }
 
 /** Emit at most `max` reviews, then stop. `null`/`0`/`undefined` means unlimited. */
 export function limit(max: number | null | undefined): Stage {
-  if (!max) return () => "accept";
+  if (!max) {
+    return () => "accept";
+  }
   let emitted = 0;
   return () => {
-    if (emitted >= max) return "stop";
+    if (emitted >= max) {
+      return "stop";
+    }
     emitted++;
     return "accept";
   };

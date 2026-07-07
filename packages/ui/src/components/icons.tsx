@@ -27,7 +27,7 @@ function Base({
       strokeWidth={strokeWidth}
       strokeLinecap="round"
       strokeLinejoin="round"
-      aria-hidden
+      aria-hidden={true}
     >
       {children}
     </Svg>
@@ -174,7 +174,7 @@ export function StarIcon({ filled = false, ...props }: IconProps & { filled?: bo
       strokeWidth={props.strokeWidth ?? 2}
       strokeLinecap="round"
       strokeLinejoin="round"
-      aria-hidden
+      aria-hidden={true}
     >
       <Path d="M12 2.5l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5-5.8-3-5.8 3 1.1-6.5L2.6 9.3l6.5-.9L12 2.5z" />
     </Svg>
