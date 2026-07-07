@@ -157,10 +157,23 @@ test.describe("scrape flow", () => {
       "Saved noviq-reviews-com.spotify.music-us.csv",
     );
 
+    // The centered header logo links back home.
+    await expect(page.getByTestId("nav-home")).toBeVisible();
+
     // Reset returns to a fresh hero.
     await page.getByTestId("new-scrape").click();
     await expect(page.getByTestId("scrape-button")).toBeVisible();
     await expect(page.getByTestId("url-input")).toHaveValue("");
+  });
+
+  test("the header logo returns to the hero", async ({ page }) => {
+    await page.goto("/");
+    await page.getByTestId("url-input").fill(PLAY_URL);
+    await page.getByTestId("scrape-button").click();
+    await expect(page.getByTestId("results-panel")).toBeVisible({ timeout: 15_000 });
+    await page.getByTestId("nav-home").click();
+    await expect(page.getByTestId("scrape-button")).toBeVisible();
+    await expect(page.getByTestId("hero-logo")).toBeVisible();
   });
 
   test("view pills filter the dashboard sections", async ({ page }) => {

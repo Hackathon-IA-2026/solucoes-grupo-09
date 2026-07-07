@@ -104,7 +104,7 @@ export function Dashboard({
         gap: space.xl,
       }}
     >
-      <TopNav />
+      <TopNav onHome={onNewScrape} />
 
       {/* Hero header */}
       <View

@@ -1,6 +1,7 @@
 import {
   BellIcon,
   ChevronDownIcon,
+  focusRing,
   IconCircleButton,
   LayoutDashboardIcon,
   NoviqMark,
@@ -8,8 +9,9 @@ import {
   SearchIcon,
   usePalette,
 } from "@noviq/ui";
+import { Image } from "expo-image";
 import { useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { Platform, Pressable, ScrollView, Text, View } from "react-native";
 
 const TABS = [
   { label: "Overview", icon: true },
@@ -22,8 +24,11 @@ const TABS = [
 /**
  * Reference `TopNav`: grape logo tile, scrollable tab pills (lime active,
  * icon/badge/chevron variants), and the search / bell / avatar cluster.
+ *
+ * NOT RENDERED right now — it's awesome, so it stays for when the dashboard
+ * grows real sections (swap `TopNav` back to this in dashboard.tsx).
  */
-export function TopNav() {
+export function TopNavFull() {
   const colors = usePalette();
   const [active, setActive] = useState<string>("Overview");
 
@@ -146,6 +151,51 @@ export function TopNav() {
           </View>
         </View>
       </View>
+    </View>
+  );
+}
+
+/**
+ * Current dashboard header: just the bolt mark, centered — tapping it
+ * returns to the home/hero screen.
+ */
+export function TopNav({ onHome }: { onHome: () => void }) {
+  const colors = usePalette();
+  return (
+    <View style={{ alignItems: "center" }}>
+      <Pressable
+        accessibilityRole="link"
+        accessibilityLabel="Noviq — back to home"
+        testID="nav-home"
+        onPress={onHome}
+        style={(state) => {
+          const { pressed } = state;
+          const { hovered = false, focused = false } = state as {
+            hovered?: boolean;
+            focused?: boolean;
+          };
+          return {
+            padding: 8,
+            borderRadius: 12,
+            transform: [{ scale: pressed ? 0.94 : hovered ? 1.06 : 1 }],
+            ...focusRing(focused, colors.focus),
+            ...(Platform.OS === "web"
+              ? ({
+                  cursor: "pointer",
+                  transitionProperty: "transform",
+                  transitionDuration: "150ms",
+                } as object)
+              : null),
+          };
+        }}
+      >
+        <Image
+          source={require("../../assets/images/bolt-logo.png")}
+          style={{ width: 40, height: 44 }}
+          contentFit="contain"
+          transition={150}
+        />
+      </Pressable>
     </View>
   );
 }
