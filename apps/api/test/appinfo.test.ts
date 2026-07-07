@@ -45,6 +45,12 @@ describe("appinfo · parseAppInfo", () => {
       operatingSystem: "iOS",
       icon: "https://is1.example/icon.png",
       url: "https://apps.apple.com/us/app/instagram/id389801252",
+      histogram: null,
+      installs: null,
+      installsText: null,
+      released: null,
+      updated: null,
+      versionHistory: null,
     });
   });
 
@@ -135,6 +141,12 @@ describe("appinfo · parseAppInfo", () => {
       operatingSystem: null,
       icon: null,
       url: null,
+      histogram: null,
+      installs: null,
+      installsText: null,
+      released: null,
+      updated: null,
+      versionHistory: null,
     });
   });
 

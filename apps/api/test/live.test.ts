@@ -95,3 +95,53 @@ describe("live · csv end-to-end", () => {
     TIMEOUT,
   );
 });
+
+describe("live · metadata extras", () => {
+  live(
+    "Apple appInfo carries histogram + version history",
+    async () => {
+      const { getAppInfo } = await import("../src/scrape.js");
+      const info = await getAppInfo({
+        appId: "389801252",
+        store: "apple",
+        stealth: "fast",
+      });
+      expect(info).not.toBeNull();
+      expect(info?.histogram).toHaveLength(5);
+      expect(info?.histogram?.every((n) => n >= 0)).toBe(true);
+      // Instagram is 4★+: the 5★ bucket dominates the 1★ bucket.
+      expect(info?.histogram?.[4]).toBeGreaterThan(info?.histogram?.[0] ?? 0);
+      expect(info?.versionHistory?.length).toBeGreaterThan(3);
+      expect(info?.versionHistory?.[0]?.version).toMatch(/^\d/);
+      expect(info?.versionHistory?.[0]?.released).toMatch(/^\d{4}-/);
+      expect(info?.released).toMatch(/^\d{4}-/);
+    },
+    TIMEOUT,
+  );
+
+  live(
+    "Google appInfo carries histogram + installs + dates; reviews carry avatars",
+    async () => {
+      const { getAppInfo, getReviews } = await import("../src/scrape.js");
+      const info = await getAppInfo({
+        appId: "com.spotify.music",
+        store: "google",
+        stealth: "fast",
+      });
+      expect(info?.histogram).toHaveLength(5);
+      expect(info?.installs).toBeGreaterThan(1_000_000);
+      expect(info?.installsText).toMatch(/\+$/);
+      expect(info?.updated).toMatch(/^\d{4}-/);
+      expect(info?.released).toMatch(/^\d{4}-/);
+
+      const reviews = await getReviews({
+        appId: "com.spotify.music",
+        store: "google",
+        limit: 20,
+        stealth: "fast",
+      });
+      expect(reviews.some((r) => r.avatar?.startsWith("https://"))).toBe(true);
+    },
+    TIMEOUT * 2,
+  );
+});

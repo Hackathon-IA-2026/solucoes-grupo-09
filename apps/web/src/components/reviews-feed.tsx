@@ -8,6 +8,7 @@ import {
   ThumbsUpIcon,
   usePalette,
 } from "@noviq/ui";
+import { Image } from "expo-image";
 import { useMemo, useState } from "react";
 import { Platform, Pressable, Text, TextInput, View } from "react-native";
 import { initials, reviewTone } from "@/lib/analytics";
@@ -287,20 +288,31 @@ function FeedReviewCard({ review }: { review: Review }) {
         <View
           style={{ flexDirection: "row", alignItems: "center", gap: 12, flexShrink: 1 }}
         >
-          <View
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 18,
-              backgroundColor: toneStyle.bg,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Text style={{ fontSize: 12, fontWeight: "600", color: toneStyle.text }}>
-              {initials(review.userName)}
-            </Text>
-          </View>
+          {review.avatar ? (
+            <Image
+              testID="review-avatar"
+              source={{ uri: review.avatar }}
+              style={{ width: 36, height: 36, borderRadius: 18 }}
+              contentFit="cover"
+              accessibilityLabel={`${review.userName} avatar`}
+              transition={100}
+            />
+          ) : (
+            <View
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                backgroundColor: toneStyle.bg,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text style={{ fontSize: 12, fontWeight: "600", color: toneStyle.text }}>
+                {initials(review.userName)}
+              </Text>
+            </View>
+          )}
           <View style={{ flexShrink: 1 }}>
             <Text
               numberOfLines={1}

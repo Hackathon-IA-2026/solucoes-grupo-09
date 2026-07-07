@@ -351,15 +351,20 @@ describe("pipeline · app metadata", () => {
 
   test("getAppInfo fetches metadata only (no reviews pulled)", async () => {
     // appleServer would serve reviews, but getAppInfo must never call fetchBatch.
-    let fetchHits = 0;
+    const hits: string[] = [];
     const backend = appleServer(10);
     server = (url, init) => {
-      fetchHits++;
+      hits.push(url);
       return backend(url, init);
     };
     const info = await getAppInfo({ appId: "1", store: "apple", ...FAST });
     expect(info?.name).toBe("Test App");
-    expect(fetchHits).toBe(0); // landing page + JSON-LD only, no review fetches
+    // One page fetch is allowed: the catalog app resource (metadata extras).
+    // The reviews endpoint must never be hit.
+    expect(hits.every((url) => !url.includes("/reviews"))).toBe(true);
+    expect(hits.filter((url) => url.includes("/api/apps/v1/catalog/"))).toHaveLength(
+      hits.length,
+    );
     expect(jsonLdReads).toBe(1); // metadata read exactly once
   });
 

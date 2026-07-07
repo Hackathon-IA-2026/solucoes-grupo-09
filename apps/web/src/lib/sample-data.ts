@@ -127,6 +127,12 @@ export function sampleResult(): ScrapeResult {
       operatingSystem: "Android",
       icon: null,
       url: null,
+      histogram: [7300, 4100, 9800, 26400, 80800],
+      installs: 5_412_338,
+      installsText: "5,000,000+",
+      released: "2023-03-14T00:00:00.000Z",
+      updated: new Date(Date.now() - 3 * 86_400_000).toISOString(),
+      versionHistory: null,
     },
   };
   return cached;

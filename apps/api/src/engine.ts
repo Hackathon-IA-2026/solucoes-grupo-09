@@ -29,6 +29,13 @@ export interface StoreAdapter<C> {
   store: Store;
   /** The page to navigate to first (establishes a real session). */
   landingUrl(opts: ScrapeOptions): string;
+  /**
+   * Optional second pass after the landing page loads: pull store-specific
+   * extras (histogram, version history, installs…) from surfaces the
+   * JSON-LD doesn't carry. Best-effort — throwing here must never fail the
+   * scrape, so the engine swallows errors.
+   */
+  fetchAppExtras?(page: Page, opts: ScrapeOptions): Promise<Partial<AppInfo>>;
   /** Cursor for the first page. Must not be `null`. */
   initialCursor: C;
   /** Fetch one page of reviews at `cursor`. */
@@ -55,16 +62,70 @@ async function extractAppInfo<C>(
   page: Page,
   opts: ScrapeOptions,
 ): Promise<AppInfo | null> {
+  const prov = { store: adapter.store, appId: opts.appId, country: countryOf(opts) };
+  let base: AppInfo | null = null;
   try {
     const scripts = await readJsonLdScripts(page);
-    return parseAppInfo(scripts, {
-      store: adapter.store,
-      appId: opts.appId,
-      country: countryOf(opts),
-    });
+    base = parseAppInfo(scripts, prov);
   } catch {
-    return null;
+    base = null;
   }
+  // Store-specific extras (histogram, version history, installs…). Strictly
+  // best-effort on top of the JSON-LD base — never let it break metadata.
+  if (adapter.fetchAppExtras) {
+    try {
+      const extras = await adapter.fetchAppExtras(page, opts);
+      base = mergeAppInfo(base, extras, prov);
+    } catch {
+      // extras are a bonus; keep whatever the base pass produced
+    }
+  }
+  return base;
+}
+
+/** All-null AppInfo scaffold for extras-only results. */
+function emptyAppInfo(prov: { store: Store; appId: string; country: string }): AppInfo {
+  return {
+    ...prov,
+    name: null,
+    developer: null,
+    category: null,
+    description: null,
+    averageRating: null,
+    ratingCount: null,
+    price: null,
+    currency: null,
+    version: null,
+    contentRating: null,
+    operatingSystem: null,
+    icon: null,
+    url: null,
+    histogram: null,
+    installs: null,
+    installsText: null,
+    released: null,
+    updated: null,
+    versionHistory: null,
+  };
+}
+
+/**
+ * Overlay adapter extras on the JSON-LD base. Extras only fill fields they
+ * actually carry (non-null/undefined); a base with no extras and no fields
+ * stays `null` so callers keep the "no metadata found" signal.
+ */
+export function mergeAppInfo(
+  base: AppInfo | null,
+  extras: Partial<AppInfo>,
+  prov: { store: Store; appId: string; country: string },
+): AppInfo | null {
+  const carried = Object.entries(extras).filter(([, v]) => v != null);
+  if (carried.length === 0) return base;
+  const merged = base ?? emptyAppInfo(prov);
+  for (const [key, value] of carried) {
+    (merged as unknown as Record<string, unknown>)[key] = value;
+  }
+  return merged;
 }
 
 /**

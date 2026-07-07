@@ -2,6 +2,7 @@ import {
   averageRating,
   exportFilename,
   formatCompact,
+  formatDate,
   reviewsToCsv,
   reviewsToJson,
   type ScrapeResult,
@@ -204,8 +205,14 @@ export function Dashboard({
                 {result.appInfo?.ratingCount
                   ? ` · ${formatCompact(result.appInfo.ratingCount)} ratings`
                   : ` · ${formatCompact(result.count)} scraped`}
-                {result.appInfo?.developer ? ` · ${result.appInfo.developer}` : ""} ·{" "}
-                {result.country.toUpperCase()}
+                {result.appInfo?.developer ? ` · ${result.appInfo.developer}` : ""}
+                {result.appInfo?.installsText
+                  ? ` · ${result.appInfo.installsText} installs`
+                  : ""}
+                {result.appInfo?.updated
+                  ? ` · updated ${formatDate(result.appInfo.updated)}`
+                  : ""}{" "}
+                · {result.country.toUpperCase()}
               </Text>
             </View>
           </View>

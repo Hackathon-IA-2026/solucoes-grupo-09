@@ -178,6 +178,13 @@ function normalize(app: Record<string, unknown>, prov: Provenance): AppInfo {
     operatingSystem: firstStr(app.operatingSystem),
     icon: imageOf(app.image) ?? imageOf(app.screenshot),
     url: str(app.url) ?? str(app["@id"]),
+    // Filled by the store adapters' extras pass (engine merge), not JSON-LD.
+    histogram: null,
+    installs: null,
+    installsText: null,
+    released: null,
+    updated: null,
+    versionHistory: null,
   };
 }
 

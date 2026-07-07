@@ -1,4 +1,4 @@
-import type { Review } from "@noviq/core";
+import { classifySentiment, type Review, type VersionRelease } from "@noviq/core";
 
 /**
  * Dashboard analytics computed from the actually-scraped reviews — the
@@ -36,8 +36,9 @@ export function sentimentMix(reviews: Review[]): SentimentMix {
   let positive = 0;
   let negative = 0;
   for (const review of reviews) {
-    if (review.rating >= 4) positive++;
-    else if (review.rating < 3) negative++;
+    const tone = classifySentiment(review);
+    if (tone === "positive") positive++;
+    else if (tone === "negative") negative++;
   }
   const pct = (n: number) => Math.round((n / reviews.length) * 100);
   const p = pct(positive);
@@ -137,24 +138,70 @@ export function keywords(reviews: Review[], top = 10): KeywordStat[] {
     });
 }
 
-/** Avg rating per app version (Google reviews carry versions), most-reviewed first. */
-export function versionStats(reviews: Review[], top = 5): VersionStat[] {
-  const stats = new Map<string, { count: number; sum: number }>();
+export interface VersionBreakdown {
+  stats: VersionStat[];
+  /**
+   * True when versions were inferred from release windows (Apple — its
+   * review API omits per-review versions) rather than read directly.
+   */
+  approximate: boolean;
+}
+
+/**
+ * Avg rating per app version. Google reviews carry `appVersion` directly;
+ * for Apple we approximate by bucketing review dates into the release
+ * windows from `versionHistory` (newest-first) and label it as such.
+ */
+export function versionStats(
+  reviews: Review[],
+  history?: VersionRelease[] | null,
+  top = 5,
+): VersionBreakdown {
+  const direct = new Map<string, { count: number; sum: number }>();
   for (const review of reviews) {
     if (!review.appVersion) continue;
-    const stat = stats.get(review.appVersion) ?? { count: 0, sum: 0 };
+    const stat = direct.get(review.appVersion) ?? { count: 0, sum: 0 };
     stat.count++;
     stat.sum += review.rating;
-    stats.set(review.appVersion, stat);
+    direct.set(review.appVersion, stat);
   }
-  return [...stats.entries()]
-    .sort((a, b) => b[1].count - a[1].count)
-    .slice(0, top)
-    .map(([version, s]) => ({
-      version,
-      rating: s.sum / s.count,
-      reviews: s.count,
-    }));
+  if (direct.size > 0) {
+    return {
+      approximate: false,
+      stats: [...direct.entries()]
+        .sort((a, b) => b[1].count - a[1].count)
+        .slice(0, top)
+        .map(([version, s]) => ({ version, rating: s.sum / s.count, reviews: s.count })),
+    };
+  }
+
+  if (!history || history.length === 0) return { approximate: false, stats: [] };
+  // Release windows: history is newest-first; a review belongs to the newest
+  // release published before it. Reviews older than the oldest known release
+  // are dropped rather than misattributed.
+  const releases = history
+    .map((r) => ({ version: r.version, at: new Date(r.released).getTime() }))
+    .filter((r) => Number.isFinite(r.at))
+    .sort((a, b) => b.at - a.at);
+  if (releases.length === 0) return { approximate: false, stats: [] };
+  const windows = new Map<string, { count: number; sum: number; at: number }>();
+  for (const review of reviews) {
+    const when = new Date(review.date).getTime();
+    if (!Number.isFinite(when)) continue;
+    const release = releases.find((r) => when >= r.at);
+    if (!release) continue;
+    const stat = windows.get(release.version) ?? { count: 0, sum: 0, at: release.at };
+    stat.count++;
+    stat.sum += review.rating;
+    windows.set(release.version, stat);
+  }
+  return {
+    approximate: true,
+    stats: [...windows.entries()]
+      .sort((a, b) => b[1].at - a[1].at)
+      .slice(0, top)
+      .map(([version, s]) => ({ version, rating: s.sum / s.count, reviews: s.count })),
+  };
 }
 
 /** % of reviews with a developer response. */
@@ -171,11 +218,9 @@ export function initials(name: string): string {
   return ((parts[0][0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase();
 }
 
-/** Rating-proxy sentiment for one review. */
+/** Blended (text + rating) sentiment for one review. */
 export function reviewTone(review: Review): "positive" | "neutral" | "negative" {
-  if (review.rating >= 4) return "positive";
-  if (review.rating === 3) return "neutral";
-  return "negative";
+  return classifySentiment(review);
 }
 
 export interface HeatmapData {

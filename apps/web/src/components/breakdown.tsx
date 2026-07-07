@@ -21,6 +21,13 @@ export function RatingDistribution({ result }: { result: ScrapeResult }) {
   const colors = usePalette();
   const dist = useMemo(() => distributionPct(result.reviews), [result.reviews]);
   const max = Math.max(1, ...dist);
+  // Store-wide histogram (crawled from the product page) → comparison ticks.
+  const storeDist = useMemo(() => {
+    const h = result.appInfo?.histogram;
+    if (h?.length !== 5) return null;
+    const total = h.reduce((a, b) => a + b, 0);
+    return total > 0 ? h.map((n) => (n / total) * 100) : null;
+  }, [result.appInfo?.histogram]);
   return (
     <Panel style={{ flexGrow: 1, flexBasis: 300 }}>
       <PanelHeader
@@ -67,6 +74,21 @@ export function RatingDistribution({ result }: { result: ScrapeResult }) {
                     backgroundColor: fill,
                   }}
                 />
+                {storeDist ? (
+                  // Store-wide marker: where the whole store sits for this star.
+                  <View
+                    accessibilityLabel={`Store-wide: ${storeDist[star - 1].toFixed(1)}%`}
+                    style={{
+                      position: "absolute",
+                      left: `${Math.min(99, (storeDist[star - 1] / max) * 100)}%`,
+                      top: 0,
+                      bottom: 0,
+                      width: 2,
+                      backgroundColor: colors.ink,
+                      opacity: 0.55,
+                    }}
+                  />
+                ) : null}
               </View>
               <Text
                 style={{
@@ -84,6 +106,18 @@ export function RatingDistribution({ result }: { result: ScrapeResult }) {
           );
         })}
       </View>
+      {storeDist ? (
+        <View
+          style={{ marginTop: 14, flexDirection: "row", alignItems: "center", gap: 6 }}
+        >
+          <View
+            style={{ width: 2, height: 10, backgroundColor: colors.ink, opacity: 0.55 }}
+          />
+          <Text style={{ fontSize: 10, color: colors.inkFaint }}>
+            store-wide distribution marker — your scrape vs all ratings
+          </Text>
+        </View>
+      ) : null}
     </Panel>
   );
 }
@@ -271,7 +305,7 @@ export function SentimentRing({ result }: { result: ScrapeResult }) {
         ))}
       </View>
       <Text style={{ marginTop: 10, fontSize: 10, color: colors.inkFaint }}>
-        from star ratings
+        from star ratings + review-text analysis
       </Text>
     </Panel>
   );
@@ -356,7 +390,11 @@ export function KeywordPanel({ result }: { result: ScrapeResult }) {
 /** Reference `VersionPanel`: icon-circle header + lime rating bars per release. */
 export function VersionPanel({ result }: { result: ScrapeResult }) {
   const colors = usePalette();
-  const versions = useMemo(() => versionStats(result.reviews), [result.reviews]);
+  const breakdown = useMemo(
+    () => versionStats(result.reviews, result.appInfo?.versionHistory),
+    [result.reviews, result.appInfo?.versionHistory],
+  );
+  const versions = breakdown.stats;
   if (versions.length === 0) return null;
   return (
     <Panel style={{ flexGrow: 1, flexBasis: 300 }}>
@@ -365,6 +403,11 @@ export function VersionPanel({ result }: { result: ScrapeResult }) {
         title="Ratings by version"
         subtitle="Recent releases"
       />
+      {breakdown.approximate ? (
+        <Text style={{ marginTop: 8, fontSize: 10, color: colors.inkFaint }}>
+          approximated from App Store release dates
+        </Text>
+      ) : null}
       <View style={{ marginTop: 16, gap: 4 }}>
         {versions.map((v) => (
           <Pressable

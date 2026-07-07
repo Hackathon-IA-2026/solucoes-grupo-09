@@ -41,6 +41,12 @@ const APP_INFO = {
   operatingSystem: "Android",
   icon: null,
   url: "https://play.google.com/store/apps/details?id=com.spotify.music",
+  histogram: [3_714_863, 1_083_164, 1_331_088, 3_061_651, 26_692_025],
+  installs: 3_032_313_142,
+  installsText: "1,000,000,000+",
+  released: "2014-05-27T13:12:17.000Z",
+  updated: "2026-07-06T08:30:56.000Z",
+  versionHistory: null,
 };
 
 const REVIEWS = [
@@ -48,6 +54,7 @@ const REVIEWS = [
     store: "google",
     id: "r1",
     userName: "Ada",
+    avatar: "https://play-lh.googleusercontent.com/a-/sample-avatar",
     title: "",
     body: "Love the playlists, hate the shuffle. Five stars anyway.",
     rating: 5,

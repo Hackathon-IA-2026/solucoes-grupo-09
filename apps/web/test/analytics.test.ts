@@ -104,15 +104,41 @@ describe("keywords", () => {
 });
 
 describe("versionStats", () => {
-  test("averages per version, most-reviewed first", () => {
-    const stats = versionStats([
+  test("averages per version, most-reviewed first (direct, Google)", () => {
+    const { stats, approximate } = versionStats([
       review({ appVersion: "2.0", rating: 5 }),
       review({ appVersion: "2.0", rating: 3 }),
       review({ appVersion: "1.9", rating: 2 }),
       review({}), // no version — excluded
     ]);
+    expect(approximate).toBe(false);
     expect(stats[0]).toMatchObject({ version: "2.0", rating: 4, reviews: 2 });
     expect(stats[1]).toMatchObject({ version: "1.9", reviews: 1 });
+  });
+
+  test("approximates from release windows when reviews lack versions (Apple)", () => {
+    const history = [
+      { version: "3.0", released: "2026-06-01T00:00:00Z", notes: null },
+      { version: "2.9", released: "2026-05-01T00:00:00Z", notes: null },
+    ];
+    const { stats, approximate } = versionStats(
+      [
+        review({ date: "2026-06-10T00:00:00Z", rating: 2 }), // 3.0 window
+        review({ date: "2026-06-20T00:00:00Z", rating: 4 }), // 3.0 window
+        review({ date: "2026-05-15T00:00:00Z", rating: 5 }), // 2.9 window
+        review({ date: "2026-04-01T00:00:00Z", rating: 1 }), // pre-history: dropped
+      ],
+      history,
+    );
+    expect(approximate).toBe(true);
+    expect(stats).toEqual([
+      { version: "3.0", rating: 3, reviews: 2 },
+      { version: "2.9", rating: 5, reviews: 1 },
+    ]);
+  });
+
+  test("empty without versions or history", () => {
+    expect(versionStats([review({})])).toEqual({ approximate: false, stats: [] });
   });
 });
 

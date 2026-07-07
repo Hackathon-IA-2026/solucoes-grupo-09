@@ -19,28 +19,36 @@ currency, version, contentRating, OS, icon, url.
 | Response rate | developerResponse | ✅ both |
 | Identity card / store rating | appInfo | ✅ both |
 
-## What we can still extract (priority order)
+## Status (2026-07-06): items 1–5 SHIPPED, live-verified
 
-1. **Store-wide ratings histogram** (both stores, high value / low effort).
-   Both product pages embed per-star counts (Apple: `ratingCountList` in the
-   page's embedded JSON; Google: histogram in the page payload). Lets the
-   Rating-breakdown panel show *scraped sample vs entire store* — a killer
-   comparison. → extend `appinfo.ts` extraction + `AppInfo.histogram?: number[5]`.
-2. **Apple version history** (medium effort). `apps.apple.com` exposes the
-   version history (version + release date + notes) on the product page.
-   Correlating review dates with release windows gives "ratings by version"
-   for Apple (approximate, label it as such).
-3. **Richer app metadata** (low effort, page-embedded): Google `installs`,
-   `lastUpdated`, `releasedDate`, ads/IAP flags; Apple size, languages,
-   subtitle, whatsNew. Feeds the identity card and new stat tiles.
-4. **Real sentiment scoring** (app/API-side, not crawler): lexicon-based
-   scoring (AFINN/VADER-style) over review bodies as a second signal next to
-   the rating proxy. No store dependency; could run client-side.
-5. **Reviewer avatars** (Google only, trivial): avatar URL is in the
-   batchexecute payload → real images in the feed instead of initials.
-6. **Multi-storefront runs** (bigger feature): fan one job out across N
-   countries to power a real "reviews by country" panel (the reference's
-   unused `countries` data) and per-country ratings.
+1. ✅ **Store-wide ratings histogram** — Apple: same-origin catalog API
+   (`/api/apps/v1/catalog/{cc}/apps/{id}?extend=userRating`,
+   `ratingCountList` index 0 = 1★); Google: ds:5 blob `[1][2][51][1]`.
+   → `AppInfo.histogram`, rendered as store-wide markers in Rating breakdown.
+2. ✅ **Apple version history** — same catalog API with
+   `extend=versionHistory&additionalPlatforms=ipad` (the platforms param is
+   required or `platformAttributes.ios` is empty). → `AppInfo.versionHistory`;
+   the web app buckets Apple reviews into release windows (labeled
+   "approximated from App Store release dates").
+3. ✅ **Richer metadata** — Google installs (`[13][2]` real count +
+   `[13][0]` display bucket), lastUpdated (`[145][0][1][0]`), released
+   (`[10][1][0]`); Apple releaseDate. → identity line + AppInfo fields.
+4. ✅ **Sentiment scoring** — lexicon scorer in `@noviq/core`
+   (`sentiment.ts`): negation + intensifier aware, blended with the star
+   rating (`classifySentiment`); UI labeled "ratings + text analysis".
+5. ✅ **Reviewer avatars** — Google `r[1][1][3][2]` → `Review.avatar`,
+   real images in the feed with initials fallback.
+
+All extraction paths verified live (fixtures in `apps/api/test/fixtures/`,
+live suite `test/live.test.ts · metadata extras`). New fields are API-response
+only — the Postgres store keeps its original schema (extend + migrate when
+stored analytics are needed).
+
+## Next
+
+6. **Multi-storefront runs** (product epic): fan one job out across N
+   countries to power a real "reviews by country" panel and per-country
+   ratings. Touches job orchestration, API shape and dashboard — spec first.
 
 ## Hard limits (don't chase)
 

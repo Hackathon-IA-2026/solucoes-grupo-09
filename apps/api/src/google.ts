@@ -1,7 +1,8 @@
+import type { Page } from "./browser.js";
 import { pageFetch } from "./browser.js";
 import type { FetchResult, StoreAdapter } from "./engine.js";
 import { UpstreamError } from "./errors.js";
-import type { Review, ReviewSort, ScrapeOptions } from "./types.js";
+import type { AppInfo, Review, ReviewSort, ScrapeOptions } from "./types.js";
 
 const PLAY = "https://play.google.com";
 const BATCH_URL = `${PLAY}/_/PlayStoreUi/data/batchexecute`;
@@ -87,10 +88,13 @@ function isoFromSeconds(seconds: unknown): string {
 export function normalizeGoogleReview(r: unknown, opts: ScrapeOptions): Review | null {
   if (!Array.isArray(r) || r[0] == null) return null;
   const reply = r[7];
+  // Reviewer avatar lives at r[1][1][3][2] (verified live 2026-07-06).
+  const avatar = r[1]?.[1]?.[3]?.[2];
   return {
     store: "google",
     id: String(r[0]),
     userName: r[1]?.[0] ?? "",
+    ...(typeof avatar === "string" && avatar.startsWith("http") ? { avatar } : {}),
     title: "", // Play reviews have no title
     body: r[4] ?? "",
     rating: Number(r[2] ?? 0),
@@ -105,12 +109,86 @@ export function normalizeGoogleReview(r: unknown, opts: ScrapeOptions): Review |
   };
 }
 
+/** Pull the raw ds:5 details blob out of the already-loaded landing page. */
+export async function readDs5(page: Page): Promise<string | null> {
+  return page.evaluate(() => {
+    for (const script of Array.from(document.querySelectorAll("script"))) {
+      const text = script.textContent ?? "";
+      if (text.includes("AF_initDataCallback") && text.includes("'ds:5'")) {
+        const start = text.indexOf("data:");
+        const end = text.lastIndexOf(", sideChannel");
+        if (start >= 0 && end > start) return text.slice(start + 5, end);
+      }
+    }
+    return null;
+  });
+}
+
+function isoFromUnix(value: unknown): string | null {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? new Date(n * 1000).toISOString() : null;
+}
+
+/**
+ * Parse store-wide extras from the details page's ds:5 blob (paths verified
+ * live 2026-07-06 against google-play-scraper's known mappings):
+ * - `[1][2][51][1][star][1]` → per-star counts (histogram);
+ * - `[1][2][13]`  → installs: [text, minimum, realCount, shortText];
+ * - `[1][2][145][0][1][0]` → last-updated unix seconds;
+ * - `[1][2][10][1][0]` → released unix seconds.
+ * Pure and defensive — any index surprise degrades to missing fields.
+ */
+export function parseGoogleExtras(ds5raw: string): Partial<AppInfo> {
+  let data: unknown;
+  try {
+    data = JSON.parse(ds5raw);
+  } catch {
+    return {};
+  }
+  // biome-ignore lint/suspicious/noExplicitAny: reverse-engineered positional blob
+  const root = (data as any)?.[1]?.[2];
+  if (!root) return {};
+  const extras: Partial<AppInfo> = {};
+
+  const ratings = root[51];
+  if (Array.isArray(ratings?.[1])) {
+    const counts: number[] = [];
+    for (let star = 1; star <= 5; star++) {
+      const n = ratings[1][star]?.[1];
+      if (typeof n !== "number" || !Number.isFinite(n) || n < 0) break;
+      counts.push(n);
+    }
+    if (counts.length === 5) extras.histogram = counts;
+  }
+  if (typeof ratings?.[0]?.[1] === "number") {
+    extras.averageRating = Math.round(ratings[0][1] * 100) / 100;
+  }
+  if (typeof ratings?.[2]?.[1] === "number") extras.ratingCount = ratings[2][1];
+
+  const installs = root[13];
+  if (typeof installs?.[2] === "number") extras.installs = installs[2];
+  else if (typeof installs?.[1] === "number") extras.installs = installs[1];
+  if (typeof installs?.[0] === "string") extras.installsText = installs[0];
+
+  const updated = isoFromUnix(root[145]?.[0]?.[1]?.[0]);
+  if (updated) extras.updated = updated;
+  const released = isoFromUnix(root[10]?.[1]?.[0]);
+  if (released) extras.released = released;
+
+  return extras;
+}
+
 export const googleAdapter: StoreAdapter<Cursor> = {
   store: "google",
   initialCursor: { token: null },
   landingUrl: (opts) =>
     `${PLAY}/store/apps/details?id=${opts.appId}` +
     `&hl=${opts.lang ?? "en"}&gl=${(opts.country ?? "us").toLowerCase()}`,
+
+  async fetchAppExtras(page) {
+    const raw = await readDs5(page);
+    return raw ? parseGoogleExtras(raw) : {};
+  },
 
   async fetchBatch(page, opts, cursor): Promise<FetchResult<Cursor>> {
     const { status, body } = await pageFetch(page, batchUrl(opts), {

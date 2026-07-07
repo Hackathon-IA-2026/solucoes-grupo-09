@@ -29,6 +29,8 @@ export interface Review {
   appVersion?: string;
   /** Apple only. */
   isEdited?: boolean;
+  /** Reviewer avatar URL. Google only. */
+  avatar?: string;
   appId: string;
   country: string;
 }
@@ -51,6 +53,25 @@ export interface AppInfo {
   operatingSystem: string | null;
   icon: string | null;
   url: string | null;
+  /** Store-wide per-star counts, index 0 = 1★ (both stores, best-effort). */
+  histogram: number[] | null;
+  /** Real install count (Google only). */
+  installs: number | null;
+  /** Display install bucket, e.g. "1,000,000,000+" (Google only). */
+  installsText: string | null;
+  /** First release (ISO). */
+  released: string | null;
+  /** Last update (ISO). */
+  updated: string | null;
+  /** Recent releases, newest first (Apple only). */
+  versionHistory: VersionRelease[] | null;
+}
+
+/** One release in an app's version history. */
+export interface VersionRelease {
+  version: string;
+  released: string;
+  notes: string | null;
 }
 
 /** The result of a completed scrape. */

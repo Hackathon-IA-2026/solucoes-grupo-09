@@ -118,6 +118,14 @@ test.describe("scrape flow", () => {
     await expect(page.getByTestId("results-panel")).toContainText("Scraped reviews");
     await expect(page.getByTestId("results-panel")).toContainText("3 of 3 shown");
 
+    // Crawled store-wide metadata renders in the identity line + breakdown.
+    await expect(page.getByTestId("results-panel")).toContainText(
+      "1,000,000,000+ installs",
+    );
+    await expect(page.getByText(/store-wide distribution marker/)).toBeVisible();
+    // Google reviewer avatar (crawled) replaces the initials circle.
+    await expect(page.getByTestId("review-avatar").first()).toBeVisible();
+
     // The redesigned analytics blocks render from the real reviews.
     await expect(page.getByTestId("timeline-panel")).toContainText("Review volume");
     await expect(page.getByTestId("heatmap-panel")).toContainText("When reviews land");

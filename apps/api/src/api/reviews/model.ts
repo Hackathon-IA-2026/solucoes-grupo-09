@@ -30,6 +30,7 @@ export const reviewSchema = t.Object({
   thumbsUp: t.Optional(t.Number({ description: "Google only" })),
   appVersion: t.Optional(t.String({ description: "Google only" })),
   isEdited: t.Optional(t.Boolean({ description: "Apple only" })),
+  avatar: t.Optional(t.String({ description: "Reviewer avatar URL (Google only)" })),
   appId: t.String(),
   country: t.String(),
 });
@@ -82,6 +83,27 @@ export const appInfoSchema = t.Object({
   operatingSystem: t.Nullable(t.String()),
   icon: t.Nullable(t.String()),
   url: t.Nullable(t.String()),
+  histogram: t.Nullable(
+    t.Array(t.Number(), {
+      description: "Store-wide per-star counts, index 0 = 1 star",
+    }),
+  ),
+  installs: t.Nullable(t.Number({ description: "Real install count (Google only)" })),
+  installsText: t.Nullable(
+    t.String({ description: 'Display bucket, e.g. "1,000,000,000+"' }),
+  ),
+  released: t.Nullable(t.String({ description: "First release (ISO)" })),
+  updated: t.Nullable(t.String({ description: "Last update (ISO)" })),
+  versionHistory: t.Nullable(
+    t.Array(
+      t.Object({
+        version: t.String(),
+        released: t.String(),
+        notes: t.Nullable(t.String()),
+      }),
+      { description: "Recent releases, newest first (Apple only)" },
+    ),
+  ),
 });
 
 /** Successful scrape response envelope. */

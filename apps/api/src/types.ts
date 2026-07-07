@@ -33,6 +33,8 @@ export interface Review {
   appVersion?: string;
   /** Whether the user edited the review after posting. Apple only. */
   isEdited?: boolean;
+  /** Reviewer avatar URL. Google only (Apple never exposes one). */
+  avatar?: string;
   // --- provenance, attached by the scraper ---
   /** App identifier: numeric id (Apple) or package name (Google). */
   appId: string;
@@ -80,6 +82,33 @@ export interface AppInfo {
   icon: string | null;
   /** Canonical store URL for the app, when present. */
   url: string | null;
+  /**
+   * Store-wide ratings histogram: counts for 1★..5★ (index 0 = 1★). Apple:
+   * `userRating.ratingCountList` from the same-origin catalog API; Google:
+   * the details page's ds:5 blob. `null` when the surface was unavailable.
+   */
+  histogram: number[] | null;
+  /** Real install count (Google only — Apple has no equivalent). */
+  installs: number | null;
+  /** Display install bucket, e.g. "1,000,000,000+" (Google only). */
+  installsText: string | null;
+  /** First release date (ISO). */
+  released: string | null;
+  /** Last update timestamp (ISO). */
+  updated: string | null;
+  /**
+   * Recent releases, newest first (Apple only — Google doesn't publish
+   * history). Lets clients bucket Apple reviews by release windows.
+   */
+  versionHistory: VersionRelease[] | null;
+}
+
+/** One release in an app's version history. */
+export interface VersionRelease {
+  version: string;
+  /** Release timestamp (ISO). */
+  released: string;
+  notes: string | null;
 }
 
 /**
