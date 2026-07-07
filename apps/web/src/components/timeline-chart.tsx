@@ -12,7 +12,7 @@ import {
   usePalette,
 } from "@noviq/ui";
 import { useMemo, useState } from "react";
-import { Platform, Text as RNText, View } from "react-native";
+import { Platform, Pressable, Text as RNText, View } from "react-native";
 import Svg, {
   Circle,
   Defs,
@@ -173,16 +173,9 @@ export function TimelineChart({ result }: { result: ScrapeResult }) {
             const isActive = i === active;
             return (
               <G key={`${point.month}-${String(i)}`}>
-                {/* invisible hit area spanning the slot */}
-                <Rect
-                  x={PAD.left + i * slot}
-                  y={PAD.top}
-                  width={slot}
-                  height={chartH}
-                  fill="transparent"
-                  onPress={() => setActive(i)}
-                />
-                {/* capsule bar */}
+                {/* capsule bar (hit areas are RN Pressables overlaid below —
+                    SVG-level press handlers leak responder props into the
+                    DOM on web) */}
                 <Rect
                   x={x}
                   y={y}
@@ -190,7 +183,6 @@ export function TimelineChart({ result }: { result: ScrapeResult }) {
                   height={h}
                   rx={barW / 2}
                   fill={isActive ? "url(#tl-active)" : "url(#tl-hatch)"}
-                  onPress={() => setActive(i)}
                 />
                 {/* grape dot on inactive bar tops */}
                 {!isActive ? (
@@ -222,6 +214,34 @@ export function TimelineChart({ result }: { result: ScrapeResult }) {
           />
         </Svg>
 
+        {/* Hit areas: one pressable per month slot, over the plot region. */}
+        {scale > 0 ? (
+          <View
+            style={{
+              position: "absolute",
+              left: PAD.left * scale,
+              top: PAD.top * scale,
+              width: (W - PAD.left - PAD.right) * scale,
+              height: chartH * scale,
+              flexDirection: "row",
+            }}
+          >
+            {points.map((point, i) => (
+              <Pressable
+                key={`hit-${point.month}-${String(i)}`}
+                accessibilityRole="button"
+                accessibilityLabel={`Inspect ${point.month}: ${point.count} reviews`}
+                onPress={() => setActive(i)}
+                style={
+                  Platform.OS === "web"
+                    ? ({ flex: 1, cursor: "pointer" } as object)
+                    : { flex: 1 }
+                }
+              />
+            ))}
+          </View>
+        ) : null}
+
         {scale > 0 ? (
           <>
             {/* lime delta bubble with a downward tail (pops on change) */}
@@ -230,9 +250,9 @@ export function TimelineChart({ result }: { result: ScrapeResult }) {
               pop
               duration={320}
               distance={6}
-              pointerEvents="none"
               testID="timeline-delta"
               style={{
+                pointerEvents: "none",
                 position: "absolute",
                 left: activeCX * scale - 34,
                 top: (activeTop - 16) * scale - 34,
@@ -281,9 +301,9 @@ export function TimelineChart({ result }: { result: ScrapeResult }) {
               pop
               duration={320}
               distance={6}
-              pointerEvents="none"
               testID="timeline-tooltip"
               style={{
+                pointerEvents: "none",
                 position: "absolute",
                 left: activeCX * scale + 12,
                 top: (activeTop + 28) * scale,

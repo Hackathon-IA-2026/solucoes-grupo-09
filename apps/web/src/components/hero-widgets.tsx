@@ -194,7 +194,6 @@ function MiniBars() {
         </Svg>
         {/* lime delta pill over the active bar */}
         <View
-          pointerEvents="none"
           style={{
             position: "absolute",
             top: -6,
@@ -384,9 +383,15 @@ export function HeroWidgets() {
   return (
     <View
       testID="hero-widgets"
-      pointerEvents="none"
       aria-hidden
-      style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+      style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        pointerEvents: "none",
+      }}
     >
       <View
         style={{

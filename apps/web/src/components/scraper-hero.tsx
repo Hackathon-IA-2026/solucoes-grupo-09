@@ -97,9 +97,9 @@ function phasePercent(state: ScrapeState): number {
 function Glow({ color, size, style }: { color: string; size: number; style: object }) {
   return (
     <View
-      pointerEvents="none"
       aria-hidden
       style={{
+        pointerEvents: "none",
         position: "absolute",
         width: size,
         height: size,
