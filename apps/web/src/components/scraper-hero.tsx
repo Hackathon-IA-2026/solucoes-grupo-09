@@ -11,7 +11,6 @@ import {
   LinkIcon,
   layout,
   motion,
-  NoviqWordmark,
   radius,
   SparklesIcon,
   space,
@@ -20,6 +19,7 @@ import {
   ZapIcon,
 } from "@noviq/ui";
 import * as Haptics from "expo-haptics";
+import { Image } from "expo-image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -228,7 +228,7 @@ export function ScraperHero({
           padding: space.xl,
         }}
       >
-        <NoviqWordmark />
+        <View />
         <View
           style={{
             flexDirection: "row",
@@ -255,6 +255,15 @@ export function ScraperHero({
       </View>
 
       <View style={{ width: "100%", maxWidth: 672, alignItems: "center" }}>
+        {/* Brand: the bolt mark, centered over the glow. */}
+        <Image
+          testID="hero-logo"
+          source={require("../../assets/images/bolt-logo.png")}
+          style={{ width: 76, height: 82, marginBottom: space.xl }}
+          contentFit="contain"
+          accessibilityLabel="Noviq"
+          transition={200}
+        />
         {/* Kicker */}
         <View
           style={{
@@ -292,23 +301,9 @@ export function ScraperHero({
           Turn any app's reviews into
           <Text style={{ color: colors.accent }}> clean data.</Text>
         </Text>
-        <Text
-          style={{
-            marginTop: space.lg,
-            textAlign: "center",
-            color: colors.inkMuted,
-            fontSize: 16,
-            lineHeight: 25,
-            maxWidth: 512,
-          }}
-        >
-          Noviq pulls every review from the App Store and Google Play, scores sentiment,
-          and tracks trends, versions and busy hours — a full analytics dashboard from a
-          single link.
-        </Text>
 
         {/* Input capsule */}
-        <View style={{ width: "100%", maxWidth: 576, marginTop: 36 }}>
+        <View style={{ width: "100%", maxWidth: 576, marginTop: 40 }}>
           <View
             style={{
               flexDirection: "row",

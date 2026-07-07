@@ -4,6 +4,7 @@
  * N-path — on charcoal. Rerun after any brand change:
  * `bun scripts/generate-assets.ts` (from apps/web).
  */
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { chromium } from "@playwright/test";
 
@@ -50,11 +51,13 @@ const ASSETS: Asset[] = [
     html: mark(1024, { radius: 0 }),
   },
   {
+    // Favicon = the bolt mark (extracted from the brand image, lime on
+    // transparent) — sourced from the committed asset, not redrawn.
     file: "assets/images/favicon.png",
     width: 64,
     height: 64,
     transparent: true,
-    html: mark(64),
+    html: `<img src="data:image/png;base64,${readFileSync(join(ROOT, "assets/images/bolt-logo.png")).toString("base64")}" style="width:60px;height:64px;object-fit:contain" />`,
   },
   {
     file: "assets/images/splash-icon.png",

@@ -19,6 +19,7 @@ test.describe("hero", () => {
       "Turn any app's reviews into",
     );
     await expect(page.getByTestId("scrape-button")).toBeVisible();
+    await expect(page.getByTestId("hero-logo")).toBeVisible();
     await expect(page.getByText("Scraper online")).toBeVisible();
     // Above-the-fold product preview: floating mini charts flank the hero on
     // wide screens (desktop project is 1280px; hidden on mobile).
