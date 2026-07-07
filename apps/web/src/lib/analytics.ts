@@ -145,6 +145,8 @@ export interface VersionBreakdown {
    * review API omits per-review versions) rather than read directly.
    */
   approximate: boolean;
+  /** Reviews older than the oldest known release (approximation only). */
+  excluded: number;
 }
 
 /**
@@ -168,6 +170,7 @@ export function versionStats(
   if (direct.size > 0) {
     return {
       approximate: false,
+      excluded: 0,
       stats: [...direct.entries()]
         .sort((a, b) => b[1].count - a[1].count)
         .slice(0, top)
@@ -175,7 +178,9 @@ export function versionStats(
     };
   }
 
-  if (!history || history.length === 0) return { approximate: false, stats: [] };
+  if (!history || history.length === 0) {
+    return { approximate: false, excluded: 0, stats: [] };
+  }
   // Release windows: history is newest-first; a review belongs to the newest
   // release published before it. Reviews older than the oldest known release
   // are dropped rather than misattributed.
@@ -183,13 +188,17 @@ export function versionStats(
     .map((r) => ({ version: r.version, at: new Date(r.released).getTime() }))
     .filter((r) => Number.isFinite(r.at))
     .sort((a, b) => b.at - a.at);
-  if (releases.length === 0) return { approximate: false, stats: [] };
+  if (releases.length === 0) return { approximate: false, excluded: 0, stats: [] };
   const windows = new Map<string, { count: number; sum: number; at: number }>();
+  let excluded = 0;
   for (const review of reviews) {
     const when = new Date(review.date).getTime();
     if (!Number.isFinite(when)) continue;
     const release = releases.find((r) => when >= r.at);
-    if (!release) continue;
+    if (!release) {
+      excluded++;
+      continue;
+    }
     const stat = windows.get(release.version) ?? { count: 0, sum: 0, at: release.at };
     stat.count++;
     stat.sum += review.rating;
@@ -197,6 +206,7 @@ export function versionStats(
   }
   return {
     approximate: true,
+    excluded,
     stats: [...windows.entries()]
       .sort((a, b) => b[1].at - a[1].at)
       .slice(0, top)

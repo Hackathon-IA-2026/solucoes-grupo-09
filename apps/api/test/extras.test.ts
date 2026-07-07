@@ -57,6 +57,19 @@ describe("google · parseGoogleExtras", () => {
     expect(parseGoogleExtras("nope")).toEqual({});
     expect(parseGoogleExtras("[]")).toEqual({});
   });
+
+  it("never publishes the bucket floor as the real install count", () => {
+    // [13] with only [text, bucketFloor] — no exact count at [2].
+    const scaffold: unknown[] = [];
+    const mid: unknown[] = [];
+    const root: unknown[] = [];
+    root[13] = ["1,000,000,000+", 1_000_000_000];
+    mid[2] = root;
+    scaffold[1] = mid;
+    const extras = parseGoogleExtras(JSON.stringify(scaffold));
+    expect(extras.installs).toBeUndefined();
+    expect(extras.installsText).toBe("1,000,000,000+");
+  });
 });
 
 describe("google · reviewer avatar", () => {

@@ -359,12 +359,11 @@ describe("pipeline · app metadata", () => {
     };
     const info = await getAppInfo({ appId: "1", store: "apple", ...FAST });
     expect(info?.name).toBe("Test App");
-    // One page fetch is allowed: the catalog app resource (metadata extras).
+    // Exactly one page fetch: the catalog app resource (metadata extras).
     // The reviews endpoint must never be hit.
-    expect(hits.every((url) => !url.includes("/reviews"))).toBe(true);
-    expect(hits.filter((url) => url.includes("/api/apps/v1/catalog/"))).toHaveLength(
-      hits.length,
-    );
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toContain("/api/apps/v1/catalog/");
+    expect(hits[0]).not.toContain("/reviews");
     expect(jsonLdReads).toBe(1); // metadata read exactly once
   });
 

@@ -28,7 +28,12 @@ export function formatRating(rating: number): string {
 
 /** ISO date → "Mar 4, 2026" (falls back to the raw string on bad input). */
 export function formatDate(iso: string): string {
-  const date = new Date(iso);
+  // Date-only strings ("2010-10-06") parse as UTC midnight, which renders as
+  // the PREVIOUS day in UTC-negative timezones — construct them as local.
+  const dateOnly = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const date = dateOnly
+    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
+    : new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
   return date.toLocaleDateString("en-US", {
     month: "short",

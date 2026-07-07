@@ -53,6 +53,13 @@ const LEXICON: Record<string, number> = {
   seamless: 3,
   polished: 2,
   // mild negative
+  bad: -3,
+  poor: -3,
+  worse: -3,
+  sucks: -3,
+  suck: -3,
+  ok: 0.5,
+  okay: 0.5,
   slow: -2,
   laggy: -2,
   lag: -2,
@@ -144,31 +151,51 @@ const INTENSIFIERS = new Set([
  * treat that as unknown, not neutral. Handles simple negation ("not good")
  * and intensifiers ("really slow").
  */
-export function sentimentScore(text: string): number {
-  const words = text
-    .toLowerCase()
-    .replace(/[''`]/g, "")
-    .split(/[^a-z]+/)
-    .filter(Boolean);
-  if (words.length === 0) return 0;
+interface SentimentAnalysis {
+  /** Normalized score in [-1, 1]; 0 with hits=0 means "no signal". */
+  score: number;
+  /** Number of lexicon words that contributed. */
+  hits: number;
+}
 
+/**
+ * Analyze text: clause-aware so negation never leaks across sentence or
+ * comma boundaries ("Not bad. Crashes sometimes." must not read "not
+ * crashes"). Handles both ASCII and typographic apostrophes — iOS keyboards
+ * emit U+2019, and "can\u2019t" must still match the negator "cant".
+ */
+export function analyzeSentiment(text: string): SentimentAnalysis {
   let total = 0;
   let hits = 0;
-  for (let i = 0; i < words.length; i++) {
-    const base = LEXICON[words[i]];
-    if (base === undefined) continue;
-    let score = base;
-    const prev = words[i - 1];
-    const prev2 = words[i - 2];
-    if (prev && INTENSIFIERS.has(prev)) score *= 1.5;
-    if ((prev && NEGATORS.has(prev)) || (prev2 && NEGATORS.has(prev2)))
-      score = -score * 0.8;
-    total += score;
-    hits++;
+  // Split into clauses first; negation/intensity windows stay inside one.
+  for (const clause of text.split(/[.!?,;:\n()]+/)) {
+    const words = clause
+      .toLowerCase()
+      .replace(/['\u2018\u2019`]/g, "")
+      .split(/[^a-z]+/)
+      .filter(Boolean);
+    for (let i = 0; i < words.length; i++) {
+      const base = LEXICON[words[i]];
+      if (base === undefined) continue;
+      let score = base;
+      const prev = words[i - 1];
+      const prev2 = words[i - 2];
+      if (prev && INTENSIFIERS.has(prev)) score *= 1.5;
+      if ((prev && NEGATORS.has(prev)) || (prev2 && NEGATORS.has(prev2))) {
+        score = -score * 0.8;
+      }
+      total += score;
+      hits++;
+    }
   }
-  if (hits === 0) return 0;
+  if (hits === 0) return { score: 0, hits: 0 };
   // Normalize: average word score mapped into [-1, 1] (±4 is the scale cap).
-  return Math.max(-1, Math.min(1, total / hits / 4));
+  return { score: Math.max(-1, Math.min(1, total / hits / 4)), hits };
+}
+
+/** Score text in [-1, 1]. 0 means "no signal" (no lexicon hits). */
+export function sentimentScore(text: string): number {
+  return analyzeSentiment(text).score;
 }
 
 export type SentimentTone = "positive" | "neutral" | "negative";
@@ -182,13 +209,17 @@ export function classifySentiment(review: {
   body: string;
   rating: number;
 }): SentimentTone {
-  const score = sentimentScore(review.body);
-  const wordCount = review.body.split(/\s+/).filter(Boolean).length;
-  if (wordCount >= 4 && Math.abs(score) >= 0.25) {
-    return score > 0 ? "positive" : "negative";
+  const { score, hits } = analyzeSentiment(review.body);
+  // The text overrides a clear star rating only when it speaks loudly AND
+  // repeatedly (≥2 lexicon hits, strong score, in the opposite direction) —
+  // one incidental "crashes" in a happy 5★ review must not flip it.
+  if (review.rating >= 4) {
+    return hits >= 2 && score <= -0.35 ? "negative" : "positive";
   }
-  if (review.rating >= 4) return "positive";
-  if (review.rating === 3 && score !== 0) return score > 0 ? "positive" : "negative";
-  if (review.rating === 3) return "neutral";
-  return review.rating >= 1 ? "negative" : "neutral";
+  if (review.rating <= 2 && review.rating >= 1) {
+    return hits >= 2 && score >= 0.35 ? "positive" : "negative";
+  }
+  // 3★ (or unrated): any clear text signal decides; otherwise neutral.
+  if (hits > 0 && Math.abs(score) >= 0.1) return score > 0 ? "positive" : "negative";
+  return "neutral";
 }

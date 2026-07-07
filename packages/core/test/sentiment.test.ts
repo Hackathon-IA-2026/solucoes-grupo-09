@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { classifySentiment, sentimentScore } from "../src/sentiment";
+import { analyzeSentiment, classifySentiment, sentimentScore } from "../src/sentiment";
 
 describe("sentimentScore", () => {
   test("positive and negative vocabulary", () => {
@@ -30,7 +30,7 @@ describe("sentimentScore", () => {
 });
 
 describe("classifySentiment", () => {
-  test("clear text overrides the star rating", () => {
+  test("clear, repeated text overrides the star rating", () => {
     // 5★ but the words scream problems (sarcastic/miskeyed ratings happen).
     expect(
       classifySentiment({
@@ -45,6 +45,36 @@ describe("classifySentiment", () => {
         body: "absolutely amazing app, works perfect and love it",
       }),
     ).toBe("positive");
+  });
+
+  test("a single incidental lexicon hit never flips a clear rating", () => {
+    // Review-confirmed regression: praising 5★ mentioning past crashes.
+    expect(classifySentiment({ rating: 5, body: "they finally fixed the crashes" })).toBe(
+      "positive",
+    );
+    expect(classifySentiment({ rating: 1, body: "one nice icon though" })).toBe(
+      "negative",
+    );
+  });
+
+  test("negation does not leak across sentence boundaries", () => {
+    // Review-confirmed regression: "not" must not flip "crashes" in the
+    // next sentence into a positive.
+    expect(classifySentiment({ rating: 1, body: "Not bad. Crashes sometimes." })).toBe(
+      "negative",
+    );
+    const clauseSafe = analyzeSentiment("no issues. crashes daily");
+    expect(clauseSafe.score).toBeLessThan(0);
+  });
+
+  test("typographic apostrophes negate like ASCII ones", () => {
+    // Review-confirmed regression: iOS keyboards emit U+2019.
+    expect(
+      classifySentiment({
+        rating: 1,
+        body: "Can\u2019t recommend this app, it doesn\u2019t work",
+      }),
+    ).toBe("negative");
   });
 
   test("weak or short text defers to the rating", () => {

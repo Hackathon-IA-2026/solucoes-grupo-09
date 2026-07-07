@@ -137,8 +137,26 @@ describe("versionStats", () => {
     ]);
   });
 
+  test("counts (not hides) reviews that predate the known releases", () => {
+    const history = [{ version: "3.0", released: "2026-06-01T00:00:00Z", notes: null }];
+    const breakdown = versionStats(
+      [
+        review({ date: "2026-06-10T00:00:00Z" }),
+        review({ date: "2026-01-01T00:00:00Z" }),
+        review({ date: "2025-12-01T00:00:00Z" }),
+      ],
+      history,
+    );
+    expect(breakdown.excluded).toBe(2);
+    expect(breakdown.stats[0].reviews).toBe(1);
+  });
+
   test("empty without versions or history", () => {
-    expect(versionStats([review({})])).toEqual({ approximate: false, stats: [] });
+    expect(versionStats([review({})])).toEqual({
+      approximate: false,
+      excluded: 0,
+      stats: [],
+    });
   });
 });
 

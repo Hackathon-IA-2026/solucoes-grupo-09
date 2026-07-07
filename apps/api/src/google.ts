@@ -166,8 +166,9 @@ export function parseGoogleExtras(ds5raw: string): Partial<AppInfo> {
   if (typeof ratings?.[2]?.[1] === "number") extras.ratingCount = ratings[2][1];
 
   const installs = root[13];
+  // Only [2] is the real count — [1] is the display bucket's floor, and a
+  // bucket floor must never be published in a field documented as exact.
   if (typeof installs?.[2] === "number") extras.installs = installs[2];
-  else if (typeof installs?.[1] === "number") extras.installs = installs[1];
   if (typeof installs?.[0] === "string") extras.installsText = installs[0];
 
   const updated = isoFromUnix(root[145]?.[0]?.[1]?.[0]);

@@ -13,7 +13,7 @@ import {
   useContainerWidth,
   usePalette,
 } from "@noviq/ui";
-import type { ReactNode } from "react";
+import { type ReactNode, useMemo } from "react";
 import { Text, View } from "react-native";
 import { responseRate, sentimentMix } from "@/lib/analytics";
 
@@ -27,9 +27,11 @@ export function StatCards({ result }: { result: ScrapeResult }) {
   const [width, onLayout] = useContainerWidth();
   const columns = width >= 1100 ? 4 : width >= 560 ? 2 : 1;
   const basis: `${number}%` = columns === 4 ? "23%" : columns === 2 ? "47%" : "100%";
-  const average = averageRating(result.reviews);
-  const mix = sentimentMix(result.reviews);
-  const replies = responseRate(result.reviews);
+  // Memoized: sentimentMix runs the lexicon over every review body, and this
+  // component re-renders on every onLayout/resize pass.
+  const average = useMemo(() => averageRating(result.reviews), [result.reviews]);
+  const mix = useMemo(() => sentimentMix(result.reviews), [result.reviews]);
+  const replies = useMemo(() => responseRate(result.reviews), [result.reviews]);
   const storeRating = result.appInfo?.averageRating;
 
   return (

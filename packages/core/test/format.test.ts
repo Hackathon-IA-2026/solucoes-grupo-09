@@ -57,6 +57,11 @@ describe("formatDate", () => {
   test("falls back to the raw string on garbage", () => {
     expect(formatDate("not-a-date")).toBe("not-a-date");
   });
+
+  test("date-only strings render the SAME calendar day in every timezone", () => {
+    // "2010-10-06" parsed as UTC midnight shows Oct 5 in UTC-negative zones.
+    expect(formatDate("2010-10-06")).toBe("Oct 6, 2010");
+  });
 });
 
 describe("ratingDistribution", () => {

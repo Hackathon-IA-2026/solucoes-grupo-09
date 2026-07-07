@@ -20,7 +20,6 @@ import { distributionPct, keywords, sentimentMix, versionStats } from "@/lib/ana
 export function RatingDistribution({ result }: { result: ScrapeResult }) {
   const colors = usePalette();
   const dist = useMemo(() => distributionPct(result.reviews), [result.reviews]);
-  const max = Math.max(1, ...dist);
   // Store-wide histogram (crawled from the product page) → comparison ticks.
   const storeDist = useMemo(() => {
     const h = result.appInfo?.histogram;
@@ -28,6 +27,9 @@ export function RatingDistribution({ result }: { result: ScrapeResult }) {
     const total = h.reduce((a, b) => a + b, 0);
     return total > 0 ? h.map((n) => (n / total) * 100) : null;
   }, [result.appInfo?.histogram]);
+  // Bars and store markers must share ONE scale or marker positions lie
+  // (and an all-zero scrape would pin every marker at the bar edge).
+  const max = Math.max(1, ...dist, ...(storeDist ?? []));
   return (
     <Panel style={{ flexGrow: 1, flexBasis: 300 }}>
       <PanelHeader
@@ -80,7 +82,7 @@ export function RatingDistribution({ result }: { result: ScrapeResult }) {
                     accessibilityLabel={`Store-wide: ${storeDist[star - 1].toFixed(1)}%`}
                     style={{
                       position: "absolute",
-                      left: `${Math.min(99, (storeDist[star - 1] / max) * 100)}%`,
+                      left: `${(storeDist[star - 1] / max) * 100}%`,
                       top: 0,
                       bottom: 0,
                       width: 2,
@@ -406,6 +408,11 @@ export function VersionPanel({ result }: { result: ScrapeResult }) {
       {breakdown.approximate ? (
         <Text style={{ marginTop: 8, fontSize: 10, color: colors.inkFaint }}>
           approximated from App Store release dates
+          {breakdown.excluded > 0
+            ? ` · ${breakdown.excluded} older ${
+                breakdown.excluded === 1 ? "review" : "reviews"
+              } predate the known releases`
+            : ""}
         </Text>
       ) : null}
       <View style={{ marginTop: 16, gap: 4 }}>

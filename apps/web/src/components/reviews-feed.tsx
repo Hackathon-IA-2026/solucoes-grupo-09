@@ -256,6 +256,50 @@ export function ReviewsFeed({ result }: { result: ScrapeResult }) {
   );
 }
 
+/**
+ * Reviewer avatar: the crawled image when it loads, the tone-tinted initials
+ * circle otherwise — avatar URLs expire/403 routinely, so a load failure must
+ * fall back rather than leave a blank hole in the card.
+ */
+function Avatar({
+  review,
+  toneStyle,
+}: {
+  review: Review;
+  toneStyle: { bg: string; text: string };
+}) {
+  const [failed, setFailed] = useState(false);
+  if (review.avatar && !failed) {
+    return (
+      <Image
+        testID="review-avatar"
+        source={{ uri: review.avatar }}
+        style={{ width: 36, height: 36, borderRadius: 18 }}
+        contentFit="cover"
+        accessibilityLabel={`${review.userName} avatar`}
+        transition={100}
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+  return (
+    <View
+      style={{
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: toneStyle.bg,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <Text style={{ fontSize: 12, fontWeight: "600", color: toneStyle.text }}>
+        {initials(review.userName)}
+      </Text>
+    </View>
+  );
+}
+
 function FeedReviewCard({ review }: { review: Review }) {
   const colors = usePalette();
   const tone = reviewTone(review);
@@ -288,31 +332,7 @@ function FeedReviewCard({ review }: { review: Review }) {
         <View
           style={{ flexDirection: "row", alignItems: "center", gap: 12, flexShrink: 1 }}
         >
-          {review.avatar ? (
-            <Image
-              testID="review-avatar"
-              source={{ uri: review.avatar }}
-              style={{ width: 36, height: 36, borderRadius: 18 }}
-              contentFit="cover"
-              accessibilityLabel={`${review.userName} avatar`}
-              transition={100}
-            />
-          ) : (
-            <View
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: 18,
-                backgroundColor: toneStyle.bg,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Text style={{ fontSize: 12, fontWeight: "600", color: toneStyle.text }}>
-                {initials(review.userName)}
-              </Text>
-            </View>
-          )}
+          <Avatar review={review} toneStyle={toneStyle} />
           <View style={{ flexShrink: 1 }}>
             <Text
               numberOfLines={1}
