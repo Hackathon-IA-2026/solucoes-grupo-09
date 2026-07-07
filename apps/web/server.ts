@@ -26,7 +26,9 @@ Bun.serve({
     const url = new URL(request.url);
 
     // Cheap, dependency-free liveness probe for the platform healthcheck.
-    if (url.pathname === "/healthz") {
+    // Answers both /healthz and /health so it passes whichever path the
+    // Railway config resolves to.
+    if (url.pathname === "/healthz" || url.pathname === "/health") {
       return new Response("ok", {
         headers: { "content-type": "text/plain", "cache-control": "no-store" },
       });
