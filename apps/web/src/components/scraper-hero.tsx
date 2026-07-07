@@ -211,7 +211,6 @@ export function ScraperHero({
       }}
     >
       <Glow color={colors.accent} size={520} style={{ top: -200, alignSelf: "center" }} />
-      <Glow color={colors.violet} size={380} style={{ bottom: -80, right: -80 }} />
       {/* The product above the fold: floating mini charts in the side gutters
           (only when there is real gutter space beside the 672px column). */}
       {heroWidth >= 1240 && !busy ? <HeroWidgets /> : null}
