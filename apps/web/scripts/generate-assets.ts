@@ -51,13 +51,16 @@ const ASSETS: Asset[] = [
     html: mark(1024, { radius: 0 }),
   },
   {
-    // Favicon = the bolt mark (extracted from the brand image, lime on
-    // transparent) — sourced from the committed asset, not redrawn.
+    // Favicon = charcoal rounded badge + the bolt mark (extracted from the
+    // brand image). A badge, not a bare glyph — lime-on-transparent is
+    // invisible on light browser tabs.
     file: "assets/images/favicon.png",
     width: 64,
     height: 64,
     transparent: true,
-    html: `<img src="data:image/png;base64,${readFileSync(join(ROOT, "assets/images/bolt-logo.png")).toString("base64")}" style="width:60px;height:64px;object-fit:contain" />`,
+    html: `<div style="width:64px;height:64px;border-radius:14px;background:${CHARCOAL};display:grid;place-items:center">
+      <img src="data:image/png;base64,${readFileSync(join(ROOT, "assets/images/bolt-logo.png")).toString("base64")}" style="width:42px;height:46px;object-fit:contain" />
+    </div>`,
   },
   {
     file: "assets/images/splash-icon.png",
