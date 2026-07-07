@@ -17,6 +17,11 @@ export default function Root({ children }: PropsWithChildren) {
           content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover"
         />
         <meta name="color-scheme" content="dark" />
+        {/* Versioned icon link: browsers cache favicons per-origin in a
+            separate store that survives hard refreshes — localhost ports are
+            shared across every locally-run app, so bust with a query param
+            (bump ?v= when the mark changes). */}
+        <link rel="icon" href="/favicon.ico?v=2" sizes="32x32" />
         <meta
           name="theme-color"
           media="(prefers-color-scheme: light)"
