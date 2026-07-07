@@ -181,7 +181,6 @@ export function TimelineChart({ result }: { result: ScrapeResult }) {
                   height={chartH}
                   fill="transparent"
                   onPress={() => setActive(i)}
-                  onPressIn={() => setActive(i)}
                 />
                 {/* capsule bar */}
                 <Rect
@@ -192,7 +191,6 @@ export function TimelineChart({ result }: { result: ScrapeResult }) {
                   rx={barW / 2}
                   fill={isActive ? "url(#tl-active)" : "url(#tl-hatch)"}
                   onPress={() => setActive(i)}
-                  onPressIn={() => setActive(i)}
                 />
                 {/* grape dot on inactive bar tops */}
                 {!isActive ? (

@@ -37,7 +37,7 @@ export function RatingDistribution({ result }: { result: ScrapeResult }) {
         title="Rating breakdown"
         subtitle={`${dist[4].toFixed(0)}% love it`}
       />
-      <View style={{ marginTop: 20, gap: 14 }}>
+      <View style={{ flex: 1, marginTop: 12, justifyContent: "space-evenly", gap: 12 }}>
         {[5, 4, 3, 2, 1].map((star) => {
           const pct = dist[star - 1];
           const fill =

@@ -15,6 +15,7 @@ import {
   radius,
   SparklesIcon,
   space,
+  useContainerWidth,
   usePalette,
   ZapIcon,
 } from "@noviq/ui";
@@ -31,6 +32,7 @@ import {
 } from "react-native";
 import { useAppPreview } from "@/hooks/use-app-preview";
 import { AppPreviewCard } from "./app-preview-card";
+import { HeroWidgets } from "./hero-widgets";
 import { StoreChip } from "./store-chip";
 
 const SAMPLES = [
@@ -149,6 +151,7 @@ export function ScraperHero({
 }: ScraperHeroProps) {
   const colors = usePalette();
   const { height } = useWindowDimensions();
+  const [heroWidth, onHeroLayout] = useContainerWidth();
   const [input, setInput] = useState("");
   const [limit, setLimit] = useState(100);
   const [sort, setSort] = useState<ReviewSort>("mostRecent");
@@ -197,6 +200,7 @@ export function ScraperHero({
 
   return (
     <View
+      onLayout={onHeroLayout}
       style={{
         minHeight: Math.max(height, 620),
         justifyContent: "center",
@@ -208,6 +212,9 @@ export function ScraperHero({
     >
       <Glow color={colors.accent} size={520} style={{ top: -200, alignSelf: "center" }} />
       <Glow color={colors.violet} size={380} style={{ bottom: -80, right: -80 }} />
+      {/* The product above the fold: floating mini charts in the side gutters
+          (only when there is real gutter space beside the 672px column). */}
+      {heroWidth >= 1240 && !busy ? <HeroWidgets /> : null}
 
       {/* Top bar */}
       <View

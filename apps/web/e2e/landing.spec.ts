@@ -20,6 +20,17 @@ test.describe("hero", () => {
     );
     await expect(page.getByTestId("scrape-button")).toBeVisible();
     await expect(page.getByText("Scraper online")).toBeVisible();
+    // Above-the-fold product preview: floating mini charts flank the hero on
+    // wide screens (desktop project is 1280px; hidden on mobile).
+    if ((page.viewportSize()?.width ?? 0) >= 1240) {
+      await expect(page.getByTestId("hero-widgets")).toBeVisible();
+      await expect(
+        page.getByTestId("hero-widgets").getByText("Review volume"),
+      ).toBeVisible();
+      await expect(
+        page.getByTestId("hero-widgets").getByText("Average rating"),
+      ).toBeVisible();
+    }
     const jsonLd = page.locator('script[type="application/ld+json"]');
     await expect(jsonLd).toHaveCount(1);
   });
