@@ -152,6 +152,8 @@ export function ScraperHero({
   const colors = usePalette();
   const { height } = useWindowDimensions();
   const [heroWidth, onHeroLayout] = useContainerWidth();
+  // Fits "Turn any app's reviews into clean data." at 44px on one line.
+  const wideHeadline = heroWidth >= 960;
   const [input, setInput] = useState("");
   const [limit, setLimit] = useState(100);
   const [sort, setSort] = useState<ReviewSort>("mostRecent");
@@ -215,46 +217,7 @@ export function ScraperHero({
           (only when there is real gutter space beside the 672px column). */}
       {heroWidth >= 1240 && !busy ? <HeroWidgets /> : null}
 
-      {/* Top bar */}
-      <View
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: space.xl,
-        }}
-      >
-        <View />
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 8,
-            borderRadius: radius.pill,
-            borderWidth: 1,
-            borderColor: colors.border,
-            backgroundColor: colors.surface,
-            paddingHorizontal: 12,
-            paddingVertical: 6,
-          }}
-        >
-          <View
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: 4,
-              backgroundColor: colors.accent,
-            }}
-          />
-          <Text style={{ fontSize: 12, color: colors.inkMuted }}>Scraper online</Text>
-        </View>
-      </View>
-
-      <View style={{ width: "100%", maxWidth: 672, alignItems: "center" }}>
+      <View style={{ width: "100%", maxWidth: 1000, alignItems: "center" }}>
         {/* Brand: the bolt mark, centered over the glow. */}
         <Image
           testID="hero-logo"
@@ -291,15 +254,18 @@ export function ScraperHero({
           style={{
             textAlign: "center",
             color: colors.ink,
-            fontSize: 44,
-            lineHeight: 48,
+            fontSize: wideHeadline ? 44 : 34,
+            lineHeight: wideHeadline ? 50 : 40,
             fontWeight: "600",
             letterSpacing: -1.2,
-            maxWidth: 640,
+            // Wide: one line (the hero column is widened past the 672px
+            // content column just for the headline). Narrow: a controlled
+            // break so "clean data." owns the second line.
+            maxWidth: wideHeadline ? 1000 : 640,
           }}
         >
-          Turn any app's reviews into
-          <Text style={{ color: colors.accent }}> clean data.</Text>
+          Turn any app's reviews{wideHeadline ? " " : "\n"}into{" "}
+          <Text style={{ color: colors.accent }}>clean data.</Text>
         </Text>
 
         {/* Input capsule */}
