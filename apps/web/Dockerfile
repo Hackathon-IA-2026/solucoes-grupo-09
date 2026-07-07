@@ -24,7 +24,9 @@ RUN bun install --frozen-lockfile
 # Explicit copies (not the whole apps/web) keep the local node_modules/dist out.
 COPY packages/core/src ./packages/core/src
 COPY packages/ui/src ./packages/ui/src
-COPY apps/web/app.json apps/web/tsconfig.json apps/web/expo-env.d.ts ./apps/web/
+# expo-env.d.ts is git-ignored (auto-generated types) and not needed for the
+# Metro/babel export, so it's intentionally not copied.
+COPY apps/web/app.json apps/web/tsconfig.json ./apps/web/
 COPY apps/web/src ./apps/web/src
 COPY apps/web/assets ./apps/web/assets
 COPY apps/web/public ./apps/web/public
