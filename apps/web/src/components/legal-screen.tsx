@@ -75,7 +75,7 @@ export function LegalScreen({
       </Head>
 
       <View onLayout={onLayout} style={{ flex: 1, backgroundColor: colors.canvas }}>
-        {/* Header: centered bolt mark, links home. */}
+        {/* Header: centered logo, links home. */}
         <View
           style={{
             alignItems: "center",
@@ -95,7 +95,7 @@ export function LegalScreen({
               }
             >
               <Image
-                source={require("../../assets/images/bolt-logo.png")}
+                source={require("../../assets/images/logo.png")}
                 style={{ width: 34, height: 38 }}
                 contentFit="contain"
                 accessibilityLabel="Zalytix"

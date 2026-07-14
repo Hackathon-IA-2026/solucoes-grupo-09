@@ -20,7 +20,7 @@ export default function Root({ children }: PropsWithChildren) {
             separate store that survives hard refreshes — localhost ports are
             shared across every locally-run app, so bust with a query param
             (bump ?v= when the mark changes). */}
-        <link rel="icon" href="/favicon.ico?v=3" sizes="32x32" />
+        <link rel="icon" href="/favicon.ico?v=4" sizes="32x32" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="manifest" href="/manifest.webmanifest" />
         <meta

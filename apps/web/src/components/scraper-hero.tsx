@@ -174,14 +174,14 @@ function FeatureDot({ label }: { label: string }) {
   );
 }
 
-/** Brand block: bolt mark over the glow, kicker pill, and the headline. */
+/** Brand block: logo over the glow, kicker pill, and the headline. */
 function HeroBrand({ wideHeadline }: { wideHeadline: boolean }) {
   const colors = usePalette();
   return (
     <>
       <Image
         testID="hero-logo"
-        source={require("../../assets/images/bolt-logo.png")}
+        source={require("../../assets/images/logo.png")}
         style={{ width: 76, height: 82, marginBottom: space.xl }}
         contentFit="contain"
         accessibilityLabel="Zalytix"
@@ -584,7 +584,7 @@ export function ScraperHero({
       {heroWidth >= 1240 && !busy ? <HeroWidgets /> : null}
 
       <View style={{ width: "100%", maxWidth: 1000, alignItems: "center" }}>
-        {/* Brand: the bolt mark, centered over the glow. */}
+        {/* Brand: the logo, centered over the glow. */}
         <HeroBrand wideHeadline={wideHeadline} />
 
         {/* Input capsule */}

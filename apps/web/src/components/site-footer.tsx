@@ -66,7 +66,7 @@ function LegalLink({
 
 /**
  * Site CTA + footer: a grape-tinted call-to-action band over the footer
- * (centered Zalytix bolt logo + wordmark, then copyright · tagline · legal
+ * (centered Zalytix logo + wordmark, then copyright · tagline · legal
  * links). `onCtaPress` scrolls to the hero on the landing page; legal pages
  * route home instead.
  */
@@ -128,10 +128,10 @@ export function SiteFooter({ onCtaPress }: { onCtaPress: () => void }) {
       {/* Divider separates the CTA from the footer block below. */}
       <View style={{ height: 1, backgroundColor: colors.border }} />
 
-      {/* Brand: the bolt logo + wordmark, centered. */}
+      {/* Brand: the logo + wordmark, centered. */}
       <View style={styles.brand}>
         <Image
-          source={require("../../assets/images/bolt-logo.png")}
+          source={require("../../assets/images/logo.png")}
           style={{ width: 28, height: 26 }}
           contentFit="contain"
           accessibilityLabel="Zalytix"

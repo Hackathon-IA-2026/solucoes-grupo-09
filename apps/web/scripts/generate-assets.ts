@@ -1,8 +1,8 @@
 /**
- * Deterministic brand-asset generator (design system v3, ported from the
- * reference app): the ZalytixMark — lime rounded square with the stroked
- * Z-path — on charcoal. Rerun after any brand change:
- * `bun scripts/generate-assets.ts` (from apps/web).
+ * Deterministic brand-asset generator: the Zalytix mark is the script "Z"
+ * glyph (lime on charcoal). Every favicon / PWA / app / OG asset is rendered
+ * from a single hi-res transparent glyph so they stay in lockstep. Rerun after
+ * any brand change: `bun scripts/generate-assets.ts` (from apps/web).
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -10,7 +10,6 @@ import { chromium } from "@playwright/test";
 
 const ROOT = join(import.meta.dir, "..");
 const LIME = "#D0F244";
-const ON_LIME = "#1E2B10";
 const CHARCOAL = "#131316";
 const CARD = "#1B1B1F";
 const FG = "#F7F7F7";
@@ -18,34 +17,29 @@ const MUTED = "#A2A2AC";
 const GRAPE = "#8D5DF6";
 const BORDER = "rgba(255,255,255,0.08)";
 
-/** Hi-res bolt mark, base64-encoded once and shared by every badge asset. */
-const BOLT_B64 = readFileSync(join(ROOT, "assets/images/bolt-logo-source.png")).toString(
+/** The lime Z glyph (transparent) — the master brand mark. */
+const GLYPH = readFileSync(join(ROOT, "assets/images/logo-source.png")).toString(
   "base64",
 );
+/** White Z glyph, for the Android themed (monochrome) icon layer. */
+const GLYPH_MONO = readFileSync(
+  join(ROOT, "assets/images/logo-mono-source.png"),
+).toString("base64");
 
-/** Charcoal rounded badge + bolt mark at any size (favicon/PWA/touch icons). */
+/** A bare, centered glyph at `px` (square, contain). */
+function glyphImg(px: number, b64 = GLYPH) {
+  return `<img src="data:image/png;base64,${b64}" style="width:${px}px;height:${px}px;object-fit:contain" alt="" />`;
+}
+
+/** Charcoal rounded badge + the lime Z (favicon / PWA / touch / app icons). */
 function badge(size: number, radius: number) {
   return `<div style="width:${size}px;height:${size}px;border-radius:${radius}px;background:${CHARCOAL};display:grid;place-items:center">
-      <img src="data:image/png;base64,${BOLT_B64}" style="width:${Math.round(size * 0.66)}px;height:${Math.round(size * 0.72)}px;object-fit:contain" />
+      ${glyphImg(Math.round(size * 0.6))}
     </div>`;
 }
 
 const FONT =
   "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
-
-/** The reference ZalytixMark: rounded square + stroked Z-path. */
-function mark(
-  size: number,
-  opts: { bg?: string; stroke?: string; radius?: number } = {},
-) {
-  const { bg = LIME, stroke = ON_LIME } = opts;
-  const rx = opts.radius ?? 9;
-  return `
-  <svg width="${size}" height="${size}" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:${size}px;height:${size}px">
-    <rect width="32" height="32" rx="${rx}" fill="${bg}"/>
-    <path d="M9 9H23L9 23H23" stroke="${stroke}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>`;
-}
 
 interface Asset {
   file: string;
@@ -57,17 +51,15 @@ interface Asset {
 
 const ASSETS: Asset[] = [
   {
+    // App icon: full-bleed charcoal + lime Z (the OS applies its own mask).
     file: "assets/images/icon.png",
     width: 1024,
     height: 1024,
-    html: mark(1024, { radius: 0 }),
+    html: badge(1024, 0),
   },
   {
-    // Favicon = charcoal rounded badge + the bolt mark. A badge, not a bare
-    // glyph — lime-on-transparent is invisible on light browser tabs.
-    // Icons render from bolt-logo-source.png (hi-res, extracted from the
-    // brand image); the bundled bolt-logo.png is the same mark downscaled to
-    // 2x its largest display size to keep the web payload small.
+    // Favicon = charcoal rounded badge + the lime Z (a badge, not a bare
+    // glyph — lime-on-transparent is invisible on light browser tabs).
     file: "assets/images/favicon.png",
     width: 64,
     height: 64,
@@ -75,40 +67,35 @@ const ASSETS: Asset[] = [
     html: badge(64, 14),
   },
   {
+    // Splash mark: bare lime Z (the splash background is charcoal).
     file: "assets/images/splash-icon.png",
     width: 512,
     height: 512,
     transparent: true,
-    html: `<div style="width:512px;height:512px;display:grid;place-items:center">${mark(320)}</div>`,
+    html: `<div style="width:512px;height:512px;display:grid;place-items:center">${glyphImg(300)}</div>`,
   },
   {
+    // Adaptive safe zone: lime Z only, centered (background layer is charcoal).
     file: "assets/images/android-icon-foreground.png",
     width: 1024,
     height: 1024,
     transparent: true,
-    // Adaptive safe zone: Z-path only, centered (background layer is lime).
-    html: `<div style="width:1024px;height:1024px;display:grid;place-items:center">
-      <svg width="560" height="560" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M9 9H23L9 23H23" stroke="${ON_LIME}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg></div>`,
+    html: `<div style="width:1024px;height:1024px;display:grid;place-items:center">${glyphImg(560)}</div>`,
   },
   {
     file: "assets/images/android-icon-background.png",
     width: 1024,
     height: 1024,
-    html: `<div style="width:1024px;height:1024px;background:${LIME}"></div>`,
+    html: `<div style="width:1024px;height:1024px;background:${CHARCOAL}"></div>`,
   },
   {
     file: "assets/images/android-icon-monochrome.png",
     width: 1024,
     height: 1024,
     transparent: true,
-    html: `<div style="width:1024px;height:1024px;display:grid;place-items:center">
-      <svg width="560" height="560" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M9 9H23L9 23H23" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg></div>`,
+    html: `<div style="width:1024px;height:1024px;display:grid;place-items:center">${glyphImg(560, GLYPH_MONO)}</div>`,
   },
-  // PWA-manifest + apple-touch icons: the favicon badge, scaled. Opaque
+  // PWA-manifest + apple-touch icons: the charcoal badge, scaled. Opaque
   // (iOS fills transparent touch-icon pixels with black anyway).
   ...[
     { file: "public/icon-192.png", size: 192 },
@@ -133,7 +120,7 @@ const ASSETS: Asset[] = [
         <div style="position:absolute;bottom:-160px;right:-80px;width:420px;height:420px;border-radius:50%;
                     background:radial-gradient(closest-side, ${GRAPE}, transparent);opacity:0.22;filter:blur(60px)"></div>
         <div style="display:flex;align-items:center;gap:16px;position:relative">
-          ${mark(56)}
+          ${glyphImg(56)}
           <span style="font-size:30px;font-weight:600;color:${FG};letter-spacing:-0.5px">Zalytix</span>
         </div>
         <div style="position:relative">
@@ -173,7 +160,7 @@ for (const asset of ASSETS) {
   console.log(`✓ ${asset.file} (${asset.width}×${asset.height})`);
 }
 // favicon.ico — a PNG-in-ICO (valid everywhere modern) so the versioned
-// <link rel="icon" href="/favicon.ico?v=2"> in +html.tsx resolves. Rendered
+// <link rel="icon" href="/favicon.ico?v=N"> in +html.tsx resolves. Rendered
 // at 32x32 from the same badge.
 await page.setViewportSize({ width: 32, height: 32 });
 await page.setContent(

@@ -165,7 +165,7 @@ const styles = StyleSheet.create({
 });
 
 /**
- * Current dashboard header: just the bolt mark, centered — tapping it
+ * Current dashboard header: just the logo, centered — tapping it
  * returns to the home/hero screen.
  */
 export function TopNav({ onHome }: { onHome: () => void }) {
@@ -199,7 +199,7 @@ export function TopNav({ onHome }: { onHome: () => void }) {
         }}
       >
         <Image
-          source={require("../../assets/images/bolt-logo.png")}
+          source={require("../../assets/images/logo.png")}
           style={{ width: 40, height: 44 }}
           contentFit="contain"
           transition={150}
