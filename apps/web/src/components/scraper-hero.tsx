@@ -32,7 +32,7 @@ import {
   View,
 } from "react-native";
 import { useAppPreview } from "@/hooks/use-app-preview";
-import { AppPreviewCard } from "./app-preview-card";
+import { AppPreviewCard, AppPreviewSkeleton } from "./app-preview-card";
 import { HeroWidgets } from "./hero-widgets";
 import { StoreChip } from "./store-chip";
 
@@ -286,6 +286,7 @@ function ScrapeProgress({
         testID="cancel-button"
         accessibilityRole="button"
         onPress={onCancel}
+        hitSlop={8}
         style={{ minHeight: 28, justifyContent: "center" }}
       >
         <Text style={{ fontSize: 13, fontWeight: "600", color: colors.danger }}>
@@ -324,6 +325,7 @@ function SampleRow({
           accessibilityRole="button"
           accessibilityLabel={`Use ${sample.label} sample link`}
           onPress={() => onPick(sample.url)}
+          hitSlop={8}
           style={[
             styles.chip,
             { borderColor: colors.border, backgroundColor: colors.surface },
@@ -336,6 +338,7 @@ function SampleRow({
         accessibilityRole="button"
         accessibilityState={{ expanded: showOptions }}
         onPress={onToggleOptions}
+        hitSlop={8}
         style={[
           styles.chip,
           {
@@ -396,6 +399,7 @@ function HeroErrors({
           <Pressable
             accessibilityRole="button"
             onPress={onDismissError}
+            hitSlop={8}
             style={{ minHeight: 28, justifyContent: "center" }}
           >
             <Text style={{ fontSize: 13, fontWeight: "600", color: colors.ink }}>
@@ -421,6 +425,46 @@ function HeroErrors({
         </Text>
       ) : null}
     </>
+  );
+}
+
+/** The expandable options: reviews-limit / sort / storefront pill rows. */
+function HeroOptions({
+  limit,
+  sort,
+  country,
+  onLimit,
+  onSort,
+  onCountry,
+}: {
+  limit: number;
+  sort: ReviewSort;
+  country: string;
+  onLimit: (value: number) => void;
+  onSort: (value: ReviewSort) => void;
+  onCountry: (value: string) => void;
+}) {
+  return (
+    <View style={{ marginTop: space.lg, gap: space.md }}>
+      <PillRow
+        label="Reviews"
+        options={LIMITS.map((value) => ({ key: String(value), label: String(value) }))}
+        activeKey={String(limit)}
+        onSelect={(key) => onLimit(Number(key))}
+      />
+      <PillRow
+        label="Sort"
+        options={SORTS.map((s) => ({ key: s.value, label: s.label }))}
+        activeKey={sort}
+        onSelect={(key) => onSort(key as ReviewSort)}
+      />
+      <PillRow
+        label="Store"
+        options={COUNTRIES.map((code) => ({ key: code, label: code.toUpperCase() }))}
+        activeKey={country}
+        onSelect={onCountry}
+      />
+    </View>
   );
 }
 
@@ -482,6 +526,15 @@ export function ScraperHero({
     const timer = setTimeout(() => setSettledInput(input), ERROR_SETTLE_MS);
     return () => clearTimeout(timer);
   }, [input]);
+
+  // Principle of Least Effort: the URL field is the hero's sole action, so
+  // focus it on mount (web only — avoids popping the mobile keyboard). Also
+  // returns focus here when the hero remounts after a "New scrape" reset.
+  useEffect(() => {
+    if (Platform.OS === "web") {
+      inputRef.current?.focus();
+    }
+  }, []);
 
   const settled = input.trim().length > 0 && settledInput === input;
   const showError =
@@ -681,38 +734,24 @@ export function ScraperHero({
                 <View style={{ width: "100%" }}>
                   <AppPreviewCard appInfo={preview.appInfo} />
                 </View>
+              ) : preview.status === "loading" ? (
+                <View style={{ width: "100%" }}>
+                  <AppPreviewSkeleton />
+                </View>
               ) : null}
             </View>
           ) : null}
 
           {/* Options: limit / sort / storefront as pill rows. */}
           {showOptions && !busy ? (
-            <View style={{ marginTop: space.lg, gap: space.md }}>
-              <PillRow
-                label="Reviews"
-                options={LIMITS.map((value) => ({
-                  key: String(value),
-                  label: String(value),
-                }))}
-                activeKey={String(limit)}
-                onSelect={(key) => setLimit(Number(key))}
-              />
-              <PillRow
-                label="Sort"
-                options={SORTS.map((s) => ({ key: s.value, label: s.label }))}
-                activeKey={sort}
-                onSelect={(key) => setSort(key as ReviewSort)}
-              />
-              <PillRow
-                label="Store"
-                options={COUNTRIES.map((code) => ({
-                  key: code,
-                  label: code.toUpperCase(),
-                }))}
-                activeKey={countryOverride ?? target?.country ?? "us"}
-                onSelect={setCountryOverride}
-              />
-            </View>
+            <HeroOptions
+              limit={limit}
+              sort={sort}
+              country={countryOverride ?? target?.country ?? "us"}
+              onLimit={setLimit}
+              onSort={setSort}
+              onCountry={setCountryOverride}
+            />
           ) : null}
         </View>
 
@@ -774,6 +813,7 @@ function PillRow({
             aria-checked={active}
             accessibilityLabel={`${label} ${option.label}`}
             onPress={() => onSelect(option.key)}
+            hitSlop={8}
             style={(pressState) => {
               const { focused = false } = pressState as { focused?: boolean };
               return {

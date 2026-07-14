@@ -47,6 +47,9 @@ export function Pill({
       accessibilityLabel={label}
       onPress={onPress}
       disabled={!onPress}
+      // Fitts's Law / WCAG 2.5.5: compact pills render below 44px; expand the
+      // touch area without changing the visual size.
+      hitSlop={8}
       style={(state) => {
         const { pressed } = state;
         const { focused = false, hovered = false } = state as {
@@ -115,6 +118,7 @@ export function PillButton({
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
+      hitSlop={8}
       style={(state) => {
         const { pressed } = state;
         const { focused = false, hovered = false } = state as {
@@ -219,6 +223,7 @@ export function IconCircleButton({
       accessibilityLabel={label}
       onPress={onPress}
       disabled={!onPress}
+      hitSlop={8}
       style={(state) => {
         const { pressed } = state;
         const { focused = false, hovered = false } = state as {

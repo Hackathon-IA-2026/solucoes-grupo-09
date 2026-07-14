@@ -27,8 +27,8 @@ import {
 } from "@zalytix/ui";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
-import { useEffect, useRef, useState } from "react";
-import { Text, View } from "react-native";
+import { type RefObject, useEffect, useRef, useState } from "react";
+import { AccessibilityInfo, Platform, Text, View } from "react-native";
 import { exportText } from "@/lib/download";
 import {
   KeywordPanel,
@@ -64,6 +64,7 @@ export function Dashboard({
   const [view, setView] = useState<View_>("All");
   const [exported, setExported] = useState<string | null>(null);
   const exportTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const headingRef = useRef<Text>(null);
   useEffect(
     () => () => {
       if (exportTimer.current) {
@@ -72,6 +73,16 @@ export function Dashboard({
     },
     [],
   );
+
+  // Focus management (WCAG 2.4.3) + status feedback: the dashboard replaces the
+  // hero on completion, so announce results to screen readers and move keyboard
+  // focus (web) to the results heading instead of leaving it stranded on body.
+  useEffect(() => {
+    AccessibilityInfo.announceForAccessibility("Scrape complete — results ready");
+    if (Platform.OS === "web") {
+      (headingRef.current as unknown as { focus?: () => void } | null)?.focus?.();
+    }
+  }, []);
 
   function download(kind: "csv" | "json") {
     if (process.env.EXPO_OS === "ios") {
@@ -111,6 +122,7 @@ export function Dashboard({
       <HeroHeader
         result={result}
         wide={wide}
+        headingRef={headingRef}
         onNewScrape={onNewScrape}
         onExportJson={() => download("json")}
       />
@@ -208,11 +220,13 @@ export function Dashboard({
 function HeroHeader({
   result,
   wide,
+  headingRef,
   onNewScrape,
   onExportJson,
 }: {
   result: ScrapeResult;
   wide: boolean;
+  headingRef: RefObject<Text | null>;
   onNewScrape: () => void;
   onExportJson: () => void;
 }) {
@@ -271,8 +285,13 @@ function HeroHeader({
             }}
           >
             <Text
+              ref={headingRef}
               accessibilityRole="header"
               aria-level={1}
+              selectable={true}
+              // web-only: make the heading programmatically focusable so focus
+              // can land here when the dashboard replaces the hero.
+              {...(Platform.OS === "web" ? ({ tabIndex: -1 } as object) : null)}
               style={{
                 fontSize: wide ? 44 : 34,
                 lineHeight: wide ? 48 : 38,
@@ -315,7 +334,7 @@ function HeroHeader({
             }}
           >
             <Stars value={result.appInfo?.averageRating ?? average} size={15} />
-            <Text style={{ fontSize: 14, color: colors.inkMuted }}>
+            <Text selectable={true} style={{ fontSize: 14, color: colors.inkMuted }}>
               {(result.appInfo?.averageRating ?? average).toFixed(1)}
               {result.appInfo?.ratingCount
                 ? ` · ${formatCompact(result.appInfo.ratingCount)} ratings`

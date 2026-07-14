@@ -1,4 +1,4 @@
-import { formatDate, type Review, type ScrapeResult } from "@zalytix/core";
+import { formatCompact, formatDate, type Review, type ScrapeResult } from "@zalytix/core";
 import {
   CornerDownRightIcon,
   focusRing,
@@ -96,8 +96,12 @@ export function ReviewsFeed({ result }: { result: ScrapeResult }) {
           <Text style={{ fontSize: 18, fontWeight: "600", color: colors.ink }}>
             Scraped reviews
           </Text>
-          <Text style={{ fontSize: 14, color: colors.inkMuted }}>
-            {filtered.length} of {result.reviews.length} shown
+          <Text
+            accessibilityLiveRegion="polite"
+            style={{ fontSize: 14, color: colors.inkMuted }}
+          >
+            {formatCompact(filtered.length)} of {formatCompact(result.reviews.length)}{" "}
+            shown
           </Text>
         </View>
         <View
@@ -128,44 +132,56 @@ export function ReviewsFeed({ result }: { result: ScrapeResult }) {
               }}
             />
           </View>
-          {SORTS.map((s) => {
-            const active = sort === s.id;
-            return (
-              <Pressable
-                key={s.id}
-                accessibilityRole="radio"
-                aria-checked={active}
-                onPress={() => setSort(s.id)}
-                style={(pressState) => {
-                  const { focused = false } = pressState as { focused?: boolean };
-                  return {
-                    borderRadius: radius.pill,
-                    borderWidth: 1,
-                    borderColor: active ? colors.accent : colors.border,
-                    backgroundColor: active ? colors.accent : colors.surfaceSunken,
-                    paddingHorizontal: 12,
-                    paddingVertical: 6,
-                    ...focusRing(focused, colors.focus, 1),
-                  };
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: 13,
-                    fontWeight: active ? "700" : "500",
-                    color: active ? colors.onAccent : colors.inkMuted,
+          <View
+            accessibilityRole="radiogroup"
+            accessibilityLabel="Sort reviews"
+            style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}
+          >
+            {SORTS.map((s) => {
+              const active = sort === s.id;
+              return (
+                <Pressable
+                  key={s.id}
+                  accessibilityRole="radio"
+                  aria-checked={active}
+                  accessibilityLabel={`Sort ${s.label}`}
+                  onPress={() => setSort(s.id)}
+                  hitSlop={8}
+                  style={(pressState) => {
+                    const { focused = false } = pressState as { focused?: boolean };
+                    return {
+                      borderRadius: radius.pill,
+                      borderWidth: 1,
+                      borderColor: active ? colors.accent : colors.border,
+                      backgroundColor: active ? colors.accent : colors.surfaceSunken,
+                      paddingHorizontal: 12,
+                      paddingVertical: 6,
+                      ...focusRing(focused, colors.focus, 1),
+                    };
                   }}
                 >
-                  {s.label}
-                </Text>
-              </Pressable>
-            );
-          })}
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      fontWeight: active ? "700" : "500",
+                      color: active ? colors.onAccent : colors.inkMuted,
+                    }}
+                  >
+                    {s.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
       </View>
 
       {/* Filter pills */}
-      <View style={{ marginTop: 16, flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+      <View
+        accessibilityRole="radiogroup"
+        accessibilityLabel="Filter by rating"
+        style={{ marginTop: 16, flexDirection: "row", flexWrap: "wrap", gap: 8 }}
+      >
         {FILTERS.map((f) => {
           const active = filter === f.id;
           return (
@@ -178,6 +194,7 @@ export function ReviewsFeed({ result }: { result: ScrapeResult }) {
                 setFilter(f.id);
                 setVisible(PAGE_SIZE);
               }}
+              hitSlop={8}
               style={(pressState) => {
                 const { focused = false } = pressState as { focused?: boolean };
                 return {
@@ -343,6 +360,7 @@ function FeedReviewCard({ review }: { review: Review }) {
           <View style={{ flexShrink: 1 }}>
             <Text
               numberOfLines={1}
+              selectable={true}
               style={{ fontSize: 14, fontWeight: "600", color: colors.ink }}
             >
               {review.userName}
@@ -402,7 +420,7 @@ function FeedReviewCard({ review }: { review: Review }) {
         >
           <ThumbsUpIcon size={14} color={colors.inkMuted} />
           <Text style={{ fontSize: 12, color: colors.inkMuted }}>
-            {review.thumbsUp} found helpful
+            {formatCompact(review.thumbsUp)} found helpful
           </Text>
         </View>
       ) : null}

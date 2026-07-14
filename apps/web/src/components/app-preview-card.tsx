@@ -75,6 +75,33 @@ export function AppPreviewCard({ appInfo }: { appInfo: AppInfo }) {
   );
 }
 
+/**
+ * Loading placeholder shown during the debounce + fetch window, so the preview
+ * reveals smoothly instead of popping in (perceived performance / skeleton
+ * screens). Same shape as the real card; decorative, hidden from a11y.
+ */
+export function AppPreviewSkeleton() {
+  const colors = usePalette();
+  const block = { backgroundColor: colors.border, borderRadius: 6 } as const;
+  return (
+    <View
+      testID="app-preview-skeleton"
+      aria-hidden={true}
+      style={[
+        styles.card,
+        { backgroundColor: colors.surfaceSunken, borderColor: colors.border },
+      ]}
+    >
+      <View style={{ ...block, width: 48, height: 48, borderRadius: 10 }} />
+      <View style={{ flex: 1, gap: 8 }}>
+        <View style={{ ...block, width: "55%", height: 14 }} />
+        <View style={{ ...block, width: "75%", height: 11 }} />
+        <View style={{ ...block, width: "35%", height: 11 }} />
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   card: {
     flexDirection: "row",
