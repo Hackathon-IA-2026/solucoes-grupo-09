@@ -1,6 +1,7 @@
 export * from "./components/brand";
 export * from "./components/fade-in";
 export * from "./components/icons";
+export * from "./components/legal";
 export * from "./components/panel";
 export * from "./components/pill";
 export * from "./hooks/use-container-width";

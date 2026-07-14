@@ -22,6 +22,15 @@
         "rules": ["deslop/unused-export"]
       },
       {
+        // The legal pages (terms/privacy) render all sections eagerly inside a
+        // ScrollView on purpose: the static export must contain the full text
+        // for SEO, and the TOC measures every section's offset for scroll
+        // tracking. A virtualized FlatList would drop offscreen sections from
+        // the HTML and break both.
+        "files": ["src/components/legal-screen.tsx"],
+        "rules": ["react-doctor/rn-no-scrollview-mapped-list"]
+      },
+      {
         // Two false positives in the reviews feed:
         // - js-set-map-lookups flags `String.prototype.includes(q)` (substring
         //   search in the filter) as an array membership lookup; a Set cannot

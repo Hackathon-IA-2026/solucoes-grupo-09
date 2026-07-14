@@ -5,6 +5,7 @@ import { Platform, ScrollView } from "react-native";
 import { Dashboard } from "@/components/dashboard";
 import { ScraperHero } from "@/components/scraper-hero";
 import { Showcase } from "@/components/showcase";
+import { SiteFooter } from "@/components/site-footer";
 import { useScrape } from "@/hooks/use-scrape";
 import { SITE_URL } from "@/lib/config";
 
@@ -105,9 +106,14 @@ export default function Home() {
             />
             {/* The product, shown — real dashboard components on sample data. */}
             {busy ? null : (
-              <Showcase
-                onTryIt={() => scrollRef.current?.scrollTo({ y: 0, animated: true })}
-              />
+              <>
+                <Showcase
+                  onTryIt={() => scrollRef.current?.scrollTo({ y: 0, animated: true })}
+                />
+                <SiteFooter
+                  onCtaPress={() => scrollRef.current?.scrollTo({ y: 0, animated: true })}
+                />
+              </>
             )}
           </>
         )}
