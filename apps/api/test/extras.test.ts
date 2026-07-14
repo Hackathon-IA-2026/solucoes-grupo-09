@@ -31,6 +31,13 @@ describe("apple · parseAppleExtras", () => {
     expect(extras.updated).toBe("2026-07-05T16:28:19Z");
   });
 
+  it("reads core identity (name, developer) from the catalog resource", () => {
+    // The App Store landing page's JSON-LD omits these, so the catalog
+    // resource must supply them or the app shows its id with no name.
+    expect(extras.name).toBe("Instagram");
+    expect(extras.developer).toBe("Instagram, Inc.");
+  });
+
   it("degrades to empty on junk", () => {
     expect(parseAppleExtras("not json")).toEqual({});
     expect(parseAppleExtras("{}")).toEqual({});

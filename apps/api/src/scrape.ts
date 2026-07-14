@@ -1,3 +1,4 @@
+import { fetchAppInfoFast } from "./appinfo-fast.js";
 import { appleAdapter } from "./apple.js";
 import { fetchAppInfo, runScraper } from "./engine.js";
 import { googleAdapter } from "./google.js";
@@ -39,9 +40,16 @@ export async function getReviews(opts: ScrapeOptions): Promise<Review[]> {
  * `null` if the page exposes no structured data. The store is inferred from the
  * appId unless given.
  */
-export function getAppInfo(opts: ScrapeOptions): Promise<AppInfo | null> {
+export async function getAppInfo(opts: ScrapeOptions): Promise<AppInfo | null> {
   const store = opts.store ?? resolveTarget(opts.appId).store;
   const resolved = { ...opts, store };
+  // Fast path first: public HTTP metadata (no browser) — instant, and it gives
+  // Apple its name/icon that the store page's JSON-LD omits. Falls back to the
+  // browser path if the fast lookup misses (e.g. a Google consent wall).
+  const fast = await fetchAppInfoFast(resolved, store).catch(() => null);
+  if (fast?.name) {
+    return fast;
+  }
   return store === "apple"
     ? fetchAppInfo(appleAdapter, resolved)
     : fetchAppInfo(googleAdapter, resolved);

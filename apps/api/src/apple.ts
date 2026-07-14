@@ -180,6 +180,29 @@ export function parseAppleExtras(body: string): Partial<AppInfo> {
       extras.updated = releases[0].released;
     }
   }
+
+  // Core identity from the catalog resource (the App Store landing page's
+  // JSON-LD omits these, so without this the app shows its id and no icon).
+  if (typeof attrs.name === "string" && attrs.name.trim()) {
+    extras.name = attrs.name.trim();
+  }
+  if (typeof attrs.artistName === "string" && attrs.artistName.trim()) {
+    extras.developer = attrs.artistName.trim();
+  }
+  const genres = attrs.genreNames;
+  if (Array.isArray(genres) && typeof genres[0] === "string" && genres[0].trim()) {
+    extras.category = genres[0].trim();
+  }
+  const artwork = attrs.artwork as { url?: unknown } | undefined;
+  if (artwork && typeof artwork.url === "string") {
+    // Artwork URL is a template, e.g. ".../{w}x{h}{c}.{f}".
+    extras.icon = artwork.url
+      .replace("{w}", "512")
+      .replace("{h}", "512")
+      .replace("{c}", "bb")
+      .replace("{f}", "jpg");
+  }
+
   return extras;
 }
 
