@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Noviq",
-    "slug": "noviq",
+    "name": "Zalytix",
+    "slug": "zalytix",
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "noviq",
+    "scheme": "zalytix",
     "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true

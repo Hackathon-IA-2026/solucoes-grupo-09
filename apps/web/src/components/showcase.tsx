@@ -11,7 +11,7 @@ import {
   space,
   useContainerWidth,
   usePalette,
-} from "@noviq/ui";
+} from "@zalytix/ui";
 import { StyleSheet, Text, View } from "react-native";
 import { sampleResult } from "@/lib/sample-data";
 import { RatingDistribution, SentimentRing } from "./breakdown";

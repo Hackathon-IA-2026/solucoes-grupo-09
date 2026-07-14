@@ -4,11 +4,11 @@ import {
   focusRing,
   IconCircleButton,
   LayoutDashboardIcon,
-  NoviqMark,
   Pill,
   SearchIcon,
   usePalette,
-} from "@noviq/ui";
+  ZalytixMark,
+} from "@zalytix/ui";
 import { Image } from "expo-image";
 import { useState } from "react";
 import { FlatList, Platform, Pressable, StyleSheet, Text, View } from "react-native";
@@ -50,7 +50,7 @@ export function TopNavFull() {
           justifyContent: "center",
         }}
       >
-        <NoviqMark size={24} tint={colors.violet} />
+        <ZalytixMark size={24} tint={colors.violet} />
       </View>
 
       {/* tab pills */}
@@ -174,7 +174,7 @@ export function TopNav({ onHome }: { onHome: () => void }) {
     <View style={{ alignItems: "center" }}>
       <Pressable
         accessibilityRole="link"
-        accessibilityLabel="Noviq — back to home"
+        accessibilityLabel="Zalytix — back to home"
         testID="nav-home"
         onPress={onHome}
         style={(state) => {

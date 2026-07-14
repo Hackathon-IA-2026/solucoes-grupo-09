@@ -1,7 +1,7 @@
 /**
  * Deterministic brand-asset generator (design system v3, ported from the
- * reference app): the NoviqMark — lime rounded square with the stroked
- * N-path — on charcoal. Rerun after any brand change:
+ * reference app): the ZalytixMark — lime rounded square with the stroked
+ * Z-path — on charcoal. Rerun after any brand change:
  * `bun scripts/generate-assets.ts` (from apps/web).
  */
 import { readFileSync, writeFileSync } from "node:fs";
@@ -33,7 +33,7 @@ function badge(size: number, radius: number) {
 const FONT =
   "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
-/** The reference NoviqMark: rounded square + stroked N-path. */
+/** The reference ZalytixMark: rounded square + stroked Z-path. */
 function mark(
   size: number,
   opts: { bg?: string; stroke?: string; radius?: number } = {},
@@ -43,7 +43,7 @@ function mark(
   return `
   <svg width="${size}" height="${size}" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:${size}px;height:${size}px">
     <rect width="32" height="32" rx="${rx}" fill="${bg}"/>
-    <path d="M9 23V9l14 14V9" stroke="${stroke}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M9 9H23L9 23H23" stroke="${stroke}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>`;
 }
 
@@ -86,10 +86,10 @@ const ASSETS: Asset[] = [
     width: 1024,
     height: 1024,
     transparent: true,
-    // Adaptive safe zone: N-path only, centered (background layer is lime).
+    // Adaptive safe zone: Z-path only, centered (background layer is lime).
     html: `<div style="width:1024px;height:1024px;display:grid;place-items:center">
       <svg width="560" height="560" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M9 23V9l14 14V9" stroke="${ON_LIME}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M9 9H23L9 23H23" stroke="${ON_LIME}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg></div>`,
   },
   {
@@ -105,7 +105,7 @@ const ASSETS: Asset[] = [
     transparent: true,
     html: `<div style="width:1024px;height:1024px;display:grid;place-items:center">
       <svg width="560" height="560" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M9 23V9l14 14V9" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M9 9H23L9 23H23" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg></div>`,
   },
   // PWA-manifest + apple-touch icons: the favicon badge, scaled. Opaque
@@ -134,7 +134,7 @@ const ASSETS: Asset[] = [
                     background:radial-gradient(closest-side, ${GRAPE}, transparent);opacity:0.22;filter:blur(60px)"></div>
         <div style="display:flex;align-items:center;gap:16px;position:relative">
           ${mark(56)}
-          <span style="font-size:30px;font-weight:600;color:${FG};letter-spacing:-0.5px">Noviq</span>
+          <span style="font-size:30px;font-weight:600;color:${FG};letter-spacing:-0.5px">Zalytix</span>
         </div>
         <div style="position:relative">
           <div style="font-size:80px;line-height:1.06;font-weight:600;color:${FG};letter-spacing:-2.5px">

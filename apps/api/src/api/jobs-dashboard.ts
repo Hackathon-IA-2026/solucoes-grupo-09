@@ -6,7 +6,7 @@ import { QUEUE_NAME } from "../jobs/bullmq.js";
 /**
  * The BullMQ Workbench dashboard (mount at /jobs). It connects a read handle to
  * the same queue/Redis as the runner. Exposes job data + controls, so it's
- * opt-in (`NOVIQ_DASHBOARD=true`) and must be protected by auth/network in prod.
+ * opt-in (`ZALYTIX_DASHBOARD=true`) and must be protected by auth/network in prod.
  */
 export function jobsDashboard(redisUrl: string) {
   const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });

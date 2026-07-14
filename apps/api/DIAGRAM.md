@@ -1,6 +1,6 @@
-# noviq — Application Flow
+# zalytix — Application Flow
 
-Visual reference for how noviq is wired together. Two entry points (CLI and
+Visual reference for how zalytix is wired together. Two entry points (CLI and
 HTTP API) feed the same scraping core; the core hides each store behind a single
 `StoreAdapter` interface and drives a humanized cloakbrowser session.
 

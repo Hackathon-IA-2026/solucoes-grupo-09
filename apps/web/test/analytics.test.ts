@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Review } from "@noviq/core";
+import type { Review } from "@zalytix/core";
 import {
   distributionPct,
   initials,

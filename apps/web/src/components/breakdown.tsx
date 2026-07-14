@@ -1,4 +1,4 @@
-import { formatCompact, type ScrapeResult } from "@noviq/core";
+import { formatCompact, type ScrapeResult } from "@zalytix/core";
 import {
   HashIcon,
   hatchGrape,
@@ -10,7 +10,7 @@ import {
   PieChartIcon,
   radius,
   usePalette,
-} from "@noviq/ui";
+} from "@zalytix/ui";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, Defs, G, Line, Pattern, Rect } from "react-native-svg";
 import { distributionPct, keywords, sentimentMix, versionStats } from "@/lib/analytics";

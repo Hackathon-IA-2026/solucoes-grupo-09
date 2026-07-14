@@ -1,5 +1,5 @@
-import { type AppInfo, formatCompact, formatRating } from "@noviq/core";
-import { FadeIn, motion, radius, Stars, space, usePalette } from "@noviq/ui";
+import { type AppInfo, formatCompact, formatRating } from "@zalytix/core";
+import { FadeIn, motion, radius, Stars, space, usePalette } from "@zalytix/ui";
 import { Image } from "expo-image";
 import { StyleSheet, Text, View } from "react-native";
 

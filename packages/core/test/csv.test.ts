@@ -126,10 +126,10 @@ describe("reviewsToJson", () => {
 describe("exportFilename", () => {
   test("keeps safe characters, replaces the rest", () => {
     expect(exportFilename("com.spotify.music", "us", "csv")).toBe(
-      "noviq-reviews-com.spotify.music-us.csv",
+      "zalytix-reviews-com.spotify.music-us.csv",
     );
     expect(exportFilename("we/ird id", "gb", "json")).toBe(
-      "noviq-reviews-we_ird_id-gb.json",
+      "zalytix-reviews-we_ird_id-gb.json",
     );
   });
 });

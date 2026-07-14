@@ -6,7 +6,7 @@ import {
   reviewsToCsv,
   reviewsToJson,
   type ScrapeResult,
-} from "@noviq/core";
+} from "@zalytix/core";
 import {
   AppleIcon,
   CalendarDaysIcon,
@@ -24,7 +24,7 @@ import {
   space,
   useContainerWidth,
   usePalette,
-} from "@noviq/ui";
+} from "@zalytix/ui";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import { useEffect, useRef, useState } from "react";
@@ -197,7 +197,7 @@ export function Dashboard({
           style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.accent }}
         />
         <Text style={{ fontSize: 12, color: colors.inkMuted }}>
-          Scraped by Noviq · {formatCompact(result.count)} reviews processed
+          Scraped by Zalytix · {formatCompact(result.count)} reviews processed
         </Text>
       </View>
     </FadeIn>

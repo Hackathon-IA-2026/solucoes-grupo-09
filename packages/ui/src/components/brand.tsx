@@ -3,10 +3,10 @@ import Svg, { Path, Rect } from "react-native-svg";
 import { usePalette } from "../hooks/use-palette";
 
 /**
- * Brand mark from the reference (`components/noviq/brand.tsx`): lime rounded
- * square with the stroked N-path "M9 23V9l14 14V9".
+ * Brand mark: lime rounded square with the stroked Z-path
+ * "M9 9H23L9 23H23" (top bar → diagonal → bottom bar).
  */
-export function NoviqMark({
+export function ZalytixMark({
   size = 28,
   tint,
 }: {
@@ -19,7 +19,7 @@ export function NoviqMark({
     <Svg width={size} height={size} viewBox="0 0 32 32" aria-hidden={true}>
       <Rect width={32} height={32} rx={9} fill={tint ?? colors.accent} />
       <Path
-        d="M9 23V9l14 14V9"
+        d="M9 9H23L9 23H23"
         stroke={colors.onAccent}
         strokeWidth={3.2}
         strokeLinecap="round"
@@ -30,11 +30,11 @@ export function NoviqMark({
   );
 }
 
-export function NoviqWordmark() {
+export function ZalytixWordmark() {
   const colors = usePalette();
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-      <NoviqMark />
+      <ZalytixMark />
       <Text
         style={{
           fontSize: 18,
@@ -43,7 +43,7 @@ export function NoviqWordmark() {
           color: colors.ink,
         }}
       >
-        Noviq
+        Zalytix
       </Text>
     </View>
   );

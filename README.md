@@ -1,4 +1,4 @@
-# Noviq
+# Zalytix
 
 **App Store & Google Play review scraping, as a product.** Paste an app link,
 get every review — ratings, dates, developer responses — exported to CSV or
@@ -20,7 +20,7 @@ packages/
           CSV/JSON export, formatting. Pure TypeScript, zero UI deps.
 ```
 
-The API keeps its own canonical `resolve.ts`; `@noviq/core` mirrors it (plus
+The API keeps its own canonical `resolve.ts`; `@zalytix/core` mirrors it (plus
 more liberal client-side inputs — Postel's law) and a **parity test suite**
 (`packages/core/test/resolve.test.ts`) imports both to guarantee they never
 drift.

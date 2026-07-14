@@ -1,4 +1,4 @@
-import { averageRating, formatCompact, type ScrapeResult } from "@noviq/core";
+import { averageRating, formatCompact, type ScrapeResult } from "@zalytix/core";
 import {
   ArrowUpRightIcon,
   FadeIn,
@@ -12,7 +12,7 @@ import {
   UsersIcon,
   useContainerWidth,
   usePalette,
-} from "@noviq/ui";
+} from "@zalytix/ui";
 import type { ReactNode } from "react";
 import { Text, View } from "react-native";
 import { responseRate, sentimentMix } from "@/lib/analytics";

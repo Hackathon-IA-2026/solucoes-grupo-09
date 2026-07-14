@@ -5,7 +5,7 @@ import type { ScrapeResult } from "../src/types.js";
 
 // Runs only when a test Redis is provided (the `test:redis` script sets it).
 // Spin one up with: docker run -d -p 6390:6379 redis:7-alpine
-const REDIS = process.env.NOVIQ_TEST_REDIS_URL;
+const REDIS = process.env.ZALYTIX_TEST_REDIS_URL;
 const suite = REDIS ? describe : describe.skip;
 
 const ok = (count: number): ScrapeResult => ({
@@ -82,7 +82,7 @@ suite("jobs · bullmq runner (real Redis)", () => {
         return ok(q.limit ?? 0);
       },
       REDIS as string,
-      { attempts: 3, backoffMs: 100, queueName: "noviq-test-retry" },
+      { attempts: 3, backoffMs: 100, queueName: "zalytix-test-retry" },
     );
     try {
       const id = await retryRunner.submit({ appId: "1", store: "apple", limit: 3 });
@@ -98,7 +98,7 @@ suite("jobs · bullmq runner (real Redis)", () => {
   it("enqueue-only mode (startWorker:false) leaves jobs waiting for a worker", async () => {
     const enqueueOnly = createBullMqRunner(async () => ok(0), REDIS as string, {
       startWorker: false,
-      queueName: "noviq-test-noworker",
+      queueName: "zalytix-test-noworker",
     });
     try {
       const id = await enqueueOnly.submit({ appId: "1", store: "apple" });

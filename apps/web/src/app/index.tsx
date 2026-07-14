@@ -1,4 +1,4 @@
-import { usePalette } from "@noviq/ui";
+import { usePalette } from "@zalytix/ui";
 import Head from "expo-router/head";
 import { useRef } from "react";
 import { Platform, ScrollView } from "react-native";
@@ -8,7 +8,7 @@ import { Showcase } from "@/components/showcase";
 import { useScrape } from "@/hooks/use-scrape";
 import { SITE_URL } from "@/lib/config";
 
-const TITLE = "App Store & Google Play Review Scraper — Free CSV Export | Noviq";
+const TITLE = "App Store & Google Play Review Scraper — Free CSV Export | Zalytix";
 const DESCRIPTION =
   "Scrape every App Store and Google Play review into clean data — sentiment, trends, version history, CSV/JSON export. Free, no signup required.";
 
@@ -20,7 +20,7 @@ const JSON_LD_SCHEMAS = [
   JSON.stringify({
     "@context": "https://schema.org",
     "@type": "WebApplication",
-    name: "Noviq",
+    name: "Zalytix",
     url: CANONICAL_URL,
     applicationCategory: "BusinessApplication",
     operatingSystem: "Web",
@@ -33,14 +33,14 @@ const JSON_LD_SCHEMAS = [
   JSON.stringify({
     "@context": "https://schema.org",
     "@type": "Organization",
-    name: "Noviq",
+    name: "Zalytix",
     url: CANONICAL_URL,
     logo: `${SITE_URL}/icon-512.png`,
   }),
   JSON.stringify({
     "@context": "https://schema.org",
     "@type": "WebSite",
-    name: "Noviq",
+    name: "Zalytix",
     url: CANONICAL_URL,
   }),
 ];
@@ -61,13 +61,13 @@ export default function Home() {
         <meta property="og:title" content={TITLE} />
         <meta property="og:description" content={DESCRIPTION} />
         <meta property="og:url" content={CANONICAL_URL} />
-        <meta property="og:site_name" content="Noviq" />
+        <meta property="og:site_name" content="Zalytix" />
         <meta property="og:image" content={`${SITE_URL}/og.png`} />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
         <meta
           property="og:image:alt"
-          content="Noviq — turn any app's reviews into clean data."
+          content="Zalytix — turn any app's reviews into clean data."
         />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={TITLE} />
@@ -75,7 +75,7 @@ export default function Home() {
         <meta name="twitter:image" content={`${SITE_URL}/og.png`} />
         <meta
           name="twitter:image:alt"
-          content="Noviq — turn any app's reviews into clean data."
+          content="Zalytix — turn any app's reviews into clean data."
         />
         {Platform.OS === "web"
           ? JSON_LD_SCHEMAS.map((schema) => (

@@ -14,5 +14,11 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["e2e/**/*.ts", "test/**/*.ts", "playwright.config.ts", "scripts/**/*.ts"]
+  "include": [
+    "e2e/**/*.ts",
+    "test/**/*.ts",
+    "playwright.config.ts",
+    "scripts/**/*.ts",
+    "server.ts"
+  ]
 }

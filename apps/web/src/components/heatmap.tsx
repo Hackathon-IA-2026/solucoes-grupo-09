@@ -1,4 +1,4 @@
-import type { ScrapeResult } from "@noviq/core";
+import type { ScrapeResult } from "@zalytix/core";
 import {
   ChevronDownIcon,
   ClockIcon,
@@ -8,7 +8,7 @@ import {
   PanelHeader,
   Pill,
   usePalette,
-} from "@noviq/ui";
+} from "@zalytix/ui";
 import { useState } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
 import { heatmap } from "@/lib/analytics";

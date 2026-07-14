@@ -4,12 +4,12 @@ import {
   initialScrapeState,
   type JobRecord,
   MAX_POLL_ERRORS,
-  type NoviqClient,
   type ScrapeEvent,
   type ScrapeRequest,
   type ScrapeResult,
   transition,
-} from "@noviq/core";
+  type ZalytixClient,
+} from "@zalytix/core";
 import { runScrape } from "../src/lib/scrape-controller";
 
 const request: ScrapeRequest = { appId: "42", store: "apple", limit: 50 };
@@ -29,7 +29,7 @@ const noSleep = () => Promise.resolve();
 function fakeClient(options: {
   submit?: () => Promise<string>;
   polls: Array<() => Promise<JobRecord>>;
-}): NoviqClient {
+}): ZalytixClient {
   let call = 0;
   return {
     submitJob: options.submit ?? (() => Promise.resolve("job-1")),
@@ -38,11 +38,11 @@ function fakeClient(options: {
       call++;
       return poll();
     },
-  } as unknown as NoviqClient;
+  } as unknown as ZalytixClient;
 }
 
 /** Run the controller and capture events + the machine's final state. */
-async function drive(client: NoviqClient, signal?: AbortSignal) {
+async function drive(client: ZalytixClient, signal?: AbortSignal) {
   const events: ScrapeEvent[] = [];
   let state = transition(initialScrapeState, { type: "SUBMIT", request });
   await runScrape(

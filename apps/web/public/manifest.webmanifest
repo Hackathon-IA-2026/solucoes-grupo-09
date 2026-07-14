@@ -1,6 +1,6 @@
 {
-  "name": "Noviq",
-  "short_name": "Noviq",
+  "name": "Zalytix",
+  "short_name": "Zalytix",
   "description": "Scrape App Store & Google Play reviews into clean data.",
   "start_url": "/",
   "display": "standalone",

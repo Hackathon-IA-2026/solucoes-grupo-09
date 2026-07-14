@@ -1,5 +1,5 @@
 /**
- * Wire types for the noviq API, mirrored from `apps/api/src/types.ts` and
+ * Wire types for the zalytix API, mirrored from `apps/api/src/types.ts` and
  * `apps/api/src/api/reviews/model.ts`. The API is the source of truth; keep
  * these in lock-step when the contract changes (the parity fixtures in
  * `test/resolve.test.ts` guard the resolver side).

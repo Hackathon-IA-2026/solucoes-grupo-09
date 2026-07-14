@@ -6,10 +6,10 @@ import { createCsvSink } from "../src/output.js";
 import { getReviews, streamReviews } from "../src/scrape.js";
 import type { Review } from "../src/types.js";
 
-// Live tests hit the real stores via cloakbrowser. Opt in with NOVIQ_LIVE=1
+// Live tests hit the real stores via cloakbrowser. Opt in with ZALYTIX_LIVE=1
 // (the `test:live` script does this). They are skipped by default so the unit
 // + pipeline suite stays fast and network-free.
-const LIVE = process.env.NOVIQ_LIVE === "1";
+const LIVE = process.env.ZALYTIX_LIVE === "1";
 const live = LIVE ? test : test.skip;
 const TIMEOUT = 120_000;
 
@@ -76,7 +76,7 @@ describe("live · csv end-to-end", () => {
   live(
     "streams reviews to a CSV file with correct row count",
     async () => {
-      const path = join(tmpdir(), `noviq-e2e-${process.pid}.csv`);
+      const path = join(tmpdir(), `zalytix-e2e-${process.pid}.csv`);
       const sink = createCsvSink(path);
       let n = 0;
       try {

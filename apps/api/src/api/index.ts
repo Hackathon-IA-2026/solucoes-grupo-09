@@ -29,7 +29,7 @@ async function browserReady(): Promise<boolean> {
 }
 
 /**
- * The noviq HTTP API. Composed from feature modules (each a controller +
+ * The zalytix HTTP API. Composed from feature modules (each a controller +
  * service + model) and cross-cutting plugins (security headers, body limit,
  * CORS, server timing) via `.use()`, with Swagger/OpenAPI docs at `/docs`.
  */
@@ -52,7 +52,7 @@ export const app = new Elysia()
   .use(
     cors({
       // Dev: any origin (local Expo web runs on arbitrary ports). Prod: only
-      // the origins listed in NOVIQ_CORS_ORIGINS — the deployed web app's
+      // the origins listed in ZALYTIX_CORS_ORIGINS — the deployed web app's
       // origin must be there or its browser calls fail preflight.
       origin: isProd ? config.corsOrigins : true,
       // POST is required by the async job API (POST /reviews/jobs).
@@ -68,17 +68,17 @@ export const app = new Elysia()
       path: "/docs",
       documentation: {
         info: {
-          title: "noviq API",
+          title: "zalytix API",
           version: "0.1.0",
           description:
             "Humanized App Store & Google Play review scraper, powered by cloakbrowser. " +
             "Drives a stealth browser session to fetch reviews from either store.",
-          contact: { name: "noviq" },
+          contact: { name: "zalytix" },
           license: { name: "MIT" },
         },
         // No hardcoded server: Swagger UI uses the origin it was loaded from, so
         // "Execute" hits the right host on localhost and in production alike.
-        // Set NOVIQ_PUBLIC_URL to pin it explicitly.
+        // Set ZALYTIX_PUBLIC_URL to pin it explicitly.
         ...(config.publicUrl
           ? { servers: [{ url: config.publicUrl, description: "Public" }] }
           : {}),
@@ -86,7 +86,7 @@ export const app = new Elysia()
       },
     }),
   )
-  .get("/", () => ({ name: "noviq", version: "0.1.0", docs: "/docs" }), {
+  .get("/", () => ({ name: "zalytix", version: "0.1.0", docs: "/docs" }), {
     detail: { summary: "API info" },
   })
   .get("/health", () => ({ status: "ok" as const, scrapes: scrapeStats() }), {
@@ -117,7 +117,7 @@ export type App = typeof app;
 if (import.meta.main) {
   app.listen(config.port, (server) => {
     const url = String(server.url);
-    console.log(`🚀 noviq API listening on ${url}`);
+    console.log(`🚀 zalytix API listening on ${url}`);
     console.log(`📚 Docs: ${url}docs`);
     console.log("🔍 Endpoints:");
     console.log("   • GET /          — API info");

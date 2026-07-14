@@ -1,6 +1,6 @@
-# Noviq
+# Zalytix
 
-> Noviq turns any app's App Store or Google Play reviews into clean, structured
+> Zalytix turns any app's App Store or Google Play reviews into clean, structured
 > data — sentiment analysis, rating trends, version history, activity heatmaps,
 > and CSV/JSON export. Free, no signup required.
 
@@ -9,7 +9,7 @@ reviews and explore them in an interactive dashboard.
 
 ## Pages
 
-- [Home](https://noviq.app/): paste a store link, scrape reviews, explore the dashboard, export CSV/JSON.
+- [Home](https://zalytix.com/): paste a store link, scrape reviews, explore the dashboard, export CSV/JSON.
 
 ## Facts
 

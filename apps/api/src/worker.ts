@@ -3,7 +3,7 @@ import { config } from "./config.js";
 import { createBullMqRunner } from "./jobs/bullmq.js";
 
 // Dedicated worker process: pulls scrape jobs off the BullMQ queue and runs
-// them. Use this (with the API set to NOVIQ_ROLE=api) to scale scraping
+// them. Use this (with the API set to ZALYTIX_ROLE=api) to scale scraping
 // independently of the HTTP layer. Run several for more throughput.
 if (!config.redisUrl) {
   console.error("worker requires REDIS_URL");
@@ -24,7 +24,7 @@ const runner = createBullMqRunner(
 );
 
 console.log(
-  `👷 noviq worker started — concurrency ${config.maxConcurrency}, queue on Redis`,
+  `👷 zalytix worker started — concurrency ${config.maxConcurrency}, queue on Redis`,
 );
 
 const shutdown = async (signal: string) => {

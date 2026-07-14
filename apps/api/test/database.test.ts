@@ -4,8 +4,8 @@ import { createReviewRepository } from "../src/database/repository.js";
 import type { AppInfo, Review } from "../src/types.js";
 
 // Runs only with a test Postgres (the `test:db` script sets it).
-// Spin one up: docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=noviq -e POSTGRES_DB=noviq postgres:16-alpine
-const URL = process.env.NOVIQ_TEST_DATABASE_URL;
+// Spin one up: docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=zalytix -e POSTGRES_DB=zalytix postgres:16-alpine
+const URL = process.env.ZALYTIX_TEST_DATABASE_URL;
 const suite = URL ? describe : describe.skip;
 
 const review = (over: Partial<Review> = {}): Review => ({

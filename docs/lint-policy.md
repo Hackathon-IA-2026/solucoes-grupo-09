@@ -16,7 +16,7 @@ reason — so the config stays at zero warnings without hiding real signal.
 | `suspicious/noBitwiseOperators` | Seeded RNG (mulberry32) and FNV hashing require bitwise math. |
 | `performance/noAwaitInLoops` | Review pagination and job polling are sequential by design (rate-limit friendliness). |
 | `performance/useTopLevelRegex` | Format/parse helpers run at human scale; locality beats micro-optimization. |
-| `performance/noReExportAll`, `noBarrelFile`, `noNamespaceImport` | `@noviq/core` / `@noviq/ui` expose deliberate public-API barrels; `import * as Haptics` is the expo-haptics contract. |
+| `performance/noReExportAll`, `noBarrelFile`, `noNamespaceImport` | `@zalytix/core` / `@zalytix/ui` expose deliberate public-API barrels; `import * as Haptics` is the expo-haptics contract. |
 | `style/noDefaultExport` | expo-router requires default exports for routes. |
 | `style/useExportsLast`, `noNestedTernary`, `useNamingConvention`, `noParameterProperties`, `noImplicitBoolean` | Conflict with established codebase idiom (tone ternaries, RN prop style). |
 | `style/noCommonJs` | React Native asset loading requires `require()`. |

@@ -1,5 +1,5 @@
-import { type Store, storeLabel } from "@noviq/core";
-import { radius, space, usePalette } from "@noviq/ui";
+import { type Store, storeLabel } from "@zalytix/core";
+import { radius, space, usePalette } from "@zalytix/ui";
 import { StyleSheet, Text, View } from "react-native";
 
 /**

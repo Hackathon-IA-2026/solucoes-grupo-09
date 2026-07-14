@@ -19,7 +19,7 @@ COPY packages/core/package.json ./packages/core/
 COPY packages/ui/package.json ./packages/ui/
 RUN bun install --frozen-lockfile
 
-# Source. @noviq/core and @noviq/ui are consumed as TS source (their package
+# Source. @zalytix/core and @zalytix/ui are consumed as TS source (their package
 # "main" is ./src/index.ts), so their src must be present for the bundler.
 # Explicit copies (not the whole apps/web) keep the local node_modules/dist out.
 COPY packages/core/src ./packages/core/src
@@ -35,8 +35,8 @@ COPY apps/web/server.ts ./apps/web/
 # EXPO_PUBLIC_* values are inlined at build time (static export), so the API
 # origin and canonical site URL must be set here. Override via Railway build
 # args / service variables if the API moves.
-ARG EXPO_PUBLIC_API_URL=https://noviq.up.railway.app
-ARG EXPO_PUBLIC_SITE_URL=https://noviq.app
+ARG EXPO_PUBLIC_API_URL=https://api.zalytix.com
+ARG EXPO_PUBLIC_SITE_URL=https://zalytix.com
 ENV EXPO_PUBLIC_API_URL=$EXPO_PUBLIC_API_URL \
     EXPO_PUBLIC_SITE_URL=$EXPO_PUBLIC_SITE_URL
 

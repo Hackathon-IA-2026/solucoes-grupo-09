@@ -1,5 +1,5 @@
 /**
- * Noviq design tokens v3 — ported 1:1 from the reference app
+ * Zalytix design tokens v3 — ported 1:1 from the reference app
  * (`reference/review-data-scraper/app/globals.css`). Dark-only, like the
  * reference (`color-scheme: dark`): charcoal canvas, near-black raised cards,
  * lime primary with dark-olive text, grape violet secondary, hairline

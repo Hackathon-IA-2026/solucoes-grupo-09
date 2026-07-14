@@ -67,12 +67,12 @@ export function reviewsToJson(reviews: Review[]): string {
   return JSON.stringify(reviews, null, 2);
 }
 
-/** A safe export filename like `noviq-reviews-com.spotify.music-us.csv`. */
+/** A safe export filename like `zalytix-reviews-com.spotify.music-us.csv`. */
 export function exportFilename(
   appId: string,
   country: string,
   ext: "csv" | "json",
 ): string {
   const safe = appId.replace(/[^\w.-]/g, "_");
-  return `noviq-reviews-${safe}-${country}.${ext}`;
+  return `zalytix-reviews-${safe}-${country}.${ext}`;
 }

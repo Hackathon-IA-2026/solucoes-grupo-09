@@ -6,7 +6,7 @@ const PLAY_URL = "https://play.google.com/store/apps/details?id=com.spotify.musi
 // build-time EXPO_PUBLIC_API_URL must never be trusted by tests).
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
-    (globalThis as { __NOVIQ_API_URL__?: string }).__NOVIQ_API_URL__ =
+    (globalThis as { __ZALYTIX_API_URL__?: string }).__ZALYTIX_API_URL__ =
       "http://localhost:3210";
   });
 });
@@ -14,7 +14,7 @@ test.beforeEach(async ({ page }) => {
 test.describe("hero", () => {
   test("renders SEO content and the scrape capsule", async ({ page }) => {
     await page.goto("/");
-    await expect(page).toHaveTitle(/Review Scraper — Free CSV Export \| Noviq/);
+    await expect(page).toHaveTitle(/Review Scraper — Free CSV Export \| Zalytix/);
     await expect(page.getByRole("heading", { level: 1 })).toContainText(
       "Turn any app's reviews into",
     );
@@ -152,10 +152,10 @@ test.describe("scrape flow", () => {
     const downloadPromise = page.waitForEvent("download");
     await page.getByTestId("export-csv").click();
     const download = await downloadPromise;
-    expect(download.suggestedFilename()).toBe("noviq-reviews-com.spotify.music-us.csv");
+    expect(download.suggestedFilename()).toBe("zalytix-reviews-com.spotify.music-us.csv");
     // …and a visible success confirmation.
     await expect(page.getByTestId("export-toast")).toContainText(
-      "Saved noviq-reviews-com.spotify.music-us.csv",
+      "Saved zalytix-reviews-com.spotify.music-us.csv",
     );
 
     // The centered header logo links back home.

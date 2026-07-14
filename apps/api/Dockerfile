@@ -14,7 +14,7 @@ WORKDIR /app
 # Monorepo-aware install: the build context is the repo root (see
 # docker-compose.yml), where the lockfile lives. Bun needs every workspace
 # manifest present to validate a frozen lockfile; installing with
-# --filter=noviq keeps the web app's Expo tree out of the image. If this fails
+# --filter=zalytix keeps the web app's Expo tree out of the image. If this fails
 # with "lockfile had changes, but lockfile is frozen", run `bun install` at the
 # repo root and commit bun.lock.
 COPY package.json bun.lock ./
@@ -22,7 +22,7 @@ COPY apps/api/package.json ./apps/api/
 COPY apps/web/package.json ./apps/web/
 COPY packages/core/package.json ./packages/core/
 COPY packages/ui/package.json ./packages/ui/
-RUN bun install --frozen-lockfile --production --filter=noviq
+RUN bun install --frozen-lockfile --production --filter=zalytix
 
 WORKDIR /app/apps/api
 
@@ -36,11 +36,11 @@ COPY apps/api/src ./src
 COPY apps/api/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Production env. NOVIQ_NO_SANDBOX is required because Chromium runs as root
+# Production env. ZALYTIX_NO_SANDBOX is required because Chromium runs as root
 # here; override the rest via --env-file / compose.
 ENV NODE_ENV=production \
     PORT=$PORT \
-    NOVIQ_NO_SANDBOX=1 \
+    ZALYTIX_NO_SANDBOX=1 \
     CLOAKBROWSER_AUTO_UPDATE=false
 
 EXPOSE $PORT

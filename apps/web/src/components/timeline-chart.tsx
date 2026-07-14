@@ -1,4 +1,4 @@
-import { formatCompact, type ScrapeResult } from "@noviq/core";
+import { formatCompact, type ScrapeResult } from "@zalytix/core";
 import {
   FadeIn,
   IconCircleButton,
@@ -10,7 +10,7 @@ import {
   UserPlusIcon,
   useContainerWidth,
   usePalette,
-} from "@noviq/ui";
+} from "@zalytix/ui";
 import { useState } from "react";
 import { Platform, Pressable, Text as RnText, StyleSheet, View } from "react-native";
 import Svg, {

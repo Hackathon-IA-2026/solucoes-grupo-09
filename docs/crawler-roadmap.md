@@ -33,7 +33,7 @@ currency, version, contentRating, OS, icon, url.
 3. ✅ **Richer metadata** — Google installs (`[13][2]` real count +
    `[13][0]` display bucket), lastUpdated (`[145][0][1][0]`), released
    (`[10][1][0]`); Apple releaseDate. → identity line + AppInfo fields.
-4. ✅ **Sentiment scoring** — lexicon scorer in `@noviq/core`
+4. ✅ **Sentiment scoring** — lexicon scorer in `@zalytix/core`
    (`sentiment.ts`): negation + intensifier aware, blended with the star
    rating (`classifySentiment`); UI labeled "ratings + text analysis".
 5. ✅ **Reviewer avatars** — Google `r[1][1][3][2]` → `Review.avatar`,

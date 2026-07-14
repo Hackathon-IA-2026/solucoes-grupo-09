@@ -28,7 +28,7 @@ describe("api · typed routes (Eden Treaty)", () => {
 
   it("GET / returns api info with a docs link", async () => {
     const { data } = await api.get();
-    expect(data?.name).toBe("noviq");
+    expect(data?.name).toBe("zalytix");
     expect(data?.docs).toBe("/docs");
   });
 

@@ -1,8 +1,8 @@
 {
-  "name": "noviq-monorepo",
+  "name": "zalytix-monorepo",
   "private": true,
   "version": "0.1.0",
-  "description": "Noviq \u2014 App Store & Google Play review scraping SaaS (API, web app, shared core).",
+  "description": "Zalytix \u2014 App Store & Google Play review scraping SaaS (API, web app, shared core).",
   "workspaces": [
     "apps/*",
     "packages/*"

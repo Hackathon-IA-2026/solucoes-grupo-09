@@ -1,9 +1,9 @@
-import { usePalette } from "@noviq/ui";
+import { usePalette } from "@zalytix/ui";
 import { Link } from "expo-router";
 import Head from "expo-router/head";
 import { Text, View } from "react-native";
 
-const TITLE = "Page not found — Noviq";
+const TITLE = "Page not found — Zalytix";
 
 /** Branded 404 — mainly so the exported +not-found.html has a real title. */
 export default function NotFound() {
@@ -36,7 +36,7 @@ export default function NotFound() {
         </Text>
         <Link href="/" style={{ marginTop: 8 }}>
           <Text style={{ fontSize: 14, fontWeight: "600", color: colors.accent }}>
-            Back to Noviq
+            Back to Zalytix
           </Text>
         </Link>
       </View>

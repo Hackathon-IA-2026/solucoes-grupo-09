@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { CSV_HEADER, createCsvSink, csvRow, writeCsv, writeJson } from "../src/output.js";
 import type { Review } from "../src/types.js";
 
-const dir = mkdtempSync(join(tmpdir(), "noviq-out-"));
+const dir = mkdtempSync(join(tmpdir(), "zalytix-out-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 const review = (over: Partial<Review> = {}): Review => ({

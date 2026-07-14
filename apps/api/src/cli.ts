@@ -8,10 +8,10 @@ import { streamReviews } from "./scrape.js";
 import type { AppInfo, ReviewSort, StealthPreset, Store } from "./types.js";
 
 const HELP = `
-noviq — humanized App Store & Google Play review scraper (powered by cloakbrowser)
+zalytix — humanized App Store & Google Play review scraper (powered by cloakbrowser)
 
 Usage:
-  noviq <app-id|package|store-url> [options]
+  zalytix <app-id|package|store-url> [options]
 
 The store is auto-detected: numeric id → Apple, package name (com.x.y) → Google.
 Override with --store.
@@ -32,10 +32,10 @@ Options:
   -h, --help          Show this help
 
 Examples:
-  noviq 284882215 --country us --limit 500
-  noviq com.facebook.katana --store google --sort mostRecent --limit 500
-  noviq https://apps.apple.com/us/app/instagram/id389801252 --sort mostHelpful
-  noviq com.spotify.music --since 2025-01-01 --headed
+  zalytix 284882215 --country us --limit 500
+  zalytix com.facebook.katana --store google --sort mostRecent --limit 500
+  zalytix https://apps.apple.com/us/app/instagram/id389801252 --sort mostHelpful
+  zalytix com.spotify.music --since 2025-01-01 --headed
 `;
 
 async function main(): Promise<void> {

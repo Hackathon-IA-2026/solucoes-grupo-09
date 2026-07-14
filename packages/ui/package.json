@@ -1,8 +1,8 @@
 {
-  "name": "@noviq/ui",
+  "name": "@zalytix/ui",
   "version": "0.1.0",
   "private": true,
-  "description": "Noviq design system — tokens, brand, icons, and reusable primitives (React Native universal, ported 1:1 from reference/).",
+  "description": "Zalytix design system — tokens, brand, icons, and reusable primitives (React Native universal, ported 1:1 from reference/).",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

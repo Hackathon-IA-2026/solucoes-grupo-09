@@ -3,7 +3,7 @@ import {
   type ScrapeRequest,
   type ScrapeState,
   validateInput,
-} from "@noviq/core";
+} from "@zalytix/core";
 import {
   ArrowRightIcon,
   focusRing,
@@ -17,7 +17,7 @@ import {
   useContainerWidth,
   usePalette,
   ZapIcon,
-} from "@noviq/ui";
+} from "@zalytix/ui";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import { useEffect, useRef, useState } from "react";
@@ -184,7 +184,7 @@ function HeroBrand({ wideHeadline }: { wideHeadline: boolean }) {
         source={require("../../assets/images/bolt-logo.png")}
         style={{ width: 76, height: 82, marginBottom: space.xl }}
         contentFit="contain"
-        accessibilityLabel="Noviq"
+        accessibilityLabel="Zalytix"
         transition={200}
       />
       {/* Kicker */}

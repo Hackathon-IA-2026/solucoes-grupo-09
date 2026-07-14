@@ -18,7 +18,7 @@ services:
     build:
       context: . # repo root — the Dockerfile needs the root bun.lock + workspace manifests
       dockerfile: apps/api/Dockerfile
-    image: noviq:latest # the worker reuses this image
+    image: zalytix:latest # the worker reuses this image
     depends_on:
       redis:
         condition: service_healthy
@@ -27,11 +27,11 @@ services:
     environment:
       NODE_ENV: production
       PORT: "3000"
-      NOVIQ_NO_SANDBOX: "1" # Chromium runs as root in the container
+      ZALYTIX_NO_SANDBOX: "1" # Chromium runs as root in the container
       REDIS_URL: redis://redis:6379 # overrides any .env value → in-compose Redis
-      NOVIQ_ROLE: api # enqueue async jobs; the worker service processes them
-      # NOVIQ_CORS_ORIGINS: https://noviq.app # REQUIRED for a deployed web frontend
-      # NOVIQ_DASHBOARD: "true"   # optional BullMQ dashboard at /jobs (protect it!)
+      ZALYTIX_ROLE: api # enqueue async jobs; the worker service processes them
+      # ZALYTIX_CORS_ORIGINS: https://zalytix.com # REQUIRED for a deployed web frontend
+      # ZALYTIX_DASHBOARD: "true"   # optional BullMQ dashboard at /jobs (protect it!)
     env_file:
       - path: .env
         required: false
@@ -49,18 +49,18 @@ services:
       start_period: 20s
 
   worker:
-    image: noviq:latest # reuses the image built by `api`
+    image: zalytix:latest # reuses the image built by `api`
     command: ["bun", "run", "src/worker.ts"]
     depends_on:
       redis:
         condition: service_healthy
       api:
-        condition: service_started # ensures noviq:latest is built first
+        condition: service_started # ensures zalytix:latest is built first
     environment:
       NODE_ENV: production
-      NOVIQ_NO_SANDBOX: "1"
+      ZALYTIX_NO_SANDBOX: "1"
       REDIS_URL: redis://redis:6379
-      NOVIQ_ROLE: worker
+      ZALYTIX_ROLE: worker
     env_file:
       - path: .env
         required: false

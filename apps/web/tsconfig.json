@@ -8,5 +8,13 @@
     }
   },
   "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
-  "exclude": ["node_modules", "dist", "e2e", "test", "playwright.config.ts", "scripts"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "e2e",
+    "test",
+    "playwright.config.ts",
+    "scripts",
+    "server.ts"
+  ]
 }

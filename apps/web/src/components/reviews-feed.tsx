@@ -1,4 +1,4 @@
-import { formatDate, type Review, type ScrapeResult } from "@noviq/core";
+import { formatDate, type Review, type ScrapeResult } from "@zalytix/core";
 import {
   CornerDownRightIcon,
   focusRing,
@@ -7,7 +7,7 @@ import {
   Stars,
   ThumbsUpIcon,
   usePalette,
-} from "@noviq/ui";
+} from "@zalytix/ui";
 import { Image } from "expo-image";
 import { useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";

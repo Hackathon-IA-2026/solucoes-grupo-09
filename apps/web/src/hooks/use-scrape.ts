@@ -4,7 +4,7 @@ import {
   type ScrapeRequest,
   type ScrapeState,
   transition,
-} from "@noviq/core";
+} from "@zalytix/core";
 import { useEffect, useReducer, useRef } from "react";
 import { client } from "@/lib/config";
 import { runScrape } from "@/lib/scrape-controller";

@@ -4,7 +4,7 @@ import { toHttpError } from "../errors.js";
 import type { ScrapeOptions, ScrapeResult } from "../types.js";
 import type { Execute, JobProgress, JobRecord, JobRunner, JobStatus } from "./types.js";
 
-export const QUEUE_NAME = "noviq-reviews";
+export const QUEUE_NAME = "zalytix-reviews";
 
 export interface BullMqOptions {
   /** Worker concurrency — the real cap on simultaneous browsers per worker. */

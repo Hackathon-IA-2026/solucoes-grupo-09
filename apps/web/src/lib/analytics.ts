@@ -1,4 +1,4 @@
-import { classifySentiment, type Review, type VersionRelease } from "@noviq/core";
+import { classifySentiment, type Review, type VersionRelease } from "@zalytix/core";
 
 /**
  * Dashboard analytics computed from the actually-scraped reviews — the

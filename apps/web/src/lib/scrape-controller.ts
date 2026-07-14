@@ -1,11 +1,11 @@
 import {
   ApiError,
   MAX_POLL_ERRORS,
-  type NoviqClient,
   pollDelayMs,
   type ScrapeEvent,
   type ScrapeRequest,
-} from "@noviq/core";
+  type ZalytixClient,
+} from "@zalytix/core";
 
 export interface ControllerOptions {
   signal: AbortSignal;
@@ -36,7 +36,7 @@ function defaultSleep(ms: number, signal: AbortSignal): Promise<void> {
  * orchestration layer (no React, no timers in tests).
  */
 export async function runScrape(
-  client: NoviqClient,
+  client: ZalytixClient,
   request: ScrapeRequest,
   dispatch: (event: ScrapeEvent) => void,
   { signal, sleep = defaultSleep }: ControllerOptions,

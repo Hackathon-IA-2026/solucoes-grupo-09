@@ -1,4 +1,4 @@
-import { averageRating } from "@noviq/core";
+import { averageRating } from "@zalytix/core";
 import {
   FadeIn,
   hatchGrape,
@@ -8,7 +8,7 @@ import {
   Stars,
   usePalette,
   useReducedMotion,
-} from "@noviq/ui";
+} from "@zalytix/ui";
 import { type PropsWithChildren, useEffect, useState } from "react";
 import { Animated, Easing, Platform, StyleSheet, Text, View } from "react-native";
 import Svg, {
@@ -28,7 +28,7 @@ import { sampleResult } from "@/lib/sample-data";
  * Floating mini-dashboard widgets that flank the hero on wide screens — the
  * product visible above the fold. Real components in miniature, computed
  * from the same sample dataset as the showcase, with the reference's
- * `noviq-float` idle animation (reduced-motion aware).
+ * `zalytix-float` idle animation (reduced-motion aware).
  */
 
 const styles = StyleSheet.create({
@@ -44,7 +44,7 @@ const styles = StyleSheet.create({
   },
 });
 
-/** Gentle vertical float loop (ref `noviq-float`), phase-shifted per widget. */
+/** Gentle vertical float loop (ref `zalytix-float`), phase-shifted per widget. */
 function Floaty({
   children,
   delay = 0,

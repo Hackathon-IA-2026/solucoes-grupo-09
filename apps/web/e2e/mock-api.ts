@@ -1,5 +1,5 @@
 /**
- * Deterministic stand-in for the noviq API, used by the Playwright suite.
+ * Deterministic stand-in for the zalytix API, used by the Playwright suite.
  * Speaks the exact wire contract (see packages/core/src/types.ts) on the dev
  * API's default port so the exported bundle needs no rebuild. Job lifecycle is
  * scripted: poll 1 → waiting, polls 2-3 → active (with progress), poll 4+ → terminal.
@@ -190,4 +190,4 @@ Bun.serve({
   },
 });
 
-console.log(`mock noviq API listening on http://localhost:${PORT}`);
+console.log(`mock zalytix API listening on http://localhost:${PORT}`);

@@ -28,10 +28,10 @@ async function parseError(res: Response): Promise<ApiError> {
 }
 
 /**
- * Minimal typed client for the noviq API. Deliberately fetch-based (no SDK
+ * Minimal typed client for the zalytix API. Deliberately fetch-based (no SDK
  * dependency) so it runs identically on web, iOS, and Android.
  */
-export class NoviqClient {
+export class ZalytixClient {
   readonly baseUrl: string;
 
   constructor(baseUrl: string) {

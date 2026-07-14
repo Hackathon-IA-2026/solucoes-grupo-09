@@ -1,4 +1,4 @@
-import type { AppInfo, Target } from "@noviq/core";
+import type { AppInfo, Target } from "@zalytix/core";
 import { useEffect, useState } from "react";
 import { client } from "@/lib/config";
 

@@ -1,4 +1,4 @@
-import type { Review, ScrapeResult } from "@noviq/core";
+import type { Review, ScrapeResult } from "@zalytix/core";
 
 /**
  * Deterministic sample scrape for the landing-page showcase — the same

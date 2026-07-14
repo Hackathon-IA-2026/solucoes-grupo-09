@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { ApiError, NoviqClient, pollDelayMs } from "../src/client";
+import { ApiError, pollDelayMs, ZalytixClient } from "../src/client";
 
 const realFetch = globalThis.fetch;
 
@@ -14,9 +14,9 @@ function stubFetch(
     Promise.resolve(handler(String(input), init))) as unknown as typeof fetch;
 }
 
-describe("NoviqClient", () => {
+describe("ZalytixClient", () => {
   test("normalizes a trailing slash on the base URL", () => {
-    expect(new NoviqClient("http://localhost:3000/").baseUrl).toBe(
+    expect(new ZalytixClient("http://localhost:3000/").baseUrl).toBe(
       "http://localhost:3000",
     );
   });
@@ -27,7 +27,7 @@ describe("NoviqClient", () => {
       seen = url;
       return Response.json({ store: "apple", appId: "42", country: "gb", appInfo: null });
     });
-    const client = new NoviqClient("http://api.test");
+    const client = new ZalytixClient("http://api.test");
     const result = await client.appInfo({ appId: "42", store: "apple", country: "gb" });
     expect(seen).toBe("http://api.test/app?appId=42&store=apple&country=gb");
     expect(result.appInfo).toBeNull();
@@ -39,7 +39,7 @@ describe("NoviqClient", () => {
       seenBody = JSON.parse(String(init?.body));
       return Response.json({ id: "job-9", status: "waiting" }, { status: 202 });
     });
-    const client = new NoviqClient("http://api.test");
+    const client = new ZalytixClient("http://api.test");
     const id = await client.submitJob({ appId: "com.x.y", limit: 100 });
     expect(id).toBe("job-9");
     expect(seenBody).toEqual({ appId: "com.x.y", limit: 100 });
@@ -51,13 +51,13 @@ describe("NoviqClient", () => {
       seen = url;
       return Response.json({ id: "a/b", status: "waiting" });
     });
-    await new NoviqClient("http://api.test").jobStatus("a/b");
+    await new ZalytixClient("http://api.test").jobStatus("a/b");
     expect(seen).toBe("http://api.test/reviews/jobs/a%2Fb");
   });
 
   test("API error bodies surface their message and status", async () => {
     stubFetch(() => Response.json({ error: "Job not found" }, { status: 404 }));
-    const client = new NoviqClient("http://api.test");
+    const client = new ZalytixClient("http://api.test");
     try {
       await client.jobStatus("nope");
       expect.unreachable();
@@ -71,7 +71,7 @@ describe("NoviqClient", () => {
 
   test("5xx and network failures are retryable", async () => {
     stubFetch(() => Response.json({ error: "queue down" }, { status: 503 }));
-    const client = new NoviqClient("http://api.test");
+    const client = new ZalytixClient("http://api.test");
     await expect(client.jobStatus("x")).rejects.toMatchObject({ retryable: true });
 
     globalThis.fetch = (() =>
@@ -84,7 +84,7 @@ describe("NoviqClient", () => {
 
   test("non-JSON error bodies fall back to a status message", async () => {
     stubFetch(() => new Response("<html>bad gateway</html>", { status: 502 }));
-    const client = new NoviqClient("http://api.test");
+    const client = new ZalytixClient("http://api.test");
     await expect(client.jobStatus("x")).rejects.toMatchObject({
       status: 502,
       message: "Request failed (502)",
@@ -96,7 +96,7 @@ describe("NoviqClient", () => {
       Promise.reject(
         new DOMException("Aborted", "AbortError"),
       )) as unknown as typeof fetch;
-    const client = new NoviqClient("http://api.test");
+    const client = new ZalytixClient("http://api.test");
     await expect(client.jobStatus("x")).rejects.toMatchObject({ name: "AbortError" });
   });
 });
