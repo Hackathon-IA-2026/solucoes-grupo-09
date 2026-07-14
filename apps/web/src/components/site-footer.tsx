@@ -128,24 +128,14 @@ export function SiteFooter({ onCtaPress }: { onCtaPress: () => void }) {
       {/* Divider separates the CTA from the footer block below. */}
       <View style={{ height: 1, backgroundColor: colors.border }} />
 
-      {/* Brand: the logo + wordmark, centered. */}
+      {/* Brand: the logo mark, centered. */}
       <View style={styles.brand}>
         <Image
           source={require("../../assets/images/logo.png")}
-          style={{ width: 28, height: 26 }}
+          style={{ width: 30, height: 28 }}
           contentFit="contain"
           accessibilityLabel="Zalytix"
         />
-        <Text
-          style={{
-            fontSize: 18,
-            fontWeight: "600",
-            letterSpacing: -0.4,
-            color: colors.ink,
-          }}
-        >
-          Zalytix
-        </Text>
       </View>
 
       {/* Copyright · tagline · legal links — three balanced cells so the
