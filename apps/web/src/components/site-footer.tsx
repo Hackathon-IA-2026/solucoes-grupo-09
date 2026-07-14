@@ -5,6 +5,7 @@ import {
   PillButton,
   radius,
   space,
+  useContainerWidth,
   usePalette,
 } from "@zalytix/ui";
 import { Image } from "expo-image";
@@ -35,13 +36,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
-  },
-  row: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: space.lg,
   },
 });
 
@@ -79,9 +73,11 @@ function LegalLink({
 export function SiteFooter({ onCtaPress }: { onCtaPress: () => void }) {
   const colors = usePalette();
   const year = new Date().getFullYear();
+  const [width, onLayout] = useContainerWidth();
+  const wide = width >= 640;
 
   return (
-    <View testID="site-footer" style={styles.wrap}>
+    <View testID="site-footer" onLayout={onLayout} style={styles.wrap}>
       {/* CTA band */}
       <View
         testID="footer-cta"
@@ -152,17 +148,36 @@ export function SiteFooter({ onCtaPress }: { onCtaPress: () => void }) {
         </Text>
       </View>
 
-      {/* Copyright · tagline · legal links */}
-      <View style={styles.row}>
-        <Text style={{ fontSize: 13, color: colors.inkFaint }}>
-          © Zalytix {year}. All rights reserved.
-        </Text>
-        <Text style={{ fontSize: 13, color: colors.inkFaint }}>
-          App Store & Google Play review intelligence.
-        </Text>
+      {/* Copyright · tagline · legal links — three balanced cells so the
+          tagline stays centered on the page (desktop); stacked on mobile. */}
+      <View
+        style={{
+          flexDirection: wide ? "row" : "column",
+          alignItems: "center",
+          gap: space.md,
+        }}
+      >
+        <View
+          style={{ flex: wide ? 1 : undefined, alignItems: wide ? "flex-start" : "center" }}
+        >
+          <Text style={{ fontSize: 13, color: colors.inkFaint }}>
+            © Zalytix {year}. All rights reserved.
+          </Text>
+        </View>
+        <View style={{ flex: wide ? 1 : undefined, alignItems: "center" }}>
+          <Text style={{ fontSize: 13, color: colors.inkFaint, textAlign: "center" }}>
+            App Store & Google Play review intelligence.
+          </Text>
+        </View>
         <View
           testID="footer-legal-links"
-          style={{ flexDirection: "row", alignItems: "center", gap: space.lg }}
+          style={{
+            flex: wide ? 1 : undefined,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: wide ? "flex-end" : "center",
+            gap: space.lg,
+          }}
         >
           <LegalLink href="/privacy" label="Privacy" testID="footer-privacy-link" />
           <View

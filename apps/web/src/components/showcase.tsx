@@ -38,7 +38,9 @@ export function Showcase() {
         alignSelf: "center",
         paddingHorizontal: space.lg,
         paddingTop: space.huge,
-        paddingBottom: space.huge,
+        // Matches the footer's uniform 32px rhythm so the CTA below has equal
+        // space above and below it.
+        paddingBottom: space.xxl,
         gap: space.xl,
       }}
     >
@@ -76,7 +78,6 @@ export function Showcase() {
             fontWeight: "600",
             letterSpacing: -1,
             color: colors.ink,
-            marginBottom: space.md,
           }}
         >
           Every scrape ends in
@@ -89,6 +90,8 @@ export function Showcase() {
             lineHeight: 23,
             color: colors.inkMuted,
             maxWidth: 560,
+            marginTop: space.lg,
+            marginBottom: space.lg,
           }}
         >
           Sentiment split, review-volume trends, activity heatmaps, version-by-version
