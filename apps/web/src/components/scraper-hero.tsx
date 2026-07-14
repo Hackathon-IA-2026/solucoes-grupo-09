@@ -2,6 +2,7 @@ import {
   type ReviewSort,
   type ScrapeRequest,
   type ScrapeState,
+  type Store,
   validateInput,
 } from "@zalytix/core";
 import {
@@ -34,12 +35,16 @@ import {
 import { useAppPreview } from "@/hooks/use-app-preview";
 import { AppPreviewCard, AppPreviewSkeleton } from "./app-preview-card";
 import { HeroWidgets } from "./hero-widgets";
-import { StoreChip } from "./store-chip";
 
-const SAMPLES = [
-  { label: "App Store", url: "https://apps.apple.com/us/app/instagram/id389801252" },
+const SAMPLES: ReadonlyArray<{ label: string; store: Store; url: string }> = [
+  {
+    label: "App Store",
+    store: "apple",
+    url: "https://apps.apple.com/us/app/instagram/id389801252",
+  },
   {
     label: "Google Play",
+    store: "google",
     url: "https://play.google.com/store/apps/details?id=com.spotify.music",
   },
 ];
@@ -300,10 +305,13 @@ function ScrapeProgress({
 /** Idle row under the capsule: sample links plus the Options toggle. */
 function SampleRow({
   showOptions,
+  activeStore,
   onPick,
   onToggleOptions,
 }: {
   showOptions: boolean;
+  /** Detected store — the matching sample chip highlights. */
+  activeStore: Store | null;
   onPick: (url: string) => void;
   onToggleOptions: () => void;
 }) {
@@ -319,21 +327,36 @@ function SampleRow({
       }}
     >
       <Text style={{ fontSize: 12, color: colors.inkMuted }}>Try:</Text>
-      {SAMPLES.map((sample) => (
-        <Pressable
-          key={sample.label}
-          accessibilityRole="button"
-          accessibilityLabel={`Use ${sample.label} sample link`}
-          onPress={() => onPick(sample.url)}
-          hitSlop={8}
-          style={[
-            styles.chip,
-            { borderColor: colors.border, backgroundColor: colors.surface },
-          ]}
-        >
-          <Text style={{ fontSize: 12, color: colors.inkMuted }}>{sample.label}</Text>
-        </Pressable>
-      ))}
+      {SAMPLES.map((sample) => {
+        const active = sample.store === activeStore;
+        return (
+          <Pressable
+            key={sample.label}
+            accessibilityRole="button"
+            aria-pressed={active}
+            accessibilityLabel={`Use ${sample.label} sample link`}
+            onPress={() => onPick(sample.url)}
+            hitSlop={8}
+            style={[
+              styles.chip,
+              {
+                borderColor: active ? colors.accent : colors.border,
+                backgroundColor: active ? colors.accent : colors.surface,
+              },
+            ]}
+          >
+            <Text
+              style={{
+                fontSize: 12,
+                fontWeight: active ? "700" : "400",
+                color: active ? colors.onAccent : colors.inkMuted,
+              }}
+            >
+              {sample.label}
+            </Text>
+          </Pressable>
+        );
+      })}
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ expanded: showOptions }}
@@ -710,6 +733,7 @@ export function ScraperHero({
             ) : (
               <SampleRow
                 showOptions={showOptions}
+                activeStore={target?.store ?? null}
                 onPick={setInput}
                 onToggleOptions={() => setShowOptions((open) => !open)}
               />
@@ -723,21 +747,14 @@ export function ScraperHero({
             onDismissError={onDismissError}
           />
 
-          {/* Detected app + live preview. */}
+          {/* Live app preview (the detected store is shown by the highlighted
+              sample chip above). */}
           {target && !busy ? (
-            <View style={{ marginTop: space.lg, gap: space.md, alignItems: "center" }}>
-              <StoreChip
-                store={target.store}
-                country={countryOverride ?? target.country}
-              />
+            <View style={{ marginTop: space.lg }}>
               {preview.status === "ready" ? (
-                <View style={{ width: "100%" }}>
-                  <AppPreviewCard appInfo={preview.appInfo} />
-                </View>
+                <AppPreviewCard appInfo={preview.appInfo} />
               ) : preview.status === "loading" ? (
-                <View style={{ width: "100%" }}>
-                  <AppPreviewSkeleton />
-                </View>
+                <AppPreviewSkeleton />
               ) : null}
             </View>
           ) : null}

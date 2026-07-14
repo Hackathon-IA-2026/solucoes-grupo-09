@@ -97,11 +97,15 @@ test.describe("input validation", () => {
     await expect(page.getByTestId("input-error")).toContainText("Paste an App Store");
   });
 
-  test("a valid link shows the detected store and app preview", async ({ page }) => {
+  test("a valid link highlights the detected store and shows the app preview", async ({
+    page,
+  }) => {
     await page.goto("/");
     await page.getByTestId("url-input").fill(PLAY_URL);
-    // The detected-store chip (distinct from the "Google Play" sample button).
-    await expect(page.getByLabel("Google Play", { exact: true })).toBeVisible();
+    // The matching sample chip highlights (aria-pressed) to reflect the store.
+    await expect(
+      page.getByRole("button", { name: "Use Google Play sample link", pressed: true }),
+    ).toBeVisible();
     await expect(page.getByTestId("app-preview")).toContainText("Spotify", {
       timeout: 5000,
     });

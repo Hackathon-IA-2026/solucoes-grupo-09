@@ -58,8 +58,8 @@ const SECTIONS: ReadonlyArray<LegalContentSection> = [
             description="Fetched from the store and returned to you; processed transiently"
           />
           <DataCard
-            title="Aggregate usage"
-            description="Basic, non-identifying metrics to keep the service healthy"
+            title="No tracking"
+            description="No analytics or advertising cookies — we don't build a profile of you"
           />
           <DataCard
             title="No personal account"
@@ -93,7 +93,7 @@ const SECTIONS: ReadonlyArray<LegalContentSection> = [
           items={[
             "Run the scrape you requested and return the results",
             "Protect the service with rate limiting and abuse prevention",
-            "Understand aggregate usage to improve reliability",
+            "Diagnose errors and keep the service reliable (short-lived logs)",
           ]}
         />
       </>
@@ -130,14 +130,17 @@ const SECTIONS: ReadonlyArray<LegalContentSection> = [
     content: (
       <>
         <SectionHeading
-          title="Minimal by default"
-          subtitle="Zalytix does not use advertising or cross-site tracking cookies. Only what the app needs to function:"
+          title="No tracking cookies"
+          subtitle="Zalytix is a static, stateless site with no login — it sets no advertising or cross-site tracking cookies and does not build a profile of you."
         />
         <LegalTable
-          headers={["Type", "Purpose", "Duration"]}
+          headers={["Cookie", "Set by", "Purpose"]}
           rows={[
-            ["Essential", "Core functionality of the app", "Session"],
-            ["Preferences", "Remember in-page settings (if any)", "Local only"],
+            [
+              "Essential security",
+              "Cloudflare (CDN / hosting)",
+              "Protect and serve the site",
+            ],
           ]}
         />
       </>

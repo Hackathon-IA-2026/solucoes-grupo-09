@@ -133,6 +133,8 @@ export function LegalScreen({
             contentContainerStyle={{
               paddingVertical: space.xl,
               paddingBottom: 128,
+              // Side gutters keep the cards clear of the overlay scrollbar.
+              paddingHorizontal: space.lg,
               maxWidth: 820,
               width: "100%",
               alignSelf: "center",
