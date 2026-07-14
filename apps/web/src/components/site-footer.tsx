@@ -129,6 +129,9 @@ export function SiteFooter({ onCtaPress }: { onCtaPress: () => void }) {
         />
       </View>
 
+      {/* Divider separates the CTA from the footer block below. */}
+      <View style={{ height: 1, backgroundColor: colors.border }} />
+
       {/* Brand: the bolt logo + wordmark, centered. */}
       <View style={styles.brand}>
         <Image
@@ -148,8 +151,6 @@ export function SiteFooter({ onCtaPress }: { onCtaPress: () => void }) {
           Zalytix
         </Text>
       </View>
-
-      <View style={{ height: 1, backgroundColor: colors.border }} />
 
       {/* Copyright · tagline · legal links */}
       <View style={styles.row}>

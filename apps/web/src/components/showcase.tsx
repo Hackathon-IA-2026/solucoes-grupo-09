@@ -37,16 +37,21 @@ export function Showcase() {
         maxWidth: layout.page + 128,
         alignSelf: "center",
         paddingHorizontal: space.lg,
+        paddingTop: space.huge,
         paddingBottom: space.huge,
         gap: space.xl,
       }}
     >
       {/* Section heading */}
-      <View style={{ alignItems: "center", gap: space.md, marginTop: space.xl }}>
+      <View style={{ alignItems: "center" }}>
         <View
           style={[
             styles.previewBadge,
-            { borderColor: colors.border, backgroundColor: colors.surface },
+            {
+              borderColor: colors.border,
+              backgroundColor: colors.surface,
+              marginBottom: space.xl,
+            },
           ]}
         >
           <View
@@ -71,6 +76,7 @@ export function Showcase() {
             fontWeight: "600",
             letterSpacing: -1,
             color: colors.ink,
+            marginBottom: space.md,
           }}
         >
           Every scrape ends in
