@@ -84,8 +84,11 @@ export function SiteFooter({ onCtaPress }: { onCtaPress: () => void }) {
         style={[
           styles.cta,
           { borderColor: colors.border },
+          // Symmetric grape glow rising from the bottom-center over a uniform
+          // surface base — the old diagonal gradient left one side plain and
+          // the other tinted, so the border read unevenly (bright on the left).
           gradientBg(
-            "linear-gradient(135deg, #1B1B1F 0%, rgba(141, 93, 246, 0.28) 100%)",
+            "radial-gradient(120% 92% at 50% 118%, rgba(141, 93, 246, 0.30) 0%, transparent 62%)",
             colors.surface,
           ),
         ]}
