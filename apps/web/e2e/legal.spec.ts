@@ -22,7 +22,6 @@ test.describe("site footer", () => {
     await expect(page.getByTestId("footer-cta-button")).toBeVisible();
     await expect(page.getByTestId("footer-privacy-link")).toBeVisible();
     await expect(page.getByTestId("footer-terms-link")).toBeVisible();
-    await expect(page.getByTestId("footer-github-link")).toBeVisible();
   });
 
   test("privacy link navigates to /privacy", async ({ page }) => {

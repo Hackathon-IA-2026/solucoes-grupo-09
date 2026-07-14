@@ -1,11 +1,9 @@
 import {
-  ArrowRightIcon,
   ClockIcon,
   DownloadIcon,
   IconCircle,
   layout,
   Panel,
-  PillButton,
   radius,
   SmileIcon,
   space,
@@ -24,7 +22,7 @@ import { TimelineChart } from "./timeline-chart";
  * deterministic sample scrape (clearly labeled) — fully interactive, so
  * visitors can play with the toggles before ever pasting a link.
  */
-export function Showcase({ onTryIt }: { onTryIt: () => void }) {
+export function Showcase() {
   const colors = usePalette();
   const [width, onLayout] = useContainerWidth();
   const wide = width >= 900;
@@ -139,27 +137,6 @@ export function Showcase({ onTryIt }: { onTryIt: () => void }) {
         />
       </View>
 
-      {/* Closing CTA */}
-      <View style={{ alignItems: "center", gap: space.lg, marginTop: space.xl }}>
-        <Text
-          style={{
-            textAlign: "center",
-            fontSize: wide ? 28 : 22,
-            fontWeight: "600",
-            letterSpacing: -0.5,
-            color: colors.ink,
-          }}
-        >
-          Paste a link. Get this for your app.
-        </Text>
-        <PillButton
-          testID="showcase-cta"
-          label="Scrape your first app — free"
-          primary={true}
-          icon={<ArrowRightIcon size={16} color={colors.onAccent} />}
-          onPress={onTryIt}
-        />
-      </View>
     </View>
   );
 }

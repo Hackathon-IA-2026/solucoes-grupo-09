@@ -62,8 +62,8 @@ test.describe("hero", () => {
     await expect(page.getByTestId("showcase")).toContainText("When reviews land");
     await expect(page.getByTestId("showcase")).toContainText("Review volume");
     await expect(page.getByTestId("showcase")).toContainText("reviews analyzed");
-    // CTA scrolls back to the input.
-    await page.getByTestId("showcase-cta").click();
+    // The footer CTA scrolls back to the input.
+    await page.getByTestId("footer-cta-button").click();
     await expect(page.getByTestId("url-input")).toBeInViewport({ timeout: 5000 });
   });
 

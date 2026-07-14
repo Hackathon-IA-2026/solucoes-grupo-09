@@ -1,18 +1,15 @@
 import {
   ArrowRightIcon,
-  ArrowUpRightIcon,
   gradientBg,
   layout,
   PillButton,
   radius,
   space,
   usePalette,
-  ZalytixWordmark,
 } from "@zalytix/ui";
+import { Image } from "expo-image";
 import { Link } from "expo-router";
-import { Linking, Platform, Pressable, StyleSheet, Text, View } from "react-native";
-
-const REPO_URL = "https://github.com/vtorres/zalytix";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 const styles = StyleSheet.create({
   wrap: {
@@ -33,22 +30,18 @@ const styles = StyleSheet.create({
     gap: space.lg,
     overflow: "hidden",
   },
+  brand: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
   row: {
     flexDirection: "row",
     flexWrap: "wrap",
     alignItems: "center",
     justifyContent: "space-between",
     gap: space.lg,
-  },
-  ghost: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    minHeight: 28,
   },
 });
 
@@ -78,9 +71,10 @@ function LegalLink({
 }
 
 /**
- * Site CTA + footer: a grape-tinted call-to-action band over the footer row
- * (wordmark, GitHub, copyright · tagline · legal links). `onCtaPress` scrolls
- * to the hero on the landing page; legal pages route home instead.
+ * Site CTA + footer: a grape-tinted call-to-action band over the footer
+ * (centered Zalytix bolt logo + wordmark, then copyright · tagline · legal
+ * links). `onCtaPress` scrolls to the hero on the landing page; legal pages
+ * route home instead.
  */
 export function SiteFooter({ onCtaPress }: { onCtaPress: () => void }) {
   const colors = usePalette();
@@ -135,26 +129,24 @@ export function SiteFooter({ onCtaPress }: { onCtaPress: () => void }) {
         />
       </View>
 
-      {/* Footer: brand + GitHub */}
-      <View style={styles.row}>
-        <ZalytixWordmark />
-        <Pressable
-          accessibilityRole="link"
-          accessibilityLabel="Zalytix on GitHub"
-          testID="footer-github-link"
-          hitSlop={8}
-          onPress={() => Linking.openURL(REPO_URL)}
-          style={[
-            styles.ghost,
-            { borderColor: colors.border, backgroundColor: colors.surface },
-            Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null,
-          ]}
+      {/* Brand: the bolt logo + wordmark, centered. */}
+      <View style={styles.brand}>
+        <Image
+          source={require("../../assets/images/bolt-logo.png")}
+          style={{ width: 28, height: 26 }}
+          contentFit="contain"
+          accessibilityLabel="Zalytix"
+        />
+        <Text
+          style={{
+            fontSize: 18,
+            fontWeight: "600",
+            letterSpacing: -0.4,
+            color: colors.ink,
+          }}
         >
-          <Text style={{ fontSize: 13, fontWeight: "500", color: colors.inkMuted }}>
-            GitHub
-          </Text>
-          <ArrowUpRightIcon size={14} color={colors.inkMuted} />
-        </Pressable>
+          Zalytix
+        </Text>
       </View>
 
       <View style={{ height: 1, backgroundColor: colors.border }} />

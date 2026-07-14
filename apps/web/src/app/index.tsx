@@ -107,9 +107,7 @@ export default function Home() {
             {/* The product, shown — real dashboard components on sample data. */}
             {busy ? null : (
               <>
-                <Showcase
-                  onTryIt={() => scrollRef.current?.scrollTo({ y: 0, animated: true })}
-                />
+                <Showcase />
                 <SiteFooter
                   onCtaPress={() => scrollRef.current?.scrollTo({ y: 0, animated: true })}
                 />
