@@ -20,7 +20,7 @@ export function Dashboard({ data, url, onReset }: { data: ScrapeResult; url: str
 
   function exportJson() {
     const blob = new Blob([JSON.stringify({ url, ...data }, null, 2)], { type: "application/json" })
-    downloadBlob(blob, `noviq-${data.appName.toLowerCase()}.json`)
+    downloadBlob(blob, `zalytix-${data.appName.toLowerCase()}.json`)
   }
 
   function exportCsv() {
@@ -31,7 +31,7 @@ export function Dashboard({ data, url, onReset }: { data: ScrapeResult; url: str
         .join(","),
     )
     const blob = new Blob([[header.join(","), ...rows].join("\n")], { type: "text/csv" })
-    downloadBlob(blob, `noviq-${data.appName.toLowerCase()}.csv`)
+    downloadBlob(blob, `zalytix-${data.appName.toLowerCase()}.csv`)
   }
 
   return (
@@ -153,7 +153,7 @@ export function Dashboard({ data, url, onReset }: { data: ScrapeResult; url: str
 
       <footer className="mt-10 flex items-center justify-center gap-2 text-xs text-muted-foreground">
         <span className="h-1.5 w-1.5 rounded-full bg-lime" />
-        Scraped by Noviq · {formatNumber(data.totalScraped)} reviews processed
+        Scraped by Zalytix · {formatNumber(data.totalScraped)} reviews processed
       </footer>
     </div>
   )

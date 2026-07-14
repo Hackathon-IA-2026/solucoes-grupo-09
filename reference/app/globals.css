@@ -147,31 +147,31 @@
   scrollbar-width: none;
 }
 
-@keyframes noviq-float {
+@keyframes zalytix-float {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-6px); }
 }
 
-@keyframes noviq-scan {
+@keyframes zalytix-scan {
   0% { transform: translateY(-100%); }
   100% { transform: translateY(400%); }
 }
 
-@keyframes noviq-rise {
+@keyframes zalytix-rise {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 .animate-rise {
-  animation: noviq-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: zalytix-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-@keyframes noviq-pop {
+@keyframes zalytix-pop {
   0% { opacity: 0; transform: translateY(6px) scale(0.9); }
   100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 .animate-pop {
-  animation: noviq-pop 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: zalytix-pop 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* diagonal hatch fill for low-intensity heatmap cells */
@@ -197,6 +197,6 @@
 }
 
 /* subtle radial glow used behind hero + key numbers */
-.noviq-glow {
+.zalytix-glow {
   background: radial-gradient(60% 60% at 50% 0%, color-mix(in oklab, var(--grape) 22%, transparent), transparent 70%);
 }

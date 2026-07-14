@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { ArrowRight, Link2, Sparkles, Zap } from "lucide-react"
-import { NoviqWordmark } from "./brand"
+import { ZalytixWordmark } from "./brand"
 import { cn } from "@/lib/utils"
 
 const SAMPLES = [
@@ -62,7 +62,7 @@ export function ScraperHero({
       />
 
       <header className="absolute left-0 right-0 top-0 flex items-center justify-between p-5 sm:p-8">
-        <NoviqWordmark />
+        <ZalytixWordmark />
         <div className="hidden items-center gap-2 rounded-full border border-border bg-card/60 px-3 py-1.5 text-xs text-muted-foreground backdrop-blur sm:flex">
           <span className="relative flex h-2 w-2">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-lime opacity-60" />
@@ -83,7 +83,7 @@ export function ScraperHero({
           <span className="text-lime"> clean data.</span>
         </h1>
         <p className="mx-auto mt-4 max-w-lg text-pretty text-base leading-relaxed text-muted-foreground">
-          Paste an App Store or Google Play link. Noviq scrapes every review —
+          Paste an App Store or Google Play link. Zalytix scrapes every review —
           ratings, dates, developer responses — and hands you a jaw-dropping dashboard.
         </p>
 

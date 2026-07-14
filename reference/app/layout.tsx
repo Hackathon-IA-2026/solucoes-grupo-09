@@ -14,9 +14,9 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Noviq — App Review Intelligence',
+  title: 'Zalytix — App Review Intelligence',
   description:
-    'Paste an App Store or Google Play link. Noviq scrapes every review — ratings, dates, developer responses — into clean, jaw-dropping data.',
+    'Paste an App Store or Google Play link. Zalytix scrapes every review — ratings, dates, developer responses — into clean, jaw-dropping data.',
   generator: 'v0.app',
 }
 

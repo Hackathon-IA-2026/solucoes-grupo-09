@@ -137,7 +137,7 @@ export function detectStore(url: string): Store {
 }
 
 export function scrape(url: string): ScrapeResult {
-  const seed = hashString(url.trim().toLowerCase() || "noviq")
+  const seed = hashString(url.trim().toLowerCase() || "zalytix")
   const rng = mulberry32(seed)
   const store = detectStore(url)
 
@@ -273,7 +273,7 @@ export function scrape(url: string): ScrapeResult {
       developerResponse: hasResponse
         ? {
             date: daysToDate(Math.max(0, daysAgo - Math.floor(rng() * 5) - 1)),
-            body: "Thanks for the detailed feedback! We've shipped a fix in the latest build — please update and reach out to support@noviq.app if anything's still off.",
+            body: "Thanks for the detailed feedback! We've shipped a fix in the latest build — please update and reach out to support@zalytix.com if anything's still off.",
           }
         : undefined,
     }

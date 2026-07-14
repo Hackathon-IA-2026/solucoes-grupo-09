@@ -1,8 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { ScraperHero } from "@/components/noviq/scraper-hero"
-import { Dashboard } from "@/components/noviq/dashboard"
+import { ScraperHero } from "@/components/zalytix/scraper-hero"
+import { Dashboard } from "@/components/zalytix/dashboard"
 import { scrape, type ScrapeResult } from "@/lib/mock-data"
 
 export default function Page() {

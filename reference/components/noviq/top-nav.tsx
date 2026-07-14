@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Bell, LayoutDashboard, Search, ChevronDown } from "lucide-react"
-import { NoviqMark } from "./brand"
+import { ZalytixMark } from "./brand"
 import { cn } from "@/lib/utils"
 
 const TABS = [
@@ -20,7 +20,7 @@ export function TopNav() {
     <nav className="flex items-center gap-3">
       {/* logo */}
       <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-grape">
-        <NoviqMark className="h-6 w-6 text-grape" />
+        <ZalytixMark className="h-6 w-6 text-grape" />
       </span>
 
       {/* tab pills — scroll on small screens */}

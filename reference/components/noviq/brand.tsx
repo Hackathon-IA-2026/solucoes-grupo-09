@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils"
 
-export function NoviqMark({ className }: { className?: string }) {
+export function ZalytixMark({ className }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 32 32"
@@ -20,12 +20,12 @@ export function NoviqMark({ className }: { className?: string }) {
   )
 }
 
-export function NoviqWordmark({ className }: { className?: string }) {
+export function ZalytixWordmark({ className }: { className?: string }) {
   return (
     <div className={cn("flex items-center gap-2", className)}>
-      <NoviqMark className="text-lime" />
+      <ZalytixMark className="text-lime" />
       <span className="text-lg font-semibold tracking-tight text-foreground">
-        Noviq
+        Zalytix
       </span>
     </div>
   )
