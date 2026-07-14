@@ -7,7 +7,11 @@
       // built-in RN Animated API instead of react-native-reanimated. Adding
       // reanimated would grow the web bundle substantially for two decorative
       // loops, working against the Lighthouse performance budget.
-      "react-doctor/rn-prefer-reanimated"
+      "react-doctor/rn-prefer-reanimated",
+      // False positive: the only match is `String.prototype.includes(q)`
+      // (substring search in the reviews filter). The rule treats it as an
+      // array-membership lookup, but a Set can't do substring matching.
+      "react-doctor/js-set-map-lookups"
     ],
     "overrides": [
       {
@@ -16,6 +20,17 @@
         // dashboard grows real sections. See the component's doc comment.
         "files": ["src/components/top-nav.tsx"],
         "rules": ["deslop/unused-export"]
+      },
+      {
+        // Two false positives in the reviews feed:
+        // - js-set-map-lookups flags `String.prototype.includes(q)` (substring
+        //   search in the filter) as an array membership lookup; a Set cannot
+        //   replace substring matching.
+        // - no-impure-state-updater flags the `onChangeText` event handler
+        //   (two plain sequential setters) as a state-updater callback with
+        //   side effects; it is a normal event handler, not an updater fn.
+        "files": ["src/components/reviews-feed.tsx"],
+        "rules": ["react-doctor/no-impure-state-updater"]
       }
     ]
   }

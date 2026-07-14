@@ -32,3 +32,5 @@ React Doctor runs with every rule enabled except the suppressions below.
 | --- | --- | --- |
 | `react-doctor/rn-prefer-reanimated` | both packages | The hero float/fade loops use the built-in RN `Animated` API on purpose — pulling in `react-native-reanimated` would add substantial web-bundle weight for two decorative animations, working against the Lighthouse performance budget. |
 | `deslop/unused-export` | `src/components/top-nav.tsx` | `TopNavFull` is exported-but-unused by explicit product decision: the full reference top nav is preserved for when the dashboard grows real sections. |
+| `react-doctor/js-set-map-lookups` | `src/components/reviews-feed.tsx` | False positive: flags `String.prototype.includes(q)` (substring search in the review filter) as an array-membership lookup; a Set can't replace substring matching. |
+| `react-doctor/no-impure-state-updater` | `src/components/reviews-feed.tsx` | False positive: flags the `onChangeText` handler (two plain sequential setters) as a state-updater callback with side effects; it's an event handler, not an updater function. |

@@ -6,7 +6,12 @@
       // Deliberate: FadeIn uses the built-in RN Animated API — pulling in
       // react-native-reanimated would add ~½MB to the web bundle for a mount
       // fade, working against the Lighthouse performance budget.
-      "react-doctor/rn-prefer-reanimated"
+      "react-doctor/rn-prefer-reanimated",
+      // False positive: flags `setReduced` used as a matchMedia /
+      // AccessibilityInfo "change" listener (use-reduced-motion) as an impure
+      // state-updater callback. It's a normal event-driven setState, not a
+      // functional updater with side effects.
+      "react-doctor/no-impure-state-updater"
     ]
   }
 }
