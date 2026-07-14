@@ -83,7 +83,10 @@ export function SiteFooter({ onCtaPress }: { onCtaPress: () => void }) {
         testID="footer-cta"
         style={[
           styles.cta,
-          { borderColor: colors.border },
+          // Opaque hairline (not the token's translucent white) so the
+          // gradient behind can't tint it — the border stays uniform on all
+          // four sides.
+          { borderColor: "#26262B" },
           // Symmetric grape glow rising from the bottom-center over a uniform
           // surface base — the old diagonal gradient left one side plain and
           // the other tinted, so the border read unevenly (bright on the left).
