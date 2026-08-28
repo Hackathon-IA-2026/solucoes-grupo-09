@@ -11,12 +11,12 @@ reason — so the config stays at zero warnings without hiding real signal.
 | `style/noProcessEnv`, `correctness/noProcessGlobal` | Expo inlines `EXPO_PUBLIC_*` only for literal `process.env.X` member expressions; importing `node:process` breaks that and the native bundle. |
 | `correctness/noNodejsModules` | The API/CLI/scripts are server-side Bun programs. |
 | `suspicious/noConsole` | The API logs operational events intentionally; scripts/probes report progress. |
-| `suspicious/noEmptyBlockStatements` | Best-effort `catch {}` is the extras-extraction contract (a metadata miss must never fail a scrape). |
+| `suspicious/noEmptyBlockStatements` | Best-effort `catch {}` is a deliberate contract where a non-critical failure must never fail the operation around it. |
 | `suspicious/useAwait` | `JobRunner` implementations satisfy an async interface even when a body is synchronous. |
 | `suspicious/noBitwiseOperators` | Seeded RNG (mulberry32) and FNV hashing require bitwise math. |
-| `performance/noAwaitInLoops` | Review pagination and job polling are sequential by design (rate-limit friendliness). |
+| `performance/noAwaitInLoops` | Upstream pagination and job polling are sequential by design (rate-limit friendliness). |
 | `performance/useTopLevelRegex` | Format/parse helpers run at human scale; locality beats micro-optimization. |
-| `performance/noReExportAll`, `noBarrelFile`, `noNamespaceImport` | `@zalytix/core` / `@zalytix/ui` expose deliberate public-API barrels; `import * as Haptics` is the expo-haptics contract. |
+| `performance/noReExportAll`, `noBarrelFile`, `noNamespaceImport` | `@wattsteer/core` / `@wattsteer/ui` expose deliberate public-API barrels; `import * as Haptics` is the expo-haptics contract. |
 | `style/noDefaultExport` | expo-router requires default exports for routes. |
 | `style/useExportsLast`, `noNestedTernary`, `useNamingConvention`, `noParameterProperties`, `noImplicitBoolean` | Conflict with established codebase idiom (tone ternaries, RN prop style). |
 | `style/noCommonJs` | React Native asset loading requires `require()`. |
@@ -31,7 +31,5 @@ React Doctor runs with every rule enabled except the suppressions below.
 | Rule | Scope | Why it's off |
 | --- | --- | --- |
 | `react-doctor/rn-prefer-reanimated` | both packages | The hero float/fade loops use the built-in RN `Animated` API on purpose — pulling in `react-native-reanimated` would add substantial web-bundle weight for two decorative animations, working against the Lighthouse performance budget. |
-| `deslop/unused-export` | `src/components/top-nav.tsx` | `TopNavFull` is exported-but-unused by explicit product decision: the full reference top nav is preserved for when the dashboard grows real sections. |
-| `react-doctor/js-set-map-lookups` | `src/components/reviews-feed.tsx` | False positive: flags `String.prototype.includes(q)` (substring search in the review filter) as an array-membership lookup; a Set can't replace substring matching. |
-| `react-doctor/no-impure-state-updater` | `src/components/reviews-feed.tsx` | False positive: flags the `onChangeText` handler (two plain sequential setters) as a state-updater callback with side effects; it's an event handler, not an updater function. |
+| `deslop/unused-export` | `src/components/top-nav.tsx` | `TopNavFull` is exported-but-unused while the landing page is a placeholder; it is the full reference top nav, kept for the real landing page and the product screens. |
 | `react-doctor/rn-no-scrollview-mapped-list` | `src/components/legal-screen.tsx` | Deliberate: the legal pages must render every section eagerly for SEO (static-export HTML) and for the scroll-measured TOC; a virtualized FlatList would omit offscreen sections. |
