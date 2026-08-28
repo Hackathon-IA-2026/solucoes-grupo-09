@@ -65,6 +65,46 @@ not relitigate without the dev:**
 
 _From closed tickets:_
 
+- [**Feature engineering spec**](tickets/008-feature-spec.md) —
+  [`docs/specs/feature-engineering.md`](../docs/specs/feature-engineering.md).
+  **`gate_at(target_date, gate_profile)` makes train/serve skew
+  inexpressible**: the D−1 cut-off is a function of the target date, so
+  training and serving resolve the same expression against the same tables.
+  Three findings that were in none of its inputs: DESSEM's file for day D
+  appears the *evening* of D−1, so it costs **eleven hours of operator
+  notice** on top of its shorter window; `AsOf(gate)` filters `ingested_at`,
+  which in a backfill filters *nothing*, so observation tables are cut on
+  `valid_time` instead and the nearest usable same-hour actual at the late
+  gate is **t−48h**; and `carga-energia-programada` reaches back to 2021 and
+  agrees with DESSEM demand to 0.03%, which makes the DESSEM-free arm a
+  contender rather than a control.
+- [**Forecaster spec**](tickets/009-forecaster-spec.md) —
+  [`docs/specs/forecaster.md`](../docs/specs/forecaster.md). The hurdle stages
+  compose by **inverting the mixture CDF**, never by multiplying. Intervals
+  are pinball for shape plus conformalized quantile regression for coverage,
+  with **two one-sided corrections** so the upper tail cannot borrow coverage
+  from the P10 the product promises. Day totals come from a 500-member path
+  ensemble, because quantiles do not add. The reason-code model is **ruled
+  out**, not deferred — `REL` is line unavailability and no ingested dataset
+  carries transmission availability, which is an absent-predictor problem.
+- [**Flex optimizer spec**](tickets/011-optimizer-spec.md) —
+  [`docs/specs/flex-optimizer.md`](../docs/specs/flex-optimizer.md). The
+  objective is denominated in **MWh-equivalents, not money**: pricing it in R$
+  would make the recommendation a function of an invented number, which this
+  map's R$-as-scenario rule forbids. Plan on P50 and make the optimistic-plan
+  failure impossible by construction with an execution rule — charge the
+  scheduled amount or what is actually curtailed, whichever is smaller —
+  rather than by planning pessimistically. The prototype's user-facing
+  P50/P10 toggle is removed: it made the visitor responsible for a modelling
+  decision.
+- [**apps/ml scaffold**](tickets/017-ml-service-scaffold.md) — FastAPI, its
+  own Dockerfile, fifth service in compose. The read-only boundary is
+  **enforced, not documented**: every connection opens with
+  `default_transaction_read_only`, proven in the running container by watching
+  an INSERT fail. `/ready` distinguishes no-database, unreachable, and
+  reachable-but-unmigrated. Python checks stay out of the root gate so a
+  missing Python toolchain cannot fail a TypeScript lint.
+
 - [**The four /app screens**](tickets/014-app-screens-prototype.md) — Prototyped
   on fixtures. The **P10–P90 band solved at three levels**: a figure with the
   interval drawn to scale beneath it, a fan chart carrying per-hour occurrence
@@ -296,14 +336,6 @@ _Charting-session decisions (made during grilling, before any ticket existed):_
 
 <!-- in-scope fog; graduates into tickets as the frontier advances -->
 
-- **Optimizer objective weights.** IDEA.md §28 offers a simple objective and a
-  realistic one. The realistic one needs a curtailment cost, a battery
-  degradation cost and an energy cost — none of which have obvious Brazilian
-  values. Now partly sharpened by the solver research: the degradation cost has
-  a derived landmark, `c_deg > c_curt·k/(2+k)` (≈ 0.042·c_curt at RTE 0.92),
-  below which the LP relaxation would be inexact. Since v1 ships binaries this
-  is no longer load-bearing for correctness, but it remains a useful sanity
-  check on any value chosen.
 - **Diagnosis domain rules.** IDEA.md §25 wants SHAP *plus* domain rules, never
   the model alone. Which rules, and how they arbitrate against SHAP when they
   disagree, can't be written until real driver rankings exist.
