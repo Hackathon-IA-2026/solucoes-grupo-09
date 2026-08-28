@@ -1,4 +1,5 @@
 import type { SubsystemCode } from "./normalise.js";
+import type { LoadAreaCode, LoadAreaKind } from "./ons/carga-api.js";
 
 /**
  * The canonical form. Nothing downstream of an adapter sees an ONS convention:
@@ -42,7 +43,18 @@ export type RejectionReason =
    * populated together on every file scanned, so half-populated is an illegal
    * state rather than a partial one.
    */
-  | "half_populated_cause";
+  | "half_populated_cause"
+  /** `cod_areacarga` was outside the carga API's published 33-code domain. */
+  | "unknown_load_area"
+  /**
+   * `din_referenciautc` arrived without its `Z`. ONS documents the field as
+   * UTC and every observed response carries the designator, so a bare wall
+   * clock means the convention moved — and guessing which way is precisely the
+   * silent three-hour error this layer exists to refuse.
+   */
+  | "non_utc_timestamp"
+  /** A half-hourly label that fell on neither `:00` nor `:30`. */
+  | "misaligned_interval";
 
 /** A rejected source row, kept so a run can explain itself. */
 export interface RejectedRow {
@@ -144,4 +156,94 @@ export interface CurtailmentParse {
    * "empty" distinguishable, which a nullable string alone cannot do.
    */
   hasDescriptionColumn: boolean;
+}
+
+/**
+ * The canonical form of one carga API half-hour.
+ *
+ * Three conventions are resolved before a row gets here, and none of them is
+ * visible downstream:
+ *
+ * - **`validTime` is the START of the half hour, UTC.** ONS labels these rows
+ *   with the *end* (`din_referenciautc`, documented "final do intervalo da
+ *   semi-hora"), which is the opposite of the bulk datasets. The half-hour
+ *   ending `03:30Z` is stored as `03:00Z`.
+ * - **The instant is read as UTC and converted no further.** These two datasets
+ *   are the only ones in scope with a documented timezone, and it is already
+ *   UTC — running them through `America/Sao_Paulo` like `din_instante` would be
+ *   a three-hour error in the one place ONS got it right.
+ * - **Quantities are MWh.** ONS publishes MWmed, so a 30-minute row's MWh is
+ *   half its MWmed.
+ */
+export interface VerifiedLoadHalfHour {
+  areaCode: LoadAreaCode;
+  areaKind: LoadAreaKind;
+  /**
+   * Populated only when the area *is* a whole subsystem. ONS publishes no
+   * geoelectric-area → subsystem assignment, so one is never inferred.
+   */
+  subsystem: SubsystemCode | null;
+  /** Start of the half hour, UTC. */
+  validTime: Date;
+  /** `val_cargaglobal` — the headline series. */
+  loadMwh: number;
+  /** `val_cargaglobalcons`, the consisted series ONS feeds its own models. */
+  consistedLoadMwh: number | null;
+  /**
+   * `val_cargaglobalsmmgd` — load net of distributed generation.
+   *
+   * The live field name wins over the dictionary's `val_cargaglobalsmmg`
+   * (no trailing `d`); the dictionary spelling is a documentation defect and is
+   * not read, so a rename would surface as a null rather than as wrong data.
+   */
+  loadNetOfMmgdMwh: number | null;
+  /** `val_cargasupervisionada` — the part ONS itself supervises. */
+  supervisedLoadMwh: number | null;
+  /** `val_carganaosupervisionada` — the part from CCEE metering. */
+  unsupervisedLoadMwh: number | null;
+  /** `val_cargammgd` — the part met by micro and mini distributed generation. */
+  mmgdLoadMwh: number | null;
+  /** `val_consistencia` — ONS's correction for measurement faults. */
+  consistencyAdjustmentMwh: number | null;
+  /**
+   * `din_atualizacao` — **the one true row-level vintage marker in ONS open
+   * data**. Null when the response omitted it, in which case the caller stamps
+   * the row with the coarser request time and says so.
+   */
+  publishedAt: Date | null;
+}
+
+/**
+ * The canonical form of one `/cargaprogramada` half-hour.
+ *
+ * A separate type, and a separate table, because this is a **forecast**: ONS
+ * publishes it D−1 for the day ahead. `docs/domain-model.md` rejects a
+ * `horizon` column on a shared fact table precisely so that reading a
+ * programmed value as an actual is a type error rather than a query bug.
+ *
+ * It also carries no `din_atualizacao`: programada revisions are detectable
+ * only by diffing values, which is what the shared versioned write does anyway.
+ */
+export interface ProgrammedLoadHalfHour {
+  areaCode: LoadAreaCode;
+  areaKind: LoadAreaKind;
+  subsystem: SubsystemCode | null;
+  /** Start of the half hour, UTC. */
+  validTime: Date;
+  /** `val_cargaglobalprogramada`. */
+  programmedLoadMwh: number;
+}
+
+/** What the carga adapter produces from one API response. */
+export interface LoadParse<TRow> {
+  rows: TRow[];
+  rejected: RejectedRow[];
+  /**
+   * Rows that arrived without `din_atualizacao`.
+   *
+   * Reported rather than shrugged off: the field is undocumented — found only
+   * in the OpenAPI spec and live responses — so it is observed, not guaranteed,
+   * and a run in which it disappeared should be able to say so.
+   */
+  rowsWithoutVintage: number;
 }

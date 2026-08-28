@@ -51,7 +51,11 @@ export interface VintageStamp {
   /** When the upstream source asserted these values. */
   publishedAt: Date;
   publishedAtPrecision: "row" | "file";
-  /** The `ons_resource_version` these rows were parsed from. */
+  /**
+   * The provenance row these rows were parsed from — `ons_resource_version`
+   * for a bulk file, `load_api_request` for a page of the carga REST API. The
+   * table each id points at is the fact table's business, not this write's.
+   */
   sourceVersionId: string;
   /** Overridable so a test can place a write at a chosen instant. */
   ingestedAt?: Date;

@@ -324,3 +324,253 @@ export const curtailmentReportHour = pgTable(
     check("curtailment_cause_whole", sql`(${t.reason} is null) = (${t.origin} is null)`),
   ],
 );
+
+/**
+ * The `cod_areacarga` domain of the ONS carga REST API — all 33 published
+ * codes, in ONS's own three groups.
+ *
+ * This is a **finer geography than any other source in scope**, which is why it
+ * is its own enum rather than a reuse of `subsystem_code`: the four subsystems
+ * decompose into 25 geoelectric areas and four loss areas, and
+ * `docs/domain-model.md` reserves `Subsystem` for the four.
+ *
+ * `SECO` is the API's dialect for the south-east/centre-west. It appears here
+ * because it is the value the source publishes and this column stores what was
+ * published; the canonical `SE` is carried alongside in `subsystem`.
+ */
+export const loadAreaCode = pgEnum("load_area_code", [
+  "SECO",
+  "S",
+  "NE",
+  "N",
+  "RJ",
+  "SP",
+  "MG",
+  "ES",
+  "MT",
+  "MS",
+  "DF",
+  "GO",
+  "AC",
+  "RO",
+  "PR",
+  "SC",
+  "RS",
+  "BASE",
+  "BAOE",
+  "ALPE",
+  "PBRN",
+  "CE",
+  "PI",
+  "TON",
+  "PA",
+  "MA",
+  "AP",
+  "AM",
+  "RR",
+  "PESE",
+  "PES",
+  "PENE",
+  "PEN",
+]);
+
+/** Which of ONS's three groups a `load_area_code` belongs to. */
+export const loadAreaKind = pgEnum("load_area_kind", [
+  "SUBSYSTEM",
+  "GEOELECTRIC",
+  "LOSSES",
+]);
+
+/** Which carga endpoint a request went to. */
+export const loadSeries = pgEnum("load_series", ["VERIFIED", "PROGRAMMED"]);
+
+/**
+ * One row per answered call to the carga REST API — the provenance anchor for
+ * every load fact, and the carga equivalent of `ons_resource_version`.
+ *
+ * A separate table rather than a reuse, because the two sources are provenanced
+ * by genuinely different things. A bulk resource is identified by a URL and an
+ * S3 fingerprint that can be re-probed with a `HEAD`; an API call is identified
+ * by the question it asked — endpoint, area, date range — and has no fingerprint
+ * at all, because there is no object to fingerprint. Forcing the carga API
+ * through `ons_resource_version` would mean inventing a `change_key` for
+ * something that has none, which is exactly the kind of plausible fiction this
+ * layer refuses.
+ *
+ * `content_sha256` and `byte_size` cover the raw response as received, so the
+ * archived payload can be verified. `json_repaired` records that the tolerant
+ * parser had to fix the response before it would parse — the malformed-JSON
+ * defect ONS emits for older ranges, kept as a fact about the payload rather
+ * than as a log line.
+ */
+export const loadApiRequest = pgTable(
+  "load_api_request",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    series: loadSeries().notNull(),
+    areaCode: loadAreaCode().notNull(),
+    /** `dat_inicio`, `YYYY-MM-DD`, inclusive — the API's own parameter form. */
+    rangeStart: text().notNull(),
+    /** `dat_fim`, `YYYY-MM-DD`, inclusive. */
+    rangeEnd: text().notNull(),
+    /** The URL actually requested. The `SECO` dialect is visible here. */
+    requestUrl: text().notNull(),
+    httpStatus: integer().notNull(),
+    /** Rows in the response, before normalisation. Zero is never written. */
+    rowCount: integer().notNull(),
+    contentSha256: text().notNull(),
+    byteSize: bigint({ mode: "number" }).notNull(),
+    /** 1 when the response was not valid JSON until it was repaired. */
+    jsonRepaired: integer().notNull().default(0),
+    /** Where the retained raw response lives, when it has been archived. */
+    archiveUri: text(),
+    fetchedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("load_api_request_window").on(t.series, t.areaCode, t.rangeStart),
+    index("load_api_request_fetched").on(t.fetchedAt),
+  ],
+);
+
+/**
+ * The four vintage columns again, anchored to an API call rather than to a
+ * bulk file.
+ *
+ * `docs/domain-model.md` §1's rule has no exceptions and the columns are
+ * identical; what differs is the provenance foreign key, because the carga API
+ * publishes no files. Kept as a second small function rather than by making the
+ * shared one's reference nullable: a nullable provenance column would let a
+ * fact row exist with no source at all, which neither source needs.
+ */
+function apiVintageColumns() {
+  return {
+    /** Monotonic per business key; bumped only when the value tuple changes. */
+    dataVersion: integer().notNull(),
+    /**
+     * When ONS asserted this value.
+     *
+     * For `/cargaverificada` this is the row's own `din_atualizacao` — the only
+     * genuine row-level vintage marker anywhere in ONS open data — and the
+     * precision is `row`. Where the field is absent (every `/cargaprogramada`
+     * row, and any verificada row that stopped carrying it) the coarsest honest
+     * stamp is the instant the response was fetched, and the precision says
+     * `file`, meaning response-grained rather than row-grained.
+     */
+    publishedAt: timestamp({ withTimezone: true }).notNull(),
+    publishedAtPrecision: publishedAtPrecision().notNull(),
+    /** When WattSteer learned it. The axis `AsOf(t)` filters on. */
+    ingestedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    /** Digest of the stored values, so an identical re-ingest writes nothing. */
+    valueDigest: text().notNull(),
+    /** Provenance: the exact API call these numbers came back from. */
+    sourceRequestId: uuid()
+      .notNull()
+      .references(() => loadApiRequest.id),
+  };
+}
+
+/**
+ * Carga de energia verificada — observed load per área de carga, per half hour.
+ * ONS dataset 6.
+ *
+ * **Half-hourly, not rolled up.** Constrained-off is downsampled to the hourly
+ * grain of the balanço it is explained against; this series is stored at the
+ * grain ONS publishes, because it is the finest system-context signal available
+ * and downsampling here would throw away the only half-hourly load in the
+ * platform. Consumers that want hours sum pairs.
+ *
+ * **`valid_time` is the start of the half hour, UTC.** The source labels the
+ * interval's **end** (`din_referenciautc`, "final do intervalo da semi-hora"),
+ * the opposite of every bulk dataset, and the difference is exactly the half hour that
+ * misaligns load against curtailment. The adapter removes it; nothing
+ * downstream ever sees an end-labelled interval.
+ *
+ * **`subsystem` is null for a geoelectric or loss area.** ONS publishes no
+ * area to subsystem assignment anywhere in scope, and a plausible guess is
+ * worse than a null.
+ */
+export const verifiedLoadHalfHour = pgTable(
+  "verified_load_half_hour",
+  {
+    areaCode: loadAreaCode().notNull(),
+    areaKind: loadAreaKind().notNull(),
+    /** Populated only where the area *is* a whole subsystem. */
+    subsystem: subsystemCode(),
+    /** Start of the half hour the fact is about, UTC. */
+    validTime: timestamp({ withTimezone: true }).notNull(),
+
+    /** `val_cargaglobal`. The headline series, and the only required measure. */
+    loadMwh: doublePrecision().notNull(),
+    /** `val_cargaglobalcons` — the consisted series ONS feeds its own models. */
+    consistedLoadMwh: doublePrecision(),
+    /**
+     * `val_cargaglobalsmmgd` — load net of distributed generation.
+     *
+     * Nullable because ONS genuinely omits it: the malformed responses for
+     * ranges through 2019-02 carry the key with no value at all. A null is that
+     * omission; it is never read as a zero.
+     */
+    loadNetOfMmgdMwh: doublePrecision(),
+    /** `val_cargasupervisionada`. */
+    supervisedLoadMwh: doublePrecision(),
+    /** `val_carganaosupervisionada`. */
+    unsupervisedLoadMwh: doublePrecision(),
+    /** `val_cargammgd` — the part met by micro and mini distributed generation. */
+    mmgdLoadMwh: doublePrecision(),
+    /** `val_consistencia` — ONS's correction for measurement faults. */
+    consistencyAdjustmentMwh: doublePrecision(),
+
+    ...apiVintageColumns(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.areaCode, t.validTime, t.dataVersion] }),
+    index("verified_load_half_hour_as_of").on(t.validTime, t.areaCode, t.ingestedAt),
+    // Subsystem-grain reads scan by time across the four subsystem areas only.
+    index("verified_load_half_hour_subsystem").on(t.subsystem, t.validTime),
+    // `subsystem` is populated exactly for the four subsystem areas. Without
+    // this the database would accept a geoelectric area carrying a subsystem
+    // from any other writer, and the "never inferred" rule would be a
+    // convention rather than a guarantee.
+    check(
+      "verified_load_subsystem_only_for_subsystem_area",
+      sql`(${t.subsystem} is null) = (${t.areaKind} <> 'SUBSYSTEM')`,
+    ),
+  ],
+);
+
+/**
+ * Carga de energia programada — ONS dataset 7.
+ *
+ * **Its own table, because it is a forecast.** ONS publishes it D−1 for the day
+ * ahead; the verified series is an observation. `docs/domain-model.md` rejects a
+ * `horizon` column on a shared fact table precisely so that reading a programmed
+ * value as an actual is a type error rather than a query bug — the same
+ * reasoning that gives DESSEM its own table.
+ *
+ * It also carries no `din_atualizacao`: this endpoint returns none, so every
+ * row's `published_at_precision` is `file` and revisions are detectable only by
+ * the value digest, which is what the shared versioned write does anyway.
+ */
+export const programmedLoadHalfHour = pgTable(
+  "programmed_load_half_hour",
+  {
+    areaCode: loadAreaCode().notNull(),
+    areaKind: loadAreaKind().notNull(),
+    subsystem: subsystemCode(),
+    /** Start of the half hour the forecast is about, UTC. */
+    validTime: timestamp({ withTimezone: true }).notNull(),
+
+    /** `val_cargaglobalprogramada`. */
+    programmedLoadMwh: doublePrecision().notNull(),
+
+    ...apiVintageColumns(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.areaCode, t.validTime, t.dataVersion] }),
+    index("programmed_load_half_hour_as_of").on(t.validTime, t.areaCode, t.ingestedAt),
+    check(
+      "programmed_load_subsystem_only_for_subsystem_area",
+      sql`(${t.subsystem} is null) = (${t.areaKind} <> 'SUBSYSTEM')`,
+    ),
+  ],
+);
