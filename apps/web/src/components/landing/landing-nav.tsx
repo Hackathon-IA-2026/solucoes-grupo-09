@@ -65,16 +65,13 @@ export function LandingNav({ onNavigate }: { onNavigate: (section: SectionId) =>
         </View>
       ) : null}
 
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
-        <LanguageSwitch testID="nav-language-switch" />
-        <CtaLink
-          testID="nav-open-app"
-          href={APP_HREF}
-          label={copy.nav.cta}
-          primary={true}
-          icon={<ArrowRightIcon size={15} color={colors.onAccent} />}
-        />
-      </View>
+      {/*
+        No CTA here. The hero states the offer and carries the primary action a
+        few hundred pixels below; repeating it in the nav gave the page two
+        identical lime buttons competing for the same click, and the nav one
+        arrived before the visitor had been told what they were opening.
+      */}
+      <LanguageSwitch testID="nav-language-switch" />
     </View>
   );
 }

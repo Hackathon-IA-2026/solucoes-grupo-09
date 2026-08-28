@@ -54,7 +54,8 @@ export function CtaLink({
             gap: 6,
             borderRadius: radius.pill,
             borderWidth: 1,
-            borderColor: primary ? colors.accent : colors.border,
+            // See PillButton: interactive controls take the stronger border.
+            borderColor: primary ? colors.accent : colors.borderStrong,
             backgroundColor: primary
               ? colors.accent
               : hovered

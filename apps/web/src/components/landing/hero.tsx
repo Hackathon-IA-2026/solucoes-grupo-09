@@ -58,7 +58,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    alignSelf: "flex-start",
+    alignSelf: "center",
     borderRadius: radius.pill,
     borderWidth: 1,
     paddingHorizontal: 12,
@@ -78,7 +78,20 @@ export function Hero({ onExplain }: { onExplain: () => void }) {
 
   return (
     <View onLayout={onLayout} style={{ gap: space.xxl }}>
-      <View style={{ gap: space.lg, maxWidth: 760 }}>
+      {/*
+        Centred. The hero states the product's entire claim and has no adjacent
+        column to balance against, so a left rag leaves a wide screen looking
+        like the layout stopped halfway. The readout below keeps its own
+        alignment, because a table of subsystems does not centre.
+      */}
+      <View
+        style={{
+          gap: space.lg,
+          maxWidth: 760,
+          alignSelf: "center",
+          alignItems: "center",
+        }}
+      >
         <View
           style={[
             styles.eyebrow,
@@ -100,6 +113,7 @@ export function Hero({ onExplain }: { onExplain: () => void }) {
             fontWeight: "600",
             letterSpacing: -1.6,
             color: colors.inkMuted,
+            textAlign: "center",
           }}
         >
           {copy.hero.headline.lead}
@@ -107,7 +121,13 @@ export function Hero({ onExplain }: { onExplain: () => void }) {
         </Text>
 
         <Text
-          style={{ fontSize: 16, lineHeight: 26, color: colors.inkMuted, maxWidth: 660 }}
+          style={{
+            fontSize: 16,
+            lineHeight: 26,
+            color: colors.inkMuted,
+            maxWidth: 660,
+            textAlign: "center",
+          }}
         >
           {copy.hero.sub}
         </Text>
@@ -116,6 +136,7 @@ export function Hero({ onExplain }: { onExplain: () => void }) {
           style={{
             flexDirection: "row",
             flexWrap: "wrap",
+            justifyContent: "center",
             gap: space.md,
             marginTop: space.sm,
           }}

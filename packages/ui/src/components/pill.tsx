@@ -136,7 +136,12 @@ export function PillButton({
           flexShrink: 0,
           borderRadius: radius.pill,
           borderWidth: 1,
-          borderColor: primary ? colors.accent : colors.border,
+          // `borderStrong` (12%), not `border` (8%): 8% is the hairline used to
+          // separate *surfaces*, and on a near-black canvas it leaves an
+          // outlined button barely distinguishable from the page — next to a
+          // solid lime primary the pair reads as one button and one label.
+          // Interactive controls get the input-strength border.
+          borderColor: primary ? colors.accent : colors.borderStrong,
           backgroundColor: primary
             ? colors.accent
             : hovered
