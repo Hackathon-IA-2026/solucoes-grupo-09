@@ -1,24 +1,31 @@
 import { config } from "./config.js";
+import { database } from "./database/connection.js";
+import {
+  createEnergyBalanceIngestor,
+  type IngestEnergyBalancePayload,
+  type IngestEnergyBalanceResult,
+} from "./ingest/index.js";
 import { createBullMqRunner } from "./jobs/bullmq.js";
 
 // Dedicated worker process: pulls jobs off the BullMQ queue and runs them. Use
 // this (with the API set to WATTSTEER_ROLE=api) to scale background work
 // independently of the HTTP layer. Run several for more throughput.
 //
-// No job handlers are registered yet — WattSteer's ingestion jobs arrive with
-// the data platform. Until then the worker connects and idles on an empty
-// queue, which is the correct behaviour: nothing enqueues work.
+// The one registered handler is ONS ingestion, which needs Postgres — a worker
+// without it could only fail every job, so it refuses to start instead.
 if (!config.redisUrl) {
   console.error("worker requires REDIS_URL");
   process.exit(1);
 }
+if (!database) {
+  console.error("worker requires DATABASE_URL — ingestion writes to Postgres");
+  process.exit(1);
+}
 
-const runner = createBullMqRunner<unknown, never>(
-  async (payload) => {
-    throw new Error(
-      `No job handler is registered for this payload: ${JSON.stringify(payload)}`,
-    );
-  },
+const ingestEnergyBalance = createEnergyBalanceIngestor({ db: database.db });
+
+const runner = createBullMqRunner<IngestEnergyBalancePayload, IngestEnergyBalanceResult>(
+  (payload, report) => ingestEnergyBalance(payload, report),
   config.redisUrl,
   {
     concurrency: config.jobConcurrency,
@@ -33,7 +40,7 @@ const runner = createBullMqRunner<unknown, never>(
 console.log(
   `👷 WattSteer worker started — concurrency ${config.jobConcurrency}, queue on Redis`,
 );
-console.log("   (no job handlers registered yet — idling)");
+console.log("   handlers: ONS balanco-energia-subsistema ingestion");
 
 const shutdown = async (signal: string) => {
   console.log(`\n🛑 Received ${signal}, draining worker…`);

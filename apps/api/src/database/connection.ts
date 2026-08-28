@@ -19,7 +19,9 @@ export interface DatabaseHandle {
 /** Create a Drizzle/postgres handle for a given URL (used by the app and tests). */
 export function createDatabase(url: string, max = 10): DatabaseHandle {
   const client = postgres(url, { max });
-  const db = drizzle(client, { schema });
+  // `casing` must match drizzle.config.ts, or the runtime will quote camelCase
+  // column names that the migration created as snake_case.
+  const db = drizzle(client, { schema, casing: "snake_case" });
   return {
     db,
     migrate: () => migrate(db, { migrationsFolder: "drizzle" }),
