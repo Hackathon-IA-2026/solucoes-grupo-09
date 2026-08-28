@@ -1,7 +1,7 @@
 {
   "name": "wattsteer-api",
   "version": "0.1.0",
-  "description": "WattSteer API — ingestion, gateway and public HTTP surface.",
+  "description": "WattSteer API \u2014 ingestion, gateway and public HTTP surface.",
   "type": "module",
   "scripts": {
     "api": "bun run src/api/index.ts",
@@ -12,7 +12,7 @@
     "db:push": "bunx drizzle-kit push",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "bunx biome check",
-    "test": "REDIS_URL= DATABASE_URL= bun test test/errors.test.ts test/job.test.ts test/rate-limit.test.ts test/ons-energy-balance.test.ts test/api.test.ts",
+    "test": "REDIS_URL= DATABASE_URL= bun test test/errors.test.ts test/job.test.ts test/rate-limit.test.ts test/csv.test.ts test/ons-energy-balance.test.ts test/ons-constrained-off.test.ts test/api.test.ts",
     "test:redis": "WATTSTEER_TEST_REDIS_URL=redis://localhost:6390 REDIS_URL= DATABASE_URL= bun test test/bullmq.test.ts",
     "test:db": "DATABASE_URL=postgres://postgres:wattsteer@localhost:5434/wattsteer bun run db:push && WATTSTEER_TEST_DATABASE_URL=postgres://postgres:wattsteer@localhost:5434/wattsteer DATABASE_URL= REDIS_URL= bun test test/database.test.ts",
     "docker:build": "docker build -f Dockerfile -t wattsteer-api:latest ../..",

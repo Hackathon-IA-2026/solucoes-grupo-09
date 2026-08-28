@@ -1,0 +1,4 @@
+id_subsistema;nom_subsistema;id_estado;nom_estado;nom_usina;id_ons;ceg;din_instante;val_geracao;val_geracaolimitada;val_disponibilidade;val_geracaoreferencia;val_geracaoreferenciafinal;cod_razaorestricao;cod_origemrestricao;dsc_restricao
+NE;NORDESTE;BA;BAHIA;CONJ. BABILÔNIA CENTRO;CJU_BA4FBBC;-;2026-08-01 00:00:00;0;;0;0;;;;
+NE;NORDESTE;BA;BAHIA;CONJ. BABILÔNIA CENTRO;CJU_BA4FBBC;-;2026-08-01 00:30:00;0;;0;0;;;;
+NE;NORDESTE;BA;BAHIA;CONJ. BABILÔNIA CENTRO;CJU_BA4FBBC;-;2026-08-01 01:00:00;0;;0;0;;;;

@@ -16,15 +16,15 @@ as different from one that is absent.
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Both wind and solar constrained-off are ingested at entity grain
-- [ ] Each file's header is read on every ingest; no schema is cached per period
-- [ ] A column present but empty is distinguishable from one that is absent
-- [ ] All four reason codes are modelled, including the one documented but not yet observed
-- [ ] Restriction origin is captured alongside reason
-- [ ] Conjunto exists as an entity; entity rows resolve to conjunto or plant correctly
-- [ ] Curtailed energy is derived from the reference-generation columns, as energy
-- [ ] Data is downsampled to hourly to meet the system context, in the lossless direction
-- [ ] A retroactive backfill of a closed month is detected and stored as a new vintage
-- [ ] Fixture tests cover the schema-drift and empty-column cases explicitly
+- [x] Both wind and solar constrained-off are ingested at entity grain
+- [x] Each file's header is read on every ingest; no schema is cached per period
+- [x] A column present but empty is distinguishable from one that is absent
+- [x] All four reason codes are modelled, including the one documented but not yet observed
+- [x] Restriction origin is captured alongside reason
+- [x] Conjunto exists as an entity; entity rows resolve to conjunto or plant correctly
+- [x] Curtailed energy is derived from the reference-generation columns, as energy
+- [x] Data is downsampled to hourly to meet the system context, in the lossless direction
+- [x] A retroactive backfill of a closed month is detected and stored as a new vintage
+- [x] Fixture tests cover the schema-drift and empty-column cases explicitly

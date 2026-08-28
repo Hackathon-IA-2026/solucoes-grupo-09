@@ -1,0 +1,5 @@
+id_subsistema;nom_subsistema;id_estado;nom_estado;nom_usina;id_ons;ceg;din_instante;val_geracao;val_geracaolimitada;val_disponibilidade;val_geracaoreferencia;val_geracaoreferenciafinal;cod_razaorestricao;cod_origemrestricao;dsc_restricao
+NE;NORDESTE;BA;BAHIA;CONJ. BABILÔNIA SUL;CJU_BABBS;-;2026-08-12 09:00:00;171.415;163.261;346.5;355.262;;CNF;LOC;"Controle de inequação: CONTROLE DE CARREGAMENTO DA LT 230 KV IRECÊ / MORRO DO CHAPÉU II – C1(S5), PREVENINDO
+A PERDA DA LT 500 KV MORRO DO CHAPÉU II / OUROLÂNDIA II – C1(N4) - IO-ON.NE.2SO e MOP 442-S/2025"
+N;NORTE;MA;MARANHAO;CONJ. PAULINO NEVES;CJU_MAPLN;-;2026-08-01 07:00:00;124.277;141.435;411;169.823;;ENE;SIS;Controle de frequência do SIN.
+N;NORTE;MA;MARANHAO;CONJ. PAULINO NEVES;CJU_MAPLN;-;2026-08-01 07:30:00;124.587;125;411;287.581;;ENE;SIS;Controle de frequência do SIN.

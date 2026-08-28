@@ -1,0 +1,6 @@
+id_subsistema;nom_subsistema;id_estado;nom_estado;nom_usina;id_ons;ceg;din_instante;val_geracao;val_geracaolimitada;val_disponibilidade;val_geracaoreferencia;val_geracaoreferenciafinal;cod_razaorestricao;cod_origemrestricao
+N;NORTE;MA;MARANHAO;CONJ. PAULINO NEVES;CJU_MAPLN;-;2024-12-01 00:00:00;402.459;;402.582;388.028;;;
+N;NORTE;MA;MARANHAO;CONJ. PAULINO NEVES;CJU_MAPLN;-;2024-12-01 00:30:00;397.262;;406.212;384.569;;;
+N;NORTE;MA;MARANHAO;CONJ. PAULINO NEVES;CJU_MAPLN;-;2024-12-01 01:00:00;389.889;;407.933;373.808;;;
+N;NORTE;MA;MARANHAO;CONJ. PAULINO NEVES;CJU_MAPLN;-;2024-12-01 01:30:00;388.779;;408.435;368.257;;;
+N;NORTE;MA;MARANHAO;CONJ. PAULINO NEVES;CJU_MAPLN;-;2024-12-01 02:00:00;393.582;;407.803;376.411;;;

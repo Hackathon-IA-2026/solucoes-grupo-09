@@ -92,6 +92,37 @@ export function selectResourceForYear(
   throw new UpstreamError(`No PARQUET or CSV resource found for year ${year}`);
 }
 
+/**
+ * Pick the resource for one month, for the datasets ONS splits monthly.
+ *
+ * `formats` is a parameter rather than the module default because the
+ * preference is per dataset, not global: Parquet is smaller everywhere, but it
+ * does not cover the full wind constrained-off history (it starts 2023-10
+ * against the CSV's 2021-10), so that adapter asks for CSV first. Choosing the
+ * format that always exists beats choosing the one that is usually smaller.
+ */
+export function selectResourceForMonth(
+  resources: CatalogueResource[],
+  year: number,
+  month: number,
+  formats: readonly ResourceFormat[] = PREFERRED_FORMATS,
+): CatalogueResource {
+  const suffix = `_${year}_${String(month).padStart(2, "0")}`;
+  for (const format of formats) {
+    const match = resources.find(
+      (resource) =>
+        resource.format === format &&
+        basename(resource.url).endsWith(`${suffix}.${format.toLowerCase()}`),
+    );
+    if (match) {
+      return match;
+    }
+  }
+  throw new UpstreamError(
+    `No ${formats.join(" or ")} resource found for ${year}-${String(month).padStart(2, "0")}`,
+  );
+}
+
 /** Fetch and decode `package_show` for a dataset. */
 export async function fetchPackage(
   slug: string,

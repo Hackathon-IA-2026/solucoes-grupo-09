@@ -36,7 +36,13 @@ export type RejectionReason =
   /** A required column was present but empty. Never read as zero. */
   | "empty_value"
   /** A required column held something that is not a number. */
-  | "unparsable_value";
+  | "unparsable_value"
+  /**
+   * Reason and origin were not both present. They are one value object and are
+   * populated together on every file scanned, so half-populated is an illegal
+   * state rather than a partial one.
+   */
+  | "half_populated_cause";
 
 /** A rejected source row, kept so a run can explain itself. */
 export interface RejectedRow {
@@ -60,4 +66,82 @@ export interface EnergyBalanceParse {
   aggregateRowsFiltered: number;
   /** The header actually present in this file, read fresh on every ingest. */
   columns: string[];
+}
+
+/** WattSteer's technology vocabulary for the two curtailed renewable fleets. */
+export type Technology = "WIND" | "SOLAR";
+
+/** Which variant of `ReportingEntity` an ONS `id_ons` denotes. */
+export type ReportingEntityKind = "CONJUNTO" | "PLANT";
+
+/** ONS restriction reason codes. `REL` is grid unavailability, not "relaxamento". */
+export type ReasonCode = "REL" | "CNF" | "ENE" | "PAR";
+
+/** Whether a restriction was local to the entity or systemic. */
+export type RestrictionOrigin = "LOC" | "SIS";
+
+/**
+ * Why generation was restricted — one value object, never three loose columns.
+ * Absent (rather than blank) when the entity was not restricted at all, which
+ * is the ordinary case in these files.
+ */
+export interface RestrictionCause {
+  reason: ReasonCode;
+  origin: RestrictionOrigin;
+  /** `dsc_restricao`. Free text; null when the column is absent or empty. */
+  description: string | null;
+}
+
+/**
+ * A reporting entity as observed in a constrained-off file.
+ *
+ * `cegCore` is null exactly when `kind` is `CONJUNTO`: ONS writes `"-"` there,
+ * and a conjunto genuinely has no CEG. That is structural absence, not an
+ * empty string.
+ */
+export interface ObservedReportingEntity {
+  onsCode: string;
+  kind: ReportingEntityKind;
+  cegCore: string | null;
+  name: string;
+  subsystem: SubsystemCode;
+  stateCode: string;
+}
+
+/** One canonical constrained-off row: an entity, a technology, one hour. */
+export interface CurtailmentReportHour {
+  reportingEntityCode: string;
+  technology: Technology;
+  /** Start of the hour, UTC. */
+  validTime: Date;
+  generationMwh: number;
+  constrainedOffMwh: number;
+  referenceGenerationMwh: number | null;
+  finalReferenceGenerationMwh: number | null;
+  /** Mean over the hour — availability is a power, so it is not summed. */
+  availabilityMw: number | null;
+  /** 1 or 2; below 2 the source hour was incomplete. */
+  halfHoursObserved: number;
+  cause: RestrictionCause | null;
+  /** The two half-hours disagreed on cause; the dominant one is carried. */
+  causeMixed: boolean;
+}
+
+/** What the constrained-off adapter produces from one source file. */
+export interface CurtailmentParse {
+  rows: CurtailmentReportHour[];
+  entities: ObservedReportingEntity[];
+  rejected: RejectedRow[];
+  /** The header actually present in this file, read fresh on every ingest. */
+  columns: string[];
+  /**
+   * Whether `dsc_restricao` was in this file's header at all.
+   *
+   * Column *presence* is a property of the file; emptiness is a property of a
+   * row. ONS backfilled this column into already-closed months, so a file from
+   * 2024-12 lacks it while 2025-01 has it — and 2025-03 has it present and
+   * empty on every row. Reporting presence here is what keeps "absent" and
+   * "empty" distinguishable, which a nullable string alone cannot do.
+   */
+  hasDescriptionColumn: boolean;
 }

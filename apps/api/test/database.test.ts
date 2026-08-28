@@ -4,9 +4,13 @@ import { sql } from "drizzle-orm";
 import { createDatabase } from "../src/database/connection.js";
 import { onsResourceVersion } from "../src/database/schema.js";
 import {
+  type CurtailmentReportHour,
   createEnergyBalanceIngestor,
   type EnergyBalanceHour,
+  readCurtailmentAsOf,
   readEnergyBalanceAsOf,
+  upsertReportingEntities,
+  writeCurtailment,
   writeEnergyBalance,
 } from "../src/ingest/index.js";
 import { createInProcessRunner } from "../src/jobs/inprocess.js";
@@ -285,4 +289,189 @@ suite("ingestion job · balanco-energia-subsistema (real Postgres, stub network)
     expect(result.inserted + result.revised).toBe(0);
     expect(result.unchanged).toBe(22_848);
   }, 60_000);
+});
+
+/** A distant window of its own, so the two suites cannot collide. */
+const CURTAILED_HOUR = new Date("2024-05-01T12:00:00.000Z");
+const ENTITY = "CJU_TEST1";
+
+const report = (
+  constrainedOffMwh: number,
+  cause: CurtailmentReportHour["cause"] = null,
+): CurtailmentReportHour => ({
+  reportingEntityCode: ENTITY,
+  technology: "WIND",
+  validTime: CURTAILED_HOUR,
+  generationMwh: 100,
+  constrainedOffMwh,
+  referenceGenerationMwh: 150,
+  finalReferenceGenerationMwh: null,
+  availabilityMw: 200,
+  halfHoursObserved: 2,
+  cause,
+  causeMixed: false,
+});
+
+suite("constrained-off · bitemporal store (real Postgres)", () => {
+  const handle = createDatabase(URL as string, 5);
+  const { db } = handle;
+  let sourceVersionId = "";
+
+  beforeAll(async () => {
+    await db.execute(sql`truncate table curtailment_report_hour`);
+    await db.execute(sql`truncate table reporting_entity cascade`);
+    const [version] = await db
+      .insert(onsResourceVersion)
+      .values({
+        datasetSlug: "restricao_coff_eolica_usi",
+        resourceName: "Restricoes_coff_eolicas-2024-05",
+        resourceUrl: "https://example.invalid/RESTRICAO_COFF_EOLICA_2024_05.csv",
+        format: "CSV",
+        changeKey: `curtailment-test|${Date.now()}`,
+      })
+      .returning({ id: onsResourceVersion.id });
+    sourceVersionId = version?.id ?? "";
+
+    await upsertReportingEntities(db, [
+      {
+        onsCode: ENTITY,
+        kind: "CONJUNTO",
+        cegCore: null,
+        name: "CONJ. TEST",
+        subsystem: "NE",
+        stateCode: "BA",
+      },
+    ]);
+  });
+
+  afterAll(() => handle.close());
+
+  it("upserts an entity idempotently and keeps first_seen_at fixed", async () => {
+    const before = await db.execute<{ first_seen_at: string; last_seen_at: string }>(
+      sql`select first_seen_at, last_seen_at from reporting_entity where ons_code = ${ENTITY}`,
+    );
+    const later = new Date(Date.now() + 60_000);
+    await upsertReportingEntities(
+      db,
+      [
+        {
+          onsCode: ENTITY,
+          kind: "CONJUNTO",
+          cegCore: null,
+          name: "CONJ. TEST RENAMED",
+          subsystem: "NE",
+          stateCode: "BA",
+        },
+      ],
+      later,
+    );
+    const after = await db.execute<{
+      first_seen_at: string;
+      last_seen_at: string;
+      name: string;
+    }>(
+      sql`select first_seen_at, last_seen_at, name from reporting_entity where ons_code = ${ENTITY}`,
+    );
+    expect([...after][0]?.name).toBe("CONJ. TEST RENAMED");
+    expect([...after][0]?.first_seen_at).toEqual([...before][0]?.first_seen_at);
+    expect(new Date([...after][0]?.last_seen_at ?? 0).getTime()).toBeGreaterThan(
+      new Date([...before][0]?.last_seen_at ?? 0).getTime(),
+    );
+  });
+
+  it("writes a first version, then treats an identical re-ingest as unchanged", async () => {
+    const first = await writeCurtailment(db, {
+      rows: [report(10)],
+      publishedAt: new Date("2024-06-01T00:00:00.000Z"),
+      publishedAtPrecision: "file",
+      sourceVersionId,
+      ingestedAt: new Date("2024-06-01T01:00:00.000Z"),
+    });
+    expect(first).toEqual({ inserted: 1, revised: 0, unchanged: 0 });
+
+    const again = await writeCurtailment(db, {
+      rows: [report(10)],
+      publishedAt: new Date("2024-06-02T00:00:00.000Z"),
+      publishedAtPrecision: "file",
+      sourceVersionId,
+      ingestedAt: new Date("2024-06-02T01:00:00.000Z"),
+    });
+    // A later publication of the same numbers is not a restatement.
+    expect(again).toEqual({ inserted: 0, revised: 0, unchanged: 1 });
+  });
+
+  it("stores a retroactive backfill of a closed month as a new vintage", async () => {
+    // ONS rewrites closed months years later. The old belief must survive.
+    const revised = await writeCurtailment(db, {
+      rows: [report(42)],
+      publishedAt: new Date("2026-05-04T00:00:00.000Z"),
+      publishedAtPrecision: "file",
+      sourceVersionId,
+      ingestedAt: new Date("2026-05-04T01:00:00.000Z"),
+    });
+    expect(revised).toEqual({ inserted: 0, revised: 1, unchanged: 0 });
+
+    const before = await readCurtailmentAsOf(db, {
+      asOf: new Date("2024-06-01T12:00:00.000Z"),
+      from: CURTAILED_HOUR,
+      to: new Date(CURTAILED_HOUR.getTime() + 3_600_000),
+    });
+    const after = await readCurtailmentAsOf(db, {
+      asOf: new Date("2026-06-01T00:00:00.000Z"),
+      from: CURTAILED_HOUR,
+      to: new Date(CURTAILED_HOUR.getTime() + 3_600_000),
+    });
+
+    // What we believed then, and what we believe now — both answerable.
+    expect(before.rows[0]?.constrainedOffMwh).toBe(10);
+    expect(before.rows[0]?.dataVersion).toBe(1);
+    expect(after.rows[0]?.constrainedOffMwh).toBe(42);
+    expect(after.rows[0]?.dataVersion).toBe(2);
+    expect(after.rows).toHaveLength(1);
+  });
+
+  it("treats a changed reason with unchanged numbers as a restatement", async () => {
+    // The cause is part of the value: CNF becoming ENE is a real revision even
+    // when not one megawatt-hour moves.
+    const first = await writeCurtailment(db, {
+      rows: [report(42, { reason: "CNF", origin: "LOC", description: null })],
+      publishedAt: new Date("2026-06-01T00:00:00.000Z"),
+      publishedAtPrecision: "file",
+      sourceVersionId,
+      ingestedAt: new Date("2026-06-01T01:00:00.000Z"),
+    });
+    expect(first.revised).toBe(1);
+
+    const second = await writeCurtailment(db, {
+      rows: [report(42, { reason: "ENE", origin: "LOC", description: null })],
+      publishedAt: new Date("2026-06-02T00:00:00.000Z"),
+      publishedAtPrecision: "file",
+      sourceVersionId,
+      ingestedAt: new Date("2026-06-02T01:00:00.000Z"),
+    });
+    expect(second.revised).toBe(1);
+
+    const now = await readCurtailmentAsOf(db, {
+      asOf: new Date("2026-07-01T00:00:00.000Z"),
+      from: CURTAILED_HOUR,
+      to: new Date(CURTAILED_HOUR.getTime() + 3_600_000),
+    });
+    expect(now.rows[0]?.cause).toEqual({
+      reason: "ENE",
+      origin: "LOC",
+      description: null,
+    });
+  });
+
+  it("reports a read before go-live as revision-optimistic", async () => {
+    const result = await readCurtailmentAsOf(db, {
+      asOf: new Date("2026-07-01T00:00:00.000Z"),
+      from: CURTAILED_HOUR,
+      to: new Date(CURTAILED_HOUR.getTime() + 3_600_000),
+    });
+    // The window predates our first ingestion, so ONS's current restatement is
+    // the only "past" available. Reported, never silently answered.
+    expect(result.vintageFidelity).toBe("revision_optimistic");
+    expect(result.goLiveAt).not.toBeNull();
+  });
 });
