@@ -3,7 +3,7 @@ import { expect, type Page, test } from "@playwright/test";
 /**
  * Footer (CTA + legal links) and the /terms + /privacy legal pages. Mirrors
  * the edtech legal spec shape but against our design-system components and
- * testIDs. No API is needed — none of these flows trigger a scrape.
+ * testIDs. No API is needed — none of these flows call the backend.
  */
 
 function headingCount(page: Page): Promise<number> {

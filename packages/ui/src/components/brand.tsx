@@ -6,7 +6,7 @@ import { usePalette } from "../hooks/use-palette";
  * Brand mark: lime rounded square with the stroked Z-path
  * "M9 9H23L9 23H23" (top bar → diagonal → bottom bar).
  */
-export function ZalytixMark({
+export function WattSteerMark({
   size = 28,
   tint,
 }: {
@@ -30,11 +30,11 @@ export function ZalytixMark({
   );
 }
 
-export function ZalytixWordmark() {
+export function WattSteerWordmark() {
   const colors = usePalette();
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-      <ZalytixMark />
+      <WattSteerMark />
       <Text
         style={{
           fontSize: 18,
@@ -43,7 +43,7 @@ export function ZalytixWordmark() {
           color: colors.ink,
         }}
       >
-        Zalytix
+        WattSteer
       </Text>
     </View>
   );

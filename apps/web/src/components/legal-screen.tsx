@@ -6,7 +6,7 @@ import {
   space,
   useContainerWidth,
   usePalette,
-} from "@zalytix/ui";
+} from "@wattsteer/ui";
 import { Image } from "expo-image";
 import { Link, router } from "expo-router";
 import Head from "expo-router/head";
@@ -29,7 +29,7 @@ const WIDE = 1024;
  * Shared legal-page shell (terms / privacy): a home-linking header, a
  * scroll-tracked TOC sidebar (beside the content on desktop, inline on
  * mobile), the hero, the measured sections, and the site footer — all in the
- * Zalytix design system.
+ * WattSteer design system.
  */
 export function LegalScreen({
   headTitle,
@@ -48,7 +48,7 @@ export function LegalScreen({
   title: string;
   intro: string;
   sidebarTitle: string;
-  sections: ReadonlyArray<LegalContentSection>;
+  sections: readonly LegalContentSection[];
 }) {
   const colors = usePalette();
   const [width, onLayout] = useContainerWidth();
@@ -87,7 +87,7 @@ export function LegalScreen({
           <Link href="/" asChild={true}>
             <Pressable
               accessibilityRole="link"
-              accessibilityLabel="Zalytix — home"
+              accessibilityLabel="WattSteer — home"
               testID="legal-home-link"
               hitSlop={8}
               style={
@@ -98,7 +98,7 @@ export function LegalScreen({
                 source={require("../../assets/images/logo.png")}
                 style={{ width: 34, height: 38 }}
                 contentFit="contain"
-                accessibilityLabel="Zalytix"
+                accessibilityLabel="WattSteer"
               />
             </Pressable>
           </Link>

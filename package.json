@@ -1,8 +1,8 @@
 {
-  "name": "zalytix-monorepo",
+  "name": "wattsteer-monorepo",
   "private": true,
   "version": "0.1.0",
-  "description": "Zalytix \u2014 App Store & Google Play review scraping SaaS (API, web app, shared core).",
+  "description": "WattSteer \u2014 renewable curtailment intelligence for the Brazilian grid (API, web app, shared core).",
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -11,10 +11,10 @@
     "api": "bun run --cwd apps/api api",
     "api:dev": "bun run --cwd apps/api api:dev",
     "worker": "bun run --cwd apps/api worker",
-    "scrape": "bun run --cwd apps/api scrape",
     "web": "bun run --cwd apps/web start",
     "web:export": "bun run --cwd apps/web export",
-    "test": "bun run --cwd packages/core test && bun run --cwd apps/api test && bun run --cwd apps/web test",
+    "test:hygiene": "bun test test/repo-hygiene.test.ts",
+    "test": "bun run test:hygiene && bun run --cwd packages/core test && bun run --cwd apps/api test && bun run --cwd apps/web test",
     "test:api": "bun run --cwd apps/api test",
     "test:core": "bun run --cwd packages/core test",
     "test:web": "bun run --cwd apps/web test",

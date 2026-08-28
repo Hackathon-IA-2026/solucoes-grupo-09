@@ -5,7 +5,7 @@ import { focusRing } from "../lib/focus-ring";
 import { radius, space } from "../tokens";
 
 /**
- * Legal-page primitives (terms / privacy), styled with the Zalytix design
+ * Legal-page primitives (terms / privacy), styled with the WattSteer design
  * system: dark charcoal surfaces, lime accents, grape for emphasis, hairline
  * borders and pill controls. Pure View+Text presentation — no data logic.
  */
@@ -89,7 +89,7 @@ export function LegalSidebar({
   onSectionPress,
 }: {
   title: string;
-  sections: ReadonlyArray<LegalTocSection>;
+  sections: readonly LegalTocSection[];
   activeSection: string;
   onSectionPress: (id: string) => void;
 }) {
@@ -268,7 +268,7 @@ export function BulletList({
   items,
   onDark = false,
 }: {
-  items: ReadonlyArray<string>;
+  items: readonly string[];
   onDark?: boolean;
 }) {
   const colors = usePalette();
@@ -499,8 +499,8 @@ export function LegalTable({
   headers,
   rows,
 }: {
-  headers: ReadonlyArray<string>;
-  rows: ReadonlyArray<ReadonlyArray<string>>;
+  headers: readonly string[];
+  rows: readonly (readonly string[])[];
 }) {
   const colors = usePalette();
   return (

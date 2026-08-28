@@ -1,13 +1,12 @@
 import { type ConnectionOptions, Queue, Worker } from "bullmq";
 import { Redis } from "ioredis";
 import { toHttpError } from "../errors.js";
-import type { ScrapeOptions, ScrapeResult } from "../types.js";
 import type { Execute, JobProgress, JobRecord, JobRunner, JobStatus } from "./types.js";
 
-export const QUEUE_NAME = "zalytix-reviews";
+export const QUEUE_NAME = "wattsteer-jobs";
 
 export interface BullMqOptions {
-  /** Worker concurrency — the real cap on simultaneous browsers per worker. */
+  /** Worker concurrency — jobs processed simultaneously per worker. */
   concurrency?: number;
   /** Run an embedded worker in this process (default true). False = enqueue/read only. */
   startWorker?: boolean;
@@ -60,52 +59,48 @@ function withOpTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> 
  * uses it transparently via the `JobRunner` interface; `execute` is injected so
  * the wiring is testable against a real Redis without a browser.
  */
-export function createBullMqRunner(
-  execute: Execute,
+export function createBullMqRunner<TPayload, TResult>(
+  execute: Execute<TPayload, TResult>,
   redisUrl: string,
   opts: BullMqOptions = {},
-): JobRunner {
+): JobRunner<TPayload, TResult> {
   const opTimeoutMs = opts.opTimeoutMs ?? 10_000;
   const name = opts.queueName ?? QUEUE_NAME;
   const queueConn = connect(redisUrl);
   const connection = (c: Redis) => c as unknown as ConnectionOptions;
 
-  const queue = new Queue<ScrapeOptions, ScrapeResult, string>(name, {
+  // All six type parameters are supplied explicitly: BullMQ derives NameType
+  // through a conditional type, which TypeScript cannot evaluate while the
+  // payload is still generic, leaving `queue.add("job", …)` unassignable.
+  const queue = new Queue<TPayload, TResult, string, TPayload, TResult, string>(name, {
     connection: connection(queueConn),
     defaultJobOptions: {
       // Keep results poll-able for a window, then auto-clean (also count-capped
       // as a backstop). Failed jobs linger longer for debugging.
       removeOnComplete: { age: opts.completedRetentionSec ?? 3600, count: 1000 },
       removeOnFail: { age: opts.failedRetentionSec ?? 86_400, count: 5000 },
-      // Retry failed jobs with exponential backoff. Safe because the scrape
-      // handler is idempotent (read-only — no side effects to replay).
+      // Retry failed jobs with exponential backoff. Handlers are expected to
+      // be idempotent, so a redelivery replays safely.
       attempts: opts.attempts ?? 1,
       backoff: { type: "exponential", delay: opts.backoffMs ?? 5000 },
     },
   });
 
   // The worker is optional so the API can run "enqueue-only" while dedicated
-  // worker processes (`bun run worker`) do the scraping.
-  let worker: Worker<ScrapeOptions, ScrapeResult, string> | undefined;
+  // worker processes (`bun run worker`) do the work.
+  let worker: Worker<TPayload, TResult, string> | undefined;
   let workerConn: Redis | undefined;
   if (opts.startWorker !== false) {
     workerConn = connect(redisUrl);
-    worker = new Worker<ScrapeOptions, ScrapeResult, string>(
+    worker = new Worker<TPayload, TResult, string>(
       name,
-      // Handler is idempotent: scraping is read-only, so a retry (or BullMQ's
-      // at-least-once redelivery after a crash) just re-scrapes — nothing to
-      // corrupt. Throwing rejects the job so BullMQ retries up to `attempts`.
+      // Handlers must be idempotent: BullMQ redelivers at least once after a
+      // crash. Throwing rejects the job so BullMQ retries up to `attempts`.
       async (job) => {
         try {
-          return await execute({
-            ...job.data,
-            // Publish per-page progress to Redis (fire-and-forget — a progress
-            // write failure must never fail the scrape itself).
-            onProgress: (info) => {
-              void job
-                .updateProgress({ collected: info.collected, limit: job.data.limit })
-                .catch(() => {});
-            },
+          return await execute(job.data, (progress) => {
+            // Fire-and-forget — a progress write must never fail the job.
+            void job.updateProgress(progress).catch(() => {});
           });
         } catch (err) {
           // Persist only a client-safe message as the job's failedReason.
@@ -123,8 +118,8 @@ export function createBullMqRunner(
 
   return {
     mode: "bullmq",
-    async submit(query) {
-      const job = await withOpTimeout(queue.add("scrape", query), opTimeoutMs, "enqueue");
+    async submit(payload) {
+      const job = await withOpTimeout(queue.add("job", payload), opTimeoutMs, "enqueue");
       return String(job.id);
     },
     async status(id) {
@@ -135,18 +130,18 @@ export function createBullMqRunner(
       const status = mapState(
         await withOpTimeout(job.getState(), opTimeoutMs, "job state"),
       );
-      const record: JobRecord = { id, status };
+      const record: JobRecord<TResult> = { id, status };
       if (status === "completed") {
         record.result = job.returnvalue;
       }
       if (status === "failed") {
-        record.error = job.failedReason || "Scrape failed";
+        record.error = job.failedReason || "Job failed";
       }
       if (
         status === "active" &&
         job.progress &&
         typeof job.progress === "object" &&
-        "collected" in job.progress
+        "done" in job.progress
       ) {
         record.progress = job.progress as JobProgress;
       }

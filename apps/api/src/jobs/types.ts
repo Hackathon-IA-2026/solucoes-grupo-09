@@ -1,42 +1,50 @@
-import type { ScrapeOptions, ScrapeResult } from "../types.js";
-
-/** Lifecycle states of a scrape job (an ADT — see `JobRecord`). */
+/** Lifecycle states of a background job (an ADT — see `JobRecord`). */
 export type JobStatus = "waiting" | "active" | "completed" | "failed";
 
-/** Live progress of an active scrape, for client progress bars. */
+/** Live progress of an active job, for client progress bars. */
 export interface JobProgress {
-  /** Reviews collected so far (deduplicated). */
-  collected: number;
-  /** The requested cap, when the client set one (denominator for a bar). */
-  limit?: number;
+  /** Units of work finished so far. */
+  done: number;
+  /** Total units, when known (denominator for a bar). */
+  total?: number;
 }
 
+/** Reports progress from inside a running job. Best-effort; never throws. */
+export type ReportProgress = (progress: JobProgress) => void;
+
 /** A point-in-time view of a job. */
-export interface JobRecord {
+export interface JobRecord<TResult = unknown> {
   id: string;
   status: JobStatus;
   /** Present when `status === "completed"`. */
-  result?: ScrapeResult;
+  result?: TResult;
   /** Client-safe message when `status === "failed"`. */
   error?: string;
   /** Live progress while `status === "active"` (best-effort). */
   progress?: JobProgress;
 }
 
-/** Executes the actual scrape for a queued job. Injected for composability/testing. */
-export type Execute = (query: ScrapeOptions) => Promise<ScrapeResult>;
+/**
+ * Executes the actual work for a queued job. Injected for composability and
+ * testing. Progress reporting is a separate argument rather than part of the
+ * payload, so the payload stays a plain serialisable value.
+ */
+export type Execute<TPayload, TResult> = (
+  payload: TPayload,
+  report: ReportProgress,
+) => Promise<TResult>;
 
 /**
- * Strategy: how scrape jobs are queued and processed. Two backends implement
- * it — an in-process runner (default) and a durable BullMQ/Redis runner —
- * selected by config without the API layer knowing which is in use.
+ * Strategy: how jobs are queued and processed. Two backends implement it —
+ * an in-process runner (default) and a durable BullMQ/Redis runner — selected
+ * by config without the API layer knowing which is in use.
  */
-export interface JobRunner {
+export interface JobRunner<TPayload, TResult> {
   readonly mode: "inprocess" | "bullmq";
-  /** Enqueue a scrape; resolves to the job id. */
-  submit(query: ScrapeOptions): Promise<string>;
+  /** Enqueue work; resolves to the job id. */
+  submit(payload: TPayload): Promise<string>;
   /** Look up a job's status/result, or `null` if the id is unknown. */
-  status(id: string): Promise<JobRecord | null>;
+  status(id: string): Promise<JobRecord<TResult> | null>;
   /** Release resources (worker, connections). */
   close(): Promise<void>;
 }

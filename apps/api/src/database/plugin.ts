@@ -1,12 +1,9 @@
 import { Elysia } from "elysia";
-import { reviewRepository } from "./repository.js";
+import { database } from "./connection.js";
 
 /**
- * Decorates the review repository onto the Elysia context as `store` so routes
- * can read persisted data via DI (`ctx.store`). It is `null` when no database
- * is configured — handlers should treat that as "persistence disabled".
+ * Decorates the database handle onto the Elysia context so routes can reach
+ * persistence via DI. It is `undefined` when no database is configured —
+ * handlers should treat that as "persistence disabled".
  */
-export const databasePlugin = new Elysia({ name: "database" }).decorate(
-  "reviewStore",
-  reviewRepository,
-);
+export const databasePlugin = new Elysia({ name: "database" }).decorate("db", database);

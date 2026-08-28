@@ -1,35 +1,31 @@
-import {
-  BulletList,
-  CardGrid,
-  DataCard,
-  LegalCard,
-  LegalDivider,
-  LegalText,
-  SectionHeading,
-} from "@zalytix/ui";
+import { BulletList, LegalCard, LegalText } from "@wattsteer/ui";
 import { type LegalContentSection, LegalScreen } from "@/components/legal-screen";
 
-const UPDATED = "Last updated: July 13, 2026";
+// Minimal, accurate terms for a public read-only site over public open data.
+// The full versions are written alongside the landing page; what matters now
+// is that nothing here describes a product WattSteer is not.
+const UPDATED = "Last updated: August 28, 2026";
 
-const SECTIONS: ReadonlyArray<LegalContentSection> = [
+const SECTIONS: readonly LegalContentSection[] = [
   {
     id: "overview",
     title: "Overview",
     content: (
       <>
         <LegalText>
-          These Terms of Service ("Terms") govern your use of Zalytix, a tool that scrapes
-          publicly available App Store and Google Play reviews into clean, exportable
-          data. By using Zalytix you agree to these Terms.
+          These Terms of Service ("Terms") govern your use of WattSteer, a public,
+          read-only site that analyses openly published Brazilian electricity system data
+          to estimate renewable curtailment and the flexibility that could absorb it. By
+          using WattSteer you agree to these Terms.
         </LegalText>
         <LegalCard tone="accent" title="Core principles">
           <BulletList
             onDark={true}
             items={[
               "Free to use — no account or signup required",
-              "We work only with publicly available store data",
-              "You are responsible for how you use exported data",
-              "Transparency about what the service does and doesn't do",
+              "We work only with publicly published open data",
+              "Forecasts and scenarios are estimates, not operational instructions",
+              "Transparency about what the service does and does not do",
             ]}
           />
         </LegalCard>
@@ -38,172 +34,76 @@ const SECTIONS: ReadonlyArray<LegalContentSection> = [
   },
   {
     id: "service",
-    title: "The Service",
+    title: "The service",
     content: (
       <>
-        <SectionHeading
-          title="What Zalytix does"
-          subtitle="Paste an App Store or Google Play link and Zalytix returns:"
-        />
-        <CardGrid>
-          <DataCard
-            title="Review Scraping"
-            description="Ratings, review text, developer replies, versions and reviewer names"
-          />
-          <DataCard
-            title="Analytics"
-            description="Sentiment, rating distribution, trends and an activity heatmap"
-          />
-          <DataCard
-            title="Version & Metadata"
-            description="App metadata and version history from the store page"
-          />
-          <DataCard
-            title="Export"
-            description="Download the results as CSV or JSON, generated in your browser"
-          />
-        </CardGrid>
+        <LegalText>
+          WattSteer publishes day-ahead estimates of renewable curtailment by subsystem,
+          an explanation of the grid conditions associated with that estimate, and what-if
+          scenarios showing how much of the estimated curtailment a given amount of
+          storage or flexible demand could absorb.
+        </LegalText>
+        <LegalText>
+          Source data is published by ONS (Operador Nacional do Sistema Elétrico), ANEEL
+          and third-party weather providers. WattSteer is not affiliated with, endorsed
+          by, or operated on behalf of any of them.
+        </LegalText>
       </>
     ),
   },
   {
-    id: "acceptable-use",
-    title: "Acceptable Use",
+    id: "no-reliance",
+    title: "No operational reliance",
     content: (
       <>
-        <SectionHeading
-          title="Prohibited behavior"
-          subtitle="When using Zalytix you agree not to:"
-        />
-        <BulletList
-          items={[
-            "Use the service for any unlawful purpose",
-            "Overload, disrupt, or attempt to bypass rate limits or abuse controls",
-            "Resell or rebrand the service as your own scraping API",
-            "Use scraped data to harass, dox, or target individual reviewers",
-            "Attempt to breach the security or integrity of the service",
-          ]}
-        />
-        <LegalDivider />
-        <LegalCard tone="warning" title="Respect the stores' terms">
-          <LegalText>
-            Zalytix accesses publicly visible store pages. You are responsible for
-            ensuring your use complies with Apple's and Google's terms of service and with
-            the laws that apply to you.
-          </LegalText>
-        </LegalCard>
+        <LegalText>
+          Everything WattSteer publishes is a modelled estimate carrying uncertainty, and
+          may be wrong. It is not a grid operating instruction, not a trading signal, and
+          not investment, engineering or regulatory advice.
+        </LegalText>
+        <LegalText>
+          Do not use WattSteer as an input to real-time system operation, dispatch or
+          settlement. Decisions with physical or financial consequences remain yours, and
+          should rest on the authoritative sources.
+        </LegalText>
       </>
     ),
   },
   {
-    id: "data-and-scraping",
-    title: "Data & Scraping",
-    content: (
-      <>
-        <SectionHeading
-          title="Public data only"
-          subtitle="Zalytix collects only data that is publicly displayed on an app's store listing. It does not access private, authenticated, or personal account data."
-        />
-        <LegalCard tone="danger" title="Your responsibility">
-          <LegalText>
-            Exported reviews may contain personal data (such as reviewer names) that is
-            already public on the store. You are the controller of any data you export and
-            are responsible for handling it lawfully, including under GDPR, LGPD, or other
-            regulations that apply to you.
-          </LegalText>
-        </LegalCard>
-      </>
-    ),
-  },
-  {
-    id: "intellectual-property",
-    title: "Intellectual Property",
-    content: (
-      <>
-        <SectionHeading
-          title="Ownership"
-          subtitle="Rights are split between Zalytix and third parties:"
-        />
-        <BulletList
-          items={[
-            "The Zalytix name, logo, interface, and source are owned by Zalytix",
-            "Scraped review content belongs to its respective authors and the stores",
-            "You receive a limited, revocable license to use the service",
-            "No unauthorized reproduction of the Zalytix brand or interface",
-          ]}
-        />
-      </>
-    ),
-  },
-  {
-    id: "disclaimers",
-    title: "Disclaimers",
-    content: (
-      <>
-        <SectionHeading
-          title="Provided “as is”"
-          subtitle="Zalytix is offered without warranties of any kind. We do not guarantee:"
-        />
-        <BulletList
-          items={[
-            "Uninterrupted or error-free availability",
-            "That store data is complete, current, or accurate",
-            "That a given app or storefront can always be scraped",
-            "Any particular result, insight, or outcome",
-          ]}
-        />
-      </>
-    ),
-  },
-  {
-    id: "limitation-liability",
-    title: "Limitation of Liability",
+    id: "availability",
+    title: "Availability and changes",
     content: (
       <LegalText>
-        To the fullest extent permitted by law, Zalytix is not liable for any indirect,
-        incidental, or consequential damages arising from your use of the service, or for
-        how you use data you export. The service is provided free of charge and on a
-        best-effort basis.
+        The service is provided as-is, without warranty of availability or accuracy.
+        Upstream sources revise their published history, sometimes years after the fact,
+        so figures shown here can change. We may modify or discontinue any part of the
+        service at any time.
       </LegalText>
     ),
   },
   {
-    id: "changes",
-    title: "Changes to These Terms",
+    id: "attribution",
+    title: "Data attribution and licensing",
     content: (
-      <>
-        <SectionHeading
-          title="Updates"
-          subtitle="We may update these Terms from time to time:"
-        />
-        <BulletList
-          items={[
-            "Material changes will be reflected on this page",
-            "Continued use after an update indicates acceptance",
-            "The “last updated” date above always reflects the current version",
-          ]}
-        />
-      </>
-    ),
-  },
-  {
-    id: "contact",
-    title: "Contact",
-    content: (
-      <LegalText>Questions about these Terms? Reach us at support@zalytix.com.</LegalText>
+      <LegalText>
+        Source datasets remain the property of their publishers and are used under their
+        respective open licences. Where a licence requires attribution or share-alike
+        treatment of derived data, WattSteer complies with it; those notices appear
+        alongside the data they cover.
+      </LegalText>
     ),
   },
 ];
 
-export default function TermsPage() {
+export default function Terms() {
   return (
     <LegalScreen
-      headTitle="Terms of Service — Zalytix"
+      headTitle="Terms of Service — WattSteer"
       path="/terms"
       badge="Terms of Service"
       updated={UPDATED}
       title="Terms of Service"
-      intro="Welcome to Zalytix. These terms govern your use of our App Store and Google Play review scraper."
+      intro="WattSteer is a public, read-only analysis of openly published grid data. These terms govern your use of it."
       sidebarTitle="Terms of Service"
       sections={SECTIONS}
     />

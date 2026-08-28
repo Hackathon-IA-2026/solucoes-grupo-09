@@ -1,6 +1,6 @@
 /**
- * Zalytix design tokens v3 — ported 1:1 from the reference app
- * (`reference/review-data-scraper/app/globals.css`). Dark-only, like the
+ * WattSteer design tokens v3 — ported 1:1 from the reference app
+ * (`reference/app/globals.css`). Dark-only, like the
  * reference (`color-scheme: dark`): charcoal canvas, near-black raised cards,
  * lime primary with dark-olive text, grape violet secondary, hairline
  * white/8% borders, 24px cards and pill controls.

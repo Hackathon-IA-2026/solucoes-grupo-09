@@ -1,5 +1,3 @@
-import type { StealthPreset } from "./types.js";
-
 // Bun auto-loads `.env` (and `.env.production`, etc.) — no dotenv needed.
 // This module is the single place env vars are read and normalized.
 
@@ -16,9 +14,6 @@ function int(value: string | undefined, def: number, min: number, max: number): 
   return Math.min(max, Math.max(min, n));
 }
 
-const stealth = process.env.ZALYTIX_STEALTH;
-const VALID_STEALTH: StealthPreset[] = ["max", "balanced", "fast"];
-
 export const config = {
   /** API server port (Railway/most PaaS inject PORT). */
   port: int(process.env.PORT, 3000, 1, 65_535),
@@ -26,60 +21,35 @@ export const config = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   isProd: process.env.NODE_ENV === "production",
   /**
-   * Public base URL for the OpenAPI `servers` entry (e.g.
-   * https://api.zalytix.com). Omit to let Swagger UI use the origin it was
-   * loaded from — correct for both localhost and most deployments.
+   * Public base URL for the OpenAPI `servers` entry. Omit to let Swagger UI use
+   * the origin it was loaded from — correct for localhost and most deployments.
    */
-  publicUrl: process.env.ZALYTIX_PUBLIC_URL || undefined,
+  publicUrl: process.env.WATTSTEER_PUBLIC_URL || undefined,
   /**
-   * Browser origins allowed by CORS in production (comma-separated), e.g.
-   * "https://zalytix.com,https://www.zalytix.com". In development every origin is
-   * allowed. Empty in production → no browser origin is allowed (server-to-
-   * server callers are unaffected; CORS only gates browsers).
+   * Browser origins allowed by CORS in production (comma-separated). In
+   * development every origin is allowed. Empty in production → no browser
+   * origin is allowed (server-to-server callers are unaffected; CORS only
+   * gates browsers).
    */
-  corsOrigins: (process.env.ZALYTIX_CORS_ORIGINS ?? "")
+  corsOrigins: (process.env.WATTSTEER_CORS_ORIGINS ?? "")
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean),
-  /** Default upstream proxy applied to scrapes when the caller omits one. */
-  defaultProxy: process.env.ZALYTIX_PROXY || undefined,
-  /** Match browser geo/locale to the (proxy) exit IP by default. */
-  geoip: bool(process.env.ZALYTIX_GEOIP),
-  /** Default stealth preset. */
-  defaultStealth: (VALID_STEALTH.includes(stealth as StealthPreset)
-    ? (stealth as StealthPreset)
-    : "max") as StealthPreset,
-  /**
-   * Run Chromium without its setuid sandbox + small /dev/shm. Required inside
-   * containers; left off locally so the sandbox (and full stealth) stays on.
-   */
-  noSandbox: bool(process.env.ZALYTIX_NO_SANDBOX),
 
   // --- resilience / resource control ---
-  /** Max scrapes running at once (each launches a Chromium). Tune to host RAM. */
-  maxConcurrency: int(process.env.ZALYTIX_MAX_CONCURRENCY, 2, 1, 64),
-  /** Max scrapes allowed to queue before returning 503. */
-  maxQueue: int(process.env.ZALYTIX_MAX_QUEUE, 20, 0, 10_000),
   /**
-   * Per-client requests allowed on the scrape surface (/reviews*, /app) per
-   * window. Bounds request *rate* (the semaphore only bounds concurrency), so
-   * an anonymous client can't monopolize the queue or burn proxy budget.
+   * Per-client requests allowed per window on the metered surface. Bounds
+   * request *rate* so an anonymous client can't monopolise the API.
    * 0 disables the limiter.
    */
-  rateLimitMax: int(process.env.ZALYTIX_RATE_LIMIT, 30, 0, 100_000),
+  rateLimitMax: int(process.env.WATTSTEER_RATE_LIMIT, 60, 0, 100_000),
   /** Rate-limit window length (ms). */
-  rateLimitWindowMs: int(process.env.ZALYTIX_RATE_WINDOW_MS, 60_000, 1000, 3_600_000),
-  /** Hard time budget per scrape (ms); partial results returned, else 504. */
-  scrapeTimeoutMs: int(process.env.ZALYTIX_SCRAPE_TIMEOUT_MS, 120_000, 5000, 600_000),
-  /** Page-navigation timeout (ms). */
-  navTimeoutMs: int(process.env.ZALYTIX_NAV_TIMEOUT_MS, 60_000, 5000, 180_000),
-  /** Per in-page fetch timeout (ms) — bounds a stalled network. */
-  fetchTimeoutMs: int(process.env.ZALYTIX_FETCH_TIMEOUT_MS, 30_000, 2000, 120_000),
-  /** Bounded retries on transient navigation/network failures. */
-  navRetries: int(process.env.ZALYTIX_NAV_RETRIES, 2, 0, 5),
+  rateLimitWindowMs: int(process.env.WATTSTEER_RATE_WINDOW_MS, 60_000, 1000, 3_600_000),
+
+  // --- jobs ---
   /**
-   * Redis connection URL. When set, scrape jobs run on a durable BullMQ queue
-   * (async API + multi-worker); otherwise an in-process runner is used.
+   * Redis connection URL. When set, background jobs run on a durable BullMQ
+   * queue (multi-worker); otherwise an in-process runner is used.
    */
   redisUrl: process.env.REDIS_URL || undefined,
   /**
@@ -88,32 +58,32 @@ export const config = {
    * - `api`: API only enqueues/reads — run workers separately (`bun run worker`).
    * - `worker`: used by the worker entrypoint.
    */
-  role: (["all", "api", "worker"].includes(process.env.ZALYTIX_ROLE ?? "")
-    ? process.env.ZALYTIX_ROLE
+  role: (["all", "api", "worker"].includes(process.env.WATTSTEER_ROLE ?? "")
+    ? process.env.WATTSTEER_ROLE
     : "all") as "all" | "api" | "worker",
+  /** Jobs processed simultaneously per worker. */
+  jobConcurrency: int(process.env.WATTSTEER_JOB_CONCURRENCY, 2, 1, 64),
   /** Keep completed jobs (with their result) this long, then auto-remove. */
-  jobRetentionSec: int(process.env.ZALYTIX_JOB_RETENTION_SEC, 3600, 60, 2_592_000),
+  jobRetentionSec: int(process.env.WATTSTEER_JOB_RETENTION_SEC, 3600, 60, 2_592_000),
   /** Keep failed jobs this long (longer, for debugging), then auto-remove. */
   jobFailedRetentionSec: int(
-    process.env.ZALYTIX_JOB_FAILED_RETENTION_SEC,
+    process.env.WATTSTEER_JOB_FAILED_RETENTION_SEC,
     86_400,
     60,
     2_592_000,
   ),
-  /** Attempts per job before it's marked failed (scrapes are idempotent → safe). */
-  jobAttempts: int(process.env.ZALYTIX_JOB_ATTEMPTS, 3, 1, 10),
+  /** Attempts per job before it's marked failed. */
+  jobAttempts: int(process.env.WATTSTEER_JOB_ATTEMPTS, 3, 1, 10),
   /** Base backoff (ms) between job retries (exponential). */
-  jobBackoffMs: int(process.env.ZALYTIX_JOB_BACKOFF_MS, 5000, 100, 120_000),
-  /**
-   * Postgres URL. When set, scraped reviews are persisted (durable, queryable
-   * via GET /reviews/stored); unset → scraping still works, results are just
-   * transient (response + Redis job result).
-   */
+  jobBackoffMs: int(process.env.WATTSTEER_JOB_BACKOFF_MS, 5000, 100, 120_000),
+
+  // --- persistence ---
+  /** Postgres URL. Unset → persistence disabled. */
   databaseUrl: process.env.DATABASE_URL || undefined,
   /**
    * Mount the BullMQ Workbench dashboard at /jobs (requires Redis). Off by
    * default — it exposes queue data/controls, so enable only behind your own
    * auth/network protection.
    */
-  dashboard: bool(process.env.ZALYTIX_DASHBOARD),
+  dashboard: bool(process.env.WATTSTEER_DASHBOARD),
 } as const;

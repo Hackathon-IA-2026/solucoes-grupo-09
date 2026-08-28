@@ -1,20 +1,27 @@
-import { ReviewService } from "./api/reviews/service.js";
 import { config } from "./config.js";
 import { createBullMqRunner } from "./jobs/bullmq.js";
 
-// Dedicated worker process: pulls scrape jobs off the BullMQ queue and runs
-// them. Use this (with the API set to ZALYTIX_ROLE=api) to scale scraping
+// Dedicated worker process: pulls jobs off the BullMQ queue and runs them. Use
+// this (with the API set to WATTSTEER_ROLE=api) to scale background work
 // independently of the HTTP layer. Run several for more throughput.
+//
+// No job handlers are registered yet — WattSteer's ingestion jobs arrive with
+// the data platform. Until then the worker connects and idles on an empty
+// queue, which is the correct behaviour: nothing enqueues work.
 if (!config.redisUrl) {
   console.error("worker requires REDIS_URL");
   process.exit(1);
 }
 
-const runner = createBullMqRunner(
-  (query) => ReviewService.scrape(query),
+const runner = createBullMqRunner<unknown, never>(
+  async (payload) => {
+    throw new Error(
+      `No job handler is registered for this payload: ${JSON.stringify(payload)}`,
+    );
+  },
   config.redisUrl,
   {
-    concurrency: config.maxConcurrency,
+    concurrency: config.jobConcurrency,
     startWorker: true,
     completedRetentionSec: config.jobRetentionSec,
     failedRetentionSec: config.jobFailedRetentionSec,
@@ -24,8 +31,9 @@ const runner = createBullMqRunner(
 );
 
 console.log(
-  `👷 zalytix worker started — concurrency ${config.maxConcurrency}, queue on Redis`,
+  `👷 WattSteer worker started — concurrency ${config.jobConcurrency}, queue on Redis`,
 );
+console.log("   (no job handlers registered yet — idling)");
 
 const shutdown = async (signal: string) => {
   console.log(`\n🛑 Received ${signal}, draining worker…`);

@@ -8,16 +8,19 @@ import { cspFor } from "../src/api/plugins/security.js";
 import { BadInputError, UpstreamError } from "../src/errors.js";
 
 // Eden Treaty — Elysia's recommended type-safe testing client. It runs requests
-// through the app in-process (no network, no server), so these stay fast and
-// never trigger a real scrape (validation fails before the service runs).
+// through the app in-process (no network, no server), so these stay fast.
+//
+// There are no domain routes yet: the WattSteer surface was removed and
+// WattSteer's arrives with the data platform. What these tests defend is the
+// plugin stack — security headers, body limit, CORS, rate limiting, request
+// correlation and error mapping — which every future route inherits.
 const api = treaty(app);
 
 describe("api · typed routes (Eden Treaty)", () => {
-  it("GET /health returns ok with concurrency stats", async () => {
+  it("GET /health returns ok", async () => {
     const { data, status } = await api.health.get();
     expect(status).toBe(200);
     expect(data?.status).toBe("ok");
-    expect(data?.scrapes?.max).toBeGreaterThanOrEqual(1);
   });
 
   it("GET /ready reports a boolean readiness", async () => {
@@ -28,89 +31,13 @@ describe("api · typed routes (Eden Treaty)", () => {
 
   it("GET / returns api info with a docs link", async () => {
     const { data } = await api.get();
-    expect(data?.name).toBe("zalytix");
+    expect(data?.name).toBe("wattsteer");
     expect(data?.docs).toBe("/docs");
   });
 
   it("echoes an x-request-id header for correlation", async () => {
     const res = await app.handle(new Request("http://localhost/health"));
     expect(res.headers.get("x-request-id")).toBeTruthy();
-  });
-
-  it("rejects a missing appId with 422", async () => {
-    // @ts-expect-error appId is required — the type itself guards the call
-    const { error } = await api.reviews.get({ query: {} });
-    expect(error?.status).toBe(422);
-  });
-
-  it("rejects an invalid store with 422", async () => {
-    // @ts-expect-error store must be "apple" | "google"
-    const { error } = await api.reviews.get({ query: { appId: "1", store: "nope" } });
-    expect(error?.status).toBe(422);
-  });
-
-  it("rejects a limit above the max with 422 (runtime validation)", async () => {
-    const { error } = await api.reviews.get({ query: { appId: "1", limit: 99_999 } });
-    expect(error?.status).toBe(422);
-  });
-
-  it("rejects a junk appId like 'undefined' with 422 (Swagger examples bug)", async () => {
-    const { error } = await api.reviews.get({
-      query: { appId: "undefined", store: "google" },
-    });
-    expect(error?.status).toBe(422);
-  });
-
-  it("rejects a non-2-letter country with 422", async () => {
-    const { error } = await api.reviews.get({
-      query: { appId: "284882215", country: "usa" },
-    });
-    expect(error?.status).toBe(422);
-  });
-
-  it("rejects an invalid `since` date with 400 (before any scrape)", async () => {
-    const { error } = await api.reviews.get({
-      query: { appId: "284882215", since: "not-a-date" },
-    });
-    expect(error?.status).toBe(400);
-  });
-
-  it("GET /reviews/jobs/:id → 404 for an unknown id", async () => {
-    const res = await app.handle(
-      new Request("http://localhost/reviews/jobs/does-not-exist"),
-    );
-    expect(res.status).toBe(404);
-  });
-
-  it("POST /reviews/jobs rejects bad input at submit (400, no enqueue)", async () => {
-    const res = await app.handle(
-      new Request("http://localhost/reviews/jobs", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ appId: "284882215", since: "not-a-date" }),
-      }),
-    );
-    expect(res.status).toBe(400);
-  });
-
-  it("GET /reviews/stored → 503 when no database is configured", async () => {
-    const res = await app.handle(new Request("http://localhost/reviews/stored?appId=1"));
-    expect(res.status).toBe(503);
-  });
-
-  it("GET /app rejects a missing appId with 422", async () => {
-    const res = await app.handle(new Request("http://localhost/app"));
-    expect(res.status).toBe(422);
-  });
-
-  it("GET /app rejects a junk appId with 422", async () => {
-    const res = await app.handle(new Request("http://localhost/app?appId=instagram"));
-    expect(res.status).toBe(422);
-  });
-
-  it("GET /apps/stored → 503 when no database is configured", async () => {
-    const res = await app.handle(new Request("http://localhost/apps/stored?appId=1"));
-    expect(res.status).toBe(503);
   });
 });
 
@@ -147,11 +74,11 @@ describe("api · swagger", () => {
     expect((await req("/docs")).status).toBe(200);
   });
 
-  it("exposes the OpenAPI schema including the /reviews and /app paths", async () => {
+  it("exposes the OpenAPI schema for the probe endpoints", async () => {
     const res = await req("/docs/json");
     const spec = (await res.json()) as { paths: Record<string, unknown> };
-    expect(spec.paths["/reviews"]).toBeDefined();
-    expect(spec.paths["/app"]).toBeDefined();
+    expect(spec.paths["/health"]).toBeDefined();
+    expect(spec.paths["/ready"]).toBeDefined();
   });
 });
 
@@ -172,9 +99,9 @@ describe("api · security headers", () => {
     expect(csp).toContain("https://cdn.jsdelivr.net");
   });
 
-  it("still sets security headers on error responses (e.g. 422)", async () => {
-    const res = await req("/reviews"); // missing appId → 422
-    expect(res.status).toBe(422);
+  it("still sets security headers on error responses (e.g. 404)", async () => {
+    const res = await req("/no-such-route");
+    expect(res.status).toBe(404);
     expect(res.headers.get("x-frame-options")).toBe("DENY");
   });
 
@@ -211,11 +138,11 @@ describe("api · body limit", () => {
 
 describe("api · CORS (browser frontend contract)", () => {
   // These run with NODE_ENV != production, so every origin is allowed. The
-  // critical regression guard is POST: the web app's async job submission
-  // (POST /reviews/jobs) must survive a browser preflight.
-  it("preflights POST /reviews/jobs successfully", async () => {
+  // regression guard that matters is POST: the web app's browser calls must
+  // survive a preflight once real routes exist.
+  it("preflights a POST successfully", async () => {
     const res = await app.handle(
-      new Request("http://localhost/reviews/jobs", {
+      new Request("http://localhost/", {
         method: "OPTIONS",
         headers: {
           Origin: "http://localhost:8081",

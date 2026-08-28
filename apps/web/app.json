@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Zalytix",
-    "slug": "zalytix",
+    "name": "WattSteer",
+    "slug": "wattsteer",
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "zalytix",
+    "scheme": "wattsteer",
     "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true
@@ -23,7 +23,12 @@
       "output": "static"
     },
     "plugins": [
-      ["expo-router", { "sitemap": false }],
+      [
+        "expo-router",
+        {
+          "sitemap": false
+        }
+      ],
       [
         "expo-splash-screen",
         {

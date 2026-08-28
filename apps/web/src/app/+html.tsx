@@ -42,7 +42,7 @@ export default function Root({ children }: PropsWithChildren) {
               }
 
               /* Hero headline, wide variant from first paint (matches the
-                 wideHeadline breakpoint in scraper-hero.tsx). The static
+                 wideHeadline breakpoint in the hero). The static
                  render emits the narrow variant (it can't measure); without
                  this, the post-hydration resize counts as layout shift. */
               @media (min-width: 960px) {

@@ -97,7 +97,7 @@ export function Pill({
   );
 }
 
-/** Solid or outlined action pill with an icon (export buttons, New scrape). */
+/** Solid or outlined action pill with an icon (primary and secondary actions). */
 export function PillButton({
   label,
   icon,

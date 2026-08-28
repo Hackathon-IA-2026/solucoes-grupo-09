@@ -1,5 +1,4 @@
 import { toHttpError } from "../errors.js";
-import type { ScrapeOptions } from "../types.js";
 import type { Execute, JobRecord, JobRunner } from "./types.js";
 
 /** Cap on remembered job records (oldest evicted) so memory can't grow unbounded. */
@@ -7,14 +6,16 @@ const MAX_RECORDS = 1000;
 
 /**
  * In-process job runner — the zero-dependency default. Jobs run in the
- * background (bounded by the executor's own concurrency gate) and their records
- * live in memory. Not durable across restarts; for that, set `REDIS_URL` to use
- * the BullMQ backend. `execute` is injected so it's trivially testable.
+ * background and their records live in memory. Not durable across restarts;
+ * for that, set `REDIS_URL` to use the BullMQ backend. `execute` is injected
+ * so it's trivially testable.
  */
-export function createInProcessRunner(execute: Execute): JobRunner {
-  const jobs = new Map<string, JobRecord>();
+export function createInProcessRunner<TPayload, TResult>(
+  execute: Execute<TPayload, TResult>,
+): JobRunner<TPayload, TResult> {
+  const jobs = new Map<string, JobRecord<TResult>>();
 
-  function remember(record: JobRecord): void {
+  function remember(record: JobRecord<TResult>): void {
     jobs.set(record.id, record);
     while (jobs.size > MAX_RECORDS) {
       const oldest = jobs.keys().next().value;
@@ -25,22 +26,17 @@ export function createInProcessRunner(execute: Execute): JobRunner {
     }
   }
 
-  async function process(id: string, query: ScrapeOptions): Promise<void> {
+  async function process(id: string, payload: TPayload): Promise<void> {
     const existing = jobs.get(id);
     if (existing) {
       existing.status = "active";
     }
     try {
-      const result = await execute({
-        ...query,
-        // Surface per-page progress on the record so pollers can render a
-        // real progress bar instead of an indeterminate spinner.
-        onProgress: (info) => {
-          const record = jobs.get(id);
-          if (record && record.status === "active") {
-            record.progress = { collected: info.collected, limit: query.limit };
-          }
-        },
+      const result = await execute(payload, (progress) => {
+        const record = jobs.get(id);
+        if (record && record.status === "active") {
+          record.progress = progress;
+        }
       });
       remember({ id, status: "completed", result });
     } catch (err) {
@@ -50,10 +46,10 @@ export function createInProcessRunner(execute: Execute): JobRunner {
 
   return {
     mode: "inprocess",
-    async submit(query) {
+    async submit(payload) {
       const id = crypto.randomUUID();
       remember({ id, status: "waiting" });
-      void process(id, query);
+      void process(id, payload);
       return id;
     },
     async status(id) {

@@ -10,6 +10,8 @@ export interface DatabaseHandle {
   db: Database;
   /** Apply pending migrations from the `drizzle/` folder. */
   migrate(): Promise<void>;
+  /** Round-trip a trivial query — used by the readiness probe. */
+  ping(): Promise<boolean>;
   /** Close the connection pool. */
   close(): Promise<void>;
 }
@@ -21,6 +23,14 @@ export function createDatabase(url: string, max = 10): DatabaseHandle {
   return {
     db,
     migrate: () => migrate(db, { migrationsFolder: "drizzle" }),
+    ping: async () => {
+      try {
+        await client`select 1`;
+        return true;
+      } catch {
+        return false;
+      }
+    },
     close: () => client.end({ timeout: 5 }),
   };
 }

@@ -1,19 +1,23 @@
-# Zalytix
+# WattSteer
 
-> Zalytix turns any app's App Store or Google Play reviews into clean, structured
-> data — sentiment analysis, rating trends, version history, activity heatmaps,
-> and CSV/JSON export. Free, no signup required.
+> WattSteer predicts renewable curtailment on the Brazilian grid a day ahead,
+> explains the grid conditions associated with it, and estimates how much of it
+> storage or flexible demand could absorb.
 
-Paste an App Store or Google Play link on the homepage to scrape an app's
-reviews and explore them in an interactive dashboard.
+WattSteer is a public, read-only site built on openly published data from ONS
+(Operador Nacional do Sistema Elétrico), ANEEL and weather providers. It has no
+accounts and no login.
 
 ## Pages
 
-- [Home](https://zalytix.com/): paste a store link, scrape reviews, explore the dashboard, export CSV/JSON.
+- [Home](https://wattsteer.com/): day-ahead curtailment risk by subsystem.
+- [Terms of Service](https://wattsteer.com/terms)
+- [Privacy Policy](https://wattsteer.com/privacy)
 
-## Facts
+## Notes
 
-- Supports both Apple App Store and Google Play storefronts.
-- Extracts ratings, review text, developer replies, app versions, and reviewer names.
-- Computes sentiment (positive/neutral/negative), rating distribution, review-volume trends, and an activity heatmap.
-- Exports results as CSV or JSON.
+- Forecasts are modelled estimates carrying uncertainty, not operating
+  instructions, trading signals or advice.
+- Source data is published by third parties and is periodically revised; figures
+  shown here can change.
+- WattSteer is not affiliated with ONS or ANEEL.

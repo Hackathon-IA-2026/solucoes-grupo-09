@@ -7,8 +7,8 @@ import {
   Pill,
   SearchIcon,
   usePalette,
-  ZalytixMark,
-} from "@zalytix/ui";
+  WattSteerMark,
+} from "@wattsteer/ui";
 import { Image } from "expo-image";
 import { useState } from "react";
 import { FlatList, Platform, Pressable, StyleSheet, Text, View } from "react-native";
@@ -50,7 +50,7 @@ export function TopNavFull() {
           justifyContent: "center",
         }}
       >
-        <ZalytixMark size={24} tint={colors.violet} />
+        <WattSteerMark size={24} tint={colors.violet} />
       </View>
 
       {/* tab pills */}
@@ -174,7 +174,7 @@ export function TopNav({ onHome }: { onHome: () => void }) {
     <View style={{ alignItems: "center" }}>
       <Pressable
         accessibilityRole="link"
-        accessibilityLabel="Zalytix — back to home"
+        accessibilityLabel="WattSteer — back to home"
         testID="nav-home"
         onPress={onHome}
         style={(state) => {

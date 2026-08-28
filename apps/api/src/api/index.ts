@@ -1,7 +1,6 @@
 import { cors } from "@elysiajs/cors";
 import { serverTiming } from "@elysiajs/server-timing";
 import { swagger } from "@elysiajs/swagger";
-import { binaryInfo } from "cloakbrowser";
 import { Elysia } from "elysia";
 import { config } from "../config.js";
 import { database } from "../database/connection.js";
@@ -10,52 +9,50 @@ import { errorHandler } from "./plugins/errors.js";
 import { rateLimit } from "./plugins/rate-limit.js";
 import { requestContext } from "./plugins/request-context.js";
 import { securityHeaders } from "./plugins/security.js";
-import { reviewsRoutes } from "./reviews/controller.js";
-import { jobRunner } from "./reviews/runner.js";
-import { scrapeStats } from "./reviews/service.js";
 
 const isProd = config.isProd;
 
-/** Readiness: the Chromium binary must resolve before we accept traffic. */
-async function browserReady(): Promise<boolean> {
-  if (process.env.CLOAKBROWSER_BINARY_PATH) {
-    return true; // container: baked in
+/** Paths exempt from rate limiting — cheap probes and docs. */
+const UNMETERED = new Set(["/", "/health", "/ready"]);
+
+/**
+ * Readiness: when a database is configured it must answer before we accept
+ * traffic. With no database configured there is nothing to warm up.
+ */
+async function ready(): Promise<boolean> {
+  if (!database) {
+    return true;
   }
-  try {
-    return Boolean((await binaryInfo())?.installed);
-  } catch {
-    return false;
-  }
+  return database.ping();
 }
 
 /**
- * The zalytix HTTP API. Composed from feature modules (each a controller +
- * service + model) and cross-cutting plugins (security headers, body limit,
- * CORS, server timing) via `.use()`, with Swagger/OpenAPI docs at `/docs`.
+ * The WattSteer HTTP API. Cross-cutting plugins (security headers, body limit,
+ * CORS, server timing) are composed via `.use()`, with Swagger/OpenAPI docs at
+ * `/docs`.
+ *
+ * There are no domain routes yet — the WattSteer surface was removed and
+ * WattSteer's arrives with the data platform.
  */
 export const app = new Elysia()
   .use(securityHeaders)
   .use(requestContext)
   .use(bodyLimit())
   .use(
-    // Scrape *submissions* only — each one may launch a Chromium. Cheap reads
-    // (job polling, stored reviews, /, /health, /ready, /docs) are exempt so
-    // a legitimate client polling its job is never throttled.
     rateLimit({
       max: config.rateLimitMax,
       windowMs: config.rateLimitWindowMs,
-      counts: (method, pathname) =>
-        (method === "GET" && (pathname === "/reviews" || pathname === "/app")) ||
-        (method === "POST" && pathname === "/reviews/jobs"),
+      // Probes and docs stay free so a monitor is never throttled.
+      counts: (_method, pathname) =>
+        !(UNMETERED.has(pathname) || pathname.startsWith("/docs")),
     }),
   )
   .use(
     cors({
       // Dev: any origin (local Expo web runs on arbitrary ports). Prod: only
-      // the origins listed in ZALYTIX_CORS_ORIGINS — the deployed web app's
+      // the origins listed in WATTSTEER_CORS_ORIGINS — the deployed web app's
       // origin must be there or its browser calls fail preflight.
       origin: isProd ? config.corsOrigins : true,
-      // POST is required by the async job API (POST /reviews/jobs).
       methods: ["GET", "POST", "OPTIONS"],
       allowedHeaders: ["Content-Type"],
       exposeHeaders: ["Content-Type", "Server-Timing"],
@@ -68,42 +65,40 @@ export const app = new Elysia()
       path: "/docs",
       documentation: {
         info: {
-          title: "zalytix API",
+          title: "WattSteer API",
           version: "0.1.0",
           description:
-            "Humanized App Store & Google Play review scraper, powered by cloakbrowser. " +
-            "Drives a stealth browser session to fetch reviews from either store.",
-          contact: { name: "zalytix" },
+            "Renewable curtailment intelligence for the Brazilian grid: " +
+            "day-ahead forecasts, diagnosis, flexibility optimisation and historical replay.",
+          contact: { name: "WattSteer" },
           license: { name: "MIT" },
         },
         // No hardcoded server: Swagger UI uses the origin it was loaded from, so
         // "Execute" hits the right host on localhost and in production alike.
-        // Set ZALYTIX_PUBLIC_URL to pin it explicitly.
+        // Set WATTSTEER_PUBLIC_URL to pin it explicitly.
         ...(config.publicUrl
           ? { servers: [{ url: config.publicUrl, description: "Public" }] }
           : {}),
-        tags: [{ name: "Reviews", description: "Scrape app store reviews" }],
       },
     }),
   )
-  .get("/", () => ({ name: "zalytix", version: "0.1.0", docs: "/docs" }), {
+  .get("/", () => ({ name: "wattsteer", version: "0.1.0", docs: "/docs" }), {
     detail: { summary: "API info" },
   })
-  .get("/health", () => ({ status: "ok" as const, scrapes: scrapeStats() }), {
-    detail: { summary: "Liveness + live scrape concurrency stats" },
+  .get("/health", () => ({ status: "ok" as const }), {
+    detail: { summary: "Liveness" },
   })
   .get(
     "/ready",
     async ({ set }) => {
-      const ready = await browserReady();
-      if (!ready) {
+      const isReady = await ready();
+      if (!isReady) {
         set.status = 503;
       }
-      return { ready };
+      return { ready: isReady };
     },
-    { detail: { summary: "Readiness — Chromium binary available" } },
-  )
-  .use(reviewsRoutes(jobRunner));
+    { detail: { summary: "Readiness — database reachable when configured" } },
+  );
 
 // Opt-in BullMQ dashboard at /jobs (requires Redis). Protect it in production.
 if (config.dashboard && config.redisUrl) {
@@ -117,21 +112,18 @@ export type App = typeof app;
 if (import.meta.main) {
   app.listen(config.port, (server) => {
     const url = String(server.url);
-    console.log(`🚀 zalytix API listening on ${url}`);
+    console.log(`🚀 WattSteer API listening on ${url}`);
     console.log(`📚 Docs: ${url}docs`);
     console.log("🔍 Endpoints:");
     console.log("   • GET /          — API info");
-    console.log("   • GET /health    — health check");
-    console.log("   • GET /reviews   — scrape App Store / Google Play reviews");
+    console.log("   • GET /health    — liveness");
+    console.log("   • GET /ready     — readiness");
     console.log("   • GET /docs      — Swagger UI");
     console.log("🔒 Security:");
     console.log("   • Content-Security-Policy (relaxed for /docs)");
     console.log("   • X-Frame-Options: DENY, X-Content-Type-Options: nosniff");
     console.log(`   • XSS protection, Referrer-Policy${isProd ? ", HSTS" : ""}`);
     console.log(`   • ${MAX_BODY_BYTES / (1024 * 1024)} MB request body limit, CORS`);
-    console.log(
-      `⚙️  Job runner: ${jobRunner.mode}${config.redisUrl ? ` (Redis, role=${config.role})` : ""}`,
-    );
     console.log(
       `🗄️  Persistence: ${database ? "Postgres (Drizzle)" : "off (no DATABASE_URL)"}`,
     );
@@ -145,7 +137,6 @@ if (import.meta.main) {
     }, 10_000);
     force.unref();
     await app.stop();
-    await jobRunner.close().catch(() => {});
     await database?.close().catch(() => {});
     console.log("✅ Server closed");
     process.exit(0);

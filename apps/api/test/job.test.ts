@@ -1,22 +1,23 @@
 import { describe, expect, it } from "bun:test";
 import { createInProcessRunner } from "../src/jobs/inprocess.js";
 import type { JobRecord } from "../src/jobs/types.js";
-import type { ScrapeResult } from "../src/types.js";
 
-const ok = (count: number): ScrapeResult => ({
-  store: "apple",
-  appId: "1",
-  country: "us",
-  count,
-  partial: false,
-  reviews: [],
-});
+// The runner is generic over payload and result — these stand in for whatever
+// WattSteer eventually queues (ingestion runs, backfills).
+interface Payload {
+  units?: number;
+}
+interface Result {
+  count: number;
+}
+
+const ok = (count: number): Result => ({ count });
 
 async function poll(
-  get: () => Promise<JobRecord | null>,
+  get: () => Promise<JobRecord<Result> | null>,
   want: JobRecord["status"],
   tries = 100,
-): Promise<JobRecord | null> {
+): Promise<JobRecord<Result> | null> {
   for (let i = 0; i < tries; i++) {
     const r = await get();
     if (r?.status === want) {
@@ -29,12 +30,14 @@ async function poll(
 
 describe("jobs · in-process runner", () => {
   it("reports mode inprocess", () => {
-    expect(createInProcessRunner(async () => ok(0)).mode).toBe("inprocess");
+    expect(createInProcessRunner<Payload, Result>(async () => ok(0)).mode).toBe(
+      "inprocess",
+    );
   });
 
   it("runs a submitted job to completion and returns the result", async () => {
-    const runner = createInProcessRunner(async (q) => ok(q.limit ?? 0));
-    const id = await runner.submit({ appId: "1", store: "apple", limit: 4 });
+    const runner = createInProcessRunner<Payload, Result>(async (p) => ok(p.units ?? 0));
+    const id = await runner.submit({ units: 4 });
     expect(typeof id).toBe("string");
     const rec = await poll(() => runner.status(id), "completed");
     expect(rec?.status).toBe("completed");
@@ -42,17 +45,17 @@ describe("jobs · in-process runner", () => {
   });
 
   it("records a failed job with a client-safe message (no leak)", async () => {
-    const runner = createInProcessRunner(async () => {
+    const runner = createInProcessRunner<Payload, Result>(async () => {
       throw new Error("ECONN internal-db dsn=secret");
     });
-    const id = await runner.submit({ appId: "1" });
+    const id = await runner.submit({});
     const rec = await poll(() => runner.status(id), "failed");
     expect(rec?.status).toBe("failed");
     expect(rec?.error).toBe("Internal server error");
   });
 
   it("returns null for an unknown id", async () => {
-    const runner = createInProcessRunner(async () => ok(0));
+    const runner = createInProcessRunner<Payload, Result>(async () => ok(0));
     expect(await runner.status("nope")).toBeNull();
   });
 });
@@ -63,17 +66,17 @@ describe("in-process runner · progress", () => {
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const runner = createInProcessRunner(async (query) => {
-      // Simulate two scraped pages, then hold until the test has observed.
-      query.onProgress?.({ collected: 20, batch: 20, hasMore: true });
-      query.onProgress?.({ collected: 40, batch: 20, hasMore: false });
+    const runner = createInProcessRunner<Payload, Result>(async (payload, report) => {
+      // Two units of work, then hold until the test has observed the progress.
+      report({ done: 20, total: payload.units });
+      report({ done: 40, total: payload.units });
       await gate;
       return ok(40);
     });
 
-    const id = await runner.submit({ appId: "42", store: "apple", limit: 100 });
+    const id = await runner.submit({ units: 100 });
     // Poll until the progress write is visible (the job runs on a microtask).
-    let record: JobRecord | null = null;
+    let record: JobRecord<Result> | null = null;
     for (let i = 0; i < 50; i++) {
       record = await runner.status(id);
       if (record?.progress) {
@@ -82,7 +85,7 @@ describe("in-process runner · progress", () => {
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
     expect(record?.status).toBe("active");
-    expect(record?.progress).toEqual({ collected: 40, limit: 100 });
+    expect(record?.progress).toEqual({ done: 40, total: 100 });
 
     release();
     for (let i = 0; i < 50; i++) {

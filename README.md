@@ -1,8 +1,14 @@
-# Zalytix
+# WattSteer
 
-**App Store & Google Play review scraping, as a product.** Paste an app link,
-get every review — ratings, dates, developer responses — exported to CSV or
-JSON. Humanized scraping powered by a stealth Chromium browser.
+**Renewable curtailment intelligence for the Brazilian grid.** Predict how much
+wind and solar will be curtailed tomorrow, explain the grid conditions driving
+it, and size the storage and flexible demand that could absorb it — from
+openly published ONS, ANEEL and weather data.
+
+> **Status: early.** The repository was rebuilt from a template; the previous
+> product's domain has been removed and WattSteer's is being specified. The API
+> serves health and readiness, the web app renders its shell, and no product
+> feature exists yet. See `.wayfinder/map.md` for the plan.
 
 ## Monorepo layout
 
@@ -10,20 +16,19 @@ Bun workspaces, split by responsibility:
 
 ```
 apps/
-  api/    The scraping engine + HTTP API (Elysia, BullMQ, Drizzle/Postgres).
-          Also a publishable library + CLI. See apps/api/README.md.
+  api/    Gateway + ingestion: the public HTTP API and the scheduled jobs that
+          pull ONS, ANEEL and weather data into Postgres.
+          (Elysia, BullMQ, Drizzle/Postgres.)
   web/    The product frontend: Expo (React Native) universal app —
           static-rendered SEO web build, plus iOS/Android from the same code.
 packages/
-  core/   Client-side domain shared by frontends: store-URL resolution &
-          validation, the scrape-flow state machine, typed API client,
-          CSV/JSON export, formatting. Pure TypeScript, zero UI deps.
+  core/   Client-side domain shared by frontends. Pure TypeScript, zero UI deps.
+  ui/     The design system: tokens, brand, icons and primitives.
 ```
 
-The API keeps its own canonical `resolve.ts`; `@zalytix/core` mirrors it (plus
-more liberal client-side inputs — Postel's law) and a **parity test suite**
-(`packages/core/test/resolve.test.ts`) imports both to guarantee they never
-drift.
+A Python service (`apps/ml`) for feature engineering, model training, inference
+and the flexibility optimizer joins this layout later; it reads Postgres and is
+reached only through the API gateway.
 
 ## Quick start
 
@@ -47,18 +52,24 @@ Point the web app at a different API with `EXPO_PUBLIC_API_URL`.
 | `bun run web` | Expo dev server |
 | `bun run web:export` | Static web build (SEO-ready) to `apps/web/dist` |
 | `bun run test` | Unit tests: core + api + web |
-| `bun run test:e2e` | Playwright e2e (exported web bundle + mock API) |
+| `bun run test:e2e` | Playwright e2e (exported web bundle) |
 | `bun run typecheck` | TypeScript across all workspaces |
 | `bun run lint` | Biome |
-| `bun run docker:up` | Redis + API + worker via compose |
+| `bun run docker:up` | Postgres + Redis + API + worker via compose |
 
 ## Testing
 
-- **`packages/core`** — resolver (incl. API-parity fixtures), state machine,
-  API client, CSV/format helpers. `bun test`.
-- **`apps/api`** — the original 159-test suite (unit, patterns, jobs, HTTP).
-- **`apps/web`** — unit tests for the scrape orchestration, plus a Playwright
-  e2e suite (desktop + mobile viewports) that drives the real exported bundle
-  against a scripted mock API: validation, preview, progress states, results,
-  CSV download, cancel and error paths. Run `bun run web:export` before
-  `bun run test:e2e`.
+- **`packages/core`** — formatting helpers. `bun test`.
+- **`apps/api`** — the surviving plugin-stack and job-runner suites: error
+  mapping, rate limiting, security headers, body limit, CORS, request
+  correlation, and both job runners. The BullMQ suite needs a throwaway Redis
+  (`bun run test:redis`).
+- **`apps/web`** — legal table-of-contents unit tests, plus a Playwright e2e
+  suite covering the footer and legal pages against the real exported bundle.
+  Run `bun run web:export` before `bun run test:e2e`.
+
+## Data sources
+
+ONS Dados Abertos (constrained-off, balanço energético, load, interchange,
+DESSEM), ANEEL SIGA (plant coordinates), and Open-Meteo (weather). Their exact
+shapes, traps and licensing are documented in `docs/research/`.

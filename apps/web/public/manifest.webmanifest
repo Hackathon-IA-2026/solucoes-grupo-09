@@ -1,7 +1,7 @@
 {
-  "name": "Zalytix",
-  "short_name": "Zalytix",
-  "description": "Scrape App Store & Google Play reviews into clean data.",
+  "name": "WattSteer",
+  "short_name": "WattSteer",
+  "description": "Day-ahead renewable curtailment intelligence for the Brazilian grid.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#131316",

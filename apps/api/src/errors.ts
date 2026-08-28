@@ -7,7 +7,7 @@ export abstract class AppError extends Error {
   abstract readonly status: number;
 }
 
-/** Caller's input was wrong: unknown app id, bad date, app/country not found. */
+/** Caller's input was wrong: unknown identifier, bad date, out-of-range value. */
 export class BadInputError extends AppError {
   readonly status = 400;
   constructor(message: string) {
@@ -16,25 +16,16 @@ export class BadInputError extends AppError {
   }
 }
 
-/** The upstream store failed or was unreachable (5xx, navigation, network). */
+/** An upstream data source failed or was unreachable (5xx, network, timeout). */
 export class UpstreamError extends AppError {
   readonly status = 502;
-  constructor(message = "Upstream store error", options?: { cause?: unknown }) {
+  constructor(message = "Upstream data source error", options?: { cause?: unknown }) {
     super(message, options);
     this.name = "UpstreamError";
   }
 }
 
-/** The scrape exceeded its time budget. */
-export class ScrapeTimeoutError extends AppError {
-  readonly status = 504;
-  constructor(message = "Scrape timed out") {
-    super(message);
-    this.name = "ScrapeTimeoutError";
-  }
-}
-
-/** The server is at capacity (scrape queue full). */
+/** The server is at capacity. */
 export class BusyError extends AppError {
   readonly status = 503;
   constructor(message = "Server at capacity — try again shortly") {
@@ -44,7 +35,7 @@ export class BusyError extends AppError {
 }
 
 /** HTTP statuses this API maps errors to. */
-export type ErrorStatus = 400 | 500 | 502 | 503 | 504;
+export type ErrorStatus = 400 | 500 | 502 | 503;
 
 /** Map any thrown value to a safe `{ status, body }` for an HTTP response. */
 export function toHttpError(error: unknown): {

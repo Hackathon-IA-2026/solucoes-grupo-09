@@ -1,4 +1,4 @@
-import type { LegalTocSection } from "@zalytix/ui";
+import type { LegalTocSection } from "@wattsteer/ui";
 import { useRef, useState } from "react";
 import type {
   LayoutChangeEvent,
@@ -19,7 +19,7 @@ const BOTTOM_EPSILON = 20;
  * even when it's too short to cross the threshold).
  */
 export function computeActiveSection(
-  sections: ReadonlyArray<LegalTocSection>,
+  sections: readonly LegalTocSection[],
   positions: Readonly<Record<string, number>>,
   offsetY: number,
   atBottom: boolean,
@@ -46,7 +46,7 @@ export function computeActiveSection(
  * scroll offset, and scrolls to a section when a TOC item is pressed. Uses a
  * plain RN ScrollView (no reanimated) to keep the web bundle lean.
  */
-export function useLegalToc(sections: ReadonlyArray<LegalTocSection>) {
+export function useLegalToc(sections: readonly LegalTocSection[]) {
   const [activeSection, setActiveSection] = useState(sections[0]?.id ?? "");
   const scrollRef = useRef<ScrollView>(null);
   const positions = useRef<Record<string, number>>({});

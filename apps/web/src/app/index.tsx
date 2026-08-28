@@ -1,54 +1,26 @@
-import { usePalette } from "@zalytix/ui";
+import { usePalette } from "@wattsteer/ui";
 import Head from "expo-router/head";
 import { useRef } from "react";
-import { Platform, ScrollView } from "react-native";
-import { Dashboard } from "@/components/dashboard";
-import { ScraperHero } from "@/components/scraper-hero";
-import { Showcase } from "@/components/showcase";
+import { ScrollView, Text, View } from "react-native";
 import { SiteFooter } from "@/components/site-footer";
-import { useScrape } from "@/hooks/use-scrape";
+import { TopNavFull } from "@/components/top-nav";
 import { SITE_URL } from "@/lib/config";
 
-const TITLE = "App Store & Google Play Review Scraper — Free CSV Export | Zalytix";
+const TITLE = "WattSteer — renewable curtailment intelligence for the Brazilian grid";
 const DESCRIPTION =
-  "Scrape every App Store and Google Play review into clean data — sentiment, trends, version history, CSV/JSON export. Free, no signup required.";
+  "Predict renewable curtailment day-ahead, understand the grid conditions driving it, and size the storage and flexible demand that could absorb it.";
 
 /** Canonical URL: one unambiguous form (trailing slash, matching sitemap.xml). */
 const CANONICAL_URL = `${SITE_URL}/`;
 
-// One <script> per schema: the most compatible shape for JSON-LD consumers.
-const JSON_LD_SCHEMAS = [
-  JSON.stringify({
-    "@context": "https://schema.org",
-    "@type": "WebApplication",
-    name: "Zalytix",
-    url: CANONICAL_URL,
-    applicationCategory: "BusinessApplication",
-    operatingSystem: "Web",
-    description: DESCRIPTION,
-    offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-    screenshot: `${SITE_URL}/og.png`,
-    featureList:
-      "App Store review scraping, Google Play review scraping, sentiment analysis, rating trends, version history, activity heatmap, CSV export, JSON export",
-  }),
-  JSON.stringify({
-    "@context": "https://schema.org",
-    "@type": "Organization",
-    name: "Zalytix",
-    url: CANONICAL_URL,
-    logo: `${SITE_URL}/icon-512.png`,
-  }),
-  JSON.stringify({
-    "@context": "https://schema.org",
-    "@type": "WebSite",
-    name: "Zalytix",
-    url: CANONICAL_URL,
-  }),
-];
-
+/**
+ * Placeholder landing page. The WattSteer hero and dashboard were removed with
+ * the rest of that domain; WattSteer's landing page is built separately, and
+ * the four product screens after it. This keeps the shell, the navigation and
+ * the footer rendering so the static export and the e2e legal suite stay green.
+ */
 export default function Home() {
   const colors = usePalette();
-  const { state, busy, submit, cancel, reset } = useScrape();
   const scrollRef = useRef<ScrollView>(null);
 
   return (
@@ -58,33 +30,10 @@ export default function Home() {
         <meta name="description" content={DESCRIPTION} />
         <link rel="canonical" href={CANONICAL_URL} />
         <meta property="og:type" content="website" />
-        <meta property="og:locale" content="en_US" />
         <meta property="og:title" content={TITLE} />
         <meta property="og:description" content={DESCRIPTION} />
         <meta property="og:url" content={CANONICAL_URL} />
-        <meta property="og:site_name" content="Zalytix" />
-        <meta property="og:image" content={`${SITE_URL}/og.png`} />
-        <meta property="og:image:width" content="1200" />
-        <meta property="og:image:height" content="630" />
-        <meta
-          property="og:image:alt"
-          content="Zalytix — turn any app's reviews into clean data."
-        />
-        <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content={TITLE} />
-        <meta name="twitter:description" content={DESCRIPTION} />
-        <meta name="twitter:image" content={`${SITE_URL}/og.png`} />
-        <meta
-          name="twitter:image:alt"
-          content="Zalytix — turn any app's reviews into clean data."
-        />
-        {Platform.OS === "web"
-          ? JSON_LD_SCHEMAS.map((schema) => (
-              <script key={schema.slice(0, 60)} type="application/ld+json">
-                {schema}
-              </script>
-            ))
-          : null}
+        <meta property="og:site_name" content="WattSteer" />
       </Head>
 
       <ScrollView
@@ -93,28 +42,36 @@ export default function Home() {
         style={{ backgroundColor: colors.canvas }}
         contentContainerStyle={{ flexGrow: 1 }}
       >
-        {state.phase === "completed" ? (
-          <Dashboard result={state.result} onNewScrape={reset} />
-        ) : (
-          <>
-            <ScraperHero
-              state={state}
-              busy={busy}
-              onSubmit={submit}
-              onCancel={cancel}
-              onDismissError={reset}
-            />
-            {/* The product, shown — real dashboard components on sample data. */}
-            {busy ? null : (
-              <>
-                <Showcase />
-                <SiteFooter
-                  onCtaPress={() => scrollRef.current?.scrollTo({ y: 0, animated: true })}
-                />
-              </>
-            )}
-          </>
-        )}
+        <TopNavFull />
+        <View
+          testID="landing-placeholder"
+          style={{ paddingHorizontal: 24, paddingVertical: 96, alignItems: "center" }}
+        >
+          <Text
+            style={{
+              color: colors.ink,
+              fontSize: 32,
+              fontWeight: "700",
+              textAlign: "center",
+            }}
+          >
+            WattSteer
+          </Text>
+          <Text
+            style={{
+              color: colors.inkMuted,
+              fontSize: 16,
+              textAlign: "center",
+              marginTop: 12,
+              maxWidth: 560,
+            }}
+          >
+            {DESCRIPTION}
+          </Text>
+        </View>
+        <SiteFooter
+          onCtaPress={() => scrollRef.current?.scrollTo({ y: 0, animated: true })}
+        />
       </ScrollView>
     </>
   );

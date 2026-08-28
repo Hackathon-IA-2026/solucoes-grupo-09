@@ -1,26 +1,9 @@
 {
-  "name": "zalytix",
+  "name": "wattsteer-api",
   "version": "0.1.0",
-  "description": "Humanized App Store & Google Play review scraper powered by cloakbrowser.",
+  "description": "WattSteer API \u2014 ingestion, gateway and public HTTP surface.",
   "type": "module",
-  "bin": {
-    "zalytix": "./dist/cli.js"
-  },
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
-  },
-  "files": [
-    "dist"
-  ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "dev": "bun run src/cli.ts",
-    "scrape": "bun run src/cli.ts",
     "api": "bun run src/api/index.ts",
     "api:dev": "bun run --watch src/api/index.ts",
     "worker": "bun run src/worker.ts",
@@ -28,16 +11,11 @@
     "db:migrate": "bunx drizzle-kit migrate",
     "db:push": "bunx drizzle-kit push",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "type-check": "bunx tsc --noEmit",
     "lint": "bunx biome check",
-    "lint:check": "bunx biome check --write",
-    "lint:format": "bunx biome format --write",
-    "test": "REDIS_URL= DATABASE_URL= bun test test/unit.test.ts test/patterns.test.ts test/errors.test.ts test/concurrency.test.ts test/service.test.ts test/appinfo.test.ts test/adapters.test.ts test/output.test.ts test/job.test.ts test/job-api.test.ts test/pipeline.test.ts test/service-scrape.test.ts test/rate-limit.test.ts test/api.test.ts",
-    "test:redis": "ZALYTIX_TEST_REDIS_URL=redis://localhost:6390 REDIS_URL= DATABASE_URL= bun test test/bullmq.test.ts",
-    "test:db": "DATABASE_URL=postgres://postgres:zalytix@localhost:5433/zalytix bun run db:push && ZALYTIX_TEST_DATABASE_URL=postgres://postgres:zalytix@localhost:5433/zalytix DATABASE_URL= REDIS_URL= bun test test/database.test.ts",
-    "test:live": "ZALYTIX_LIVE=1 bun test test/live.test.ts",
-    "docker:build": "docker build -f Dockerfile -t zalytix:latest ../..",
-    "docker:run": "docker run --rm -p 3000:3000 --shm-size=1gb zalytix:latest",
+    "test": "REDIS_URL= DATABASE_URL= bun test test/errors.test.ts test/job.test.ts test/rate-limit.test.ts test/api.test.ts",
+    "test:redis": "WATTSTEER_TEST_REDIS_URL=redis://localhost:6390 REDIS_URL= DATABASE_URL= bun test test/bullmq.test.ts",
+    "docker:build": "docker build -f Dockerfile -t wattsteer-api:latest ../..",
+    "docker:run": "docker run --rm -p 3000:3000 wattsteer-api:latest",
     "docker:up": "docker compose -f ../../docker-compose.yml up --build"
   },
   "engines": {
@@ -53,15 +31,10 @@
     "@getworkbench/elysia": "^0.9.1",
     "@sinclair/typebox": "0.34.49",
     "bullmq": "^5.78.0",
-    "cloakbrowser": "^0.3.31",
     "drizzle-orm": "^0.45.2",
-    "drizzle-typebox": "^0.3.3",
     "elysia": "^1.4.28",
     "ioredis": "5.10.1",
-    "mmdb-lib": "^3.0.2",
-    "playwright-core": "^1.53.0",
-    "postgres": "^3.4.9",
-    "socks-proxy-agent": "^10.0.0"
+    "postgres": "^3.4.9"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.16",

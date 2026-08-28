@@ -1,11 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import {
-  BadInputError,
-  BusyError,
-  ScrapeTimeoutError,
-  toHttpError,
-  UpstreamError,
-} from "../src/errors.js";
+import { BadInputError, BusyError, toHttpError, UpstreamError } from "../src/errors.js";
 
 describe("errors · toHttpError", () => {
   it("maps each domain error to its status with a client-safe message", () => {
@@ -14,7 +8,6 @@ describe("errors · toHttpError", () => {
       body: { error: "bad id" },
     });
     expect(toHttpError(new UpstreamError()).status).toBe(502);
-    expect(toHttpError(new ScrapeTimeoutError()).status).toBe(504);
     expect(toHttpError(new BusyError()).status).toBe(503);
   });
 

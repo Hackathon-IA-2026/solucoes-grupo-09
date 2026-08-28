@@ -7,7 +7,7 @@ import {
   space,
   useContainerWidth,
   usePalette,
-} from "@zalytix/ui";
+} from "@wattsteer/ui";
 import { Image } from "expo-image";
 import { Link } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -66,7 +66,7 @@ function LegalLink({
 
 /**
  * Site CTA + footer: a grape-tinted call-to-action band over the footer
- * (centered Zalytix logo + wordmark, then copyright · tagline · legal
+ * (centered WattSteer logo + wordmark, then copyright · tagline · legal
  * links). `onCtaPress` scrolls to the hero on the landing page; legal pages
  * route home instead.
  */
@@ -109,8 +109,8 @@ export function SiteFooter({ onCtaPress }: { onCtaPress: () => void }) {
             color: colors.ink,
           }}
         >
-          Turn any app's reviews into{" "}
-          <Text style={{ color: colors.accent }}>clean data.</Text>
+          Stop wasting clean energy{" "}
+          <Text style={{ color: colors.accent }}>before it happens.</Text>
         </Text>
         <Text
           style={{
@@ -120,11 +120,11 @@ export function SiteFooter({ onCtaPress }: { onCtaPress: () => void }) {
             color: colors.inkMuted,
           }}
         >
-          Free, no signup. Paste an App Store or Google Play link and go.
+          Day-ahead curtailment risk for the Brazilian grid, from open data.
         </Text>
         <PillButton
           testID="footer-cta-button"
-          label="Scrape an app"
+          label="See the forecast"
           primary={true}
           onPress={onCtaPress}
           icon={<ArrowRightIcon size={16} color={colors.onAccent} />}
@@ -140,7 +140,7 @@ export function SiteFooter({ onCtaPress }: { onCtaPress: () => void }) {
           source={require("../../assets/images/logo.png")}
           style={{ width: 30, height: 28 }}
           contentFit="contain"
-          accessibilityLabel="Zalytix"
+          accessibilityLabel="WattSteer"
         />
       </View>
 
@@ -154,15 +154,18 @@ export function SiteFooter({ onCtaPress }: { onCtaPress: () => void }) {
         }}
       >
         <View
-          style={{ flex: wide ? 1 : undefined, alignItems: wide ? "flex-start" : "center" }}
+          style={{
+            flex: wide ? 1 : undefined,
+            alignItems: wide ? "flex-start" : "center",
+          }}
         >
           <Text style={{ fontSize: 13, color: colors.inkFaint }}>
-            © Zalytix {year}. All rights reserved.
+            © WattSteer {year}. All rights reserved.
           </Text>
         </View>
         <View style={{ flex: wide ? 1 : undefined, alignItems: "center" }}>
           <Text style={{ fontSize: 13, color: colors.inkFaint, textAlign: "center" }}>
-            App Store & Google Play review intelligence.
+            Renewable curtailment intelligence.
           </Text>
         </View>
         <View

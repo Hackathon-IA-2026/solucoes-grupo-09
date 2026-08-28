@@ -1,7 +1,25 @@
-# Production topology: Redis + API (enqueue) + worker(s) (scrape).
-#   docker compose up --build            # one of each
-#   docker compose up --build --scale worker=3   # scale scraping out
+# Local topology mirroring the deployed services: Postgres + Redis + API +
+# worker. The Python ML service joins this file when it exists.
+#   docker compose up --build
+#   docker compose up --build --scale worker=3
 services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: wattsteer
+      POSTGRES_PASSWORD: wattsteer
+      POSTGRES_DB: wattsteer
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wattsteer"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -18,24 +36,25 @@ services:
     build:
       context: . # repo root — the Dockerfile needs the root bun.lock + workspace manifests
       dockerfile: apps/api/Dockerfile
-    image: zalytix:latest # the worker reuses this image
+    image: wattsteer-api:latest # the worker reuses this image
     depends_on:
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     ports:
       - "${PORT:-3000}:3000"
     environment:
       NODE_ENV: production
       PORT: "3000"
-      ZALYTIX_NO_SANDBOX: "1" # Chromium runs as root in the container
       REDIS_URL: redis://redis:6379 # overrides any .env value → in-compose Redis
-      ZALYTIX_ROLE: api # enqueue async jobs; the worker service processes them
-      # ZALYTIX_CORS_ORIGINS: https://zalytix.com # REQUIRED for a deployed web frontend
-      # ZALYTIX_DASHBOARD: "true"   # optional BullMQ dashboard at /jobs (protect it!)
+      DATABASE_URL: postgres://wattsteer:wattsteer@postgres:5432/wattsteer
+      WATTSTEER_ROLE: api # enqueue jobs; the worker service processes them
+      # WATTSTEER_CORS_ORIGINS: https://wattsteer.com # REQUIRED for a deployed web frontend
+      # WATTSTEER_DASHBOARD: "true"   # optional BullMQ dashboard at /jobs (protect it!)
     env_file:
       - path: .env
         required: false
-    shm_size: "1gb" # Chromium needs more than Docker's 64 MB /dev/shm default
     restart: unless-stopped
     healthcheck:
       test:
@@ -49,22 +68,23 @@ services:
       start_period: 20s
 
   worker:
-    image: zalytix:latest # reuses the image built by `api`
+    image: wattsteer-api:latest # reuses the image built by `api`
     command: ["bun", "run", "src/worker.ts"]
     depends_on:
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
       api:
-        condition: service_started # ensures zalytix:latest is built first
+        condition: service_started # ensures wattsteer-api:latest is built first
     environment:
       NODE_ENV: production
-      ZALYTIX_NO_SANDBOX: "1"
       REDIS_URL: redis://redis:6379
-      ZALYTIX_ROLE: worker
+      DATABASE_URL: postgres://wattsteer:wattsteer@postgres:5432/wattsteer
+      WATTSTEER_ROLE: worker
     env_file:
       - path: .env
         required: false
-    shm_size: "1gb"
     restart: unless-stopped
     # The worker has no HTTP server, so disable the image's /health probe;
     # liveness is "process running" (restart on crash).
@@ -73,3 +93,4 @@ services:
 
 volumes:
   redis-data:
+  postgres-data:

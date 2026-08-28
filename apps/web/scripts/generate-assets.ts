@@ -1,5 +1,5 @@
 /**
- * Deterministic brand-asset generator: the Zalytix mark is the script "Z"
+ * Deterministic brand-asset generator: the WattSteer mark is the script "Z"
  * glyph (lime on charcoal). Every favicon / PWA / app / OG asset is rendered
  * from a single hi-res transparent glyph so they stay in lockstep. Rerun after
  * any brand change: `bun scripts/generate-assets.ts` (from apps/web).
@@ -121,14 +121,14 @@ const ASSETS: Asset[] = [
                     background:radial-gradient(closest-side, ${GRAPE}, transparent);opacity:0.22;filter:blur(60px)"></div>
         <div style="display:flex;align-items:center;gap:16px;position:relative">
           ${glyphImg(56)}
-          <span style="font-size:30px;font-weight:600;color:${FG};letter-spacing:-0.5px">Zalytix</span>
+          <span style="font-size:30px;font-weight:600;color:${FG};letter-spacing:-0.5px">WattSteer</span>
         </div>
         <div style="position:relative">
           <div style="font-size:80px;line-height:1.06;font-weight:600;color:${FG};letter-spacing:-2.5px">
-            Turn any app's reviews<br/>into <span style="color:${LIME}">clean data.</span>
+            Stop wasting clean energy<br/><span style="color:${LIME}">before it happens.</span>
           </div>
           <div style="margin-top:26px;font-size:28px;line-height:1.4;color:${MUTED};max-width:820px">
-            App Store &amp; Google Play review scraping — free, no signup.
+            Day-ahead renewable curtailment intelligence for the Brazilian grid.
           </div>
         </div>
         <div style="display:flex;gap:12px;position:relative">

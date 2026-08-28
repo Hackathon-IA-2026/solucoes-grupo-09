@@ -1,8 +1,8 @@
 {
-  "name": "@zalytix/core",
+  "name": "@wattsteer/core",
   "version": "0.1.0",
   "private": true,
-  "description": "Client-side domain logic shared by zalytix frontends: store-URL resolution, the scrape-flow state machine, API client, and export helpers.",
+  "description": "Client-side domain shared by WattSteer frontends. Pure TypeScript, no UI dependencies.",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

@@ -1,9 +1,9 @@
-# zalytix
+# wattsteer
 
 Humanized **App Store & Google Play review scraper** for Node.js / TypeScript,
 powered by [cloakbrowser](https://github.com/CloakHQ/cloakbrowser).
 
-Instead of hitting the stores' APIs with a bare HTTP client, zalytix drives a
+Instead of hitting the stores' APIs with a bare HTTP client, wattsteer drives a
 stealth Chromium browser to the app's real store page, then issues the review
 calls **from inside that browser context**:
 
@@ -82,7 +82,7 @@ import {
   streamGoogleReviews,
   getAppleReviews,
   writeJson,
-} from "zalytix";
+} from "wattsteer";
 
 // Buffer into an array (store inferred from the id):
 const reviews = await getReviews({ appId: "284882215", limit: 200 });
@@ -139,7 +139,7 @@ bun run api:dev      # same, with --watch
 | `GET /reviews/stored`  | query persisted reviews (Postgres; no browser)    |
 | `GET /apps/stored`     | query persisted app metadata (Postgres; no browser)|
 | `GET /docs`            | Swagger UI (OpenAPI JSON at `/docs/json`)         |
-| `GET /jobs`            | BullMQ dashboard (opt-in; `ZALYTIX_DASHBOARD=true`) |
+| `GET /jobs`            | BullMQ dashboard (opt-in; `WATTSTEER_DASHBOARD=true`) |
 
 
 `GET /reviews` query: `appId` (required), `store`, `country` (2 letters), `lang`,
@@ -158,7 +158,7 @@ curl "http://localhost:3000/reviews?appId=284882215&sort=mostHelpful&limit=50"
 
 ### App metadata
 
-Beyond individual reviews, zalytix captures **app-level metadata** — name,
+Beyond individual reviews, wattsteer captures **app-level metadata** — name,
 developer, category, aggregate rating + count, price, version, content rating —
 read from the schema.org `SoftwareApplication` JSON-LD that both stores embed in
 their landing page. It's a stable, standard format (not reverse-engineered
@@ -196,16 +196,16 @@ leave it unset for a zero-dependency in-process runner (dev/single box). The API
 is identical either way.
 
 - **Cleanup:** finished jobs auto-remove from Redis after a retention window
-  (`ZALYTIX_JOB_RETENTION_SEC`, default 1 h for completed; 24 h for failed) with a
+  (`WATTSTEER_JOB_RETENTION_SEC`, default 1 h for completed; 24 h for failed) with a
   count cap as a backstop — so results stay poll-able for a while, then Redis is
   cleaned automatically. (We can't delete on completion: the *result lives in the
   job*, so `GET /reviews/jobs/:id` must be able to read it first.)
 - **Scaling:** by default the API process also runs an embedded worker
-  (`ZALYTIX_ROLE=all`). To scale scraping separately, set `ZALYTIX_ROLE=api` and run
-  dedicated workers: `bun run worker` (each caps at `ZALYTIX_MAX_CONCURRENCY`).
-- **Dashboard:** `ZALYTIX_DASHBOARD=true` mounts BullMQ **Workbench** at `/jobs`
+  (`WATTSTEER_ROLE=all`). To scale scraping separately, set `WATTSTEER_ROLE=api` and run
+  dedicated workers: `bun run worker` (each caps at `WATTSTEER_MAX_CONCURRENCY`).
+- **Dashboard:** `WATTSTEER_DASHBOARD=true` mounts BullMQ **Workbench** at `/jobs`
   (protect it — it exposes queue controls).
-- **Retries:** failed jobs retry with exponential backoff (`ZALYTIX_JOB_ATTEMPTS`,
+- **Retries:** failed jobs retry with exponential backoff (`WATTSTEER_JOB_ATTEMPTS`,
   default 3). Safe because the handler is **idempotent** — scraping is read-only,
   so a retry (or BullMQ's at-least-once redelivery after a crash) just re-scrapes,
   nothing to corrupt. Only *total* failures retry; partial results complete.
@@ -289,19 +289,19 @@ Bun auto-loads `.env` (copy `.env.example`). All env reads live in `src/config.t
 | ------------------ | ------------- | ------------------------------------------------------- |
 | `PORT`             | `3000`        | API port                                                |
 | `NODE_ENV`         | `development` | `production` enables HSTS + same-origin CORS            |
-| `ZALYTIX_PROXY`      | —             | upstream proxy applied to scrapes (not client-settable) |
-| `ZALYTIX_GEOIP`      | `false`       | match browser geo/locale to the proxy exit IP           |
-| `ZALYTIX_STEALTH`    | `max`         | default stealth preset                                  |
-| `ZALYTIX_NO_SANDBOX` | `false`       | Chromium `--no-sandbox` (set automatically in Docker)   |
-| `ZALYTIX_MAX_CONCURRENCY` | `2`      | max simultaneous scrapes (tune to host RAM)             |
-| `ZALYTIX_MAX_QUEUE`  | `20`          | queued scrapes before 503                               |
-| `ZALYTIX_SCRAPE_TIMEOUT_MS` | `120000` | per-scrape budget (→ partial or 504)                  |
-| `ZALYTIX_NAV_TIMEOUT_MS` | `60000`   | page navigation timeout                                 |
-| `ZALYTIX_FETCH_TIMEOUT_MS` | `30000` | per in-page fetch timeout                               |
-| `ZALYTIX_NAV_RETRIES` | `2`          | bounded retries on transient navigation failures        |
+| `WATTSTEER_PROXY`      | —             | upstream proxy applied to scrapes (not client-settable) |
+| `WATTSTEER_GEOIP`      | `false`       | match browser geo/locale to the proxy exit IP           |
+| `WATTSTEER_STEALTH`    | `max`         | default stealth preset                                  |
+| `WATTSTEER_NO_SANDBOX` | `false`       | Chromium `--no-sandbox` (set automatically in Docker)   |
+| `WATTSTEER_MAX_CONCURRENCY` | `2`      | max simultaneous scrapes (tune to host RAM)             |
+| `WATTSTEER_MAX_QUEUE`  | `20`          | queued scrapes before 503                               |
+| `WATTSTEER_SCRAPE_TIMEOUT_MS` | `120000` | per-scrape budget (→ partial or 504)                  |
+| `WATTSTEER_NAV_TIMEOUT_MS` | `60000`   | page navigation timeout                                 |
+| `WATTSTEER_FETCH_TIMEOUT_MS` | `30000` | per in-page fetch timeout                               |
+| `WATTSTEER_NAV_RETRIES` | `2`          | bounded retries on transient navigation failures        |
 | `REDIS_URL`        | —             | enable durable BullMQ job queue (else in-process)       |
 | `DATABASE_URL`     | —             | Postgres URL — persist + query reviews (else off)       |
-| `ZALYTIX_DASHBOARD`  | `false`       | mount BullMQ Workbench dashboard at `/jobs` (protect it) |
+| `WATTSTEER_DASHBOARD`  | `false`       | mount BullMQ Workbench dashboard at `/jobs` (protect it) |
 
 
 ## Docker
@@ -316,14 +316,14 @@ libraries, fonts and Python, preinstalled and verified) — with Bun added on to
 > which spawn an external Chromium process.
 
 ```bash
-bun run docker:build           # docker build -t zalytix:latest .
+bun run docker:build           # docker build -t wattsteer:latest .
 bun run docker:run             # single container on :3000 (1 GB shm)
 bun run docker:up              # full stack: Redis + API + worker
 ```
 
 `docker compose` runs the **production topology** — three services sharing one
-image: `redis` (durable queue), `api` (`ZALYTIX_ROLE=api`, enqueues async jobs +
-serves sync `/reviews`), and `worker` (`ZALYTIX_ROLE=worker`, pulls jobs and
+image: `redis` (durable queue), `api` (`WATTSTEER_ROLE=api`, enqueues async jobs +
+serves sync `/reviews`), and `worker` (`WATTSTEER_ROLE=worker`, pulls jobs and
 scrapes). Compose points `REDIS_URL` at the in-compose Redis (overriding any
 `.env`). Scale scraping out independently:
 
@@ -334,7 +334,7 @@ docker compose up --build --scale worker=3
 Verified end-to-end: a job POSTed to the API is enqueued to Redis and processed
 by the separate worker container (`waiting → active → completed`).
 
-`ZALYTIX_NO_SANDBOX=1` is baked into the image (Chromium runs as root in the
+`WATTSTEER_NO_SANDBOX=1` is baked into the image (Chromium runs as root in the
 container); locally the full sandbox + stealth stays on. To avoid shipping a
 second copy of Chromium, the entrypoint points `CLOAKBROWSER_BINARY_PATH` at the
 patched Chromium already in the base image (resolved at runtime, so base-image
@@ -343,7 +343,7 @@ the container scrapes both stores and the `HEALTHCHECK` reports healthy.
 
 ### Cluster mode? No.
 
-Elysia can cluster (Bun `SO_REUSEPORT`), but zalytix is **browser-bound** — each
+Elysia can cluster (Bun `SO_REUSEPORT`), but wattsteer is **browser-bound** — each
 request drives a real Chromium (hundreds of MB). Forking processes multiplies
 browser memory without raising throughput. Instead, **bound concurrent sessions
 and scale horizontally** (more containers behind a load balancer).
@@ -491,7 +491,7 @@ relaxed CSP for `/docs` and header coverage on errors), and the body-size limit
 Postgres: review + app-metadata upsert/dedup and filtering. Schema is applied by
 `db push` (the `test:db` script does this first). Skipped without a test DB.
 - **Live** (`test/live.test.ts`) — real Apple + Google pulls and a CSV
-round-trip. Skipped unless `ZALYTIX_LIVE=1` (set by `bun run test:live`).
+round-trip. Skipped unless `WATTSTEER_LIVE=1` (set by `bun run test:live`).
 
 Verified live: a max-stealth Google pull of **2,000 reviews** across 20
 token-paginated pages came back 100% unique with strictly descending dates.
