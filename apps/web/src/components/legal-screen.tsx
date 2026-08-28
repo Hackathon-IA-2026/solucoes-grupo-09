@@ -8,7 +8,7 @@ import {
   usePalette,
 } from "@wattsteer/ui";
 import { Image } from "expo-image";
-import { Link, router } from "expo-router";
+import { Link } from "expo-router";
 import Head from "expo-router/head";
 import type { ReactNode } from "react";
 import { Platform, Pressable, ScrollView, View } from "react-native";
@@ -155,7 +155,7 @@ export function LegalScreen({
               </LegalSection>
             ))}
 
-            <SiteFooter onCtaPress={() => router.push("/")} />
+            <SiteFooter />
           </ScrollView>
         </View>
       </View>

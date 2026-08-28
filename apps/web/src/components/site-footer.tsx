@@ -2,7 +2,6 @@ import {
   ArrowRightIcon,
   gradientBg,
   layout,
-  PillButton,
   radius,
   space,
   useContainerWidth,
@@ -11,6 +10,8 @@ import {
 import { Image } from "expo-image";
 import { Link } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { copy } from "./landing/copy";
+import { APP_HREF, CtaLink } from "./landing/cta-link";
 
 const styles = StyleSheet.create({
   wrap: {
@@ -66,11 +67,18 @@ function LegalLink({
 
 /**
  * Site CTA + footer: a grape-tinted call-to-action band over the footer
- * (centered WattSteer logo + wordmark, then copyright · tagline · legal
- * links). `onCtaPress` scrolls to the hero on the landing page; legal pages
- * route home instead.
+ * (centered WattSteer logo, then copyright · tagline · legal links).
+ *
+ * The CTA used to take an `onCtaPress` callback because it had nowhere to
+ * go — on the landing page it scrolled back to the scrape input, and on the
+ * legal pages it routed home. Both were the same admission: the site had no
+ * destination. It now points at `/app`, the product itself, from every page,
+ * and it does so as a real anchor rather than a scripted button so the
+ * static export contains a crawlable path into the app.
+ *
+ * Copy is the closing line of the pitch (IDEA.md §47).
  */
-export function SiteFooter({ onCtaPress }: { onCtaPress: () => void }) {
+export function SiteFooter() {
   const colors = usePalette();
   const year = new Date().getFullYear();
   const [width, onLayout] = useContainerWidth();
@@ -109,8 +117,8 @@ export function SiteFooter({ onCtaPress }: { onCtaPress: () => void }) {
             color: colors.ink,
           }}
         >
-          Stop wasting clean energy{" "}
-          <Text style={{ color: colors.accent }}>before it happens.</Text>
+          {copy.footerCta.headline.lead}{" "}
+          <Text style={{ color: colors.accent }}>{copy.footerCta.headline.accent}</Text>
         </Text>
         <Text
           style={{
@@ -120,13 +128,13 @@ export function SiteFooter({ onCtaPress }: { onCtaPress: () => void }) {
             color: colors.inkMuted,
           }}
         >
-          Day-ahead curtailment risk for the Brazilian grid, from open data.
+          {copy.footerCta.sub}
         </Text>
-        <PillButton
+        <CtaLink
           testID="footer-cta-button"
-          label="See the forecast"
+          href={APP_HREF}
+          label={copy.footerCta.button}
           primary={true}
-          onPress={onCtaPress}
           icon={<ArrowRightIcon size={16} color={colors.onAccent} />}
         />
       </View>
