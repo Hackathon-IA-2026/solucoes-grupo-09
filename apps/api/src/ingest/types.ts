@@ -54,7 +54,21 @@ export type RejectionReason =
    */
   | "non_utc_timestamp"
   /** A half-hourly label that fell on neither `:00` nor `:30`. */
-  | "misaligned_interval";
+  | "misaligned_interval"
+  /**
+   * A second row for a business key the same file already gave.
+   *
+   * Never observed, and deliberately not left to the primary key: an append-only
+   * write resolves a within-file collision with `onConflictDoNothing`, which
+   * would drop the second row silently. The measured hazard is
+   * `intercambio-nacional` publishing one link in both orientations in one hour.
+   */
+  | "duplicate_key"
+  /**
+   * An interchange row whose origin and destination were the same subsystem.
+   * Not a flow, and not something any consumer could read.
+   */
+  | "self_directed_exchange";
 
 /** A rejected source row, kept so a run can explain itself. */
 export interface RejectedRow {
@@ -246,4 +260,97 @@ export interface LoadParse<TRow> {
    * and a run in which it disappeared should be able to say so.
    */
   rowsWithoutVintage: number;
+}
+
+// The two remaining subsystem bulk series (ONS datasets 8 and 9). Appended
+// rather than merged into the blocks above so that two adapters landing at once
+// cannot conflict on this file.
+
+/**
+ * One canonical hour of directed exchange over one inter-subsystem link.
+ *
+ * **The pair is stated in one canonical orientation and the direction is the
+ * sign.** `from` precedes `to` in the `SubsystemCode` declaration order, so the
+ * four links are always `N→NE`, `N→SE`, `NE→SE` and `S→SE`; a positive value is
+ * energy flowing that way, a negative one is energy flowing back.
+ *
+ * ONS itself changed basis mid-series — files up to 2025 fix the orientation and
+ * sign the value, the 2026 file flips the row and keeps the verified value
+ * non-negative — so a stored (origin, destination) taken verbatim from the file
+ * would be two different series wearing one name. See `ons/interchange.ts`.
+ */
+export interface SubsystemExchangeHour {
+  fromSubsystem: SubsystemCode;
+  toSubsystem: SubsystemCode;
+  /** Start of the hour, UTC. */
+  validTime: Date;
+  /** `val_intercambiomwmed`, positive from → to. */
+  verifiedExchangeMwh: number;
+  /**
+   * `val_intercambioprogmwmed`, positive from → to.
+   *
+   * Null for every row of every file before 2026: ONS added the column in
+   * 2026-05 and did **not** backfill it. Null is that absence, and is never a
+   * zero — a programmed exchange of zero is a real and different statement.
+   */
+  programmedExchangeMwh: number | null;
+}
+
+/** What the interchange adapter produces from one source file. */
+export interface SubsystemExchangeParse {
+  rows: SubsystemExchangeHour[];
+  rejected: RejectedRow[];
+  /** The header actually present in this file, read fresh on every ingest. */
+  columns: string[];
+  /**
+   * Whether `val_intercambioprogmwmed` was in this file's header at all.
+   *
+   * The mirror image of `CurtailmentParse.hasDescriptionColumn`, and the reason
+   * both exist: ONS backfilled `dsc_restricao` into closed months and did not
+   * backfill this one. Presence is a property of the file, emptiness a property
+   * of a row, and only reporting both keeps the two distinguishable.
+   */
+  hasProgrammedColumn: boolean;
+  /** Rows published in the reverse of the canonical orientation, and flipped. */
+  reorientedRows: number;
+}
+
+/**
+ * Which definition of "load" a `SubsystemLoadDay` was measured under.
+ *
+ * ONS changed the definition twice with no schema change to signal it, so the
+ * regime is carried on the row: a level shift at a boundary is a methodology
+ * break, not a change in the grid.
+ */
+export type LoadMethodologyRegime =
+  /** Through 2021-02: plants ONS dispatches and/or programmes, only. */
+  | "DISPATCHED_ONLY"
+  /** 2021-03 → 2023-04-28: plus forecast generation of non-dispatched plants. */
+  | "WITH_NON_DISPATCHED"
+  /** From 2023-04-29: plus an estimate of MMGD from forecast weather. */
+  | "WITH_MMGD";
+
+/** One canonical day of load for one subsystem — ONS dataset 8. */
+export interface SubsystemLoadDay {
+  subsystem: SubsystemCode;
+  /** First instant of the local day, UTC — start-of-interval, as everywhere. */
+  validTime: Date;
+  loadMwh: number;
+  /**
+   * Length of the local day the MWmed mean was converted over: 1380, 1440 or
+   * 1500 minutes. Stored rather than derived so that a day whose energy dips by
+   * a twenty-fourth explains itself.
+   */
+  dayMinutes: number;
+  methodologyRegime: LoadMethodologyRegime;
+}
+
+/** What the daily-load adapter produces from one source file. */
+export interface SubsystemLoadDayParse {
+  rows: SubsystemLoadDay[];
+  rejected: RejectedRow[];
+  /** The header actually present in this file, read fresh on every ingest. */
+  columns: string[];
+  /** Rows whose local day was not 24 hours long. Zero from 2019 onward. */
+  irregularDays: number;
 }

@@ -74,3 +74,62 @@ curl -s 'https://apicarga.ons.org.br/prd/cargaverificada?dat_inicio=2026-08-01&d
    returns HTTP 200 and `[\n ]`. An empty array therefore never distinguishes
    "no data" from "wrong code", which is why an empty response for a covered
    period is treated as a failure rather than as an empty result.
+
+## Interchange and daily load (ticket 06)
+
+Captured **2026-08-28** from `dados.ons.org.br`. Real bytes, unedited except for
+selecting whole lines; the two `package-show-…json` files are whole responses.
+
+Recapture with, for example:
+
+```
+curl -s 'https://dados.ons.org.br/api/3/action/package_show?id=intercambio-nacional'
+curl -s 'https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/intercambio_nacional_ho/INTERCAMBIO_NACIONAL_2026.csv' | head -37
+```
+
+| File | Source | Pins |
+| --- | --- | --- |
+| `package-show-intercambio-nacional.json` | `package_show?id=intercambio-nacional` | Whole response. 27 CSV, **4 PARQUET** (2023→ only), 27 XLSX. **15 of the 27 CSVs carry `last_modified: null`** — every year before 2012 |
+| `package-show-carga-energia.json` | `package_show?id=carga-energia` | Whole response. 27 of each format; the S3 segment is `carga_energia_di`, not the slug |
+| `INTERCAMBIO_NACIONAL_2025.head.csv` | `intercambio_nacional_ho`, header + lines 2–21 | The pre-drift header: **6 columns, no `val_intercambioprogmwmed`**. Unpadded `nom_*`, four fixed pairs, values signed |
+| `INTERCAMBIO_NACIONAL_2026.head.csv` | same dataset, header + lines 2–37 | The post-drift header: **7 columns**, `nom_*` with a **leading space**, and the direction flip — `SE; SUDESTE;NE; NORDESTE` at 04:00 against `NE; NORDESTE;SE; SUDESTE` at 00:00 |
+| `INTERCAMBIO_NACIONAL_2000.head.csv` | same dataset, header + lines 2–13 | The oldest vintage — only **three** links at hour 0, and the year CKAN reports no `last_modified` for |
+| `INTERCAMBIO_NACIONAL_2018.dst-overlap.csv` | same dataset, lines 1, 4602–4617 | Fall back, 2018-02-18: the duplicated local hour `2018-02-17 23:00` is published once and cannot be disambiguated |
+| `INTERCAMBIO_NACIONAL_2018.dst-gap.csv` | same dataset, lines 1, 29470–29481 | Spring forward, 2018-11-04: the hour that never happened is **simply absent**, with no placeholder row — the opposite of `balanco-energia-subsistema` |
+| `head-INTERCAMBIO_NACIONAL_2000.csv.json` | S3 `HEAD` of `INTERCAMBIO_NACIONAL_2000.csv` | Change detection where the catalogue has no stamp: CKAN says `last_modified: null`, S3 answers `Fri, 13 Oct 2023 13:45:52 GMT` with an ETag and a length |
+| `CARGA_ENERGIA_2000.head.csv` | `carga_energia_di`, header + lines 2–9 | The daily grain, **no `SIN` row**, `nom_subsistema` title-case (`Sudeste/Centro-Oeste`) — a third dialect |
+| `CARGA_ENERGIA_2021.regime.csv` | same dataset, header + lines 230–245 | The **2021-03-01** methodology break, four days either side |
+| `CARGA_ENERGIA_2023.regime.csv` | same dataset, header + lines 466–481 | The **2023-04-29** methodology break. SE drops 41 438 → 38 139 MWmed across it, with no schema change to signal it |
+| `CARGA_ENERGIA_2018.dst.csv` | same dataset, lines 1, 190–197, 1226–1237 | The two irregular local days, kept rather than rejected |
+
+### Five things measured while capturing these, beyond the research
+
+1. **The interchange direction convention changed with the new column, and the
+   research does not record it.** Full scan of both years: `INTERCAMBIO_NACIONAL_2018.csv`
+   publishes **four fixed pairs** (`N→NE`, `N→SE`, `NE→SE`, `SE→S`) and carries
+   the direction in the **sign** — 11 719 of 35 036 rows are negative.
+   `INTERCAMBIO_NACIONAL_2026.csv` publishes **eight** pairs, every
+   `val_intercambiomwmed` is non-negative, and the *row itself* flips when the
+   flow reverses. Same physical quantity, different basis. A store keyed on
+   (origin, destination) taken verbatim would hold two disjoint series in one
+   column, so the adapter normalises the orientation and keeps the sign.
+2. **Neither file ever states a link in both orientations within one hour** —
+   zero occurrences across all 57 980 rows of the two years, and exactly four
+   links per hour in both. The adapter still rejects a mirrored pair rather than
+   letting `onConflictDoNothing` swallow it.
+3. **The leading space in `nom_subsistema_*` is 2026-only.** 2000, 2019, 2023 and
+   2025 are all clean; only the 2026 file writes `" NORTE"`. The padding hazard
+   is per-vintage in this dataset exactly as it is in the balanço, which is why
+   trimming is unconditional and the display names are never a key.
+4. **The interchange spring-forward hour is omitted, not placeholdered.** 2018
+   has 8 759 distinct hours and no row at all for `2018-11-04 00:00`, where
+   `balanco-energia-subsistema` emits a row with empty measures. Two datasets,
+   two behaviours, same transition.
+5. **The daily load value for a spring-forward day is a mean over 23 hours, not
+   24.** All four `2018-11-04` values carry the repeating decimal of a
+   forty-sixths denominator (`4838.64947826`, `9711.65039130`), where ordinary
+   days carry forty-eighths (`5070.88229167`). So MWmed → MWh must use the
+   length the local day actually had. The 25-hour day is less clear — the
+   `2018-02-17` values do not show a fiftieths repetend — so those rows are
+   converted the same honest way and flagged: `day_minutes` is stored on every
+   row and the run reports how many days were irregular.

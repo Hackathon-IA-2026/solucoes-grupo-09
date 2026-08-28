@@ -1,0 +1,17 @@
+{
+  "url": "https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/intercambio_nacional_ho/INTERCAMBIO_NACIONAL_2000.csv",
+  "capturedAt": "2026-08-28",
+  "headers": {
+    "x-amz-id-2": "Sprs/ktFMaGyAIBgt8cYO8vVVdyyZ+cKldhwGnO8AiDHouPz2l9wPsm+vGTsNAHgmmOA7cIwy3M=",
+    "x-amz-request-id": "ZZ81TKEE7S2H7CAP",
+    "date": "Fri, 28 Aug 2026 23:42:55 GMT",
+    "last-modified": "Fri, 13 Oct 2023 13:45:52 GMT",
+    "etag": "\"b81b0e64e99bde0abb7c2da0937560c5\"",
+    "x-amz-server-side-encryption": "AES256",
+    "accept-ranges": "bytes",
+    "content-type": "binary/octet-stream",
+    "content-length": "1367327",
+    "server": "AmazonS3",
+    "connection": "close"
+  }
+}

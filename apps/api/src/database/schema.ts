@@ -574,3 +574,122 @@ export const programmedLoadHalfHour = pgTable(
     ),
   ],
 );
+
+// The two remaining subsystem bulk series — ONS datasets 8 (`carga-energia`)
+// and 9 (`intercambio-nacional`). Appended rather than merged into the blocks
+// above so that two adapters landing at once cannot conflict on this file.
+
+/**
+ * Which definition of "load" a `subsystem_load_day` row was measured under.
+ *
+ * An enum on the fact table rather than a lookup table or a derived view,
+ * because it is a property of the *row*: ONS restated what the series means on
+ * two dates and published no column to say so, and a value that is not carried
+ * with the number it qualifies is a value someone will forget to join.
+ */
+export const loadMethodologyRegime = pgEnum("load_methodology_regime", [
+  "DISPATCHED_ONLY",
+  "WITH_NON_DISPATCHED",
+  "WITH_MMGD",
+]);
+
+/**
+ * Intercâmbios entre subsistemas — directed hourly exchange over each
+ * inter-subsystem link. ONS dataset 9.
+ *
+ * **The link is stored in one canonical orientation and the direction is the
+ * sign.** `from_subsystem` precedes `to_subsystem` in the `subsystem_code` enum
+ * order, so the four links are always `N→NE`, `N→SE`, `NE→SE` and `S→SE`;
+ * positive is energy flowing that way. ONS changed basis mid-series — files
+ * through 2025 fix the orientation and sign the value, the 2026 file flips the
+ * row and keeps the verified value non-negative — so storing (origin,
+ * destination) verbatim would put two incompatible series in one column. The
+ * check constraint below is what makes the wrong orientation unrepresentable
+ * rather than merely avoided by the adapter.
+ *
+ * **`programmed_exchange_mwh` is nullable, and that nullability is the point.**
+ * `val_intercambioprogmwmed` was added in 2026-05 and was **not** backfilled, so
+ * every hour before 2026 has no programmed value at all. That is the opposite of
+ * `dsc_restricao` in the constrained-off datasets, which ONS *did* rewrite into
+ * closed months. Null here means "ONS had not invented this column yet"; it is
+ * never a zero, which would be a real and different statement.
+ */
+export const subsystemExchangeHour = pgTable(
+  "subsystem_exchange_hour",
+  {
+    /** Earlier end of the link in `subsystem_code` order. */
+    fromSubsystem: subsystemCode().notNull(),
+    /** Later end of the link in `subsystem_code` order. */
+    toSubsystem: subsystemCode().notNull(),
+    /** Start of the hour the fact is about, UTC. */
+    validTime: timestamp({ withTimezone: true }).notNull(),
+
+    /** `val_intercambiomwmed`, positive from → to. */
+    verifiedExchangeMwh: doublePrecision().notNull(),
+    /** `val_intercambioprogmwmed`, positive from → to. Null before 2026. */
+    programmedExchangeMwh: doublePrecision(),
+
+    ...vintageColumns(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.fromSubsystem, t.toSubsystem, t.validTime, t.dataVersion],
+    }),
+    index("subsystem_exchange_hour_as_of").on(
+      t.validTime,
+      t.fromSubsystem,
+      t.toSubsystem,
+      t.ingestedAt,
+    ),
+    // The canonical orientation, enforced. Without it another writer could store
+    // `NE→N` beside `N→NE` and the two would be the same link with opposite
+    // signs — the exact defect the adapter normalises away.
+    check(
+      "subsystem_exchange_canonical_orientation",
+      sql`${t.fromSubsystem} < ${t.toSubsystem}`,
+    ),
+  ],
+);
+
+/**
+ * Carga de energia diária — daily load per subsystem. ONS dataset 8.
+ *
+ * **`methodology_regime` is what this table exists to carry.** ONS changed the
+ * definition of the series in March 2021 (adding forecast generation from plants
+ * it does not dispatch) and again on 29 April 2023 (adding estimated MMGD), with
+ * no schema change either time. The result is a level shift that a model would
+ * otherwise learn as a change in the grid. Stamping the regime on the row makes
+ * the break a fact you can filter on.
+ *
+ * **This is not a daily rollup of `verified_load_half_hour`** and must never be
+ * joined to it as one — the regimes are precisely the difference between them.
+ *
+ * **`day_minutes` records the length of the local day the MWmed mean was
+ * converted over.** Brazil moved its clocks at midnight until 2019, so a
+ * spring-forward day is 1 380 minutes and a fall-back day 1 500; ONS's own
+ * `2018-11-04` values are means over 46 half-hours, not 48. Storing the divisor
+ * is what lets a day whose energy dips by a twenty-fourth explain itself.
+ */
+export const subsystemLoadDay = pgTable(
+  "subsystem_load_day",
+  {
+    subsystem: subsystemCode().notNull(),
+    /** First instant of the local day the fact is about, UTC. */
+    validTime: timestamp({ withTimezone: true }).notNull(),
+
+    loadMwh: doublePrecision().notNull(),
+    /** Length of the local day in minutes: 1380, 1440 or 1500. */
+    dayMinutes: integer().notNull(),
+    methodologyRegime: loadMethodologyRegime().notNull(),
+
+    ...vintageColumns(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.subsystem, t.validTime, t.dataVersion] }),
+    index("subsystem_load_day_as_of").on(t.validTime, t.subsystem, t.ingestedAt),
+    // A day is 23, 24 or 25 hours long and nothing else. Any other divisor
+    // means the local-day resolution went wrong, and a wrong divisor is a
+    // quietly wrong energy.
+    check("subsystem_load_day_length", sql`${t.dayMinutes} in (1380, 1440, 1500)`),
+  ],
+);

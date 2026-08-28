@@ -21,6 +21,41 @@ export {
   upsertReportingEntities,
   writeCurtailment,
 } from "./curtailment-repository.js";
+// The two remaining subsystem bulk series — ONS datasets 8 (`carga-energia`)
+// and 9 (`intercambio-nacional`). Appended rather than merged into the blocks
+// above so that two adapters landing at once cannot conflict on this file.
+export {
+  createDailyLoadIngestor,
+  type DailyLoadIngestorDeps,
+  type IngestDailyLoadPayload,
+  type IngestDailyLoadResult,
+} from "./daily-load-job.js";
+export {
+  dailyLoadDigest,
+  readSubsystemLoadDaysAsOf,
+  type SubsystemLoadDayAsOfQuery,
+  type SubsystemLoadDayAsOfResult,
+  type SubsystemLoadDayAsOfRow,
+  type SubsystemLoadDayWrite,
+  type SubsystemLoadDayWriteResult,
+  writeSubsystemLoadDays,
+} from "./daily-load-repository.js";
+export {
+  createInterchangeIngestor,
+  type IngestInterchangePayload,
+  type IngestInterchangeResult,
+  type InterchangeIngestorDeps,
+} from "./interchange-job.js";
+export {
+  exchangeDigest,
+  readSubsystemExchangeAsOf,
+  type SubsystemExchangeAsOfQuery,
+  type SubsystemExchangeAsOfResult,
+  type SubsystemExchangeAsOfRow,
+  type SubsystemExchangeWrite,
+  type SubsystemExchangeWriteResult,
+  writeSubsystemExchange,
+} from "./interchange-repository.js";
 export {
   createEnergyBalanceIngestor,
   type IngestEnergyBalancePayload,
@@ -102,11 +137,24 @@ export {
   WIND_DATASET_SLUG,
 } from "./ons/constrained-off.js";
 export {
+  DAILY_LOAD_DATASET_SLUG,
+  DAILY_LOAD_FORMATS,
+  LOAD_METHODOLOGY_REGIMES,
+  type LoadMethodologyBreak,
+  parseDailyLoadCsv,
+  regimeForDate,
+} from "./ons/daily-load.js";
+export {
   DATASET_SLUG,
   parseEnergyBalance,
   parseEnergyBalanceCsv,
   parseEnergyBalanceParquet,
 } from "./ons/energy-balance.js";
+export {
+  INTERCHANGE_DATASET_SLUG,
+  INTERCHANGE_FORMATS,
+  parseInterchangeCsv,
+} from "./ons/interchange.js";
 export {
   intervalStartFromEnd,
   parseProgrammedLoad,
@@ -128,12 +176,19 @@ export {
   markResourceFetched,
   recordResourceVersion,
 } from "./resource-version.js";
-export { ONS_TIME_ZONE, zonedWallClockToUtc } from "./time.js";
+export {
+  type LocalDay,
+  localDayInterval,
+  ONS_TIME_ZONE,
+  parseCalendarDate,
+  zonedWallClockToUtc,
+} from "./time.js";
 export type {
   CurtailmentParse,
   CurtailmentReportHour,
   EnergyBalanceHour,
   EnergyBalanceParse,
+  LoadMethodologyRegime,
   LoadParse,
   ObservedReportingEntity,
   ProgrammedLoadHalfHour,
@@ -143,6 +198,10 @@ export type {
   ReportingEntityKind,
   RestrictionCause,
   RestrictionOrigin,
+  SubsystemExchangeHour,
+  SubsystemExchangeParse,
+  SubsystemLoadDay,
+  SubsystemLoadDayParse,
   Technology,
   VerifiedLoadHalfHour,
 } from "./types.js";
