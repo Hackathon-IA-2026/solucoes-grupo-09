@@ -339,3 +339,31 @@ export function MessageSquareReplyIcon(props: IconProps) {
     </Base>
   );
 }
+
+export function XIcon(props: IconProps) {
+  return (
+    <Base {...props}>
+      <Path d="M18 6 6 18" />
+      <Path d="m6 6 12 12" />
+    </Base>
+  );
+}
+
+export function CheckIcon(props: IconProps) {
+  return (
+    <Base {...props}>
+      <Path d="M20 6 9 17l-5-5" />
+    </Base>
+  );
+}
+
+export function ArrowUpDownIcon(props: IconProps) {
+  return (
+    <Base {...props}>
+      <Path d="m21 16-4 4-4-4" />
+      <Path d="M17 20V4" />
+      <Path d="m3 8 4-4 4 4" />
+      <Path d="M7 4v16" />
+    </Base>
+  );
+}
