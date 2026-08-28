@@ -4,8 +4,14 @@ title: The four /app screens
 type: wayfinder:prototype
 status: open
 assignee:
-blocked_by: ["006", "013"]
+blocked_by: ["006"]
 ---
+
+> **Blocker loosened.** This ticket was gated on **Public API surface**, but its
+> own instruction is to build against fixture data — the shape is the point,
+> not the pipeline. The API surface informs it; it does not gate it. Running on
+> fixtures now is also what surfaces the P10–P90 display problem early, which
+> the API contract then has to serve.
 
 ## Question
 
