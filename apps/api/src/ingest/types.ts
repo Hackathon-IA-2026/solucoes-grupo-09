@@ -247,3 +247,72 @@ export interface LoadParse<TRow> {
    */
   rowsWithoutVintage: number;
 }
+
+/**
+ * The canonical form of one DESSEM half-hour, per subsystem (ticket 08).
+ *
+ * Appended rather than merged into the blocks above so that two adapters
+ * landing at once cannot conflict on this file.
+ *
+ * Three things differ from every type above, and all three are structural:
+ *
+ * - **This is a `Forecast`.** ONS creates the file for reference day D on the
+ *   evening of D−1, so `published_at < valid_time` on every row — the shape
+ *   `docs/domain-model.md` §4 uses to tell a forecast from an observation with
+ *   no flag at all. `lead_time` is derived from the pair, never stored.
+ * - **`referenceDay` is the run label**, the second component of the row's
+ *   `ForecastOrigin` (`{ producer: ons_dessem, run_label, published_at }`).
+ *   It is `din_programacaodia` verbatim, `YYYY-MM-DD`.
+ * - **Quantities are MW, not MWh.** DESSEM publishes instantaneous power, not
+ *   MWmed, so the conversion every other ONS adapter applies at its boundary
+ *   would be a factual error here. The `_mw` suffix is the domain model's
+ *   marker for exactly that (§1: "a column named `*_mw` holds instantaneous or
+ *   nameplate power").
+ *
+ * `validTime` is the START of the half hour, UTC. The source labels the period
+ * by `num_patamar`, which the research established denotes the half hour ending
+ * at 00:00 + k×30 min Brasília — the same end-labelling as the carga API
+ * and the opposite of the bulk files. The adapter removes it.
+ */
+export interface DessemBalanceHalfHour {
+  subsystem: SubsystemCode;
+  /** Start of the half hour the forecast is about, UTC. */
+  validTime: Date;
+  /** `din_programacaodia`, `YYYY-MM-DD`. The `ForecastOrigin` run label. */
+  referenceDay: string;
+  /** `val_demanda`. */
+  demandMw: number;
+  /** `val_ger_hidraulica` — the **published** header, not the dictionary's. */
+  hydroGenerationMw: number;
+  /** `val_ger_pch` — small hydro. */
+  smallHydroGenerationMw: number;
+  /** `val_ger_termica` — the published header, not the dictionary's. */
+  thermalGenerationMw: number;
+  /** `val_ger_pct` — small thermal. */
+  smallThermalGenerationMw: number;
+  /** `val_ger_eolica`. Half of why this dataset exists. */
+  windGenerationMw: number;
+  /** `val_ger_fotovoltaica` — utility-scale PV. The other half. */
+  solarGenerationMw: number;
+  /** `val_ger_mmgd` — micro and mini distributed generation, modelled by ONS. */
+  mmgdGenerationMw: number;
+  /** `val_cons_elevatoria` — pumping load, a consumption not a generation. */
+  pumpingConsumptionMw: number;
+}
+
+/** What the DESSEM adapter produces from one reference day's file. */
+export interface DessemBalanceParse {
+  rows: DessemBalanceHalfHour[];
+  rejected: RejectedRow[];
+  /** The header actually present in this file, read fresh on every ingest. */
+  columns: string[];
+  /** `din_programacaodia`, which must be one single day for the whole file. */
+  referenceDay: string;
+  /**
+   * How many patamares each subsystem carried — 48 for every day in scope, and
+   * asserted against the length of the local civil day rather than hard-coded.
+   */
+  patamaresPerSubsystem: number;
+  /** `SIN` rows removed at the boundary. Zero on every DESSEM file seen. */
+  aggregateRowsFiltered: number;
+}

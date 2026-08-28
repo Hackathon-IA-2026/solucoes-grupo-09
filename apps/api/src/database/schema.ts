@@ -574,3 +574,95 @@ export const programmedLoadHalfHour = pgTable(
     ),
   ],
 );
+
+/**
+ * Who produced a forecast — the first component of `ForecastOrigin`
+ * (`docs/domain-model.md` §4: `{ producer, run_label, published_at }`).
+ *
+ * All three members the domain model names are declared, though only
+ * `ons_dessem` has a table yet: the enum is the domain's vocabulary, not an
+ * inventory of what has been built, and the same reasoning that keeps `PAR` in
+ * `reason_code` with zero observations keeps the other two here.
+ */
+export const forecastProducer = pgEnum("forecast_producer", [
+  "ons_dessem",
+  "open_meteo",
+  "wattsteer",
+]);
+
+/**
+ * Balanço DESSEM detalhe — ONS's own day-ahead expectation of load and
+ * generation per subsystem, per half hour. ONS dataset 11.
+ *
+ * **Its own table, because it is a `Forecast`.** `docs/domain-model.md` §4
+ * makes `Observation` and `Forecast` two table families discriminated by shape
+ * rather than by a flag: an observation has `published_at > valid_time`, a forecast has
+ * `published_at < valid_time`, and only a forecast carries a `ForecastOrigin`.
+ * Storing this beside the balanço actuals under a `horizon` column is the exact
+ * failure the spec calls out — and the check constraint below is what makes
+ * "this can never be read as an observation" a guarantee of the database rather
+ * than a habit of the adapter.
+ *
+ * **Three time axes.** `valid_time` (the half hour DESSEM describes),
+ * `published_at` (the file's S3 `Last-Modified` — ONS creates day D's file on
+ * the evening of D−1, which is why `gate_late` can use it and `gate_early`
+ * structurally cannot), and `ingested_at`. `lead_time` is
+ * `valid_time − published_at` and is **derived, never stored**: a stored copy
+ * could disagree with its own timestamps.
+ *
+ * **`run_label` is the reference day**, `din_programacaodia` verbatim — the
+ * `ForecastOrigin` component that names *which* DESSEM run these numbers came
+ * out of. It is not a second valid time: patamar 48 of day D describes
+ * 23:30–00:00 local on D, and every row of the file shares one label.
+ *
+ * **Storage is MW.** DESSEM publishes instantaneous power, not the MWmed every
+ * other ONS bulk dataset publishes, so there is no conversion at this boundary
+ * and the columns say `_mw` (`docs/domain-model.md` §1).
+ */
+export const dessemBalanceHalfHour = pgTable(
+  "dessem_balance_half_hour",
+  {
+    subsystem: subsystemCode().notNull(),
+    /** Start of the half hour the forecast is about, UTC. */
+    validTime: timestamp({ withTimezone: true }).notNull(),
+
+    /** `ForecastOrigin.producer`. Always `ons_dessem` in this table. */
+    forecastProducer: forecastProducer().notNull(),
+    /** `ForecastOrigin.run_label` — the DESSEM reference day, `YYYY-MM-DD`. */
+    runLabel: text().notNull(),
+
+    /** `val_demanda`. */
+    demandMw: doublePrecision().notNull(),
+    /** `val_ger_hidraulica` — the published header, not the dictionary's. */
+    hydroGenerationMw: doublePrecision().notNull(),
+    /** `val_ger_pch`. */
+    smallHydroGenerationMw: doublePrecision().notNull(),
+    /** `val_ger_termica` — the published header, not the dictionary's. */
+    thermalGenerationMw: doublePrecision().notNull(),
+    /** `val_ger_pct`. */
+    smallThermalGenerationMw: doublePrecision().notNull(),
+    /** `val_ger_eolica` — the forward-looking wind expectation. */
+    windGenerationMw: doublePrecision().notNull(),
+    /** `val_ger_fotovoltaica` — the forward-looking utility-scale PV expectation. */
+    solarGenerationMw: doublePrecision().notNull(),
+    /** `val_ger_mmgd` — ONS's modelled distributed generation. */
+    mmgdGenerationMw: doublePrecision().notNull(),
+    /** `val_cons_elevatoria` — pumping load. */
+    pumpingConsumptionMw: doublePrecision().notNull(),
+
+    ...vintageColumns(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.subsystem, t.validTime, t.dataVersion] }),
+    index("dessem_balance_half_hour_as_of").on(t.validTime, t.subsystem, t.ingestedAt),
+    // Forecast-sourced features are cut on `published_at ≤ gate`
+    // (`docs/specs/feature-engineering.md`), which is a different access path
+    // from `AsOf` and gets its own index rather than a scan.
+    index("dessem_balance_half_hour_published").on(t.publishedAt, t.validTime),
+    // The structural discriminator, enforced. A row whose publication does not
+    // precede the instant it describes is not a forecast, and this table holds
+    // nothing else — so the illegal state is unrepresentable rather than merely
+    // avoided by the one adapter that writes here today.
+    check("dessem_balance_is_a_forecast", sql`${t.publishedAt} < ${t.validTime}`),
+  ],
+);

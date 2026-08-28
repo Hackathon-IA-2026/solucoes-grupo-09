@@ -21,6 +21,26 @@ export {
   upsertReportingEntities,
   writeCurtailment,
 } from "./curtailment-repository.js";
+// The DESSEM day-ahead balance (ONS dataset 11) — the platform's first
+// bulk-file forecast, and its only daily-split source. Appended rather than
+// merged into the blocks above so that two adapters landing at once cannot
+// conflict on this file.
+export {
+  createDessemIngestor,
+  type DessemDayResult,
+  type IngestDessemPayload,
+  type IngestDessemResult,
+} from "./dessem-job.js";
+export {
+  type DessemBalanceAsOfQuery,
+  type DessemBalanceAsOfResult,
+  type DessemBalanceAsOfRow,
+  type DessemBalanceWrite,
+  type DessemBalanceWriteResult,
+  dessemBalanceDigest,
+  readDessemBalanceAsOf,
+  writeDessemBalance,
+} from "./dessem-repository.js";
 export {
   createEnergyBalanceIngestor,
   type IngestEnergyBalancePayload,
@@ -85,6 +105,7 @@ export {
   TruncatedLoadResponseError,
 } from "./ons/carga-api.js";
 export {
+  availableResourceDays,
   type CatalogueResource,
   fetchPackage,
   fingerprintFromHeaders,
@@ -92,6 +113,7 @@ export {
   type ResourceFingerprint,
   type ResourceFormat,
   readResources,
+  selectResourceForDay,
   selectResourceForMonth,
   selectResourceForYear,
 } from "./ons/catalogue.js";
@@ -101,6 +123,14 @@ export {
   SOLAR_DATASET_SLUG,
   WIND_DATASET_SLUG,
 } from "./ons/constrained-off.js";
+export {
+  DESSEM_COVERAGE_START,
+  DESSEM_DETAIL_DATASET_SLUG,
+  PATAMAR_MINUTES,
+  parseDessemBalanceCsv,
+  patamarStart,
+  referenceDayAnchor,
+} from "./ons/dessem-balance.js";
 export {
   DATASET_SLUG,
   parseEnergyBalance,
@@ -132,6 +162,8 @@ export { ONS_TIME_ZONE, zonedWallClockToUtc } from "./time.js";
 export type {
   CurtailmentParse,
   CurtailmentReportHour,
+  DessemBalanceHalfHour,
+  DessemBalanceParse,
   EnergyBalanceHour,
   EnergyBalanceParse,
   LoadParse,
