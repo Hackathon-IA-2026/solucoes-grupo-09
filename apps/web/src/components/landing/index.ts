@@ -15,7 +15,6 @@
 
 export * from "./band";
 export * from "./band-figure";
-export * from "./copy";
 export * from "./cta-link";
 export * from "./driver-bars";
 export * from "./engines";

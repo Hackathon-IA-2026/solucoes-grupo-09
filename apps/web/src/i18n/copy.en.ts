@@ -1,33 +1,31 @@
 /**
- * Every string the landing page renders, in one module.
+ * The site's copy, per locale.
  *
- * i18n is decided but not built (`docs/specs/i18n.md`), so this is not a
- * translation catalogue — it is the shape a catalogue can be lifted out of
- * without touching a component. Two rules make that possible:
+ * Structured rather than a flat key table: the shape *is* the contract, so
+ * `Copy` is derived from the English dictionary and TypeScript refuses any
+ * locale that omits a string or invents one. A flat `t("hero.sub")` catalogue
+ * cannot do that — a missing key is a runtime fallback, silently.
+ *
+ * Two rules make a locale liftable without touching a component:
  *
  * 1. **No prose is interpolated inside JSX.** Where a sentence needs one
- *    highlighted fragment, it is stored as `{ lead, accent }` and the
- *    component concatenates two `<Text>` runs. A translator gets two whole
- *    clauses, not a sentence split around a variable.
- * 2. **Numbers never live here.** They come from `fixtures.ts` and are
- *    formatted at the edge, so `Intl` can take over per locale later.
+ *    highlighted fragment it is stored as `{ lead, accent }` and the component
+ *    concatenates two `<Text>` runs, so a translator gets whole clauses.
+ * 2. **Numbers never live here.** They come from fixtures and are formatted at
+ *    the edge, so `Intl` handles them per locale.
  *
- * Known awkward spots for the PT-BR pass, flagged now rather than discovered
- * later:
+ * Portuguese is **authored, not translated**, wherever a literal rendering
+ * would be worse than the original — the hero's tense pun in particular, where
+ * IDEA.md §46 already contains a stronger Portuguese sentence than any
+ * translation of the English one would be.
  *
- * - `hero.headline` — the EN pun on tense ("happened" / "coming") does not
- *   survive literal translation. PT-BR should be authored, not translated;
- *   §46 of IDEA.md already contains a better Portuguese original.
- * - `band.rangeLabel` — "P10–P90" is a notation, not a phrase. It must stay
- *   verbatim in both locales; only the surrounding gloss translates.
- * - ONS proper nouns (`constrained-off`, `conjunto`, the reason codes, the
- *   subsystem display names) are untranslated by naming rule 2 of
- *   `docs/domain-model.md`, in EN copy as well as PT.
- * - `provenance.odbl` is a licence notice whose wording is constrained by
- *   ODbL §4.3; it needs a legal check per locale, not a translation.
+ * Untranslated in both locales, by naming rule 2 of `docs/domain-model.md`:
+ * ONS proper nouns (`constrained-off`, `conjunto`, the reason codes, the
+ * subsystem display names), the quantile notation `P10–P90`, and the
+ * institution names ONS, ANEEL, DESSEM, SIGA.
  */
 
-export const copy = {
+export const en = {
   nav: {
     home: "WattSteer — home",
     links: [
@@ -196,3 +194,22 @@ export const copy = {
     button: "Open the live grid",
   },
 } as const;
+
+/**
+ * The shape every locale must satisfy, derived from English.
+ *
+ * `Widen` keeps the structure and the `readonly` markers but replaces each
+ * string *literal* with `string`, so a locale supplies its own words while
+ * still being checked key-for-key. A locale that omits a string, or invents
+ * one, fails to compile — which is the whole point: a missing translation
+ * should be a build error, not a silent fallback to a key name at runtime.
+ */
+export type Copy = Widen<typeof en>;
+
+type Widen<T> = T extends string
+  ? string
+  : T extends readonly (infer U)[]
+    ? readonly Widen<U>[]
+    : T extends object
+      ? { readonly [K in keyof T]: Widen<T[K]> }
+      : T;

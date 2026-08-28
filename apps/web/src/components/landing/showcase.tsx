@@ -1,8 +1,8 @@
 import { Badge, Panel, radius, space, usePalette } from "@wattsteer/ui";
 import { StyleSheet, Text, View } from "react-native";
+import { useCopy } from "@/i18n";
 import { band, formatMwhExact, formatRange } from "./band";
 import { BandRail, railLabel } from "./band-figure";
-import { copy } from "./copy";
 import { DriverBars } from "./driver-bars";
 import { MitigationStack } from "./mitigation-stack";
 import { ReplayCompare } from "./replay-compare";
@@ -40,6 +40,7 @@ const styles = StyleSheet.create({
 });
 
 export function Showcase({ wide }: { wide: boolean }) {
+  const copy = useCopy();
   const colors = usePalette();
   return (
     <>
@@ -85,6 +86,7 @@ const UNCERTAIN = band(1400, 4180, 8600);
  * the whole argument for the rail in one picture.
  */
 function BandExplainer({ wide }: { wide: boolean }) {
+  const copy = useCopy();
   const colors = usePalette();
   const max = 9000;
   return (

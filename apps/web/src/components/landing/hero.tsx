@@ -15,10 +15,10 @@ import {
   ZapIcon,
 } from "@wattsteer/ui";
 import { StyleSheet, Text, View } from "react-native";
+import { useCopy } from "@/i18n";
 import { producerLabel } from "@/lib/domain";
 import { formatMwhExact, formatProbability, formatRange, upper } from "./band";
 import { BandFigure, BandRail, railLabel } from "./band-figure";
-import { copy } from "./copy";
 import { APP_HREF, CtaLink } from "./cta-link";
 import { FanChart, FanLegend } from "./fan-chart";
 import {
@@ -68,6 +68,7 @@ const styles = StyleSheet.create({
 });
 
 export function Hero({ onExplain }: { onExplain: () => void }) {
+  const copy = useCopy();
   const colors = usePalette();
   const [width, onLayout] = useContainerWidth();
   const wide = width >= 900;
@@ -141,6 +142,7 @@ export function Hero({ onExplain }: { onExplain: () => void }) {
 
 /** The live-readout panel: national figure, subsystem ranking, hourly fan. */
 function Readout({ wide, subsystemMax }: { wide: boolean; subsystemMax: number }) {
+  const copy = useCopy();
   const colors = usePalette();
   return (
     <View testID="hero-readout" style={{ gap: space.lg }}>
@@ -246,6 +248,7 @@ function Readout({ wide, subsystemMax }: { wide: boolean; subsystemMax: number }
  * this one line carries both the provenance and the vintage.
  */
 function OriginLine() {
+  const copy = useCopy();
   const colors = usePalette();
   return (
     <View
@@ -265,6 +268,7 @@ function OriginLine() {
 }
 
 function SubsystemRow({ outlook, max }: { outlook: SubsystemOutlook; max: number }) {
+  const copy = useCopy();
   const colors = usePalette();
   const probabilityTone =
     outlook.probability >= 0.66

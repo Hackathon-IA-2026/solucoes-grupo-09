@@ -8,6 +8,7 @@ import {
   usePalette,
 } from "@wattsteer/ui";
 import { Text, View } from "react-native";
+import { useCopy } from "@/i18n";
 import {
   centre,
   type Figure,
@@ -17,7 +18,6 @@ import {
   upper,
 } from "./band";
 import { BandRail, railLabel } from "./band-figure";
-import { copy } from "./copy";
 import { REPLAY } from "./fixtures";
 import { Footnote } from "./section";
 
@@ -40,6 +40,7 @@ import { Footnote } from "./section";
  * and this panel is where it becomes visible.
  */
 export function ReplayCompare() {
+  const copy = useCopy();
   const colors = usePalette();
   const max = Math.max(upper(REPLAY.actual), upper(REPLAY.optimized)) * 1.05;
 
@@ -141,6 +142,7 @@ function CompareRow({
   max: number;
   accent?: boolean;
 }) {
+  const copy = useCopy();
   const colors = usePalette();
   return (
     <View style={{ gap: 8 }}>

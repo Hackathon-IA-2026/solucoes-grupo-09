@@ -10,7 +10,7 @@ import {
 import { Image } from "expo-image";
 import { Link } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { copy } from "./landing/copy";
+import { useCopy } from "@/i18n";
 import { APP_HREF, CtaLink } from "./landing/cta-link";
 
 const styles = StyleSheet.create({
@@ -79,6 +79,7 @@ function LegalLink({
  * Copy is the closing line of the pitch (IDEA.md §47).
  */
 export function SiteFooter() {
+  const copy = useCopy();
   const colors = usePalette();
   const year = new Date().getFullYear();
   const [width, onLayout] = useContainerWidth();

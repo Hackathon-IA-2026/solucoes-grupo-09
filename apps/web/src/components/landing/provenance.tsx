@@ -8,7 +8,7 @@ import {
   XIcon,
 } from "@wattsteer/ui";
 import { Text, View } from "react-native";
-import { copy } from "./copy";
+import { useCopy } from "@/i18n";
 import { SectionHeading } from "./section";
 
 /**
@@ -32,6 +32,7 @@ import { SectionHeading } from "./section";
  * deliberately does not.
  */
 export function Provenance({ wide }: { wide: boolean }) {
+  const copy = useCopy();
   const colors = usePalette();
   const basis: `${number}%` = wide ? "31%" : "100%";
 

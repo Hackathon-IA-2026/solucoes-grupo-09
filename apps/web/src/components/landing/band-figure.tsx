@@ -1,5 +1,6 @@
 import { Badge, radius, space, usePalette } from "@wattsteer/ui";
 import { StyleSheet, Text, View } from "react-native";
+import { useCopy } from "@/i18n";
 import {
   type Band,
   type Figure,
@@ -8,7 +9,6 @@ import {
   railFractions,
   upper,
 } from "./band";
-import { copy } from "./copy";
 
 /**
  * Uncertainty primitives. **New primitives — promote to `packages/ui` once
@@ -123,6 +123,7 @@ export function BandRail({
 
 /** "P10–P90 · 2,640–6,320 MWh", or the observed marker. */
 export function BandCaption({ figure, unit }: { figure: Figure; unit: string }) {
+  const copy = useCopy();
   const colors = usePalette();
   if (figure.kind === "observed") {
     return (
@@ -162,6 +163,7 @@ export function BandFigure({
   /** Lime card treatment, for the one figure that leads a section. */
   highlight?: boolean;
 }) {
+  const copy = useCopy();
   const colors = usePalette();
   const value = figure.kind === "band" ? figure.band.p50 : figure.value;
   const railMax = max ?? upper(figure) * 1.1;

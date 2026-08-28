@@ -26,6 +26,7 @@ import {
 import { router, usePathname } from "expo-router";
 import type { ReactNode } from "react";
 import { Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { LanguageSwitch } from "@/components/language-switch";
 import {
   RUN_LABELS,
   type RunLabel,
@@ -126,12 +127,24 @@ export function AppShell({
                 PROTOTYPE · FIXTURE DATA
               </Text>
             </View>
+            {/* Pushes the switch to the far edge of the header row. */}
+            <View style={{ flex: 1 }} />
+            <LanguageSwitch testID="app-language-switch" />
           </View>
 
           <ScrollView
             horizontal={true}
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ flexDirection: "row", gap: 8, paddingBottom: 14 }}
+            // Vertical padding inside the scroller, not margin outside it: the
+            // pills carry a border and a focus ring, and a scroll viewport
+            // clips at its own edge, so without it the top of each pill reads
+            // as tucked under the header rule above.
+            contentContainerStyle={{
+              flexDirection: "row",
+              gap: 8,
+              paddingTop: 6,
+              paddingBottom: 16,
+            }}
           >
             {SCREENS.map((screen) => (
               <Pill
@@ -181,56 +194,72 @@ export function SelectionBar() {
         backgroundColor: colors.canvasTint,
       }}
     >
-      <ScrollView
-        horizontal={true}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{
-          flexDirection: "row",
-          alignItems: "center",
-          gap: space.xl,
-          paddingHorizontal: 20,
-          paddingVertical: 12,
+      {/*
+        The tint band spans the viewport, but its contents sit in the same
+        max-width column as the header and the screen body. Without this the
+        selector starts hard against the left edge while everything above and
+        below it is centred, which is what breaks the page's rhythm on a wide
+        display. The inner view is still full width on a narrow one, so the
+        horizontal scroll behaviour on mobile is unchanged.
+      */}
+      <View
+        style={{
+          width: "100%",
+          maxWidth: layout.page,
+          alignSelf: "center",
         }}
       >
-        <Group label="Subsystem">
-          {SUBSYSTEMS.map((s) => (
-            <MiniPill
-              key={s.code}
-              label={s.short}
-              active={params.subsystem === s.code}
-              onPress={() => params.setParams({ subsystem: s.code as SubsystemCode })}
-            />
-          ))}
-        </Group>
-        <Group label="Technology">
-          {(["WIND", "SOLAR"] as Technology[]).map((tech) => (
-            <MiniPill
-              key={tech}
-              label={tech === "WIND" ? "Wind" : "Solar"}
-              active={params.technology === tech}
-              onPress={() => params.setParams({ technology: tech })}
-            />
-          ))}
-        </Group>
-        <Group label="D−1 run">
-          {RUN_LABELS.map((run) => (
-            <MiniPill
-              key={run}
-              label={run}
-              active={params.run === run}
-              onPress={() => params.setParams({ run: run as RunLabel })}
-            />
-          ))}
-        </Group>
-        <View>
-          <Text style={{ fontSize: 10, color: colors.inkFaint, marginBottom: 4 }}>
-            Target day
-          </Text>
-          <Text style={{ fontSize: 13, fontWeight: "600", color: colors.ink }}>
-            {params.date}
-          </Text>
-        </View>
-      </ScrollView>
+        <ScrollView
+          horizontal={true}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: space.xl,
+            paddingHorizontal: 20,
+            paddingVertical: 12,
+          }}
+        >
+          <Group label="Subsystem">
+            {SUBSYSTEMS.map((s) => (
+              <MiniPill
+                key={s.code}
+                label={s.short}
+                active={params.subsystem === s.code}
+                onPress={() => params.setParams({ subsystem: s.code as SubsystemCode })}
+              />
+            ))}
+          </Group>
+          <Group label="Technology">
+            {(["WIND", "SOLAR"] as Technology[]).map((tech) => (
+              <MiniPill
+                key={tech}
+                label={tech === "WIND" ? "Wind" : "Solar"}
+                active={params.technology === tech}
+                onPress={() => params.setParams({ technology: tech })}
+              />
+            ))}
+          </Group>
+          <Group label="D−1 run">
+            {RUN_LABELS.map((run) => (
+              <MiniPill
+                key={run}
+                label={run}
+                active={params.run === run}
+                onPress={() => params.setParams({ run: run as RunLabel })}
+              />
+            ))}
+          </Group>
+          <View>
+            <Text style={{ fontSize: 10, color: colors.inkFaint, marginBottom: 4 }}>
+              Target day
+            </Text>
+            <Text style={{ fontSize: 13, fontWeight: "600", color: colors.ink }}>
+              {params.date}
+            </Text>
+          </View>
+        </ScrollView>
+      </View>
     </View>
   );
 }

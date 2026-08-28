@@ -13,7 +13,7 @@
  * loudly as one computed over 4,000.
  */
 
-import { usePalette } from "@wattsteer/ui";
+import { useContainerWidth, usePalette } from "@wattsteer/ui";
 import { Text, View } from "react-native";
 import Svg, { Circle, G, Line, Path, Text as SvgText } from "react-native-svg";
 import type { ReliabilityPoint } from "@/lib/fixtures";
@@ -25,12 +25,20 @@ const FONT =
 
 export function ReliabilityCurve({
   points,
-  height = S,
+  maxSize = 460,
 }: {
   points: ReliabilityPoint[];
-  height?: number;
+  /** Upper bound on the square's side. It grows to the panel width below this. */
+  maxSize?: number;
 }) {
   const colors = usePalette();
+  // Measured rather than fixed: `width="100%"` on a square viewBox letterboxes
+  // — the plot renders as a centred square with dead space either side of it.
+  // A reliability diagram has to *stay* square, because the identity line only
+  // reads as "perfectly calibrated" at 45°, so the fix is to grow the square to
+  // the panel's width rather than to stretch the drawing to fill it.
+  const [measured, onLayout] = useContainerWidth();
+  const side = Math.max(180, Math.min(measured || S, maxSize));
   const plot = S - PAD * 2;
   const maxCount = Math.max(...points.map((p) => p.hourCount), 1);
 
@@ -42,11 +50,11 @@ export function ReliabilityCurve({
     .join(" L")}`;
 
   return (
-    <View style={{ gap: 8 }}>
+    <View onLayout={onLayout} style={{ gap: 8, alignItems: "center" }}>
       <Svg
         viewBox={`0 0 ${S} ${S}`}
-        width="100%"
-        height={height}
+        width={side}
+        height={side}
         accessibilityLabel="Reliability diagram: forecast probability against observed frequency"
       >
         {[0, 0.25, 0.5, 0.75, 1].map((g) => (

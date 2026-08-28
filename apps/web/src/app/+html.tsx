@@ -5,10 +5,17 @@ import type { PropsWithChildren } from "react";
  * Static-render HTML shell (web only). Everything here ships in the initial
  * HTML — no client JS required — which is what search engines and social
  * crawlers read. Per-page tags live in each route's <Head>.
+ *
+ * `lang` is `pt-BR` because the export renders the default locale and that
+ * locale is Portuguese. It cannot vary per page: `docs/specs/i18n.md` records
+ * that this shell is global with no per-route access, which is precisely the
+ * limitation locale-prefixed routes would remove. `I18nProvider` rewrites the
+ * attribute on the client when a visitor switches, so the prerendered value is
+ * correct for the prerendered content and correct again after a switch.
  */
 export default function Root({ children }: PropsWithChildren) {
   return (
-    <html lang="en">
+    <html lang="pt-BR">
       <head>
         <meta charSet="utf-8" />
         <meta

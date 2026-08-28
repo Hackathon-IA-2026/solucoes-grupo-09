@@ -10,7 +10,7 @@ import {
 } from "@wattsteer/ui";
 import type { ComponentType } from "react";
 import { Text, View } from "react-native";
-import { copy } from "./copy";
+import { useCopy } from "@/i18n";
 import { SectionHeading } from "./section";
 
 /**
@@ -33,6 +33,7 @@ const ENGINE_ICONS: readonly IconComponent[] = [
 ];
 
 export function Engines({ wide }: { wide: boolean }) {
+  const copy = useCopy();
   const colors = usePalette();
   const basis: `${number}%` = wide ? "47%" : "100%";
 

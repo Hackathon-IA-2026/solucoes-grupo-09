@@ -8,7 +8,8 @@ import {
   WattSteerWordmark,
 } from "@wattsteer/ui";
 import { Platform, Pressable, Text, View } from "react-native";
-import { copy } from "./copy";
+import { LanguageSwitch } from "@/components/language-switch";
+import { useCopy } from "@/i18n";
 import { APP_HREF, CtaLink } from "./cta-link";
 import type { SectionId } from "./section";
 
@@ -26,6 +27,7 @@ import type { SectionId } from "./section";
  * parallel and `TopNavFull` is theirs.
  */
 export function LandingNav({ onNavigate }: { onNavigate: (section: SectionId) => void }) {
+  const copy = useCopy();
   const colors = usePalette();
   const [width, onLayout] = useContainerWidth();
   const wide = width >= 860;
@@ -63,13 +65,16 @@ export function LandingNav({ onNavigate }: { onNavigate: (section: SectionId) =>
         </View>
       ) : null}
 
-      <CtaLink
-        testID="nav-open-app"
-        href={APP_HREF}
-        label={copy.nav.cta}
-        primary={true}
-        icon={<ArrowRightIcon size={15} color={colors.onAccent} />}
-      />
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
+        <LanguageSwitch testID="nav-language-switch" />
+        <CtaLink
+          testID="nav-open-app"
+          href={APP_HREF}
+          label={copy.nav.cta}
+          primary={true}
+          icon={<ArrowRightIcon size={15} color={colors.onAccent} />}
+        />
+      </View>
     </View>
   );
 }

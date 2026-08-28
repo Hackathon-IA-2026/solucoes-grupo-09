@@ -8,10 +8,10 @@ import {
   usePalette,
 } from "@wattsteer/ui";
 import { Text, View } from "react-native";
+import { useCopy } from "@/i18n";
 import { formatBrl, SCENARIO_BRL_PER_MWH } from "@/lib/economics";
 import { centre, formatMwhExact, formatPercent, formatRange, upper } from "./band";
 import { BandRail, railLabel } from "./band-figure";
-import { copy } from "./copy";
 import { MITIGATION, type MitigationStep } from "./fixtures";
 import { Footnote } from "./section";
 
@@ -38,6 +38,7 @@ import { Footnote } from "./section";
  *   than fabricate one, the figure is labelled as a median-to-median ratio.
  */
 export function MitigationStack() {
+  const copy = useCopy();
   const colors = usePalette();
   const baseline = MITIGATION[0];
   const final = MITIGATION[MITIGATION.length - 1];
@@ -127,6 +128,7 @@ export function MitigationStack() {
 }
 
 function StepRow({ step, max }: { step: MitigationStep; max: number }) {
+  const copy = useCopy();
   const colors = usePalette();
   return (
     <View style={{ gap: 8 }}>

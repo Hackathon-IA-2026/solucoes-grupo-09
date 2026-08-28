@@ -1,6 +1,6 @@
 import { Panel, PanelHeader, PieChartIcon, space, usePalette } from "@wattsteer/ui";
 import { Text, View } from "react-native";
-import { copy } from "./copy";
+import { useCopy } from "@/i18n";
 import { DRIVERS } from "./fixtures";
 import { Footnote } from "./section";
 
@@ -22,6 +22,7 @@ import { Footnote } from "./section";
  * P10–P90 would be inventing uncertainty rather than reporting it.
  */
 export function DriverBars() {
+  const copy = useCopy();
   const colors = usePalette();
   const max = Math.max(...DRIVERS.map((d) => d.share));
 

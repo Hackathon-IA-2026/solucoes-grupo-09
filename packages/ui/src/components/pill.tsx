@@ -128,7 +128,12 @@ export function PillButton({
         return {
           flexDirection: "row",
           alignItems: "center",
+          justifyContent: "center",
           gap: 6,
+          // A pill hugs its label. As a flex child in a wrapping row it would
+          // otherwise shrink below its content and break the label onto a
+          // second line *inside* the rounded shape.
+          flexShrink: 0,
           borderRadius: radius.pill,
           borderWidth: 1,
           borderColor: primary ? colors.accent : colors.border,
@@ -153,6 +158,7 @@ export function PillButton({
     >
       {icon}
       <Text
+        numberOfLines={1}
         style={{
           fontSize: 14,
           fontWeight: primary ? "600" : "500",
