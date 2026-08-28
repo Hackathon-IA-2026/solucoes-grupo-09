@@ -14,13 +14,13 @@ mid-window is attributed correctly rather than retroactively.
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Plant, generating-unit and conjunto-membership registries are ingested
-- [ ] Capacity is aggregated from unit grain to plant grain correctly
-- [ ] Installed capacity is queryable as of any date in the window
-- [ ] Conjunto membership is queryable as of any date, honouring its validity dates
-- [ ] Operation modality is available per plant
-- [ ] Subsystem comes from the electrical assignment and is never derived from state
-- [ ] An assertion fires if any renewable unit ever gains a deactivation date, since none currently has one
-- [ ] The snapshot is stored with its own vintage, since the previous day's is unrecoverable
+- [x] Plant, generating-unit and conjunto-membership registries are ingested
+- [x] Capacity is aggregated from unit grain to plant grain correctly
+- [x] Installed capacity is queryable as of any date in the window
+- [x] Conjunto membership is queryable as of any date, honouring its validity dates
+- [x] Operation modality is available per plant
+- [x] Subsystem comes from the electrical assignment and is never derived from state
+- [x] An assertion fires if any renewable unit ever gains a deactivation date, since none currently has one
+- [x] The snapshot is stored with its own vintage, since the previous day's is unrecoverable

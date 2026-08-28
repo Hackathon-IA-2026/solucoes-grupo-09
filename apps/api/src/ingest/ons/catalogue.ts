@@ -181,3 +181,29 @@ export async function headResource(
   }
   return fingerprintFromHeaders(response.headers);
 }
+
+/**
+ * Pick the one resource of a dataset ONS publishes as a single file.
+ *
+ * The registry datasets — `capacidade-geracao`, `usina_conjunto`,
+ * `modalidade-usina` — are not split by year or month: there is exactly one
+ * file per format, overwritten in place. So there is nothing to match a period
+ * against, and the only choice is the format preference.
+ *
+ * Still routed through the catalogue rather than a constant URL, and for a
+ * reason this dataset family demonstrates better than any other:
+ * `modalidade-usina`'s CKAN slug is hyphenated while its S3 path segment is
+ * `modalidade_usina`. A constructed URL is a 404 waiting to happen.
+ */
+export function selectSingleResource(
+  resources: CatalogueResource[],
+  formats: readonly ResourceFormat[] = PREFERRED_FORMATS,
+): CatalogueResource {
+  for (const format of formats) {
+    const match = resources.find((resource) => resource.format === format);
+    if (match) {
+      return match;
+    }
+  }
+  throw new UpstreamError(`No ${formats.join(" or ")} resource found`);
+}
