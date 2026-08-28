@@ -1,5 +1,4 @@
 import {
-  ArrowRightIcon,
   focusRing,
   layout,
   space,
@@ -10,7 +9,6 @@ import {
 import { Platform, Pressable, Text, View } from "react-native";
 import { LanguageSwitch } from "@/components/language-switch";
 import { useCopy } from "@/i18n";
-import { APP_HREF, CtaLink } from "./cta-link";
 import type { SectionId } from "./section";
 
 /**
@@ -28,7 +26,6 @@ import type { SectionId } from "./section";
  */
 export function LandingNav({ onNavigate }: { onNavigate: (section: SectionId) => void }) {
   const copy = useCopy();
-  const colors = usePalette();
   const [width, onLayout] = useContainerWidth();
   const wide = width >= 860;
 
