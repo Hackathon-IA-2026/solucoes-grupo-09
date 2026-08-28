@@ -5,6 +5,7 @@
  */
 
 import {
+  FadeIn,
   LayoutDashboardIcon,
   Panel,
   PanelHeader,
@@ -52,7 +53,14 @@ export default function GridOverviewScreen() {
           }
         />
 
-        <View style={{ gap: space.md }}>
+        {/*
+          Staged entrance, borrowed from the results dashboard this screen is
+          modelled on: the eye is given an order to read the answer in —
+          subsystems, then the profile, then the day totals — instead of the
+          whole page arriving at once. Each block is offset by one step, and
+          `FadeIn` collapses to an instant render under prefers-reduced-motion.
+        */}
+        <FadeIn style={{ gap: space.md }}>
           {all.map((forecast) => (
             <SubsystemRow
               key={forecast.subsystem}
@@ -68,20 +76,25 @@ export default function GridOverviewScreen() {
             />
           ))}
           <RiskCaveat />
-        </View>
+        </FadeIn>
 
-        <Panel>
-          <PanelHeader
-            icon={<LayoutDashboardIcon size={18} color={colors.inkMuted} />}
-            title={`${meta.onsDisplayName} · ${params.technology}`}
-            subtitle="24-hour profile, P10–P90"
-          />
-          <View style={{ marginTop: space.lg }}>
-            <FanChart hours={selected.hours} thresholdMw={selected.thresholdMw} />
-          </View>
-        </Panel>
+        <FadeIn delay={70}>
+          <Panel>
+            <PanelHeader
+              icon={<LayoutDashboardIcon size={18} color={colors.inkMuted} />}
+              title={`${meta.onsDisplayName} · ${params.technology}`}
+              subtitle="24-hour profile, P10–P90"
+            />
+            <View style={{ marginTop: space.lg }}>
+              <FanChart hours={selected.hours} thresholdMw={selected.thresholdMw} />
+            </View>
+          </Panel>
+        </FadeIn>
 
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
+        <FadeIn
+          delay={140}
+          style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}
+        >
           <BandCard
             label="Expected curtailed energy, whole day"
             band={selected.dailyEnergy}
@@ -95,7 +108,7 @@ export default function GridOverviewScreen() {
             tone="violet"
             footnote={`Hour of the largest P50. Threshold in force: ${selected.thresholdMw} MW at subsystem grain.`}
           />
-        </View>
+        </FadeIn>
 
         <Text style={{ fontSize: 12, color: colors.inkFaint, lineHeight: 19 }}>
           Forecast grain is the subsystem. Observed curtailment is published per reporting
