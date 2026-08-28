@@ -18,7 +18,9 @@ function walk(node: Node, path: string[], out: Map<string, string>): void {
     return;
   }
   if (Array.isArray(node)) {
-    node.forEach((child, i) => walk(child as Node, [...path, String(i)], out));
+    node.forEach((child, i) => {
+      walk(child as Node, [...path, String(i)], out);
+    });
     return;
   }
   for (const [key, child] of Object.entries(node as Record<string, Node>)) {
