@@ -162,3 +162,90 @@ export function wallClockFromNaiveDate(value: Date): WallClock {
 export function minutesBetween(from: Date, to: Date): number {
   return Math.round((to.getTime() - from.getTime()) / MS_PER_MINUTE);
 }
+
+/**
+ * The interval one *local calendar day* actually occupied, as a UTC instant and
+ * a length.
+ *
+ * Two things make this more than `midnight, 1440`:
+ *
+ * - **Midnight does not always exist.** Brazil moved its clocks at 00:00, so on
+ *   a spring-forward day the local day begins at 01:00. `carga-energia` still
+ *   publishes a row for `2018-11-04`, and rejecting it as a DST gap would throw
+ *   away a real day of load for four subsystems.
+ * - **The day is not always 24 hours long**, and a mean power is only energy
+ *   once multiplied by the duration it is a mean over. ONS agrees: the four
+ *   `2018-11-04` values are means over 46 half-hours rather than 48, visible in
+ *   their repeating decimals (`4838.64947826`).
+ *
+ * Null only when neither midnight nor the hour after it exists, which no real
+ * zone does; it is returned rather than thrown so the caller rejects a row
+ * instead of failing a whole file.
+ */
+export interface LocalDay {
+  /** First instant of the local day, UTC. */
+  start: Date;
+  /** Length of the local day in minutes — 1380, 1440 or 1500. */
+  minutes: number;
+  /** True when local midnight never happened and the day starts an hour late. */
+  midnightSkipped: boolean;
+}
+
+/** Resolve a local calendar date to the interval it actually occupied. */
+export function localDayInterval(
+  wall: Pick<WallClock, "year" | "month" | "day">,
+  timeZone: string = ONS_TIME_ZONE,
+): LocalDay | null {
+  const startOf = (
+    date: Pick<WallClock, "year" | "month" | "day">,
+  ): { instant: Date; midnightSkipped: boolean } | null => {
+    const base = { ...date, minute: 0, second: 0 };
+    for (const hour of [0, 1]) {
+      const zoned = zonedWallClockToUtc({ ...base, hour }, timeZone);
+      if (zoned.kind === "ok") {
+        return { instant: zoned.instant, midnightSkipped: hour !== 0 };
+      }
+      if (zoned.kind === "ambiguous") {
+        // The local day began twice; the earlier occurrence is its start.
+        return { instant: zoned.instants[0], midnightSkipped: hour !== 0 };
+      }
+    }
+    return null;
+  };
+
+  const start = startOf(wall);
+  if (!start) {
+    return null;
+  }
+  // Date.UTC normalises a day past the end of the month, so no calendar
+  // arithmetic is written here.
+  const nextDay = new Date(Date.UTC(wall.year, wall.month - 1, wall.day + 1));
+  const next = startOf({
+    year: nextDay.getUTCFullYear(),
+    month: nextDay.getUTCMonth() + 1,
+    day: nextDay.getUTCDate(),
+  });
+  if (!next) {
+    return null;
+  }
+
+  return {
+    start: start.instant,
+    minutes: minutesBetween(start.instant, next.instant),
+    midnightSkipped: start.midnightSkipped,
+  };
+}
+
+const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** Parse ONS's date-only `din_instante`. Null when it is not one. */
+export function parseCalendarDate(
+  value: string,
+): Pick<WallClock, "year" | "month" | "day"> | null {
+  const match = DATE_ONLY.exec(value.trim());
+  if (!match) {
+    return null;
+  }
+  const [, year, month, day] = match;
+  return { year: Number(year), month: Number(month), day: Number(day) };
+}

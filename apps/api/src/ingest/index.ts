@@ -21,6 +21,22 @@ export {
   upsertReportingEntities,
   writeCurtailment,
 } from "./curtailment-repository.js";
+export {
+  createDailyLoadIngestor,
+  type DailyLoadIngestorDeps,
+  type IngestDailyLoadPayload,
+  type IngestDailyLoadResult,
+} from "./daily-load-job.js";
+export {
+  dailyLoadDigest,
+  readSubsystemLoadDaysAsOf,
+  type SubsystemLoadDayAsOfQuery,
+  type SubsystemLoadDayAsOfResult,
+  type SubsystemLoadDayAsOfRow,
+  type SubsystemLoadDayWrite,
+  type SubsystemLoadDayWriteResult,
+  writeSubsystemLoadDays,
+} from "./daily-load-repository.js";
 // The DESSEM day-ahead balance (ONS dataset 11) — the platform's first
 // bulk-file forecast, and its only daily-split source. Appended rather than
 // merged into the blocks above so that two adapters landing at once cannot
@@ -41,6 +57,22 @@ export {
   readDessemBalanceAsOf,
   writeDessemBalance,
 } from "./dessem-repository.js";
+export {
+  createInterchangeIngestor,
+  type IngestInterchangePayload,
+  type IngestInterchangeResult,
+  type InterchangeIngestorDeps,
+} from "./interchange-job.js";
+export {
+  exchangeDigest,
+  readSubsystemExchangeAsOf,
+  type SubsystemExchangeAsOfQuery,
+  type SubsystemExchangeAsOfResult,
+  type SubsystemExchangeAsOfRow,
+  type SubsystemExchangeWrite,
+  type SubsystemExchangeWriteResult,
+  writeSubsystemExchange,
+} from "./interchange-repository.js";
 export {
   createEnergyBalanceIngestor,
   type IngestEnergyBalancePayload,
@@ -131,6 +163,14 @@ export {
   WIND_DATASET_SLUG,
 } from "./ons/constrained-off.js";
 export {
+  DAILY_LOAD_DATASET_SLUG,
+  DAILY_LOAD_FORMATS,
+  LOAD_METHODOLOGY_REGIMES,
+  type LoadMethodologyBreak,
+  parseDailyLoadCsv,
+  regimeForDate,
+} from "./ons/daily-load.js";
+export {
   DESSEM_COVERAGE_START,
   DESSEM_DETAIL_DATASET_SLUG,
   PATAMAR_MINUTES,
@@ -144,6 +184,11 @@ export {
   parseEnergyBalanceCsv,
   parseEnergyBalanceParquet,
 } from "./ons/energy-balance.js";
+export {
+  INTERCHANGE_DATASET_SLUG,
+  INTERCHANGE_FORMATS,
+  parseInterchangeCsv,
+} from "./ons/interchange.js";
 export {
   intervalStartFromEnd,
   parseProgrammedLoad,

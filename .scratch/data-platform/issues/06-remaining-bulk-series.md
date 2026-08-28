@@ -16,11 +16,11 @@ not modelled as a change in the grid.
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Directed interchange flows are ingested, both verified and programmed where present
-- [ ] Years missing the later column ingest cleanly, without failing and without defaulting
-- [ ] Leading whitespace in subsystem names is handled
-- [ ] The daily load series is ingested with its definitional regimes recorded as metadata
-- [ ] Interval labelling is normalised to match every other source
-- [ ] Change detection still works where the catalogue does not report a modification time
+- [x] Directed interchange flows are ingested, both verified and programmed where present
+- [x] Years missing the later column ingest cleanly, without failing and without defaulting
+- [x] Leading whitespace in subsystem names is handled
+- [x] The daily load series is ingested with its definitional regimes recorded as metadata
+- [x] Interval labelling is normalised to match every other source
+- [x] Change detection still works where the catalogue does not report a modification time

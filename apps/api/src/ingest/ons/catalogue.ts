@@ -74,12 +74,19 @@ function basename(url: string): string {
  * The year is matched against the filename CKAN gave us rather than used to
  * build one, so the irregular-filename hazard stays confined to matching — a
  * miss is a thrown error, not a silent 404 on a fabricated URL.
+ *
+ * `formats` is a parameter for the same reason it is one on
+ * `selectResourceForMonth`: the preference is per dataset. `intercambio-nacional`
+ * publishes Parquet for 2023 → 2026 only, against CSV for all 27 years, so a
+ * Parquet-preferring select would silently ingest a different rendition for the
+ * recent years than for the history.
  */
 export function selectResourceForYear(
   resources: CatalogueResource[],
   year: number,
+  formats: readonly ResourceFormat[] = PREFERRED_FORMATS,
 ): CatalogueResource {
-  for (const format of PREFERRED_FORMATS) {
+  for (const format of formats) {
     const match = resources.find(
       (resource) =>
         resource.format === format &&
@@ -89,7 +96,7 @@ export function selectResourceForYear(
       return match;
     }
   }
-  throw new UpstreamError(`No PARQUET or CSV resource found for year ${year}`);
+  throw new UpstreamError(`No ${formats.join(" or ")} resource found for year ${year}`);
 }
 
 /**
