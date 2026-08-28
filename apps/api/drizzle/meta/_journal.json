@@ -15,6 +15,13 @@
       "when": 1787954165230,
       "tag": "0001_even_sabra",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787959736277,
+      "tag": "0002_eager_luckman",
+      "breakpoints": true
     }
   ]
 }

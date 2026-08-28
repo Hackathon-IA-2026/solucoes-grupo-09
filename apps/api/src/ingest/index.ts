@@ -26,6 +26,32 @@ export {
   type IngestEnergyBalancePayload,
   type IngestEnergyBalanceResult,
 } from "./job.js";
+// The ONS carga REST API (datasets 6 & 7) — the one source with no bulk files.
+// Appended rather than merged into the blocks above so that two adapters
+// landing at once cannot conflict on this file.
+export {
+  createLoadIngestor,
+  DEFAULT_AREA_CODES,
+  type IngestLoadPayload,
+  type IngestLoadResult,
+} from "./load-job.js";
+export {
+  type LoadAsOfQuery,
+  type LoadWriteResult,
+  type ProgrammedLoadAsOfResult,
+  type ProgrammedLoadAsOfRow,
+  type ProgrammedLoadWrite,
+  programmedLoadDigest,
+  readProgrammedLoadAsOf,
+  readVerifiedLoadAsOf,
+  recordLoadApiRequest,
+  type VerifiedLoadAsOfResult,
+  type VerifiedLoadAsOfRow,
+  type VerifiedLoadWrite,
+  verifiedLoadDigest,
+  writeProgrammedLoad,
+  writeVerifiedLoad,
+} from "./load-repository.js";
 export {
   mwmedToMwh,
   parseDecimal,
@@ -33,6 +59,31 @@ export {
   type SubsystemCode,
   trimmed,
 } from "./normalise.js";
+export {
+  AREA_CODE_FOR_SUBSYSTEM,
+  CARGA_API_BASE,
+  chunkDateRange,
+  type DateRange,
+  EmptyLoadResponseError,
+  fetchLoadRange,
+  isLoadAreaCode,
+  LOAD_AREA_CODES,
+  type LoadAreaCode,
+  type LoadAreaKind,
+  type LoadResponse,
+  type LoadSeries,
+  loadAreaKind,
+  loadRequestUrl,
+  MAX_RANGE_MONTHS,
+  parseTolerantJson,
+  type RawLoadRow,
+  repairMissingJsonValues,
+  resolveAreaCode,
+  SERIES_COVERAGE_START,
+  SERIES_PATH,
+  subsystemForArea,
+  TruncatedLoadResponseError,
+} from "./ons/carga-api.js";
 export {
   type CatalogueResource,
   fetchPackage,
@@ -57,6 +108,12 @@ export {
   parseEnergyBalanceParquet,
 } from "./ons/energy-balance.js";
 export {
+  intervalStartFromEnd,
+  parseProgrammedLoad,
+  parseUtcInstant,
+  parseVerifiedLoad,
+} from "./ons/load.js";
+export {
   type AsOfQuery,
   type EnergyBalanceAsOfResult,
   type EnergyBalanceAsOfRow,
@@ -77,7 +134,9 @@ export type {
   CurtailmentReportHour,
   EnergyBalanceHour,
   EnergyBalanceParse,
+  LoadParse,
   ObservedReportingEntity,
+  ProgrammedLoadHalfHour,
   ReasonCode,
   RejectedRow,
   RejectionReason,
@@ -85,6 +144,7 @@ export type {
   RestrictionCause,
   RestrictionOrigin,
   Technology,
+  VerifiedLoadHalfHour,
 } from "./types.js";
 export {
   digestValues,

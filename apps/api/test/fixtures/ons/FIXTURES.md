@@ -33,3 +33,44 @@ The wrapped row is the important one. In the full August 2026 wind file, 12
 physical lines carry an unbalanced quote and 7 have a field count other than 16.
 A newline-splitting CSV parser emits those as short, misaligned rows — plausible
 data rather than an error.
+
+## Carga API, half-hourly load (ticket 07)
+
+Captured **2026-08-28** from `https://apicarga.ons.org.br/prd`. Whole responses,
+byte-for-byte, unedited — including their irregular indentation and the missing
+values in the 2018 one. The API is unauthenticated; no headers are required.
+
+Recapture with, for example:
+
+```
+curl -s 'https://apicarga.ons.org.br/prd/cargaverificada?dat_inicio=2026-08-01&dat_fim=2026-08-01&cod_areacarga=SECO'
+```
+
+| File | Source | Pins |
+| --- | --- | --- |
+| `carga-verificada-SECO-2026-08-01.json` | `/cargaverificada`, `SECO`, 2026-08-01 | 48 rows — semi-horária. The UTC `din_referenciautc` running `03:30Z` → `2026-08-02T03:00Z`, i.e. **end**-labelled; the live `val_cargaglobalsmmgd` spelling; `din_atualizacao` on every row |
+| `carga-verificada-SECO-2018-06-01.malformed.json` | same endpoint, 2018-06-01 | **Invalid JSON**: `"val_cargaglobalsmmgd": ,` and `"val_cargammgd": ,`. `JSON.parse` throws on it. Also a `din_atualizacao` of 2020-09 for a 2018 valid time — the two axes, years apart |
+| `carga-verificada-SE-2026-08-01.empty.json` | same endpoint and date, `cod_areacarga=SE` | **The silent failure.** HTTP 200, body `[\n ]`. Not a 400 |
+| `carga-verificada-RJ-2026-08-01.json` | same endpoint and date, `cod_areacarga=RJ` | The geoelectric grain — an area that is not a subsystem, and gets no subsystem assigned |
+| `carga-programada-SECO-2026-08-01.json` | `/cargaprogramada`, `SECO`, 2026-08-01 | The forecast series: four fields, and **no `din_atualizacao`** |
+
+### Three things measured while capturing these, beyond the research
+
+1. **Exceeding the three-month limit truncates silently.**
+   `dat_inicio=2026-01-01&dat_fim=2026-06-30&cod_areacarga=SECO` returns HTTP
+   200 with **4944 rows ending at `2026-04-13`** — 103 days of the 181
+   requested, no error, no marker. `2026-01-01 → 2026-04-01` (three months and
+   a day) still returns the full range, so a three-month chunk is safely inside
+   the cap. This is why chunking is a correctness requirement and not a
+   politeness, and why the adapter also checks that the last `dat_referencia`
+   reaches `dat_fim`.
+2. **The malformed-JSON defect has no clean start date.** Probed one day per
+   period: 2016-01-01, 2017-06-01, 2018-06-01, 2018-10-01, 2018-12-01,
+   2019-01-01 and **2019-02-01** are all invalid; 2019-02-15, 2019-02-25,
+   2019-02-28, 2019-03-05 and everything later parse cleanly. So it cannot be
+   gated on a date, and the tolerant parser runs on every response.
+   Only two fields were observed affected, both nullable in the schema.
+3. **An unknown `cod_areacarga` is answered exactly like `SE`.** `ZZ` also
+   returns HTTP 200 and `[\n ]`. An empty array therefore never distinguishes
+   "no data" from "wrong code", which is why an empty response for a covered
+   period is treated as a failure rather than as an empty result.
