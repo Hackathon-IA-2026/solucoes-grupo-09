@@ -23,7 +23,7 @@ import { Footnote } from "./section";
  */
 export function DriverBars() {
   const colors = usePalette();
-  const max = Math.max(...DRIVERS.map((d) => d.contribution));
+  const max = Math.max(...DRIVERS.map((d) => d.share));
 
   return (
     <Panel
@@ -63,7 +63,7 @@ export function DriverBars() {
             >
               <View
                 style={{
-                  width: `${(driver.contribution / max) * 100}%`,
+                  width: `${(driver.share / max) * 100}%`,
                   height: "100%",
                   borderRadius: 5,
                   backgroundColor: index === 0 ? colors.accent : colors.violet,
@@ -80,7 +80,7 @@ export function DriverBars() {
                 color: colors.ink,
               }}
             >
-              {`${Math.round(driver.contribution * 100)}%`}
+              {`${Math.round(driver.share * 100)}%`}
             </Text>
           </View>
         ))}

@@ -130,6 +130,39 @@ export const onsResourceVersion = pgTable(
 );
 
 /**
+ * The four vintage columns every fact row carries, defined once.
+ *
+ * `docs/domain-model.md` §7: "Every fact row carries `valid_time`,
+ * `published_at`, `ingested_at`, `data_version`. No exceptions." A rule with no
+ * exceptions should be written down once — repeating the columns per table
+ * invites one of them to drift, and a fact table that quietly lost its
+ * `ingested_at` would break `AsOf(t)` silently rather than loudly.
+ *
+ * A function, not a shared object: Drizzle column builders carry state, so each
+ * table must get its own instances.
+ */
+function vintageColumns() {
+  return {
+    /** Monotonic per business key; bumped only when the value tuple changes. */
+    dataVersion: integer().notNull(),
+    /** When the upstream source asserted this value. Never null. */
+    publishedAt: timestamp({ withTimezone: true }).notNull(),
+    publishedAtPrecision: publishedAtPrecision().notNull(),
+    /** When WattSteer learned it. The axis `AsOf(t)` filters on. */
+    ingestedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    /**
+     * Digest of the stored values. Comparing it against the latest version of
+     * the same key is what makes an identical re-ingest write nothing.
+     */
+    valueDigest: text().notNull(),
+    /** Provenance: the exact resource version these numbers were parsed from. */
+    sourceVersionId: uuid()
+      .notNull()
+      .references(() => onsResourceVersion.id),
+  };
+}
+
+/**
  * Balanço de energia nos subsistemas — hourly system context per subsystem.
  * ONS dataset 5, and WattSteer's first fact table.
  *
@@ -152,9 +185,6 @@ export const subsystemEnergyBalanceHour = pgTable(
     subsystem: subsystemCode().notNull(),
     /** Start of the hour the fact is about, UTC. */
     validTime: timestamp({ withTimezone: true }).notNull(),
-    /** Monotonic per business key; bumped only when the value tuple changes. */
-    dataVersion: integer().notNull(),
-
     loadMwh: doublePrecision().notNull(),
     hydroGenerationMwh: doublePrecision().notNull(),
     thermalGenerationMwh: doublePrecision().notNull(),
@@ -162,20 +192,7 @@ export const subsystemEnergyBalanceHour = pgTable(
     solarGenerationMwh: doublePrecision().notNull(),
     netExchangeMwh: doublePrecision().notNull(),
 
-    /** When ONS asserted this value. Never null. */
-    publishedAt: timestamp({ withTimezone: true }).notNull(),
-    publishedAtPrecision: publishedAtPrecision().notNull(),
-    /** When WattSteer learned it. The axis `AsOf(t)` filters on. */
-    ingestedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-    /**
-     * Digest of the six stored values. Comparing it against the latest version
-     * of the same key is what makes an identical re-ingest write nothing.
-     */
-    valueDigest: text().notNull(),
-    /** Provenance: the exact resource version these numbers were parsed from. */
-    sourceVersionId: uuid()
-      .notNull()
-      .references(() => onsResourceVersion.id),
+    ...vintageColumns(),
   },
   (t) => [
     primaryKey({ columns: [t.subsystem, t.validTime, t.dataVersion] }),
@@ -258,7 +275,6 @@ export const curtailmentReportHour = pgTable(
     technology: technology().notNull(),
     /** Start of the hour the fact is about, UTC. */
     validTime: timestamp({ withTimezone: true }).notNull(),
-    dataVersion: integer().notNull(),
 
     /** Energy actually generated. */
     generationMwh: doublePrecision().notNull(),
@@ -284,13 +300,7 @@ export const curtailmentReportHour = pgTable(
      */
     causeMixed: integer().notNull().default(0),
 
-    publishedAt: timestamp({ withTimezone: true }).notNull(),
-    publishedAtPrecision: publishedAtPrecision().notNull(),
-    ingestedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-    valueDigest: text().notNull(),
-    sourceVersionId: uuid()
-      .notNull()
-      .references(() => onsResourceVersion.id),
+    ...vintageColumns(),
   },
   (t) => [
     primaryKey({

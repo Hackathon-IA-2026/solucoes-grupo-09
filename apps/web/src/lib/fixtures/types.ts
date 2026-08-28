@@ -8,10 +8,40 @@
  *
  * Nothing in this directory talks to the API. The point of ticket 014 is the
  * shape of the screens, not the pipeline.
+ *
+ * The shared vocabulary — `SubsystemCode`, `Technology`, `Band`, `Figure`,
+ * `Driver`, `ForecastOrigin` and the reason/origin/vintage enums — is defined
+ * once in `@/lib/domain` and re-exported here. It used to be declared in both
+ * places, and the two copies disagreed.
  */
 
-/** `Subsystem` — an enum, not a table. Exactly four. `SIN` is not a member. */
-export type SubsystemCode = "N" | "NE" | "S" | "SE";
+export {
+  type Band,
+  band,
+  centre,
+  type Driver,
+  type Figure,
+  type ForecastOrigin,
+  observed,
+  type ReasonCode,
+  type RestrictionOrigin,
+  type SubsystemCode,
+  spread,
+  type Technology,
+  upper,
+  type VintageFidelity,
+} from "@/lib/domain";
+
+import type {
+  Band,
+  Driver,
+  ForecastOrigin,
+  ReasonCode,
+  RestrictionOrigin,
+  SubsystemCode,
+  Technology,
+  VintageFidelity,
+} from "@/lib/domain";
 
 export interface SubsystemMeta {
   code: SubsystemCode;
@@ -19,51 +49,6 @@ export interface SubsystemMeta {
   onsDisplayName: string;
   /** Short label for tight chrome. */
   short: string;
-}
-
-/** `Technology` — two members; WattSteer forecasts VRE curtailment only. */
-export type Technology = "wind" | "solar";
-
-/** `ReasonCode`, verbatim from the ONS dictionary. `REL` is not "relaxamento". */
-export type ReasonCode = "REL" | "CNF" | "ENE" | "PAR";
-
-/** `RestrictionOrigin`. */
-export type RestrictionOrigin = "LOC" | "SIS";
-
-/**
- * `VintageFidelity` — stamped on every backtest, replay and metric, and
- * product-visible by decision, not by accident.
- */
-export type VintageFidelity = "point_in_time" | "revision_optimistic";
-
-/**
- * `ForecastOrigin` — the identity of the run that produced a forecast. Every
- * surface that shows a forecast must name it.
- */
-export interface ForecastOrigin {
-  producer: "open_meteo" | "ons_dessem" | "wattsteer";
-  runLabel: string;
-  /** ISO instant. `published_at` in the domain model. */
-  publishedAt: string;
-}
-
-/**
- * A P10 / P50 / P90 triple — the shape of every quantity the forecaster emits.
- *
- * This type exists so that a single figure is *impossible to render by
- * accident*: the screens take `Band`, and every component that displays one
- * has to decide what it does with the interval. The reference stat cards all
- * take a `number`, which is exactly the constraint this prototype refuses to
- * inherit.
- *
- * Quantiles do not add. Two `Band`s must never be summed componentwise — the
- * P90 of a sum is not the sum of the P90s. Fixtures therefore carry a joint
- * band wherever the product needs a total, and the UI never sums them.
- */
-export interface Band {
-  p10: number;
-  p50: number;
-  p90: number;
 }
 
 /** `CurtailmentHour`, forecast side: the atom the model predicts. */
@@ -111,20 +96,6 @@ export interface SubsystemDayForecast {
  * Three wide, named bins; see `components/charts/risk-class.tsx` for why.
  */
 export type RiskClass = "low" | "elevated" | "high";
-
-/** Driver attribution — SHAP plus domain rules, at subsystem grain. */
-export interface Driver {
-  /** Stable identifier; the label is UI copy and would be translated. */
-  code: string;
-  label: string;
-  /** Share of the total attributed magnitude, 0..1. Shares sum to 1. */
-  share: number;
-  /** Which way this driver pushed the forecast on this day. */
-  direction: "raises" | "lowers";
-  /** What the feature actually read, and what it usually reads. */
-  observed: string;
-  typical: string;
-}
 
 /**
  * A reliability (calibration) point: of the hours we called `binCentre`, how

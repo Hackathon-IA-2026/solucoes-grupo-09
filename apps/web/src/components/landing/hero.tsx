@@ -15,6 +15,7 @@ import {
   ZapIcon,
 } from "@wattsteer/ui";
 import { StyleSheet, Text, View } from "react-native";
+import { producerLabel } from "@/lib/domain";
 import { formatMwhExact, formatProbability, formatRange, upper } from "./band";
 import { BandFigure, BandRail, railLabel } from "./band-figure";
 import { copy } from "./copy";
@@ -257,7 +258,7 @@ function OriginLine() {
     >
       <ZapIcon size={14} color={colors.inkFaint} />
       <Text style={{ fontSize: 12, color: colors.inkFaint }}>
-        {`${copy.readout.originLabel}: ${FORECAST_ORIGIN.producer} · ${FORECAST_ORIGIN.runLabel} · published ${FORECAST_ORIGIN.publishedAt}`}
+        {`${copy.readout.originLabel}: ${producerLabel[FORECAST_ORIGIN.producer]} · ${FORECAST_ORIGIN.runLabel} · published ${FORECAST_ORIGIN.publishedAt}`}
       </Text>
     </View>
   );

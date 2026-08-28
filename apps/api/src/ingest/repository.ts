@@ -1,37 +1,27 @@
-import { createHash } from "node:crypto";
-import { and, gte, lte, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import type { Database } from "../database/connection.js";
 import { subsystemEnergyBalanceHour } from "../database/schema.js";
 import type { SubsystemCode } from "./normalise.js";
 import type { EnergyBalanceHour } from "./types.js";
+import {
+  digestValues,
+  type VersionedTableSpec,
+  type VersionedWriteResult,
+  type VintageStamp,
+  writeVersioned,
+} from "./versioned-write.js";
 
 /**
- * Bitemporal persistence for the energy balance: how a revision becomes a new
- * row, and how `AsOf(t)` reads exactly one row per key back out.
+ * Bitemporal persistence for the energy balance.
  *
- * The two decisions this file implements are recorded in
- * `docs/specs/data-platform.md`. In short: facts are wide (one table per
- * grain), and `data_version` is derived from a digest of the stored value tuple
- * rather than from the source file or from a bare counter.
+ * The append-and-version algorithm lives in `versioned-write.ts` and is shared
+ * with every other fact table; what stays here is what is genuinely specific —
+ * this table's key, its digest, its insert shape, and its as-of read.
  */
 
-/** Postgres caps bind parameters at 65535; this keeps a batch well inside it. */
-const INSERT_CHUNK = 1000;
-
-/** Decimal places the digest rounds to — below the noise floor of ONS values. */
-const DIGEST_PRECISION = 6;
-
-/**
- * Digest of the values a row stores, and of nothing else.
- *
- * Deliberately excludes `published_at`, `ingested_at` and the source file: a
- * re-publication that restates a byte of a 171 MB file must not bump the
- * version of every row inside it, and a poll that finds the same numbers must
- * not bump anything at all. Vintage history records ONS restatements, not
- * WattSteer's polling schedule.
- */
+/** Digest of the six stored measures, keyed by the business key. */
 export function valueDigest(row: EnergyBalanceHour): string {
-  const parts = [
+  return digestValues([
     row.subsystem,
     row.validTime.toISOString(),
     row.loadMwh,
@@ -40,140 +30,45 @@ export function valueDigest(row: EnergyBalanceHour): string {
     row.windGenerationMwh,
     row.solarGenerationMwh,
     row.netExchangeMwh,
-  ].map((part) => (typeof part === "number" ? part.toFixed(DIGEST_PRECISION) : part));
-  return createHash("sha256").update(parts.join("|")).digest("hex");
+  ]);
 }
 
-const businessKey = (subsystem: string, validTime: Date): string =>
-  `${subsystem}|${validTime.toISOString()}`;
+const SPEC: VersionedTableSpec<
+  EnergyBalanceHour,
+  typeof subsystemEnergyBalanceHour.$inferInsert
+> = {
+  table: subsystemEnergyBalanceHour,
+  tableName: "subsystem_energy_balance_hour",
+  keyColumns: ["subsystem", "valid_time"],
+  validTimeColumn: "valid_time",
+  businessKey: (row) => `${row.subsystem}|${row.validTime.toISOString()}`,
+  validTime: (row) => row.validTime,
+  digest: valueDigest,
+  toInsert: (row, version, vintage) => ({
+    ...row,
+    dataVersion: version.dataVersion,
+    valueDigest: version.valueDigest,
+    publishedAt: vintage.publishedAt,
+    publishedAtPrecision: vintage.publishedAtPrecision,
+    ingestedAt: vintage.ingestedAt,
+    sourceVersionId: vintage.sourceVersionId,
+  }),
+};
 
 /** What to write, and the vintage to stamp on it. */
-export interface EnergyBalanceWrite {
+export interface EnergyBalanceWrite extends VintageStamp {
   rows: EnergyBalanceHour[];
-  /** When ONS asserted these values — the file's `Last-Modified` here. */
-  publishedAt: Date;
-  publishedAtPrecision: "row" | "file";
-  /** The `ons_resource_version` these rows were parsed from. */
-  sourceVersionId: string;
-  /** Overridable so a test can place a write at a chosen instant. */
-  ingestedAt?: Date;
 }
 
-/** What a write actually did — the shape an operator wants in a run summary. */
-export interface EnergyBalanceWriteResult {
-  /** Business keys seen for the first time. */
-  inserted: number;
-  /** Keys whose values changed — a real ONS restatement. */
-  revised: number;
-  /** Keys re-ingested with identical values. No row was written. */
-  unchanged: number;
-}
+export type EnergyBalanceWriteResult = VersionedWriteResult;
 
-interface LatestVersion {
-  dataVersion: number;
-  valueDigest: string;
-}
-
-/**
- * Load the current latest version of every key in the rows' valid-time range.
- *
- * Ranged rather than keyed by an `IN` list because one ingest covers one
- * contiguous file, so the range is exactly the batch and the index serves it.
- */
-async function loadLatest(
-  db: Database,
-  from: Date,
-  to: Date,
-): Promise<Map<string, LatestVersion>> {
-  const rows = await db
-    .selectDistinctOn(
-      [subsystemEnergyBalanceHour.subsystem, subsystemEnergyBalanceHour.validTime],
-      {
-        subsystem: subsystemEnergyBalanceHour.subsystem,
-        validTime: subsystemEnergyBalanceHour.validTime,
-        dataVersion: subsystemEnergyBalanceHour.dataVersion,
-        valueDigest: subsystemEnergyBalanceHour.valueDigest,
-      },
-    )
-    .from(subsystemEnergyBalanceHour)
-    .where(
-      and(
-        gte(subsystemEnergyBalanceHour.validTime, from),
-        lte(subsystemEnergyBalanceHour.validTime, to),
-      ),
-    )
-    .orderBy(
-      subsystemEnergyBalanceHour.subsystem,
-      subsystemEnergyBalanceHour.validTime,
-      sql`${subsystemEnergyBalanceHour.dataVersion} desc`,
-    );
-
-  return new Map(
-    rows.map((row) => [
-      businessKey(row.subsystem, row.validTime),
-      { dataVersion: row.dataVersion, valueDigest: row.valueDigest },
-    ]),
-  );
-}
-
-/**
- * Append the rows whose values actually changed.
- *
- * Idempotent by construction: running it twice over the same parse writes
- * nothing the second time, because every digest matches the version already
- * stored. That is what makes a BullMQ retry after a partial failure safe.
- */
+/** Append the rows whose values actually changed. Idempotent on re-ingest. */
 export async function writeEnergyBalance(
   db: Database,
   write: EnergyBalanceWrite,
 ): Promise<EnergyBalanceWriteResult> {
-  const result: EnergyBalanceWriteResult = { inserted: 0, revised: 0, unchanged: 0 };
-  if (write.rows.length === 0) {
-    return result;
-  }
-
-  const times = write.rows.map((row) => row.validTime.getTime());
-  const latest = await loadLatest(
-    db,
-    new Date(Math.min(...times)),
-    new Date(Math.max(...times)),
-  );
-  const ingestedAt = write.ingestedAt ?? new Date();
-
-  const pending: (typeof subsystemEnergyBalanceHour.$inferInsert)[] = [];
-  for (const row of write.rows) {
-    const digest = valueDigest(row);
-    const current = latest.get(businessKey(row.subsystem, row.validTime));
-    if (current?.valueDigest === digest) {
-      result.unchanged += 1;
-      continue;
-    }
-    if (current) {
-      result.revised += 1;
-    } else {
-      result.inserted += 1;
-    }
-    pending.push({
-      ...row,
-      dataVersion: (current?.dataVersion ?? 0) + 1,
-      publishedAt: write.publishedAt,
-      publishedAtPrecision: write.publishedAtPrecision,
-      ingestedAt,
-      valueDigest: digest,
-      sourceVersionId: write.sourceVersionId,
-    });
-  }
-
-  for (let offset = 0; offset < pending.length; offset += INSERT_CHUNK) {
-    await db
-      .insert(subsystemEnergyBalanceHour)
-      .values(pending.slice(offset, offset + INSERT_CHUNK))
-      // A retry that got as far as inserting is not a failure: the same key at
-      // the same version carries the same values by construction.
-      .onConflictDoNothing();
-  }
-
-  return result;
+  const { rows, ...vintage } = write;
+  return writeVersioned(db, SPEC, rows, vintage);
 }
 
 /** One row of an as-of read, carrying the vintage it came from. */
@@ -187,9 +82,9 @@ export interface EnergyBalanceAsOfRow extends EnergyBalanceHour {
  * Whether an as-of read is honestly point-in-time.
  *
  * A window that predates ingestion go-live cannot be: the "past" it returns is
- * ONS's *current* restatement of it, because prior vintages are unrecoverable.
- * This can never be repaired retroactively, so it is reported rather than
- * silently answered.
+ * the source's *current* restatement of it, because prior vintages are
+ * unrecoverable. This can never be repaired retroactively, so it is reported
+ * rather than silently answered.
  */
 export type VintageFidelity = "point_in_time" | "revision_optimistic";
 
@@ -210,11 +105,11 @@ export interface AsOfQuery {
 }
 
 /**
- * `AsOf(t)` — the only sanctioned read of a fact table.
+ * `AsOf(t)` — the only sanctioned read of this table.
  *
- * `DISTINCT ON` over the business key, ordered by descending `ingested_at`,
- * returns exactly one row per key or none. The tiebreak on `data_version`
- * matters because a backfill can write several versions at one instant.
+ * The reads are deliberately *not* shared with the other fact tables: each
+ * projects different columns and rebuilds a different shape, and a generic that
+ * returned untyped rows would push that work onto every caller instead.
  */
 export async function readEnergyBalanceAsOf(
   db: Database,

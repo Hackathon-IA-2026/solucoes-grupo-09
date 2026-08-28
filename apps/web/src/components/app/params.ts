@@ -45,7 +45,24 @@ export interface AppParams {
   episode: string;
 }
 
-const TECHNOLOGIES: Technology[] = ["wind", "solar"];
+/**
+ * URL spelling of `Technology`, and the only place the two forms meet.
+ *
+ * The domain — and the database enum, and the API — say `WIND` / `SOLAR`.
+ * A URL reads better lowercase, so the query string keeps its own spelling and
+ * this module translates. Exactly the same shape of boundary as the ONS carga
+ * API's `SECO` for the subsystem the rest of the system calls `SE`: the
+ * transport form is owned by the transport layer and never leaks inward.
+ */
+const TECHNOLOGY_PARAM: Record<string, Technology> = {
+  wind: "WIND",
+  solar: "SOLAR",
+};
+
+/** Render a `Technology` back into its URL spelling. */
+export function technologyParam(technology: Technology): string {
+  return technology.toLowerCase();
+}
 
 function first(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -62,9 +79,7 @@ export function parseAppParams(
     subsystem: SUBSYSTEM_CODES.includes(subsystem as SubsystemCode)
       ? (subsystem as SubsystemCode)
       : "NE",
-    technology: TECHNOLOGIES.includes(technology as Technology)
-      ? (technology as Technology)
-      : "wind",
+    technology: TECHNOLOGY_PARAM[technology ?? ""] ?? "WIND",
     run: RUN_LABELS.includes(run as RunLabel) ? (run as RunLabel) : "12Z",
     date: TARGET_DATE,
     episode:

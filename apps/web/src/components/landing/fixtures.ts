@@ -23,17 +23,16 @@
  *   shows none rather than showing one at the wrong grain.
  */
 
-import { band, type Figure, observed } from "./band";
+import {
+  band,
+  type Driver,
+  type Figure,
+  type ForecastOrigin,
+  observed,
+  type SubsystemCode,
+} from "@/lib/domain";
 
-/** `docs/domain-model.md` §2 — four members, and `SIN` is not one of them. */
-export type SubsystemCode = "N" | "NE" | "S" | "SE";
-
-export interface ForecastOrigin {
-  producer: string;
-  runLabel: string;
-  /** Run initialisation — the `published_at` of every row it produced. */
-  publishedAt: string;
-}
+export type { Driver, ForecastOrigin, SubsystemCode };
 
 export interface SubsystemOutlook {
   code: SubsystemCode;
@@ -50,13 +49,6 @@ export interface HourlyBand {
   p10: number;
   p50: number;
   p90: number;
-}
-
-export interface Driver {
-  /** English label; the underlying feature name is an identifier, not copy. */
-  label: string;
-  /** Normalised SHAP contribution, 0..1, summing to 1 across the list. */
-  contribution: number;
 }
 
 export interface MitigationStep {
@@ -78,7 +70,7 @@ export const FORECAST_DAY = "2026-08-29";
  * no special case — it is simply a newer vintage of the same valid hours.
  */
 export const FORECAST_ORIGIN: ForecastOrigin = {
-  producer: "ECMWF IFS HRES via Open-Meteo",
+  producer: "open_meteo",
   runLabel: "D−1 12Z",
   publishedAt: "2026-08-28T12:00Z",
 };
@@ -146,12 +138,54 @@ export const HOURLY_PROFILE: readonly HourlyBand[] = [
 
 /** IDEA.md §43's driver list, at the grain the Diagnosis engine reports. */
 export const DRIVERS: readonly Driver[] = [
-  { label: "Renewable / load ratio", contribution: 0.31 },
-  { label: "Export stress, NE → SE", contribution: 0.25 },
-  { label: "Low residual load", contribution: 0.18 },
-  { label: "Solar ramp", contribution: 0.14 },
-  { label: "Weekend", contribution: 0.07 },
-  { label: "Other features", contribution: 0.05 },
+  {
+    code: "renewable_load_ratio",
+    label: "Renewable / load ratio",
+    share: 0.31,
+    direction: "raises",
+    observed: "1.18",
+    typical: "0.74",
+  },
+  {
+    code: "ne_se_export_utilisation",
+    label: "Export stress, NE → SE",
+    share: 0.25,
+    direction: "raises",
+    observed: "94%",
+    typical: "71%",
+  },
+  {
+    code: "residual_load",
+    label: "Low residual load",
+    share: 0.18,
+    direction: "raises",
+    observed: "−0.9 GW",
+    typical: "4.1 GW",
+  },
+  {
+    code: "solar_ramp_1h",
+    label: "Solar ramp",
+    share: 0.14,
+    direction: "raises",
+    observed: "+2.8 GW/h",
+    typical: "+1.1 GW/h",
+  },
+  {
+    code: "is_weekend",
+    label: "Weekend",
+    share: 0.07,
+    direction: "raises",
+    observed: "Sunday",
+    typical: "weekday",
+  },
+  {
+    code: "other",
+    label: "Other features",
+    share: 0.05,
+    direction: "raises",
+    observed: "—",
+    typical: "—",
+  },
 ];
 
 export const MITIGATION: readonly MitigationStep[] = [

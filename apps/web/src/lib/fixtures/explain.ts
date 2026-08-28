@@ -272,7 +272,7 @@ export function buildExplain(
   technology: Technology,
 ): ExplainFixture {
   const drivers =
-    subsystem === "NE" && technology === "wind"
+    subsystem === "NE" && technology === "WIND"
       ? NE_WIND_DRIVERS
       : subsystem === "NE"
         ? NE_SOLAR_DRIVERS

@@ -76,11 +76,11 @@ interface ProfileSpec {
 
 const PROFILES: Record<SubsystemCode, Record<Technology, ProfileSpec>> = {
   N: {
-    wind: { peakHour: 4, width: 3.4, peakMw: 63, occurrence: 0.34, spread: 0.55 },
-    solar: { peakHour: 12, width: 2.2, peakMw: 41, occurrence: 0.22, spread: 0.62 },
+    WIND: { peakHour: 4, width: 3.4, peakMw: 63, occurrence: 0.34, spread: 0.55 },
+    SOLAR: { peakHour: 12, width: 2.2, peakMw: 41, occurrence: 0.22, spread: 0.62 },
   },
   NE: {
-    wind: {
+    WIND: {
       peakHour: 3,
       width: 3.8,
       peakMw: 640,
@@ -88,7 +88,7 @@ const PROFILES: Record<SubsystemCode, Record<Technology, ProfileSpec>> = {
       occurrence: 0.89,
       spread: 0.3,
     },
-    solar: {
+    SOLAR: {
       peakHour: 12,
       width: 2.6,
       peakMw: 470,
@@ -97,8 +97,8 @@ const PROFILES: Record<SubsystemCode, Record<Technology, ProfileSpec>> = {
     },
   },
   SE: {
-    wind: { peakHour: 2, width: 3, peakMw: 38, occurrence: 0.12, spread: 0.7 },
-    solar: {
+    WIND: { peakHour: 2, width: 3, peakMw: 38, occurrence: 0.12, spread: 0.7 },
+    SOLAR: {
       peakHour: 12,
       width: 2.8,
       peakMw: 295,
@@ -107,8 +107,8 @@ const PROFILES: Record<SubsystemCode, Record<Technology, ProfileSpec>> = {
     },
   },
   S: {
-    wind: { peakHour: 5, width: 3.6, peakMw: 96, occurrence: 0.18, spread: 0.6 },
-    solar: { peakHour: 13, width: 2.2, peakMw: 52, occurrence: 0.09, spread: 0.75 },
+    WIND: { peakHour: 5, width: 3.6, peakMw: 96, occurrence: 0.18, spread: 0.6 },
+    SOLAR: { peakHour: 13, width: 2.2, peakMw: 52, occurrence: 0.09, spread: 0.75 },
   },
 };
 
@@ -135,7 +135,7 @@ function seedFor(
   run: RunLabel,
 ): number {
   const s = SUBSYSTEM_CODES.indexOf(subsystem) + 1;
-  const t = technology === "wind" ? 3 : 7;
+  const t = technology === "WIND" ? 3 : 7;
   const r = run === "00Z" ? 1 : 2;
   return s * 17 + t * 5 + r;
 }

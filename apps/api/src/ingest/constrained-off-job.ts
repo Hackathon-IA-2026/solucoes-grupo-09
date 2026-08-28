@@ -1,25 +1,24 @@
 import type { Database } from "../database/connection.js";
-import { UpstreamError } from "../errors.js";
 import type { Execute } from "../jobs/index.js";
+import { acquireBulkResource, BULK_STEPS } from "./bulk-resource.js";
 import { upsertReportingEntities, writeCurtailment } from "./curtailment-repository.js";
-import { fetchPackage, headResource, selectResourceForMonth } from "./ons/catalogue.js";
+import { type CatalogueResource, selectResourceForMonth } from "./ons/catalogue.js";
 import {
   parseConstrainedOffCsv,
   SOLAR_DATASET_SLUG,
   WIND_DATASET_SLUG,
 } from "./ons/constrained-off.js";
-import { markResourceFetched, recordResourceVersion } from "./resource-version.js";
 import type { Technology } from "./types.js";
 
 /**
  * Ingestion for the entity-grain constrained-off datasets, one month at a time
  * — the unit ONS publishes.
  *
- * Same order of operations as the energy-balance job, for the same reason:
- * discover from the catalogue, fingerprint with a `HEAD`, stop there if nothing
- * moved, and only then spend a download. The refresh policy this enables
- * matters more here than anywhere else, because ONS rewrites closed months of
- * this dataset years after the fact — the whole of 2025 was restated in 2026.
+ * Acquisition is shared with every other bulk dataset (`bulk-resource.ts`).
+ * The conditional-download policy it implements matters more here than
+ * anywhere else, because ONS rewrites closed months of this dataset years
+ * after the fact — the whole of 2025 was restated in 2026 — so a sweep over
+ * closed history has to be cheap enough to run often.
  */
 
 /** One month of one technology. */
@@ -71,22 +70,19 @@ export function createConstrainedOffIngestor(
 
   return async (payload, report) => {
     const slug = slugFor(payload.technology);
-    const resources = await fetchPackage(slug, fetchImpl);
-    const resource = selectResourceForMonth(
-      resources,
-      payload.year,
-      payload.month,
-      FORMATS,
-    );
-    report({ done: 1, total: 4 });
-
-    const fingerprint = await headResource(resource.url, fetchImpl);
-    const version = await recordResourceVersion(deps.db, slug, resource, fingerprint);
-    report({ done: 2, total: 4 });
+    const acquired = await acquireBulkResource({
+      db: deps.db,
+      fetch: fetchImpl,
+      slug,
+      select: (resources: CatalogueResource[]) =>
+        selectResourceForMonth(resources, payload.year, payload.month, FORMATS),
+      force: payload.force,
+      report,
+    });
 
     const base = {
-      resourceName: resource.name,
-      changed: !version.alreadySeen,
+      resourceName: acquired.resource.name,
+      changed: acquired.changed,
       rowsParsed: 0,
       rowsRejected: 0,
       entitiesSeen: 0,
@@ -96,22 +92,14 @@ export function createConstrainedOffIngestor(
       unchanged: 0,
     };
 
-    if (version.alreadySeen && !payload.force) {
+    if (!acquired.bytes) {
       return { ...base, downloaded: false };
     }
 
-    const response = await fetchImpl(resource.url);
-    if (!response.ok) {
-      throw new UpstreamError(`GET ${resource.url} failed: HTTP ${response.status}`);
-    }
-    const bytes = await response.arrayBuffer();
-    report({ done: 3, total: 4 });
-
     const parsed = parseConstrainedOffCsv(
-      new TextDecoder("utf-8").decode(bytes),
+      new TextDecoder("utf-8").decode(acquired.bytes),
       payload.technology,
     );
-    await markResourceFetched(deps.db, version.id, bytes);
 
     // Entities first: the fact table has a foreign key to them, and a month can
     // introduce a conjunto that has never been settled against before.
@@ -119,13 +107,11 @@ export function createConstrainedOffIngestor(
 
     const written = await writeCurtailment(deps.db, {
       rows: parsed.rows,
-      // No row-level vintage on these files, so the file's `Last-Modified` is
-      // the coarsest honest stamp, and the row says so.
-      publishedAt: fingerprint.lastModified ?? resource.lastModified ?? new Date(),
-      publishedAtPrecision: "file",
-      sourceVersionId: version.id,
+      publishedAt: acquired.publishedAt,
+      publishedAtPrecision: acquired.publishedAtPrecision,
+      sourceVersionId: acquired.versionId,
     });
-    report({ done: 4, total: 4 });
+    report({ done: BULK_STEPS, total: BULK_STEPS });
 
     return {
       ...base,

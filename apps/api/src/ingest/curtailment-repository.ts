@@ -1,5 +1,4 @@
-import { createHash } from "node:crypto";
-import { and, gte, lte, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import type { Database } from "../database/connection.js";
 import { curtailmentReportHour, reportingEntity } from "../database/schema.js";
 import type { VintageFidelity } from "./repository.js";
@@ -10,54 +9,85 @@ import type {
   RestrictionOrigin,
   Technology,
 } from "./types.js";
+import {
+  digestValues,
+  INSERT_CHUNK,
+  type VersionedTableSpec,
+  type VersionedWriteResult,
+  type VintageStamp,
+  writeVersioned,
+} from "./versioned-write.js";
 
 /**
- * Bitemporal persistence for constrained-off, following the decisions the
- * energy-balance repository established: facts are wide and append-only, and
- * `data_version` is a digest of the stored value tuple rather than of the
- * source file or a counter.
+ * Bitemporal persistence for constrained-off.
  *
- * Kept in its own module rather than added to `repository.ts` because the two
- * tables share a *pattern*, not code — this one has an entity dimension to
- * maintain, a nullable value object, and a composite key with a technology in
- * it. Forcing them into one generic would obscure both.
+ * The append-and-version algorithm is shared — see `versioned-write.ts`. What
+ * lives here is what is specific to this table: an entity dimension to
+ * maintain, a composite key carrying a technology, a nullable value object, and
+ * its own as-of projection.
  */
 
-const INSERT_CHUNK = 1000;
-const DIGEST_PRECISION = 6;
-
 /**
- * Digest of the values a row stores, and of nothing else.
+ * Digest of the values a row stores.
  *
- * The cause is part of the value: ONS revising a reason from `CNF` to `ENE`
- * without changing a single number is a real restatement, and a digest over
- * the measures alone would silently swallow it.
+ * The cause is part of the value: the source revising a reason from `CNF` to
+ * `ENE` without changing a single number is a real restatement, and a digest
+ * over the measures alone would silently swallow it.
  */
 export function curtailmentDigest(row: CurtailmentReportHour): string {
-  const parts = [
+  return digestValues([
     row.reportingEntityCode,
     row.technology,
     row.validTime.toISOString(),
-    row.generationMwh.toFixed(DIGEST_PRECISION),
-    row.constrainedOffMwh.toFixed(DIGEST_PRECISION),
-    row.referenceGenerationMwh?.toFixed(DIGEST_PRECISION) ?? "",
-    row.finalReferenceGenerationMwh?.toFixed(DIGEST_PRECISION) ?? "",
-    row.availabilityMw?.toFixed(DIGEST_PRECISION) ?? "",
+    row.generationMwh,
+    row.constrainedOffMwh,
+    row.referenceGenerationMwh,
+    row.finalReferenceGenerationMwh,
+    row.availabilityMw,
     String(row.halfHoursObserved),
-    row.cause?.reason ?? "",
-    row.cause?.origin ?? "",
-    row.cause?.description ?? "",
+    row.cause?.reason ?? null,
+    row.cause?.origin ?? null,
+    row.cause?.description ?? null,
     row.causeMixed ? "1" : "0",
-  ];
-  return createHash("sha256").update(parts.join("|")).digest("hex");
+  ]);
 }
 
-const businessKey = (row: {
-  reportingEntityCode: string;
-  technology: string;
-  validTime: Date;
-}): string =>
-  `${row.reportingEntityCode}|${row.technology}|${row.validTime.toISOString()}`;
+const SPEC: VersionedTableSpec<
+  CurtailmentReportHour,
+  typeof curtailmentReportHour.$inferInsert
+> = {
+  table: curtailmentReportHour,
+  tableName: "curtailment_report_hour",
+  keyColumns: ["reporting_entity_code", "technology", "valid_time"],
+  validTimeColumn: "valid_time",
+  businessKey: (row) =>
+    `${row.reportingEntityCode}|${row.technology}|${row.validTime.toISOString()}`,
+  validTime: (row) => row.validTime,
+  digest: curtailmentDigest,
+  toInsert: (row, version, vintage) => ({
+    reportingEntityCode: row.reportingEntityCode,
+    technology: row.technology,
+    validTime: row.validTime,
+    dataVersion: version.dataVersion,
+    generationMwh: row.generationMwh,
+    constrainedOffMwh: row.constrainedOffMwh,
+    referenceGenerationMwh: row.referenceGenerationMwh,
+    finalReferenceGenerationMwh: row.finalReferenceGenerationMwh,
+    availabilityMw: row.availabilityMw,
+    halfHoursObserved: row.halfHoursObserved,
+    // Written as a whole or not at all — the CHECK constraint on this table
+    // makes a half-populated pair unrepresentable, not merely discouraged.
+    reason: row.cause?.reason ?? null,
+    origin: row.cause?.origin ?? null,
+    restrictionDescription: row.cause?.description ?? null,
+    causeMixed: row.causeMixed ? 1 : 0,
+    publishedAt: vintage.publishedAt,
+    publishedAtPrecision: vintage.publishedAtPrecision,
+    ingestedAt: vintage.ingestedAt,
+    valueDigest: version.valueDigest,
+    sourceVersionId: vintage.sourceVersionId,
+  }),
+};
 
 /**
  * Upsert the entities a file mentioned.
@@ -99,134 +129,20 @@ export async function upsertReportingEntities(
   return entities.length;
 }
 
-export interface CurtailmentWrite {
+/** What to write, and the vintage to stamp on it. */
+export interface CurtailmentWrite extends VintageStamp {
   rows: CurtailmentReportHour[];
-  publishedAt: Date;
-  publishedAtPrecision: "row" | "file";
-  sourceVersionId: string;
-  ingestedAt?: Date;
 }
 
-export interface CurtailmentWriteResult {
-  inserted: number;
-  revised: number;
-  unchanged: number;
-}
+export type CurtailmentWriteResult = VersionedWriteResult;
 
-interface LatestVersion {
-  dataVersion: number;
-  valueDigest: string;
-}
-
-async function loadLatest(
-  db: Database,
-  from: Date,
-  to: Date,
-): Promise<Map<string, LatestVersion>> {
-  const rows = await db
-    .selectDistinctOn(
-      [
-        curtailmentReportHour.reportingEntityCode,
-        curtailmentReportHour.technology,
-        curtailmentReportHour.validTime,
-      ],
-      {
-        reportingEntityCode: curtailmentReportHour.reportingEntityCode,
-        technology: curtailmentReportHour.technology,
-        validTime: curtailmentReportHour.validTime,
-        dataVersion: curtailmentReportHour.dataVersion,
-        valueDigest: curtailmentReportHour.valueDigest,
-      },
-    )
-    .from(curtailmentReportHour)
-    .where(
-      and(
-        gte(curtailmentReportHour.validTime, from),
-        lte(curtailmentReportHour.validTime, to),
-      ),
-    )
-    .orderBy(
-      curtailmentReportHour.reportingEntityCode,
-      curtailmentReportHour.technology,
-      curtailmentReportHour.validTime,
-      sql`${curtailmentReportHour.dataVersion} desc`,
-    );
-
-  return new Map(
-    rows.map((row) => [
-      businessKey(row),
-      { dataVersion: row.dataVersion, valueDigest: row.valueDigest },
-    ]),
-  );
-}
-
-/**
- * Append the rows whose values actually changed.
- *
- * Idempotent: a second run over the same parse writes nothing, because every
- * digest matches the version already stored. That is what makes a retry safe.
- */
+/** Append the rows whose values actually changed. Idempotent on re-ingest. */
 export async function writeCurtailment(
   db: Database,
   write: CurtailmentWrite,
 ): Promise<CurtailmentWriteResult> {
-  const result: CurtailmentWriteResult = { inserted: 0, revised: 0, unchanged: 0 };
-  if (write.rows.length === 0) {
-    return result;
-  }
-
-  const times = write.rows.map((row) => row.validTime.getTime());
-  const latest = await loadLatest(
-    db,
-    new Date(Math.min(...times)),
-    new Date(Math.max(...times)),
-  );
-  const ingestedAt = write.ingestedAt ?? new Date();
-
-  const pending: (typeof curtailmentReportHour.$inferInsert)[] = [];
-  for (const row of write.rows) {
-    const digest = curtailmentDigest(row);
-    const current = latest.get(businessKey(row));
-    if (current?.valueDigest === digest) {
-      result.unchanged += 1;
-      continue;
-    }
-    if (current) {
-      result.revised += 1;
-    } else {
-      result.inserted += 1;
-    }
-    pending.push({
-      reportingEntityCode: row.reportingEntityCode,
-      technology: row.technology,
-      validTime: row.validTime,
-      dataVersion: (current?.dataVersion ?? 0) + 1,
-      generationMwh: row.generationMwh,
-      constrainedOffMwh: row.constrainedOffMwh,
-      referenceGenerationMwh: row.referenceGenerationMwh,
-      finalReferenceGenerationMwh: row.finalReferenceGenerationMwh,
-      availabilityMw: row.availabilityMw,
-      halfHoursObserved: row.halfHoursObserved,
-      reason: row.cause?.reason ?? null,
-      origin: row.cause?.origin ?? null,
-      restrictionDescription: row.cause?.description ?? null,
-      causeMixed: row.causeMixed ? 1 : 0,
-      publishedAt: write.publishedAt,
-      publishedAtPrecision: write.publishedAtPrecision,
-      ingestedAt,
-      valueDigest: digest,
-      sourceVersionId: write.sourceVersionId,
-    });
-  }
-
-  for (let offset = 0; offset < pending.length; offset += INSERT_CHUNK) {
-    await db
-      .insert(curtailmentReportHour)
-      .values(pending.slice(offset, offset + INSERT_CHUNK))
-      .onConflictDoNothing();
-  }
-
-  return result;
+  const { rows, ...vintage } = write;
+  return writeVersioned(db, SPEC, rows, vintage);
 }
 
 /** One row of an as-of read, carrying the vintage it came from. */

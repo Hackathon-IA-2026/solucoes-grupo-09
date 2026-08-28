@@ -1,4 +1,9 @@
 export {
+  acquireBulkResource,
+  BULK_STEPS,
+  type BulkResource,
+} from "./bulk-resource.js";
+export {
   type ConstrainedOffIngestorDeps,
   createConstrainedOffIngestor,
   type IngestConstrainedOffPayload,
@@ -81,3 +86,11 @@ export type {
   RestrictionOrigin,
   Technology,
 } from "./types.js";
+export {
+  digestValues,
+  INSERT_CHUNK,
+  type VersionedTableSpec,
+  type VersionedWriteResult,
+  type VintageStamp,
+  writeVersioned,
+} from "./versioned-write.js";

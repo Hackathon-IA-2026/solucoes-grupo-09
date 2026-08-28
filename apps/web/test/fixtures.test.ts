@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseAppParams } from "../src/components/app/params";
+import { parseAppParams, technologyParam } from "../src/components/app/params";
 import {
   buildForecast,
   buildMitigationSteps,
@@ -13,7 +13,7 @@ import {
 } from "../src/lib/fixtures";
 
 describe("forecast fixtures", () => {
-  const forecast = buildForecast("NE", "wind", "12Z");
+  const forecast = buildForecast("NE", "WIND", "12Z");
 
   test("emits 24 hours", () => {
     expect(forecast.hours).toHaveLength(24);
@@ -34,7 +34,7 @@ describe("forecast fixtures", () => {
   });
 
   test("the 12Z run carries a narrower band than 00Z", () => {
-    const early = buildForecast("NE", "wind", "00Z");
+    const early = buildForecast("NE", "WIND", "00Z");
     const width = (f: typeof forecast) => f.dailyEnergy.p90 - f.dailyEnergy.p10;
     expect(width(forecast)).toBeLessThan(width(early));
   });
@@ -96,7 +96,7 @@ describe("prototype heuristic", () => {
 
 describe("mitigation steps", () => {
   const steps = buildMitigationSteps({
-    forecast: buildForecast("NE", "wind", "12Z"),
+    forecast: buildForecast("NE", "WIND", "12Z"),
     battery: DEFAULT_BATTERY,
     load: DEFAULT_LOAD,
     basis: "p50",
@@ -143,21 +143,34 @@ describe("URL params", () => {
   test("defaults hold for an empty query", () => {
     const params = parseAppParams({});
     expect(params.subsystem).toBe("NE");
-    expect(params.technology).toBe("wind");
+    expect(params.technology).toBe("WIND");
     expect(params.run).toBe("12Z");
   });
 
   test("a hand-edited URL falls back rather than crashing", () => {
     const params = parseAppParams({ subsystem: "SIN", technology: "hydro", run: "18Z" });
     expect(params.subsystem).toBe("NE");
-    expect(params.technology).toBe("wind");
+    expect(params.technology).toBe("WIND");
     expect(params.run).toBe("12Z");
   });
 
   test("valid values survive", () => {
     const params = parseAppParams({ subsystem: "S", technology: "solar", run: "00Z" });
     expect(params.subsystem).toBe("S");
-    expect(params.technology).toBe("solar");
+    expect(params.technology).toBe("SOLAR");
     expect(params.run).toBe("00Z");
+  });
+
+  test("the URL keeps its own lowercase spelling of technology", () => {
+    // The domain, the database enum and the API all say WIND / SOLAR. A URL
+    // reads better lowercase, so params.ts owns the translation — the same
+    // shape of boundary as the ONS carga API calling SE "SECO". The transport
+    // spelling must never leak inward, and the domain spelling must never
+    // appear in a query string.
+    expect(parseAppParams({ technology: "wind" }).technology).toBe("WIND");
+    expect(technologyParam("SOLAR")).toBe("solar");
+    // An uppercase value in the URL is not the transport form. Asserted with
+    // SOLAR so the expectation cannot be satisfied by the WIND default.
+    expect(parseAppParams({ technology: "SOLAR" }).technology).toBe("WIND");
   });
 });

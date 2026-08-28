@@ -26,20 +26,28 @@ the parse and write differ.
 under enforced directory separation. The `landing/` design is the stronger one:
 its `Figure` sum type makes a dropped uncertainty band unrepresentable.
 
-**Why this waits:** the correct shape of (1) and (2) becomes obvious once
-tickets 06, 07 and 08 add a third and fourth adapter — one of which is a REST
-source with no bulk file at all, which is exactly the case a premature generic
-would fail to accommodate. And (3) should converge when the screens stop
-running on fixtures, not before.
+**Why it did not wait, in the end.** The argument for waiting was that a REST
+source with no bulk file would break a generic drawn from two file-based
+examples. That turned out to name the seam rather than forbid it: the shared
+piece is the *versioned write*, which every fact table needs whatever its
+transport, and acquisition is a separate helper scoped to bulk files and named
+for it. A REST source shares the first and skips the second. Splitting it that
+way was only visible once the two concerns were pulled apart — which is what
+doing the work, rather than deferring it, produced.
 
-**Blocked by:** 06, 07, 08 — deliberately, so the abstraction is drawn from
-four instances rather than two.
+Finding (3) turned out to be worse than duplication: the two vocabularies
+*contradicted* each other. `Technology` was lowercase on the web and uppercase
+in the API and the database enum, and `Driver` disagreed on a field name. The
+lowercase URL spelling survives as a transport form owned by `params.ts`, the
+same way the ONS carga API's `SECO` is owned by its client.
 
-**Status:** ready-for-agent
+**Blocked by:** nothing. Done ahead of 06/07/08 at the dev's call.
 
-- [ ] The versioned-append write is extracted once and used by both fact tables
-- [ ] The reads stay separate, and the header comment claims only that
-- [ ] Job orchestration is shared, with parse and write injected
-- [ ] Adding a fifth dataset touches one adapter file and one registration
-- [ ] `apps/web` has one definition of each domain type, and it is the sum-type one
-- [ ] No behaviour changes; the existing tests pass untouched
+**Status:** done
+
+- [x] The versioned-append write is extracted once and used by both fact tables
+- [x] The reads stay separate, and the header comment claims only that
+- [x] Job orchestration is shared, with parse and write injected
+- [x] Adding a fifth dataset touches one adapter file and one registration
+- [x] `apps/web` has one definition of each domain type, and it is the sum-type one
+- [x] No behaviour changes; the existing tests pass untouched

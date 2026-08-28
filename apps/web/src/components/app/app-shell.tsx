@@ -203,10 +203,10 @@ export function SelectionBar() {
           ))}
         </Group>
         <Group label="Technology">
-          {(["wind", "solar"] as Technology[]).map((tech) => (
+          {(["WIND", "SOLAR"] as Technology[]).map((tech) => (
             <MiniPill
               key={tech}
-              label={tech === "wind" ? "Wind" : "Solar"}
+              label={tech === "WIND" ? "Wind" : "Solar"}
               active={params.technology === tech}
               onPress={() => params.setParams({ technology: tech })}
             />
