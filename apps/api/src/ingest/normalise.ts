@@ -81,3 +81,43 @@ export function parseDecimal(value: string | null | undefined): number | null {
 export function mwmedToMwh(mwmed: number, intervalMinutes: number): number {
   return mwmed * (intervalMinutes / 60);
 }
+
+/**
+ * Parse a plain calendar date from an ONS registry file.
+ *
+ * The registry datasets (`capacidade-geracao`, `usina_conjunto`) write dates as
+ * bare `YYYY-MM-DD` with no time and no zone — unlike `din_instante`, which is
+ * a Brasília wall clock and needs the full IANA treatment in `time.ts`. A
+ * commissioning date is a calendar day, not an instant in Brasília, so it is
+ * anchored at UTC midnight: that is the reading under which
+ * `commissioned_on <= t` means "on or after that day" in every timezone the
+ * question is ever asked from.
+ *
+ * `null` means the column was present but empty — which is meaningful data in
+ * both files (`dat_desativacao` empty = still running; `dat_fimrelacionamento`
+ * empty = still a member). `NaN`-carrying dates are impossible to express, so
+ * an unparsable value is reported as `invalid` rather than coerced.
+ */
+export function parseSourceDate(
+  value: string | null | undefined,
+): { date: Date | null } | { invalid: string } {
+  if (value === null || value === undefined) {
+    return { date: null };
+  }
+  const text = trimmed(value);
+  if (text === "") {
+    return { date: null };
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return { invalid: text };
+  }
+  const date = new Date(`${text}T00:00:00.000Z`);
+  return Number.isNaN(date.getTime()) ? { invalid: text } : { date };
+}
+
+/** Truncate an instant to the UTC midnight of the calendar day it falls in. */
+export function toUtcDay(instant: Date): Date {
+  return new Date(
+    Date.UTC(instant.getUTCFullYear(), instant.getUTCMonth(), instant.getUTCDate()),
+  );
+}

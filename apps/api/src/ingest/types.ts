@@ -54,7 +54,19 @@ export type RejectionReason =
    */
   | "non_utc_timestamp"
   /** A half-hourly label that fell on neither `:00` nor `:30`. */
-  | "misaligned_interval";
+  | "misaligned_interval"
+  /** A registry date column held something that is not a `YYYY-MM-DD`. */
+  | "unparsable_date"
+  /**
+   * A column that is this row's identity was present but empty — a registry
+   * row with no `ceg`, or a membership with no `id_ons_usina`. Nothing can be
+   * keyed on it, so it is rejected rather than given a synthetic key.
+   */
+  | "missing_identity"
+  /** `nom_tipousina` / `id_tipousina` was not a technology WattSteer models. */
+  | "unknown_technology"
+  /** `nom_modalidadeoperacao` was not one of the four dispatched modalities. */
+  | "unknown_modality";
 
 /** A rejected source row, kept so a run can explain itself. */
 export interface RejectedRow {
@@ -246,4 +258,153 @@ export interface LoadParse<TRow> {
    * and a run in which it disappeared should be able to say so.
    */
   rowsWithoutVintage: number;
+}
+/**
+ * ONS's operation modality, and what determines which `ReportingEntity`
+ * variant a plant participates in (`docs/domain-model.md` §3). Exactly four
+ * members: `TIPO III` exists in `modalidade-usina` but describes distributed
+ * generation ONS does not dispatch, and it is outside every dataset WattSteer
+ * ingests — so it is unrepresentable here rather than tolerated.
+ */
+export type OperationModality = "TIPO_I" | "TIPO_II_A" | "TIPO_II_B" | "TIPO_II_C";
+
+/**
+ * A plant as ONS's registry describes it — one *usina*.
+ *
+ * Identity is `cegCore` rather than `onsPlantCode`, and that is a deviation
+ * from `docs/domain-model.md` §3 forced by measurement: the live
+ * `capacidade-geracao` file carries **no `id_ons` column at all** (the research
+ * recorded it as added 2026-01-26; it is not there). `ceg` is on every row, so
+ * the version-stripped core is the only identity this source offers. The ONS
+ * plant code is recovered where `usina_conjunto` supplies it and is null
+ * otherwise — which is honest, because for a Tipo I / II-B plant that never
+ * joins a conjunto no ONS dataset in this ticket names one.
+ *
+ * Attribute ownership follows the plant-registry research: **ONS owns all of
+ * these**. SIGA contributes coordinates, municipality and ownership share, and
+ * nothing here.
+ */
+export interface RegistryPlant {
+  /** ANEEL CEG with the version segment stripped. The identity. */
+  cegCore: string;
+  /** The CEG exactly as ONS rendered it — provenance survives normalisation. */
+  cegRaw: string;
+  /** ONS `id_ons`, from the conjunto bridge. Null when no source names one. */
+  onsPlantCode: string | null;
+  name: string;
+  /**
+   * From `id_subsistema` — the **electrical** assignment.
+   *
+   * Never derived from `id_estado`: twelve VRE units in Bahia are assigned to
+   * `SE`, and five of the 1,614 curtailed plants disagree with SIGA's
+   * "principal" UF outright. State is an attribute, not a subsystem key.
+   */
+  subsystem: SubsystemCode;
+  /** ONS `id_estado`. An attribute; never a subsystem input. */
+  stateCode: string;
+  technology: Technology;
+  operationModality: OperationModality;
+  ownerName: string;
+  operatorName: string;
+}
+
+/**
+ * One turbine or inverter block — the true grain of `capacidade-geracao`, and
+ * the entity that exists for exactly one reason: `InstalledCapacityAsOf`.
+ *
+ * A plant's capacity is the sum over its units at a date, never a stored
+ * number. `decommissionedOn` is nullable and that nullability is correct: it
+ * means "still running".
+ */
+export interface RegistryGeneratingUnit {
+  plantCegCore: string;
+  /** ONS `cod_equipamento` — unique within a plant across the whole live file. */
+  equipmentCode: string;
+  /** ONS `num_unidadegeradora`, the operational number. Display, not identity. */
+  unitNumber: string;
+  name: string;
+  ratedPowerMw: number;
+  /** `dat_entradateste` — release for commissioning. Null when absent. */
+  testEntryOn: Date | null;
+  /** `dat_entradaoperacao` — release for commercial operation. UTC midnight. */
+  commissionedOn: Date;
+  /** `dat_desativacao`. Null means still running — the honest reading. */
+  decommissionedOn: Date | null;
+}
+
+/** What the `capacidade-geracao` adapter produces from one snapshot. */
+export interface PlantRegistryParse {
+  plants: RegistryPlant[];
+  units: RegistryGeneratingUnit[];
+  rejected: RejectedRow[];
+  /**
+   * Rows dropped because their technology is outside WattSteer's scope —
+   * hydro, thermal and nuclear. Reported rather than silently discarded: if
+   * this ever reaches zero, ONS has changed what the file covers.
+   */
+  outOfScopeRowsFiltered: number;
+  /**
+   * Units whose `dat_desativacao` precedes their `dat_entradaoperacao`.
+   *
+   * Real in the live file — all three BELMONTE 1-1 deactivations are stamped
+   * 2023-05-03 against a 2023-12-05 commissioning. The rows are kept verbatim
+   * (nothing is coerced) and `InstalledCapacityAsOf` naturally counts them in
+   * no interval at all, but the count is surfaced so the contradiction is
+   * visible rather than merely harmless.
+   */
+  inconsistentUnitDates: number;
+  /** The header actually present in this snapshot, read fresh on every ingest. */
+  columns: string[];
+}
+
+/**
+ * A conjunto as the `usina_conjunto` bridge describes it.
+ *
+ * `technology` is null when `id_tipousina` is not one of the two VRE codes —
+ * the bridge also carries `UTE` and `UHE` conjuntos. `sourceTypeCode` keeps
+ * ONS's own value so the null is explainable.
+ */
+export interface RegistryConjunto {
+  onsConjuntoCode: string;
+  name: string;
+  subsystem: SubsystemCode;
+  stateCode: string;
+  technology: Technology | null;
+  /** `id_tipousina` verbatim: `UEE`, `UFV`, `UTE`, `UHE`. */
+  sourceTypeCode: string;
+}
+
+/**
+ * One SCD2 row of the plant-to-conjunto bridge.
+ *
+ * **`memberTo` is the inclusive last day of membership**, not an exclusive
+ * bound. Measured, not assumed: of the 331 sequential memberships in the live
+ * file, all 331 successors start on the day *after* their predecessor's
+ * `dat_fimrelacionamento` and none starts on the same day. Reading it as
+ * exclusive would leave a one-day hole in every plant that ever moved conjunto.
+ */
+export interface RegistryConjuntoMembership {
+  /** `id_ons_usina`. The membership key — see the note on `plantCegCore`. */
+  plantOnsCode: string;
+  /**
+   * The member plant's `ceg_core`, or null where ONS's own bridge leaves `ceg`
+   * empty (it does, for `SPUD42`). Not the key: one `ceg_core` in the live file
+   * carries two `id_ons` values (`RNST6` and `RNST06`), so keying membership on
+   * the CEG would collapse two real rows into a false overlap.
+   */
+  plantCegCore: string | null;
+  conjuntoCode: string;
+  /** `dat_iniciorelacionamento`, UTC midnight. First day of membership. */
+  memberFrom: Date;
+  /** `dat_fimrelacionamento`, UTC midnight. **Inclusive** last day, or null. */
+  memberTo: Date | null;
+}
+
+/** What the `usina_conjunto` adapter produces from one snapshot. */
+export interface ConjuntoMembershipParse {
+  conjuntos: RegistryConjunto[];
+  memberships: RegistryConjuntoMembership[];
+  rejected: RejectedRow[];
+  /** The header actually present in this snapshot, read fresh on every ingest. */
+  columns: string[];
 }

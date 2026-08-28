@@ -1,0 +1,14 @@
+{
+  "url": "https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/capacidade-geracao/CAPACIDADE_GERACAO.csv",
+  "status": 200,
+  "headers": {
+    "date": "Fri, 28 Aug 2026 23:22:30 GMT",
+    "last-modified": "Fri, 28 Aug 2026 22:00:39 GMT",
+    "etag": "\"39f066df4ed00307ca98b1adaf2dadfe\"",
+    "accept-ranges": "bytes",
+    "content-type": "binary/octet-stream",
+    "content-length": "1277484",
+    "server": "AmazonS3",
+    "x-amz-server-side-encryption": "AES256"
+  }
+}

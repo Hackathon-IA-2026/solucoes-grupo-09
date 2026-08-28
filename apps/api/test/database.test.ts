@@ -6,12 +6,22 @@ import { onsResourceVersion } from "../src/database/schema.js";
 import {
   type CurtailmentReportHour,
   createEnergyBalanceIngestor,
+  createPlantRegistryIngestor,
   type EnergyBalanceHour,
+  type RegistryGeneratingUnit,
+  type RegistryPlant,
+  readConjuntoMembershipAsOf,
   readCurtailmentAsOf,
   readEnergyBalanceAsOf,
+  readInstalledCapacityAsOf,
+  readPlantCapacityAsOf,
+  upsertConjuntos,
+  upsertPlants,
   upsertReportingEntities,
+  writeConjuntoMemberships,
   writeCurtailment,
   writeEnergyBalance,
+  writeGeneratingUnits,
 } from "../src/ingest/index.js";
 import { createInProcessRunner } from "../src/jobs/inprocess.js";
 
@@ -503,5 +513,550 @@ suite("constrained-off · bitemporal store (real Postgres)", () => {
     // the only "past" available. Reported, never silently answered.
     expect(result.vintageFidelity).toBe("revision_optimistic");
     expect(result.goLiveAt).not.toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ONS fleet registry (ticket 04) — as-of capacity and time-resolved membership.
+// ---------------------------------------------------------------------------
+
+/** A plant of our own, so these suites cannot collide with the ones above. */
+const TEST_PLANT = "EOL.TT.BA.000001-1";
+const TEST_PLANT_SE = "UFV.TT.BA.000002-9";
+
+const registryPlant = (
+  cegCore: string,
+  overrides: Partial<RegistryPlant> = {},
+): RegistryPlant => ({
+  cegCore,
+  cegRaw: `${cegCore}.01`,
+  onsPlantCode: null,
+  name: `PLANT ${cegCore}`,
+  subsystem: "NE",
+  stateCode: "BA",
+  technology: "WIND",
+  operationModality: "TIPO_II_C",
+  ownerName: "AGENTE",
+  operatorName: "AGENTE",
+  ...overrides,
+});
+
+const registryUnit = (
+  plantCegCore: string,
+  equipmentCode: string,
+  ratedPowerMw: number,
+  commissionedOn: string,
+  decommissionedOn: string | null = null,
+): RegistryGeneratingUnit => ({
+  plantCegCore,
+  equipmentCode,
+  unitNumber: equipmentCode.slice(-1),
+  name: `UG ${equipmentCode}`,
+  ratedPowerMw,
+  testEntryOn: null,
+  commissionedOn: new Date(`${commissionedOn}T00:00:00.000Z`),
+  decommissionedOn:
+    decommissionedOn === null ? null : new Date(`${decommissionedOn}T00:00:00.000Z`),
+});
+
+suite("registry · installed capacity as of a date (real Postgres)", () => {
+  const handle = createDatabase(URL as string, 5);
+  const { db } = handle;
+  let sourceVersionId = "";
+
+  const R1 = new Date("2026-08-01T00:00:00.000Z");
+  const R2 = new Date("2026-08-15T00:00:00.000Z");
+  const LATER = new Date("2026-09-01T00:00:00.000Z");
+
+  beforeAll(async () => {
+    await db.execute(sql`truncate table generating_unit`);
+    await db.execute(sql`truncate table conjunto_membership`);
+    await db.execute(sql`truncate table plant cascade`);
+    await db.execute(sql`truncate table conjunto cascade`);
+    const [version] = await db
+      .insert(onsResourceVersion)
+      .values({
+        datasetSlug: "capacidade-geracao",
+        resourceName: "Capacidade_Geracao",
+        resourceUrl: "https://example.invalid/CAPACIDADE_GERACAO.csv",
+        format: "CSV",
+        changeKey: `registry-test|${Date.now()}`,
+      })
+      .returning({ id: onsResourceVersion.id });
+    sourceVersionId = version?.id ?? "";
+
+    await upsertPlants(db, [
+      registryPlant(TEST_PLANT),
+      // State BA, subsystem SE — the electrical assignment, not the state.
+      registryPlant(TEST_PLANT_SE, { subsystem: "SE", technology: "SOLAR" }),
+    ]);
+  });
+
+  afterAll(() => handle.close());
+
+  const write = (units: RegistryGeneratingUnit[], ingestedAt: Date) =>
+    writeGeneratingUnits(db, {
+      units,
+      publishedAt: ingestedAt,
+      publishedAtPrecision: "file",
+      sourceVersionId,
+      ingestedAt,
+    });
+
+  it("writes the first snapshot at data_version 1", async () => {
+    const result = await write(
+      [
+        registryUnit(TEST_PLANT, "UG1", 10, "2024-01-15"),
+        registryUnit(TEST_PLANT, "UG2", 20, "2025-06-01"),
+        registryUnit(TEST_PLANT_SE, "UG3", 30, "2024-01-15"),
+      ],
+      R1,
+    );
+    expect(result).toEqual({ inserted: 3, revised: 0, unchanged: 0 });
+  });
+
+  it("writes nothing when the daily snapshot reproduces itself", async () => {
+    // The file is overwritten twice a day. Version history has to record ONS's
+    // corrections, not the refresh schedule.
+    const result = await write(
+      [
+        registryUnit(TEST_PLANT, "UG1", 10, "2024-01-15"),
+        registryUnit(TEST_PLANT, "UG2", 20, "2025-06-01"),
+        registryUnit(TEST_PLANT_SE, "UG3", 30, "2024-01-15"),
+      ],
+      R2,
+    );
+    expect(result).toEqual({ inserted: 0, revised: 0, unchanged: 3 });
+  });
+
+  it("sums unit capacity to plant grain at a date, and only what existed then", async () => {
+    const early = await readInstalledCapacityAsOf(db, {
+      asOf: LATER,
+      on: new Date("2024-06-01T00:00:00.000Z"),
+    });
+    // UG2 has not commissioned yet, so 20 MW of today's fleet is not there.
+    expect(early.totalMw).toBeCloseTo(40, 6);
+
+    const late = await readInstalledCapacityAsOf(db, {
+      asOf: LATER,
+      on: new Date("2026-01-01T00:00:00.000Z"),
+    });
+    expect(late.totalMw).toBeCloseTo(60, 6);
+  });
+
+  it("groups by the plant's electrical subsystem, never by its state", async () => {
+    const result = await readInstalledCapacityAsOf(db, {
+      asOf: LATER,
+      on: new Date("2026-01-01T00:00:00.000Z"),
+    });
+    // Both plants are in BA. One is electrically SE, and stays there.
+    expect(result.groups).toEqual([
+      { subsystem: "NE", technology: "WIND", plants: 1, units: 2, capacityMw: 30 },
+      { subsystem: "SE", technology: "SOLAR", plants: 1, units: 1, capacityMw: 30 },
+    ]);
+  });
+
+  it("filters by scope and technology without double counting", async () => {
+    const result = await readInstalledCapacityAsOf(db, {
+      asOf: LATER,
+      on: new Date("2026-01-01T00:00:00.000Z"),
+      subsystem: "SE",
+      technology: "SOLAR",
+    });
+    expect(result.totalMw).toBeCloseTo(30, 6);
+    expect(result.groups).toHaveLength(1);
+  });
+
+  it("counts a unit from its commissioning day and drops it on its deactivation day", async () => {
+    await write(
+      [registryUnit(TEST_PLANT, "UG4", 5, "2026-02-01", "2026-03-01")],
+      new Date("2026-08-20T00:00:00.000Z"),
+    );
+    const inside = await readInstalledCapacityAsOf(db, {
+      asOf: LATER,
+      on: new Date("2026-02-01T00:00:00.000Z"),
+      subsystem: "NE",
+    });
+    const onExit = await readInstalledCapacityAsOf(db, {
+      asOf: LATER,
+      on: new Date("2026-03-01T00:00:00.000Z"),
+      subsystem: "NE",
+    });
+    // `[commissioned_on, decommissioned_on)` — closed at the start, open at the
+    // end, exactly as `docs/domain-model.md` defines `InstalledCapacityAsOf`.
+    expect(inside.totalMw).toBeCloseTo(35, 6);
+    expect(onExit.totalMw).toBeCloseTo(30, 6);
+  });
+
+  it("stores a corrected commissioning date as a new vintage, not an overwrite", async () => {
+    // ONS's snapshot is today's record of the past, and the correction changes
+    // the fleet on every day between the two dates. Both readings survive.
+    const revised = await write(
+      [registryUnit(TEST_PLANT, "UG2", 20, "2025-01-01")],
+      new Date("2026-08-25T00:00:00.000Z"),
+    );
+    expect(revised).toEqual({ inserted: 0, revised: 1, unchanged: 0 });
+
+    const believedBefore = await readInstalledCapacityAsOf(db, {
+      asOf: new Date("2026-08-20T00:00:00.000Z"),
+      on: new Date("2025-03-01T00:00:00.000Z"),
+      subsystem: "NE",
+    });
+    const believedNow = await readInstalledCapacityAsOf(db, {
+      asOf: LATER,
+      on: new Date("2025-03-01T00:00:00.000Z"),
+      subsystem: "NE",
+    });
+    expect(believedBefore.totalMw).toBeCloseTo(10, 6);
+    expect(believedNow.totalMw).toBeCloseTo(30, 6);
+  });
+
+  it("reports a fleet date before go-live as revision-optimistic", async () => {
+    const result = await readInstalledCapacityAsOf(db, {
+      asOf: LATER,
+      on: new Date("2024-06-01T00:00:00.000Z"),
+    });
+    expect(result.goLiveAt?.toISOString()).toBe(R1.toISOString());
+    expect(result.vintageFidelity).toBe("revision_optimistic");
+  });
+
+  it("answers at plant grain for capacity weighting", async () => {
+    const rows = await readPlantCapacityAsOf(db, {
+      asOf: LATER,
+      on: new Date("2026-01-01T00:00:00.000Z"),
+      subsystem: "NE",
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      cegCore: TEST_PLANT,
+      technology: "WIND",
+      operationModality: "TIPO_II_C",
+      units: 2,
+      capacityMw: 30,
+    });
+  });
+
+  it("writes nothing for an empty snapshot", async () => {
+    expect(await write([], LATER)).toEqual({
+      inserted: 0,
+      revised: 0,
+      unchanged: 0,
+    });
+  });
+});
+
+suite("registry · conjunto membership as of a date (real Postgres)", () => {
+  const handle = createDatabase(URL as string, 5);
+  const { db } = handle;
+  let sourceVersionId = "";
+
+  const MOVER = "BAEABL";
+  const FIRST = "CJU_TESTA";
+  const SECOND = "CJU_TESTB";
+  const INGESTED = new Date("2026-08-01T00:00:00.000Z");
+  const ASOF = new Date("2026-09-01T00:00:00.000Z");
+
+  beforeAll(async () => {
+    await db.execute(sql`truncate table conjunto_membership`);
+    await db.execute(sql`truncate table conjunto cascade`);
+    const [version] = await db
+      .insert(onsResourceVersion)
+      .values({
+        datasetSlug: "usina_conjunto",
+        resourceName: "Relacionamento_Usina_Conjunto",
+        resourceUrl: "https://example.invalid/RELACIONAMENTO_USINA_CONJUNTO.csv",
+        format: "CSV",
+        changeKey: `membership-test|${Date.now()}`,
+      })
+      .returning({ id: onsResourceVersion.id });
+    sourceVersionId = version?.id ?? "";
+
+    await upsertConjuntos(db, [
+      {
+        onsConjuntoCode: FIRST,
+        name: "Conj. A",
+        subsystem: "NE",
+        stateCode: "BA",
+        technology: "WIND",
+        sourceTypeCode: "UEE",
+      },
+      {
+        onsConjuntoCode: SECOND,
+        name: "Conj. B",
+        subsystem: "NE",
+        stateCode: "BA",
+        technology: "WIND",
+        sourceTypeCode: "UEE",
+      },
+    ]);
+
+    await writeConjuntoMemberships(db, {
+      memberships: [
+        {
+          plantOnsCode: MOVER,
+          plantCegCore: "EOL.CV.BA.031402-1",
+          conjuntoCode: FIRST,
+          memberFrom: new Date("2021-12-11T00:00:00.000Z"),
+          memberTo: new Date("2024-10-29T00:00:00.000Z"),
+        },
+        {
+          plantOnsCode: MOVER,
+          plantCegCore: "EOL.CV.BA.031402-1",
+          conjuntoCode: SECOND,
+          memberFrom: new Date("2024-10-30T00:00:00.000Z"),
+          memberTo: null,
+        },
+      ],
+      publishedAt: INGESTED,
+      publishedAtPrecision: "file",
+      sourceVersionId,
+      ingestedAt: INGESTED,
+    });
+  });
+
+  afterAll(() => handle.close());
+
+  it("returns exactly one conjunto for a plant on any given day", async () => {
+    for (const on of ["2022-06-01", "2024-10-29", "2024-10-30", "2026-08-28"]) {
+      const result = await readConjuntoMembershipAsOf(db, {
+        asOf: ASOF,
+        on: new Date(`${on}T00:00:00.000Z`),
+        plantOnsCode: MOVER,
+      });
+      expect(result.rows).toHaveLength(1);
+    }
+  });
+
+  it("honours member_to as the inclusive last day of membership", async () => {
+    // Measured against the live file: the successor starts the next day, so
+    // 2024-10-29 still belongs to the first conjunto. An exclusive reading
+    // would leave that day unattributed.
+    const lastDay = await readConjuntoMembershipAsOf(db, {
+      asOf: ASOF,
+      on: new Date("2024-10-29T00:00:00.000Z"),
+      plantOnsCode: MOVER,
+    });
+    const nextDay = await readConjuntoMembershipAsOf(db, {
+      asOf: ASOF,
+      on: new Date("2024-10-30T00:00:00.000Z"),
+      plantOnsCode: MOVER,
+    });
+    expect(lastDay.rows[0]?.conjuntoCode).toBe(FIRST);
+    expect(nextDay.rows[0]?.conjuntoCode).toBe(SECOND);
+  });
+
+  it("attributes a plant to the conjunto it was in, not the one it is in", async () => {
+    const midWindow = await readConjuntoMembershipAsOf(db, {
+      asOf: ASOF,
+      on: new Date("2024-05-01T00:00:00.000Z"),
+      conjuntoCode: SECOND,
+    });
+    // The plant is in SECOND today; it was not in May 2024. A snapshot join
+    // would report it here and misattribute two and a half years of history.
+    expect(midWindow.rows).toEqual([]);
+  });
+
+  it("returns nothing before the membership began", async () => {
+    const result = await readConjuntoMembershipAsOf(db, {
+      asOf: ASOF,
+      on: new Date("2021-12-10T00:00:00.000Z"),
+      plantOnsCode: MOVER,
+    });
+    expect(result.rows).toEqual([]);
+  });
+
+  it("records a membership being closed as a revision, keeping the prior belief", async () => {
+    const before = await readConjuntoMembershipAsOf(db, {
+      asOf: ASOF,
+      on: new Date("2026-08-28T00:00:00.000Z"),
+      plantOnsCode: MOVER,
+    });
+    expect(before.rows[0]?.memberTo).toBeNull();
+
+    const closedAt = new Date("2026-09-15T00:00:00.000Z");
+    const revised = await writeConjuntoMemberships(db, {
+      memberships: [
+        {
+          plantOnsCode: MOVER,
+          plantCegCore: "EOL.CV.BA.031402-1",
+          conjuntoCode: SECOND,
+          memberFrom: new Date("2024-10-30T00:00:00.000Z"),
+          memberTo: new Date("2026-09-10T00:00:00.000Z"),
+        },
+      ],
+      publishedAt: closedAt,
+      publishedAtPrecision: "file",
+      sourceVersionId,
+      ingestedAt: closedAt,
+    });
+    expect(revised).toEqual({ inserted: 0, revised: 1, unchanged: 0 });
+
+    const after = await readConjuntoMembershipAsOf(db, {
+      asOf: new Date("2026-10-01T00:00:00.000Z"),
+      on: new Date("2026-09-11T00:00:00.000Z"),
+      plantOnsCode: MOVER,
+    });
+    expect(after.rows).toEqual([]);
+    // What we believed on 2026-09-01 is still answerable.
+    expect(before.rows[0]?.dataVersion).toBe(1);
+  });
+
+  it("refuses a membership that ends before it starts, at the database", async () => {
+    let caught: unknown;
+    try {
+      await db.execute(sql`
+        insert into conjunto_membership (
+          plant_ons_code, conjunto_code, member_from, member_to, data_version,
+          published_at, published_at_precision, value_digest, source_version_id
+        ) values (
+          'BACKWARDS', ${FIRST},
+          '2024-06-30T00:00:00Z'::timestamptz, '2024-01-01T00:00:00Z'::timestamptz, 1,
+          now(), 'file', 'backwards-probe', ${sourceVersionId}::uuid
+        )
+      `);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeDefined();
+    const cause = (caught as { cause?: { constraint_name?: string } }).cause;
+    expect(cause?.constraint_name).toBe("conjunto_membership_ordered");
+  });
+});
+
+/**
+ * The registry job end to end on the real job runner, with the network stubbed
+ * by the captured fixtures. Needs Postgres because what the job does *is* what
+ * it writes.
+ */
+suite("ingestion job · ONS fleet registry (real Postgres, stub network)", () => {
+  const handle = createDatabase(URL as string, 5);
+  const { db } = handle;
+
+  const FIXTURES = join(import.meta.dir, "fixtures", "ons");
+  const CAPACITY_HEAD = {
+    "last-modified": "Fri, 28 Aug 2026 22:00:39 GMT",
+    "content-length": "1277484",
+    etag: '"39f066df4ed00307ca98b1adaf2dadfe"',
+  };
+  const BRIDGE_HEAD = {
+    "last-modified": "Fri, 28 Aug 2026 22:04:55 GMT",
+    "content-length": "325169",
+    etag: '"e2426c37974df3a25d97c8e462fc7086"',
+  };
+
+  let requests: string[] = [];
+
+  const isBridge = (url: string) => url.includes("USINA_CONJUNTO");
+
+  const stubFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    requests.push(`${init?.method ?? "GET"} ${url}`);
+    if (url.includes("package_show")) {
+      const file = url.includes("usina_conjunto")
+        ? "package-show-usina_conjunto.json"
+        : "package-show-capacidade-geracao.json";
+      return new Response(await Bun.file(join(FIXTURES, file)).text(), {
+        headers: { "content-type": "application/json" },
+      });
+    }
+    const headers = isBridge(url) ? BRIDGE_HEAD : CAPACITY_HEAD;
+    if (init?.method === "HEAD") {
+      return new Response(null, { headers });
+    }
+    const file = isBridge(url)
+      ? "RELACIONAMENTO_USINA_CONJUNTO.registry.csv"
+      : "CAPACIDADE_GERACAO.registry.csv";
+    return new Response(await Bun.file(join(FIXTURES, file)).arrayBuffer(), { headers });
+  }) as typeof fetch;
+
+  beforeAll(async () => {
+    await db.execute(sql`truncate table generating_unit`);
+    await db.execute(sql`truncate table conjunto_membership`);
+    await db.execute(sql`truncate table plant cascade`);
+    await db.execute(sql`truncate table conjunto cascade`);
+    await db.execute(sql`truncate table ons_resource_version cascade`);
+  });
+  afterAll(() => handle.close());
+
+  it("ingests both halves of the registry through the job runner", async () => {
+    requests = [];
+    const runner = createInProcessRunner(
+      createPlantRegistryIngestor({ db, fetch: stubFetch }),
+    );
+    const id = await runner.submit({});
+
+    let record = await runner.status(id);
+    for (let i = 0; i < 600 && record?.status !== "completed"; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      record = await runner.status(id);
+    }
+    await runner.close();
+
+    expect(record?.status).toBe("completed");
+    expect(record?.result).toMatchObject({
+      changed: true,
+      downloaded: true,
+      // 37 fixture lines: one header, seven hydro/thermal/nuclear, 29 VRE units.
+      unitRowsParsed: 29,
+      unitRowsRejected: 0,
+      outOfScopeRowsFiltered: 7,
+      inconsistentUnitDates: 3,
+      plantsSeen: 9,
+      membershipRowsParsed: 15,
+      membershipRowsRejected: 0,
+      conjuntosSeen: 6,
+      // DELTA 3 I and II appear in both files, so both acquire an ONS code.
+      plantCodesLinked: 2,
+      // EOL.CV.RN.047240-9 is RNST6 *and* RNST06; neither is guessed.
+      plantCodesAmbiguous: 1,
+    });
+  }, 60_000);
+
+  it("recovers the ONS plant code the capacity file does not carry", async () => {
+    const rows = await db.execute<{ ceg_core: string; ons_plant_code: string | null }>(
+      sql`select ceg_core, ons_plant_code from plant order by ceg_core`,
+    );
+    const byCore = new Map([...rows].map((row) => [row.ceg_core, row.ons_plant_code]));
+    expect(byCore.get("EOL.CV.MA.033682-3")).toBe("MAEDT1");
+    // No conjunto membership names this Tipo I plant, so its ONS code is
+    // genuinely unknown — null, rather than a name-based guess.
+    expect(byCore.get("EOL.CV.CE.028699-0")).toBeNull();
+  });
+
+  it("detects an unchanged snapshot without downloading either file", async () => {
+    requests = [];
+    const ingest = createPlantRegistryIngestor({ db, fetch: stubFetch });
+    const result = await ingest({}, () => {});
+
+    expect(result).toMatchObject({ changed: false, downloaded: false });
+    // Two catalogue calls and two HEADs. No GET of either file.
+    expect(requests.filter((request) => request.startsWith("GET https://ons"))).toEqual(
+      [],
+    );
+    expect(requests.filter((request) => request.startsWith("HEAD"))).toHaveLength(2);
+  }, 60_000);
+
+  it("re-parsing the same snapshot writes no new version", async () => {
+    const ingest = createPlantRegistryIngestor({ db, fetch: stubFetch });
+    const result = await ingest({ force: true }, () => {});
+    expect(result.downloaded).toBe(true);
+    expect(result.units).toEqual({ inserted: 0, revised: 0, unchanged: 29 });
+    expect(result.memberships).toEqual({ inserted: 0, revised: 0, unchanged: 15 });
+  }, 60_000);
+
+  it("answers the fleet build-up from the ingested snapshot", async () => {
+    const asOf = new Date("2027-01-01T00:00:00.000Z");
+    const atWindowOpen = await readInstalledCapacityAsOf(db, {
+      asOf,
+      on: new Date("2024-04-01T00:00:00.000Z"),
+    });
+    const today = await readInstalledCapacityAsOf(db, {
+      asOf,
+      on: new Date("2026-08-28T00:00:00.000Z"),
+    });
+    // SERRA DAS ALMAS I and II commission in 2025, so the fixture fleet grows.
+    expect(today.totalMw).toBeGreaterThan(atWindowOpen.totalMw);
+    // And the SE-assigned Bahia plants are in SE, where ONS put them.
+    expect(today.groups.some((group) => group.subsystem === "SE")).toBe(true);
   });
 });

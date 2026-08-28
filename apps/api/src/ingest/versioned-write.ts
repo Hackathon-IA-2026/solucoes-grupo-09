@@ -72,6 +72,23 @@ export interface VersionedWriteResult {
 }
 
 /**
+ * How much of the table the latest-version lookup has to read.
+ *
+ * `valid_time_range` — the default, and right for a fact table. One ingest
+ * covers one contiguous file of hours, so the batch's valid-time range *is* the
+ * batch and the as-of index serves it. A key's valid time never moves, because
+ * it is part of the key.
+ *
+ * `whole_table` — right for a registry snapshot, where the valid time is one of
+ * the stored values rather than part of the key, so a revision can move it. A
+ * corrected commissioning date lands outside the new batch's range, and a
+ * ranged lookup would miss the row it is meant to be revising and append a
+ * second version-1 row instead. These tables are thousands of rows, not
+ * millions, so reading all of them is the cheaper of the two mistakes.
+ */
+export type LatestLookup = "valid_time_range" | "whole_table";
+
+/**
  * How one fact table plugs into the shared write.
  *
  * `keyColumns` and `validTimeColumn` are snake_case database names because the
@@ -79,6 +96,9 @@ export interface VersionedWriteResult {
  * caller-supplied key list through the typed query builder costs more in
  * generic gymnastics than the safety it buys, and the names are checked against
  * the schema by the tests that exercise each table.
+ *
+ * `latestLookup` says how much of the table the latest-version lookup must
+ * read; see `LatestLookup`.
  */
 export interface VersionedTableSpec<TRow, TInsert> {
   table: PgTable;
@@ -88,6 +108,8 @@ export interface VersionedTableSpec<TRow, TInsert> {
   keyColumns: readonly string[];
   /** The valid-time column the batch range is expressed over. */
   validTimeColumn: string;
+  /** Defaults to `valid_time_range`; see `LatestLookup`. */
+  latestLookup?: LatestLookup;
   /** Business key of a canonical row, matching `keyColumns`' order. */
   businessKey: (row: TRow) => string;
   /** Valid time of a canonical row — used to bound the lookup. */
@@ -108,10 +130,12 @@ interface LatestVersion {
 }
 
 /**
- * Load the current latest version of every key in the batch's valid-time range.
+ * Load the current latest version of every key the batch might revise.
  *
  * Ranged rather than keyed by an `IN` list because one ingest covers one
  * contiguous file, so the range *is* the batch and the as-of index serves it.
+ * A table whose valid time is a value rather than part of its key opts out of
+ * the range — see `LatestLookup`.
  */
 async function loadLatest<TRow, TInsert>(
   db: Database,
@@ -121,13 +145,17 @@ async function loadLatest<TRow, TInsert>(
 ): Promise<Map<string, LatestVersion>> {
   const keys = spec.keyColumns.map((column) => sql.identifier(column));
   const keyList = sql.join(keys, sql`, `);
+  const scope =
+    (spec.latestLookup ?? "valid_time_range") === "whole_table"
+      ? sql``
+      : sql`where ${sql.identifier(spec.validTimeColumn)} >= ${from.toISOString()}::timestamptz
+             and ${sql.identifier(spec.validTimeColumn)} <= ${to.toISOString()}::timestamptz`;
 
   const rows = await db.execute<Record<string, string | number>>(sql`
     select distinct on (${keyList})
       ${keyList}, data_version, value_digest
     from ${sql.identifier(spec.tableName)}
-    where ${sql.identifier(spec.validTimeColumn)} >= ${from.toISOString()}::timestamptz
-      and ${sql.identifier(spec.validTimeColumn)} <= ${to.toISOString()}::timestamptz
+    ${scope}
     order by ${keyList}, data_version desc
   `);
 

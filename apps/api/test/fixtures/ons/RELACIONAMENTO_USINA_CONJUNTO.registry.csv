@@ -1,0 +1,16 @@
+id_subsistema;nom_subsistema;estad_id;nom_estado;id_tipousina;nom_tipousina;id_conjuntousina;id_ons_conjunto;id_ons_usina;nom_conjunto;nom_usina;ceg;dat_iniciorelacionamento;dat_fimrelacionamento
+N;Norte;MA;MARANHAO;UEE;Eolielétrica                  ;91;CJU_MAPLN;MAEDT1;Conj. Paulino Neves;Delta 3 I;EOL.CV.MA.033682-3.01;2017-08-08;
+N;Norte;MA;MARANHAO;UEE;Eolielétrica                  ;91;CJU_MAPLN;MAEDT2;Conj. Paulino Neves;Delta 3 II;EOL.CV.MA.033683-1.01;2017-06-28;
+N;Norte;MA;MARANHAO;UEE;Eolielétrica                  ;91;CJU_MAPLN;MAEDT3;Conj. Paulino Neves;Delta 3 III;EOL.CV.MA.033684-0.01;2017-07-20;
+N;Norte;MA;MARANHAO;UEE;Eolielétrica                  ;91;CJU_MAPLN;MAEDT4;Conj. Paulino Neves;Delta 3 IV;EOL.CV.MA.033685-8.01;2017-06-30;
+N;Norte;MA;MARANHAO;UEE;Eolielétrica                  ;91;CJU_MAPLN;MAEDT5;Conj. Paulino Neves;Delta 3 V;EOL.CV.MA.033675-0.01;2017-06-22;
+N;Norte;MA;MARANHAO;UEE;Eolielétrica                  ;91;CJU_MAPLN;MAEDT6;Conj. Paulino Neves;Delta 3 VI;EOL.CV.MA.033673-4.01;2017-06-15;
+N;Norte;MA;MARANHAO;UEE;Eolielétrica                  ;91;CJU_MAPLN;MAEDT7;Conj. Paulino Neves;Delta 3 VII;EOL.CV.MA.033680-7.01;2017-05-10;
+N;Norte;MA;MARANHAO;UEE;Eolielétrica                  ;91;CJU_MAPLN;MAEDT8;Conj. Paulino Neves;Delta 3 VIII;EOL.CV.MA.033686-6.01;2017-07-28;
+NE;Nordeste;BA;BAHIA;UEE;Eolielétrica                  ;136;CJU_BAABL;BAEABL;Conj. Abil I;Abil;EOL.CV.BA.031402-1.01;2021-12-11;2024-10-29
+NE;Nordeste;BA;BAHIA;UEE;Eolielétrica                  ;281;CJU_BA4EPND;BAEABL;Conj. Pindaí II 230 kV;Abil;EOL.CV.BA.031402-1.01;2024-10-30;
+NE;Nordeste;RN;RIO GRANDE DO NORTE;UEE;Eolielétrica                  ;223;CJU_RNCAJ1;RNST6 ;Conj. Caju;Cajuína C16;EOL.CV.RN.047240-9.01;2022-10-14;
+NE;Nordeste;RN;RIO GRANDE DO NORTE;UEE;Eolielétrica                  ;223;CJU_RNCAJ1;RNST06;Conj. Caju;Cajuína C22;EOL.CV.RN.047240-9.01;2026-06-23;
+S;Sul;PR;PARANA;UTE;Térmica                       ;186;CJU_PRKCL;PRUTKC;Conj. Klabin Celulose;Klabin Celulose;UTE.FL.PR.031098-0.01;2016-02-24;
+S;Sul;PR;PARANA;UTE;Térmica                       ;186;CJU_PRKCL;PRUTPU;Conj. Klabin Celulose;Puma II;UTE.FL.PR.045824-4.01;2021-11-06;
+SE;Sudeste/Centro-Oeste;SP;SAO PAULO;UFV;Fotovoltaica                  ;133;CJU_SPUFD;SPUD42;Conj. Dracena;Dracena 4 2;;2019-07-06;

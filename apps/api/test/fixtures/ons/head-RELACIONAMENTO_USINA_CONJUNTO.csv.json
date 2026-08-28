@@ -1,0 +1,14 @@
+{
+  "url": "https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/usina_conjunto/RELACIONAMENTO_USINA_CONJUNTO.csv",
+  "status": 200,
+  "headers": {
+    "date": "Fri, 28 Aug 2026 23:22:30 GMT",
+    "last-modified": "Fri, 28 Aug 2026 22:04:55 GMT",
+    "etag": "\"e2426c37974df3a25d97c8e462fc7086\"",
+    "accept-ranges": "bytes",
+    "content-type": "binary/octet-stream",
+    "content-length": "325169",
+    "server": "AmazonS3",
+    "x-amz-server-side-encryption": "AES256"
+  }
+}

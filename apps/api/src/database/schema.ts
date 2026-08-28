@@ -574,3 +574,227 @@ export const programmedLoadHalfHour = pgTable(
     ),
   ],
 );
+/**
+ * ONS's operation modality (`docs/domain-model.md` §3), and what determines
+ * which `ReportingEntity` variant a plant participates in.
+ *
+ * Four members. `TIPO III` appears in `modalidade-usina` but names distributed
+ * generation ONS does not dispatch and does not settle constrained-off for; it
+ * is absent from both `capacidade-geracao` and the constrained-off datasets, so
+ * making it unrepresentable keeps out-of-scope plants out by shape.
+ */
+export const operationModality = pgEnum("operation_modality", [
+  "TIPO_I",
+  "TIPO_II_A",
+  "TIPO_II_B",
+  "TIPO_II_C",
+]);
+
+/**
+ * The plant registry — one row per *usina*, from ONS `capacidade-geracao`.
+ *
+ * **A dimension, not a fact table.** It answers "what is this plant?", which
+ * has one current answer: subsystem, state, technology, modality and owner are
+ * attributes ONS restates rather than a series. Everything about a plant that
+ * genuinely varies with time lives elsewhere and is versioned there — capacity
+ * in `generating_unit`, conjunto in `conjunto_membership`. That split is what
+ * lets `InstalledCapacityAsOf` be a query instead of a stored number.
+ *
+ * **Identity is `ceg_core`, and that departs from `docs/domain-model.md` §3.**
+ * The domain model names `ons_plant_code` (`id_ons`) as the identity, and the
+ * research records `id_ons` as added to this dataset on 2026-01-26. It is not
+ * in the live file: the header has 18 columns and no `id_ons`. `ceg` is on
+ * every row, so the version-stripped core is the only identity the source
+ * offers. `ons_plant_code` is recovered from `usina_conjunto` where that bridge
+ * names one and is null otherwise — nullable because it is genuinely unknown
+ * for a Tipo I / II-B plant that belongs to no conjunto, not because it is
+ * optional.
+ *
+ * `ceg_raw` is kept beside the derived core: the version segment is stripped to
+ * make the SIGA join work at all (verbatim matching is 0 of 1,614), and
+ * provenance must survive normalisation.
+ */
+export const plant = pgTable(
+  "plant",
+  {
+    /** ANEEL CEG, version segment stripped. The bridge to SIGA and the identity. */
+    cegCore: text().primaryKey(),
+    /** ONS's own rendering, zero-padded version segment and all. */
+    cegRaw: text().notNull(),
+    /** ONS `id_ons`. Null where no ONS dataset in scope names one. */
+    onsPlantCode: text(),
+    /** ONS `nom_usina`. Display only — never a join key; SIGA writes aliases. */
+    name: text().notNull(),
+    /**
+     * The **electrical** assignment, from `id_subsistema` — never derived from
+     * `state_code`. Twelve VRE units in Bahia are assigned to `SE` in the live
+     * file, and any state→subsystem mapping would place them in `NE`.
+     */
+    subsystem: subsystemCode().notNull(),
+    /** ONS `id_estado`. An attribute of the plant, and never a subsystem input. */
+    stateCode: text().notNull(),
+    technology: technology().notNull(),
+    operationModality: operationModality().notNull(),
+    /** `nom_agenteproprietario` / `nom_agenteoperador`, verbatim. */
+    ownerName: text().notNull(),
+    operatorName: text().notNull(),
+    firstSeenAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("plant_subsystem_technology").on(t.subsystem, t.technology),
+    index("plant_ons_code").on(t.onsPlantCode),
+  ],
+);
+
+/**
+ * One turbine or inverter block. The true grain of `capacidade-geracao`, and
+ * the table that makes installed capacity a function of time.
+ *
+ * **Versioned, and this is the point of the ticket.** ONS overwrites this file
+ * twice a day and yesterday's is unrecoverable — there is no archive, no
+ * `x-amz-version-id` and no way to request a prior cut. So every snapshot is
+ * appended with its own vintage: a retroactively corrected commissioning date
+ * arrives as `data_version` 2, and what WattSteer believed the fleet was on any
+ * past day stays answerable. A snapshot that reproduces identical values writes
+ * nothing, so the version history records ONS's corrections rather than the
+ * refresh schedule.
+ *
+ * **`commissioned_on` is this table's valid time.** It is the instant in the
+ * world the row's assertion becomes true — this unit exists, at this rating,
+ * from this day — which is exactly what `valid_time` means in
+ * `docs/domain-model.md` §1. Naming it for the domain rather than for the
+ * mechanism keeps `InstalledCapacityAsOf` readable; the shared versioned write
+ * takes the column name as a parameter precisely so a table can do this.
+ *
+ * **`decommissioned_on` nullable means "still running"** — the one place in
+ * this schema where a null is the correct modelling of an open interval rather
+ * than a missing value. ONS records exactly three deactivated VRE units in the
+ * entire file, all before the window opens; the adapter asserts on any new one
+ * rather than modelling retirement, because the modelled error is currently
+ * 0 MW and a wrong estimator would be worse than none.
+ *
+ * Capacity is **never** stored per plant. A plant total cannot be time-resolved
+ * — its units commission on different days — and the plant-registry research
+ * measured the cost of pretending otherwise at 25.8% of fleet MW at window
+ * start, moving the SE-solar capacity centroid 94 km.
+ */
+export const generatingUnit = pgTable(
+  "generating_unit",
+  {
+    plantCegCore: text()
+      .notNull()
+      .references(() => plant.cegCore),
+    /** ONS `cod_equipamento` — unique within a plant across the whole live file. */
+    equipmentCode: text().notNull(),
+    /** `num_unidadegeradora`, the operational number. Display, not identity. */
+    unitNumber: text().notNull(),
+    name: text().notNull(),
+    /** Nameplate power (ANEEL norm), MW. A power: summed across units, never over time. */
+    ratedPowerMw: doublePrecision().notNull(),
+    /** `dat_entradateste` — release for commissioning. */
+    testEntryOn: timestamp({ withTimezone: true }),
+    /** `dat_entradaoperacao`, UTC midnight. This table's `valid_time`. */
+    commissionedOn: timestamp({ withTimezone: true }).notNull(),
+    /** `dat_desativacao`, UTC midnight. Null means still running. */
+    decommissionedOn: timestamp({ withTimezone: true }),
+
+    ...vintageColumns(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.plantCegCore, t.equipmentCode, t.dataVersion] }),
+    // `AsOf` orders by ingested_at within a key; the interval predicate is on
+    // the two date columns. This index serves the DISTINCT ON directly.
+    index("generating_unit_as_of").on(t.commissionedOn, t.plantCegCore, t.ingestedAt),
+    // The fleet build-up query scans the commissioning axis across all plants.
+    index("generating_unit_interval").on(t.commissionedOn, t.decommissionedOn),
+  ],
+);
+
+/**
+ * A conjunto — a group of Tipo II-C plants ONS settles as one unit, and the
+ * only grain at which a restriction reason exists (`docs/domain-model.md` §3).
+ *
+ * A dimension for the same reason `plant` is one. Note that a conjunto has no
+ * CEG at all: ONS writes `"-"` for it in the constrained-off files, which is
+ * structural absence rather than a blank, and so there is no `ceg_core` column
+ * here to be null.
+ *
+ * `technology` is nullable because the bridge also carries `UTE` and `UHE`
+ * conjuntos, which have no WattSteer technology; `source_type_code` keeps ONS's
+ * own `id_tipousina` so the null is explainable rather than merely empty.
+ */
+export const conjunto = pgTable(
+  "conjunto",
+  {
+    /** ONS `id_ons_conjunto`, e.g. `CJU_MAPLN`. */
+    onsConjuntoCode: text().primaryKey(),
+    name: text().notNull(),
+    subsystem: subsystemCode().notNull(),
+    stateCode: text().notNull(),
+    technology: technology(),
+    /** `id_tipousina` verbatim: `UEE`, `UFV`, `UTE`, `UHE`. */
+    sourceTypeCode: text().notNull(),
+    firstSeenAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("conjunto_subsystem_technology").on(t.subsystem, t.technology)],
+);
+
+/**
+ * The plant-to-conjunto bridge, SCD2 — `usina_conjunto`.
+ *
+ * Time-resolved at source and therefore time-resolved here: a plant that joined
+ * a conjunto mid-window is attributed to the conjunto it was actually in, not
+ * retroactively to today's. Every read of this table goes through a date.
+ *
+ * **`member_to` is the inclusive last day**, not an exclusive bound. Measured:
+ * all 331 sequential memberships in the live file have the successor starting
+ * the day after the predecessor's `dat_fimrelacionamento`, and none starting on
+ * the same day. Reading it as exclusive opens a one-day hole in every plant
+ * that ever moved conjunto — the kind of error that produces a plausible chart.
+ *
+ * **The key is `plant_ons_code`, not the CEG.** One `ceg_core` in the live file
+ * carries two ONS codes (`RNST6` and `RNST06`) with concurrent open memberships
+ * of the same conjunto; keyed on the CEG that reads as a violation of the
+ * one-conjunto invariant, which it is not. `plant_ceg_core` rides along as the
+ * bridge to `plant`, nullable because ONS's own file leaves `ceg` empty on one
+ * row, and deliberately **not** a foreign key: the bridge carries members that
+ * `capacidade-geracao` does not list, and dropping a real membership to satisfy
+ * a constraint would be the wrong trade.
+ *
+ * `member_from` is the valid time, and it is part of the business key: a plant
+ * can move conjunto and back, so the same (plant, conjunto) pair can legally
+ * appear twice with different start days.
+ */
+export const conjuntoMembership = pgTable(
+  "conjunto_membership",
+  {
+    /** ONS `id_ons_usina`. */
+    plantOnsCode: text().notNull(),
+    conjuntoCode: text()
+      .notNull()
+      .references(() => conjunto.onsConjuntoCode),
+    /** `dat_iniciorelacionamento`, UTC midnight. First day of membership. */
+    memberFrom: timestamp({ withTimezone: true }).notNull(),
+    /** `dat_fimrelacionamento`, UTC midnight. **Inclusive** last day, or null. */
+    memberTo: timestamp({ withTimezone: true }),
+    /** The member's `ceg_core`, where ONS's bridge supplies one. */
+    plantCegCore: text(),
+
+    ...vintageColumns(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.plantOnsCode, t.conjuntoCode, t.memberFrom, t.dataVersion],
+    }),
+    index("conjunto_membership_as_of").on(t.memberFrom, t.plantOnsCode, t.ingestedAt),
+    index("conjunto_membership_conjunto").on(t.conjuntoCode, t.memberFrom),
+    // An interval that ends before it starts is not a shorter membership, it is
+    // a corrupt one. The adapter rejects it; this makes that true for any writer.
+    check(
+      "conjunto_membership_ordered",
+      sql`${t.memberTo} is null or ${t.memberTo} >= ${t.memberFrom}`,
+    ),
+  ],
+);

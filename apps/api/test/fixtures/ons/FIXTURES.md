@@ -44,6 +44,21 @@ Recapture with, for example:
 
 ```
 curl -s 'https://apicarga.ons.org.br/prd/cargaverificada?dat_inicio=2026-08-01&dat_fim=2026-08-01&cod_areacarga=SECO'
+## The fleet registry (ticket 04)
+
+Captured **2026-08-28** from `dados.ons.org.br`. Both CSVs are real bytes, taken
+as line ranges of the live file and concatenated in file order — nothing is
+retyped, and no value is edited. The `package-show-*.json` payloads are the
+whole CKAN responses; the repo formatter re-indents them, which changes
+whitespace and nothing else.
+
+Recapture:
+
+```
+curl -s 'https://dados.ons.org.br/api/3/action/package_show?id=capacidade-geracao'
+curl -s 'https://dados.ons.org.br/api/3/action/package_show?id=usina_conjunto'
+curl -s https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/capacidade-geracao/CAPACIDADE_GERACAO.csv
+curl -s https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/usina_conjunto/RELACIONAMENTO_USINA_CONJUNTO.csv
 ```
 
 | File | Source | Pins |
@@ -74,3 +89,57 @@ curl -s 'https://apicarga.ons.org.br/prd/cargaverificada?dat_inicio=2026-08-01&d
    returns HTTP 200 and `[\n ]`. An empty array therefore never distinguishes
    "no data" from "wrong code", which is why an empty response for a covered
    period is treated as a failure rather than as an empty result.
+| `package-show-capacidade-geracao.json` | `package_show?id=capacidade-geracao` | Whole response. One CSV, one PARQUET, one XLSX — **no per-year split**: a single file, overwritten in place. |
+| `package-show-usina_conjunto.json` | `package_show?id=usina_conjunto` | Whole response. Same single-file shape. |
+| `head-CAPACIDADE_GERACAO.csv.json` | S3 `HEAD` of the CSV | The change-detection triple. No `x-amz-version-id` — yesterday's snapshot is unrecoverable, which is why the ingest stores its own vintage. |
+| `head-RELACIONAMENTO_USINA_CONJUNTO.csv.json` | S3 `HEAD` of the CSV | As above, for the bridge. |
+| `CAPACIDADE_GERACAO.registry.csv` | lines 1–3, 8–10, 272–274, 514–523, 1413–1414, 2123–2124, 3545–3550, 4799–4802, 4829–4832 | See below — nine findings in 36 data rows. |
+| `RELACIONAMENTO_USINA_CONJUNTO.registry.csv` | lines 1–9, 17, 454, 1321, 1323, 1672–1673, 2045 | See below. |
+
+**What the capacity slice pins**, range by range:
+
+- **1–3, 8–10, 1413–1414** — hydro (XINGÓ), thermal and nuclear rows. The file
+  covers the whole ONS fleet; WattSteer's is two technologies of it, and the
+  filtered count is reported rather than silently dropped.
+- **272–274** — EOL ICARAIZINHO, a **TIPO I** wind plant. It belongs to no
+  conjunto, so it is the case where `ons_plant_code` is genuinely unknowable
+  from these two datasets and stays null.
+- **514–523** — ALEGRIA II's nine units plus MIASSABA 3's first. ALEGRIA II
+  commissions across **four different dates over eleven months**, which is what
+  makes the unit grain necessary: a plant-level "entry into operation" date
+  credits all 100.65 MW on day one.
+- **2123–2124** — CATAVENTOS DO ACARAÚ I, **TIPO II-B**.
+- **3545–3550** — BELMONTE 1-1. Its three deactivated units are **the only VRE
+  deactivations in the entire live file** (50 MW, 2023-05-03, before the window
+  opens). They also carry a `dat_desativacao` that *precedes* their
+  `dat_entradaoperacao` of 2023-12-05 — undocumented, kept verbatim, counted.
+- **4799–4802** — DELTA 3 I and II, members of `CJU_MAPLN`. The only plants
+  present in both fixtures, so they are where the ONS plant code gets recovered.
+- **4829–4832** — SERRA DAS ALMAS I and II: state `BA`, subsystem **`SE`**.
+  Twelve VRE units in the live file are assigned this way. Any state→subsystem
+  mapping puts them in `NE` and nothing crashes.
+
+**And the bridge slice:**
+
+- **1–9** — `CJU_MAPLN` with Delta 3 I–VIII, all open memberships.
+- **17 and 454** — `BAEABL` leaving `CJU_BAABL` on 2024-10-29 and joining
+  `CJU_BA4EPND` on **2024-10-30**. This pair is the evidence that
+  `dat_fimrelacionamento` is the **inclusive** last day: across the whole live
+  file all 331 sequential memberships hand over on consecutive days and **none**
+  shares a day, so an exclusive reading loses 2024-10-29 for every plant that
+  ever moved.
+- **1321 and 1323** — `RNST6` and `RNST06`, two ONS codes for one `ceg_core`
+  (`EOL.CV.RN.047240-9`), both with open memberships of `CJU_RNCAJ1`. Keyed on
+  the CEG this looks like a violation of the one-conjunto-per-plant invariant;
+  keyed on `id_ons_usina` it is what it is.
+- **1672–1673** — `CJU_PRKCL`, a **thermal** conjunto. The bridge is not
+  VRE-only, so its technology is null rather than guessed, and its members are
+  not in `capacidade-geracao`'s VRE scope.
+- **2045** — `SPUD42` "Dracena 4 2", whose `ceg` is **empty in ONS's own bridge
+  table**. A gap in ONS's data, not a reason to drop a real membership.
+
+**What the research got wrong, recorded here because the fixture proves it.**
+`docs/research/ons-datasets.md` §12 lists `id_ons` as added to
+`capacidade-geracao` by changelog 1.6 on 2026-01-26. The live header has
+**18 columns and no `id_ons`**. That is why `plant` is keyed on `ceg_core` and
+the ONS plant code is recovered from `usina_conjunto` instead.

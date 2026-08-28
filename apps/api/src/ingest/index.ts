@@ -96,6 +96,13 @@ export {
   selectResourceForYear,
 } from "./ons/catalogue.js";
 export {
+  CONJUNTO_DATASET_SLUG,
+  findMembershipOverlaps,
+  type MembershipOverlap,
+  type ParseConjuntoMembershipOptions,
+  parseConjuntoMembershipCsv,
+} from "./ons/conjunto-membership.js";
+export {
   cegCore,
   parseConstrainedOffCsv,
   SOLAR_DATASET_SLUG,
@@ -113,6 +120,43 @@ export {
   parseUtcInstant,
   parseVerifiedLoad,
 } from "./ons/load.js";
+export {
+  CAPACITY_DATASET_SLUG,
+  findRenewableDeactivations,
+  type ParsePlantRegistryOptions,
+  parseCapacityRegistryCsv,
+  type RenewableDeactivation,
+  WINDOW_OPENS_ON,
+} from "./ons/plant-registry.js";
+export {
+  createPlantRegistryIngestor,
+  type IngestPlantRegistryPayload,
+  type IngestPlantRegistryResult,
+  type PlantRegistryIngestorDeps,
+} from "./registry-job.js";
+export {
+  type ConjuntoMembershipQuery,
+  type ConjuntoMembershipResult,
+  type ConjuntoMembershipRow,
+  type ConjuntoMembershipWrite,
+  conjuntoMembershipDigest,
+  type GeneratingUnitWrite,
+  generatingUnitDigest,
+  type InstalledCapacityGroup,
+  type InstalledCapacityQuery,
+  type InstalledCapacityResult,
+  linkPlantOnsCodes,
+  type PlantCapacityRow,
+  type RegistryAsOfQuery,
+  type RegistryWriteResult,
+  readConjuntoMembershipAsOf,
+  readInstalledCapacityAsOf,
+  readPlantCapacityAsOf,
+  upsertConjuntos,
+  upsertPlants,
+  writeConjuntoMemberships,
+  writeGeneratingUnits,
+} from "./registry-repository.js";
 export {
   type AsOfQuery,
   type EnergyBalanceAsOfResult,
