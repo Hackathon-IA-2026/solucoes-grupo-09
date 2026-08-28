@@ -2,8 +2,8 @@
 id: "010"
 title: Diagnosis engine spec — SHAP, domain rules, LLM renderer
 type: wayfinder:grilling
-status: open
-assignee:
+status: closed
+assignee: spec-agent
 blocked_by: ["009"]
 ---
 

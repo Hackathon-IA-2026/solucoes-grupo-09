@@ -54,6 +54,17 @@ export interface BulkResourceRequest {
   slug: string;
   /** Pick the resource for the period being ingested. */
   select: (resources: CatalogueResource[]) => CatalogueResource;
+  /**
+   * An already-discovered resource list, so the catalogue call is skipped.
+   *
+   * For the year- and month-split datasets one acquisition is one file and
+   * reading `package_show` per call costs nothing worth naming. The daily-split
+   * DESSEM balances are ~460 files behind a 900 kB `package_show`, so a
+   * backfill that re-read it per day would spend 400 MB re-answering a question
+   * it asked in its first request. The package stays the *job's* to fetch;
+   * this is only the door for handing the answer back.
+   */
+  resources?: CatalogueResource[];
   /** Re-download and re-diff even when the fingerprint is unchanged. */
   force?: boolean;
   /** Progress across the four acquisition steps. */
@@ -74,7 +85,7 @@ export async function acquireBulkResource(
 ): Promise<BulkResource> {
   const { db, fetch: fetchImpl, slug, select, report } = request;
 
-  const resources = await fetchPackage(slug, fetchImpl);
+  const resources = request.resources ?? (await fetchPackage(slug, fetchImpl));
   const resource = select(resources);
   report?.({ done: 1, total: BULK_STEPS });
 

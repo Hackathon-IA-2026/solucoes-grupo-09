@@ -143,3 +143,48 @@ curl -s https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/usina_conjunto/RE
 `capacidade-geracao` by changelog 1.6 on 2026-01-26. The live header has
 **18 columns and no `id_ons`**. That is why `plant` is keyed on `ceg_core` and
 the ONS plant code is recovered from `usina_conjunto` instead.
+## DESSEM day-ahead balance (ticket 08)
+
+Captured **2026-08-28** from `dados.ons.org.br` and `apicarga.ons.org.br`. The
+CSVs are byte-for-byte; the `package_show` is the only **trimmed** fixture in
+this directory, and the trim is described below.
+
+| File | Source | Pins |
+| --- | --- | --- |
+| `BALANCO_DESSEM_DETALHE_2026_08_29.csv` | `.../dataset/balanco_dessem_detalhe/BALANCO_DESSEM_DETALHE_2026_08_29.csv` | A **whole reference day**, unedited: 192 rows = 48 patamares × 4 subsystems. The published header — `val_ger_hidraulica` / `val_ger_termica`, **not** the dictionary's `val_geracao_*` |
+| `BALANCO_DESSEM_DETALHE_2025_05_23.head.csv` | same dataset, header + first 8 rows | The **first day ONS ever published** for this dataset. The header is byte-identical to 2026-08-29's, 15 months later |
+| `head-BALANCO_DESSEM_DETALHE_2026_08_29.csv.json` | S3 `HEAD` of the 2026-08-29 CSV | `Last-Modified: Fri, 28 Aug 2026 19:42:43 GMT` — the file for day D created the **evening of D−1**. This is the row's `published_at`, and it is what makes `published_at < valid_time` checkable rather than assumed |
+| `carga-programada-SECO-2026-08-29.json` | `https://apicarga.ons.org.br/prd/cargaprogramada?dat_inicio=2026-08-29&dat_fim=2026-08-29&cod_areacarga=SECO` | The independent check on the undocumented `num_patamar` mapping — 48 end-labelled half hours of programmed SE load for the same day |
+| `package-show-balanco-dessem-detalhe.trimmed.json` | `https://dados.ons.org.br/api/3/action/package_show?id=balanco_dessem_detalhe` | The **daily** split: `BALANCO_DESSEM_DETALHE_<YYYY>_<MM>_<DD>` filenames. **Trimmed**: the live response is 943 kB / 1381 resources; the fixture keeps the two dictionary resources and the first and last two days (`2025_05_23`, `2025_05_24`, `2026_08_28`, `2026_08_29`), all three formats each, with `num_resources` adjusted. Nothing else was altered |
+
+### Three things measured while capturing these
+
+1. **The `num_patamar` mapping holds on a second day.** The research inferred
+   patamar *k* = the half hour **ending** 00:00 + k×30 min Brasília from four
+   half hours of 2026-08-28. Re-checked here across the **whole** of 2026-08-29,
+   all 48 patamares of `SE` `val_demanda` against `/cargaprogramada` `SECO`:
+   worst-case disagreement **0.067%**, typical 0.02%. Patamar 48 lines up with
+   `din_referenciautc = 2026-08-30T03:00:00Z`, i.e. the half hour ending local
+   midnight *after* the reference day — so the last patamar belongs to day D,
+   not to D+1.
+2. **A second, physical confirmation ONS cannot break silently.** Summed over
+   subsystems, `val_ger_fotovoltaica + val_ger_mmgd` is **exactly zero** for
+   every patamar before local 05:30 and after local 19:30, and MMGD — rooftop
+   solar, purely irradiance-driven — peaks at patamar 24, the half hour ending
+   **12:00 BRT**, which is solar noon. The adapter asserts this shape on every
+   file rather than trusting the inference.
+3. **Parquet buys nothing here.** `BALANCO_DESSEM_DETALHE_2026_08_29.parquet` is
+   16 634 bytes against the CSV's 17 236 — 3.5%. The adapter reads CSV only,
+   and does not re-import the INT96-timestamp hazard for the sake of 600 bytes.
+   The catalogue holds **460 reference days** (2025-05-23 → 2026-08-29) and one
+   more appears each evening.
+4. **The publication is mid-afternoon BRT, not evening — the research and the
+   feature-engineering spec both read the clock as local.** CKAN writes naive
+   timestamps that are UTC (as `catalogue.ts` already records), and the S3
+   `Last-Modified` confirms it: the 2026-08-29 file has CKAN `created`
+   `2026-08-28T19:43:09` and `Last-Modified: 19:42:43 GMT` — the same clock,
+   which is **16:42 BRT**. So `docs/specs/feature-engineering.md`'s "file
+   created ≈ 17:48 BRT" is ≈ 14:48 BRT for that day. The gate table's
+   conclusion is unchanged and if anything safer: DESSEM is comfortably inside
+   `gate_late` (D−1 19:00 BRT) and still hours after `gate_early` (09:00 BRT),
+   so its exclusion from the early gate remains structural.

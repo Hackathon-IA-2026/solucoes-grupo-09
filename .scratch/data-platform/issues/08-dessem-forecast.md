@@ -15,12 +15,12 @@ is inferred, so it must be asserted on ingest rather than trusted.
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The detailed balance is ingested — the only forward-looking wind and solar dispatch expectation available
-- [ ] Daily-split file discovery works and backfills the full available history
-- [ ] Three time axes are stored; the data can never be read as an observation
-- [ ] The period index is mapped to wall-clock time, and the mapping is asserted rather than assumed
-- [ ] A reference day with an unexpected number of periods is rejected loudly
-- [ ] The published header is trusted over the data dictionary where the two disagree
-- [ ] Values are treated as instantaneous power, matching the source, not as average power
+- [x] The detailed balance is ingested — the only forward-looking wind and solar dispatch expectation available
+- [x] Daily-split file discovery works and backfills the full available history
+- [x] Three time axes are stored; the data can never be read as an observation
+- [x] The period index is mapped to wall-clock time, and the mapping is asserted rather than assumed
+- [x] A reference day with an unexpected number of periods is rejected loudly
+- [x] The published header is trusted over the data dictionary where the two disagree
+- [x] Values are treated as instantaneous power, matching the source, not as average power

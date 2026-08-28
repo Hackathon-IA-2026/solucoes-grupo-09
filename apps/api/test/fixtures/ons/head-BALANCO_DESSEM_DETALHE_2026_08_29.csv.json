@@ -1,0 +1,14 @@
+{
+  "url": "https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/balanco_dessem_detalhe/BALANCO_DESSEM_DETALHE_2026_08_29.csv",
+  "status": 200,
+  "headers": {
+    "date": "Fri, 28 Aug 2026 23:38:08 GMT",
+    "last-modified": "Fri, 28 Aug 2026 19:42:43 GMT",
+    "etag": "\"23095c914ca5cad5ca3b430dbe5a5dad\"",
+    "accept-ranges": "bytes",
+    "content-type": "binary/octet-stream",
+    "content-length": "17236",
+    "server": "AmazonS3",
+    "x-amz-server-side-encryption": "AES256"
+  }
+}

@@ -123,6 +123,67 @@ export function selectResourceForMonth(
   );
 }
 
+/** `_YYYY_MM_DD` before an accepted extension — the daily-split filename shape. */
+const DAY_SUFFIX = /_(\d{4})_(\d{2})_(\d{2})\.(csv|parquet)$/;
+
+/**
+ * Pick the resource for one reference day, for the datasets ONS splits daily.
+ *
+ * The DESSEM balances are the only daily split in scope — ~460 resources per
+ * package and one more every evening — so this is a third selector rather than
+ * a generalisation of the other two: the month and year selectors match a
+ * suffix that a daily file would also match on the first of a month, and
+ * folding them together would make `2026_08` silently select `2026_08_01`.
+ */
+export function selectResourceForDay(
+  resources: CatalogueResource[],
+  year: number,
+  month: number,
+  day: number,
+  formats: readonly ResourceFormat[] = PREFERRED_FORMATS,
+): CatalogueResource {
+  const suffix = `_${year}_${String(month).padStart(2, "0")}_${String(day).padStart(2, "0")}`;
+  for (const format of formats) {
+    const match = resources.find(
+      (resource) =>
+        resource.format === format &&
+        basename(resource.url).endsWith(`${suffix}.${format.toLowerCase()}`),
+    );
+    if (match) {
+      return match;
+    }
+  }
+  throw new UpstreamError(
+    `No ${formats.join(" or ")} resource found for ${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+  );
+}
+
+/**
+ * Every reference day the catalogue actually offers, as `YYYY-MM-DD`, ascending.
+ *
+ * Discovery, not construction: a backfill over a daily-split dataset has to know
+ * which days exist, and iterating a date range instead would spend a request per
+ * day ONS never published. Days are read from the filenames CKAN gave us, in the
+ * formats the caller will actually ingest — a day present only as XLSX is not a
+ * day this platform can read.
+ */
+export function availableResourceDays(
+  resources: CatalogueResource[],
+  formats: readonly ResourceFormat[] = PREFERRED_FORMATS,
+): string[] {
+  const days = new Set<string>();
+  for (const resource of resources) {
+    if (!formats.includes(resource.format)) {
+      continue;
+    }
+    const match = DAY_SUFFIX.exec(basename(resource.url));
+    if (match) {
+      days.add(`${match[1]}-${match[2]}-${match[3]}`);
+    }
+  }
+  return [...days].sort();
+}
+
 /** Fetch and decode `package_show` for a dataset. */
 export async function fetchPackage(
   slug: string,

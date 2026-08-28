@@ -227,3 +227,753 @@ compute.**
 31. As a reviewer, I want the renderer to have no tools, no retrieval and no
     access to the database, so that "it renders, it never decides" is a
     property of the call and not of the prompt.
+
+## Implementation Decisions
+
+### Which model SHAP explains — the composed expectation, attributed once
+
+**Decision: the target is `g(x) = E[Y | x]`, the composed expected
+`constrained_off_mwh` for one `(subsystem, valid_time)`, in MWh.**
+
+`forecaster.md` publishes five scalars per hour. Only one is attributable
+without inventing arithmetic:
+
+| Candidate | Why not |
+|---|---|
+| `p(x)` — occurrence | Matches IDEA §25's mock exactly, and explains *half the model*. A day whose risk is driven by the classifier and whose magnitude is driven by the weather would show only the first half, and the screen's biggest number is an MWh figure the attribution would not describe at all. |
+| `Q_pos^0.5` — magnitude | The mirror failure. Also conditional on an event whose probability is the other stage's output, so its drivers answer "given curtailment, how much" — a question the screen never asks. |
+| `Q_Y(0.1 or 0.5)` — a composed quantile | Not a smooth function of the features. `Q_Y` is a **piecewise** function whose branch is selected by `q ≤ 1 − p(x)`; a feature that moves `p` across that boundary produces a discontinuous jump from `0` to `> τ`, and Shapley values of a step function attribute the entire day to whichever feature happened to cross it. This is the sharpest reason the band is not the attribution target. |
+| Two attributions, combined | See below. |
+| **`E[Y|x]` — the expectation** | **Chosen.** A genuine function of both stages, continuous in every feature, denominated in the product's own unit, and additive across hours. |
+
+**Why the two-attribution route is refused, stated as arithmetic rather than as
+taste.** Write `g = μ + p·(m − μ)` with `m = Ê[Y|Y>τ, x]` and `μ = μ_sub(s,h)`
+constant given the cell. Let `a = p`, `b = m − μ`, with SHAP baselines `a₀`,
+`b₀`. Then
+
+```
+g − g₀ = b₀·(a − a₀) + a₀·(b − b₀) + (a − a₀)·(b − b₀)
+       = b₀·Σⱼ φ^p_j  +  a₀·Σⱼ φ^m_j  +  (Σⱼ φ^p_j)(Σⱼ φ^m_j)
+```
+
+The first two terms decompose per feature. **The third does not.** It is a
+scalar product of two sums, and every way of splitting it across features —
+proportional to `|φ^p|`, to `|φ^m|`, to their geometric mean, to the composed
+first-order term — is a choice with no principle behind it, and the choices
+disagree about the ranking whenever the cross term is large. The cross term is
+*largest* precisely on the interesting days: those where a feature raises both
+the chance and the size. So the double-counting question is not "how do we
+avoid it"; it is "why are we creating it". Attributing `g` directly creates no
+cross term to allocate, because `g` is one function.
+
+**How `g` is attributed: exact Shapley values over eight group players,
+interventional, against a matched background.**
+
+For a target row `x` at `(subsystem s, local hour h)` and the artifact's frozen
+background set `B(s,h)` of 128 rows:
+
+```
+v(S) = (1/|B|) · Σ_{b ∈ B(s,h)}  g( x[S] ⊕ b[S̄] )        for S ⊆ {1..8}
+φ_j  = Σ_{S ⊆ N\{j}}  (|S|! · (8−|S|−1)! / 8!) · [ v(S ∪ {j}) − v(S) ]
+```
+
+- **Interventional (marginal), not conditional/path-dependent.** The
+  path-dependent TreeSHAP estimator attributes credit to features the model does
+  not read, through correlation with features it does — and this feature vector
+  is saturated with correlation by construction (`proxy_residual_load_mwh` is a
+  function of three other columns). The interventional value function answers
+  "what does the model do when this group is replaced by a typical one", which
+  is the only version of the question the screen's `observed vs typical` framing
+  is already asking.
+- **Exact, not sampled.** Eight players is 256 coalitions; the whole enumeration
+  is affordable, so the *ranking* carries no Monte-Carlo noise. The only
+  residual error is background sampling, and it is quantified (below) rather
+  than assumed away.
+- **`g` is evaluated through the forecaster's own composition function.** The
+  ML service imports it; it does not re-implement `p·m + (1−p)·μ_sub`. Story 5
+  of `forecaster.md` already requires one implementation with four callers.
+  This is the fifth.
+- **Local accuracy holds exactly**: `Σⱼ φ_j = g(x) − v(∅)`. This is asserted,
+  not hoped for, and it is what makes the shares mean something.
+
+**Cost.** 256 coalitions × 128 background rows = 32,768 constructed rows per
+instance, two boosters each; 24 hours × 4 subsystems = 96 instances ≈ 3.1 M row
+evaluations per lane per publication. Seconds, batched, offline, once per
+publication — never in an HTTP request.
+
+**Grouped Shapley is not the sum of member Shapley values, and that is the
+point.** For a general `g` the two coincide only where `g` is additive across
+the group boundary. Treating the group as an atomic player defines its own
+cooperative game over eight players, and the answer to "what if members
+disagree" is that there are no members in the game being solved. A group whose
+features pull opposite ways gets whatever net effect *replacing the whole
+group with a typical one* has — one number, one sign, no cancellation performed
+by us.
+
+**What this does not explain, said on the screen and not only here.** The
+attribution explains the **expected MWh**. It does not explain the P10, the
+P90, the width of the band, or the day-level occurrence probability — the last
+of which comes from the path ensemble and is not a per-hour model output at all.
+The risk chip and the driver bars are adjacent panels describing related but
+distinct quantities, and the screen must say so once.
+
+### Feature grouping — eight players, one total partition
+
+**The map is data.** `apps/ml/src/wattsteer_ml/diagnosis/driver_groups.yaml`,
+loaded at train time, hashed (`driver_group_hash`, sha256 over the sorted
+`feature → group` pairs) and stamped on the model card together with
+`driver_group_version`.
+
+| # | `code` | `label_code` | Mechanism | Members |
+|---|---|---|---|---|
+| 1 | `renewable_resource` | `driver.renewable_resource` | How much wind and sun there is to spill | `weather_wind_*`, `weather_shortwave_radiation`, `weather_direct_normal_irradiance`, `weather_diffuse_radiation`, `weather_cloud_cover`, `weather_clearness_index`, `weather_wind_power_curve_cf`, `weather_expected_wind_mwh`, `weather_expected_solar_mwh`, `weather_temperature_2m`, `weather_surface_pressure`, `weather_relative_humidity_2m`, `weather_precipitation`, `dessem_wind_mwh`, `dessem_solar_mwh`, `dessem_mmgd_mwh`, `dessem_*_capacity_factor`, `capacity_*`, `observed_*_capacity_factor_mean_7d`, `observed_wind_generation_lag_168h`, `observed_solar_generation_lag_168h` |
+| 2 | `demand_level` | `driver.demand_level` | How much load there is to absorb it | `programmed_load_mwh`, `programmed_load_mean_3h`, `programmed_load_daily_min_mwh`, `programmed_load_rank_in_day`, `dessem_demand_mwh`, `dessem_pumping_mwh`, `observed_load_lag_168h` |
+| 3 | `net_surplus` | `driver.net_surplus` | The balance itself — IDEA's "renewable / load ratio" and "low residual load" | `proxy_residual_load_*`, `proxy_renewable_load_ratio`, `proxy_vre_surplus_mwh`, `dessem_residual_load_mwh`, `dessem_residual_load_min_of_day`, `dessem_residual_load_rank_in_day`, `dessem_renewable_load_ratio`, `dessem_vre_surplus_mwh`, `dessem_inflexible_share`, `dessem_hydro_mwh`, `dessem_thermal_mwh`, `dessem_sin_residual_load_mwh` |
+| 4 | `export_stress` | `driver.export_stress` | Whether the surplus can leave | `dessem_implied_net_export_mwh`, `dessem_export_utilisation`, `dessem_absorber_residual_load_mwh`, `observed_net_exchange_*`, `observed_corridor_flow_*`, `observed_export_utilisation_mean_24h_to_cutoff`, `observed_corridor_utilisation_ne_se_max_7d` |
+| 5 | `ramp_shape` | `driver.ramp_shape` | Intraday shape and steepness — IDEA's "solar ramp" | every `*_ramp_1h`, `weather_wind_speed_120m_mean_3h`, `weather_wind_speed_120m_std_6h`, `weather_shortwave_radiation_mean_3h` |
+| 6 | `calendar_season` | `driver.calendar_season` | Weekend, holiday, season, sun angle — IDEA's "Sunday" | `calendar_*`, `solar_zenith_cos`, `solar_extraterrestrial_ghi` |
+| 7 | `recent_history` | `driver.recent_history` | What has been happening lately | `observed_constrained_off_*`, `observed_reason_share_*`, `observed_actual_lag_hours` |
+| 8 | `data_conditions` | `driver.data_conditions` | The state of the pipeline, and the residual | `weather_run_age_hours`, `weather_centroid_coverage`, `subsystem`, **and every feature not named by 1–7** |
+
+All five drivers IDEA §25 names by hand land somewhere: high wind → 1, low
+residual load → 3, high NE export → 4, solar ramp → 5, Sunday → 6.
+
+**Four rules that make the map a decision rather than a taxonomy:**
+
+- **Total and disjoint.** Every name in the artifact's ordered feature list
+  belongs to exactly one group. Group 8 is the declared catch-all, so
+  totality is achievable, but a new feature silently landing in
+  `data_conditions` is a bad outcome — hence the test: a feature added upstream
+  that matches no explicit rule fails the group-map test, and the fix is a line
+  in the YAML, not a fallback.
+- **`calendar_local_hour` and `subsystem` contribute ≈ 0 by construction**,
+  because the background is matched on both. They stay in the map for totality
+  and their `φ` is expected to be numerically zero; a non-zero value is a bug in
+  the background sampler and a test says so.
+- **`data_conditions` is a player, not a leftover.** Its `φ` is a Shapley value
+  like any other, so the "everything else" row on the screen has a real
+  contribution and a real sign — unlike the fixture's `other`, which is
+  currently a rounding remainder.
+- **The grouping is a product decision and is frozen against retrains.** The map
+  changes only by editing the YAML, which bumps `driver_group_version`, which
+  invalidates every cached narration. The retrain never touches it.
+
+**`observed` and `typical`, and what a group can honestly show.** A group has no
+single value, so each group **declares a headline feature** in the YAML. The
+payload carries that feature's value on the target date at the group's
+peak-`|φ|` hour, and the median of the same feature over the matched background
+for that hour, plus a `unit` code. At retrain the card records whether the
+declared headline is in fact the largest mean-`|φ|` member on the newest fold;
+a mismatch is a **card warning, never an automatic relabel** — a driver whose
+subtitle changes weekly is worse than one that is second-best.
+
+**Display, and the only place a sign can still be lost.** The API returns all
+eight groups, ranked by `|share|`. The screen renders groups with
+`share ≥ 0.03`, capped at six rows, merging the remainder into one `other` row
+whose `phi` is the signed sum of what it absorbed. That merge is the one summing
+step in the whole design, so it carries the sign rule explicitly:
+
+> An `other` row reports `direction: "mixed"` when
+> `Σ|φ_members| > 1.5 · |Σ φ_members|`, and `raises` / `lowers` otherwise.
+
+`"mixed"` is a **new third member of `Driver.direction`** and is a required
+change to `apps/web/src/lib/domain.ts` — flagged below rather than assumed.
+
+**Shares.** `share_j = |φ_j| / Σ_k |φ_k|` over the displayed rows, so shares sum
+to 1 and a day whose drivers cancel still produces a full bar chart. This makes
+the shares **shares of the total attributed movement**, not of the curtailment
+and not of "the attributed magnitude" — which is what the current UI footnote
+and the `Driver.share` doc comment say. Both are copy changes and are flagged.
+
+### Aggregation across the day — sum, exactly, and publish the disagreement
+
+**Decision: the day attribution is `Φ_j = Σ_{t ∈ D} φ_{j,t}`, the exact
+hour-wise sum over the 24 hours of the target date in `America/Sao_Paulo`.**
+
+The reason is one line: **expectations add and quantiles do not.** The day's
+expected MWh really is `Σ_t E[Y_t]`, the baseline really is `Σ_t v_t(∅)`, and
+Shapley values are linear in the value function, so the sum of the hourly
+attributions *is* the attribution of the day's expected total against a typical
+day's — with no averaging rule, no weighting scheme and no choice to defend.
+This is the same argument that forbids summing the band, running in the one
+direction where it is valid, and it is why the target had to be the expectation
+before this question could be answered at all.
+
+The rejected alternatives, and what they would have cost:
+
+- **Peak hour only.** Answers "why is 13:00 the worst hour", which is a good
+  question and a different one. It would also sit beside a day-total figure it
+  does not explain, on the same screen, which is the reconciliation problem the
+  forecaster's path ensemble exists to avoid one layer down.
+- **Mean of hourly ranks, or mean of shares.** Both are averages of
+  normalisations, which is an operation with no interpretation: an hour whose
+  total attribution is 0.2 MWh would carry the same weight in the ranking as one
+  carrying 90 MWh.
+- **Attribute a day-grain model instead.** There is no day-grain model. Building
+  one would create a second thing to reconcile with the hourly one.
+
+**The cost of summing, measured rather than waved at.** A group can dominate at
+noon and reverse at dawn, and the sum hides it. So the payload carries, per
+group:
+
+```
+hour_disagreement_j = Σ_t |φ_{j,t}|  /  max(|Σ_t φ_{j,t}|, ε)
+```
+
+`1.0` means every hour pulled the same way. A displayed group with
+`hour_disagreement ≥ 2.0` is flagged, and the narration is **required** to say
+that the driver acted in both directions across the day. This is cheap, exact,
+and it turns the aggregation's known weakness into a published number.
+
+**The peak hour is returned beside the day, never instead of it.**
+`peak_hour_drivers` carries the same eight groups computed for the single hour
+with the largest `E[Y_t]`, plus that hour's local time. The screen may render it
+as a secondary view; the headline ranking is always the day.
+
+### Domain rules — the arbitration mechanism now, most of the content later
+
+The map records the rules' content as fog and this spec does not pretend
+otherwise. What it does refuse to defer is the **mechanism**, because a
+mechanism designed after the rules exist will be designed to fit them.
+
+**A rule is a predicate over `(feature_row, composed_forecast, attribution,
+recent_observations)` with exactly one of three actions:**
+
+| Action | What it may do | What it may never do |
+|---|---|---|
+| `annotate` | Attach a typed fact to `rule_flags[]`, which the renderer is **required** to state | Touch any number |
+| `demote` | Force a driver group below the fold regardless of its `|share|` | Change its `φ`, its sign or its share |
+| `withhold` | Suppress the model narration; the template renders instead | Change any number, or delete a driver |
+
+**No rule may change a number, and no rule may create a driver.** This is the
+whole design. An attribution that a rule could overwrite would no longer be the
+model's attribution, and every property the rest of the system establishes about
+the model — the reliability curve, the coverage report, the shuffled-label
+control — would stop describing what is on the screen. A rule's power is
+strictly over *what gets said*, never over *what is true of the model*.
+
+**Arbitration when a rule and SHAP disagree: both are published, neither wins.**
+The payload carries `drivers` untouched and `rule_flags` alongside, the renderer
+receives both and is required to state both, and the screen shows the
+annotation adjacent to the bars. This is the only outcome consistent with §26:
+a rule asserting a fact about the *grid* and a `φ` asserting a fact about the
+*model* are not the same kind of claim, so "resolving" them would mean silently
+converting one into the other.
+
+Ordering, so two rules cannot both claim the last word: rules are evaluated in
+declared order; every fired rule is recorded with its inputs; the **strictest**
+action taken by any fired rule governs (`withhold` > `demote` > `annotate`).
+
+**The four rules that ship in v1**, chosen because none of them needs a
+constant that does not already exist as data:
+
+| `code` | Action | Fires when | Constant source |
+|---|---|---|---|
+| `nothing_to_explain` | `withhold` | The day's occurrence probability is below the lowest `risk_bins` edge **and** no hour's `P50` is non-zero | `risk_bins`, from the artifact |
+| `attribution_is_noise` | `withhold` | `Σ_j |Φ_j| ≤ 2 × attribution_stderr_mwh` — the ranking is smaller than its own background-sampling error | Computed per day (below), not invented |
+| `stale_inputs` | `annotate` | `weather_run_age_hours > 0`, or `weather_centroid_coverage < 1`, or any displayed group's headline feature is NULL at serve time | Feature values |
+| `unmodelled_outage_regime` | `annotate` | On the most recent settled day for this subsystem, `REL` accounts for the largest share of constrained-off MWh | Observed `RestrictionCause`, already ingested |
+
+`unmodelled_outage_regime` is the sharpest honest rule available today and it
+exists because `forecaster.md` already ruled the reason-code model out on the
+ground that **no ingested dataset carries transmission availability**. When
+yesterday's curtailment was mostly external unavailability, the model is
+explaining a mechanism it structurally cannot see, and the screen should say so
+next to the bars rather than in a footnote nobody reads.
+
+`attribution_stderr_mwh` is a bootstrap over the background sample: resample
+`B(s,h)` with replacement 200 times, recompute `v(∅)` and `Σ_j|φ_j|`, take the
+standard deviation of the day total. It is the one number that makes
+"this ranking is noise" a measurement rather than a taste.
+
+**What is deferred, and the trigger that reopens it.** Every rule that would
+encode grid *physics* — "NE export saturated at the corridor limit ⇒ export
+stress must be named"; "hydro reservoirs above X ⇒ inflexibility dominates" —
+needs a threshold nobody can set today, and the map is right that they cannot be
+written before real rankings exist. The reopening trigger, so this is a bounded
+deferral and not a shrug:
+
+> Reopen when **three point-in-time folds exist** and the driver-stability
+> report has been produced. A candidate rule is admitted only if (a) it fires on
+> at least 20 days in the report, (b) every quantity in its predicate is an
+> ingested column or an artifact field, and (c) its action is `annotate` or
+> `demote` — a new `withhold` rule needs a separate review, because withholding
+> is the only action a user can notice as an absence.
+
+### The §26 boundary — a documented rule with two enforcers
+
+**Decision: a documented rule, enforced twice automatically. Copy review is
+retained and is load-bearing for nothing.**
+
+The rule, stated once so it can be cited:
+
+> WattSteer says the model **raised** or **lowered** its forecast. It never says
+> a condition **caused** curtailment. The product name for this engine is
+> **Diagnosis**; the phrase "Causal AI" does not appear anywhere, including in
+> marketing copy, and no surface claims to explain why an event physically
+> occurred.
+
+**Enforcer 1 — a build-time forbidden-vocabulary test**, in the same spirit as
+the repo-hygiene test that already fails when the old product name returns.
+Scope: `apps/web/src/**`, `packages/ui/**`, every i18n message catalogue, and
+the narration system prompt. Banned, case-insensitive, both locales:
+
+```
+causal, causality, causal ai, root cause, caused by, causes the,
+because the grid, why it happened, driver of the event,
+causa, causal, causou, causado por, causa raiz, porque ocorreu
+```
+
+Exceptions live in `apps/web/src/lib/copy/causality-allowlist.ts`, one entry per
+permitted occurrence, each carrying the string, its location and a reason. The
+only expected entries are the disclaimers that *use* the word to deny the claim
+— the driver-bars footnote is one.
+
+**Enforcer 2 — a runtime validator on every generated narration.** The lexical
+half of the output validator (below) rejects the same lemma set. A narration
+that trips it is retried once with the complaint appended, then falls back to
+the template. Nothing that trips it ever reaches a user.
+
+**Why a review is not enough.** Copy review works on strings that exist at
+review time. The narration panel produces a sentence per request, per locale,
+per day. The only place to review it is the moment it is generated, which is
+what enforcer 2 is.
+
+### The LLM renderer — the contract
+
+**It renders. It never decides.** No tools, no retrieval, no database access, no
+web access, no arithmetic. Its whole world is one JSON document.
+
+**Where it runs.** `apps/api` (Elysia/TypeScript), per the map's stack decision,
+using `@anthropic-ai/sdk`. `apps/ml` computes and persists the attribution;
+the API assembles the payload, checks the cache, calls the model, validates and
+returns.
+
+**Model and call parameters.**
+
+| | |
+|---|---|
+| Model | `claude-opus-5` |
+| Effort | `output_config: { effort: "low" }` — the task is restatement under constraint, not reasoning |
+| Thinking | left at the model's default (adaptive). **Not disabled** — disabling it on this model risks leaked reasoning tags and tool-call text in the visible response, and low effort already buys the cost back |
+| `max_tokens` | `700`, non-streaming; the output is one short paragraph |
+| Output shape | structured outputs, `output_config.format` with a one-field schema `{ narration: string }`, so no preamble can appear |
+| Caching | `cache_control: { type: "ephemeral" }` on the system block, which is byte-identical across every request; the volatile payload goes last |
+| Tools | none, declared as none |
+
+Volume is 4 subsystems × 2 locales × 2 gate profiles ≈ 16 calls per day, at
+roughly 2 k input tokens (mostly cache reads) and 300 output tokens — cents per
+day. There is no cost argument for a weaker model here, and a weaker model on
+this task fails in the one direction that matters: it invents a number.
+
+**The input JSON — the renderer's entire world.**
+
+```jsonc
+{
+  "schema_version": "diagnosis.narration.v1",
+  "prompt_version": "2026-08-28.1",
+  "locale": "pt-BR",                       // or "en-US"
+  "subsystem": "NE",
+  "subsystem_display_name": "NORDESTE",    // ONS's proper noun, untranslated
+  "target_date": "2026-08-28",
+  "threshold_mw": 5,
+  "forecast_origin": {
+    "run_label": "dessem_free_v1__gate_late__thr5/2026-08-27T22:11:07Z",
+    "gate_profile": "gate_late",
+    "published_at": "2026-08-27T22:11:07Z"
+  },
+  "vintage_fidelity": "point_in_time",
+  "risk": {
+    "day_occurrence_probability": 0.87,
+    "risk_class": "high",                  // a code; the client translates it
+    "hours_p50_nonzero": 9
+  },
+  "magnitude": {
+    "day_expected_mwh": 412.0,
+    "baseline_expected_mwh": 96.0,
+    "day_energy_p10_mwh": 0.0,
+    "day_energy_p50_mwh": 370.0,
+    "day_energy_p90_mwh": 980.0,
+    "peak_power_p50_mw": 118.0,
+    "peak_hour_local": 13
+  },
+  "attribution": {
+    "target": "expected_mwh_day",
+    "total_attributed_mwh": 316.0,         // = day_expected − baseline
+    "sum_abs_attributed_mwh": 402.0,
+    "stderr_mwh": 4.1,
+    "top_two_share": 0.56,                 // pre-computed: the renderer may not add
+    "groups": [
+      {
+        "code": "net_surplus",
+        "label_code": "driver.net_surplus",
+        "phi_mwh": 128.0,
+        "share": 0.31,
+        "direction": "raises",
+        "headline_feature": "proxy_renewable_load_ratio",
+        "observed": 1.42,
+        "typical": 0.96,
+        "unit": "ratio",
+        "hour_disagreement": 1.1,
+        "demoted": false
+      }
+      // ... eight entries, ranked by |share|
+    ]
+  },
+  "rule_flags": [
+    { "code": "stale_inputs", "severity": "annotate",
+      "facts": { "weather_run_age_hours": 12 } }
+  ],
+  "observed_reasons_latest": {
+    "date": "2026-08-27", "top_reason": "ENE", "top_reason_share": 0.62
+  }
+}
+```
+
+Every field the copy could want is present *as a number*. `top_two_share` looks
+redundant and is not: the prototype's own fixture narration adds two shares
+together, and the rule "the renderer may not compute" is only enforceable if
+nothing it needs requires computing.
+
+**The system prompt's load-bearing constraints** (abbreviated; the file is the
+authority):
+
+- Write one paragraph, 45–90 words, in `{locale}`, in the second half of the
+  register the rest of the product uses.
+- State only facts present in the input. **Introduce no number, name, place,
+  date or quantity that does not appear in the input document.**
+- Say that the *model* raised or lowered its forecast. Never say a condition
+  caused, drove or explains the curtailment itself.
+- State every `rule_flags` entry.
+- If any displayed group has `hour_disagreement ≥ 2.0`, say that it acted in
+  both directions during the day.
+- Never give advice, never mention batteries, dispatch or the optimizer, never
+  speculate about tomorrow beyond the target date, never characterise the band's
+  meaning (that caveat is static UI copy).
+- Round nothing. Use the numbers as given.
+
+**The output validator — three gates, all of them mechanical.**
+
+1. **Numeric whitelist.** Extract every numeric token from the narration
+   (locale-aware: `1.42` / `1,42`, `412` / `412,0`, `87%`, `1.900`). Each must
+   match a value present in the input document, rendered at one of the permitted
+   precisions for its field, in the requested locale. **A number that is
+   arithmetically correct but absent from the input fails**, which is the whole
+   point — that is what a derived-and-wrong figure looks like from the outside.
+2. **Lexical.** The §26 banned-lemma set, plus banned advice verbs
+   (`should`, `recommend`, `deve`, `recomenda`) and banned certainty adverbs
+   (`certainly`, `definitely`, `certamente`).
+3. **Structural.** Word count within `[35, 110]`; single paragraph; no markup;
+   no URL; locale of the output matches the request (a cheap script/stopword
+   check is sufficient — the failure mode is a whole paragraph in the wrong
+   language, not a stray word).
+
+A failure appends the validator's complaint to a second and final attempt. A
+second failure logs the rejected text with its payload hash and falls back to
+the template. **The rejected text is never shown.**
+
+**The template fallback.** A deterministic sentence assembled from the same
+payload through `t()` keys with interpolation, one key per locale, living in the
+message catalogue. It names the risk class, the day's expected MWh against the
+baseline, the top two groups with their directions and their `observed`/`typical`
+pair, and every `rule_flags` entry. It is the one narration surface that *is* a
+translated string, and that is consistent: a template is a fixed string
+catalogue, which is exactly what `i18n.md` says the API returns everywhere
+except generated prose.
+
+The response carries `narration.source: "model" | "template"`, so the panel
+footnote can be true in both cases. The screen currently asserts unconditionally
+that the paragraph was written by a language model; that is a copy change and is
+flagged.
+
+**The caching key.**
+
+```
+narration:v1:{prompt_version}:{model_id}:{locale}:{sha256(canonical(input_json))}
+```
+
+- `canonical()` sorts keys and rounds every float to its field's display
+  precision **before** hashing, so a 1e-12 jitter in a re-computed `φ` does not
+  miss the cache.
+- The payload already contains `forecast_origin.run_label` (which contains the
+  `artifact_id`), so a retrain, a promotion, a superseding 12Z run, or a changed
+  `driver_group_version` all invalidate the key by construction. Nothing else
+  does, and there is no manual invalidation path to forget to call.
+- `prompt_version` and `model_id` are in the key because a prompt edit or a model
+  change produces different prose from identical facts.
+- Redis, TTL 26 h. A template fallback is cached under the same key with a 5 min
+  TTL, so an outage does not turn into a call per request, and recovery is fast.
+
+**The API surface.** `GET /v1/diagnosis/day-ahead?subsystem=&date=&run=&locale=`,
+returning the attribution as codes plus the narration as prose. Two consequences
+for the client contract, both departures from the prototype's fixture:
+
+- **`observed` and `typical` are numbers with a `unit` code**, not preformatted
+  strings like `"310 MW left"` or `"+1.4 GW YoY"`. The client formats them
+  through `Intl`, per `i18n.md`. Preformatted values in the API would be
+  translated strings by another name.
+- **The endpoint takes no `technology` parameter.** There is one attribution per
+  subsystem-day, because there is one model per subsystem-day.
+
+**Persistence, so Replay can read it.** Every published attribution is written
+to `diagnosis_attribution` at `(artifact_id, subsystem, target_date,
+published_at)` grain, carrying the eight `Φ_j`, the baseline, the stderr, the
+peak-hour attribution, the fired rules and the `driver_group_hash`. This mirrors
+`forecaster.md`'s rule that every served forecast is persisted as a `Forecast`
+row, and for the same reason: "what did we say at D−1" must be a query, not a
+re-run against a model that has since been retrained. Whether and how Time
+Machine renders it is ticket 012's call, not this spec's.
+
+### Two additions to the forecaster's artifact
+
+This spec asks `forecaster.md` for exactly two things, and they are called out
+rather than assumed:
+
+1. **The matched background sample** — `B(s, h)`, 128 rows per
+   `(subsystem, local_hour)` cell (12,288 rows), drawn once from the base-fit
+   block with a stamped seed, added to the joblib bundle beside `μ_sub` and the
+   PIT matrix `U`. Without it "typical" has no definition and the attribution
+   is not reproducible from the artifact alone.
+2. **Three card fields** — `driver_group_version`, `driver_group_hash`, and the
+   `headline_feature_check` block recording, per group, whether the declared
+   headline feature was the largest mean-`|φ|` member on the newest fold.
+
+Neither changes what the forecaster predicts. Both belong to the artifact
+because the alternative is an explanation that cannot be regenerated from the
+model that produced it.
+
+## Testing Decisions
+
+**What makes a good test here.** An attribution has no ground truth, so almost
+every test in this spec asserts an **invariant of the construction** rather than
+a value. Two of them are generic detectors in the same family as the feature
+spec's gate ablation and the forecaster's shuffled-label control: they catch a
+whole class of wrongness without knowing what right looks like.
+
+**Seam 1 — local accuracy, as arithmetic.** On fixture models with no training
+involved: `Σⱼ φ_j == g(x) − v(∅)` to floating-point tolerance, for random
+feature vectors, for `p = 0`, for `p = 1`, and at the isotonic clip endpoints.
+This is the property that makes shares meaningful, and it is exact, so the
+tolerance is machine epsilon and not a judgement.
+
+**Seam 2 — the additive cross-check, which is where grouping is validated.** On
+a synthetic model that is additive across the group boundary
+(`g = Σ_j f_j(x_group_j)`), grouped Shapley **must equal** the sum of the
+member features' interventional Shapley values. On a model with a deliberate
+cross-group interaction it **must not**, and the gap must be exactly the
+interaction term. Together these pin down that the implementation solves the
+game it claims to solve, and they are what a future session that wants to
+"simplify" grouping into summation has to confront.
+
+**Seam 3 — the sign-honesty property, stated as a test.** Construct a group
+whose two members have `φ` of `+40` and `−35` under a per-feature attribution.
+Assert the group's own `φ` is computed from the coalition and is *not* `+5`
+unless the model happens to be additive there. Assert that no code path in the
+diagnosis module sums member-level values into a group value — a grep-level
+test, in the same spirit as the UI's "nothing sums two bands", because this is
+the invariant most likely to be broken by a well-meaning optimisation.
+
+**Seam 4 — the group map is a total partition.** Every name in the artifact's
+ordered feature list matches exactly one explicit rule; no name matches two; the
+`data_conditions` catch-all is reached by zero features that were not explicitly
+placed there. A feature added to `feature-engineering.md` fails this test until
+it is grouped, which is the point. Also: `driver_group_hash` changes when and
+only when the YAML changes.
+
+**Seam 5 — the matched background.** `φ` for `subsystem` and for
+`calendar_local_hour` is numerically zero (within tolerance) on every instance,
+because the background is matched on both. A non-zero value means the sampler
+leaked across cells and every "typical" on the screen is wrong. This test is
+cheap and catches the single most likely implementation bug.
+
+**Seam 6 — the day sum.** For a seeded fixture, `Φ_j == Σ_t φ_{j,t}` exactly;
+`Σ_j Φ_j == day_expected_mwh − baseline_expected_mwh` exactly;
+`hour_disagreement ≥ 1` always, and `== 1` exactly when every hour shares a
+sign. Assert 24 hours were consumed (the feature spec's DST canary, one layer
+up).
+
+**Seam 7 — the shuffled-feature control, the generic detector.** Permute one
+group's columns across rows *within a fold* and re-run the attribution. That
+group's `|Φ|` must collapse toward zero and the other groups' rankings must be
+materially unchanged. **If permuting a group's inputs leaves its contribution
+intact, the attribution is not reading the model** — and this test does not need
+to know which group or which model. It is the diagnosis-layer twin of the
+forecaster's shuffled-label control and it is the most valuable test in this
+spec.
+
+**Seam 8 — the rules cannot write.** Property test: for every rule, for randomly
+generated payloads, the post-rule payload's `p`, band, `E[Y]`, every `φ`, every
+share and every rank-underlying value are **byte-identical** to the pre-rule
+payload. Only `rule_flags`, `demoted` and the narration-source decision may
+differ. This is the one-way valve, asserted rather than reviewed.
+Additionally: two rules with conflicting actions resolve to the strictest; a
+fired rule always appears in `rule_flags`; a `withhold` rule means the LLM is
+never called (assert the client is not invoked, not merely that its output is
+discarded).
+
+**Seam 9 — the numeric whitelist validator, adversarially.** A narration that
+states a number correctly derived from the input but absent from it (e.g. the
+sum of two shares, when `top_two_share` has been removed from the payload)
+**must be rejected**. A narration stating a number present in the input in the
+other locale's formatting must pass. A narration stating a plausible-looking
+number that appears nowhere must be rejected. Fixture-driven, no API calls.
+
+**Seam 10 — the §26 enforcers.** The forbidden-vocabulary test fails on a
+deliberately planted `"causal"` in a message catalogue and passes when it is
+moved to the allowlist with a reason; an allowlist entry whose string no longer
+appears in the codebase also fails, so the allowlist cannot rot. The runtime
+lexical validator rejects a fixture narration containing each banned lemma, in
+both locales.
+
+**Seam 11 — the renderer contract, without calling the API.** The assembled
+request carries no tools, the system block is byte-identical across two
+different payloads (so caching can work), the payload block is last, the model
+id and effort match this spec, and the locale in the prompt matches the request.
+A snapshot test on the canonicalised payload catches an accidental field
+addition, which would silently invalidate every cached narration.
+
+**Seam 12 — caching.** Identical payloads hit; a changed `φ` beyond display
+precision misses; a changed `φ` below display precision hits; a changed
+`artifact_id`, `prompt_version`, `model_id`, `driver_group_version` or locale
+misses. A template fallback is cached with the short TTL and does not survive
+into the next publication.
+
+**Seam 13 — live, scheduled.** One real call per locale per deployment against
+the real model, asserting only that the response passes all three validators.
+This is the test that catches a prompt regression, and it is the only test in
+this spec that spends money.
+
+**Acceptance gate.** Default `bun test` / `pytest` pass with no network, no
+database and no model artifact (seams 1–6 and 8–12 are fixture- and
+synthetic-data-driven). Seam 7 runs against a real artifact under the existing
+env-var gating. Seam 13 runs on its schedule. The attribution for all four
+subsystems completes inside the publication budget with wall-clock recorded.
+
+## Out of Scope
+
+- **The two estimators, the mixture inversion, the band, the ensemble and the
+  gate.** [`forecaster.md`](forecaster.md). This spec attributes one of its
+  outputs and asks for two additions to its artifact; it decides nothing about
+  the model.
+- **The feature list, the availability classes and the gate arithmetic.**
+  [`feature-engineering.md`](feature-engineering.md). This spec groups names; it
+  never adds, drops or redefines one.
+- **The reason-code model.** Ruled out in `forecaster.md` on an absent-predictor
+  argument, with a three-part reopening trigger. Nothing here forecasts a
+  reason; `unmodelled_outage_regime` reads *observed* reasons only, and only
+  upward-aggregated ones.
+- **Per-technology drivers.** There is no per-technology model. The technology
+  split is a point split of a band's centre, and attributing a split would
+  explain the share regressor rather than the forecast.
+- **Per-hour driver bars on the Explain screen.** The day is the headline and
+  the peak hour is returned beside it. A 24 × 8 attribution heatmap is a real
+  screen and it is not this one.
+- **Counterfactual and causal claims of every kind** — "if the corridor had 500
+  MW more headroom, curtailment would have been X". That is causal inference,
+  §26 forbids the claim, and the model cannot support it. Note the boundary
+  precisely: the optimizer's *what-if* is a simulation of a dispatch under a
+  fixed forecast, which is a different and legitimate object.
+- **Attribution of the optimizer's plan.** `flex-optimizer.md` explains a
+  dispatch through its own dispatch stack and SOC profile. The two engines
+  never share an explanation surface.
+- **SHAP interaction values, and any second-order decomposition.** Eight players
+  gives 28 pairs, which is a matrix nobody asked for and a screen nobody
+  designed.
+- **Global feature importance on the Explain screen.** The card carries mean-`|φ|`
+  per group per fold for the headline check and for the driver-stability report;
+  it is model metadata, not a day's explanation, and mixing the two on one
+  screen is how "why today" becomes "why in general".
+- **Grid-physics domain rules.** Deferred with an explicit reopening trigger
+  above. This is the ticket's stated acceptable outcome and it is taken.
+- **Translating the narration.** It is generated in the requested locale, per
+  the map's settled exception. No translation layer, no `t()` key, no
+  round-trip.
+- **Letting the renderer see anything but its payload.** No database, no tools,
+  no retrieval, no conversation history.
+
+## Further Notes
+
+**The headline is that the composition question answers the grouping question
+and the aggregation question at the same time.** Once the target is the
+expectation — the one composed scalar that is continuous, additive across hours
+and denominated in MWh — the day aggregation is forced (sum, exactly) and the
+grouping becomes affordable enough to do *before* attribution rather than after.
+Every hard problem in this ticket dissolves into the same choice, and the choice
+is forced by the forecaster's own arithmetic: the band is piecewise and the
+probability is unitless, so neither can be summed over a day, and only the
+expectation can.
+
+**"Group first, then attribute" is the load-bearing sentence.** The usual
+pipeline is attribute-then-group, and every version of it has to decide what to
+do with a group whose members disagree — and every answer is a lie of some size.
+Making the group a *player* removes the question rather than answering it. It
+costs one thing: the group's value is no longer the sum of its members' values,
+so a reader who computes both will find they differ. Seam 2 pins the difference
+to the cross-group interaction, which is the honest name for it.
+
+**The one-way valve is what makes the domain rules safe to ship half-written.**
+The map is right that the rules' content cannot be decided today. But a rule
+that can only annotate, demote or withhold cannot corrupt anything, so shipping
+four rules today and eight more in three months carries no risk of quietly
+invalidating the model's published properties. Had the mechanism allowed a rule
+to adjust a `φ` — which is what "arbitration" usually means — deferring the
+content would have been reckless rather than prudent.
+
+**The renderer's real constraint is the validator, not the prompt.** Prompts ask;
+validators enforce. The numeric whitelist is deliberately strict enough to
+reject a *correct* derived number, because from the outside a correct
+computation and a lucky hallucination are indistinguishable, and the only
+tractable rule is "no computation at all". The cost is a handful of
+pre-computed fields in the payload, which is the cheapest safety mechanism in
+this document.
+
+**Where this spec is weakest.** Four places, ranked:
+
+1. **The eight groups are a judgement and the first real ranking may embarrass
+   them.** `net_surplus`, `demand_level` and `renewable_resource` are
+   mechanically distinct and statistically entangled — `proxy_residual_load_mwh`
+   is literally programmed load minus expected wind minus expected solar. The
+   interventional value function handles the correlation correctly, but if the
+   ranking turns out to put `net_surplus` first on every single day, the group
+   set is carrying no information and should be re-cut. The driver-stability
+   report is where that becomes visible, and it is the same report the deferred
+   rules wait on.
+2. **The matched background makes "typical" hour-specific, which is right for
+   the bars and slightly odd for the day.** Summing 24 hour-matched baselines
+   gives "a typical day" only in the sense of "the sum of typical hours", which
+   is not any particular day that occurred. This is the same class of statement
+   as the forecaster's hour-wise P10 envelope not being a realisable day, and it
+   is stated on the same grounds.
+3. **`hour_disagreement` is published but its threshold is invented.** `2.0` is
+   a judgement placed where being wrong is conservative: too low and the
+   narration says "acted in both directions" on days where it barely did; too
+   high and it stays silent. It errs toward saying more, which is the right
+   direction for a caveat, but it is a constant and it is named as one.
+4. **Nothing validates that a narration is *good*, only that it is not wrong.**
+   The three gates catch invented numbers, banned claims and structural
+   nonsense. A dull, unhelpful, technically-correct paragraph passes every one
+   of them. That is the right trade for v1 — the failure mode this product
+   cannot survive is a confident false claim, not a boring true one — but it
+   means the narration's quality rests on the prompt and on seam 13's single
+   live call, which is thin.
+
+**Calls the dev should review.** Four in this spec, plus the cross-spec ones
+recorded in the ticket:
+
+- **The expectation as the sole attribution target** means the Explain screen's
+  bars do not explain its band. Two adjacent panels now describe two related
+  quantities, and the screen needs one sentence saying so. If that is
+  unacceptable to the product, the alternative is to attribute `p(x)` and accept
+  that the MWh figure goes unexplained — which is IDEA §25's own mock, and is
+  half an answer.
+- **One attribution per subsystem-day, with no technology dimension**, which
+  contradicts the prototype's `buildExplain(subsystem, technology)`. The
+  prototype invented a per-technology explanation for a model that has no
+  per-technology head.
+- **Three UI contract changes**: `Driver.direction` gains `"mixed"`;
+  `observed` / `typical` become numbers plus a `unit` code; the share is a share
+  of *attributed movement*, which changes both the doc comment and the
+  driver-bars footnote.
+- **`claude-opus-5` at low effort for sixteen calls a day.** The cost argument
+  for a smaller model is worth cents and the failure mode it buys is an invented
+  number on a page whose entire premise is that nothing on it is invented.
