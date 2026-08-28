@@ -77,6 +77,23 @@ export const config = {
   /** Base backoff (ms) between job retries (exponential). */
   jobBackoffMs: int(process.env.WATTSTEER_JOB_BACKOFF_MS, 5000, 100, 120_000),
 
+  // --- the ML service ---
+  /**
+   * Base URL of the Python service that owns modelling and optimisation.
+   * Compose sets `http://ml:8000`; on Railway it is the private domain. Unset
+   * → the gateway reports the capability as unavailable rather than 500ing.
+   */
+  mlUrl: process.env.WATTSTEER_ML_URL || undefined,
+  /**
+   * How long the gateway waits on the ML service before giving up.
+   *
+   * The optimizer solves in milliseconds and the forecaster serves a stored
+   * artifact, so a slow answer means something is wrong rather than busy —
+   * and a gateway that waits indefinitely turns one struggling service into
+   * an exhausted connection pool.
+   */
+  mlTimeoutMs: int(process.env.WATTSTEER_ML_TIMEOUT_MS, 5000, 100, 60_000),
+
   // --- persistence ---
   /** Postgres URL. Unset → persistence disabled. */
   databaseUrl: process.env.DATABASE_URL || undefined,

@@ -2,7 +2,7 @@
 id: "017"
 title: apps/ml scaffold and service topology
 type: wayfinder:task
-status: open
+status: closed
 assignee:
 blocked_by: ["004", "005"]
 ---
