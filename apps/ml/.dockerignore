@@ -1,0 +1,17 @@
+# The build context is apps/ml (see docker-compose.yml), so this file governs
+# it alone — the repo-root .dockerignore never applies to the ml image.
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+tests/
+.env
+.env.*
+!.env.example
+Dockerfile
+.dockerignore
+# README.md is copied deliberately (the wheel build reads it); nothing else in
+# the docs tree is.

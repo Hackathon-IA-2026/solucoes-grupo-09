@@ -1,5 +1,6 @@
-# Local topology mirroring the deployed services: Postgres + Redis + API +
-# worker. The Python ML service joins this file when it exists.
+# Local topology mirroring the deployed services, one for one: Postgres, Redis,
+# API, worker and the Python ML service. Five here, five on Railway — the whole
+# point of this file is that a topology mistake surfaces locally.
 #   docker compose up --build
 #   docker compose up --build --scale worker=3
 services:
@@ -50,6 +51,10 @@ services:
       REDIS_URL: redis://redis:6379 # overrides any .env value → in-compose Redis
       DATABASE_URL: postgres://wattsteer:wattsteer@postgres:5432/wattsteer
       WATTSTEER_ROLE: api # enqueue jobs; the worker service processes them
+      # The ML service is internal: reachable on the compose network by service
+      # name, never published to a browser. On Railway this is
+      # http://ml.railway.internal:8000.
+      WATTSTEER_ML_URL: http://ml:8000
       # WATTSTEER_CORS_ORIGINS: https://wattsteer.com # REQUIRED for a deployed web frontend
       # WATTSTEER_DASHBOARD: "true"   # optional BullMQ dashboard at /jobs (protect it!)
     env_file:
@@ -82,6 +87,7 @@ services:
       REDIS_URL: redis://redis:6379
       DATABASE_URL: postgres://wattsteer:wattsteer@postgres:5432/wattsteer
       WATTSTEER_ROLE: worker
+      WATTSTEER_ML_URL: http://ml:8000
     env_file:
       - path: .env
         required: false
@@ -91,6 +97,49 @@ services:
     healthcheck:
       disable: true
 
+  ml:
+    build:
+      context: apps/ml # not the repo root: this service shares no lockfile with
+      dockerfile: Dockerfile # the Bun workspace, so the monorepo would be dead weight
+    image: wattsteer-ml:latest
+    depends_on:
+      postgres:
+        condition: service_healthy # reads Postgres; nothing to read until it answers
+    ports:
+      # Published so the stub is callable during development. In production the
+      # ml service has no public domain — only the gateway reaches it.
+      - "${ML_PORT:-8000}:8000"
+    environment:
+      WATTSTEER_ML_ENV: production
+      PORT: "8000"
+      # Same database the gateway owns. Read-only is enforced by the ML service
+      # itself (default_transaction_read_only on every connection); on Railway
+      # this points at a role granted SELECT and nothing else. Drizzle owns
+      # migrations — this service never runs one.
+      DATABASE_URL: postgres://wattsteer:wattsteer@postgres:5432/wattsteer
+      WATTSTEER_ML_ARTIFACT_DIR: /data/models
+    volumes:
+      # The Railway volume's local stand-in: trained artifacts must survive a
+      # rebuild, or every `docker compose up --build` silently retrains.
+      - ml-artifacts:/data/models
+    env_file:
+      - path: .env
+        required: false
+    restart: unless-stopped
+    healthcheck:
+      # Liveness only, matching the api service: the probe must not depend on
+      # Postgres. Readiness lives at /ready.
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health').read()"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
 volumes:
   redis-data:
   postgres-data:
+  ml-artifacts:
