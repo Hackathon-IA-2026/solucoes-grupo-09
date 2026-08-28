@@ -23,8 +23,11 @@
 > emptying the template. This spec assumes it has landed and does not repeat it.
 >
 > Map: [`.wayfinder/map.md`](../../.wayfinder/map.md). Status: **ready-for-agent**
-> for the mechanical parts; three decisions are called out inline as still open
-> and belong to their decision tickets.
+> for the mechanical parts. Of the three decisions originally called out inline
+> as open, two — the fact-table shape and the `data_version` derivation, and the
+> raw-payload archive and its retention — were settled by the tracer ticket and
+> are now recorded below. The remaining one, the weather variable list and
+> centroid set, still belongs to **Feature engineering spec**.
 
 ## Problem Statement
 
@@ -267,10 +270,49 @@ that yields identical values does not write a new version — vintage history
 records ONS restatements, not WattSteer's polling schedule. Reads go through
 as-of views that return exactly one row per key.
 
-*Open decision, belonging to* **Bitemporal schema and ingestion contract**:
-whether facts live in one wide table per grain or one narrow observation table,
-and how `data_version` is derived. Both are genuine forks with different
-migration costs, and this spec deliberately does not pre-empt them.
+**Settled while writing the first adapter** (ticket
+[`007`](../../.wayfinder/tickets/007-bitemporal-schema.md), closed by the
+tracer): facts live in **one wide table per grain**, and **`data_version` is
+derived from a digest of the stored value tuple**.
+
+*Wide, one table per grain.* The alternative — a narrow
+`(series, entity, valid_time, value)` table that absorbs new ONS datasets
+without migrations — was rejected on three grounds, all of which only became
+visible with a real file in hand. First, the six measures of a balanço row are
+published together, revised together and read together; narrow storage makes
+"these six values are one restatement" an application convention rather than a
+row, and there is then no single thing to digest. Second, it multiplies row
+count and as-of work by the number of measures — 22 848 rows per year becomes
+137 088 — for a table whose only query is "give me the hour". Third, and
+decisively, the domain model does not describe facts narrowly:
+`RestrictionCause` is a value object spanning three columns that are populated
+and blank together, and a narrow store cannot express that at all. The migration
+cost the narrow shape buys off is small and knowable: the ONS catalogue is
+enumerated at 15 datasets, so the number of future fact tables is a known finite
+number, not an open set.
+
+*`data_version` from a value digest.* It is a monotonic integer per business
+key, bumped only when a sha256 over the stored values (and nothing else) differs
+from the latest version of that key. The two alternatives were both wrong in the
+same direction. A **source-file hash** is file-grained: ONS rewrites whole years
+in place, so one restated hour would bump the version of every row in the file
+and vintage history would record ONS's publishing schedule rather than its
+restatements. An **ONS-published version** does not exist — the research
+established that no `x-amz-version-id` is returned on any object and that prior
+vintages are unrecoverable. A **bare ingestion counter** would record WattSteer's
+polling schedule, which the domain model explicitly forbids. The digest excludes
+`published_at` and `ingested_at` deliberately: a re-publication with identical
+numbers is not a revision.
+
+*As-of reads.* `DISTINCT ON (business key) … ORDER BY … ingested_at DESC,
+data_version DESC` over an index on `(valid_time, subsystem, ingested_at)`. No
+materialised current-view: the wide shape means one row per key per vintage, and
+the fact tables are small enough (hundreds of thousands of rows per dataset-year)
+that the index carries it. Revisit only if measurement says so.
+
+*Where DESSEM goes* was already settled by the domain model — its own table,
+because an `Observation` and a `Forecast` are two table families discriminated
+by shape rather than by a `horizon` column.
 
 **DESSEM has three time axes, not two.** It is a forecast published by ONS, so
 it carries the valid time, ONS's own publication time, and WattSteer's ingestion
@@ -320,8 +362,20 @@ revision.
 unrecoverable once overwritten, so WattSteer is the sole custodian of its own
 vintages. This also makes parsing bugs reprocessable without re-fetching.
 
-*Open decision, belonging to* **Bitemporal schema and ingestion contract**:
-where archived payloads live and their retention policy.
+**Settled with the same ticket.** The *fingerprint* of every observed resource
+state lives in Postgres, in `ons_resource_version`: the S3 triple
+(`Last-Modified`, `Content-Length`, `ETag`) folded into a `change_key`, plus the
+content sha256 and byte size once the bytes are fetched. That row is what makes
+"has this file changed?" answerable from a single `HEAD`, and it is the
+provenance every fact row points at. The *bytes* live outside Postgres behind
+`archive_uri` — a Railway volume or bucket path — because a year of one dataset
+is 1.4 MB of Parquet and the full backfill across four source families is
+gigabytes, which does not belong in the row store. Retention: raw payloads are
+kept indefinitely for any resource state that produced a written revision, and
+90 days for states that produced none. The fingerprint row is never deleted —
+it is small, and it is the only record that a file existed in a given state.
+The archive writer itself is not built by the tracer; `archive_uri` is nullable
+so that landing it later is an insert, not a migration.
 
 **Ingestion runs on the existing BullMQ worker and Redis**, which the template
 already provides and the strip retains. No second scheduler.
@@ -391,8 +445,8 @@ consistent with what the research measured.
 - **The domain vocabulary itself.** This spec uses working names; the ubiquitous
   language is **Domain model and ubiquitous language**, and its outcome may
   rename things described here.
-- **The exact table layout and `data_version` derivation** — explicitly deferred
-  to **Bitemporal schema and ingestion contract**.
+- ~~**The exact table layout and `data_version` derivation**~~ — no longer
+  deferred; settled in Implementation Decisions above by the tracer ticket.
 - **The weather variable list and centroid set** — deferred to **Feature
   engineering spec**.
 - **CMO prices, `programacao_diaria`, and the geoelectric-area load grain.** All
@@ -436,6 +490,27 @@ Historical Forecast API, which the lead-time research measured and replaced with
 Single Runs. In both cases the later, measured finding wins. The superseded
 recommendations remain in their original files unedited, which is why this note
 exists.
+
+**Two things the research did not have, found by building the tracer.** Both
+were caught by fixture tests and neither would have surfaced from reading the
+file.
+
+1. **The Parquet rendition stores `din_instante` as INT96**, which every reader
+   materialises as an epoch instant — so the naive Brasília wall clock the CSV
+   writes as a string arrives from Parquet as a `Date` whose *UTC* fields are
+   the local reading. Trusting it is a silent three-hour error, in exactly the
+   dataset that defines the hourly grid. The research established the timezone
+   from the CSV rendition and the trap does not exist there. Since the spec
+   *prefers* Parquet, this is on the default path.
+2. **The DST spring-forward placeholder rows are not uniformly empty.** The
+   research records `balanco` emitting a placeholder with empty `val_carga` and
+   `val_intercambio` for the hour that never happened, quoting the `SE` row.
+   Reading all of 2018-11-04 00:00: `NE`, `N` and `SE` are as described, but the
+   `S` row carries `0E-8` in every column rather than blanks, and there is no
+   `SIN` row for that hour at all. An emptiness test would silently admit the
+   `S` row as a real zero hour. The adapter therefore detects the gap from the
+   IANA zone — the local time did not exist — rather than from the values, which
+   catches all four rows and needs no per-dataset rule.
 
 **One caveat is not yet closed.** The measured train/serve weather gap is
 per-point, but the feature is a capacity-weighted aggregate. Aggregation will

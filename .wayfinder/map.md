@@ -65,6 +65,21 @@ not relitigate without the dev:**
 
 _From closed tickets:_
 
+- [**Bitemporal schema and ingestion contract**](tickets/007-bitemporal-schema.md) —
+  resolved by building the tracer rather than by grilling. Facts live in **one
+  wide table per grain**, not a narrow observation table: the measures of a row
+  are published, revised and read together, and `RestrictionCause` is a value
+  object a narrow store cannot express. **`data_version` is a sha256 over the
+  stored value tuple** compared against the latest version of the same business
+  key — not the source file's hash (file-grained, would bump a whole rewritten
+  year), not an ONS version (none exists), not a counter (that would record our
+  polling schedule). `AsOf(t)` is `DISTINCT ON` over the business key ordered by
+  `ingested_at DESC`, with no materialised current-view. Raw payloads:
+  fingerprint rows in Postgres (`ons_resource_version`, the S3 triple as a
+  `change_key`), bytes behind a nullable `archive_uri` outside it, kept
+  indefinitely where they produced a revision and 90 days otherwise. Reasoning
+  in [`docs/specs/data-platform.md`](../docs/specs/data-platform.md).
+
 - [**Domain model and ubiquitous language**](tickets/006-domain-model.md) —
   [`docs/domain-model.md`](../docs/domain-model.md) is now the naming authority
   for the whole effort; where it and any spec disagree, it wins. Load-bearing

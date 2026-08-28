@@ -1,0 +1,14 @@
+{
+  "url": "https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/balanco_energia_subsistema_ho/BALANCO_ENERGIA_SUBSISTEMA_2026.parquet",
+  "status": 200,
+  "headers": {
+    "date": "Fri, 28 Aug 2026 21:12:18 GMT",
+    "last-modified": "Fri, 28 Aug 2026 15:00:33 GMT",
+    "etag": "\"591d0f65d881b5bb016cc7e0d83aec19\"",
+    "accept-ranges": "bytes",
+    "content-type": "binary/octet-stream",
+    "content-length": "1393352",
+    "server": "AmazonS3",
+    "x-amz-server-side-encryption": "AES256"
+  }
+}

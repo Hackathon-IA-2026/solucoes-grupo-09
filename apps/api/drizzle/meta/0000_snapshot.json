@@ -1,0 +1,321 @@
+{
+  "id": "778dfcff-cc7c-4102-9fae-4a2ba8158ae3",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.ons_resource_version": {
+      "name": "ons_resource_version",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "dataset_slug": {
+          "name": "dataset_slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "resource_name": {
+          "name": "resource_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "resource_url": {
+          "name": "resource_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "format": {
+          "name": "format",
+          "type": "resource_format",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "change_key": {
+          "name": "change_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_modified": {
+          "name": "last_modified",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "content_length": {
+          "name": "content_length",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "etag": {
+          "name": "etag",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "content_sha256": {
+          "name": "content_sha256",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "byte_size": {
+          "name": "byte_size",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "archive_uri": {
+          "name": "archive_uri",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "first_seen_at": {
+          "name": "first_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "fetched_at": {
+          "name": "fetched_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "ons_resource_version_identity": {
+          "name": "ons_resource_version_identity",
+          "columns": [
+            {
+              "expression": "resource_url",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "change_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ons_resource_version_dataset": {
+          "name": "ons_resource_version_dataset",
+          "columns": [
+            {
+              "expression": "dataset_slug",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "first_seen_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.subsystem_energy_balance_hour": {
+      "name": "subsystem_energy_balance_hour",
+      "schema": "",
+      "columns": {
+        "subsystem": {
+          "name": "subsystem",
+          "type": "subsystem_code",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "valid_time": {
+          "name": "valid_time",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "data_version": {
+          "name": "data_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "load_mwh": {
+          "name": "load_mwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "hydro_generation_mwh": {
+          "name": "hydro_generation_mwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "thermal_generation_mwh": {
+          "name": "thermal_generation_mwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "wind_generation_mwh": {
+          "name": "wind_generation_mwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "solar_generation_mwh": {
+          "name": "solar_generation_mwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "net_exchange_mwh": {
+          "name": "net_exchange_mwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at": {
+          "name": "published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at_precision": {
+          "name": "published_at_precision",
+          "type": "published_at_precision",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingested_at": {
+          "name": "ingested_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "value_digest": {
+          "name": "value_digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_version_id": {
+          "name": "source_version_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "subsystem_energy_balance_hour_as_of": {
+          "name": "subsystem_energy_balance_hour_as_of",
+          "columns": [
+            {
+              "expression": "valid_time",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "subsystem",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ingested_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "subsystem_energy_balance_hour_source_version_id_ons_resource_version_id_fk": {
+          "name": "subsystem_energy_balance_hour_source_version_id_ons_resource_version_id_fk",
+          "tableFrom": "subsystem_energy_balance_hour",
+          "tableTo": "ons_resource_version",
+          "columnsFrom": ["source_version_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "subsystem_energy_balance_hour_subsystem_valid_time_data_version_pk": {
+          "name": "subsystem_energy_balance_hour_subsystem_valid_time_data_version_pk",
+          "columns": ["subsystem", "valid_time", "data_version"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.published_at_precision": {
+      "name": "published_at_precision",
+      "schema": "public",
+      "values": ["row", "file"]
+    },
+    "public.resource_format": {
+      "name": "resource_format",
+      "schema": "public",
+      "values": ["PARQUET", "CSV"]
+    },
+    "public.subsystem_code": {
+      "name": "subsystem_code",
+      "schema": "public",
+      "values": ["N", "NE", "S", "SE"]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}
