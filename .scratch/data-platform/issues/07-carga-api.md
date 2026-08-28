@@ -19,13 +19,13 @@ ONS itself — worth capturing precisely because nothing else has one.
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Both the verified and programmed series are ingested at semi-hourly grain
-- [ ] The correct subsystem code is used, and a test proves the familiar one returns no rows
-- [ ] An empty response for a period known to have data is treated as a failure
-- [ ] Requests are chunked to the documented range limit
-- [ ] Malformed historical responses are parsed tolerantly rather than aborting a backfill
-- [ ] The source's own row-level update stamp is captured and stored
-- [ ] Timestamps documented as UTC are not double-converted
-- [ ] End-of-interval labelling is normalised to start-of-interval
+- [x] Both the verified and programmed series are ingested at semi-hourly grain
+- [x] The correct subsystem code is used, and a test proves the familiar one returns no rows
+- [x] An empty response for a period known to have data is treated as a failure
+- [x] Requests are chunked to the documented range limit
+- [x] Malformed historical responses are parsed tolerantly rather than aborting a backfill
+- [x] The source's own row-level update stamp is captured and stored
+- [x] Timestamps documented as UTC are not double-converted
+- [x] End-of-interval labelling is normalised to start-of-interval
