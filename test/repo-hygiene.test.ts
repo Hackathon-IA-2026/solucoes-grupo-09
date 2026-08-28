@@ -13,8 +13,22 @@ import { join, relative, sep } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");
 
-/** Tokens that must not appear in project code, in any casing. */
-const FORBIDDEN = ["zalytix"];
+/**
+ * Tokens that must not appear in project code, in any casing.
+ *
+ * The name alone is not enough. The strip renamed "Zalytix scraper" to
+ * "WattSteer scraper" and this test was satisfied, leaving apps/api/README.md
+ * documenting a review scraper for a curtailment engine. Guard the *domain*
+ * too, since that is what actually misleads a reader.
+ */
+const FORBIDDEN = [
+  "zalytix",
+  "cloakbrowser",
+  "app store",
+  "google play",
+  "scraper",
+  "scraping",
+];
 
 /**
  * Paths where the old name is legitimate and must survive:

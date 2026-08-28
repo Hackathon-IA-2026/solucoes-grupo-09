@@ -88,7 +88,7 @@ export const rateLimit = (options: RateLimitOptions) => {
         set.status = 429;
         set.headers["retry-after"] = String(retryAfterSec);
         return {
-          error: "Too many requests — scraping is rate limited. Try again shortly.",
+          error: "Too many requests — this endpoint is rate limited. Try again shortly.",
         };
       }
     })
