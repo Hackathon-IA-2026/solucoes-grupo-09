@@ -3,6 +3,12 @@
   <url>
     <loc>https://wattsteer.com/</loc>
     <lastmod>2026-08-28</lastmod>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://wattsteer.com/app</loc>
+    <lastmod>2026-08-28</lastmod>
+    <priority>0.8</priority>
   </url>
   <url>
     <loc>https://wattsteer.com/privacy</loc>

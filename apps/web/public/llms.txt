@@ -10,14 +10,29 @@ accounts and no login.
 
 ## Pages
 
-- [Home](https://wattsteer.com/): day-ahead curtailment risk by subsystem.
+- [Home](https://wattsteer.com/): day-ahead curtailment risk by subsystem, the
+  four engines behind it, and where the data comes from.
+- [App](https://wattsteer.com/app): the product itself — Grid Overview,
+  Explain, Mitigate and Time Machine.
 - [Terms of Service](https://wattsteer.com/terms)
 - [Privacy Policy](https://wattsteer.com/privacy)
 
 ## Notes
 
+- Headline figures are quantiles, not point estimates. Every forecast is
+  published as P10, P50 and P90; a figure shown without a band is a measured
+  observation and is labelled as one.
+- The four subsystems are NORTE, NORDESTE, SUL and SUDESTE/CENTRO-OESTE. A
+  national figure is a derived sum over those four, never the ONS `SIN` row.
+- Energy is reported in MWh. Money appears only as an explicitly labelled
+  economic scenario, next to the R$/MWh it assumed. No carbon figure is
+  claimed.
 - Forecasts are modelled estimates carrying uncertainty, not operating
   instructions, trading signals or advice.
 - Source data is published by third parties and is periodically revised; figures
-  shown here can change.
+  shown here can change. Metrics computed over windows that predate WattSteer's
+  own ingestion are labelled revision-optimistic.
+- Plant registry data is derived from ANEEL SIGA, © ANEEL, under the Open
+  Database License (ODbL) v1.0; WattSteer's derived plant table is offered
+  under the same licence.
 - WattSteer is not affiliated with ONS or ANEEL.

@@ -1,0 +1,338 @@
+import { formatDate } from "@wattsteer/core";
+import {
+  ArrowRightIcon,
+  Badge,
+  CalendarDaysIcon,
+  ClockIcon,
+  gradientBg,
+  Panel,
+  PanelHeader,
+  PillButton,
+  radius,
+  space,
+  useContainerWidth,
+  usePalette,
+  ZapIcon,
+} from "@wattsteer/ui";
+import { StyleSheet, Text, View } from "react-native";
+import { formatMwh, formatProbability, formatRange, upper } from "./band";
+import { BandFigure, BandRail, railLabel } from "./band-figure";
+import { copy } from "./copy";
+import { APP_HREF, CtaLink } from "./cta-link";
+import { FanChart, FanLegend } from "./fan-chart";
+import {
+  FORECAST_DAY,
+  FORECAST_ORIGIN,
+  HOURLY_PROFILE,
+  NATIONAL_ENERGY,
+  SUBSYSTEMS,
+  type SubsystemOutlook,
+} from "./fixtures";
+import { Footnote } from "./section";
+
+/**
+ * The hero.
+ *
+ * The template's hero was an input plus live progress, because the product
+ * began with something the visitor had to type. WattSteer has nothing to
+ * type — the grid is already running and the forecast already exists — so
+ * the hero's job inverts: instead of asking the visitor for the subject, the
+ * hero becomes the subject. It shows tomorrow's national curtailment outlook
+ * the way the product will: a headline energy figure with its band, the four
+ * subsystems ranked by risk, and the 24-hour profile as a fan.
+ *
+ * That choice is also the honest one about what this product is. A visitor
+ * who reads nothing else should leave knowing what WattSteer knows and how
+ * confidently it knows it, which is exactly what a paste-a-link hero could
+ * never have conveyed.
+ *
+ * There is no API yet, so the readout renders a fixture and says so in the
+ * panel header rather than in a footnote — a fake live readout is the single
+ * most damaging thing this page could do to a product whose stated value is
+ * honesty about data.
+ */
+
+const styles = StyleSheet.create({
+  eyebrow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    alignSelf: "flex-start",
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  dot: { width: 6, height: 6, borderRadius: 3 },
+});
+
+export function Hero({ onExplain }: { onExplain: () => void }) {
+  const colors = usePalette();
+  const [width, onLayout] = useContainerWidth();
+  const wide = width >= 900;
+  // One scale across every subsystem rail: a rail normalised to its own band
+  // would make the quietest subsystem look as uncertain as the loudest.
+  const subsystemMax = Math.max(...SUBSYSTEMS.map((s) => upper(s.energy))) * 1.05;
+
+  return (
+    <View onLayout={onLayout} style={{ gap: space.xxl }}>
+      <View style={{ gap: space.lg, maxWidth: 760 }}>
+        <View
+          style={[
+            styles.eyebrow,
+            { borderColor: colors.border, backgroundColor: colors.surface },
+          ]}
+        >
+          <View style={[styles.dot, { backgroundColor: colors.accent }]} />
+          <Text style={{ fontSize: 12, fontWeight: "500", color: colors.inkMuted }}>
+            {copy.hero.eyebrow}
+          </Text>
+        </View>
+
+        <Text
+          accessibilityRole="header"
+          aria-level={1}
+          style={{
+            fontSize: wide ? 56 : 34,
+            lineHeight: wide ? 60 : 40,
+            fontWeight: "600",
+            letterSpacing: -1.6,
+            color: colors.inkMuted,
+          }}
+        >
+          {copy.hero.headline.lead}
+          <Text style={{ color: colors.ink }}>{` ${copy.hero.headline.accent}`}</Text>
+        </Text>
+
+        <Text
+          style={{ fontSize: 16, lineHeight: 26, color: colors.inkMuted, maxWidth: 660 }}
+        >
+          {copy.hero.sub}
+        </Text>
+
+        <View
+          style={{
+            flexDirection: "row",
+            flexWrap: "wrap",
+            gap: space.md,
+            marginTop: space.sm,
+          }}
+        >
+          <CtaLink
+            testID="hero-open-app"
+            href={APP_HREF}
+            label={copy.hero.primaryCta}
+            primary={true}
+            icon={<ArrowRightIcon size={16} color={colors.onAccent} />}
+          />
+          <PillButton
+            testID="hero-explain"
+            label={copy.hero.secondaryCta}
+            onPress={onExplain}
+          />
+        </View>
+      </View>
+
+      <Readout wide={wide} subsystemMax={subsystemMax} />
+    </View>
+  );
+}
+
+/** The live-readout panel: national figure, subsystem ranking, hourly fan. */
+function Readout({ wide, subsystemMax }: { wide: boolean; subsystemMax: number }) {
+  const colors = usePalette();
+  return (
+    <View testID="hero-readout" style={{ gap: space.lg }}>
+      <Panel
+        style={[
+          { gap: space.xl, padding: wide ? 24 : 18 },
+          gradientBg(
+            "radial-gradient(120% 90% at 8% -10%, rgba(141, 93, 246, 0.22) 0%, transparent 60%)",
+            colors.surface,
+          ),
+        ]}
+      >
+        <PanelHeader
+          icon={<CalendarDaysIcon size={18} color={colors.inkMuted} />}
+          title={copy.readout.title}
+          subtitle={formatDate(FORECAST_DAY)}
+          right={<Badge label={copy.readout.sampleBadge} tone="warning" />}
+        />
+
+        <View style={{ flexDirection: wide ? "row" : "column", gap: space.lg }}>
+          <View style={{ flex: wide ? 1 : undefined, gap: space.md }}>
+            <BandFigure
+              label={copy.readout.nationalLabel}
+              figure={NATIONAL_ENERGY}
+              unit="MWh"
+            />
+            <Footnote>{copy.readout.nationalGrainNote}</Footnote>
+          </View>
+
+          <View style={{ flex: wide ? 1.15 : undefined, gap: space.md }}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <Text style={{ fontSize: 14, fontWeight: "600", color: colors.ink }}>
+                {copy.readout.subsystemsTitle}
+              </Text>
+              <Text style={{ fontSize: 12, color: colors.inkFaint }}>
+                {copy.readout.columnProbability}
+              </Text>
+            </View>
+            {SUBSYSTEMS.map((outlook) => (
+              <SubsystemRow key={outlook.code} outlook={outlook} max={subsystemMax} />
+            ))}
+            <Footnote>{copy.readout.additivityNote}</Footnote>
+          </View>
+        </View>
+
+        <View
+          style={{
+            height: 1,
+            backgroundColor: colors.border,
+          }}
+        />
+
+        <View style={{ gap: space.md }}>
+          <View
+            style={{
+              flexDirection: "row",
+              flexWrap: "wrap",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: space.md,
+            }}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <ClockIcon size={16} color={colors.inkMuted} />
+              <Text style={{ fontSize: 14, fontWeight: "600", color: colors.ink }}>
+                {copy.readout.profileTitle}
+              </Text>
+              <Text style={{ fontSize: 13, color: colors.inkMuted }}>
+                {copy.readout.profileSub}
+              </Text>
+            </View>
+            <FanLegend
+              bandLabel={copy.band.rangeLabel}
+              medianLabel={copy.band.medianLabel}
+            />
+          </View>
+
+          <FanChart
+            points={HOURLY_PROFILE}
+            unit="MWh"
+            accessibilityLabel={`${copy.readout.profileSub}. ${copy.readout.profileCaption}`}
+          />
+          <Footnote>{copy.readout.profileCaption}</Footnote>
+        </View>
+
+        <OriginLine />
+      </Panel>
+
+      <Footnote>{copy.readout.sampleNote}</Footnote>
+    </View>
+  );
+}
+
+/**
+ * `docs/domain-model.md` §4: every surface that shows a forecast must name
+ * its `ForecastOrigin`. The run initialisation *is* the `published_at`, so
+ * this one line carries both the provenance and the vintage.
+ */
+function OriginLine() {
+  const colors = usePalette();
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: 8,
+      }}
+    >
+      <ZapIcon size={14} color={colors.inkFaint} />
+      <Text style={{ fontSize: 12, color: colors.inkFaint }}>
+        {`${copy.readout.originLabel}: ${FORECAST_ORIGIN.producer} · ${FORECAST_ORIGIN.runLabel} · published ${FORECAST_ORIGIN.publishedAt}`}
+      </Text>
+    </View>
+  );
+}
+
+function SubsystemRow({ outlook, max }: { outlook: SubsystemOutlook; max: number }) {
+  const colors = usePalette();
+  const probabilityTone =
+    outlook.probability >= 0.66
+      ? colors.danger
+      : outlook.probability >= 0.25
+        ? colors.warning
+        : colors.inkMuted;
+
+  return (
+    <View
+      testID={`subsystem-${outlook.code}`}
+      style={{
+        gap: 8,
+        borderRadius: radius.lg,
+        borderCurve: "continuous",
+        borderWidth: 1,
+        borderColor: colors.border,
+        backgroundColor: colors.canvasTint,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+      }}
+    >
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: space.md,
+        }}
+      >
+        <View
+          style={{ flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1 }}
+        >
+          <Badge label={outlook.code} tone="neutral" />
+          <Text
+            numberOfLines={1}
+            style={{ fontSize: 13, fontWeight: "600", color: colors.ink }}
+          >
+            {outlook.displayName}
+          </Text>
+        </View>
+        {/* A probability is a point estimate — it genuinely has no band, and
+            showing it as bare text next to a banded magnitude is the visual
+            way of saying so. */}
+        <Text
+          style={{
+            fontSize: 15,
+            fontWeight: "700",
+            fontVariant: ["tabular-nums"],
+            color: probabilityTone,
+          }}
+        >
+          {formatProbability(outlook.probability)}
+        </Text>
+      </View>
+
+      <BandRail
+        figure={outlook.energy}
+        max={max}
+        label={railLabel(outlook.energy, "MWh", outlook.displayName)}
+      />
+
+      <Text
+        style={{ fontSize: 12, color: colors.inkMuted, fontVariant: ["tabular-nums"] }}
+      >
+        {outlook.energy.kind === "band"
+          ? `${formatMwh(outlook.energy.band.p50)} MWh · ${copy.band.rangeLabel} ${formatRange(outlook.energy.band)}`
+          : `${formatMwh(outlook.energy.value)} MWh · ${copy.band.observedLabel}`}
+      </Text>
+    </View>
+  );
+}
