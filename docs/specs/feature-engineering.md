@@ -285,14 +285,21 @@ window contains no DST transitions and the builder asserts that.
 | Profile | Weather run | DESSEM | Gate instant | Feature sets |
 |---|---|---|---|---|
 | `gate_early` | D−1 **00Z** (disseminated ≈ 06:00 BRT) | ✗ not yet published | **D−1 09:00 BRT** | `dessem_free_v1` only |
-| `gate_late` | D−1 **12Z** (disseminated ≈ 15:00 BRT) | ✓ file created ≈ 17:48 BRT | **D−1 19:00 BRT** | both |
+| `gate_late` | D−1 **12Z** (disseminated ≈ 15:00 BRT) | ✓ file created ≈ 14:48–16:42 BRT | **D−1 19:00 BRT** | both |
+
+> **Corrected while implementing ticket 08.** This table first read "file
+> created ≈ 17:48 BRT", taking CKAN's naive `created` timestamp as local time.
+> It is UTC — confirmed by matching an S3 `Last-Modified` of 19:42:43 GMT
+> against a CKAN `created` of 19:43:09 for the same file — so DESSEM publishes
+> mid-afternoon Brasília, not evening. The conclusion is unchanged and slightly
+> safer: still comfortably inside `gate_late`, still hours after `gate_early`.
 
 `gate_late` is v1's primary. It is measurably better weather (RMSE 4.38 vs 4.76
 km/h on `wind_speed_120m`) and it is the only gate at which DESSEM exists at all.
 
 **DESSEM's exclusion from the early gate is structural, not a rule.** The DESSEM
 file for reference day D is created on the evening of D−1 — 2026-08-28's file was
-created 2026-08-27T17:48. At 09:00 on D−1 the newest DESSEM file describes D−1
+created 2026-08-27T17:48 **UTC**. At 09:00 on D−1 the newest DESSEM file describes D−1
 itself. So the A/B is not only a shorter window; it is also **eleven hours less
 notice**. That cost belongs in the comparison and was not previously recorded.
 
