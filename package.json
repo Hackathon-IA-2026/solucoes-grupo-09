@@ -22,7 +22,16 @@
     "typecheck": "bun run --cwd packages/core typecheck && bun run --cwd packages/ui typecheck && bun run --cwd apps/api typecheck && bun run --cwd apps/web typecheck",
     "lint": "bunx biome check",
     "lint:fix": "bunx biome check --write",
-    "docker:up": "docker compose up --build"
+    "docker:up": "docker compose up --build",
+    "ml": "cd apps/ml && uv run wattsteer-ml",
+    "ml:lint": "cd apps/ml && uv run ruff check . && uv run ruff format --check .",
+    "ml:fix": "cd apps/ml && uv run ruff check --fix . && uv run ruff format .",
+    "ml:typecheck": "cd apps/ml && uv run mypy",
+    "ml:test": "cd apps/ml && uv run pytest",
+    "ml:sync": "cd apps/ml && uv sync",
+    "check": "bun run typecheck && bun run lint && bun run test",
+    "check:ml": "bun run ml:lint && bun run ml:typecheck && bun run ml:test",
+    "check:all": "bun run check && bun run check:ml"
   },
   "overrides": {
     "@sinclair/typebox": "0.34.49"

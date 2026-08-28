@@ -1,0 +1,75 @@
+[project]
+name = "wattsteer-ml"
+version = "0.1.0"
+description = "WattSteer ML service — features, training, inference, SHAP, backtests and the flex optimizer."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.34",
+  "asyncpg>=0.30",
+  "pydantic>=2.9",
+  "pydantic-settings>=2.6",
+]
+
+[project.scripts]
+wattsteer-ml = "wattsteer_ml.__main__:main"
+
+[dependency-groups]
+# `uv sync --no-dev` in the image skips these; `bun run ml:lint` needs them.
+dev = [
+  "ruff>=0.14",
+  "mypy>=1.13",
+  "pytest>=8.3",
+  "httpx>=0.28",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/wattsteer_ml"]
+
+# --- Python lint/format story -------------------------------------------------
+# Ruff is the whole story: linter and formatter in one binary, so there is no
+# second tool to keep in sync. Biome never sees a Python file — `.py` is an
+# unknown extension to it and `files.ignoreUnknown` is on — and Ruff never sees
+# a TypeScript one, so the two cannot fight.
+[tool.ruff]
+line-length = 90 # matches biome.json's lineWidth, so both languages wrap alike
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+  "E",
+  "W",     # pycodestyle
+  "F",     # pyflakes
+  "I",     # import sorting (Biome's organizeImports equivalent)
+  "N",     # pep8-naming
+  "UP",    # pyupgrade
+  "B",     # bugbear
+  "SIM",   # simplify
+  "ASYNC", # async correctness
+  "S",     # bandit — the security/noSecrets analogue
+  "RUF",
+]
+ignore = [
+  "S101", # asserts are how pytest asserts
+]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src", "tests"]
+strict = true
+warn_unreachable = true
+
+# asyncpg ships no py.typed marker, so strict mode refuses to import it. The
+# narrow override keeps strictness everywhere else rather than relaxing it
+# globally for one dependency.
+[[tool.mypy.overrides]]
+module = ["asyncpg.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
