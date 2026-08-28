@@ -2,7 +2,7 @@ import { radius, space, useContainerWidth, usePalette } from "@wattsteer/ui";
 import { useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, G, Line, Path, Text as SvgText } from "react-native-svg";
-import { formatMwh } from "./band";
+import { formatMwhExact } from "./band";
 import type { HourlyBand } from "./fixtures";
 
 /**
@@ -130,7 +130,7 @@ export function FanChart({
                 fontFamily={FONT}
                 fill={colors.inkMuted}
               >
-                {g === 0 ? "0" : formatMwh(max * g)}
+                {g === 0 ? "0" : formatMwhExact(max * g)}
               </SvgText>
             </G>
           );
@@ -207,7 +207,7 @@ export function FanChart({
             <Pressable
               key={p.hour}
               accessibilityRole="button"
-              accessibilityLabel={`${String(p.hour).padStart(2, "0")}:00 — median ${formatMwh(p.p50)} ${unit}, P10 to P90 ${formatMwh(p.p10)} to ${formatMwh(p.p90)} ${unit}`}
+              accessibilityLabel={`${String(p.hour).padStart(2, "0")}:00 — median ${formatMwhExact(p.p50)} ${unit}, P10 to P90 ${formatMwhExact(p.p10)} to ${formatMwhExact(p.p90)} ${unit}`}
               onPress={() => setSelected(i)}
               onHoverIn={() => setSelected(i)}
               style={
@@ -252,7 +252,7 @@ export function FanChart({
               fontVariant: ["tabular-nums"],
             }}
           >
-            {`${formatMwh(cur.p50)} ${unit}`}
+            {`${formatMwhExact(cur.p50)} ${unit}`}
           </Text>
           <Text
             style={{
@@ -261,7 +261,7 @@ export function FanChart({
               fontVariant: ["tabular-nums"],
             }}
           >
-            {`${formatMwh(cur.p10)}–${formatMwh(cur.p90)}`}
+            {`${formatMwhExact(cur.p10)}–${formatMwhExact(cur.p90)}`}
           </Text>
         </View>
       ) : null}

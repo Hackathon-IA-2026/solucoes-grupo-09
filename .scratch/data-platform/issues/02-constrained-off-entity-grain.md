@@ -24,7 +24,12 @@ as different from one that is absent.
 - [x] All four reason codes are modelled, including the one documented but not yet observed
 - [x] Restriction origin is captured alongside reason
 - [x] Conjunto exists as an entity; entity rows resolve to conjunto or plant correctly
-- [x] Curtailed energy is derived from the reference-generation columns, as energy
+- [x] Curtailed energy is derived from `val_geracaolimitada`, as energy — **not**
+      from the reference-generation columns as this box originally read. The
+      domain model names `val_geracaolimitada` "the primary label"; the
+      reference columns are what generation *would* have been, which is a
+      different quantity. Both are stored, so the alternative stays computable.
+      The wording was wrong, not the adapter.
 - [x] Data is downsampled to hourly to meet the system context, in the lossless direction
 - [x] A retroactive backfill of a closed month is detected and stored as a new vintage
 - [x] Fixture tests cover the schema-drift and empty-column cases explicitly

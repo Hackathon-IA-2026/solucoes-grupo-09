@@ -2,7 +2,7 @@
 id: "015"
 title: Landing page rewrite
 type: wayfinder:prototype
-status: open
+status: closed
 assignee:
 blocked_by: ["004", "006"]
 ---

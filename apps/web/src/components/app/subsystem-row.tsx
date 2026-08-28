@@ -16,7 +16,7 @@
 
 import { ArrowRightIcon, focusRing, radius, space, usePalette } from "@wattsteer/ui";
 import { Platform, Pressable, Text, View } from "react-native";
-import { BandStrip, formatMwh } from "@/components/charts/band-figure";
+import { BandStrip, formatMwhCompact } from "@/components/charts/band-figure";
 import { RiskChip } from "@/components/charts/risk-class";
 import { type SubsystemDayForecast, subsystemMeta } from "@/lib/fixtures";
 
@@ -93,7 +93,7 @@ export function SubsystemRow({
               color: colors.ink,
             }}
           >
-            {`${formatMwh(forecast.dailyEnergy.p50)} MWh`}
+            {`${formatMwhCompact(forecast.dailyEnergy.p50)} MWh`}
           </Text>
         </View>
         <BandStrip band={forecast.dailyEnergy} domainMax={domainMax} tone="accent" />
@@ -105,7 +105,7 @@ export function SubsystemRow({
               fontVariant: ["tabular-nums"],
             }}
           >
-            {`P10 ${formatMwh(forecast.dailyEnergy.p10)}`}
+            {`P10 ${formatMwhCompact(forecast.dailyEnergy.p10)}`}
           </Text>
           <Text
             style={{
@@ -114,7 +114,7 @@ export function SubsystemRow({
               fontVariant: ["tabular-nums"],
             }}
           >
-            {`peak ${formatMwh(forecast.peakPower.p10)}–${formatMwh(
+            {`peak ${formatMwhCompact(forecast.peakPower.p10)}–${formatMwhCompact(
               forecast.peakPower.p90,
             )} MW`}
           </Text>
@@ -125,7 +125,7 @@ export function SubsystemRow({
               fontVariant: ["tabular-nums"],
             }}
           >
-            {`P90 ${formatMwh(forecast.dailyEnergy.p90)}`}
+            {`P90 ${formatMwhCompact(forecast.dailyEnergy.p90)}`}
           </Text>
         </View>
       </View>

@@ -15,7 +15,7 @@ import {
   ZapIcon,
 } from "@wattsteer/ui";
 import { StyleSheet, Text, View } from "react-native";
-import { formatMwh, formatProbability, formatRange, upper } from "./band";
+import { formatMwhExact, formatProbability, formatRange, upper } from "./band";
 import { BandFigure, BandRail, railLabel } from "./band-figure";
 import { copy } from "./copy";
 import { APP_HREF, CtaLink } from "./cta-link";
@@ -330,8 +330,8 @@ function SubsystemRow({ outlook, max }: { outlook: SubsystemOutlook; max: number
         style={{ fontSize: 12, color: colors.inkMuted, fontVariant: ["tabular-nums"] }}
       >
         {outlook.energy.kind === "band"
-          ? `${formatMwh(outlook.energy.band.p50)} MWh · ${copy.band.rangeLabel} ${formatRange(outlook.energy.band)}`
-          : `${formatMwh(outlook.energy.value)} MWh · ${copy.band.observedLabel}`}
+          ? `${formatMwhExact(outlook.energy.band.p50)} MWh · ${copy.band.rangeLabel} ${formatRange(outlook.energy.band)}`
+          : `${formatMwhExact(outlook.energy.value)} MWh · ${copy.band.observedLabel}`}
       </Text>
     </View>
   );

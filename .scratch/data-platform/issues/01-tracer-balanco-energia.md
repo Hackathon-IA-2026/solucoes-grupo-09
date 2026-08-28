@@ -25,21 +25,21 @@ ingestion needs from the domain model is already decided on the map — subsyste
 grain, conjunto as an entity, reasons only at conjunto grain, forecasts stored
 apart from observations, the 2024-04 window.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Resource URLs are read from the catalogue API, never constructed
-- [ ] A changed file is detected without downloading it
-- [ ] Parquet is preferred; the CSV fallback path exists and is exercised
-- [ ] Subsystem codes are canonicalised; padded and unpadded forms both resolve
-- [ ] The system-wide aggregate row is filtered at the adapter boundary
-- [ ] Timestamps become UTC instants; interval labelling is normalised to start-of-interval
-- [ ] Average-power values are converted to energy using the source interval length
-- [ ] Every string column is trimmed unconditionally
-- [ ] A re-ingest with identical values writes no new version
-- [ ] A re-ingest with changed values appends a version rather than overwriting
-- [ ] An as-of read returns exactly one row per key
-- [ ] Fixture tests cover each normalisation rule, using a real captured payload
-- [ ] As-of behaviour is tested against real Postgres, gated the way the template gates its database test
-- [ ] Ingestion runs on the existing job infrastructure and is idempotent on retry
-- [ ] The chosen table shape and `data_version` derivation are recorded, and the
+- [x] Resource URLs are read from the catalogue API, never constructed
+- [x] A changed file is detected without downloading it
+- [x] Parquet is preferred; the CSV fallback path exists and is exercised
+- [x] Subsystem codes are canonicalised; padded and unpadded forms both resolve
+- [x] The system-wide aggregate row is filtered at the adapter boundary
+- [x] Timestamps become UTC instants; interval labelling is normalised to start-of-interval
+- [x] Average-power values are converted to energy using the source interval length
+- [x] Every string column is trimmed unconditionally
+- [x] A re-ingest with identical values writes no new version
+- [x] A re-ingest with changed values appends a version rather than overwriting
+- [x] An as-of read returns exactly one row per key
+- [x] Fixture tests cover each normalisation rule, using a real captured payload
+- [x] As-of behaviour is tested against real Postgres, gated the way the template gates its database test
+- [x] Ingestion runs on the existing job infrastructure and is idempotent on retry
+- [x] The chosen table shape and `data_version` derivation are recorded, and the
       wayfinder ticket **Bitemporal schema and ingestion contract** is closed

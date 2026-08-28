@@ -36,7 +36,12 @@ import type { ReactNode } from "react";
 import { Text, View } from "react-native";
 import type { Band } from "@/lib/fixtures";
 
-export function formatMwh(value: number): string {
+/**
+ * Compact: "12.5k", "4180", "42.7". The product screens pack many figures into
+ * tight rows, where an exact grouped number costs width that the band strip
+ * needs. See `landing/band.ts` for the exact renderer and why they differ.
+ */
+export function formatMwhCompact(value: number): string {
   if (value >= 10_000) {
     return `${(value / 1000).toFixed(1)}k`;
   }
@@ -77,9 +82,9 @@ export function BandStrip({
   return (
     <View
       accessibilityRole="image"
-      accessibilityLabel={`P10 ${formatMwh(band.p10)}, P50 ${formatMwh(
+      accessibilityLabel={`P10 ${formatMwhCompact(band.p10)}, P50 ${formatMwhCompact(
         band.p50,
-      )}, P90 ${formatMwh(band.p90)}`}
+      )}, P90 ${formatMwhCompact(band.p90)}`}
       style={{
         height,
         borderRadius: height / 2,
@@ -156,7 +161,7 @@ export function BandFigure({
             color: colors.ink,
           }}
         >
-          {formatMwh(band.p50)}
+          {formatMwhCompact(band.p50)}
         </Text>
         <Text style={{ fontSize: 14, fontWeight: "500", color: colors.inkMuted }}>
           {unit}
@@ -167,13 +172,13 @@ export function BandFigure({
         <Text
           style={{ fontSize: 11, color: colors.inkFaint, fontVariant: ["tabular-nums"] }}
         >
-          P10 {formatMwh(band.p10)}
+          P10 {formatMwhCompact(band.p10)}
         </Text>
         <Text style={{ fontSize: 11, color: colors.inkFaint }}>P50 marked</Text>
         <Text
           style={{ fontSize: 11, color: colors.inkFaint, fontVariant: ["tabular-nums"] }}
         >
-          P90 {formatMwh(band.p90)}
+          P90 {formatMwhCompact(band.p90)}
         </Text>
       </View>
       {footnote === undefined ? null : (

@@ -2,7 +2,7 @@
 id: "014"
 title: The four /app screens
 type: wayfinder:prototype
-status: open
+status: closed
 assignee:
 blocked_by: ["006"]
 ---

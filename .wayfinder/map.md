@@ -65,14 +65,33 @@ not relitigate without the dev:**
 
 _From closed tickets:_
 
+- [**The four /app screens**](tickets/014-app-screens-prototype.md) — Prototyped
+  on fixtures. The **P10–P90 band solved at three levels**: a figure with the
+  interval drawn to scale beneath it, a fan chart carrying per-hour occurrence
+  probability as opacity, and an optimizer that scores one plan against all
+  three realisations. **Quantiles do not add** — a test asserts nothing in the
+  UI ever sums two bands. Risk is three named wide bins with redundant
+  encoding, not a gradient. Time Machine distinguishes in-sample replay from a
+  real counterfactual, and revision-optimistic from point-in-time. Open
+  question left for the dev: the bin edges (25% / 60%) are invented and must
+  come from the calibration curve.
+- [**Landing page rewrite**](tickets/015-landing-page.md) — The hero's job
+  inverts: nothing for a visitor to type, so the hero *is* the subject.
+  `Figure` is a **sum type** (band or observed, no third variant), so no code
+  path can render a forecast as a lone number. Visible "Sample data" badge,
+  not a footnote.
+
 - [**Bitemporal schema and ingestion contract**](tickets/007-bitemporal-schema.md) —
   resolved by building the tracer rather than by grilling. Facts live in **one
   wide table per grain**, not a narrow observation table: the measures of a row
   are published, revised and read together, and `RestrictionCause` is a value
-  object a narrow store cannot express. **`data_version` is a sha256 over the
-  stored value tuple** compared against the latest version of the same business
-  key — not the source file's hash (file-grained, would bump a whole rewritten
-  year), not an ONS version (none exists), not a counter (that would record our
+  object a narrow store cannot express. **`data_version` is a monotonic counter
+  gated by a sha256 digest of the stored value tuple**, compared against the
+  latest version of the same business key: the digest decides *whether* to
+  write, the counter records the ordinal. (An earlier version of this line said
+  the version *was* the digest — the schema never did that.) Not the source
+  file's hash (file-grained, would bump a whole rewritten
+  year), not an ONS version (none exists), not a bare counter (that would record our
   polling schedule). `AsOf(t)` is `DISTINCT ON` over the business key ordered by
   `ingested_at DESC`, with no materialised current-view. Raw payloads:
   fingerprint rows in Postgres (`ons_resource_version`, the S3 triple as a

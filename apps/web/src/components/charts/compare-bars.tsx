@@ -17,7 +17,7 @@ import { space, usePalette } from "@wattsteer/ui";
 import { useEffect, useState } from "react";
 import { Animated, Text, View } from "react-native";
 import type { Band } from "@/lib/fixtures";
-import { formatMwh } from "./band-figure";
+import { formatMwhCompact } from "./band-figure";
 
 export interface CompareRow {
   key: string;
@@ -87,7 +87,7 @@ export function CompareBars({
                   color,
                 }}
               >
-                {`${formatMwh(headline)} ${unit}`}
+                {`${formatMwhCompact(headline)} ${unit}`}
               </Text>
             </View>
 

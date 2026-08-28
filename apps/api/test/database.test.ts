@@ -463,6 +463,36 @@ suite("constrained-off · bitemporal store (real Postgres)", () => {
     });
   });
 
+  it("refuses a half-populated cause at the database, not just in TypeScript", async () => {
+    // The domain model calls half-populated an *illegal state*, not a
+    // discouraged one. TypeScript enforces it on the way in through this
+    // codebase; the CHECK is what makes it true for any other writer.
+    let caught: unknown;
+    try {
+      await db.execute(sql`
+        insert into curtailment_report_hour (
+          reporting_entity_code, technology, valid_time, data_version,
+          generation_mwh, constrained_off_mwh, half_hours_observed,
+          reason, origin, cause_mixed,
+          published_at, published_at_precision, value_digest, source_version_id
+        ) values (
+          ${ENTITY}, 'WIND',
+          ${new Date("2024-05-02T12:00:00.000Z").toISOString()}::timestamptz, 99,
+          1, 1, 2,
+          'ENE', null, 0,
+          now(), 'file', 'half-populated-probe', ${sourceVersionId}::uuid
+        )
+      `);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeDefined();
+    // Drizzle wraps the driver error, so the constraint name is on the cause.
+    const cause = (caught as { cause?: { constraint_name?: string } }).cause;
+    expect(cause?.constraint_name).toBe("curtailment_cause_whole");
+  });
+
   it("reports a read before go-live as revision-optimistic", async () => {
     const result = await readCurtailmentAsOf(db, {
       asOf: new Date("2026-07-01T00:00:00.000Z"),

@@ -138,4 +138,4 @@ export function buildMitigationSteps(input: MitigateInput): MitigationStep[] {
  * R$/MWh visible on screen. No carbon claim is derivable from any of this and
  * none is offered.
  */
-export const ECONOMIC_ASSUMPTION_BRL_PER_MWH = 180;
+export { SCENARIO_BRL_PER_MWH as ECONOMIC_ASSUMPTION_BRL_PER_MWH } from "@/lib/economics";

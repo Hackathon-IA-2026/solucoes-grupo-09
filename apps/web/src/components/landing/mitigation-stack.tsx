@@ -8,10 +8,11 @@ import {
   usePalette,
 } from "@wattsteer/ui";
 import { Text, View } from "react-native";
-import { centre, formatMwh, formatPercent, formatRange, upper } from "./band";
+import { formatBrl, SCENARIO_BRL_PER_MWH } from "@/lib/economics";
+import { centre, formatMwhExact, formatPercent, formatRange, upper } from "./band";
 import { BandRail, railLabel } from "./band-figure";
 import { copy } from "./copy";
-import { MITIGATION, type MitigationStep, SCENARIO_BRL_PER_MWH } from "./fixtures";
+import { MITIGATION, type MitigationStep } from "./fixtures";
 import { Footnote } from "./section";
 
 /**
@@ -78,7 +79,7 @@ export function MitigationStack() {
       >
         <Kpi
           label={copy.showcase.mitigate.recoveredLabel}
-          value={`${formatMwh(recoveredMedian)} MWh`}
+          value={`${formatMwhExact(recoveredMedian)} MWh`}
           detail={
             final.recovered !== null && final.recovered.kind === "band"
               ? `${copy.band.rangeLabel} ${formatRange(final.recovered.band)}`
@@ -116,7 +117,7 @@ export function MitigationStack() {
             fontVariant: ["tabular-nums"],
           }}
         >
-          {`R$ ${formatMwh(scenarioBrl)} at an assumed R$ ${SCENARIO_BRL_PER_MWH}/MWh`}
+          {`R$ ${formatBrl(scenarioBrl)} at an assumed R$ ${SCENARIO_BRL_PER_MWH}/MWh`}
         </Text>
       </View>
 
@@ -148,7 +149,7 @@ function StepRow({ step, max }: { step: MitigationStep; max: number }) {
             color: step.recovered === null ? colors.inkMuted : colors.accent,
           }}
         >
-          {`${formatMwh(centre(step.remaining))} MWh`}
+          {`${formatMwhExact(centre(step.remaining))} MWh`}
         </Text>
       </View>
       <BandRail

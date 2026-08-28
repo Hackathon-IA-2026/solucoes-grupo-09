@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
   band,
   centre,
-  formatMwh,
+  formatMwhExact,
   formatPercent,
   formatProbability,
   formatRange,
@@ -71,8 +71,8 @@ describe("band", () => {
 
 describe("formatting", () => {
   it("formats energy with separators and an en dash range", () => {
-    expect(formatMwh(4180)).toBe("4,180");
-    expect(formatMwh(4180.4)).toBe("4,180");
+    expect(formatMwhExact(4180)).toBe("4,180");
+    expect(formatMwhExact(4180.4)).toBe("4,180");
     expect(formatRange({ p10: 2640, p50: 4180, p90: 6320 })).toBe("2,640–6,320");
     // An en dash, not a hyphen — a hyphen reads as a minus next to numbers.
     expect(formatRange({ p10: 1, p50: 2, p90: 3 })).toContain("–");

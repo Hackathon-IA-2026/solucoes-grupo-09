@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import {
   type Band,
   type Figure,
-  formatMwh,
+  formatMwhExact,
   formatRange,
   railFractions,
   upper,
@@ -215,7 +215,7 @@ export function BandFigure({
           color: onCard,
         }}
       >
-        {formatMwh(value)}{" "}
+        {formatMwhExact(value)}{" "}
         <Text style={{ fontSize: size === "lg" ? 18 : 15, fontWeight: "500" }}>
           {unit}
         </Text>
@@ -234,8 +234,8 @@ export function BandFigure({
 /** One accessible sentence per rail — screen readers get the numbers, not a bar. */
 export function railLabel(figure: Figure, unit: string, label: string): string {
   if (figure.kind === "observed") {
-    return `${label}: ${formatMwh(figure.value)} ${unit}, observed`;
+    return `${label}: ${formatMwhExact(figure.value)} ${unit}, observed`;
   }
   const b: Band = figure.band;
-  return `${label}: median ${formatMwh(b.p50)} ${unit}, 10th to 90th percentile ${formatMwh(b.p10)} to ${formatMwh(b.p90)} ${unit}`;
+  return `${label}: median ${formatMwhExact(b.p50)} ${unit}, 10th to 90th percentile ${formatMwhExact(b.p10)} to ${formatMwhExact(b.p90)} ${unit}`;
 }

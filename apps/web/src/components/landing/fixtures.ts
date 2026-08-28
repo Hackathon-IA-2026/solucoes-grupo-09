@@ -176,7 +176,7 @@ export const MITIGATION: readonly MitigationStep[] = [
 ];
 
 /** Assumed energy value for the labelled economic scenario. Visible on screen. */
-export const SCENARIO_BRL_PER_MWH = 180;
+export { SCENARIO_BRL_PER_MWH } from "@/lib/economics";
 
 export interface ReplayEvent {
   /** The historical day replayed. */

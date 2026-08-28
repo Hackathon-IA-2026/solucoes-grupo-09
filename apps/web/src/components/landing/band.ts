@@ -69,13 +69,22 @@ export function spread(band_: Band): number {
 }
 
 /** Integer MWh with thousands separators. `Intl` takes this over per locale. */
-export function formatMwh(value: number): string {
+/**
+ * Exact, thousands-grouped: "12,500". The landing page shows a handful of large
+ * figures and rounding them to "12.5k" would throw away precision a reader has
+ * room for.
+ *
+ * Named for its rendering, not its unit: `charts/band-figure.tsx` has a
+ * compact formatter for the same quantity, and two functions called `formatMwhExact`
+ * that disagree on the same input is a wrong number waiting to happen.
+ */
+export function formatMwhExact(value: number): string {
   return Math.round(value).toLocaleString("en-US");
 }
 
 /** "2,640–6,320" — an en dash, never a hyphen, and never a minus sign. */
 export function formatRange(band_: Band): string {
-  return `${formatMwh(band_.p10)}–${formatMwh(band_.p90)}`;
+  return `${formatMwhExact(band_.p10)}–${formatMwhExact(band_.p90)}`;
 }
 
 /** Percentage with one decimal, for shares and reductions. */

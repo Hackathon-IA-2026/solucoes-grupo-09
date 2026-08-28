@@ -39,7 +39,7 @@ import { Text, View } from "react-native";
 import { AppShell, MiniPill, ScreenTitle } from "@/components/app/app-shell";
 import { ForecastStamp, HonestyNote, VintageBadge } from "@/components/app/honesty";
 import { useAppParams } from "@/components/app/use-app-params";
-import { formatMwh } from "@/components/charts/band-figure";
+import { formatMwhCompact } from "@/components/charts/band-figure";
 import { CompareBars, type CompareRow } from "@/components/charts/compare-bars";
 import { FanChart } from "@/components/charts/fan-chart";
 import { INGESTION_GO_LIVE, REPLAY_DAYS, replayDay } from "@/lib/fixtures";
@@ -152,12 +152,12 @@ export default function TimeMachineScreen() {
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
           <Headline
             label="Renewable energy curtailed"
-            value={`${formatMwh(actual)} MWh`}
+            value={`${formatMwhCompact(actual)} MWh`}
             tone="ink"
           />
           <Headline
             label="Potentially recovered"
-            value={`${formatMwh(day.recoveredMwh)} MWh`}
+            value={`${formatMwhCompact(day.recoveredMwh)} MWh`}
             tone="accent"
           />
           <Headline

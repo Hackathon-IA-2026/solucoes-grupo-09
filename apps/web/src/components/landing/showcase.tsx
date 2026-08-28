@@ -1,6 +1,6 @@
 import { Badge, Panel, radius, space, usePalette } from "@wattsteer/ui";
 import { StyleSheet, Text, View } from "react-native";
-import { band, formatMwh, formatRange } from "./band";
+import { band, formatMwhExact, formatRange } from "./band";
 import { BandRail, railLabel } from "./band-figure";
 import { copy } from "./copy";
 import { DriverBars } from "./driver-bars";
@@ -105,7 +105,7 @@ function BandExplainer({ wide }: { wide: boolean }) {
           <ExampleRail label="A confident forecast" figure={CONFIDENT} max={max} />
           <ExampleRail label="A wide-open one" figure={UNCERTAIN} max={max} />
           <Text style={{ fontSize: 12, color: colors.inkFaint }}>
-            {`Same median — ${formatMwh(4180)} MWh — and a single-number card would print them identically.`}
+            {`Same median — ${formatMwhExact(4180)} MWh — and a single-number card would print them identically.`}
           </Text>
         </View>
       </View>

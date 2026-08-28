@@ -37,7 +37,7 @@ import { AppShell, MiniPill, ScreenTitle } from "@/components/app/app-shell";
 import { BatteryEditor, LoadEditor } from "@/components/app/asset-editor";
 import { ForecastStamp, HeuristicNote } from "@/components/app/honesty";
 import { useAppParams } from "@/components/app/use-app-params";
-import { BandFigure, BandStrip, formatMwh } from "@/components/charts/band-figure";
+import { BandFigure, BandStrip, formatMwhCompact } from "@/components/charts/band-figure";
 import { DispatchChart } from "@/components/charts/dispatch-chart";
 import {
   type Band,
@@ -344,7 +344,7 @@ function StepCard({
                 color: colors.ink,
               }}
             >
-              {formatMwh(step.remaining.p50)}
+              {formatMwhCompact(step.remaining.p50)}
             </Text>
             <Text style={{ fontSize: 13, color: colors.inkMuted }}>MWh remaining</Text>
           </View>
@@ -356,7 +356,7 @@ function StepCard({
               fontVariant: ["tabular-nums"],
             }}
           >
-            {`P10 ${formatMwh(step.remaining.p10)} · P90 ${formatMwh(step.remaining.p90)}`}
+            {`P10 ${formatMwhCompact(step.remaining.p10)} · P90 ${formatMwhCompact(step.remaining.p90)}`}
           </Text>
           {delta === null ? (
             <Text style={{ fontSize: 12, color: colors.inkFaint }}>
@@ -364,7 +364,7 @@ function StepCard({
             </Text>
           ) : (
             <Text style={{ fontSize: 12, color: colors.accent, fontWeight: "700" }}>
-              {`−${formatMwh(delta)} MWh vs the previous step (P50)`}
+              {`−${formatMwhCompact(delta)} MWh vs the previous step (P50)`}
             </Text>
           )}
         </>

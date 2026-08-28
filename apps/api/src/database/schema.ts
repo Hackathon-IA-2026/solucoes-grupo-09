@@ -1,5 +1,7 @@
+import { sql } from "drizzle-orm";
 import {
   bigint,
+  check,
   doublePrecision,
   index,
   integer,
@@ -302,5 +304,13 @@ export const curtailmentReportHour = pgTable(
     ),
     // Subsystem-level rollups scan by time across entities.
     index("curtailment_report_hour_time").on(t.validTime, t.technology),
+    // `RestrictionCause` is one value object over three columns, and the domain
+    // model's claim is that half-populated is *unrepresentable* — not merely
+    // avoided. TypeScript enforces that on the way in; without this the
+    // database would still accept a reason with no origin from any other
+    // writer, and the claim would be a convention rather than a guarantee.
+    // Description is deliberately outside the pair: it is absent whenever the
+    // source column is, which is orthogonal to whether a restriction happened.
+    check("curtailment_cause_whole", sql`(${t.reason} is null) = (${t.origin} is null)`),
   ],
 );

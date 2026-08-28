@@ -28,7 +28,7 @@ import Svg, {
   Text as SvgText,
 } from "react-native-svg";
 import type { CurtailmentHourForecast, CurtailmentHourObservation } from "@/lib/fixtures";
-import { formatMwh } from "./band-figure";
+import { formatMwhCompact } from "./band-figure";
 
 const W = 640;
 const H = 260;
@@ -263,9 +263,9 @@ export function FanChart({
             <Pressable
               key={`hit-${h.validTime}`}
               accessibilityRole="button"
-              accessibilityLabel={`Hour ${h.hourLocal}: P50 ${formatMwh(
+              accessibilityLabel={`Hour ${h.hourLocal}: P50 ${formatMwhCompact(
                 h.constrainedOff.p50,
-              )} MWh, P10 to P90 ${formatMwh(h.constrainedOff.p10)} to ${formatMwh(
+              )} MWh, P10 to P90 ${formatMwhCompact(h.constrainedOff.p10)} to ${formatMwhCompact(
                 h.constrainedOff.p90,
               )}`}
               onPress={() => setActive(activeSel === i ? null : i)}
@@ -374,15 +374,19 @@ function HourReadout({
       }}
     >
       <Readout label="Hour" value={`${String(hour.hourLocal).padStart(2, "0")}:00`} />
-      <Readout label="P10" value={formatMwh(hour.constrainedOff.p10)} />
-      <Readout label="P50" value={formatMwh(hour.constrainedOff.p50)} strong={true} />
-      <Readout label="P90" value={formatMwh(hour.constrainedOff.p90)} />
+      <Readout label="P10" value={formatMwhCompact(hour.constrainedOff.p10)} />
+      <Readout
+        label="P50"
+        value={formatMwhCompact(hour.constrainedOff.p50)}
+        strong={true}
+      />
+      <Readout label="P90" value={formatMwhCompact(hour.constrainedOff.p90)} />
       <Readout
         label="P(above threshold)"
         value={`${Math.round(hour.occurrenceProbability * 100)}%`}
       />
       {observedMwh === undefined ? null : (
-        <Readout label={observedLabel} value={formatMwh(observedMwh)} />
+        <Readout label={observedLabel} value={formatMwhCompact(observedMwh)} />
       )}
     </View>
   );

@@ -11,7 +11,7 @@ import { Text, View } from "react-native";
 import {
   centre,
   type Figure,
-  formatMwh,
+  formatMwhExact,
   formatPercent,
   formatRange,
   upper,
@@ -97,7 +97,7 @@ export function ReplayCompare() {
               color: colors.accent,
             }}
           >
-            {`${formatMwh(centre(REPLAY.recovered))} MWh`}
+            {`${formatMwhExact(centre(REPLAY.recovered))} MWh`}
           </Text>
           {REPLAY.recovered.kind === "band" ? (
             <Text style={{ fontSize: 12, color: colors.inkFaint }}>
@@ -168,7 +168,7 @@ function CompareRow({
             color: accent ? colors.accent : colors.ink,
           }}
         >
-          {`${formatMwh(centre(figure))} MWh`}
+          {`${formatMwhExact(centre(figure))} MWh`}
         </Text>
       </View>
       <BandRail figure={figure} max={max} label={railLabel(figure, "MWh", label)} />
