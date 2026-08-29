@@ -4,6 +4,7 @@
  * parameters through the prototype heuristic in `optimize.ts`.
  */
 
+import { REFERENCE_FLEET } from "@wattsteer/core";
 import { type DispatchPlan, evaluatePlan, planDispatch } from "./optimize";
 import type {
   Band,
@@ -15,33 +16,33 @@ import type {
 } from "./types";
 
 /**
- * Default assets. ONS publishes no flexibility-asset registry, so these are
- * scenario inputs with defensible round numbers, not an inventory.
+ * The default assets the screen opens with — the **published**
+ * `REFERENCE_FLEET`, not a fixture of its own.
+ *
+ * ONS publishes no flexibility-asset registry, so a default fleet is a scenario
+ * input rather than an inventory; but it is the same scenario input that floor
+ * coverage, `Δ recovered_floor_mwh`, the featured-days list and the hot-swap
+ * guardrail are all measured against, and those numbers only mean what they say
+ * if every one of them used the same battery. So the sizes live once, in
+ * `@wattsteer/core`, and this module spends them rather than restating them.
+ *
+ * A local copy stood here until this change, with a third set of sizes again
+ * (70 MW of shift against 2,400 MWh/day) — valid, but not the fleet the
+ * backtest scores against.
  */
 export const DEFAULT_BATTERY: BatteryAsset = {
   assetType: "battery",
-  maxPowerMw: 100,
-  energyCapacityMwh: 300,
-  roundTripEfficiency: 0.92,
-  initialStateOfCharge: 0.2,
+  maxPowerMw: REFERENCE_FLEET.battery.maxPowerMw,
+  energyCapacityMwh: REFERENCE_FLEET.battery.energyCapacityMwh,
+  roundTripEfficiency: REFERENCE_FLEET.battery.roundTripEfficiency,
+  initialStateOfCharge: REFERENCE_FLEET.battery.initialStateOfCharge,
 };
 
-/**
- * The reference flexible load.
- *
- * `dailyEnergyMwh` implies a baseline of `dailyEnergyMwh / 24`, and a load
- * cannot shed more than it was drawing — so `maxShiftMw` must not exceed it.
- * This fixture previously paired 70 MW of shift with 1,200 MWh/day, i.e. a
- * 50 MW baseline, which `docs/specs/flex-optimizer.md` rejects outright as
- * SHIFT_EXCEEDS_BASELINE. The demonstration wants the 70 MW, so the baseline
- * moves rather than the headline: 2,400 MWh/day is a 100 MW industrial load,
- * which is the size of thing that has 70 MW to move in the first place.
- */
 export const DEFAULT_LOAD: ShiftableLoadAsset = {
   assetType: "shiftable_load",
-  maxShiftMw: 70,
-  shiftWindowHours: 3,
-  dailyEnergyMwh: 2400,
+  maxShiftMw: REFERENCE_FLEET.shiftableLoad.maxShiftMw,
+  shiftWindowHours: REFERENCE_FLEET.shiftableLoad.shiftWindowHours,
+  dailyEnergyMwh: REFERENCE_FLEET.shiftableLoad.dailyEnergyMwh,
 };
 
 /** Editable ranges for the asset parameter steppers. */
@@ -165,8 +166,13 @@ export function buildMitigationSteps(input: MitigateInput): MitigationStep[] {
 }
 
 /**
- * The economic scenario. R$ appears only here, labelled, with the assumed
- * R$/MWh visible on screen. No carbon claim is derivable from any of this and
- * none is offered.
+ * The economic scenario. R$ appears only as a labelled scenario, with the
+ * assumed R$/MWh visible on screen. No carbon claim is derivable from any of
+ * this and none is offered.
+ *
+ * The rate itself is `BRL_PER_MWH` in `@wattsteer/core`, imported by the screen
+ * directly. It used to be re-exported from here under a second name, which read
+ * as a second assumption; it never was one, but the alias was worth removing
+ * along with the real defect — the value lived in a package the optimizer,
+ * which is Python, could not read.
  */
-export { SCENARIO_BRL_PER_MWH as ECONOMIC_ASSUMPTION_BRL_PER_MWH } from "@/lib/economics";

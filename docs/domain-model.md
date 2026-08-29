@@ -143,6 +143,24 @@ Enum: `wind` | `solar`. Maps ONS `EOLIELÉTRICA` / `FOTOVOLTAICA`. Two members
 only — WattSteer forecasts VRE curtailment, and hydro/thermal appear solely as
 context quantities inside the energy balance.
 
+**Written `WIND` / `SOLAR` wherever the value is serialized** — in the
+`technology` Postgres enum, in every row the API returns, and in the
+`technology` query parameter, **case-sensitively**: `technology=wind` is a
+`422`, not a synonym. The two members are named in lowercase in prose here and
+that is all the lowercase above is; a field name like `wind_mwh` is a
+`snake_case` *name* under the wire's own casing rule and is likewise not a
+spelling of the value. The uppercase form is the one already in the database
+enum, the canonical read rows and the parameter the gateway validates, so
+choosing it costs no migration and no translation at the TypeScript-to-Python
+boundary. Case-sensitivity is a caching decision: these responses are public,
+shared-cacheable and have no `Authorization` to `Vary` on, so accepting several
+spellings would split one answer across several cache entries.
+
+Published once as `Technology` and `TECHNOLOGIES` in
+`packages/core/src/domain.ts` and `apps/ml/src/wattsteer_ml/constants.py`, with
+the casing pinned for both languages by
+`packages/core/fixtures/published-constants/constants.json`.
+
 ---
 
 ## 3. The fleet: Plant, GeneratingUnit, Conjunto, ReportingEntity
@@ -598,6 +616,14 @@ can be overturned cheaply rather than discovered later.
    keyed by scenario hash.
 7. **A plant belongs to at most one conjunto at a time** is asserted on ingest,
    not verified in advance.
+8. **`Technology` serializes as `WIND` / `SOLAR`, and the `technology` query
+   parameter is case-sensitive.** This document named the members in lowercase
+   prose while the database enum, the API's rows and the query parameter Elysia
+   validates were already uppercase, and no document had said which one a URL
+   should carry. Uppercase was chosen because it is what already exists in all
+   three places — the alternative buys prose symmetry and pays for it with a
+   translation at the one boundary that does not type-check, TypeScript to
+   Python over HTTP. See `Technology` in §2.
 
 ---
 

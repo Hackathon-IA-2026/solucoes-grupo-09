@@ -1,3 +1,4 @@
+import { producerLabel } from "@wattsteer/core";
 import {
   ArrowRightIcon,
   Badge,
@@ -16,7 +17,6 @@ import {
 import { StyleSheet, Text, View } from "react-native";
 import { useCopy, useFormat, useI18n } from "@/i18n";
 import { fill } from "@/i18n/format";
-import { producerLabel } from "@/lib/domain";
 import { formatMwhExact, formatProbability, formatRange, upper } from "./band";
 import { BandFigure, BandRail, ExpectationFigure, useRailLabel } from "./band-figure";
 import { APP_HREF, CtaLink } from "./cta-link";

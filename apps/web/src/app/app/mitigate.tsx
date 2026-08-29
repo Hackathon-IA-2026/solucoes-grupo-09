@@ -19,6 +19,7 @@
  *     "MWh recovered" back into an interval instead of a promise.
  */
 
+import { BRL_PER_MWH } from "@wattsteer/core";
 import {
   Panel,
   PanelHeader,
@@ -49,7 +50,6 @@ import {
   type CurtailmentBasis,
   DEFAULT_BATTERY,
   DEFAULT_LOAD,
-  ECONOMIC_ASSUMPTION_BRL_PER_MWH,
   type MitigationStep,
   type ShiftableLoadAsset,
   subsystemMeta,
@@ -211,11 +211,11 @@ export default function MitigateScreen() {
                 color: colors.ink,
               }}
             >
-              {f.brlThousands(active.recovered.p50 * ECONOMIC_ASSUMPTION_BRL_PER_MWH)}
+              {f.brlThousands(active.recovered.p50 * BRL_PER_MWH)}
             </Text>
             <Text style={{ fontSize: 11, lineHeight: 18, color: colors.inkFaint }}>
               {fill(copy.app.mitigate.economicNote, {
-                rate: f.brl(ECONOMIC_ASSUMPTION_BRL_PER_MWH),
+                rate: f.brl(BRL_PER_MWH),
               })}
             </Text>
           </Panel>

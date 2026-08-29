@@ -42,3 +42,12 @@ quietly skip one.
 
 `summary` is deliberately **not** pinned. It is documentation, it will be
 reworded, and pinning prose would make the parity suite fail for a typo fix.
+
+## The sibling directory
+
+[`../published-constants/`](../published-constants/README.md) applies the same
+harness to the numbers and enums both languages quote — the two curtailment
+thresholds, `max_gap_hours`, the R$/MWh scenario assumption, the four
+subsystems with their ONS display names, the technology casing and the
+published `REFERENCE_FLEET`. Same four properties, same "each side against
+`expected`" rule; a different family of values, so a different directory.

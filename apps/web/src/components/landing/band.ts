@@ -1,7 +1,7 @@
 /**
  * Band helpers for the landing page.
  *
- * The types and the `Figure` algebra live in `@/lib/domain` — they are the
+ * The types and the `Figure` algebra live in `@wattsteer/core` — they are the
  * whole web app's vocabulary, not this page's. What stays here is the
  * page-specific *rendering*: an exact, thousands-grouped figure, because the
  * landing page shows a handful of large numbers and has room for the precision
@@ -16,14 +16,14 @@ export {
   observed,
   spread,
   upper,
-} from "@/lib/domain";
+} from "@wattsteer/core";
 
+import type { Band } from "@wattsteer/core";
 import {
   formatExact,
   formatPercent as formatPercentIn,
   type Locale,
 } from "@/i18n/format";
-import type { Band } from "@/lib/domain";
 
 /**
  * Exact, thousands-grouped: "12.500" in Portuguese, "12,500" in English.

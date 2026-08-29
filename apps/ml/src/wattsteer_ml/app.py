@@ -28,13 +28,14 @@ from pydantic import BaseModel, Field
 
 from . import __version__, artifacts
 from .config import settings
+from .constants import Subsystem
 from .database import database
 
-#: The subsystem vocabulary is the gateway's, not ours — it matches the
-#: `subsystem_code` enum in `apps/api/src/database/schema.ts`. Duplicated as a
-#: literal rather than read from the database so a request with a nonsense
-#: subsystem is rejected by the schema before it reaches Postgres.
-Subsystem = Literal["N", "NE", "S", "SE"]
+#: `Subsystem` comes from `constants.py`, which is bound to the TypeScript
+#: definition by a shared golden vector rather than by a comment. It is a
+#: literal rather than a database lookup so a request naming a nonsense
+#: subsystem — or `SIN`, which is not one — is rejected by the schema before it
+#: reaches Postgres.
 
 #: Day-ahead is the only horizon WattSteer forecasts (charting decision), so the
 #: hour count is a constant of the domain rather than a request parameter.

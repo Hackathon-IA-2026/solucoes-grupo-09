@@ -7,6 +7,7 @@
  * least sure the hour clears the threshold at all.
  */
 
+import { SUBSYSTEM_CODES, SUBSYSTEM_THRESHOLD_MW } from "@wattsteer/core";
 import type {
   Band,
   CurtailmentHourForecast,
@@ -14,29 +15,25 @@ import type {
   RiskClass,
   SubsystemCode,
   SubsystemDayForecast,
-  SubsystemMeta,
   Technology,
 } from "./types";
 
-/** `Subsystem` — four members, ONS display names untranslated. */
-export const SUBSYSTEMS: SubsystemMeta[] = [
-  { code: "N", onsDisplayName: "NORTE", short: "N" },
-  { code: "NE", onsDisplayName: "NORDESTE", short: "NE" },
-  { code: "SE", onsDisplayName: "SUDESTE/CENTRO-OESTE", short: "SE/CO" },
-  { code: "S", onsDisplayName: "SUL", short: "S" },
-];
-
-export const SUBSYSTEM_CODES: SubsystemCode[] = ["N", "NE", "SE", "S"];
-
-export function subsystemMeta(code: SubsystemCode): SubsystemMeta {
-  return SUBSYSTEMS.find((s) => s.code === code) ?? SUBSYSTEMS[0];
-}
+/**
+ * The subsystem enum, its ONS display names and the subsystem-grain threshold
+ * are **published constants**, not fixtures: the gateway stamps the same
+ * threshold on every response and `/v1/meta` echoes the same four names. They
+ * are re-exported here so the screens' existing imports keep working, and they
+ * are defined in `@wattsteer/core` so a fixture cannot drift from the API.
+ */
+export {
+  SUBSYSTEM_CODES,
+  SUBSYSTEM_THRESHOLD_MW,
+  SUBSYSTEMS,
+  subsystemMeta,
+} from "@wattsteer/core";
 
 /** The day the whole prototype is pointed at. */
 export const TARGET_DATE = "2026-08-29";
-
-/** `curtailment_threshold_mw` at subsystem grain. Stamped on every output. */
-export const SUBSYSTEM_THRESHOLD_MW = 5;
 
 export type RunLabel = "00Z" | "12Z";
 

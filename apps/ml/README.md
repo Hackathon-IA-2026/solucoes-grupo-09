@@ -28,6 +28,21 @@ The vocabulary and the fidelity rule are pinned by golden vectors in
 `packages/core/fixtures/canonical-contract/`, which `pytest` and `bun test`
 both enumerate — see `tests/test_canonical_contract.py`.
 
+## The published constants
+
+`src/wattsteer_ml/constants.py` holds the numbers and the enums the whole
+product agrees on: the four subsystems with ONS's display names, the two
+technologies and their casing, the two `curtailment_threshold_mw` defaults,
+`max_gap_hours`, the R$/MWh scenario assumption and the published
+`REFERENCE_FLEET`. `packages/core/src/constants.ts` is the same set in
+TypeScript; neither is generated from the other, and
+`packages/core/fixtures/published-constants/constants.json` is the shared vector
+that stops them drifting — same harness, same rules, one directory over.
+
+The R$/MWh rate is why the module exists. It used to live in `apps/web`, which
+made it "the single place it is written down" for one of the two languages that
+quote it, and the optimizer that needs it is this one.
+
 ## Run it
 
 ```sh

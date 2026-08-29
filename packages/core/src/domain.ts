@@ -1,18 +1,36 @@
 /**
- * WattSteer's client-side domain vocabulary — the single definition of the
- * names the whole web app shares.
+ * WattSteer's domain vocabulary — the single definition of the names the whole
+ * product shares.
  *
  * `docs/domain-model.md` is the naming authority for the project. This module
- * is that vocabulary expressed in TypeScript for the frontend, and it exists
- * because it was briefly defined twice: the landing page and the product
- * screens were built in parallel and each declared its own `SubsystemCode`,
- * `Band`, `ForecastOrigin` and `Driver`. They disagreed on two of them —
- * `Driver.contribution` against `Driver.share`, and a lowercase `Technology`
- * against the uppercase one the API and the database enum actually use.
+ * is that vocabulary expressed in TypeScript, and it lives in `packages/core`
+ * because it was briefly defined twice inside the web app alone: the landing
+ * page and the product screens were built in parallel and each declared its own
+ * `SubsystemCode`, `Band`, `ForecastOrigin` and `Driver`. They disagreed on two
+ * of them — `Driver.contribution` against `Driver.share`, and a lowercase
+ * `Technology` against the uppercase one the API and the database enum actually
+ * use.
  *
  * Two definitions of a domain type is not duplication to be tidied later; it
  * is a contradiction, and the moment one surface talks to the API the two
- * stop agreeing about what the same word means.
+ * stop agreeing about what the same word means. Promoting the module out of
+ * `apps/web` is what lets the gateway import these names instead of forming a
+ * second opinion about them.
+ *
+ * Two rules from `docs/domain-model.md` that this module encodes structurally
+ * rather than merely documents, because both are lost by a rewrite that is
+ * only reading the field lists:
+ *
+ *  - **`SIN` is not a `Subsystem`.** It is ONS's national aggregate row,
+ *    filtered at the ingest boundary. A national total is a derived sum over
+ *    the four, never a fifth member — which is what makes double counting
+ *    impossible rather than merely discouraged.
+ *  - **A lead time is derived and is never stored or returned.** It is
+ *    `valid_time − published_at`, computable by anyone holding a
+ *    `ForecastOrigin` and the hour it describes. A stored copy is a second
+ *    number that can disagree with the two instants it came from. No exported
+ *    type here carries one, and `packages/core/test/vocabulary.test.ts` asserts
+ *    it of the source rather than trusting this paragraph.
  */
 
 /** `Subsystem` — an enum, not a table. Exactly four. `SIN` is not a member. */
@@ -21,11 +39,47 @@ export type SubsystemCode = "N" | "NE" | "S" | "SE";
 /**
  * `Technology` — the two variable renewable fleets.
  *
- * Uppercase to match the `technology` Postgres enum and the API's canonical
- * form. The screens once used lowercase, which would have needed a translation
- * layer at exactly the boundary where a silent mismatch is hardest to see.
+ * **The serialized form is uppercase, everywhere, including the `technology`
+ * query parameter.** `docs/domain-model.md` writes the enum `wind | solar` and
+ * the wire carries `wind_mwh` / `solar_mwh`, so the two authorities look like
+ * they disagree; they do not, once you separate a *value* from a *field name*.
+ * The domain model is naming the two members in prose, and `wind_mwh` is a
+ * snake_case field name under the wire's own casing rule. Neither is a spelling
+ * of the value that travels in `technology=`.
+ *
+ * The value is uppercase because it already is, in the three places that would
+ * have to be migrated to change it: the `technology` Postgres enum
+ * (`apps/api/src/database/schema.ts`), the rows the canonical read contract
+ * already serves, and the `technology` query parameter Elysia already validates
+ * on `/v1/canonical/*`. A lowercase wire would buy prose symmetry and cost a
+ * translation at the one boundary — TypeScript to Python, over HTTP — where a
+ * silent mismatch is hardest to see and where nothing type-checks across.
+ *
+ * It is also **case-sensitive**: `technology=wind` is a 422, not a synonym.
+ * These responses are public and shared-cacheable with no `Authorization` to
+ * `Vary` on, so a case-insensitive parameter would fragment one answer across
+ * several cache entries and make a hit rate a function of how a caller typed.
+ *
+ * The vector in `fixtures/published-constants/constants.json` pins the casing
+ * in both languages, so this decision cannot drift on one side only.
  */
 export type Technology = "WIND" | "SOLAR";
+
+/** The two members, in the order the screens offer them. */
+export const TECHNOLOGIES: readonly Technology[] = ["WIND", "SOLAR"];
+
+/**
+ * Read a `technology` query parameter. `null` for anything else — including a
+ * lowercase spelling, deliberately; see `Technology`.
+ */
+export function parseTechnology(raw: string | undefined | null): Technology | null {
+  return raw === "WIND" || raw === "SOLAR" ? raw : null;
+}
+
+/** Read a `subsystem` query parameter. `SIN` is not a member, so it is `null`. */
+export function parseSubsystem(raw: string | undefined | null): SubsystemCode | null {
+  return raw === "N" || raw === "NE" || raw === "S" || raw === "SE" ? raw : null;
+}
 
 /** `ReasonCode`, verbatim from the ONS dictionary. `REL` is not "relaxamento". */
 export type ReasonCode = "REL" | "CNF" | "ENE" | "PAR";

@@ -2,7 +2,7 @@
   "name": "@wattsteer/core",
   "version": "0.1.0",
   "private": true,
-  "description": "Client-side domain shared by WattSteer frontends. Pure TypeScript, no UI dependencies.",
+  "description": "WattSteer's shared domain: the vocabulary, the published constants and the cross-language golden vectors. Pure TypeScript, no UI dependencies.",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

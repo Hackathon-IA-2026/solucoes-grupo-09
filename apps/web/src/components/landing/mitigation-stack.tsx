@@ -1,3 +1,4 @@
+import { BRL_PER_MWH } from "@wattsteer/core";
 import {
   Badge,
   Panel,
@@ -10,7 +11,6 @@ import {
 import { Text, View } from "react-native";
 import { useCopy, useFormat, useI18n } from "@/i18n";
 import { fill } from "@/i18n/format";
-import { SCENARIO_BRL_PER_MWH } from "@/lib/economics";
 import { centre, formatMwhExact, formatPercent, formatRange, upper } from "./band";
 import { BandRail, useRailLabel } from "./band-figure";
 import { MITIGATION, type MitigationStep, stepDetail, stepLabel } from "./fixtures";
@@ -48,7 +48,7 @@ export function MitigationStack() {
   const max = Math.max(...MITIGATION.map((step) => upper(step.remaining))) * 1.05;
   const avoided = 1 - centre(final.remaining) / centre(baseline.remaining);
   const recoveredMedian = final.recovered === null ? 0 : centre(final.recovered);
-  const scenarioBrl = recoveredMedian * SCENARIO_BRL_PER_MWH;
+  const scenarioBrl = recoveredMedian * BRL_PER_MWH;
 
   return (
     <Panel
@@ -123,7 +123,7 @@ export function MitigationStack() {
         >
           {fill(copy.showcase.mitigate.economicNote, {
             value: f.brl(scenarioBrl),
-            rate: f.brl(SCENARIO_BRL_PER_MWH),
+            rate: f.brl(BRL_PER_MWH),
           })}
         </Text>
       </View>
