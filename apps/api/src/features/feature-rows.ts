@@ -230,6 +230,110 @@ export interface FeatureRow {
   programmed_load_daily_min_mwh: number | null;
   /** Rank of t among D's 24 programmed loads, ascending: 1 is the trough. */
   programmed_load_rank_in_day: number | null;
+
+  // Class `D` — ONS's DESSEM day-ahead balance, and the augmented set's whole
+  // contribution. See `drizzle/0025_dessem_and_the_feature_set.sql`.
+  //
+  // **Every column here exists only in `dessem_augmented_v1`, and only at
+  // `gate_late`.** That is not a rule imposed on the data; it is the shape of
+  // the data. The DESSEM file for reference day D is created mid-afternoon on
+  // D−1, so at 09:00 on D−1 the newest one describes D−1 itself — which is why
+  // `feature_rows` *refuses* the augmented set at `gate_early` rather than
+  // returning a row of NULLs, and why asking for `dessem_free_v1` returns rows
+  // whose `dessem_*` columns are NULL because the block produced nothing to
+  // join, not because a filter emptied them.
+  //
+  // **The eleven hours are the augmented set's second cost.** `gate_late` is
+  // D−1 19:00 BRT against `gate_early`'s 09:00, so a model that needs these
+  // columns hands an operator far less notice. The A/B reports it beside the
+  // shorter window, because a comparison that reports only the metric is
+  // reporting half the trade.
+  //
+  // DESSEM publishes instantaneous MW at 30-minute grain; the two half hours of
+  // an hour are **averaged** into the hour's MWh. That is the opposite of the
+  // class-`P` sum above it, and right for the opposite reason.
+
+  /** `val_demanda`. */
+  dessem_demand_mwh: number | null;
+  /** `val_ger_eolica` — the day-ahead wind expectation. */
+  dessem_wind_mwh: number | null;
+  /** `val_ger_fotovoltaica` — utility-scale PV, a different fleet from MMGD. */
+  dessem_solar_mwh: number | null;
+  /** `val_ger_mmgd` — ONS's *modelled* distributed generation, not metered. */
+  dessem_mmgd_mwh: number | null;
+  /** `val_ger_hidraulica` + `val_ger_pch`. */
+  dessem_hydro_mwh: number | null;
+  /** `val_ger_termica` + `val_ger_pct`. */
+  dessem_thermal_mwh: number | null;
+  /** `val_cons_elevatoria` — a consumption, subtracted in the identity below. */
+  dessem_pumping_mwh: number | null;
+  /**
+   * `demand − wind − solar − mmgd`, from DESSEM's own quantities.
+   *
+   * Set B's answer to `proxy_residual_load_mwh`, and one of the four features
+   * that would justify the augmented set's trade.
+   */
+  dessem_residual_load_mwh: number | null;
+  /** `(wind + solar + mmgd) / demand`. NULL where demand is zero. */
+  dessem_renewable_load_ratio: number | null;
+  /** `(wind + solar + mmgd) − demand`. */
+  dessem_vre_surplus_mwh: number | null;
+  /** `(hydro + thermal) / demand`. NULL where demand is zero. */
+  dessem_inflexible_share: number | null;
+  /**
+   * `(hydro + thermal + wind + solar + mmgd) − demand − pumping`.
+   *
+   * DESSEM publishes no exchange column, so net export is derived from the
+   * energy identity. **Named *implied* because transmission losses are not
+   * modelled** — ONS publishes no day-ahead loss figure to model them from — so
+   * it is a signal for the northern export limits, not a measured flow. The
+   * utilisation ratio that would divide it needs an export capability estimate
+   * that does not exist yet; that denominator is ticket 10's.
+   */
+  dessem_implied_net_export_mwh: number | null;
+  /**
+   * Difference within the day-D DESSEM profile.
+   *
+   * Legal where the actuals-side ramp is not, for the reason the class-`P`
+   * ramps are: a D−1 publication carries the whole of day D at once. NULL at
+   * the local day's first hour, whose predecessor belongs to D−1's own file.
+   */
+  dessem_demand_ramp_1h: number | null;
+  /** As above, on `dessem_residual_load_mwh`. */
+  dessem_residual_load_ramp_1h: number | null;
+  /** As above, on `wind + solar + mmgd`. */
+  dessem_vre_ramp_1h: number | null;
+  /** Minimum over D's 24 residual loads. **Day grain**, NULL if any hour is missing. */
+  dessem_residual_load_min_of_day: number | null;
+  /** Rank of t among D's 24 residual loads, ascending: 1 is the trough. */
+  dessem_residual_load_rank_in_day: number | null;
+  /**
+   * `dessem_wind_mwh / (capacity_wind_mw × 1 h)`, the fleet read at the gate's
+   * vintage — the same double as-of, and the same reading, as
+   * `capacity_wind_mw` in this row. NULL where the fleet is unknown or zero.
+   */
+  dessem_wind_capacity_factor: number | null;
+  /** As above, `SOLAR`. The numerator is utility-scale PV only, so MMGD is
+   * deliberately outside a ratio whose denominator is the registered fleet. */
+  dessem_solar_capacity_factor: number | null;
+  /**
+   * Sum of `dessem_residual_load_mwh` over the four subsystems for this hour.
+   *
+   * A **derived sum**, which is the only form a national total may take:
+   * `SIN` is not a `Subsystem` (`docs/domain-model.md` §2). A system fact,
+   * broadcast identically to all four rows of the hour, and NULL unless all
+   * four reported it.
+   */
+  dessem_sin_residual_load_mwh: number | null;
+  /**
+   * SE's `dessem_residual_load_mwh`, carried onto the N and NE rows.
+   *
+   * A physical asymmetry rather than a statistic: N and NE curtail when SE has
+   * no headroom to absorb what they export. NULL on SE's own rows — a subsystem
+   * is not its own absorber — and NULL on S, which the mechanism does not
+   * describe.
+   */
+  dessem_absorber_residual_load_mwh: number | null;
 }
 
 /**
@@ -301,6 +405,31 @@ export const FEATURE_ROW_COLUMNS: readonly (keyof FeatureRow)[] = [
   "programmed_load_mean_3h",
   "programmed_load_daily_min_mwh",
   "programmed_load_rank_in_day",
+  // Class `D`, appended by `drizzle/0025_dessem_and_the_feature_set.sql`.
+  // Twenty-one, not the spec's twenty-two names: `dessem_export_utilisation`
+  // needs an export capability estimate that does not exist yet, and is
+  // ticket 10's.
+  "dessem_demand_mwh",
+  "dessem_wind_mwh",
+  "dessem_solar_mwh",
+  "dessem_mmgd_mwh",
+  "dessem_hydro_mwh",
+  "dessem_thermal_mwh",
+  "dessem_pumping_mwh",
+  "dessem_residual_load_mwh",
+  "dessem_renewable_load_ratio",
+  "dessem_vre_surplus_mwh",
+  "dessem_inflexible_share",
+  "dessem_implied_net_export_mwh",
+  "dessem_demand_ramp_1h",
+  "dessem_residual_load_ramp_1h",
+  "dessem_vre_ramp_1h",
+  "dessem_residual_load_min_of_day",
+  "dessem_residual_load_rank_in_day",
+  "dessem_wind_capacity_factor",
+  "dessem_solar_capacity_factor",
+  "dessem_sin_residual_load_mwh",
+  "dessem_absorber_residual_load_mwh",
 ];
 
 /**
@@ -344,6 +473,14 @@ const DAY_GRAIN_COLUMNS: readonly string[] = [
   // target hour, so it genuinely varies across the 24 — the same distinction
   // that keeps `observed_constrained_off_same_hour_mean_7d` out of this list.
   "programmed_load_daily_min_mwh",
+  // Class `D`'s one summary of the whole profile, on the same terms as class
+  // `P`'s. `dessem_residual_load_rank_in_day` is deliberately *not* here — it
+  // is computed over the day but selected by the target hour — and neither is
+  // `dessem_sin_residual_load_mwh`, which is constant across the four
+  // subsystems of an hour but varies across the 24 hours of the day. Constant
+  // across subsystems is not day grain; nothing in this marking is about the
+  // other axis.
+  "dessem_residual_load_min_of_day",
 ];
 
 /** The grain of one column. Hourly is the default because the row is. */

@@ -149,6 +149,13 @@ const ALLOWED_RELATIONS = new Set([
   "programmed",
   "profile",
   "shaped",
+  // Ticket 07's CTEs: the class-`D` block reads the balance once, names the
+  // identities once in `derived`, and derives the two cross-subsystem terms
+  // from that same read rather than from a second one.
+  "dessem",
+  "derived",
+  "system_hour",
+  "absorber",
 ]);
 
 const functionSegments = (): Map<string, string> => {
@@ -616,6 +623,109 @@ describe("the day-ahead programme, structurally", () => {
   });
 });
 
+describe("DESSEM and the feature-set argument, structurally", () => {
+  it("gates the block on the feature set, and refuses the early gate twice", () => {
+    // The acceptance claim, as a property of the SQL rather than of a fixture.
+    // `feature_rows` has refused `dessem_augmented_v1` at `gate_early` since
+    // ticket 01; ticket 07 puts the same refusal in the block, so it survives a
+    // future caller that reaches `feature_dessem_block` another way. And
+    // `dessem_free_v1` produces **no rows at all** rather than rows a filter
+    // then empties — which is what makes "the DESSEM-free set contains no
+    // DESSEM-sourced value" a property of the function producing them.
+    const block = functionSegments().get("feature_dessem_block") ?? "";
+    expect(block).toContain("feature_apply_gate(target_date, gate_profile)");
+    expect(block).toContain("canonical_day_ahead_balance");
+    expect(
+      /FUNCTION\s+feature_dessem_block\(\s*target_date date, gate_profile text, feature_set text\s*\)/.test(
+        block,
+      ),
+    ).toBe(true);
+    // Set A: nothing, at either gate. The `RETURN` is before any read.
+    const setA = block.indexOf("IF feature_set = 'dessem_free_v1' THEN");
+    expect(setA).toBeGreaterThan(-1);
+    expect(setA).toBeLessThan(block.indexOf("canonical_day_ahead_balance"));
+    // Set B: gate_late or nothing, and it raises rather than returning NULLs.
+    // Two walls, not one — the block's own and `feature_rows`' — so the rule
+    // survives a caller that reaches the block another way. `feature_rows` is
+    // restated in full by every migration that adds a column, so its copy of
+    // the refusal appears once per restatement and the count below is over the
+    // *distinct functions* that raise it rather than over the text.
+    const raisers = [...functionSegments()]
+      .filter(([, body]) => body.includes("dessem_augmented_v1 exists only at gate_late"))
+      .map(([name]) => name);
+    expect(raisers.toSorted()).toEqual(["feature_dessem_block", "feature_rows"]);
+  });
+
+  it("cuts on publication, and never on the actuals cutoff", () => {
+    // A `Forecast` with a genuine publication instant — the DESSEM file's own
+    // creation — so the gate alone is the right cut. Reaching for
+    // `actuals_cutoff` here would move a forecast onto the enforced axis that
+    // exists because observations have no honest publication stamp.
+    const block = functionSegments().get("feature_dessem_block") ?? "";
+    expect(block).not.toContain("actuals_cutoff");
+    expect(block).not.toContain("feature_publication_lag");
+  });
+
+  it("averages the two half hours rather than summing them", () => {
+    // The opposite of `canonical_programmed_load`, and right for the opposite
+    // reason: the programme is already MWh per half hour, DESSEM publishes
+    // instantaneous MW. A sum here would publish every DESSEM quantity at twice
+    // its true size — which looks exactly like a busy day.
+    const block = functionSegments().get("feature_dessem_block") ?? "";
+    expect(block).toContain("avg(b.demand_mw)");
+    expect(block).not.toMatch(/sum\(b\./);
+    // And a half-empty hour is a hole, not a half-sized one.
+    expect(block).toContain("HAVING count(*) = 2");
+  });
+
+  it("never lets a ramp span a gap in the profile, and refuses a partial day", () => {
+    // The class-`P` guards, on the class-`D` block. `lag()` returns the
+    // previous *row*, which is the previous *hour* only while the profile is
+    // complete; a minimum over nineteen hours is the minimum of a different day.
+    const block = functionSegments().get("feature_dessem_block") ?? "";
+    expect(block.split("previous_hour = shaped.valid_time - interval").length - 1).toBe(
+      3,
+    );
+    expect(block.split("hours_in_day = 24").length - 1).toBe(2);
+  });
+
+  it("derives the national total as a sum over the four, and only over four", () => {
+    // `SIN` is not a Subsystem (`docs/domain-model.md` §2). A national total is
+    // a derived sum over the four or it does not exist — and a sum over three
+    // is the residual load of a different system, so it is NULL rather than
+    // quietly smaller.
+    const block = functionSegments().get("feature_dessem_block") ?? "";
+    expect(block).toContain("HAVING count(*) = 4");
+    expect(SQL).not.toMatch(/'SIN'/);
+  });
+
+  it("leaves the export utilisation ratio to the ticket that has a denominator", () => {
+    // The spec names 22 `dessem_*` features across 21 table rows. Twenty-one
+    // are here; `dessem_export_utilisation` needs an export capability estimate
+    // no ONS dataset publishes, and a ratio with an invented denominator would
+    // be a worse answer than a missing column.
+    const dessem = FEATURE_ROW_COLUMNS.filter((column) => column.startsWith("dessem_"));
+    expect(dessem).toHaveLength(21);
+    for (const column of dessem) {
+      expect(column).not.toContain("utilisation");
+    }
+  });
+
+  it("states the eleven hours of lost notice beside the shorter window", () => {
+    // The augmented set's *second* cost, and the one a metric table hides. The
+    // spec records it where the trade is stated, not only where the gate is
+    // described, because a comparison that reports only the metric is reporting
+    // half the trade.
+    const spec = readFileSync(
+      join(import.meta.dir, "../../../docs/specs/feature-engineering.md"),
+      "utf8",
+    );
+    const table = spec.slice(spec.indexOf("### The two feature sets"));
+    expect(table.slice(0, 2400)).toContain("eleven hours");
+    expect(RAW).toContain("eleven hours");
+  });
+});
+
 describe("the feature/label partition", () => {
   it("puts every column in exactly one of the three categories", () => {
     for (const column of FEATURE_ROW_COLUMNS) {
@@ -669,6 +779,27 @@ describe("the feature/label partition", () => {
       "programmed_load_mean_3h",
       "programmed_load_daily_min_mwh",
       "programmed_load_rank_in_day",
+      "dessem_demand_mwh",
+      "dessem_wind_mwh",
+      "dessem_solar_mwh",
+      "dessem_mmgd_mwh",
+      "dessem_hydro_mwh",
+      "dessem_thermal_mwh",
+      "dessem_pumping_mwh",
+      "dessem_residual_load_mwh",
+      "dessem_renewable_load_ratio",
+      "dessem_vre_surplus_mwh",
+      "dessem_inflexible_share",
+      "dessem_implied_net_export_mwh",
+      "dessem_demand_ramp_1h",
+      "dessem_residual_load_ramp_1h",
+      "dessem_vre_ramp_1h",
+      "dessem_residual_load_min_of_day",
+      "dessem_residual_load_rank_in_day",
+      "dessem_wind_capacity_factor",
+      "dessem_solar_capacity_factor",
+      "dessem_sin_residual_load_mwh",
+      "dessem_absorber_residual_load_mwh",
     ]);
   });
 
@@ -709,6 +840,7 @@ describe("the feature dictionary's grain marking", () => {
       "observed_reason_share_cnf_7d",
       "observed_reason_share_rel_7d",
       "programmed_load_daily_min_mwh",
+      "dessem_residual_load_min_of_day",
     ]);
     for (const column of FEATURE_ROW_COLUMNS) {
       expect({ column, grain: featureGrain(column) }).toEqual({
@@ -722,6 +854,11 @@ describe("the feature dictionary's grain marking", () => {
     expect(featureGrain("observed_constrained_off_same_hour_mean_7d")).toBe("hour");
     // Nor is the staleness: it is a distance from this hour to the cutoff.
     expect(featureGrain("observed_actual_lag_hours")).toBe("hour");
+    // Nor is the system-wide residual load, which is constant across the four
+    // subsystems of an hour and varies across the 24 hours of the day. This
+    // marking is about the time axis only; "constant across subsystems" is a
+    // different property with no column here to record it.
+    expect(featureGrain("dessem_sin_residual_load_mwh")).toBe("hour");
   });
 
   it("says so in the catalogue too, at the column itself", () => {
