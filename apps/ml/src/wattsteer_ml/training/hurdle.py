@@ -353,6 +353,33 @@ def forecast_rows(
     return _compose_with(bundle, block)
 
 
+def expected_mwh_for_block(
+    bundle: HurdleBundle, block: FeatureBlock
+) -> tuple[float, ...]:
+    """``E[Y | x]`` per row of a block already encoded against this contract.
+
+    The route the diagnosis attribution evaluates its ``g`` through, and the
+    reason it exists rather than the attribution holding its own arithmetic:
+    the explained quantity and the served quantity must not be allowed to drift
+    apart, so both reach :func:`wattsteer_ml.mixture.compose` by the same three
+    lines of :func:`_compose_block`. `docs/specs/diagnosis.md` calls this the
+    fifth caller of the one composition.
+
+    A block rather than rows because the attribution constructs its coalitions
+    **in the encoded space** — ``x[S] ⊕ b[S̄]`` is a row of floats, and there is
+    no feature-row mapping it came from to re-encode. The block carries the
+    bundle's own contract, which is what keeps that space the same one the
+    boosters were fitted in.
+    """
+    if block.contract != bundle.contract:
+        raise TrainingError(
+            "the block was encoded under a different feature contract than the "
+            "bundle's; a row of floats means nothing without the list that "
+            "ordered it"
+        )
+    return tuple(hour.forecast.expected_mwh for hour in _compose_with(bundle, block))
+
+
 def _compose_with(bundle: HurdleBundle, block: FeatureBlock) -> tuple[HourForecast, ...]:
     """A finished bundle's estimators, unpacked onto :func:`_compose_block`."""
     return _compose_block(

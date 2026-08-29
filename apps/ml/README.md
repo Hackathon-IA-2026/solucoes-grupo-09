@@ -93,6 +93,58 @@ there is no spelling of "everything else" available in the file.
 the feature spec, standing in for the artifact's own list until the feature
 builder lands. `assert_total_partition` already takes the names as an argument,
 so that substitution is one call site.
+## The attribution — what the eight bars explain, and what they do not
+
+`src/wattsteer_ml/diagnosis/attribution.py` turns one `(subsystem, valid_time)`
+into **eight signed contributions in MWh**, one per driver group, saying how far
+this hour's expected `constrained_off_mwh` sits from a typical hour's and which
+group moved it.
+
+**It explains the expectation, and nothing else.** The attributed scalar is
+`g(x) = E[Y | x]` — the composed expected MWh. It is **not** the P10, **not**
+the P90, **not** the width of the band and **not** the day-level occurrence
+probability. That sentence is a payload field, not only a README paragraph:
+`to_payload()` carries `target: "expected_mwh_hour"` and
+`explains: "diagnosis.explains_expectation_not_band"`, and the risk chip and the
+driver bars are adjacent panels describing related but distinct quantities.
+
+The expectation is the only published quantity that is a genuine function of
+both hurdle stages, continuous in every feature, denominated in the product's
+own unit and additive across hours. A composed *quantile* is piecewise — its
+branch is selected by `q ≤ 1 − p(x)` — so a feature that moves `p` across the
+boundary makes it jump from zero, and the Shapley values of a step function hand
+the whole hour to whichever feature crossed it.
+
+**Composition happens before attribution, never after.** `g` is attributed as
+one function of one feature vector. Attributing the two stages separately and
+gluing them leaves a cross term that does not decompose per feature, and every
+rule for splitting it is invented. `g` itself is evaluated through the
+forecaster's own composition — `training.expected_mwh_for_block`, which reaches
+`mixture.compose` by the same three lines every served forecast does. Nothing
+under `diagnosis/` imports `mixture`, and `test_grouped_shapley.py` asserts it.
+
+**The players are the eight groups.** A group's `φ` is a Shapley value of the
+group *as a player*, so there is no aggregation step in which a sign could be
+lost: a group whose members pull opposite ways gets whatever replacing the whole
+group with a typical one does. Eight players is 256 coalitions, so the values
+are exact and the ranking carries no sampling noise. `share_j = |φ_j| / Σ_k|φ_k|`
+is computed **over all eight groups**, never over the rows the screen displays.
+Nothing in the module sums member-level values into a group value, and a
+structural test reads the source to say so.
+
+`background.py` is where "typical" gets a definition: 128 rows per
+`(subsystem, local_hour)` cell, drawn once with a stamped seed. The matching is
+enforced rather than checked — the sampler partitions by cell before it draws, a
+`BackgroundCell` refuses a row from another cell, and the only lookup takes the
+target's own key. The artifact bundle will carry the sample; until it does,
+`draw_matched_background` produces the same shape from a block and stamps where
+it came from.
+
+This runs **offline, batched, once per publication** and never inside an HTTP
+request. One instance is 256 × 128 = 32,768 constructed rows, evaluated in a
+single call; `HourAttribution.elapsed_seconds` records what it cost, so the
+publication budget is argued about with a number.
+
 ## The flex optimizer
 
 `src/wattsteer_ml/optimizer/` is the MILP of
