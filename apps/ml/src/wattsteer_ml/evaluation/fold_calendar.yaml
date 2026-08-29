@@ -1,0 +1,124 @@
+# The fold calendar — fixed once, shared by every run in the A/B matrix.
+#
+# `docs/specs/forecaster.md`, "The fold-evaluation protocol", is the authority
+# for every number below. This file is that section's table, as data.
+#
+# WHY THIS IS DATA AND NOT A PYTHON TABLE
+# ---------------------------------------
+# A-full, A-common, B-common and the archive-weather arm are comparable only if
+# they were scored on identical test rows. The calendar is therefore not a
+# parameter a run chooses: it is a stored artifact with a `version` and a hash,
+# and every fold result is keyed by that hash. Editing anything below changes
+# `rules_hash`, which changes every fold's `fold_hash`, which invalidates every
+# cached fold result. That is the intended cost, and it is why the edit is a
+# reviewed diff in a data file rather than a keyword argument at a call site.
+#
+# WHY RULES AND A PINNED TABLE, RATHER THAN A LIST OF SIX FOLDS
+# -------------------------------------------------------------
+# The spec requires the live-edge fold to grow until it reaches a full quarter
+# and then freeze, at which point the next fold opens — without a manual edit. A
+# hand-written list of six folds cannot do that, and a session that has to add
+# F7 by hand is a session that can add it wrongly.
+#
+# So the rules below generate the quarters, and `pinned_folds` is the spec's own
+# table held against the generator: `folds.py` derives each pinned row from the
+# rules at load and refuses the file if any field disagrees. The generator
+# therefore cannot drift from the document, and the document is still what a
+# reviewer reads.
+#
+# THE THREE CALIBRATION WINDOWS THAT DIFFER FROM THE SPEC'S TABLE BY ONE DAY
+# ---------------------------------------------------------------------------
+# The spec states the rule three times and emphatically — the calibration window
+# is "the last 90 d of train", "the 90 days immediately preceding the train
+# end", "90 days, and it must be the *most recent* 90". Three rows of its own
+# table do not satisfy it:
+#
+#   fold   spec table start   its length   rule-derived (train_end - 89 days)
+#   F3     2025-07-02         91 days      2025-07-03
+#   F4     2025-10-02         91 days      2025-10-03
+#   F6     2026-04-01         91 days      2026-04-02
+#
+# F1, F2 and F5 match the rule exactly, at 90 days. The rule is stated in prose
+# three times and half the table obeys it, so the rule wins and the three slips
+# are corrected here. Nothing downstream moves: the DESSEM decision-grade
+# arithmetic is unchanged either way (F4's base-fit block is 133 days, F5's is
+# 223), so the spec's "F5 and F6 only" verdict still holds exactly.
+#
+# This is recorded rather than silently applied. If the table is the intended
+# authority instead, the fix is three lines here and a `version` bump — and the
+# loader will then reject `calibration_days: 90`, which is the correct outcome:
+# the two cannot both be true.
+
+version: 1
+
+# The earliest date any training block may contain. The window opens where solar
+# constrained-off begins.
+window_start: 2024-04-01
+
+# Twelve months in: a training block shorter than a year cannot contain the
+# season it is asked to predict.
+first_test_start: 2025-04-01
+
+# Quarterly test folds. Short enough that six exist over the window, long enough
+# that a fold contains a season rather than a weather regime.
+quarter_months: 3
+
+# The calibration window, carved out of the training block rather than shared
+# with it, and it must be the most recent 90 days of that block.
+calibration_days: 90
+
+# A run is decision-grade in a fold only if its base-fit block — the training
+# block minus the calibration window — is at least this many days. The DESSEM
+# A/B's fold arithmetic; `docs/specs/forecaster.md`, "Which folds are
+# decision-grade".
+min_base_fit_days: 180
+
+# The spec's table, held against the generator. `quarter_end` and `quarter_days`
+# are the *full* quarter: for the live-edge fold the spec writes "today − 1" and
+# "growing", which is that fold's current truncation and not its identity.
+pinned_folds:
+  - id: F1
+    test_start: 2025-04-01
+    quarter_end: 2025-06-30
+    quarter_days: 91
+    train_end: 2025-03-31
+    calibration_start: 2025-01-01
+    calibration_end: 2025-03-31
+  - id: F2
+    test_start: 2025-07-01
+    quarter_end: 2025-09-30
+    quarter_days: 92
+    train_end: 2025-06-30
+    calibration_start: 2025-04-02
+    calibration_end: 2025-06-30
+  - id: F3
+    test_start: 2025-10-01
+    quarter_end: 2025-12-31
+    quarter_days: 92
+    train_end: 2025-09-30
+    # 2025-07-02, 91 days, in the spec's table. See the note above.
+    calibration_start: 2025-07-03
+    calibration_end: 2025-09-30
+  - id: F4
+    test_start: 2026-01-01
+    quarter_end: 2026-03-31
+    quarter_days: 90
+    train_end: 2025-12-31
+    # 2025-10-02, 91 days, in the spec's table. See the note above.
+    calibration_start: 2025-10-03
+    calibration_end: 2025-12-31
+  - id: F5
+    test_start: 2026-04-01
+    quarter_end: 2026-06-30
+    quarter_days: 91
+    train_end: 2026-03-31
+    calibration_start: 2026-01-01
+    calibration_end: 2026-03-31
+  - id: F6
+    test_start: 2026-07-01
+    quarter_end: 2026-09-30
+    quarter_days: 92
+    train_end: 2026-06-30
+    # 2026-04-01, 91 days, in the spec's table. See the note above.
+    calibration_start: 2026-04-02
+    calibration_end: 2026-06-30
