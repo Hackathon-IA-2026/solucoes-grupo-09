@@ -36,6 +36,14 @@ ARG PORT=8000
 # root is an artifact a non-root process cannot later rotate.
 RUN useradd --create-home --uid 10001 wattsteer
 
+# LightGBM's manylinux wheel links against libgomp at load time and the slim
+# image does not carry it. Without this the service imports fine and *training*
+# dies on the first `import lightgbm`, which is a runtime failure a build cannot
+# see. One package, no recommends, apt lists removed in the same layer.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends libgomp1 \
+ && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY --from=build --chown=wattsteer:wattsteer /app/.venv /app/.venv

@@ -16,6 +16,16 @@ dependencies = [
   # were academic-use-only. See `docs/research/optimizer-formulation.md` §6.
   "ortools>=9.7",
   "holidays==0.103",
+  # The forecaster's estimator family. `estimator_family ∈ {"lightgbm"}` is a
+  # hot-swap gate check (`docs/specs/forecaster.md`), so the choice is part of
+  # the contract rather than an implementation detail: native NULL handling,
+  # a native pinball objective and native categoricals are all three load-
+  # bearing for the hurdle, and none of them is available from a dependency
+  # this project could substitute without changing what the artifact means.
+  "lightgbm>=4.5",
+  # The bundle's on-disk format. `*.joblib` is the stem the artifact layout
+  # already names, and `artifacts.ARTIFACT_SUFFIX` is the one place it is spelt.
+  "joblib>=1.4",
 ]
 
 [project.scripts]
@@ -122,3 +132,19 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+# LightGBM ships no `py.typed` marker, so strict mode refuses to import it. The
+# same narrow override the other four untyped dependencies get, and for the same
+# reason: `training/bundle.py` and `training/hurdle.py` are the only modules
+# that touch a `Booster`, and every prediction is copied out through `float()`
+# before anything else sees it.
+[[tool.mypy.overrides]]
+module = ["lightgbm.*"]
+ignore_missing_imports = true
+
+# joblib ships no marker either. `training/bundle.py` is the only module that
+# calls it, and it re-validates the loaded object field by field rather than
+# trusting the pickle's shape.
+[[tool.mypy.overrides]]
+module = ["joblib.*"]
+ignore_missing_imports = true

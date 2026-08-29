@@ -30,7 +30,7 @@ environment versions; the metric and experiment blocks accrete later.
 blocker:** the feature function, sliced in parallel in the feature-engineering
 issue set.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] One fold trains all six estimators plus `μ_sub` on the base-fit block
       alone, and produces a complete 24-hour band and expectation for every

@@ -1,0 +1,432 @@
+"""Train the hurdle on one fold, and compose a band out of it.
+
+The tracer bullet: feature rows in, a bundle and a card on the volume, and a
+P10/P50/P90 band plus an ``E[Y]`` for every subsystem-hour of the fold's test
+period out.
+
+**The two stages are fitted separately and composed once.** This module fits six
+estimators and ``μ_sub`` and then hands them to
+:func:`wattsteer_ml.mixture.compose`. It contains no second composition and no
+arithmetic on ``p`` and a magnitude together — grep it for ``*`` between the
+two. `docs/specs/forecaster.md` opens on the reason: ``p × E[Y | Y > τ]`` is an
+expectation and not a P50, and the moment two places can build a mixture, two
+places will build different ones.
+
+**The magnitude models see curtailed hours only.** That is the whole difference
+between a hurdle and a zero-inflated regression fitted on everything: ``Q_pos``
+and ``Ê[Y | Y > τ]`` are *conditional on* ``Y > τ``, and a fit that also saw the
+quiet hours would estimate something else and the composition would then be
+inverting a CDF nobody fitted. The positive mask is
+:attr:`~wattsteer_ml.training.design.FeatureBlock.positive`, which reads
+``y_has_curtailment`` — the feature function's own decision from the
+``threshold_mw`` it was given — rather than re-comparing anything here.
+
+**The blocks come from ticket 03 and are not recomputed.** :func:`train_fold`
+takes a :class:`~wattsteer_ml.evaluation.FoldBlocks`, which cannot exist unless
+its base-fit and calibration windows are disjoint and ordered before the test
+period. This module derives no dates: it partitions the rows it was given by
+``target_date`` against those boundaries and refuses a row that falls outside
+them. There is no fold calendar in this file and no call that would build one.
+
+**Where the calibration window is and is not used.** Every fit is on base-fit
+rows. The calibration block is passed to LightGBM as an *early-stopping monitor*
+only — the spec's v1 configuration says "early stopping on the calibration
+window's pinball loss" — so it chooses a tree count and contributes no gradient,
+and the base learners are **not refit** afterwards, which is the invariant
+:class:`~wattsteer_ml.evaluation.FoldBlocks` exists to hold. Set
+``early_stopping_rounds`` to 0 in a configuration that wants the calibration
+window untouched entirely.
+
+**``p`` is the classifier's raw output here.** Isotonic calibration is
+forecaster ticket 05 and the conformal corrections are ticket 06; until they
+land the composition is fed ``p_raw``, the band is uncalibrated and the card
+carries no Calibration or Quantiles group to claim otherwise. That is a stated
+absence, not a silent one: a card without those groups is a card that has not
+made a coverage statement.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Any
+
+import lightgbm as lgb
+import numpy as np
+import numpy.typing as npt
+
+from wattsteer_ml.constants import SUBSYSTEM_CODES, Subsystem
+from wattsteer_ml.evaluation import Fold, FoldBlocks, RowKey
+from wattsteer_ml.mixture import (
+    FITTED_ALPHAS,
+    ComposedForecast,
+    MagnitudeQuantiles,
+    compose,
+)
+from wattsteer_ml.training.bundle import (
+    HOURS_PER_DAY,
+    HurdleBundle,
+    ModelCard,
+    SubThresholdMeans,
+    TrainingCounts,
+    new_artifact_id,
+)
+from wattsteer_ml.training.contract import FeatureContract
+from wattsteer_ml.training.design import FeatureBlock, RowStamp
+from wattsteer_ml.training.hyperparameters import MODEL_CONFIG_V1, ModelConfig
+
+
+class TrainingError(ValueError):
+    """The rows cannot train the fold that was asked for."""
+
+
+@dataclass(frozen=True)
+class HourForecast:
+    """One subsystem-hour of the answer: who it is about, and what was said."""
+
+    key: RowKey
+    forecast: ComposedForecast
+
+
+@dataclass(frozen=True)
+class TrainedFold:
+    """What one fold's training produced. The bundle, its card, and the blocks."""
+
+    bundle: HurdleBundle
+    card: ModelCard
+    blocks: FoldBlocks
+    counts: TrainingCounts
+
+
+def train_fold(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    fold: Fold,
+    blocks: FoldBlocks,
+    function_definition: str,
+    config: ModelConfig = MODEL_CONFIG_V1,
+    created_at: datetime | None = None,
+    artifact_id: str | None = None,
+    feature_set_version: str | None = None,
+    git_sha_ml: str | None = None,
+    git_sha_api: str | None = None,
+) -> TrainedFold:
+    """Fit the six estimators and ``μ_sub`` on ``blocks``' base-fit block.
+
+    Args:
+        rows: everything ``feature_rows(...)`` returned for this fold — base
+            fit, calibration and test together, exactly as ``FoldBlocks``
+            produces them. They are partitioned here by ``target_date``.
+        fold: the fold these blocks came from, for the card's ``fold_hash``.
+        blocks: the three windows, from :meth:`Fold.blocks_for`.
+        function_definition: ``pg_get_functiondef(feature_rows)``, the half of
+            the feature contract a column list cannot see.
+        config: the published configuration. Named, never searched.
+
+    Returns:
+        The bundle, the card and the counts behind them.
+    """
+    stamp = RowStamp.of(rows)
+    base_fit_rows, calibration_rows, test_rows = _partition(rows, blocks)
+    if not base_fit_rows:
+        raise TrainingError(
+            f"{fold.id}: the base-fit block {blocks.base_fit_start.isoformat()}–"
+            f"{blocks.base_fit_end.isoformat()} contains no rows"
+        )
+    contract = FeatureContract.of(base_fit_rows, function_definition=function_definition)
+    base_fit = FeatureBlock.of(base_fit_rows, contract, threshold_mw=stamp.threshold_mw)
+    calibration = FeatureBlock.of(
+        calibration_rows, contract, threshold_mw=stamp.threshold_mw
+    )
+
+    fit_block = base_fit.select(base_fit.labelled)
+    positives = fit_block.select(fit_block.positive)
+    if not len(positives):
+        raise TrainingError(
+            f"{fold.id}: no base-fit hour is above τ = {stamp.threshold_mw} MWh, so "
+            "there is no conditional magnitude distribution to fit; this is a "
+            "statement about the data, not a configuration to relax"
+        )
+    monitor = calibration.select(calibration.labelled)
+    monitor_positives = monitor.select(monitor.positive)
+
+    bundle = HurdleBundle(
+        lane=stamp.lane,
+        contract=contract,
+        model_config_version=config.version,
+        threshold_mw=stamp.threshold_mw,
+        occurrence=_fit(
+            config=config,
+            params=config.params(objective="binary", role="occurrence"),
+            train=fit_block,
+            label=fit_block.positive.astype(np.float64),
+            monitor=monitor,
+            monitor_label=monitor.positive.astype(np.float64),
+        ),
+        magnitude_p10=_fit_quantile(
+            config, positives, monitor_positives, FITTED_ALPHAS[0]
+        ),
+        magnitude_p50=_fit_quantile(
+            config, positives, monitor_positives, FITTED_ALPHAS[1]
+        ),
+        magnitude_p90=_fit_quantile(
+            config, positives, monitor_positives, FITTED_ALPHAS[2]
+        ),
+        magnitude_mean=_fit(
+            config=config,
+            params=config.params(objective="l2", role="magnitude_mean"),
+            train=positives,
+            label=positives.total_mwh,
+            monitor=monitor_positives,
+            monitor_label=monitor_positives.total_mwh,
+        ),
+        wind_share=_fit(
+            config=config,
+            params=config.params(objective="l2", role="wind_share"),
+            train=positives,
+            label=_wind_share(positives),
+            monitor=monitor_positives,
+            monitor_label=_wind_share(monitor_positives),
+        ),
+        sub_threshold_means=fit_sub_threshold_means(fit_block),
+    )
+    counts = TrainingCounts(
+        base_fit_rows=len(base_fit),
+        base_fit_labelled_rows=len(fit_block),
+        base_fit_positive_rows=len(positives),
+        base_fit_sub_threshold_rows=len(fit_block) - len(positives),
+        calibration_rows=len(calibration),
+        calibration_labelled_rows=len(monitor),
+        calibration_positive_rows=len(monitor_positives),
+        test_rows=len(test_rows),
+        vintage_fidelity=_fidelity_counts(rows),
+    )
+    card = ModelCard(
+        artifact_id=artifact_id
+        if artifact_id is not None
+        else new_artifact_id(created_at),
+        created_at=created_at if created_at is not None else datetime.now(tz=UTC),
+        lane=stamp.lane,
+        contract=contract,
+        config=config,
+        fold=fold,
+        blocks=blocks,
+        counts=counts,
+        sub_threshold_means=bundle.sub_threshold_means,
+        feature_set_version=feature_set_version,
+        git_sha_ml=git_sha_ml,
+        git_sha_api=git_sha_api,
+    )
+    return TrainedFold(bundle=bundle, card=card, blocks=blocks, counts=counts)
+
+
+def forecast_rows(
+    bundle: HurdleBundle, rows: Sequence[Mapping[str, Any]]
+) -> tuple[HourForecast, ...]:
+    """Compose one band and one expectation per row, through ticket 01's inversion.
+
+    The only place a served number is produced, and it produces it by calling
+    :func:`wattsteer_ml.mixture.compose`. The six predictions are the *inputs* to
+    that call; none of them is multiplied by another here.
+
+    Two clamps, and they are type-level rather than corrective. ``p`` and the
+    share are clipped to ``[0, 1]`` because a regression has no constraint
+    saying so and a probability outside it is not one; the magnitudes are
+    floored at zero because MWh are non-negative and
+    :class:`~wattsteer_ml.mixture.MagnitudeQuantiles` refuses a negative knot.
+    The floor **into** ``F_pos``'s support — strictly above ``τ`` — is the
+    mixture's own business and is applied there, not here, so there is exactly
+    one place that knows where the positive branch starts.
+    """
+    if not rows:
+        return ()
+    block = FeatureBlock.of(rows, bundle.contract, threshold_mw=bundle.threshold_mw)
+    matrix = block.matrix
+    occurrence = np.clip(_predict(bundle.occurrence, matrix), 0.0, 1.0)
+    q10 = _predict(bundle.magnitude_p10, matrix)
+    q50 = _predict(bundle.magnitude_p50, matrix)
+    q90 = _predict(bundle.magnitude_p90, matrix)
+    mean = _predict(bundle.magnitude_mean, matrix)
+    share = np.clip(_predict(bundle.wind_share, matrix), 0.0, 1.0)
+    floor = 0.0
+    return tuple(
+        HourForecast(
+            key=key,
+            forecast=compose(
+                occurrence_probability=float(occurrence[index]),
+                positive_quantiles=MagnitudeQuantiles.from_boosters(
+                    q10=max(floor, float(q10[index])),
+                    q50=max(floor, float(q50[index])),
+                    q90=max(floor, float(q90[index])),
+                ),
+                positive_mean_mwh=max(floor, float(mean[index])),
+                sub_threshold_mean_mwh=bundle.sub_threshold_means.mean_for(
+                    key.subsystem, key.local_hour
+                ),
+                threshold_mw=bundle.threshold_mw,
+                wind_share=float(share[index]),
+            ),
+        )
+        for index, key in enumerate(block.keys)
+    )
+
+
+def fit_sub_threshold_means(block: FeatureBlock) -> SubThresholdMeans:
+    """``μ_sub`` — the base-fit empirical mean over sub-threshold rows, 96 numbers.
+
+    By (subsystem, local hour), as the spec specifies. A cell the base-fit block
+    has no sub-threshold row for falls back to that subsystem's mean and then to
+    the pooled one, so the table is complete: a serving path that had to handle a
+    missing cell would need a rule for it, and a rule for a missing value is an
+    imputation policy, which is the one thing this model does not have.
+
+    Every value is a mean over rows the feature function itself marked
+    sub-threshold, so every value is at or below ``τ`` — the bound
+    :class:`~wattsteer_ml.mixture.HurdleMixture` asserts on construction.
+    """
+    labelled = block.select(block.labelled)
+    sub = labelled.select(~labelled.positive)
+    totals: dict[tuple[Subsystem, int], list[float]] = {}
+    by_subsystem: dict[Subsystem, list[float]] = {}
+    pooled: list[float] = []
+    for key, value in zip(sub.keys, sub.total_mwh.tolist(), strict=True):
+        totals.setdefault((key.subsystem, key.local_hour), []).append(value)
+        by_subsystem.setdefault(key.subsystem, []).append(value)
+        pooled.append(value)
+    pooled_mean = _mean(pooled, 0.0)
+    return SubThresholdMeans(
+        values=tuple(
+            tuple(
+                _mean(
+                    totals.get((code, hour), []),
+                    _mean(by_subsystem.get(code, []), pooled_mean),
+                )
+                for hour in range(HOURS_PER_DAY)
+            )
+            for code in SUBSYSTEM_CODES
+        )
+    )
+
+
+def _partition(
+    rows: Sequence[Mapping[str, Any]], blocks: FoldBlocks
+) -> tuple[list[Mapping[str, Any]], list[Mapping[str, Any]], list[Mapping[str, Any]]]:
+    """Split rows into the three blocks. No date arithmetic beyond comparison."""
+    base_fit: list[Mapping[str, Any]] = []
+    calibration: list[Mapping[str, Any]] = []
+    test: list[Mapping[str, Any]] = []
+    for row in rows:
+        target = row["target_date"]
+        if blocks.base_fit_start <= target <= blocks.base_fit_end:
+            base_fit.append(row)
+        elif blocks.calibration_start <= target <= blocks.calibration_end:
+            calibration.append(row)
+        elif blocks.test_start <= target <= blocks.test_end:
+            test.append(row)
+        else:
+            raise TrainingError(
+                f"{target.isoformat()} is in none of this fold's three blocks "
+                f"({blocks.base_fit_start.isoformat()}–{blocks.test_end.isoformat()}); "
+                "a row outside them belongs to a window nobody declared"
+            )
+    return base_fit, calibration, test
+
+
+def _fit_quantile(
+    config: ModelConfig,
+    positives: FeatureBlock,
+    monitor: FeatureBlock,
+    alpha: float,
+) -> lgb.Booster:
+    """One pinball booster, on curtailed hours only."""
+    return _fit(
+        config=config,
+        params=config.params(
+            objective="quantile", role=f"magnitude_q{alpha:.2f}", alpha=alpha
+        ),
+        train=positives,
+        label=positives.total_mwh,
+        monitor=monitor,
+        monitor_label=monitor.total_mwh,
+    )
+
+
+def _fit(
+    *,
+    config: ModelConfig,
+    params: Mapping[str, Any],
+    train: FeatureBlock,
+    label: npt.NDArray[np.float64],
+    monitor: FeatureBlock,
+    monitor_label: npt.NDArray[np.float64],
+) -> lgb.Booster:
+    """One booster. Fitted on ``train``; ``monitor`` only chooses where to stop."""
+    if not len(train):
+        raise TrainingError("a booster cannot be fitted on an empty block")
+    contract = train.contract
+    names = list(contract.feature_names)
+    categorical = list(contract.categorical_indices)
+    dataset = lgb.Dataset(
+        train.matrix,
+        label=label,
+        feature_name=names,
+        categorical_feature=categorical,
+        free_raw_data=False,
+    )
+    callbacks: list[Any] = [lgb.log_evaluation(period=0)]
+    valid_sets: list[Any] = []
+    if config.early_stopping_rounds and len(monitor):
+        valid_sets.append(
+            lgb.Dataset(
+                monitor.matrix,
+                label=monitor_label,
+                reference=dataset,
+                feature_name=names,
+                categorical_feature=categorical,
+                free_raw_data=False,
+            )
+        )
+        callbacks.append(lgb.early_stopping(config.early_stopping_rounds, verbose=False))
+    booster = lgb.train(
+        dict(params),
+        dataset,
+        num_boost_round=config.num_boost_round,
+        valid_sets=valid_sets,
+        callbacks=callbacks,
+    )
+    # The Dataset holds a reference to the training matrix; the bundle must not.
+    return lgb.Booster(model_str=booster.model_to_string())
+
+
+def _predict(
+    booster: lgb.Booster, matrix: npt.NDArray[np.float64]
+) -> npt.NDArray[np.float64]:
+    predictions = np.asarray(booster.predict(matrix), dtype=np.float64)
+    return predictions.reshape(matrix.shape[0])
+
+
+def _wind_share(block: FeatureBlock) -> npt.NDArray[np.float64]:
+    """``wind_mwh / total_mwh`` on the positive rows. NaN where either is NULL.
+
+    Not clipped and not filled: LightGBM drops a row whose *label* is NaN from
+    the objective, which is the correct treatment of an hour whose split is
+    unknown, and a filled 0.5 would be a fabricated observation.
+    """
+    with np.errstate(invalid="ignore", divide="ignore"):
+        share = block.wind_mwh / block.total_mwh
+    return np.asarray(share, dtype=np.float64)
+
+
+def _fidelity_counts(rows: Sequence[Mapping[str, Any]]) -> dict[str, int]:
+    """``vintage_fidelity`` as counts. Two numbers, never one average."""
+    counts: dict[str, int] = {}
+    for row in rows:
+        value = row.get("vintage_fidelity")
+        key = str(value) if value is not None else "unknown"
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def _mean(values: Sequence[float], fallback: float) -> float:
+    return sum(values) / len(values) if values else fallback

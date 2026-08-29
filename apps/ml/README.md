@@ -6,8 +6,8 @@ service: the Elysia gateway in `apps/api` is its only caller, and the Expo app
 never reaches it directly.
 
 Today it is a healthcheck, a read-only database connection, an artifact volume,
-one stub endpoint and the flex optimizer's MILP. The forecaster and the
-simulator land in later tickets.
+one stub endpoint, the flex optimizer's MILP and the hurdle trainer. Serving the
+band over HTTP, calibration and the hot-swap gate land in later tickets.
 
 ## What it reads
 
@@ -215,6 +215,39 @@ they are what lets the gateway answer `MODEL_UNAVAILABLE` with a `lane_state`
 rather than collapsing "no promoted artifact" into a spinner. The fourth is the
 refusal to guess between them: `current()` raises rather than falling back to
 the newest file, while `/v1/meta` still answers so an operator can see why.
+
+### Training the hurdle
+
+`src/wattsteer_ml/training/` turns feature rows into one of those artifacts.
+`train_fold(rows, fold=…, blocks=…, function_definition=…)` fits **six**
+LightGBM estimators plus `μ_sub` on the base-fit block of one fold and returns a
+frozen bundle and its card; `forecast_rows(bundle, rows)` composes a
+P10/P50/P90 band and an `E[Y]` for every subsystem-hour.
+
+Four rules are held by the shapes rather than by convention, and each has a test
+that fails when it stops being true:
+
+- **One composition.** The band is produced by `mixture.compose` — ticket 01's
+  inversion of the mixture CDF — and there is no second mixture anywhere in the
+  package. `p × E[Y | Y > τ]` is an expectation, not a P50.
+- **The magnitude models see curtailed hours only.** That is what makes this a
+  hurdle rather than a zero-inflated regression fitted on everything. The
+  positive mask is `y_has_curtailment`, the feature function's own decision from
+  the `threshold_mw` it was handed.
+- **The blocks come from `FoldBlocks`.** Nothing in `training/` derives a date.
+- **No imputation, anywhere.** A NULL becomes `NaN` and stays one; LightGBM
+  routes it down its own branch. `docs/specs/feature-engineering.md` makes
+  unavailability meaningful, and a median fill would destroy it.
+
+Hyperparameters are the published `model_config_version` and are never searched
+during a retrain — `tests/test_model_config.py` asserts that no tuning API is
+reachable from the package at all.
+
+**LightGBM needs an OpenMP runtime.** The Linux wheel links against `libgomp`,
+which the Dockerfile installs; on macOS the wheel wants `libomp.dylib`, so a
+local `uv run pytest` needs `brew install libomp` once. Without it `import
+lightgbm` raises at load time and everything else in the service still works,
+which makes it an easy failure to misread.
 
 ## Endpoints
 
