@@ -82,6 +82,13 @@ range and serving passes tomorrow's date, and they execute **the same expression
 over the same tables**. Train/serve skew stops being something to avoid and
 becomes something that cannot be expressed.
 
+**The tables it reads through are the canonical views** of ticket 013, not the
+ingest tables. The feature function is where ONS's conventions would get
+reimplemented if anywhere, so it must not be able to see a padded code, an
+average-power value or an end-of-interval timestamp in the first place. Ticket
+016 settled that the contract is SQL for exactly this reason; see
+`api-surface.md` § the publication job.
+
 On top of that spine:
 
 - **Facts are read at two different as-ofs, deliberately.** Features are read

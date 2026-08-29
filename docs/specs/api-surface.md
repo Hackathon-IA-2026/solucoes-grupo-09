@@ -325,6 +325,25 @@ in `apps/ml`), so it returns the computed rows and the **worker** writes them.
 That keeps the read-only guarantee intact and keeps every write in the service
 that owns the Drizzle schema.
 
+**What the ML service reads are the canonical views, not the tables.** The
+contract of ticket 013 is a set of SQL views owning the row vocabulary — the
+renames, the grain, the unit and timestamp resolution — so "the ML service reads
+Postgres directly" and "there is exactly one definition of a canonical read" are
+both true at once, which they cannot be if the contract is TypeScript. Ticket 016
+settled this against two alternatives: having Python call the gateway would put a
+37M-row training read through JSON over HTTP and make `ml → api → ml` a
+dependency cycle, and having Python re-query the base tables would put the
+renames and the vintage rule in two languages, which is the drift the contract
+exists to prevent. This is the same choice `feature-engineering.md` already made
+one layer up when it put the feature function in SQL "with the schema authority".
+
+The `/v1/canonical/*` HTTP routes stay, but for the web app and for debugging —
+they are no longer the modelling path.
+
+`vintageFidelity` is the deliberate exception: a pure function of two timestamps,
+bound in both languages by shared golden vectors. Duplicating that is safe in a
+way duplicating row-shaping SQL is not.
+
 **A publication is atomic and additive.** Rows are inserted with a new
 `data_version` under the append-only discipline; nothing is updated in place; a
 half-written publication is impossible because the insert is one transaction. A

@@ -352,6 +352,19 @@ If `share_of_days_with_no_non_zero_p50_hour` is large, the optimizer's chosen
 posture collapses in the same way it argued P10 would, and ticket 011 has to
 reopen. That number is the deliverable this spec owes ticket 011.
 
+**And the alternative is measured at the same time, rather than argued about
+later.** The backtest scores a second planning arm — the plan built against
+`E[Y]` instead of P50 — through the identical simulator, and publishes both
+arms' `recovered_floor_mwh`. This costs almost nothing: the expectation is
+already a served field, and the scoring path is already shared. It is worth the
+almost-nothing because `E[Y] > P50` exactly when `p < 0.5`, which is to say the
+expectation is non-zero in precisely the hours where the P50 plan goes blind, so
+if the P50 posture does collapse, the replacement arrives already evidenced
+instead of starting a fresh argument. Note the objection that killed
+scenario-weighting does not apply here: that failed because the hour-wise
+quantile envelope is not a physically realisable day, whereas `E[Y]` is a
+genuine expectation and adds across hours legitimately.
+
 **The technology split does not get a band.** The domain atom is
 (`Subsystem`, `Technology`, `valid_time`), and the screens carry a `technology`
 field, but the hurdle is trained on the **total** and the split is produced by

@@ -461,6 +461,16 @@ Which is why the conservatism belongs in the *claim* and not in the *plan*:
   009) or a copula/block-bootstrap over residuals. Recorded as the upgrade path
   with that precondition named.
 
+**The `E[Y]` arm is carried alongside, and this is why.** The execution rule
+above makes over-planning nearly free — an asset charges the scheduled amount or
+what is actually being curtailed, whichever is smaller — so a plan that is too
+ambitious is not used, while a plan that is blind in an hour cannot act in it at
+all. The costs are not symmetric, and P50 sits on the cautious side of an
+asymmetry it was not chosen for. `forecaster.md` therefore scores a second
+planning arm against `E[Y]` through this spec's simulator, unchanged. v1 still
+ships the P50 plan; the second arm exists so that the number deciding the
+posture and the evidence for its replacement arrive together.
+
 **What the three envelopes are used for, then, is scoring, not planning.** The
 plan is simulated against P10, P50 and P90 by one shared function, exactly as
 the prototype already does, and the result carries all three. Two consequences
