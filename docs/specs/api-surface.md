@@ -1262,10 +1262,17 @@ array is never drawn as a flat line at zero.
 the parity fixtures. It is the only package both `apps/api` and `apps/web`
 depend on, and its `fixtures/` directory is read by `pytest` as well.**
 
-It holds four things today (`format.ts`, two functions) and its own strip-spec
-records the emptiness as deliberate: "it is the declared home for domain shared
-between Elysia and Expo, and the Public API surface ticket explicitly considers
-putting the typed API client back there." It does.
+It holds `format.ts` (two functions) **and a working cross-language parity
+harness**: `fixtures/canonical-contract/` with its README, enumerated by
+`test/canonical-contract.test.ts` and by
+`apps/ml/tests/test_canonical_contract.py`, pinning the canonical read manifest
+and the `VintageFidelity` rule. (An earlier draft of this section described the
+package as holding "four things today" and proposed *recovering* the parity
+pattern; it was already recovered by the data-platform work. What follows
+extends it rather than rebuilding it.) Its own strip-spec records the rest of
+the emptiness as deliberate: "it is the declared home for domain shared between
+Elysia and Expo, and the Public API surface ticket explicitly considers putting
+the typed API client back there." It does.
 
 ```
 packages/core/
@@ -1286,6 +1293,8 @@ packages/core/
     constants.ts              # SUBSYSTEMS, REFERENCE_FLEET, thresholds, BRL_PER_MWH
     format.ts                 # as today
   fixtures/                   # golden vectors, read by bun test AND pytest
+    canonical-contract/*        # already shipped: the read manifest + VintageFidelity
+    published-constants/*       # the constants above, pinned in both languages
     gate-at/*.json
     scenario-canonical/*.json
     scenario-validation/*.json
@@ -1303,11 +1312,15 @@ carrying `status`, the domain `code`, and a `retryable` flag for 429/5xx/network
 — which is what a UI needs to decide between "retry" and "show state 2 above".
 
 **Four constants move, and one of them is a real bug today.**
-`ECONOMIC_ASSUMPTION_BRL_PER_MWH` (fixtures) and `SCENARIO_BRL_PER_MWH = 180`
-(`apps/web/src/lib/economics.ts`) are **two names for one assumption**, and
-`flex-optimizer.md` calls the latter "the single place it is written down". It
-is written down twice, in a package Python cannot read, and the optimizer needs
-it. It becomes `BRL_PER_MWH` in `packages/core/src/constants.ts`, beside
+`SCENARIO_BRL_PER_MWH = 180` (`apps/web/src/lib/economics.ts`) is one
+definition, which `apps/web/src/lib/fixtures/mitigate.ts` re-exported under the
+second name `ECONOMIC_ASSUMPTION_BRL_PER_MWH` — an alias worth deleting, but not
+a second definition, and an earlier draft of this section overstated it as
+"written down twice". The real defect is narrower and is a live bug:
+`flex-optimizer.md` calls this "the single place it is written down", the
+optimizer that needs it is **Python**, and a constant in `apps/web` is one the
+optimizer cannot read. It becomes `BRL_PER_MWH` in
+`packages/core/src/constants.ts`, beside
 `SUBSYSTEMS`, `REFERENCE_FLEET`, `SUBSYSTEM_THRESHOLD_MW = 5`,
 `REPORTING_ENTITY_THRESHOLD_MW = 1` and `MAX_GAP_HOURS = 0`.
 
@@ -1546,9 +1559,10 @@ whole vintage vocabulary exists to survive.
 2. **ODbL §4.6 obliges machine-readable access to the plant registry**, and
    nothing in the product provided it. `/v1/plants` exists for a licence and not
    for a screen.
-3. **`SCENARIO_BRL_PER_MWH` and `ECONOMIC_ASSUMPTION_BRL_PER_MWH` are two names
-   for the number `flex-optimizer.md` calls "the single place it is written
-   down"**, and both live where Python cannot read them.
+3. **The number `flex-optimizer.md` calls "the single place it is written down"
+   lives where Python cannot read it**, and the optimizer that needs it is
+   Python. (It also carried a second *name* — an alias, since deleted — which
+   an earlier draft of this spec mistook for a second definition.)
 
 **Where this spec is weakest.** Four places, ranked:
 

@@ -1,9 +1,9 @@
+import type { BandUnavailableReason } from "@wattsteer/core";
 import { Badge, radius, space, usePalette } from "@wattsteer/ui";
 import type { ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useCopy, useI18n } from "@/i18n";
 import { fill } from "@/i18n/format";
-import type { BandUnavailableReason } from "@/lib/domain";
 import {
   type Band,
   type Figure,

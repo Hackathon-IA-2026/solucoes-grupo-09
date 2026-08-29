@@ -27,8 +27,6 @@
  *   shows none rather than showing one at the wrong grain.
  */
 
-import type { Copy, Formatters } from "@/i18n";
-import { fill } from "@/i18n/format";
 import {
   type Band,
   type BandUnavailableReason,
@@ -37,8 +35,11 @@ import {
   type Figure,
   type ForecastOrigin,
   observed,
+  REFERENCE_FLEET,
   type SubsystemCode,
-} from "@/lib/domain";
+} from "@wattsteer/core";
+import type { Copy, Formatters } from "@/i18n";
+import { fill } from "@/i18n/format";
 import type { RiskClass } from "@/lib/fixtures";
 
 export type { BandUnavailableReason, ForecastOrigin, SubsystemCode };
@@ -284,18 +285,23 @@ export const DRIVERS: readonly LandingDriver[] = [
 ];
 
 /**
- * The scenario the mitigation panel illustrates.
+ * The scenario the mitigation panel illustrates — the published
+ * `REFERENCE_FLEET`, read rather than restated.
  *
  * Held as numbers rather than as the sentence "100 MW / 300 MWh, round-trip
  * 92%": that sentence is copy in one language and an en-US decimal besides,
  * and the same four numbers read correctly in both locales.
+ *
+ * The landing page quoting a different fleet than the Mitigate screen defaults
+ * to would be two answers to "what does WattSteer assume", on two pages of one
+ * product, so both spend the same constant.
  */
 export const LANDING_SCENARIO = {
-  batteryPowerMw: 100,
-  batteryEnergyMwh: 300,
-  roundTripEfficiency: 0.92,
-  loadShiftMw: 70,
-  shiftWindowHours: 3,
+  batteryPowerMw: REFERENCE_FLEET.battery.maxPowerMw,
+  batteryEnergyMwh: REFERENCE_FLEET.battery.energyCapacityMwh,
+  roundTripEfficiency: REFERENCE_FLEET.battery.roundTripEfficiency,
+  loadShiftMw: REFERENCE_FLEET.shiftableLoad.maxShiftMw,
+  shiftWindowHours: REFERENCE_FLEET.shiftableLoad.shiftWindowHours,
 };
 
 export const MITIGATION: readonly MitigationStep[] = [
@@ -352,7 +358,7 @@ export function stepDetail(
 }
 
 /** Assumed energy value for the labelled economic scenario. Visible on screen. */
-export { SCENARIO_BRL_PER_MWH } from "@/lib/economics";
+export { BRL_PER_MWH } from "@wattsteer/core";
 
 export interface ReplayEvent {
   /** The historical day replayed. */

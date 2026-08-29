@@ -22,7 +22,10 @@ apps/
   web/    The product frontend: Expo (React Native) universal app —
           static-rendered SEO web build, plus iOS/Android from the same code.
 packages/
-  core/   Client-side domain shared by frontends. Pure TypeScript, zero UI deps.
+  core/   The shared domain: the vocabulary (`domain.ts`), the published
+          constants (`constants.ts`) and the cross-language golden vectors in
+          `fixtures/`, which `bun test` and `pytest` both enumerate.
+          Pure TypeScript, zero UI deps.
   ui/     The design system: tokens, brand, icons and primitives.
 ```
 

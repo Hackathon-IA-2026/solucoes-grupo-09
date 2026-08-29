@@ -10,9 +10,11 @@
  * shape of the screens, not the pipeline.
  *
  * The shared vocabulary — `SubsystemCode`, `Technology`, `Band`, `Figure`,
- * `Driver`, `ForecastOrigin` and the reason/origin/vintage enums — is defined
- * once in `@/lib/domain` and re-exported here. It used to be declared in both
- * places, and the two copies disagreed.
+ * `Driver`, `ForecastOrigin`, `SubsystemMeta` and the reason/origin/vintage
+ * enums — is defined once in `@wattsteer/core` and re-exported here. It used to
+ * be declared in both places, and the two copies disagreed; it now lives in the
+ * shared package rather than in this app, so the gateway and the modelling
+ * service read the same definitions instead of forming a second opinion.
  */
 
 export {
@@ -31,11 +33,12 @@ export {
   type ReasonCode,
   type RestrictionOrigin,
   type SubsystemCode,
+  type SubsystemMeta,
   spread,
   type Technology,
   upper,
   type VintageFidelity,
-} from "@/lib/domain";
+} from "@wattsteer/core";
 
 import type {
   AttributedDriver,
@@ -46,15 +49,7 @@ import type {
   SubsystemCode,
   Technology,
   VintageFidelity,
-} from "@/lib/domain";
-
-export interface SubsystemMeta {
-  code: SubsystemCode;
-  /** ONS's own display name, untranslated (naming rule 2). */
-  onsDisplayName: string;
-  /** Short label for tight chrome. */
-  short: string;
-}
+} from "@wattsteer/core";
 
 /** `CurtailmentHour`, forecast side: the atom the model predicts. */
 export interface CurtailmentHourForecast {

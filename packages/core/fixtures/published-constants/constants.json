@@ -1,0 +1,33 @@
+{
+  "defaults": {
+    "subsystem_threshold_mw": 5,
+    "reporting_entity_threshold_mw": 1,
+    "max_gap_hours": 0,
+    "brl_per_mwh": 180
+  },
+  "subsystems": [
+    { "code": "N", "ons_display_name": "NORTE", "short": "N" },
+    { "code": "NE", "ons_display_name": "NORDESTE", "short": "NE" },
+    { "code": "SE", "ons_display_name": "SUDESTE/CENTRO-OESTE", "short": "SE/CO" },
+    { "code": "S", "ons_display_name": "SUL", "short": "S" }
+  ],
+  "technologies": ["WIND", "SOLAR"],
+  "reference_fleet": {
+    "battery": {
+      "asset_type": "battery",
+      "label": "Battery",
+      "max_power_mw": 100,
+      "energy_capacity_mwh": 300,
+      "round_trip_efficiency": 0.92,
+      "initial_state_of_charge": 0.2
+    },
+    "shiftable_load": {
+      "asset_type": "shiftable_load",
+      "label": "Flexible load",
+      "max_power_mw": 70,
+      "max_shift_mw": 50,
+      "shift_window_hours": 3,
+      "daily_energy_mwh": 1700
+    }
+  }
+}

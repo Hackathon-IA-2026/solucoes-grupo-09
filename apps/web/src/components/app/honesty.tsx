@@ -7,12 +7,12 @@
  * to check that a screen used them.
  */
 
+import { producerLabel } from "@wattsteer/core";
 import { Badge, ClockIcon, radius, space, usePalette } from "@wattsteer/ui";
 import type { ReactNode } from "react";
 import { Text, View } from "react-native";
 import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
-import { producerLabel } from "@/lib/domain";
 import type { ForecastOrigin, VintageFidelity } from "@/lib/fixtures";
 
 /**
