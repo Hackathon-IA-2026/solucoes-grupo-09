@@ -1,0 +1,6 @@
+{
+  "name": "a source that has ingested nothing cannot have been watching",
+  "window_start": "2026-03-01T00:00:00.000Z",
+  "go_live_at": null,
+  "expected": "revision_optimistic"
+}

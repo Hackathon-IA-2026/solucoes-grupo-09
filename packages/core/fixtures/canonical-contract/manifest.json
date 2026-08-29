@@ -1,0 +1,77 @@
+{
+  "base_path": "/v1/canonical",
+  "reads": [
+    {
+      "name": "curtailment-by-reporting-entity",
+      "kind": "observation",
+      "producer": null,
+      "grain": "reporting_entity_hour",
+      "key": ["reportingEntityCode", "technology", "validTime"],
+      "carries_restriction_cause": true,
+      "fidelity_axis": "valid_time"
+    },
+    {
+      "name": "curtailment-by-plant",
+      "kind": "observation",
+      "producer": null,
+      "grain": "plant_hour",
+      "key": ["plantOnsCode", "technology", "validTime"],
+      "carries_restriction_cause": false,
+      "fidelity_axis": "valid_time"
+    },
+    {
+      "name": "system-context",
+      "kind": "observation",
+      "producer": null,
+      "grain": "subsystem_hour",
+      "key": ["subsystem", "validTime"],
+      "carries_restriction_cause": false,
+      "fidelity_axis": "valid_time"
+    },
+    {
+      "name": "system-exchange",
+      "kind": "observation",
+      "producer": null,
+      "grain": "subsystem_link_hour",
+      "key": ["fromSubsystem", "toSubsystem", "validTime"],
+      "carries_restriction_cause": false,
+      "fidelity_axis": "valid_time"
+    },
+    {
+      "name": "day-ahead-balance",
+      "kind": "forecast",
+      "producer": "ons_dessem",
+      "grain": "subsystem_half_hour",
+      "key": ["subsystem", "validTime"],
+      "carries_restriction_cause": false,
+      "fidelity_axis": "valid_time"
+    },
+    {
+      "name": "weather-forecast",
+      "kind": "forecast",
+      "producer": "open_meteo",
+      "grain": "centroid_hour",
+      "key": ["centroidId", "validTime"],
+      "carries_restriction_cause": false,
+      "fidelity_axis": "valid_time"
+    },
+    {
+      "name": "installed-capacity",
+      "kind": "observation",
+      "producer": null,
+      "grain": "fleet_scope_day",
+      "key": ["subsystem", "technology"],
+      "carries_restriction_cause": false,
+      "fidelity_axis": "fleet_date"
+    },
+    {
+      "name": "conjunto-membership",
+      "kind": "observation",
+      "producer": null,
+      "grain": "plant_day",
+      "key": ["plantOnsCode"],
+      "carries_restriction_cause": false,
+      "fidelity_axis": "fleet_date"
+    }
+  ]
+}

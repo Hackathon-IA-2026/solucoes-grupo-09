@@ -1,0 +1,17 @@
+{
+  "name": "a source that ingested nothing leaves no instant from which the whole answer would have been knowable",
+  "sources": [
+    {
+      "read": "system-context",
+      "vintage_fidelity": "point_in_time",
+      "go_live_at": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "read": "day-ahead-balance",
+      "vintage_fidelity": "revision_optimistic",
+      "go_live_at": null
+    }
+  ],
+  "expected_vintage_fidelity": "revision_optimistic",
+  "expected_go_live_at": null
+}
