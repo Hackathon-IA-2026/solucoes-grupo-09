@@ -833,6 +833,28 @@ to know which group or which model. It is the diagnosis-layer twin of the
 forecaster's shuffled-label control and it is the most valuable test in this
 spec.
 
+> **"Within a fold" means within the cell, and the background is redrawn from
+> the permuted fold.** Permuting inside `(subsystem, calendar_local_hour)` makes
+> the permuted target's value a draw from the same cell every background row is
+> drawn from, so the two are exchangeable and `φ_j → 0` follows from the
+> construction rather than from an average. A shuffle pooled across the whole
+> fold instead hands a 14:00 row a 03:00 row's values, which leaves it atypical
+> *of its cell* — and an attribution taken against a matched background is
+> obliged to report that as a contribution, so part of what the pooled control
+> measures is the mismatch it introduced. Measured on a fitted bundle: pooled
+> leaves 183–390 MWh of a 1689 MWh baseline and flips the sign, cell-wise leaves
+> 5–180 MWh and keeps it. Redrawing the background from the permuted fold is the
+> other half: a permutation that left the background alone would compare a
+> shuffled target against an unshuffled typical.
+>
+> **The control needs a day the model read as unusual.** A permutation replaces
+> the group's values with another row's from the same cell, so a target whose
+> values were typical anyway has a `Φ` drawn from the same distribution before
+> and after, and nothing collapses. This is a statement about what the control
+> can measure, not a licence to pick the day that flatters it: the test asserts
+> the collapse on a group the *baseline ranking* named, and refuses to report a
+> collapse for a group whose `|Φ|` was already zero.
+
 **Seam 8 — the rules cannot write.** Property test: for every rule, for randomly
 generated payloads, the post-rule payload's `p`, band, `E[Y]`, every `φ`, every
 share and every rank-underlying value are **byte-identical** to the pre-rule
