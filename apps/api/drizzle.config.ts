@@ -3,7 +3,7 @@ import { defineConfig } from "drizzle-kit";
 // DATABASE_URL is read from .env (Bun/drizzle-kit load it). Used by
 // `bun run db:generate` (create migrations) and `bun run db:migrate` (apply).
 export default defineConfig({
-  schema: "./src/database/schema.ts",
+  schema: ["./src/database/schema.ts", "./src/database/canonical-views.ts"],
   out: "./drizzle",
   dialect: "postgresql",
   dbCredentials: { url: process.env.DATABASE_URL ?? "" },

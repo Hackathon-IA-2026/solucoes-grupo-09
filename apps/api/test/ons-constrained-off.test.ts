@@ -74,11 +74,11 @@ describe("constrained-off · hourly rollup from a half-hourly source", () => {
     expect(first?.halfHoursObserved).toBe(2);
     // MWmed over 30 minutes is half as many MWh, so the hour is the mean of the
     // two half-hour powers — not their sum.
-    expect(first?.generationMwh).toBeCloseTo((402.459 + 397.262) / 2, 6);
+    expect(first?.verifiedGenerationMwh).toBeCloseTo((402.459 + 397.262) / 2, 6);
   });
 
   it("averages availability rather than summing it — it is a power", () => {
-    expect(parse.rows[0]?.availabilityMw).toBeCloseTo((402.582 + 406.212) / 2, 6);
+    expect(parse.rows[0]?.availableCapacityMw).toBeCloseTo((402.582 + 406.212) / 2, 6);
   });
 
   it("records an incomplete hour instead of letting it look like a low one", () => {

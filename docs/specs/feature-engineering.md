@@ -82,7 +82,7 @@ range and serving passes tomorrow's date, and they execute **the same expression
 over the same tables**. Train/serve skew stops being something to avoid and
 becomes something that cannot be expressed.
 
-**The tables it reads through are the canonical views** of ticket 013, not the
+**The tables it reads through are the canonical views** of tickets 013/016, not the
 ingest tables. The feature function is where ONS's conventions would get
 reimplemented if anywhere, so it must not be able to see a padded code, an
 average-power value or an end-of-interval timestamp in the first place. Ticket

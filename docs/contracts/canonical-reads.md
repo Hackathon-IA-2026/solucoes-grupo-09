@@ -3,14 +3,19 @@
 > What the modelling side reads, and the reason it never reads a fact table.
 >
 > Vocabulary authority: [`../domain-model.md`](../domain-model.md). Every name
-> below is that document's. Where the ingest layer's own field name has drifted
-> from it, the contract restores the domain model's name and the drift is listed
-> in [Two corrections](#two-corrections-against-the-ingest-layer).
+> below is that document's, and since ticket 016 so is every name underneath it
+> — see [The corrections](#the-corrections-ticket-016-made-at-the-source).
 >
-> Implementation: `apps/api/src/contract/` (TypeScript), served by
-> `apps/api/src/api/canonical.ts` at `/v1/canonical`. Consumer-side vocabulary:
-> `apps/ml/src/wattsteer_ml/canonical.py`. Ticket:
-> `.scratch/data-platform/issues/13-canonical-read-contract.md`.
+> Implementation: **the contract is a set of SQL views**,
+> `apps/api/src/database/canonical-views.ts`, shipped as migrations `0012`
+> (the read axes) and `0013` (the views). Two callers, no other:
+> `apps/api/src/contract/reads.ts` for TypeScript and the `/v1/canonical` routes,
+> and `apps/ml/src/wattsteer_ml/canonical_reads.py` for the modelling service,
+> which reads Postgres directly on its read-only role. Shared vocabulary and the
+> vintage rule: `apps/api/src/contract/{manifest,vintage}.ts` and
+> `apps/ml/src/wattsteer_ml/canonical.py`. Tickets:
+> `.scratch/data-platform/issues/13-canonical-read-contract.md` (the contract),
+> `.scratch/data-platform/issues/16-canonical-transport.md` (the move into SQL).
 
 ## Why this exists
 
@@ -156,6 +161,53 @@ read**: the later run wins as a newer vintage of the same hours, which is the
 D−1 12Z-supersedes-00Z rule falling out of the bitemporal model rather than
 being special-cased. Pass it only to answer "what did the 00Z run say?".
 
+Both are **axes, not filters** — see the next section. Applying either yourself,
+outside the view, is a different and quietly wrong query.
+
+## How to read it: the views and their axes
+
+Each read is one view, named from its manifest name by one rule —
+`curtailment-by-plant` → `canonical_curtailment_by_plant`. The rule is applied
+in both languages (`view_name` in Python, the same transform asserted in
+`apps/api/test/contract.test.ts`) rather than tabulated, so a renamed view cannot
+leave a stale entry behind that still parses. There is a ninth view,
+`canonical_read_go_live`, which is not a read: it is the go-live instant per
+read, and it is the only input the fidelity rule takes from the database.
+
+A view cannot take an argument, so the axes travel as session settings and the
+view reads them back through the functions in `drizzle/0012_canonical_read_axes.sql`:
+
+| Setting | Required | Used by |
+|---|---|---|
+| `wattsteer.as_of` | **always** | every read |
+| `wattsteer.fleet_date` | registry reads | `installed-capacity`, `conjunto-membership` |
+| `wattsteer.published_at_or_before` | no | `day-ahead-balance` |
+| `wattsteer.weather_run_cycle` | no | `weather-forecast` |
+
+Two properties are worth stating plainly, because both are load-bearing:
+
+1. **`canonical_as_of()` raises rather than defaulting.** There is no fallback
+   to `now()`. A view that answered latest-version when the axis was forgotten
+   would be indistinguishable from a correct answer, which is precisely the
+   failure `AsOf` exists to prevent; SQLSTATE `22023` is the alternative.
+2. **The two optional axes are applied *inside* the version pick, not after.**
+   Both restrict a column that is not part of the business key, so "the latest
+   version of the 00Z run" is a different query from "the latest version,
+   discarded if it turned out to be 12Z" — and the day-ahead gate has exactly
+   the same shape. Every filter a *caller* applies (`valid_time`, subsystem,
+   technology, entity code, centroid) is on a key column, where inside and
+   outside are the same question.
+
+Set them with `set_config(..., true)` inside a transaction, so they cannot
+outlive it and cannot leak onto a pooled connection. `applyAxes` /`withAxes`
+(`apps/api/src/contract/scope.ts`) and `apply_axes`
+(`apps/ml/src/wattsteer_ml/canonical_reads.py`) are the only two places that do.
+
+**The `/v1/canonical/*` routes still serve**, from these same views, for the web
+app and for debugging. They are no longer the modelling path: putting a ~37M-row
+training read through JSON and making `ml → api → ml` a dependency cycle is what
+ticket 016 removed.
+
 ## Reads only, and no migration rights
 
 Two layers, and the second does not depend on the first:
@@ -166,6 +218,13 @@ Two layers, and the second does not depend on the first:
    (`apps/api/src/contract/read-only.ts`). A write or a DDL statement from
    inside one raises `25006 read_only_sql_transaction` — asserted in
    `apps/api/test/database-contract.test.ts`, not merely intended.
+
+A view is a read-only surface by construction, and none of these is auto-updatable
+in Postgres' sense — every one has a `DISTINCT ON`, an aggregate or a `UNION`. So
+the boundary did not weaken when the contract moved into SQL; it acquired a third
+layer. In production the ML service should additionally connect as a role granted
+`SELECT` on the `canonical_*` views and nothing else, which is the layer that
+survives a leaked connection string.
 
 The transaction earns its round trip twice: it also gives a composed read **one
 snapshot**, so a `training-window` spanning an ingest commit cannot return
@@ -191,16 +250,34 @@ An inverted or empty window is a **400**, not an empty result: an empty result
 would read as "there was no curtailment", which is a different and much worse
 statement than "your window is backwards".
 
-## Two corrections against the ingest layer
+## The corrections ticket 016 made at the source
 
-The repositories under `apps/api/src/ingest/` name two quantities differently
-from `docs/domain-model.md` §4. The contract restores the domain model's names,
-and the consumer only ever sees the right-hand column.
+Ticket 013 corrected two drifted field names *at the contract's edge*: the
+repositories under `apps/api/src/ingest/` named two quantities differently from
+`docs/domain-model.md` §4, and the contract renamed them on the way past. That
+made the domain model true for a consumer while leaving it false in the schema,
+which is the wrong half to fix — and it is a compensating rename, which is the
+kind of thing that only stays correct while someone remembers it.
 
-| Ingest field | Contract field | ONS source |
+The columns carry the domain model's names now, and there is no rename left
+anywhere to perform:
+
+| Was | Is, in `curtailment_report_hour` | ONS source |
 |---|---|---|
-| `generationMwh` | `verified_generation_mwh` | `val_geracao` |
-| `availabilityMw` | `available_capacity_mw` | `val_disponibilidade` |
+| `generation_mwh` | `verified_generation_mwh` | `val_geracao` |
+| `availability_mw` | `available_capacity_mw` | `val_disponibilidade` |
+
+The same ticket made two other things true that the composing contract could not:
+
+- **`reporting_entity_kind` is on every curtailment row** (`CONJUNTO` or
+  `PLANT`). A consumer can tell a conjunto row from a self-reporting plant row
+  without a second call — the first thing a screen showing a restriction cause
+  has to say. The view joins `reporting_entity`; a module composing repositories
+  had no place to put that join.
+- **`vintageFidelity` has one implementation per language.** It had been written
+  out identically in nine places on the TypeScript side, beside the one that was
+  actually tested. The survivor is `apps/api/src/contract/vintage.ts`, and
+  `apps/api/test/contract.test.ts` asserts it is the only one.
 
 ## How the two languages are kept from drifting
 
@@ -211,6 +288,14 @@ implementation against them; `apps/ml/tests/test_canonical_contract.py` asserts
 the Python one. **Neither side compares against the other** — only against
 `expected` — so a shared misunderstanding cannot cancel out, and both suites
 fail if the directory holds a case they did not enumerate.
+
+**`vintageFidelity` is the one thing left duplicated on purpose.** Everything
+that shapes a row moved into SQL in ticket 016; an inequality between two
+timestamps did not. It is bound in both languages by these vectors, and pushing
+it into the database would cost the one part of this contract that is testable
+without one. What the database supplies is its input — `canonical_read_go_live`
+— and nothing else. The views themselves contain neither `point_in_time` nor
+`revision_optimistic`, which `apps/api/test/contract.test.ts` checks.
 
 The shape is recovered from the template's deleted resolver-parity suite
 (`packages/core/test/resolve.test.ts`, before commit `9b8a1fc`), which is the

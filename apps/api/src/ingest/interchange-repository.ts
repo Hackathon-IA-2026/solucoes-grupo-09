@@ -1,8 +1,10 @@
 import { sql } from "drizzle-orm";
+import { readGoLive, withAxes } from "../contract/scope.js";
+import { type VintageFidelity, vintageFidelity } from "../contract/vintage.js";
+import { canonicalSystemExchange } from "../database/canonical-views.js";
 import type { Database } from "../database/connection.js";
 import { subsystemExchangeHour } from "../database/schema.js";
 import type { SubsystemCode } from "./normalise.js";
-import type { VintageFidelity } from "./repository.js";
 import type { SubsystemExchangeHour } from "./types.js";
 import {
   digestValues,
@@ -97,7 +99,7 @@ export interface SubsystemExchangeAsOfQuery {
   subsystem?: SubsystemCode;
 }
 
-/** `AsOf(t)` — the only sanctioned read of this table. */
+/** `AsOf(t)` — the only sanctioned read of this table, through its view. */
 export async function readSubsystemExchangeAsOf(
   db: Database,
   query: SubsystemExchangeAsOfQuery,
@@ -106,47 +108,42 @@ export async function readSubsystemExchangeAsOf(
     ? sql`and (from_subsystem = ${query.subsystem} or to_subsystem = ${query.subsystem})`
     : sql``;
 
-  const rows = await db.execute<{
-    from_subsystem: SubsystemCode;
-    to_subsystem: SubsystemCode;
-    valid_time: string;
-    data_version: number;
-    verified_exchange_mwh: number;
-    programmed_exchange_mwh: number | null;
-    published_at: string;
-    ingested_at: string;
-  }>(sql`
-    select distinct on (from_subsystem, to_subsystem, valid_time)
-      from_subsystem, to_subsystem, valid_time, data_version,
-      verified_exchange_mwh, programmed_exchange_mwh,
-      published_at, ingested_at
-    from subsystem_exchange_hour
-    where ingested_at <= ${query.asOf.toISOString()}::timestamptz
-      and valid_time >= ${query.from.toISOString()}::timestamptz
-      and valid_time < ${query.to.toISOString()}::timestamptz
-      ${linkFilter}
-    order by from_subsystem, to_subsystem, valid_time, ingested_at desc, data_version desc
-  `);
+  return withAxes(db, { asOf: query.asOf }, async (tx) => {
+    const rows = await tx.execute<{
+      from_subsystem: SubsystemCode;
+      to_subsystem: SubsystemCode;
+      valid_time: string;
+      data_version: number;
+      verified_exchange_mwh: number;
+      programmed_exchange_mwh: number | null;
+      published_at: string;
+      ingested_at: string;
+    }>(sql`
+      select * from ${canonicalSystemExchange}
+      where valid_time >= ${query.from.toISOString()}::timestamptz
+        and valid_time < ${query.to.toISOString()}::timestamptz
+        ${linkFilter}
+      order by from_subsystem, to_subsystem, valid_time
+    `);
 
-  const [goLive] = await db.execute<{ go_live: string | null }>(
-    sql`select min(ingested_at) as go_live from subsystem_exchange_hour`,
-  );
-  const goLiveAt = goLive?.go_live ? new Date(goLive.go_live) : null;
+    const goLiveAt = await readGoLive(tx, "system-exchange");
 
-  return {
-    rows: [...rows].map((row) => ({
-      fromSubsystem: row.from_subsystem,
-      toSubsystem: row.to_subsystem,
-      validTime: new Date(row.valid_time),
-      verifiedExchangeMwh: Number(row.verified_exchange_mwh),
-      programmedExchangeMwh:
-        row.programmed_exchange_mwh === null ? null : Number(row.programmed_exchange_mwh),
-      dataVersion: row.data_version,
-      publishedAt: new Date(row.published_at),
-      ingestedAt: new Date(row.ingested_at),
-    })),
-    vintageFidelity:
-      goLiveAt && query.from >= goLiveAt ? "point_in_time" : "revision_optimistic",
-    goLiveAt,
-  };
+    return {
+      rows: [...rows].map((row) => ({
+        fromSubsystem: row.from_subsystem,
+        toSubsystem: row.to_subsystem,
+        validTime: new Date(row.valid_time),
+        verifiedExchangeMwh: Number(row.verified_exchange_mwh),
+        programmedExchangeMwh:
+          row.programmed_exchange_mwh === null
+            ? null
+            : Number(row.programmed_exchange_mwh),
+        dataVersion: row.data_version,
+        publishedAt: new Date(row.published_at),
+        ingestedAt: new Date(row.ingested_at),
+      })),
+      vintageFidelity: vintageFidelity(query.from, goLiveAt),
+      goLiveAt,
+    };
+  });
 }

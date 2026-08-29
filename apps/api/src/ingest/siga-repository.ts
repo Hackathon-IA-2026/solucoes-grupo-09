@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
+import { type VintageFidelity, vintageFidelity } from "../contract/vintage.js";
 import type { Database } from "../database/connection.js";
 import { plantGeo, sigaSnapshot } from "../database/schema.js";
-import type { VintageFidelity } from "./repository.js";
 import type {
   CoordinateRejection,
   PlantLocationSource,
@@ -336,8 +336,7 @@ export async function readPlantLocationsAsOf(
     // SIGA has no archive at all: before WattSteer's first snapshot the only
     // answer available is today's extract, and the read says so rather than
     // implying a point-in-time reconstruction it cannot make.
-    vintageFidelity:
-      goLiveAt && query.asOf >= goLiveAt ? "point_in_time" : "revision_optimistic",
+    vintageFidelity: vintageFidelity(query.asOf, goLiveAt),
     goLiveAt,
   };
 }

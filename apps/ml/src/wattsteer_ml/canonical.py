@@ -2,10 +2,19 @@
 
 **This module is why the modelling service never reads a fact table.** The
 platform owns ONS's conventions and resolves every one of them at ingest; what
-reaches here is WattSteer's own vocabulary, served by
-`apps/api/src/api/canonical.ts` under `/v1/canonical`. A padded subsystem code,
-an average-power value, a `SIN` aggregate row and an end-of-interval timestamp
-are all things this side has never seen and has no code to handle.
+reaches here is WattSteer's own vocabulary, served by the canonical **views**
+(`apps/api/src/database/canonical-views.ts`) and read by
+:mod:`wattsteer_ml.canonical_reads` on this service's own read-only role. A
+padded subsystem code, an average-power value, a `SIN` aggregate row and an
+end-of-interval timestamp are all things this side has never seen and has no
+code to handle.
+
+Ticket 016 is what makes that sentence true rather than aspirational. While the
+contract was TypeScript it could only reach Python over HTTP, so this module
+carried a URL builder and the modelling side called the gateway; the views moved
+the definition somewhere both languages can hold it, and the URL builder is gone
+with the need for it. **This service has no HTTP client and must never grow
+one.**
 
 What lives here is the half of the contract that has to exist in *both*
 languages:
@@ -17,6 +26,13 @@ languages:
   whether an answer is honestly point-in-time. It is four lines of arithmetic
   over two instants and it decides whether a backtest number means anything,
   which is exactly the kind of rule two languages get subtly different.
+
+  This is the **one** thing ticket 016 deliberately left duplicated. Everything
+  that shapes a row moved into SQL; an inequality between two timestamps did
+  not, because the golden vectors already bind the two implementations and
+  because pushing it into the database would cost the one part of this contract
+  that is testable without one. The database supplies its input — the go-live
+  instant, from ``canonical_read_go_live`` — and nothing else.
 
 Neither is copied from the TypeScript at runtime; both are asserted against the
 shared golden vectors in ``packages/core/fixtures/canonical-contract/``, which
@@ -34,7 +50,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
-from urllib.parse import urlencode
 
 #: Observation or forecast, decided structurally rather than by a flag.
 #: `docs/domain-model.md` §4: an Observation always has
@@ -73,11 +88,6 @@ class CanonicalRead:
     #: Which axis decides this read's fidelity — the valid-time window for a
     #: fact table, the fleet date for a registry read.
     fidelity_axis: Literal["valid_time", "as_of", "fleet_date"]
-
-    @property
-    def path(self) -> str:
-        """The URL path of this read. One place the shape is written down."""
-        return f"{CANONICAL_BASE_PATH}/{self.name}"
 
 
 #: Every read the contract exposes, in the order the modelling side meets them.
@@ -227,15 +237,13 @@ def combine_go_live(sources: list[VintageSource]) -> datetime | None:
     return latest
 
 
-def read_url(base_url: str, name: str, **params: str) -> str:
-    """The URL of one canonical read against a gateway.
-
-    ``as_of`` is not defaulted here and is not defaulted by the gateway either:
-    a default would let a caller who never thought about vintage receive an
-    answer that looks authoritative, which is the failure ``AsOf`` exists to
-    prevent. Passing it is the caller's decision to make.
-    """
-    if name not in CANONICAL_READ_BY_NAME:
-        raise KeyError(f"{name!r} is not a canonical read")
-    query = f"?{urlencode(params)}" if params else ""
-    return f"{base_url.rstrip('/')}{CANONICAL_READ_BY_NAME[name].path}{query}"
+# There is deliberately no URL builder in this module any more.
+#
+# Ticket 013 left one here — a `read_url` that composed a gateway base URL with
+# a read's path — against the day the modelling side would call `/v1/canonical`
+# over HTTP. Ticket 016 settled that it never will: the contract is SQL views,
+# and `canonical_reads.py` reads them on this service's own read-only role. The
+# builder was the last thing in `apps/ml` shaped like an HTTP client, and a
+# dead one is an invitation. `CANONICAL_BASE_PATH` survives it because the
+# routes themselves survive — for the web app and for debugging — and because
+# the shared manifest vector still pins the path both languages agree on.

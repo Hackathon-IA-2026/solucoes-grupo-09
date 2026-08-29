@@ -59,14 +59,14 @@ what was ticket 017):
 
 **Blocked by:** 13 (merged).
 
-**Status:** ready-for-agent
+**Status:** implemented on branch `ticket-16-canonical-views`
 
-- [ ] The canonical reads are SQL views, shipped as a migration, owning the row vocabulary
-- [ ] `contract/reads.ts` becomes a thin caller over the views; the composing logic and its compensating renames are gone
-- [ ] `apps/ml` reads the views directly on its read-only role, and adds no HTTP client
-- [ ] `/v1/canonical/*` still serves, for the web app and debugging, from the same views
-- [ ] The golden vectors still bind both languages, and `vintageFidelity` stays the one duplicated-by-design piece
-- [ ] The two drifted field names are corrected at the source
-- [ ] The eight duplicate `vintageFidelity` implementations are gone
-- [ ] A curtailment consumer can tell a conjunto row from a plant row without a second call
-- [ ] `api-surface.md` and `feature-engineering.md` agree with what was built
+- [x] The canonical reads are SQL views, shipped as a migration, owning the row vocabulary
+- [x] `contract/reads.ts` becomes a thin caller over the views; the composing logic and its compensating renames are gone
+- [x] `apps/ml` reads the views directly on its read-only role, and adds no HTTP client
+- [x] `/v1/canonical/*` still serves, for the web app and debugging, from the same views
+- [x] The golden vectors still bind both languages, and `vintageFidelity` stays the one duplicated-by-design piece
+- [x] The two drifted field names are corrected at the source
+- [x] The eight duplicate `vintageFidelity` implementations are gone
+- [x] A curtailment consumer can tell a conjunto row from a plant row without a second call
+- [x] `api-surface.md` and `feature-engineering.md` agree with what was built

@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
 import { and, gte, lte, sql } from "drizzle-orm";
+import { readGoLive, withAxes } from "../contract/scope.js";
+import { type VintageFidelity, vintageFidelity } from "../contract/vintage.js";
+import { canonicalWeatherForecast } from "../database/canonical-views.js";
 import type { Database } from "../database/connection.js";
 import { weatherForecastHour, weatherRunRequest } from "../database/schema.js";
 import { UpstreamError } from "../errors.js";
 import type { PayloadArchive } from "./archive.js";
 import { retainPayload } from "./custody.js";
-import type { VintageFidelity } from "./repository.js";
 import type { WeatherForecastHour } from "./types.js";
 import {
   digestValues,
@@ -372,85 +374,77 @@ export async function readWeatherForecastAsOf(
           sql`, `,
         )})`
       : sql``;
-  const cycleFilter = query.runCycle
-    ? sql`and run_cycle = ${query.runCycle}::weather_run_cycle`
-    : sql``;
 
-  const rows = await db.execute<{
-    centroid_id: string;
-    valid_time: string;
-    grid_latitude: number;
-    grid_longitude: number;
-    grid_elevation_m: number;
-    run_cycle: RunCycle;
-    run_age_hours: number;
-    data_version: number;
-    wind_speed100m_kmh: number | null;
-    wind_speed120m_kmh: number | null;
-    wind_direction120m_deg: number | null;
-    wind_gusts10m_kmh: number | null;
-    temperature2m_c: number | null;
-    surface_pressure_hpa: number | null;
-    relative_humidity2m_pct: number | null;
-    precipitation_mm: number | null;
-    shortwave_radiation_wm2: number | null;
-    direct_normal_irradiance_wm2: number | null;
-    diffuse_radiation_wm2: number | null;
-    cloud_cover_pct: number | null;
-    published_at: string;
-    ingested_at: string;
-  }>(sql`
-    select distinct on (centroid_id, valid_time)
-      centroid_id, valid_time, grid_latitude, grid_longitude, grid_elevation_m,
-      run_cycle, run_age_hours, data_version,
-      wind_speed100m_kmh, wind_speed120m_kmh, wind_direction120m_deg,
-      wind_gusts10m_kmh, temperature2m_c, surface_pressure_hpa,
-      relative_humidity2m_pct, precipitation_mm, shortwave_radiation_wm2,
-      direct_normal_irradiance_wm2, diffuse_radiation_wm2, cloud_cover_pct,
-      published_at, ingested_at
-    from weather_forecast_hour
-    where ingested_at <= ${query.asOf.toISOString()}::timestamptz
-      and valid_time >= ${query.from.toISOString()}::timestamptz
-      and valid_time < ${query.to.toISOString()}::timestamptz
-      ${centroidFilter}
-      ${cycleFilter}
-    order by centroid_id, valid_time, ingested_at desc, data_version desc
-  `);
+  // The run cycle is an *axis*, not a filter: `canonical_weather_forecast`
+  // applies it before choosing a version, because "the latest version of the
+  // 00Z run" is not "the latest version, discarded if it turned out to be 12Z".
+  return withAxes(
+    db,
+    { asOf: query.asOf, weatherRunCycle: query.runCycle },
+    async (tx) => {
+      const rows = await tx.execute<{
+        centroid_id: string;
+        valid_time: string;
+        grid_latitude: number;
+        grid_longitude: number;
+        grid_elevation_m: number;
+        run_cycle: RunCycle;
+        run_age_hours: number;
+        data_version: number;
+        wind_speed100m_kmh: number | null;
+        wind_speed120m_kmh: number | null;
+        wind_direction120m_deg: number | null;
+        wind_gusts10m_kmh: number | null;
+        temperature2m_c: number | null;
+        surface_pressure_hpa: number | null;
+        relative_humidity2m_pct: number | null;
+        precipitation_mm: number | null;
+        shortwave_radiation_wm2: number | null;
+        direct_normal_irradiance_wm2: number | null;
+        diffuse_radiation_wm2: number | null;
+        cloud_cover_pct: number | null;
+        published_at: string;
+        ingested_at: string;
+      }>(sql`
+      select * from ${canonicalWeatherForecast}
+      where valid_time >= ${query.from.toISOString()}::timestamptz
+        and valid_time < ${query.to.toISOString()}::timestamptz
+        ${centroidFilter}
+      order by centroid_id, valid_time
+    `);
 
-  const [live] = await db.execute<{ go_live: string | null }>(
-    sql`select min(ingested_at) as go_live from weather_forecast_hour`,
+      const goLiveAt = await readGoLive(tx, "weather-forecast");
+      const number = (value: number | null): number | null =>
+        value === null ? null : Number(value);
+
+      return {
+        rows: [...rows].map((row) => ({
+          centroidId: row.centroid_id,
+          validTime: new Date(row.valid_time),
+          gridLatitude: Number(row.grid_latitude),
+          gridLongitude: Number(row.grid_longitude),
+          gridElevationM: Number(row.grid_elevation_m),
+          runInitTime: new Date(row.published_at),
+          runCycle: row.run_cycle,
+          runAgeHours: Number(row.run_age_hours),
+          dataVersion: row.data_version,
+          ingestedAt: new Date(row.ingested_at),
+          windSpeed100mKmh: number(row.wind_speed100m_kmh),
+          windSpeed120mKmh: number(row.wind_speed120m_kmh),
+          windDirection120mDeg: number(row.wind_direction120m_deg),
+          windGusts10mKmh: number(row.wind_gusts10m_kmh),
+          temperature2mC: number(row.temperature2m_c),
+          surfacePressureHpa: number(row.surface_pressure_hpa),
+          relativeHumidity2mPct: number(row.relative_humidity2m_pct),
+          precipitationMm: number(row.precipitation_mm),
+          shortwaveRadiationWm2: number(row.shortwave_radiation_wm2),
+          directNormalIrradianceWm2: number(row.direct_normal_irradiance_wm2),
+          diffuseRadiationWm2: number(row.diffuse_radiation_wm2),
+          cloudCoverPct: number(row.cloud_cover_pct),
+        })),
+        vintageFidelity: vintageFidelity(query.from, goLiveAt),
+        goLiveAt,
+      };
+    },
   );
-  const goLiveAt = live?.go_live ? new Date(live.go_live) : null;
-  const number = (value: number | null): number | null =>
-    value === null ? null : Number(value);
-
-  return {
-    rows: [...rows].map((row) => ({
-      centroidId: row.centroid_id,
-      validTime: new Date(row.valid_time),
-      gridLatitude: Number(row.grid_latitude),
-      gridLongitude: Number(row.grid_longitude),
-      gridElevationM: Number(row.grid_elevation_m),
-      runInitTime: new Date(row.published_at),
-      runCycle: row.run_cycle,
-      runAgeHours: Number(row.run_age_hours),
-      dataVersion: row.data_version,
-      ingestedAt: new Date(row.ingested_at),
-      windSpeed100mKmh: number(row.wind_speed100m_kmh),
-      windSpeed120mKmh: number(row.wind_speed120m_kmh),
-      windDirection120mDeg: number(row.wind_direction120m_deg),
-      windGusts10mKmh: number(row.wind_gusts10m_kmh),
-      temperature2mC: number(row.temperature2m_c),
-      surfacePressureHpa: number(row.surface_pressure_hpa),
-      relativeHumidity2mPct: number(row.relative_humidity2m_pct),
-      precipitationMm: number(row.precipitation_mm),
-      shortwaveRadiationWm2: number(row.shortwave_radiation_wm2),
-      directNormalIrradianceWm2: number(row.direct_normal_irradiance_wm2),
-      diffuseRadiationWm2: number(row.diffuse_radiation_wm2),
-      cloudCoverPct: number(row.cloud_cover_pct),
-    })),
-    vintageFidelity:
-      goLiveAt && query.from >= goLiveAt ? "point_in_time" : "revision_optimistic",
-    goLiveAt,
-  };
 }

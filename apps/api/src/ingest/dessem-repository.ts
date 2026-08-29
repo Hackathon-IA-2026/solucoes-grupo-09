@@ -1,9 +1,11 @@
 import { sql } from "drizzle-orm";
+import { readGoLive, withAxes } from "../contract/scope.js";
+import { type VintageFidelity, vintageFidelity } from "../contract/vintage.js";
+import { canonicalDayAheadBalance } from "../database/canonical-views.js";
 import type { Database } from "../database/connection.js";
 import { dessemBalanceHalfHour } from "../database/schema.js";
 import { UpstreamError } from "../errors.js";
 import type { SubsystemCode } from "./normalise.js";
-import type { VintageFidelity } from "./repository.js";
 import type { DessemBalanceHalfHour } from "./types.js";
 import {
   digestValues,
@@ -172,76 +174,72 @@ export async function readDessemBalanceAsOf(
   const subsystemFilter = query.subsystem
     ? sql`and subsystem = ${query.subsystem}`
     : sql``;
-  const gateFilter = query.publishedAtOrBefore
-    ? sql`and published_at <= ${query.publishedAtOrBefore.toISOString()}::timestamptz`
-    : sql``;
 
-  const rows = await db.execute<{
-    subsystem: SubsystemCode;
-    valid_time: string;
-    forecast_producer: DessemBalanceAsOfRow["forecastProducer"];
-    run_label: string;
-    data_version: number;
-    demand_mw: number;
-    hydro_generation_mw: number;
-    small_hydro_generation_mw: number;
-    thermal_generation_mw: number;
-    small_thermal_generation_mw: number;
-    wind_generation_mw: number;
-    solar_generation_mw: number;
-    mmgd_generation_mw: number;
-    pumping_consumption_mw: number;
-    published_at: string;
-    ingested_at: string;
-  }>(sql`
-    select distinct on (subsystem, valid_time)
-      subsystem, valid_time, forecast_producer, run_label, data_version,
-      demand_mw, hydro_generation_mw, small_hydro_generation_mw,
-      thermal_generation_mw, small_thermal_generation_mw,
-      wind_generation_mw, solar_generation_mw, mmgd_generation_mw,
-      pumping_consumption_mw, published_at, ingested_at
-    from dessem_balance_half_hour
-    where ingested_at <= ${query.asOf.toISOString()}::timestamptz
-      and valid_time >= ${query.from.toISOString()}::timestamptz
-      and valid_time < ${query.to.toISOString()}::timestamptz
-      ${subsystemFilter}
-      ${gateFilter}
-    order by subsystem, valid_time, ingested_at desc, data_version desc
-  `);
-
-  const [live] = await db.execute<{ go_live: string | null }>(
-    sql`select min(ingested_at) as go_live from dessem_balance_half_hour`,
-  );
-  const goLiveAt = live?.go_live ? new Date(live.go_live) : null;
-
-  return {
-    rows: [...rows].map((row) => {
-      const validTime = new Date(row.valid_time);
-      const publishedAt = new Date(row.published_at);
-      return {
-        subsystem: row.subsystem,
-        validTime,
-        referenceDay: row.run_label,
-        forecastProducer: row.forecast_producer,
-        demandMw: Number(row.demand_mw),
-        hydroGenerationMw: Number(row.hydro_generation_mw),
-        smallHydroGenerationMw: Number(row.small_hydro_generation_mw),
-        thermalGenerationMw: Number(row.thermal_generation_mw),
-        smallThermalGenerationMw: Number(row.small_thermal_generation_mw),
-        windGenerationMw: Number(row.wind_generation_mw),
-        solarGenerationMw: Number(row.solar_generation_mw),
-        mmgdGenerationMw: Number(row.mmgd_generation_mw),
-        pumpingConsumptionMw: Number(row.pumping_consumption_mw),
-        dataVersion: row.data_version,
-        publishedAt,
-        ingestedAt: new Date(row.ingested_at),
-        leadTimeMinutes: Math.round(
-          (validTime.getTime() - publishedAt.getTime()) / MS_PER_MINUTE,
-        ),
-      };
-    }),
-    vintageFidelity:
-      goLiveAt && query.from >= goLiveAt ? "point_in_time" : "revision_optimistic",
-    goLiveAt,
+  // The gate is an *axis*, not a filter: `canonical_day_ahead_balance` applies
+  // it before choosing a version, because the row wanted is the latest ingested
+  // one among those published by the gate — not the latest ingested one,
+  // discarded if it turned out to have been published late.
+  const axes = {
+    asOf: query.asOf,
+    publishedAtOrBefore: query.publishedAtOrBefore,
   };
+
+  return withAxes(db, axes, async (tx) => {
+    const rows = await tx.execute<{
+      subsystem: SubsystemCode;
+      valid_time: string;
+      forecast_producer: DessemBalanceAsOfRow["forecastProducer"];
+      run_label: string;
+      data_version: number;
+      demand_mw: number;
+      hydro_generation_mw: number;
+      small_hydro_generation_mw: number;
+      thermal_generation_mw: number;
+      small_thermal_generation_mw: number;
+      wind_generation_mw: number;
+      solar_generation_mw: number;
+      mmgd_generation_mw: number;
+      pumping_consumption_mw: number;
+      published_at: string;
+      ingested_at: string;
+    }>(sql`
+      select * from ${canonicalDayAheadBalance}
+      where valid_time >= ${query.from.toISOString()}::timestamptz
+        and valid_time < ${query.to.toISOString()}::timestamptz
+        ${subsystemFilter}
+      order by subsystem, valid_time
+    `);
+
+    const goLiveAt = await readGoLive(tx, "day-ahead-balance");
+
+    return {
+      rows: [...rows].map((row) => {
+        const validTime = new Date(row.valid_time);
+        const publishedAt = new Date(row.published_at);
+        return {
+          subsystem: row.subsystem,
+          validTime,
+          referenceDay: row.run_label,
+          forecastProducer: row.forecast_producer,
+          demandMw: Number(row.demand_mw),
+          hydroGenerationMw: Number(row.hydro_generation_mw),
+          smallHydroGenerationMw: Number(row.small_hydro_generation_mw),
+          thermalGenerationMw: Number(row.thermal_generation_mw),
+          smallThermalGenerationMw: Number(row.small_thermal_generation_mw),
+          windGenerationMw: Number(row.wind_generation_mw),
+          solarGenerationMw: Number(row.solar_generation_mw),
+          mmgdGenerationMw: Number(row.mmgd_generation_mw),
+          pumpingConsumptionMw: Number(row.pumping_consumption_mw),
+          dataVersion: row.data_version,
+          publishedAt,
+          ingestedAt: new Date(row.ingested_at),
+          leadTimeMinutes: Math.round(
+            (validTime.getTime() - publishedAt.getTime()) / MS_PER_MINUTE,
+          ),
+        };
+      }),
+      vintageFidelity: vintageFidelity(query.from, goLiveAt),
+      goLiveAt,
+    };
+  });
 }

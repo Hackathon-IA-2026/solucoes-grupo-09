@@ -256,7 +256,7 @@ export const reportingEntity = pgTable(
  * half-hours and `half_hours_observed` records how many were actually present —
  * a partial hour stays visible instead of masquerading as a low one.
  *
- * **`availability_mw` is a mean, not a sum.** It is a power, and summing two
+ * **`available_capacity_mw` is a mean, not a sum.** It is a power, and summing two
  * half-hour availabilities would double a figure that never doubled.
  *
  * **The cause is one value object over three columns** (`docs/domain-model.md`
@@ -277,14 +277,14 @@ export const curtailmentReportHour = pgTable(
     validTime: timestamp({ withTimezone: true }).notNull(),
 
     /** Energy actually generated. */
-    generationMwh: doublePrecision().notNull(),
+    verifiedGenerationMwh: doublePrecision().notNull(),
     /** Energy withheld by the restriction — the curtailment quantity. */
     constrainedOffMwh: doublePrecision().notNull(),
     /** Reference generation, and its final settled revision. */
     referenceGenerationMwh: doublePrecision(),
     finalReferenceGenerationMwh: doublePrecision(),
     /** Mean verified availability over the hour, in MW. */
-    availabilityMw: doublePrecision(),
+    availableCapacityMw: doublePrecision(),
     /** 1 or 2. Below 2 means the source hour was incomplete. */
     halfHoursObserved: integer().notNull(),
 

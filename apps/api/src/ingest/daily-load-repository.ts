@@ -1,8 +1,8 @@
 import { sql } from "drizzle-orm";
+import { type VintageFidelity, vintageFidelity } from "../contract/vintage.js";
 import type { Database } from "../database/connection.js";
 import { subsystemLoadDay } from "../database/schema.js";
 import type { SubsystemCode } from "./normalise.js";
-import type { VintageFidelity } from "./repository.js";
 import type { LoadMethodologyRegime, SubsystemLoadDay } from "./types.js";
 import {
   digestValues,
@@ -152,8 +152,7 @@ export async function readSubsystemLoadDaysAsOf(
 
   return {
     rows: mapped,
-    vintageFidelity:
-      goLiveAt && query.from >= goLiveAt ? "point_in_time" : "revision_optimistic",
+    vintageFidelity: vintageFidelity(query.from, goLiveAt),
     goLiveAt,
     regimesSpanned: [...new Set(mapped.map((row) => row.methodologyRegime))],
   };

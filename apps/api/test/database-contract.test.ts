@@ -7,7 +7,9 @@ import {
   readPlantMeasurements,
   readSystemContext,
   readTrainingWindow,
+  withAxes,
 } from "../src/contract/index.js";
+import { toWire } from "../src/contract/wire.js";
 import { createDatabase } from "../src/database/connection.js";
 import { onsResourceVersion } from "../src/database/schema.js";
 import {
@@ -54,11 +56,11 @@ const report = (
   reportingEntityCode: ENTITY,
   technology: "WIND",
   validTime,
-  generationMwh: 100,
+  verifiedGenerationMwh: 100,
   constrainedOffMwh,
   referenceGenerationMwh: 150,
   finalReferenceGenerationMwh: null,
-  availabilityMw: 200,
+  availableCapacityMw: 200,
   halfHoursObserved: 2,
   cause,
   causeMixed: false,
@@ -190,15 +192,27 @@ suite("canonical read contract (real Postgres)", () => {
     expect(after?.dataVersion).toBe(2);
   });
 
-  it("speaks the domain model's names, not the ingest layer's", async () => {
+  it("speaks the domain model's names, all the way down to the column", async () => {
     const { rows } = await readCurtailment(db, window(NOW));
     const row = rows[0];
     expect(row).toBeDefined();
-    // `generationMwh` and `availabilityMw` upstream; §4 names them these.
     expect(row?.verifiedGenerationMwh).toBe(100);
     expect(row?.availableCapacityMw).toBe(200);
-    expect(Object.keys(row ?? {})).not.toContain("generationMwh");
-    expect(Object.keys(row ?? {})).not.toContain("availabilityMw");
+
+    // Ticket 016's drift correction: the domain model's names are the *source*
+    // names now, not a rename applied at the contract's edge. Asserted against
+    // `information_schema` rather than against the contract's output, because
+    // the claim is about the base table and a compensating rename would satisfy
+    // any assertion made on the rows alone.
+    const columns = await db.execute<{ column_name: string }>(sql`
+      select column_name from information_schema.columns
+      where table_name = 'curtailment_report_hour'
+    `);
+    const names = [...columns].map((column) => column.column_name);
+    expect(names).toContain("verified_generation_mwh");
+    expect(names).toContain("available_capacity_mw");
+    expect(names).not.toContain("generation_mwh");
+    expect(names).not.toContain("availability_mw");
   });
 
   it("carries the restriction cause as a whole value, at the grain it exists", async () => {
@@ -333,5 +347,149 @@ suite("canonical read contract (real Postgres)", () => {
       }),
     );
     expect(state).toBe("25006");
+  });
+
+  // -------------------------------------------------------------------------
+  // Ticket 016 — the contract is SQL views now
+  // -------------------------------------------------------------------------
+  //
+  // The claims below are about the *views*, queried directly, and they are the
+  // ones the move could have broken silently. A view that read latest-version
+  // instead of as-of would pass every test above: the rows would still be one
+  // per business key, the receipt would still be built, and only the numbers
+  // would be wrong — by exactly the amount a revision changed them.
+
+  /** Read a view at one `as_of`, the way `apps/ml` will. */
+  const viewAt = async (asOf: Date, relation: string) =>
+    withAxes(db, { asOf }, async (tx) => [
+      ...(await tx.execute<{ valid_time: string; constrained_off_mwh: number }>(sql`
+        select valid_time, constrained_off_mwh
+        from ${sql.raw(relation)}
+        where valid_time >= ${WINDOW_FROM.toISOString()}::timestamptz
+          and valid_time < ${WINDOW_TO.toISOString()}::timestamptz
+        order by valid_time
+      `)),
+    ]);
+
+  it("reads the view as-of, not latest-version, across a revision", async () => {
+    // HOUR_ONE was written as 10 at GO_LIVE and restated to 11 at REVISED_AT.
+    // A latest-version view answers 11 at both cuts; an as-of view answers 10
+    // at the first and 11 at the second. This is the whole correctness claim of
+    // ticket 016 and it is why the `as_of` axis exists rather than a default.
+    const atGoLive = await viewAt(GO_LIVE, "canonical_curtailment_by_reporting_entity");
+    const afterRevision = await viewAt(
+      REVISED_AT,
+      "canonical_curtailment_by_reporting_entity",
+    );
+
+    const hourOne = (rows: Array<{ valid_time: string; constrained_off_mwh: number }>) =>
+      Number(
+        rows.find((row) => new Date(row.valid_time).getTime() === HOUR_ONE.getTime())
+          ?.constrained_off_mwh,
+      );
+
+    expect(hourOne(atGoLive)).toBe(10);
+    expect(hourOne(afterRevision)).toBe(11);
+    // Both cuts still return exactly one row per business key, and the same set
+    // of keys — the revision replaced a version, it did not add a row.
+    expect(atGoLive).toHaveLength(2);
+    expect(afterRevision).toHaveLength(2);
+  });
+
+  it("also reads as-of at a cut between the two versions", async () => {
+    // One second before the restatement was ingested, the restatement did not
+    // exist. An off-by-one on the `<=` would show up here and nowhere else.
+    const justBefore = new Date(REVISED_AT.getTime() - 1000);
+    const rows = await viewAt(justBefore, "canonical_curtailment_by_reporting_entity");
+    const row = rows.find((r) => new Date(r.valid_time).getTime() === HOUR_ONE.getTime());
+    expect(Number(row?.constrained_off_mwh)).toBe(10);
+  });
+
+  it("refuses to answer at all when no as_of was set", async () => {
+    // The property that makes the one above safe to rely on. There is no
+    // default and no fallback to `now()`: a view that quietly answered
+    // latest-version when the axis was forgotten would be indistinguishable
+    // from a correct answer, so it raises instead. `22023` is
+    // `invalid_parameter_value`, raised by `canonical_as_of()`.
+    const state = await sqlStateOf(() =>
+      readOnly(db, async (tx) => {
+        await tx.execute(
+          sql`select * from canonical_curtailment_by_reporting_entity limit 1`,
+        );
+      }),
+    );
+    expect(state).toBe("22023");
+  });
+
+  it("puts the reporting entity's kind on the curtailment row itself", async () => {
+    // Ticket 016's third drift item. Before the view there was no join to make
+    // here, so a consumer could not tell a conjunto row from a self-reporting
+    // plant row without a second call — the first thing a screen showing a
+    // restriction cause has to say.
+    const { rows } = await readCurtailment(db, window(NOW));
+    expect(rows).not.toHaveLength(0);
+    for (const row of rows) {
+      expect(row.reportingEntityKind).toBe("CONJUNTO");
+    }
+  });
+
+  it("serves the same rows on the wire, from the same view", async () => {
+    // `/v1/canonical/*` keeps serving — for the web app and for debugging — and
+    // it is not a second path that could disagree: the route calls this read and
+    // hands the result to `toWire`, so the wire body is exactly this, snake-cased.
+    // (The routes themselves are exercised in `contract.test.ts`; the module-level
+    // database handle is deliberately unset in this suite, which is why the
+    // assertion is on the payload rather than on a request.)
+    const body = toWire(await readCurtailment(db, window(NOW))) as {
+      rows: Array<{
+        reporting_entity_kind: string;
+        verified_generation_mwh: number;
+        available_capacity_mw: number;
+      }>;
+      vintage: { vintage_fidelity: string };
+    };
+    expect(body.rows).toHaveLength(2);
+    expect(body.rows[0]?.reporting_entity_kind).toBe("CONJUNTO");
+    expect(body.rows[0]?.verified_generation_mwh).toBe(100);
+    expect(body.rows[0]?.available_capacity_mw).toBe(200);
+    expect(body.vintage.vintage_fidelity).toBe("revision_optimistic");
+  });
+
+  it("keeps the day-ahead gate inside the version pick, not after it", async () => {
+    // The subtle one. The gate cuts on `published_at`, which is *not* part of
+    // the business key, so applying it after the `DISTINCT ON` is a different
+    // query: it would pick the latest-ingested row and then drop it for having
+    // been published late, returning nothing. Applied inside — which is what
+    // the view does — it picks the latest-ingested row *among those published
+    // by the gate*, which is the row that was actually knowable.
+    //
+    // Here the only DESSEM row was published on D−1 evening. A gate before that
+    // instant must return nothing; a gate after it must return the row.
+    const before = await readDayAheadBalance(db, {
+      ...window(NOW),
+      publishedAtOrBefore: new Date(DESSEM_PUBLISHED.getTime() - 1000),
+    });
+    expect(before.rows).toHaveLength(0);
+
+    const after = await readDayAheadBalance(db, {
+      ...window(NOW),
+      publishedAtOrBefore: DESSEM_PUBLISHED,
+    });
+    expect(after.rows).toHaveLength(1);
+    expect(after.rows[0]?.demandMw).toBe(700);
+  });
+
+  it("leaves no read axis behind on the connection", async () => {
+    // The axes are written with `set_config(..., true)` — transaction-local —
+    // so a read cannot leave its `as_of` on a pooled connection for the next
+    // one to inherit. A session-scoped setting here would make every test above
+    // pass and production wrong on the second request.
+    await readCurtailment(db, window(GO_LIVE));
+    const [setting] = [
+      ...(await db.execute<{ as_of: string | null }>(
+        sql`select current_setting('wattsteer.as_of', true) as as_of`,
+      )),
+    ];
+    expect(setting?.as_of == null || setting.as_of === "").toBe(true);
   });
 });

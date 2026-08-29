@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { app } from "../src/api/index.js";
 import {
@@ -157,14 +157,86 @@ describe("contract · a reason is reachable only where it is observed", () => {
   });
 });
 
-describe("contract · the service reads only and holds no migration rights", () => {
-  it("composes the repositories and writes no SQL of its own", () => {
-    // The ticket's instruction, enforced. A second `DISTINCT ON` written here
-    // would be a second implementation of the as-of, and the two would drift.
+describe("contract · the reads are a thin caller over the canonical views", () => {
+  it("writes no as-of of its own and names no base table", () => {
+    // Ticket 016's instruction, enforced. A second `DISTINCT ON` written here
+    // would be a second implementation of the as-of — and this time it would
+    // drift against SQL that Python is also reading, which is worse than the
+    // TypeScript-only drift ticket 013 was guarding against.
     const reads = code("reads.ts");
     expect(reads.toLowerCase()).not.toContain("distinct on");
-    expect(reads).not.toContain("sql`");
-    expect(reads).not.toContain("db.execute");
+    for (const table of [
+      "curtailment_report_hour",
+      "plant_detail_hour",
+      "subsystem_energy_balance_hour",
+      "subsystem_exchange_hour",
+      "dessem_balance_half_hour",
+      "weather_forecast_hour",
+      "generating_unit",
+      "conjunto_membership",
+    ]) {
+      expect(reads).not.toContain(table);
+    }
+  });
+
+  it("reads exactly one view per canonical read, named by the shared rule", () => {
+    // The view a read lives in is *derived* from its manifest name, in both
+    // languages, rather than tabulated beside it — `apps/ml`'s `view_name` does
+    // the same transform and `test_canonical_contract.py` checks it from the
+    // other side. A lookup table would be a second place the pairing is written
+    // down, and the failure it invites is the quiet one: a renamed view and a
+    // stale entry that still parses.
+    const views = readFileSync(
+      join(import.meta.dir, "..", "src", "database", "canonical-views.ts"),
+      "utf8",
+    );
+    const reads = read("reads.ts");
+    for (const spec of CANONICAL_READS) {
+      const view = `canonical_${spec.name.replaceAll("-", "_")}`;
+      const binding = view.replace(/_([a-z])/g, (_, letter: string) =>
+        letter.toUpperCase(),
+      );
+      expect(views).toContain(`export const ${binding} = pgView(`);
+      expect(views).toContain(`"${view}"`);
+      // …and that binding is what `reads.ts` selects from, once per read.
+      expect(reads.split(`\${${binding}}`)).toHaveLength(2);
+    }
+  });
+
+  it("keeps the vintage rule out of SQL, and its input in", () => {
+    // The one thing deliberately not pushed into the database. What the views
+    // supply is the go-live instant; the inequality over two timestamps stays a
+    // pure function in each language, bound by the golden vectors.
+    const views = readFileSync(
+      join(import.meta.dir, "..", "src", "database", "canonical-views.ts"),
+      "utf8",
+    );
+    expect(views).not.toContain("point_in_time");
+    expect(views).not.toContain("revision_optimistic");
+    expect(views).toContain("canonical_read_go_live");
+  });
+
+  it("has exactly one implementation of the vintage rule in the whole app", () => {
+    // Ticket 016's second drift item. It was written out identically in eight
+    // `*-repository.ts` files beside the one that was actually tested; the copies
+    // are gone and the survivor is `contract/vintage.ts`.
+    const root = join(import.meta.dir, "..", "src");
+    const walk = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+        entry.isDirectory()
+          ? walk(join(dir, entry.name))
+          : entry.name.endsWith(".ts")
+            ? [join(dir, entry.name)]
+            : [],
+      );
+    const implementing = walk(root).filter((file) =>
+      /\?\s*"point_in_time"/.test(
+        readFileSync(file, "utf8").replace(/\/\*[\s\S]*?\*\//g, ""),
+      ),
+    );
+    expect(implementing.map((file) => file.replace(`${root}/`, ""))).toEqual([
+      "contract/vintage.ts",
+    ]);
   });
 
   it("reaches no write path", () => {

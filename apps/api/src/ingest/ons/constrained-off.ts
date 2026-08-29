@@ -100,11 +100,11 @@ export function cegCore(raw: string): string | null {
 interface HalfHour {
   entity: ObservedReportingEntity;
   validTime: Date;
-  generationMwh: number;
+  verifiedGenerationMwh: number;
   constrainedOffMwh: number;
   referenceGenerationMwh: number | null;
   finalReferenceGenerationMwh: number | null;
-  availabilityMw: number | null;
+  availableCapacityMw: number | null;
   cause: RestrictionCause | null;
 }
 
@@ -250,7 +250,7 @@ function normaliseRow(
         stateCode: trimmed(row.id_estado ?? ""),
       },
       validTime: zoned.instant,
-      generationMwh: mwmedToMwh(generation, SOURCE_INTERVAL_MINUTES),
+      verifiedGenerationMwh: mwmedToMwh(generation, SOURCE_INTERVAL_MINUTES),
       constrainedOffMwh: mwmedToMwh(limited ?? 0, SOURCE_INTERVAL_MINUTES),
       referenceGenerationMwh:
         reference === null ? null : mwmedToMwh(reference, SOURCE_INTERVAL_MINUTES),
@@ -259,7 +259,7 @@ function normaliseRow(
           ? null
           : mwmedToMwh(finalReference, SOURCE_INTERVAL_MINUTES),
       // A power, carried as-is — it is averaged over the hour, never summed.
-      availabilityMw: availability,
+      availableCapacityMw: availability,
       cause: cause.cause,
     },
   };
@@ -311,9 +311,9 @@ function toHours(halves: HalfHour[], technology: Technology): CurtailmentReportH
     };
 
     const availabilities = group
-      .map((half) => half.availabilityMw)
+      .map((half) => half.availableCapacityMw)
       .filter((value): value is number => value !== null);
-    const availabilityMw =
+    const availableCapacityMw =
       availabilities.length === 0
         ? null
         : availabilities.reduce((total, value) => total + value, 0) /
@@ -331,13 +331,13 @@ function toHours(halves: HalfHour[], technology: Technology): CurtailmentReportH
       reportingEntityCode: first.entity.onsCode,
       technology,
       validTime: hourStart(first.validTime),
-      generationMwh: sum((half) => half.generationMwh),
+      verifiedGenerationMwh: sum((half) => half.verifiedGenerationMwh),
       constrainedOffMwh: sum((half) => half.constrainedOffMwh),
       referenceGenerationMwh: nullableSum((half) => half.referenceGenerationMwh),
       finalReferenceGenerationMwh: nullableSum(
         (half) => half.finalReferenceGenerationMwh,
       ),
-      availabilityMw,
+      availableCapacityMw,
       halfHoursObserved: Math.min(group.length, HALF_HOURS_PER_HOUR),
       cause: dominant?.cause ?? null,
       causeMixed: reasons.size > 1,

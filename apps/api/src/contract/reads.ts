@@ -1,18 +1,20 @@
-import type { Database } from "../database/connection.js";
-import { readCurtailmentAsOf } from "../ingest/curtailment-repository.js";
-import { readDessemBalanceAsOf } from "../ingest/dessem-repository.js";
-import { readSubsystemExchangeAsOf } from "../ingest/interchange-repository.js";
-import type { SubsystemCode } from "../ingest/normalise.js";
-import { readPlantDetailAsOf } from "../ingest/plant-detail-repository.js";
+import { sql } from "drizzle-orm";
 import {
-  readConjuntoMembershipAsOf,
-  readInstalledCapacityAsOf,
-} from "../ingest/registry-repository.js";
-import { readEnergyBalanceAsOf } from "../ingest/repository.js";
-import type { Technology } from "../ingest/types.js";
-import { readWeatherForecastAsOf } from "../ingest/weather-repository.js";
+  canonicalConjuntoMembership,
+  canonicalCurtailmentByPlant,
+  canonicalCurtailmentByReportingEntity,
+  canonicalDayAheadBalance,
+  canonicalInstalledCapacity,
+  canonicalSystemContext,
+  canonicalSystemExchange,
+  canonicalWeatherForecast,
+} from "../database/canonical-views.js";
+import type { Database } from "../database/connection.js";
+import type { SubsystemCode } from "../ingest/normalise.js";
+import type { ReasonCode, RestrictionOrigin, Technology } from "../ingest/types.js";
 import type { CanonicalReadName } from "./manifest.js";
 import { readOnly } from "./read-only.js";
+import { applyAxes, type ReadAxes, readGoLive } from "./scope.js";
 import type {
   CanonicalReadResult,
   ConjuntoMembershipAtDate,
@@ -20,42 +22,59 @@ import type {
   DayAheadBalanceForecast,
   InstalledCapacityScope,
   PlantMeasurement,
+  ReportingEntityKind,
   SystemContextObservation,
   SystemExchangeObservation,
   VintageReceipt,
   WeatherForecastAtCentroid,
 } from "./types.js";
-import { combineFidelity, combineGoLive, type VintageSource } from "./vintage.js";
+import {
+  combineFidelity,
+  combineGoLive,
+  type VintageSource,
+  vintageFidelity,
+} from "./vintage.js";
 
 /**
- * The canonical reads themselves.
+ * The canonical reads themselves — a thin caller over the canonical views.
  *
- * **These compose; they do not query.** Every function here calls the as-of
- * read that already exists on the matching `src/ingest/*-repository.ts` and
- * then renames into `docs/domain-model.md`'s vocabulary. There is no `sql` tag
- * in this file and no table name, deliberately: a second `DISTINCT ON` written
- * here would be a second implementation of the one query whose correctness the
- * data-platform spec paid for, and the two would drift the first time an
- * ordering tiebreak changed.
+ * **These select; they do not shape.** Every read here is one `select` from one
+ * view in `src/database/canonical-views.ts`, plus the window predicate the
+ * caller asked for. There is no `distinct on` in this file and no base table
+ * name, deliberately: the `AsOf` pick, the renames, the grain, the unit and
+ * timestamp resolution and the vintage columns all live in the view, which is
+ * the only definition of them and the one `apps/ml` reads too.
  *
- * What the layer therefore adds is exactly three things, all of them the
- * ticket's:
+ * That is ticket 016's whole change of shape. Ticket 013's version of this file
+ * composed the ingest repositories and renamed their fields on the way past,
+ * which was right as far as TypeScript goes and unusable from Python: a
+ * TypeScript module composing TypeScript functions is not a contract a second
+ * language can hold, so the contract had to be re-served over HTTP to reach the
+ * modelling side. Moving the definition into SQL is what lets "the ML service
+ * reads Postgres directly" and "there is exactly one definition of a canonical
+ * read" both be true. The compensating renames are gone with it — the two
+ * drifted field names are corrected in the schema now, not at this edge.
  *
- * 1. **Vocabulary.** Source-shaped field names become domain names, and the
- *    ingest layer's two drifts from the domain model are corrected (see
- *    `types.ts`).
+ * What this layer still adds is three things:
+ *
+ * 1. **The typed row.** Snake-cased view columns become the domain shapes in
+ *    `types.ts`, and the two value objects the database stores as loose columns
+ *    — `RestrictionCause` and `ResourceMeasurementValue` — are put back together
+ *    as wholes, because a reason without its origin is an illegal state rather
+ *    than a partial one.
  * 2. **The vintage receipt.** Every answer carries its `VintageFidelity`, its
- *    go-live and the sources that decided them, so a consumer can always tell a
- *    point-in-time view from a revision-optimistic one — and a composition is
- *    only as honest as its weakest source.
- * 3. **The read-only boundary**, and one snapshot per answer (`read-only.ts`).
+ *    go-live and the sources that decided them. The fidelity rule stays a pure
+ *    function here and in Python — `vintage.ts` says why it is the one thing
+ *    deliberately not pushed into SQL.
+ * 3. **The read-only boundary**, one snapshot per answer, and the read axes
+ *    (`read-only.ts`, `scope.ts`).
  *
  * Each read is written twice over: a `*Within` function that takes an open
- * read-only transaction, and the exported wrapper that opens one. The split
- * exists so `readTrainingWindow` can compose several reads inside a **single**
- * snapshot; `SET TRANSACTION` cannot be reissued in a nested one, so a bundle
- * built by calling the public reads would either fail or silently span an
- * ingest commit.
+ * read-only transaction with its axes already applied, and the exported wrapper
+ * that opens one. The split exists so `readTrainingWindow` can compose several
+ * reads inside a **single** snapshot; `SET TRANSACTION` cannot be reissued in a
+ * nested one, so a bundle built by calling the public reads would either fail or
+ * silently span an ingest commit.
  */
 
 /** The two axes every fact read takes. */
@@ -74,6 +93,21 @@ export interface RegistryReadQuery {
   /** Fleet date: which units existed, which conjunto applied, on this day. */
   on: Date;
 }
+
+// ---------------------------------------------------------------------------
+// The vintage receipt
+// ---------------------------------------------------------------------------
+
+/** One source's contribution, with the fidelity rule applied on the axis it uses. */
+const sourceOf = (
+  read: CanonicalReadName,
+  fidelityAxisInstant: Date,
+  goLiveAt: Date | null,
+): VintageSource => ({
+  read,
+  vintageFidelity: vintageFidelity(fidelityAxisInstant, goLiveAt),
+  goLiveAt,
+});
 
 /** Build the receipt for a fact read composed of one or more sources. */
 function factReceipt(query: FactReadQuery, sources: VintageSource[]): VintageReceipt {
@@ -102,14 +136,13 @@ function registryReceipt(
   };
 }
 
-const source = (
-  read: CanonicalReadName,
-  result: { vintageFidelity: VintageSource["vintageFidelity"]; goLiveAt: Date | null },
-): VintageSource => ({
-  read,
-  vintageFidelity: result.vintageFidelity,
-  goLiveAt: result.goLiveAt,
-});
+/** The half-open valid-time window every fact view is filtered by. */
+const windowFilter = (query: FactReadQuery) =>
+  sql`valid_time >= ${query.from.toISOString()}::timestamptz
+      and valid_time < ${query.to.toISOString()}::timestamptz`;
+
+const number = (value: number | string | null): number | null =>
+  value === null ? null : Number(value);
 
 // ---------------------------------------------------------------------------
 // Curtailment
@@ -125,30 +158,78 @@ async function curtailmentWithin(
   tx: Database,
   query: CurtailmentReadQuery,
 ): Promise<CanonicalReadResult<CurtailmentObservation>> {
-  const result = await readCurtailmentAsOf(tx, query);
+  const technologyFilter = query.technology
+    ? sql`and technology = ${query.technology}`
+    : sql``;
+  const entityFilter = query.reportingEntityCode
+    ? sql`and reporting_entity_code = ${query.reportingEntityCode}`
+    : sql``;
+
+  const rows = await tx.execute<{
+    reporting_entity_code: string;
+    reporting_entity_kind: ReportingEntityKind;
+    technology: Technology;
+    valid_time: string;
+    constrained_off_mwh: number;
+    verified_generation_mwh: number;
+    reference_generation_mwh: number | null;
+    final_reference_generation_mwh: number | null;
+    available_capacity_mw: number | null;
+    half_hours_observed: number;
+    restriction_reason: ReasonCode | null;
+    restriction_origin: RestrictionOrigin | null;
+    restriction_description: string | null;
+    restriction_cause_mixed: boolean;
+    data_version: number;
+    published_at: string;
+    ingested_at: string;
+  }>(sql`
+    select * from ${canonicalCurtailmentByReportingEntity}
+    where ${windowFilter(query)}
+      ${technologyFilter}
+      ${entityFilter}
+    order by reporting_entity_code, technology, valid_time
+  `);
+
   return {
     read: "curtailment-by-reporting-entity",
     kind: "observation",
-    rows: result.rows.map((row) => ({
-      reportingEntityCode: row.reportingEntityCode,
+    rows: [...rows].map((row) => ({
+      reportingEntityCode: row.reporting_entity_code,
+      // Ticket 016's third drift correction: the grain of the row, on the row.
+      // Without it a consumer could not tell a conjunto from a self-reporting
+      // plant without a second call, which is the first thing a screen showing
+      // a restriction cause has to say.
+      reportingEntityKind: row.reporting_entity_kind,
       technology: row.technology,
-      validTime: row.validTime,
-      constrainedOffMwh: row.constrainedOffMwh,
-      // `generationMwh` upstream. `docs/domain-model.md` §4 names the quantity
-      // `verified_generation_mwh`; the contract speaks that name.
-      verifiedGenerationMwh: row.generationMwh,
-      referenceGenerationMwh: row.referenceGenerationMwh,
-      finalReferenceGenerationMwh: row.finalReferenceGenerationMwh,
-      // `availabilityMw` upstream; §4 names it `available_capacity_mw`.
-      availableCapacityMw: row.availabilityMw,
-      halfHoursObserved: row.halfHoursObserved,
-      restrictionCause: row.cause,
-      restrictionCauseMixed: row.causeMixed,
-      dataVersion: row.dataVersion,
-      publishedAt: row.publishedAt,
-      ingestedAt: row.ingestedAt,
+      validTime: new Date(row.valid_time),
+      constrainedOffMwh: Number(row.constrained_off_mwh),
+      verifiedGenerationMwh: Number(row.verified_generation_mwh),
+      referenceGenerationMwh: number(row.reference_generation_mwh),
+      finalReferenceGenerationMwh: number(row.final_reference_generation_mwh),
+      availableCapacityMw: number(row.available_capacity_mw),
+      halfHoursObserved: row.half_hours_observed,
+      // Reconstructed as the value object it is: all three or none.
+      restrictionCause:
+        row.restriction_reason === null || row.restriction_origin === null
+          ? null
+          : {
+              reason: row.restriction_reason,
+              origin: row.restriction_origin,
+              description: row.restriction_description,
+            },
+      restrictionCauseMixed: row.restriction_cause_mixed,
+      dataVersion: row.data_version,
+      publishedAt: new Date(row.published_at),
+      ingestedAt: new Date(row.ingested_at),
     })),
-    vintage: factReceipt(query, [source("curtailment-by-reporting-entity", result)]),
+    vintage: factReceipt(query, [
+      sourceOf(
+        "curtailment-by-reporting-entity",
+        query.from,
+        await readGoLive(tx, "curtailment-by-reporting-entity"),
+      ),
+    ]),
   };
 }
 
@@ -161,7 +242,10 @@ export async function readCurtailment(
   db: Database,
   query: CurtailmentReadQuery,
 ): Promise<CanonicalReadResult<CurtailmentObservation>> {
-  return readOnly(db, (tx) => curtailmentWithin(tx, query));
+  return readOnly(db, async (tx) => {
+    await applyAxes(tx, axesOf(query));
+    return curtailmentWithin(tx, query);
+  });
 }
 
 export interface PlantMeasurementReadQuery extends FactReadQuery {
@@ -173,36 +257,66 @@ async function plantMeasurementsWithin(
   tx: Database,
   query: PlantMeasurementReadQuery,
 ): Promise<CanonicalReadResult<PlantMeasurement>> {
-  const result = await readPlantDetailAsOf(tx, query);
+  const technologyFilter = query.technology
+    ? sql`and technology = ${query.technology}`
+    : sql``;
+  const plantFilter = query.plantOnsCode
+    ? sql`and plant_ons_code = ${query.plantOnsCode}`
+    : sql``;
+
+  const rows = await tx.execute<{
+    plant_ons_code: string;
+    technology: Technology;
+    valid_time: string;
+    estimated_generation_mwh: number | null;
+    verified_generation_mwh: number | null;
+    measured_quantity: "wind_speed_ms" | "irradiance_wm2";
+    measurement_value: number | null;
+    measurement_invalid: boolean | null;
+    half_hours_observed: number;
+    data_version: number;
+    published_at: string;
+    ingested_at: string;
+  }>(sql`
+    select * from ${canonicalCurtailmentByPlant}
+    where ${windowFilter(query)}
+      ${technologyFilter}
+      ${plantFilter}
+    order by plant_ons_code, technology, valid_time
+  `);
+
   return {
     read: "curtailment-by-plant",
     kind: "observation",
-    rows: result.rows.map((row) => ({
-      plantOnsCode: row.plantOnsCode,
+    rows: [...rows].map((row) => ({
+      plantOnsCode: row.plant_ons_code,
       technology: row.technology,
-      validTime: row.validTime,
-      estimatedGenerationMwh: row.estimatedGenerationMwh,
-      verifiedGenerationMwh: row.verifiedGenerationMwh,
+      validTime: new Date(row.valid_time),
+      estimatedGenerationMwh: number(row.estimated_generation_mwh),
+      verifiedGenerationMwh: number(row.verified_generation_mwh),
+      // Reading and flag, or neither: a reading whose validity is unknown is
+      // not a reading. Which quantity it is comes from the view rather than
+      // being re-derived from the technology here.
       measurement:
-        row.measurement === null
+        row.measurement_value === null || row.measurement_invalid === null
           ? null
           : {
-              // Which quantity was measured follows from the technology and is
-              // stated rather than left to be inferred — an unlabelled number
-              // is how a wind speed reaches a PV curve.
-              quantity:
-                row.technology === "WIND"
-                  ? ("wind_speed_ms" as const)
-                  : ("irradiance_wm2" as const),
-              value: row.measurement.value,
-              invalid: row.measurement.invalid,
+              quantity: row.measured_quantity,
+              value: Number(row.measurement_value),
+              invalid: row.measurement_invalid,
             },
-      halfHoursObserved: row.halfHoursObserved,
-      dataVersion: row.dataVersion,
-      publishedAt: row.publishedAt,
-      ingestedAt: row.ingestedAt,
+      halfHoursObserved: row.half_hours_observed,
+      dataVersion: row.data_version,
+      publishedAt: new Date(row.published_at),
+      ingestedAt: new Date(row.ingested_at),
     })),
-    vintage: factReceipt(query, [source("curtailment-by-plant", result)]),
+    vintage: factReceipt(query, [
+      sourceOf(
+        "curtailment-by-plant",
+        query.from,
+        await readGoLive(tx, "curtailment-by-plant"),
+      ),
+    ]),
   };
 }
 
@@ -215,7 +329,10 @@ export async function readPlantMeasurements(
   db: Database,
   query: PlantMeasurementReadQuery,
 ): Promise<CanonicalReadResult<PlantMeasurement>> {
-  return readOnly(db, (tx) => plantMeasurementsWithin(tx, query));
+  return readOnly(db, async (tx) => {
+    await applyAxes(tx, axesOf(query));
+    return plantMeasurementsWithin(tx, query);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -230,24 +347,48 @@ async function systemContextWithin(
   tx: Database,
   query: SystemContextReadQuery,
 ): Promise<CanonicalReadResult<SystemContextObservation>> {
-  const result = await readEnergyBalanceAsOf(tx, query);
+  const subsystemFilter = query.subsystem
+    ? sql`and subsystem = ${query.subsystem}`
+    : sql``;
+
+  const rows = await tx.execute<{
+    subsystem: SubsystemCode;
+    valid_time: string;
+    load_mwh: number;
+    wind_generation_mwh: number;
+    solar_generation_mwh: number;
+    hydro_generation_mwh: number;
+    thermal_generation_mwh: number;
+    net_exchange_mwh: number;
+    data_version: number;
+    published_at: string;
+    ingested_at: string;
+  }>(sql`
+    select * from ${canonicalSystemContext}
+    where ${windowFilter(query)}
+      ${subsystemFilter}
+    order by subsystem, valid_time
+  `);
+
   return {
     read: "system-context",
     kind: "observation",
-    rows: result.rows.map((row) => ({
+    rows: [...rows].map((row) => ({
       subsystem: row.subsystem,
-      validTime: row.validTime,
-      loadMwh: row.loadMwh,
-      windGenerationMwh: row.windGenerationMwh,
-      solarGenerationMwh: row.solarGenerationMwh,
-      hydroGenerationMwh: row.hydroGenerationMwh,
-      thermalGenerationMwh: row.thermalGenerationMwh,
-      netExchangeMwh: row.netExchangeMwh,
-      dataVersion: row.dataVersion,
-      publishedAt: row.publishedAt,
-      ingestedAt: row.ingestedAt,
+      validTime: new Date(row.valid_time),
+      loadMwh: Number(row.load_mwh),
+      windGenerationMwh: Number(row.wind_generation_mwh),
+      solarGenerationMwh: Number(row.solar_generation_mwh),
+      hydroGenerationMwh: Number(row.hydro_generation_mwh),
+      thermalGenerationMwh: Number(row.thermal_generation_mwh),
+      netExchangeMwh: Number(row.net_exchange_mwh),
+      dataVersion: row.data_version,
+      publishedAt: new Date(row.published_at),
+      ingestedAt: new Date(row.ingested_at),
     })),
-    vintage: factReceipt(query, [source("system-context", result)]),
+    vintage: factReceipt(query, [
+      sourceOf("system-context", query.from, await readGoLive(tx, "system-context")),
+    ]),
   };
 }
 
@@ -256,28 +397,53 @@ export async function readSystemContext(
   db: Database,
   query: SystemContextReadQuery,
 ): Promise<CanonicalReadResult<SystemContextObservation>> {
-  return readOnly(db, (tx) => systemContextWithin(tx, query));
+  return readOnly(db, async (tx) => {
+    await applyAxes(tx, axesOf(query));
+    return systemContextWithin(tx, query);
+  });
 }
 
 async function systemExchangeWithin(
   tx: Database,
   query: SystemContextReadQuery,
 ): Promise<CanonicalReadResult<SystemExchangeObservation>> {
-  const result = await readSubsystemExchangeAsOf(tx, query);
+  // Either end of the link — orientation is canonical, so this is not a pair.
+  const linkFilter = query.subsystem
+    ? sql`and (from_subsystem = ${query.subsystem} or to_subsystem = ${query.subsystem})`
+    : sql``;
+
+  const rows = await tx.execute<{
+    from_subsystem: SubsystemCode;
+    to_subsystem: SubsystemCode;
+    valid_time: string;
+    verified_exchange_mwh: number;
+    programmed_exchange_mwh: number | null;
+    data_version: number;
+    published_at: string;
+    ingested_at: string;
+  }>(sql`
+    select * from ${canonicalSystemExchange}
+    where ${windowFilter(query)}
+      ${linkFilter}
+    order by from_subsystem, to_subsystem, valid_time
+  `);
+
   return {
     read: "system-exchange",
     kind: "observation",
-    rows: result.rows.map((row) => ({
-      fromSubsystem: row.fromSubsystem,
-      toSubsystem: row.toSubsystem,
-      validTime: row.validTime,
-      verifiedExchangeMwh: row.verifiedExchangeMwh,
-      programmedExchangeMwh: row.programmedExchangeMwh,
-      dataVersion: row.dataVersion,
-      publishedAt: row.publishedAt,
-      ingestedAt: row.ingestedAt,
+    rows: [...rows].map((row) => ({
+      fromSubsystem: row.from_subsystem,
+      toSubsystem: row.to_subsystem,
+      validTime: new Date(row.valid_time),
+      verifiedExchangeMwh: Number(row.verified_exchange_mwh),
+      programmedExchangeMwh: number(row.programmed_exchange_mwh),
+      dataVersion: row.data_version,
+      publishedAt: new Date(row.published_at),
+      ingestedAt: new Date(row.ingested_at),
     })),
-    vintage: factReceipt(query, [source("system-exchange", result)]),
+    vintage: factReceipt(query, [
+      sourceOf("system-exchange", query.from, await readGoLive(tx, "system-exchange")),
+    ]),
   };
 }
 
@@ -286,7 +452,10 @@ export async function readSystemExchange(
   db: Database,
   query: SystemContextReadQuery,
 ): Promise<CanonicalReadResult<SystemExchangeObservation>> {
-  return readOnly(db, (tx) => systemExchangeWithin(tx, query));
+  return readOnly(db, async (tx) => {
+    await applyAxes(tx, axesOf(query));
+    return systemExchangeWithin(tx, query);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -301,7 +470,9 @@ export interface DayAheadBalanceReadQuery extends FactReadQuery {
    * Forecast features are cut on `published_at`, not on `ingested_at`: over
    * backfilled history every row was ingested at go-live, so `AsOf` alone
    * filters nothing while this genuinely reproduces what was knowable
-   * (`docs/specs/feature-engineering.md`).
+   * (`docs/specs/feature-engineering.md`). It is an axis rather than a filter —
+   * the view applies it before choosing a version, which is not the same query
+   * as applying it after.
    */
   publishedAtOrBefore?: Date;
 }
@@ -310,33 +481,66 @@ async function dayAheadBalanceWithin(
   tx: Database,
   query: DayAheadBalanceReadQuery,
 ): Promise<CanonicalReadResult<DayAheadBalanceForecast>> {
-  const result = await readDessemBalanceAsOf(tx, query);
+  const subsystemFilter = query.subsystem
+    ? sql`and subsystem = ${query.subsystem}`
+    : sql``;
+
+  const rows = await tx.execute<{
+    subsystem: SubsystemCode;
+    valid_time: string;
+    forecast_producer: "ons_dessem";
+    run_label: string;
+    demand_mw: number;
+    hydro_generation_mw: number;
+    small_hydro_generation_mw: number;
+    thermal_generation_mw: number;
+    small_thermal_generation_mw: number;
+    wind_generation_mw: number;
+    solar_generation_mw: number;
+    mmgd_generation_mw: number;
+    pumping_consumption_mw: number;
+    data_version: number;
+    published_at: string;
+    ingested_at: string;
+  }>(sql`
+    select * from ${canonicalDayAheadBalance}
+    where ${windowFilter(query)}
+      ${subsystemFilter}
+    order by subsystem, valid_time
+  `);
+
   return {
     read: "day-ahead-balance",
     kind: "forecast",
-    rows: result.rows.map((row) => ({
+    rows: [...rows].map((row) => ({
       subsystem: row.subsystem,
-      validTime: row.validTime,
+      validTime: new Date(row.valid_time),
       origin: {
-        producer: row.forecastProducer,
+        producer: row.forecast_producer,
         // The reference day is this run's identity, per `ForecastOrigin`.
-        runLabel: row.referenceDay,
-        publishedAt: row.publishedAt,
+        runLabel: row.run_label,
+        publishedAt: new Date(row.published_at),
       },
-      demandMw: row.demandMw,
-      hydroGenerationMw: row.hydroGenerationMw,
-      smallHydroGenerationMw: row.smallHydroGenerationMw,
-      thermalGenerationMw: row.thermalGenerationMw,
-      smallThermalGenerationMw: row.smallThermalGenerationMw,
-      windGenerationMw: row.windGenerationMw,
-      solarGenerationMw: row.solarGenerationMw,
-      mmgdGenerationMw: row.mmgdGenerationMw,
-      pumpingConsumptionMw: row.pumpingConsumptionMw,
-      dataVersion: row.dataVersion,
-      publishedAt: row.publishedAt,
-      ingestedAt: row.ingestedAt,
+      demandMw: Number(row.demand_mw),
+      hydroGenerationMw: Number(row.hydro_generation_mw),
+      smallHydroGenerationMw: Number(row.small_hydro_generation_mw),
+      thermalGenerationMw: Number(row.thermal_generation_mw),
+      smallThermalGenerationMw: Number(row.small_thermal_generation_mw),
+      windGenerationMw: Number(row.wind_generation_mw),
+      solarGenerationMw: Number(row.solar_generation_mw),
+      mmgdGenerationMw: Number(row.mmgd_generation_mw),
+      pumpingConsumptionMw: Number(row.pumping_consumption_mw),
+      dataVersion: row.data_version,
+      publishedAt: new Date(row.published_at),
+      ingestedAt: new Date(row.ingested_at),
     })),
-    vintage: factReceipt(query, [source("day-ahead-balance", result)]),
+    vintage: factReceipt(query, [
+      sourceOf(
+        "day-ahead-balance",
+        query.from,
+        await readGoLive(tx, "day-ahead-balance"),
+      ),
+    ]),
   };
 }
 
@@ -345,7 +549,10 @@ export async function readDayAheadBalance(
   db: Database,
   query: DayAheadBalanceReadQuery,
 ): Promise<CanonicalReadResult<DayAheadBalanceForecast>> {
-  return readOnly(db, (tx) => dayAheadBalanceWithin(tx, query));
+  return readOnly(db, async (tx) => {
+    await applyAxes(tx, axesOf(query));
+    return dayAheadBalanceWithin(tx, query);
+  });
 }
 
 export interface WeatherReadQuery extends FactReadQuery {
@@ -356,7 +563,8 @@ export interface WeatherReadQuery extends FactReadQuery {
    * Absent — the normal read — the latest version wins whichever run produced
    * it, which is the D−1 12Z-supersedes-00Z rule falling out of the vintage
    * rather than being special-cased. Present, it answers "what did the 00Z run
-   * say?" for a diagnosis.
+   * say?" for a diagnosis, and like the day-ahead gate it is an axis rather
+   * than a filter.
    */
   runCycle?: "00Z" | "12Z";
 }
@@ -365,41 +573,80 @@ async function weatherForecastWithin(
   tx: Database,
   query: WeatherReadQuery,
 ): Promise<CanonicalReadResult<WeatherForecastAtCentroid>> {
-  const result = await readWeatherForecastAsOf(tx, query);
+  const centroidFilter =
+    query.centroidIds && query.centroidIds.length > 0
+      ? sql`and centroid_id in (${sql.join(
+          query.centroidIds.map((id) => sql`${id}`),
+          sql`, `,
+        )})`
+      : sql``;
+
+  const rows = await tx.execute<{
+    centroid_id: string;
+    valid_time: string;
+    run_cycle: "00Z" | "12Z";
+    grid_latitude: number;
+    grid_longitude: number;
+    grid_elevation_m: number;
+    run_age_hours: number;
+    wind_speed100m_kmh: number | null;
+    wind_speed120m_kmh: number | null;
+    wind_direction120m_deg: number | null;
+    wind_gusts10m_kmh: number | null;
+    temperature2m_c: number | null;
+    surface_pressure_hpa: number | null;
+    relative_humidity2m_pct: number | null;
+    precipitation_mm: number | null;
+    shortwave_radiation_wm2: number | null;
+    direct_normal_irradiance_wm2: number | null;
+    diffuse_radiation_wm2: number | null;
+    cloud_cover_pct: number | null;
+    data_version: number;
+    published_at: string;
+    ingested_at: string;
+  }>(sql`
+    select * from ${canonicalWeatherForecast}
+    where ${windowFilter(query)}
+      ${centroidFilter}
+    order by centroid_id, valid_time
+  `);
+
   return {
     read: "weather-forecast",
     kind: "forecast",
-    rows: result.rows.map((row) => ({
-      centroidId: row.centroidId,
-      validTime: row.validTime,
+    rows: [...rows].map((row) => ({
+      centroidId: row.centroid_id,
+      validTime: new Date(row.valid_time),
       origin: {
         producer: "open_meteo" as const,
-        runLabel: row.runCycle,
+        runLabel: row.run_cycle,
         // The run initialisation *is* the publication instant, which is why
         // supersession needs no rule of its own.
-        publishedAt: row.runInitTime,
+        publishedAt: new Date(row.published_at),
       },
-      gridLatitude: row.gridLatitude,
-      gridLongitude: row.gridLongitude,
-      gridElevationM: row.gridElevationM,
-      runAgeHours: row.runAgeHours,
-      windSpeed100mKmh: row.windSpeed100mKmh,
-      windSpeed120mKmh: row.windSpeed120mKmh,
-      windDirection120mDeg: row.windDirection120mDeg,
-      windGusts10mKmh: row.windGusts10mKmh,
-      temperature2mC: row.temperature2mC,
-      surfacePressureHpa: row.surfacePressureHpa,
-      relativeHumidity2mPct: row.relativeHumidity2mPct,
-      precipitationMm: row.precipitationMm,
-      shortwaveRadiationWm2: row.shortwaveRadiationWm2,
-      directNormalIrradianceWm2: row.directNormalIrradianceWm2,
-      diffuseRadiationWm2: row.diffuseRadiationWm2,
-      cloudCoverPct: row.cloudCoverPct,
-      dataVersion: row.dataVersion,
-      publishedAt: row.runInitTime,
-      ingestedAt: row.ingestedAt,
+      gridLatitude: Number(row.grid_latitude),
+      gridLongitude: Number(row.grid_longitude),
+      gridElevationM: Number(row.grid_elevation_m),
+      runAgeHours: Number(row.run_age_hours),
+      windSpeed100mKmh: number(row.wind_speed100m_kmh),
+      windSpeed120mKmh: number(row.wind_speed120m_kmh),
+      windDirection120mDeg: number(row.wind_direction120m_deg),
+      windGusts10mKmh: number(row.wind_gusts10m_kmh),
+      temperature2mC: number(row.temperature2m_c),
+      surfacePressureHpa: number(row.surface_pressure_hpa),
+      relativeHumidity2mPct: number(row.relative_humidity2m_pct),
+      precipitationMm: number(row.precipitation_mm),
+      shortwaveRadiationWm2: number(row.shortwave_radiation_wm2),
+      directNormalIrradianceWm2: number(row.direct_normal_irradiance_wm2),
+      diffuseRadiationWm2: number(row.diffuse_radiation_wm2),
+      cloudCoverPct: number(row.cloud_cover_pct),
+      dataVersion: row.data_version,
+      publishedAt: new Date(row.published_at),
+      ingestedAt: new Date(row.ingested_at),
     })),
-    vintage: factReceipt(query, [source("weather-forecast", result)]),
+    vintage: factReceipt(query, [
+      sourceOf("weather-forecast", query.from, await readGoLive(tx, "weather-forecast")),
+    ]),
   };
 }
 
@@ -408,7 +655,10 @@ export async function readWeatherForecast(
   db: Database,
   query: WeatherReadQuery,
 ): Promise<CanonicalReadResult<WeatherForecastAtCentroid>> {
-  return readOnly(db, (tx) => weatherForecastWithin(tx, query));
+  return readOnly(db, async (tx) => {
+    await applyAxes(tx, axesOf(query));
+    return weatherForecastWithin(tx, query);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -430,13 +680,50 @@ async function installedCapacityWithin(
   tx: Database,
   query: InstalledCapacityReadQuery,
 ): Promise<InstalledCapacityResult> {
-  const result = await readInstalledCapacityAsOf(tx, query);
+  const subsystemFilter = query.subsystem
+    ? sql`and subsystem = ${query.subsystem}`
+    : sql``;
+  const technologyFilter = query.technology
+    ? sql`and technology = ${query.technology}`
+    : sql``;
+
+  const rows = await tx.execute<{
+    subsystem: SubsystemCode;
+    technology: Technology;
+    plants: number;
+    units: number;
+    capacity_mw: number;
+  }>(sql`
+    select * from ${canonicalInstalledCapacity}
+    where true
+      ${subsystemFilter}
+      ${technologyFilter}
+    order by subsystem, technology
+  `);
+
+  const scopes = [...rows].map((row) => ({
+    subsystem: row.subsystem,
+    technology: row.technology,
+    plants: row.plants,
+    units: row.units,
+    capacityMw: Number(row.capacity_mw),
+  }));
+
   return {
     read: "installed-capacity",
     kind: "observation",
-    rows: result.groups,
-    totalMw: result.totalMw,
-    vintage: registryReceipt(query, [source("installed-capacity", result)]),
+    rows: scopes,
+    totalMw: scopes.reduce((total, scope) => total + scope.capacityMw, 0),
+    // The registry snapshot is today's record of the past: a fleet date before
+    // WattSteer's first ingest can only be answered from ONS's current cut, so
+    // the fidelity axis here is the fleet date and not the window.
+    vintage: registryReceipt(query, [
+      sourceOf(
+        "installed-capacity",
+        query.on,
+        await readGoLive(tx, "installed-capacity"),
+      ),
+    ]),
   };
 }
 
@@ -445,7 +732,10 @@ export async function readInstalledCapacity(
   db: Database,
   query: InstalledCapacityReadQuery,
 ): Promise<InstalledCapacityResult> {
-  return readOnly(db, (tx) => installedCapacityWithin(tx, query));
+  return readOnly(db, async (tx) => {
+    await applyAxes(tx, { asOf: query.asOf, fleetDate: query.on });
+    return installedCapacityWithin(tx, query);
+  });
 }
 
 export interface ConjuntoMembershipReadQuery extends RegistryReadQuery {
@@ -457,20 +747,49 @@ async function conjuntoMembershipWithin(
   tx: Database,
   query: ConjuntoMembershipReadQuery,
 ): Promise<CanonicalReadResult<ConjuntoMembershipAtDate>> {
-  const result = await readConjuntoMembershipAsOf(tx, query);
+  const conjuntoFilter = query.conjuntoCode
+    ? sql`and conjunto_code = ${query.conjuntoCode}`
+    : sql``;
+  const plantFilter = query.plantOnsCode
+    ? sql`and plant_ons_code = ${query.plantOnsCode}`
+    : sql``;
+
+  const rows = await tx.execute<{
+    plant_ons_code: string;
+    conjunto_code: string;
+    plant_ceg_core: string | null;
+    member_from: string;
+    member_to: string | null;
+    data_version: number;
+    published_at: string;
+    ingested_at: string;
+  }>(sql`
+    select * from ${canonicalConjuntoMembership}
+    where true
+      ${conjuntoFilter}
+      ${plantFilter}
+    order by conjunto_code, plant_ons_code
+  `);
+
   return {
     read: "conjunto-membership",
     kind: "observation",
-    rows: result.rows.map((row) => ({
-      plantOnsCode: row.plantOnsCode,
-      conjuntoCode: row.conjuntoCode,
-      memberFrom: row.memberFrom,
-      memberTo: row.memberTo,
-      dataVersion: row.dataVersion,
-      publishedAt: row.publishedAt,
-      ingestedAt: row.ingestedAt,
+    rows: [...rows].map((row) => ({
+      plantOnsCode: row.plant_ons_code,
+      conjuntoCode: row.conjunto_code,
+      memberFrom: new Date(row.member_from),
+      memberTo: row.member_to === null ? null : new Date(row.member_to),
+      dataVersion: row.data_version,
+      publishedAt: new Date(row.published_at),
+      ingestedAt: new Date(row.ingested_at),
     })),
-    vintage: registryReceipt(query, [source("conjunto-membership", result)]),
+    vintage: registryReceipt(query, [
+      sourceOf(
+        "conjunto-membership",
+        query.on,
+        await readGoLive(tx, "conjunto-membership"),
+      ),
+    ]),
   };
 }
 
@@ -485,12 +804,24 @@ export async function readConjuntoMembership(
   db: Database,
   query: ConjuntoMembershipReadQuery,
 ): Promise<CanonicalReadResult<ConjuntoMembershipAtDate>> {
-  return readOnly(db, (tx) => conjuntoMembershipWithin(tx, query));
+  return readOnly(db, async (tx) => {
+    await applyAxes(tx, { asOf: query.asOf, fleetDate: query.on });
+    return conjuntoMembershipWithin(tx, query);
+  });
 }
 
 // ---------------------------------------------------------------------------
 // The composition
 // ---------------------------------------------------------------------------
+
+/** The axes a fact read needs, from the query it was given. */
+const axesOf = (
+  query: FactReadQuery & { publishedAtOrBefore?: Date; runCycle?: "00Z" | "12Z" },
+): ReadAxes => ({
+  asOf: query.asOf,
+  publishedAtOrBefore: query.publishedAtOrBefore,
+  weatherRunCycle: query.runCycle,
+});
 
 export interface TrainingWindowQuery extends FactReadQuery {
   subsystem?: SubsystemCode;
@@ -536,6 +867,15 @@ export async function readTrainingWindow(
 ): Promise<TrainingWindow> {
   const fleetDate = query.fleetDate ?? query.from;
   return readOnly(db, async (tx) => {
+    // Every axis for the whole bundle, written once. The registry reads need a
+    // fleet date and the day-ahead read a gate, and both are set here so the
+    // seven reads below share one axis set as well as one snapshot.
+    await applyAxes(tx, {
+      asOf: query.asOf,
+      fleetDate,
+      publishedAtOrBefore: query.publishedAtOrBefore,
+    });
+
     // Serial rather than concurrent: they share one transaction, and a single
     // Postgres connection serialises them anyway. Written as `await` in
     // sequence so that is visible rather than implied by a `Promise.all` that

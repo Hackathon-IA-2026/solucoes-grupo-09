@@ -1,8 +1,12 @@
 import { sql } from "drizzle-orm";
+import {
+  combineFidelity,
+  type VintageFidelity,
+  vintageFidelity,
+} from "../contract/vintage.js";
 import type { Database } from "../database/connection.js";
 import { type SubsystemCode, toUtcDay } from "../ingest/normalise.js";
 import { readPlantCapacityAsOf } from "../ingest/registry-repository.js";
-import type { VintageFidelity } from "../ingest/repository.js";
 import { readPlantLocationsAsOf } from "../ingest/siga-repository.js";
 import type { Coordinate, PlantLocationSource, Technology } from "../ingest/types.js";
 import {
@@ -484,10 +488,17 @@ export async function readCapacityWeightsAsOf(
   // per-query fidelity against `generating_unit`'s go-live, which is what the
   // fleet date is answered from; SIGA's is against `plant_geo`'s.
   const registry = await readPlantCapacityFidelity(db, query.asOf, on);
-  const vintageFidelity: VintageFidelity =
-    registry === "point_in_time" && locations.vintageFidelity === "point_in_time"
-      ? "point_in_time"
-      : "revision_optimistic";
+  // The composition rule, from the one place it is written: a weight vector
+  // assembled from a point-in-time fleet and revision-optimistic coordinates is
+  // revision-optimistic as a whole, because a consumer cannot use half of it.
+  const fidelity: VintageFidelity = combineFidelity([
+    { read: "installed-capacity", vintageFidelity: registry, goLiveAt: null },
+    {
+      read: "plant-locations",
+      vintageFidelity: locations.vintageFidelity,
+      goLiveAt: null,
+    },
+  ]);
 
   return {
     on,
@@ -498,7 +509,7 @@ export async function readCapacityWeightsAsOf(
       centroids: query.centroids,
       gridCells: query.gridCells,
     }),
-    vintageFidelity,
+    vintageFidelity: fidelity,
   };
 }
 
@@ -519,5 +530,5 @@ async function readPlantCapacityFidelity(
         where ingested_at <= ${asOf.toISOString()}::timestamptz`,
   );
   const goLiveAt = row?.go_live ? new Date(row.go_live) : null;
-  return goLiveAt && on >= goLiveAt ? "point_in_time" : "revision_optimistic";
+  return vintageFidelity(on, goLiveAt);
 }

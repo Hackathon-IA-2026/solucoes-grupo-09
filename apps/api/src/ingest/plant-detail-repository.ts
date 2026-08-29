@@ -1,7 +1,9 @@
 import { sql } from "drizzle-orm";
+import { readGoLive, withAxes } from "../contract/scope.js";
+import { type VintageFidelity, vintageFidelity } from "../contract/vintage.js";
+import { canonicalCurtailmentByPlant } from "../database/canonical-views.js";
 import type { Database } from "../database/connection.js";
 import { observedPlant, plantDetailHour } from "../database/schema.js";
-import type { VintageFidelity } from "./repository.js";
 import type {
   ObservedPlant,
   PlantDetailHour,
@@ -180,75 +182,62 @@ export async function readPlantDetailAsOf(
     ? sql`and plant_ons_code = ${query.plantOnsCode}`
     : sql``;
 
-  const rows = await db.execute<{
-    plant_ons_code: string;
-    technology: Technology;
-    valid_time: string;
-    data_version: number;
-    estimated_generation_mwh: number | null;
-    verified_generation_mwh: number | null;
-    measured_wind_speed_ms: number | null;
-    measured_irradiance_wm2: number | null;
-    measurement_invalid: number | null;
-    half_hours_observed: number;
-    published_at: string;
-    ingested_at: string;
-  }>(sql`
-    select distinct on (plant_ons_code, technology, valid_time)
-      plant_ons_code, technology, valid_time, data_version,
-      estimated_generation_mwh, verified_generation_mwh,
-      measured_wind_speed_ms, measured_irradiance_wm2,
-      measurement_invalid, half_hours_observed,
-      published_at, ingested_at
-    from plant_detail_hour
-    where ingested_at <= ${query.asOf.toISOString()}::timestamptz
-      and valid_time >= ${query.from.toISOString()}::timestamptz
-      and valid_time < ${query.to.toISOString()}::timestamptz
-      ${technologyFilter}
-      ${plantFilter}
-    order by plant_ons_code, technology, valid_time,
-             ingested_at desc, data_version desc
-  `);
+  return withAxes(db, { asOf: query.asOf }, async (tx) => {
+    const rows = await tx.execute<{
+      plant_ons_code: string;
+      technology: Technology;
+      valid_time: string;
+      data_version: number;
+      estimated_generation_mwh: number | null;
+      verified_generation_mwh: number | null;
+      measurement_value: number | null;
+      measurement_invalid: boolean | null;
+      half_hours_observed: number;
+      published_at: string;
+      ingested_at: string;
+    }>(sql`
+      select * from ${canonicalCurtailmentByPlant}
+      where valid_time >= ${query.from.toISOString()}::timestamptz
+        and valid_time < ${query.to.toISOString()}::timestamptz
+        ${technologyFilter}
+        ${plantFilter}
+      order by plant_ons_code, technology, valid_time
+    `);
 
-  const [goLive] = await db.execute<{ go_live: string | null }>(
-    sql`select min(ingested_at) as go_live from plant_detail_hour`,
-  );
-  const goLiveAt = goLive?.go_live ? new Date(goLive.go_live) : null;
+    const goLiveAt = await readGoLive(tx, "curtailment-by-plant");
 
-  return {
-    rows: [...rows].map((row) => {
-      const raw =
-        row.technology === "WIND"
-          ? row.measured_wind_speed_ms
-          : row.measured_irradiance_wm2;
-      // Reconstructed as the value object it is: reading and flag, or neither.
-      const measurement: ResourceMeasurement | null =
-        raw === null || row.measurement_invalid === null
-          ? null
-          : { value: Number(raw), invalid: row.measurement_invalid === 1 };
-      return {
-        plantOnsCode: row.plant_ons_code,
-        technology: row.technology,
-        validTime: new Date(row.valid_time),
-        estimatedGenerationMwh:
-          row.estimated_generation_mwh === null
+    return {
+      rows: [...rows].map((row) => {
+        // Reconstructed as the value object it is: reading and flag, or
+        // neither. Which of the two source columns the reading came from is
+        // the view's decision now, not this function's.
+        const measurement: ResourceMeasurement | null =
+          row.measurement_value === null || row.measurement_invalid === null
             ? null
-            : Number(row.estimated_generation_mwh),
-        verifiedGenerationMwh:
-          row.verified_generation_mwh === null
-            ? null
-            : Number(row.verified_generation_mwh),
-        measurement,
-        halfHoursObserved: row.half_hours_observed,
-        dataVersion: row.data_version,
-        publishedAt: new Date(row.published_at),
-        ingestedAt: new Date(row.ingested_at),
-      };
-    }),
-    vintageFidelity:
-      goLiveAt && query.from >= goLiveAt ? "point_in_time" : "revision_optimistic",
-    goLiveAt,
-  };
+            : { value: Number(row.measurement_value), invalid: row.measurement_invalid };
+        return {
+          plantOnsCode: row.plant_ons_code,
+          technology: row.technology,
+          validTime: new Date(row.valid_time),
+          estimatedGenerationMwh:
+            row.estimated_generation_mwh === null
+              ? null
+              : Number(row.estimated_generation_mwh),
+          verifiedGenerationMwh:
+            row.verified_generation_mwh === null
+              ? null
+              : Number(row.verified_generation_mwh),
+          measurement,
+          halfHoursObserved: row.half_hours_observed,
+          dataVersion: row.data_version,
+          publishedAt: new Date(row.published_at),
+          ingestedAt: new Date(row.ingested_at),
+        };
+      }),
+      vintageFidelity: vintageFidelity(query.from, goLiveAt),
+      goLiveAt,
+    };
+  });
 }
 
 /** A plant whose identity the two grains disagree about. */
