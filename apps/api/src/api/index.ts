@@ -4,6 +4,7 @@ import { swagger } from "@elysiajs/swagger";
 import { Elysia } from "elysia";
 import { config } from "../config.js";
 import { database } from "../database/connection.js";
+import { canonicalReads } from "./canonical.js";
 import { ingestHealth } from "./ingest-health.js";
 import { mlProxy } from "./ml-proxy.js";
 import { bodyLimit, MAX_BODY_BYTES } from "./plugins/body-limit.js";
@@ -33,8 +34,9 @@ async function ready(): Promise<boolean> {
  * CORS, server timing) are composed via `.use()`, with Swagger/OpenAPI docs at
  * `/docs`.
  *
- * There are no domain routes yet — the WattSteer surface was removed and
- * WattSteer's arrives with the data platform.
+ * The domain surface so far is the ingestion health view and the canonical read
+ * contract (`/v1/canonical/*`) — the reads the modelling side consumes instead
+ * of the fact tables. The product's own `/v1` routes arrive with the forecaster.
  */
 export const app = new Elysia()
   .use(securityHeaders)
@@ -102,7 +104,8 @@ export const app = new Elysia()
     { detail: { summary: "Readiness — database reachable when configured" } },
   )
   .use(mlProxy)
-  .use(ingestHealth);
+  .use(ingestHealth)
+  .use(canonicalReads);
 
 // Opt-in BullMQ dashboard at /jobs (requires Redis). Protect it in production.
 if (config.dashboard && config.redisUrl) {
@@ -124,6 +127,7 @@ if (import.meta.main) {
     console.log("   • GET /ready     — readiness");
     console.log("   • GET /docs      — Swagger UI");
     console.log("   • GET /ingest/health — ingestion freshness, custody, joins");
+    console.log("   • GET /v1/canonical    — the canonical read contract manifest");
     console.log("🔒 Security:");
     console.log("   • Content-Security-Policy (relaxed for /docs)");
     console.log("   • X-Frame-Options: DENY, X-Content-Type-Options: nosniff");

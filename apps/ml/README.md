@@ -8,6 +8,26 @@ never reaches it directly.
 Today it is a scaffold — a healthcheck, a read-only database connection, an
 artifact volume and one stub endpoint. The engines land in later tickets.
 
+## What it reads
+
+**The canonical read contract, and never a fact table.**
+[`docs/contracts/canonical-reads.md`](../../docs/contracts/canonical-reads.md)
+is the document; `src/wattsteer_ml/canonical.py` is this side of it. ONS's
+conventions — padded subsystem codes, the `SIN` aggregate row, end-of-interval
+labelling, MWmed average power, the CEG version segment — are resolved by the
+platform at ingest and are unrepresentable in what arrives here. Reimplementing
+any of them on this side would be the two-implementation drift the contract
+exists to prevent.
+
+Every read takes an `as_of` and returns a **vintage receipt** carrying its
+`vintage_fidelity`. A window that predates ingestion go-live is
+`revision_optimistic` and can never be repaired retroactively; anything trained
+or scored on one must say so.
+
+The vocabulary and the fidelity rule are pinned by golden vectors in
+`packages/core/fixtures/canonical-contract/`, which `pytest` and `bun test`
+both enumerate — see `tests/test_canonical_contract.py`.
+
 ## Run it
 
 ```sh

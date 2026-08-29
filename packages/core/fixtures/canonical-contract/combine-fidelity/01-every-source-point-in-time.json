@@ -1,0 +1,17 @@
+{
+  "name": "a composition is point-in-time only when every source is",
+  "sources": [
+    {
+      "read": "curtailment-by-reporting-entity",
+      "vintage_fidelity": "point_in_time",
+      "go_live_at": "2026-01-15T09:30:00.000Z"
+    },
+    {
+      "read": "system-context",
+      "vintage_fidelity": "point_in_time",
+      "go_live_at": "2026-01-10T00:00:00.000Z"
+    }
+  ],
+  "expected_vintage_fidelity": "point_in_time",
+  "expected_go_live_at": "2026-01-15T09:30:00.000Z"
+}

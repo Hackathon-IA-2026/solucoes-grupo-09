@@ -19,7 +19,7 @@ revision-optimistic one.
 
 **Blocked by:** 02, 04, 07, 08, 09
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Reads are exposed in domain vocabulary, with no source-specific naming
 - [ ] The consumer can request an as-of view and receives exactly one row per key

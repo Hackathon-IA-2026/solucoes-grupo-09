@@ -1,0 +1,6 @@
+{
+  "name": "an empty composition is not vacuously honest — nothing was consulted",
+  "sources": [],
+  "expected_vintage_fidelity": "revision_optimistic",
+  "expected_go_live_at": null
+}
