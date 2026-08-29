@@ -6,13 +6,16 @@ import type { Database } from "../src/database/connection.js";
 import { createDatabase } from "../src/database/connection.js";
 import { onsResourceVersion } from "../src/database/schema.js";
 import {
+  assertWeatherCompleteness,
   FEATURE_ROW_COLUMNS,
   type FeatureRow,
   isFeatureColumn,
   loadCalendar,
   loadCalendarArtifact,
+  readCapacityWeightsAsOf,
   readFeatureRows,
   readServingRows,
+  ServingCompletenessError,
 } from "../src/features/index.js";
 import {
   type CurtailmentReportHour,
@@ -125,6 +128,25 @@ const OBSERVED_INGESTED_AT = new Date("2026-08-01T00:00:00.000Z");
 const ENTITY = "CJU_FE01";
 const CENTROID_A = "FE01_A";
 const CENTROID_B = "FE01_B";
+
+/**
+ * Where this suite's two frozen points are, and where its two plants are.
+ *
+ * The **same** coordinates for both, deliberately. `canonical_capacity_weight`
+ * assigns a plant to the nearest centroid of its own technology, and the real
+ * `centroid_set_v1` — nineteen points across the north-east — may already be in
+ * this database from the centroid suite. A plant exactly on its own point is
+ * nearest to it whatever else is loaded, so the weight vector this fixture
+ * asserts against is a property of the fixture rather than of what ran first.
+ *
+ * `CENTROID_B` is where ticket 03's single solar point stood, so
+ * `canonical_solar_centroid` — and every `solar_zenith_cos` computed at it — is
+ * unmoved by ticket 08 putting a wind point beside it.
+ */
+const CENTROID_A_LAT = -10;
+const CENTROID_A_LON = -41;
+const CENTROID_B_LAT = -9;
+const CENTROID_B_LON = -40;
 
 /**
  * The D−1 12Z run: published *before* the late gate, so a feature may see it.
@@ -245,10 +267,19 @@ const weatherHour = (
   cloudCoverPct: 10,
 });
 
-/** Twenty-four hours of the target's local day, at both centroids. */
+/**
+ * The target's local day at both centroids, **and the three hours either side**.
+ *
+ * A weather run is not a day file: the D−1 12Z run that carries 00:00 BRT on D
+ * carries 23:00 BRT on D−1 in the same publication, which is why the class-`W`
+ * ramps and centred windows are defined at the local day's edges where the
+ * class-`P` and class-`D` ones are not. A fixture that stopped at the day
+ * boundary would make that difference invisible and the edge rows NULL for a
+ * reason that has nothing to do with the gate.
+ */
 const runRows = (runInitTime: Date, base: number): WeatherForecastHour[] => {
   const rows: WeatherForecastHour[] = [];
-  for (let hour = 0; hour < 24; hour += 1) {
+  for (let hour = -3; hour < 27; hour += 1) {
     const validTime = new Date(DAY_FROM.getTime() + hour * 3_600_000);
     rows.push(weatherHour(CENTROID_A, validTime, runInitTime, base - 2));
     rows.push(weatherHour(CENTROID_B, validTime, runInitTime, base + 2));
@@ -532,6 +563,20 @@ suite("the gate, end to end (real Postgres)", () => {
     thresholdMw: 5,
   } as const;
 
+  /**
+   * One target date, through the **training** call.
+   *
+   * `readServingRows` is the training call with a range of one day *plus the
+   * serve-time completeness contract*, and that contract refuses a day whose
+   * weather did not arrive. This fixture carries a run for `TARGET` and for no
+   * other date, so the tests below that ask about a different day — the fleet on
+   * D−1, the fidelity of a day before go-live — have to ask the way training
+   * asks. That they must is the contract working, and it is the reason the
+   * distinction between the two entry points is worth having.
+   */
+  const rowsForDay = (targetDate: string) =>
+    readFeatureRows(db, { targetFrom: targetDate, targetTo: targetDate, ...query });
+
   beforeAll(async () => {
     await db.execute(sql`truncate table weather_forecast_hour`);
     await db.execute(sql`truncate table weather_run_request cascade`);
@@ -574,14 +619,32 @@ suite("the gate, end to end (real Postgres)", () => {
         now(), now(), 1000, 1, 'asserted'
       ) on conflict (version) do nothing
     `);
+    // The frozen geometry. Two points, one per technology, and they are the two
+    // the weather rows below are taken at — because ticket 08 weights the
+    // centroids by the capacity nearest them, so a centroid the fleet is not
+    // near carries no weight and a weather series at a point the set does not
+    // hold is never read.
+    //
+    // The solar point is where ticket 03's single point was, so
+    // `canonical_solar_centroid` — and every `solar_zenith_cos` computed at it —
+    // is unmoved by the wind point arriving beside it.
+    // `FE01_SOLAR` is this suite's own retired point — ticket 03 needed one
+    // solar centroid and named it that; ticket 08 needs one per technology and
+    // names them after the two the weather rows are taken at. It is removed
+    // rather than left beside them because it sits at the same coordinates as
+    // its replacement, and two points at one place make "the nearest centroid"
+    // a coin toss.
+    await db.execute(sql`delete from centroid_point where centroid_id = 'FE01_SOLAR'`);
     await db.execute(sql`
       insert into centroid_point (
         set_version, centroid_id, label, latitude, longitude, technology,
         represented_mw, origin, municipalities, plants, merged_from
-      ) values (
-        'centroid_set_v1', 'FE01_SOLAR', 'Solar', -9, -40, 'SOLAR', 1000,
-        'hand_transcribed', '', 1, ''
-      ) on conflict do nothing
+      ) values
+        ('centroid_set_v1', ${CENTROID_A}, 'Wind', ${CENTROID_A_LAT},
+         ${CENTROID_A_LON}, 'WIND', 1000, 'hand_transcribed', '', 1, ''),
+        ('centroid_set_v1', ${CENTROID_B}, 'Solar', ${CENTROID_B_LAT},
+         ${CENTROID_B_LON}, 'SOLAR', 1000, 'hand_transcribed', '', 1, '')
+      on conflict do nothing
     `);
     await db.execute(sql`
       insert into plant (
@@ -632,6 +695,39 @@ suite("the gate, end to end (real Postgres)", () => {
       registryPlant(PLANT_WIND),
       registryPlant(PLANT_SOLAR, { technology: "SOLAR" }),
     ]);
+
+    // Ticket 08's inputs: where the two plants are.
+    //
+    // The class-`W` block weights the centroids by the capacity nearest them,
+    // so a fixture with no located plant has no weight vector and no weather at
+    // all. These two put the wind fleet at `CENTROID_A` and the solar fleet at
+    // `CENTROID_B` — one plant each, so the assignment is unambiguous and the
+    // weights are the two fleets' own megawatts and nothing else.
+    //
+    // Written with `plant_geo`'s own vintage columns rather than through the
+    // SIGA writer because the location is a constant of this fixture: it is
+    // ingested long before every gate this suite asks about, so no as-of can
+    // hide it and the weights are a question about capacity alone.
+    await db.execute(sql`
+      insert into plant_geo (
+        plant_ceg_core, ceg_raw, siga_name, latitude, longitude, location_source,
+        municipalities_raw, ownership, observed_on, data_version, published_at,
+        published_at_precision, ingested_at, value_digest, source_version_id
+      ) values
+        (${PLANT_WIND}, ${PLANT_WIND}, 'Bahia', ${CENTROID_A_LAT}, ${CENTROID_A_LON},
+         'siga_coordinate',
+         '', '', ${REGISTRY_INGESTED_AT.toISOString()}::timestamptz, 1,
+         ${REGISTRY_INGESTED_AT.toISOString()}::timestamptz, 'file',
+         ${REGISTRY_INGESTED_AT.toISOString()}::timestamptz, 'features-geo-wind',
+         ${registryVersion?.id ?? ""}::uuid),
+        (${PLANT_SOLAR}, ${PLANT_SOLAR}, 'Solar', ${CENTROID_B_LAT}, ${CENTROID_B_LON},
+         'siga_coordinate',
+         '', '', ${REGISTRY_INGESTED_AT.toISOString()}::timestamptz, 1,
+         ${REGISTRY_INGESTED_AT.toISOString()}::timestamptz, 'file',
+         ${REGISTRY_INGESTED_AT.toISOString()}::timestamptz, 'features-geo-solar',
+         ${registryVersion?.id ?? ""}::uuid)
+      on conflict do nothing
+    `);
 
     const writeUnits = (units: RegistryGeneratingUnit[], ingestedAt: Date) =>
       writeGeneratingUnits(db, {
@@ -954,8 +1050,386 @@ suite("the gate, end to end (real Postgres)", () => {
     expect(post_gate_rows).toBeGreaterThan(0);
 
     const rows = await readServingRows(db, { targetDate: TARGET, ...query });
-    const values = new Set(rows.map((row) => row.weather_temperature_2m));
-    expect(values).toEqual(new Set([20]));
+    // The 12Z run's two centroids are 18 °C and 22 °C; the 00Z run's are 28 and
+    // 32. Whatever the weighting does, it must do it to the first pair.
+    for (const row of rows.filter((r) => r.subsystem === "NE")) {
+      expect(Number(row.weather_temperature_2m)).toBeGreaterThan(17);
+      expect(Number(row.weather_temperature_2m)).toBeLessThan(23);
+    }
+  });
+
+  it("weights the twelve variables by capacity, per subsystem, per fleet", async () => {
+    // The debt ticket 01 named, paid. Through that ticket
+    // `weather_temperature_2m` was the unweighted mean over every centroid that
+    // reported the hour — 18 and 22 average to 20, the same number for all four
+    // subsystems, and the migration said so at the function.
+    //
+    // It is now the VRE-capacity-weighted mean over **this** subsystem's fleet:
+    // 147 MW of wind at `CENTROID_A` (18 °C) and 40 MW of solar at `CENTROID_B`
+    // (22 °C), so 18.86 °C and not 20. Wind variables carry the wind vector
+    // alone, so `weather_wind_speed_120m` is `CENTROID_A`'s 32 km/h and not the
+    // 32 the two happen to share; solar variables carry the solar vector alone.
+    const rows = await readServingRows(db, { targetDate: TARGET, ...query });
+    const ne = rows.filter((row) => row.subsystem === "NE");
+    expect(ne).toHaveLength(24);
+
+    const vreWeighted = (18 * 147 + 22 * 40) / 187;
+    expect(vreWeighted).not.toBe(20);
+    for (const row of ne) {
+      expect(Number(row.weather_temperature_2m)).toBeCloseTo(vreWeighted, 9);
+      // Both centroids report 32 km/h, so the wind mean is 32 whichever way it
+      // is weighted — what this pins is that the wind basis produced a number
+      // at all, and the direction pair beside it that a numeric mean could not.
+      expect(Number(row.weather_wind_speed_120m)).toBeCloseTo(32, 9);
+      expect(Number(row.weather_wind_direction_120m_sin)).toBeCloseTo(1, 9);
+      expect(Number(row.weather_wind_direction_120m_cos)).toBeCloseTo(0, 9);
+      expect(Number(row.weather_shortwave_radiation)).toBeCloseTo(500, 9);
+      // Every centroid carrying weight reported, so coverage is exactly 1.
+      expect(Number(row.weather_centroid_coverage)).toBeCloseTo(1, 12);
+      expect(Number(row.weather_run_age_hours)).toBe(0);
+    }
+
+    // A subsystem the registry places no VRE in has no weight vector, so it has
+    // no weather — a hole, and one the serve-time contract distinguishes from a
+    // fleet whose weather failed to arrive.
+    for (const row of rows.filter((r) => r.subsystem !== "NE")) {
+      expect(row.weather_temperature_2m).toBeNull();
+      expect(row.weather_centroid_coverage).toBeNull();
+    }
+  });
+
+  it("carries the run's age into the row when a scheduled run was missing", async () => {
+    // The fallback, end to end. `weather-repository.ts` writes `run_age_hours`
+    // when the scheduled run is absent from the archive and an older cycle
+    // stands in — measured at 4.5% of slots — and this is the half that matters
+    // to a model: the staleness reaches the feature row instead of the pipeline
+    // failing open and saying nothing.
+    //
+    // Only the **solar** centroid is aged, and the feature still reads 12: the
+    // max, not a mean, because a mean would dilute one stale point into
+    // invisibility and the column exists to say this row is older than its
+    // neighbours.
+    let aged: number | null | undefined;
+    let cover: number | null | undefined;
+    try {
+      await db.transaction(async (tx) => {
+        const scoped = tx as unknown as Database;
+        await scoped.execute(sql`
+          update weather_forecast_hour set run_age_hours = 12
+          where centroid_id = ${CENTROID_B}
+        `);
+        const rows = await readServingRows(scoped, { targetDate: TARGET, ...query });
+        const ne = rows.find((row) => row.subsystem === "NE");
+        aged = ne?.weather_run_age_hours;
+        cover = ne?.weather_centroid_coverage;
+        tx.rollback();
+      });
+    } catch (error) {
+      if (!(error instanceof Error && /rollback/i.test(error.message))) {
+        throw error;
+      }
+    }
+    expect(Number(aged)).toBe(12);
+    // A stale run is a run: it degrades the forecast, and it does not open a
+    // hole in the coverage.
+    expect(Number(cover)).toBeCloseTo(1, 12);
+  });
+
+  it("refuses to serve when a centroid carrying weight reported nothing", async () => {
+    // The other half of the same story, against the database rather than a
+    // doctored row: delete the solar point's hours and 40 of NE's 187 placed MW
+    // stop reporting. The weighted means renormalise over the wind point that
+    // remains and look exactly like weather; only the coverage column says
+    // otherwise, and the serve path refuses on it rather than imputing.
+    let refused: unknown;
+    let coverage: number | null | undefined;
+    try {
+      await db.transaction(async (tx) => {
+        const scoped = tx as unknown as Database;
+        await scoped.execute(
+          sql`delete from weather_forecast_hour where centroid_id = ${CENTROID_B}`,
+        );
+        const training = await readFeatureRows(scoped, {
+          targetFrom: TARGET,
+          targetTo: TARGET,
+          ...query,
+        });
+        coverage = training.find(
+          (row) => row.subsystem === "NE",
+        )?.weather_centroid_coverage;
+        refused = await readServingRows(scoped, {
+          targetDate: TARGET,
+          ...query,
+        }).catch((error: unknown) => error);
+        tx.rollback();
+      });
+    } catch (error) {
+      if (!(error instanceof Error && /rollback/i.test(error.message))) {
+        throw error;
+      }
+    }
+    // 147 of 187 MW reported — the share of weight **mass**, not the two-thirds
+    // a count of centroids would have given.
+    expect(Number(coverage)).toBeCloseTo(147 / 187, 12);
+    expect(refused).toBeInstanceOf(ServingCompletenessError);
+    // Training still gets the row, with the hole visible on it. That asymmetry
+    // is the design: a training row records what arrived, and a served row is
+    // refused rather than imputed.
+    expect(coverage).not.toBeNull();
+  });
+
+  it("converts wind through a pinned power curve and solar without a derate", async () => {
+    // The curve's three numbers, at the feature rather than in a comment: below
+    // cut-in and at or above cut-out the machine produces nothing, between rated
+    // and cut-out it is at nameplate, and between cut-in and rated the
+    // interpolation is cubic because the power in the wind is.
+    const [pinned] = [
+      ...(await db.execute<Record<string, number | null>>(sql`
+        select
+          feature_wind_power_curve_cf(2.999) as below_cut_in,
+          feature_wind_power_curve_cf(3.0) as at_cut_in,
+          feature_wind_power_curve_cf(12.0) as at_rated,
+          feature_wind_power_curve_cf(24.999) as below_cut_out,
+          feature_wind_power_curve_cf(25.0) as at_cut_out,
+          feature_wind_power_curve_cf(7.5) as mid_band,
+          feature_wind_power_curve_cf(null) as no_speed
+      `)),
+    ] as [Record<string, number | null>];
+    expect(Number(pinned.below_cut_in)).toBe(0);
+    expect(Number(pinned.at_cut_in)).toBe(0);
+    expect(Number(pinned.at_rated)).toBe(1);
+    expect(Number(pinned.below_cut_out)).toBe(1);
+    expect(Number(pinned.at_cut_out)).toBe(0);
+    expect(Number(pinned.mid_band)).toBeCloseTo(
+      (7.5 ** 3 - 3 ** 3) / (12 ** 3 - 3 ** 3),
+      9,
+    );
+    expect(pinned.no_speed).toBeNull();
+
+    // 32 km/h is 8.888… m/s, inside the band, and the fixture's two centroids
+    // agree — so the weighted capacity factor is the curve at that speed and the
+    // expected generation is that factor against the 147 MW read at the gate.
+    const rows = await readServingRows(db, { targetDate: TARGET, ...query });
+    const ne = rows.filter((row) => row.subsystem === "NE");
+    const speedMs = 32 / 3.6;
+    const cf = (speedMs ** 3 - 3 ** 3) / (12 ** 3 - 3 ** 3);
+    for (const row of ne) {
+      expect(Number(row.weather_wind_power_curve_cf)).toBeCloseTo(cf, 9);
+      expect(Number(row.weather_expected_wind_mwh)).toBeCloseTo(cf * 147, 6);
+      // STC-referenced, and carrying no temperature derate: 40 MW x 500/1000.
+      expect(Number(row.weather_expected_solar_mwh)).toBeCloseTo(40 * 0.5, 9);
+    }
+  });
+
+  it("averages wind direction as a vector, across the 350 to 10 degree seam", async () => {
+    // 350° and 10° do not average to 180°, and a fixture that only ever averaged
+    // 90° with 90° would not know the difference. Asked of the database
+    // directly, because the seam is a property of the encoding rather than of
+    // this fixture's weather.
+    const [seam] = [
+      ...(await db.execute<{ sin: number; cos: number }>(sql`
+        select
+          sum(sin(radians(d))) / sqrt(sum(sin(radians(d))) ^ 2
+                                      + sum(cos(radians(d))) ^ 2) as sin,
+          sum(cos(radians(d))) / sqrt(sum(sin(radians(d))) ^ 2
+                                      + sum(cos(radians(d))) ^ 2) as cos
+        from unnest(array[350.0, 10.0]) as d
+      `)),
+    ] as [{ sin: number; cos: number }];
+    // Due north — 0°, which is what 350° and 10° straddle. A numeric mean would
+    // have said 180°, which is due south.
+    expect(Number(seam.sin)).toBeCloseTo(0, 12);
+    expect(Number(seam.cos)).toBeCloseTo(1, 12);
+  });
+
+  it("divides shortwave by the extraterrestrial irradiance, guarded at night", async () => {
+    const rows = await readServingRows(db, { targetDate: TARGET, ...query });
+    const ne = rows.filter((row) => row.subsystem === "NE");
+    for (const row of ne) {
+      const ghi = Number(row.solar_extraterrestrial_ghi);
+      const expected = Number(row.weather_shortwave_radiation) / Math.max(ghi, 1);
+      expect(Number(row.weather_clearness_index)).toBeCloseTo(expected, 9);
+      // The guard is what keeps the night finite: the denominator is exactly
+      // zero below the horizon, and the fixture's constant 500 W/m² over it is
+      // physically impossible and numerically the point.
+      expect(Number.isFinite(Number(row.weather_clearness_index))).toBe(true);
+    }
+    // Non-vacuous: some hours of the day really are below the horizon.
+    expect(ne.some((row) => Number(row.solar_extraterrestrial_ghi) === 0)).toBe(true);
+  });
+
+  it("derives the shape inside the run profile, across the local day's edges", async () => {
+    // The class-`P` and class-`D` ramps are NULL at the first hour of the local
+    // day, because the hour before it belongs to D−1's own file. A weather run
+    // is not a day file: it carries D−1 23:00 BRT and D 00:00 BRT in the same
+    // publication, so the same difference is a shape inside one forecast and is
+    // defined at both edges.
+    const rows = await readServingRows(db, { targetDate: TARGET, ...query });
+    const ne = rows
+      .filter((row) => row.subsystem === "NE")
+      .toSorted(
+        (a, b) => new Date(a.valid_time).getTime() - new Date(b.valid_time).getTime(),
+      );
+    const first = ne[0];
+    const last = ne[23];
+    // The fixture's profile is flat across the day, so every ramp is zero — and
+    // zero, not NULL, is the claim: a NULL here would mean the difference could
+    // not be computed at all.
+    for (const column of [
+      "weather_wind_speed_120m_ramp_1h",
+      "weather_wind_speed_120m_mean_3h",
+      "weather_wind_speed_120m_std_6h",
+      "weather_shortwave_radiation_ramp_1h",
+      "weather_shortwave_radiation_mean_3h",
+      "weather_expected_vre_ramp_1h",
+    ] as const) {
+      // Named rather than compared through `Number(...)`, because `Number(null)`
+      // is 0 and 0 is exactly the value these columns take here.
+      expect({ column, first: first?.[column], last: last?.[column] }).toEqual({
+        column,
+        first: expect.any(Number),
+        last: expect.any(Number),
+      });
+    }
+    expect(Number(first?.weather_wind_speed_120m_ramp_1h)).toBeCloseTo(0, 9);
+    expect(Number(first?.weather_wind_speed_120m_mean_3h)).toBeCloseTo(32, 9);
+    expect(Number(first?.weather_wind_speed_120m_std_6h)).toBeCloseTo(0, 9);
+    expect(Number(last?.weather_shortwave_radiation_ramp_1h)).toBeCloseTo(0, 9);
+    expect(Number(last?.weather_shortwave_radiation_mean_3h)).toBeCloseTo(500, 9);
+    expect(Number(last?.weather_expected_vre_ramp_1h)).toBeCloseTo(0, 9);
+  });
+
+  it("refuses to serve a day whose fleet lost a centroid, rather than imputing", async () => {
+    // The completeness contract, on rows the aggregate really produced. Dropping
+    // the solar centroid's hours takes 40 of NE's 187 placed MW out of the
+    // sample: the weighted means renormalise over the wind point that remains
+    // and look exactly like weather, and only `weather_centroid_coverage` says
+    // otherwise. That is what the serve path refuses on.
+    const rows = await readServingRows(db, { targetDate: TARGET, ...query });
+    const holed = rows.map((row) =>
+      row.subsystem === "NE" ? { ...row, weather_centroid_coverage: 147 / 187 } : row,
+    );
+    expect(() => assertWeatherCompleteness(holed, TARGET)).toThrow(
+      ServingCompletenessError,
+    );
+    // A missing pinned variable refuses on the same terms, and a derived one
+    // does not: a centred window is NULL wherever a neighbour is, and refusing
+    // on that would refuse on the machinery working.
+    const blanked = rows.map((row) =>
+      row.subsystem === "NE" ? { ...row, weather_shortwave_radiation: null } : row,
+    );
+    expect(() => assertWeatherCompleteness(blanked, TARGET)).toThrow(
+      ServingCompletenessError,
+    );
+    const windowed = rows.map((row) => ({
+      ...row,
+      weather_wind_speed_120m_std_6h: null,
+    }));
+    expect(() => assertWeatherCompleteness(windowed, TARGET)).not.toThrow();
+    // And a day with no weighted subsystem at all is refused rather than passing
+    // vacuously.
+    const unweighted = rows.map((row) => ({
+      ...row,
+      weather_centroid_coverage: null,
+    }));
+    expect(() => assertWeatherCompleteness(unweighted, TARGET)).toThrow(
+      ServingCompletenessError,
+    );
+  });
+
+  it("agrees with the capacity weights TypeScript computes for the same fleet", async () => {
+    // The weighting has two implementations — `canonical_capacity_weight` here
+    // and `computeCapacityWeights` in `features/capacity-weights.ts` — because a
+    // plpgsql feature function cannot call TypeScript. This is what makes the
+    // second one safe: the same fleet through both, compared, exactly as
+    // `feature_vintage_fidelity` is bound to the golden vintage vectors it
+    // restates rather than trusted beside them.
+    // The geometry is handed in rather than defaulted, because `centroids.ts`
+    // holds the real nineteen points and this fixture's fleet lives at two of
+    // its own. Both sides therefore answer the same question about the same
+    // geometry, which is the only comparison worth making.
+    const weights = await readCapacityWeightsAsOf(db, {
+      asOf: GATE_LATE,
+      on: new Date(`${TARGET}T00:00:00.000Z`),
+      centroids: [
+        {
+          id: CENTROID_A,
+          label: "Wind",
+          latitude: CENTROID_A_LAT,
+          longitude: CENTROID_A_LON,
+          technology: "WIND",
+          representedMw: 1000,
+          provisional: false,
+        },
+        {
+          id: CENTROID_B,
+          label: "Solar",
+          latitude: CENTROID_B_LAT,
+          longitude: CENTROID_B_LON,
+          technology: "SOLAR",
+          representedMw: 1000,
+          provisional: false,
+        },
+      ],
+    });
+    // The view is read under the axes the gate writes, and through the function
+    // that writes them: there is no second opinion here about what "at the gate"
+    // means either.
+    const fromSql = await db.transaction(async (tx) => {
+      await tx.execute(sql`select feature_apply_gate(${TARGET}::date, 'gate_late')`);
+      return [
+        ...(await tx.execute<{
+          subsystem: string;
+          technology: string;
+          centroid_id: string;
+          weight: number;
+          capacity_mw: number;
+        }>(sql`
+          select subsystem, technology::text as technology, centroid_id,
+                 weight, capacity_mw
+          from canonical_capacity_weight
+        `)),
+      ];
+    });
+
+    const fromTs = weights.vectors
+      .flatMap((vector) =>
+        vector.cells.map((cell) => ({
+          subsystem: vector.subsystem,
+          technology: vector.technology,
+          centroid_id: cell.centroidId,
+          weight: cell.weight,
+          capacity_mw: cell.capacityMw,
+        })),
+      )
+      .toSorted((a, b) =>
+        `${a.subsystem}|${a.technology}|${a.centroid_id}`.localeCompare(
+          `${b.subsystem}|${b.technology}|${b.centroid_id}`,
+        ),
+      );
+
+    const sorted = fromSql.toSorted((a, b) =>
+      `${a.subsystem}|${a.technology}|${a.centroid_id}`.localeCompare(
+        `${b.subsystem}|${b.technology}|${b.centroid_id}`,
+      ),
+    );
+
+    expect(sorted.length).toBeGreaterThan(0);
+    expect(sorted.length).toBe(fromTs.length);
+    sorted.forEach((row, index) => {
+      const mirror = fromTs[index];
+      expect({
+        subsystem: row.subsystem,
+        technology: row.technology,
+        centroid_id: row.centroid_id,
+      }).toEqual({
+        subsystem: mirror?.subsystem as string,
+        technology: mirror?.technology as string,
+        centroid_id: mirror?.centroid_id as string,
+      });
+      expect(Number(row.weight)).toBeCloseTo(mirror?.weight ?? Number.NaN, 12);
+      expect(Number(row.capacity_mw)).toBeCloseTo(mirror?.capacity_mw ?? Number.NaN, 9);
+    });
   });
 
   it("reads the fleet as of the target date, at the gate's vintage", async () => {
@@ -991,10 +1465,7 @@ suite("the gate, end to end (real Postgres)", () => {
     // The valid-time half. `UG3` enters service on 2026-08-20, so the row for
     // 2026-08-19 is 140 MW and the row for 2026-08-20 is 147 — the seven
     // megawatts appear on the day the unit does, and not a day earlier.
-    const dayBefore = await readServingRows(db, {
-      targetDate: TARGET_MINUS_1,
-      ...query,
-    });
+    const dayBefore = await rowsForDay(TARGET_MINUS_1);
     const ne = dayBefore.filter((row) => row.subsystem === "NE");
     expect(ne.length).toBeGreaterThan(0);
     for (const row of ne) {
@@ -1006,7 +1477,7 @@ suite("the gate, end to end (real Postgres)", () => {
     // The vintage half, on its own. `UG4` is invisible at `TARGET`'s gate and
     // visible at a later date's, and nothing about the unit changed in between
     // — only what WattSteer had been told.
-    const later = await readServingRows(db, { targetDate: AFTER_GO_LIVE, ...query });
+    const later = await rowsForDay(AFTER_GO_LIVE);
     const ne = later.find((row) => row.subsystem === "NE");
     // 147 + 500: the same fleet, a week later, with the late snapshot now
     // inside the gate.
@@ -1098,7 +1569,7 @@ suite("the gate, end to end (real Postgres)", () => {
   });
 
   it("reports a window predating go-live as revision_optimistic", async () => {
-    const before = await readServingRows(db, { targetDate: BEFORE_GO_LIVE, ...query });
+    const before = await rowsForDay(BEFORE_GO_LIVE);
     for (const row of before) {
       expect(row.vintage_fidelity).toBe("revision_optimistic");
     }
@@ -1106,7 +1577,7 @@ suite("the gate, end to end (real Postgres)", () => {
     // A target date after every source's go-live is honestly point-in-time,
     // even though it has no rows in either source — fidelity is a claim about
     // what WattSteer was watching, not about what it found.
-    const after = await readServingRows(db, { targetDate: AFTER_GO_LIVE, ...query });
+    const after = await rowsForDay(AFTER_GO_LIVE);
     for (const row of after) {
       expect(row.vintage_fidelity).toBe("point_in_time");
     }
@@ -1127,8 +1598,13 @@ suite("the gate, end to end (real Postgres)", () => {
         await scoped.execute(
           sql`update generating_unit set ingested_at = '2026-09-15T00:00:00.000Z'`,
         );
-        const rows = await readServingRows(scoped, {
-          targetDate: AFTER_GO_LIVE,
+        // The training call, because hiding the registry hides the capacity
+        // weights with it and the serve-time contract would refuse the day
+        // before the stamp could be read. That refusal is the right answer to a
+        // fleet nobody can see; it is not the question this test asks.
+        const rows = await readFeatureRows(scoped, {
+          targetFrom: AFTER_GO_LIVE,
+          targetTo: AFTER_GO_LIVE,
           ...query,
         });
         stamped = rows[0]?.vintage_fidelity;

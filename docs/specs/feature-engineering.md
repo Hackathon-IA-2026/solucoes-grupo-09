@@ -559,6 +559,37 @@ STC-referenced and nothing more. Adding a −0.4%/K cell-temperature derate woul
 bake my coefficient into a feature; `weather_temperature_2m` is in the vector, so
 a gradient-boosted model can learn the interaction from data instead.
 
+> **Settled while implementing ticket 08.** Five things the table above left
+> open, decided at `drizzle/0029_the_weather_block.sql` and recorded here:
+>
+> - **The profile a ramp lives in is the run's, not the calendar day's.** The
+>   class-`P` and class-`D` ramps are NULL at the first hour of D because the
+>   hour before it belongs to D−1's own *file*. A weather run is not a day file:
+>   the D−1 12Z run carries 23:00 BRT on D−1 and 00:00 BRT on D in one
+>   publication, so the same difference is a shape inside one forecast and is
+>   legal at both edges. The block reads three hours either side of the local day
+>   and emits the 24.
+> - **`weather_wind_speed_120m_std_6h` is the six hours t−3 … t+2.** An even
+>   window has no exactly centred form; three hours of history, the hour itself
+>   and two ahead is the convention, and it is NULL unless all six carry a value.
+> - **The clearness index's ε is 1 W/m².** Top-of-atmosphere irradiance is
+>   exactly zero below the horizon, so the denominator is clamped rather than
+>   divided by; a ratio of two small numbers at dawn is not a measurement.
+> - **`weather_centroid_coverage` distinguishes NULL from 0**, and the serve-time
+>   contract turns on it. NULL means the registry places no VRE in that subsystem
+>   at the gate — no weight vector, no mass to cover, and `capacity_wind_mw` is
+>   already NULL beside it. 0 means a fleet exists and nothing reported for it.
+>   The serve path refuses on anything below 1 among the *weighted* rows, and
+>   refuses a day in which no subsystem is weighted at all; it does not refuse a
+>   subsystem that has no fleet to forecast.
+> - **The weighting has a second implementation, and it is bound rather than
+>   trusted.** A plpgsql feature function cannot call TypeScript, so
+>   `canonical_capacity_weight` restates the nearest-centroid assignment and the
+>   pro-rata share that `features/capacity-weights.ts` owns.
+>   `database-features.test.ts` runs the same fleet through both and compares —
+>   the same arrangement `feature_vintage_fidelity` has with the golden vintage
+>   vectors, and for the same reason.
+
 #### ONS day-ahead programming — class `P`, `dessem_free_v1`'s spine
 
 `carga-energia-programada` is a REST-only dataset covering **2021-03-05 → now**,

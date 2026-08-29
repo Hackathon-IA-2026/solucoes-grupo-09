@@ -334,6 +334,112 @@ export interface FeatureRow {
    * describe.
    */
   dessem_absorber_residual_load_mwh: number | null;
+
+  // Class `W`, the rest of it — appended by `drizzle/0029_the_weather_block.sql`
+  // because `ALTER TYPE ... ADD ATTRIBUTE` appends, which is why the weather
+  // columns are split across the row rather than gathered.
+  // `weather_temperature_2m` above keeps its name and its position and changes
+  // its **meaning**: through ticket 01 it was the unweighted mean over every
+  // centroid that reported the hour and was the same number for all four
+  // subsystems; it is now the VRE-capacity-weighted mean over this subsystem's
+  // own fleet.
+  //
+  // `weather_lead_hours` is deliberately absent. Within a fixed run cycle it is
+  // perfectly collinear with `calendar_local_hour` — from a D−1 12Z run the lead
+  // is exactly `15 + local_hour` — so it carries nothing the vector does not
+  // already hold. `weather_run_age_hours` captures the only informative part.
+
+  /** Wind speed at 100 m, km/h, weighted on the **wind** vector. */
+  weather_wind_speed_100m: number | null;
+  /** Wind speed at 120 m, km/h — the hub height the power curve is stated at. */
+  weather_wind_speed_120m: number | null;
+  /**
+   * sin of the capacity-weighted **vector** mean wind direction at 120 m.
+   *
+   * Never a numeric mean: 350° and 10° do not average to 180°. Null where
+   * opposed bearings cancel exactly and the resultant has no direction.
+   */
+  weather_wind_direction_120m_sin: number | null;
+  /** cos of the same weighted vector mean. */
+  weather_wind_direction_120m_cos: number | null;
+  /** Gusts at 10 m, km/h — the only height the pinned model publishes them at. */
+  weather_wind_gusts_10m: number | null;
+  /** Surface pressure, hPa, weighted on the combined **VRE** vector. */
+  weather_surface_pressure: number | null;
+  /** Relative humidity at 2 m, %, VRE-weighted. */
+  weather_relative_humidity_2m: number | null;
+  /** Precipitation over the hour, mm, VRE-weighted. */
+  weather_precipitation: number | null;
+  /** GHI, W/m², an hour mean, weighted on the **solar** vector. */
+  weather_shortwave_radiation: number | null;
+  /** DNI, W/m², solar-weighted. */
+  weather_direct_normal_irradiance: number | null;
+  /** DHI, W/m², solar-weighted. */
+  weather_diffuse_radiation: number | null;
+  /** Total cloud cover, %, solar-weighted. */
+  weather_cloud_cover: number | null;
+  /**
+   * `weather_shortwave_radiation / max(solar_extraterrestrial_ghi, 1 W/m²)`.
+   *
+   * The denominator is the astronomy block's own top-of-atmosphere irradiance,
+   * sampled at the hour midpoint so an hour-mean numerator is not divided by an
+   * edge-sampled denominator. Clamped rather than divided by zero: below the
+   * horizon the denominator is exactly zero.
+   */
+  weather_clearness_index: number | null;
+  /**
+   * Generic IEC-class power curve at 120 m — cut-in 3 m/s, rated 12 m/s,
+   * cut-out 25 m/s, no air-density correction — applied **per centroid** and
+   * then capacity-weighted.
+   *
+   * A **proxy**, named as one: it is not the Brazilian fleet's curve.
+   */
+  weather_wind_power_curve_cf: number | null;
+  /** `weather_wind_power_curve_cf × capacity_wind_mw × 1 h`. */
+  weather_expected_wind_mwh: number | null;
+  /**
+   * `capacity_solar_mw × weather_shortwave_radiation / 1000 × 1 h`.
+   *
+   * STC-referenced, with **no temperature derate**: adding one would bake a
+   * coefficient into a feature, and `weather_temperature_2m` is in the vector.
+   */
+  weather_expected_solar_mwh: number | null;
+  /**
+   * Δ within the forecast profile — legal because a D−1 run publishes the whole
+   * profile at once, and defined at the first hour of the local day because the
+   * hour before it belongs to the same run rather than to a different file.
+   */
+  weather_wind_speed_120m_ramp_1h: number | null;
+  /** Δ of `weather_shortwave_radiation`, on the same terms. */
+  weather_shortwave_radiation_ramp_1h: number | null;
+  /** Δ of `weather_expected_wind_mwh + weather_expected_solar_mwh`. */
+  weather_expected_vre_ramp_1h: number | null;
+  /** Mean over the three hours centred on t, within the forecast profile. */
+  weather_wind_speed_120m_mean_3h: number | null;
+  /** Sample sd over the six hours t−3 … t+2. Null unless all six carry a value. */
+  weather_wind_speed_120m_std_6h: number | null;
+  /** Mean of `weather_shortwave_radiation` over the three hours centred on t. */
+  weather_shortwave_radiation_mean_3h: number | null;
+  /**
+   * `run_init(scheduled) − run_init(used)`, hours, as the **max** over the
+   * centroids carrying weight here.
+   *
+   * 0 on the normal path; 12 or 24 when a scheduled run was missing from the
+   * archive and an older cycle stood in — which is how a 4.5% missing-run rate
+   * degrades the forecast rather than corrupting it.
+   */
+  weather_run_age_hours: number | null;
+  /**
+   * Share of the subsystem's combined-VRE capacity weight **mass** that a
+   * centroid reported for this hour — not the fraction of centroids.
+   *
+   * Losing a 426 MW point and losing a 4,172 MW point are the same fraction of
+   * points and are not the same event. 1 means everything arrived. The weighted
+   * means beside it are renormalised over the reporters, so a hole moves this
+   * column and not them — which is what makes it the thing the serve path
+   * refuses on.
+   */
+  weather_centroid_coverage: number | null;
 }
 
 /**
@@ -430,6 +536,33 @@ export const FEATURE_ROW_COLUMNS: readonly (keyof FeatureRow)[] = [
   "dessem_solar_capacity_factor",
   "dessem_sin_residual_load_mwh",
   "dessem_absorber_residual_load_mwh",
+  // The rest of class `W`, appended by `drizzle/0029_the_weather_block.sql`.
+  // Twenty-four, not the spec's twenty-five names: `weather_lead_hours` is
+  // deliberately absent, and the collinearity argument is recorded at the block.
+  "weather_wind_speed_100m",
+  "weather_wind_speed_120m",
+  "weather_wind_direction_120m_sin",
+  "weather_wind_direction_120m_cos",
+  "weather_wind_gusts_10m",
+  "weather_surface_pressure",
+  "weather_relative_humidity_2m",
+  "weather_precipitation",
+  "weather_shortwave_radiation",
+  "weather_direct_normal_irradiance",
+  "weather_diffuse_radiation",
+  "weather_cloud_cover",
+  "weather_clearness_index",
+  "weather_wind_power_curve_cf",
+  "weather_expected_wind_mwh",
+  "weather_expected_solar_mwh",
+  "weather_wind_speed_120m_ramp_1h",
+  "weather_shortwave_radiation_ramp_1h",
+  "weather_expected_vre_ramp_1h",
+  "weather_wind_speed_120m_mean_3h",
+  "weather_wind_speed_120m_std_6h",
+  "weather_shortwave_radiation_mean_3h",
+  "weather_run_age_hours",
+  "weather_centroid_coverage",
 ];
 
 /**
@@ -583,13 +716,157 @@ export async function readServingRows(
   db: Database,
   query: ServingQuery,
 ): Promise<FeatureRow[]> {
-  return readFeatureRows(db, {
+  const rows = await readFeatureRows(db, {
     targetFrom: query.targetDate,
     targetTo: query.targetDate,
     gateProfile: query.gateProfile,
     featureSet: query.featureSet,
     thresholdMw: query.thresholdMw,
   });
+  assertWeatherCompleteness(rows, query.targetDate);
+  return rows;
+}
+
+/**
+ * The class-`W` columns the serve path insists on, and nothing derived.
+ *
+ * The twelve pinned variables as they arrive at the row — twelve stored
+ * variables becoming thirteen columns, because wind direction enters as a
+ * sin/cos pair. Deliberately **not** the derived block beside them: a ramp is
+ * NULL at a profile edge and a centred window is NULL wherever a neighbour is,
+ * and refusing to serve on those would refuse on the machinery working as
+ * designed. The question this contract asks is whether the *forecast arrived*,
+ * and these thirteen are the columns that answer it.
+ */
+const SERVED_WEATHER_COLUMNS: readonly (keyof FeatureRow)[] = [
+  "weather_wind_speed_100m",
+  "weather_wind_speed_120m",
+  "weather_wind_direction_120m_sin",
+  "weather_wind_direction_120m_cos",
+  "weather_wind_gusts_10m",
+  "weather_temperature_2m",
+  "weather_surface_pressure",
+  "weather_relative_humidity_2m",
+  "weather_precipitation",
+  "weather_shortwave_radiation",
+  "weather_direct_normal_irradiance",
+  "weather_diffuse_radiation",
+  "weather_cloud_cover",
+];
+
+/**
+ * The coverage a served row must carry: **all of it**.
+ *
+ * `weather_centroid_coverage` is the share of capacity weight mass that
+ * reported, so anything below 1 means some of tomorrow's fleet has no weather.
+ * The aggregate renormalises over the reporters rather than dividing by the
+ * full mass, which is right for a training row — a hole is a hole, and the
+ * column beside it says how big — and is exactly why the serve path has to look
+ * at the column: the mean of the points that did arrive is a plausible-looking
+ * number, and nothing in it says it describes three-quarters of a subsystem.
+ */
+const SERVED_MIN_CENTROID_COVERAGE = 1;
+
+/** Floating-point slack. A weighted sum of nineteen shares need not land on 1. */
+const COVERAGE_EPSILON = 1e-9;
+
+/** Four subsystems by twenty-four local hours — the row spine, restated. */
+const SERVED_ROW_COUNT = 96;
+
+/**
+ * The serve path refused, and why — never a partially built row.
+ *
+ * `docs/specs/feature-engineering.md`: at serve time the completeness contract
+ * is asserted and a failure **refuses to serve** rather than imputing. Imputing
+ * is the one response that cannot be detected downstream: a mean over the
+ * centroids that happened to arrive is a number of exactly the right shape, and
+ * a forecast built on it is wrong in a way the interval does not widen for.
+ */
+export class ServingCompletenessError extends Error {
+  constructor(
+    readonly targetDate: string,
+    readonly failures: readonly string[],
+  ) {
+    super(
+      `refusing to serve ${targetDate}: the weather completeness contract failed — ${failures.join("; ")}`,
+    );
+    this.name = "ServingCompletenessError";
+  }
+}
+
+/**
+ * The completeness contract, across variables, hours and centroids.
+ *
+ * Four questions, and a served day has to answer all four: are all 96
+ * subsystem-hours here, does at least one subsystem carry a weight vector at
+ * all, does every *weighted* row carry all thirteen pinned weather columns, and
+ * did every megawatt behind those rows have a centroid reporting for it. Any
+ * "no" refuses.
+ *
+ * **A subsystem with no VRE fleet is not a failure, and the distinction is the
+ * subtle half of this contract.** `weather_centroid_coverage` is NULL exactly
+ * when the registry places no capacity in that subsystem at the gate: there is
+ * no weight vector, so there is no mass to cover and no weather to aggregate.
+ * Refusing the whole day because a subsystem has no registered VRE would be
+ * refusing on the machinery working — those rows already carry a NULL
+ * `capacity_wind_mw`, and the model cannot forecast the curtailment of a fleet
+ * that does not exist. Coverage **below** 1 is the failure: part of a real
+ * fleet had no weather, and the mean of the points that did arrive is a number
+ * of exactly the right shape with nothing in it to say so.
+ *
+ * The vacuous case is closed by the second question: if *every* subsystem is
+ * unweighted the registry read itself has failed, and a day with no weather
+ * anywhere passes no contract.
+ *
+ * Exported so the assertion can be exercised without a database, and because a
+ * serving job needs to distinguish this refusal from a transport failure.
+ */
+export function assertWeatherCompleteness(
+  rows: readonly FeatureRow[],
+  targetDate: string,
+): void {
+  const failures: string[] = [];
+
+  if (rows.length !== SERVED_ROW_COUNT) {
+    failures.push(`expected ${SERVED_ROW_COUNT} subsystem-hours, got ${rows.length}`);
+  }
+
+  const missing = new Map<string, number>();
+  let weighted = 0;
+  let uncovered = 0;
+  for (const row of rows) {
+    const coverage = row.weather_centroid_coverage;
+    if (coverage === null || coverage === undefined) {
+      continue;
+    }
+    weighted += 1;
+    for (const column of SERVED_WEATHER_COLUMNS) {
+      if (row[column] === null || row[column] === undefined) {
+        missing.set(column, (missing.get(column) ?? 0) + 1);
+      }
+    }
+    if (coverage < SERVED_MIN_CENTROID_COVERAGE - COVERAGE_EPSILON) {
+      uncovered += 1;
+    }
+  }
+
+  if (weighted === 0) {
+    failures.push(
+      "no subsystem carries a capacity weight vector: the fleet read behind the weights returned nothing at this gate",
+    );
+  }
+  for (const [column, count] of missing) {
+    failures.push(`${column} is null in ${count} of ${weighted} weighted rows`);
+  }
+  if (uncovered > 0) {
+    failures.push(
+      `weather_centroid_coverage is below ${SERVED_MIN_CENTROID_COVERAGE} in ${uncovered} of ${weighted} weighted rows`,
+    );
+  }
+
+  if (failures.length > 0) {
+    throw new ServingCompletenessError(targetDate, failures);
+  }
 }
 
 const BRASILIA = "America/Sao_Paulo";

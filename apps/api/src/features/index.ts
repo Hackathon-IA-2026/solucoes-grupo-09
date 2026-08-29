@@ -46,6 +46,7 @@ export {
   weightMisallocation,
 } from "./capacity-weights.js";
 export {
+  assertWeatherCompleteness,
   FEATURE_ROW_COLUMNS,
   FEATURE_ROW_STAMP_COLUMNS,
   FEATURE_SETS,
@@ -60,6 +61,7 @@ export {
   isLabelColumn,
   readFeatureRows,
   readServingRows,
+  ServingCompletenessError,
   type ServingQuery,
   servingTargetDate,
 } from "./feature-rows.js";
