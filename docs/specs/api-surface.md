@@ -1372,7 +1372,7 @@ neither language can quietly skip one.
 | canonical scenario JSON + sha256 | web builds the URL, gateway builds the cache key | ML re-derives it to validate | Float formatting. `0.92` vs `0.920` is a different hash and a cache that silently never hits |
 | the 18 scenario validation rules | gateway, "before a model is built" | ML, "trusts nothing it did not validate itself" | Two hand-written tables of eighteen rules |
 | `avoidability` and its null rule | web renders "—" | ML computes it | The null-vs-zero rule is one line and it is the product's most quoted percentage |
-| **the simulator / execution rule** | `apps/web/src/lib/optimize.ts` `evaluatePlan` | `apps/ml`, the authority | See below |
+| **the simulator / execution rule** | `apps/web/src/lib/fixtures/optimize.ts` `evaluatePlan` | `apps/ml`, the authority | See below |
 
 **The simulator is not a parity case. It is a deletion.** `replay.md` seam 3
 requires a structural test that **exactly one implementation of the execution
@@ -1620,7 +1620,7 @@ whole vintage vocabulary exists to survive.
    alternative — `camelCase` on the wire — would require re-shaping two
    contracts that two specs declared fixed and would put the conversion in the
    Python service instead.
-6. **`apps/web/src/lib/optimize.ts`'s `evaluatePlan` and `planDispatch` are
+6. **`apps/web/src/lib/fixtures/optimize.ts`'s `evaluatePlan` and `planDispatch` are
    deleted, not ported.** `replay.md` requires exactly one execution rule in the
    repository and `flex-optimizer.md` records that this copy is wrong. Deleting
    it means Mitigate must call `/v1/optimize` before the fixtures come out, so

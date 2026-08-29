@@ -19,6 +19,12 @@
  *  - **The assets may not import from the grid**: net demand increase is capped
  *    at the curtailment actually available in that hour, and is forbidden
  *    outright in hours with no curtailment.
+ *
+ * The *planner* below is a heuristic and is allowed to be. The **scorer** is
+ * not: `evaluatePlan` is the execution rule, and there is exactly one of those
+ * in the repository per language — see its own doc comment, and
+ * `apps/ml/tests/test_one_simulator.py`, which walks the repository to keep it
+ * that way. Every KPI comes from it; nothing here reads a number off a plan.
  */
 
 import type {
@@ -174,13 +180,46 @@ export function planDispatch(input: PlanInput): DispatchPlan {
 }
 
 /**
- * Score a plan against a realisation of the forecast.
+ * **The execution rule.** One implementation, in this file, in this language —
+ * and `apps/ml/src/wattsteer_ml/optimizer/simulator.py` is the other language's,
+ * proved identical against the golden vectors in
+ * `packages/core/fixtures/execution-rule/`. `apps/ml/tests/test_one_simulator.py`
+ * walks the repository and fails if a third appears. That single shared code
+ * path is what makes a backtest number comparable to a forecast number, and
+ * `docs/specs/flex-optimizer.md` calls it the most important line it contains.
+ *
+ * > The plan is a schedule of *intended* dispatch. On the day, an asset charges
+ * > the scheduled amount **or the amount actually being curtailed, whichever is
+ * > smaller**, and discharges the scheduled amount or what its state of charge
+ * > actually permits, whichever is smaller.
+ *
+ * ```
+ * executedCharge    = min(plan.ch[t], headroom(soc), realisation[t])
+ * executedDischarge = min(plan.dis[t], available(soc))
+ * delta[t]          = executedCharge - executedDischarge + up[t] - down[t]
+ * absorbed[t]       = max(0, min(delta[t], realisation[t]))
+ * soc              += etaC * executedCharge - executedDischarge / etaD
+ * ```
  *
  * This is the whole reason the band survives to the headline number: the plan
- * is built once, against whichever point of the band the user pointed the
- * optimizer at, and then evaluated three times — against P10, P50 and P90 —
- * so "MWh recovered" arrives as an interval rather than as a single figure
- * that quietly assumes the median came true.
+ * is built once, against whichever point of the band the optimizer was pointed
+ * at, and evaluated three times — against P10, P50 and P90 — so "MWh recovered"
+ * arrives as an interval rather than as a figure that quietly assumes the
+ * median came true. And because the rule clips both legs against a state of
+ * charge recomputed from the executed dispatch, a plan built for a big day and
+ * executed against a small one absorbs *less* — never more, and never anything
+ * it did not receive. Over-planning cannot overstate recovery, which is what
+ * makes planning on P50 while promising the P10 edge coherent rather than
+ * optimistic.
+ *
+ * Two things this used to get wrong, both of them flattering:
+ *
+ *  - it carried the **planned** state of charge alongside a clipped absorption,
+ *    so on a realisation below the planning basis the chart showed a battery
+ *    filling up on energy it never received — the headline fell and the
+ *    trajectory did not, and only the trajectory was wrong;
+ *  - it never clipped **discharge** to the available state of charge, so a plan
+ *    could deliver energy the battery never stored.
  */
 export function evaluatePlan(
   plan: DispatchPlan,
@@ -192,68 +231,86 @@ export function evaluatePlan(
   const dispatch: HourlyDispatch[] = [];
   let baseline = 0;
   let absorbedTotal = 0;
+  let roundTripLossMwh = 0;
 
-  // The plan is made against a forecast; this evaluates it against a
-  // realisation that may be smaller. The execution rule is: charge the
-  // scheduled amount or what is actually curtailed, whichever is smaller.
-  //
-  // Reporting the *planned* state of charge alongside a clipped absorption
-  // would show a battery filling on energy it never received — the chart and
-  // the headline would disagree, and only the chart would be wrong. So the
-  // trajectory is recomputed from what execution actually did.
   const capacity = battery ? Math.max(0, battery.energyCapacityMwh) : 0;
+  const floor = capacity * SOC_FLOOR_FRACTION;
+  const ceiling = capacity * SOC_CEILING_FRACTION;
+  // A datasheet prints one round-trip number and the balance needs two, because
+  // the loss enters asymmetrically: x etaC on the way in, / etaD on the way
+  // out. Split sqrt(RTE), exactly as `Battery.fromRoundTrip` does on the Python
+  // side, so the two never disagree about a 92 % battery.
   const eta = battery
     ? Math.sqrt(Math.max(0.01, Math.min(1, battery.roundTripEfficiency)))
     : 1;
   let soc = battery
-    ? capacity * Math.max(0, Math.min(1, battery.initialStateOfCharge))
+    ? Math.min(
+        ceiling,
+        Math.max(
+          floor,
+          capacity * Math.max(0, Math.min(1, battery.initialStateOfCharge)),
+        ),
+      )
     : 0;
 
   for (let t = 0; t < n; t++) {
     const offered = realisationMwh[t];
     baseline += offered;
-    const netDemandIncrease =
-      plan.batteryChargeMw[t] -
-      plan.batteryDischargeMw[t] +
-      plan.loadShiftUpMw[t] -
-      plan.loadShiftDownMw[t];
-    // No import from the grid: absorption is capped by what was curtailed.
+
+    // ...or the amount actually being curtailed, whichever is smaller.
+    const headroom = Math.max(0, ceiling - soc);
+    const charge = battery
+      ? Math.min(plan.batteryChargeMw[t], headroom / eta, offered)
+      : 0;
+    // ...or what its state of charge actually permits, whichever is smaller.
+    const stored = Math.max(0, soc - floor);
+    const discharge = battery ? Math.min(plan.batteryDischargeMw[t], stored * eta) : 0;
+    if (battery) {
+      soc += eta * charge - discharge / eta;
+      roundTripLossMwh += (1 - eta) * charge + (1 / eta - 1) * discharge;
+    }
+
+    // The net increase in flexible demand, which is what stops a discharge in
+    // an oversupply hour being counted as absorption. The load's shift is
+    // energy-conserving by construction and is not clipped by the realisation;
+    // absorption is.
+    const shiftUp = plan.loadShiftUpMw[t];
+    const shiftDown = plan.loadShiftDownMw[t];
+    const netDemandIncrease = charge - discharge + shiftUp - shiftDown;
+    // No import from the grid, and no negative absorption.
     const absorbed = Math.max(0, Math.min(netDemandIncrease, offered));
     absorbedTotal += absorbed;
-
-    // Scale the demand-increasing legs by however much of the plan the hour
-    // could actually support. Both legs scale together, because the shortfall
-    // is in the energy available, not in one asset's willingness.
-    const executable =
-      netDemandIncrease > 0 ? Math.min(1, offered / netDemandIncrease) : 1;
-    const charge = plan.batteryChargeMw[t] * executable;
-    const shiftUp = plan.loadShiftUpMw[t] * executable;
-    const discharge = plan.batteryDischargeMw[t];
-
-    if (battery) {
-      soc = Math.max(0, Math.min(capacity, soc + charge * eta - discharge / eta));
-    }
 
     dispatch.push({
       hourLocal: t,
       offeredMwh: offered,
       batteryChargeMw: charge,
       batteryDischargeMw: discharge,
-      stateOfChargeMwh: battery ? soc : plan.stateOfChargeMwh[t],
+      stateOfChargeMwh: soc,
       loadShiftUpMw: shiftUp,
-      loadShiftDownMw: plan.loadShiftDownMw[t],
+      loadShiftDownMw: shiftDown,
       absorbedMwh: absorbed,
     });
   }
+
+  // `thresholdMw` gates whether the ratio is *defined*; it never enters the
+  // ratio. The baseline is the whole realisation, unfiltered, because the
+  // threshold is a property of the CurtailmentHour label and has nothing to do
+  // with what a battery can absorb - filtering the denominator by it would make
+  // the Avoidability Score move when someone tuned an episode parameter.
+  const hasCurtailmentHour = realisationMwh.some((mwh) => mwh >= thresholdMw);
 
   return {
     baselineCurtailmentMwh: baseline,
     optimizedCurtailmentMwh: baseline - absorbedTotal,
     avoidedEnergyMwh: absorbedTotal,
-    // null, never 0, when there was nothing to avoid — a zero would read as
-    // "nothing could be avoided".
-    avoidability: baseline > 0 ? absorbedTotal / baseline : null,
+    // null, never 0, when there was nothing to avoid - a zero would read as
+    // "nothing could be avoided". A day of noise fully absorbed is undefined
+    // too, or it would render a triumphant 100 %.
+    avoidability: hasCurtailmentHour && baseline > 0 ? absorbedTotal / baseline : null,
     dispatch,
     thresholdMw,
+    storedAtHorizonEndMwh: soc,
+    roundTripLossMwh,
   };
 }

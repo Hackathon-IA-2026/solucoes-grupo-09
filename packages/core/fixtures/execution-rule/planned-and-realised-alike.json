@@ -1,0 +1,212 @@
+{
+  "name": "planned-and-realised-alike",
+  "why": "The reference day, executed against the profile it was planned on \u2014 the one realisation where the plan and the simulator have to agree exactly.",
+  "thresholdMw": 5.0,
+  "battery": {
+    "maxPowerMw": 100.0,
+    "energyCapacityMwh": 300.0,
+    "roundTripEfficiency": 0.92,
+    "initialStateOfCharge": 0.2
+  },
+  "plan": {
+    "batteryChargeMw": [
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 20.0, 51.49445897705094, 80.0,
+      90.0, 29.99999999999997, 9.999999999999972, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+    ],
+    "batteryDischargeMw": [
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 43.16248370981448, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 2.842170943040401e-14, 2.842170943040401e-14, 2.842170943040401e-14,
+      2.842170943040401e-14, 2.842170943040401e-14, 0.0, 0.0, 0.0
+    ],
+    "loadShiftUpMw": [
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+    ],
+    "loadShiftDownMw": [
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+    ]
+  },
+  "realisationMwh": [
+    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 20.0, 70.0, 110.0, 90.0, 30.0, 10.0,
+    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+  ],
+  "expected": {
+    "baselineCurtailmentMwh": 330.0,
+    "avoidedEnergyMwh": 281.4944589770509,
+    "optimizedCurtailmentMwh": 48.5055410229491,
+    "avoidability": 0.8530135120516694,
+    "storedAtHorizonEndMwh": 284.99999999999966,
+    "roundTripLossMwh": 13.331975267236455,
+    "dispatch": [
+      {
+        "hourLocal": 0,
+        "batteryChargeMw": 0.0,
+        "batteryDischargeMw": 0.0,
+        "stateOfChargeMwh": 60.0,
+        "absorbedMwh": 0.0
+      },
+      {
+        "hourLocal": 1,
+        "batteryChargeMw": 0.0,
+        "batteryDischargeMw": 0.0,
+        "stateOfChargeMwh": 60.0,
+        "absorbedMwh": 0.0
+      },
+      {
+        "hourLocal": 2,
+        "batteryChargeMw": 0.0,
+        "batteryDischargeMw": 0.0,
+        "stateOfChargeMwh": 60.0,
+        "absorbedMwh": 0.0
+      },
+      {
+        "hourLocal": 3,
+        "batteryChargeMw": 0.0,
+        "batteryDischargeMw": 0.0,
+        "stateOfChargeMwh": 60.0,
+        "absorbedMwh": 0.0
+      },
+      {
+        "hourLocal": 4,
+        "batteryChargeMw": 0.0,
+        "batteryDischargeMw": 0.0,
+        "stateOfChargeMwh": 60.0,
+        "absorbedMwh": 0.0
+      },
+      {
+        "hourLocal": 5,
+        "batteryChargeMw": 0.0,
+        "batteryDischargeMw": 0.0,
+        "stateOfChargeMwh": 60.0,
+        "absorbedMwh": 0.0
+      },
+      {
+        "hourLocal": 6,
+        "batteryChargeMw": 0.0,
+        "batteryDischargeMw": 0.0,
+        "stateOfChargeMwh": 60.0,
+        "absorbedMwh": 0.0
+      },
+      {
+        "hourLocal": 7,
+        "batteryChargeMw": 0.0,
+        "batteryDischargeMw": 0.0,
+        "stateOfChargeMwh": 60.0,
+        "absorbedMwh": 0.0
+      },
+      {
+        "hourLocal": 8,
+        "batteryChargeMw": 0.0,
+        "batteryDischargeMw": 0.0,
+        "stateOfChargeMwh": 60.0,
+        "absorbedMwh": 0.0
+      },
+      {
+        "hourLocal": 9,
+        "batteryChargeMw": 0.0,
+        "batteryDischargeMw": 43.162483709814474,
+        "stateOfChargeMwh": 15.0,
+        "absorbedMwh": 0.0
+      },
+      {
+        "hourLocal": 10,
+        "batteryChargeMw": 20.0,
+        "batteryDischargeMw": 0.0,
+        "stateOfChargeMwh": 34.183326093250884,
+        "absorbedMwh": 20.0
+      },
+      {
+        "hourLocal": 11,
+        "batteryChargeMw": 51.49445897705094,
+        "batteryDischargeMw": 0.0,
+        "stateOfChargeMwh": 83.5750760208658,
+        "absorbedMwh": 51.49445897705094
+      },
+      {
+        "hourLocal": 12,
+        "batteryChargeMw": 80.0,
+        "batteryDischargeMw": 0.0,
+        "stateOfChargeMwh": 160.3083803938693,
+        "absorbedMwh": 80.0
+      },
+      {
+        "hourLocal": 13,
+        "batteryChargeMw": 90.0,
+        "batteryDischargeMw": 0.0,
+        "stateOfChargeMwh": 246.63334781349823,
+        "absorbedMwh": 90.0
+      },
+      {
+        "hourLocal": 14,
+        "batteryChargeMw": 29.99999999999997,
+        "batteryDischargeMw": 0.0,
+        "stateOfChargeMwh": 275.40833695337454,
+        "absorbedMwh": 29.99999999999997
+      },
+      {
+        "hourLocal": 15,
+        "batteryChargeMw": 9.999999999999972,
+        "batteryDischargeMw": 0.0,
+        "stateOfChargeMwh": 284.99999999999994,
+        "absorbedMwh": 9.999999999999972
+      },
+      {
+        "hourLocal": 16,
+        "batteryChargeMw": 0.0,
+        "batteryDischargeMw": 2.842170943040401e-14,
+        "stateOfChargeMwh": 284.9999999999999,
+        "absorbedMwh": 0.0
+      },
+      {
+        "hourLocal": 17,
+        "batteryChargeMw": 0.0,
+        "batteryDischargeMw": 2.842170943040401e-14,
+        "stateOfChargeMwh": 284.99999999999983,
+        "absorbedMwh": 0.0
+      },
+      {
+        "hourLocal": 18,
+        "batteryChargeMw": 0.0,
+        "batteryDischargeMw": 2.842170943040401e-14,
+        "stateOfChargeMwh": 284.9999999999998,
+        "absorbedMwh": 0.0
+      },
+      {
+        "hourLocal": 19,
+        "batteryChargeMw": 0.0,
+        "batteryDischargeMw": 2.842170943040401e-14,
+        "stateOfChargeMwh": 284.9999999999997,
+        "absorbedMwh": 0.0
+      },
+      {
+        "hourLocal": 20,
+        "batteryChargeMw": 0.0,
+        "batteryDischargeMw": 2.842170943040401e-14,
+        "stateOfChargeMwh": 284.99999999999966,
+        "absorbedMwh": 0.0
+      },
+      {
+        "hourLocal": 21,
+        "batteryChargeMw": 0.0,
+        "batteryDischargeMw": 0.0,
+        "stateOfChargeMwh": 284.99999999999966,
+        "absorbedMwh": 0.0
+      },
+      {
+        "hourLocal": 22,
+        "batteryChargeMw": 0.0,
+        "batteryDischargeMw": 0.0,
+        "stateOfChargeMwh": 284.99999999999966,
+        "absorbedMwh": 0.0
+      },
+      {
+        "hourLocal": 23,
+        "batteryChargeMw": 0.0,
+        "batteryDischargeMw": 0.0,
+        "stateOfChargeMwh": 284.99999999999966,
+        "absorbedMwh": 0.0
+      }
+    ]
+  }
+}

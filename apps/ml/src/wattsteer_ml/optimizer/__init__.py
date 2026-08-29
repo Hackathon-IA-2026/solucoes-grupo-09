@@ -8,11 +8,13 @@ module split follows the spec's own seams:
 * :mod:`.fleet` — the `FlexibilityAsset` variants as the model sees them.
 * :mod:`.backend` — which solver runs, and which are refused before they can.
 * :mod:`.milp` — the model of the research's §2, built and solved.
+* :mod:`.simulator` — the execution rule, and every KPI derived from it.
 
-The simulator that scores a plan, and every KPI derived from one, belong to
-ticket 02 and deliberately do not live here: the objective value carries a
-throughput penalty, is not a physical quantity, and must never become a number
-on a screen.
+:mod:`.simulator` is deliberately separate from :mod:`.milp`: the objective
+value carries a throughput penalty, is not a physical quantity, and must never
+become a number on a screen. Every KPI is re-derived from physics against a
+named realisation, by the one function the live path, Replay and the backtest
+all import.
 """
 
 from __future__ import annotations
@@ -37,6 +39,15 @@ from .milp import (
     SolverReport,
     solve,
 )
+from .simulator import (
+    TOLERANCE_MWH,
+    ExecutedHour,
+    Schedule,
+    ScoredBand,
+    ScoredRealisation,
+    score_band,
+    simulate,
+)
 
 __all__ = [
     "GRID_ZONE",
@@ -46,15 +57,20 @@ __all__ = [
     "PERIOD_HOURS",
     "REFUSED_BACKENDS",
     "SHIPPED",
+    "TOLERANCE_MWH",
     "Availability",
     "BackendNotPermittedError",
     "Battery",
     "BatteryDispatch",
     "DispatchPlan",
+    "ExecutedHour",
     "Horizon",
     "HourlyDispatch",
     "ModelOptions",
     "OptimizerBugError",
+    "Schedule",
+    "ScoredBand",
+    "ScoredRealisation",
     "SolverNotOptimalError",
     "SolverReport",
     "Versions",
@@ -63,5 +79,7 @@ __all__ = [
     "local_day",
     "reference_battery",
     "resolve_backend",
+    "score_band",
+    "simulate",
     "solve",
 ]
