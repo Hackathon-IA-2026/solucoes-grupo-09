@@ -57,6 +57,16 @@ changes nothing else about how a band is built — there is still one call to
 a scalar to a served interval. What that costs at the upper tail, and why the
 lower one is exact, is written down in :mod:`wattsteer_ml.training.conformal`.
 
+**Every figure above hour grain is drawn, and this file draws none of them.**
+Forecaster ticket 07 takes the randomised PIT of the band composed *here* on
+the calibration window — with the correction already applied, so ``U`` is a
+property of the band the product ships — and stores it in the bundle.
+:func:`day_grain_rows` then groups the composed hours into days and hands the
+mixtures to :mod:`wattsteer_ml.training.ensemble`, which inverts the same
+:class:`~wattsteer_ml.mixture.HurdleMixture` objects at 500 × 24 draws of
+``u``. Grep this file for a day total: there is none, because a day total is
+not a sum of anything this file holds.
+
 **The pool the reliability curve is measured on is an argument, not a
 derivation.** :func:`train_fold` cannot compute out-of-fold predictions across
 every walk-forward fold from one fold's rows, and a curve measured on the fold
@@ -88,7 +98,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 import lightgbm as lgb
@@ -100,6 +110,7 @@ from wattsteer_ml.evaluation import Fold, FoldBlocks, RowKey
 from wattsteer_ml.mixture import (
     FITTED_ALPHAS,
     ComposedForecast,
+    HurdleMixture,
     MagnitudeQuantiles,
     compose,
 )
@@ -126,6 +137,16 @@ from wattsteer_ml.training.conformal import (
 )
 from wattsteer_ml.training.contract import FeatureContract
 from wattsteer_ml.training.design import FeatureBlock, RowStamp
+from wattsteer_ml.training.ensemble import (
+    ENSEMBLE_DRAWS,
+    ENSEMBLE_SEED,
+    DayGrainCoverage,
+    DayGrainForecast,
+    DrawPlan,
+    PitMatrix,
+    draw_day_grain,
+    fit_pit_matrix,
+)
 from wattsteer_ml.training.hyperparameters import MODEL_CONFIG_V1, ModelConfig
 
 
@@ -269,6 +290,21 @@ def train_fold(
         sub_threshold_means=sub_threshold_means,
         threshold_mw=stamp.threshold_mw,
     )
+    pit = _fit_pit(
+        monitor,
+        blocks=blocks,
+        fold=fold,
+        occurrence=occurrence,
+        isotonic=fitted_calibration.isotonic,
+        magnitude_p10=magnitude_p10,
+        magnitude_p50=magnitude_p50,
+        magnitude_p90=magnitude_p90,
+        magnitude_mean=magnitude_mean,
+        wind_share=wind_share,
+        sub_threshold_means=sub_threshold_means,
+        threshold_mw=stamp.threshold_mw,
+        correction=correction,
+    )
     bundle = HurdleBundle(
         lane=stamp.lane,
         contract=contract,
@@ -283,6 +319,7 @@ def train_fold(
         sub_threshold_means=sub_threshold_means,
         calibration=fitted_calibration,
         conformal=correction,
+        pit=pit,
     )
     counts = TrainingCounts(
         base_fit_rows=len(base_fit),
@@ -309,6 +346,8 @@ def train_fold(
         sub_threshold_means=bundle.sub_threshold_means,
         calibration=fitted_calibration,
         conformal=correction,
+        pit=pit,
+        day_grain=_fold_day_grain(bundle, test_rows, fold=fold),
         coverage=_fold_coverage(bundle, test_rows, fold=fold),
         feature_set_version=feature_set_version,
         git_sha_ml=git_sha_ml,
@@ -351,6 +390,49 @@ def forecast_rows(
         return ()
     block = FeatureBlock.of(rows, bundle.contract, threshold_mw=bundle.threshold_mw)
     return _compose_with(bundle, block)
+
+
+def day_grain_rows(
+    bundle: HurdleBundle,
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    seed: int = ENSEMBLE_SEED,
+    draws: int = ENSEMBLE_DRAWS,
+) -> tuple[DayGrainForecast, ...]:
+    """Day energy, peak power and day-level occurrence, per subsystem and day.
+
+    The only place a figure above hour grain is produced, and it produces it by
+    drawing 500 whole rows of the bundle's PIT matrix through the *same*
+    mixtures :func:`forecast_rows` composed the hourly band from — not through a
+    second inversion, and never by adding anything up.
+    :func:`~wattsteer_ml.training.ensemble.draw_day_grain` holds the arithmetic;
+    this function's whole job is to group the composed hours into days.
+
+    **One draw plan for every subsystem of every day.** That is the hand-back
+    forecaster ticket 08 needs: draw ``k`` is the same calibration day in all
+    four subsystems, so the national day-total quantiles are a property of these
+    draws and need no copula. Composing them is ticket 08's; producing the
+    shared index is this function's.
+
+    A ``(day, subsystem)`` with fewer than twenty-four composed hours is
+    dropped rather than totalled — a day total over twenty-three hours is a
+    different quantity wearing the same name.
+    """
+    grouped: dict[tuple[date, Subsystem], list[tuple[int, HurdleMixture]]] = {}
+    for hour in forecast_rows(bundle, rows):
+        grouped.setdefault((hour.key.target_date, hour.key.subsystem), []).append(
+            (hour.key.local_hour, hour.forecast.mixture)
+        )
+    days = {
+        key: [mixture for _, mixture in sorted(entries, key=lambda one: one[0])]
+        for key, entries in grouped.items()
+    }
+    return draw_day_grain(
+        days,
+        matrix=bundle.pit,
+        threshold_mw=bundle.threshold_mw,
+        plan=DrawPlan.seeded(rows=bundle.pit.rows, seed=seed, draws=draws),
+    )
 
 
 def _compose_with(bundle: HurdleBundle, block: FeatureBlock) -> tuple[HourForecast, ...]:
@@ -520,6 +602,102 @@ def _fit_conformal(
         _scored(composed, monitor_positives),
         window=(blocks.calibration_start, blocks.calibration_end),
     )
+
+
+def _fit_pit(
+    monitor: FeatureBlock,
+    *,
+    blocks: FoldBlocks,
+    fold: Fold,
+    occurrence: lgb.Booster,
+    isotonic: IsotonicCalibrator,
+    magnitude_p10: lgb.Booster,
+    magnitude_p50: lgb.Booster,
+    magnitude_p90: lgb.Booster,
+    magnitude_mean: lgb.Booster,
+    wind_share: lgb.Booster,
+    sub_threshold_means: SubThresholdMeans,
+    threshold_mw: float,
+    correction: ConformalCorrection,
+) -> PitMatrix:
+    """``U`` on the calibration window's settled hours, against the served band.
+
+    ``correction`` is passed rather than omitted, and that is the whole
+    ordering: ``δ_lo`` and ``δ_hi`` are fitted first, on this same window's
+    curtailed hours, and the PIT is then taken of the band the product would
+    actually have shown. A matrix built from the uncorrected band would describe
+    a distribution nobody serves, and the ensemble would map its draws back
+    through a different one.
+
+    **Every settled hour, not only the curtailed ones.** The conformal residuals
+    are about the width of the conditional interval and so see positives only;
+    ``U`` is about the whole predictive CDF, and a sub-threshold hour is exactly
+    what supplies the ``Uniform(0, 1 − p)`` mass that keeps the column uniform.
+
+    The arithmetic lives in :mod:`wattsteer_ml.training.ensemble`; this
+    function's job is to hand it the right block, as :func:`_fit_calibration`
+    and :func:`_fit_conformal` do for theirs.
+
+    **The same in-sample optimism this file already declares reaches here too.**
+    The band composed on this window is a hair closer to its labels than it will
+    be out of sample, so ``U`` is very slightly *under*-dispersed and the day
+    band it produces is very slightly narrow. It is stated rather than
+    corrected, for the reason the module docstring gives about ``δ``.
+    """
+    if not len(monitor):
+        raise TrainingError(
+            f"{fold.id}: the calibration block "
+            f"{blocks.calibration_start.isoformat()}–"
+            f"{blocks.calibration_end.isoformat()} carries no settled label, so "
+            "there is no PIT to take and no day-grain figure that is not a sum "
+            "of quantiles"
+        )
+    composed = _compose_block(
+        monitor,
+        occurrence=occurrence,
+        isotonic=isotonic,
+        magnitude_p10=magnitude_p10,
+        magnitude_p50=magnitude_p50,
+        magnitude_p90=magnitude_p90,
+        magnitude_mean=magnitude_mean,
+        wind_share=wind_share,
+        sub_threshold_means=sub_threshold_means,
+        threshold_mw=threshold_mw,
+        correction=correction,
+    )
+    return fit_pit_matrix(
+        [
+            (hour.key, hour.forecast.mixture, float(observed))
+            for hour, observed in zip(composed, monitor.total_mwh.tolist(), strict=True)
+        ],
+        window=(blocks.calibration_start, blocks.calibration_end),
+    )
+
+
+def _fold_day_grain(
+    bundle: HurdleBundle, rows: Sequence[Mapping[str, Any]], *, fold: Fold
+) -> DayGrainCoverage | None:
+    """``day_total_coverage`` and ``peak_coverage`` on this fold's test period.
+
+    Measured on the **served** day band — drawn from the bundle's own matrix
+    through the bundle's own mixtures — because the number the card publishes
+    has to be a property of what the product would have shown. Nothing about it
+    feeds back: the matrix was fitted before this function ran, on a different
+    window, and :class:`~wattsteer_ml.training.ensemble.PitMatrix` has no field
+    a coverage number could reach.
+
+    ``None`` when no test day has all twenty-four hours settled.
+    """
+    if not rows:
+        return None
+    block = FeatureBlock.of(rows, bundle.contract, threshold_mw=bundle.threshold_mw)
+    labelled = block.select(block.labelled)
+    if not len(labelled):
+        return None
+    observed: dict[tuple[date, Subsystem], list[float]] = {}
+    for key, value in zip(labelled.keys, labelled.total_mwh.tolist(), strict=True):
+        observed.setdefault((key.target_date, key.subsystem), []).append(float(value))
+    return DayGrainCoverage.of(observed, day_grain_rows(bundle, rows), fold_id=fold.id)
 
 
 def _fold_coverage(

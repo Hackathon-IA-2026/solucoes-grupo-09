@@ -35,7 +35,7 @@ serialising them across the API is not in v1.
 **Blocked by:** 05, 06 (the marginals must be calibrated and conformalised
 before their PIT means anything).
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The PIT matrix is computed on the calibration window with the randomised
       rule for sub-threshold hours and stored in the bundle

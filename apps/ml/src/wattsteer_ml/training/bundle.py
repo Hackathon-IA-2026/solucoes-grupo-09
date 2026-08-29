@@ -45,9 +45,19 @@ load. The card gains the Quantiles group at the same time: a card with no
 ``delta_lo`` in it is a card that has not made a coverage statement, and that
 absence was stated rather than defaulted right up until this ticket filled it.
 
-**What this module still does not hold.** The PIT residual matrix, fitted by
-forecaster ticket 07 on the same calibration window. It is absent rather than
-present-and-``None``, and it will arrive the same way these two did.
+**The PIT residual matrix is one required field, added by forecaster ticket
+07.** The bundle carries a :class:`~wattsteer_ml.training.ensemble.PitMatrix` —
+``U``, one row per complete calibration day and one column per subsystem-hour,
+plus the window and the seed behind it — and it is required for the third time
+for the same reason. Every figure above hour grain is a quantile of 500
+whole-row draws of it, and a bundle without one can serve twenty-four hourly
+bands and no day total at all; ``docs/specs/replay.md`` forbids reconstructing
+that day total by summing the hourly band, so "absent" here means the day-grain
+row simply cannot be produced. A bundle written before 07 does not load. The
+card gains an Ensemble group at the same time, and the group is where the
+matrix's per-column Kolmogorov–Smirnov distance is published: a ``U`` that is
+not uniform means the marginals are miscalibrated and every day-grain number
+drawn from it is meaningless.
 """
 
 from __future__ import annotations
@@ -72,6 +82,7 @@ from wattsteer_ml.lanes import Lane, format_instant, is_artifact_id
 from wattsteer_ml.training.calibration import Calibration, IsotonicCalibrator
 from wattsteer_ml.training.conformal import ConformalCorrection, CoverageReport
 from wattsteer_ml.training.contract import FeatureContract
+from wattsteer_ml.training.ensemble import DayGrainCoverage, PitMatrix
 from wattsteer_ml.training.hyperparameters import ESTIMATOR_FAMILY, ModelConfig
 
 #: Hours in the local target day. `μ_sub` is 4 subsystems × this many hours.
@@ -195,6 +206,12 @@ class HurdleBundle:
     #: :func:`~wattsteer_ml.training.hurdle.forecast_rows` applies them to
     #: ``Q_pos`` before the one composition — never after it.
     conformal: ConformalCorrection
+    #: ``U`` — the randomised PIT of the composed, corrected band over the same
+    #: calibration window, one row per complete day. Required: every figure
+    #: above hour grain is a quantile of 500 whole-row draws of it, and the one
+    #: alternative — summing the hourly band — is what both
+    #: `docs/specs/forecaster.md` and `docs/specs/replay.md` forbid.
+    pit: PitMatrix
     #: ``lightgbm`` — the allow-list the hot-swap gate's second check enforces.
     estimator_family: str = ESTIMATOR_FAMILY
 
@@ -266,7 +283,7 @@ class ModelCard:
     """The document beside the bundle. Written whatever the gate later decides.
 
     The groups written here — Identity, Lane, Contract, Data, Calibration,
-    Quantiles, plus the Environment block — are fields. The Metrics, Experiments
+    Quantiles, Ensemble, plus the Environment block — are fields. The Metrics, Experiments
     and Decision groups accrete in forecaster tickets 09 and 13 and are absent
     here rather than present and empty, so a reader can tell "not measured yet"
     from "measured as nothing".
@@ -289,6 +306,13 @@ class ModelCard:
     sub_threshold_means: SubThresholdMeans
     calibration: Calibration
     conformal: ConformalCorrection
+    #: ``U`` and what it measures about itself — the per-column KS distance, the
+    #: days it kept and the days it dropped for holding an unsettled hour.
+    pit: PitMatrix
+    #: ``day_total_coverage`` and ``peak_coverage`` on this fold's test period.
+    #: ``None`` when the test period held no complete settled day — absent for a
+    #: stated reason, like the coverage block above it.
+    day_grain: DayGrainCoverage | None = None
     #: Empirical coverage of this fold's test period, marginally and per
     #: subsystem and per local hour. ``None`` when the test period held no
     #: curtailed hour — see the class docstring. **Reported, never corrected**:
@@ -362,6 +386,22 @@ class ModelCard:
                         "coverage_absent_reason": (
                             "this fold's test period held no curtailed hour, so "
                             "there is no interval whose coverage could fail"
+                        ),
+                    }
+                ),
+            },
+            "ensemble": {
+                **self.pit.card_fields(),
+                **(
+                    self.day_grain.card_fields()
+                    if self.day_grain is not None
+                    else {
+                        "day_grain_coverage": None,
+                        "day_grain_absent_reason": (
+                            "this fold's test period held no day whose "
+                            "twenty-four hours are all settled, so there is no "
+                            "observed day total for a day band to be scored "
+                            "against"
                         ),
                     }
                 ),
@@ -485,7 +525,27 @@ def _validated(loaded: object) -> HurdleBundle:
             )
     _validated_calibration(loaded.calibration)
     _validated_conformal(loaded.conformal)
+    _validated_pit(loaded.pit)
     return loaded
+
+
+def _validated_pit(pit: object) -> None:
+    """``U``, after the same ``__init__``-less load.
+
+    A bundle whose matrix came back as something else could still serve
+    twenty-four hourly bands, which is what makes this worth checking rather
+    than discovering: the failure would surface as a day total that some caller
+    reconstructed by summing them, and the whole of forecaster ticket 07 is that
+    such a number is wrong by roughly ``√24``. The re-validation runs
+    ``__post_init__``'s checks over the loaded values, so a truncated row or a
+    PIT outside ``[0, 1]`` fails here rather than inside a draw.
+    """
+    if not isinstance(pit, PitMatrix):
+        raise PartialBundleError(
+            f"the bundle's PIT matrix is a {type(pit).__name__}, not a PitMatrix; "
+            "without it there is no day total that is not a sum of quantiles"
+        )
+    pit.__post_init__()
 
 
 def _validated_conformal(conformal: object) -> None:
