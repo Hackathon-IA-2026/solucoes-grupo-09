@@ -968,6 +968,7 @@ a day must not be read as an hourly signal.
 | Window | **2024-04-01 → now** (~880 days) | **2025-05-23 → now** (~460 days) |
 | Rows | ≈ 84,500 | ≈ 44,200 |
 | Gates | `gate_early` and `gate_late` | **`gate_late` only** |
+| Operator notice | D−1 09:00 BRT is available | **eleven hours later** — D−1 19:00 BRT, and no earlier |
 | Day-ahead load | `programmed_load_mwh` (ONS programming) | DESSEM demand, with ONS programming retained |
 | Day-ahead VRE | weather-derived expected generation | DESSEM wind/solar/MMGD **plus** the weather-derived proxies |
 | Residual load | `proxy_residual_load_mwh` | `dessem_residual_load_mwh` |
@@ -982,6 +983,29 @@ the trade:
 `dessem_residual_load_mwh`, `dessem_implied_net_export_mwh`,
 `dessem_export_utilisation` and `dessem_absorber_residual_load_mwh`. Everything
 else DESSEM contributes has a weather- or programming-derived analogue in set A.
+
+**The augmented set has two costs, not one.** The shorter window is the visible
+one and it is in the table above. The second is the **eleven hours of lost
+operator notice**: set A is available at `gate_early`, D−1 09:00 BRT, and set B
+is not available until `gate_late`, D−1 19:00 BRT, because the DESSEM file for
+day D does not exist before mid-afternoon on D−1. Both costs belong wherever the
+A/B's result is stated — a comparison that reports only the metric is reporting
+half the trade.
+
+> **Implemented in ticket 07.** Twenty-one of the twenty-two names are built by
+> `feature_dessem_block` in `drizzle/0025_dessem_and_the_feature_set.sql`.
+> `dessem_export_utilisation` is not: it needs an export capability estimate no
+> ONS dataset publishes, and that denominator is ticket 10's. Two properties of
+> that block are worth restating here because they are what the feature-set
+> argument *means* in code. At `dessem_free_v1` it returns **no rows at all**,
+> at either gate — so a set-A row's `dessem_*` columns are NULL because there
+> was nothing to join, not because a filter emptied them. At
+> `dessem_augmented_v1` and any gate but `gate_late` it raises `22023`, the same
+> refusal `feature_rows` has made since ticket 01, so the rule survives a caller
+> that reaches the block another way. DESSEM publishes instantaneous MW at
+> 30-minute grain, so the two half hours of an hour are **averaged** into the
+> hour's MWh — the opposite of `canonical_programmed_load`'s sum, and right for
+> the opposite reason.
 
 **The A/B needs three trainings, not two**, or the comparison confounds feature
 content with window length:

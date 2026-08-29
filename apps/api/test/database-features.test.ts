@@ -16,6 +16,7 @@ import {
 } from "../src/features/index.js";
 import {
   type CurtailmentReportHour,
+  type DessemBalanceHalfHour,
   type EnergyBalanceHour,
   type RegistryGeneratingUnit,
   type RegistryPlant,
@@ -25,6 +26,7 @@ import {
   upsertReportingEntities,
   type WeatherForecastHour,
   writeCurtailment,
+  writeDessemBalance,
   writeEnergyBalance,
   writeGeneratingUnits,
   writeProgrammedLoad,
@@ -354,6 +356,136 @@ const NE_PROGRAMMED = (localHour: number): number => 1000 + 10 * localHour;
 /** SE's runs the other way, so a rank or a minimum cannot be shared by accident. */
 const SE_PROGRAMMED = (localHour: number): number => 2000 - 20 * localHour;
 
+// ------------------------------------------------------ ticket 07's class `D`
+//
+// DESSEM's file for reference day D is created mid-afternoon on D−1. The spec's
+// measured instance is 17:48 **UTC** — 14:48 Brasília — which is four hours
+// inside `gate_late` (D−1 22:00Z) and ten hours after `gate_early`.
+const DESSEM_PUBLISHED_AT = new Date("2026-08-19T17:48:00.000Z");
+/** D−1's own file, published a day earlier and therefore visible at `TARGET`'s gate. */
+const DESSEM_PUBLISHED_AT_D_MINUS_1 = new Date("2026-08-18T17:48:00.000Z");
+/** After `TARGET`'s gate: a restatement no row of `TARGET` may see. */
+const DESSEM_PUBLISHED_AFTER_GATE = new Date("2026-08-19T23:30:00.000Z");
+
+/** One subsystem's day-ahead balance for one local hour, in MW. */
+interface DessemHourMw {
+  demand: number;
+  wind: number;
+  solar: number;
+  mmgd: number;
+  hydro: number;
+  smallHydro: number;
+  thermal: number;
+  smallThermal: number;
+  pumping: number;
+}
+
+/**
+ * The four profiles, chosen so every derived column is arithmetic.
+ *
+ * NE is the one the assertions look at, and its three ramps are deliberately
+ * three *different* numbers — demand +10, residual +9, VRE +1 — so a ramp
+ * computed from the wrong quantity cannot come out right by coincidence. SE
+ * runs the other way, so a minimum or a rank taken across subsystems rather
+ * than within one collapses visibly. N and S exist so the system-wide sum has
+ * four terms and so the absorber column has somewhere to be NULL.
+ */
+const DESSEM_PROFILE: Record<"N" | "NE" | "S" | "SE", (hour: number) => DessemHourMw> = {
+  NE: (hour) => ({
+    demand: 1000 + 10 * hour,
+    // 73.5 against the 147 MW fleet and 10 against the 40 MW fleet: the two
+    // capacity factors come to exactly 0.5 and 0.25.
+    wind: 73.5,
+    solar: 10,
+    mmgd: 16.5 + hour,
+    hydro: 40,
+    smallHydro: 10,
+    thermal: 60,
+    smallThermal: 15,
+    pumping: 5,
+  }),
+  SE: (hour) => ({
+    demand: 2000 - 20 * hour,
+    wind: 100,
+    solar: 50,
+    mmgd: 30,
+    hydro: 500,
+    smallHydro: 20,
+    thermal: 200,
+    smallThermal: 10,
+    pumping: 25,
+  }),
+  N: (hour) => ({
+    demand: 500 + 5 * hour,
+    wind: 50,
+    solar: 10,
+    mmgd: 5,
+    hydro: 300,
+    smallHydro: 5,
+    thermal: 30,
+    smallThermal: 5,
+    pumping: 3,
+  }),
+  S: (hour) => ({
+    demand: 800 + 2 * hour,
+    wind: 60,
+    solar: 20,
+    mmgd: 10,
+    hydro: 400,
+    smallHydro: 10,
+    thermal: 50,
+    smallThermal: 5,
+    pumping: 4,
+  }),
+};
+
+/** `demand − wind − solar − mmgd`, the quantity five other columns are built on. */
+const dessemResidual = (subsystem: keyof typeof DESSEM_PROFILE, hour: number): number => {
+  const mw = DESSEM_PROFILE[subsystem](hour);
+  return mw.demand - mw.wind - mw.solar - mw.mmgd;
+};
+
+/**
+ * A whole local day's DESSEM balance, as the 48 half hours ONS publishes.
+ *
+ * The two half hours of an hour are the hourly value ∓2 MW, so their **mean**
+ * is the hourly figure and neither half hour is. A block that summed them, or
+ * took the first, or took the last, produces three different wrong answers and
+ * none of them is the expected one.
+ */
+const dessemDay = (
+  subsystem: keyof typeof DESSEM_PROFILE,
+  dayStart: Date,
+  referenceDay: string,
+  scale = 1,
+): DessemBalanceHalfHour[] => {
+  const rows: DessemBalanceHalfHour[] = [];
+  for (let hour = 0; hour < 24; hour += 1) {
+    const mw = DESSEM_PROFILE[subsystem](hour);
+    const start = new Date(dayStart.getTime() + hour * 3_600_000);
+    for (const [offsetMs, delta] of [
+      [0, -2],
+      [1_800_000, 2],
+    ] as const) {
+      rows.push({
+        subsystem,
+        validTime: new Date(start.getTime() + offsetMs),
+        referenceDay,
+        demandMw: (mw.demand + delta) * scale,
+        hydroGenerationMw: (mw.hydro + delta) * scale,
+        smallHydroGenerationMw: (mw.smallHydro + delta) * scale,
+        thermalGenerationMw: (mw.thermal + delta) * scale,
+        smallThermalGenerationMw: (mw.smallThermal + delta) * scale,
+        windGenerationMw: (mw.wind + delta) * scale,
+        solarGenerationMw: (mw.solar + delta) * scale,
+        mmgdGenerationMw: (mw.mmgd + delta) * scale,
+        pumpingConsumptionMw: (mw.pumping + delta) * scale,
+      });
+    }
+  }
+  return rows;
+};
+
 /** Column-by-column, `null` and `undefined` included, dates comparable. */
 const comparable = (row: FeatureRow): Record<string, unknown> => {
   const out: Record<string, unknown> = {};
@@ -409,6 +541,7 @@ suite("the gate, end to end (real Postgres)", () => {
     // fixtures, and a plant with no live units contributes no capacity anyway.
     await db.execute(sql`truncate table generating_unit`);
     await db.execute(sql`truncate table programmed_load_half_hour`);
+    await db.execute(sql`truncate table dessem_balance_half_hour`);
     await db.execute(sql`truncate table ons_resource_version cascade`);
 
     const [version] = await db
@@ -707,6 +840,79 @@ suite("the gate, end to end (real Postgres)", () => {
       ],
       ...programmedVintage,
       ingestedAt: REGISTRY_LATE_INGEST,
+    });
+
+    // ------------------------------------------------ ticket 07's class-`D` block
+    //
+    // DESSEM's balance for the target day and for the day before it, plus two
+    // decoys — one on each vintage axis, because the two keep out different
+    // things and only one of them is the publication cut this block relies on.
+    const [dessemVersion] = await db
+      .insert(onsResourceVersion)
+      .values({
+        datasetSlug: "balanco-dessem-detalhe",
+        resourceName: "BALANCO_DESSEM_DETALHE",
+        resourceUrl: "https://example.invalid/FEATURES_DESSEM.csv",
+        format: "CSV",
+        changeKey: `features-dessem-test|${Date.now()}`,
+      })
+      .returning({ id: onsResourceVersion.id });
+
+    const dessemVintage = {
+      publishedAtPrecision: "file",
+      sourceVersionId: dessemVersion?.id ?? "",
+    } as const;
+
+    // D−1's own file, published on D−2 and therefore comfortably inside
+    // `TARGET`'s gate. It is the near-edge decoy: the 23:00 BRT hour of D−1 is
+    // visible at this gate, so a ramp that reached across the day boundary
+    // would find it — and would be a difference of two forecasts wearing the
+    // name of a shape inside one.
+    await writeDessemBalance(db, {
+      rows: (["N", "NE", "S", "SE"] as const).flatMap((subsystem) =>
+        dessemDay(
+          subsystem,
+          new Date(DAY_FROM.getTime() - 86_400_000),
+          TARGET_MINUS_1,
+          // Scaled, so a ramp that crossed the boundary would be visibly wrong
+          // rather than accidentally right.
+          10,
+        ),
+      ),
+      publishedAt: DESSEM_PUBLISHED_AT_D_MINUS_1,
+      ingestedAt: OBSERVED_INGESTED_AT,
+      ...dessemVintage,
+    });
+
+    // The target day's own file.
+    await writeDessemBalance(db, {
+      rows: (["N", "NE", "S", "SE"] as const).flatMap((subsystem) =>
+        dessemDay(subsystem, DAY_FROM, TARGET),
+      ),
+      publishedAt: DESSEM_PUBLISHED_AT,
+      ingestedAt: OBSERVED_INGESTED_AT,
+      ...dessemVintage,
+    });
+
+    // The publication decoy: a restatement of the whole day, published after
+    // the gate. `published_at <= gate` is the only thing keeping it out, and it
+    // is a hundred times the size so it cannot fail to show if it gets in.
+    await writeDessemBalance(db, {
+      rows: dessemDay("NE", DAY_FROM, TARGET, 100),
+      publishedAt: DESSEM_PUBLISHED_AFTER_GATE,
+      ingestedAt: OBSERVED_INGESTED_AT,
+      ...dessemVintage,
+    });
+
+    // The ingestion decoy: the same publication instant as the original — so
+    // the publication cut lets it through — learned an hour after the gate.
+    // Only `as_of` keeps this one out, and the two axes are here side by side
+    // because a block that dropped either would still pass the other's test.
+    await writeDessemBalance(db, {
+      rows: dessemDay("SE", DAY_FROM, TARGET, 100),
+      publishedAt: DESSEM_PUBLISHED_AT,
+      ingestedAt: REGISTRY_LATE_INGEST,
+      ...dessemVintage,
     });
   });
 
@@ -1328,6 +1534,285 @@ suite("the gate, end to end (real Postgres)", () => {
     expect(sqlstate).toBe("23514");
   });
 
+  // ----------------------------------------------------- class `D`, the A/B arm
+  //
+  // Every test below asks for `dessem_augmented_v1`, because that is the only
+  // set in which these columns exist and the only gate at which they can.
+  const augmented = { ...query, featureSet: "dessem_augmented_v1" } as const;
+
+  const dessemRows = async (targetDate: string) =>
+    readServingRows(db, { targetDate, ...augmented });
+
+  const neAt = (rows: FeatureRow[], hour: number): FeatureRow | undefined => {
+    const at = new Date(DAY_FROM.getTime() + hour * 3_600_000).getTime();
+    return rows.find(
+      (row) => row.subsystem === "NE" && new Date(row.valid_time).getTime() === at,
+    );
+  };
+
+  it("carries the balance, averaged from MW back to the hour's MWh", async () => {
+    const rows = await dessemRows(TARGET);
+    // Every subsystem has a profile, and every hour of it is present.
+    for (const subsystem of ["N", "NE", "S", "SE"] as const) {
+      const of = rows.filter((row) => row.subsystem === subsystem);
+      expect(of).toHaveLength(24);
+      expect({
+        subsystem,
+        complete: of.every((row) => row.dessem_demand_mwh !== null),
+      }).toEqual({ subsystem, complete: true });
+    }
+
+    // The seven levels, at one hour, against the profile's own arithmetic. The
+    // two half hours are the hourly value ∓2 MW, so a sum would be double, the
+    // first half two low and the last two high — three wrong answers, none of
+    // them this one.
+    const mw = DESSEM_PROFILE.NE(9);
+    const noon = neAt(rows, 9);
+    expect(noon?.dessem_demand_mwh).toBeCloseTo(mw.demand, 6);
+    expect(noon?.dessem_wind_mwh).toBeCloseTo(mw.wind, 6);
+    expect(noon?.dessem_solar_mwh).toBeCloseTo(mw.solar, 6);
+    expect(noon?.dessem_mmgd_mwh).toBeCloseTo(mw.mmgd, 6);
+    // Hydro and thermal are each the pair the spec's feature table defines:
+    // `val_ger_hidraulica` + `val_ger_pch`, `val_ger_termica` + `val_ger_pct`.
+    expect(noon?.dessem_hydro_mwh).toBeCloseTo(mw.hydro + mw.smallHydro, 6);
+    expect(noon?.dessem_thermal_mwh).toBeCloseTo(mw.thermal + mw.smallThermal, 6);
+    expect(noon?.dessem_pumping_mwh).toBeCloseTo(mw.pumping, 6);
+
+    // And the decoys did not win. The restatement published after the gate is a
+    // hundred times NE's size; the one learned after the gate is a hundred
+    // times SE's. Neither axis alone would have kept both out.
+    const se = rows.find((row) => row.subsystem === "SE");
+    expect(Number(se?.dessem_demand_mwh)).toBeCloseTo(DESSEM_PROFILE.SE(0).demand, 6);
+
+    // Non-vacuous: both decoys really are in the table, really are the newest
+    // rows for their keys, and really would dominate the answer.
+    const [counts] = [
+      ...(await db.execute<{ published_late: number; ingested_late: number }>(sql`
+        select
+          count(*) filter (
+            where published_at > ${GATE_LATE.toISOString()}::timestamptz
+          )::int as published_late,
+          count(*) filter (
+            where published_at <= ${GATE_LATE.toISOString()}::timestamptz
+              and ingested_at > ${GATE_LATE.toISOString()}::timestamptz
+          )::int as ingested_late
+        from dessem_balance_half_hour
+      `)),
+    ] as [{ published_late: number; ingested_late: number }];
+    expect(counts.published_late).toBeGreaterThan(0);
+    expect(counts.ingested_late).toBeGreaterThan(0);
+  });
+
+  it("derives the identities from the balance's own quantities", async () => {
+    const rows = await dessemRows(TARGET);
+    const mw = DESSEM_PROFILE.NE(9);
+    const vre = mw.wind + mw.solar + mw.mmgd;
+    const noon = neAt(rows, 9);
+
+    expect(noon?.dessem_residual_load_mwh).toBeCloseTo(mw.demand - vre, 6);
+    expect(noon?.dessem_renewable_load_ratio).toBeCloseTo(vre / mw.demand, 9);
+    expect(noon?.dessem_vre_surplus_mwh).toBeCloseTo(vre - mw.demand, 6);
+    expect(noon?.dessem_inflexible_share).toBeCloseTo(
+      (mw.hydro + mw.smallHydro + mw.thermal + mw.smallThermal) / mw.demand,
+      9,
+    );
+    // The energy identity DESSEM's missing exchange column is worked around by:
+    // generation minus demand minus pumping is net export, up to the losses the
+    // column's name says are not modelled.
+    expect(noon?.dessem_implied_net_export_mwh).toBeCloseTo(
+      mw.hydro +
+        mw.smallHydro +
+        mw.thermal +
+        mw.smallThermal +
+        vre -
+        mw.demand -
+        mw.pumping,
+      6,
+    );
+  });
+
+  it("derives the shape inside the profile, and stops at the day's near edge", async () => {
+    const rows = await dessemRows(TARGET);
+    // Three different ramps, so one computed from the wrong quantity cannot
+    // come out right by coincidence: demand +10, residual +9, VRE +1.
+    const noon = neAt(rows, 9);
+    expect(noon?.dessem_demand_ramp_1h).toBeCloseTo(10, 6);
+    expect(noon?.dessem_residual_load_ramp_1h).toBeCloseTo(9, 6);
+    expect(noon?.dessem_vre_ramp_1h).toBeCloseTo(1, 6);
+
+    // The near edge, and the reason it is an edge: D−1's own DESSEM file is in
+    // the table, is published a day earlier, and is therefore *visible* at this
+    // gate — so nothing but the day bound stops a ramp reaching into it. It is
+    // ten times the size, so a ramp that did would be unmissable.
+    const first = neAt(rows, 0);
+    expect(first?.dessem_demand_mwh).toBeCloseTo(DESSEM_PROFILE.NE(0).demand, 6);
+    expect(first?.dessem_demand_ramp_1h).toBeNull();
+    expect(first?.dessem_residual_load_ramp_1h).toBeNull();
+    expect(first?.dessem_vre_ramp_1h).toBeNull();
+    // The far edge has no such hole: DESSEM carries no centred window, only
+    // backward differences, so the last hour of the day is a complete row.
+    expect(neAt(rows, 23)?.dessem_demand_ramp_1h).toBeCloseTo(10, 6);
+  });
+
+  it("summarises the day's residual load, and says which hour of it this is", async () => {
+    const rows = await dessemRows(TARGET);
+    const ne = rows.filter((row) => row.subsystem === "NE");
+    const se = rows.filter((row) => row.subsystem === "SE");
+
+    // Day grain: one number for the whole date, broadcast identically. NE's
+    // residual load rises and SE's falls, so a minimum taken across subsystems
+    // rather than within one collapses here.
+    expect(new Set(ne.map((row) => row.dessem_residual_load_min_of_day))).toEqual(
+      new Set([dessemResidual("NE", 0)]),
+    );
+    expect(new Set(se.map((row) => row.dessem_residual_load_min_of_day))).toEqual(
+      new Set([dessemResidual("SE", 23)]),
+    );
+
+    // Rank is hourly, ascending, partitioned by subsystem: 1 is the trough.
+    expect(neAt(rows, 0)?.dessem_residual_load_rank_in_day).toBe(1);
+    expect(neAt(rows, 23)?.dessem_residual_load_rank_in_day).toBe(24);
+    const seRank = (hour: number) =>
+      se.find(
+        (row) =>
+          new Date(row.valid_time).getTime() === DAY_FROM.getTime() + hour * 3_600_000,
+      )?.dessem_residual_load_rank_in_day;
+    expect(seRank(0)).toBe(24);
+    expect(seRank(23)).toBe(1);
+  });
+
+  it("takes the capacity-factor denominator from the fleet at the gate", async () => {
+    const rows = await dessemRows(TARGET);
+    // NE's fleet at this gate is 147 MW of wind and 40 of solar — `UG3`
+    // commissioned on D counts, `UG4` recorded after the gate does not — so a
+    // denominator read at any other vintage gives a different number. 73.5/147
+    // and 10/40.
+    for (const row of rows.filter((r) => r.subsystem === "NE")) {
+      expect(row.dessem_wind_capacity_factor).toBeCloseTo(0.5, 9);
+      expect(row.dessem_solar_capacity_factor).toBeCloseTo(0.25, 9);
+      // The same fleet the row's own capacity columns report: one definition of
+      // "the fleet at the gate", so the ratio and its denominator cannot
+      // disagree.
+      expect(Number(row.capacity_wind_mw)).toBe(147);
+    }
+
+    // S has generation and no registered fleet, so its capacity factors are
+    // NULL and never zero: "the fleet is unknown at this gate" and "the fleet
+    // generated nothing" are different statements, and only one is a number.
+    for (const row of rows.filter((r) => r.subsystem === "S")) {
+      expect(Number(row.capacity_wind_mw)).toBe(0);
+      expect(row.dessem_wind_capacity_factor).toBeNull();
+      expect(row.dessem_solar_capacity_factor).toBeNull();
+    }
+  });
+
+  it("carries the system total and the absorbing subsystem's residual load", async () => {
+    const rows = await dessemRows(TARGET);
+    const hour = 9;
+    const sin = (["N", "NE", "S", "SE"] as const).reduce(
+      (total, subsystem) => total + dessemResidual(subsystem, hour),
+      0,
+    );
+
+    // A derived sum over the four, which is the only form a national total may
+    // take: `SIN` is not a Subsystem. Broadcast identically to all four rows of
+    // the hour.
+    const atHour = rows.filter(
+      (row) =>
+        new Date(row.valid_time).getTime() === DAY_FROM.getTime() + hour * 3_600_000,
+    );
+    expect(atHour).toHaveLength(4);
+    for (const row of atHour) {
+      expect(row.dessem_sin_residual_load_mwh).toBeCloseTo(sin, 5);
+    }
+
+    // The physical asymmetry: SE's residual load on the northern rows, because
+    // N and NE curtail when SE has no headroom to absorb them.
+    const absorbing = dessemResidual("SE", hour);
+    for (const subsystem of ["N", "NE"] as const) {
+      const row = atHour.find((r) => r.subsystem === subsystem);
+      expect({ subsystem, carried: row?.dessem_absorber_residual_load_mwh }).toEqual({
+        subsystem,
+        carried: absorbing,
+      });
+    }
+    // NULL where the mechanism does not apply. On SE it would otherwise be a
+    // duplicate of the column beside it under a name promising something else.
+    for (const subsystem of ["S", "SE"] as const) {
+      const row = atHour.find((r) => r.subsystem === subsystem);
+      expect({ subsystem, carried: row?.dessem_absorber_residual_load_mwh }).toEqual({
+        subsystem,
+        carried: null,
+      });
+    }
+  });
+
+  it("refuses the augmented set at the early gate rather than returning NULLs", async () => {
+    // The acceptance claim, and the difference between this and the class-`P`
+    // hole beside it. The programme *could* be published earlier and is not, so
+    // its early-gate columns are NULL and the hole is the report. DESSEM's file
+    // for day D does not exist at 09:00 on D−1 at all, so the augmented set is
+    // not a thinner answer at `gate_early` — it is not an answer, and the
+    // function says so instead of handing back a row a model could train on.
+    let sqlstate: string | undefined;
+    try {
+      await readServingRows(db, {
+        targetDate: TARGET,
+        ...augmented,
+        gateProfile: "gate_early",
+      });
+    } catch (error) {
+      sqlstate = sqlStateOf(error);
+    }
+    expect(sqlstate).toBe("22023");
+
+    // And the block refuses on its own, for a caller that reaches it without
+    // going through `feature_rows`.
+    let blockState: string | undefined;
+    try {
+      await db.execute(
+        sql`select * from feature_dessem_block(${TARGET}::date, 'gate_early', 'dessem_augmented_v1')`,
+      );
+    } catch (error) {
+      blockState = sqlStateOf(error);
+    }
+    expect(blockState).toBe("22023");
+  });
+
+  it("leaves the DESSEM-free set free of DESSEM, at either gate", async () => {
+    // The other half of the feature-set argument. Set A is not "set B with the
+    // columns blanked": the block produces no rows for it, so the columns are
+    // NULL because the join found nothing — and the same is true at both gates,
+    // including the one where the file genuinely exists.
+    const dessemColumns = FEATURE_ROW_COLUMNS.filter((column) =>
+      column.startsWith("dessem_"),
+    );
+    expect(dessemColumns).toHaveLength(21);
+
+    for (const gateProfile of ["gate_early", "gate_late"] as const) {
+      const rows = await readServingRows(db, {
+        targetDate: TARGET,
+        ...query,
+        gateProfile,
+      });
+      expect(rows).toHaveLength(96);
+      for (const row of rows) {
+        for (const column of dessemColumns) {
+          expect({ gateProfile, column, value: row[column] }).toEqual({
+            gateProfile,
+            column,
+            value: null,
+          });
+        }
+      }
+    }
+
+    // Non-vacuous: the same rows at the same late gate carry real values once
+    // the augmented set is asked for, so the NULLs above are the set's doing.
+    const setB = await dessemRows(TARGET);
+    expect(setB.every((row) => row.dessem_demand_mwh !== null)).toBe(true);
+  });
+
   // ---------------------------------------------------------------- Seam 1
   it("seam 1 — the training row and the serving row are the same row", async () => {
     // The central claim of the spec, and it is cheap because the claim is that
@@ -1355,21 +1840,53 @@ suite("the gate, end to end (real Postgres)", () => {
     }
   });
 
+  it("seam 1 — and the same is true of the augmented set", async () => {
+    // The claim has to hold for both arms of the A/B, not only the one the rest
+    // of this suite queries. The augmented set is the harder case: it carries
+    // twenty-one more columns, three of which are derived across subsystems and
+    // two of which read a second block, so a range query that let a day's
+    // profile bleed into its neighbour's would show here and nowhere else.
+    const trained = await readFeatureRows(db, {
+      targetFrom: TARGET_MINUS_1,
+      targetTo: TARGET,
+      ...augmented,
+    });
+    const served = await readServingRows(db, { targetDate: TARGET, ...augmented });
+
+    const trainedForTarget = trained.filter((row) =>
+      String(row.target_date).includes(TARGET),
+    );
+    expect(trainedForTarget).toHaveLength(served.length);
+    expect(served.length).toBeGreaterThan(0);
+    expect(trained.length).toBe(served.length * 2);
+    // Non-vacuous: the DESSEM columns really are populated in what is compared.
+    expect(served.some((row) => row.dessem_residual_load_mwh !== null)).toBe(true);
+
+    const byKey = new Map(trainedForTarget.map((row) => [keyOf(row), comparable(row)]));
+    for (const row of served) {
+      expect(byKey.get(keyOf(row))).toEqual(comparable(row));
+    }
+  });
+
   // ---------------------------------------------------------------- Seam 2
-  it("seam 2 — deleting every post-gate source row changes no feature value", async () => {
-    // The general leak detector. It is not told which features are suspect: it
-    // deletes what will not exist at serve time and asserts that nothing the
-    // function calls a feature moved. A lag added by a future session that
-    // nobody thought to review fails here.
-    //
-    // The `y_` labels are deliberately excluded, and that exclusion is the
-    // asymmetry rather than a loophole: labels are read `AsOf(now())` on
-    // purpose, so their sources are *expected* to post-date the gate. A test
-    // that demanded they survive ablation would be testing for a leak the spec
-    // asks for.
-    const before = await readServingRows(db, { targetDate: TARGET, ...query });
+  //
+  // Run for both feature sets, because the augmented set is the only one in
+  // which twenty-one of the columns exist at all — and an ablation that never
+  // asked for them would pass on a DESSEM leak without noticing.
+  const ablate = async (
+    featureSet: "dessem_free_v1" | "dessem_augmented_v1",
+  ): Promise<{
+    before: FeatureRow[];
+    after: FeatureRow[];
+    deleted: number;
+    deletedFromDessem: number;
+    deletedPastCutoff: number;
+  }> => {
+    const asked = { ...query, featureSet } as const;
+    const before = await readServingRows(db, { targetDate: TARGET, ...asked });
     let after: FeatureRow[] = [];
     let deleted = 0;
+    let deletedFromDessem = 0;
     let deletedPastCutoff = 0;
 
     try {
@@ -1388,6 +1905,11 @@ suite("the gate, end to end (real Postgres)", () => {
           // of `TARGET`'s hours both go, and nothing the row calls a feature may
           // move when they do.
           "programmed_load_half_hour",
+          // Ticket 07's class-`D` block, and the one table with a decoy on each
+          // axis: a restatement published after the gate, and a restatement
+          // learned after it under the original's publication instant. Both are
+          // a hundred times the size of the real profile.
+          "dessem_balance_half_hour",
         ]) {
           const removed = await scoped.execute<{ n: number }>(sql`
             with gone as (
@@ -1397,7 +1919,11 @@ suite("the gate, end to end (real Postgres)", () => {
               returning 1
             ) select count(*)::int as n from gone
           `);
-          deleted += Number([...removed][0]?.n ?? 0);
+          const n = Number([...removed][0]?.n ?? 0);
+          deleted += n;
+          if (table === "dessem_balance_half_hour") {
+            deletedFromDessem = n;
+          }
         }
 
         // The second axis, and the one ticket 05 added. Over the backfill window
@@ -1422,7 +1948,7 @@ suite("the gate, end to end (real Postgres)", () => {
           deletedPastCutoff += Number([...removed][0]?.n ?? 0);
         }
 
-        after = await readServingRows(scoped, { targetDate: TARGET, ...query });
+        after = await readServingRows(scoped, { targetDate: TARGET, ...asked });
         tx.rollback();
       });
     } catch (error) {
@@ -1431,6 +1957,46 @@ suite("the gate, end to end (real Postgres)", () => {
         throw error;
       }
     }
+    return { before, after, deleted, deletedFromDessem, deletedPastCutoff };
+  };
+
+  it("seam 2 — and the augmented set survives the same ablation", async () => {
+    // The DESSEM arm of the leak detector. Twenty-one columns exist only here,
+    // two of them are derived across subsystems and two read the registry
+    // through a second block — so this is where a DESSEM-shaped leak would
+    // show, and set A's pass says nothing about it.
+    const { before, after, deleted, deletedFromDessem } =
+      await ablate("dessem_augmented_v1");
+    expect(deleted).toBeGreaterThan(0);
+    // Non-vacuous on this ticket's own table: DESSEM rows the gate could not
+    // have seen — on either axis — really were there to be removed.
+    expect(deletedFromDessem).toBeGreaterThan(0);
+    expect(after).toHaveLength(before.length);
+
+    // Non-vacuous: the columns under test carry values on both sides.
+    expect(before.some((row) => row.dessem_residual_load_mwh !== null)).toBe(true);
+    expect(after.some((row) => row.dessem_residual_load_mwh !== null)).toBe(true);
+
+    const byKey = new Map(
+      after.map((row) => [keyOf(row), featuresOnly(comparable(row))]),
+    );
+    for (const row of before) {
+      expect(byKey.get(keyOf(row))).toEqual(featuresOnly(comparable(row)));
+    }
+  });
+
+  it("seam 2 — deleting every post-gate source row changes no feature value", async () => {
+    // The general leak detector. It is not told which features are suspect: it
+    // deletes what will not exist at serve time and asserts that nothing the
+    // function calls a feature moved. A lag added by a future session that
+    // nobody thought to review fails here.
+    //
+    // The `y_` labels are deliberately excluded, and that exclusion is the
+    // asymmetry rather than a loophole: labels are read `AsOf(now())` on
+    // purpose, so their sources are *expected* to post-date the gate. A test
+    // that demanded they survive ablation would be testing for a leak the spec
+    // asks for.
+    const { before, after, deleted, deletedPastCutoff } = await ablate("dessem_free_v1");
 
     // Non-vacuous in both directions: rows really were removed, and the row set
     // is unchanged because the spine comes from the calendar.

@@ -36,7 +36,7 @@ that does not exist yet. See 10.
 **Blocked by:** 01 — the gate, end to end. 04 — installed capacity, for the
 DESSEM-derived capacity factors.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Demand, wind, solar, MMGD, hydro, thermal and pumping enter the feature row from the day-ahead balance, cut on `published_at ≤ gate`
 - [ ] Residual load, renewable load ratio, VRE surplus and inflexible share are derived from the balance's own quantities
