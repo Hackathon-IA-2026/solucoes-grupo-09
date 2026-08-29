@@ -569,6 +569,12 @@ export type FlexibilityAsset = Battery | ShiftableLoad;
 
 export interface Battery {
   assetType: "battery";
+  /**
+   * Echoed back, never interpolated into SQL, a log format string or a tooltip
+   * without escaping. The 64-character cap is `docs/specs/flex-optimizer.md`'s
+   * untrusted-input hygiene rule: the scenario is attacker-controlled and the
+   * label is the one free-text field on it.
+   */
   label: string;
   subsystem: Subsystem;
   /**
@@ -595,6 +601,12 @@ export interface Battery {
 
 export interface ShiftableLoad {
   assetType: "shiftable_load";
+  /**
+   * Echoed back, never interpolated into SQL, a log format string or a tooltip
+   * without escaping. The 64-character cap is `docs/specs/flex-optimizer.md`'s
+   * untrusted-input hygiene rule: the scenario is attacker-controlled and the
+   * label is the one free-text field on it.
+   */
   label: string;
   subsystem: Subsystem;
   /**
@@ -1286,6 +1298,12 @@ export interface WireField {
   readonly shape?: string;
   readonly list?: boolean;
   readonly optional?: boolean;
+  /**
+   * The single value a `const` property is fixed to — the discriminant of a
+   * `oneOf`. Present only where the schema pins one, which for the wire means
+   * `asset_type` on each `FlexibilityAsset` variant.
+   */
+  readonly const?: string;
 }
 
 /** A wire object, keyed by the camelCase name the interface above declares. */
@@ -1409,7 +1427,7 @@ export const WIRE_SHAPES = {
     causeMixed: { wire: "cause_mixed" },
   },
   DiagnosisNarrationInput: {
-    schemaVersion: { wire: "schema_version" },
+    schemaVersion: { wire: "schema_version", const: "diagnosis.narration.v1" },
     promptVersion: { wire: "prompt_version" },
     locale: { wire: "locale" },
     subsystem: { wire: "subsystem" },
@@ -1514,7 +1532,7 @@ export const WIRE_SHAPES = {
     recoveryTimeHours: { wire: "recovery_time_hours", optional: true },
   },
   Battery: {
-    assetType: { wire: "asset_type" },
+    assetType: { wire: "asset_type", const: "battery" },
     label: { wire: "label" },
     subsystem: { wire: "subsystem" },
     maxPowerMw: { wire: "max_power_mw" },
@@ -1531,7 +1549,7 @@ export const WIRE_SHAPES = {
     availableTo: { wire: "available_to", optional: true },
   },
   ShiftableLoad: {
-    assetType: { wire: "asset_type" },
+    assetType: { wire: "asset_type", const: "shiftable_load" },
     label: { wire: "label" },
     subsystem: { wire: "subsystem" },
     maxPowerMw: { wire: "max_power_mw" },
@@ -1779,7 +1797,7 @@ export const WIRE_SHAPES = {
     peakHourLocal: { wire: "peak_hour_local" },
   },
   DiagnosisNarrationInputAttribution: {
-    target: { wire: "target" },
+    target: { wire: "target", const: "expected_mwh_day" },
     totalAttributedMwh: { wire: "total_attributed_mwh" },
     sumAbsAttributedMwh: { wire: "sum_abs_attributed_mwh" },
     stderrMwh: { wire: "stderr_mwh" },

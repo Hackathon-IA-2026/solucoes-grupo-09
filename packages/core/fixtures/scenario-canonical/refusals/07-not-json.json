@@ -1,0 +1,6 @@
+{
+  "name": "valid base64url, and not JSON",
+  "description": "bm90IGpzb24gYXQgYWxs decodes cleanly to bytes and then to text, and is still not a scenario. The three failures are kept apart so a diagnosis says which one happened.",
+  "blob": "bm90IGpzb24gYXQgYWxs",
+  "expected_code": "BAD_INPUT"
+}

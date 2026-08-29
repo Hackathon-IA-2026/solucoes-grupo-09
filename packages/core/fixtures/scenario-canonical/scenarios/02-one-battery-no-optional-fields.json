@@ -1,0 +1,23 @@
+{
+  "name": "the smallest scenario the schema admits",
+  "description": "No forecast_origin (the latest run is resolved server-side) and no economic assumptions. An absent optional field and one never written must produce the same bytes.",
+  "scenario": {
+    "v": 1,
+    "subsystem": "S",
+    "target_date": "2026-08-29",
+    "assets": [
+      {
+        "asset_type": "battery",
+        "label": "Battery",
+        "subsystem": "S",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      }
+    ]
+  },
+  "canonical": "{\"assets\":[{\"asset_type\":\"battery\",\"energy_capacity_mwh\":300,\"initial_state_of_charge\":0.2,\"label\":\"Battery\",\"max_power_mw\":100,\"round_trip_efficiency\":0.92,\"subsystem\":\"S\"}],\"subsystem\":\"S\",\"target_date\":\"2026-08-29\",\"v\":1}",
+  "blob": "eyJhc3NldHMiOlt7ImFzc2V0X3R5cGUiOiJiYXR0ZXJ5IiwiZW5lcmd5X2NhcGFjaXR5X213aCI6MzAwLCJpbml0aWFsX3N0YXRlX29mX2NoYXJnZSI6MC4yLCJsYWJlbCI6IkJhdHRlcnkiLCJtYXhfcG93ZXJfbXciOjEwMCwicm91bmRfdHJpcF9lZmZpY2llbmN5IjowLjkyLCJzdWJzeXN0ZW0iOiJTIn1dLCJzdWJzeXN0ZW0iOiJTIiwidGFyZ2V0X2RhdGUiOiIyMDI2LTA4LTI5IiwidiI6MX0",
+  "hash": "sha256:36997e7d122c269ebdbbab583175bad3f9154303c08e988a1404636268bf7c15"
+}

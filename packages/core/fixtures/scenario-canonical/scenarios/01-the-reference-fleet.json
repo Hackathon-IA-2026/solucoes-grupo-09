@@ -1,0 +1,36 @@
+{
+  "name": "the reference fleet, both assets",
+  "description": "The published REFERENCE_FLEET as a scenario. Every figure the product compares across screens is measured against this fleet, so this is the blob a share link most often carries.",
+  "scenario": {
+    "v": 1,
+    "subsystem": "NE",
+    "target_date": "2026-08-29",
+    "forecast_origin": "2026-08-28T12:00:00Z",
+    "assets": [
+      {
+        "asset_type": "battery",
+        "label": "Battery",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "shiftable_load",
+        "label": "Flexible load",
+        "subsystem": "NE",
+        "max_power_mw": 70,
+        "max_shift_mw": 50,
+        "shift_window_hours": 3,
+        "daily_energy_mwh": 1700
+      }
+    ],
+    "economic_assumptions": {
+      "brl_per_mwh": 180
+    }
+  },
+  "canonical": "{\"assets\":[{\"asset_type\":\"battery\",\"energy_capacity_mwh\":300,\"initial_state_of_charge\":0.2,\"label\":\"Battery\",\"max_power_mw\":100,\"round_trip_efficiency\":0.92,\"subsystem\":\"NE\"},{\"asset_type\":\"shiftable_load\",\"daily_energy_mwh\":1700,\"label\":\"Flexible load\",\"max_power_mw\":70,\"max_shift_mw\":50,\"shift_window_hours\":3,\"subsystem\":\"NE\"}],\"economic_assumptions\":{\"brl_per_mwh\":180},\"forecast_origin\":\"2026-08-28T12:00:00Z\",\"subsystem\":\"NE\",\"target_date\":\"2026-08-29\",\"v\":1}",
+  "blob": "eyJhc3NldHMiOlt7ImFzc2V0X3R5cGUiOiJiYXR0ZXJ5IiwiZW5lcmd5X2NhcGFjaXR5X213aCI6MzAwLCJpbml0aWFsX3N0YXRlX29mX2NoYXJnZSI6MC4yLCJsYWJlbCI6IkJhdHRlcnkiLCJtYXhfcG93ZXJfbXciOjEwMCwicm91bmRfdHJpcF9lZmZpY2llbmN5IjowLjkyLCJzdWJzeXN0ZW0iOiJORSJ9LHsiYXNzZXRfdHlwZSI6InNoaWZ0YWJsZV9sb2FkIiwiZGFpbHlfZW5lcmd5X213aCI6MTcwMCwibGFiZWwiOiJGbGV4aWJsZSBsb2FkIiwibWF4X3Bvd2VyX213Ijo3MCwibWF4X3NoaWZ0X213Ijo1MCwic2hpZnRfd2luZG93X2hvdXJzIjozLCJzdWJzeXN0ZW0iOiJORSJ9XSwiZWNvbm9taWNfYXNzdW1wdGlvbnMiOnsiYnJsX3Blcl9td2giOjE4MH0sImZvcmVjYXN0X29yaWdpbiI6IjIwMjYtMDgtMjhUMTI6MDA6MDBaIiwic3Vic3lzdGVtIjoiTkUiLCJ0YXJnZXRfZGF0ZSI6IjIwMjYtMDgtMjkiLCJ2IjoxfQ",
+  "hash": "sha256:9a76a54296754cec9438ed5180c8f89955bfa4a0a5e0897faaf9f2ff53e65345"
+}

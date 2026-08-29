@@ -14,6 +14,7 @@
     "./api": "./src/types.generated.ts",
     "./wire": "./src/wire.ts",
     "./client": "./src/client.ts",
+    "./scenario": "./src/scenario.ts",
     "./schema": "./src/schema.ts",
     "./schema/*": "./schema/*"
   },

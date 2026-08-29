@@ -1,0 +1,6 @@
+{
+  "name": "a blob outside the alphabet",
+  "description": "`+` and `/` are base64's alphabet, not base64url's. A link mangled by a mailer is a refusal, never a best-effort decode.",
+  "blob": "eyJ2Ijox+/8=",
+  "expected_code": "BAD_INPUT"
+}

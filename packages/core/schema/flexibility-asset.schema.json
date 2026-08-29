@@ -10,7 +10,12 @@
       "type": "object",
       "properties": {
         "asset_type": { "const": "battery" },
-        "label": { "type": "string" },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Echoed back, never interpolated into SQL, a log format string or a tooltip without escaping. The 64-character cap is `docs/specs/flex-optimizer.md`'s untrusted-input hygiene rule: the scenario is attacker-controlled and the label is the one free-text field on it."
+        },
         "subsystem": { "$ref": "common.schema.json#/$defs/subsystem" },
         "max_power_mw": {
           "type": "number",
@@ -58,7 +63,12 @@
       "type": "object",
       "properties": {
         "asset_type": { "const": "shiftable_load" },
-        "label": { "type": "string" },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Echoed back, never interpolated into SQL, a log format string or a tooltip without escaping. The 64-character cap is `docs/specs/flex-optimizer.md`'s untrusted-input hygiene rule: the scenario is attacker-controlled and the label is the one free-text field on it."
+        },
         "subsystem": { "$ref": "common.schema.json#/$defs/subsystem" },
         "max_power_mw": {
           "type": "number",

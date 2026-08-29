@@ -1,0 +1,18 @@
+{
+  "name": "asset_type: ev",
+  "description": "`EV`, `DataCentre`, `Electrolyzer` and `HVAC` are the spec's named future variants and v1 implements none of them. Until one is a variant in the schema it is not a variant on the wire, and the refusal names the discriminant rather than guessing a shape.",
+  "scenario": {
+    "v": 1,
+    "subsystem": "NE",
+    "target_date": "2026-08-29",
+    "assets": [
+      {
+        "asset_type": "ev",
+        "label": "Fleet",
+        "subsystem": "NE",
+        "max_power_mw": 10
+      }
+    ]
+  },
+  "expected_code": "ASSET_TYPE_UNKNOWN"
+}
