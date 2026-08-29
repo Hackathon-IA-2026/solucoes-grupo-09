@@ -120,6 +120,20 @@
       "when": 1787978560645,
       "tag": "0016_the_feature_gate",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1787979465637,
+      "tag": "0017_mean_sugar_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1787979525637,
+      "tag": "0018_calendar_and_astronomy",
+      "breakpoints": true
     }
   ]
 }

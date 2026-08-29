@@ -14,6 +14,24 @@
  */
 
 export {
+  CALENDAR_GENERATOR,
+  CALENDAR_VERSION,
+  type CalendarArtifact,
+  type CalendarDay,
+  type CalendarHolidayCategory,
+  calendarDigest,
+  loadCalendarArtifact,
+  NATIONAL_SCOPE,
+  parseCalendarArtifact,
+} from "./calendar/calendar.js";
+export {
+  CalendarImmutableError,
+  type LoadCalendarResult,
+  loadCalendar,
+  readCalendarGeneration,
+  storedCalendarDigest,
+} from "./calendar/calendar-repository.js";
+export {
   type CapacityAttribution,
   type CapacityWeightInput,
   type CapacityWeightQuery,

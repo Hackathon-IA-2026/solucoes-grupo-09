@@ -438,6 +438,29 @@ All computed in `America/Sao_Paulo` from the UTC `valid_time`.
 encoding — they are a coarser quantisation of the same axis and add split points
 without information.
 
+> **Settled while implementing ticket 03.** Four details this table left open,
+> each of which has exactly one defensible answer once written down:
+>
+> - **The day-of-year period is 365.25, not 365.** A 365-day period puts 29
+>   February a day out of phase and never recovers it; 365.25 makes the new-year
+>   step 1.25 days out of a common year and 0.25 out of a leap year, which
+>   averages to one over the cycle. Asserted directly in
+>   `database-calendar.test.ts` rather than left as an intention.
+> - **The solar geometry is computed at the frozen set's solar centroid**, the
+>   `represented_mw`-weighted mean of `centroid_set_v1`'s SOLAR points. It has to
+>   be frozen: a point that moved with the fleet would restate `solar_zenith_cos`
+>   for hours already trained on, and a class-`T` feature that changes when a
+>   plant is commissioned is not deterministic in any useful sense. With no set
+>   frozen, both solar columns are NULL rather than zero — `greatest(x, 0)`
+>   ignores NULLs, and a confident 0 W/m² at noon is the one wrong answer that
+>   looks like a right one.
+> - **Irradiance is sampled at the hour's midpoint**, because
+>   `weather_shortwave_radiation` is an hour *mean* and the clearness index
+>   divides one by the other. An edge-sampled denominator peaks the ratio above 1
+>   every morning.
+> - **A bridge day is a Monday before a Tuesday national holiday or a Friday
+>   after a Thursday one**, and a holiday is never a bridge to itself.
+
 #### Installed capacity — class `T`, day grain broadcast across hours
 
 | Feature | Definition | D−1 | Source |
@@ -805,6 +828,30 @@ a proxy, and is an early candidate for the forecaster's feature-selection pass.
 
 Municipal holidays are out of scope; `holidays` does not carry them and they do
 not move a subsystem.
+
+> **Settled while implementing ticket 03.** The materialisation is
+> `feature_calendar_generation` (one immutable row per version, carrying the pin
+> `holidays==0.103` and a digest of its days) and `feature_calendar_day`
+> (`(day, uf, name, category)`). Three decisions inside that:
+>
+> - **`uf = 'BR'` is national and national days are stored once.** A calendar
+>   that repeated Tiradentes under all 27 UFs would make
+>   `calendar_holiday_state_share` read 1.0 on every national holiday — a second
+>   copy of the binary in the column beside it, dressed as a regional signal. The
+>   subtraction of national days from a state's list is by **name and across
+>   categories**: `holidays` joins same-day names into one string
+>   (`'Fundação de Brasília; Tiradentes'`), and Rio observes Carnival as
+>   *public* where the country observes it as *optional*.
+> - **The retrain trigger is enforced, not documented.** The loader refuses to
+>   write a different calendar under an existing version and says why; a changed
+>   calendar has to be `br_calendar_v2`, which is a new feature-set version. The
+>   Python side asserts the artifact is byte-for-byte what the pinned library
+>   produces, so bumping `holidays` without regenerating fails the build rather
+>   than silently restating three years of features.
+> - **Outside the loaded horizon every holiday-derived column is NULL**, never
+>   `false`. The horizon is checked against D−1 and D+1 because the bridge and
+>   day-before features read the neighbours, so the calendar's edge is visible in
+>   the row rather than being a quiet "not a holiday".
 
 ### Installed capacity, joined across a changing fleet
 

@@ -1,0 +1,3694 @@
+{
+  "version": "br_calendar_v1",
+  "generator": "holidays==0.103",
+  "day_from": "2023-01-01",
+  "day_to": "2032-12-31",
+  "row_count": 614,
+  "digest": "sha256:62115cfc75a221158ac435ed68a1eca5ec1db68477e55b6f6c7b35e9b80b486b",
+  "days": [
+    {
+      "day": "2023-01-01",
+      "uf": "BR",
+      "name": "Confraternização Universal",
+      "category": "public"
+    },
+    {
+      "day": "2023-01-04",
+      "uf": "RO",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2023-01-23",
+      "uf": "AC",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2023-02-20",
+      "uf": "BR",
+      "name": "Carnaval",
+      "category": "optional"
+    },
+    {
+      "day": "2023-02-21",
+      "uf": "BR",
+      "name": "Carnaval",
+      "category": "optional"
+    },
+    {
+      "day": "2023-02-22",
+      "uf": "BR",
+      "name": "Início da Quaresma",
+      "category": "optional"
+    },
+    {
+      "day": "2023-03-06",
+      "uf": "PE",
+      "name": "Revolução Pernambucana de 1817",
+      "category": "public"
+    },
+    {
+      "day": "2023-03-10",
+      "uf": "AC",
+      "name": "Dia Internacional da Mulher",
+      "category": "public"
+    },
+    {
+      "day": "2023-03-18",
+      "uf": "TO",
+      "name": "Dia da Autonomia",
+      "category": "public"
+    },
+    {
+      "day": "2023-03-19",
+      "uf": "AP",
+      "name": "São José",
+      "category": "public"
+    },
+    {
+      "day": "2023-03-19",
+      "uf": "CE",
+      "name": "São José",
+      "category": "public"
+    },
+    {
+      "day": "2023-03-25",
+      "uf": "CE",
+      "name": "Abolição da escravidão no Ceará",
+      "category": "public"
+    },
+    {
+      "day": "2023-04-07",
+      "uf": "BR",
+      "name": "Sexta-feira Santa",
+      "category": "public"
+    },
+    {
+      "day": "2023-04-17",
+      "uf": "ES",
+      "name": "Nossa Senhora da Penha",
+      "category": "public"
+    },
+    {
+      "day": "2023-04-21",
+      "uf": "BR",
+      "name": "Tiradentes",
+      "category": "public"
+    },
+    {
+      "day": "2023-04-21",
+      "uf": "DF",
+      "name": "Fundação de Brasília",
+      "category": "public"
+    },
+    {
+      "day": "2023-04-21",
+      "uf": "MG",
+      "name": "Execução de Tiradentes",
+      "category": "public"
+    },
+    {
+      "day": "2023-04-23",
+      "uf": "RJ",
+      "name": "São Jorge",
+      "category": "public"
+    },
+    {
+      "day": "2023-05-01",
+      "uf": "BR",
+      "name": "Dia do Trabalhador",
+      "category": "public"
+    },
+    {
+      "day": "2023-06-08",
+      "uf": "BR",
+      "name": "Corpus Christi",
+      "category": "optional"
+    },
+    {
+      "day": "2023-06-15",
+      "uf": "AC",
+      "name": "Aniversário do Acre",
+      "category": "public"
+    },
+    {
+      "day": "2023-06-18",
+      "uf": "RO",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2023-06-24",
+      "uf": "AL",
+      "name": "São João",
+      "category": "public"
+    },
+    {
+      "day": "2023-06-29",
+      "uf": "AL",
+      "name": "São Pedro",
+      "category": "public"
+    },
+    {
+      "day": "2023-07-02",
+      "uf": "BA",
+      "name": "Independência da Bahia",
+      "category": "public"
+    },
+    {
+      "day": "2023-07-08",
+      "uf": "SE",
+      "name": "Emancipação política de Sergipe",
+      "category": "public"
+    },
+    {
+      "day": "2023-07-09",
+      "uf": "SP",
+      "name": "Revolução Constitucionalista",
+      "category": "public"
+    },
+    {
+      "day": "2023-07-25",
+      "uf": "AP",
+      "name": "São Tiago",
+      "category": "public"
+    },
+    {
+      "day": "2023-07-26",
+      "uf": "GO",
+      "name": "Fundação da cidade de Goiás",
+      "category": "public"
+    },
+    {
+      "day": "2023-07-28",
+      "uf": "MA",
+      "name": "Adesão do Maranhão à independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2023-08-05",
+      "uf": "PB",
+      "name": "Fundação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2023-08-07",
+      "uf": "RN",
+      "name": "Dia do Rio Grande do Norte",
+      "category": "public"
+    },
+    {
+      "day": "2023-08-13",
+      "uf": "SC",
+      "name": "Dia do Estado de Santa Catarina",
+      "category": "public"
+    },
+    {
+      "day": "2023-08-15",
+      "uf": "CE",
+      "name": "Nossa Senhora da Assunção",
+      "category": "public"
+    },
+    {
+      "day": "2023-08-15",
+      "uf": "PA",
+      "name": "Adesão do Grão-Pará à independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2023-09-05",
+      "uf": "AM",
+      "name": "Elevação do Amazonas à categoria de província",
+      "category": "public"
+    },
+    {
+      "day": "2023-09-07",
+      "uf": "BR",
+      "name": "Independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2023-09-08",
+      "uf": "AC",
+      "name": "Dia da Amazônia",
+      "category": "public"
+    },
+    {
+      "day": "2023-09-08",
+      "uf": "TO",
+      "name": "Nossa Senhora da Natividade",
+      "category": "public"
+    },
+    {
+      "day": "2023-09-13",
+      "uf": "AP",
+      "name": "Criação do Território Federal",
+      "category": "public"
+    },
+    {
+      "day": "2023-09-16",
+      "uf": "AL",
+      "name": "Emancipação Política de Alagoas",
+      "category": "public"
+    },
+    {
+      "day": "2023-09-20",
+      "uf": "RS",
+      "name": "Dia do Gaúcho",
+      "category": "public"
+    },
+    {
+      "day": "2023-10-03",
+      "uf": "RN",
+      "name": "Mártires de Cunhaú e Uruaçu",
+      "category": "public"
+    },
+    {
+      "day": "2023-10-05",
+      "uf": "RR",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2023-10-05",
+      "uf": "TO",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2023-10-11",
+      "uf": "MS",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2023-10-12",
+      "uf": "BR",
+      "name": "Nossa Senhora Aparecida",
+      "category": "public"
+    },
+    {
+      "day": "2023-10-19",
+      "uf": "PI",
+      "name": "Dia do Piauí",
+      "category": "public"
+    },
+    {
+      "day": "2023-10-24",
+      "uf": "GO",
+      "name": "Pedra fundamental de Goiânia",
+      "category": "public"
+    },
+    {
+      "day": "2023-10-28",
+      "uf": "BR",
+      "name": "Dia do Servidor Público",
+      "category": "optional"
+    },
+    {
+      "day": "2023-11-02",
+      "uf": "BR",
+      "name": "Finados",
+      "category": "public"
+    },
+    {
+      "day": "2023-11-15",
+      "uf": "BR",
+      "name": "Proclamação da República",
+      "category": "public"
+    },
+    {
+      "day": "2023-11-15",
+      "uf": "PR",
+      "name": "Nossa Senhora do Rocio",
+      "category": "public"
+    },
+    {
+      "day": "2023-11-17",
+      "uf": "AC",
+      "name": "Assinatura do Tratado de Petrópolis",
+      "category": "public"
+    },
+    {
+      "day": "2023-11-20",
+      "uf": "AL",
+      "name": "Consciência Negra",
+      "category": "public"
+    },
+    {
+      "day": "2023-11-20",
+      "uf": "AM",
+      "name": "Consciência Negra",
+      "category": "public"
+    },
+    {
+      "day": "2023-11-20",
+      "uf": "AP",
+      "name": "Consciência Negra",
+      "category": "public"
+    },
+    {
+      "day": "2023-11-20",
+      "uf": "MT",
+      "name": "Consciência Negra",
+      "category": "public"
+    },
+    {
+      "day": "2023-11-20",
+      "uf": "RJ",
+      "name": "Consciência Negra",
+      "category": "public"
+    },
+    {
+      "day": "2023-11-26",
+      "uf": "SC",
+      "name": "Dia de Santa Catarina de Alexandria",
+      "category": "public"
+    },
+    {
+      "day": "2023-11-30",
+      "uf": "AL",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2023-11-30",
+      "uf": "DF",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2023-12-24",
+      "uf": "BR",
+      "name": "Véspera de Natal",
+      "category": "optional"
+    },
+    {
+      "day": "2023-12-25",
+      "uf": "BR",
+      "name": "Natal",
+      "category": "public"
+    },
+    {
+      "day": "2023-12-31",
+      "uf": "BR",
+      "name": "Véspera de Ano-Novo",
+      "category": "optional"
+    },
+    {
+      "day": "2024-01-01",
+      "uf": "BR",
+      "name": "Confraternização Universal",
+      "category": "public"
+    },
+    {
+      "day": "2024-01-04",
+      "uf": "RO",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2024-01-26",
+      "uf": "AC",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2024-02-12",
+      "uf": "BR",
+      "name": "Carnaval",
+      "category": "optional"
+    },
+    {
+      "day": "2024-02-13",
+      "uf": "BR",
+      "name": "Carnaval",
+      "category": "optional"
+    },
+    {
+      "day": "2024-02-14",
+      "uf": "BR",
+      "name": "Início da Quaresma",
+      "category": "optional"
+    },
+    {
+      "day": "2024-03-06",
+      "uf": "PE",
+      "name": "Revolução Pernambucana de 1817",
+      "category": "public"
+    },
+    {
+      "day": "2024-03-08",
+      "uf": "AC",
+      "name": "Dia Internacional da Mulher",
+      "category": "public"
+    },
+    {
+      "day": "2024-03-18",
+      "uf": "TO",
+      "name": "Dia da Autonomia",
+      "category": "public"
+    },
+    {
+      "day": "2024-03-19",
+      "uf": "AP",
+      "name": "São José",
+      "category": "public"
+    },
+    {
+      "day": "2024-03-19",
+      "uf": "CE",
+      "name": "São José",
+      "category": "public"
+    },
+    {
+      "day": "2024-03-25",
+      "uf": "CE",
+      "name": "Abolição da escravidão no Ceará",
+      "category": "public"
+    },
+    {
+      "day": "2024-03-29",
+      "uf": "BR",
+      "name": "Sexta-feira Santa",
+      "category": "public"
+    },
+    {
+      "day": "2024-04-08",
+      "uf": "ES",
+      "name": "Nossa Senhora da Penha",
+      "category": "public"
+    },
+    {
+      "day": "2024-04-21",
+      "uf": "BR",
+      "name": "Tiradentes",
+      "category": "public"
+    },
+    {
+      "day": "2024-04-21",
+      "uf": "DF",
+      "name": "Fundação de Brasília",
+      "category": "public"
+    },
+    {
+      "day": "2024-04-21",
+      "uf": "MG",
+      "name": "Execução de Tiradentes",
+      "category": "public"
+    },
+    {
+      "day": "2024-04-23",
+      "uf": "RJ",
+      "name": "São Jorge",
+      "category": "public"
+    },
+    {
+      "day": "2024-05-01",
+      "uf": "BR",
+      "name": "Dia do Trabalhador",
+      "category": "public"
+    },
+    {
+      "day": "2024-05-30",
+      "uf": "BR",
+      "name": "Corpus Christi",
+      "category": "optional"
+    },
+    {
+      "day": "2024-06-15",
+      "uf": "AC",
+      "name": "Aniversário do Acre",
+      "category": "public"
+    },
+    {
+      "day": "2024-06-18",
+      "uf": "RO",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2024-06-24",
+      "uf": "AL",
+      "name": "São João",
+      "category": "public"
+    },
+    {
+      "day": "2024-06-29",
+      "uf": "AL",
+      "name": "São Pedro",
+      "category": "public"
+    },
+    {
+      "day": "2024-07-02",
+      "uf": "BA",
+      "name": "Independência da Bahia",
+      "category": "public"
+    },
+    {
+      "day": "2024-07-08",
+      "uf": "SE",
+      "name": "Emancipação política de Sergipe",
+      "category": "public"
+    },
+    {
+      "day": "2024-07-09",
+      "uf": "SP",
+      "name": "Revolução Constitucionalista",
+      "category": "public"
+    },
+    {
+      "day": "2024-07-25",
+      "uf": "AP",
+      "name": "São Tiago",
+      "category": "public"
+    },
+    {
+      "day": "2024-07-26",
+      "uf": "GO",
+      "name": "Fundação da cidade de Goiás",
+      "category": "public"
+    },
+    {
+      "day": "2024-07-28",
+      "uf": "MA",
+      "name": "Adesão do Maranhão à independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2024-08-05",
+      "uf": "PB",
+      "name": "Fundação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2024-08-07",
+      "uf": "RN",
+      "name": "Dia do Rio Grande do Norte",
+      "category": "public"
+    },
+    {
+      "day": "2024-08-11",
+      "uf": "SC",
+      "name": "Dia do Estado de Santa Catarina",
+      "category": "public"
+    },
+    {
+      "day": "2024-08-15",
+      "uf": "CE",
+      "name": "Nossa Senhora da Assunção",
+      "category": "public"
+    },
+    {
+      "day": "2024-08-15",
+      "uf": "PA",
+      "name": "Adesão do Grão-Pará à independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2024-09-05",
+      "uf": "AM",
+      "name": "Elevação do Amazonas à categoria de província",
+      "category": "public"
+    },
+    {
+      "day": "2024-09-06",
+      "uf": "AC",
+      "name": "Dia da Amazônia",
+      "category": "public"
+    },
+    {
+      "day": "2024-09-07",
+      "uf": "BR",
+      "name": "Independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2024-09-08",
+      "uf": "TO",
+      "name": "Nossa Senhora da Natividade",
+      "category": "public"
+    },
+    {
+      "day": "2024-09-13",
+      "uf": "AP",
+      "name": "Criação do Território Federal",
+      "category": "public"
+    },
+    {
+      "day": "2024-09-16",
+      "uf": "AL",
+      "name": "Emancipação Política de Alagoas",
+      "category": "public"
+    },
+    {
+      "day": "2024-09-20",
+      "uf": "RS",
+      "name": "Dia do Gaúcho",
+      "category": "public"
+    },
+    {
+      "day": "2024-10-03",
+      "uf": "RN",
+      "name": "Mártires de Cunhaú e Uruaçu",
+      "category": "public"
+    },
+    {
+      "day": "2024-10-05",
+      "uf": "RR",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2024-10-05",
+      "uf": "TO",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2024-10-11",
+      "uf": "MS",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2024-10-12",
+      "uf": "BR",
+      "name": "Nossa Senhora Aparecida",
+      "category": "public"
+    },
+    {
+      "day": "2024-10-19",
+      "uf": "PI",
+      "name": "Dia do Piauí",
+      "category": "public"
+    },
+    {
+      "day": "2024-10-24",
+      "uf": "GO",
+      "name": "Pedra fundamental de Goiânia",
+      "category": "public"
+    },
+    {
+      "day": "2024-10-28",
+      "uf": "BR",
+      "name": "Dia do Servidor Público",
+      "category": "optional"
+    },
+    {
+      "day": "2024-11-02",
+      "uf": "BR",
+      "name": "Finados",
+      "category": "public"
+    },
+    {
+      "day": "2024-11-15",
+      "uf": "BR",
+      "name": "Proclamação da República",
+      "category": "public"
+    },
+    {
+      "day": "2024-11-15",
+      "uf": "PR",
+      "name": "Nossa Senhora do Rocio",
+      "category": "public"
+    },
+    {
+      "day": "2024-11-17",
+      "uf": "AC",
+      "name": "Assinatura do Tratado de Petrópolis",
+      "category": "public"
+    },
+    {
+      "day": "2024-11-20",
+      "uf": "BR",
+      "name": "Dia Nacional de Zumbi e da Consciência Negra",
+      "category": "public"
+    },
+    {
+      "day": "2024-11-30",
+      "uf": "AL",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2024-11-30",
+      "uf": "DF",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2024-12-01",
+      "uf": "SC",
+      "name": "Dia de Santa Catarina de Alexandria",
+      "category": "public"
+    },
+    {
+      "day": "2024-12-24",
+      "uf": "BR",
+      "name": "Véspera de Natal",
+      "category": "optional"
+    },
+    {
+      "day": "2024-12-25",
+      "uf": "BR",
+      "name": "Natal",
+      "category": "public"
+    },
+    {
+      "day": "2024-12-31",
+      "uf": "BR",
+      "name": "Véspera de Ano-Novo",
+      "category": "optional"
+    },
+    {
+      "day": "2025-01-01",
+      "uf": "BR",
+      "name": "Confraternização Universal",
+      "category": "public"
+    },
+    {
+      "day": "2025-01-04",
+      "uf": "RO",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2025-01-24",
+      "uf": "AC",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2025-03-03",
+      "uf": "BR",
+      "name": "Carnaval",
+      "category": "optional"
+    },
+    {
+      "day": "2025-03-04",
+      "uf": "BR",
+      "name": "Carnaval",
+      "category": "optional"
+    },
+    {
+      "day": "2025-03-05",
+      "uf": "BR",
+      "name": "Início da Quaresma",
+      "category": "optional"
+    },
+    {
+      "day": "2025-03-06",
+      "uf": "PE",
+      "name": "Revolução Pernambucana de 1817",
+      "category": "public"
+    },
+    {
+      "day": "2025-03-08",
+      "uf": "AC",
+      "name": "Dia Internacional da Mulher",
+      "category": "public"
+    },
+    {
+      "day": "2025-03-18",
+      "uf": "TO",
+      "name": "Dia da Autonomia",
+      "category": "public"
+    },
+    {
+      "day": "2025-03-19",
+      "uf": "AP",
+      "name": "São José",
+      "category": "public"
+    },
+    {
+      "day": "2025-03-19",
+      "uf": "CE",
+      "name": "São José",
+      "category": "public"
+    },
+    {
+      "day": "2025-03-25",
+      "uf": "CE",
+      "name": "Abolição da escravidão no Ceará",
+      "category": "public"
+    },
+    {
+      "day": "2025-04-18",
+      "uf": "BR",
+      "name": "Sexta-feira Santa",
+      "category": "public"
+    },
+    {
+      "day": "2025-04-21",
+      "uf": "BR",
+      "name": "Tiradentes",
+      "category": "public"
+    },
+    {
+      "day": "2025-04-21",
+      "uf": "DF",
+      "name": "Fundação de Brasília",
+      "category": "public"
+    },
+    {
+      "day": "2025-04-21",
+      "uf": "MG",
+      "name": "Execução de Tiradentes",
+      "category": "public"
+    },
+    {
+      "day": "2025-04-23",
+      "uf": "RJ",
+      "name": "São Jorge",
+      "category": "public"
+    },
+    {
+      "day": "2025-04-28",
+      "uf": "ES",
+      "name": "Nossa Senhora da Penha",
+      "category": "public"
+    },
+    {
+      "day": "2025-05-01",
+      "uf": "BR",
+      "name": "Dia do Trabalhador",
+      "category": "public"
+    },
+    {
+      "day": "2025-06-15",
+      "uf": "AC",
+      "name": "Aniversário do Acre",
+      "category": "public"
+    },
+    {
+      "day": "2025-06-18",
+      "uf": "RO",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2025-06-19",
+      "uf": "BR",
+      "name": "Corpus Christi",
+      "category": "optional"
+    },
+    {
+      "day": "2025-06-24",
+      "uf": "AL",
+      "name": "São João",
+      "category": "public"
+    },
+    {
+      "day": "2025-06-29",
+      "uf": "AL",
+      "name": "São Pedro",
+      "category": "public"
+    },
+    {
+      "day": "2025-07-02",
+      "uf": "BA",
+      "name": "Independência da Bahia",
+      "category": "public"
+    },
+    {
+      "day": "2025-07-08",
+      "uf": "SE",
+      "name": "Emancipação política de Sergipe",
+      "category": "public"
+    },
+    {
+      "day": "2025-07-09",
+      "uf": "SP",
+      "name": "Revolução Constitucionalista",
+      "category": "public"
+    },
+    {
+      "day": "2025-07-25",
+      "uf": "AP",
+      "name": "São Tiago",
+      "category": "public"
+    },
+    {
+      "day": "2025-07-26",
+      "uf": "GO",
+      "name": "Fundação da cidade de Goiás",
+      "category": "public"
+    },
+    {
+      "day": "2025-07-28",
+      "uf": "MA",
+      "name": "Adesão do Maranhão à independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2025-08-05",
+      "uf": "PB",
+      "name": "Fundação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2025-08-07",
+      "uf": "RN",
+      "name": "Dia do Rio Grande do Norte",
+      "category": "public"
+    },
+    {
+      "day": "2025-08-15",
+      "uf": "CE",
+      "name": "Nossa Senhora da Assunção",
+      "category": "public"
+    },
+    {
+      "day": "2025-08-15",
+      "uf": "PA",
+      "name": "Adesão do Grão-Pará à independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2025-08-17",
+      "uf": "SC",
+      "name": "Dia do Estado de Santa Catarina",
+      "category": "public"
+    },
+    {
+      "day": "2025-09-05",
+      "uf": "AC",
+      "name": "Dia da Amazônia",
+      "category": "public"
+    },
+    {
+      "day": "2025-09-05",
+      "uf": "AM",
+      "name": "Elevação do Amazonas à categoria de província",
+      "category": "public"
+    },
+    {
+      "day": "2025-09-07",
+      "uf": "BR",
+      "name": "Independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2025-09-08",
+      "uf": "TO",
+      "name": "Nossa Senhora da Natividade",
+      "category": "public"
+    },
+    {
+      "day": "2025-09-13",
+      "uf": "AP",
+      "name": "Criação do Território Federal",
+      "category": "public"
+    },
+    {
+      "day": "2025-09-16",
+      "uf": "AL",
+      "name": "Emancipação Política de Alagoas",
+      "category": "public"
+    },
+    {
+      "day": "2025-09-20",
+      "uf": "RS",
+      "name": "Dia do Gaúcho",
+      "category": "public"
+    },
+    {
+      "day": "2025-10-03",
+      "uf": "RN",
+      "name": "Mártires de Cunhaú e Uruaçu",
+      "category": "public"
+    },
+    {
+      "day": "2025-10-05",
+      "uf": "RR",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2025-10-05",
+      "uf": "TO",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2025-10-11",
+      "uf": "MS",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2025-10-12",
+      "uf": "BR",
+      "name": "Nossa Senhora Aparecida",
+      "category": "public"
+    },
+    {
+      "day": "2025-10-19",
+      "uf": "PI",
+      "name": "Dia do Piauí",
+      "category": "public"
+    },
+    {
+      "day": "2025-10-24",
+      "uf": "GO",
+      "name": "Pedra fundamental de Goiânia",
+      "category": "public"
+    },
+    {
+      "day": "2025-10-28",
+      "uf": "BR",
+      "name": "Dia do Servidor Público",
+      "category": "optional"
+    },
+    {
+      "day": "2025-11-02",
+      "uf": "BR",
+      "name": "Finados",
+      "category": "public"
+    },
+    {
+      "day": "2025-11-15",
+      "uf": "BR",
+      "name": "Proclamação da República",
+      "category": "public"
+    },
+    {
+      "day": "2025-11-15",
+      "uf": "PR",
+      "name": "Nossa Senhora do Rocio",
+      "category": "public"
+    },
+    {
+      "day": "2025-11-17",
+      "uf": "AC",
+      "name": "Assinatura do Tratado de Petrópolis",
+      "category": "public"
+    },
+    {
+      "day": "2025-11-20",
+      "uf": "BR",
+      "name": "Dia Nacional de Zumbi e da Consciência Negra",
+      "category": "public"
+    },
+    {
+      "day": "2025-11-30",
+      "uf": "AL",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2025-11-30",
+      "uf": "DF",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2025-11-30",
+      "uf": "SC",
+      "name": "Dia de Santa Catarina de Alexandria",
+      "category": "public"
+    },
+    {
+      "day": "2025-12-24",
+      "uf": "BR",
+      "name": "Véspera de Natal",
+      "category": "optional"
+    },
+    {
+      "day": "2025-12-25",
+      "uf": "BR",
+      "name": "Natal",
+      "category": "public"
+    },
+    {
+      "day": "2025-12-31",
+      "uf": "BR",
+      "name": "Véspera de Ano-Novo",
+      "category": "optional"
+    },
+    {
+      "day": "2026-01-01",
+      "uf": "BR",
+      "name": "Confraternização Universal",
+      "category": "public"
+    },
+    {
+      "day": "2026-01-04",
+      "uf": "RO",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2026-01-23",
+      "uf": "AC",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2026-02-16",
+      "uf": "BR",
+      "name": "Carnaval",
+      "category": "optional"
+    },
+    {
+      "day": "2026-02-17",
+      "uf": "BR",
+      "name": "Carnaval",
+      "category": "optional"
+    },
+    {
+      "day": "2026-02-18",
+      "uf": "BR",
+      "name": "Início da Quaresma",
+      "category": "optional"
+    },
+    {
+      "day": "2026-03-06",
+      "uf": "PE",
+      "name": "Revolução Pernambucana de 1817",
+      "category": "public"
+    },
+    {
+      "day": "2026-03-08",
+      "uf": "AC",
+      "name": "Dia Internacional da Mulher",
+      "category": "public"
+    },
+    {
+      "day": "2026-03-18",
+      "uf": "TO",
+      "name": "Dia da Autonomia",
+      "category": "public"
+    },
+    {
+      "day": "2026-03-19",
+      "uf": "AP",
+      "name": "São José",
+      "category": "public"
+    },
+    {
+      "day": "2026-03-19",
+      "uf": "CE",
+      "name": "São José",
+      "category": "public"
+    },
+    {
+      "day": "2026-03-25",
+      "uf": "CE",
+      "name": "Abolição da escravidão no Ceará",
+      "category": "public"
+    },
+    {
+      "day": "2026-04-03",
+      "uf": "BR",
+      "name": "Sexta-feira Santa",
+      "category": "public"
+    },
+    {
+      "day": "2026-04-13",
+      "uf": "ES",
+      "name": "Nossa Senhora da Penha",
+      "category": "public"
+    },
+    {
+      "day": "2026-04-21",
+      "uf": "BR",
+      "name": "Tiradentes",
+      "category": "public"
+    },
+    {
+      "day": "2026-04-21",
+      "uf": "DF",
+      "name": "Fundação de Brasília",
+      "category": "public"
+    },
+    {
+      "day": "2026-04-21",
+      "uf": "MG",
+      "name": "Execução de Tiradentes",
+      "category": "public"
+    },
+    {
+      "day": "2026-04-23",
+      "uf": "RJ",
+      "name": "São Jorge",
+      "category": "public"
+    },
+    {
+      "day": "2026-05-01",
+      "uf": "BR",
+      "name": "Dia do Trabalhador",
+      "category": "public"
+    },
+    {
+      "day": "2026-06-04",
+      "uf": "BR",
+      "name": "Corpus Christi",
+      "category": "optional"
+    },
+    {
+      "day": "2026-06-15",
+      "uf": "AC",
+      "name": "Aniversário do Acre",
+      "category": "public"
+    },
+    {
+      "day": "2026-06-18",
+      "uf": "RO",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2026-06-24",
+      "uf": "AL",
+      "name": "São João",
+      "category": "public"
+    },
+    {
+      "day": "2026-06-29",
+      "uf": "AL",
+      "name": "São Pedro",
+      "category": "public"
+    },
+    {
+      "day": "2026-07-02",
+      "uf": "BA",
+      "name": "Independência da Bahia",
+      "category": "public"
+    },
+    {
+      "day": "2026-07-08",
+      "uf": "SE",
+      "name": "Emancipação política de Sergipe",
+      "category": "public"
+    },
+    {
+      "day": "2026-07-09",
+      "uf": "SP",
+      "name": "Revolução Constitucionalista",
+      "category": "public"
+    },
+    {
+      "day": "2026-07-25",
+      "uf": "AP",
+      "name": "São Tiago",
+      "category": "public"
+    },
+    {
+      "day": "2026-07-26",
+      "uf": "GO",
+      "name": "Fundação da cidade de Goiás",
+      "category": "public"
+    },
+    {
+      "day": "2026-07-28",
+      "uf": "MA",
+      "name": "Adesão do Maranhão à independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2026-08-05",
+      "uf": "PB",
+      "name": "Fundação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2026-08-07",
+      "uf": "RN",
+      "name": "Dia do Rio Grande do Norte",
+      "category": "public"
+    },
+    {
+      "day": "2026-08-15",
+      "uf": "CE",
+      "name": "Nossa Senhora da Assunção",
+      "category": "public"
+    },
+    {
+      "day": "2026-08-15",
+      "uf": "PA",
+      "name": "Adesão do Grão-Pará à independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2026-08-16",
+      "uf": "SC",
+      "name": "Dia do Estado de Santa Catarina",
+      "category": "public"
+    },
+    {
+      "day": "2026-09-05",
+      "uf": "AC",
+      "name": "Dia da Amazônia",
+      "category": "public"
+    },
+    {
+      "day": "2026-09-05",
+      "uf": "AM",
+      "name": "Elevação do Amazonas à categoria de província",
+      "category": "public"
+    },
+    {
+      "day": "2026-09-07",
+      "uf": "BR",
+      "name": "Independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2026-09-08",
+      "uf": "TO",
+      "name": "Nossa Senhora da Natividade",
+      "category": "public"
+    },
+    {
+      "day": "2026-09-13",
+      "uf": "AP",
+      "name": "Criação do Território Federal",
+      "category": "public"
+    },
+    {
+      "day": "2026-09-16",
+      "uf": "AL",
+      "name": "Emancipação Política de Alagoas",
+      "category": "public"
+    },
+    {
+      "day": "2026-09-20",
+      "uf": "RS",
+      "name": "Dia do Gaúcho",
+      "category": "public"
+    },
+    {
+      "day": "2026-10-03",
+      "uf": "RN",
+      "name": "Mártires de Cunhaú e Uruaçu",
+      "category": "public"
+    },
+    {
+      "day": "2026-10-05",
+      "uf": "RR",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2026-10-05",
+      "uf": "TO",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2026-10-11",
+      "uf": "MS",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2026-10-12",
+      "uf": "BR",
+      "name": "Nossa Senhora Aparecida",
+      "category": "public"
+    },
+    {
+      "day": "2026-10-19",
+      "uf": "PI",
+      "name": "Dia do Piauí",
+      "category": "public"
+    },
+    {
+      "day": "2026-10-24",
+      "uf": "GO",
+      "name": "Pedra fundamental de Goiânia",
+      "category": "public"
+    },
+    {
+      "day": "2026-10-28",
+      "uf": "BR",
+      "name": "Dia do Servidor Público",
+      "category": "optional"
+    },
+    {
+      "day": "2026-11-02",
+      "uf": "BR",
+      "name": "Finados",
+      "category": "public"
+    },
+    {
+      "day": "2026-11-15",
+      "uf": "BR",
+      "name": "Proclamação da República",
+      "category": "public"
+    },
+    {
+      "day": "2026-11-15",
+      "uf": "PR",
+      "name": "Nossa Senhora do Rocio",
+      "category": "public"
+    },
+    {
+      "day": "2026-11-20",
+      "uf": "AC",
+      "name": "Assinatura do Tratado de Petrópolis",
+      "category": "public"
+    },
+    {
+      "day": "2026-11-20",
+      "uf": "BR",
+      "name": "Dia Nacional de Zumbi e da Consciência Negra",
+      "category": "public"
+    },
+    {
+      "day": "2026-11-29",
+      "uf": "SC",
+      "name": "Dia de Santa Catarina de Alexandria",
+      "category": "public"
+    },
+    {
+      "day": "2026-11-30",
+      "uf": "AL",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2026-11-30",
+      "uf": "DF",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2026-12-24",
+      "uf": "BR",
+      "name": "Véspera de Natal",
+      "category": "optional"
+    },
+    {
+      "day": "2026-12-25",
+      "uf": "BR",
+      "name": "Natal",
+      "category": "public"
+    },
+    {
+      "day": "2026-12-31",
+      "uf": "BR",
+      "name": "Véspera de Ano-Novo",
+      "category": "optional"
+    },
+    {
+      "day": "2027-01-01",
+      "uf": "BR",
+      "name": "Confraternização Universal",
+      "category": "public"
+    },
+    {
+      "day": "2027-01-04",
+      "uf": "RO",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2027-01-23",
+      "uf": "AC",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2027-02-08",
+      "uf": "BR",
+      "name": "Carnaval",
+      "category": "optional"
+    },
+    {
+      "day": "2027-02-09",
+      "uf": "BR",
+      "name": "Carnaval",
+      "category": "optional"
+    },
+    {
+      "day": "2027-02-10",
+      "uf": "BR",
+      "name": "Início da Quaresma",
+      "category": "optional"
+    },
+    {
+      "day": "2027-03-06",
+      "uf": "PE",
+      "name": "Revolução Pernambucana de 1817",
+      "category": "public"
+    },
+    {
+      "day": "2027-03-08",
+      "uf": "AC",
+      "name": "Dia Internacional da Mulher",
+      "category": "public"
+    },
+    {
+      "day": "2027-03-18",
+      "uf": "TO",
+      "name": "Dia da Autonomia",
+      "category": "public"
+    },
+    {
+      "day": "2027-03-19",
+      "uf": "AP",
+      "name": "São José",
+      "category": "public"
+    },
+    {
+      "day": "2027-03-19",
+      "uf": "CE",
+      "name": "São José",
+      "category": "public"
+    },
+    {
+      "day": "2027-03-25",
+      "uf": "CE",
+      "name": "Abolição da escravidão no Ceará",
+      "category": "public"
+    },
+    {
+      "day": "2027-03-26",
+      "uf": "BR",
+      "name": "Sexta-feira Santa",
+      "category": "public"
+    },
+    {
+      "day": "2027-04-05",
+      "uf": "ES",
+      "name": "Nossa Senhora da Penha",
+      "category": "public"
+    },
+    {
+      "day": "2027-04-21",
+      "uf": "BR",
+      "name": "Tiradentes",
+      "category": "public"
+    },
+    {
+      "day": "2027-04-21",
+      "uf": "DF",
+      "name": "Fundação de Brasília",
+      "category": "public"
+    },
+    {
+      "day": "2027-04-21",
+      "uf": "MG",
+      "name": "Execução de Tiradentes",
+      "category": "public"
+    },
+    {
+      "day": "2027-04-23",
+      "uf": "RJ",
+      "name": "São Jorge",
+      "category": "public"
+    },
+    {
+      "day": "2027-05-01",
+      "uf": "BR",
+      "name": "Dia do Trabalhador",
+      "category": "public"
+    },
+    {
+      "day": "2027-05-27",
+      "uf": "BR",
+      "name": "Corpus Christi",
+      "category": "optional"
+    },
+    {
+      "day": "2027-06-15",
+      "uf": "AC",
+      "name": "Aniversário do Acre",
+      "category": "public"
+    },
+    {
+      "day": "2027-06-18",
+      "uf": "RO",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2027-06-24",
+      "uf": "AL",
+      "name": "São João",
+      "category": "public"
+    },
+    {
+      "day": "2027-06-29",
+      "uf": "AL",
+      "name": "São Pedro",
+      "category": "public"
+    },
+    {
+      "day": "2027-07-02",
+      "uf": "BA",
+      "name": "Independência da Bahia",
+      "category": "public"
+    },
+    {
+      "day": "2027-07-08",
+      "uf": "SE",
+      "name": "Emancipação política de Sergipe",
+      "category": "public"
+    },
+    {
+      "day": "2027-07-09",
+      "uf": "SP",
+      "name": "Revolução Constitucionalista",
+      "category": "public"
+    },
+    {
+      "day": "2027-07-25",
+      "uf": "AP",
+      "name": "São Tiago",
+      "category": "public"
+    },
+    {
+      "day": "2027-07-26",
+      "uf": "GO",
+      "name": "Fundação da cidade de Goiás",
+      "category": "public"
+    },
+    {
+      "day": "2027-07-28",
+      "uf": "MA",
+      "name": "Adesão do Maranhão à independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2027-08-05",
+      "uf": "PB",
+      "name": "Fundação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2027-08-07",
+      "uf": "RN",
+      "name": "Dia do Rio Grande do Norte",
+      "category": "public"
+    },
+    {
+      "day": "2027-08-15",
+      "uf": "CE",
+      "name": "Nossa Senhora da Assunção",
+      "category": "public"
+    },
+    {
+      "day": "2027-08-15",
+      "uf": "PA",
+      "name": "Adesão do Grão-Pará à independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2027-08-15",
+      "uf": "SC",
+      "name": "Dia do Estado de Santa Catarina",
+      "category": "public"
+    },
+    {
+      "day": "2027-09-05",
+      "uf": "AC",
+      "name": "Dia da Amazônia",
+      "category": "public"
+    },
+    {
+      "day": "2027-09-05",
+      "uf": "AM",
+      "name": "Elevação do Amazonas à categoria de província",
+      "category": "public"
+    },
+    {
+      "day": "2027-09-07",
+      "uf": "BR",
+      "name": "Independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2027-09-08",
+      "uf": "TO",
+      "name": "Nossa Senhora da Natividade",
+      "category": "public"
+    },
+    {
+      "day": "2027-09-13",
+      "uf": "AP",
+      "name": "Criação do Território Federal",
+      "category": "public"
+    },
+    {
+      "day": "2027-09-16",
+      "uf": "AL",
+      "name": "Emancipação Política de Alagoas",
+      "category": "public"
+    },
+    {
+      "day": "2027-09-20",
+      "uf": "RS",
+      "name": "Dia do Gaúcho",
+      "category": "public"
+    },
+    {
+      "day": "2027-10-03",
+      "uf": "RN",
+      "name": "Mártires de Cunhaú e Uruaçu",
+      "category": "public"
+    },
+    {
+      "day": "2027-10-05",
+      "uf": "RR",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2027-10-05",
+      "uf": "TO",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2027-10-11",
+      "uf": "MS",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2027-10-12",
+      "uf": "BR",
+      "name": "Nossa Senhora Aparecida",
+      "category": "public"
+    },
+    {
+      "day": "2027-10-19",
+      "uf": "PI",
+      "name": "Dia do Piauí",
+      "category": "public"
+    },
+    {
+      "day": "2027-10-24",
+      "uf": "GO",
+      "name": "Pedra fundamental de Goiânia",
+      "category": "public"
+    },
+    {
+      "day": "2027-10-28",
+      "uf": "BR",
+      "name": "Dia do Servidor Público",
+      "category": "optional"
+    },
+    {
+      "day": "2027-11-02",
+      "uf": "BR",
+      "name": "Finados",
+      "category": "public"
+    },
+    {
+      "day": "2027-11-15",
+      "uf": "BR",
+      "name": "Proclamação da República",
+      "category": "public"
+    },
+    {
+      "day": "2027-11-15",
+      "uf": "PR",
+      "name": "Nossa Senhora do Rocio",
+      "category": "public"
+    },
+    {
+      "day": "2027-11-19",
+      "uf": "AC",
+      "name": "Assinatura do Tratado de Petrópolis",
+      "category": "public"
+    },
+    {
+      "day": "2027-11-20",
+      "uf": "BR",
+      "name": "Dia Nacional de Zumbi e da Consciência Negra",
+      "category": "public"
+    },
+    {
+      "day": "2027-11-28",
+      "uf": "SC",
+      "name": "Dia de Santa Catarina de Alexandria",
+      "category": "public"
+    },
+    {
+      "day": "2027-11-30",
+      "uf": "AL",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2027-11-30",
+      "uf": "DF",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2027-12-24",
+      "uf": "BR",
+      "name": "Véspera de Natal",
+      "category": "optional"
+    },
+    {
+      "day": "2027-12-25",
+      "uf": "BR",
+      "name": "Natal",
+      "category": "public"
+    },
+    {
+      "day": "2027-12-31",
+      "uf": "BR",
+      "name": "Véspera de Ano-Novo",
+      "category": "optional"
+    },
+    {
+      "day": "2028-01-01",
+      "uf": "BR",
+      "name": "Confraternização Universal",
+      "category": "public"
+    },
+    {
+      "day": "2028-01-04",
+      "uf": "RO",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2028-01-23",
+      "uf": "AC",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2028-02-28",
+      "uf": "BR",
+      "name": "Carnaval",
+      "category": "optional"
+    },
+    {
+      "day": "2028-02-29",
+      "uf": "BR",
+      "name": "Carnaval",
+      "category": "optional"
+    },
+    {
+      "day": "2028-03-01",
+      "uf": "BR",
+      "name": "Início da Quaresma",
+      "category": "optional"
+    },
+    {
+      "day": "2028-03-06",
+      "uf": "PE",
+      "name": "Revolução Pernambucana de 1817",
+      "category": "public"
+    },
+    {
+      "day": "2028-03-10",
+      "uf": "AC",
+      "name": "Dia Internacional da Mulher",
+      "category": "public"
+    },
+    {
+      "day": "2028-03-18",
+      "uf": "TO",
+      "name": "Dia da Autonomia",
+      "category": "public"
+    },
+    {
+      "day": "2028-03-19",
+      "uf": "AP",
+      "name": "São José",
+      "category": "public"
+    },
+    {
+      "day": "2028-03-19",
+      "uf": "CE",
+      "name": "São José",
+      "category": "public"
+    },
+    {
+      "day": "2028-03-25",
+      "uf": "CE",
+      "name": "Abolição da escravidão no Ceará",
+      "category": "public"
+    },
+    {
+      "day": "2028-04-14",
+      "uf": "BR",
+      "name": "Sexta-feira Santa",
+      "category": "public"
+    },
+    {
+      "day": "2028-04-21",
+      "uf": "BR",
+      "name": "Tiradentes",
+      "category": "public"
+    },
+    {
+      "day": "2028-04-21",
+      "uf": "DF",
+      "name": "Fundação de Brasília",
+      "category": "public"
+    },
+    {
+      "day": "2028-04-21",
+      "uf": "MG",
+      "name": "Execução de Tiradentes",
+      "category": "public"
+    },
+    {
+      "day": "2028-04-23",
+      "uf": "RJ",
+      "name": "São Jorge",
+      "category": "public"
+    },
+    {
+      "day": "2028-04-24",
+      "uf": "ES",
+      "name": "Nossa Senhora da Penha",
+      "category": "public"
+    },
+    {
+      "day": "2028-05-01",
+      "uf": "BR",
+      "name": "Dia do Trabalhador",
+      "category": "public"
+    },
+    {
+      "day": "2028-06-15",
+      "uf": "AC",
+      "name": "Aniversário do Acre",
+      "category": "public"
+    },
+    {
+      "day": "2028-06-15",
+      "uf": "BR",
+      "name": "Corpus Christi",
+      "category": "optional"
+    },
+    {
+      "day": "2028-06-18",
+      "uf": "RO",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2028-06-24",
+      "uf": "AL",
+      "name": "São João",
+      "category": "public"
+    },
+    {
+      "day": "2028-06-29",
+      "uf": "AL",
+      "name": "São Pedro",
+      "category": "public"
+    },
+    {
+      "day": "2028-07-02",
+      "uf": "BA",
+      "name": "Independência da Bahia",
+      "category": "public"
+    },
+    {
+      "day": "2028-07-08",
+      "uf": "SE",
+      "name": "Emancipação política de Sergipe",
+      "category": "public"
+    },
+    {
+      "day": "2028-07-09",
+      "uf": "SP",
+      "name": "Revolução Constitucionalista",
+      "category": "public"
+    },
+    {
+      "day": "2028-07-25",
+      "uf": "AP",
+      "name": "São Tiago",
+      "category": "public"
+    },
+    {
+      "day": "2028-07-26",
+      "uf": "GO",
+      "name": "Fundação da cidade de Goiás",
+      "category": "public"
+    },
+    {
+      "day": "2028-07-28",
+      "uf": "MA",
+      "name": "Adesão do Maranhão à independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2028-08-05",
+      "uf": "PB",
+      "name": "Fundação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2028-08-07",
+      "uf": "RN",
+      "name": "Dia do Rio Grande do Norte",
+      "category": "public"
+    },
+    {
+      "day": "2028-08-13",
+      "uf": "SC",
+      "name": "Dia do Estado de Santa Catarina",
+      "category": "public"
+    },
+    {
+      "day": "2028-08-15",
+      "uf": "CE",
+      "name": "Nossa Senhora da Assunção",
+      "category": "public"
+    },
+    {
+      "day": "2028-08-15",
+      "uf": "PA",
+      "name": "Adesão do Grão-Pará à independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2028-09-05",
+      "uf": "AM",
+      "name": "Elevação do Amazonas à categoria de província",
+      "category": "public"
+    },
+    {
+      "day": "2028-09-07",
+      "uf": "BR",
+      "name": "Independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2028-09-08",
+      "uf": "AC",
+      "name": "Dia da Amazônia",
+      "category": "public"
+    },
+    {
+      "day": "2028-09-08",
+      "uf": "TO",
+      "name": "Nossa Senhora da Natividade",
+      "category": "public"
+    },
+    {
+      "day": "2028-09-13",
+      "uf": "AP",
+      "name": "Criação do Território Federal",
+      "category": "public"
+    },
+    {
+      "day": "2028-09-16",
+      "uf": "AL",
+      "name": "Emancipação Política de Alagoas",
+      "category": "public"
+    },
+    {
+      "day": "2028-09-20",
+      "uf": "RS",
+      "name": "Dia do Gaúcho",
+      "category": "public"
+    },
+    {
+      "day": "2028-10-03",
+      "uf": "RN",
+      "name": "Mártires de Cunhaú e Uruaçu",
+      "category": "public"
+    },
+    {
+      "day": "2028-10-05",
+      "uf": "RR",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2028-10-05",
+      "uf": "TO",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2028-10-11",
+      "uf": "MS",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2028-10-12",
+      "uf": "BR",
+      "name": "Nossa Senhora Aparecida",
+      "category": "public"
+    },
+    {
+      "day": "2028-10-19",
+      "uf": "PI",
+      "name": "Dia do Piauí",
+      "category": "public"
+    },
+    {
+      "day": "2028-10-24",
+      "uf": "GO",
+      "name": "Pedra fundamental de Goiânia",
+      "category": "public"
+    },
+    {
+      "day": "2028-10-28",
+      "uf": "BR",
+      "name": "Dia do Servidor Público",
+      "category": "optional"
+    },
+    {
+      "day": "2028-11-02",
+      "uf": "BR",
+      "name": "Finados",
+      "category": "public"
+    },
+    {
+      "day": "2028-11-15",
+      "uf": "BR",
+      "name": "Proclamação da República",
+      "category": "public"
+    },
+    {
+      "day": "2028-11-15",
+      "uf": "PR",
+      "name": "Nossa Senhora do Rocio",
+      "category": "public"
+    },
+    {
+      "day": "2028-11-17",
+      "uf": "AC",
+      "name": "Assinatura do Tratado de Petrópolis",
+      "category": "public"
+    },
+    {
+      "day": "2028-11-20",
+      "uf": "BR",
+      "name": "Dia Nacional de Zumbi e da Consciência Negra",
+      "category": "public"
+    },
+    {
+      "day": "2028-11-26",
+      "uf": "SC",
+      "name": "Dia de Santa Catarina de Alexandria",
+      "category": "public"
+    },
+    {
+      "day": "2028-11-30",
+      "uf": "AL",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2028-11-30",
+      "uf": "DF",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2028-12-24",
+      "uf": "BR",
+      "name": "Véspera de Natal",
+      "category": "optional"
+    },
+    {
+      "day": "2028-12-25",
+      "uf": "BR",
+      "name": "Natal",
+      "category": "public"
+    },
+    {
+      "day": "2028-12-31",
+      "uf": "BR",
+      "name": "Véspera de Ano-Novo",
+      "category": "optional"
+    },
+    {
+      "day": "2029-01-01",
+      "uf": "BR",
+      "name": "Confraternização Universal",
+      "category": "public"
+    },
+    {
+      "day": "2029-01-04",
+      "uf": "RO",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2029-01-26",
+      "uf": "AC",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2029-02-12",
+      "uf": "BR",
+      "name": "Carnaval",
+      "category": "optional"
+    },
+    {
+      "day": "2029-02-13",
+      "uf": "BR",
+      "name": "Carnaval",
+      "category": "optional"
+    },
+    {
+      "day": "2029-02-14",
+      "uf": "BR",
+      "name": "Início da Quaresma",
+      "category": "optional"
+    },
+    {
+      "day": "2029-03-06",
+      "uf": "PE",
+      "name": "Revolução Pernambucana de 1817",
+      "category": "public"
+    },
+    {
+      "day": "2029-03-09",
+      "uf": "AC",
+      "name": "Dia Internacional da Mulher",
+      "category": "public"
+    },
+    {
+      "day": "2029-03-18",
+      "uf": "TO",
+      "name": "Dia da Autonomia",
+      "category": "public"
+    },
+    {
+      "day": "2029-03-19",
+      "uf": "AP",
+      "name": "São José",
+      "category": "public"
+    },
+    {
+      "day": "2029-03-19",
+      "uf": "CE",
+      "name": "São José",
+      "category": "public"
+    },
+    {
+      "day": "2029-03-25",
+      "uf": "CE",
+      "name": "Abolição da escravidão no Ceará",
+      "category": "public"
+    },
+    {
+      "day": "2029-03-30",
+      "uf": "BR",
+      "name": "Sexta-feira Santa",
+      "category": "public"
+    },
+    {
+      "day": "2029-04-09",
+      "uf": "ES",
+      "name": "Nossa Senhora da Penha",
+      "category": "public"
+    },
+    {
+      "day": "2029-04-21",
+      "uf": "BR",
+      "name": "Tiradentes",
+      "category": "public"
+    },
+    {
+      "day": "2029-04-21",
+      "uf": "DF",
+      "name": "Fundação de Brasília",
+      "category": "public"
+    },
+    {
+      "day": "2029-04-21",
+      "uf": "MG",
+      "name": "Execução de Tiradentes",
+      "category": "public"
+    },
+    {
+      "day": "2029-04-23",
+      "uf": "RJ",
+      "name": "São Jorge",
+      "category": "public"
+    },
+    {
+      "day": "2029-05-01",
+      "uf": "BR",
+      "name": "Dia do Trabalhador",
+      "category": "public"
+    },
+    {
+      "day": "2029-05-31",
+      "uf": "BR",
+      "name": "Corpus Christi",
+      "category": "optional"
+    },
+    {
+      "day": "2029-06-15",
+      "uf": "AC",
+      "name": "Aniversário do Acre",
+      "category": "public"
+    },
+    {
+      "day": "2029-06-18",
+      "uf": "RO",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2029-06-24",
+      "uf": "AL",
+      "name": "São João",
+      "category": "public"
+    },
+    {
+      "day": "2029-06-29",
+      "uf": "AL",
+      "name": "São Pedro",
+      "category": "public"
+    },
+    {
+      "day": "2029-07-02",
+      "uf": "BA",
+      "name": "Independência da Bahia",
+      "category": "public"
+    },
+    {
+      "day": "2029-07-08",
+      "uf": "SE",
+      "name": "Emancipação política de Sergipe",
+      "category": "public"
+    },
+    {
+      "day": "2029-07-09",
+      "uf": "SP",
+      "name": "Revolução Constitucionalista",
+      "category": "public"
+    },
+    {
+      "day": "2029-07-25",
+      "uf": "AP",
+      "name": "São Tiago",
+      "category": "public"
+    },
+    {
+      "day": "2029-07-26",
+      "uf": "GO",
+      "name": "Fundação da cidade de Goiás",
+      "category": "public"
+    },
+    {
+      "day": "2029-07-28",
+      "uf": "MA",
+      "name": "Adesão do Maranhão à independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2029-08-05",
+      "uf": "PB",
+      "name": "Fundação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2029-08-07",
+      "uf": "RN",
+      "name": "Dia do Rio Grande do Norte",
+      "category": "public"
+    },
+    {
+      "day": "2029-08-12",
+      "uf": "SC",
+      "name": "Dia do Estado de Santa Catarina",
+      "category": "public"
+    },
+    {
+      "day": "2029-08-15",
+      "uf": "CE",
+      "name": "Nossa Senhora da Assunção",
+      "category": "public"
+    },
+    {
+      "day": "2029-08-15",
+      "uf": "PA",
+      "name": "Adesão do Grão-Pará à independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2029-09-05",
+      "uf": "AM",
+      "name": "Elevação do Amazonas à categoria de província",
+      "category": "public"
+    },
+    {
+      "day": "2029-09-07",
+      "uf": "AC",
+      "name": "Dia da Amazônia",
+      "category": "public"
+    },
+    {
+      "day": "2029-09-07",
+      "uf": "BR",
+      "name": "Independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2029-09-08",
+      "uf": "TO",
+      "name": "Nossa Senhora da Natividade",
+      "category": "public"
+    },
+    {
+      "day": "2029-09-13",
+      "uf": "AP",
+      "name": "Criação do Território Federal",
+      "category": "public"
+    },
+    {
+      "day": "2029-09-16",
+      "uf": "AL",
+      "name": "Emancipação Política de Alagoas",
+      "category": "public"
+    },
+    {
+      "day": "2029-09-20",
+      "uf": "RS",
+      "name": "Dia do Gaúcho",
+      "category": "public"
+    },
+    {
+      "day": "2029-10-03",
+      "uf": "RN",
+      "name": "Mártires de Cunhaú e Uruaçu",
+      "category": "public"
+    },
+    {
+      "day": "2029-10-05",
+      "uf": "RR",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2029-10-05",
+      "uf": "TO",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2029-10-11",
+      "uf": "MS",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2029-10-12",
+      "uf": "BR",
+      "name": "Nossa Senhora Aparecida",
+      "category": "public"
+    },
+    {
+      "day": "2029-10-19",
+      "uf": "PI",
+      "name": "Dia do Piauí",
+      "category": "public"
+    },
+    {
+      "day": "2029-10-24",
+      "uf": "GO",
+      "name": "Pedra fundamental de Goiânia",
+      "category": "public"
+    },
+    {
+      "day": "2029-10-28",
+      "uf": "BR",
+      "name": "Dia do Servidor Público",
+      "category": "optional"
+    },
+    {
+      "day": "2029-11-02",
+      "uf": "BR",
+      "name": "Finados",
+      "category": "public"
+    },
+    {
+      "day": "2029-11-15",
+      "uf": "BR",
+      "name": "Proclamação da República",
+      "category": "public"
+    },
+    {
+      "day": "2029-11-15",
+      "uf": "PR",
+      "name": "Nossa Senhora do Rocio",
+      "category": "public"
+    },
+    {
+      "day": "2029-11-17",
+      "uf": "AC",
+      "name": "Assinatura do Tratado de Petrópolis",
+      "category": "public"
+    },
+    {
+      "day": "2029-11-20",
+      "uf": "BR",
+      "name": "Dia Nacional de Zumbi e da Consciência Negra",
+      "category": "public"
+    },
+    {
+      "day": "2029-11-25",
+      "uf": "SC",
+      "name": "Dia de Santa Catarina de Alexandria",
+      "category": "public"
+    },
+    {
+      "day": "2029-11-30",
+      "uf": "AL",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2029-11-30",
+      "uf": "DF",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2029-12-24",
+      "uf": "BR",
+      "name": "Véspera de Natal",
+      "category": "optional"
+    },
+    {
+      "day": "2029-12-25",
+      "uf": "BR",
+      "name": "Natal",
+      "category": "public"
+    },
+    {
+      "day": "2029-12-31",
+      "uf": "BR",
+      "name": "Véspera de Ano-Novo",
+      "category": "optional"
+    },
+    {
+      "day": "2030-01-01",
+      "uf": "BR",
+      "name": "Confraternização Universal",
+      "category": "public"
+    },
+    {
+      "day": "2030-01-04",
+      "uf": "RO",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2030-01-25",
+      "uf": "AC",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2030-03-04",
+      "uf": "BR",
+      "name": "Carnaval",
+      "category": "optional"
+    },
+    {
+      "day": "2030-03-05",
+      "uf": "BR",
+      "name": "Carnaval",
+      "category": "optional"
+    },
+    {
+      "day": "2030-03-06",
+      "uf": "BR",
+      "name": "Início da Quaresma",
+      "category": "optional"
+    },
+    {
+      "day": "2030-03-06",
+      "uf": "PE",
+      "name": "Revolução Pernambucana de 1817",
+      "category": "public"
+    },
+    {
+      "day": "2030-03-08",
+      "uf": "AC",
+      "name": "Dia Internacional da Mulher",
+      "category": "public"
+    },
+    {
+      "day": "2030-03-18",
+      "uf": "TO",
+      "name": "Dia da Autonomia",
+      "category": "public"
+    },
+    {
+      "day": "2030-03-19",
+      "uf": "AP",
+      "name": "São José",
+      "category": "public"
+    },
+    {
+      "day": "2030-03-19",
+      "uf": "CE",
+      "name": "São José",
+      "category": "public"
+    },
+    {
+      "day": "2030-03-25",
+      "uf": "CE",
+      "name": "Abolição da escravidão no Ceará",
+      "category": "public"
+    },
+    {
+      "day": "2030-04-19",
+      "uf": "BR",
+      "name": "Sexta-feira Santa",
+      "category": "public"
+    },
+    {
+      "day": "2030-04-21",
+      "uf": "BR",
+      "name": "Tiradentes",
+      "category": "public"
+    },
+    {
+      "day": "2030-04-21",
+      "uf": "DF",
+      "name": "Fundação de Brasília",
+      "category": "public"
+    },
+    {
+      "day": "2030-04-21",
+      "uf": "MG",
+      "name": "Execução de Tiradentes",
+      "category": "public"
+    },
+    {
+      "day": "2030-04-23",
+      "uf": "RJ",
+      "name": "São Jorge",
+      "category": "public"
+    },
+    {
+      "day": "2030-04-29",
+      "uf": "ES",
+      "name": "Nossa Senhora da Penha",
+      "category": "public"
+    },
+    {
+      "day": "2030-05-01",
+      "uf": "BR",
+      "name": "Dia do Trabalhador",
+      "category": "public"
+    },
+    {
+      "day": "2030-06-15",
+      "uf": "AC",
+      "name": "Aniversário do Acre",
+      "category": "public"
+    },
+    {
+      "day": "2030-06-18",
+      "uf": "RO",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2030-06-20",
+      "uf": "BR",
+      "name": "Corpus Christi",
+      "category": "optional"
+    },
+    {
+      "day": "2030-06-24",
+      "uf": "AL",
+      "name": "São João",
+      "category": "public"
+    },
+    {
+      "day": "2030-06-29",
+      "uf": "AL",
+      "name": "São Pedro",
+      "category": "public"
+    },
+    {
+      "day": "2030-07-02",
+      "uf": "BA",
+      "name": "Independência da Bahia",
+      "category": "public"
+    },
+    {
+      "day": "2030-07-08",
+      "uf": "SE",
+      "name": "Emancipação política de Sergipe",
+      "category": "public"
+    },
+    {
+      "day": "2030-07-09",
+      "uf": "SP",
+      "name": "Revolução Constitucionalista",
+      "category": "public"
+    },
+    {
+      "day": "2030-07-25",
+      "uf": "AP",
+      "name": "São Tiago",
+      "category": "public"
+    },
+    {
+      "day": "2030-07-26",
+      "uf": "GO",
+      "name": "Fundação da cidade de Goiás",
+      "category": "public"
+    },
+    {
+      "day": "2030-07-28",
+      "uf": "MA",
+      "name": "Adesão do Maranhão à independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2030-08-05",
+      "uf": "PB",
+      "name": "Fundação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2030-08-07",
+      "uf": "RN",
+      "name": "Dia do Rio Grande do Norte",
+      "category": "public"
+    },
+    {
+      "day": "2030-08-11",
+      "uf": "SC",
+      "name": "Dia do Estado de Santa Catarina",
+      "category": "public"
+    },
+    {
+      "day": "2030-08-15",
+      "uf": "CE",
+      "name": "Nossa Senhora da Assunção",
+      "category": "public"
+    },
+    {
+      "day": "2030-08-15",
+      "uf": "PA",
+      "name": "Adesão do Grão-Pará à independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2030-09-05",
+      "uf": "AM",
+      "name": "Elevação do Amazonas à categoria de província",
+      "category": "public"
+    },
+    {
+      "day": "2030-09-06",
+      "uf": "AC",
+      "name": "Dia da Amazônia",
+      "category": "public"
+    },
+    {
+      "day": "2030-09-07",
+      "uf": "BR",
+      "name": "Independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2030-09-08",
+      "uf": "TO",
+      "name": "Nossa Senhora da Natividade",
+      "category": "public"
+    },
+    {
+      "day": "2030-09-13",
+      "uf": "AP",
+      "name": "Criação do Território Federal",
+      "category": "public"
+    },
+    {
+      "day": "2030-09-16",
+      "uf": "AL",
+      "name": "Emancipação Política de Alagoas",
+      "category": "public"
+    },
+    {
+      "day": "2030-09-20",
+      "uf": "RS",
+      "name": "Dia do Gaúcho",
+      "category": "public"
+    },
+    {
+      "day": "2030-10-03",
+      "uf": "RN",
+      "name": "Mártires de Cunhaú e Uruaçu",
+      "category": "public"
+    },
+    {
+      "day": "2030-10-05",
+      "uf": "RR",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2030-10-05",
+      "uf": "TO",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2030-10-11",
+      "uf": "MS",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2030-10-12",
+      "uf": "BR",
+      "name": "Nossa Senhora Aparecida",
+      "category": "public"
+    },
+    {
+      "day": "2030-10-19",
+      "uf": "PI",
+      "name": "Dia do Piauí",
+      "category": "public"
+    },
+    {
+      "day": "2030-10-24",
+      "uf": "GO",
+      "name": "Pedra fundamental de Goiânia",
+      "category": "public"
+    },
+    {
+      "day": "2030-10-28",
+      "uf": "BR",
+      "name": "Dia do Servidor Público",
+      "category": "optional"
+    },
+    {
+      "day": "2030-11-02",
+      "uf": "BR",
+      "name": "Finados",
+      "category": "public"
+    },
+    {
+      "day": "2030-11-15",
+      "uf": "BR",
+      "name": "Proclamação da República",
+      "category": "public"
+    },
+    {
+      "day": "2030-11-15",
+      "uf": "PR",
+      "name": "Nossa Senhora do Rocio",
+      "category": "public"
+    },
+    {
+      "day": "2030-11-17",
+      "uf": "AC",
+      "name": "Assinatura do Tratado de Petrópolis",
+      "category": "public"
+    },
+    {
+      "day": "2030-11-20",
+      "uf": "BR",
+      "name": "Dia Nacional de Zumbi e da Consciência Negra",
+      "category": "public"
+    },
+    {
+      "day": "2030-11-30",
+      "uf": "AL",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2030-11-30",
+      "uf": "DF",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2030-12-01",
+      "uf": "SC",
+      "name": "Dia de Santa Catarina de Alexandria",
+      "category": "public"
+    },
+    {
+      "day": "2030-12-24",
+      "uf": "BR",
+      "name": "Véspera de Natal",
+      "category": "optional"
+    },
+    {
+      "day": "2030-12-25",
+      "uf": "BR",
+      "name": "Natal",
+      "category": "public"
+    },
+    {
+      "day": "2030-12-31",
+      "uf": "BR",
+      "name": "Véspera de Ano-Novo",
+      "category": "optional"
+    },
+    {
+      "day": "2031-01-01",
+      "uf": "BR",
+      "name": "Confraternização Universal",
+      "category": "public"
+    },
+    {
+      "day": "2031-01-04",
+      "uf": "RO",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2031-01-24",
+      "uf": "AC",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2031-02-24",
+      "uf": "BR",
+      "name": "Carnaval",
+      "category": "optional"
+    },
+    {
+      "day": "2031-02-25",
+      "uf": "BR",
+      "name": "Carnaval",
+      "category": "optional"
+    },
+    {
+      "day": "2031-02-26",
+      "uf": "BR",
+      "name": "Início da Quaresma",
+      "category": "optional"
+    },
+    {
+      "day": "2031-03-06",
+      "uf": "PE",
+      "name": "Revolução Pernambucana de 1817",
+      "category": "public"
+    },
+    {
+      "day": "2031-03-08",
+      "uf": "AC",
+      "name": "Dia Internacional da Mulher",
+      "category": "public"
+    },
+    {
+      "day": "2031-03-18",
+      "uf": "TO",
+      "name": "Dia da Autonomia",
+      "category": "public"
+    },
+    {
+      "day": "2031-03-19",
+      "uf": "AP",
+      "name": "São José",
+      "category": "public"
+    },
+    {
+      "day": "2031-03-19",
+      "uf": "CE",
+      "name": "São José",
+      "category": "public"
+    },
+    {
+      "day": "2031-03-25",
+      "uf": "CE",
+      "name": "Abolição da escravidão no Ceará",
+      "category": "public"
+    },
+    {
+      "day": "2031-04-11",
+      "uf": "BR",
+      "name": "Sexta-feira Santa",
+      "category": "public"
+    },
+    {
+      "day": "2031-04-21",
+      "uf": "BR",
+      "name": "Tiradentes",
+      "category": "public"
+    },
+    {
+      "day": "2031-04-21",
+      "uf": "DF",
+      "name": "Fundação de Brasília",
+      "category": "public"
+    },
+    {
+      "day": "2031-04-21",
+      "uf": "ES",
+      "name": "Nossa Senhora da Penha",
+      "category": "public"
+    },
+    {
+      "day": "2031-04-21",
+      "uf": "MG",
+      "name": "Execução de Tiradentes",
+      "category": "public"
+    },
+    {
+      "day": "2031-04-23",
+      "uf": "RJ",
+      "name": "São Jorge",
+      "category": "public"
+    },
+    {
+      "day": "2031-05-01",
+      "uf": "BR",
+      "name": "Dia do Trabalhador",
+      "category": "public"
+    },
+    {
+      "day": "2031-06-12",
+      "uf": "BR",
+      "name": "Corpus Christi",
+      "category": "optional"
+    },
+    {
+      "day": "2031-06-15",
+      "uf": "AC",
+      "name": "Aniversário do Acre",
+      "category": "public"
+    },
+    {
+      "day": "2031-06-18",
+      "uf": "RO",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2031-06-24",
+      "uf": "AL",
+      "name": "São João",
+      "category": "public"
+    },
+    {
+      "day": "2031-06-29",
+      "uf": "AL",
+      "name": "São Pedro",
+      "category": "public"
+    },
+    {
+      "day": "2031-07-02",
+      "uf": "BA",
+      "name": "Independência da Bahia",
+      "category": "public"
+    },
+    {
+      "day": "2031-07-08",
+      "uf": "SE",
+      "name": "Emancipação política de Sergipe",
+      "category": "public"
+    },
+    {
+      "day": "2031-07-09",
+      "uf": "SP",
+      "name": "Revolução Constitucionalista",
+      "category": "public"
+    },
+    {
+      "day": "2031-07-25",
+      "uf": "AP",
+      "name": "São Tiago",
+      "category": "public"
+    },
+    {
+      "day": "2031-07-26",
+      "uf": "GO",
+      "name": "Fundação da cidade de Goiás",
+      "category": "public"
+    },
+    {
+      "day": "2031-07-28",
+      "uf": "MA",
+      "name": "Adesão do Maranhão à independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2031-08-05",
+      "uf": "PB",
+      "name": "Fundação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2031-08-07",
+      "uf": "RN",
+      "name": "Dia do Rio Grande do Norte",
+      "category": "public"
+    },
+    {
+      "day": "2031-08-15",
+      "uf": "CE",
+      "name": "Nossa Senhora da Assunção",
+      "category": "public"
+    },
+    {
+      "day": "2031-08-15",
+      "uf": "PA",
+      "name": "Adesão do Grão-Pará à independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2031-08-17",
+      "uf": "SC",
+      "name": "Dia do Estado de Santa Catarina",
+      "category": "public"
+    },
+    {
+      "day": "2031-09-05",
+      "uf": "AC",
+      "name": "Dia da Amazônia",
+      "category": "public"
+    },
+    {
+      "day": "2031-09-05",
+      "uf": "AM",
+      "name": "Elevação do Amazonas à categoria de província",
+      "category": "public"
+    },
+    {
+      "day": "2031-09-07",
+      "uf": "BR",
+      "name": "Independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2031-09-08",
+      "uf": "TO",
+      "name": "Nossa Senhora da Natividade",
+      "category": "public"
+    },
+    {
+      "day": "2031-09-13",
+      "uf": "AP",
+      "name": "Criação do Território Federal",
+      "category": "public"
+    },
+    {
+      "day": "2031-09-16",
+      "uf": "AL",
+      "name": "Emancipação Política de Alagoas",
+      "category": "public"
+    },
+    {
+      "day": "2031-09-20",
+      "uf": "RS",
+      "name": "Dia do Gaúcho",
+      "category": "public"
+    },
+    {
+      "day": "2031-10-03",
+      "uf": "RN",
+      "name": "Mártires de Cunhaú e Uruaçu",
+      "category": "public"
+    },
+    {
+      "day": "2031-10-05",
+      "uf": "RR",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2031-10-05",
+      "uf": "TO",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2031-10-11",
+      "uf": "MS",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2031-10-12",
+      "uf": "BR",
+      "name": "Nossa Senhora Aparecida",
+      "category": "public"
+    },
+    {
+      "day": "2031-10-19",
+      "uf": "PI",
+      "name": "Dia do Piauí",
+      "category": "public"
+    },
+    {
+      "day": "2031-10-24",
+      "uf": "GO",
+      "name": "Pedra fundamental de Goiânia",
+      "category": "public"
+    },
+    {
+      "day": "2031-10-28",
+      "uf": "BR",
+      "name": "Dia do Servidor Público",
+      "category": "optional"
+    },
+    {
+      "day": "2031-11-02",
+      "uf": "BR",
+      "name": "Finados",
+      "category": "public"
+    },
+    {
+      "day": "2031-11-15",
+      "uf": "BR",
+      "name": "Proclamação da República",
+      "category": "public"
+    },
+    {
+      "day": "2031-11-15",
+      "uf": "PR",
+      "name": "Nossa Senhora do Rocio",
+      "category": "public"
+    },
+    {
+      "day": "2031-11-17",
+      "uf": "AC",
+      "name": "Assinatura do Tratado de Petrópolis",
+      "category": "public"
+    },
+    {
+      "day": "2031-11-20",
+      "uf": "BR",
+      "name": "Dia Nacional de Zumbi e da Consciência Negra",
+      "category": "public"
+    },
+    {
+      "day": "2031-11-30",
+      "uf": "AL",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2031-11-30",
+      "uf": "DF",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2031-11-30",
+      "uf": "SC",
+      "name": "Dia de Santa Catarina de Alexandria",
+      "category": "public"
+    },
+    {
+      "day": "2031-12-24",
+      "uf": "BR",
+      "name": "Véspera de Natal",
+      "category": "optional"
+    },
+    {
+      "day": "2031-12-25",
+      "uf": "BR",
+      "name": "Natal",
+      "category": "public"
+    },
+    {
+      "day": "2031-12-31",
+      "uf": "BR",
+      "name": "Véspera de Ano-Novo",
+      "category": "optional"
+    },
+    {
+      "day": "2032-01-01",
+      "uf": "BR",
+      "name": "Confraternização Universal",
+      "category": "public"
+    },
+    {
+      "day": "2032-01-04",
+      "uf": "RO",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2032-01-23",
+      "uf": "AC",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2032-02-09",
+      "uf": "BR",
+      "name": "Carnaval",
+      "category": "optional"
+    },
+    {
+      "day": "2032-02-10",
+      "uf": "BR",
+      "name": "Carnaval",
+      "category": "optional"
+    },
+    {
+      "day": "2032-02-11",
+      "uf": "BR",
+      "name": "Início da Quaresma",
+      "category": "optional"
+    },
+    {
+      "day": "2032-03-06",
+      "uf": "PE",
+      "name": "Revolução Pernambucana de 1817",
+      "category": "public"
+    },
+    {
+      "day": "2032-03-08",
+      "uf": "AC",
+      "name": "Dia Internacional da Mulher",
+      "category": "public"
+    },
+    {
+      "day": "2032-03-18",
+      "uf": "TO",
+      "name": "Dia da Autonomia",
+      "category": "public"
+    },
+    {
+      "day": "2032-03-19",
+      "uf": "AP",
+      "name": "São José",
+      "category": "public"
+    },
+    {
+      "day": "2032-03-19",
+      "uf": "CE",
+      "name": "São José",
+      "category": "public"
+    },
+    {
+      "day": "2032-03-25",
+      "uf": "CE",
+      "name": "Abolição da escravidão no Ceará",
+      "category": "public"
+    },
+    {
+      "day": "2032-03-26",
+      "uf": "BR",
+      "name": "Sexta-feira Santa",
+      "category": "public"
+    },
+    {
+      "day": "2032-04-05",
+      "uf": "ES",
+      "name": "Nossa Senhora da Penha",
+      "category": "public"
+    },
+    {
+      "day": "2032-04-21",
+      "uf": "BR",
+      "name": "Tiradentes",
+      "category": "public"
+    },
+    {
+      "day": "2032-04-21",
+      "uf": "DF",
+      "name": "Fundação de Brasília",
+      "category": "public"
+    },
+    {
+      "day": "2032-04-21",
+      "uf": "MG",
+      "name": "Execução de Tiradentes",
+      "category": "public"
+    },
+    {
+      "day": "2032-04-23",
+      "uf": "RJ",
+      "name": "São Jorge",
+      "category": "public"
+    },
+    {
+      "day": "2032-05-01",
+      "uf": "BR",
+      "name": "Dia do Trabalhador",
+      "category": "public"
+    },
+    {
+      "day": "2032-05-27",
+      "uf": "BR",
+      "name": "Corpus Christi",
+      "category": "optional"
+    },
+    {
+      "day": "2032-06-15",
+      "uf": "AC",
+      "name": "Aniversário do Acre",
+      "category": "public"
+    },
+    {
+      "day": "2032-06-18",
+      "uf": "RO",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2032-06-24",
+      "uf": "AL",
+      "name": "São João",
+      "category": "public"
+    },
+    {
+      "day": "2032-06-29",
+      "uf": "AL",
+      "name": "São Pedro",
+      "category": "public"
+    },
+    {
+      "day": "2032-07-02",
+      "uf": "BA",
+      "name": "Independência da Bahia",
+      "category": "public"
+    },
+    {
+      "day": "2032-07-08",
+      "uf": "SE",
+      "name": "Emancipação política de Sergipe",
+      "category": "public"
+    },
+    {
+      "day": "2032-07-09",
+      "uf": "SP",
+      "name": "Revolução Constitucionalista",
+      "category": "public"
+    },
+    {
+      "day": "2032-07-25",
+      "uf": "AP",
+      "name": "São Tiago",
+      "category": "public"
+    },
+    {
+      "day": "2032-07-26",
+      "uf": "GO",
+      "name": "Fundação da cidade de Goiás",
+      "category": "public"
+    },
+    {
+      "day": "2032-07-28",
+      "uf": "MA",
+      "name": "Adesão do Maranhão à independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2032-08-05",
+      "uf": "PB",
+      "name": "Fundação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2032-08-07",
+      "uf": "RN",
+      "name": "Dia do Rio Grande do Norte",
+      "category": "public"
+    },
+    {
+      "day": "2032-08-15",
+      "uf": "CE",
+      "name": "Nossa Senhora da Assunção",
+      "category": "public"
+    },
+    {
+      "day": "2032-08-15",
+      "uf": "PA",
+      "name": "Adesão do Grão-Pará à independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2032-08-15",
+      "uf": "SC",
+      "name": "Dia do Estado de Santa Catarina",
+      "category": "public"
+    },
+    {
+      "day": "2032-09-05",
+      "uf": "AC",
+      "name": "Dia da Amazônia",
+      "category": "public"
+    },
+    {
+      "day": "2032-09-05",
+      "uf": "AM",
+      "name": "Elevação do Amazonas à categoria de província",
+      "category": "public"
+    },
+    {
+      "day": "2032-09-07",
+      "uf": "BR",
+      "name": "Independência do Brasil",
+      "category": "public"
+    },
+    {
+      "day": "2032-09-08",
+      "uf": "TO",
+      "name": "Nossa Senhora da Natividade",
+      "category": "public"
+    },
+    {
+      "day": "2032-09-13",
+      "uf": "AP",
+      "name": "Criação do Território Federal",
+      "category": "public"
+    },
+    {
+      "day": "2032-09-16",
+      "uf": "AL",
+      "name": "Emancipação Política de Alagoas",
+      "category": "public"
+    },
+    {
+      "day": "2032-09-20",
+      "uf": "RS",
+      "name": "Dia do Gaúcho",
+      "category": "public"
+    },
+    {
+      "day": "2032-10-03",
+      "uf": "RN",
+      "name": "Mártires de Cunhaú e Uruaçu",
+      "category": "public"
+    },
+    {
+      "day": "2032-10-05",
+      "uf": "RR",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2032-10-05",
+      "uf": "TO",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2032-10-11",
+      "uf": "MS",
+      "name": "Criação do Estado",
+      "category": "public"
+    },
+    {
+      "day": "2032-10-12",
+      "uf": "BR",
+      "name": "Nossa Senhora Aparecida",
+      "category": "public"
+    },
+    {
+      "day": "2032-10-19",
+      "uf": "PI",
+      "name": "Dia do Piauí",
+      "category": "public"
+    },
+    {
+      "day": "2032-10-24",
+      "uf": "GO",
+      "name": "Pedra fundamental de Goiânia",
+      "category": "public"
+    },
+    {
+      "day": "2032-10-28",
+      "uf": "BR",
+      "name": "Dia do Servidor Público",
+      "category": "optional"
+    },
+    {
+      "day": "2032-11-02",
+      "uf": "BR",
+      "name": "Finados",
+      "category": "public"
+    },
+    {
+      "day": "2032-11-15",
+      "uf": "BR",
+      "name": "Proclamação da República",
+      "category": "public"
+    },
+    {
+      "day": "2032-11-15",
+      "uf": "PR",
+      "name": "Nossa Senhora do Rocio",
+      "category": "public"
+    },
+    {
+      "day": "2032-11-19",
+      "uf": "AC",
+      "name": "Assinatura do Tratado de Petrópolis",
+      "category": "public"
+    },
+    {
+      "day": "2032-11-20",
+      "uf": "BR",
+      "name": "Dia Nacional de Zumbi e da Consciência Negra",
+      "category": "public"
+    },
+    {
+      "day": "2032-11-28",
+      "uf": "SC",
+      "name": "Dia de Santa Catarina de Alexandria",
+      "category": "public"
+    },
+    {
+      "day": "2032-11-30",
+      "uf": "AL",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2032-11-30",
+      "uf": "DF",
+      "name": "Dia do Evangélico",
+      "category": "public"
+    },
+    {
+      "day": "2032-12-24",
+      "uf": "BR",
+      "name": "Véspera de Natal",
+      "category": "optional"
+    },
+    {
+      "day": "2032-12-25",
+      "uf": "BR",
+      "name": "Natal",
+      "category": "public"
+    },
+    {
+      "day": "2032-12-31",
+      "uf": "BR",
+      "name": "Véspera de Ano-Novo",
+      "category": "optional"
+    }
+  ]
+}

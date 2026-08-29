@@ -1,7 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  CALENDAR_GENERATOR,
+  CALENDAR_VERSION,
   FEATURE_ROW_COLUMNS,
   FEATURE_SETS,
   GATE_PROFILES,
@@ -26,8 +28,36 @@ import {
  * standing a server up.
  */
 
-const MIGRATION_PATH = join(import.meta.dir, "../drizzle/0016_the_feature_gate.sql");
-const RAW = readFileSync(MIGRATION_PATH, "utf8");
+/**
+ * Every hand-written migration that creates a feature function — **discovered,
+ * not listed**.
+ *
+ * Ticket 01 read one file. That was right for one file and would be quietly
+ * wrong for two: a ticket adding a block in a new migration would inherit none
+ * of these assertions, and the one that matters — that a feature reads canonical
+ * views and nothing else — is exactly the one a new block is most likely to
+ * break. So the set is derived from the tree by asking which migrations declare
+ * a `feature_` function, and it grows on its own as the twelve tickets land.
+ *
+ * The generated migrations are *not* in it, and must not be: a canonical view
+ * names ingest tables by definition — that is what a view is for — and the
+ * scans below are about what a **feature** may reach through them.
+ */
+const MIGRATION_DIRECTORY = join(import.meta.dir, "../drizzle");
+const featureMigrations = (): string[] =>
+  readdirSync(MIGRATION_DIRECTORY)
+    .filter((name) => name.endsWith(".sql"))
+    .toSorted()
+    .filter((name) =>
+      readFileSync(join(MIGRATION_DIRECTORY, name), "utf8").includes(
+        "CREATE OR REPLACE FUNCTION feature_",
+      ),
+    );
+
+const MIGRATIONS = featureMigrations();
+const RAW = MIGRATIONS.map((name) =>
+  readFileSync(join(MIGRATION_DIRECTORY, name), "utf8"),
+).join("\n");
 
 /**
  * The SQL with every comment removed.
@@ -48,7 +78,11 @@ const SQL = RAW.split("\n")
  * was. Names and literals are asserted against `SQL`; what the statements
  * actually touch is asserted against this.
  */
-const CODE = SQL.replace(/'[^']*'/g, "''");
+const CODE = SQL.replace(/'[^']*'/g, "''")
+  // `extract(hour from x)` is not a relation being read, and the scan below
+  // matches on `from`. Blanking the field name keeps the scan about what the
+  // statements touch rather than about SQL's one keyword with two jobs.
+  .replace(/\bextract\s*\(\s*\w+\s+from\b/gi, "extract(");
 
 /** The ingest tables. None of them may be reachable from a feature. */
 const INGEST_TABLES = [
@@ -81,6 +115,14 @@ const ALLOWED_RELATIONS = new Set([
   "spine",
   "weather",
   "labels",
+  // Ticket 03's CTEs: the calendar and share blocks, and the four steps the
+  // solar geometry is spelled out in.
+  "calendar",
+  "shares",
+  "hours",
+  "solar",
+  "geometry",
+  "sun_position",
 ]);
 
 const functionSegments = (): Map<string, string> => {
@@ -169,10 +211,16 @@ describe("the gate, structurally", () => {
   });
 
   it("offers the caller nowhere to put a cut-off", () => {
-    const signature = SQL.slice(
-      SQL.indexOf("CREATE OR REPLACE FUNCTION feature_rows("),
-      SQL.indexOf("RETURNS SETOF feature_row"),
-    );
+    // Every definition of it, not the first: `feature_rows` is restated in full
+    // by each migration that adds columns — a function body cannot be patched —
+    // and a restatement is exactly where a parameter could be smuggled in.
+    const definitions = [...SQL.matchAll(/CREATE OR REPLACE FUNCTION feature_rows\(/g)];
+    const signatures = definitions.map((match) => {
+      const start = match.index ?? 0;
+      return SQL.slice(start, SQL.indexOf("RETURNS SETOF feature_row", start));
+    });
+    expect(signatures.length).toBeGreaterThan(1);
+    const signature = signatures.join("\n");
     expect(signature.length).toBeGreaterThan(0);
 
     // The five arguments the spec names, and not one more. `as_of`,
@@ -196,6 +244,34 @@ describe("the gate, structurally", () => {
     }
   });
 
+  it("gives no feature block an instant to resolve against", () => {
+    // The wall, restated for every block a later ticket adds. A block takes a
+    // target date — and a gate profile where it reads something carrying a
+    // vintage — and never a timestamp: there is no argument through which a
+    // hand-chosen cut-off could arrive, so a feature that resolves against one
+    // cannot be written, only imagined.
+    //
+    // `feature_vintage_fidelity` is not a block and is not covered here: it is
+    // two timestamps and an inequality, it reads nothing, and both arguments
+    // come from the row being stamped rather than from a caller.
+    const blocks = [
+      ...SQL.matchAll(/CREATE OR REPLACE FUNCTION (feature_\w*_block)\(([^)]*)\)/g),
+    ];
+    expect(blocks.length).toBeGreaterThanOrEqual(4);
+    for (const block of blocks) {
+      const name = block[1] as string;
+      const parameters = block[2] as string;
+      for (const forbidden of ["timestamp", "as_of", "published_at", "cutoff"]) {
+        expect({ name, forbidden, present: parameters.includes(forbidden) }).toEqual({
+          name,
+          forbidden,
+          present: false,
+        });
+      }
+      expect(parameters).toContain("target_date date");
+    }
+  });
+
   it("fails closed on every unresolved argument", () => {
     // Ticket 016's posture, inherited: `canonical_as_of()` raises rather than
     // defaulting to `now()`, because a default turns a forgotten axis into a
@@ -211,18 +287,75 @@ describe("the gate, structurally", () => {
   it("declares the row shape once, and TypeScript reads it rather than restating it", () => {
     // A second list of column names is a second dictionary. This is the check
     // that the one in `feature-rows.ts` is a copy and not an opinion.
+    //
+    // The declaration has two halves now and will have more: `CREATE TYPE` in
+    // `0016`, then one `ALTER TYPE ... ADD ATTRIBUTE` per column each later
+    // ticket adds. `ADD ATTRIBUTE` appends, so migration order *is* attribute
+    // order — which is why the files are read in name order and the attributes
+    // in the order they appear.
     const body = SQL.slice(
       SQL.indexOf("CREATE TYPE feature_row AS ("),
       SQL.indexOf("CREATE OR REPLACE FUNCTION feature_rows("),
     );
-    const declared = body
+    const created = body
       .split("\n")
       .slice(1)
       .map((line) => line.trim())
       .filter((line) => /^[a-z_]\w*\s/.test(line))
       .map((line) => line.split(/\s+/)[0] as string);
+    const added = [...SQL.matchAll(/ALTER TYPE feature_row ADD ATTRIBUTE\s+(\w+)/g)].map(
+      (match) => match[1] as string,
+    );
 
-    expect(declared).toEqual([...FEATURE_ROW_COLUMNS]);
+    expect([...created, ...added]).toEqual([...FEATURE_ROW_COLUMNS]);
+    // Non-vacuous: the row really did grow past ticket 01's declaration.
+    expect(added.length).toBeGreaterThan(0);
+  });
+
+  it("names one calendar version, and the three copies of it agree", () => {
+    // "Whichever calendar is newest" is exactly the silent restatement the
+    // materialisation exists to prevent, so the SQL reads the table under a
+    // literal. A literal in three languages is a constant that can drift, and
+    // this is where it cannot: `calendar.ts` here, `calendar_generator.py` in
+    // `apps/ml`, and the migration's own text.
+    expect(SQL).toContain(`'${CALENDAR_VERSION}'`);
+    const versions = new Set(
+      [...SQL.matchAll(/'(br_calendar_v\d+)'/g)].map((match) => match[1] as string),
+    );
+    expect([...versions]).toEqual([CALENDAR_VERSION]);
+
+    const python = readFileSync(
+      join(import.meta.dir, "../../ml/src/wattsteer_ml/calendar_generator.py"),
+      "utf8",
+    );
+    expect(python).toContain(`CALENDAR_VERSION = "${CALENDAR_VERSION}"`);
+    expect(python).toContain(`GENERATOR = "${CALENDAR_GENERATOR}"`);
+  });
+
+  it("computes the calendar features in Brasília and the astronomy in UTC", () => {
+    // The spec's timezone rule, in the one file that could break it: calendar
+    // features come from the local rendering and everything else is UTC. The
+    // sun does not observe civil time, so a solar hour angle built from the
+    // local wall clock would be wrong by the offset — three hours, which is
+    // 45 degrees of hour angle and the difference between noon and mid-morning.
+    const calendar = functionSegments().get("feature_calendar_block") ?? "";
+    expect(calendar).toContain("AT TIME ZONE 'America/Sao_Paulo'");
+    expect(calendar).toContain("AT TIME ZONE 'UTC'");
+    // 365.25, never 365: an encoding on a 365-day period leaves 29 February a
+    // day out of phase with every other year in the window.
+    expect(calendar).toContain("365.25");
+  });
+
+  it("keeps month and week_of_year out of the row", () => {
+    // Dropped as redundant with the day-of-year encoding — a coarser
+    // quantisation of the same axis, adding split points without information.
+    // Asserted rather than trusted, because "available and redundant" is the
+    // kind of decision a later session repairs helpfully.
+    for (const column of FEATURE_ROW_COLUMNS) {
+      expect(column).not.toBe("calendar_month");
+      expect(column).not.toBe("calendar_week_of_year");
+    }
+    expect(SQL).not.toMatch(/\bweek_of_year\b/);
   });
 
   it("knows both gate profiles and both feature sets, and no third of either", () => {
@@ -253,6 +386,19 @@ describe("the feature/label partition", () => {
     expect(FEATURE_ROW_COLUMNS.filter(isLabelColumn).length).toBeGreaterThan(0);
     expect(FEATURE_ROW_COLUMNS.filter(isFeatureColumn)).toEqual([
       "weather_temperature_2m",
+      "calendar_local_hour",
+      "calendar_hour_sin",
+      "calendar_hour_cos",
+      "calendar_doy_sin",
+      "calendar_doy_cos",
+      "calendar_day_of_week",
+      "calendar_is_weekend",
+      "calendar_is_holiday_national",
+      "calendar_holiday_state_share",
+      "calendar_is_day_before_holiday",
+      "calendar_is_bridge_day",
+      "solar_zenith_cos",
+      "solar_extraterrestrial_ghi",
     ]);
   });
 

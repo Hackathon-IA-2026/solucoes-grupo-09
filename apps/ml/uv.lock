@@ -160,6 +160,18 @@ wheels = [
 ]
 
 [[package]]
+name = "holidays"
+version = "0.103"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "python-dateutil" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/74/7f/5f740e8d6702c8524877dfdd3b7cd6825f09d0597e1610cc813a8b47c737/holidays-0.103.tar.gz", hash = "sha256:688a3cf0e10f46627039b778da4c962ecd5d9695610e80893c611dea931b6c91", size = 988261, upload-time = "2026-08-17T19:32:19.717Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ca/64/69565fc485b56a6d8726d7d1a8ca74b6025faab5d31671d264e26ed5cc85/holidays-0.103-py3-none-any.whl", hash = "sha256:d507f7f64379ed5a782b8a4a83fb99705f8c538c7cf4c70079ceb0a3e0447cc9", size = 1581726, upload-time = "2026-08-17T19:32:17.705Z" },
+]
+
+[[package]]
 name = "httpcore"
 version = "1.0.9"
 source = { registry = "https://pypi.org/simple" }
@@ -655,6 +667,7 @@ source = { editable = "." }
 dependencies = [
     { name = "asyncpg" },
     { name = "fastapi" },
+    { name = "holidays" },
     { name = "ortools" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -674,6 +687,7 @@ dev = [
 requires-dist = [
     { name = "asyncpg", specifier = ">=0.30" },
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "holidays", specifier = "==0.103" },
     { name = "ortools", specifier = ">=9.7" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pydantic-settings", specifier = ">=2.6" },
