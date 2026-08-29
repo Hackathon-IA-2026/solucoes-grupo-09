@@ -18,10 +18,10 @@ wrong `lang` on the English tree.
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `sitemap.xml` lists exactly the real indexable pages, not the gate
-- [ ] Each page declares its own canonical and both `hreflang` alternates
-- [ ] `manifest.webmanifest` carries per-locale name and description
-- [ ] `<html lang>` is correct on every prerendered page, or the limitation is documented with evidence
-- [ ] `llms.txt` describes both locales
+- [x] `sitemap.xml` lists exactly the real indexable pages, not the gate
+- [x] Each page declares its own canonical and both `hreflang` alternates
+- [x] `manifest.webmanifest` carries per-locale name and description
+- [x] `<html lang>` is correct on every prerendered page, or the limitation is documented with evidence
+- [x] `llms.txt` describes both locales

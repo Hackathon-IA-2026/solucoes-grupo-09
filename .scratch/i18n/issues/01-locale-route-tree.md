@@ -19,12 +19,12 @@ visitor is sent, which is the next ticket's job.
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `/pt/`, `/en/`, and the legal pages exist under both locales in the export
-- [ ] `generateStaticParams` emits one static file per locale per route
-- [ ] The `[locale]` layout rejects an unknown locale rather than rendering it
-- [ ] The provider takes its locale from the route param, never from the browser
-- [ ] The language switch navigates between locale roots instead of swapping state
-- [ ] A stored preference still survives navigation
-- [ ] Existing tests pass; the Playwright legal suite is updated for the new paths
+- [x] `/pt/`, `/en/`, and the legal pages exist under both locales in the export
+- [x] `generateStaticParams` emits one static file per locale per route
+- [x] The `[locale]` layout rejects an unknown locale rather than rendering it
+- [x] The provider takes its locale from the route param, never from the browser
+- [x] The language switch navigates between locale roots instead of swapping state
+- [x] A stored preference still survives navigation
+- [x] Existing tests pass; the Playwright legal suite is updated for the new paths

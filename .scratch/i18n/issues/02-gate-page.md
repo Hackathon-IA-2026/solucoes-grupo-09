@@ -18,11 +18,11 @@ with no snippet.
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `/` ships real links to both locale roots and works with JS disabled
-- [ ] A returning visitor is sent to their stored locale; a new one to their browser's
-- [ ] `x-default` and both `hreflang` alternates are declared, `x-default` → `/pt/`
-- [ ] `robots` meta is `noindex,follow`
-- [ ] `robots.txt` still allows `/` — no `Disallow` for the gate
-- [ ] The redirect replaces rather than pushes, so Back does not trap the visitor
+- [x] `/` ships real links to both locale roots and works with JS disabled
+- [x] A returning visitor is sent to their stored locale; a new one to their browser's
+- [x] `x-default` and both `hreflang` alternates are declared, `x-default` → `/pt/`
+- [x] `robots` meta is `noindex,follow`
+- [x] `robots.txt` still allows `/` — no `Disallow` for the gate
+- [x] The redirect replaces rather than pushes, so Back does not trap the visitor
