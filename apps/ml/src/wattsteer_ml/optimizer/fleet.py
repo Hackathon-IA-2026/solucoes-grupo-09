@@ -20,9 +20,13 @@ flat constant: a flat 0.05 would sit below the threshold for any battery under
 ~90 % round-trip, and the LP cross-check in the test suite would then fail for a
 legitimate reason, which is the worst kind of failing test.
 
-v1 implements `Battery` only. `ShiftableLoad` is flex-optimizer ticket 05 and
-lands as a second variant plus a second term in the coupling sum (C1); nothing
-here has to move for it.
+v1 implements `Battery` and `ShiftableLoad`. The second variant landed as
+exactly what the spec says a variant is — a dataclass here, a constraint block
+in :mod:`.shiftable`, and one more term in the coupling sum (C1) — and nothing
+above it moved: not the common fields, not the transport, not the result shape,
+not the simulator, not the KPI definitions. `EV`, `DataCentre`, `Electrolyzer`
+and `HVAC` are meant to land the same way, and this is where the third one
+starts.
 """
 
 from __future__ import annotations
@@ -37,6 +41,12 @@ from .horizon import HORIZON_HOURS
 #: `docs/specs/flex-optimizer.md`'s defaults for a battery that does not say.
 DEFAULT_MIN_STATE_OF_CHARGE = 0.05
 DEFAULT_MAX_STATE_OF_CHARGE = 0.95
+
+#: The divisor in a shiftable load's flat baseline, ``daily_energy_mwh / 24``.
+#: The hours in a civil day — deliberately not :data:`.horizon.HORIZON_HOURS`,
+#: which is the number of *periods*, so that a 15-minute horizon does not
+#: quietly divide a daily energy by 96.
+HOURS_PER_DAY = 24
 
 
 @dataclass(frozen=True)
@@ -163,6 +173,71 @@ class Battery:
         return rho * k / (2.0 + k)
 
 
+@dataclass(frozen=True)
+class ShiftableLoad:
+    """A `ShiftableLoad` — IDEA.md §31's freezer, as (D1)–(D5) needs it.
+
+    ``key`` names the asset's MILP variables and must be unique across the whole
+    fleet, batteries included: two assets sharing a key is a model dump nobody
+    can read, and the builder refuses it.
+
+    The asset schema carries one ``max_shift_mw``, so ``C̄up = C̄do``; the two
+    are separate properties because the formulation distinguishes them and an
+    asymmetric process is a field away, not a reformulation.
+    """
+
+    key: str
+    label: str
+    #: The connection limit, MW. A common field, and not itself a (D) parameter:
+    #: what bounds the shift is ``max_shift_mw``, which validation holds at or
+    #: below this.
+    max_power_mw: float
+    #: ``C̄up_a`` and ``C̄do_a`` — the shiftable portion of the process, MW.
+    max_shift_mw: float
+    #: ``L_a`` — the window within which a shift must be compensated, hours.
+    shift_window_hours: int
+    #: A **validation input, not a constraint**: (D1) conserves the load's daily
+    #: energy by construction, and a daily-energy equality would be redundant
+    #: against it and would make an infeasible model far harder to diagnose.
+    #: What it buys is the flat baseline below.
+    daily_energy_mwh: float
+    #: ``R`` — optional. Present emits (D5); absent emits no (D5) row at all.
+    recovery_time_hours: int | None = None
+    availability: Availability = WHOLE_DAY
+
+    @property
+    def up_limit_mw(self) -> float:
+        """``C̄up_a`` (D2)."""
+        return self.max_shift_mw
+
+    @property
+    def down_limit_mw(self) -> float:
+        """``C̄do_a`` (D3)."""
+        return self.max_shift_mw
+
+    @property
+    def simultaneity_limit_mw(self) -> float:
+        """``max(C̄up_a, C̄do_a)`` (D4) — the load's mutual-exclusion analogue."""
+        return max(self.up_limit_mw, self.down_limit_mw)
+
+    @property
+    def flat_baseline_mw(self) -> float:
+        """``daily_energy_mwh / 24`` — the power the process draws in an hour.
+
+        The one physical check (D1)–(D4) cannot make for itself: **a load cannot
+        be shed by more power than it draws.** With no baseline profile supplied
+        the baseline is flat, which is where ticket 04's `SHIFT_EXCEEDS_BASELINE`
+        comes from — and the divisor is the hours in a day, not the periods in
+        the horizon, so a 15-minute horizon would not silently change it.
+        """
+        return self.daily_energy_mwh / HOURS_PER_DAY
+
+    @property
+    def cycle_energy_mwh(self) -> float:
+        """``C̄up_a · L_a`` — the upward energy of one DSM cycle, (D5)'s bound."""
+        return self.max_shift_mw * self.shift_window_hours
+
+
 def reference_battery(key: str = "battery") -> Battery:
     """`packages/core`'s published ``REFERENCE_FLEET`` battery, as a model asset.
 
@@ -183,10 +258,37 @@ def reference_battery(key: str = "battery") -> Battery:
     )
 
 
-def available_between(battery: Battery, from_hour: int, to_hour: int) -> Battery:
-    """The same battery, dispatchable only in ``[from_hour, to_hour)``."""
+def reference_load(key: str = "load") -> ShiftableLoad:
+    """`packages/core`'s published ``REFERENCE_FLEET`` load, as a model asset.
+
+    70 MW connected, 50 MW shiftable, ``L = 3``, 1,700 MWh/day — which is 71 %
+    of the flat-baseline cap and deliberately not on it. The prototype's default
+    (70 MW of shift against 1,200 MWh/day) is a `SHIFT_EXCEEDS_BASELINE` refusal,
+    and both single-field repairs sit on the validity boundary; a constant this
+    many numbers are compared against must not be one rounding from a 422. There
+    is no second fleet defined here either.
+    """
+    published = REFERENCE_FLEET.shiftable_load
+    return ShiftableLoad(
+        key=key,
+        label=published.label,
+        max_power_mw=float(published.max_power_mw),
+        max_shift_mw=float(published.max_shift_mw),
+        shift_window_hours=int(published.shift_window_hours),
+        daily_energy_mwh=float(published.daily_energy_mwh),
+    )
+
+
+def available_between[FlexibilityAsset: (Battery, ShiftableLoad)](
+    asset: FlexibilityAsset, from_hour: int, to_hour: int
+) -> FlexibilityAsset:
+    """The same asset, dispatchable only in ``[from_hour, to_hour)``.
+
+    One helper for both variants: availability is a *common* field, and a second
+    function per variant is how a common field stops being one.
+    """
     if not 0 <= from_hour < to_hour <= HORIZON_HOURS:
         raise OptimizerBugError(
             f"availability [{from_hour}, {to_hour}) is not inside the horizon."
         )
-    return replace(battery, availability=Availability(from_hour, to_hour))
+    return replace(asset, availability=Availability(from_hour, to_hour))
