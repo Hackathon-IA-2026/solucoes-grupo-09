@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  boolean,
   check,
   date,
   doublePrecision,
@@ -2066,5 +2067,293 @@ export const featurePublicationLag = pgTable(
     // A negative lag would put the cutoff *after* the gate, which is a feature
     // reading the future through a configuration row.
     check("feature_publication_lag_non_negative", sql`${t.publicationLagHours} >= 0`),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// The feature dictionary — feature-engineering ticket 11, the one that closes
+// the spec.
+//
+// Appended as its own block so that two tickets landing at once cannot conflict
+// on this file.
+// ---------------------------------------------------------------------------
+
+/**
+ * One row per attribute of the `feature_row` composite type — the *structured*
+ * half of the dictionary, and deliberately not the prose half.
+ *
+ * **This table is not the column list.** `feature_dictionary()` takes the
+ * columns, their order and their SQL types from `pg_attribute` on `feature_row`
+ * and joins these rows onto them, and it **raises** when an attribute has no row
+ * here or a row here names no attribute. That direction matters: a hand-listed
+ * dictionary would be a second place the feature set is written down, and this
+ * repository has been bitten by exactly that twice — `ordered_features.yaml`
+ * transcribed the spec's table by hand because no dictionary existed, and
+ * `DAY_GRAIN_COLUMNS` restates a marking the catalogue also carries. A
+ * dictionary derived from the type is what makes `feature_hash` mean anything:
+ * the hash is over the type's ordered names, so the dictionary and the hash
+ * cannot describe two different vectors.
+ *
+ * **Unclassified is not an option.** `docs/specs/feature-engineering.md`
+ * §"Classification": an unclassified feature is a leak waiting to be written.
+ * The enforcement is the raise, not the discipline — a ticket that appends an
+ * attribute and forgets this table gets a failure on the next call rather than
+ * a column nobody can account for.
+ *
+ * **The prose lives once, in the catalogue.** There is no `description` column
+ * here: the dictionary reads `col_description(feature_row, attnum)`, which is
+ * where every block from `0017` onward already wrote its argument. A second
+ * copy of that prose in this table would be the same mistake one layer down.
+ */
+export const featureDictionaryEntry = pgTable(
+  "feature_dictionary_entry",
+  {
+    /** The attribute name, spelled as the composite type spells it. */
+    columnName: text().primaryKey(),
+    /**
+     * What the column *is*, before what it is made of.
+     *
+     * `identity` is the row grain and the date it answers for; `stamp` is what
+     * the row was allowed to see; `label` is read `AsOf(now())` on purpose;
+     * `feature` is everything else, and is the only role that carries classes.
+     */
+    role: text().notNull(),
+    /**
+     * The spec's six classes, minus `✗` — a dropped feature is not a column,
+     * and lives in `feature_dropped_feature` instead.
+     *
+     * An array because the spec's own table writes `W+T`, `D+K` and `P+W+T`: a
+     * column can be made of a forecast *and* a deterministic quantity, and
+     * collapsing that to one letter would hide which half can go missing. The
+     * elements are stored in the order the spec writes them, so
+     * `array_to_string(classes, '+')` reproduces its notation exactly.
+     */
+    classes: text().array().notNull(),
+    /** The spec's Source column: which ONS dataset, which run, or `derived`. */
+    source: text().notNull(),
+    /**
+     * Does the value vary across the 24 hours of the target date, or is it one
+     * number broadcast across them?
+     *
+     * NULL for `identity` and `stamp`, where the question is not asked: those
+     * columns say which row this is, not what was measured. Marked for every
+     * feature and every label, because a day-grain column is invisible in the
+     * data — twenty-four equal numbers look exactly like a flat signal, and
+     * `docs/specs/feature-engineering.md` §"Installed capacity" is explicit
+     * that a capacity column must not be read as an hourly one.
+     */
+    grain: text(),
+    inDessemFreeV1: boolean("in_dessem_free_v1").notNull(),
+    inDessemAugmentedV1: boolean("in_dessem_augmented_v1").notNull(),
+    /**
+     * Does this column carry a value at `gate_early`?
+     *
+     * Recorded rather than derived, because the two reasons it is false are
+     * different facts. The `dessem_*` columns are absent structurally — the file
+     * does not exist at D−1 09:00 BRT. The `programmed_*` and `proxy_*` columns
+     * are absent because the programme for day D is stamped D−1 15:00 BRT, six
+     * hours after that gate, and **nobody repaired it**: reaching for an earlier
+     * hour would claim an availability nothing has measured, which is the leak
+     * this spec exists to prevent rather than a convenience. Ticket 12 owns the
+     * measurement that would close it.
+     */
+    availableAtGateEarly: boolean().notNull(),
+    /**
+     * Is the value an estimate of a quantity WattSteer cannot observe?
+     *
+     * A proxy named as a proxy, per the ticket. The generic IEC power curve is
+     * not the Brazilian fleet's; the utilisation denominators are a P99.5 of
+     * observed flow summed over corridors that do not peak together, which is an
+     * **upper** bound and therefore conservative in a known direction; the
+     * holiday share is unweighted by load because no honest per-state load
+     * weight exists in WattSteer's sources.
+     */
+    isProxy: boolean().notNull(),
+    /**
+     * One of the four augmented-only columns that would justify the trade.
+     *
+     * `docs/specs/feature-engineering.md` §"The two feature sets": everything
+     * else DESSEM contributes has a weather- or programming-derived analogue in
+     * set A. A column can only be one of these if it is augmented-only.
+     */
+    justifiesDessemTrade: boolean().notNull(),
+    /**
+     * Is the column offered to the estimator as an input?
+     *
+     * Every feature is, because availability is this spec's question and
+     * selection is the forecaster's. `subsystem` is too — the row grain is
+     * (`Subsystem`, `valid_time`), the model is trained across all four, and the
+     * diagnosis spec matches its attribution background on it. Nothing else in
+     * the identity or the stamp is, and no label is.
+     */
+    modelInput: boolean().notNull(),
+  },
+  (t) => [
+    check(
+      "feature_dictionary_entry_role",
+      sql`${t.role} in ('identity', 'stamp', 'feature', 'label')`,
+    ),
+    check(
+      "feature_dictionary_entry_classes_known",
+      sql`${t.classes} <@ array['D', 'W', 'P', 'K', 'T']`,
+    ),
+    // The classification rule, as a constraint: exactly the features carry
+    // classes, and every feature carries at least one. Unclassified is not an
+    // option, and neither is a stamp wearing a class it cannot have.
+    check(
+      "feature_dictionary_entry_features_are_classified",
+      sql`(${t.role} = 'feature') = (cardinality(${t.classes}) > 0)`,
+    ),
+    check(
+      "feature_dictionary_entry_grain",
+      sql`(${t.grain} is null) = (${t.role} in ('identity', 'stamp'))
+          and (${t.grain} is null or ${t.grain} in ('hour', 'day'))`,
+    ),
+    // A column in neither set is a column nothing builds.
+    check(
+      "feature_dictionary_entry_in_some_set",
+      sql`${t.inDessemFreeV1} or ${t.inDessemAugmentedV1}`,
+    ),
+    // Class `D` *is* the augmented set. A DESSEM-sourced column that claimed
+    // membership of `dessem_free_v1`, or availability at `gate_early`, would be
+    // the exact skew the gate exists to make unrepresentable.
+    check(
+      "feature_dictionary_entry_dessem_is_augmented_only",
+      sql`not ('D' = any(${t.classes}))
+          or (${t.inDessemAugmentedV1}
+              and not ${t.inDessemFreeV1}
+              and not ${t.availableAtGateEarly})`,
+    ),
+    check(
+      "feature_dictionary_entry_trade_is_augmented_only",
+      sql`not ${t.justifiesDessemTrade}
+          or (${t.inDessemAugmentedV1} and not ${t.inDessemFreeV1})`,
+    ),
+    // Every feature is an input; nothing outside the features and the row grain
+    // is one.
+    check(
+      "feature_dictionary_entry_model_input",
+      sql`(${t.role} = 'feature' and ${t.modelInput})
+          or (${t.role} = 'identity' and ${t.columnName} = 'subsystem' and ${t.modelInput})
+          or not ${t.modelInput}`,
+    ),
+  ],
+);
+
+/**
+ * The `✗` class: an IDEA.md feature that cannot be served at D−1, and the
+ * column that replaces it.
+ *
+ * Its own table rather than a row in the dictionary, because a dropped feature
+ * is **not a column** — it has no attribute, no type and no ordinal, and giving
+ * it a dictionary row would mean the dictionary was no longer derived from the
+ * type. The link back is `replacementColumns`, and `feature_dropped_features()`
+ * checks every name in it against `feature_row`'s attributes, so a replacement
+ * cannot name a column that does not exist.
+ *
+ * `docs/specs/feature-engineering.md` §"Dropped": five of IDEA.md's twelve
+ * families are unavailable exactly as written, and all five are recoverable in a
+ * different form. A drop with no named replacement is the failure this table
+ * exists to make visible — abandoning `residual_load` because the actuals are
+ * unavailable would have thrown away the product.
+ */
+export const featureDroppedFeature = pgTable(
+  "feature_dropped_feature",
+  {
+    /** The name IDEA.md gave it, verbatim. Provenance, never a join key. */
+    ideaFeature: text().primaryKey(),
+    /** Why it cannot be served at D−1. */
+    reason: text().notNull(),
+    /** The prose replacement, as the spec's Replacement column states it. */
+    replacement: text().notNull(),
+    /**
+     * The `feature_row` attributes that replace it, if any.
+     *
+     * Empty for `val_intercambioprogmwmed` alone: it is excluded from both sets
+     * rather than replaced, because it exists only from 2026-01 and is not
+     * backfilled — a feature richer at serve time than in training, which is the
+     * mirror image of the skew this spec is about. `replacement` carries that
+     * sentence and the array is empty, which is the honest shape.
+     */
+    replacementColumns: text().array().notNull(),
+  },
+  (t) => [
+    check("feature_dropped_feature_reason", sql`length(${t.reason}) > 0`),
+    check("feature_dropped_feature_replacement", sql`length(${t.replacement}) > 0`),
+  ],
+);
+
+/**
+ * The two feature sets, as data: the window each builds over and the gates each
+ * exists at.
+ *
+ * These are arguments to `feature_rows`, not a second implementation — the point
+ * of the whole design is that there is one function and the sets are parameters
+ * of it. What this table adds is the *window*, which the function cannot hold: a
+ * caller passing 2024-04-01 for `dessem_augmented_v1` would get rows of NULLs
+ * rather than a refusal, because DESSEM's coverage begins 2025-05-23 and an
+ * empty join is not an error.
+ */
+export const featureSetDefinition = pgTable(
+  "feature_set_definition",
+  {
+    /** Spelled as `feature_rows` takes it, because it is that argument. */
+    featureSet: text().primaryKey(),
+    /** The first target date the set can be built for. */
+    windowFrom: date({ mode: "string" }).notNull(),
+    /** Why the window opens there — the fact that drives it, not the date. */
+    windowFromDriver: text().notNull(),
+    /** The gate profiles the set exists at. Set B has exactly one. */
+    gates: text().array().notNull(),
+    /** The column this set calls residual load: the A/B's central quantity. */
+    residualLoadColumn: text().notNull(),
+  },
+  (t) => [
+    check(
+      "feature_set_definition_known",
+      sql`${t.featureSet} in ('dessem_free_v1', 'dessem_augmented_v1')`,
+    ),
+    check(
+      "feature_set_definition_gates",
+      sql`cardinality(${t.gates}) > 0 and ${t.gates} <@ array['gate_early', 'gate_late']`,
+    ),
+  ],
+);
+
+/**
+ * The A/B, as three rows — because it needs **three** trainings and not two.
+ *
+ * `docs/specs/feature-engineering.md` §"The two feature sets": comparing set A
+ * over 880 days against set B over 460 confounds feature content with window
+ * length. `A-full` against `A-common` measures what the longer history is worth;
+ * `B-common` against `A-common` measures what DESSEM is worth. All three are
+ * evaluated on the same held-out period at the same gate with the same
+ * threshold.
+ *
+ * Data rather than prose so that the forecaster reads the three configurations
+ * instead of transcribing them, and so that "all three are expressible as
+ * arguments to the one function" is checkable: every row here is a legal
+ * argument tuple for `feature_rows`, and `feature_ab_configurations()` refuses a
+ * row that is not.
+ */
+export const featureAbConfiguration = pgTable(
+  "feature_ab_configuration",
+  {
+    /** `A-full`, `A-common`, `B-common`. */
+    run: text().primaryKey(),
+    featureSet: text()
+      .notNull()
+      .references(() => featureSetDefinition.featureSet),
+    /** The first target date *this run* trains over — never before the set's own. */
+    windowFrom: date({ mode: "string" }).notNull(),
+    gateProfile: text().notNull(),
+    /** What this run isolates when read against its neighbour. */
+    isolates: text().notNull(),
+  },
+  (t) => [
+    check(
+      "feature_ab_configuration_gate",
+      sql`${t.gateProfile} in ('gate_early', 'gate_late')`,
+    ),
   ],
 );

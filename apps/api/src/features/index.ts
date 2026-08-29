@@ -46,6 +46,20 @@ export {
   weightMisallocation,
 } from "./capacity-weights.js";
 export {
+  type AbConfiguration,
+  type DroppedFeature,
+  type FeatureClass,
+  type FeatureColumnGrain,
+  type FeatureDictionaryEntry,
+  type FeatureRole,
+  type FeatureSetModelInput,
+  readAbConfigurations,
+  readDroppedFeatures,
+  readExpectedRowCount,
+  readFeatureDictionary,
+  readFeatureSetModelInputs,
+} from "./feature-dictionary.js";
+export {
   assertWeatherCompleteness,
   FEATURE_ROW_COLUMNS,
   FEATURE_ROW_STAMP_COLUMNS,
