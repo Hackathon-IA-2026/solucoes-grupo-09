@@ -1,9 +1,11 @@
 import { config } from "./config.js";
 import { database } from "./database/connection.js";
 import {
-  createEnergyBalanceIngestor,
-  type IngestEnergyBalancePayload,
-  type IngestEnergyBalanceResult,
+  createIngestDispatcher,
+  createPayloadArchive,
+  type QueueTask,
+  type QueueTaskResult,
+  REFRESH_CADENCE,
 } from "./ingest/index.js";
 import { createBullMqRunner } from "./jobs/bullmq.js";
 
@@ -11,8 +13,10 @@ import { createBullMqRunner } from "./jobs/bullmq.js";
 // this (with the API set to WATTSTEER_ROLE=api) to scale background work
 // independently of the HTTP layer. Run several for more throughput.
 //
-// The one registered handler is ONS ingestion, which needs Postgres — a worker
-// without it could only fail every job, so it refuses to start instead.
+// The one registered handler dispatches every ingestor, the tiered refresh
+// sweeps and the retention pass — one queue, one handler, no second scheduler.
+// All of it needs Postgres, so a worker without it refuses to start rather than
+// failing every job it is handed.
 if (!config.redisUrl) {
   console.error("worker requires REDIS_URL");
   process.exit(1);
@@ -22,10 +26,26 @@ if (!database) {
   process.exit(1);
 }
 
-const ingestEnergyBalance = createEnergyBalanceIngestor({ db: database.db });
+const archive = createPayloadArchive({
+  bucket: config.archiveBucket,
+  bucketAccessKeyId: config.archiveAccessKeyId,
+  bucketSecretAccessKey: config.archiveSecretAccessKey,
+  bucketEndpoint: config.archiveEndpoint,
+  bucketRegion: config.archiveRegion,
+  directory: config.archiveDir,
+});
 
-const runner = createBullMqRunner<IngestEnergyBalancePayload, IngestEnergyBalanceResult>(
-  (payload, report) => ingestEnergyBalance(payload, report),
+const dispatch = createIngestDispatcher({
+  db: database.db,
+  archive,
+  retention: {
+    unproductiveDays: config.archiveRetentionDays,
+    batchSize: 500,
+  },
+});
+
+const runner = createBullMqRunner<QueueTask, QueueTaskResult>(
+  (payload, report) => dispatch(payload, report),
   config.redisUrl,
   {
     concurrency: config.jobConcurrency,
@@ -37,10 +57,48 @@ const runner = createBullMqRunner<IngestEnergyBalancePayload, IngestEnergyBalanc
   },
 );
 
+// The heartbeat: three sweeps and a retention pass, registered on the queue
+// itself. Registering is idempotent — the ids are stable, so N replicas
+// starting at once converge on one schedule apiece rather than N.
+if (config.refreshSchedules) {
+  for (const tier of ["live", "recent", "history"] as const) {
+    await runner.schedule({
+      id: `refresh:${tier}`,
+      pattern: REFRESH_CADENCE[tier],
+      payload: { kind: "refresh_sweep", payload: { tier } },
+    });
+  }
+  // Weekly, and after the weekly sweep rather than before it: retention should
+  // never be the reason a payload the sweep was about to reprocess is gone.
+  await runner.schedule({
+    id: "custody:retention",
+    pattern: "30 5 * * 1",
+    payload: { kind: "retention", payload: {} },
+  });
+}
+
 console.log(
   `👷 WattSteer worker started — concurrency ${config.jobConcurrency}, queue on Redis`,
 );
-console.log("   handlers: ONS balanco-energia-subsistema ingestion");
+console.log("   handlers: ONS ingestion (7 sources), refresh sweeps, retention");
+if (archive) {
+  console.log(`   custody: raw payloads retained in the ${archive.kind} archive`);
+} else {
+  // Loud, because a deployment that runs for a year without custody cannot be
+  // repaired afterwards: the vintages it did not keep are gone from ONS too.
+  console.warn(
+    "⚠️  custody: NO ARCHIVE CONFIGURED — raw payloads are not retained and prior " +
+      "vintages will be unrecoverable. Set WATTSTEER_ARCHIVE_BUCKET or WATTSTEER_ARCHIVE_DIR.",
+  );
+}
+if (config.refreshSchedules) {
+  console.log(
+    `   refresh: live ${REFRESH_CADENCE.live} · recent ${REFRESH_CADENCE.recent} ` +
+      `· history ${REFRESH_CADENCE.history} (UTC)`,
+  );
+} else {
+  console.log("   refresh: schedules disabled (WATTSTEER_REFRESH=off)");
+}
 
 const shutdown = async (signal: string) => {
   console.log(`\n🛑 Received ${signal}, draining worker…`);

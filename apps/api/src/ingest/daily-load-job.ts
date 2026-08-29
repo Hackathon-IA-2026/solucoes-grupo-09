@@ -1,6 +1,7 @@
 import type { Database } from "../database/connection.js";
 import { UpstreamError } from "../errors.js";
 import type { Execute } from "../jobs/index.js";
+import type { PayloadArchive } from "./archive.js";
 import { acquireBulkResource, BULK_STEPS } from "./bulk-resource.js";
 import { writeSubsystemLoadDays } from "./daily-load-repository.js";
 import { selectResourceForYear } from "./ons/catalogue.js";
@@ -9,6 +10,7 @@ import {
   DAILY_LOAD_FORMATS,
   parseDailyLoadCsv,
 } from "./ons/daily-load.js";
+import type { ObservationContext } from "./resource-version.js";
 import type { LoadMethodologyRegime } from "./types.js";
 
 /**
@@ -24,6 +26,12 @@ export interface IngestDailyLoadPayload {
   year: number;
   /** Re-download and re-diff even when the fingerprint is unchanged. */
   force?: boolean;
+  /**
+   * The sweep this run belongs to. Stamped on any re-publication the run
+   * discovers, which is what makes "the history sweep found this" — the
+   * evidence that a settled period was rewritten — a queryable fact.
+   */
+  context?: ObservationContext;
 }
 
 export interface IngestDailyLoadResult {
@@ -46,6 +54,11 @@ export interface DailyLoadIngestorDeps {
   db: Database;
   /** Injected so the job is testable without the network. */
   fetch?: typeof fetch;
+  /**
+   * Where raw payloads are retained. Absent means the payload is ingested and
+   * not kept — correct for a test, and visible in the health view otherwise.
+   */
+  archive?: PayloadArchive;
 }
 
 /** Build the job handler. */
@@ -62,6 +75,8 @@ export function createDailyLoadIngestor(
       select: (resources) =>
         selectResourceForYear(resources, payload.year, DAILY_LOAD_FORMATS),
       force: payload.force,
+      archive: deps.archive,
+      context: payload.context,
       report,
     });
 

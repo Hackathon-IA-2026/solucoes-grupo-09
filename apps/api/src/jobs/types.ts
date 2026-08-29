@@ -34,6 +34,17 @@ export type Execute<TPayload, TResult> = (
   report: ReportProgress,
 ) => Promise<TResult>;
 
+/** Recurring work, registered once at boot and owned by the queue. */
+export interface JobSchedule<TPayload> {
+  /** Stable identity. Re-registering the same id updates it rather than adding. */
+  id: string;
+  /** Cron expression, evaluated in `timeZone` (UTC unless said otherwise). */
+  pattern: string;
+  /** IANA zone the pattern is read in. Defaults to UTC. */
+  timeZone?: string;
+  payload: TPayload;
+}
+
 /**
  * Strategy: how jobs are queued and processed. Two backends implement it —
  * an in-process runner (default) and a durable BullMQ/Redis runner — selected
@@ -43,6 +54,18 @@ export interface JobRunner<TPayload, TResult> {
   readonly mode: "inprocess" | "bullmq";
   /** Enqueue work; resolves to the job id. */
   submit(payload: TPayload): Promise<string>;
+  /**
+   * Register recurring work under a stable `id`, replacing any prior schedule
+   * with the same id.
+   *
+   * On the queue rather than beside it, deliberately. Ingestion needs a
+   * heartbeat — the tiered refresh sweeps and the retention pass — and the one
+   * thing worse than no scheduler is a second one: a cron process that enqueues
+   * into this queue would double-fire under two replicas and would be invisible
+   * to everything that watches the queue. BullMQ's job scheduler is leader-safe
+   * across workers, so N replicas produce one run.
+   */
+  schedule(schedule: JobSchedule<TPayload>): Promise<void>;
   /** Look up a job's status/result, or `null` if the id is unknown. */
   status(id: string): Promise<JobRecord<TResult> | null>;
   /** Release resources (worker, connections). */

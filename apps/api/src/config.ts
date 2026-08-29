@@ -77,6 +77,38 @@ export const config = {
   /** Base backoff (ms) between job retries (exponential). */
   jobBackoffMs: int(process.env.WATTSTEER_JOB_BACKOFF_MS, 5000, 100, 120_000),
 
+  // --- ingestion: refresh, custody, retention ---
+  /**
+   * Register the three repeatable refresh sweeps (live, recent, history) on the
+   * worker. Off means the platform only ingests what is enqueued by hand —
+   * useful for a one-off backfill process that must not also be sweeping.
+   */
+  refreshSchedules: (process.env.WATTSTEER_REFRESH ?? "on") !== "off",
+  /**
+   * S3-compatible bucket holding the raw-payload archive. Railway injects
+   * `BUCKET`/`ACCESS_KEY_ID`/`SECRET_ACCESS_KEY`/`ENDPOINT`/`REGION` from the
+   * bucket itself, so the fallbacks are the platform's own names and a
+   * deployment needs no extra wiring. This is production custody; see
+   * `ingest/archive.ts` for why it is a bucket and not a volume.
+   */
+  archiveBucket: process.env.WATTSTEER_ARCHIVE_BUCKET || process.env.BUCKET || undefined,
+  archiveAccessKeyId:
+    process.env.WATTSTEER_ARCHIVE_ACCESS_KEY_ID || process.env.ACCESS_KEY_ID || undefined,
+  archiveSecretAccessKey:
+    process.env.WATTSTEER_ARCHIVE_SECRET_ACCESS_KEY ||
+    process.env.SECRET_ACCESS_KEY ||
+    undefined,
+  archiveEndpoint:
+    process.env.WATTSTEER_ARCHIVE_ENDPOINT || process.env.ENDPOINT || undefined,
+  archiveRegion: process.env.WATTSTEER_ARCHIVE_REGION || process.env.REGION || undefined,
+  /** Directory archive — compose and local development, when no bucket is set. */
+  archiveDir: process.env.WATTSTEER_ARCHIVE_DIR || undefined,
+  /**
+   * Days a payload that produced no revision is retained. Payloads that did
+   * produce one are kept indefinitely and this does not apply to them.
+   */
+  archiveRetentionDays: int(process.env.WATTSTEER_ARCHIVE_RETENTION_DAYS, 90, 1, 36_500),
+
   // --- the ML service ---
   /**
    * Base URL of the Python service that owns modelling and optimisation.

@@ -377,8 +377,93 @@ it is small, and it is the only record that a file existed in a given state.
 The archive writer itself is not built by the tracer; `archive_uri` is nullable
 so that landing it later is an insert, not a migration.
 
+**Where the bytes live: a Railway bucket, not a volume — settled, with the
+reasoning.** The spec deferred the choice; it is made here.
+
+A volume is the obvious answer and the wrong one, for a reason that has nothing
+to do with price: *a Railway volume attaches to exactly one service and forbids
+replicas on it*, and re-deploying a service with a volume attached takes a short
+outage even behind a healthcheck. The ingestion worker is the one service the
+platform is explicitly built to scale horizontally — `docker compose up --scale
+worker=3`, the whole point of the BullMQ layer — so putting custody on a volume
+would trade the platform's only scaling axis for a filesystem. A bucket is
+S3-compatible, shared by every replica, and has no deploy-time coupling at all.
+
+Cost is a footnote rather than the argument, and it points the same way:
+buckets bill at **$0.015/GB-month with free egress and free API operations**
+against a volume's **$0.15/GB-month**. Sizing it from the research's own
+measurements — the full backfill across the in-scope datasets is single-digit
+gigabytes, and steady-state growth is dominated by the twice-daily registry
+snapshot (1.6 MB per changed cut) and by re-published constrained-off months
+(~2.5 MB each) — the archive is a few GB in year one. That is **cents per month
+either way**; what a volume would actually cost is the second worker.
+
+Two properties of the store shape the writer. Buckets support no object
+versioning, and the archive needs none, because objects are **content-addressed**:
+the key is `bulk|carga/<dataset>/<xx>/<sha256>.<ext>`, so a payload is stored
+once however many provenance rows fetched it, an object never has to be
+overwritten, and a corrupted read fails a digest check instead of being
+reprocessed as history. And the bucket has no lifecycle configuration, so
+retention is WattSteer's own pass over its own ledger rather than a rule
+configured out of sight in a console.
+
+**Custody is a ledger, not a directory.** `payload_custody` records one row per
+retained payload — provenance, dataset, archive key, digest, byte size, fetch
+time, and `purged_at`/`purge_reason` when retention drops it. Enumerating the
+archive is then a query rather than a bucket listing, "can this vintage still be
+reprocessed?" is one lookup, and a payload dropped under policy stays
+distinguishable from one that was never held. Rows are marked purged, never
+deleted: the point of custody is being able to say what was known and when, and
+"we held these bytes and dropped them on this date" is a better answer than a
+gap.
+
+**Retention, confirmed and now enforced:** indefinite for any payload that
+produced a written revision, 90 days (`WATTSTEER_ARCHIVE_RETENTION_DAYS`) for
+one that produced none. The asymmetry follows from what the archive is for. A
+payload whose rows all digested identical is not a vintage — WattSteer's belief
+did not change when it arrived — and it is the overwhelming majority of what a
+sweep downloads. A payload that did change something is the only surviving copy
+of what ONS used to say. The 90 days on the first class is a window for a
+parsing bug to be found and reprocessed before the bytes that would have proved
+it go away. Productivity is established by asking the fact tables which
+provenance ids they were written from — discovered through `information_schema`
+rather than a hardcoded table list, because a forgotten table would make
+retention delete the only copy of a vintage *silently*. Because the archive is
+content-addressed, the bytes are removed only when the purged row was the last
+live claim on them.
+
+**A re-publication is an event, recorded, not a diff absorbed.** When a `HEAD`
+produces a new fingerprint for a URL whose bytes WattSteer already holds, that
+is ONS overwriting a file, and `resource_republication` records it with the
+superseded version, how many days it had stood settled, and which tier found
+it. Enough settled re-publications in one sweep (3+, each having stood 45+ days)
+is reported as a **bulk campaign** — the 2021→2024 and 2025→2026 rewrites the
+research measured — rather than disappearing into a hundred new `data_version`
+rows.
+
+**Reprocessing is a `fetch`, not a second code path.** Every ingestor already
+takes `fetch` as a dependency, so custody is served through one:
+`createArchiveFetch` answers `package_show`, the `HEAD` and the `GET` out of the
+archive and the fingerprint rows. Reprocessing a source is then the ordinary
+ingestor with a different `fetch` and `force: true`, and `asOf` replays the
+vintage that was current at any past instant — including the catalogue, so a
+replay cannot pick a resource that did not exist then.
+
+**Freshness is measured against the facts, not against the runs.** A source that
+quietly stops updating produces successful runs that download nothing, so
+`GET /ingest/health` reports per source the newest fact time, the row count, the
+last successful run, re-publication activity, the custody summary and the
+registry join match rates — and a `stale` boolean per source, with the endpoint
+answering 503 when any source is stale. A health endpoint that stayed green
+through a week of silence would be a participant in the failure it exists to
+catch.
+
 **Ingestion runs on the existing BullMQ worker and Redis**, which the template
-already provides and the strip retains. No second scheduler.
+already provides and the strip retains. No second scheduler — and the refresh
+regime is on that queue too: one handler dispatches a tagged payload to every
+ingestor, and three repeatable jobs (one per tier) enqueue a sweep that
+*recomputes* its plan from the clock. BullMQ's job scheduler is leader-safe, so
+N worker replicas produce one sweep, and there is no cron process anywhere.
 
 ## Testing Decisions
 

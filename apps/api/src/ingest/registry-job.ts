@@ -1,5 +1,6 @@
 import type { Database } from "../database/connection.js";
 import type { Execute } from "../jobs/index.js";
+import type { PayloadArchive } from "./archive.js";
 import { acquireBulkResource } from "./bulk-resource.js";
 import { selectSingleResource } from "./ons/catalogue.js";
 import {
@@ -14,6 +15,7 @@ import {
   writeConjuntoMemberships,
   writeGeneratingUnits,
 } from "./registry-repository.js";
+import type { ObservationContext } from "./resource-version.js";
 
 /**
  * Ingestion for the ONS fleet registry: `capacidade-geracao` and
@@ -57,6 +59,12 @@ export interface IngestPlantRegistryPayload {
    * default — the domain model calls that an ingest failure, not a merge.
    */
   allowOverlappingMembership?: boolean;
+  /**
+   * The sweep this run belongs to. Stamped on any re-publication the run
+   * discovers, which is what makes "the history sweep found this" — the
+   * evidence that a settled period was rewritten — a queryable fact.
+   */
+  context?: ObservationContext;
 }
 
 export interface IngestPlantRegistryResult {
@@ -86,6 +94,11 @@ export interface PlantRegistryIngestorDeps {
   db: Database;
   /** Injected so the job is testable without the network. */
   fetch?: typeof fetch;
+  /**
+   * Where raw payloads are retained. Absent means the payload is ingested and
+   * not kept — correct for a test, and visible in the health view otherwise.
+   */
+  archive?: PayloadArchive;
 }
 
 /**
@@ -111,6 +124,8 @@ export function createPlantRegistryIngestor(
       slug: CAPACITY_DATASET_SLUG,
       select: (resources) => selectSingleResource(resources, FORMATS),
       force: payload.force,
+      archive: deps.archive,
+      context: payload.context,
       report: ({ done }) => report({ done, total: REGISTRY_STEPS }),
     });
     const membership = await acquireBulkResource({
@@ -119,6 +134,8 @@ export function createPlantRegistryIngestor(
       slug: CONJUNTO_DATASET_SLUG,
       select: (resources) => selectSingleResource(resources, FORMATS),
       force: payload.force,
+      archive: deps.archive,
+      context: payload.context,
       report: ({ done }) => report({ done: 4 + done, total: REGISTRY_STEPS }),
     });
 

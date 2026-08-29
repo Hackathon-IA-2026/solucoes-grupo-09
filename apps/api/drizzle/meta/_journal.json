@@ -64,6 +64,13 @@
       "when": 1787963303930,
       "tag": "0008_mute_quasar",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1787963415494,
+      "tag": "0009_fast_squirrel_girl",
+      "breakpoints": true
     }
   ]
 }

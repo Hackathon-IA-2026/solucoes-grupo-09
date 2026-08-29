@@ -1,6 +1,7 @@
 import type { Database } from "../database/connection.js";
 import { UpstreamError } from "../errors.js";
 import type { Execute } from "../jobs/index.js";
+import type { PayloadArchive } from "./archive.js";
 import { acquireBulkResource, BULK_STEPS } from "./bulk-resource.js";
 import { writeSubsystemExchange } from "./interchange-repository.js";
 import { selectResourceForYear } from "./ons/catalogue.js";
@@ -9,6 +10,7 @@ import {
   INTERCHANGE_FORMATS,
   parseInterchangeCsv,
 } from "./ons/interchange.js";
+import type { ObservationContext } from "./resource-version.js";
 
 /**
  * The ingestion job for `intercambio-nacional`, on the job layer the template
@@ -29,6 +31,12 @@ export interface IngestInterchangePayload {
   year: number;
   /** Re-download and re-diff even when the fingerprint is unchanged. */
   force?: boolean;
+  /**
+   * The sweep this run belongs to. Stamped on any re-publication the run
+   * discovers, which is what makes "the history sweep found this" — the
+   * evidence that a settled period was rewritten — a queryable fact.
+   */
+  context?: ObservationContext;
 }
 
 export interface IngestInterchangeResult {
@@ -51,6 +59,11 @@ export interface InterchangeIngestorDeps {
   db: Database;
   /** Injected so the job is testable without the network. */
   fetch?: typeof fetch;
+  /**
+   * Where raw payloads are retained. Absent means the payload is ingested and
+   * not kept — correct for a test, and visible in the health view otherwise.
+   */
+  archive?: PayloadArchive;
 }
 
 /** Build the job handler. */
@@ -67,6 +80,8 @@ export function createInterchangeIngestor(
       select: (resources) =>
         selectResourceForYear(resources, payload.year, INTERCHANGE_FORMATS),
       force: payload.force,
+      archive: deps.archive,
+      context: payload.context,
       report,
     });
 

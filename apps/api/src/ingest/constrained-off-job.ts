@@ -1,5 +1,6 @@
 import type { Database } from "../database/connection.js";
 import type { Execute } from "../jobs/index.js";
+import type { PayloadArchive } from "./archive.js";
 import { acquireBulkResource, BULK_STEPS } from "./bulk-resource.js";
 import { upsertReportingEntities, writeCurtailment } from "./curtailment-repository.js";
 import { type CatalogueResource, selectResourceForMonth } from "./ons/catalogue.js";
@@ -8,6 +9,7 @@ import {
   SOLAR_DATASET_SLUG,
   WIND_DATASET_SLUG,
 } from "./ons/constrained-off.js";
+import type { ObservationContext } from "./resource-version.js";
 import type { Technology } from "./types.js";
 
 /**
@@ -29,6 +31,12 @@ export interface IngestConstrainedOffPayload {
   month: number;
   /** Re-download and re-diff even when the fingerprint is unchanged. */
   force?: boolean;
+  /**
+   * The sweep this run belongs to. Stamped on any re-publication the run
+   * discovers, which is what makes "the history sweep found this" — the
+   * evidence that a settled period was rewritten — a queryable fact.
+   */
+  context?: ObservationContext;
 }
 
 export interface IngestConstrainedOffResult {
@@ -49,6 +57,11 @@ export interface ConstrainedOffIngestorDeps {
   db: Database;
   /** Injected so the job is testable without the network. */
   fetch?: typeof fetch;
+  /**
+   * Where raw payloads are retained. Absent means the payload is ingested and
+   * not kept — correct for a test, and visible in the health view otherwise.
+   */
+  archive?: PayloadArchive;
 }
 
 /**
@@ -77,6 +90,8 @@ export function createConstrainedOffIngestor(
       select: (resources: CatalogueResource[]) =>
         selectResourceForMonth(resources, payload.year, payload.month, FORMATS),
       force: payload.force,
+      archive: deps.archive,
+      context: payload.context,
       report,
     });
 

@@ -1,3 +1,7 @@
+// Tiered refresh, raw-payload custody and ingestion observability. Appended
+// rather than merged into the blocks above so that adapters landing at the same
+// time cannot conflict on this file.
+
 export {
   ANEEL_CKAN_BASE,
   fetchAneelPackage,
@@ -29,6 +33,19 @@ export {
   type SigaFleetSummary,
   summariseSigaFleetCapacity,
 } from "./aneel/siga.js";
+export {
+  type ArchiveConfig,
+  type ArchiveKeyParts,
+  archiveKey,
+  type BucketArchiveOptions,
+  createBucketArchive,
+  createDirectoryArchive,
+  createPayloadArchive,
+  extensionForFormat,
+  type PayloadArchive,
+  payloadSha256,
+} from "./archive.js";
+export { type ArchiveFetchOptions, createArchiveFetch } from "./archive-fetch.js";
 export {
   acquireBulkResource,
   BULK_STEPS,
@@ -63,6 +80,20 @@ export {
   upsertReportingEntities,
   writeCurtailment,
 } from "./curtailment-repository.js";
+export {
+  type CustodyProvenance,
+  type CustodySummary,
+  DEFAULT_RETENTION,
+  enforceRetention,
+  type ReadPayloadResult,
+  type RetainedPayload,
+  type RetainPayloadRequest,
+  type RetentionPolicy,
+  type RetentionResult,
+  readCustodySummary,
+  readRetainedPayload,
+  retainPayload,
+} from "./custody.js";
 export {
   createDailyLoadIngestor,
   type DailyLoadIngestorDeps,
@@ -99,6 +130,12 @@ export {
   readDessemBalanceAsOf,
   writeDessemBalance,
 } from "./dessem-repository.js";
+export {
+  createIngestDispatcher,
+  type IngestDispatcherDeps,
+  type QueueTask,
+  type QueueTaskResult,
+} from "./dispatch.js";
 export {
   createInterchangeIngestor,
   type IngestInterchangePayload,
@@ -153,6 +190,13 @@ export {
   type SubsystemCode,
   trimmed,
 } from "./normalise.js";
+export {
+  type IngestionHealth,
+  type RegistryJoinRates,
+  type RepublicationHealth,
+  readIngestionHealth,
+  type SourceHealth,
+} from "./observability.js";
 export {
   AREA_CODE_FOR_SUBSYSTEM,
   CARGA_API_BASE,
@@ -267,6 +311,19 @@ export {
   writePlantDetail,
 } from "./plant-detail-repository.js";
 export {
+  CAMPAIGN_MIN_RESOURCES,
+  CAMPAIGN_MIN_SETTLED_DAYS,
+  createRefreshSweep,
+  planRefresh,
+  REFRESH_CADENCE,
+  type RefreshPlanOptions,
+  type RefreshSweepDeps,
+  type RefreshSweepPayload,
+  type RefreshSweepResult,
+  type RepublicationCampaign,
+  readRepublications,
+} from "./refresh.js";
+export {
   createPlantRegistryIngestor,
   type IngestPlantRegistryPayload,
   type IngestPlantRegistryResult,
@@ -306,6 +363,12 @@ export {
   valueDigest,
   writeEnergyBalance,
 } from "./repository.js";
+export type {
+  ObservationContext,
+  RecordedResourceVersion,
+  RefreshTier,
+  Republication,
+} from "./resource-version.js";
 export {
   markResourceFetched,
   recordResourceVersion,
@@ -331,6 +394,14 @@ export {
   type StoredPlantLocation,
   writePlantLocations,
 } from "./siga-repository.js";
+export {
+  type IngestionSource,
+  type IngestTask,
+  type IngestTaskResult,
+  periodLabelOf,
+  rowsOf,
+  sourceOf,
+} from "./tasks.js";
 export { ONS_TIME_ZONE, zonedWallClockToUtc } from "./time.js";
 export type {
   CurtailmentParse,

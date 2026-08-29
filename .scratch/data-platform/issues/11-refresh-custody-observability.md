@@ -16,13 +16,13 @@ this having been running since go-live.
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Refresh is tiered by period volatility, with a slow sweep across all closed history
-- [ ] A bulk re-publication of closed periods is detected and surfaced, not silently absorbed
-- [ ] Raw payloads are archived byte-for-byte with their fetch time
-- [ ] Archived payloads can be reprocessed without re-fetching
-- [ ] A retention policy exists and is enforced
-- [ ] A per-source view shows freshness, row counts and last successful run
-- [ ] Registry join match rates appear in that view
-- [ ] A source that quietly stops updating becomes visible rather than silently going stale
+- [x] Refresh is tiered by period volatility, with a slow sweep across all closed history
+- [x] A bulk re-publication of closed periods is detected and surfaced, not silently absorbed
+- [x] Raw payloads are archived byte-for-byte with their fetch time
+- [x] Archived payloads can be reprocessed without re-fetching
+- [x] A retention policy exists and is enforced
+- [x] A per-source view shows freshness, row counts and last successful run
+- [x] Registry join match rates appear in that view
+- [x] A source that quietly stops updating becomes visible rather than silently going stale

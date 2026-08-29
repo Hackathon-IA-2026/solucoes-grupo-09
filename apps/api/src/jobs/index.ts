@@ -10,6 +10,7 @@ export type {
   JobProgress,
   JobRecord,
   JobRunner,
+  JobSchedule,
   JobStatus,
   ReportProgress,
 } from "./types.js";

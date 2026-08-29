@@ -1,5 +1,6 @@
 import type { Database } from "../database/connection.js";
 import type { Execute } from "../jobs/index.js";
+import type { PayloadArchive } from "./archive.js";
 import {
   recordLoadApiRequest,
   writeProgrammedLoad,
@@ -78,6 +79,11 @@ export interface LoadIngestorDeps {
   db: Database;
   /** Injected so the job is testable without the network. */
   fetch?: typeof fetch;
+  /**
+   * Where raw payloads are retained. Absent means the payload is ingested and
+   * not kept — correct for a test, and visible in the health view otherwise.
+   */
+  archive?: PayloadArchive;
   /** Overridable so a test can point at a local server. */
   baseUrl?: string;
 }
@@ -127,13 +133,17 @@ export function createLoadIngestor(
 
         // Provenance first: the fact rows carry a foreign key to it, and the
         // row is also the only record that this range was asked for at all.
-        const sourceVersionId = await recordLoadApiRequest(deps.db, {
-          series: payload.series,
-          areaCode,
-          rangeStart: range.from,
-          rangeEnd: range.to,
-          response,
-        });
+        const sourceVersionId = await recordLoadApiRequest(
+          deps.db,
+          {
+            series: payload.series,
+            areaCode,
+            rangeStart: range.from,
+            rangeEnd: range.to,
+            response,
+          },
+          deps.archive,
+        );
 
         result.requests += 1;
         result.requestsRepaired += response.repaired ? 1 : 0;

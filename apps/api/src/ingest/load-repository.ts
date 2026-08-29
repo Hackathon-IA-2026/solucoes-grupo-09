@@ -7,6 +7,8 @@ import {
   verifiedLoadHalfHour,
 } from "../database/schema.js";
 import { UpstreamError } from "../errors.js";
+import type { PayloadArchive } from "./archive.js";
+import { retainPayload } from "./custody.js";
 import type { SubsystemCode } from "./normalise.js";
 import type {
   LoadAreaCode,
@@ -58,6 +60,7 @@ export interface RecordedLoadRequest {
 export async function recordLoadApiRequest(
   db: Database,
   request: RecordedLoadRequest,
+  archive?: PayloadArchive,
 ): Promise<string> {
   const { response } = request;
   const [inserted] = await db
@@ -80,6 +83,22 @@ export async function recordLoadApiRequest(
   if (!inserted) {
     throw new UpstreamError("Failed to record the carga API request");
   }
+
+  // The carga API has no file to fingerprint and no `HEAD` to spend, so the
+  // response body *is* the vintage: without it there is no way to reconstruct
+  // what ONS answered for a range on a given day, and `din_atualizacao` only
+  // dates rows that are still being served. Retaining it is what puts this
+  // source under the same custody as the bulk files.
+  await retainPayload(db, archive, {
+    provenance: "load_api_request",
+    provenanceId: inserted.id,
+    datasetSlug: `carga-${request.series.toLowerCase()}`,
+    resourceName: `${request.areaCode}_${request.rangeStart}_${request.rangeEnd}`,
+    extension: "json",
+    bytes: new TextEncoder().encode(response.body),
+    fetchedAt: response.fetchedAt,
+  });
+
   return inserted.id;
 }
 

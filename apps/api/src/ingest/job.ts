@@ -1,9 +1,11 @@
 import type { Database } from "../database/connection.js";
 import type { Execute } from "../jobs/index.js";
+import type { PayloadArchive } from "./archive.js";
 import { acquireBulkResource, BULK_STEPS } from "./bulk-resource.js";
 import { selectResourceForYear } from "./ons/catalogue.js";
 import { DATASET_SLUG, parseEnergyBalance } from "./ons/energy-balance.js";
 import { writeEnergyBalance } from "./repository.js";
+import type { ObservationContext } from "./resource-version.js";
 
 /**
  * The ingestion job for `balanco-energia-subsistema`, running on the job layer
@@ -20,6 +22,12 @@ export interface IngestEnergyBalancePayload {
   year: number;
   /** Re-download and re-diff even when the fingerprint is unchanged. */
   force?: boolean;
+  /**
+   * The sweep this run belongs to. Stamped on any re-publication the run
+   * discovers, which is what makes "the history sweep found this" — the
+   * evidence that a settled period was rewritten — a queryable fact.
+   */
+  context?: ObservationContext;
 }
 
 export interface IngestEnergyBalanceResult {
@@ -39,6 +47,11 @@ export interface EnergyBalanceIngestorDeps {
   db: Database;
   /** Injected so the job is testable without the network. */
   fetch?: typeof fetch;
+  /**
+   * Where raw payloads are retained. Absent means the payload is ingested and
+   * not kept — correct for a test, and visible in the health view otherwise.
+   */
+  archive?: PayloadArchive;
 }
 
 /**
@@ -58,6 +71,8 @@ export function createEnergyBalanceIngestor(
       slug: DATASET_SLUG,
       select: (resources) => selectResourceForYear(resources, payload.year),
       force: payload.force,
+      archive: deps.archive,
+      context: payload.context,
       report,
     });
 

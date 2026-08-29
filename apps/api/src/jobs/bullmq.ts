@@ -1,7 +1,14 @@
 import { type ConnectionOptions, Queue, Worker } from "bullmq";
 import { Redis } from "ioredis";
 import { toHttpError } from "../errors.js";
-import type { Execute, JobProgress, JobRecord, JobRunner, JobStatus } from "./types.js";
+import type {
+  Execute,
+  JobProgress,
+  JobRecord,
+  JobRunner,
+  JobSchedule,
+  JobStatus,
+} from "./types.js";
 
 export const QUEUE_NAME = "wattsteer-jobs";
 
@@ -121,6 +128,19 @@ export function createBullMqRunner<TPayload, TResult>(
     async submit(payload) {
       const job = await withOpTimeout(queue.add("job", payload), opTimeoutMs, "enqueue");
       return String(job.id);
+    },
+    async schedule({ id, pattern, timeZone, payload }: JobSchedule<TPayload>) {
+      // Leader-safe across replicas: BullMQ's scheduler produces one delayed
+      // job per interval however many workers are watching the queue.
+      await withOpTimeout(
+        queue.upsertJobScheduler(
+          id,
+          { pattern, tz: timeZone ?? "Etc/UTC" },
+          { name: "job", data: payload },
+        ),
+        opTimeoutMs,
+        "schedule",
+      );
     },
     async status(id) {
       const job = await withOpTimeout(queue.getJob(id), opTimeoutMs, "job lookup");

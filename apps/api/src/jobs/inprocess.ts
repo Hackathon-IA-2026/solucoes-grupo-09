@@ -46,6 +46,13 @@ export function createInProcessRunner<TPayload, TResult>(
 
   return {
     mode: "inprocess",
+    async schedule() {
+      // Deliberately inert. The in-process runner exists so the API works with
+      // no Redis; a timer here would make a laptop's `bun run api` start
+      // sweeping ONS, and two developers running one would sweep it twice.
+      // Recurring ingestion is a property of the deployed worker, and the
+      // worker requires Redis.
+    },
     async submit(payload) {
       const id = crypto.randomUUID();
       remember({ id, status: "waiting" });
