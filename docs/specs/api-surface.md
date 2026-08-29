@@ -395,11 +395,29 @@ pointed at `/v1/optimize`:
   read as an outage, and a WattSteer bug would read as an outage. Gateway
   validation makes the 422 case *unlikely*, not impossible: the ML service
   "trusts nothing it did not validate itself" by design. **A 4xx from the ML
-  service must pass through with its code and its body.**
+  service must pass through with its status code and its error code — but
+  re-wrapped in the gateway's envelope, not forwarded verbatim.**
+
+  This is the one place where "pass the body through" and "one envelope,
+  everywhere" collide, and the envelope wins. A client that must parse one shape
+  for gateway errors and another for upstream ones has no closed enum, which is
+  the property the envelope exists to provide. What has to survive is the
+  *information* — the distinction between a rejected scenario and an outage —
+  and that lives in the status and the code, not in the byte-for-byte body. The
+  upstream code is therefore admitted into the gateway's closed enum rather than
+  smuggled past it, and any upstream detail the enum has no room for travels in
+  the envelope's detail field.
 - The optimizer's failure table needs `503 SOLVER_GAP_UNCLOSED` and
   `504 SOLVER_TIMEOUT` as **distinct** outcomes. Today both would land in
   `BusyError`'s single sentence, and "the gap was not closed" is a different
   thing to tell a user than "we gave up waiting".
+
+> **Why the subtag rule, not the exact-match rule.** The web app's `Locale` is
+> `"pt" | "en"` and its `languageTag` helper emits `pt-BR` and **`en`** — so an
+> exact-match `locale ∈ {pt-BR, en-US}` would have the gateway return a `422` to
+> its own client for English. The app's own locale negotiation already
+> prefix-matches on the primary subtag; the API matches it rather than
+> contradicting it.
 
 **So: keep `ml-proxy.ts`, keep its comment, delete its forecast route when
 `curtailment_forecast_hour` lands, add the 4xx passthrough and the two solver
@@ -676,7 +694,9 @@ GET /v1/curtailment/reasons?subsystem=&date=&limit=
 
 Path and parameters exactly as `diagnosis.md` fixes them, with `run=` re-spelled
 `gate_profile=` for consistency with the forecast route. **No `technology`
-parameter.** `locale ∈ {pt-BR, en-US}`, defaulting from `Accept-Language`, and
+parameter.** `locale ∈ {pt-BR, en-US}`, **negotiated by primary subtag** —
+`pt*` resolves to `pt-BR`, `en*` to `en-US` — defaulting from `Accept-Language`,
+and
 `Vary: Accept-Language` is set — this is the only endpoint that varies by
 locale, because it is the only one that returns generated prose.
 
@@ -1137,7 +1157,7 @@ Replay's five refusals, and the eleven this spec adds:
 | `TARGET_DATE_OUT_OF_RANGE` | 422 | before 2024-04, or beyond tomorrow |
 | `DATE_RANGE_TOO_LARGE` | 422 | observed range over 400 days |
 | `GATE_PROFILE_UNKNOWN` | 422 | not `gate_early` / `gate_late` |
-| `LOCALE_UNSUPPORTED` | 422 | not `pt-BR` / `en-US` |
+| `LOCALE_UNSUPPORTED` | 422 | primary subtag is neither `pt` nor `en` |
 | `FORECAST_NOT_YET_PUBLISHED` | 404 | the gate for that target date has not passed |
 | `FORECAST_UNAVAILABLE` | 404 | the gate passed and no rows exist — a publication failure |
 | `MODEL_UNAVAILABLE` | 503 | no promoted artifact in the requested lane |
