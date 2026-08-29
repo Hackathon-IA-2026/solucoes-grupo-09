@@ -19,6 +19,7 @@
     "test:core": "bun run --cwd packages/core test",
     "test:web": "bun run --cwd apps/web test",
     "test:e2e": "bun run --cwd apps/web test:e2e",
+    "test:live": "bun run --cwd apps/api test:live",
     "typecheck": "bun run --cwd packages/core typecheck && bun run --cwd packages/ui typecheck && bun run --cwd apps/api typecheck && bun run --cwd apps/web typecheck",
     "lint": "bunx biome check",
     "lint:fix": "bunx biome check --write",

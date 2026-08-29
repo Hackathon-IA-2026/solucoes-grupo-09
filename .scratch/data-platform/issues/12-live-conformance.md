@@ -17,7 +17,7 @@ It is gated and scheduled, and must never run in the default test path.
 
 **Blocked by:** 02, 05, 07, 09
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The suite is off by default and never runs without being explicitly enabled
 - [ ] It runs on a schedule in CI rather than on every commit
