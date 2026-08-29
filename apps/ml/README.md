@@ -110,6 +110,38 @@ The container starts whether or not anything is mounted, and `/v1/meta` reports
 yet" and "the volume did not attach" are indistinguishable from the outside
 otherwise.
 
+### Lanes, and what "current" means
+
+An artifact's identity is the triple **(feature set, gate profile, threshold)**,
+and each triple gets its own directory — `dessem_free_v1__gate_late__thr5` —
+because "newest" is well-defined within a lane and meaningless across them
+(`src/wattsteer_ml/lanes.py`). Alongside them, at the root of the volume, sits
+`promotions.jsonl`: the append-only log the hot-swap gate writes one line to on
+every decision, promote and refuse alike, carrying the artifact id, the lane,
+the decision, its reason and the instant (`src/wattsteer_ml/promotions.py`).
+
+**`artifacts.current(lane)` is the newest artifact named by a `promote` line in
+that log — never the newest file.** A candidate that fails the gate is still
+written to the volume, so that it can be inspected, and a newest-file rule would
+serve exactly the model the gate refused. A rollback is an append naming an
+earlier artifact; nothing is ever deleted, so the bad promotion's line survives
+next to the line that undid it.
+
+`/v1/meta` therefore reports, per lane, one of:
+
+| `state` | Means |
+| --- | --- |
+| `no_artifact` | nothing has ever been trained in this lane |
+| `present_unpromoted` | bundles are on the volume and none passed the gate |
+| `promoted` | an artifact is named by a `promote` line and is on disk |
+| `unresolvable` | the log is damaged, or promotes an artifact that is not there |
+
+The first three are the three states `docs/specs/forecaster.md` requires, and
+they are what lets the gateway answer `MODEL_UNAVAILABLE` with a `lane_state`
+rather than collapsing "no promoted artifact" into a spinner. The fourth is the
+refusal to guess between them: `current()` raises rather than falling back to
+the newest file, while `/v1/meta` still answers so an operator can see why.
+
 ## Endpoints
 
 | Route | Purpose |
