@@ -274,6 +274,17 @@ The same ticket made two other things true that the composing contract could not
   without a second call — the first thing a screen showing a restriction cause
   has to say. The view joins `reporting_entity`; a module composing repositories
   had no place to put that join.
+- **`reporting_entity_name` is on every curtailment row too**, added by
+  api-surface ticket 14 for the same reason and by the same join: a reason row
+  on `GET /v1/curtailment/reasons` carries an `entity_label`, and a code is not
+  a name. A product read reaching into `reporting_entity` for one column would
+  be a second path to a base table.
+- **`canonical_curtailment_episodes(subsystem, from, to, threshold_mw,
+  max_gap_hours, technology)`** is a parameterised SQL function over the same
+  view — a read-time computation, never a stored grain, so a threshold is an
+  argument rather than something frozen into the database. An hour is in an
+  episode at or above the threshold; a sub-threshold hour and an unobserved
+  hour are both gaps, because continuity across an absence cannot be asserted.
 - **`vintageFidelity` has one implementation per language.** It had been written
   out identically in nine places on the TypeScript side, beside the one that was
   actually tested. The survivor is `apps/api/src/contract/vintage.ts`, and

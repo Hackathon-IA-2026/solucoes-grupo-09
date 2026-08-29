@@ -37,14 +37,14 @@ the canonical views, and the reporting-entity kind becoming reachable from a
 curtailment row without a second call is part of that ticket, which is what makes
 the required grain field cheap.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The three routes return 200 with the modelling service unreachable and no promoted artifact
-- [ ] The hourly range is capped at 400 days, refused with the range code beyond that
-- [ ] Every episode carries the threshold and the gap tolerance that produced it, echoed at the top level
-- [ ] Episodes are computed on read; nothing is stored at episode grain
-- [ ] Every reason row carries its grain, and a screen can tell a conjunto row from a plant row without a second call
-- [ ] There is no plant parameter and nothing is aggregated to plant grain
-- [ ] The mixed-cause flag is present on every reason row
-- [ ] Reason codes are returned as codes; no gloss appears on the wire
-- [ ] Every response carries its vintage fidelity and the data version it was read at
+- [x] The three routes return 200 with the modelling service unreachable and no promoted artifact
+- [x] The hourly range is capped at 400 days, refused with the range code beyond that
+- [x] Every episode carries the threshold and the gap tolerance that produced it, echoed at the top level
+- [x] Episodes are computed on read; nothing is stored at episode grain
+- [x] Every reason row carries its grain, and a screen can tell a conjunto row from a plant row without a second call
+- [x] There is no plant parameter and nothing is aggregated to plant grain
+- [x] The mixed-cause flag is present on every reason row
+- [x] Reason codes are returned as codes; no gloss appears on the wire
+- [x] Every response carries its vintage fidelity and the data version it was read at
