@@ -37,7 +37,7 @@ asserting it when there are five.
 **Blocked by:** 01 (the coupling sum and the objective), 04 (the load's validation
 rules).
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] A battery-and-load fleet solves to `OPTIMAL` and the load's contribution appears in `Δ[t]`
 - [ ] Daily energy is conserved to 1e-9

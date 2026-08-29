@@ -6,6 +6,7 @@ module split follows the spec's own seams:
 
 * :mod:`.horizon` — the 24 local civil hours, derived from the IANA zone.
 * :mod:`.fleet` — the `FlexibilityAsset` variants as the model sees them.
+* :mod:`.shiftable` — the shiftable load's (D1)–(D5), and nothing else.
 * :mod:`.backend` — which solver runs, and which are refused before they can.
 * :mod:`.milp` — the model of the research's §2, built and solved.
 * :mod:`.simulator` — the execution rule, and every KPI derived from it.
@@ -28,7 +29,14 @@ from .backend import (
     resolve_backend,
 )
 from .errors import BackendNotPermittedError, OptimizerBugError, SolverNotOptimalError
-from .fleet import Availability, Battery, available_between, reference_battery
+from .fleet import (
+    Availability,
+    Battery,
+    ShiftableLoad,
+    available_between,
+    reference_battery,
+    reference_load,
+)
 from .horizon import GRID_ZONE, HORIZON_HOURS, PERIOD_HOURS, Horizon, local_day
 from .milp import (
     SHIPPED,
@@ -39,6 +47,7 @@ from .milp import (
     SolverReport,
     solve,
 )
+from .shiftable import Compensation, LoadDispatch
 from .simulator import (
     TOLERANCE_MWH,
     ExecutedHour,
@@ -62,15 +71,18 @@ __all__ = [
     "BackendNotPermittedError",
     "Battery",
     "BatteryDispatch",
+    "Compensation",
     "DispatchPlan",
     "ExecutedHour",
     "Horizon",
     "HourlyDispatch",
+    "LoadDispatch",
     "ModelOptions",
     "OptimizerBugError",
     "Schedule",
     "ScoredBand",
     "ScoredRealisation",
+    "ShiftableLoad",
     "SolverNotOptimalError",
     "SolverReport",
     "Versions",
@@ -78,6 +90,7 @@ __all__ = [
     "configured_milp_backend",
     "local_day",
     "reference_battery",
+    "reference_load",
     "resolve_backend",
     "score_band",
     "simulate",

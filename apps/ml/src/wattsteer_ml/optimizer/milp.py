@@ -8,9 +8,11 @@ state of charge per local hour — that a real inverter could execute.
 implementer choices the spec fixes: the binaries (B7)–(B8) ship; the
 Chen–Baldick tightening (B3a)/(B3b) is not implemented; there is no terminal
 state-of-charge constraint; and the horizon is a local civil day. The shiftable
-load's (D1)–(D4) is flex-optimizer ticket 05 and enters as a second term in the
-coupling sum (C1) and nothing else. Wiring `offered_mwh` to a real `Forecast` is
-ticket 07; here it is a caller-supplied profile.
+load's (D1)–(D5) lives in :mod:`.shiftable` and enters here as a second term in
+the coupling sum (C1) and nothing else — which is the property that makes `EV`,
+`DataCentre`, `Electrolyzer` and `HVAC` a variant and a constraint block later
+rather than a reformulation. Wiring `offered_mwh` to a real `Forecast` is ticket
+07; here it is a caller-supplied profile.
 
 **Every failure mode this file has is silent**, which is why it is written the
 way it is. Each of the four below leaves the model feasible, the status
@@ -53,8 +55,15 @@ from typing import Any
 from ..config import settings
 from .backend import Versions, create_solver, resolve_backend, versions
 from .errors import OptimizerBugError, SolverNotOptimalError
-from .fleet import Battery
+from .fleet import HOURS_PER_DAY, Battery, ShiftableLoad
 from .horizon import PERIOD_HOURS, Horizon
+from .shiftable import (
+    Compensation,
+    LoadBlock,
+    LoadDispatch,
+    build_loads,
+    extract_loads,
+)
 
 #: ``c_curt``. One, by construction: the objective is in MWh-equivalents, so a
 #: recovered MWh is worth exactly one unit and nothing has to be priced.
@@ -157,6 +166,11 @@ class HourlyDispatch:
     #: three of this model's invariants are statements about it, and a number
     #: no test can read is a number no test can defend.
     net_flexible_demand_mwh: float
+    #: ``Σ_a up[a,t]`` and ``Σ_a Σ_t' do[a,t',t]`` — the load half of (C1), in
+    #: the shape the published result contract already carries. Defaulted so
+    #: that a fleet with no load reads as the zeros it is.
+    load_shift_up_mw: float = 0.0
+    load_shift_down_mw: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -194,6 +208,10 @@ class DispatchPlan:
     """
 
     horizon: Horizon
+    #: The batteries, paired index-for-index with :attr:`batteries`. Named
+    #: ``assets`` since ticket 01 and left alone: the simulator's `Schedule`
+    #: pairs against it, and the loads have their own pair below because a
+    #: shiftable load has no state of charge for the execution rule to clip.
     assets: tuple[Battery, ...]
     hours: tuple[HourlyDispatch, ...]
     batteries: tuple[BatteryDispatch, ...]
@@ -202,6 +220,10 @@ class DispatchPlan:
     #: the weights that produced it.
     deg_penalty_rho: float
     throughput_penalties: tuple[float, ...]
+    #: The shiftable loads, paired index-for-index with their dispatch. Empty
+    #: for a battery-only fleet, which is every plan ticket 01 could build.
+    loads: tuple[ShiftableLoad, ...] = ()
+    load_dispatch: tuple[LoadDispatch, ...] = ()
 
     @property
     def offered_mwh(self) -> tuple[float, ...]:
@@ -236,12 +258,24 @@ class DispatchPlan:
         """
         return sum(battery.state_of_charge_mwh[-1] for battery in self.batteries)
 
+    @property
+    def shifted_mwh(self) -> float:
+        """``Σ_a Σ_t up[a,t]·Δt`` — the energy the loads moved.
+
+        Its counterpart is not reported beside it because there is nothing to
+        compare: (D1) makes ``Σ down`` equal to this by construction, and a
+        second field carrying the same number would invite a reader to believe
+        the two were independently measured.
+        """
+        return sum(load.shifted_mwh for load in self.load_dispatch) * PERIOD_HOURS
+
 
 def solve(
     *,
     offered_mwh: Sequence[float],
     batteries: Sequence[Battery],
     horizon: Horizon,
+    loads: Sequence[ShiftableLoad] = (),
     backend: str | None = None,
     deg_penalty_rho: float | None = None,
     time_limit_ms: int | None = None,
@@ -266,7 +300,8 @@ def solve(
     )
     profile = tuple(float(value) for value in offered_mwh)
     fleet = tuple(batteries)
-    _check_shapes(profile, fleet, horizon)
+    flexible = tuple(loads)
+    _check_shapes(profile, fleet, flexible, horizon)
     penalties = tuple(_throughput_penalty(battery, rho) for battery in fleet)
 
     solver = create_solver(chosen)
@@ -282,7 +317,13 @@ def solve(
     charge: list[list[Any]] = []
     discharge: list[list[Any]] = []
     state = _build_batteries(solver, named, fleet, horizon, options, charge, discharge)
-    absorb = _build_coupling(solver, named, profile, horizon, charge, discharge, options)
+    # (D1)–(D5). The block is self-contained; what reaches the coupling sum is
+    # one expression per hour, which is the whole of a variant's contact with
+    # the rest of the model.
+    blocks = build_loads(solver, named, flexible, horizon)
+    absorb = _build_coupling(
+        solver, named, profile, horizon, charge, discharge, blocks, options
+    )
     _build_objective(solver, profile, absorb, charge, discharge, penalties)
     if len(named.seen) != solver.NumVariables():
         # Every variable went through `named`, so the counts agreeing is what
@@ -301,6 +342,8 @@ def solve(
     return _extract(
         horizon=horizon,
         fleet=fleet,
+        flexible=flexible,
+        blocks=blocks,
         profile=profile,
         charge=charge,
         discharge=discharge,
@@ -313,7 +356,10 @@ def solve(
 
 
 def _check_shapes(
-    profile: tuple[float, ...], fleet: tuple[Battery, ...], horizon: Horizon
+    profile: tuple[float, ...],
+    fleet: tuple[Battery, ...],
+    flexible: tuple[ShiftableLoad, ...],
+    horizon: Horizon,
 ) -> None:
     if len(profile) != len(horizon):
         raise OptimizerBugError(
@@ -324,9 +370,37 @@ def _check_shapes(
         raise OptimizerBugError(
             "curtailment offered to the optimizer cannot be negative."
         )
-    keys = [battery.key for battery in fleet]
+    keys = [battery.key for battery in fleet] + [load.key for load in flexible]
     if len(set(keys)) != len(keys):
-        raise OptimizerBugError(f"battery keys must be unique across the fleet: {keys}.")
+        raise OptimizerBugError(f"asset keys must be unique across the fleet: {keys}.")
+    for load in flexible:
+        if load.shift_window_hours < 1 or load.shift_window_hours >= len(horizon):
+            raise OptimizerBugError(
+                f"load {load.key!r}: a shift window of {load.shift_window_hours} h "
+                f"is not inside a {len(horizon)}-period horizon."
+            )
+        if load.max_shift_mw > load.max_power_mw + _ZERO_MW:
+            raise OptimizerBugError(
+                f"load {load.key!r}: max_shift_mw {load.max_shift_mw:.6g} is above "
+                f"the connection limit {load.max_power_mw:.6g}."
+            )
+        # The one physical check (D1)–(D4) cannot make for itself. It is
+        # validation's rule — `SHIFT_EXCEEDS_BASELINE` — re-asserted at the
+        # model boundary, because the ml service trusts nothing it did not
+        # validate itself, and because the consequence of letting it through is
+        # a *feasible* plan that sheds a process harder than it runs.
+        if load.max_shift_mw > load.flat_baseline_mw + _ZERO_MW:
+            raise OptimizerBugError(
+                f"load {load.key!r}: max_shift_mw {load.max_shift_mw:.6g} is above "
+                f"the flat baseline {load.flat_baseline_mw:.6g} "
+                f"(daily_energy_mwh / {HOURS_PER_DAY}) — validation let it through."
+            )
+        recovery = load.recovery_time_hours
+        if recovery is not None and recovery < 1:
+            raise OptimizerBugError(
+                f"load {load.key!r}: a recovery time of {recovery} h is not a "
+                "recovery time. Absent means no (D5) block; zero means nothing."
+            )
 
 
 def _throughput_penalty(battery: Battery, rho: float) -> float:
@@ -418,6 +492,7 @@ def _build_coupling(
     horizon: Horizon,
     charge: list[list[Any]],
     discharge: list[list[Any]],
+    blocks: tuple[LoadBlock, ...],
     options: ModelOptions,
 ) -> list[Any]:
     """(C1)–(C5), with the sign split branching on the *parameter* ``curt[t]``."""
@@ -425,8 +500,12 @@ def _build_coupling(
     for hour in horizon.hours:
         offered = profile[hour]
         charged = solver.Sum([row[hour] for row in charge])
-        # (C1). The shiftable load's up/down terms join this sum in ticket 05.
+        # (C1). ``Σ_b (ch − dis) + Σ_a (up − Σ_t' do)``: the load's whole
+        # contribution to the rest of the model is this one extra term, and
+        # every constraint below is written exactly as it was without it.
         delta = charged - solver.Sum([row[hour] for row in discharge])
+        for block in blocks:
+            delta = delta + block.net_shift(solver, hour)
         # (C3). Where nothing is offered the bounds are [0, 0], so the variable
         # exists at every index and is pinned rather than special-cased.
         absorbed = solver.NumVar(0.0, max(offered, 0.0), named("absorb", f"t{hour:02d}"))
@@ -503,6 +582,8 @@ def _extract(
     *,
     horizon: Horizon,
     fleet: tuple[Battery, ...],
+    flexible: tuple[ShiftableLoad, ...],
+    blocks: tuple[LoadBlock, ...],
     profile: tuple[float, ...],
     charge: list[list[Any]],
     discharge: list[list[Any]],
@@ -523,10 +604,13 @@ def _extract(
         )
         for index, battery in enumerate(fleet)
     )
+    shifted = extract_loads(blocks, horizon)
     hours = []
     for hour in horizon.hours:
         charged = sum(d.charge_mw[hour] for d in dispatches)
         discharged = sum(d.discharge_mw[hour] for d in dispatches)
+        shift_up = sum(load.shift_up_mw[hour] for load in shifted)
+        shift_down = sum(load.shift_down_mw[hour] for load in shifted)
         hours.append(
             HourlyDispatch(
                 hour_local=hour,
@@ -535,7 +619,10 @@ def _extract(
                 battery_discharge_mw=discharged,
                 state_of_charge_mwh=sum(d.state_of_charge_mwh[hour] for d in dispatches),
                 absorbed_mwh=float(absorb[hour].solution_value()),
-                net_flexible_demand_mwh=(charged - discharged) * PERIOD_HOURS,
+                net_flexible_demand_mwh=(charged - discharged + shift_up - shift_down)
+                * PERIOD_HOURS,
+                load_shift_up_mw=shift_up,
+                load_shift_down_mw=shift_down,
             )
         )
     return DispatchPlan(
@@ -546,6 +633,8 @@ def _extract(
         solver=report,
         deg_penalty_rho=rho,
         throughput_penalties=penalties,
+        loads=flexible,
+        load_dispatch=shifted,
     )
 
 
@@ -553,8 +642,10 @@ __all__ = [
     "CURTAILMENT_WEIGHT",
     "SHIPPED",
     "BatteryDispatch",
+    "Compensation",
     "DispatchPlan",
     "HourlyDispatch",
+    "LoadDispatch",
     "ModelOptions",
     "SolverReport",
     "Versions",

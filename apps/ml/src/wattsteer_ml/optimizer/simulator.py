@@ -77,11 +77,19 @@ class Schedule:
     executed by the same code as a plan that has just come off the solver.
 
     ``load_shift_up_mw`` and ``load_shift_down_mw`` are the shiftable load's
-    (D1)–(D4) block. v1's builder emits no load — flex-optimizer ticket 05 adds
-    it — so :meth:`from_plan` fills them with zeros. They are *fields and not a
-    future edit* because the execution rule's ``Δ[t]`` already has both terms in
-    it: leaving them out would mean ticket 05 having to reopen the rule, and the
-    one place the rule may not be touched casually is here.
+    (D1)–(D4) block, aggregated over the loads. They were *fields and not a
+    future edit* because the execution rule's ``Δ[t]`` already had both terms in
+    it, and that is exactly what it bought: when ticket 05 added the second
+    variant, the rule below did not move and neither did a KPI. What changed is
+    the one line in :meth:`from_plan` that reads the numbers off the plan
+    instead of writing zeros, which is the seam's job. A plan built from a
+    battery-only fleet still carries zeros, because that is what its hours say.
+
+    The load has no state of charge and nothing to clip it against: the rule
+    executes a shift as planned. That is not an omission — a lossless shift that
+    is compensated inside its own window has no realisation-dependent leg, and
+    the day it acquires one (`shift_efficiency`, a curtailed process) is the day
+    it earns a clip of its own.
     """
 
     assets: tuple[Battery, ...]
@@ -91,12 +99,11 @@ class Schedule:
 
     @classmethod
     def from_plan(cls, plan: DispatchPlan) -> Schedule:
-        hours = len(plan.hours)
         return cls(
             assets=plan.assets,
             dispatch=plan.batteries,
-            load_shift_up_mw=(0.0,) * hours,
-            load_shift_down_mw=(0.0,) * hours,
+            load_shift_up_mw=tuple(hour.load_shift_up_mw for hour in plan.hours),
+            load_shift_down_mw=tuple(hour.load_shift_down_mw for hour in plan.hours),
         )
 
     def __len__(self) -> int:
