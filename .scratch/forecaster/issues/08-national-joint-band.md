@@ -22,7 +22,7 @@ computed inside each ensemble member, and is never an ONS aggregate row.
 
 **Blocked by:** 07.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] One draw of day-row indices is shared across all four subsystems, so
       ensemble member *k* is the same calendar day everywhere
