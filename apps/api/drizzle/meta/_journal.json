@@ -218,6 +218,13 @@
       "when": 1788002916402,
       "tag": "0030_the_proxy_residual_load",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1788004747555,
+      "tag": "0031_the_interchange_utilisation_proxy",
+      "breakpoints": true
     }
   ]
 }

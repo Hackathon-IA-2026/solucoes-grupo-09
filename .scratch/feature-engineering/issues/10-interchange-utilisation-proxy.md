@@ -49,7 +49,7 @@ estimate could appear.
 **Blocked by:** 05 — lagged actuals, for `actuals_cutoff`. 07 — DESSEM, for the
 implied net export that the augmented set's utilisation ratio divides.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] `export_capability_estimate(corridor, gate)` is a P99.5 of directed flow over the trailing 365 days ending at `actuals_cutoff(gate)`
 - [ ] Fewer than 300 non-null hours in the trailing year yields NULL rather than a denominator
