@@ -2,7 +2,7 @@ import { describe, expect, it, test } from "bun:test";
 import { Elysia, t } from "elysia";
 import { bodyLimit } from "../src/api/plugins/body-limit.js";
 import { errorHandler, fieldPath, validationFailure } from "../src/api/plugins/errors.js";
-import { rateLimit } from "../src/api/plugins/rate-limit.js";
+import { rateLimit, tiersFrom } from "../src/api/plugins/rate-limit.js";
 import { requestContext } from "../src/api/plugins/request-context.js";
 import {
   CodedError,
@@ -153,7 +153,17 @@ describe("the error envelope · the shapes that used to escape it", () => {
   it("answers a 429 in the envelope and still sets Retry-After", async () => {
     const app = new Elysia()
       .use(requestContext)
-      .use(rateLimit({ max: 1, windowMs: 60_000, counts: () => true }))
+      .use(
+        rateLimit({
+          tiers: tiersFrom({
+            readMax: 1,
+            windowMs: 60_000,
+            solveMax: 1,
+            solveBurst: 1,
+          }),
+          classify: () => "read",
+        }),
+      )
       .use(errorHandler)
       .get("/boom", () => "ok");
     const hit = () =>

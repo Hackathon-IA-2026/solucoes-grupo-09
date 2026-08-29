@@ -38,13 +38,44 @@ export const config = {
 
   // --- resilience / resource control ---
   /**
-   * Per-client requests allowed per window on the metered surface. Bounds
-   * request *rate* so an anonymous client can't monopolise the API.
-   * 0 disables the limiter.
+   * Read tier: per-client requests allowed per window on the cheap surface.
+   * Almost every hit is a shared-cache hit, so this is generous by design.
+   * 0 disables the tier's budget.
    */
-  rateLimitMax: int(process.env.WATTSTEER_RATE_LIMIT, 60, 0, 100_000),
-  /** Rate-limit window length (ms). */
+  rateLimitMax: int(process.env.WATTSTEER_RATE_LIMIT, 120, 0, 100_000),
+  /** Rate-limit window length (ms) — the window both tiers quote their rate over. */
   rateLimitWindowMs: int(process.env.WATTSTEER_RATE_WINDOW_MS, 60_000, 1000, 3_600_000),
+  /**
+   * Solve tier: sustained requests per window against the MILP and the replay.
+   * A public branch-and-bound solver is not a free compute service.
+   */
+  rateLimitSolveMax: int(process.env.WATTSTEER_RATE_LIMIT_SOLVE, 30, 0, 100_000),
+  /**
+   * Solve tier burst: how many solves may arrive back to back before the
+   * sustained rate takes over. `flex-optimizer.md` asks for "30/min burst 10",
+   * which is a token bucket and not a window — moving a slider fires several
+   * requests in a second and must not be throttled for it.
+   */
+  rateLimitSolveBurst: int(process.env.WATTSTEER_RATE_LIMIT_SOLVE_BURST, 10, 1, 10_000),
+  /**
+   * How many proxies sit in front of this process.
+   *
+   * The client a budget is charged to is the `n`-th `X-Forwarded-For` hop from
+   * the end, because everything to its left was written by whoever was talking.
+   * 1 is right behind a single load balancer (Railway, a CDN); 0 ignores the
+   * header entirely and is right when the port is directly exposed. Getting
+   * this too high hands an attacker a fresh budget per forged hop.
+   */
+  trustedProxyDepth: int(process.env.WATTSTEER_TRUSTED_PROXY_DEPTH, 1, 0, 16),
+  /**
+   * Global language-model calls per Brasília civil day for the narration.
+   *
+   * Not an IP limit: the real volume is ~16 distinct narrations a day and
+   * everything else is a cache hit, so what needs a budget is the *call*, not
+   * the request. Beyond the cap the endpoint serves the template narration and
+   * says so, rather than refusing. 0 disables the cap.
+   */
+  narrationDailyCap: int(process.env.WATTSTEER_NARRATION_DAILY_CAP, 200, 0, 1_000_000),
 
   // --- jobs ---
   /**
