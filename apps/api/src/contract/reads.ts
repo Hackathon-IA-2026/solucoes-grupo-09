@@ -827,7 +827,7 @@ export interface TrainingWindowQuery extends FactReadQuery {
   subsystem?: SubsystemCode;
   technology?: Technology;
   centroidIds?: readonly string[];
-  /** The forecast gate, applied to the day-ahead balance. See above. */
+  /** The forecast gate, applied to both forecast reads — day-ahead and weather. */
   publishedAtOrBefore?: Date;
   /**
    * Fleet date for the capacity weights. Defaults to the window start, which is

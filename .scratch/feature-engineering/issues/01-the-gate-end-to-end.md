@@ -63,7 +63,7 @@ timestamp in the first place.
 that `apps/ml` reads directly on its read-only role. Nothing here re-specifies
 that work; this ticket is its first consumer.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] `gate_at(target_date, gate_profile)` exists as a SQL function, both profiles resolve in `America/Sao_Paulo`, and the builder asserts the window carries no DST transition
 - [ ] `feature_rows(...)` exists with the signature above, at (`Subsystem`, `valid_time`) grain, hourly, UTC, start-labelled

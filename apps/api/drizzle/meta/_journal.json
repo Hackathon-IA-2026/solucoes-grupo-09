@@ -106,6 +106,20 @@
       "when": 1787976469206,
       "tag": "0014_rapid_callisto",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1787978500645,
+      "tag": "0015_wise_nightshade",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1787978560645,
+      "tag": "0016_the_feature_gate",
+      "breakpoints": true
     }
   ]
 }
