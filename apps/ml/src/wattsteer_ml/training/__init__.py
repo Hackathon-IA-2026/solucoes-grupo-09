@@ -122,13 +122,16 @@ from wattsteer_ml.training.ensemble import (
     randomised_pit,
 )
 from wattsteer_ml.training.hurdle import (
+    HourEstimates,
     HourForecast,
     TrainedFold,
     TrainingError,
+    compose_estimates,
     day_grain_rows,
     expected_mwh_for_block,
     fit_sub_threshold_means,
     forecast_rows,
+    partition_rows,
     train_fold,
 )
 from wattsteer_ml.training.hyperparameters import (
@@ -185,6 +188,7 @@ __all__ = [
     "FeatureColumn",
     "FeatureContract",
     "FeatureContractError",
+    "HourEstimates",
     "HourForecast",
     "HurdleBundle",
     "IsotonicCalibrator",
@@ -211,6 +215,7 @@ __all__ = [
     "TrainingError",
     "UnknownModelConfigError",
     "calibrate",
+    "compose_estimates",
     "conformal_rank",
     "conformalise",
     "day_grain_rows",
@@ -231,6 +236,7 @@ __all__ = [
     "model_config",
     "new_artifact_id",
     "outside_calibration_window",
+    "partition_rows",
     "pit_column",
     "randomised_pit",
     "read_feature_function_definition",

@@ -210,7 +210,7 @@ def train_fold(
         The bundle, the card and the counts behind them.
     """
     stamp = RowStamp.of(rows)
-    base_fit_rows, calibration_rows, test_rows = _partition(rows, blocks)
+    base_fit_rows, calibration_rows, test_rows = partition_rows(rows, blocks)
     if not base_fit_rows:
         raise TrainingError(
             f"{fold.id}: the base-fit block {blocks.base_fit_start.isoformat()}–"
@@ -515,28 +515,101 @@ def _compose_block(
     q90 = _predict(magnitude_p90, matrix)
     mean = _predict(magnitude_mean, matrix)
     share = np.clip(_predict(wind_share, matrix), 0.0, 1.0)
+    return compose_estimates(
+        block.keys,
+        [
+            HourEstimates(
+                occurrence_probability=probability[index],
+                q10=float(q10[index]),
+                q50=float(q50[index]),
+                q90=float(q90[index]),
+                positive_mean_mwh=float(mean[index]),
+                wind_share=float(share[index]),
+            )
+            for index in range(len(block.keys))
+        ],
+        sub_threshold_means=sub_threshold_means,
+        threshold_mw=threshold_mw,
+        correction=correction,
+    )
+
+
+@dataclass(frozen=True)
+class HourEstimates:
+    """One row's estimated quantities, as scalars, before anything inverts them.
+
+    The seam between *what estimated the six numbers* and *how a band is built
+    from them*. Serving fills it from the bundle's boosters;
+    :mod:`wattsteer_ml.evaluation.ladder` fills it from a base rate, a
+    seven-day feature, a logistic regression or a forest — and every one of
+    those reaches the product's band through :func:`compose_estimates` and so
+    through :func:`wattsteer_ml.mixture.compose`, which is called in this module
+    and in no other. The baseline ladder compares models; it must not also
+    compare compositions.
+    """
+
+    #: ``p(x)``. Calibrated where the rung has a calibrator, raw where it does
+    #: not — which the metrics row records rather than hides.
+    occurrence_probability: float
+    #: The three magnitude knots, **as estimated**, crossing and all. They are
+    #: floored at zero here and sorted nowhere: the crossing is the measured
+    #: ``crossing_rate`` and :class:`~wattsteer_ml.mixture.QuantileBand` is
+    #: where the sort happens, after composition.
+    q10: float
+    q50: float
+    q90: float
+    #: ``Ê[Y | Y > τ, x]``, floored at zero. The mixture moves it into
+    #: ``F_pos``'s support; that is not this type's business.
+    positive_mean_mwh: float
+    #: ``ŝ(x)``. ``None`` where a rung fits no share model, in which case the
+    #: composed forecast carries no technology split at all rather than a
+    #: fabricated one.
+    wind_share: float | None = None
+
+
+def compose_estimates(
+    keys: Sequence[RowKey],
+    estimates: Sequence[HourEstimates],
+    *,
+    sub_threshold_means: SubThresholdMeans,
+    threshold_mw: float,
+    correction: ConformalCorrection | None = None,
+) -> tuple[HourForecast, ...]:
+    """Compose a band per row from loose scalars. **The only composition.**
+
+    Every route from an estimate to a served interval passes through here, which
+    is what lets the baseline ladder score a base rate and LightGBM with the
+    same arithmetic. ``strict=True`` on the zip: a key without an estimate is a
+    band composed against another hour's row.
+
+    The two clamps are type-level rather than corrective — the knots and the
+    conditional mean are floored at zero because MWh are non-negative and
+    :class:`~wattsteer_ml.mixture.MagnitudeQuantiles` refuses a negative knot.
+    The floor **into** ``F_pos``'s support is the mixture's own and is applied
+    there.
+    """
     floor = 0.0
     forecasts: list[HourForecast] = []
-    for index, key in enumerate(block.keys):
+    for key, estimate in zip(keys, estimates, strict=True):
         quantiles = MagnitudeQuantiles.from_boosters(
-            q10=max(floor, float(q10[index])),
-            q50=max(floor, float(q50[index])),
-            q90=max(floor, float(q90[index])),
+            q10=max(floor, estimate.q10),
+            q50=max(floor, estimate.q50),
+            q90=max(floor, estimate.q90),
         )
         forecasts.append(
             HourForecast(
                 key=key,
                 forecast=compose(
-                    occurrence_probability=probability[index],
+                    occurrence_probability=estimate.occurrence_probability,
                     positive_quantiles=(
                         quantiles if correction is None else correction.apply(quantiles)
                     ),
-                    positive_mean_mwh=max(floor, float(mean[index])),
+                    positive_mean_mwh=max(floor, estimate.positive_mean_mwh),
                     sub_threshold_mean_mwh=sub_threshold_means.mean_for(
                         key.subsystem, key.local_hour
                     ),
                     threshold_mw=threshold_mw,
-                    wind_share=float(share[index]),
+                    wind_share=estimate.wind_share,
                 ),
             )
         )
@@ -809,10 +882,16 @@ def fit_sub_threshold_means(block: FeatureBlock) -> SubThresholdMeans:
     )
 
 
-def _partition(
+def partition_rows(
     rows: Sequence[Mapping[str, Any]], blocks: FoldBlocks
 ) -> tuple[list[Mapping[str, Any]], list[Mapping[str, Any]], list[Mapping[str, Any]]]:
-    """Split rows into the three blocks. No date arithmetic beyond comparison."""
+    """Split rows into the three blocks. No date arithmetic beyond comparison.
+
+    Public because the baseline ladder splits the *same* rows by the *same*
+    boundaries before it fits a rung, and two functions that partition a fold
+    are two chances for the ladder's base fit and the served model's to differ
+    by a day.
+    """
     base_fit: list[Mapping[str, Any]] = []
     calibration: list[Mapping[str, Any]] = []
     test: list[Mapping[str, Any]] = []
