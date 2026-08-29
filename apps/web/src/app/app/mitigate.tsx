@@ -71,7 +71,7 @@ export default function MitigateScreen() {
   const copy = useCopy();
   const f = useFormat();
   const params = useAppParams();
-  const forecast = buildForecast(params.subsystem, params.technology, params.run);
+  const forecast = buildForecast(params.subsystem, params.run);
   const meta = subsystemMeta(params.subsystem);
 
   const [battery, setBattery] = useState<BatteryAsset>(DEFAULT_BATTERY);
@@ -102,7 +102,6 @@ export default function MitigateScreen() {
           title={copy.app.mitigate.title}
           lede={fill(copy.app.mitigate.lede, {
             subsystem: meta.onsDisplayName,
-            technology: copy.app.technology[params.technology].toLowerCase(),
             date: f.date(params.date),
           })}
           right={

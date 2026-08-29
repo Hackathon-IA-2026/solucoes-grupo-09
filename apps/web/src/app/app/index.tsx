@@ -9,6 +9,7 @@ import {
   LayoutDashboardIcon,
   Panel,
   PanelHeader,
+  PieChartIcon,
   space,
   usePalette,
 } from "@wattsteer/ui";
@@ -22,6 +23,7 @@ import { sharedParams, useAppParams } from "@/components/app/use-app-params";
 import { BandCard } from "@/components/charts/band-figure";
 import { FanChart } from "@/components/charts/fan-chart";
 import { RiskCaveat } from "@/components/charts/risk-class";
+import { TechnologySplitPanel } from "@/components/charts/technology-split";
 import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
 import { buildAllForecasts, buildForecast, subsystemMeta } from "@/lib/fixtures";
@@ -31,8 +33,11 @@ export default function GridOverviewScreen() {
   const copy = useCopy();
   const f = useFormat();
   const params = useAppParams();
-  const all = buildAllForecasts(params.technology, params.run);
-  const selected = buildForecast(params.subsystem, params.technology, params.run);
+  // One forecast per subsystem-day. The technology selection does not reach
+  // either call: there is no per-technology forecast to build, so it can only
+  // choose which scalar the split panel below emphasises.
+  const all = buildAllForecasts(params.run);
+  const selected = buildForecast(params.subsystem, params.run);
   const meta = subsystemMeta(params.subsystem);
 
   // One scale across all four rows, so "wider" and "bigger" mean what they look
@@ -69,6 +74,7 @@ export default function GridOverviewScreen() {
             <SubsystemRow
               key={forecast.subsystem}
               forecast={forecast}
+              emphasis={params.technology}
               domainMax={domainMax}
               selected={forecast.subsystem === params.subsystem}
               onPress={() =>
@@ -86,7 +92,7 @@ export default function GridOverviewScreen() {
           <Panel>
             <PanelHeader
               icon={<LayoutDashboardIcon size={18} color={colors.inkMuted} />}
-              title={`${meta.onsDisplayName} · ${copy.app.technology[params.technology]}`}
+              title={meta.onsDisplayName}
               subtitle={copy.app.overview.profileSubtitle}
             />
             <View style={{ marginTop: space.lg }}>
@@ -95,8 +101,25 @@ export default function GridOverviewScreen() {
           </Panel>
         </FadeIn>
 
+        <FadeIn delay={140}>
+          <Panel>
+            <PanelHeader
+              icon={<PieChartIcon size={18} color={colors.inkMuted} />}
+              title={copy.app.split.title}
+              subtitle={copy.app.split.subtitle}
+            />
+            <View style={{ marginTop: space.lg }}>
+              <TechnologySplitPanel
+                split={selected.split}
+                expectedMwh={selected.dayExpectedMwh}
+                emphasis={params.technology}
+              />
+            </View>
+          </Panel>
+        </FadeIn>
+
         <FadeIn
-          delay={140}
+          delay={210}
           style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}
         >
           <BandCard

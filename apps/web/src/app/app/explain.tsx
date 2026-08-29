@@ -43,7 +43,7 @@ export default function ExplainScreen() {
   const copy = useCopy();
   const f = useFormat();
   const params = useAppParams();
-  const forecast = buildForecast(params.subsystem, params.technology, params.run);
+  const forecast = buildForecast(params.subsystem, params.run);
   const explain = buildExplain(params.subsystem, params.technology);
   const meta = subsystemMeta(params.subsystem);
 

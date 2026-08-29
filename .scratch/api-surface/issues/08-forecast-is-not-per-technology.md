@@ -45,7 +45,7 @@ never per-technology in any defensible sense.
 **forecaster**'s to produce; this ticket reshapes the client contract and the
 fixtures, which can happen first.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The forecast shape carries no technology and is one object per subsystem-day
 - [ ] The day band and the peak-power band are read from the day-grain figures, never reduced from the hours

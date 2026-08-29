@@ -2,11 +2,17 @@ import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { SUBSYSTEM_CODES } from "../src/constants.js";
-import type { Band as DomainBand, SubsystemCode, Technology } from "../src/domain.js";
-import { TECHNOLOGIES } from "../src/domain.js";
+import type {
+  Band as DomainBand,
+  TechnologySplit as DomainSplit,
+  SubsystemCode,
+  Technology,
+} from "../src/domain.js";
+import { splitFor, splitOther, TECHNOLOGIES } from "../src/domain.js";
 import { readSchemas } from "../src/schema.js";
 import type {
   Band as WireBand,
+  TechnologySplit as WireSplit,
   Subsystem as WireSubsystem,
   Technology as WireTechnology,
 } from "../src/types.generated.js";
@@ -53,6 +59,25 @@ describe("the wire's nouns and the domain's nouns are the same nouns", () => {
     // @ts-expect-error — case-sensitively: `wind` is a 422, not a synonym.
     const lower: WireTechnology = "wind";
     expect(TECHNOLOGIES).not.toContain(lower as Technology);
+  });
+
+  test("a wire TechnologySplit is a domain TechnologySplit and back", () => {
+    const wire: WireSplit = { windMwh: 1200, solarMwh: 340 };
+    const domain: DomainSplit = wire;
+    const backAgain: WireSplit = domain;
+    expect(backAgain).toEqual(wire);
+    expect(splitFor(domain, "WIND")).toBe(1200);
+    expect(splitFor(domain, "SOLAR")).toBe(340);
+    expect(splitOther(domain, "WIND")).toBe(340);
+  });
+
+  test("neither side of the split has anywhere to put a quantile", () => {
+    // The type-level half of `vocabulary-rules.test.ts`'s schema assertion: a
+    // split is two scalars, so a client cannot carry a band through it even by
+    // accident, and no chart can be handed one to draw.
+    // @ts-expect-error — there is no per-technology band to publish.
+    const banded: DomainSplit = { windMwh: { p10: 1, p50: 2, p90: 3 }, solarMwh: 0 };
+    expect(typeof (banded as unknown as { windMwh: unknown }).windMwh).toBe("object");
   });
 });
 

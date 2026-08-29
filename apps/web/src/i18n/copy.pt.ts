@@ -497,6 +497,8 @@ export const pt: Copy = {
       hint: "Toque em uma hora para ler o intervalo",
       hourLabel: "Hora",
       exceedance: "P(acima do limiar)",
+      expected: "Esperada E[Y]",
+      splitReadout: "{wind} eólica · {solar} solar",
       hourFigure: "Hora {hour}: P50 {p50} MWh, P10 a P90 {p10} a {p90}",
     },
 
@@ -551,13 +553,24 @@ export const pt: Copy = {
       rowEnergy: "Energia cortada esperada",
       rowPeak: "pico {low}–{high} MW",
       profileSubtitle: "Perfil de 24 horas, P10–P90",
-      dailyEnergy: "Energia cortada esperada, dia inteiro",
+      dailyEnergy: "Energia cortada, dia inteiro",
       dailyEnergyNote:
-        "O total do dia é uma previsão conjunta. Não é a soma das P90 horárias — quantis não somam.",
+        "O total do dia é uma previsão conjunta lida do ensemble de trajetórias. Não é a soma das P90 horárias nem a soma das P50 — nenhum quantil soma, medianas incluídas.",
       peakPower: "Pico de potência horária",
-      peakPowerNote: "Hora da maior P50. Limiar em vigor: {mw} MW no grão de subsistema.",
+      peakPowerNote:
+        "A maior hora dentro de um dia sorteado, no mesmo ensemble. Limiar em vigor: {mw} MW no grão de subsistema.",
       grainNote:
         "O grão da previsão é o subsistema. O curtailment observado é publicado por entidade de reporte — um conjunto, na maior parte — e os motivos de restrição só existem lá; veja Explicar.",
+    },
+
+    split: {
+      title: "Eólica e solar",
+      subtitle: "Dois escalares, sem faixa",
+      expected: "Energia cortada esperada, dia inteiro",
+      expectedNote:
+        "E[Y], publicada ao lado da faixa e não dentro dela. Não é o meio do intervalo: com massa parada em “nenhum corte”, a expectativa fica acima da mediana, e num dia calmo a mediana é zero cravado enquanto a expectativa não é.",
+      note: "O previsor tem uma cabeça por subsistema, então eólica e solar são uma divisão dessa expectativa e nada além disso. Não existe faixa eólica nem faixa solar para desenhar, e é por isso que escolher uma tecnologia ali em cima destaca um destes dois números em vez de filtrar a previsão.",
+      emphasised: "em destaque",
     },
 
     explain: {
@@ -595,7 +608,7 @@ export const pt: Copy = {
     mitigate: {
       metaTitle: "Mitigar — WattSteer",
       title: "O que dá para fazer?",
-      lede: "{subsystem} {technology}, {date}. Armazenamento e demanda flexível dimensionados contra a previsão do dia seguinte.",
+      lede: "{subsystem}, {date}. Armazenamento e demanda flexível dimensionados contra a previsão do dia seguinte.",
       basisTitle: "Planejar contra",
       basisMedian: "a previsão mediana (P50)",
       basisConservative: "uma previsão conservadora (P10)",

@@ -20,15 +20,28 @@ import { BandStrip } from "@/components/charts/band-figure";
 import { RiskChip } from "@/components/charts/risk-class";
 import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
-import { type SubsystemDayForecast, subsystemMeta } from "@/lib/fixtures";
+import {
+  type SubsystemDayForecast,
+  splitFor,
+  subsystemMeta,
+  type Technology,
+} from "@/lib/fixtures";
 
 export function SubsystemRow({
   forecast,
+  emphasis,
   domainMax,
   selected,
   onPress,
 }: {
   forecast: SubsystemDayForecast;
+  /**
+   * Which scalar of this row's split to name under the subsystem. The row used
+   * to print `forecast.technology`, which existed because the forecast itself
+   * was per-technology; it is not, so the selection names one half of the
+   * expectation instead of claiming to describe the whole row.
+   */
+  emphasis: Technology;
   domainMax: number;
   selected: boolean;
   onPress: () => void;
@@ -77,7 +90,7 @@ export function SubsystemRow({
             {meta.onsDisplayName}
           </Text>
           <Text style={{ fontSize: 11, color: colors.inkFaint }}>
-            {`${copy.app.technology[forecast.technology]} · ${meta.code}`}
+            {`${copy.app.technology[emphasis]} ${f.compact(splitFor(forecast.split, emphasis))} MWh · ${meta.code}`}
           </Text>
         </View>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
@@ -99,7 +112,14 @@ export function SubsystemRow({
               color: colors.ink,
             }}
           >
-            {`${f.compact(forecast.dailyEnergy.p50)} MWh`}
+            {/*
+              The **expectation**, not the median. The label says "expected"
+              and now means it: on a subsystem under an even chance to curtail
+              at all, the median is flatly zero, and a row headlined with it
+              reads as "nothing happening" for a day that carries real expected
+              energy. The strip underneath still shows where the median sits.
+            */}
+            {`${f.compact(forecast.dayExpectedMwh)} MWh`}
           </Text>
         </View>
         <BandStrip band={forecast.dailyEnergy} domainMax={domainMax} tone="accent" />
