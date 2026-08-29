@@ -233,6 +233,15 @@ export interface ReplayDay {
   observed: CurtailmentHourObservation[];
   /** What the D−1 run said, pinned to the vintage available at D−1. */
   forecast: CurtailmentHourForecast[];
+  /**
+   * The day total as a JOINT band — never the componentwise sum of `forecast`.
+   *
+   * Adding 24 hourly P90s assumes every hour lands at its 90th percentile at
+   * once, which describes a day far worse than a 90th-percentile day. The
+   * forecaster produces this from a path ensemble; the fixture reproduces the
+   * sub-additivity so the screens cannot learn the wrong habit.
+   */
+  forecastDayEnergy: Band;
   forecastOrigin: ForecastOrigin;
   /** What the reference scenario's dispatch would have absorbed. */
   recoveredMwh: number;

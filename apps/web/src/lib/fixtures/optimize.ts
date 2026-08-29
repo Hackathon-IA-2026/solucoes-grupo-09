@@ -186,11 +186,28 @@ export function evaluatePlan(
   plan: DispatchPlan,
   realisationMwh: number[],
   thresholdMw: number,
+  battery?: BatteryAsset,
 ): OptimizationResult {
   const n = realisationMwh.length;
   const dispatch: HourlyDispatch[] = [];
   let baseline = 0;
   let absorbedTotal = 0;
+
+  // The plan is made against a forecast; this evaluates it against a
+  // realisation that may be smaller. The execution rule is: charge the
+  // scheduled amount or what is actually curtailed, whichever is smaller.
+  //
+  // Reporting the *planned* state of charge alongside a clipped absorption
+  // would show a battery filling on energy it never received — the chart and
+  // the headline would disagree, and only the chart would be wrong. So the
+  // trajectory is recomputed from what execution actually did.
+  const capacity = battery ? Math.max(0, battery.energyCapacityMwh) : 0;
+  const eta = battery
+    ? Math.sqrt(Math.max(0.01, Math.min(1, battery.roundTripEfficiency)))
+    : 1;
+  let soc = battery
+    ? capacity * Math.max(0, Math.min(1, battery.initialStateOfCharge))
+    : 0;
 
   for (let t = 0; t < n; t++) {
     const offered = realisationMwh[t];
@@ -203,13 +220,27 @@ export function evaluatePlan(
     // No import from the grid: absorption is capped by what was curtailed.
     const absorbed = Math.max(0, Math.min(netDemandIncrease, offered));
     absorbedTotal += absorbed;
+
+    // Scale the demand-increasing legs by however much of the plan the hour
+    // could actually support. Both legs scale together, because the shortfall
+    // is in the energy available, not in one asset's willingness.
+    const executable =
+      netDemandIncrease > 0 ? Math.min(1, offered / netDemandIncrease) : 1;
+    const charge = plan.batteryChargeMw[t] * executable;
+    const shiftUp = plan.loadShiftUpMw[t] * executable;
+    const discharge = plan.batteryDischargeMw[t];
+
+    if (battery) {
+      soc = Math.max(0, Math.min(capacity, soc + charge * eta - discharge / eta));
+    }
+
     dispatch.push({
       hourLocal: t,
       offeredMwh: offered,
-      batteryChargeMw: plan.batteryChargeMw[t],
-      batteryDischargeMw: plan.batteryDischargeMw[t],
-      stateOfChargeMwh: plan.stateOfChargeMwh[t],
-      loadShiftUpMw: plan.loadShiftUpMw[t],
+      batteryChargeMw: charge,
+      batteryDischargeMw: discharge,
+      stateOfChargeMwh: battery ? soc : plan.stateOfChargeMwh[t],
+      loadShiftUpMw: shiftUp,
       loadShiftDownMw: plan.loadShiftDownMw[t],
       absorbedMwh: absorbed,
     });

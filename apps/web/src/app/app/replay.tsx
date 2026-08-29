@@ -49,18 +49,25 @@ export default function TimeMachineScreen() {
   const params = useAppParams();
   const day = replayDay(params.episode);
 
-  const actual = day.episode.totalMwh;
+  // The DAY total, not the episode total. An episode is the run of hours above
+  // `threshold_mw`, so using it as the denominator makes the headline
+  // "% avoided" move when the threshold moves — the reduction would look
+  // better simply for having drawn the episode more tightly.
+  const actual = day.observed.reduce((sum, h) => sum + h.constrainedOffMwh, 0);
   const remaining = actual - day.recoveredMwh;
   const avoidedShare = actual > 0 ? day.recoveredMwh / actual : null;
 
   // The forecast row is a band, because "what the model said at D−1" never was
   // a single number and drawing it as one beside a measured actual would be
   // exactly the dishonesty this screen exists to avoid.
-  const forecastBand = {
-    p10: day.forecast.reduce((acc, h) => acc + h.constrainedOff.p10, 0),
-    p50: day.forecast.reduce((acc, h) => acc + h.constrainedOff.p50, 0),
-    p90: day.forecast.reduce((acc, h) => acc + h.constrainedOff.p90, 0),
-  };
+  //
+  // It is a JOINT day band carried on the fixture, not the componentwise sum
+  // of the hourly ones. Quantiles are not additive: adding 24 P90s assumes
+  // every hour lands at its 90th percentile together, which describes a day
+  // far worse than a 90th-percentile day. This screen summed them until
+  // `docs/specs/replay.md` caught it; the forecaster emits a path ensemble
+  // precisely so the joint total exists.
+  const forecastBand = day.forecastDayEnergy;
 
   const rows: CompareRow[] = [
     {

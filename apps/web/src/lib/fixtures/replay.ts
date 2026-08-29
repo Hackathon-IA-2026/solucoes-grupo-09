@@ -15,6 +15,7 @@
  */
 
 import type {
+  Band,
   CurtailmentHourForecast,
   CurtailmentHourObservation,
   ReplayDay,
@@ -155,6 +156,9 @@ function buildDay(spec: DaySpec, index: number): ReplayDay {
     label: spec.label,
     observed,
     forecast,
+    // Joint, not componentwise: the same sub-additive factor `grid.ts` uses,
+    // so the two screens cannot disagree about what a day band means.
+    forecastDayEnergy: jointDayBand(forecast),
     forecastOrigin: {
       producer: "wattsteer",
       runLabel: "hurdle-v0.4 · weather 12Z",
@@ -169,6 +173,25 @@ function buildDay(spec: DaySpec, index: number): ReplayDay {
 }
 
 export const REPLAY_DAYS: ReplayDay[] = DAYS.map(buildDay);
+
+/**
+ * The day total as a joint band.
+ *
+ * Adding the hourly bounds would assume every hour lands at its bound
+ * together. The 0.62 factor is the same one `grid.ts` applies, kept identical
+ * on purpose: two fixtures that shrink the interval differently would teach
+ * the screens that a day band is whatever the file that built it decided.
+ */
+function jointDayBand(hours: CurtailmentHourForecast[]): Band {
+  const sumP50 = hours.reduce((acc, h) => acc + h.constrainedOff.p50, 0);
+  const sumP10 = hours.reduce((acc, h) => acc + h.constrainedOff.p10, 0);
+  const sumP90 = hours.reduce((acc, h) => acc + h.constrainedOff.p90, 0);
+  return {
+    p10: Math.round(sumP50 - (sumP50 - sumP10) * 0.62),
+    p50: Math.round(sumP50),
+    p90: Math.round(sumP50 + (sumP90 - sumP50) * 0.62),
+  };
+}
 
 export function replayDay(id: string): ReplayDay {
   return REPLAY_DAYS.find((d) => d.episode.id === id) ?? REPLAY_DAYS[0];

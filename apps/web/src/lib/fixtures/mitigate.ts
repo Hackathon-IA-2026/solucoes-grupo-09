@@ -27,12 +27,23 @@ export const DEFAULT_BATTERY: BatteryAsset = {
   initialStateOfCharge: 0.2,
 };
 
+/**
+ * The reference flexible load.
+ *
+ * `dailyEnergyMwh` implies a baseline of `dailyEnergyMwh / 24`, and a load
+ * cannot shed more than it was drawing — so `maxShiftMw` must not exceed it.
+ * This fixture previously paired 70 MW of shift with 1,200 MWh/day, i.e. a
+ * 50 MW baseline, which `docs/specs/flex-optimizer.md` rejects outright as
+ * SHIFT_EXCEEDS_BASELINE. The demonstration wants the 70 MW, so the baseline
+ * moves rather than the headline: 2,400 MWh/day is a 100 MW industrial load,
+ * which is the size of thing that has 70 MW to move in the first place.
+ */
 export const DEFAULT_LOAD: ShiftableLoadAsset = {
   assetType: "shiftable_load",
   label: "Flexible load",
   maxShiftMw: 70,
   shiftWindowHours: 3,
-  dailyEnergyMwh: 1200,
+  dailyEnergyMwh: 2400,
 };
 
 /** Editable ranges for the asset parameter steppers. */
@@ -53,10 +64,26 @@ function realisation(forecast: SubsystemDayForecast, key: keyof Band): number[] 
 function scoreAcrossBand(
   forecast: SubsystemDayForecast,
   plan: DispatchPlan,
+  battery: BatteryAsset,
 ): { remaining: Band; recovered: Band; avoidability: Band | null } {
-  const p10 = evaluatePlan(plan, realisation(forecast, "p10"), forecast.thresholdMw);
-  const p50 = evaluatePlan(plan, realisation(forecast, "p50"), forecast.thresholdMw);
-  const p90 = evaluatePlan(plan, realisation(forecast, "p90"), forecast.thresholdMw);
+  const p10 = evaluatePlan(
+    plan,
+    realisation(forecast, "p10"),
+    forecast.thresholdMw,
+    battery,
+  );
+  const p50 = evaluatePlan(
+    plan,
+    realisation(forecast, "p50"),
+    forecast.thresholdMw,
+    battery,
+  );
+  const p90 = evaluatePlan(
+    plan,
+    realisation(forecast, "p90"),
+    forecast.thresholdMw,
+    battery,
+  );
   const avoidable =
     p10.avoidability !== null && p50.avoidability !== null && p90.avoidability !== null;
   return {
@@ -120,8 +147,13 @@ export function buildMitigationSteps(input: MitigateInput): MitigationStep[] {
   ];
 
   return steps.map(({ key, label, plan }) => {
-    const scored = scoreAcrossBand(forecast, plan);
-    const onP50 = evaluatePlan(plan, realisation(forecast, "p50"), forecast.thresholdMw);
+    const scored = scoreAcrossBand(forecast, plan, battery);
+    const onP50 = evaluatePlan(
+      plan,
+      realisation(forecast, "p50"),
+      forecast.thresholdMw,
+      battery,
+    );
     return {
       key,
       label,

@@ -174,3 +174,60 @@ describe("URL params", () => {
     expect(parseAppParams({ technology: "SOLAR" }).technology).toBe("WIND");
   });
 });
+
+describe("defects the specs found in this prototype", () => {
+  test("the replay day band is joint, never the sum of the hourly bands", () => {
+    // docs/specs/replay.md caught this screen adding 24 hourly P90s. That
+    // assumes every hour lands at its 90th percentile together, which is a far
+    // worse day than a 90th-percentile day.
+    for (const day of REPLAY_DAYS) {
+      const summed = day.forecast.reduce(
+        (acc, h) => ({
+          p10: acc.p10 + h.constrainedOff.p10,
+          p90: acc.p90 + h.constrainedOff.p90,
+        }),
+        { p10: 0, p90: 0 },
+      );
+      const joint = day.forecastDayEnergy;
+      expect(joint.p90).toBeLessThan(summed.p90);
+      expect(joint.p10).toBeGreaterThan(summed.p10);
+      expect(joint.p10).toBeLessThanOrEqual(joint.p50);
+      expect(joint.p50).toBeLessThanOrEqual(joint.p90);
+    }
+  });
+
+  test("the reference flexible load can actually shed what it claims", () => {
+    // flex-optimizer.md rejects max_shift_mw above the implied baseline as
+    // SHIFT_EXCEEDS_BASELINE — a load cannot shed more than it was drawing.
+    const baselineMw = DEFAULT_LOAD.dailyEnergyMwh / 24;
+    expect(DEFAULT_LOAD.maxShiftMw).toBeLessThanOrEqual(baselineMw);
+  });
+
+  test("a low realisation never fills the battery on energy it did not receive", () => {
+    // flex-optimizer.md found evaluatePlan clipping absorption but reporting
+    // the PLANNED state of charge, so the chart showed a battery charging on
+    // curtailment that never arrived.
+    const forecast = buildForecast("NE", "WIND", "12Z");
+    const plan = planDispatch({
+      offeredMwh: forecast.hours.map((h) => h.constrainedOff.p50),
+      battery: DEFAULT_BATTERY,
+      load: DEFAULT_LOAD,
+      thresholdMw: forecast.thresholdMw,
+    });
+    const onNothing = evaluatePlan(
+      plan,
+      forecast.hours.map(() => 0),
+      forecast.thresholdMw,
+      DEFAULT_BATTERY,
+    );
+    const start =
+      DEFAULT_BATTERY.energyCapacityMwh * DEFAULT_BATTERY.initialStateOfCharge;
+    // With nothing curtailed all day, the battery can only ever discharge.
+    for (const hour of onNothing.dispatch) {
+      expect(hour.batteryChargeMw).toBe(0);
+      expect(hour.stateOfChargeMwh).toBeLessThanOrEqual(start + 1e-9);
+    }
+    expect(onNothing.avoidedEnergyMwh).toBe(0);
+    expect(onNothing.avoidability).toBeNull();
+  });
+});
