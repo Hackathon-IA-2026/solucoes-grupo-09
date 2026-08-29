@@ -109,6 +109,42 @@ def exact_shapley(
     return tuple(phi)
 
 
+def shapley_operator(players: int) -> tuple[tuple[float, ...], ...]:
+    """The same game as :func:`exact_shapley`, written as the linear map it is.
+
+    ``φ = M · v``, with ``M`` of shape ``n × 2ⁿ``. Shapley values are linear in
+    the value function — the identity the whole day sum rests on — so a game
+    over a fixed player set *is* a matrix, and re-solving it for hundreds of
+    bootstrap redraws of the background is one matrix product instead of
+    hundreds of enumerations.
+
+    Coefficients, read straight off the definition: ``v(T)`` enters ``φ_j``
+    with ``+w(|T| − 1)`` when ``j ∈ T`` (it is the ``S ∪ {j}`` end of some
+    marginal contribution) and with ``−w(|T|)`` when ``j ∉ T``.
+
+    **This is not the published path.** :func:`exact_shapley` is the definition
+    and the only function whose output reaches a payload: it sums with
+    :func:`math.fsum`, which is what makes local accuracy assertable at the
+    arithmetic's own level. A caller that wants a *spread* over resampled value
+    functions does not need the last bit and cannot afford the enumeration, and
+    gets this instead. A test pins the two against each other.
+
+    Returns:
+        ``M`` as rows, one per player, in player order.
+    """
+    weights = coalition_weights(players)
+    subsets = coalition_count(players)
+    rows: list[tuple[float, ...]] = []
+    for player in range(players):
+        bit = 1 << player
+        row: list[float] = []
+        for mask in range(subsets):
+            size = _popcount(mask)
+            row.append(weights[size - 1] if mask & bit else -weights[size])
+        rows.append(tuple(row))
+    return tuple(rows)
+
+
 def local_accuracy_residual(
     phi: Sequence[float], coalition_values: Sequence[float], *, players: int
 ) -> float:

@@ -56,7 +56,7 @@ from __future__ import annotations
 import math
 import time
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 
 import numpy as np
@@ -73,6 +73,7 @@ from wattsteer_ml.diagnosis.shapley import (
     coalition_count,
     exact_shapley,
     local_accuracy_residual,
+    shapley_operator,
 )
 from wattsteer_ml.evaluation import RowKey
 
@@ -217,6 +218,16 @@ class HourAttribution:
     elapsed_seconds: float
     driver_group_version: str
     driver_group_hash: str
+    #: ``v(S)`` before it was averaged — one row per coalition, one column per
+    #: background row — retained only when the caller asked for it, and never on
+    #: the wire. :func:`resample_phi` is its only reader: a bootstrap over the
+    #: background is a re-weighting of *these* numbers, and redrawing the cell to
+    #: evaluate ``g`` again would spend 200× the model evaluations to arrive at
+    #: the same block. Excluded from equality and from ``repr`` because a
+    #: 32,768-entry array is neither a comparable value nor a readable one.
+    coalition_rows: npt.NDArray[np.float64] | None = field(
+        default=None, repr=False, compare=False
+    )
 
     def __post_init__(self) -> None:
         codes = tuple(one.code for one in self.contributions)
@@ -233,6 +244,14 @@ class HourAttribution:
                 f"g(x) − v(∅) is {movement}; a residual of "
                 f"{attributed - movement} is above the arithmetic's own "
                 f"{LOCAL_ACCURACY_TOLERANCE} × {scale}"
+            )
+        if self.coalition_rows is not None and self.coalition_rows.shape != (
+            self.coalitions,
+            self.background_rows,
+        ):
+            raise AttributionError(
+                f"the retained block is {self.coalition_rows.shape} and the game was "
+                f"{self.coalitions} coalitions over {self.background_rows} rows"
             )
 
     @property
@@ -321,6 +340,7 @@ def attribute_hour(
     background: MatchedBackground,
     expectation: ComposedExpectation,
     group_map: DriverGroupMap = DRIVER_GROUP_MAP,
+    retain_coalition_rows: bool = False,
 ) -> HourAttribution:
     """The eight contributions for one ``(subsystem, valid_time)``.
 
@@ -337,6 +357,10 @@ def attribute_hour(
         expectation: ``g``, evaluating the forecaster's composition over a block
             of rows.
         group_map: the eight players.
+        retain_coalition_rows: keep ``v(S)`` per background row on the result, so
+            a bootstrap over the background can re-weight the evaluations this
+            call already paid for. Off by default: the block is 32,768 floats
+            and only the day attribution has a use for it.
 
     Returns:
         Eight signed contributions in MWh, ranked by ``|share|``, with local
@@ -357,13 +381,14 @@ def attribute_hour(
 
     cell = background.cell_for(key)
     columns = group_columns(background.feature_names, group_map)
-    values = _coalition_values(
+    per_row = _coalition_rows(
         key=key,
         target_row=target_row,
         cell=cell,
         columns=columns,
         expectation=expectation,
     )
+    values = tuple(float(value) for value in per_row.mean(axis=1))
     phi = exact_shapley(values, players=len(DRIVER_GROUP_CODES))
     residual = local_accuracy_residual(phi, values, players=len(DRIVER_GROUP_CODES))
 
@@ -399,18 +424,99 @@ def attribute_hour(
         elapsed_seconds=time.perf_counter() - started,
         driver_group_version=str(group_map.version),
         driver_group_hash=group_map.driver_group_hash,
+        coalition_rows=per_row if retain_coalition_rows else None,
     )
 
 
-def _coalition_values(
+@dataclass(frozen=True)
+class HourResample:
+    """One hour's game, re-solved under redraws of its own background cell.
+
+    ``v(∅)`` and ``φ`` come from the **same** draws, because the spec's bootstrap
+    resamples the background once per replicate and recomputes both — a baseline
+    bootstrapped independently of the ranking would describe a day nobody could
+    have seen.
+    """
+
+    #: ``(resamples, players)`` — ``φ`` per replicate, in
+    #: :data:`~wattsteer_ml.diagnosis.driver_groups.DRIVER_GROUP_CODES` order.
+    phi_mwh: npt.NDArray[np.float64]
+    #: ``(resamples,)`` — ``v(∅)`` per replicate, in MWh.
+    baseline_expected_mwh: npt.NDArray[np.float64]
+
+
+def resample_hour(
+    attribution: HourAttribution,
+    *,
+    resamples: int,
+    generator: np.random.Generator,
+) -> HourResample:
+    """This hour's game under ``resamples`` redraws of its own background cell.
+
+    The bootstrap `docs/specs/diagnosis.md` asks for resamples ``B(s, h)`` **with
+    replacement** and recomputes the game. Redrawing the cell does not change
+    ``g``, and ``g`` has already been evaluated on every one of the
+    ``2ⁿ × |B|`` constructed rows, so a redraw is a re-weighting of
+    :attr:`HourAttribution.coalition_rows` — which is why the whole bootstrap
+    costs one matrix product rather than 200 × 32,768 model evaluations.
+
+    Two matrix products, in fact, and the second is the game itself:
+    :func:`~wattsteer_ml.diagnosis.shapley.shapley_operator` is
+    :func:`~wattsteer_ml.diagnosis.shapley.exact_shapley` written as the linear
+    map it is, so the 200 replicate games are solved at once. The published
+    ``φ`` is never one of these — it comes from ``exact_shapley`` and its
+    :func:`math.fsum`, and local accuracy is asserted against it. These are a
+    spread, and a spread does not need the last bit.
+
+    Args:
+        attribution: an hour attributed with ``retain_coalition_rows=True``.
+        resamples: ``B`` in the bootstrap, the spec's 200.
+        generator: seeded by the caller, so the standard error is reproducible
+            from the artifact and the day.
+
+    Returns:
+        ``φ`` and ``v(∅)`` per replicate, from the same draws.
+
+    Raises:
+        AttributionError: if the hour did not retain its block. A bootstrap that
+            silently returned zeros would publish "this ranking is certain".
+    """
+    if resamples <= 0:
+        raise AttributionError(f"a bootstrap is resamples, got {resamples!r}")
+    per_row = attribution.coalition_rows
+    if per_row is None:
+        raise AttributionError(
+            f"the attribution for {attribution.key.line!r} kept no coalition block; "
+            "a bootstrap over the background resamples the evaluations the "
+            "attribution already paid for and cannot be run after they are gone"
+        )
+    rows = per_row.shape[1]
+    draws = generator.integers(0, rows, size=(resamples, rows))
+    # One column per replicate, holding how many times each background row was
+    # drawn into it. ``v_b(S)`` is then the weighted mean the resample defines,
+    # and the whole bootstrap is `(2ⁿ × |B|) · (|B| × B)`.
+    counts = np.zeros((rows, resamples), dtype=np.float64)
+    for replicate in range(resamples):
+        counts[:, replicate] = np.bincount(draws[replicate], minlength=rows)
+    values = (per_row @ counts) / float(rows)
+    operator = np.asarray(shapley_operator(len(DRIVER_GROUP_CODES)), dtype=np.float64)
+    return HourResample(
+        phi_mwh=np.ascontiguousarray((operator @ values).T),
+        # ``v(∅)`` is coalition zero — the row where no group was replaced by the
+        # target's, which is what "a typical hour" means.
+        baseline_expected_mwh=np.ascontiguousarray(values[0]),
+    )
+
+
+def _coalition_rows(
     *,
     key: RowKey,
     target_row: npt.NDArray[np.float64],
     cell: BackgroundCell,
     columns: tuple[tuple[int, ...], ...],
     expectation: ComposedExpectation,
-) -> tuple[float, ...]:
-    """``v(S)`` for every ``S``, from one batched evaluation of ``g``.
+) -> npt.NDArray[np.float64]:
+    """``v(S)`` for every ``S``, per background row, from one batched call to ``g``.
 
     The 256 coalitions are materialised as one ``(256 · |B|) × k`` block and
     handed to ``g`` in a single call, because the cost of this attribution is
@@ -421,6 +527,10 @@ def _coalition_values(
     columns overwritten from the target — ``x[S] ⊕ b[S̄]``, in that order, so a
     column the coalition does not name is never touched and cannot be half
     replaced.
+
+    The means are taken by the caller. The block is returned unaveraged because
+    the bootstrap needs the rows the mean was taken over, and averaging here
+    would mean paying for the evaluations twice to get them back.
     """
     players = len(columns)
     subsets = coalition_count(players)
@@ -441,5 +551,4 @@ def _coalition_values(
         raise AttributionError(
             f"g returned {evaluated.shape} for {subsets * rows} rows of {width} columns"
         )
-    per_coalition = np.asarray(evaluated, dtype=np.float64).reshape(subsets, rows)
-    return tuple(float(value) for value in per_coalition.mean(axis=1))
+    return np.asarray(evaluated, dtype=np.float64).reshape(subsets, rows)
