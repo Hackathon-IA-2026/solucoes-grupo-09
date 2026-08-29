@@ -19,7 +19,7 @@ restores it, and the evidence of the bad promotion survives.
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Artifacts live in one directory per lane, and lanes are discovered rather
       than configured

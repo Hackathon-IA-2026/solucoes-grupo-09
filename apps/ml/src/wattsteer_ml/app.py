@@ -30,6 +30,7 @@ from . import __version__, artifacts
 from .config import settings
 from .constants import Subsystem
 from .database import database
+from .promotions import PROMOTION_LOG_FILENAME
 
 #: `Subsystem` comes from `constants.py`, which is bound to the TypeScript
 #: definition by a shared golden vector rather than by a comment. It is a
@@ -102,12 +103,55 @@ class Readiness(BaseModel):
     schema_present: bool | None = None
 
 
+class PromotionLogState(BaseModel):
+    """The decision log, as a fact separate from the artifacts it governs.
+
+    `decisions` counts refusals as well as promotions: a lane whose log holds
+    only refusals is a lane that has been looked at and found wanting, which is
+    not the same story as a volume nobody has written to.
+    """
+
+    path: str
+    decisions: int
+    #: Set when the log could not be read. While it is set, no lane on this
+    #: volume can say what it is allowed to serve, and serving raises rather
+    #: than falling back to the newest file.
+    error: str | None
+
+
+class LaneReport(BaseModel):
+    """One artifact lane, and which of the three states it is in."""
+
+    lane: str
+    feature_set: str
+    gate_profile: str
+    threshold_mw: float
+    #: `no_artifact` | `present_unpromoted` | `promoted` | `unresolvable`.
+    #: The gateway forwards the first three as `details.lane_state` on a
+    #: `MODEL_UNAVAILABLE`, which is how "no promoted artifact" reaches a screen
+    #: as its own sentence rather than as a spinner.
+    state: artifacts.LaneState
+    artifact_count: int
+    #: The artifact this lane serves. `None` is a decision — nothing has been
+    #: promoted — not a missing file.
+    promoted: str | None
+    #: The newest bundle *on disk*. Differs from `promoted` exactly when the
+    #: newest candidate was refused, which is the case the promotion log exists
+    #: to keep off the wire.
+    newest: str | None
+    fault: str | None
+
+
 class ArtifactState(BaseModel):
     path: str
     mounted: bool
     writable: bool
     count: int
-    current: str | None
+    lanes: list[LaneReport]
+    promotion_log: PromotionLogState
+    #: Entries on the mount that name no lane — a loose `.joblib` in the root,
+    #: a directory nobody can parse. Never served, always reported.
+    unrecognised: list[str]
 
 
 class Meta(BaseModel):
@@ -140,7 +184,13 @@ class ForecastStub(BaseModel):
     horizon_hours: int = Field(default=HORIZON_HOURS)
     status: Literal["not_implemented"]
     detail: str
-    #: Which artifact produced the numbers. `None` while there are none.
+    #: Which artifact produced the numbers. Always `None` here, and for a
+    #: sharper reason than "there is no model yet": an artifact is served *from
+    #: a lane*, and this stub takes no lane argument, so there is no lane whose
+    #: promotion log could name one. Ticket 14 gives the route its lane and
+    #: fills this in from `artifacts.current(lane)`; until then, naming the
+    #: newest file on the volume would be inventing a provenance — precisely
+    #: the newest-file rule the promotion log replaced.
     artifact: str | None
     hours: list[dict[str, float]]
     generated_at: datetime
@@ -200,8 +250,27 @@ def meta() -> Meta:
             path=str(store.path),
             mounted=store.mounted,
             writable=store.writable,
-            count=len(store.artifacts),
-            current=store.current,
+            count=store.artifact_count,
+            lanes=[
+                LaneReport(
+                    lane=view.lane.directory_name,
+                    feature_set=view.lane.feature_set,
+                    gate_profile=view.lane.gate_profile,
+                    threshold_mw=view.lane.threshold_mw,
+                    state=view.state,
+                    artifact_count=len(view.artifacts),
+                    promoted=view.promoted,
+                    newest=view.newest,
+                    fault=view.fault,
+                )
+                for view in store.lanes
+            ],
+            promotion_log=PromotionLogState(
+                path=str(store.path / PROMOTION_LOG_FILENAME),
+                decisions=len(store.log.records) if store.log is not None else 0,
+                error=store.log_error,
+            ),
+            unrecognised=list(store.unrecognised),
         ),
     )
 
@@ -230,7 +299,7 @@ def day_ahead(
             "its shape so the gateway proxy can be wired and tested; it will "
             "never return invented numbers."
         ),
-        artifact=artifacts.inspect().current,
+        artifact=None,
         hours=[],
         generated_at=now,
     )

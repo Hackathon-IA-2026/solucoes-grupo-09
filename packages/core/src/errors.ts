@@ -263,10 +263,20 @@ export const NO_FORECAST_STATES = [
 export type NoForecastState = (typeof NO_FORECAST_STATES)[number]["state"];
 
 /**
- * `details.lane_state` on a `MODEL_UNAVAILABLE`: which of the forecaster's
- * three artifact states holds. (The third, `promoted`, is not a refusal.)
+ * `details.lane_state` on a `MODEL_UNAVAILABLE`: which of the forecaster's lane
+ * states holds when there is nothing to serve.
+ *
+ * The forecaster has four (`apps/ml/src/wattsteer_ml/artifacts.py`). `promoted`
+ * is absent here because it is not an absence — a lane with a promoted artifact
+ * has something to serve and never reaches this envelope. The other three are
+ * all reasons a request found nothing, and each is a different sentence:
+ * nothing on the volume, bundles present but none promoted (including the case
+ * where the log holds only refusals, whose reasons are readable), and a log
+ * that cannot be read at all. Collapsing the last into either of the first two
+ * would be guessing which of them holds while the volume is saying it cannot
+ * tell us — which is the failure the promotion log exists to prevent.
  */
-export const LANE_STATES = ["no_artifact", "present_unpromoted"] as const;
+export const LANE_STATES = ["no_artifact", "present_unpromoted", "unresolvable"] as const;
 export type LaneState = (typeof LANE_STATES)[number];
 
 /**

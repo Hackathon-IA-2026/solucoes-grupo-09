@@ -1188,6 +1188,19 @@ exists. The per-technology field is typed as a scalar, so a band cannot be
 returned there. Persisted `Forecast` rows round-trip through `AsOf` and return
 the same numbers the endpoint served.
 
+**A lane has four states, not three.** Beyond `no_artifact`,
+`present_unpromoted` and `promoted`, there is `unresolvable`: the promotion log
+is truncated, unreadable, or names an artifact that is no longer on the volume.
+Folding it into one of the other three would mean guessing which of them holds
+at the exact moment the volume is telling us it cannot say — and the promotion
+log exists to stop that guess being made. `present_unpromoted` also covers the
+case where the log holds only *refusals*, whose reasons stay readable, which is
+why it is a recorded decision rather than an absent file.
+
+`packages/core`'s `LANE_STATES` carries three of the four. `promoted` is absent
+there deliberately: it is not an absence, so it never reaches a
+`MODEL_UNAVAILABLE` envelope.
+
 **Seam 11 — live, scheduled.** The weekly retrain runs end to end against real
 Postgres, produces a card, reaches a decision, and appends exactly one line.
 Wall-clock and peak memory are recorded so a retrain that starts to outgrow the

@@ -71,8 +71,12 @@ describe("the four 'no forecast' states", () => {
     expect(stale[0]?.status).toBe(200);
   });
 
-  it("names the two lane states MODEL_UNAVAILABLE distinguishes", () => {
-    expect(LANE_STATES).toEqual(["no_artifact", "present_unpromoted"]);
+  it("names the lane states MODEL_UNAVAILABLE distinguishes, and not `promoted`", () => {
+    expect(LANE_STATES).toEqual(["no_artifact", "present_unpromoted", "unresolvable"]);
+    // The forecaster has a fourth, `promoted`. It is deliberately absent: a lane
+    // with a promoted artifact has something to serve and never reaches this
+    // envelope. These three are all reasons a request found nothing.
+    expect(LANE_STATES).not.toContain("promoted");
   });
 });
 
