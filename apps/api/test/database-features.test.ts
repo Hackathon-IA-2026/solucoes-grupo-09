@@ -9,6 +9,8 @@ import {
   FEATURE_ROW_COLUMNS,
   type FeatureRow,
   isFeatureColumn,
+  loadCalendar,
+  loadCalendarArtifact,
   readFeatureRows,
   readServingRows,
 } from "../src/features/index.js";
@@ -271,6 +273,44 @@ suite("the gate, end to end (real Postgres)", () => {
         changeKey: `features-test|${Date.now()}`,
       })
       .returning({ id: onsResourceVersion.id });
+
+    // Ticket 03's inputs, seeded here on purpose rather than left empty.
+    //
+    // The two seams below are generic — they compare every column and every
+    // non-label column — but a column that is NULL in every row passes them
+    // without being tested. So the calendar, the registry's state assignment
+    // and a frozen solar centroid are all present, and the class-`T` features
+    // carry real values through both. A suite that truncates `plant` or
+    // `centroid_set` may have run before this one, which is why these are
+    // written rather than assumed.
+    await loadCalendar(db, loadCalendarArtifact());
+    await db.execute(sql`
+      insert into centroid_set (
+        version, source, geometry_digest, centroid_count, represented_mw,
+        registry_as_of, fleet_on, freeze_located_mw, freeze_plants, collision_check
+      ) values (
+        'centroid_set_v1', 'hand_transcribed', 'sha256:features-test', 1, 1000,
+        now(), now(), 1000, 1, 'asserted'
+      ) on conflict (version) do nothing
+    `);
+    await db.execute(sql`
+      insert into centroid_point (
+        set_version, centroid_id, label, latitude, longitude, technology,
+        represented_mw, origin, municipalities, plants, merged_from
+      ) values (
+        'centroid_set_v1', 'FE01_SOLAR', 'Solar', -9, -40, 'SOLAR', 1000,
+        'hand_transcribed', '', 1, ''
+      ) on conflict do nothing
+    `);
+    await db.execute(sql`
+      insert into plant (
+        ceg_core, ceg_raw, name, subsystem, state_code, technology,
+        operation_modality, owner_name, operator_name
+      ) values
+        ('FE01_BA', 'FE01_BA', 'Bahia', 'NE', 'BA', 'WIND', 'TIPO_I', 'o', 'o'),
+        ('FE01_SP', 'FE01_SP', 'Sao Paulo', 'SE', 'SP', 'SOLAR', 'TIPO_I', 'o', 'o')
+      on conflict (ceg_core) do nothing
+    `);
 
     await upsertReportingEntities(db, [
       {

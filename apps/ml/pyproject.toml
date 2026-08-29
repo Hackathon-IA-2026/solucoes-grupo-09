@@ -15,6 +15,7 @@ dependencies = [
   # release shipping SCIP >= 8.0.3, the Apache-2.0 relicense — earlier SCIPs
   # were academic-use-only. See `docs/research/optimizer-formulation.md` §6.
   "ortools>=9.7",
+  "holidays==0.103",
 ]
 
 [project.scripts]
@@ -97,6 +98,14 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = ["yaml"]
 ignore_missing_imports = true
+
+# `holidays` ships typed modules but re-exports `Brazil` through
+# `holidays.countries` implicitly, which strict mode refuses to follow. The
+# narrow override buys that one import rather than relaxing reexport rules
+# everywhere; `calendar_generator.py` is the only module that imports it.
+[[tool.mypy.overrides]]
+module = ["holidays.*"]
+no_implicit_reexport = false
 
 # OR-Tools ships `pywraplp.pyi` but no `py.typed` marker, so strict mode will
 # not read it. Same narrow override, same reason: one untyped dependency should

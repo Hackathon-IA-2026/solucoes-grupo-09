@@ -529,3 +529,72 @@ export const canonicalReadGoLive = pgView("canonical_read_go_live", {
   union all
   select 'conjunto-membership', min(ingested_at) from conjunto_membership
 `);
+
+/**
+ * Which states a subsystem is made of — **ONS's electrical assignment**, not a
+ * map of Brazil.
+ *
+ * The denominator of `calendar_holiday_state_share`. It is derived from
+ * `plant.subsystem` × `plant.state_code`, which is ONS's own pairing of a plant
+ * to a subsystem and to a federal unit, because the alternative — a geographic
+ * state→subsystem table — is wrong on the cases that matter: twelve VRE units
+ * in Bahia are assigned to `SE` in the live file, and any geography would place
+ * them in `NE` (`schema.ts`, `plant.subsystem`). A subsystem is an electrical
+ * region and its state list has to come from the same source that says so.
+ *
+ * **Read without a vintage axis, exactly as `canonical_installed_capacity`
+ * reads `plant`.** The registry is a slowly changing dimension WattSteer
+ * overwrites rather than versions, so this read is revision-optimistic in the same
+ * sense the capacity features are, and for the same reason. What it costs is
+ * bounded: a new state entering a subsystem changes a denominator of 5–10 by
+ * one, and that is a knowably small restatement rather than a silent one.
+ */
+export const canonicalSubsystemState = pgView("canonical_subsystem_state", {
+  subsystem: subsystemCode().notNull(),
+  /** ONS `id_estado` — the two-letter UF, the key the calendar is stored under. */
+  uf: text().notNull(),
+  /** How many registry plants carry the pair. Provenance, never a weight. */
+  plants: integer().notNull(),
+}).as(sql`
+  select subsystem, state_code as uf, count(*)::int as plants
+  from plant
+  group by subsystem, state_code
+`);
+
+/**
+ * The solar-capacity-weighted centroid of a frozen centroid set — one point per
+ * set, and the point the solar geometry is computed at.
+ *
+ * **Frozen, and that is the requirement rather than a convenience.** Solar
+ * zenith at hour *t* is a fact about a place; if the place moved with the fleet
+ * the cosine for a past hour would change every time a plant was commissioned,
+ * silently restating a class-`T` feature that is supposed to be recomputable
+ * from the calendar alone. `centroid_point.represented_mw` is the freeze-time
+ * solar capacity behind each point, so the weighted mean of the points under one
+ * set version is itself frozen with the set — and a set that moves is already a
+ * new feature-set version and a retrain.
+ *
+ * No axis: a centroid set is immutable once written (`centroid_set.version` is
+ * the key and `geometry_digest` refuses a restatement), so there is no vintage
+ * to choose between. This is the second view without one, and for a stronger
+ * reason than `canonical_read_go_live`'s.
+ */
+export const canonicalSolarCentroid = pgView("canonical_solar_centroid", {
+  setVersion: text().notNull(),
+  /** Degrees north, capacity-weighted. */
+  latitude: doublePrecision(),
+  /** Degrees east, capacity-weighted. */
+  longitude: doublePrecision(),
+  representedMw: doublePrecision(),
+  centroids: integer().notNull(),
+}).as(sql`
+  select
+    set_version,
+    sum(latitude * represented_mw) / nullif(sum(represented_mw), 0) as latitude,
+    sum(longitude * represented_mw) / nullif(sum(represented_mw), 0) as longitude,
+    sum(represented_mw) as represented_mw,
+    count(*)::int as centroids
+  from centroid_point
+  where technology = 'SOLAR'
+  group by set_version
+`);

@@ -44,6 +44,30 @@ The R$/MWh rate is why the module exists. It used to live in `apps/web`, which
 made it "the single place it is written down" for one of the two languages that
 quote it, and the optimizer that needs it is this one.
 
+## The holiday calendar generator
+
+`src/wattsteer_ml/calendar_generator.py` produces
+`packages/core/fixtures/calendar/br_calendar_v1.json` from the **pinned**
+`holidays==0.103`, and it is the only place in the product that knows when
+Carnival is.
+
+```bash
+uv run python -m wattsteer_ml.calendar_generator   # rewrite the artifact
+```
+
+It runs **offline, once per version**, because
+`docs/specs/feature-engineering.md` puts the calendar in a table rather than in
+a call at feature time: Carnival is a moveable feast, and a library upgrade that
+moved it by a day would restate three years of training features with no
+migration, no diff and no failing test while the deployed model kept scoring
+against the old ones. `tests/test_calendar_generator.py` asserts the artifact is
+byte-for-byte what the pinned library produces, so bumping the pin without
+regenerating fails the build — and a regeneration whose diff touches a past date
+is a retrain trigger and a new calendar version.
+
+`apps/api` loads the artifact (`bun run src/scripts/load-calendar.ts`) and
+refuses to write a changed one over an existing version.
+
 ## The driver group map
 
 `src/wattsteer_ml/diagnosis/driver_groups.yaml` is the vocabulary the Explain

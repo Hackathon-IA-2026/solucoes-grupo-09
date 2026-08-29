@@ -44,15 +44,15 @@ is why it lands here rather than there.
 
 **Blocked by:** 01 — the gate, end to end.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Local hour, its sin/cos encoding, day-of-year sin/cos, day of week and weekend flag are computed in `America/Sao_Paulo` from the UTC `valid_time`
-- [ ] A calendar day table is materialised by a generator with a pinned version, holding date, UF, holiday name and category, including moveable feasts
-- [ ] Regenerating at the pinned version reproduces the stored table exactly, and a non-empty diff over past dates is documented as a retrain trigger
-- [ ] National holidays are a binary; regional holidays enter as the subsystem's observing-state share, labelled a proxy and explicitly unweighted by load
-- [ ] Day-before-holiday and bridge-day features are derived from the same table
-- [ ] `month` and `week_of_year` are absent, and the reason is recorded
-- [ ] Solar zenith cosine and extraterrestrial horizontal irradiance are computed in SQL at the solar-capacity-weighted centroid
-- [ ] The builder asserts exactly 24 distinct local hours per target date and fails loudly otherwise
-- [ ] Fixture tests cover the cyclical encodings at hour 23→0, day-of-year 365→1 and across a leap year, and pin known holidays across several years
-- [ ] Seams 1 and 2 still pass with these features present
+- [x] Local hour, its sin/cos encoding, day-of-year sin/cos, day of week and weekend flag are computed in `America/Sao_Paulo` from the UTC `valid_time`
+- [x] A calendar day table is materialised by a generator with a pinned version, holding date, UF, holiday name and category, including moveable feasts
+- [x] Regenerating at the pinned version reproduces the stored table exactly, and a non-empty diff over past dates is documented as a retrain trigger
+- [x] National holidays are a binary; regional holidays enter as the subsystem's observing-state share, labelled a proxy and explicitly unweighted by load
+- [x] Day-before-holiday and bridge-day features are derived from the same table
+- [x] `month` and `week_of_year` are absent, and the reason is recorded
+- [x] Solar zenith cosine and extraterrestrial horizontal irradiance are computed in SQL at the solar-capacity-weighted centroid
+- [x] The builder asserts exactly 24 distinct local hours per target date and fails loudly otherwise
+- [x] Fixture tests cover the cyclical encodings at hour 23→0, day-of-year 365→1 and across a leap year, and pin known holidays across several years
+- [x] Seams 1 and 2 still pass with these features present

@@ -85,6 +85,41 @@ export interface FeatureRow {
   capacity_wind_added_28d_mw: number | null;
   /** As above, `SOLAR`. Day grain. */
   capacity_solar_added_28d_mw: number | null;
+
+  // Class `T` — deterministic. Appended after the labels because
+  // `ALTER TYPE ... ADD ATTRIBUTE` appends, and the composite type is the
+  // authority on the order. See `drizzle/0019_calendar_and_astronomy.sql`.
+  //
+  // `month` and `week_of_year` are deliberately absent: a coarser quantisation
+  // of the same axis as `calendar_doy_sin/cos`, adding split points without
+  // information. Their absence is a decision recorded in the spec's rejected
+  // list, not an oversight to be helpfully repaired.
+
+  /** Local hour 0–23 in `America/Sao_Paulo`. Categorical. */
+  calendar_local_hour: number | null;
+  calendar_hour_sin: number | null;
+  calendar_hour_cos: number | null;
+  /** Period 365.25, so the encoding closes on itself across a leap year. */
+  calendar_doy_sin: number | null;
+  calendar_doy_cos: number | null;
+  /** 0 = Sunday, matching Postgres' `dow`. Categorical. */
+  calendar_day_of_week: number | null;
+  calendar_is_weekend: boolean | null;
+  /** Includes the moveable feasts. Null outside the loaded calendar's horizon. */
+  calendar_is_holiday_national: boolean | null;
+  /**
+   * Share of the subsystem's ONS-assigned states observing a *state* holiday.
+   *
+   * **A proxy, unweighted by load**, and shipped labelled as one: no per-state
+   * load exists in WattSteer's sources, so no honest weight does either.
+   */
+  calendar_holiday_state_share: number | null;
+  calendar_is_day_before_holiday: boolean | null;
+  calendar_is_bridge_day: boolean | null;
+  /** cos of the solar zenith at the frozen solar-capacity-weighted centroid. */
+  solar_zenith_cos: number | null;
+  /** Top-of-atmosphere horizontal irradiance, W/m². The clearness denominator. */
+  solar_extraterrestrial_ghi: number | null;
 }
 
 /**
@@ -117,6 +152,19 @@ export const FEATURE_ROW_COLUMNS: readonly (keyof FeatureRow)[] = [
   "capacity_solar_mw",
   "capacity_wind_added_28d_mw",
   "capacity_solar_added_28d_mw",
+  "calendar_local_hour",
+  "calendar_hour_sin",
+  "calendar_hour_cos",
+  "calendar_doy_sin",
+  "calendar_doy_cos",
+  "calendar_day_of_week",
+  "calendar_is_weekend",
+  "calendar_is_holiday_national",
+  "calendar_holiday_state_share",
+  "calendar_is_day_before_holiday",
+  "calendar_is_bridge_day",
+  "solar_zenith_cos",
+  "solar_extraterrestrial_ghi",
 ];
 
 /**

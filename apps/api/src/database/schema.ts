@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   bigint,
   check,
+  date,
   doublePrecision,
   index,
   integer,
@@ -1909,4 +1910,88 @@ export const centroidDriftCheck = pgTable(
     checkedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("centroid_drift_check_set").on(t.setVersion, t.checkedAt)],
+);
+
+// ---------------------------------------------------------------------------
+// The calendar — feature-engineering ticket 03.
+//
+// Appended as its own block so that two tickets landing at once cannot conflict
+// on this file.
+// ---------------------------------------------------------------------------
+
+/**
+ * `holidays`' own taxonomy, kept rather than collapsed.
+ *
+ * Carnival, Corpus Christi, Ash Wednesday and both Christmas/New-Year eves are
+ * `optional` in that library: not statutory nationwide, and observed anyway by
+ * enough of the country to move the load curve as much as any statutory day.
+ * `calendar_is_holiday_national` therefore counts both categories — but the
+ * distinction is stored, so a later refinement that wants to weight them
+ * differently is a query rather than a regeneration.
+ */
+export const calendarHolidayCategory = pgEnum("calendar_holiday_category", [
+  "public",
+  "optional",
+]);
+
+/**
+ * One generated calendar version, and the pinned library that produced it.
+ *
+ * **Immutable once written, and the schema is what makes that true**: the
+ * version is the primary key and `digest` is a digest of the days under it, so
+ * a regeneration that produced a different calendar cannot restate an existing
+ * version — it has to insert a new one. That is the whole argument of
+ * `docs/specs/feature-engineering.md` §"The holiday calendar — data, not a
+ * library call": a `holidays` upgrade that moves one moveable feast would
+ * otherwise silently restate three years of training features with no
+ * migration, no diff and no test failure.
+ *
+ * A regeneration whose diff touches only future dates extends the horizon. A
+ * non-empty diff over **past** dates is a retrain trigger, and lands as
+ * `br_calendar_v2` with a new feature-set version — never as an edit here.
+ */
+export const featureCalendarGeneration = pgTable("feature_calendar_generation", {
+  /** `br_calendar_v1`, `br_calendar_v2`, … Also the business key everywhere. */
+  version: text().primaryKey(),
+  /** The pin, spelled as the requirement that produces it: `holidays==0.103`. */
+  generator: text().notNull(),
+  /** Digest of the days under this version, in the artifact's own order. */
+  digest: text().notNull(),
+  /** Inclusive horizon. A day outside it reads NULL, never `false`. */
+  dayFrom: date({ mode: "string" }).notNull(),
+  dayTo: date({ mode: "string" }).notNull(),
+  dayCount: integer().notNull(),
+  loadedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * One `(day, uf, name, category)` holiday row — the materialised calendar.
+ *
+ * **`uf = 'BR'` is national; a two-letter UF is a holiday that state observes
+ * and the country does not.** The national days are not repeated under each
+ * state, which is what keeps `calendar_is_holiday_national` and
+ * `calendar_holiday_state_share` separate measurements rather than one
+ * measurement counted twice — the share reads 0 on Tiradentes rather than 1.
+ *
+ * A scope can carry two names on one day (Minas Gerais observes Tiradentes'
+ * execution alongside Tiradentes), so the name is part of the key.
+ */
+export const featureCalendarDay = pgTable(
+  "feature_calendar_day",
+  {
+    calendarVersion: text()
+      .notNull()
+      .references(() => featureCalendarGeneration.version),
+    /** The civil date in `America/Sao_Paulo`. A date, never an instant. */
+    day: date({ mode: "string" }).notNull(),
+    /** `BR` for national, otherwise the UF observing it. Municipal is out of scope. */
+    uf: text().notNull(),
+    /** `holidays`' own name, verbatim — provenance, never a join key. */
+    name: text().notNull(),
+    category: calendarHolidayCategory().notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.calendarVersion, t.day, t.uf, t.name] }),
+    index("feature_calendar_day_lookup").on(t.calendarVersion, t.day, t.uf),
+  ],
 );
