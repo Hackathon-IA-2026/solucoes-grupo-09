@@ -17,6 +17,9 @@ package owns is everything between a feature row and an artifact on the volume:
 - :mod:`~wattsteer_ml.training.ensemble` — the randomised PIT matrix fitted on
   the same window, and the 500 whole-day draws every figure above hour grain is
   a quantile of.
+- :mod:`~wattsteer_ml.training.national` — the national day: the four
+  subsystems' paths added draw by draw under the ensemble's shared row index,
+  and quantiles read off that. No copula, and no sum of quantiles anywhere.
 - :mod:`~wattsteer_ml.training.bundle` — the frozen bundle, the card, and a load
   that refuses a partial mixture.
 - :mod:`~wattsteer_ml.training.hurdle` — the fit, and the composition, which is
@@ -140,6 +143,16 @@ from wattsteer_ml.training.hyperparameters import (
     UnknownModelConfigError,
     model_config,
 )
+from wattsteer_ml.training.national import (
+    NATIONAL_DERIVATION,
+    NATIONAL_PRODUCER,
+    ForecastOrigin,
+    NationalDayGrain,
+    NationalError,
+    national_day_grain,
+    national_rows,
+    subsystem_day_expectations,
+)
 
 __all__ = [
     "COVERAGE_GUARDRAIL",
@@ -157,6 +170,8 @@ __all__ = [
     "MODEL_CONFIGS",
     "MODEL_CONFIG_V1",
     "MODEL_CONFIG_VERSION",
+    "NATIONAL_DERIVATION",
+    "NATIONAL_PRODUCER",
     "NOMINAL_MISCOVERAGE",
     "PIT_COLUMNS",
     "PIT_COLUMN_KEYS",
@@ -185,12 +200,15 @@ __all__ = [
     "FeatureColumn",
     "FeatureContract",
     "FeatureContractError",
+    "ForecastOrigin",
     "HourForecast",
     "HurdleBundle",
     "IsotonicCalibrator",
     "LoadedArtifact",
     "ModelCard",
     "ModelConfig",
+    "NationalDayGrain",
+    "NationalError",
     "OutOfFoldPool",
     "OutOfFoldPrediction",
     "PartialBundleError",
@@ -229,6 +247,8 @@ __all__ = [
     "load_artifact",
     "minimum_calibration_rows",
     "model_config",
+    "national_day_grain",
+    "national_rows",
     "new_artifact_id",
     "outside_calibration_window",
     "pit_column",
@@ -236,6 +256,7 @@ __all__ = [
     "read_feature_function_definition",
     "residuals",
     "save_artifact",
+    "subsystem_day_expectations",
     "train_fold",
     "upper_correction_fraction",
     "wilson_half_width",
