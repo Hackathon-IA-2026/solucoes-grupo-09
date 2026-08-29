@@ -12,7 +12,7 @@ labelled allocation — a product decision, not a storage one.
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Per-plant curtailment detail is ingested for both wind and solar
 - [ ] Measured wind speed and irradiance are stored with their invalid-data flags

@@ -18,7 +18,7 @@ numbers — so the model must be pinned explicitly on every request.
 **Blocked by:** 01. Also gated by **Feature engineering spec** for the variable list
 and the centroid set.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Weather is fetched from named runs, never from the stitched archive
 - [ ] An explicit model is pinned on every request
