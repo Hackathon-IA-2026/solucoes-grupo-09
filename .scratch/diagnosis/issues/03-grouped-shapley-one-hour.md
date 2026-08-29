@@ -67,7 +67,7 @@ That sample is one of exactly two additions this spec asks the forecaster for
 and it is a hand-back, not work to be done here. Until it lands, build against a
 seeded fixture background of the same shape.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Eight signed contributions in MWh are produced for one `(subsystem, valid_time)`
 - [ ] The attributed scalar is the composed expectation, evaluated through the forecaster's composition function rather than a local copy
