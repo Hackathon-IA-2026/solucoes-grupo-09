@@ -12,20 +12,24 @@ import {
   upper,
 } from "../src/components/landing/band";
 import {
+  FORECAST_ORIGIN,
   HOURLY_PROFILE,
   MITIGATION,
-  NATIONAL_ENERGY,
+  NATIONAL,
   SUBSYSTEMS,
 } from "../src/components/landing/fixtures";
+import { riskClass } from "../src/lib/fixtures";
 
 /**
  * The band type and the fixture's internal consistency.
  *
  * The fixture assertions are not busywork: the landing page states in copy
- * that subsystem medians sum to the national median and that the *bands* do
- * not, and both halves of that claim are easy to break by editing one number
- * later. These tests are what stop the page from telling a small lie about
- * its own arithmetic.
+ * that the national figure is an expectation *because* an expectation is the
+ * only quantity that survives aggregation, and that claim is easy to break by
+ * editing one number later. These tests are what stop the page from telling a
+ * small lie about its own arithmetic — the lie it told until the API spec
+ * caught it, which was a national median summed out of four subsystem
+ * medians.
  */
 
 describe("band", () => {
@@ -94,28 +98,54 @@ describe("formatting", () => {
 });
 
 describe("landing fixture", () => {
-  it("has subsystem medians that sum to the national median", () => {
-    const total = SUBSYSTEMS.reduce((sum, s) => sum + centre(s.energy), 0);
-    expect(total).toBe(centre(NATIONAL_ENERGY));
+  it("has subsystem expectations that sum exactly to the national one", () => {
+    // The whole reason the headline is an expectation: `E[·]` adds, with no
+    // assumption at all about how the four subsystems move together.
+    const total = SUBSYSTEMS.reduce((sum, s) => sum + s.expectedMwh, 0);
+    expect(total).toBeCloseTo(NATIONAL.expectedMwh, 6);
   });
 
-  it("does not let the subsystem bands sum to the national band", () => {
-    // Quantiles are not additive, and the page says so. If a future edit made
-    // these add up it would be arithmetically tidy and physically wrong.
-    const lows = SUBSYSTEMS.reduce(
-      (sum, s) => sum + (s.energy.kind === "band" ? s.energy.band.p10 : 0),
-      0,
-    );
-    const highs = SUBSYSTEMS.reduce(
-      (sum, s) => sum + (s.energy.kind === "band" ? s.energy.band.p90 : 0),
-      0,
-    );
-    expect(NATIONAL_ENERGY.kind).toBe("band");
-    if (NATIONAL_ENERGY.kind !== "band") {
-      return;
+  it("does not let the national figure be a componentwise sum of medians", () => {
+    // The defect this fixture was built to stop coming back. The median of a
+    // sum is the sum of the medians only for comonotone components, and four
+    // subsystems' curtailment is not comonotone — so a national figure equal
+    // to the sum of the four P50s is a number with no engine behind it.
+    const sumOfMedians = SUBSYSTEMS.reduce((sum, s) => sum + centre(s.energy), 0);
+    expect(sumOfMedians).toBe(4180);
+    expect(NATIONAL.expectedMwh).not.toBe(sumOfMedians);
+    // For a hurdle mixture E[Y] > P50 wherever p < 0.5, which is three of the
+    // four. An expectation *below* the summed medians would mean a subsystem
+    // expectation had been quietly set to a quantile.
+    expect(NATIONAL.expectedMwh).toBeGreaterThan(sumOfMedians);
+    for (const s of SUBSYSTEMS) {
+      expect(s.expectedMwh).toBeGreaterThan(centre(s.energy));
     }
-    expect(lows).not.toBe(NATIONAL_ENERGY.band.p10);
-    expect(highs).not.toBe(NATIONAL_ENERGY.band.p90);
+  });
+
+  it("publishes no national band, and says why", () => {
+    // Quantiles of a sum need a joint draw across subsystems, which the
+    // forecaster does not produce yet. Until it does, the honest value is
+    // null — and a null with no stated reason is unrepresentable in the type.
+    expect(NATIONAL.band).toBeNull();
+    expect(NATIONAL.bandUnavailableReason).toBe("no_joint_ensemble");
+  });
+
+  it("tallies the risk classes it publishes, and bins them the way the product does", () => {
+    const counts = { low: 0, elevated: 0, high: 0 };
+    for (const s of SUBSYSTEMS) {
+      expect(s.riskClass).toBe(riskClass(s.probability));
+      counts[s.riskClass] += 1;
+    }
+    expect(counts).toEqual(NATIONAL.riskClassCounts);
+    expect(counts.low + counts.elevated + counts.high).toBe(4);
+  });
+
+  it("names WattSteer as the producer of the forecast, not the weather provider", () => {
+    // `open_meteo` produces the weather run. The producer of a curtailment
+    // forecast is WattSteer, and the weather run is a second field because it
+    // is a second fact about a different artifact.
+    expect(FORECAST_ORIGIN.producer).toBe("wattsteer");
+    expect(FORECAST_ORIGIN.weatherRunLabel).toBe("D−1 12Z");
   });
 
   it("covers all 24 hours with ordered quantiles", () => {
@@ -127,9 +157,11 @@ describe("landing fixture", () => {
     });
   });
 
-  it("has hourly medians summing to the daily median", () => {
-    const total = HOURLY_PROFILE.reduce((sum, p) => sum + p.p50, 0);
-    expect(total).toBe(centre(NATIONAL_ENERGY));
+  it("has hourly expectations summing to the day, and hourly medians summing to nothing", () => {
+    const expected = HOURLY_PROFILE.reduce((sum, p) => sum + p.expectedMwh, 0);
+    expect(expected).toBeCloseTo(NATIONAL.expectedMwh, 6);
+    const medians = HOURLY_PROFILE.reduce((sum, p) => sum + p.p50, 0);
+    expect(medians).not.toBe(NATIONAL.expectedMwh);
   });
 
   it("shrinks curtailment monotonically as flexibility is added", () => {

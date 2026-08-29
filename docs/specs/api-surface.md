@@ -953,8 +953,15 @@ contract.
 
 ### The national readout, and the band that cannot be built
 
-The landing hero renders `NATIONAL_ENERGY = band(2640, 4180, 6320)` MWh over
-four subsystem bands whose P50s sum to 4180. The comment concedes that "nothing
+> **Fixed.** Product-fix 01 landed the change this section specifies: the hero
+> now renders `national.expected_mwh` with `band: null` and
+> `band_unavailable_reason: "no_joint_ensemble"`, and the null band is
+> unrepresentable without a stated reason. What follows is kept as the record of
+> what was found and why, and the joint-band upgrade it argues for is still owed
+> by forecaster ticket 08.
+
+The landing hero rendered `NATIONAL_ENERGY = band(2640, 4180, 6320)` MWh over
+four subsystem bands whose P50s summed to 4180. The comment concedes that "nothing
 else sums", which is the right instinct applied one notch too late: **medians do
 not add either.** The median of a sum is the sum of the medians only when the
 components are comonotone, and four subsystems' curtailment is not.

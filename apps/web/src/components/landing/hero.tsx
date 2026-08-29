@@ -15,16 +15,17 @@ import {
 } from "@wattsteer/ui";
 import { StyleSheet, Text, View } from "react-native";
 import { useCopy, useFormat, useI18n } from "@/i18n";
+import { fill } from "@/i18n/format";
 import { producerLabel } from "@/lib/domain";
 import { formatMwhExact, formatProbability, formatRange, upper } from "./band";
-import { BandFigure, BandRail, useRailLabel } from "./band-figure";
+import { BandFigure, BandRail, ExpectationFigure, useRailLabel } from "./band-figure";
 import { APP_HREF, CtaLink } from "./cta-link";
 import { FanChart, FanLegend } from "./fan-chart";
 import {
   FORECAST_DAY,
   FORECAST_ORIGIN,
   HOURLY_PROFILE,
-  NATIONAL_ENERGY,
+  NATIONAL,
   SUBSYSTEMS,
   type SubsystemOutlook,
 } from "./fixtures";
@@ -185,11 +186,28 @@ function Readout({ wide, subsystemMax }: { wide: boolean; subsystemMax: number }
 
         <View style={{ flexDirection: wide ? "row" : "column", gap: space.lg }}>
           <View style={{ flex: wide ? 1 : undefined, gap: space.md }}>
-            <BandFigure
-              label={copy.readout.nationalLabel}
-              figure={NATIONAL_ENERGY}
-              unit="MWh"
-            />
+            {/*
+              The national figure is an expectation while `band` is null, and a
+              band the day the forecaster draws a shared day-row index across
+              the four subsystems. Both cases are rendered because both are in
+              the contract: `national.band` is nullable on the wire, and the
+              null case carries the reason it is null.
+            */}
+            {NATIONAL.band === null ? (
+              <ExpectationFigure
+                label={copy.readout.nationalLabel}
+                value={NATIONAL.expectedMwh}
+                unit="MWh"
+                reason={NATIONAL.bandUnavailableReason}
+              />
+            ) : (
+              <BandFigure
+                label={copy.readout.nationalLabel}
+                figure={{ kind: "band", band: NATIONAL.band }}
+                unit="MWh"
+              />
+            )}
+            <RiskCounts />
             <Footnote>{copy.readout.nationalGrainNote}</Footnote>
           </View>
 
@@ -267,6 +285,11 @@ function Readout({ wide, subsystemMax }: { wide: boolean; subsystemMax: number }
  * `docs/domain-model.md` §4: every surface that shows a forecast must name
  * its `ForecastOrigin`. The run initialisation *is* the `published_at`, so
  * this one line carries both the provenance and the vintage.
+ *
+ * It names two artifacts, not one. The producer of this forecast is
+ * WattSteer and `run_label` is its artifact version; the weather run is a
+ * separate fact and is written out as one, because a line that shows only
+ * the weather run credits the forecast to the wrong party.
  */
 function OriginLine() {
   const copy = useCopy();
@@ -282,9 +305,37 @@ function OriginLine() {
     >
       <ZapIcon size={14} color={colors.inkFaint} />
       <Text style={{ fontSize: 12, color: colors.inkFaint }}>
-        {`${copy.readout.originLabel}: ${producerLabel[FORECAST_ORIGIN.producer]} · ${FORECAST_ORIGIN.runLabel} · published ${FORECAST_ORIGIN.publishedAt}`}
+        {`${copy.readout.originLabel}: ${fill(copy.readout.originValue, {
+          producer: producerLabel[FORECAST_ORIGIN.producer],
+          run: FORECAST_ORIGIN.runLabel,
+          published: FORECAST_ORIGIN.publishedAt,
+          weatherRun: FORECAST_ORIGIN.weatherRunLabel,
+        })}`}
       </Text>
     </View>
+  );
+}
+
+/**
+ * `risk_class_counts` — how many subsystems sit in each bin.
+ *
+ * It arrives beside the national expectation in the same response, and it is
+ * there for a reason: an expectation alone cannot say whether 4,580 MWh is
+ * one subsystem in trouble or four subsystems mildly exposed, which is the
+ * question a band was never answering either.
+ */
+function RiskCounts() {
+  const copy = useCopy();
+  const f = useFormat();
+  const colors = usePalette();
+  return (
+    <Text style={{ fontSize: 12, color: colors.inkMuted }}>
+      {fill(copy.readout.riskCounts, {
+        high: f.number(NATIONAL.riskClassCounts.high),
+        elevated: f.number(NATIONAL.riskClassCounts.elevated),
+        low: f.number(NATIONAL.riskClassCounts.low),
+      })}
+    </Text>
   );
 }
 

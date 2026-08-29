@@ -75,9 +75,10 @@ export const en = {
 
   readout: {
     title: "Tomorrow on the Brazilian grid",
-    nationalLabel: "Forecast constrained-off energy, all four subsystems",
+    nationalLabel: "Expected constrained-off energy, all four subsystems",
     nationalGrainNote:
-      "A national figure is the sum of the four subsystems. ONS publishes a SIN row; WattSteer never uses it, because it double-counts against the subsystem rows it sits beside.",
+      "The national figure is the sum of the four subsystems' expected energy, and that sum is exact — expectations add however the subsystems happen to move together. ONS publishes a SIN row; WattSteer never uses it, because it double-counts against the subsystem rows it sits beside.",
+    riskCounts: "Subsystems by risk: high {high} · elevated {elevated} · low {low}",
     sampleBadge: "Sample data",
     sampleNote:
       "Illustrative fixture. The live feed arrives with the forecasting service; nothing on this page is a real forecast yet.",
@@ -90,8 +91,9 @@ export const en = {
     profileCaption:
       "The shaded band is P10–P90; the line is P50. An hour counts as curtailed above the 5 MW subsystem threshold, which is stamped on every figure WattSteer publishes.",
     additivityNote:
-      "Subsystem bands do not sum to the national band, and the hourly bands do not sum to the daily one. Quantiles are not additive — only the P50 medians are shown adding up, and even that is a convention.",
+      "Nothing in this column sums to the figure beside it. Bands are not additive, and neither are medians: the P50 of a sum is the sum of the P50s only if the four subsystems move together, and they do not. The expected value is the one quantity that adds exactly, which is why the national figure is one.",
     originLabel: "Forecast origin",
+    originValue: "{producer} · {run} · published {published} · weather run {weatherRun}",
   },
 
   band: {
@@ -99,6 +101,14 @@ export const en = {
     medianLabel: "P50",
     observedLabel: "Observed",
     observedNote: "A measured value. No band, because there is no forecast.",
+    expectedLabel: "Expected value",
+    figureExpected:
+      "{label}: expected value {value} {unit}, published without a forecast band",
+    /** Keyed by `BandUnavailableReason` — a null band always states its reason. */
+    noBand: {
+      no_joint_ensemble:
+        "No band: the forecaster draws its 500-path ensemble one subsystem at a time, so there is no joint distribution to read a national P10–P90 off. Adding the four subsystems' quantiles would invent one. The expected value needs no such assumption.",
+    },
     explainerTitle: "Every number here has a width",
     explainerConfident: "A confident forecast",
     explainerUncertain: "A wide-open one",

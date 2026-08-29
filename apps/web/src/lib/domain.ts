@@ -44,12 +44,27 @@ export type VintageFidelity = "point_in_time" | "revision_optimistic";
  * surface that shows a forecast must name it.
  */
 export interface ForecastOrigin {
-  /** Identity, not copy. The display name is UI text — see `producerLabel`. */
+  /**
+   * Identity, not copy. The display name is UI text — see `producerLabel`.
+   *
+   * The producer of a *curtailment* forecast is `wattsteer`. `open_meteo` is
+   * the producer of the **weather** run that forecast consumed, which is a
+   * different fact about a different artifact — see `weatherRunLabel`.
+   */
   producer: ForecastProducer;
-  /** The run's own label, e.g. "D−1 12Z". */
+  /** The run's own label. For a `wattsteer` forecast, the artifact version. */
   runLabel: string;
   /** ISO instant — `published_at` in the domain model. */
   publishedAt: string;
+  /**
+   * The weather run the forecast was built on, e.g. "D−1 12Z".
+   *
+   * Two facts, two fields: `docs/specs/api-surface.md` carries
+   * `weather_run_label` beside the WattSteer origin rather than making a
+   * screen choose which of the two to call "the run". Optional, because an
+   * origin that is not a WattSteer forecast has no weather run to name.
+   */
+  weatherRunLabel?: string;
 }
 
 export type ForecastProducer = "open_meteo" | "ons_dessem" | "wattsteer";
@@ -84,6 +99,22 @@ export interface Band {
   /** 90th percentile. */
   p90: number;
 }
+
+/**
+ * Why a published figure has no band — an identity, never a sentence.
+ *
+ * The sentence lives in the dictionaries keyed by this code, exactly as the
+ * driver codes and the risk classes do, so a missing explanation is a compile
+ * error rather than a blank line under a number.
+ *
+ * One member today, and a union rather than a `string` on purpose: the
+ * national forecast has no band because the path ensemble is drawn per
+ * subsystem, and a quantile of a sum needs a joint draw
+ * (`docs/specs/api-surface.md`, "The national readout, and the band that
+ * cannot be built"). A second reason has to be written down in both locales
+ * before it can reach a screen.
+ */
+export type BandUnavailableReason = "no_joint_ensemble";
 
 /**
  * A number the UI is allowed to render — and the reason the band survives.
