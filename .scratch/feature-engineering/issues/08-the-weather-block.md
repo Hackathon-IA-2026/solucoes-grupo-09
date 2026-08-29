@@ -62,7 +62,7 @@ serve** rather than imputing.
 irradiance the clearness index divides by. 04 — for the installed capacity the
 expected-generation conversions scale.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The twelve variables are pinned and requested as a set; variables that are null under the pinned model are never requested
 - [ ] Every exclusion from the list carries its stated reason

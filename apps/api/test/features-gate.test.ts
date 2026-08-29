@@ -13,6 +13,7 @@ import {
   servingTargetDate,
 } from "../src/features/index.js";
 import { PROGRAMME_PUBLICATION_HOUR_BRT } from "../src/ingest/ons/load.js";
+import { CENTROID_SET_VERSION } from "../src/ingest/weather/centroids.js";
 
 /**
  * The claims that hold before a database is involved.
@@ -156,6 +157,21 @@ const ALLOWED_RELATIONS = new Set([
   "derived",
   "system_hour",
   "absorber",
+  // Ticket 08's CTEs: the class-`W` block reads the weight vectors once
+  // (`basis`), the run profile once (`points`) over a widened hour set
+  // (`profile_hours`), crosses the two into a spine that exists before the
+  // weather is joined (`hour_spine`), and then derives the weighted means
+  // (`aggregated`), the two conversions (`converted`) and the profile shapes
+  // (`shaped`, shared with the two blocks above) from that one read.
+  // `extraterrestrial` is the clearness index's denominator, read back through
+  // the block that owns it rather than recomputed here.
+  "basis",
+  "profile_hours",
+  "points",
+  "hour_spine",
+  "aggregated",
+  "converted",
+  "extraterrestrial",
 ]);
 
 const functionSegments = (): Map<string, string> => {
@@ -726,6 +742,122 @@ describe("DESSEM and the feature-set argument, structurally", () => {
   });
 });
 
+describe("the weather block, structurally", () => {
+  it("weights every variable, and never on the wrong fleet's vector", () => {
+    // The split is the block's whole reason to exist: NE wind is the Bahia
+    // interior and the RN/CE coast, more than half of SE solar is three
+    // municipality clusters in northern Minas Gerais, and one shared vector
+    // would put solar weight on wind's coast. Asserted per variable, because a
+    // basis is one identifier and getting one wrong is invisible in review.
+    const block = functionSegments().get("feature_weather_block") ?? "";
+    expect(block).not.toBe("");
+    for (const [variable, weight] of [
+      ["wind_speed100m_kmh", "wind_weight"],
+      ["wind_speed120m_kmh", "wind_weight"],
+      ["wind_direction120m_deg", "wind_weight"],
+      ["wind_gusts10m_kmh", "wind_weight"],
+      ["temperature2m_c", "vre_weight"],
+      ["surface_pressure_hpa", "vre_weight"],
+      ["relative_humidity2m_pct", "vre_weight"],
+      ["precipitation_mm", "vre_weight"],
+      ["shortwave_radiation_wm2", "solar_weight"],
+      ["direct_normal_irradiance_wm2", "solar_weight"],
+      ["diffuse_radiation_wm2", "solar_weight"],
+      ["cloud_cover_pct", "solar_weight"],
+    ] as const) {
+      const weighted = new RegExp(
+        `p\\.${variable}\\s*\\)*\\s*\\*\\s*basis\\.${weight}`,
+      ).test(block.replace(/\s+/g, " "));
+      expect({ variable, weight, weighted }).toEqual({
+        variable,
+        weight,
+        weighted: true,
+      });
+    }
+  });
+
+  it("renormalises over the reporters rather than dividing by the full mass", () => {
+    // A hole in the sample is not calm weather. Dividing by the full weight
+    // mass would pull every mean toward zero in proportion to the hole and
+    // produce a number that looks like weather; the size of the hole belongs on
+    // `weather_centroid_coverage`, which is the column the serve path refuses on.
+    const block = (functionSegments().get("feature_weather_block") ?? "").replace(
+      /\s+/g,
+      " ",
+    );
+    const denominators =
+      block.split(/nullif\(\s*sum\(basis\.\w+_weight\)\s*FILTER \(WHERE p\./).length - 1;
+    // Eleven scalar means and the power curve: every one renormalised.
+    expect(denominators).toBe(12);
+  });
+
+  it("reports coverage as weight mass and never as a count of centroids", () => {
+    // Losing a 426 MW point and losing a 4,172 MW point are the same fraction
+    // of points and are not remotely the same event.
+    const block = (functionSegments().get("feature_weather_block") ?? "").replace(
+      /\s+/g,
+      " ",
+    );
+    expect(block).toContain("sum(basis.vre_weight) FILTER (WHERE p.centroid_id IS NOT");
+    expect(block).not.toMatch(/count\(\s*p\.centroid_id\s*\)/);
+  });
+
+  it("writes the power curve's three parameters down at the feature", () => {
+    // Cut-in 3 m/s, rated 12 m/s, cut-out 25 m/s — the curve the lead-time
+    // research passes both sides of the train/serve comparison through, and a
+    // proxy rather than the Brazilian fleet's. A curve whose numbers live only
+    // in a comment is a curve nobody can check.
+    const curve = functionSegments().get("feature_wind_power_curve_cf") ?? "";
+    expect(curve).not.toBe("");
+    for (const parameter of ["3.0", "12.0", "25.0"]) {
+      expect(curve).toContain(parameter);
+    }
+    // Applied per centroid and then weighted, never to the weighted mean speed:
+    // the curve is nonlinear, so the two differ.
+    const block = (functionSegments().get("feature_weather_block") ?? "").replace(
+      /\s+/g,
+      " ",
+    );
+    expect(block).toContain(
+      "feature_wind_power_curve_cf(p.wind_speed120m_kmh / 3.6) * basis.wind_weight",
+    );
+  });
+
+  it("names one centroid set version, and the two copies of it agree", () => {
+    // "Whichever set happens to be loaded" is the silent restatement freezing
+    // the geometry exists to prevent, so the weight view reads `centroid_point`
+    // under a literal — the same shape as the calendar's `br_calendar_v1`, and
+    // the same hazard: a literal in two languages is a constant that can drift.
+    const views = readFileSync(
+      join(import.meta.dir, "../src/database/canonical-views.ts"),
+      "utf8",
+    );
+    expect(views).toContain(`'${CENTROID_SET_VERSION}'`);
+    const versions = new Set(
+      [...views.matchAll(/'(centroid_set_v\d+)'/g)].map((match) => match[1] as string),
+    );
+    expect([...versions]).toEqual([CENTROID_SET_VERSION]);
+  });
+
+  it("takes the fleet before the weather, so no read inherits the D−28 axes", () => {
+    // `feature_capacity_block` leaves the read axes at the D−28 fleet date,
+    // because the last thing it does is the second of its two as-of reads. The
+    // expected-generation denominator is therefore materialised first and
+    // `feature_apply_gate` is called afterwards. Reading the weather or the
+    // weights first would work today and would break silently the day someone
+    // reorders the CTEs in `feature_rows`.
+    const block = functionSegments().get("feature_weather_block") ?? "";
+    const fleet = block.indexOf("feature_capacity_block");
+    const gate = block.indexOf("PERFORM feature_apply_gate");
+    const weights = block.indexOf("canonical_capacity_weight");
+    const weather = block.indexOf("canonical_weather_forecast");
+    expect(fleet).toBeGreaterThan(-1);
+    expect(gate).toBeGreaterThan(fleet);
+    expect(weights).toBeGreaterThan(gate);
+    expect(weather).toBeGreaterThan(gate);
+  });
+});
+
 describe("the feature/label partition", () => {
   it("puts every column in exactly one of the three categories", () => {
     for (const column of FEATURE_ROW_COLUMNS) {
@@ -800,7 +932,43 @@ describe("the feature/label partition", () => {
       "dessem_solar_capacity_factor",
       "dessem_sin_residual_load_mwh",
       "dessem_absorber_residual_load_mwh",
+      "weather_wind_speed_100m",
+      "weather_wind_speed_120m",
+      "weather_wind_direction_120m_sin",
+      "weather_wind_direction_120m_cos",
+      "weather_wind_gusts_10m",
+      "weather_surface_pressure",
+      "weather_relative_humidity_2m",
+      "weather_precipitation",
+      "weather_shortwave_radiation",
+      "weather_direct_normal_irradiance",
+      "weather_diffuse_radiation",
+      "weather_cloud_cover",
+      "weather_clearness_index",
+      "weather_wind_power_curve_cf",
+      "weather_expected_wind_mwh",
+      "weather_expected_solar_mwh",
+      "weather_wind_speed_120m_ramp_1h",
+      "weather_shortwave_radiation_ramp_1h",
+      "weather_expected_vre_ramp_1h",
+      "weather_wind_speed_120m_mean_3h",
+      "weather_wind_speed_120m_std_6h",
+      "weather_shortwave_radiation_mean_3h",
+      "weather_run_age_hours",
+      "weather_centroid_coverage",
     ]);
+  });
+
+  it("keeps lead time out of the row, and the collinearity argument in it", () => {
+    // Within a fixed run cycle `weather_lead_hours` is perfectly collinear with
+    // `calendar_local_hour`: from a D−1 12Z run the lead is exactly
+    // `15 + local_hour`. Asserted rather than trusted, because "available and
+    // redundant" is the kind of decision a later session repairs helpfully.
+    for (const column of FEATURE_ROW_COLUMNS) {
+      expect(column).not.toBe("weather_lead_hours");
+    }
+    expect(RAW).toContain("weather_lead_hours");
+    expect(RAW).toContain("collinear");
   });
 
   it("treats an unheard-of column as a feature, not as an exception", () => {

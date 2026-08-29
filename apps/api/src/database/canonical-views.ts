@@ -814,3 +814,146 @@ export const canonicalPlantRegistry = pgView("canonical_plant_registry", {
   left join location l
     on l.plant_ceg_core = p.ceg_core and l.withdrawn_on is null
 `);
+
+/**
+ * `CapacityWeight(centroid, technology, t)` — the weight vector the class-`W`
+ * weather features are aggregated on, as a view.
+ *
+ * The other half of `canonical_solar_centroid`. That view answers "where is the
+ * solar fleet, once and forever" because a frozen point is what makes the solar
+ * geometry recomputable from the calendar alone. This one answers the question
+ * the geometry deliberately does not: **how much of each subsystem's fleet each
+ * frozen point speaks for, on a given day** — which moves, and has to.
+ *
+ * **Time-varying is settled by measurement, not by caution.**
+ * `docs/research/plant-registry.md` §5 measured 25.8% of today's curtailed-fleet
+ * MW as commissioned *after* the training window opens, fixed 2026-08 weights as
+ * misallocating 50.4% of the SE-solar weight mass at window start, and the SE
+ * solar capacity centroid as moving 94 km — more than seven Open-Meteo grid
+ * cells — between 2024-04 and 2026-08. A static vector would leak today's fleet
+ * composition into 2024's features and contaminate every backtest built on them.
+ *
+ * **Wind and solar carry separate vectors**, because the two fleets sit in
+ * different places: NE wind is the Bahia/Piauí interior and the RN/CE coast,
+ * while more than half of SE solar is three municipality clusters in northern
+ * Minas Gerais. One shared vector would put solar weight on wind's coast. The
+ * combined VRE basis the shared variables need is not a third row here — it is
+ * `capacity_mw` summed across the two technologies of a subsystem, which is the
+ * blend by installed capacity and nothing else.
+ *
+ * **Both axes, and they are not interchangeable.** The read is
+ * `canonical_plant_registry`, which is already the double as-of the weights
+ * need: `canonical_fleet_date()` decides which units existed, and
+ * `canonical_as_of()` decides what WattSteer had learned. A feature block writes
+ * both through `feature_apply_gate` and never picks either itself.
+ *
+ * **An unlocated plant is spread pro rata rather than dropped.**
+ * `location_source = 'unlocated'` is a real state — 1.72% of operating SIGA
+ * rows are at Null Island and lose their point — and a plant with no coordinate
+ * still generates. `weight` is its share of the scope's **located** mass, so the
+ * shape of the vector is untouched; `capacity_mw` is that share of the
+ * **placed** mass, so the megawatts still add up to `InstalledCapacityAsOf`.
+ * A scope with no located plant at all has no row: an even spread over the
+ * frozen points would be a fabricated location.
+ *
+ * **The grid-cell merge `capacity-weights.ts` performs has no work to do here.**
+ * That module folds two frozen points that snapped to one Open-Meteo cell into
+ * a single weight, because one cell entering a weighted mean twice is a silently
+ * doubled region. `centroid_point`'s `centroid_point_cell` unique index makes
+ * that state unrepresentable within a set, so on `centroid_set_v1` — nineteen
+ * points, all resolving to distinct cells as measured against `ecmwf_ifs` on
+ * 2026-08-28 — the two agree row for row. `database-features.test.ts` asserts
+ * that agreement against `computeCapacityWeights` rather than assuming it.
+ *
+ * The set version is a **literal**, exactly as `br_calendar_v1` is a literal in
+ * the calendar block: "whichever set happens to be loaded" is the silent
+ * restatement this design exists to prevent. Moving to `centroid_set_v2` is an
+ * edit to this file, a migration and a retrain — visible in a diff, which is
+ * the point. `ingest/weather/centroids.ts` holds the same string and
+ * `features-gate.test.ts` asserts the two agree.
+ */
+export const canonicalCapacityWeight = pgView("canonical_capacity_weight", {
+  /** The frozen geometry these weights are attached to. Weights outlive no set. */
+  setVersion: text().notNull(),
+  subsystem: subsystemCode().notNull(),
+  technology: technology().notNull(),
+  /** A point of the set — `W1`, `S5`. The business key of every weather row. */
+  centroidId: text().notNull(),
+  /** Share of the scope's **located** capacity. A scope's weights sum to 1. */
+  weight: doublePrecision().notNull(),
+  /** Placed MW behind that share — the located mass plus its pro-rata share. */
+  capacityMw: doublePrecision().notNull(),
+  /** Capacity-weighted mean plant-to-centroid distance, km. The drift metric. */
+  distanceKm: doublePrecision().notNull(),
+  /** `InstalledCapacityAsOf(subsystem, technology, fleet_date)` — placed or not. */
+  scopeCapacityMw: doublePrecision().notNull(),
+  /** The denominator `capacity_mw` is a share of. Never more than the scope's. */
+  scopePlacedMw: doublePrecision().notNull(),
+}).as(sql`
+  with fleet as (
+    select subsystem, technology, installed_capacity_mw, latitude, longitude
+    from canonical_plant_registry
+    where installed_capacity_mw > 0
+  ),
+  scope_totals as (
+    select
+      subsystem,
+      technology,
+      sum(installed_capacity_mw) as scope_capacity_mw,
+      coalesce(sum(installed_capacity_mw)
+                 filter (where latitude is not null), 0) as located_mw,
+      coalesce(sum(installed_capacity_mw)
+                 filter (where latitude is null), 0) as unlocated_mw
+    from fleet
+    group by subsystem, technology
+  ),
+  assigned as (
+    select
+      fleet.subsystem,
+      fleet.technology,
+      fleet.installed_capacity_mw,
+      nearest.centroid_id,
+      nearest.distance_km
+    from fleet
+    cross join lateral (
+      select
+        c.centroid_id,
+        2 * 6371.0088 * asin(least(1, sqrt(
+          sin(radians(c.latitude - fleet.latitude) / 2) ^ 2
+          + cos(radians(fleet.latitude)) * cos(radians(c.latitude))
+            * sin(radians(c.longitude - fleet.longitude) / 2) ^ 2))) as distance_km
+      from centroid_point c
+      where c.set_version = 'centroid_set_v1'
+        and c.technology = fleet.technology
+      order by distance_km
+      limit 1
+    ) nearest
+    where fleet.latitude is not null and fleet.longitude is not null
+  ),
+  by_centroid as (
+    select
+      subsystem,
+      technology,
+      centroid_id,
+      sum(installed_capacity_mw) as centroid_mw,
+      sum(distance_km * installed_capacity_mw) as distance_mw_km
+    from assigned
+    group by subsystem, technology, centroid_id
+  )
+  select
+    'centroid_set_v1' as set_version,
+    by_centroid.subsystem,
+    by_centroid.technology,
+    by_centroid.centroid_id,
+    by_centroid.centroid_mw / scope_totals.located_mw as weight,
+    (by_centroid.centroid_mw / scope_totals.located_mw)
+      * (scope_totals.located_mw + scope_totals.unlocated_mw) as capacity_mw,
+    by_centroid.distance_mw_km / by_centroid.centroid_mw as distance_km,
+    scope_totals.scope_capacity_mw,
+    scope_totals.located_mw + scope_totals.unlocated_mw as scope_placed_mw
+  from by_centroid
+  join scope_totals
+    on scope_totals.subsystem = by_centroid.subsystem
+   and scope_totals.technology = by_centroid.technology
+  where scope_totals.located_mw > 0
+`);
