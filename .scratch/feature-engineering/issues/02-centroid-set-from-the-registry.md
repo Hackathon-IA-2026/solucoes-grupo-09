@@ -44,7 +44,7 @@ while this lands.
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The centroid set is generated from the plant registry and SIGA coordinates by a script, and regenerating it reproduces the stored set exactly
 - [ ] Every point is derived, including the two that were never computed from municipality centroids
