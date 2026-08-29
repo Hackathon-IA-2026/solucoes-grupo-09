@@ -176,6 +176,13 @@
       "when": 1787995180663,
       "tag": "0024_day_ahead_programming",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1787998349708,
+      "tag": "0025_curtailment_entity_label_and_episodes",
+      "breakpoints": true
     }
   ]
 }

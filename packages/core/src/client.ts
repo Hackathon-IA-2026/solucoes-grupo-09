@@ -35,11 +35,14 @@ import {
   isErrorCode,
 } from "./errors.js";
 import type {
+  CurtailmentEpisodes,
+  CurtailmentHours,
   DiagnosisDayAhead,
   ForecastDayAhead,
   GridNow,
   GridOutlook,
   Meta,
+  ObservedReasons,
   OptimizationResult,
   Scenario,
 } from "./types.generated.js";
@@ -294,6 +297,97 @@ export class ApiClient {
    * would never exercise: an inverse built by hand is where a cache key stops
    * matching.
    */
+  /**
+   * `GET /v1/curtailment/hours` — the observed series, and therefore honest
+   * with no promoted artifact.
+   *
+   * `cursor` continues a paged range and is opaque: it is the server's page
+   * boundary, not an argument a caller composes. The range is capped at 400
+   * days and a longer one is refused rather than truncated.
+   */
+  curtailmentHours(
+    query: {
+      subsystem: string;
+      from: string;
+      to: string;
+      technology?: string;
+      asOf?: string;
+      cursor?: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<CurtailmentHours> {
+    return this.request<CurtailmentHours>("CurtailmentHours", "/v1/curtailment/hours", {
+      query: {
+        subsystem: query.subsystem,
+        from: query.from,
+        to: query.to,
+        technology: query.technology,
+        as_of: query.asOf,
+        cursor: query.cursor,
+      },
+      signal,
+    });
+  }
+
+  /**
+   * `GET /v1/curtailment/episodes` — the read-time view.
+   *
+   * The threshold and the gap tolerance are optional here and stamped on the
+   * answer either way, which is the point: a screen renders the episodes beside
+   * the parameters that produced them rather than beside the ones it meant.
+   */
+  curtailmentEpisodes(
+    query: {
+      subsystem: string;
+      from: string;
+      to: string;
+      technology?: string;
+      thresholdMw?: number;
+      maxGapHours?: number;
+      asOf?: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<CurtailmentEpisodes> {
+    return this.request<CurtailmentEpisodes>(
+      "CurtailmentEpisodes",
+      "/v1/curtailment/episodes",
+      {
+        query: {
+          subsystem: query.subsystem,
+          from: query.from,
+          to: query.to,
+          technology: query.technology,
+          threshold_mw: query.thresholdMw,
+          max_gap_hours: query.maxGapHours,
+          as_of: query.asOf,
+        },
+        signal,
+      },
+    );
+  }
+
+  /**
+   * `GET /v1/curtailment/reasons` — observed causes at reporting-entity grain.
+   *
+   * There is no `plant` parameter, deliberately: a plant's reason derived from
+   * its conjunto's is an allocation, and v1 computes none. Every row says which
+   * grain it was observed at.
+   */
+  observedReasons(
+    query: { subsystem: string; date: string; limit?: number; asOf?: string },
+    signal?: AbortSignal,
+  ): Promise<ObservedReasons> {
+    return this.request<ObservedReasons>("ObservedReasons", "/v1/curtailment/reasons", {
+      query: {
+        subsystem: query.subsystem,
+        date: query.date,
+        limit: query.limit,
+        as_of: query.asOf,
+      },
+      signal,
+    });
+  }
+
   optimize(scenario: Scenario, signal?: AbortSignal): Promise<OptimizationResult> {
     return this.request<OptimizationResult>("OptimizationResult", "/v1/optimize", {
       method: "POST",

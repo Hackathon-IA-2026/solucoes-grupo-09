@@ -93,6 +93,10 @@ const rowVintage = {
  * join is safe: `reporting_entity_code` is a foreign key, so it neither drops
  * nor duplicates a row.
  *
+ * **`reporting_entity_name` comes from the same join**, and is what a reason
+ * row is labelled with: `GET /v1/curtailment/reasons` returns an `entity_label`
+ * on every row, and a code is not a name.
+ *
  * **`subsystem` comes from the same join**, and for the same class of reason.
  * The label the day-ahead model is trained on is defined at (`Subsystem`,
  * `valid_time`) grain (`docs/specs/feature-engineering.md` §"The feature
@@ -110,6 +114,15 @@ export const canonicalCurtailmentByReportingEntity = pgView(
     reportingEntityCode: text().notNull(),
     /** `CONJUNTO` or `PLANT` — the grain of the row, on the row. */
     reportingEntityKind: reportingEntityKind().notNull(),
+    /**
+     * ONS's `nom_usina` for the entity — display only, never a join key.
+     *
+     * Projected for the same reason `reporting_entity_kind` is: a screen that
+     * shows a restriction cause has to name the entity it was reported for, and
+     * a code is not a name. Reaching into `reporting_entity` from a product
+     * read to fetch it would be a second path to a base table for one column.
+     */
+    reportingEntityName: text().notNull(),
     /** The entity's electrical subsystem — the grain the label is defined at. */
     subsystem: subsystemCode().notNull(),
     technology: technology().notNull(),
@@ -136,6 +149,7 @@ export const canonicalCurtailmentByReportingEntity = pgView(
   select distinct on (c.reporting_entity_code, c.technology, c.valid_time)
     c.reporting_entity_code,
     e.kind as reporting_entity_kind,
+    e.name as reporting_entity_name,
     e.subsystem,
     c.technology,
     c.valid_time,
