@@ -386,9 +386,24 @@ function HourReadout({
       <Readout label="P10" value={f.compact(hour.constrainedOff.p10)} />
       <Readout label="P50" value={f.compact(hour.constrainedOff.p50)} strong={true} />
       <Readout label="P90" value={f.compact(hour.constrainedOff.p90)} />
+      {/*
+        The expectation sits *beside* P10/P50/P90, never between them. At this
+        grain the difference is visible rather than argued: in a shoulder hour
+        the median is 0 and E[Y] is not, because the hour is more likely than
+        not to stay under the threshold and considerably above it when it does.
+      */}
+      <Readout label={copy.app.fan.expected} value={f.compact(hour.expectedMwh)} />
       <Readout
         label={copy.app.fan.exceedance}
         value={f.percent(hour.occurrenceProbability)}
+      />
+      {/* The split, at the hour grain: two scalars, no fourth quantile. */}
+      <Readout
+        label={copy.app.split.title}
+        value={fill(copy.app.fan.splitReadout, {
+          wind: f.compact(hour.split.windMwh),
+          solar: f.compact(hour.split.solarMwh),
+        })}
       />
       {observedMwh === undefined ? null : (
         <Readout label={observedLabel} value={f.compact(observedMwh)} />

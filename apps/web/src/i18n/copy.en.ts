@@ -566,6 +566,8 @@ export const en = {
       hint: "Tap an hour to read its interval",
       hourLabel: "Hour",
       exceedance: "P(above threshold)",
+      expected: "Expected E[Y]",
+      splitReadout: "{wind} wind · {solar} solar",
       hourFigure: "Hour {hour}: P50 {p50} MWh, P10 to P90 {p10} to {p90}",
     },
 
@@ -624,14 +626,24 @@ export const en = {
       rowEnergy: "Expected curtailed energy",
       rowPeak: "peak {low}–{high} MW",
       profileSubtitle: "24-hour profile, P10–P90",
-      dailyEnergy: "Expected curtailed energy, whole day",
+      dailyEnergy: "Curtailed energy, whole day",
       dailyEnergyNote:
-        "A day total is a joint forecast. It is not the sum of the hourly P90s — quantiles do not add.",
+        "A day total is a joint forecast read from the path ensemble. It is neither the sum of the hourly P90s nor the sum of the hourly P50s — no quantile adds, medians included.",
       peakPower: "Peak hourly power",
       peakPowerNote:
-        "Hour of the largest P50. Threshold in force: {mw} MW at subsystem grain.",
+        "The largest hour within a drawn day, over the same ensemble. Threshold in force: {mw} MW at subsystem grain.",
       grainNote:
         "Forecast grain is the subsystem. Observed curtailment is published per reporting entity — a conjunto for most of it — and restriction reasons exist only there; see Explain.",
+    },
+
+    split: {
+      title: "Wind and solar",
+      subtitle: "Two scalars, no band",
+      expected: "Expected curtailed energy, whole day",
+      expectedNote:
+        "E[Y], published beside the band rather than inside it. It is not the middle of the interval: with mass sitting on “no curtailment at all”, the expectation runs above the median, and on a quiet day the median is flatly zero while the expectation is not.",
+      note: "The forecaster has one head per subsystem, so wind and solar are a division of that expectation and nothing more. There is no wind band and no solar band to draw, which is why picking a technology above emphasises one of these two numbers instead of filtering the forecast.",
+      emphasised: "shown",
     },
 
     explain: {
@@ -669,7 +681,7 @@ export const en = {
     mitigate: {
       metaTitle: "Mitigate — WattSteer",
       title: "What can we do?",
-      lede: "{subsystem} {technology}, {date}. Storage and flexible demand sized against the day-ahead forecast.",
+      lede: "{subsystem}, {date}. Storage and flexible demand sized against the day-ahead forecast.",
       basisTitle: "Plan against",
       basisMedian: "the median forecast (P50)",
       basisConservative: "a conservative forecast (P10)",

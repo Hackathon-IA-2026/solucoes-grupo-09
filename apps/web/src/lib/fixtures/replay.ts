@@ -130,6 +130,18 @@ function buildDay(spec: DaySpec, index: number): ReplayDay {
       Math.round(actual * spec.bias * (0.9 + 0.2 * wobble(index + 9, hourLocal)) * 10) /
       10;
     const rel = spec.spread * (inside ? 1 : 1.8);
+    const occurrenceProbability = inside ? 0.86 : 0.11;
+    // `E[Y]` for the hour, and the two scalars it divides into. A sibling of
+    // the band, never inside it: the hurdle puts mass at zero, so the
+    // expectation and the median are different numbers and the shape says so.
+    //
+    // The episode names a technology because an *observed* episode genuinely
+    // has one; the forecast underneath it does not, so the split is a
+    // dominant-fleet division of one subsystem expectation rather than two
+    // forecasts laid side by side.
+    const expectedMwh = Math.round(p50 * occurrenceProbability * 10) / 10;
+    const dominant = Math.round(expectedMwh * 0.82 * 10) / 10;
+    const other = Math.round((expectedMwh - dominant) * 10) / 10;
     forecast.push({
       validTime: validTimeFor(spec.date, hourLocal),
       hourLocal,
@@ -138,7 +150,12 @@ function buildDay(spec: DaySpec, index: number): ReplayDay {
         p50,
         p90: Math.round(p50 * (1 + rel * 1.3) * 10) / 10,
       },
-      occurrenceProbability: inside ? 0.86 : 0.11,
+      expectedMwh: Math.round((dominant + other) * 10) / 10,
+      occurrenceProbability,
+      split:
+        spec.technology === "WIND"
+          ? { windMwh: dominant, solarMwh: other }
+          : { windMwh: other, solarMwh: dominant },
     });
   }
 

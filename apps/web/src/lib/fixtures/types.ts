@@ -34,8 +34,11 @@ export {
   type RestrictionOrigin,
   type SubsystemCode,
   type SubsystemMeta,
+  splitFor,
+  splitOther,
   spread,
   type Technology,
+  type TechnologySplit,
   upper,
   type VintageFidelity,
 } from "@wattsteer/core";
@@ -48,6 +51,7 @@ import type {
   RestrictionOrigin,
   SubsystemCode,
   Technology,
+  TechnologySplit,
   VintageFidelity,
 } from "@wattsteer/core";
 
@@ -59,8 +63,22 @@ export interface CurtailmentHourForecast {
   hourLocal: number;
   /** `constrained_off_mwh`, as a band. */
   constrainedOff: Band;
+  /**
+   * `E[constrained_off_mwh]` for this hour — a **sibling** of the band, never
+   * inside it and never its centre.
+   *
+   * The hourly model is a hurdle: mass at zero with weight `1 −
+   * occurrenceProbability`, and a magnitude distribution above it. Its
+   * expectation therefore exceeds its median whenever the hour is less than an
+   * even chance to clear the threshold, and the median is flatly zero below
+   * that. Storing the expectation as a fourth number inside `constrainedOff`
+   * would have invited exactly the reading the shape exists to prevent.
+   */
+  expectedMwh: number;
   /** Hurdle model, part one: P(this hour exceeds the threshold). */
   occurrenceProbability: number;
+  /** Two scalars summing to `expectedMwh`. There is no per-technology band. */
+  split: TechnologySplit;
 }
 
 /** `CurtailmentHour`, observed side. */
@@ -71,23 +89,48 @@ export interface CurtailmentHourObservation {
 }
 
 /**
- * The day-ahead forecast for one (`Subsystem`, `Technology`) — the only
- * horizon WattSteer serves.
+ * The day-ahead forecast for one `Subsystem` — the only horizon WattSteer
+ * serves, and **one object per subsystem-day**.
+ *
+ * There is deliberately no `technology` field. This shape used to carry one,
+ * and `buildForecast(subsystem, technology, run)` built a whole band per
+ * technology; no such model exists. The forecaster has a single head per
+ * subsystem, so the only division it can publish is a scalar split of the
+ * expectation (`split`, and `CurtailmentHourForecast.split` at the finer
+ * grain). A technology selector on a screen picks which of those two scalars
+ * to emphasise; it cannot filter this object, because there is nothing here to
+ * filter — see `docs/specs/api-surface.md`, contract change 5.
  */
 export interface SubsystemDayForecast {
   subsystem: SubsystemCode;
-  technology: Technology;
   /** The day being forecast, `America/Sao_Paulo` civil date. */
   targetDate: string;
   forecastOrigin: ForecastOrigin;
   /** `curtailment_threshold_mw` in force, stamped on every output. */
   thresholdMw: number;
-  /** Hurdle model, part one, at day grain. */
+  /**
+   * P(the day contains at least one hour above the threshold), read from the
+   * day-grain path ensemble — not `1 − Π(1 − p_t)` over the hours, which would
+   * assume the hours are independent when the whole point of drawing paths is
+   * that they are not.
+   */
   occurrenceProbability: number;
-  /** Hurdle model, part two: day total conditional on occurrence. */
+  /**
+   * The day total, as a band. **Read from the path ensemble, never reduced
+   * from the hours**: quantiles do not add, and neither do medians.
+   */
   dailyEnergy: Band;
-  /** Peak hourly power across the day. */
+  /** Peak hourly power across the day — also a path-ensemble quantity. */
   peakPower: Band;
+  /**
+   * `E[day total]` — a sibling of `dailyEnergy`, **not its centre**. It is the
+   * sum of the hourly expectations, which is exact because expectations add,
+   * and it sits above `dailyEnergy.p50` whenever the day is a mixture with
+   * meaningful mass at zero.
+   */
+  dayExpectedMwh: number;
+  /** Two scalars summing to `dayExpectedMwh`. No quantile lives in here. */
+  split: TechnologySplit;
   hours: CurtailmentHourForecast[];
 }
 

@@ -13,7 +13,7 @@ import {
 } from "../src/lib/fixtures";
 
 describe("forecast fixtures", () => {
-  const forecast = buildForecast("NE", "WIND", "12Z");
+  const forecast = buildForecast("NE", "12Z");
 
   test("emits 24 hours", () => {
     expect(forecast.hours).toHaveLength(24);
@@ -26,15 +26,93 @@ describe("forecast fixtures", () => {
     }
   });
 
-  test("the day total is not the sum of the hourly quantiles", () => {
-    // Quantiles do not add. If this ever becomes an equality, someone has
-    // summed a band and the screens are lying about the interval.
-    const sumP90 = forecast.hours.reduce((acc, h) => acc + h.constrainedOff.p90, 0);
-    expect(forecast.dailyEnergy.p90).toBeLessThan(sumP90);
+  test("the day band is not the componentwise sum of the hourly bands", () => {
+    // Quantiles do not add — and neither do medians, which is the half of the
+    // rule the fixture used to break by setting the day P50 to the sum of the
+    // hourly P50s. The day figures are read from the path ensemble, so *no*
+    // component of the band may equal its componentwise sum.
+    //
+    // The inequality is asserted rather than its direction. Under the strong
+    // intra-day dependence a path ensemble preserves, the day P90 sits below
+    // the sum of the hourly P90s on a busy subsystem and can sit above it on a
+    // rare-event one, where almost every hour's own P90 is zero and the whole
+    // day either fires together or not at all. Pinning a direction here would
+    // pin an assumption about the dependence structure instead of the rule.
+    for (const code of ["N", "NE", "SE", "S"] as const) {
+      const each = buildForecast(code, "12Z");
+      const sum = (key: "p10" | "p50" | "p90") =>
+        Math.round(each.hours.reduce((acc, h) => acc + h.constrainedOff[key], 0));
+      expect(each.dailyEnergy.p90).not.toBe(sum("p90"));
+      // The median is checked only where the componentwise sum is not zero.
+      // On the two quiet subsystems every hour is under an even chance, so
+      // every hourly median is zero and so is their sum — the two agree at 0
+      // because there is nothing to disagree about, not because a median was
+      // added, and asserting inequality there would assert noise.
+      if (sum("p50") > 0) {
+        expect(each.dailyEnergy.p50).not.toBe(sum("p50"));
+      }
+    }
+    // NE is the busy subsystem, so it is where the whole rule has teeth.
+    const busy = buildForecast("NE", "12Z");
+    const summed = (key: "p10" | "p50" | "p90") =>
+      Math.round(busy.hours.reduce((acc, h) => acc + h.constrainedOff[key], 0));
+    expect(summed("p50")).toBeGreaterThan(0);
+    expect(busy.dailyEnergy).not.toEqual({
+      p10: summed("p10"),
+      p50: summed("p50"),
+      p90: summed("p90"),
+    });
+  });
+
+  test("the peak-power band is drawn, not the largest hourly band", () => {
+    // A day's peak is a property of a *path*: the biggest hour of a drawn day,
+    // not the componentwise extreme of 24 marginals. Reducing it from the
+    // hours reports the P90 of the worst hour as if the day were certain to
+    // contain that hour.
+    const hourlyMaxP90 = Math.max(...forecast.hours.map((h) => h.constrainedOff.p90));
+    expect(forecast.peakPower.p90).not.toBe(Math.round(hourlyMaxP90));
+    expect(forecast.peakPower.p10).toBeLessThanOrEqual(forecast.peakPower.p50);
+    expect(forecast.peakPower.p50).toBeLessThanOrEqual(forecast.peakPower.p90);
+  });
+
+  test("the forecast carries no technology, and needs none to build", () => {
+    // Contract change 5: one object per subsystem-day. A `technology` key here
+    // would be claiming a per-technology head the forecaster does not have,
+    // and `buildForecast` taking one would let a screen ask for it.
+    expect(Object.keys(forecast)).not.toContain("technology");
+    expect(forecast.subsystem).toBe("NE");
+    expect(buildForecast.length).toBe(2);
+  });
+
+  test("the split is two scalars at both grains, and they sum to E[Y]", () => {
+    const day = forecast.split;
+    expect(Object.keys(day).sort()).toEqual(["solarMwh", "windMwh"]);
+    expect(typeof day.windMwh).toBe("number");
+    expect(typeof day.solarMwh).toBe("number");
+    expect(day.windMwh + day.solarMwh).toBe(forecast.dayExpectedMwh);
+    for (const hour of forecast.hours) {
+      expect(Object.keys(hour.split).sort()).toEqual(["solarMwh", "windMwh"]);
+      expect(hour.split.windMwh + hour.split.solarMwh).toBeCloseTo(hour.expectedMwh, 6);
+    }
+  });
+
+  test("the expectation is a sibling of the band, never its centre", () => {
+    // For a hurdle mixture the expectation exceeds the median whenever the
+    // occurrence probability is below an even chance, so a screen reading the
+    // P50 as "the expected figure" under-reports every quiet day — by all of
+    // it, where the median is zero.
+    expect(forecast.dayExpectedMwh).not.toBe(forecast.dailyEnergy.p50);
+    const quiet = buildForecast("S", "12Z");
+    expect(quiet.occurrenceProbability).toBeLessThan(0.5);
+    expect(quiet.dailyEnergy.p50).toBe(0);
+    expect(quiet.dayExpectedMwh).toBeGreaterThan(quiet.dailyEnergy.p50);
+    for (const hour of quiet.hours) {
+      expect(hour.expectedMwh).toBeGreaterThanOrEqual(hour.constrainedOff.p50);
+    }
   });
 
   test("the 12Z run carries a narrower band than 00Z", () => {
-    const early = buildForecast("NE", "WIND", "00Z");
+    const early = buildForecast("NE", "00Z");
     const width = (f: typeof forecast) => f.dailyEnergy.p90 - f.dailyEnergy.p10;
     expect(width(forecast)).toBeLessThan(width(early));
   });
@@ -100,7 +178,7 @@ describe("prototype heuristic", () => {
 
 describe("mitigation steps", () => {
   const steps = buildMitigationSteps({
-    forecast: buildForecast("NE", "WIND", "12Z"),
+    forecast: buildForecast("NE", "12Z"),
     battery: DEFAULT_BATTERY,
     load: DEFAULT_LOAD,
     basis: "p50",
@@ -211,7 +289,7 @@ describe("defects the specs found in this prototype", () => {
     // flex-optimizer.md found evaluatePlan clipping absorption but reporting
     // the PLANNED state of charge, so the chart showed a battery charging on
     // curtailment that never arrived.
-    const forecast = buildForecast("NE", "WIND", "12Z");
+    const forecast = buildForecast("NE", "12Z");
     const plan = planDispatch({
       offeredMwh: forecast.hours.map((h) => h.constrainedOff.p50),
       battery: DEFAULT_BATTERY,

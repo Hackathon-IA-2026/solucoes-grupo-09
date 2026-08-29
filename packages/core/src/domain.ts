@@ -155,6 +155,46 @@ export interface Band {
 }
 
 /**
+ * How a forecast figure divides between the two fleets — **two scalars, and
+ * nothing else**.
+ *
+ * The forecaster has no per-technology head. It produces one distribution per
+ * subsystem-day and one per subsystem-hour; the wind/solar division is a
+ * decomposition of the **expectation**, which is the only quantity that can be
+ * divided honestly. Expectations add: `E[wind] + E[solar] = E[total]`, exactly.
+ * Quantiles do not, so there is no P10 of the wind part that composes with
+ * anything, and publishing one would invite a chart to draw a band the model
+ * cannot support.
+ *
+ * That is why this is an interface with two `number`s rather than two `Band`s,
+ * and why `common.schema.json`'s `technology_split` is
+ * `additionalProperties: false` over exactly `wind_mwh` and `solar_mwh`: a
+ * response that smuggles a `p10` under the split fails validation at the
+ * boundary rather than reaching a fan chart that would happily render it.
+ * `packages/core/test/vocabulary-rules.test.ts` asserts that rejection.
+ *
+ * The consequence for the UI is the point of the type: a technology selector
+ * can only ever choose **which of these two scalars to emphasise**. It cannot
+ * filter a forecast, because there is no per-technology forecast to filter.
+ */
+export interface TechnologySplit {
+  /** `E[constrained_off]` attributable to wind, MWh. */
+  windMwh: number;
+  /** `E[constrained_off]` attributable to solar, MWh. */
+  solarMwh: number;
+}
+
+/** The one scalar a technology selection picks out of a split. */
+export function splitFor(split: TechnologySplit, technology: Technology): number {
+  return technology === "WIND" ? split.windMwh : split.solarMwh;
+}
+
+/** The other one — what the selection is being read against. */
+export function splitOther(split: TechnologySplit, technology: Technology): number {
+  return technology === "WIND" ? split.solarMwh : split.windMwh;
+}
+
+/**
  * Why a published figure has no band — an identity, never a sentence.
  *
  * The sentence lives in the dictionaries keyed by this code, exactly as the
