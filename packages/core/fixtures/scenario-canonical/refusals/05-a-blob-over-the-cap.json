@@ -1,0 +1,197 @@
+{
+  "name": "twenty assets with maximum-length labels",
+  "description": "The encoded blob is over 4096 bytes. Measured on the base64url, not on the JSON, because the blob is what arrives in a query string from an unauthenticated caller and the cap's job is to bound what gets parsed at all.",
+  "scenario": {
+    "v": 1,
+    "subsystem": "NE",
+    "target_date": "2026-08-29",
+    "assets": [
+      {
+        "asset_type": "battery",
+        "label": "00 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "01 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "02 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "03 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "04 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "05 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "06 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "07 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "08 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "09 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "10 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "11 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "12 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "13 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "14 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "15 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "16 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "17 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "18 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "19 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      }
+    ],
+    "economic_assumptions": {
+      "brl_per_mwh": 180
+    }
+  },
+  "blob": "eyJhc3NldHMiOlt7ImFzc2V0X3R5cGUiOiJiYXR0ZXJ5IiwiZW5lcmd5X2NhcGFjaXR5X213aCI6MzAwLCJpbml0aWFsX3N0YXRlX29mX2NoYXJnZSI6MC4yLCJsYWJlbCI6IjAwIEJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkIiLCJtYXhfcG93ZXJfbXciOjEwMCwicm91bmRfdHJpcF9lZmZpY2llbmN5IjowLjkyLCJzdWJzeXN0ZW0iOiJORSJ9LHsiYXNzZXRfdHlwZSI6ImJhdHRlcnkiLCJlbmVyZ3lfY2FwYWNpdHlfbXdoIjozMDAsImluaXRpYWxfc3RhdGVfb2ZfY2hhcmdlIjowLjIsImxhYmVsIjoiMDEgQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQiIsIm1heF9wb3dlcl9tdyI6MTAwLCJyb3VuZF90cmlwX2VmZmljaWVuY3kiOjAuOTIsInN1YnN5c3RlbSI6Ik5FIn0seyJhc3NldF90eXBlIjoiYmF0dGVyeSIsImVuZXJneV9jYXBhY2l0eV9td2giOjMwMCwiaW5pdGlhbF9zdGF0ZV9vZl9jaGFyZ2UiOjAuMiwibGFiZWwiOiIwMiBCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCIiwibWF4X3Bvd2VyX213IjoxMDAsInJvdW5kX3RyaXBfZWZmaWNpZW5jeSI6MC45Miwic3Vic3lzdGVtIjoiTkUifSx7ImFzc2V0X3R5cGUiOiJiYXR0ZXJ5IiwiZW5lcmd5X2NhcGFjaXR5X213aCI6MzAwLCJpbml0aWFsX3N0YXRlX29mX2NoYXJnZSI6MC4yLCJsYWJlbCI6IjAzIEJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkIiLCJtYXhfcG93ZXJfbXciOjEwMCwicm91bmRfdHJpcF9lZmZpY2llbmN5IjowLjkyLCJzdWJzeXN0ZW0iOiJORSJ9LHsiYXNzZXRfdHlwZSI6ImJhdHRlcnkiLCJlbmVyZ3lfY2FwYWNpdHlfbXdoIjozMDAsImluaXRpYWxfc3RhdGVfb2ZfY2hhcmdlIjowLjIsImxhYmVsIjoiMDQgQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQiIsIm1heF9wb3dlcl9tdyI6MTAwLCJyb3VuZF90cmlwX2VmZmljaWVuY3kiOjAuOTIsInN1YnN5c3RlbSI6Ik5FIn0seyJhc3NldF90eXBlIjoiYmF0dGVyeSIsImVuZXJneV9jYXBhY2l0eV9td2giOjMwMCwiaW5pdGlhbF9zdGF0ZV9vZl9jaGFyZ2UiOjAuMiwibGFiZWwiOiIwNSBCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCIiwibWF4X3Bvd2VyX213IjoxMDAsInJvdW5kX3RyaXBfZWZmaWNpZW5jeSI6MC45Miwic3Vic3lzdGVtIjoiTkUifSx7ImFzc2V0X3R5cGUiOiJiYXR0ZXJ5IiwiZW5lcmd5X2NhcGFjaXR5X213aCI6MzAwLCJpbml0aWFsX3N0YXRlX29mX2NoYXJnZSI6MC4yLCJsYWJlbCI6IjA2IEJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkIiLCJtYXhfcG93ZXJfbXciOjEwMCwicm91bmRfdHJpcF9lZmZpY2llbmN5IjowLjkyLCJzdWJzeXN0ZW0iOiJORSJ9LHsiYXNzZXRfdHlwZSI6ImJhdHRlcnkiLCJlbmVyZ3lfY2FwYWNpdHlfbXdoIjozMDAsImluaXRpYWxfc3RhdGVfb2ZfY2hhcmdlIjowLjIsImxhYmVsIjoiMDcgQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQiIsIm1heF9wb3dlcl9tdyI6MTAwLCJyb3VuZF90cmlwX2VmZmljaWVuY3kiOjAuOTIsInN1YnN5c3RlbSI6Ik5FIn0seyJhc3NldF90eXBlIjoiYmF0dGVyeSIsImVuZXJneV9jYXBhY2l0eV9td2giOjMwMCwiaW5pdGlhbF9zdGF0ZV9vZl9jaGFyZ2UiOjAuMiwibGFiZWwiOiIwOCBCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCIiwibWF4X3Bvd2VyX213IjoxMDAsInJvdW5kX3RyaXBfZWZmaWNpZW5jeSI6MC45Miwic3Vic3lzdGVtIjoiTkUifSx7ImFzc2V0X3R5cGUiOiJiYXR0ZXJ5IiwiZW5lcmd5X2NhcGFjaXR5X213aCI6MzAwLCJpbml0aWFsX3N0YXRlX29mX2NoYXJnZSI6MC4yLCJsYWJlbCI6IjA5IEJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkIiLCJtYXhfcG93ZXJfbXciOjEwMCwicm91bmRfdHJpcF9lZmZpY2llbmN5IjowLjkyLCJzdWJzeXN0ZW0iOiJORSJ9LHsiYXNzZXRfdHlwZSI6ImJhdHRlcnkiLCJlbmVyZ3lfY2FwYWNpdHlfbXdoIjozMDAsImluaXRpYWxfc3RhdGVfb2ZfY2hhcmdlIjowLjIsImxhYmVsIjoiMTAgQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQiIsIm1heF9wb3dlcl9tdyI6MTAwLCJyb3VuZF90cmlwX2VmZmljaWVuY3kiOjAuOTIsInN1YnN5c3RlbSI6Ik5FIn0seyJhc3NldF90eXBlIjoiYmF0dGVyeSIsImVuZXJneV9jYXBhY2l0eV9td2giOjMwMCwiaW5pdGlhbF9zdGF0ZV9vZl9jaGFyZ2UiOjAuMiwibGFiZWwiOiIxMSBCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCIiwibWF4X3Bvd2VyX213IjoxMDAsInJvdW5kX3RyaXBfZWZmaWNpZW5jeSI6MC45Miwic3Vic3lzdGVtIjoiTkUifSx7ImFzc2V0X3R5cGUiOiJiYXR0ZXJ5IiwiZW5lcmd5X2NhcGFjaXR5X213aCI6MzAwLCJpbml0aWFsX3N0YXRlX29mX2NoYXJnZSI6MC4yLCJsYWJlbCI6IjEyIEJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkIiLCJtYXhfcG93ZXJfbXciOjEwMCwicm91bmRfdHJpcF9lZmZpY2llbmN5IjowLjkyLCJzdWJzeXN0ZW0iOiJORSJ9LHsiYXNzZXRfdHlwZSI6ImJhdHRlcnkiLCJlbmVyZ3lfY2FwYWNpdHlfbXdoIjozMDAsImluaXRpYWxfc3RhdGVfb2ZfY2hhcmdlIjowLjIsImxhYmVsIjoiMTMgQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQiIsIm1heF9wb3dlcl9tdyI6MTAwLCJyb3VuZF90cmlwX2VmZmljaWVuY3kiOjAuOTIsInN1YnN5c3RlbSI6Ik5FIn0seyJhc3NldF90eXBlIjoiYmF0dGVyeSIsImVuZXJneV9jYXBhY2l0eV9td2giOjMwMCwiaW5pdGlhbF9zdGF0ZV9vZl9jaGFyZ2UiOjAuMiwibGFiZWwiOiIxNCBCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCIiwibWF4X3Bvd2VyX213IjoxMDAsInJvdW5kX3RyaXBfZWZmaWNpZW5jeSI6MC45Miwic3Vic3lzdGVtIjoiTkUifSx7ImFzc2V0X3R5cGUiOiJiYXR0ZXJ5IiwiZW5lcmd5X2NhcGFjaXR5X213aCI6MzAwLCJpbml0aWFsX3N0YXRlX29mX2NoYXJnZSI6MC4yLCJsYWJlbCI6IjE1IEJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkIiLCJtYXhfcG93ZXJfbXciOjEwMCwicm91bmRfdHJpcF9lZmZpY2llbmN5IjowLjkyLCJzdWJzeXN0ZW0iOiJORSJ9LHsiYXNzZXRfdHlwZSI6ImJhdHRlcnkiLCJlbmVyZ3lfY2FwYWNpdHlfbXdoIjozMDAsImluaXRpYWxfc3RhdGVfb2ZfY2hhcmdlIjowLjIsImxhYmVsIjoiMTYgQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQiIsIm1heF9wb3dlcl9tdyI6MTAwLCJyb3VuZF90cmlwX2VmZmljaWVuY3kiOjAuOTIsInN1YnN5c3RlbSI6Ik5FIn0seyJhc3NldF90eXBlIjoiYmF0dGVyeSIsImVuZXJneV9jYXBhY2l0eV9td2giOjMwMCwiaW5pdGlhbF9zdGF0ZV9vZl9jaGFyZ2UiOjAuMiwibGFiZWwiOiIxNyBCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCIiwibWF4X3Bvd2VyX213IjoxMDAsInJvdW5kX3RyaXBfZWZmaWNpZW5jeSI6MC45Miwic3Vic3lzdGVtIjoiTkUifSx7ImFzc2V0X3R5cGUiOiJiYXR0ZXJ5IiwiZW5lcmd5X2NhcGFjaXR5X213aCI6MzAwLCJpbml0aWFsX3N0YXRlX29mX2NoYXJnZSI6MC4yLCJsYWJlbCI6IjE4IEJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkIiLCJtYXhfcG93ZXJfbXciOjEwMCwicm91bmRfdHJpcF9lZmZpY2llbmN5IjowLjkyLCJzdWJzeXN0ZW0iOiJORSJ9LHsiYXNzZXRfdHlwZSI6ImJhdHRlcnkiLCJlbmVyZ3lfY2FwYWNpdHlfbXdoIjozMDAsImluaXRpYWxfc3RhdGVfb2ZfY2hhcmdlIjowLjIsImxhYmVsIjoiMTkgQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQiIsIm1heF9wb3dlcl9tdyI6MTAwLCJyb3VuZF90cmlwX2VmZmljaWVuY3kiOjAuOTIsInN1YnN5c3RlbSI6Ik5FIn1dLCJlY29ub21pY19hc3N1bXB0aW9ucyI6eyJicmxfcGVyX213aCI6MTgwfSwic3Vic3lzdGVtIjoiTkUiLCJ0YXJnZXRfZGF0ZSI6IjIwMjYtMDgtMjkiLCJ2IjoxfQ",
+  "blob_length": 6034,
+  "expected_code": "SCENARIO_TOO_LARGE"
+}

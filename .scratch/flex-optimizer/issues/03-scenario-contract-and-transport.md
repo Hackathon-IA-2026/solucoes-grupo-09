@@ -46,7 +46,7 @@ and everything else moves to it.
 
 **Blocked by:** None — can start immediately, in parallel with 01.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] A scenario round-trips through canonical encoding → base64url → decode byte-identically
 - [ ] The hash is stable under key reordering and under equivalent float spellings (`0.92` vs `0.920`)

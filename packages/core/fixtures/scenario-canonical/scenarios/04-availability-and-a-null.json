@@ -1,0 +1,29 @@
+{
+  "name": "an explicit null is carried, not dropped",
+  "description": "recovery_time_hours is `number | null` in the schema: null is a stated member of the contract, so it survives canonicalisation and changes the hash. A canonicaliser that dropped nulls would make two different scenarios share a cache key.",
+  "scenario": {
+    "v": 1,
+    "subsystem": "N",
+    "target_date": "2026-08-29",
+    "assets": [
+      {
+        "asset_type": "shiftable_load",
+        "label": "Flexible load",
+        "subsystem": "N",
+        "max_power_mw": 70,
+        "max_shift_mw": 50,
+        "shift_window_hours": 3,
+        "daily_energy_mwh": 1700,
+        "recovery_time_hours": null,
+        "available_from": "00:00",
+        "available_to": "24:00"
+      }
+    ],
+    "economic_assumptions": {
+      "brl_per_mwh": 180
+    }
+  },
+  "canonical": "{\"assets\":[{\"asset_type\":\"shiftable_load\",\"available_from\":\"00:00\",\"available_to\":\"24:00\",\"daily_energy_mwh\":1700,\"label\":\"Flexible load\",\"max_power_mw\":70,\"max_shift_mw\":50,\"recovery_time_hours\":null,\"shift_window_hours\":3,\"subsystem\":\"N\"}],\"economic_assumptions\":{\"brl_per_mwh\":180},\"subsystem\":\"N\",\"target_date\":\"2026-08-29\",\"v\":1}",
+  "blob": "eyJhc3NldHMiOlt7ImFzc2V0X3R5cGUiOiJzaGlmdGFibGVfbG9hZCIsImF2YWlsYWJsZV9mcm9tIjoiMDA6MDAiLCJhdmFpbGFibGVfdG8iOiIyNDowMCIsImRhaWx5X2VuZXJneV9td2giOjE3MDAsImxhYmVsIjoiRmxleGlibGUgbG9hZCIsIm1heF9wb3dlcl9tdyI6NzAsIm1heF9zaGlmdF9tdyI6NTAsInJlY292ZXJ5X3RpbWVfaG91cnMiOm51bGwsInNoaWZ0X3dpbmRvd19ob3VycyI6Mywic3Vic3lzdGVtIjoiTiJ9XSwiZWNvbm9taWNfYXNzdW1wdGlvbnMiOnsiYnJsX3Blcl9td2giOjE4MH0sInN1YnN5c3RlbSI6Ik4iLCJ0YXJnZXRfZGF0ZSI6IjIwMjYtMDgtMjkiLCJ2IjoxfQ",
+  "hash": "sha256:981d4dfc109fdb16ef48350b9d9a302842234ab6c35c2d7e7e9978262c7dc8a1"
+}

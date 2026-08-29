@@ -1,0 +1,25 @@
+{
+  "name": "a label carrying characters the escape rule owns",
+  "description": "The label is the one free-text field on an attacker-controlled object. A quote, a backslash, a newline, a tab and a non-ASCII character pin RFC 8785 §3.2.2.2: the two-character escapes where they exist, \\u00xx for the rest of the control range, and the raw code point otherwise.",
+  "scenario": {
+    "v": 1,
+    "subsystem": "SE",
+    "target_date": "2026-08-29",
+    "assets": [
+      {
+        "asset_type": "battery",
+        "label": "Bateria \"Açu\" \\ \n\t <script> é",
+        "subsystem": "SE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2,
+        "available_from": "06:00",
+        "available_to": "22:00"
+      }
+    ]
+  },
+  "canonical": "{\"assets\":[{\"asset_type\":\"battery\",\"available_from\":\"06:00\",\"available_to\":\"22:00\",\"energy_capacity_mwh\":300,\"initial_state_of_charge\":0.2,\"label\":\"Bateria \\\"Açu\\\" \\\\ \\n\\t <script> é\",\"max_power_mw\":100,\"round_trip_efficiency\":0.92,\"subsystem\":\"SE\"}],\"subsystem\":\"SE\",\"target_date\":\"2026-08-29\",\"v\":1}",
+  "blob": "eyJhc3NldHMiOlt7ImFzc2V0X3R5cGUiOiJiYXR0ZXJ5IiwiYXZhaWxhYmxlX2Zyb20iOiIwNjowMCIsImF2YWlsYWJsZV90byI6IjIyOjAwIiwiZW5lcmd5X2NhcGFjaXR5X213aCI6MzAwLCJpbml0aWFsX3N0YXRlX29mX2NoYXJnZSI6MC4yLCJsYWJlbCI6IkJhdGVyaWEgXCJBw6d1XCIgXFwgXG5cdCA8c2NyaXB0PiDDqSIsIm1heF9wb3dlcl9tdyI6MTAwLCJyb3VuZF90cmlwX2VmZmljaWVuY3kiOjAuOTIsInN1YnN5c3RlbSI6IlNFIn1dLCJzdWJzeXN0ZW0iOiJTRSIsInRhcmdldF9kYXRlIjoiMjAyNi0wOC0yOSIsInYiOjF9",
+  "hash": "sha256:943cdcf70d3ff01e352b9bde529f4b8571eb9d8ed5d201a53b057b4544ba4af6"
+}

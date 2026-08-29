@@ -1,0 +1,89 @@
+{
+  "$comment": "The one rule two shortest-round-tripping serialisers still disagree about. `input` is a JSON number literal, parsed by each language's own parser into an IEEE-754 double; `expected` is what RFC 8785 §3.2.2.3 requires, which is ECMAScript's Number::toString, read off a real ECMAScript engine. Python's repr is also shortest-round-tripping and is NOT this function: it disagrees about where exponential notation begins at both ends, and about whether a whole float keeps its `.0`. Every case below is one a naive implementation gets wrong.",
+  "cases": [
+    {
+      "name": "the round-trip efficiency the reference battery is published at",
+      "input": 0.92,
+      "expected": "0.92"
+    },
+    {
+      "name": "a trailing zero is not part of the number",
+      "input": 0.92,
+      "expected": "0.92",
+      "source_spelling": "0.920"
+    },
+    {
+      "name": "a whole number carries no decimal point",
+      "input": 100.0,
+      "expected": "100",
+      "source_spelling": "100.0 — Python's repr is `100.0` and would hash differently"
+    },
+    { "name": "an integer", "input": 300, "expected": "300" },
+    { "name": "zero", "input": 0, "expected": "0" },
+    {
+      "name": "negative zero is zero",
+      "input": -0.0,
+      "expected": "0",
+      "source_spelling": "-0.0 — a signed zero is a distinction JSON cannot carry and a hash must not invent"
+    },
+    { "name": "a negative", "input": -0.5, "expected": "-0.5" },
+    { "name": "one half", "input": 1.5, "expected": "1.5" },
+    {
+      "name": "a tenth, which is not exactly representable",
+      "input": 0.1,
+      "expected": "0.1"
+    },
+    {
+      "name": "the last exponent that stays decimal, going small",
+      "input": 1e-6,
+      "expected": "0.000001",
+      "source_spelling": "1e-6 — Python's repr is `1e-06`"
+    },
+    {
+      "name": "the first exponent that goes exponential, going small",
+      "input": 1e-7,
+      "expected": "1e-7",
+      "source_spelling": "1e-7 — Python's repr is `1e-07`, with a zero-padded exponent"
+    },
+    {
+      "name": "the last exponent that stays decimal, going large",
+      "input": 1e20,
+      "expected": "100000000000000000000",
+      "source_spelling": "1e20 — Python's repr is `1e+20`"
+    },
+    {
+      "name": "the first exponent that goes exponential, going large",
+      "input": 1e21,
+      "expected": "1e+21"
+    },
+    {
+      "name": "seventeen significant digits, still decimal",
+      "input": 123456789012345680000,
+      "expected": "123456789012345680000"
+    },
+    {
+      "name": "an integer beyond exact double precision",
+      "input": 9007199254740993,
+      "expected": "9007199254740992",
+      "source_spelling": "9007199254740993 — 2^53 + 1, which no double holds; both sides must round it the same way before serialising, or a Python bignum and a JavaScript double disagree"
+    },
+    {
+      "name": "a value with a fractional part and a large integer part",
+      "input": 1234567890.123,
+      "expected": "1234567890.123"
+    },
+    {
+      "name": "the smallest positive double",
+      "input": 5e-324,
+      "expected": "5e-324"
+    },
+    {
+      "name": "the largest finite double",
+      "input": 1.7976931348623157e308,
+      "expected": "1.7976931348623157e+308"
+    },
+    { "name": "the published initial state of charge", "input": 0.2, "expected": "0.2" },
+    { "name": "the default minimum state of charge", "input": 0.05, "expected": "0.05" },
+    { "name": "the default maximum state of charge", "input": 0.95, "expected": "0.95" }
+  ]
+}

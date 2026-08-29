@@ -227,7 +227,18 @@ class Generator {
       for (const [wire, property] of Object.entries(properties)) {
         merged.set(
           toCamelKey(wire),
-          this.shapeField(wire, property, branchFile, `${name}${pascal(wire)}`, false),
+          // The discriminant is dropped here on purpose. A merged union shape
+          // is the union of every branch's fields and belongs to no single
+          // variant, so carrying one branch's `const` onto it would name the
+          // last branch walked as *the* variant — and `src/scenario.ts` finds a
+          // variant by its discriminant, so it would find the wrong key set.
+          this.shapeField(
+            wire,
+            { ...property, const: undefined },
+            branchFile,
+            `${name}${pascal(wire)}`,
+            false,
+          ),
         );
       }
     }
@@ -252,6 +263,14 @@ class Generator {
     required: boolean,
   ): string {
     const parts = [`wire: ${JSON.stringify(wire)}`];
+    // A `const`-valued property is a **discriminant**, and it is the only thing
+    // in the schema that says which branch of a `oneOf` a value took. Carrying
+    // it into the table is what lets `src/scenario.ts` decide, at runtime, that
+    // `max_shift_mw` is not a field of a `battery` — without a hand-written
+    // variant list that a new `EV` variant would have to be added to twice.
+    if (typeof property.const === "string") {
+      parts.push(`const: ${JSON.stringify(property.const)}`);
+    }
     const nested = this.nestedShapeName(property, file, inlineName);
     if (nested !== null) {
       parts.push(`shape: ${JSON.stringify(nested.name)}`);
@@ -386,6 +405,12 @@ export interface WireField {
   readonly shape?: string;
   readonly list?: boolean;
   readonly optional?: boolean;
+  /**
+   * The single value a \`const\` property is fixed to — the discriminant of a
+   * \`oneOf\`. Present only where the schema pins one, which for the wire means
+   * \`asset_type\` on each \`FlexibilityAsset\` variant.
+   */
+  readonly const?: string;
 }
 
 /** A wire object, keyed by the camelCase name the interface above declares. */

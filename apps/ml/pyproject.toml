@@ -28,6 +28,11 @@ dev = [
   "mypy>=1.13",
   "pytest>=8.3",
   "httpx>=0.28",
+  # `packages/core/schema/` is the cross-language authority, and the Python side
+  # has to be able to *assert* against it rather than paraphrase it. Test-only:
+  # the service validates nothing at runtime that the gateway did not already.
+  "jsonschema>=4.23",
+  "types-jsonschema>=4.23",
 ]
 
 [build-system]

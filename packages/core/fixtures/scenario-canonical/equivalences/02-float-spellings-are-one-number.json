@@ -1,0 +1,74 @@
+{
+  "name": "0.92, 0.920, 9.2e-1 and 0.9200000000000000",
+  "description": "Four spellings of one IEEE-754 double. The canonical number rule is the shortest form that round-trips, so all four produce `0.92` and one hash. This is the vector that would catch a Python side emitting `0.9200000000000001` or a `%.17g` formatter.",
+  "source_spellings": ["0.92", "0.920", "9.2e-1", "0.9200000000000000"],
+  "variants": [
+    {
+      "v": 1,
+      "subsystem": "NE",
+      "target_date": "2026-08-29",
+      "assets": [
+        {
+          "asset_type": "battery",
+          "label": "Battery",
+          "subsystem": "NE",
+          "max_power_mw": 100,
+          "energy_capacity_mwh": 300,
+          "round_trip_efficiency": 0.92,
+          "initial_state_of_charge": 0.2
+        }
+      ]
+    },
+    {
+      "v": 1,
+      "subsystem": "NE",
+      "target_date": "2026-08-29",
+      "assets": [
+        {
+          "asset_type": "battery",
+          "label": "Battery",
+          "subsystem": "NE",
+          "max_power_mw": 100,
+          "energy_capacity_mwh": 300,
+          "round_trip_efficiency": 0.92,
+          "initial_state_of_charge": 0.2
+        }
+      ]
+    },
+    {
+      "v": 1,
+      "subsystem": "NE",
+      "target_date": "2026-08-29",
+      "assets": [
+        {
+          "asset_type": "battery",
+          "label": "Battery",
+          "subsystem": "NE",
+          "max_power_mw": 100,
+          "energy_capacity_mwh": 300,
+          "round_trip_efficiency": 0.92,
+          "initial_state_of_charge": 0.2
+        }
+      ]
+    },
+    {
+      "v": 1,
+      "subsystem": "NE",
+      "target_date": "2026-08-29",
+      "assets": [
+        {
+          "asset_type": "battery",
+          "label": "Battery",
+          "subsystem": "NE",
+          "max_power_mw": 100,
+          "energy_capacity_mwh": 300,
+          "round_trip_efficiency": 0.92,
+          "initial_state_of_charge": 0.2
+        }
+      ]
+    }
+  ],
+  "canonical": "{\"assets\":[{\"asset_type\":\"battery\",\"energy_capacity_mwh\":300,\"initial_state_of_charge\":0.2,\"label\":\"Battery\",\"max_power_mw\":100,\"round_trip_efficiency\":0.92,\"subsystem\":\"NE\"}],\"subsystem\":\"NE\",\"target_date\":\"2026-08-29\",\"v\":1}",
+  "blob": "eyJhc3NldHMiOlt7ImFzc2V0X3R5cGUiOiJiYXR0ZXJ5IiwiZW5lcmd5X2NhcGFjaXR5X213aCI6MzAwLCJpbml0aWFsX3N0YXRlX29mX2NoYXJnZSI6MC4yLCJsYWJlbCI6IkJhdHRlcnkiLCJtYXhfcG93ZXJfbXciOjEwMCwicm91bmRfdHJpcF9lZmZpY2llbmN5IjowLjkyLCJzdWJzeXN0ZW0iOiJORSJ9XSwic3Vic3lzdGVtIjoiTkUiLCJ0YXJnZXRfZGF0ZSI6IjIwMjYtMDgtMjkiLCJ2IjoxfQ",
+  "hash": "sha256:b8f8e97da89ee6568f4c6c28766a0981d80809fe38e0630cfe418dfbd7a483ed"
+}
