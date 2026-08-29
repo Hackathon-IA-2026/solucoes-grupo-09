@@ -4,6 +4,7 @@ import {
   loadApiRequest,
   onsResourceVersion,
   payloadCustody,
+  weatherRunRequest,
 } from "../database/schema.js";
 import { archiveKey, type PayloadArchive, payloadSha256 } from "./archive.js";
 
@@ -29,18 +30,28 @@ import { archiveKey, type PayloadArchive, payloadSha256 } from "./archive.js";
  * is a window for a parsing bug to be found and reprocessed before the bytes
  * that would have proved it go away.
  *
- * The fingerprint rows are never deleted. `ons_resource_version` and
- * `load_api_request` are small, and they are the only record that a file
- * existed in a given state at all.
+ * The fingerprint rows are never deleted. `ons_resource_version`,
+ * `load_api_request` and `weather_run_request` are small, and they are the only
+ * record that a file existed in a given state at all.
  */
 
 /** Which provenance table a payload hangs off. */
-export type CustodyProvenance = "bulk_resource" | "load_api_request";
+export type CustodyProvenance =
+  | "bulk_resource"
+  | "load_api_request"
+  | "weather_run_request";
+
+/** The archive family each provenance files its bytes under. */
+const ARCHIVE_FAMILY: Record<CustodyProvenance, "bulk" | "carga" | "weather"> = {
+  bulk_resource: "bulk",
+  load_api_request: "carga",
+  weather_run_request: "weather",
+};
 
 /** One payload to retain, with everything needed to file it. */
 export interface RetainPayloadRequest {
   provenance: CustodyProvenance;
-  /** `ons_resource_version.id` or `load_api_request.id`. */
+  /** `ons_resource_version.id`, `load_api_request.id`, or `weather_run_request.id`. */
   provenanceId: string;
   /** CKAN package id, or the carga series — the archive's first path segment. */
   datasetSlug: string;
@@ -80,7 +91,7 @@ export async function retainPayload(
 
   const contentSha256 = payloadSha256(request.bytes);
   const uri = archiveKey({
-    family: request.provenance === "bulk_resource" ? "bulk" : "carga",
+    family: ARCHIVE_FAMILY[request.provenance],
     datasetSlug: request.datasetSlug,
     contentSha256,
     extension: request.extension,
@@ -111,11 +122,16 @@ export async function retainPayload(
       .update(onsResourceVersion)
       .set({ archiveUri: uri })
       .where(eq(onsResourceVersion.id, request.provenanceId));
-  } else {
+  } else if (request.provenance === "load_api_request") {
     await db
       .update(loadApiRequest)
       .set({ archiveUri: uri })
       .where(eq(loadApiRequest.id, request.provenanceId));
+  } else {
+    await db
+      .update(weatherRunRequest)
+      .set({ archiveUri: uri })
+      .where(eq(weatherRunRequest.id, request.provenanceId));
   }
 
   return { archiveUri: uri, contentSha256, byteSize: request.bytes.byteLength };

@@ -18,7 +18,9 @@ import {
   type RefreshSweepResult,
 } from "./refresh.js";
 import { createPlantRegistryIngestor } from "./registry-job.js";
+import { createSigaIngestor } from "./siga-job.js";
 import type { IngestTask, IngestTaskResult } from "./tasks.js";
+import { createWeatherIngestor } from "./weather-job.js";
 
 /**
  * One queue, one handler, every ingestor behind it.
@@ -64,7 +66,7 @@ export interface IngestDispatcherDeps {
  *
  * Every ingestor is constructed once, at wiring time, rather than per job: they
  * are closures over `db`, `fetch` and the archive, and rebuilding them per
- * message would make the hot path allocate seven objects to use one.
+ * message would make the hot path allocate nine objects to use one.
  */
 export function createIngestDispatcher(
   deps: IngestDispatcherDeps,
@@ -77,6 +79,8 @@ export function createIngestDispatcher(
   const dessem = createDessemIngestor(shared);
   const load = createLoadIngestor(shared);
   const registry = createPlantRegistryIngestor(shared);
+  const siga = createSigaIngestor(shared);
+  const weather = createWeatherIngestor(shared);
 
   /** Run one ingestion task. Also what the sweep calls, in-process. */
   const runIngestion = async (
@@ -96,6 +100,10 @@ export function createIngestDispatcher(
         return { kind: task.kind, result: await dessem(task.payload, report) };
       case "load":
         return { kind: task.kind, result: await load(task.payload, report) };
+      case "siga":
+        return { kind: task.kind, result: await siga(task.payload, report) };
+      case "weather":
+        return { kind: task.kind, result: await weather(task.payload, report) };
       default: {
         // Exhaustive: every other kind is handled above, and a payload that is
         // none of them cannot have been built from `IngestTask`.

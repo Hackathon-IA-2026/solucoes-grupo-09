@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { and, gte, lte, sql } from "drizzle-orm";
 import type { Database } from "../database/connection.js";
 import { weatherForecastHour, weatherRunRequest } from "../database/schema.js";
 import { UpstreamError } from "../errors.js";
+import type { PayloadArchive } from "./archive.js";
+import { retainPayload } from "./custody.js";
 import type { VintageFidelity } from "./repository.js";
 import type { WeatherForecastHour } from "./types.js";
 import {
@@ -68,6 +70,7 @@ export interface RecordedWeatherRunRequest {
 export async function recordWeatherRunRequest(
   db: Database,
   request: RecordedWeatherRunRequest,
+  archive?: PayloadArchive,
 ): Promise<string> {
   const { response } = request;
   const [inserted] = await db
@@ -94,7 +97,55 @@ export async function recordWeatherRunRequest(
   if (!inserted) {
     throw new UpstreamError("Failed to record the Single Runs API request");
   }
+
+  // Retained for the carga API's reason, not the bulk files'. There is no file
+  // to re-`HEAD` and Open-Meteo keeps no archive of what it answered, so the
+  // JSON body is the only thing that can ever show what ECMWF said for this run
+  // — and a model run, unlike an ONS month, is never republished, which makes
+  // the response WattSteer holds the only copy there will be.
+  await retainPayload(db, archive, {
+    provenance: "weather_run_request",
+    provenanceId: inserted.id,
+    datasetSlug: WEATHER_MODEL,
+    resourceName: `${request.runInit.toISOString()}_${runCycleOf(request.runInit)}`,
+    extension: "json",
+    bytes: new TextEncoder().encode(response.body),
+    fetchedAt: response.fetchedAt,
+  });
+
   return inserted.id;
+}
+
+/**
+ * The scheduled run slots already answered *by the run that was asked for*.
+ *
+ * This is weather's equivalent of the bulk sources' `HEAD` probe, and it is
+ * what makes the source affordable to sweep at all: a model run is immutable,
+ * so re-fetching one WattSteer already holds cannot discover anything. Unlike a
+ * `HEAD` it costs no HTTP call — the evidence is local, in the provenance table
+ * every ingest writes before it writes facts.
+ *
+ * **Only exact hits count.** A slot answered by an *older* run — the archive
+ * was missing the scheduled one when the sweep passed — is deliberately absent
+ * from this set, so a later pass tries the scheduled run again. That is the
+ * whole repair mechanism: see the tier note in `refresh.ts`.
+ */
+export async function readHeldRunInits(
+  db: Database,
+  range: { from: Date; to: Date },
+): Promise<Set<string>> {
+  const rows = await db
+    .select({ scheduledRunInit: weatherRunRequest.scheduledRunInit })
+    .from(weatherRunRequest)
+    .where(
+      and(
+        gte(weatherRunRequest.scheduledRunInit, range.from),
+        lte(weatherRunRequest.scheduledRunInit, range.to),
+        sql`${weatherRunRequest.runInit} = ${weatherRunRequest.scheduledRunInit}`,
+        sql`${weatherRunRequest.rowCount} > 0`,
+      ),
+    );
+  return new Set(rows.map((row) => row.scheduledRunInit.toISOString()));
 }
 
 /**

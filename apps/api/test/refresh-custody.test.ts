@@ -114,6 +114,66 @@ describe("refresh plan · tiers", () => {
     expect(REFRESH_CADENCE.history.includes(" 1 * *")).toBe(true);
   });
 
+  it("plans the SIGA snapshot exactly where the registry snapshot goes", () => {
+    // SIGA is a daily extract overwritten in place with no upstream archive, so
+    // it is the registry's twin: the every-cycle tier, and no period at all.
+    expect(live.some((task) => task.kind === "siga")).toBe(true);
+    expect(recent.some((task) => task.kind === "siga")).toBe(false);
+    expect(history.some((task) => task.kind === "siga")).toBe(false);
+    expect(periodLabelOf({ kind: "siga", payload: {} })).toBeNull();
+    expect(sourceOf({ kind: "siga", payload: {} })).toBe("siga");
+  });
+
+  describe("weather · the tiers re-based from volatility to coverage", () => {
+    const window = (tasks: IngestTask[]) => {
+      const task = tasks.find((candidate) => candidate.kind === "weather");
+      return task?.kind === "weather" ? task.payload : null;
+    };
+
+    it("takes the publication edge every cycle — today and tomorrow", () => {
+      // Tomorrow is the point: its runs initialise *today*, so D+1 is the
+      // newest day the archive can answer at all.
+      expect(window(live)).toMatchObject({ from: "2026-08-28", to: "2026-08-29" });
+      // Both cycles, always. 00Z buys notice and 12Z is measurably better; the
+      // job stores them as two vintages of the same hours.
+      expect(window(live)?.runCycles).toEqual(["00Z", "12Z"]);
+    });
+
+    it("re-asks the recent fortnight, where fallbacks and late runs cluster", () => {
+      expect(window(recent)).toMatchObject({ from: "2026-08-14", to: "2026-08-27" });
+    });
+
+    it("takes a rolling slice of the bounded archive on the slow tier", () => {
+      // The archive starts 2024-03-14 and a target day is served by D−1 runs,
+      // so the first day that can be asked for is 2024-03-15. A pass that asked
+      // earlier would spend two calls to be told the archive begins tomorrow.
+      const first = window(planRefresh({ tier: "history", now: NOW, historySlice: 0 }));
+      expect(first?.from).toBe("2024-03-15");
+      expect(first?.to).toBe("2024-06-12");
+
+      const second = window(planRefresh({ tier: "history", now: NOW, historySlice: 1 }));
+      expect(second?.from).toBe("2024-06-13");
+      expect(second?.from).not.toBe(first?.from);
+    });
+
+    it("leaves no day uncovered between the tiers", () => {
+      // live starts the day after recent ends, and recent the day after the
+      // last history slice. A gap here is a day nothing would ever backfill.
+      expect(window(recent)?.to).toBe("2026-08-27");
+      expect(window(live)?.from).toBe("2026-08-28");
+      const lastSlice = window(
+        planRefresh({ tier: "history", now: NOW, historySlice: 9 }),
+      );
+      expect(lastSlice?.to).toBe("2026-08-13");
+    });
+
+    it("labels the run by target day, and logs it against its own source", () => {
+      const task = live.find((candidate) => candidate.kind === "weather") as IngestTask;
+      expect(periodLabelOf(task)).toBe("2026-08-28..2026-08-29");
+      expect(sourceOf(task)).toBe("weather");
+    });
+  });
+
   it("names the source a run is logged against, not the ingestor", () => {
     // Wind and solar share one ingestor; an operator watching for a source that
     // went quiet needs solar to be visibly quiet while wind is still running.

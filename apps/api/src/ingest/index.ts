@@ -494,6 +494,7 @@ export {
 } from "./weather-job.js";
 export {
   type RecordedWeatherRunRequest,
+  readHeldRunInits,
   readWeatherForecastAsOf,
   recordWeatherRunRequest,
   type WeatherAsOfQuery,

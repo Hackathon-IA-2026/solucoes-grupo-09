@@ -56,7 +56,7 @@ interface SourceHealthSpec {
   toleranceHours: number;
 }
 
-/** The nine sources, and what "fresh" means for each. */
+/** The eleven sources, and what "fresh" means for each. */
 const SOURCES: SourceHealthSpec[] = [
   {
     source: "energy_balance",
@@ -114,6 +114,27 @@ const SOURCES: SourceHealthSpec[] = [
     validTimeColumn: "commissioned_on",
     basis: "ingested_at",
     toleranceHours: 48,
+  },
+  {
+    source: "siga",
+    table: "plant_geo",
+    // `observed_on` is the snapshot a *belief began* in and deliberately does
+    // not move when a later extract restates the same location, so it is the
+    // wrong clock to judge freshness by — a fleet whose coordinates are stable
+    // would read as years stale. The ingest time is the honest one.
+    validTimeColumn: "observed_on",
+    basis: "ingested_at",
+    toleranceHours: 48,
+  },
+  {
+    source: "weather",
+    table: "weather_forecast_hour",
+    // A forecast's `valid_time` is in the future by construction, so freshness
+    // is the ingest clock here for the same reason it is for DESSEM. Twenty-six
+    // hours is two run cycles plus publication slack: one missed run is a late
+    // afternoon, two consecutive misses is the source having gone quiet.
+    basis: "ingested_at",
+    toleranceHours: 26,
   },
 ];
 
