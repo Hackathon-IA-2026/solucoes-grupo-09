@@ -835,13 +835,21 @@ export interface Meta {
   /**
    * `REFERENCE_FLEET`, echoed for diagnosability. Echoed, never fetched in order
    * to be used: a caller that reads it over HTTP can be served a different
-   * battery than the one the number it is looking at was computed against.
+   * battery than the one the number it is looking at was computed against. Its
+   * fields are named here rather than left as a free-form object so that the one
+   * translator renames them: `max_power_mw` is a field name, and a block whose
+   * shape the table does not know travels in whatever casing the gateway
+   * happened to build it in.
    */
-  referenceFleet: Record<string, unknown>;
+  referenceFleet: MetaReferenceFleet;
   /**
    * Data rather than copy, because the ODbL/CC-BY notice is bilingual and a
    * bilingual notice assembled from translated strings around untranslated
-   * licence identifiers is exactly the shape `docs/specs/i18n.md` asks for.
+   * licence identifiers is exactly the shape `docs/specs/i18n.md` asks for. The
+   * keys are source identifiers and are *data*, so they travel untouched; the
+   * values are a named shape and their fields are renamed like any other
+   * object's, which is what puts `derivative_database` on the wire under that
+   * name.
    */
   attribution: Record<string, SourceAttribution>;
 }
@@ -859,7 +867,21 @@ export interface MetaGate {
  */
 export interface MetaLane {
   lane: string;
-  state: "no_artifact" | "present_unpromoted" | "promoted";
+  /**
+   * The forecaster's three states, verbatim, plus `unresolvable` - which is not
+   * a fourth state so much as the refusal to guess between the first three.
+   * `apps/ml/src/wattsteer_ml/artifacts.py` produces it for a corrupt promotion
+   * log or a `promote` line naming an artifact that is not on the volume, and
+   * the one thing that module must never do when it cannot tell is fall back to
+   * the newest file. Neither may this endpoint: mapping it onto `no_artifact`
+   * would report a damaged volume as an untrained lane.
+   */
+  state: "no_artifact" | "present_unpromoted" | "promoted" | "unresolvable";
+  /**
+   * Why the lane is `unresolvable`, in the modelling service's own prose. Absent
+   * for every other state.
+   */
+  fault?: string;
   artifactId?: string | null;
   trainedThrough?: CivilDate | null;
   vintageFidelity?: VintageFidelity;
@@ -867,12 +889,23 @@ export interface MetaLane {
 
 export interface MetaModel {
   reachable: boolean;
+  /**
+   * The error code the gateway's edge onto the modelling service produced -
+   * `OPTIMIZER_UNAVAILABLE`, `OPTIMIZER_TIMEOUT`, `OPTIMIZER_NOT_CONFIGURED`.
+   * Present only when `reachable` is false, and it is the difference between
+   * "not deployed" and "deployed and broken", which is the whole reason an
+   * operator reads this endpoint.
+   */
+  unreachableReason?: string;
   lanes: MetaLane[];
   /**
    * Reported separately from the lane state, so an unmounted volume is
-   * diagnosable rather than inferred from an absent artifact.
+   * diagnosable rather than inferred from an absent artifact. `null` when the
+   * modelling service is unreachable: the volume is mounted into *that* process,
+   * so with the service unreachable its state is unknown, and `{mounted: false}`
+   * would be a claim this endpoint cannot support.
    */
-  volume: MetaModelVolume;
+  volume: MetaModelVolume | null;
 }
 
 export interface MetaForecastState {
@@ -884,11 +917,51 @@ export interface MetaForecastState {
   nextPublicationAt: UtcInstant;
 }
 
+/**
+ * One ingestion source, and how far behind it is. The three instants are
+ * nullable because a source that has **never** ingested is the most diagnostic
+ * line this endpoint can carry, and the alternative - omitting the source - is
+ * precisely how a feed that silently stopped becomes invisible. A null lag is
+ * not a zero lag.
+ */
 export interface MetaFreshness {
   source: string;
-  latestValidTime: UtcInstant;
-  latestIngestedAt: UtcInstant;
-  lagHours: number;
+  latestValidTime: UtcInstant | null;
+  latestIngestedAt: UtcInstant | null;
+  /**
+   * Hours behind now, on the basis this source is judged by - the newest fact
+   * time for an observation series, the newest ingestion for a forecast whose
+   * valid time is in the future by construction.
+   */
+  lagHours: number | null;
+}
+
+/**
+ * The published battery. Deliberately not `flexibility-asset.schema.json`'s
+ * `battery`: that one requires a `subsystem`, and the reference fleet is
+ * subsystem-agnostic by construction - it is the fleet every subsystem's floor
+ * coverage is measured against.
+ */
+export interface ReferenceBattery {
+  assetType: "battery";
+  label: string;
+  maxPowerMw: number;
+  energyCapacityMwh: number;
+  roundTripEfficiency: number;
+  initialStateOfCharge: number;
+}
+
+/**
+ * The published flexible load. Subsystem-agnostic for the same reason the
+ * battery is.
+ */
+export interface ReferenceShiftableLoad {
+  assetType: "shiftable_load";
+  label: string;
+  maxPowerMw: number;
+  maxShiftMw: number;
+  shiftWindowHours: number;
+  dailyEnergyMwh: number;
 }
 
 export interface SourceAttribution {
@@ -985,15 +1058,19 @@ export interface PlantRegistry {
   plantCount: number;
   licence: RegistryLicence;
   /**
-   * Source attribution, keyed by source. Data rather than copy: the bilingual
-   * 4.3 notice is assembled by the client from translated strings around these
-   * untranslated identifiers. Three fields and no more - `name`, `licence` and
-   * `url` are spelled identically in both casings, which is what lets a map
-   * whose keys are *data* pass through the one translator untouched and still
-   * validate. The ODbL specifics that would need renaming live under `licence`,
-   * which is a named object and is renamed properly.
+   * Source attribution, keyed by source - `meta.schema.json`'s
+   * `source_attribution`, `$ref`-ed rather than restated, so the two endpoints
+   * that carry the notice cannot come to disagree about what is in it. Data
+   * rather than copy: the bilingual 4.3 notice is assembled by the client from
+   * translated strings around these untranslated identifiers. The keys are
+   * source identifiers and are *data*, so they travel untouched; the values are
+   * a named shape and are renamed field by field, which is what puts
+   * `derivative_database` on the wire under that name. This block was once a
+   * narrower local definition holding only the three casing-stable fields,
+   * because the one translator carried a map's values through unrenamed; it does
+   * not any more.
    */
-  attribution: Record<string, RegistrySource>;
+  attribution: Record<string, SourceAttribution>;
   plants: RegistryPlantRow[];
 }
 
@@ -1004,21 +1081,6 @@ export interface PlantRegistry {
 export interface RegistryFilters {
   subsystem: Subsystem | null;
   technology: Technology | null;
-}
-
-/**
- * One upstream source and the licence it publishes under. Deliberately
- * narrower than `meta.schema.json`'s `source_attribution`: every key here is
- * casing-stable, so the block survives the wire translation unrenamed.
- */
-export interface RegistrySource {
-  name: string;
-  /**
-   * An SPDX-style identifier, untranslated, with the bilingual notice built
-   * around it by the client.
-   */
-  licence: string;
-  url: string;
 }
 
 /**
@@ -1405,9 +1467,19 @@ export interface MetaData {
 }
 
 /**
- * Reported separately from the lane state, so an unmounted volume is
- * diagnosable rather than inferred from an absent artifact.
+ * `REFERENCE_FLEET`, echoed for diagnosability. Echoed, never fetched in order
+ * to be used: a caller that reads it over HTTP can be served a different
+ * battery than the one the number it is looking at was computed against. Its
+ * fields are named here rather than left as a free-form object so that the one
+ * translator renames them: `max_power_mw` is a field name, and a block whose
+ * shape the table does not know travels in whatever casing the gateway
+ * happened to build it in.
  */
+export interface MetaReferenceFleet {
+  battery: ReferenceBattery;
+  shiftableLoad: ReferenceShiftableLoad;
+}
+
 export interface MetaModelVolume {
   mounted: boolean;
   writable: boolean;
@@ -1474,6 +1546,14 @@ export interface WireField {
    */
   readonly shape?: string;
   readonly list?: boolean;
+  /**
+   * True where the field is a **map whose keys are data** and whose values are
+   * `shape` — `/v1/meta`'s and `/v1/plants`' `attribution`. The keys are
+   * carried through untouched and every value is renamed, which is the whole
+   * distinction: a source identifier is not a field name, and
+   * `derivative_database` is.
+   */
+  readonly map?: boolean;
   readonly optional?: boolean;
   /**
    * The single value a `const` property is fixed to — the discriminant of a
@@ -1826,8 +1906,8 @@ export const WIRE_SHAPES = {
     model: { wire: "model", shape: "MetaModel" },
     forecast: { wire: "forecast", shape: "MetaForecastState" },
     data: { wire: "data", shape: "MetaData" },
-    referenceFleet: { wire: "reference_fleet" },
-    attribution: { wire: "attribution" },
+    referenceFleet: { wire: "reference_fleet", shape: "MetaReferenceFleet" },
+    attribution: { wire: "attribution", shape: "SourceAttribution", map: true },
   },
   MetaGate: {
     profile: { wire: "profile" },
@@ -1838,12 +1918,14 @@ export const WIRE_SHAPES = {
   MetaLane: {
     lane: { wire: "lane" },
     state: { wire: "state" },
+    fault: { wire: "fault", optional: true },
     artifactId: { wire: "artifact_id", optional: true },
     trainedThrough: { wire: "trained_through", optional: true },
     vintageFidelity: { wire: "vintage_fidelity", optional: true },
   },
   MetaModel: {
     reachable: { wire: "reachable" },
+    unreachableReason: { wire: "unreachable_reason", optional: true },
     lanes: { wire: "lanes", shape: "MetaLane", list: true },
     volume: { wire: "volume", shape: "MetaModelVolume" },
   },
@@ -1860,6 +1942,22 @@ export const WIRE_SHAPES = {
     latestValidTime: { wire: "latest_valid_time" },
     latestIngestedAt: { wire: "latest_ingested_at" },
     lagHours: { wire: "lag_hours" },
+  },
+  ReferenceBattery: {
+    assetType: { wire: "asset_type", const: "battery" },
+    label: { wire: "label" },
+    maxPowerMw: { wire: "max_power_mw" },
+    energyCapacityMwh: { wire: "energy_capacity_mwh" },
+    roundTripEfficiency: { wire: "round_trip_efficiency" },
+    initialStateOfCharge: { wire: "initial_state_of_charge" },
+  },
+  ReferenceShiftableLoad: {
+    assetType: { wire: "asset_type", const: "shiftable_load" },
+    label: { wire: "label" },
+    maxPowerMw: { wire: "max_power_mw" },
+    maxShiftMw: { wire: "max_shift_mw" },
+    shiftWindowHours: { wire: "shift_window_hours" },
+    dailyEnergyMwh: { wire: "daily_energy_mwh" },
   },
   SourceAttribution: {
     name: { wire: "name" },
@@ -1894,17 +1992,12 @@ export const WIRE_SHAPES = {
     filters: { wire: "filters", shape: "RegistryFilters" },
     plantCount: { wire: "plant_count" },
     licence: { wire: "licence", shape: "RegistryLicence" },
-    attribution: { wire: "attribution" },
+    attribution: { wire: "attribution", shape: "SourceAttribution", map: true },
     plants: { wire: "plants", shape: "RegistryPlantRow", list: true },
   },
   RegistryFilters: {
     subsystem: { wire: "subsystem" },
     technology: { wire: "technology" },
-  },
-  RegistrySource: {
-    name: { wire: "name" },
-    licence: { wire: "licence" },
-    url: { wire: "url" },
   },
   RegistryLicence: {
     database: { wire: "database" },
@@ -2051,6 +2144,10 @@ export const WIRE_SHAPES = {
   },
   MetaData: {
     freshness: { wire: "freshness", shape: "MetaFreshness", list: true },
+  },
+  MetaReferenceFleet: {
+    battery: { wire: "battery", shape: "ReferenceBattery" },
+    shiftableLoad: { wire: "shiftable_load", shape: "ReferenceShiftableLoad" },
   },
   MetaModelVolume: {
     mounted: { wire: "mounted" },

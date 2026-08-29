@@ -237,3 +237,95 @@ describe("the codec round-trips every checked-in example", () => {
     ]);
   });
 });
+
+/**
+ * The half of "a map is data" that was wrong, and is the reason this block
+ * exists.
+ *
+ * A map's **keys** are data. Its **values** are objects like any other, and
+ * `derivative_database` is as much a field name as `as_of` is. The codec used
+ * to carry the whole map through unrenamed, and the defect was invisible by
+ * construction: `attribution` is `additionalProperties`-typed, so
+ * `{"derivativeDatabase": true}` validated against the schema exactly as
+ * `{"derivative_database": true}` did. Nothing failed; the wire was simply
+ * wrong.
+ *
+ * So these assert on a **multi-word field name specifically**. A test written
+ * over `name`, `licence` and `url` — the three fields the block was once
+ * narrowed to — passes whether the fix is present or not, which is precisely
+ * how the defect survived being tested for a whole ticket.
+ */
+describe("a map's values are renamed even though its keys are not", () => {
+  const APP = {
+    name: "ANEEL SIGA",
+    licence: "ODbL-1.0",
+    url: "https://dadosabertos.aneel.gov.br/",
+    derivativeDatabase: true,
+    machineReadableAt: "/v1/plants",
+  };
+  const WIRE = {
+    name: "ANEEL SIGA",
+    licence: "ODbL-1.0",
+    url: "https://dadosabertos.aneel.gov.br/",
+    derivative_database: true,
+    machine_readable_at: "/v1/plants",
+  };
+
+  test("encoding renames a multi-word field inside a map value", () => {
+    const encoded = encodeWire("Meta", { attribution: { aneel_siga: APP } }) as {
+      attribution: Record<string, Record<string, unknown>>;
+    };
+    expect(encoded.attribution.aneel_siga).toEqual(WIRE);
+    // The key is data and survives: `aneelSiga` would be a renamed *value*.
+    expect(Object.keys(encoded.attribution)).toEqual(["aneel_siga"]);
+    // Stated separately from the `toEqual` above, because this is the exact key
+    // that used to reach the wire in the wrong casing and validate anyway.
+    expect(encoded.attribution.aneel_siga?.derivative_database).toBe(true);
+    expect(encoded.attribution.aneel_siga?.derivativeDatabase).toBeUndefined();
+  });
+
+  test("decoding renames it back, on both endpoints that carry the block", () => {
+    for (const shape of ["Meta", "PlantRegistry"] as const) {
+      const decoded = decodeWire(shape, { attribution: { aneel_siga: WIRE } }) as {
+        attribution: Record<string, Record<string, unknown>>;
+      };
+      expect(decoded.attribution.aneel_siga).toEqual(APP);
+      expect(decoded.attribution.aneel_siga?.derivative_database).toBeUndefined();
+    }
+  });
+
+  test("the round trip is exact, which is what the map branch has to preserve", () => {
+    const app = decodeWire("Meta", { attribution: { ons: WIRE } });
+    expect(encodeWire("Meta", app)).toEqual({ attribution: { ons: WIRE } });
+  });
+
+  test("a map whose values are scalars is still carried through whole", () => {
+    // `error.details` — the distinction the map branch has to keep making. Its
+    // values have no shape to recurse into, so a key that happens to look like
+    // a field name is still data and is not touched.
+    const details = { field_path: "assets[0].max_shift_mw", limit_mw: 50 };
+    const encoded = encodeWire("ErrorEnvelope", {
+      error: { code: "SHIFT_EXCEEDS_CONNECTION", message: "no", details },
+    }) as { error: { details: Record<string, unknown> } };
+    expect(encoded.error.details).toEqual(details);
+  });
+
+  test("the table says which fields are maps, and only those", () => {
+    // A guard on the mechanism rather than on one payload: the generator marks
+    // a map value's shape, and the two attribution blocks are the only maps in
+    // the whole contract whose values have one. A third appearing here is a
+    // field worth a second look, not a failure to route around.
+    const maps: string[] = [];
+    for (const [name, shape] of Object.entries(WIRE_SHAPES)) {
+      for (const [camel, field] of Object.entries(shape)) {
+        if (field.map === true) {
+          maps.push(`${name}.${camel} -> ${field.shape}`);
+        }
+      }
+    }
+    expect(maps.sort()).toEqual([
+      "Meta.attribution -> SourceAttribution",
+      "PlantRegistry.attribution -> SourceAttribution",
+    ]);
+  });
+});

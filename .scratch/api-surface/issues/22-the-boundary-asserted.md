@@ -36,3 +36,23 @@ the forecast route is gone, and should.
 - [ ] The meta endpoint reports the modelling service unreachable and stays otherwise correct
 - [ ] The default test run needs no network, no database and no modelling service for the structural half
 - [ ] The degradation half runs against real Postgres under the existing environment-variable gating
+
+---
+
+## A third crossing you must allow for, from ticket 06
+
+Your structural check is "no route under `apps/api/src/api` reaches the ML
+service except the optimizer and replay solve". `/v1/meta` is now a **third**
+crossing, deliberately: the ticket requires it to merge the ML service's own
+artifact and lane view into the operator's one readout, and that view lives in
+the process that has the volume mounted.
+
+It is diagnostic rather than product, it goes through `callMl` like the others,
+and it degrades instead of failing — `apps/ml`'s `/v1/meta` never raises for
+exactly this reason, while `current(lane)` does. So the check should name three
+allowed crossings and say why the third is different, rather than being widened
+until it stops meaning anything.
+
+- [ ] The crossing check names `/v1/meta` explicitly, with its reason, and still
+      fails on a fourth crossing added anywhere else
+

@@ -545,6 +545,45 @@ translated strings around untranslated licence identifiers is exactly the shape
 "a stale forecast and an unmounted volume do not look alike", and the volume
 state is reported separately for the same reason.
 
+**Four things the built endpoint carries that this block does not show**, each
+because the alternative was a claim the gateway cannot support:
+
+- **`state` has a fourth value, `unresolvable`.** It is not a fourth state so
+  much as the refusal to guess between the three:
+  `apps/ml/src/wattsteer_ml/artifacts.py` reports it for a damaged promotion log
+  or a `promote` line naming an artifact that is not on the volume, and the one
+  thing that module must never do when it cannot tell is fall back to the newest
+  file. Mapping it onto `no_artifact` here would report a broken volume as an
+  untrained lane. An optional `fault` carries the modelling service's own prose.
+- **`model.volume` is `null` when the service is unreachable**, not
+  `{mounted: false}`. The volume is mounted into *that* process; with the
+  process unreachable its state is unknown, and this is the endpoint that may
+  least afford to invent one. `model.unreachable_reason` carries the code
+  `ml-proxy.ts` produced — unconfigured, refused, timed out — because those are
+  three different sentences for an operator and a boolean flattens them.
+- **The three instants in `data.freshness[]` are nullable.** A source that has
+  *never* ingested is the most diagnostic line this endpoint has; omitting it,
+  which is what a non-nullable instant would force, is exactly how a feed that
+  silently stopped becomes invisible.
+- **`reference_fleet`'s fields are named in the schema** rather than left a
+  free-form object. The one translator renames only what the generated table
+  knows about, so an unnamed block would travel in whatever casing the gateway
+  happened to build it in.
+
+**This route is the third and last crossing to the ML service**, against Seam 1
+below, which names only the optimizer and the replay solve. The crossing is
+diagnostic rather than a data path: it contributes one field, it is wrapped
+whole, and its failure is a value on the response instead of a status on it.
+
+**No `ETag`, against story 25's "an ETag on every read".** The two are in
+tension and the caching table wins: an ETag exists so a shared cache can
+revalidate rather than re-query, and a response that may not be stored has
+nothing to revalidate. The 304 it would enable is also the wrong answer to this
+endpoint's question — "unchanged" is not what an operator asking whether the
+volume is still gone can be told by a cache that was never allowed to hold the
+previous answer. Story 25 stands for every other read, all of which are
+storable.
+
 #### 2. `GET /v1/grid/outlook?target_date=&gate_profile=`
 
 The one call the landing hero and the Overview's first paint both make. Four

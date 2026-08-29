@@ -16,6 +16,7 @@
     "./client": "./src/client.ts",
     "./scenario": "./src/scenario.ts",
     "./scenario-validation": "./src/scenario-validation.ts",
+    "./schedule": "./src/schedule.ts",
     "./schema": "./src/schema.ts",
     "./schema/*": "./schema/*"
   },

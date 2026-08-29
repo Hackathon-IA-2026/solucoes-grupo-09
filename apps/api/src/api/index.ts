@@ -7,6 +7,7 @@ import { database } from "../database/connection.js";
 import { canonicalReads } from "./canonical.js";
 import { gridRoutes } from "./grid.js";
 import { ingestHealth } from "./ingest-health.js";
+import { metaRoutes } from "./meta.js";
 import { mlProxy } from "./ml-proxy.js";
 import { plantRoutes } from "./plants.js";
 import {
@@ -126,7 +127,8 @@ export const app = new Elysia()
   .use(ingestHealth)
   .use(canonicalReads)
   .use(gridRoutes)
-  .use(plantRoutes);
+  .use(plantRoutes)
+  .use(metaRoutes);
 
 // Opt-in BullMQ dashboard at /jobs (requires Redis). Protect it in production.
 if (config.dashboard && config.redisUrl) {
@@ -149,6 +151,9 @@ if (import.meta.main) {
     console.log("   • GET /docs      — Swagger UI");
     console.log("   • GET /ingest/health — ingestion freshness, custody, joins");
     console.log("   • GET /v1/canonical    — the canonical read contract manifest");
+    console.log(
+      "   • GET /v1/meta         — what this deployment can do, and what is broken",
+    );
     console.log("   • GET /v1/grid/now     — the observed right-now readout");
     console.log(
       "   • GET /v1/plants       — the plant registry (ODbL §4.6), JSON or CSV",

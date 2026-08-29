@@ -90,9 +90,9 @@ function convertField(
   direction: "decode" | "encode",
 ): unknown {
   if (raw === null || raw === undefined || field.shape === undefined) {
-    // A field with no nested shape is a scalar, or a map whose keys are *data*
-    // — `error.details`, `/v1/meta`'s attribution block. Renaming those would
-    // rewrite values rather than field names.
+    // A field with no nested shape is a scalar, or a map whose *values* are
+    // scalars — `error.details`. Renaming either would rewrite values rather
+    // than field names, so both pass through untouched.
     return raw;
   }
   // The one narrowing of the generated `shape: string`. It is a `WireShapeName`
@@ -102,6 +102,26 @@ function convertField(
   const nested = WIRE_SHAPES[field.shape as WireShapeName];
   if (field.list === true) {
     return Array.isArray(raw) ? raw.map((item) => convert(nested, item, direction)) : raw;
+  }
+  if (field.map === true) {
+    // A **map whose keys are data and whose values are a named shape** —
+    // `/v1/meta`'s and `/v1/plants`' `attribution`, keyed by source identifier.
+    // The keys are values and are carried through untouched; the values are
+    // objects like any other and are renamed field by field.
+    //
+    // This used to be the same branch as "no shape at all", and the bug it hid
+    // is the reason the schema now names the value's shape: the block validated
+    // either way, so `derivative_database` travelled as `derivativeDatabase`
+    // and nothing anywhere failed. A map is not an opaque blob — only its keys
+    // are.
+    if (!isPlainObject(raw)) {
+      return raw;
+    }
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(raw)) {
+      out[key] = convert(nested, value, direction);
+    }
+    return out;
   }
   return convert(nested, raw, direction);
 }

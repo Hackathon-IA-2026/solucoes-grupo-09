@@ -25,9 +25,9 @@
     },
     "licence": { "$ref": "#/$defs/registry_licence" },
     "attribution": {
-      "description": "Source attribution, keyed by source. Data rather than copy: the bilingual 4.3 notice is assembled by the client from translated strings around these untranslated identifiers. Three fields and no more - `name`, `licence` and `url` are spelled identically in both casings, which is what lets a map whose keys are *data* pass through the one translator untouched and still validate. The ODbL specifics that would need renaming live under `licence`, which is a named object and is renamed properly.",
+      "description": "Source attribution, keyed by source - `meta.schema.json`'s `source_attribution`, `$ref`-ed rather than restated, so the two endpoints that carry the notice cannot come to disagree about what is in it. Data rather than copy: the bilingual 4.3 notice is assembled by the client from translated strings around these untranslated identifiers. The keys are source identifiers and are *data*, so they travel untouched; the values are a named shape and are renamed field by field, which is what puts `derivative_database` on the wire under that name. This block was once a narrower local definition holding only the three casing-stable fields, because the one translator carried a map's values through unrenamed; it does not any more.",
       "type": "object",
-      "additionalProperties": { "$ref": "#/$defs/registry_source" }
+      "additionalProperties": { "$ref": "meta.schema.json#/$defs/source_attribution" }
     },
     "plants": {
       "type": "array",
@@ -62,21 +62,6 @@
         }
       },
       "required": ["subsystem", "technology"],
-      "additionalProperties": false
-    },
-    "registry_source": {
-      "title": "RegistrySource",
-      "description": "One upstream source and the licence it publishes under. Deliberately narrower than `meta.schema.json`'s `source_attribution`: every key here is casing-stable, so the block survives the wire translation unrenamed.",
-      "type": "object",
-      "properties": {
-        "name": { "type": "string" },
-        "licence": {
-          "type": "string",
-          "description": "An SPDX-style identifier, untranslated, with the bilingual notice built around it by the client."
-        },
-        "url": { "type": "string" }
-      },
-      "required": ["name", "licence", "url"],
       "additionalProperties": false
     },
     "registry_licence": {

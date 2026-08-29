@@ -197,12 +197,32 @@ describe("plants · the licence rides on the payload", () => {
     const attribution = wire.attribution as Record<string, Record<string, unknown>>;
     expect(attribution.aneel_siga?.licence).toBe("ODbL-1.0");
     expect(attribution.ons?.licence).toBe("CC-BY-4.0");
-    // `attribution` is a map whose keys are data, so the one translator carries
-    // its values through unrenamed. That is only safe while every field name is
-    // casing-stable — this is the assertion that keeps it so.
-    for (const source of Object.values(attribution)) {
-      expect(Object.keys(source).sort()).toEqual(["licence", "name", "url"]);
+    // `attribution` is a map whose **keys** are data — source identifiers, which
+    // travel untouched. Its **values** are a named shape and are renamed field
+    // by field, which they were not when this ticket shipped: the block was
+    // narrowed to the three casing-stable names because the one translator
+    // carried a map through whole. `api-surface` ticket 06 fixed the generator,
+    // so this asserts the rename on a multi-word field instead of pinning the
+    // narrowing that was standing in for it.
+    for (const key of Object.keys(attribution)) {
+      expect(key).toBe(key.toLowerCase());
     }
+    const wired = encodeWire("PlantRegistry", {
+      ...REGISTRY,
+      attribution: {
+        aneel_siga: {
+          name: "ANEEL SIGA",
+          licence: "ODbL-1.0",
+          url: "https://dadosabertos.aneel.gov.br/",
+          derivativeDatabase: true,
+          machineReadableAt: "/v1/plants",
+        },
+      },
+    }) as { attribution: Record<string, Record<string, unknown>> };
+    expect(wired.attribution.aneel_siga?.derivative_database).toBe(true);
+    expect(wired.attribution.aneel_siga?.machine_readable_at).toBe("/v1/plants");
+    expect(wired.attribution.aneel_siga?.derivativeDatabase).toBeUndefined();
+    expect(validate("plant-registry.schema.json", wired).valid).toBe(true);
   });
 
   it("carries the same notice in the CSV, before any row", () => {
