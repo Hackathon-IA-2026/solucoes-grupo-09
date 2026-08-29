@@ -3,6 +3,17 @@ export {
   BULK_STEPS,
   type BulkResource,
 } from "./bulk-resource.js";
+// The plant-grain constrained-off `_detail` datasets (ONS 2 & 4) — the true
+// per-usina view, and the only source that carries no restriction reason
+// because at this grain none exists. Appended rather than merged into the
+// constrained-off block above so that two adapters landing at once cannot
+// conflict on this file.
+export {
+  type ConstrainedOffDetailIngestorDeps,
+  createConstrainedOffDetailIngestor,
+  type IngestConstrainedOffDetailPayload,
+  type IngestConstrainedOffDetailResult,
+} from "./constrained-off-detail-job.js";
 export {
   type ConstrainedOffIngestorDeps,
   createConstrainedOffIngestor,
@@ -163,6 +174,12 @@ export {
   WIND_DATASET_SLUG,
 } from "./ons/constrained-off.js";
 export {
+  MEASURED_WIND_SPEED_UNIT_CORRECTION,
+  parseConstrainedOffDetailCsv,
+  SOLAR_DETAIL_DATASET_SLUG,
+  WIND_DETAIL_DATASET_SLUG,
+} from "./ons/constrained-off-detail.js";
+export {
   DAILY_LOAD_DATASET_SLUG,
   DAILY_LOAD_FORMATS,
   LOAD_METHODOLOGY_REGIMES,
@@ -200,9 +217,24 @@ export {
   findRenewableDeactivations,
   type ParsePlantRegistryOptions,
   parseCapacityRegistryCsv,
+  parseOperationModality,
   type RenewableDeactivation,
   WINDOW_OPENS_ON,
 } from "./ons/plant-registry.js";
+export {
+  type PlantDetailAsOfQuery,
+  type PlantDetailAsOfResult,
+  type PlantDetailAsOfRow,
+  type PlantDetailWrite,
+  type PlantDetailWriteResult,
+  type PlantIdentityConflict,
+  type PlantIdentityReconciliation,
+  plantDetailDigest,
+  readPlantDetailAsOf,
+  reconcilePlantIdentity,
+  upsertObservedPlants,
+  writePlantDetail,
+} from "./plant-detail-repository.js";
 export {
   createPlantRegistryIngestor,
   type IngestPlantRegistryPayload,
@@ -256,12 +288,16 @@ export type {
   EnergyBalanceHour,
   EnergyBalanceParse,
   LoadParse,
+  ObservedPlant,
   ObservedReportingEntity,
+  PlantDetailHour,
+  PlantDetailParse,
   ProgrammedLoadHalfHour,
   ReasonCode,
   RejectedRow,
   RejectionReason,
   ReportingEntityKind,
+  ResourceMeasurement,
   RestrictionCause,
   RestrictionOrigin,
   Technology,

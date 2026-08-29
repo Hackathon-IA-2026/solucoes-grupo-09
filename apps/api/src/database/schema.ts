@@ -1003,3 +1003,149 @@ export const subsystemLoadDay = pgTable(
     check("subsystem_load_day_length", sql`${t.dayMinutes} in (1380, 1440, 1500)`),
   ],
 );
+
+// The plant-grain constrained-off `_detail` datasets (ONS 2 & 4). Appended
+// rather than merged into the constrained-off block above so that two adapters
+// landing at once cannot conflict on this file.
+
+/**
+ * A plant as the constrained-off `_detail` files name it.
+ *
+ * **Why this is not `plant`.** `plant` is the ONS *registry* dimension, keyed
+ * by `ceg_core` because `capacidade-geracao` publishes no `id_ons`, and it
+ * carries owner and operator, which these files do not. This table is keyed by
+ * `ons_plant_code` because that is the domain's plant identity
+ * (`docs/domain-model.md` §3) and because these files are the only source in
+ * scope that puts **both** identifiers on one row for an individual plant.
+ * Keeping them apart is what lets the two be reconciled — see
+ * `reconcilePlantIdentity` — instead of one silently overwriting the other.
+ *
+ * **There is no conjunto column here, and that is the point of the table.**
+ * ONS names the plant's conjunto inline in these files. Storing it would put a
+ * plant one join from `curtailment_report_hour`, and therefore one join from a
+ * restriction reason that does not exist at this grain. Membership is read from
+ * `conjunto_membership`, which is time-resolved and must be resolved as of a
+ * date; `operation_modality` is kept because it is a plant attribute and is
+ * what says *whether* a plant's reason is knowable at all.
+ */
+export const observedPlant = pgTable(
+  "observed_plant",
+  {
+    /** ONS `id_ons`, e.g. `MAEDT1`. Never a `CJU_` code — conjuntos do not
+     * appear in these files at all: 0 of 1,365,984 rows in 2026-08 wind. */
+    onsCode: text().primaryKey(),
+    /** ANEEL CEG with the version segment stripped. Always present here. */
+    cegCore: text().notNull(),
+    /** ONS's own rendering, zero-padded version segment and all. */
+    cegRaw: text().notNull(),
+    /** ONS `nom_usina`. Display only — never a join key; SIGA writes aliases. */
+    name: text().notNull(),
+    subsystem: subsystemCode().notNull(),
+    /** ONS `id_estado`. These files have no `nom_estado` — do not assume one. */
+    stateCode: text().notNull(),
+    technology: technology().notNull(),
+    /** What decides which `ReportingEntity` variant this plant settles under. */
+    operationModality: operationModality().notNull(),
+    firstSeenAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("observed_plant_ceg_core").on(t.cegCore),
+    index("observed_plant_subsystem_technology").on(t.subsystem, t.technology),
+  ],
+);
+
+/**
+ * Per-plant constrained-off detail, per technology, per hour — ONS 2 & 4.
+ *
+ * **This table has no reason, no origin, no description and no reference
+ * generation, and no foreign key by which one could arrive.** That is not an
+ * omission to be filled in later; it is the shape of the source. The `_detail`
+ * files publish no restriction reason on any vintage, and for a Tipo II-C plant
+ * — 93% of wind rows and 98.6% of curtailed energy — the reason genuinely does
+ * not exist at this grain: it is settled against the *conjunto*. Deriving a
+ * per-plant reason is an **allocation** with a stated method, labelled as an
+ * estimate, and v1 computes none (`docs/domain-model.md` §3). Curtailment
+ * volume is likewise absent, because without a reference generation it cannot
+ * be computed from these columns.
+ *
+ * **The measured resource is one value object over three columns**, exactly as
+ * `RestrictionCause` is on `curtailment_report_hour`. ONS blanks the
+ * measurement and its invalid flag together and fills them together, so
+ * half-populated is unrepresentable here rather than merely avoided. The two
+ * unit-bearing columns are separate and separately named so that a wind speed
+ * can never be read as an irradiance; a CHECK ties each to its technology.
+ *
+ * **`measured_wind_speed_ms` corrects a documented unit.** The ONS dictionary
+ * says `val_ventoverificado` is in `m3/s` — a volumetric flow rate, which
+ * cannot describe the wind driving a turbine. The published magnitudes are
+ * ordinary surface wind speeds, so WattSteer stores and names m/s. No numeric
+ * conversion is applied: the label was wrong, not the values.
+ *
+ * **Hourly, from a half-hourly source**, as everywhere else. Energies sum; the
+ * measured resource is a *mean* because a speed and an irradiance are
+ * intensive; `measurement_invalid` is the disjunction over the half-hours, so
+ * an hour built on one failed measurement says so.
+ */
+export const plantDetailHour = pgTable(
+  "plant_detail_hour",
+  {
+    plantOnsCode: text()
+      .notNull()
+      .references(() => observedPlant.onsCode),
+    technology: technology().notNull(),
+    /** Start of the hour the fact is about, UTC. */
+    validTime: timestamp({ withTimezone: true }).notNull(),
+
+    /** `val_geracaoestimada` — wind × power curve, or history. Often absent. */
+    estimatedGenerationMwh: doublePrecision(),
+    /** `val_geracaoverificada`. Negative values occur and are published as-is. */
+    verifiedGenerationMwh: doublePrecision(),
+    /** `val_ventoverificado`, mean over the hour. **m/s**, not the documented m3/s. */
+    measuredWindSpeedMs: doublePrecision(),
+    /** `val_irradianciaverificado`, mean over the hour, W/m². */
+    measuredIrradianceWm2: doublePrecision(),
+    /**
+     * `flg_dadoventoinvalido` / `flg_dadoirradianciainvalido`, unified.
+     *
+     * The two technologies encode this boolean differently and permanently —
+     * wind writes `0.0`/`1.0`, solar writes `False`/`True`, each since its
+     * dataset's first published month. The adapter reads both dialects; the
+     * database stores one.
+     */
+    measurementInvalid: integer(),
+    /** 1 or 2. Below 2 means the source hour was incomplete. */
+    halfHoursObserved: integer().notNull(),
+
+    ...vintageColumns(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.plantOnsCode, t.technology, t.validTime, t.dataVersion],
+    }),
+    index("plant_detail_hour_as_of").on(
+      t.validTime,
+      t.plantOnsCode,
+      t.technology,
+      t.ingestedAt,
+    ),
+    index("plant_detail_hour_time").on(t.validTime, t.technology),
+    // The measurement is one value object: a reading without its flag, or a
+    // flag without its reading, is an illegal state and not a partial one.
+    check(
+      "plant_detail_measurement_whole",
+      sql`(coalesce(${t.measuredWindSpeedMs}, ${t.measuredIrradianceWm2}) is null) = (${t.measurementInvalid} is null)`,
+    ),
+    // A wind row measures a speed and a solar row an irradiance. Never both,
+    // and never the other one — the units are not interchangeable and a column
+    // that could hold either would eventually hold the wrong one.
+    check(
+      "plant_detail_measurement_technology",
+      sql`case ${t.technology}
+            when 'WIND' then ${t.measuredIrradianceWm2} is null
+            else ${t.measuredWindSpeedMs} is null
+          end`,
+    ),
+    check("plant_detail_invalid_boolean", sql`${t.measurementInvalid} in (0, 1)`),
+  ],
+);

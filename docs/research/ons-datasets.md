@@ -1036,3 +1036,50 @@ any difference as "re-download and diff".
     cleanly. **Not confirmed**: from which date the defect starts, which fields are affected, or
     whether it also affects `/cargaprogramada`. A tolerant/repairing parser is required for
     historical backfill, and this should be characterised before relying on pre-2025 carga data.
+
+---
+
+## Addendum — the `_detail` files, resolved and corrected during ingest (ticket 03)
+
+Established by full scans of `RESTRICAO_COFF_EOLICA_DETAIL_2026_08.csv` (1 365 984 rows),
+`RESTRICAO_COFF_EOLICA_DETAIL_2021_10.csv` (1 084 896), `RESTRICAO_COFF_FOTOVOLTAICA_DETAIL_2026_08.csv`
+(710 640) and `RESTRICAO_COFF_FOTOVOLTAICA_DETAIL_2024_04.csv` (478 464), on **2026-08-28**. Fixture
+evidence for each is in `apps/api/test/fixtures/ons/FIXTURES.md`.
+
+**The unit correction, recorded.** `val_ventoverificado` is documented "em m3/s"; a volumetric flow
+rate cannot describe the wind driving a turbine, and every observed value is an ordinary surface
+wind speed. WattSteer reads and stores the column as **m/s** — the database column is
+`plant_detail_hour.measured_wind_speed_ms`, and the correction is declared in code as
+`MEASURED_WIND_SPEED_UNIT_CORRECTION` with `conversionFactor: 1`. The factor is 1 deliberately: the
+*label* is wrong, not the values, so scaling anything would invent data. This closes open question 6
+for ingestion purposes; it remains unconfirmed against any ONS source that corrects the error.
+
+**Open question 9 is resolved.** The 30-versus-29 CSV count for
+`restricao_coff_fotovoltaica_detail` is not an extra month. `package_show` returns
+`RESTRICAO_COFF_FOTOVOLTAICA_DETAIL_2024_09.csv` **twice** — two resource ids, the same URL,
+created 2024-10-04 and 2024-09-03, recording different `size` values (67 028 501 and 66 254 356) and
+one with a null `last_modified`. Both datasets cover 2024-04 → 2026-08 inclusive, 29 months. Because
+the month selector matches on the URL basename it takes the first and is deterministic, and because
+`published_at` comes from the S3 `HEAD` rather than from CKAN, the null `last_modified` is harmless.
+
+**Four facts the survey did not record, all of which change the schema:**
+
+1. **The `_detail` files contain no conjunto rows at all** — 0 of 1 365 984 wind rows and 0 of
+   710 640 solar rows begin `CJU_`, and `ceg` is populated on every row with no `"-"` anywhere.
+   These are genuinely per-usina, which is what makes them safe to key on `ons_plant_code` and what
+   makes them the only source in scope that puts `id_ons` and `ceg` on one row for an individual
+   plant. `capacidade-geracao` has no `id_ons` at all, so this is the identity bridge.
+2. **ONS publishes one plant-half-hour twice, with different values.** `MGJCN` appears twice for all
+   48 half-hours of 2024-04-13, differing in `val_geracaoestimada` and `val_geracaoverificada`. This
+   is not a revision — a revision arrives in a later file — so both copies are rejected.
+3. **Every measure can be empty, and the measurement pair empties together.** 117 209 rows of the
+   2021-10 wind file publish no estimate; 480 publish neither wind speed nor flag (336 of those
+   publish nothing at all, 144 an estimate only). No row in 1 084 896 blanks the measurement without
+   also blanking its flag, which is what makes the pair a single value object.
+4. **Negative irradiance is real and is flagged valid.** 3 069 rows of the 2024-04 solar file read
+   between −1 and −2 W/m² at night with `flg_dadoirradianciainvalido = False`. A pyranometer offset,
+   stored as published.
+
+**The boolean-dialect finding is confirmed at scale**, not merely on the first row: the 2026-08 wind
+file uses only `0.0` (1 229 489) and `1.0` (136 495), and the 2026-08 solar file only `False`
+(603 206) and `True` (107 434).
