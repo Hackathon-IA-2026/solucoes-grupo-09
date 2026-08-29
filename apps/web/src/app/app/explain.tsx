@@ -25,18 +25,23 @@ import { AppShell, MiniPill, ScreenTitle } from "@/components/app/app-shell";
 import { ForecastStamp, VintageBadge } from "@/components/app/honesty";
 import { sharedParams, useAppParams } from "@/components/app/use-app-params";
 import { BandFigure } from "@/components/charts/band-figure";
-import { DriverBars } from "@/components/charts/driver-bars";
+import { DriverBars, formatReading } from "@/components/charts/driver-bars";
 import { ReliabilityCurve } from "@/components/charts/reliability-curve";
 import { RiskCaveat, RiskChip, RiskScale } from "@/components/charts/risk-class";
+import { useCopy, useFormat } from "@/i18n";
+import { fill } from "@/i18n/format";
 import {
   buildExplain,
   buildForecast,
+  type ExplainFixture,
   type ObservedReason,
   subsystemMeta,
 } from "@/lib/fixtures";
 
 export default function ExplainScreen() {
   const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
   const params = useAppParams();
   const forecast = buildForecast(params.subsystem, params.technology, params.run);
   const explain = buildExplain(params.subsystem, params.technology);
@@ -45,13 +50,13 @@ export default function ExplainScreen() {
   return (
     <>
       <Head>
-        <title>Explain — WattSteer</title>
+        <title>{copy.app.explain.metaTitle}</title>
         <meta name="robots" content="noindex" />
       </Head>
       <AppShell>
         <ScreenTitle
-          title={`Why ${meta.onsDisplayName}?`}
-          lede={`What the model is reading on ${params.date}, and how much of it to believe.`}
+          title={fill(copy.app.explain.title, { subsystem: meta.onsDisplayName })}
+          lede={fill(copy.app.explain.lede, { date: f.date(params.date) })}
           right={
             <ForecastStamp
               origin={forecast.forecastOrigin}
@@ -64,8 +69,8 @@ export default function ExplainScreen() {
           <Panel style={{ flexGrow: 1, flexBasis: 300, gap: space.lg }}>
             <PanelHeader
               icon={<HashIcon size={18} color={colors.inkMuted} />}
-              title="Curtailment risk"
-              subtitle="P(any hour above threshold)"
+              title={copy.app.explain.riskTitle}
+              subtitle={copy.app.explain.riskSubtitle}
             />
             <RiskChip probability={forecast.occurrenceProbability} />
             <RiskScale probability={forecast.occurrenceProbability} />
@@ -73,15 +78,15 @@ export default function ExplainScreen() {
           </Panel>
           <Panel style={{ flexGrow: 1, flexBasis: 300 }}>
             <BandFigure
-              label="Expected magnitude, whole day"
+              label={copy.app.explain.magnitude}
               band={forecast.dailyEnergy}
               unit="MWh"
-              footnote="Conditional on the day clearing the threshold at all."
+              footnote={copy.app.explain.magnitudeNote}
             />
           </Panel>
           <Panel style={{ flexGrow: 1, flexBasis: 300 }}>
             <BandFigure
-              label="Peak hourly power"
+              label={copy.app.explain.peakPower}
               band={forecast.peakPower}
               unit="MW"
               tone="violet"
@@ -92,8 +97,8 @@ export default function ExplainScreen() {
         <Panel>
           <PanelHeader
             icon={<SparklesIcon size={18} color={colors.inkMuted} />}
-            title="Narration"
-            subtitle="Generated in the requested locale"
+            title={copy.app.explain.narrationTitle}
+            subtitle={copy.app.explain.narrationSubtitle}
           />
           <Text
             style={{
@@ -103,11 +108,10 @@ export default function ExplainScreen() {
               color: colors.inkMuted,
             }}
           >
-            {explain.narration}
+            <Narration explain={explain} thresholdMw={forecast.thresholdMw} />
           </Text>
           <Text style={{ marginTop: space.md, fontSize: 11, color: colors.inkFaint }}>
-            Written by a language model from the attribution table below. It restates the
-            numbers; it does not add any.
+            {copy.app.explain.narrationNote}
           </Text>
         </Panel>
 
@@ -115,8 +119,8 @@ export default function ExplainScreen() {
           <Panel style={{ flexGrow: 1, flexBasis: 380 }}>
             <PanelHeader
               icon={<LayersIcon size={18} color={colors.inkMuted} />}
-              title="Driver attribution"
-              subtitle="SHAP, at subsystem grain"
+              title={copy.app.explain.driversTitle}
+              subtitle={copy.app.explain.driversSubtitle}
             />
             <View style={{ marginTop: space.lg }}>
               <DriverBars drivers={explain.drivers} />
@@ -126,15 +130,19 @@ export default function ExplainScreen() {
           <Panel style={{ flexGrow: 1, flexBasis: 320 }}>
             <PanelHeader
               icon={<PieChartIcon size={18} color={colors.inkMuted} />}
-              title="Reliability"
-              subtitle="Forecast vs observed frequency"
+              title={copy.app.explain.reliabilityTitle}
+              subtitle={copy.app.explain.reliabilitySubtitle}
               right={<VintageBadge fidelity={explain.reliabilityFidelity} />}
             />
             <View style={{ marginTop: space.lg }}>
               <ReliabilityCurve points={explain.reliability} />
             </View>
             <Text style={{ marginTop: space.md, fontSize: 11, color: colors.inkFaint }}>
-              {`${explain.reliabilitySampleHours.toLocaleString("en-US")} hours over ${explain.reliabilityWindow}. The whole window predates ingestion go-live, so it is scored against ONS's current restatement of the past, not against what was knowable at the time.`}
+              {fill(copy.app.explain.reliabilityNote, {
+                hours: f.exact(explain.reliabilitySampleHours),
+                from: f.date(explain.reliabilityWindowFrom),
+                to: f.date(explain.reliabilityWindowTo),
+              })}
             </Text>
           </Panel>
         </View>
@@ -147,9 +155,11 @@ export default function ExplainScreen() {
         <View
           style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "center" }}
         >
-          <Text style={{ fontSize: 12, color: colors.inkMuted }}>Next:</Text>
+          <Text style={{ fontSize: 12, color: colors.inkMuted }}>
+            {copy.app.explain.next}
+          </Text>
           <MiniPill
-            label="What could absorb it →"
+            label={copy.app.explain.nextMitigate}
             active={false}
             onPress={() =>
               router.push({
@@ -165,6 +175,44 @@ export default function ExplainScreen() {
 }
 
 /**
+ * The generated narration.
+ *
+ * `docs/specs/i18n.md` carves this surface out of "the API returns codes, the
+ * client renders the words": there is no translation key for a sentence a
+ * language model writes fresh per request, so the shipped endpoint will take a
+ * `locale` and generate the prose in it. There is no model behind a fixture,
+ * so the prototype composes the same sentence from a per-locale template and
+ * the fixture's own values — which is what keeps this panel honest in
+ * Portuguese until the real narration replaces it wholesale.
+ */
+function Narration({
+  explain,
+  thresholdMw,
+}: {
+  explain: ExplainFixture;
+  thresholdMw: number;
+}) {
+  const copy = useCopy();
+  const f = useFormat();
+  const [top, second] = explain.drivers;
+  const meta = subsystemMeta(explain.subsystem);
+  return (
+    <>
+      {fill(copy.app.explain.narration, {
+        subsystem: meta.onsDisplayName,
+        technology: copy.app.technology[explain.technology].toLowerCase(),
+        mw: f.number(thresholdMw),
+        top: copy.app.drivers.labels[top.code].toLowerCase(),
+        observed: formatReading(top.observed, copy, f) ?? "",
+        typical: formatReading(top.typical, copy, f) ?? "",
+        second: copy.app.drivers.labels[second.code].toLowerCase(),
+        share: f.percent(explain.narrationTopShare),
+      })}
+    </>
+  );
+}
+
+/**
  * Observed restriction reasons.
  *
  * The single hardest thing on this screen to get right: a reason is a property
@@ -174,6 +222,10 @@ export default function ExplainScreen() {
  * the eighteen Tipo I / II-B plants are their own reporting entities and their
  * reasons genuinely are observed at plant grain. So the panel labels the grain
  * per row rather than assuming one for the table.
+ *
+ * `reason.description` is `dsc_restricao` as ONS wrote it, and stays in ONS's
+ * Portuguese in both locales: it is a source record, not copy, and translating
+ * one would be inventing evidence.
  */
 function ObservedReasonsPanel({
   reasons,
@@ -183,12 +235,14 @@ function ObservedReasonsPanel({
   date: string;
 }) {
   const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
   return (
     <Panel>
       <PanelHeader
         icon={<HashIcon size={18} color={colors.inkMuted} />}
-        title="Observed restriction reasons"
-        subtitle={`Settled by ONS for ${date}`}
+        title={copy.app.explain.reasonsTitle}
+        subtitle={fill(copy.app.explain.reasonsSubtitle, { date: f.date(date) })}
       />
       <View style={{ marginTop: space.lg, gap: space.md }}>
         {reasons.map((reason) => (
@@ -215,8 +269,8 @@ function ObservedReasonsPanel({
               </Text>
               <Text style={{ fontSize: 11, color: colors.inkFaint }}>
                 {reason.grain === "conjunto"
-                  ? "reason observed at conjunto grain"
-                  : "reason observed at plant grain — this plant is its own reporting entity"}
+                  ? copy.app.explain.grainConjunto
+                  : copy.app.explain.grainPlant}
               </Text>
             </View>
             <Text
@@ -227,7 +281,7 @@ function ObservedReasonsPanel({
                 color: colors.ink,
               }}
             >
-              {`${reason.constrainedOffMwh.toFixed(1)} MWh`}
+              {`${f.number(reason.constrainedOffMwh, 1)} MWh`}
             </Text>
             {reason.description === null ? null : (
               <Text style={{ fontSize: 11, color: colors.inkFaint, flexBasis: "100%" }}>
@@ -237,11 +291,7 @@ function ObservedReasonsPanel({
           </View>
         ))}
         <Text style={{ fontSize: 11, lineHeight: 18, color: colors.inkFaint }}>
-          Reason codes: REL external (grid) unavailability · CNF reliability requirement ·
-          ENE energetic (oversupply) · PAR access-opinion restriction. Origin: LOC local,
-          SIS systemic. A conjunto's reason is never allocated down to its member plants —
-          that would be an allocation presented as an observation, and WattSteer does not
-          compute one.
+          {copy.app.explain.reasonLegend}
         </Text>
       </View>
     </Panel>

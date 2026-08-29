@@ -34,19 +34,9 @@
 import { radius, space, usePalette } from "@wattsteer/ui";
 import type { ReactNode } from "react";
 import { Text, View } from "react-native";
+import { useCopy, useFormat } from "@/i18n";
+import { fill } from "@/i18n/format";
 import type { Band } from "@/lib/fixtures";
-
-/**
- * Compact: "12.5k", "4180", "42.7". The product screens pack many figures into
- * tight rows, where an exact grouped number costs width that the band strip
- * needs. See `landing/band.ts` for the exact renderer and why they differ.
- */
-export function formatMwhCompact(value: number): string {
-  if (value >= 10_000) {
-    return `${(value / 1000).toFixed(1)}k`;
-  }
-  return value >= 100 ? String(Math.round(value)) : value.toFixed(1);
-}
 
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
@@ -68,11 +58,13 @@ export function BandStrip({
   tone?: "accent" | "violet" | "muted";
 }) {
   const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
   const max = Math.max(domainMax ?? band.p90 * 1.15, 1e-6);
   const left = clamp01(band.p10 / max);
   const right = clamp01(band.p90 / max);
   const mid = clamp01(band.p50 / max);
-  const fill =
+  const fillColor =
     tone === "accent"
       ? colors.accent
       : tone === "violet"
@@ -82,9 +74,11 @@ export function BandStrip({
   return (
     <View
       accessibilityRole="image"
-      accessibilityLabel={`P10 ${formatMwhCompact(band.p10)}, P50 ${formatMwhCompact(
-        band.p50,
-      )}, P90 ${formatMwhCompact(band.p90)}`}
+      accessibilityLabel={fill(copy.app.band.strip, {
+        p10: f.compact(band.p10),
+        p50: f.compact(band.p50),
+        p90: f.compact(band.p90),
+      })}
       style={{
         height,
         borderRadius: height / 2,
@@ -101,7 +95,7 @@ export function BandStrip({
           top: 0,
           bottom: 0,
           borderRadius: height / 2,
-          backgroundColor: fill,
+          backgroundColor: fillColor,
           opacity: 0.32,
         }}
       />
@@ -114,7 +108,7 @@ export function BandStrip({
           width: 3,
           marginLeft: -1.5,
           borderRadius: 2,
-          backgroundColor: fill,
+          backgroundColor: fillColor,
         }}
       />
     </View>
@@ -143,6 +137,8 @@ export function BandFigure({
   footnote?: string;
 }) {
   const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
   const figureSize = size === "lg" ? 40 : 28;
   return (
     <View style={{ gap: space.sm }}>
@@ -161,7 +157,7 @@ export function BandFigure({
             color: colors.ink,
           }}
         >
-          {formatMwhCompact(band.p50)}
+          {f.compact(band.p50)}
         </Text>
         <Text style={{ fontSize: 14, fontWeight: "500", color: colors.inkMuted }}>
           {unit}
@@ -172,13 +168,15 @@ export function BandFigure({
         <Text
           style={{ fontSize: 11, color: colors.inkFaint, fontVariant: ["tabular-nums"] }}
         >
-          P10 {formatMwhCompact(band.p10)}
+          {`P10 ${f.compact(band.p10)}`}
         </Text>
-        <Text style={{ fontSize: 11, color: colors.inkFaint }}>P50 marked</Text>
+        <Text style={{ fontSize: 11, color: colors.inkFaint }}>
+          {copy.app.band.medianMarked}
+        </Text>
         <Text
           style={{ fontSize: 11, color: colors.inkFaint, fontVariant: ["tabular-nums"] }}
         >
-          P90 {formatMwhCompact(band.p90)}
+          {`P90 ${f.compact(band.p90)}`}
         </Text>
       </View>
       {footnote === undefined ? null : (

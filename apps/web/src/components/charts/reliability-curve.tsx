@@ -16,6 +16,7 @@
 import { useContainerWidth, usePalette } from "@wattsteer/ui";
 import { Text, View } from "react-native";
 import Svg, { Circle, G, Line, Path, Text as SvgText } from "react-native-svg";
+import { useCopy, useFormat } from "@/i18n";
 import type { ReliabilityPoint } from "@/lib/fixtures";
 
 const S = 240;
@@ -32,6 +33,8 @@ export function ReliabilityCurve({
   maxSize?: number;
 }) {
   const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
   // Measured rather than fixed: `width="100%"` on a square viewBox letterboxes
   // — the plot renders as a centred square with dead space either side of it.
   // A reliability diagram has to *stay* square, because the identity line only
@@ -55,7 +58,7 @@ export function ReliabilityCurve({
         viewBox={`0 0 ${S} ${S}`}
         width={side}
         height={side}
-        accessibilityLabel="Reliability diagram: forecast probability against observed frequency"
+        accessibilityLabel={copy.app.reliability.figure}
       >
         {[0, 0.25, 0.5, 0.75, 1].map((g) => (
           <G key={g}>
@@ -75,7 +78,7 @@ export function ReliabilityCurve({
               fontFamily={FONT}
               fill={colors.inkMuted}
             >
-              {`${Math.round(g * 100)}`}
+              {f.number(g * 100)}
             </SvgText>
             <SvgText
               x={x(g)}
@@ -85,7 +88,7 @@ export function ReliabilityCurve({
               fontFamily={FONT}
               fill={colors.inkMuted}
             >
-              {`${Math.round(g * 100)}`}
+              {f.number(g * 100)}
             </SvgText>
           </G>
         ))}
@@ -123,13 +126,11 @@ export function ReliabilityCurve({
           fontFamily={FONT}
           fill={colors.inkFaint}
         >
-          forecast probability (%)
+          {copy.app.reliability.axis}
         </SvgText>
       </Svg>
       <Text style={{ fontSize: 11, color: colors.inkFaint }}>
-        Dots below the dashed identity line are over-confident forecasts: of the hours
-        called 85%, 77% actually cleared the threshold. Dot area is the number of hours in
-        the bin.
+        {copy.app.reliability.note}
       </Text>
     </View>
   );

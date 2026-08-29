@@ -14,6 +14,8 @@
 
 import { focusRing, radius, space, usePalette } from "@wattsteer/ui";
 import { Platform, Pressable, Text, View } from "react-native";
+import { useCopy, useFormat } from "@/i18n";
+import { fill } from "@/i18n/format";
 import { ASSET_LIMITS, type BatteryAsset, type ShiftableLoadAsset } from "@/lib/fixtures";
 
 interface Limit {
@@ -41,6 +43,7 @@ export function Stepper({
   onChange: (next: number) => void;
 }) {
   const colors = usePalette();
+  const copy = useCopy();
   const set = (next: number) => {
     onChange(round(Math.max(limit.min, Math.min(limit.max, next)), limit.step));
   };
@@ -61,7 +64,7 @@ export function Stepper({
         }}
       >
         <StepButton
-          label={`Decrease ${label}`}
+          label={fill(copy.app.assets.decrease, { label })}
           glyph="−"
           disabled={value <= limit.min}
           onPress={() => set(value - limit.step)}
@@ -77,7 +80,7 @@ export function Stepper({
           {format(value)}
         </Text>
         <StepButton
-          label={`Increase ${label}`}
+          label={fill(copy.app.assets.increase, { label })}
           glyph="+"
           disabled={value >= limit.max}
           onPress={() => set(value + limit.step)}
@@ -138,46 +141,48 @@ export function BatteryEditor({
   onChange: (next: BatteryAsset) => void;
 }) {
   const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
   const duration =
     battery.maxPowerMw > 0 ? battery.energyCapacityMwh / battery.maxPowerMw : 0;
   return (
     <View style={{ gap: space.md }}>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
         <Stepper
-          label="Power (MW)"
+          label={copy.app.assets.batteryPower}
           value={battery.maxPowerMw}
           limit={ASSET_LIMITS.batteryPowerMw}
-          format={(v) => `${v} MW`}
+          format={(v) => `${f.number(v)} MW`}
           onChange={(maxPowerMw) => onChange({ ...battery, maxPowerMw })}
         />
         <Stepper
-          label="Energy (MWh)"
+          label={copy.app.assets.batteryEnergy}
           value={battery.energyCapacityMwh}
           limit={ASSET_LIMITS.batteryEnergyMwh}
-          format={(v) => `${v} MWh`}
+          format={(v) => `${f.number(v)} MWh`}
           onChange={(energyCapacityMwh) => onChange({ ...battery, energyCapacityMwh })}
         />
         <Stepper
-          label="Round-trip efficiency"
+          label={copy.app.assets.roundTrip}
           value={battery.roundTripEfficiency}
           limit={ASSET_LIMITS.roundTripEfficiency}
-          format={(v) => `${Math.round(v * 100)}%`}
+          format={(v) => f.percent(v)}
           onChange={(roundTripEfficiency) =>
             onChange({ ...battery, roundTripEfficiency })
           }
         />
         <Stepper
-          label="Initial state of charge"
+          label={copy.app.assets.initialSoc}
           value={battery.initialStateOfCharge}
           limit={ASSET_LIMITS.initialStateOfCharge}
-          format={(v) => `${Math.round(v * 100)}%`}
+          format={(v) => f.percent(v)}
           onChange={(initialStateOfCharge) =>
             onChange({ ...battery, initialStateOfCharge })
           }
         />
       </View>
       <Text style={{ fontSize: 11, color: colors.inkFaint }}>
-        {`${duration.toFixed(1)}-hour duration. Efficiency splits into a charge and a discharge leg (√RTE each); the loss enters the state-of-charge balance asymmetrically.`}
+        {fill(copy.app.assets.batteryNote, { hours: f.number(duration, 1) })}
       </Text>
     </View>
   );
@@ -191,34 +196,35 @@ export function LoadEditor({
   onChange: (next: ShiftableLoadAsset) => void;
 }) {
   const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
   return (
     <View style={{ gap: space.md }}>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
         <Stepper
-          label="Shiftable power (MW)"
+          label={copy.app.assets.loadShift}
           value={load.maxShiftMw}
           limit={ASSET_LIMITS.loadShiftMw}
-          format={(v) => `${v} MW`}
+          format={(v) => `${f.number(v)} MW`}
           onChange={(maxShiftMw) => onChange({ ...load, maxShiftMw })}
         />
         <Stepper
-          label="Shift window (h)"
+          label={copy.app.assets.loadWindow}
           value={load.shiftWindowHours}
           limit={ASSET_LIMITS.shiftWindowHours}
-          format={(v) => `±${v} h`}
+          format={(v) => `±${f.number(v)} h`}
           onChange={(shiftWindowHours) => onChange({ ...load, shiftWindowHours })}
         />
         <Stepper
-          label="Daily energy (MWh)"
+          label={copy.app.assets.loadDailyEnergy}
           value={load.dailyEnergyMwh}
           limit={ASSET_LIMITS.loadDailyEnergyMwh}
-          format={(v) => `${v} MWh`}
+          format={(v) => `${f.number(v)} MWh`}
           onChange={(dailyEnergyMwh) => onChange({ ...load, dailyEnergyMwh })}
         />
       </View>
       <Text style={{ fontSize: 11, color: colors.inkFaint }}>
-        Daily energy is conserved by construction: every hour shifted up is compensated by
-        down-shifts inside the window, so the load consumes the same MWh either way.
+        {copy.app.assets.loadNote}
       </Text>
     </View>
   );

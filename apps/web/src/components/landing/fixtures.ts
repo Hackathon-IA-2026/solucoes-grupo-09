@@ -23,16 +23,41 @@
  *   shows none rather than showing one at the wrong grain.
  */
 
+import type { Copy, Formatters } from "@/i18n";
+import { fill } from "@/i18n/format";
 import {
   band,
-  type Driver,
+  type DriverDirection,
   type Figure,
   type ForecastOrigin,
   observed,
   type SubsystemCode,
 } from "@/lib/domain";
 
-export type { Driver, ForecastOrigin, SubsystemCode };
+export type { ForecastOrigin, SubsystemCode };
+
+/**
+ * The landing page's own driver vocabulary.
+ *
+ * Separate from `lib/domain`'s `DriverCode`, which is the *product's* set: this
+ * panel is a marketing illustration of IDEA.md §43 and names features the
+ * Diagnosis engine does not have. Sharing one union would force the product's
+ * dictionary to carry labels for features it never attributes to.
+ */
+export type LandingDriverCode =
+  | "renewable_load_ratio"
+  | "ne_se_export_utilisation"
+  | "residual_load"
+  | "solar_ramp_1h"
+  | "is_weekend"
+  | "other";
+
+export interface LandingDriver {
+  code: LandingDriverCode;
+  /** Share of the attributed magnitude, 0..1. */
+  share: number;
+  direction: DriverDirection;
+}
 
 export interface SubsystemOutlook {
   code: SubsystemCode;
@@ -51,10 +76,11 @@ export interface HourlyBand {
   p90: number;
 }
 
+export type MitigationStepKey = "no_action" | "battery" | "battery_and_load";
+
 export interface MitigationStep {
-  label: string;
-  /** Asset description — scenario input, never an inventory. */
-  detail: string | null;
+  /** The step's identity. Its words, and its asset detail, are copy. */
+  key: MitigationStepKey;
   /** Curtailment remaining after this step. */
   remaining: Figure;
   /** Energy this step recovers against the no-action baseline. */
@@ -137,77 +163,106 @@ export const HOURLY_PROFILE: readonly HourlyBand[] = [
 ];
 
 /** IDEA.md §43's driver list, at the grain the Diagnosis engine reports. */
-export const DRIVERS: readonly Driver[] = [
+export const DRIVERS: readonly LandingDriver[] = [
   {
     code: "renewable_load_ratio",
-    label: "Renewable / load ratio",
     share: 0.31,
     direction: "raises",
-    observed: "1.18",
-    typical: "0.74",
   },
   {
     code: "ne_se_export_utilisation",
-    label: "Export stress, NE → SE",
     share: 0.25,
     direction: "raises",
-    observed: "94%",
-    typical: "71%",
   },
   {
     code: "residual_load",
-    label: "Low residual load",
     share: 0.18,
     direction: "raises",
-    observed: "−0.9 GW",
-    typical: "4.1 GW",
   },
   {
     code: "solar_ramp_1h",
-    label: "Solar ramp",
     share: 0.14,
     direction: "raises",
-    observed: "+2.8 GW/h",
-    typical: "+1.1 GW/h",
   },
   {
     code: "is_weekend",
-    label: "Weekend",
     share: 0.07,
     direction: "raises",
-    observed: "Sunday",
-    typical: "weekday",
   },
   {
     code: "other",
-    label: "Other features",
     share: 0.05,
     direction: "raises",
-    observed: "—",
-    typical: "—",
   },
 ];
 
+/**
+ * The scenario the mitigation panel illustrates.
+ *
+ * Held as numbers rather than as the sentence "100 MW / 300 MWh, round-trip
+ * 92%": that sentence is copy in one language and an en-US decimal besides,
+ * and the same four numbers read correctly in both locales.
+ */
+export const LANDING_SCENARIO = {
+  batteryPowerMw: 100,
+  batteryEnergyMwh: 300,
+  roundTripEfficiency: 0.92,
+  loadShiftMw: 70,
+  shiftWindowHours: 3,
+};
+
 export const MITIGATION: readonly MitigationStep[] = [
   {
-    label: "No action",
-    detail: null,
+    key: "no_action",
     remaining: band(520, 786, 1120),
     recovered: null,
   },
   {
-    label: "+ Battery",
-    detail: "100 MW / 300 MWh, round-trip 92%",
+    key: "battery",
     remaining: band(340, 524, 760),
     recovered: band(150, 262, 390),
   },
   {
-    label: "+ Flexible load",
-    detail: "70 MW shiftable, 3 h window",
+    key: "battery_and_load",
     remaining: band(230, 361, 530),
     recovered: band(270, 425, 620),
   },
 ];
+
+/** The step's name, in the reader's language. */
+export function stepLabel(copy: Copy, key: MitigationStepKey): string {
+  if (key === "no_action") {
+    return copy.showcase.mitigate.baselineLabel;
+  }
+  return key === "battery"
+    ? copy.showcase.mitigate.stepBattery
+    : copy.showcase.mitigate.stepLoad;
+}
+
+/**
+ * The asset line under a step — the parameters, written out. `null` for the
+ * baseline, which has no assets to describe.
+ */
+export function stepDetail(
+  copy: Copy,
+  f: Formatters,
+  key: MitigationStepKey,
+): string | null {
+  if (key === "no_action") {
+    return null;
+  }
+  if (key === "battery") {
+    return fill(copy.showcase.mitigate.detailBattery, {
+      power: f.number(LANDING_SCENARIO.batteryPowerMw),
+      energy: f.number(LANDING_SCENARIO.batteryEnergyMwh),
+      efficiency: f.percent(LANDING_SCENARIO.roundTripEfficiency),
+    });
+  }
+  return fill(copy.showcase.mitigate.detailLoad, {
+    shift: f.number(LANDING_SCENARIO.loadShiftMw),
+    window: f.number(LANDING_SCENARIO.shiftWindowHours),
+  });
+}
 
 /** Assumed energy value for the labelled economic scenario. Visible on screen. */
 export { SCENARIO_BRL_PER_MWH } from "@/lib/economics";

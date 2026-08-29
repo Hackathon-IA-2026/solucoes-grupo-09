@@ -18,33 +18,43 @@ export {
   upper,
 } from "@/lib/domain";
 
+import {
+  formatExact,
+  formatPercent as formatPercentIn,
+  type Locale,
+} from "@/i18n/format";
 import type { Band } from "@/lib/domain";
 
 /**
- * Exact, thousands-grouped: "12,500".
+ * Exact, thousands-grouped: "12.500" in Portuguese, "12,500" in English.
  *
  * Named for its rendering, not its unit: `charts/band-figure.tsx` has a
  * compact formatter for the same quantity, and two functions called
  * `formatMwh` that disagree on the same input is a wrong number waiting to
  * happen.
+ *
+ * Every formatter here takes the locale rather than assuming one. The landing
+ * page is served from `/pt/` and `/en/` as two different static files, and a
+ * Portuguese page printing `12,500` reads as twelve and a half, not twelve
+ * thousand five hundred.
  */
-export function formatMwhExact(value: number): string {
-  return Math.round(value).toLocaleString("en-US");
+export function formatMwhExact(locale: Locale, value: number): string {
+  return formatExact(locale, value);
 }
 
-/** "2,640–6,320" — an en dash, never a hyphen, and never a minus sign. */
-export function formatRange(band_: Band): string {
-  return `${formatMwhExact(band_.p10)}–${formatMwhExact(band_.p90)}`;
+/** "2.640–6.320" — an en dash, never a hyphen, and never a minus sign. */
+export function formatRange(locale: Locale, band_: Band): string {
+  return `${formatMwhExact(locale, band_.p10)}–${formatMwhExact(locale, band_.p90)}`;
 }
 
 /** Percentage with one decimal, for shares and reductions. */
-export function formatPercent(fraction: number): string {
-  return `${(fraction * 100).toFixed(1)}%`;
+export function formatPercent(locale: Locale, fraction: number): string {
+  return formatPercentIn(locale, fraction, 1);
 }
 
 /** Whole-number percentage, for probabilities. */
-export function formatProbability(fraction: number): string {
-  return `${Math.round(fraction * 100)}%`;
+export function formatProbability(locale: Locale, fraction: number): string {
+  return formatPercentIn(locale, fraction, 0);
 }
 
 /**

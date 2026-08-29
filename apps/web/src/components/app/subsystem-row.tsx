@@ -16,8 +16,10 @@
 
 import { ArrowRightIcon, focusRing, radius, space, usePalette } from "@wattsteer/ui";
 import { Platform, Pressable, Text, View } from "react-native";
-import { BandStrip, formatMwhCompact } from "@/components/charts/band-figure";
+import { BandStrip } from "@/components/charts/band-figure";
 import { RiskChip } from "@/components/charts/risk-class";
+import { useCopy, useFormat } from "@/i18n";
+import { fill } from "@/i18n/format";
 import { type SubsystemDayForecast, subsystemMeta } from "@/lib/fixtures";
 
 export function SubsystemRow({
@@ -32,12 +34,16 @@ export function SubsystemRow({
   onPress: () => void;
 }) {
   const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
   const meta = subsystemMeta(forecast.subsystem);
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${meta.onsDisplayName}: open Explain`}
+      accessibilityLabel={fill(copy.app.overview.rowFigure, {
+        subsystem: meta.onsDisplayName,
+      })}
       onPress={onPress}
       style={(state) => {
         const { focused = false, hovered = false } = state as {
@@ -71,7 +77,7 @@ export function SubsystemRow({
             {meta.onsDisplayName}
           </Text>
           <Text style={{ fontSize: 11, color: colors.inkFaint }}>
-            {`${forecast.technology} · ${meta.code}`}
+            {`${copy.app.technology[forecast.technology]} · ${meta.code}`}
           </Text>
         </View>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
@@ -83,7 +89,7 @@ export function SubsystemRow({
       <View style={{ gap: 6 }}>
         <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
           <Text style={{ fontSize: 11, color: colors.inkFaint }}>
-            Expected curtailed energy
+            {copy.app.overview.rowEnergy}
           </Text>
           <Text
             style={{
@@ -93,7 +99,7 @@ export function SubsystemRow({
               color: colors.ink,
             }}
           >
-            {`${formatMwhCompact(forecast.dailyEnergy.p50)} MWh`}
+            {`${f.compact(forecast.dailyEnergy.p50)} MWh`}
           </Text>
         </View>
         <BandStrip band={forecast.dailyEnergy} domainMax={domainMax} tone="accent" />
@@ -105,7 +111,7 @@ export function SubsystemRow({
               fontVariant: ["tabular-nums"],
             }}
           >
-            {`P10 ${formatMwhCompact(forecast.dailyEnergy.p10)}`}
+            {`P10 ${f.compact(forecast.dailyEnergy.p10)}`}
           </Text>
           <Text
             style={{
@@ -114,9 +120,10 @@ export function SubsystemRow({
               fontVariant: ["tabular-nums"],
             }}
           >
-            {`peak ${formatMwhCompact(forecast.peakPower.p10)}–${formatMwhCompact(
-              forecast.peakPower.p90,
-            )} MW`}
+            {fill(copy.app.overview.rowPeak, {
+              low: f.compact(forecast.peakPower.p10),
+              high: f.compact(forecast.peakPower.p90),
+            })}
           </Text>
           <Text
             style={{
@@ -125,7 +132,7 @@ export function SubsystemRow({
               fontVariant: ["tabular-nums"],
             }}
           >
-            {`P90 ${formatMwhCompact(forecast.dailyEnergy.p90)}`}
+            {`P90 ${f.compact(forecast.dailyEnergy.p90)}`}
           </Text>
         </View>
       </View>

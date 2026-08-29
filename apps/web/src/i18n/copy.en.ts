@@ -37,6 +37,31 @@ export const en = {
     cta: "Open the live grid",
   },
 
+  /**
+   * The gate page and the footer.
+   *
+   * `gate.tagline` is the one string the site renders in *both* locales at
+   * once: the gate is bilingual by construction, because a chooser that picks
+   * a language to address the reader in has already made the choice for them.
+   * It reads `pt.gate.tagline` and `en.gate.tagline` side by side rather than
+   * hardcoding two sentences.
+   */
+  gate: {
+    tagline: "Curtailment intelligence for the Brazilian grid.",
+  },
+
+  footer: {
+    tagline: "Renewable curtailment intelligence.",
+    rights: "© WattSteer {year}. All rights reserved.",
+  },
+
+  notFound: {
+    metaTitle: "Page not found — WattSteer",
+    title: "Page not found",
+    body: "The page you're looking for doesn't exist.",
+    back: "Back to WattSteer",
+  },
+
   hero: {
     eyebrow: "Day-ahead curtailment forecast · Brazilian grid",
     headline: {
@@ -75,6 +100,14 @@ export const en = {
     observedLabel: "Observed",
     observedNote: "A measured value. No band, because there is no forecast.",
     explainerTitle: "Every number here has a width",
+    explainerConfident: "A confident forecast",
+    explainerUncertain: "A wide-open one",
+    explainerSame:
+      "Same median — {value} MWh — and a single-number card would print them identically.",
+    railObserved: "{label}: {value} {unit}, observed",
+    railBand:
+      "{label}: median {p50} {unit}, 10th to 90th percentile {p10} to {p90} {unit}",
+    hourFigure: "{hour} — median {p50} {unit}, P10 to P90 {p10} to {p90} {unit}",
     explainerBody:
       "A curtailment forecast that says 4,180 MWh and nothing else is a number pretending to be a fact. WattSteer publishes P10, P50 and P90 together and draws the distance between them, so the width of the uncertainty is as visible as the middle of it. Where a figure genuinely has no band — a measured historical actual — it is labelled observed, so the absence means something.",
   },
@@ -117,6 +150,14 @@ export const en = {
       panelTitle: "Diagnosis",
       panelSub: "NORDESTE · tomorrow",
       heading: "Which conditions the risk is associated with",
+      drivers: {
+        renewable_load_ratio: "Renewable / load ratio",
+        ne_se_export_utilisation: "Export stress, NE → SE",
+        residual_load: "Low residual load",
+        solar_ramp_1h: "Solar ramp",
+        is_weekend: "Weekend",
+        other: "Other features",
+      },
       note: "SHAP contribution to the model's forecast, normalised to 100%. These are the model's drivers, not a causal claim about the grid.",
     },
     mitigate: {
@@ -125,9 +166,15 @@ export const en = {
       heading: "What flexibility would absorb it",
       baselineLabel: "No action",
       note: "Asset parameters are scenario inputs, not an inventory — ONS publishes no flexibility-asset registry, so this is a what-if, not a plan.",
+      stepBattery: "+ Battery",
+      stepLoad: "+ Flexible load",
+      detailBattery: "{power} MW / {energy} MWh, round-trip {efficiency}",
+      detailLoad: "{shift} MW shiftable, {window} h window",
       recoveredLabel: "Energy recovered",
       avoidedLabel: "Curtailment avoided",
+      medianToMedian: "median to median",
       scenarioLabel: "Economic scenario",
+      economicNote: "{value} at an assumed {rate}/MWh",
     },
     replay: {
       panelTitle: "Replay",
@@ -137,6 +184,8 @@ export const en = {
       optimizedLabel: "With WattSteer",
       recoveredLabel: "Recovered",
       reductionLabel: "Curtailment reduction",
+      vintageBadge: "revision-optimistic",
+      medianToObserved: "median to observed",
       vintageNote:
         "This window predates WattSteer's ingestion, so the past shown here is ONS's current restatement of it, not what was knowable on the day. Labelled revision-optimistic, and it can never be repaired: ONS rewrites history in place.",
     },
@@ -296,6 +345,300 @@ export const en = {
         title: "Data attribution and licensing",
         body: "Source datasets remain the property of their publishers and are used under their respective open licences. Where a licence requires attribution or share-alike treatment of derived data, WattSteer complies with it; those notices appear alongside the data they cover.",
       },
+    },
+  },
+
+  /**
+   * The four `/app` product screens.
+   *
+   * The largest copy surface in the product, and the one where getting it
+   * wrong costs the most: these screens carry the honesty the whole thing is
+   * built on — the vintage badges, the in-sample replay warning, the risk-class
+   * names, the "quantiles do not add" notes — and a caveat a reader cannot read
+   * is a caveat that is not there. A Portuguese-speaking grid operator must not
+   * get the marketing in Portuguese and the product in English.
+   *
+   * Three conventions, all of them load-bearing:
+   *
+   * 1. **`{placeholder}` is always a value, never prose.** Filled by `fill()`
+   *    with something a formatter produced (a number, a date, a percentage) or
+   *    something the domain owns (an ONS display name, a reason code). Prose is
+   *    never interpolated, so a translator always sees a whole clause and can
+   *    move the value to wherever the sentence needs it.
+   * 2. **Units and notation are not translated.** `MW`, `MWh`, `GW`, `P10`,
+   *    `P50`, `P90`, `R$`, `BRT` and the ONS vocabulary read the same in both
+   *    locales, so they are appended by the components rather than stored here.
+   * 3. **Codes are keys, labels are copy.** Risk classes, mitigation steps,
+   *    driver codes, reason codes and vintage fidelities arrive from the
+   *    fixtures (and later the API) as codes; their words live here.
+   */
+  app: {
+    shell: {
+      backToLanding: "WattSteer — back to the landing page",
+      prototypeBadge: "PROTOTYPE · FIXTURE DATA",
+      screens: {
+        overview: "Grid Overview",
+        explain: "Explain",
+        mitigate: "Mitigate",
+        replay: "Time Machine",
+      },
+      selection: {
+        subsystem: "Subsystem",
+        technology: "Technology",
+        run: "D−1 run",
+        targetDay: "Target day",
+      },
+    },
+
+    /** `Technology` is an enum in the API; these are its words. */
+    technology: { WIND: "Wind", SOLAR: "Solar" },
+
+    /** Stamped on every forecast surface — see `components/app/honesty.tsx`. */
+    stamp: {
+      published: "{producer} · {run} · published {when} BRT",
+      threshold: " · threshold {mw} MW",
+    },
+
+    /** `VintageFidelity`, product-visible by decision rather than by accident. */
+    vintage: {
+      point_in_time: "POINT-IN-TIME",
+      revision_optimistic: "REVISION-OPTIMISTIC",
+    },
+
+    /** The prototype's standing caveat about its own optimizer. */
+    heuristic: {
+      title: "This is a prototype heuristic, not the optimizer",
+      points: [
+        "The shipped Flex Optimizer is a MILP with real binaries for the battery's charge/discharge mutual exclusion, solved by SCIP in single-digit milliseconds inside the request. Nothing on this page solves a MILP.",
+        "The greedy pass here keeps the two properties whose absence would make the numbers wrong rather than approximate: absorbed energy is the net increase in flexible demand, and the assets may never import from the grid.",
+        "Expect the real optimizer to recover somewhat more than this page shows, never less.",
+      ],
+    },
+
+    /** The band figure and its strip — `components/charts/band-figure.tsx`. */
+    band: {
+      medianMarked: "P50 marked",
+      strip: "P10 {p10}, P50 {p50}, P90 {p90}",
+    },
+
+    /** `RiskClass` — three wide bins, named. See `charts/risk-class.tsx`. */
+    risk: {
+      low: "Low",
+      elevated: "Elevated",
+      high: "High",
+      caveat:
+        "Risk is P(at least one hour above the threshold), binned. The bins are wide because the classifier is not calibrated finely enough to justify narrower ones — see the reliability curve on Explain.",
+    },
+
+    /** The 24-hour fan chart. */
+    fan: {
+      figure: "Day-ahead curtailment profile, P10 to P90 band around the median",
+      thresholdMark: "threshold {mw} MW",
+      medianLegend: "P50 forecast",
+      bandLegend: "P10–P90 band",
+      observedDefault: "Observed",
+      hint: "Tap an hour to read its interval",
+      hourLabel: "Hour",
+      exceedance: "P(above threshold)",
+      hourFigure: "Hour {hour}: P50 {p50} MWh, P10 to P90 {p10} to {p90}",
+    },
+
+    /** The dispatch and state-of-charge chart. */
+    dispatch: {
+      figure:
+        "Hourly dispatch: curtailment offered, energy absorbed, and battery state of charge",
+      offered: "Curtailment offered (MWh)",
+      absorbed: "Absorbed (MWh)",
+      soc: "Battery SOC (MWh, right axis)",
+      discharge: "Discharge (below the line)",
+    },
+
+    /** Driver attribution — SHAP shares, at subsystem grain. */
+    drivers: {
+      /** Keyed by `Driver.code`; the fixture and the API send the code. */
+      labels: {
+        vre_load_ratio: "Renewable / load ratio",
+        export_headroom: "Export headroom to SE/CO",
+        load_level: "Load level",
+        overnight_load_level: "Overnight load level",
+        hub_wind_speed: "Hub-height wind speed",
+        day_of_week: "Day of the week",
+        midday_net_load: "Midday net load",
+        clear_sky_index: "Clear-sky index",
+        installed_pv: "PV commissioned in window",
+        hydro_flexibility: "Hydro down-ramp available",
+        import_position: "Net import position",
+        other: "Everything else",
+      },
+      /** The non-numeric readings a driver can report. */
+      terms: {
+        weekend: "weekend",
+        weekday: "weekday",
+        importing: "importing",
+        balanced: "balanced",
+      },
+      direction: { raises: "raises", lowers: "lowers" },
+      reading: "observed {observed} · typical {typical}",
+      figure: "{driver}: {share} of attributed magnitude, {direction} risk",
+      note: "Shares are of the attributed magnitude for this subsystem-day, not of the curtailment itself. A driver that raises risk is not a cause of any individual curtailed MWh.",
+    },
+
+    /** The reliability (calibration) diagram. */
+    reliability: {
+      figure: "Reliability diagram: forecast probability against observed frequency",
+      axis: "forecast probability (%)",
+      note: "Dots below the dashed identity line are over-confident forecasts: of the hours called 85%, 77% actually cleared the threshold. Dot area is the number of hours in the bin.",
+    },
+
+    overview: {
+      metaTitle: "Grid Overview — WattSteer",
+      title: "Grid Overview",
+      lede: "Day-ahead curtailment risk for {date}, by subsystem. Every figure is a P10/P50/P90 interval, not a point.",
+      rowFigure: "{subsystem}: open Explain",
+      rowEnergy: "Expected curtailed energy",
+      rowPeak: "peak {low}–{high} MW",
+      profileSubtitle: "24-hour profile, P10–P90",
+      dailyEnergy: "Expected curtailed energy, whole day",
+      dailyEnergyNote:
+        "A day total is a joint forecast. It is not the sum of the hourly P90s — quantiles do not add.",
+      peakPower: "Peak hourly power",
+      peakPowerNote:
+        "Hour of the largest P50. Threshold in force: {mw} MW at subsystem grain.",
+      grainNote:
+        "Forecast grain is the subsystem. Observed curtailment is published per reporting entity — a conjunto for most of it — and restriction reasons exist only there; see Explain.",
+    },
+
+    explain: {
+      metaTitle: "Explain — WattSteer",
+      title: "Why {subsystem}?",
+      lede: "What the model is reading on {date}, and how much of it to believe.",
+      riskTitle: "Curtailment risk",
+      riskSubtitle: "P(any hour above threshold)",
+      magnitude: "Expected magnitude, whole day",
+      magnitudeNote: "Conditional on the day clearing the threshold at all.",
+      peakPower: "Peak hourly power",
+      narrationTitle: "Narration",
+      narrationSubtitle: "Generated in the requested locale",
+      narration:
+        "The model puts {subsystem} {technology} curtailment above the {mw} MW threshold for most of the day. The largest single contribution is {top} ({observed} against a typical {typical}), followed by {second}. Those two together account for {share} of the attributed magnitude. The band is wide in the shoulder hours because the occurrence classifier is near an even chance there — read the P10 as “it may not clear the threshold at all”, not as a small number.",
+      narrationNote:
+        "Written by a language model from the attribution table below. It restates the numbers; it does not add any.",
+      driversTitle: "Driver attribution",
+      driversSubtitle: "SHAP, at subsystem grain",
+      reliabilityTitle: "Reliability",
+      reliabilitySubtitle: "Forecast vs observed frequency",
+      reliabilityNote:
+        "{hours} hours from {from} to {to}. The whole window predates ingestion go-live, so it is scored against ONS's current restatement of the past, not against what was knowable at the time.",
+      reasonsTitle: "Observed restriction reasons",
+      reasonsSubtitle: "Settled by ONS for {date}",
+      grainConjunto: "reason observed at conjunto grain",
+      grainPlant:
+        "reason observed at plant grain — this plant is its own reporting entity",
+      reasonLegend:
+        "Reason codes: REL external (grid) unavailability · CNF reliability requirement · ENE energetic (oversupply) · PAR access-opinion restriction. Origin: LOC local, SIS systemic. A conjunto's reason is never allocated down to its member plants — that would be an allocation presented as an observation, and WattSteer does not compute one.",
+      next: "Next:",
+      nextMitigate: "What could absorb it →",
+    },
+
+    mitigate: {
+      metaTitle: "Mitigate — WattSteer",
+      title: "What can we do?",
+      lede: "{subsystem} {technology}, {date}. Storage and flexible demand sized against the day-ahead forecast.",
+      basisTitle: "Plan against",
+      basisMedian: "the median forecast (P50)",
+      basisConservative: "a conservative forecast (P10)",
+      basisMedianPill: "P50 median",
+      basisConservativePill: "P10 conservative",
+      basisMedianBody:
+        "The plan is optimal if the median comes true. If the day comes in below P50 the assets will have committed to charging from energy that was never curtailed — the P10 column below is what that costs.",
+      basisConservativeBody:
+        "The plan is feasible against a pessimistic realisation, so the recovered energy is a floor rather than a median. It systematically under-uses the fleet, which is the direction of error worth preferring.",
+      steps: {
+        no_action: "No action",
+        battery: "+ Battery",
+        battery_and_load: "+ Flexible load",
+      },
+      reveal: "Reveal",
+      hidden: "Hidden — reveal it in order to see the step change.",
+      remaining: "MWh remaining",
+      baselineStep: "The day as forecast, with nothing dispatched.",
+      stepDelta: "−{delta} MWh vs the previous step (P50)",
+      recovered: "Energy recovered",
+      recoveredNote:
+        "One plan, scored against all three realisations of the forecast. The interval is the forecast's, not the optimizer's.",
+      avoided: "Curtailment avoided",
+      avoidedNote:
+        "Inverted on purpose: the share avoided is lowest on the P90 realisation, because a fixed fleet covers less of a bigger event.",
+      avoidedUndefined:
+        "Undefined, not zero: with no assets there is nothing to divide by. A zero here would read as nothing could be avoided.",
+      economicTitle: "Economic scenario (labelled)",
+      economicNote:
+        "At an assumed {rate}/MWh, on the P50 realisation. This is a scenario, not a settlement value, and it is the only place R$ appears. No carbon claim is derivable from any of this and none is made.",
+      dispatchTitle: "Dispatch",
+      dispatchSubtitle: "{step} · scored on the P50 realisation",
+      batteryTitle: "Battery",
+      loadTitle: "Flexible load",
+      assetSubtitle: "Scenario input, not an inventory",
+      includeBattery: "Include battery",
+      includeLoad: "Include load",
+      reset: "Reset to {power} MW / {energy} MWh + {shift} MW",
+      footnote:
+        "ONS publishes no flexibility-asset registry, so every parameter above is your assumption. Mitigate is a what-if tool, not an inventory — the scenario is encoded in the URL rather than saved, so a link is the whole of sharing it.",
+    },
+
+    /** The asset parameter steppers on Mitigate. */
+    assets: {
+      decrease: "Decrease {label}",
+      increase: "Increase {label}",
+      batteryPower: "Power (MW)",
+      batteryEnergy: "Energy (MWh)",
+      roundTrip: "Round-trip efficiency",
+      initialSoc: "Initial state of charge",
+      batteryNote:
+        "{hours}-hour duration. Efficiency splits into a charge and a discharge leg (√RTE each); the loss enters the state-of-charge balance asymmetrically.",
+      loadShift: "Shiftable power (MW)",
+      loadWindow: "Shift window (h)",
+      loadDailyEnergy: "Daily energy (MWh)",
+      loadNote:
+        "Daily energy is conserved by construction: every hour shifted up is compensated by down-shifts inside the window, so the load consumes the same MWh either way.",
+    },
+
+    replay: {
+      metaTitle: "Time Machine — WattSteer",
+      title: "What if WattSteer had been running?",
+      lede: "A past day, replayed against the forecast vintage available at D−1 and scored against what ONS settled.",
+      dayLabel: "{date} · {subsystem} {technology}",
+      scenarioLabel: "{power} MW / {energy} MWh battery + {shift} MW flexible load",
+      inSample: "IN-SAMPLE",
+      outOfSample: "OUT-OF-SAMPLE",
+      honestyTitle: "What this replay is, and what it is not",
+      inSampleNote:
+        "The serving model was trained on data through {through}, which includes this day. Its D−1 forecast here is an in-sample fit, so this is a replay, not a counterfactual: treat the recovered energy as an optimistic upper bound on what the live system would have achieved.",
+      outOfSampleNote:
+        "This day postdates the serving model's training cut ({through}), so the D−1 forecast is genuinely out of sample. This is the closest thing on this screen to a real counterfactual.",
+      revisionOptimisticNote:
+        "This day predates ingestion go-live ({goLive}). ONS rewrites history in place with no version marker, so the actual above is ONS's current restatement of the day, not what was published at the time. Prior vintages are unrecoverable and this can never be repaired retroactively.",
+      pointInTimeNote:
+        "This day postdates ingestion go-live ({goLive}), so every value here is the one that was genuinely knowable at the time — an as-of read, not today's restatement.",
+      scenarioNote:
+        "Recovered energy is what this dispatch achieves under this scenario against this forecast vintage. It is a property of the scenario, not of the day, and changing any asset parameter changes it.",
+      claimsNote:
+        "MWh recovered and % avoided are the only claims made. No carbon saving is derivable from recovered renewable energy without a marginal-emissions model, and none is offered.",
+      rowActual: "Curtailed — settled by ONS",
+      rowActualNote: "{hours} contiguous hours above {mw} MW, peak {peak} MW.",
+      rowForecast: "What the D−1 run said",
+      rowForecastNote:
+        "P10–P90 shaded, P50 solid. A joint day total, never the sum of the hourly quantiles.",
+      rowRecovered: "With the scenario dispatched",
+      compareSubtitle: "Actual vs forecast vs recovered",
+      headlineCurtailed: "Renewable energy curtailed",
+      headlineRecovered: "Potentially recovered",
+      headlineAvoided: "Curtailment avoided",
+      hourlyTitle: "Hour by hour",
+      hourlySubtitle: "What was forecast, and what happened",
+      settledActual: "Settled actual",
+      episodeNote:
+        "An episode is a read-time view of curtailment hours, never a stored row — it carries the {mw} MW threshold and the 0-hour gap tolerance that produced it, and a different threshold would produce a different episode from the same data.",
     },
   },
 } as const;

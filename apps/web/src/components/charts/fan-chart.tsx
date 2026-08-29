@@ -27,8 +27,9 @@ import Svg, {
   Stop,
   Text as SvgText,
 } from "react-native-svg";
+import { useCopy, useFormat } from "@/i18n";
+import { fill } from "@/i18n/format";
 import type { CurtailmentHourForecast, CurtailmentHourObservation } from "@/lib/fixtures";
-import { formatMwhCompact } from "./band-figure";
 
 const W = 640;
 const H = 260;
@@ -55,16 +56,20 @@ export function FanChart({
   hours,
   observed,
   thresholdMw,
-  observedLabel = "Observed",
+  observedLabel,
   height = H,
 }: {
   hours: CurtailmentHourForecast[];
   observed?: CurtailmentHourObservation[];
   thresholdMw: number;
+  /** Overrides the generic "Observed" — Replay calls it the settled actual. */
   observedLabel?: string;
   height?: number;
 }) {
   const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
+  const observedText = observedLabel ?? copy.app.fan.observedDefault;
   const [containerWidth, onLayout] = useContainerWidth();
   const [activeSel, setActive] = useState<number | null>(null);
 
@@ -111,7 +116,7 @@ export function FanChart({
         viewBox={`0 0 ${W} ${H}`}
         width="100%"
         height={scale > 0 ? scale * height : height}
-        accessibilityLabel="Day-ahead curtailment profile, P10 to P90 band around the median"
+        accessibilityLabel={copy.app.fan.figure}
       >
         <Defs>
           <LinearGradient id="fan-band" x1="0" y1="0" x2="0" y2="1">
@@ -140,7 +145,7 @@ export function FanChart({
                 fontFamily={FONT}
                 fill={colors.inkMuted}
               >
-                {Math.round(max * g)}
+                {f.number(max * g)}
               </SvgText>
             </G>
           );
@@ -196,7 +201,7 @@ export function FanChart({
           fontFamily={FONT}
           fill={colors.inkFaint}
         >
-          {`threshold ${thresholdMw} MW`}
+          {fill(copy.app.fan.thresholdMark, { mw: f.number(thresholdMw) })}
         </SvgText>
 
         {hours.map((h, i) =>
@@ -263,11 +268,12 @@ export function FanChart({
             <Pressable
               key={`hit-${h.validTime}`}
               accessibilityRole="button"
-              accessibilityLabel={`Hour ${h.hourLocal}: P50 ${formatMwhCompact(
-                h.constrainedOff.p50,
-              )} MWh, P10 to P90 ${formatMwhCompact(h.constrainedOff.p10)} to ${formatMwhCompact(
-                h.constrainedOff.p90,
-              )}`}
+              accessibilityLabel={fill(copy.app.fan.hourFigure, {
+                hour: f.hour(h.hourLocal),
+                p50: f.compact(h.constrainedOff.p50),
+                p10: f.compact(h.constrainedOff.p10),
+                p90: f.compact(h.constrainedOff.p90),
+              })}
               onPress={() => setActive(activeSel === i ? null : i)}
               style={
                 Platform.OS === "web"
@@ -283,10 +289,10 @@ export function FanChart({
         <HourReadout
           hour={activeHour}
           observedMwh={observed?.[active]?.constrainedOffMwh}
-          observedLabel={observedLabel}
+          observedLabel={observedText}
         />
       ) : (
-        <Legend hasObserved={observed !== undefined} observedLabel={observedLabel} />
+        <Legend hasObserved={observed !== undefined} observedLabel={observedText} />
       )}
     </View>
   );
@@ -300,6 +306,7 @@ function Legend({
   observedLabel: string;
 }) {
   const colors = usePalette();
+  const copy = useCopy();
   return (
     <View
       style={{
@@ -310,11 +317,11 @@ function Legend({
         marginTop: 10,
       }}
     >
-      <Swatch color={colors.violet} label="P50 forecast" />
-      <Swatch color={colors.violet} label="P10–P90 band" faded={true} />
+      <Swatch color={colors.violet} label={copy.app.fan.medianLegend} />
+      <Swatch color={colors.violet} label={copy.app.fan.bandLegend} faded={true} />
       {hasObserved ? <Swatch color={colors.accent} label={observedLabel} /> : null}
       <RnText style={{ fontSize: 11, color: colors.inkFaint }}>
-        Tap an hour to read its interval
+        {copy.app.fan.hint}
       </RnText>
     </View>
   );
@@ -356,6 +363,8 @@ function HourReadout({
   observedLabel: string;
 }) {
   const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
   return (
     <View
       style={{
@@ -373,20 +382,16 @@ function HourReadout({
         paddingVertical: 10,
       }}
     >
-      <Readout label="Hour" value={`${String(hour.hourLocal).padStart(2, "0")}:00`} />
-      <Readout label="P10" value={formatMwhCompact(hour.constrainedOff.p10)} />
+      <Readout label={copy.app.fan.hourLabel} value={f.hour(hour.hourLocal)} />
+      <Readout label="P10" value={f.compact(hour.constrainedOff.p10)} />
+      <Readout label="P50" value={f.compact(hour.constrainedOff.p50)} strong={true} />
+      <Readout label="P90" value={f.compact(hour.constrainedOff.p90)} />
       <Readout
-        label="P50"
-        value={formatMwhCompact(hour.constrainedOff.p50)}
-        strong={true}
-      />
-      <Readout label="P90" value={formatMwhCompact(hour.constrainedOff.p90)} />
-      <Readout
-        label="P(above threshold)"
-        value={`${Math.round(hour.occurrenceProbability * 100)}%`}
+        label={copy.app.fan.exceedance}
+        value={f.percent(hour.occurrenceProbability)}
       />
       {observedMwh === undefined ? null : (
-        <Readout label={observedLabel} value={formatMwhCompact(observedMwh)} />
+        <Readout label={observedLabel} value={f.compact(observedMwh)} />
       )}
     </View>
   );

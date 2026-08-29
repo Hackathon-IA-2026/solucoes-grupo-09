@@ -1,4 +1,3 @@
-import { formatDate } from "@wattsteer/core";
 import {
   Badge,
   Panel,
@@ -8,7 +7,7 @@ import {
   usePalette,
 } from "@wattsteer/ui";
 import { Text, View } from "react-native";
-import { useCopy } from "@/i18n";
+import { useCopy, useFormat, useI18n } from "@/i18n";
 import {
   centre,
   type Figure,
@@ -17,7 +16,7 @@ import {
   formatRange,
   upper,
 } from "./band";
-import { BandRail, railLabel } from "./band-figure";
+import { BandRail, useRailLabel } from "./band-figure";
 import { REPLAY } from "./fixtures";
 import { Footnote } from "./section";
 
@@ -41,6 +40,8 @@ import { Footnote } from "./section";
  */
 export function ReplayCompare() {
   const copy = useCopy();
+  const f = useFormat();
+  const { locale } = useI18n();
   const colors = usePalette();
   const max = Math.max(upper(REPLAY.actual), upper(REPLAY.optimized)) * 1.05;
 
@@ -52,8 +53,8 @@ export function ReplayCompare() {
       <PanelHeader
         icon={<RotateCcwIcon size={18} color={colors.inkMuted} />}
         title={copy.showcase.replay.panelTitle}
-        subtitle={`${REPLAY.subsystem} · ${formatDate(REPLAY.day)}`}
-        right={<Badge label="revision-optimistic" tone="warning" />}
+        subtitle={`${REPLAY.subsystem} · ${f.date(REPLAY.day)}`}
+        right={<Badge label={copy.showcase.replay.vintageBadge} tone="warning" />}
       />
 
       <Text style={{ fontSize: 15, fontWeight: "600", color: colors.ink }}>
@@ -98,11 +99,11 @@ export function ReplayCompare() {
               color: colors.accent,
             }}
           >
-            {`${formatMwhExact(centre(REPLAY.recovered))} MWh`}
+            {`${formatMwhExact(locale, centre(REPLAY.recovered))} MWh`}
           </Text>
           {REPLAY.recovered.kind === "band" ? (
             <Text style={{ fontSize: 12, color: colors.inkFaint }}>
-              {`${copy.band.rangeLabel} ${formatRange(REPLAY.recovered.band)}`}
+              {`${copy.band.rangeLabel} ${formatRange(locale, REPLAY.recovered.band)}`}
             </Text>
           ) : null}
         </View>
@@ -120,9 +121,11 @@ export function ReplayCompare() {
               color: colors.ink,
             }}
           >
-            {formatPercent(REPLAY.reduction)}
+            {formatPercent(locale, REPLAY.reduction)}
           </Text>
-          <Text style={{ fontSize: 12, color: colors.inkFaint }}>median to observed</Text>
+          <Text style={{ fontSize: 12, color: colors.inkFaint }}>
+            {copy.showcase.replay.medianToObserved}
+          </Text>
         </View>
       </View>
 
@@ -143,6 +146,8 @@ function CompareRow({
   accent?: boolean;
 }) {
   const copy = useCopy();
+  const { locale } = useI18n();
+  const railLabel = useRailLabel();
   const colors = usePalette();
   return (
     <View style={{ gap: 8 }}>
@@ -170,7 +175,7 @@ function CompareRow({
             color: accent ? colors.accent : colors.ink,
           }}
         >
-          {`${formatMwhExact(centre(figure))} MWh`}
+          {`${formatMwhExact(locale, centre(figure))} MWh`}
         </Text>
       </View>
       <BandRail figure={figure} max={max} label={railLabel(figure, "MWh", label)} />
@@ -178,7 +183,7 @@ function CompareRow({
         style={{ fontSize: 12, color: colors.inkMuted, fontVariant: ["tabular-nums"] }}
       >
         {figure.kind === "band"
-          ? `${copy.band.rangeLabel} ${formatRange(figure.band)}`
+          ? `${copy.band.rangeLabel} ${formatRange(locale, figure.band)}`
           : copy.band.observedNote}
       </Text>
     </View>

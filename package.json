@@ -13,7 +13,7 @@
     "worker": "bun run --cwd apps/api worker",
     "web": "bun run --cwd apps/web start",
     "web:export": "bun run --cwd apps/web export",
-    "test:hygiene": "bun test test/repo-hygiene.test.ts",
+    "test:hygiene": "bun test ./test/",
     "test": "bun run test:hygiene && bun run --cwd packages/core test && bun run --cwd apps/api test && bun run --cwd apps/web test",
     "test:api": "bun run --cwd apps/api test",
     "test:core": "bun run --cwd packages/core test",

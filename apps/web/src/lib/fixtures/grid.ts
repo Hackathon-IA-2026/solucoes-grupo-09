@@ -236,13 +236,15 @@ export function buildAllForecasts(
  * `components/charts/risk-class.tsx`. They live here rather than in the
  * component because they are a model-facing decision (they are what a
  * calibration curve would be checked against), not a styling one.
+ *
+ * The edges live here; the *names* do not. "Low" and "Baixo" are the same bin,
+ * so the class is the key and the word comes from the dictionaries.
  */
-export const RISK_BINS: { klass: RiskClass; from: number; to: number; label: string }[] =
-  [
-    { klass: "low", from: 0, to: 0.25, label: "Low" },
-    { klass: "elevated", from: 0.25, to: 0.6, label: "Elevated" },
-    { klass: "high", from: 0.6, to: 1, label: "High" },
-  ];
+export const RISK_BINS: { klass: RiskClass; from: number; to: number }[] = [
+  { klass: "low", from: 0, to: 0.25 },
+  { klass: "elevated", from: 0.25, to: 0.6 },
+  { klass: "high", from: 0.6, to: 1 },
+];
 
 export function riskClass(probability: number): RiskClass {
   const bin = RISK_BINS.find((b) => probability >= b.from && probability < b.to);

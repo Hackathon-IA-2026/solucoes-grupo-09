@@ -1,4 +1,3 @@
-import { formatDate } from "@wattsteer/core";
 import {
   ArrowRightIcon,
   Badge,
@@ -15,10 +14,10 @@ import {
   ZapIcon,
 } from "@wattsteer/ui";
 import { StyleSheet, Text, View } from "react-native";
-import { useCopy } from "@/i18n";
+import { useCopy, useFormat, useI18n } from "@/i18n";
 import { producerLabel } from "@/lib/domain";
 import { formatMwhExact, formatProbability, formatRange, upper } from "./band";
-import { BandFigure, BandRail, railLabel } from "./band-figure";
+import { BandFigure, BandRail, useRailLabel } from "./band-figure";
 import { APP_HREF, CtaLink } from "./cta-link";
 import { FanChart, FanLegend } from "./fan-chart";
 import {
@@ -164,6 +163,7 @@ export function Hero({ onExplain }: { onExplain: () => void }) {
 /** The live-readout panel: national figure, subsystem ranking, hourly fan. */
 function Readout({ wide, subsystemMax }: { wide: boolean; subsystemMax: number }) {
   const copy = useCopy();
+  const f = useFormat();
   const colors = usePalette();
   return (
     <View testID="hero-readout" style={{ gap: space.lg }}>
@@ -179,7 +179,7 @@ function Readout({ wide, subsystemMax }: { wide: boolean; subsystemMax: number }
         <PanelHeader
           icon={<CalendarDaysIcon size={18} color={colors.inkMuted} />}
           title={copy.readout.title}
-          subtitle={formatDate(FORECAST_DAY)}
+          subtitle={f.date(FORECAST_DAY)}
           right={<Badge label={copy.readout.sampleBadge} tone="warning" />}
         />
 
@@ -290,6 +290,8 @@ function OriginLine() {
 
 function SubsystemRow({ outlook, max }: { outlook: SubsystemOutlook; max: number }) {
   const copy = useCopy();
+  const { locale } = useI18n();
+  const railLabel = useRailLabel();
   const colors = usePalette();
   const probabilityTone =
     outlook.probability >= 0.66
@@ -342,7 +344,7 @@ function SubsystemRow({ outlook, max }: { outlook: SubsystemOutlook; max: number
             color: probabilityTone,
           }}
         >
-          {formatProbability(outlook.probability)}
+          {formatProbability(locale, outlook.probability)}
         </Text>
       </View>
 
@@ -356,8 +358,8 @@ function SubsystemRow({ outlook, max }: { outlook: SubsystemOutlook; max: number
         style={{ fontSize: 12, color: colors.inkMuted, fontVariant: ["tabular-nums"] }}
       >
         {outlook.energy.kind === "band"
-          ? `${formatMwhExact(outlook.energy.band.p50)} MWh · ${copy.band.rangeLabel} ${formatRange(outlook.energy.band)}`
-          : `${formatMwhExact(outlook.energy.value)} MWh · ${copy.band.observedLabel}`}
+          ? `${formatMwhExact(locale, outlook.energy.band.p50)} MWh · ${copy.band.rangeLabel} ${formatRange(locale, outlook.energy.band)}`
+          : `${formatMwhExact(locale, outlook.energy.value)} MWh · ${copy.band.observedLabel}`}
       </Text>
     </View>
   );

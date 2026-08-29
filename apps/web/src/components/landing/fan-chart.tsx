@@ -2,6 +2,8 @@ import { radius, space, useContainerWidth, usePalette } from "@wattsteer/ui";
 import { useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, G, Line, Path, Text as SvgText } from "react-native-svg";
+import { useCopy, useI18n } from "@/i18n";
+import { fill } from "@/i18n/format";
 import { formatMwhExact } from "./band";
 import type { HourlyBand } from "./fixtures";
 
@@ -85,6 +87,8 @@ export function FanChart({
   accessibilityLabel: string;
 }) {
   const colors = usePalette();
+  const copy = useCopy();
+  const { locale } = useI18n();
   const [containerWidth, onLayout] = useContainerWidth();
   // Default to the peak hour rather than hour 0: the interesting hour should
   // be selected before anyone touches anything.
@@ -130,7 +134,7 @@ export function FanChart({
                 fontFamily={FONT}
                 fill={colors.inkMuted}
               >
-                {g === 0 ? "0" : formatMwhExact(max * g)}
+                {g === 0 ? "0" : formatMwhExact(locale, max * g)}
               </SvgText>
             </G>
           );
@@ -207,7 +211,13 @@ export function FanChart({
             <Pressable
               key={p.hour}
               accessibilityRole="button"
-              accessibilityLabel={`${String(p.hour).padStart(2, "0")}:00 — median ${formatMwhExact(p.p50)} ${unit}, P10 to P90 ${formatMwhExact(p.p10)} to ${formatMwhExact(p.p90)} ${unit}`}
+              accessibilityLabel={fill(copy.band.hourFigure, {
+                hour: `${String(p.hour).padStart(2, "0")}:00`,
+                p50: formatMwhExact(locale, p.p50),
+                p10: formatMwhExact(locale, p.p10),
+                p90: formatMwhExact(locale, p.p90),
+                unit,
+              })}
               onPress={() => setSelected(i)}
               onHoverIn={() => setSelected(i)}
               style={
@@ -252,7 +262,7 @@ export function FanChart({
               fontVariant: ["tabular-nums"],
             }}
           >
-            {`${formatMwhExact(cur.p50)} ${unit}`}
+            {`${formatMwhExact(locale, cur.p50)} ${unit}`}
           </Text>
           <Text
             style={{
@@ -261,7 +271,7 @@ export function FanChart({
               fontVariant: ["tabular-nums"],
             }}
           >
-            {`${formatMwhExact(cur.p10)}–${formatMwhExact(cur.p90)}`}
+            {`${formatMwhExact(locale, cur.p10)}–${formatMwhExact(locale, cur.p90)}`}
           </Text>
         </View>
       ) : null}

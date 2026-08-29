@@ -16,10 +16,15 @@
  */
 
 export {
+  type AttributedDriver,
   type Band,
   band,
   centre,
   type Driver,
+  type DriverCode,
+  type DriverDirection,
+  type DriverReading,
+  type DriverTerm,
   type Figure,
   type ForecastOrigin,
   observed,
@@ -33,8 +38,8 @@ export {
 } from "@/lib/domain";
 
 import type {
+  AttributedDriver,
   Band,
-  Driver,
   ForecastOrigin,
   ReasonCode,
   RestrictionOrigin,
@@ -129,22 +134,41 @@ export interface ExplainFixture {
   subsystem: SubsystemCode;
   technology: Technology;
   targetDate: string;
-  drivers: Driver[];
-  /** Generated directly in the requested locale; not a translated string. */
-  narration: string;
+  drivers: AttributedDriver[];
+  /**
+   * The share of attributed magnitude the narration's two named drivers carry
+   * between them.
+   *
+   * The narration is the one deliberate exception `docs/specs/i18n.md` carves
+   * out of "the API returns codes, the client renders the words": there is no
+   * translation key for a sentence a language model writes fresh per request,
+   * so the shipped API will take a `locale` and generate the prose directly in
+   * it. There is no language model behind a fixture, so the prototype
+   * composes the same sentence from a per-locale template and the values here
+   * — which keeps the screen honest in both languages until the real
+   * narration arrives to replace it wholesale.
+   */
+  narrationTopShare: number;
   reliability: ReliabilityPoint[];
   /** How many hours the reliability curve was computed over. */
   reliabilitySampleHours: number;
-  reliabilityWindow: string;
+  /** The scored window, as civil dates — formatted by the reader's locale. */
+  reliabilityWindowFrom: string;
+  reliabilityWindowTo: string;
   reliabilityFidelity: VintageFidelity;
   observedReasons: ObservedReason[];
   observedReasonsDate: string;
 }
 
-/** `FlexibilityAsset` — a sum type; v1 implements two variants. */
+/**
+ * `FlexibilityAsset` — a sum type; v1 implements two variants.
+ *
+ * Neither carries a `label`. The two kinds of asset are named in the
+ * dictionaries by their `assetType`, because "Battery" is copy and an asset
+ * type is not.
+ */
 export interface BatteryAsset {
   assetType: "battery";
-  label: string;
   maxPowerMw: number;
   energyCapacityMwh: number;
   roundTripEfficiency: number;
@@ -153,7 +177,6 @@ export interface BatteryAsset {
 
 export interface ShiftableLoadAsset {
   assetType: "shiftable_load";
-  label: string;
   maxShiftMw: number;
   shiftWindowHours: number;
   dailyEnergyMwh: number;
@@ -199,8 +222,8 @@ export interface HourlyDispatch {
 
 /** One step of the Mitigate reveal. */
 export interface MitigationStep {
+  /** The step's identity; its words live in the dictionaries. */
   key: "no_action" | "battery" | "battery_and_load";
-  label: string;
   /** Remaining curtailment across the band, MWh. */
   remaining: Band;
   /** Recovered energy across the band, MWh. */
@@ -225,10 +248,18 @@ export interface CurtailmentEpisode {
   maxGapHours: number;
 }
 
+/** The fixed asset scenario a replayed day is scored against. */
+export interface ReplayScenario {
+  batteryPowerMw: number;
+  batteryEnergyMwh: number;
+  loadShiftMw: number;
+}
+
 /** One replayed day for the Time Machine. */
 export interface ReplayDay {
   episode: CurtailmentEpisode;
-  label: string;
+  /** The replayed civil date, `America/Sao_Paulo`. The label is built from it. */
+  date: string;
   /** What ONS settled, hour by hour. */
   observed: CurtailmentHourObservation[];
   /** What the D−1 run said, pinned to the vintage available at D−1. */
@@ -245,7 +276,8 @@ export interface ReplayDay {
   forecastOrigin: ForecastOrigin;
   /** What the reference scenario's dispatch would have absorbed. */
   recoveredMwh: number;
-  scenarioLabel: string;
+  /** The reference scenario, as parameters rather than as an English sentence. */
+  scenario: ReplayScenario;
   vintageFidelity: VintageFidelity;
   /**
    * Whether the model that produced `forecast` had this period inside its

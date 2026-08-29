@@ -4,7 +4,7 @@ import { Link, useRouter } from "expo-router";
 import Head from "expo-router/head";
 import { useEffect } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
-import { readStoredLocale } from "@/i18n";
+import { en, pt, readStoredLocale } from "@/i18n";
 import {
   DEFAULT_LOCALE,
   LOCALE_NAME,
@@ -124,12 +124,8 @@ export default function Gate() {
             WattSteer
           </Text>
           <View style={{ gap: 2, maxWidth: 400 }}>
-            <Text style={tagline(colors.inkMuted)}>
-              Inteligência de curtailment para a rede elétrica brasileira.
-            </Text>
-            <Text style={tagline(colors.inkMuted)}>
-              Curtailment intelligence for the Brazilian grid.
-            </Text>
+            <Text style={tagline(colors.inkMuted)}>{pt.gate.tagline}</Text>
+            <Text style={tagline(colors.inkMuted)}>{en.gate.tagline}</Text>
           </View>
 
           <View

@@ -29,7 +29,6 @@ export const MODEL_TRAINED_THROUGH = "2026-05-31";
 
 interface DaySpec {
   id: string;
-  label: string;
   date: string;
   subsystem: ReplayDay["episode"]["subsystem"];
   technology: ReplayDay["episode"]["technology"];
@@ -40,13 +39,24 @@ interface DaySpec {
   bias: number;
   spread: number;
   recoveredShare: number;
-  scenarioLabel: string;
 }
+
+/**
+ * The scenario every replayed day is scored against.
+ *
+ * Parameters rather than the sentence they used to be stored as: "100 MW /
+ * 300 MWh battery + 70 MW flexible load" is copy in one language, and the same
+ * three numbers read perfectly well in both.
+ */
+const REFERENCE_SCENARIO = {
+  batteryPowerMw: 100,
+  batteryEnergyMwh: 300,
+  loadShiftMw: 70,
+};
 
 const DAYS: DaySpec[] = [
   {
     id: "2025-09-14-ne-wind",
-    label: "14 Sep 2025 · NORDESTE wind",
     date: "2025-09-14",
     subsystem: "NE",
     technology: "WIND",
@@ -56,11 +66,9 @@ const DAYS: DaySpec[] = [
     bias: 0.88,
     spread: 0.34,
     recoveredShare: 0.459,
-    scenarioLabel: "100 MW / 300 MWh battery + 70 MW flexible load",
   },
   {
     id: "2026-03-22-ne-solar",
-    label: "22 Mar 2026 · NORDESTE solar",
     date: "2026-03-22",
     subsystem: "NE",
     technology: "SOLAR",
@@ -70,11 +78,9 @@ const DAYS: DaySpec[] = [
     bias: 1.14,
     spread: 0.29,
     recoveredShare: 0.318,
-    scenarioLabel: "100 MW / 300 MWh battery + 70 MW flexible load",
   },
   {
     id: "2026-08-11-ne-wind",
-    label: "11 Aug 2026 · NORDESTE wind",
     date: "2026-08-11",
     subsystem: "NE",
     technology: "WIND",
@@ -84,7 +90,6 @@ const DAYS: DaySpec[] = [
     bias: 0.96,
     spread: 0.26,
     recoveredShare: 0.401,
-    scenarioLabel: "100 MW / 300 MWh battery + 70 MW flexible load",
   },
 ];
 
@@ -153,7 +158,7 @@ function buildDay(spec: DaySpec, index: number): ReplayDay {
       thresholdMw: 5,
       maxGapHours: 0,
     },
-    label: spec.label,
+    date: spec.date,
     observed,
     forecast,
     // Joint, not componentwise: the same sub-additive factor `grid.ts` uses,
@@ -165,7 +170,7 @@ function buildDay(spec: DaySpec, index: number): ReplayDay {
       publishedAt: `${spec.date}T13:35:00Z`,
     },
     recoveredMwh: Math.round(total * spec.recoveredShare),
-    scenarioLabel: spec.scenarioLabel,
+    scenario: REFERENCE_SCENARIO,
     vintageFidelity: isPointInTime ? "point_in_time" : "revision_optimistic",
     inTrainingWindow: spec.date <= MODEL_TRAINED_THROUGH,
     modelTrainedThrough: MODEL_TRAINED_THROUGH,
