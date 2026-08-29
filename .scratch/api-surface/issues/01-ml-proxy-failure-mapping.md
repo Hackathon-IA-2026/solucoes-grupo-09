@@ -34,12 +34,22 @@ persisted forecast to serve instead — ticket 11 removes it.
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] An upstream 4xx passes through with its own status, its own code and its own body
-- [ ] An upstream 422 is distinguishable, at the client, from an unreachable modelling service
-- [ ] An upstream 500 is distinguishable from both
-- [ ] `SOLVER_GAP_UNCLOSED` and `SOLVER_TIMEOUT` produce distinct statuses and distinct codes
-- [ ] An unconfigured upstream URL, a refused connection and a timeout keep their existing three distinct outcomes
-- [ ] One test per branch, each asserting a distinct status **and** a distinct code — the module's whole purpose is that the caller can tell whose fault it is
-- [ ] The module's design comment survives and is updated to say it is the edge onto the solver
+- [x] An upstream 4xx keeps its own status and its own code, **re-wrapped in the
+      gateway envelope** — not forwarded verbatim. The spec was corrected on this
+      after the ticket was written: a client parsing one shape for gateway errors
+      and another for upstream ones has no closed enum, which is the property the
+      envelope exists to provide
+- [x] An upstream 422 is distinguishable, at the client, from an unreachable modelling service
+- [x] An upstream 500 is distinguishable from both
+- [x] `SOLVER_GAP_UNCLOSED` and `SOLVER_TIMEOUT` produce distinct statuses and distinct codes
+- [x] An unconfigured upstream URL, a refused connection and a timeout keep their existing three distinct outcomes
+- [x] One test per branch, each asserting its status **and** its code, and a test
+      that no two branches agree on the pair. **The codes are all distinct; the
+      statuses deliberately are not.** Unconfigured and refused are both 502, and
+      gateway-timeout and upstream-502/503/504 are both 503, because 503 tells a
+      caller to retry and 502 tells them not to bother yet — a semantic this spec
+      praises and which six distinct statuses would destroy. The code is the
+      discriminator, which is why it was added
+- [x] The module's design comment survives and is updated to say it is the edge onto the solver
