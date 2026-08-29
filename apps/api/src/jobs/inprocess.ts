@@ -1,4 +1,4 @@
-import { toHttpError } from "../errors.js";
+import { clientSafeMessage } from "../errors.js";
 import type { Execute, JobRecord, JobRunner } from "./types.js";
 
 /** Cap on remembered job records (oldest evicted) so memory can't grow unbounded. */
@@ -40,7 +40,7 @@ export function createInProcessRunner<TPayload, TResult>(
       });
       remember({ id, status: "completed", result });
     } catch (err) {
-      remember({ id, status: "failed", error: toHttpError(err).body.error });
+      remember({ id, status: "failed", error: clientSafeMessage(err) });
     }
   }
 

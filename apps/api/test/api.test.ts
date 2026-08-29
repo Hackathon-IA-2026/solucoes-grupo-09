@@ -64,8 +64,7 @@ describe("api · error mapping (global handler)", () => {
     const res = await hit("/boom");
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({
-      error: "Internal server error",
-      code: "INTERNAL",
+      error: { code: "INTERNAL", message: "Internal server error" },
     });
   });
 });
@@ -192,9 +191,11 @@ describe("api · ML proxy", () => {
     // a 502 says the dependency is absent; a 500 would say WattSteer is broken.
     const res = await hit("?subsystem=NE");
     expect(res.status).toBe(502);
-    expect(await res.json()).toEqual({
-      error: "The ML service is not configured",
-      code: "OPTIMIZER_NOT_CONFIGURED",
+    expect(await res.json()).toMatchObject({
+      error: {
+        code: "OPTIMIZER_NOT_CONFIGURED",
+        message: "The ML service is not configured",
+      },
     });
   });
 

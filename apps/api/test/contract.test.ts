@@ -381,7 +381,7 @@ describe("contract · routing", () => {
     );
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({
-      error: expect.stringContaining("[from, to)"),
+      error: { message: expect.stringContaining("[from, to)") },
     });
   });
 
