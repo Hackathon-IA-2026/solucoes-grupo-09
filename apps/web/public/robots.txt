@@ -1,3 +1,11 @@
+# Everything is crawlable, including the language gate at "/".
+#
+# The gate carries <meta name="robots" content="noindex,follow">, and that has
+# to be the whole signal: pairing a Disallow with a noindex is self-defeating,
+# because a disallowed URL is never fetched, the noindex is never read, and the
+# URL can still be indexed from an external link with an empty snippet. Pages
+# that should stay out of the index (the gate, /app, the 404) say so in their
+# own <head>.
 User-agent: *
 Allow: /
 

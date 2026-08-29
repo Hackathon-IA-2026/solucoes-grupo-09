@@ -1,10 +1,10 @@
 {
   "lang": "pt-BR",
   "dir": "ltr",
-  "name": "WattSteer",
+  "name": "WattSteer — curtailment na rede brasileira",
   "short_name": "WattSteer",
-  "description": "Day-ahead renewable curtailment intelligence for the Brazilian grid.",
-  "start_url": "/",
+  "description": "Previsão de curtailment de renováveis para o dia seguinte na rede elétrica brasileira, a partir de dados abertos do ONS.",
+  "start_url": "/pt/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#131316",

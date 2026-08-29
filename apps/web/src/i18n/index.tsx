@@ -25,14 +25,22 @@ import {
  * fallback: the audience is Brazilian grid operators and renewable IPPs, and
  * the data is ONS's. English is the second locale, not the source one.
  *
- * **Known divergence from `docs/specs/i18n.md`.** That spec settles on
- * locale-prefixed routes (`/pt/…`, `/en/…`) so both languages are crawlable.
- * This is a client-side switch, which means the static export contains
- * Portuguese only and the English copy is invisible to a crawler. That is the
- * exact trade the spec warned about, taken deliberately to get a working
- * toggle now. The switch is the visible half of the feature and does not
- * change when routing does — the routes are what would need building, not the
- * dictionaries or the components.
+ * The provider has two modes, and the difference is the whole point of
+ * `docs/specs/i18n.md`:
+ *
+ * - **Route-driven** (`<I18nProvider locale={…}>`), used by
+ *   `app/[locale]/_layout.tsx`. The URL is the single source of truth. The
+ *   browser is never consulted, nothing is read back out of storage to decide
+ *   what to render, and there is therefore nothing for hydration to disagree
+ *   with: the static file at `/en/privacy` is English because its path says
+ *   so. The language switch under this provider is a *link*, not a toggle.
+ * - **Client-driven** (no `locale` prop), used by the root layout for the
+ *   routes that are not locale-prefixed — `/app`, which is `noindex` and has
+ *   no SEO stake in its URL. There the stored preference still drives a
+ *   state toggle, exactly as before.
+ *
+ * Browser/device language is read in exactly one place in the product: the
+ * gate page at `/`, to decide where to send a first-time visitor.
  */
 
 export type { Locale };
@@ -47,7 +55,7 @@ const dictionaries: Record<Locale, Copy> = { pt, en };
  * itself throws `SecurityError` — an optional chain does not protect against
  * that, only a try/catch does.
  */
-function readStoredLocale(): Locale | null {
+export function readStoredLocale(): Locale | null {
   if (Platform.OS !== "web" || typeof window === "undefined") {
     return null;
   }
@@ -59,7 +67,7 @@ function readStoredLocale(): Locale | null {
   }
 }
 
-function writeStoredLocale(locale: Locale): void {
+export function writeStoredLocale(locale: Locale): void {
   if (Platform.OS !== "web" || typeof window === "undefined") {
     return;
   }
@@ -77,8 +85,27 @@ function setDocumentLang(locale: Locale): void {
   }
 }
 
+/**
+ * How many route-driven providers are currently mounted.
+ *
+ * The root layout's client-driven provider *wraps* the `[locale]` subtree, so
+ * on a locale page both providers exist and both would otherwise want to set
+ * `<html lang>`. React runs child effects before parent effects, so by the
+ * time the outer provider's effect fires this counter already says a route
+ * owns the attribute, and the outer one stands down. Without this the stored
+ * preference would silently overwrite the URL's own locale on `/en/…`.
+ */
+let routeOwnedLangs = 0;
+
 interface I18nValue {
   locale: Locale;
+  /**
+   * The locale the *URL* asserts, or `null` on a route that is not
+   * locale-prefixed. Components use this to decide whether switching language
+   * means navigating or setting state — never to decide what to render.
+   */
+  routeLocale: Locale | null;
+  /** Only meaningful when `routeLocale` is `null`. */
   setLocale: (next: Locale) => void;
   /** The copy for the active locale. */
   copy: Copy;
@@ -86,12 +113,48 @@ interface I18nValue {
 
 const I18nContext = createContext<I18nValue | null>(null);
 
-export function I18nProvider({ children }: PropsWithChildren) {
-  // Always render the default first, then apply the stored choice after mount.
-  // The static export is prerendered in Portuguese, so hydrating straight into
-  // a persisted "en" tree would mismatch every text node and React would throw
-  // the whole server tree away. An English visitor sees a brief Portuguese
-  // flash instead of a hydration error.
+export function I18nProvider({
+  locale: routeLocale,
+  children,
+}: PropsWithChildren<{ locale?: Locale }>) {
+  return routeLocale ? (
+    <RouteI18nProvider locale={routeLocale}>{children}</RouteI18nProvider>
+  ) : (
+    <ClientI18nProvider>{children}</ClientI18nProvider>
+  );
+}
+
+/** The URL decides, start to finish. No state, no storage read, no detection. */
+function RouteI18nProvider({ locale, children }: PropsWithChildren<{ locale: Locale }>) {
+  useEffect(() => {
+    routeOwnedLangs += 1;
+    setDocumentLang(locale);
+    return () => {
+      routeOwnedLangs -= 1;
+    };
+  }, [locale]);
+
+  const value = useMemo<I18nValue>(
+    () => ({
+      locale,
+      routeLocale: locale,
+      // Switching under a route-driven provider is a navigation, which the
+      // language switch performs itself; this exists only so the context
+      // shape is uniform.
+      setLocale: writeStoredLocale,
+      copy: dictionaries[locale],
+    }),
+    [locale],
+  );
+
+  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
+}
+
+/** For the routes with no locale in their URL (`/app`). */
+function ClientI18nProvider({ children }: PropsWithChildren) {
+  // Always render the default first, then apply the stored choice after mount:
+  // hydrating straight into a persisted "en" tree would mismatch every text
+  // node of a page prerendered in Portuguese.
   const [locale, setLocaleState] = useState<Locale>(DEFAULT_LOCALE);
 
   useEffect(() => {
@@ -99,17 +162,21 @@ export function I18nProvider({ children }: PropsWithChildren) {
     if (saved && saved !== DEFAULT_LOCALE) {
       setLocaleState(saved);
     }
-    setDocumentLang(saved ?? DEFAULT_LOCALE);
+    if (routeOwnedLangs === 0) {
+      setDocumentLang(saved ?? DEFAULT_LOCALE);
+    }
   }, []);
 
   const setLocale = useCallback((next: Locale) => {
     setLocaleState(next);
     writeStoredLocale(next);
-    setDocumentLang(next);
+    if (routeOwnedLangs === 0) {
+      setDocumentLang(next);
+    }
   }, []);
 
   const value = useMemo<I18nValue>(
-    () => ({ locale, setLocale, copy: dictionaries[locale] }),
+    () => ({ locale, routeLocale: null, setLocale, copy: dictionaries[locale] }),
     [locale, setLocale],
   );
 

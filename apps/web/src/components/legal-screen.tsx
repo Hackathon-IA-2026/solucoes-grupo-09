@@ -9,11 +9,13 @@ import {
 } from "@wattsteer/ui";
 import { Image } from "expo-image";
 import { Link } from "expo-router";
-import Head from "expo-router/head";
 import type { ReactNode } from "react";
 import { Platform, Pressable, ScrollView, View } from "react-native";
+import { LanguageSwitch } from "@/components/language-switch";
 import { useLegalToc } from "@/hooks/use-legal-toc";
-import { SITE_URL } from "@/lib/config";
+import { useI18n } from "@/i18n";
+import { localePath } from "@/i18n/locale";
+import { SeoHead } from "./seo-head";
 import { SiteFooter } from "./site-footer";
 
 export interface LegalContentSection {
@@ -33,6 +35,7 @@ const WIDE = 1024;
  */
 export function LegalScreen({
   headTitle,
+  description,
   path,
   badge,
   updated,
@@ -42,6 +45,7 @@ export function LegalScreen({
   sections,
 }: {
   headTitle: string;
+  description: string;
   path: "/terms" | "/privacy";
   badge: string;
   updated: string;
@@ -50,6 +54,7 @@ export function LegalScreen({
   sidebarTitle: string;
   sections: readonly LegalContentSection[];
 }) {
+  const { locale, copy } = useI18n();
   const colors = usePalette();
   const [width, onLayout] = useContainerWidth();
   const wide = width >= WIDE;
@@ -68,26 +73,32 @@ export function LegalScreen({
 
   return (
     <>
-      <Head>
-        <title>{headTitle}</title>
-        <link rel="canonical" href={`${SITE_URL}${path}`} />
-        <meta name="robots" content="index,follow" />
-      </Head>
+      <SeoHead
+        locale={locale}
+        path={path}
+        title={headTitle}
+        description={description}
+        ogType="article"
+      />
 
       <View onLayout={onLayout} style={{ flex: 1, backgroundColor: colors.canvas }}>
-        {/* Header: centered logo, links home. */}
+        {/* Header: centered logo linking home, language switch at the right. */}
         <View
           style={{
             alignItems: "center",
+            justifyContent: "center",
             paddingVertical: space.lg,
             borderBottomWidth: 1,
             borderBottomColor: colors.border,
           }}
         >
-          <Link href="/" asChild={true}>
+          {/* Home means *this locale's* home. A bare "/" here would bounce a
+              reader out to the gate and, worse, let the gate's stored-locale
+              redirect decide their language for them mid-visit. */}
+          <Link href={localePath(locale) as never} asChild={true}>
             <Pressable
               accessibilityRole="link"
-              accessibilityLabel="WattSteer — home"
+              accessibilityLabel={copy.legal.homeLink}
               testID="legal-home-link"
               hitSlop={8}
               style={
@@ -102,6 +113,21 @@ export function LegalScreen({
               />
             </Pressable>
           </Link>
+
+          {/* The legal pages are locale-prefixed too, so they need the way
+              across: /en/privacy ⇄ /pt/privacy, same page, other language.
+              Absolutely positioned so the logo stays optically centered. */}
+          <View
+            style={{
+              position: "absolute",
+              right: space.lg,
+              top: 0,
+              bottom: 0,
+              justifyContent: "center",
+            }}
+          >
+            <LanguageSwitch testID="legal-language-switch" />
+          </View>
         </View>
 
         <View

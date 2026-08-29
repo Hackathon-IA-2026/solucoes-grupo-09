@@ -8,14 +8,40 @@ WattSteer is a public, read-only site built on openly published data from ONS
 (Operador Nacional do Sistema Elétrico), ANEEL and weather providers. It has no
 accounts and no login.
 
+## Languages
+
+The site is published in two locales, and the URL is what selects one — there
+is no per-request negotiation and no client-side language state to reason
+about. `/pt/…` is Portuguese (pt-BR) and `/en/…` is English; the same page
+exists at both prefixes and each declares the other as an `hreflang`
+alternate. Portuguese is the default and the `x-default` target: the audience
+is Brazilian grid operators and renewable IPPs, and the data is ONS's.
+
+`https://wattsteer.com/` itself is only a language gate — `noindex,follow`,
+with links to both roots. It is not a page worth reading; follow it through to
+one of the two below.
+
 ## Pages
 
-- [Home](https://wattsteer.com/): day-ahead curtailment risk by subsystem, the
-  four engines behind it, and where the data comes from.
+Portuguese (pt-BR):
+
+- [Início](https://wattsteer.com/pt/): risco de curtailment por subsistema para
+  o dia seguinte, os quatro motores por trás dele e a origem dos dados.
+- [Termos de Uso](https://wattsteer.com/pt/terms)
+- [Política de Privacidade](https://wattsteer.com/pt/privacy)
+
+English:
+
+- [Home](https://wattsteer.com/en/): day-ahead curtailment risk by subsystem,
+  the four engines behind it, and where the data comes from.
+- [Terms of Service](https://wattsteer.com/en/terms)
+- [Privacy Policy](https://wattsteer.com/en/privacy)
+
+Locale-independent:
+
 - [App](https://wattsteer.com/app): the product itself — Grid Overview,
-  Explain, Mitigate and Time Machine.
-- [Terms of Service](https://wattsteer.com/terms)
-- [Privacy Policy](https://wattsteer.com/privacy)
+  Explain, Mitigate and Time Machine. Not locale-prefixed and `noindex`; its
+  language follows the visitor's stored preference.
 
 ## Notes
 
@@ -27,6 +53,10 @@ accounts and no login.
 - Energy is reported in MWh. Money appears only as an explicitly labelled
   economic scenario, next to the R$/MWh it assumed. No carbon figure is
   claimed.
+- Sector vocabulary is not translated in either locale: "curtailment",
+  "constrained-off" and "conjunto" appear verbatim in Portuguese and English
+  alike, because that is how the sector's own Portuguese-language discourse
+  uses them.
 - Forecasts are modelled estimates carrying uncertainty, not operating
   instructions, trading signals or advice.
 - Source data is published by third parties and is periodically revised; figures

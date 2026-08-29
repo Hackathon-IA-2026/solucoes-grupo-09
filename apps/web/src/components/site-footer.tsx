@@ -10,7 +10,8 @@ import {
 import { Image } from "expo-image";
 import { Link } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { useCopy } from "@/i18n";
+import { useI18n } from "@/i18n";
+import { DEFAULT_LOCALE, localePath } from "@/i18n/locale";
 import { APP_HREF, CtaLink } from "./landing/cta-link";
 
 const styles = StyleSheet.create({
@@ -46,13 +47,13 @@ function LegalLink({
   label,
   testID,
 }: {
-  href: "/privacy" | "/terms";
+  href: string;
   label: string;
   testID: string;
 }) {
   const colors = usePalette();
   return (
-    <Link href={href} asChild={true}>
+    <Link href={href as never} asChild={true}>
       <Pressable
         accessibilityRole="link"
         testID={testID}
@@ -79,8 +80,13 @@ function LegalLink({
  * Copy is the closing line of the pitch (IDEA.md §47).
  */
 export function SiteFooter() {
-  const copy = useCopy();
+  const { copy, routeLocale } = useI18n();
   const colors = usePalette();
+  // The legal pages live under the locale prefix; `/app` does not, and its
+  // footer links out to the default locale's copies rather than to a path
+  // that would 404.
+  const legalHref = (path: "/privacy" | "/terms") =>
+    localePath(routeLocale ?? DEFAULT_LOCALE, path);
   const year = new Date().getFullYear();
   const [width, onLayout] = useContainerWidth();
   const wide = width >= 640;
@@ -187,7 +193,11 @@ export function SiteFooter() {
             gap: space.lg,
           }}
         >
-          <LegalLink href="/privacy" label="Privacy" testID="footer-privacy-link" />
+          <LegalLink
+            href={legalHref("/privacy")}
+            label={copy.legal.privacyLink}
+            testID="footer-privacy-link"
+          />
           <View
             aria-hidden={true}
             style={{
@@ -197,7 +207,11 @@ export function SiteFooter() {
               backgroundColor: colors.border,
             }}
           />
-          <LegalLink href="/terms" label="Terms" testID="footer-terms-link" />
+          <LegalLink
+            href={legalHref("/terms")}
+            label={copy.legal.termsLink}
+            testID="footer-terms-link"
+          />
         </View>
       </View>
     </View>

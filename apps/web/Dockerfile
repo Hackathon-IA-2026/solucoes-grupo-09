@@ -30,6 +30,10 @@ COPY apps/web/app.json apps/web/tsconfig.json ./apps/web/
 COPY apps/web/src ./apps/web/src
 COPY apps/web/assets ./apps/web/assets
 COPY apps/web/public ./apps/web/public
+# The post-export pass that gives each locale tree its own <html lang> and PWA
+# manifest — see apps/web/scripts/localize-export.ts. The build fails without
+# it rather than shipping a Portuguese `lang` on the English pages.
+COPY apps/web/scripts/localize-export.ts ./apps/web/scripts/
 COPY apps/web/server.ts ./apps/web/
 
 # EXPO_PUBLIC_* values are inlined at build time (static export), so the API
@@ -41,7 +45,7 @@ ENV EXPO_PUBLIC_API_URL=$EXPO_PUBLIC_API_URL \
     EXPO_PUBLIC_SITE_URL=$EXPO_PUBLIC_SITE_URL
 
 WORKDIR /app/apps/web
-RUN bunx expo export --platform web
+RUN bunx expo export --platform web && bun scripts/localize-export.ts
 
 # --- runtime stage: serve dist/ ---
 FROM oven/bun:1.3-slim AS runtime

@@ -1,21 +1,64 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<!--
+  The six real, indexable pages: three routes × two locales.
+
+  Not listed, deliberately:
+  - "/" — the language gate. It is noindex,follow: no unique content, but it
+    passes crawl equity to the two locale roots it links to.
+  - "/app" — the product shell, which declares noindex itself. A sitemap entry
+    for a noindexed URL is a contradiction, so it is gone.
+
+  Every entry below repeats the same hreflang set the page itself emits in its
+  own head. They must agree: disagreement between a sitemap's alternates and a
+  page's own is a common reason Google discards hreflang silently. x-default
+  points at Portuguese — Brazil is the primary market.
+-->
+<urlset
+  xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+  xmlns:xhtml="http://www.w3.org/1999/xhtml"
+>
   <url>
-    <loc>https://wattsteer.com/</loc>
+    <loc>https://wattsteer.com/pt/</loc>
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://wattsteer.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wattsteer.com/en/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://wattsteer.com/pt/"/>
     <lastmod>2026-08-28</lastmod>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://wattsteer.com/app</loc>
+    <loc>https://wattsteer.com/en/</loc>
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://wattsteer.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wattsteer.com/en/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://wattsteer.com/pt/"/>
     <lastmod>2026-08-28</lastmod>
-    <priority>0.8</priority>
+    <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://wattsteer.com/privacy</loc>
+    <loc>https://wattsteer.com/pt/privacy</loc>
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://wattsteer.com/pt/privacy"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wattsteer.com/en/privacy"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://wattsteer.com/pt/privacy"/>
     <lastmod>2026-08-28</lastmod>
   </url>
   <url>
-    <loc>https://wattsteer.com/terms</loc>
+    <loc>https://wattsteer.com/en/privacy</loc>
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://wattsteer.com/pt/privacy"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wattsteer.com/en/privacy"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://wattsteer.com/pt/privacy"/>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
+    <loc>https://wattsteer.com/pt/terms</loc>
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://wattsteer.com/pt/terms"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wattsteer.com/en/terms"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://wattsteer.com/pt/terms"/>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
+    <loc>https://wattsteer.com/en/terms</loc>
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://wattsteer.com/pt/terms"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wattsteer.com/en/terms"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://wattsteer.com/pt/terms"/>
     <lastmod>2026-08-28</lastmod>
   </url>
 </urlset>
