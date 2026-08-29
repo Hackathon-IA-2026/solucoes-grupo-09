@@ -20,6 +20,11 @@ import {
 import { createPlantRegistryIngestor } from "./registry-job.js";
 import { createSigaIngestor } from "./siga-job.js";
 import type { IngestTask, IngestTaskResult } from "./tasks.js";
+import {
+  type CentroidDriftPayload,
+  type CentroidDriftResult,
+  createCentroidDriftCheck,
+} from "./weather/centroid-job.js";
 import { createWeatherIngestor } from "./weather-job.js";
 
 /**
@@ -39,17 +44,28 @@ import { createWeatherIngestor } from "./weather-job.js";
  * a period boundary moved.
  */
 
-/** Everything the queue carries: an ingestion, a sweep, or a retention pass. */
+/**
+ * Everything the queue carries: an ingestion, a sweep, a retention pass, or the
+ * centroid drift watch.
+ *
+ * The drift check is deliberately **not** an `IngestTask`: it ingests nothing
+ * and has no source, no period and no vintage of its own. It reads the registry
+ * WattSteer already holds and asks one question of it — has the fleet grown away
+ * from the frozen weather geometry — so it belongs beside the sweep and the
+ * retention pass rather than among the adapters.
+ */
 export type QueueTask =
   | IngestTask
   | { kind: "refresh_sweep"; payload: RefreshSweepPayload }
-  | { kind: "retention"; payload: { policy?: RetentionPolicy } };
+  | { kind: "retention"; payload: { policy?: RetentionPolicy } }
+  | { kind: "centroid_drift"; payload: CentroidDriftPayload };
 
 /** What a queued task produced. */
 export type QueueTaskResult =
   | IngestTaskResult
   | { kind: "refresh_sweep"; result: RefreshSweepResult }
-  | { kind: "retention"; result: RetentionResult };
+  | { kind: "retention"; result: RetentionResult }
+  | { kind: "centroid_drift"; result: CentroidDriftResult };
 
 export interface IngestDispatcherDeps {
   db: Database;
@@ -114,10 +130,17 @@ export function createIngestDispatcher(
   };
 
   const sweep = createRefreshSweep({ db: deps.db, run: runIngestion });
+  const centroidDrift = createCentroidDriftCheck({ db: deps.db });
 
   return async (task, report) => {
     if (task.kind === "refresh_sweep") {
       return { kind: "refresh_sweep", result: await sweep(task.payload, report) };
+    }
+    if (task.kind === "centroid_drift") {
+      return {
+        kind: "centroid_drift",
+        result: await centroidDrift(task.payload, report),
+      };
     }
     if (task.kind === "retention") {
       return {

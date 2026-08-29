@@ -1749,3 +1749,164 @@ export const payloadCustody = pgTable(
     index("payload_custody_uri").on(t.archiveUri),
   ],
 );
+
+// ---------------------------------------------------------------------------
+// The centroid set — the frozen geometry weather is queried at, and the drift
+// watch over it. Appended as its own block so that two adapters landing at once
+// cannot conflict on this file.
+// ---------------------------------------------------------------------------
+
+/**
+ * How a centroid set's geometry came to exist.
+ *
+ * `hand_transcribed` is `centroid_set_v1` and only ever v1: the nineteen points
+ * copied out of `docs/research/weather-sources.md`, two of which were never
+ * computed from SIGA municipality centroids at all. Everything after it is
+ * `generated` — produced from the registry by `centroid-generator.ts`, which is
+ * the whole point of recording the distinction.
+ */
+export const centroidSetSource = pgEnum("centroid_set_source", [
+  "hand_transcribed",
+  "generated",
+]);
+
+/**
+ * Whether the grid-cell uniqueness question was actually asked of this set.
+ *
+ * Open-Meteo snaps a query to the nearest cell and echoes the cell centre back,
+ * so the only way to know two points share a cell is to have asked. A set frozen
+ * without that answer would be asserting an invariant it never checked.
+ */
+export const centroidCollisionCheck = pgEnum("centroid_collision_check", [
+  "asserted",
+  "unchecked",
+]);
+
+/** How a single point of a set came to be where it is. */
+export const centroidPointOrigin = pgEnum("centroid_point_origin", [
+  "municipality_centroid",
+  "hand_transcribed",
+]);
+
+/** What a drift check concluded. Named, because a boolean would not be read. */
+export const centroidDriftOutcome = pgEnum("centroid_drift_outcome", [
+  "within_tolerance",
+  "regeneration_triggered",
+]);
+
+/**
+ * One frozen centroid set — the geometry, its provenance and its freeze-time
+ * drift baseline.
+ *
+ * **Immutable once written, and the schema is what makes that true**: the
+ * version is the primary key and `geometry_digest` is a digest of the points
+ * under it, so a regeneration that produced different geometry cannot restate
+ * an existing version — it has to insert a new one. That is not fastidiousness
+ * about history: moving a query point moves the Open-Meteo grid cell underneath
+ * a series that has already been ingested against it, which is a covariate
+ * shift no test would see. A new set is a new feature-set version and a
+ * retrain.
+ *
+ * `freeze_mean_distance_km` is the capacity-weighted mean plant-to-centroid
+ * distance measured when the set was frozen — the baseline `centroid_drift_check`
+ * compares against.
+ */
+export const centroidSet = pgTable(
+  "centroid_set",
+  {
+    /** `centroid_set_v1`, `centroid_set_v2`, … Also the business key everywhere. */
+    version: text().primaryKey(),
+    source: centroidSetSource().notNull(),
+    /** Digest of the frozen points. A differing set under one version is refused. */
+    geometryDigest: text().notNull(),
+    centroidCount: integer().notNull(),
+    /** Located MW the points carried at freeze time. Provenance, never a weight. */
+    representedMw: doublePrecision().notNull(),
+    /** Vintage axis: what WattSteer had learned when the set was computed. */
+    registryAsOf: timestamp({ withTimezone: true }).notNull(),
+    /** Fleet date: which units existed on the day the geometry was computed. */
+    fleetOn: timestamp({ withTimezone: true }).notNull(),
+    /** The drift baseline, km. Null only when nothing could be placed. */
+    freezeMeanDistanceKm: doublePrecision(),
+    freezeLocatedMw: doublePrecision().notNull(),
+    freezePlants: integer().notNull(),
+    /** Generator parameters, so a regeneration is reproducible from the row. */
+    clusterRadiusKm: doublePrecision(),
+    minClusterMw: doublePrecision(),
+    collisionCheck: centroidCollisionCheck().notNull(),
+    frozenAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("centroid_set_frozen").on(t.frozenAt)],
+);
+
+/**
+ * One point of one set. `(set_version, centroid_id)` is the key, and the row is
+ * never updated — a point that moves belongs to a different set.
+ */
+export const centroidPoint = pgTable(
+  "centroid_point",
+  {
+    setVersion: text()
+      .notNull()
+      .references(() => centroidSet.version),
+    /** `W1`, `S5` — the business key of every weather row taken at this point. */
+    centroidId: text().notNull(),
+    label: text().notNull(),
+    latitude: doublePrecision().notNull(),
+    longitude: doublePrecision().notNull(),
+    technology: technology().notNull(),
+    /** Installed MW the cluster represented at freeze time. Not the weight. */
+    representedMw: doublePrecision().notNull(),
+    origin: centroidPointOrigin().notNull(),
+    /** `Janaúba, MG; Jaíba, MG` — the municipalities behind the point. */
+    municipalities: text().notNull(),
+    plants: integer().notNull(),
+    /** Cluster keys folded in by a grid-cell merge, semicolon-separated. */
+    mergedFrom: text().notNull(),
+    /** The cell Open-Meteo snapped the point to, as echoed. Null if unchecked. */
+    gridLatitude: doublePrecision(),
+    gridLongitude: doublePrecision(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.setVersion, t.centroidId] }),
+    // One cell per set: the invariant the generator asserts, restated where the
+    // database can enforce it rather than trusting the writer to have checked.
+    uniqueIndex("centroid_point_cell").on(t.setVersion, t.gridLatitude, t.gridLongitude),
+    index("centroid_point_technology").on(t.setVersion, t.technology),
+  ],
+);
+
+/**
+ * One scheduled recomputation of the drift metric against a frozen set.
+ *
+ * The trigger is a 25% increase over the freeze-time baseline: the fleet has
+ * grown away from the points and the geometry no longer represents it. What
+ * follows is a **new centroid set version, a new feature-set version and a
+ * retrain** — never an edit to the points in place. This table is the evidence
+ * trail for that decision, which is why a check that concludes nothing is
+ * recorded too.
+ */
+export const centroidDriftCheck = pgTable(
+  "centroid_drift_check",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    setVersion: text()
+      .notNull()
+      .references(() => centroidSet.version),
+    /** Fleet date the metric was recomputed at. */
+    fleetOn: timestamp({ withTimezone: true }).notNull(),
+    /** Vintage axis of the registry read behind it. */
+    registryAsOf: timestamp({ withTimezone: true }).notNull(),
+    meanDistanceKm: doublePrecision(),
+    baselineMeanDistanceKm: doublePrecision(),
+    /** `mean / baseline`. Null when either side has no located mass. */
+    driftRatio: doublePrecision(),
+    /** The ratio at which regeneration is raised. Stored, so a policy change is visible. */
+    triggerRatio: doublePrecision().notNull(),
+    outcome: centroidDriftOutcome().notNull(),
+    locatedMw: doublePrecision().notNull(),
+    plants: integer().notNull(),
+    checkedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("centroid_drift_check_set").on(t.setVersion, t.checkedAt)],
+);

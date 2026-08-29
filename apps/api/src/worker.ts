@@ -75,12 +75,25 @@ if (config.refreshSchedules) {
     pattern: "30 5 * * 1",
     payload: { kind: "retention", payload: {} },
   });
+  // The centroid drift watch: weekly, after a week of daily SIGA and registry
+  // snapshots have had a chance to move the fleet. It recomputes the
+  // capacity-weighted mean plant-to-centroid distance against the frozen set's
+  // freeze-time baseline and warns at a 25% increase. It never regenerates —
+  // that is a new centroid set version, a new feature-set version and a
+  // retrain, and it is a decision rather than a cron job.
+  await runner.schedule({
+    id: "centroid:drift",
+    pattern: "0 6 * * 1",
+    payload: { kind: "centroid_drift", payload: {} },
+  });
 }
 
 console.log(
   `👷 WattSteer worker started — concurrency ${config.jobConcurrency}, queue on Redis`,
 );
-console.log("   handlers: ONS ingestion (7 sources), refresh sweeps, retention");
+console.log(
+  "   handlers: ONS ingestion (7 sources), refresh sweeps, retention, centroid drift",
+);
 if (archive) {
   console.log(`   custody: raw payloads retained in the ${archive.kind} archive`);
 } else {

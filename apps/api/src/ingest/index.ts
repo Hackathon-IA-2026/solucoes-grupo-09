@@ -437,6 +437,55 @@ export {
   type VintageStamp,
   writeVersioned,
 } from "./versioned-write.js";
+// The centroid generator, the frozen-set store and the drift watch — the
+// geometry weather enters at, produced from the registry rather than
+// transcribed. Appended as its own block so that two adapters landing at once
+// cannot conflict on this file.
+export {
+  assertGeneratedCellsUnique,
+  type CentroidDistance,
+  type CentroidGeneratorOptions,
+  type CentroidMerge,
+  DEFAULT_CLUSTER_RADIUS_KM,
+  DEFAULT_MIN_CLUSTER_MW,
+  type DiscardedCluster,
+  type GeneratedCentroid,
+  type GeneratedCentroidSet,
+  type GeneratorPlant,
+  generateCentroidSet,
+  meanDistanceOf,
+  measureCentroidDistance,
+  pointKey,
+} from "./weather/centroid-generator.js";
+export {
+  type CentroidDriftDeps,
+  type CentroidDriftPayload,
+  type CentroidDriftResult,
+  createCentroidDriftCheck,
+  DRIFT_TRIGGER_RATIO,
+  type GridProbe,
+  type RegenerateCentroidsInput,
+  type RegenerateCentroidsResult,
+  readGeneratorPlants,
+  regenerateCentroids,
+} from "./weather/centroid-job.js";
+export {
+  type CentroidDriftRecord,
+  CentroidSetImmutableError,
+  centroidGeometryDigest,
+  type FreezablePoint,
+  type FreezeCentroidSetInput,
+  type FreezeCentroidSetResult,
+  freezeCentroidSet,
+  freezeGeneratedCentroidSet,
+  listCentroidSetVersions,
+  readCentroidSet,
+  readLatestDriftCheck,
+  recordCentroidDriftCheck,
+  type StoredCentroidPoint,
+  type StoredCentroidSet,
+  seedCentroidSetV1,
+} from "./weather/centroid-set-repository.js";
 export {
   asQueryPoints,
   assertNoGridCollisions,
