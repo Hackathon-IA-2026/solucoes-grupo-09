@@ -354,6 +354,9 @@ export type {
   RestrictionOrigin,
   Technology,
   VerifiedLoadHalfHour,
+  WeatherForecastHour,
+  WeatherRunParse,
+  WeatherValues,
 } from "./types.js";
 export {
   digestValues,
@@ -363,3 +366,70 @@ export {
   type VintageStamp,
   writeVersioned,
 } from "./versioned-write.js";
+export {
+  asQueryPoints,
+  assertNoGridCollisions,
+  CENTROID_SET_VERSION,
+  CENTROIDS,
+  type Centroid,
+  type CentroidTechnology,
+  GridCellCollisionError,
+  resolveCentroids,
+} from "./weather/centroids.js";
+export { FIELD_FOR_VARIABLE, parseModelRun } from "./weather/parse.js";
+export {
+  ACCUMULATED_VARIABLES,
+  type BackoffOptions,
+  backoffDelayMs,
+  fetchModelRun,
+  locationsOf,
+  MODEL_COVERAGE_START,
+  type ModelRunRequest,
+  type ModelRunResponse,
+  ModelRunUnavailableError,
+  previousRun,
+  type QueryPoint,
+  type RawLocation,
+  RUN_CYCLE_HOUR,
+  RUN_CYCLES,
+  type RunCycle,
+  redact,
+  runAgeHours,
+  runCycleOf,
+  runParam,
+  SINGLE_RUNS_HOST,
+  SINGLE_RUNS_PATH,
+  scheduledRunFor,
+  singleRunsUrl,
+  UndefinedWeatherVariableError,
+  WEATHER_MODEL,
+  WEATHER_VARIABLES,
+  WeatherRateLimitError,
+  type WeatherVariable,
+} from "./weather/single-runs.js";
+// Weather from named model runs (Open-Meteo Single Runs, pinned ECMWF IFS) —
+// the platform's only non-ONS source, and the only one whose `published_at` is
+// a genuine publication instant rather than the coarsest honest fallback.
+// Appended rather than merged into the blocks above so that two adapters
+// landing at once cannot conflict on this file.
+export {
+  callBudget,
+  createWeatherIngestor,
+  type IngestWeatherPayload,
+  type IngestWeatherResult,
+  targetDays,
+  type WeatherIngestorDeps,
+  type WeatherRunSummary,
+} from "./weather-job.js";
+export {
+  type RecordedWeatherRunRequest,
+  readWeatherForecastAsOf,
+  recordWeatherRunRequest,
+  type WeatherAsOfQuery,
+  type WeatherForecastAsOfResult,
+  type WeatherForecastAsOfRow,
+  type WeatherForecastWrite,
+  type WeatherWriteResult,
+  weatherForecastDigest,
+  writeWeatherForecast,
+} from "./weather-repository.js";

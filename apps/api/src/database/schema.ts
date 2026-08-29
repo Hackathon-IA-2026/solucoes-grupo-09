@@ -1341,3 +1341,209 @@ export const sigaSnapshot = pgTable(
   },
   (t) => [index("siga_snapshot_ingested").on(t.ingestedAt)],
 );
+
+// --- Weather from named model runs (Open-Meteo Single Runs). Appended rather
+// than merged into the blocks above so that two adapters landing at once cannot
+// conflict on this file.
+
+/**
+ * The weather models WattSteer may store. **One member, deliberately.**
+ *
+ * `best_match` is absent for the same reason `SIN` is absent from
+ * `subsystem_code`: it is not a value this platform can hold safely. Open-Meteo
+ * silently substitutes DWD ICON for ECMWF IFS between lead offsets under
+ * `best_match` — no null, no warning, plausible numbers — so a row claiming to
+ * be `best_match` would be a row that does not know which model produced it.
+ * Making it unrepresentable is what turns the pin from a convention into a
+ * guarantee. A new member here is a retrain trigger.
+ */
+export const weatherModel = pgEnum("weather_model", ["ecmwf_ifs"]);
+
+/**
+ * The two run cycles ingested. The earlier buys operators notice; the later is
+ * measurably better in exactly the evening hours where curtailment concentrates.
+ * 06Z and 18Z exist from 2025 but not in 2024, so they cannot cover the
+ * training window and are not in the vocabulary.
+ */
+export const weatherRunCycle = pgEnum("weather_run_cycle", ["00Z", "12Z"]);
+
+/**
+ * One answered Single Runs API call — the provenance every weather fact points
+ * at.
+ *
+ * Written before any fact, and the only record that a given run was asked for
+ * at a given instant. `request_url` carries the `models=` and `run=` parameters
+ * verbatim, which is what makes "the model was pinned" auditable after the fact
+ * rather than merely asserted in a comment; a commercial `apikey` is redacted
+ * out of it before it is stored.
+ */
+export const weatherRunRequest = pgTable(
+  "weather_run_request",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    /** Always `ecmwf_ifs`. The enum is what makes that true. */
+    model: weatherModel().notNull(),
+    /** The run actually retrieved. Also the `published_at` of every fact row. */
+    runInit: timestamp({ withTimezone: true }).notNull(),
+    runCycle: weatherRunCycle().notNull(),
+    /**
+     * The run the schedule asked for. Differs from `run_init` only when that
+     * run was missing from the archive — measured at 4.5% of slots in the
+     * sampled 2025-08 fortnight — and an older cycle was used instead.
+     */
+    scheduledRunInit: timestamp({ withTimezone: true }).notNull(),
+    /** Which frozen geometry the points came from. Never edited in place. */
+    centroidSetVersion: text().notNull(),
+    centroidCount: integer().notNull(),
+    /** The `hourly=` list exactly as sent, so a variable-list change is visible. */
+    variables: text().notNull(),
+    forecastDays: integer().notNull(),
+    /** The URL requested, with any `apikey` redacted. */
+    requestUrl: text().notNull(),
+    httpStatus: integer().notNull(),
+    /** Canonical rows the response yielded, after hour-zero exclusion. */
+    rowCount: integer().notNull(),
+    contentSha256: text().notNull(),
+    byteSize: bigint({ mode: "number" }).notNull(),
+    /**
+     * 429s absorbed by backoff before this call succeeded. Recorded because the
+     * endpoint returns no rate-limit headers: this column is the only measure
+     * of pressure a backfill leaves behind.
+     */
+    rateLimitRetries: integer().notNull().default(0),
+    /** Where the retained raw response lives, when it has been archived. */
+    archiveUri: text(),
+    fetchedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("weather_run_request_run").on(t.runInit, t.runCycle),
+    index("weather_run_request_fetched").on(t.fetchedAt),
+  ],
+);
+
+/**
+ * The four vintage columns a third time, anchored to a model run.
+ *
+ * Kept as its own small function for the reason the carga one is: a nullable
+ * provenance column would let a fact row exist with no source at all.
+ */
+function weatherVintageColumns() {
+  return {
+    /** Monotonic per business key; bumped only when the value tuple changes. */
+    dataVersion: integer().notNull(),
+    /**
+     * **The run's initialisation time.** Not a fallback and not an
+     * approximation: it is when ECMWF asserted this forecast, and it is the
+     * whole reason the D−1 12Z run superseding the D−1 00Z run needs no special
+     * case — it is simply a newer vintage of the same valid hours.
+     *
+     * The precision is `file` rather than `row` because the stamp is
+     * run-grained: every hour of a run shares it, exactly as every row of an
+     * ONS bulk file shares its `Last-Modified`.
+     */
+    publishedAt: timestamp({ withTimezone: true }).notNull(),
+    publishedAtPrecision: publishedAtPrecision().notNull(),
+    /** When WattSteer learned it. The axis `AsOf(t)` filters on. */
+    ingestedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    /** Digest of the stored values, so an identical re-ingest writes nothing. */
+    valueDigest: text().notNull(),
+    /** Provenance: the exact model-run request these numbers came back from. */
+    sourceRequestId: uuid()
+      .notNull()
+      .references(() => weatherRunRequest.id),
+  };
+}
+
+/**
+ * Weather at a frozen cluster centroid, from a named model run.
+ *
+ * **This is a forecast, and it is the same object at training time and at
+ * serving time.** The stitched Historical Forecast archive is not stored here
+ * and is not what this table holds: that archive is bit-identical to
+ * `_previous_day0` — the shortest-lead slice of each run — and the measured
+ * train/serve gap against a real D−1 forecast is RMSE 4.38 km/h on
+ * `wind_speed_120m` against a field sd of 8.87, a dispersion gap that would
+ * inflate every interval the product promises.
+ *
+ * **The business key is (`centroid_id`, `valid_time`).** The run is *not* part
+ * of the key: a later run forecasting the same hour is a revision of the same
+ * fact, so 12Z superseding 00Z falls straight out of `AsOf(t)` and
+ * `data_version`. Both runs remain readable and comparable, because both
+ * versions remain — `run_cycle` and `published_at` on each row say which is
+ * which.
+ *
+ * **Units are in the column names.** Wind is km/h and temperature °C because
+ * that is what Open-Meteo returns, and converting on ingest would put a
+ * conversion between the number ECMWF produced and the number stored.
+ *
+ * **The run's own hour zero is never here.** Five of the twelve variables are
+ * accumulated or time-averaged and have no preceding window at initialisation,
+ * so the hour is excluded by the adapter rather than stored as a row that is
+ * five-twelfths NULL.
+ */
+export const weatherForecastHour = pgTable(
+  "weather_forecast_hour",
+  {
+    /** A point in the frozen centroid set — `W1`, `S5`, and so on. */
+    centroidId: text().notNull(),
+    /** Start of the forecast hour, UTC. */
+    validTime: timestamp({ withTimezone: true }).notNull(),
+
+    /**
+     * The model grid cell the query snapped to, as echoed by the API.
+     *
+     * Stored because it is the only evidence of *which* cell a series is from:
+     * if a frozen point ever moved, the cell underneath it would move too and
+     * nothing else in the row would say so.
+     */
+    gridLatitude: doublePrecision().notNull(),
+    gridLongitude: doublePrecision().notNull(),
+    gridElevationM: doublePrecision().notNull(),
+
+    /** Which cycle produced this row. Redundant with `published_at`, by design. */
+    runCycle: weatherRunCycle().notNull(),
+    /**
+     * `run_init(scheduled) − run_init(used)`, in hours. Zero on the normal
+     * path; 12 or 24 when the scheduled run was missing from the archive. A
+     * feature in its own right — it is how a model is told that this row is
+     * older than the rows around it, instead of the pipeline failing open and
+     * saying nothing.
+     */
+    runAgeHours: integer().notNull(),
+
+    windSpeed100mKmh: doublePrecision(),
+    windSpeed120mKmh: doublePrecision(),
+    windDirection120mDeg: doublePrecision(),
+    windGusts10mKmh: doublePrecision(),
+    temperature2mC: doublePrecision(),
+    surfacePressureHpa: doublePrecision(),
+    relativeHumidity2mPct: doublePrecision(),
+    precipitationMm: doublePrecision(),
+    shortwaveRadiationWm2: doublePrecision(),
+    directNormalIrradianceWm2: doublePrecision(),
+    diffuseRadiationWm2: doublePrecision(),
+    cloudCoverPct: doublePrecision(),
+
+    ...weatherVintageColumns(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.centroidId, t.validTime, t.dataVersion] }),
+    index("weather_forecast_hour_as_of").on(t.validTime, t.centroidId, t.ingestedAt),
+    // Reading one run back — the 00Z-versus-12Z comparison the ticket exists to
+    // make possible — scans by publication rather than by valid time.
+    index("weather_forecast_hour_run").on(t.publishedAt, t.runCycle),
+    // `published_at` **is** the run initialisation. Enforced rather than
+    // documented: without this a writer could stamp a fetch time here, and the
+    // supersession story — which rests entirely on that identity — would
+    // quietly stop being true.
+    check(
+      "weather_forecast_published_at_is_run_init",
+      sql`date_part('minute', ${t.publishedAt} at time zone 'UTC') = 0
+          and date_part('second', ${t.publishedAt} at time zone 'UTC') = 0
+          and date_part('hour', ${t.publishedAt} at time zone 'UTC')
+              = case when ${t.runCycle} = '00Z' then 0 else 12 end`,
+    ),
+    // A run used can be older than the one scheduled, never newer.
+    check("weather_forecast_run_age_non_negative", sql`${t.runAgeHours} >= 0`),
+  ],
+);

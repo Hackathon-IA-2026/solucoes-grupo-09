@@ -1,0 +1,361 @@
+import { config } from "../config.js";
+import type { Database } from "../database/connection.js";
+import { BadInputError } from "../errors.js";
+import type { Execute } from "../jobs/index.js";
+import {
+  asQueryPoints,
+  CENTROID_SET_VERSION,
+  type Centroid,
+  resolveCentroids,
+} from "./weather/centroids.js";
+import { parseModelRun } from "./weather/parse.js";
+import {
+  type BackoffOptions,
+  fetchModelRun,
+  MODEL_COVERAGE_START,
+  ModelRunUnavailableError,
+  previousRun,
+  RUN_CYCLES,
+  type RunCycle,
+  runAgeHours,
+  scheduledRunFor,
+  WEATHER_VARIABLES,
+} from "./weather/single-runs.js";
+import { recordWeatherRunRequest, writeWeatherForecast } from "./weather-repository.js";
+
+/**
+ * Ingestion for weather from named model runs.
+ *
+ * The unit of work is **one model run for all centroids at once**. That is not
+ * an optimisation: Open-Meteo answers a comma-separated multi-point request
+ * with one object per point, snapped to each point's own grid cell, and the
+ * measured cost of 20 locations × 12 variables × 3 forecast days in one request
+ * is 84 KB and 10.5 s. Splitting it per point would multiply the call count by
+ * twenty against an endpoint that already 429s at 6-way concurrency.
+ *
+ * Both cycles are ingested for every target day. The 00 Z run publishes sooner
+ * and buys operators notice; the 12 Z run is measurably better, especially in
+ * the evening hours where curtailment risk concentrates. Nothing in this job
+ * expresses "12 Z supersedes 00 Z" — the run initialisation is the row's
+ * publication time, so the later run is simply a newer vintage of the same
+ * valid hours and the shared versioned write does the rest.
+ */
+
+/** One target day range. Runs are always D−1 of each day in it. */
+export interface IngestWeatherPayload {
+  /** `YYYY-MM-DD` target days, inclusive. Runs fetched are D−1. */
+  from: string;
+  to: string;
+  /** Defaults to both. Narrowed to compare the two cycles or to catch up. */
+  runCycles?: RunCycle[];
+  /** Defaults to the whole frozen centroid set. */
+  centroidIds?: string[];
+  /**
+   * Forecast days from the run's own initialisation. Three covers the whole of
+   * target day D from either cycle with room for the Brasília-local day, which
+   * runs 03:00 Z on D to 02:00 Z on D+1.
+   */
+  forecastDays?: number;
+  /**
+   * How many 12-hour steps back to try when a scheduled run is missing.
+   *
+   * The archive is not gapless — 5 of 112 sampled run slots were missing, all
+   * clustered in one 2025-08 week — and a missing run is not a reason to leave
+   * a hole. Two steps reaches 24 h back, which covered every observed gap.
+   * Zero disables the fallback and makes a missing run a hard failure.
+   */
+  maxRunFallbackSteps?: number;
+}
+
+/** What one run contributed, and which run it actually was. */
+export interface WeatherRunSummary {
+  targetDay: string;
+  cycle: RunCycle;
+  scheduledRunInit: string;
+  /** Older than `scheduledRunInit` when the archive was missing that run. */
+  runInit: string | null;
+  runAgeHours: number;
+  rows: number;
+  /** True when no run within the fallback window existed. */
+  missing: boolean;
+}
+
+export interface IngestWeatherResult {
+  centroidSetVersion: string;
+  centroidIds: string[];
+  variables: string[];
+  /** Run slots asked for — target days × cycles. */
+  runsScheduled: number;
+  /** Runs that produced rows. */
+  runsIngested: number;
+  /** Slots where the scheduled run was missing and an older one was used. */
+  runsFallenBack: number;
+  /** Slots where no run existed within the fallback window. */
+  runsMissing: number;
+  /** HTTP calls actually made, including the misses. One per run tried. */
+  requests: number;
+  /** 429s absorbed by backoff across the whole ingest. */
+  rateLimitRetries: number;
+  /** Rows dropped as the run's own hour zero. */
+  hourZeroRowsExcluded: number;
+  /** Individual missing values in stored rows. A hole, not a failure. */
+  nullValues: number;
+  inserted: number;
+  revised: number;
+  unchanged: number;
+  /**
+   * Rows dropped because a newer run already answered that hour. Zero on the
+   * ordinary path; non-zero when a backfill is re-run, because the second pass
+   * fetches the 00Z run again after the 12Z run is already stored.
+   */
+  supersededByNewerRun: number;
+  runs: WeatherRunSummary[];
+}
+
+export interface WeatherIngestorDeps {
+  db: Database;
+  /** Injected so the job is testable without the network. */
+  fetch?: typeof fetch;
+  /**
+   * Host. Defaults to `WATTSTEER_OPEN_METEO_HOST`, then to the free-tier host —
+   * so moving to the Professional tier's `customer-` hostname is an environment
+   * change and not a rewrite. A test passes it explicitly.
+   */
+  baseUrl?: string;
+  /**
+   * Commercial-tier key, defaulting to `WATTSTEER_OPEN_METEO_KEY`. Redacted out
+   * of the stored request URL.
+   */
+  apiKey?: string;
+  backoff?: BackoffOptions;
+}
+
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const MS_PER_DAY = 86_400_000;
+
+/** Inclusive `YYYY-MM-DD` day list. */
+export function targetDays(from: string, to: string): string[] {
+  for (const value of [from, to]) {
+    if (!DATE.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) {
+      throw new BadInputError(`Expected a YYYY-MM-DD date, got '${value}'`);
+    }
+  }
+  const end = Date.parse(`${to}T00:00:00Z`);
+  if (end < Date.parse(`${from}T00:00:00Z`)) {
+    throw new BadInputError(`Range ends before it starts: ${from} → ${to}`);
+  }
+  const days: string[] = [];
+  for (
+    let cursor = Date.parse(`${from}T00:00:00Z`);
+    cursor <= end;
+    cursor += MS_PER_DAY
+  ) {
+    days.push(new Date(cursor).toISOString().slice(0, 10));
+  }
+  return days;
+}
+
+/**
+ * The documented call budget for a backfill of this window.
+ *
+ * Exported and tested rather than left in a comment, because "completes within
+ * the documented call budget" is only checkable if the budget is a value. The
+ * weighting is Open-Meteo's own, applied pessimistically: a request over ten
+ * variables is billed as multiple calls, and it is not published whether a
+ * multi-location request is billed per location, so this assumes it is.
+ */
+export function callBudget(options: {
+  days: number;
+  cycles: number;
+  centroids: number;
+  variables?: number;
+}): { requests: number; weightedUnits: number } {
+  const requests = options.days * options.cycles;
+  const variableMultiplier =
+    (options.variables ?? WEATHER_VARIABLES.length) > 10 ? 1.2 : 1;
+  return {
+    requests,
+    weightedUnits: Math.round(requests * options.centroids * variableMultiplier),
+  };
+}
+
+/**
+ * Find the newest run at or before `scheduled` that the archive actually holds.
+ *
+ * Steps back a whole cycle at a time, which alternates 12 Z and 00 Z. A run
+ * before `ecmwf_ifs` coverage begins is not tried at all — that is a fact about
+ * the archive, not a gap in it, and asking would spend a call to be told so.
+ */
+async function fetchWithFallback(
+  scheduled: Date,
+  points: ReturnType<typeof asQueryPoints>,
+  deps: WeatherIngestorDeps,
+  maxSteps: number,
+  forecastDays: number,
+): Promise<{
+  response: Awaited<ReturnType<typeof fetchModelRun>> | null;
+  runInit: Date | null;
+  requests: number;
+}> {
+  const coverageStart = Date.parse(`${MODEL_COVERAGE_START}T00:00:00Z`);
+  let requests = 0;
+  let runInit = scheduled;
+
+  for (let step = 0; step <= maxSteps; step += 1) {
+    if (runInit.getTime() < coverageStart) {
+      break;
+    }
+    try {
+      requests += 1;
+      const response = await fetchModelRun({
+        runInit,
+        points,
+        forecastDays,
+        baseUrl: deps.baseUrl,
+        apiKey: deps.apiKey,
+        fetch: deps.fetch,
+        backoff: deps.backoff,
+      });
+      return { response, runInit, requests };
+    } catch (error) {
+      if (!(error instanceof ModelRunUnavailableError)) {
+        throw error;
+      }
+      runInit = previousRun(runInit);
+    }
+  }
+  return { response: null, runInit: null, requests };
+}
+
+/**
+ * Build the job handler.
+ *
+ * One HTTP call per (target day, cycle) on the normal path — 880 days × 1 cycle
+ * is 880 requests for the whole training window, ~30 min at 3-way concurrency,
+ * and 1–2 requests a day thereafter.
+ */
+export function createWeatherIngestor(
+  deps: WeatherIngestorDeps,
+): Execute<IngestWeatherPayload, IngestWeatherResult> {
+  // Host and key come from the environment unless a caller overrides them, so
+  // the commercial tier is a variable rather than a code change.
+  const configured: WeatherIngestorDeps = {
+    ...deps,
+    baseUrl: deps.baseUrl ?? config.openMeteoHost,
+    apiKey: deps.apiKey ?? config.openMeteoApiKey,
+  };
+
+  return async (payload, report) => {
+    const days = targetDays(payload.from, payload.to);
+    const cycles = payload.runCycles ?? [...RUN_CYCLES];
+    for (const cycle of cycles) {
+      if (!RUN_CYCLES.includes(cycle)) {
+        throw new BadInputError(`Unknown run cycle '${cycle}'`);
+      }
+    }
+    const centroids: Centroid[] = resolveCentroids(payload.centroidIds);
+    const points = asQueryPoints(centroids);
+    const forecastDays = payload.forecastDays ?? 3;
+    const maxSteps = payload.maxRunFallbackSteps ?? 2;
+
+    const result: IngestWeatherResult = {
+      centroidSetVersion: CENTROID_SET_VERSION,
+      centroidIds: centroids.map((centroid) => centroid.id),
+      variables: [...WEATHER_VARIABLES],
+      runsScheduled: days.length * cycles.length,
+      runsIngested: 0,
+      runsFallenBack: 0,
+      runsMissing: 0,
+      requests: 0,
+      rateLimitRetries: 0,
+      hourZeroRowsExcluded: 0,
+      nullValues: 0,
+      inserted: 0,
+      revised: 0,
+      unchanged: 0,
+      supersededByNewerRun: 0,
+      runs: [],
+    };
+
+    let done = 0;
+    for (const day of days) {
+      for (const cycle of cycles) {
+        const scheduled = scheduledRunFor(day, cycle);
+        const attempt = await fetchWithFallback(
+          scheduled,
+          points,
+          configured,
+          maxSteps,
+          forecastDays,
+        );
+        result.requests += attempt.requests;
+        done += 1;
+
+        if (!(attempt.response && attempt.runInit)) {
+          result.runsMissing += 1;
+          result.runs.push({
+            targetDay: day,
+            cycle,
+            scheduledRunInit: scheduled.toISOString(),
+            runInit: null,
+            runAgeHours: 0,
+            rows: 0,
+            missing: true,
+          });
+          report({ done, total: result.runsScheduled });
+          continue;
+        }
+
+        const { response, runInit } = attempt;
+        result.rateLimitRetries += response.rateLimitRetries;
+
+        // Parsed before anything is recorded: an all-null variable or a grid
+        // collision must abort the ingest, not leave a provenance row claiming
+        // a run was successfully taken in.
+        const parsed = parseModelRun(response, {
+          centroids,
+          runInit,
+          scheduledRunInit: scheduled,
+        });
+
+        const sourceVersionId = await recordWeatherRunRequest(deps.db, {
+          runInit,
+          scheduledRunInit: scheduled,
+          centroidCount: centroids.length,
+          forecastDays,
+          rowCount: parsed.rows.length,
+          response,
+        });
+
+        const written = await writeWeatherForecast(deps.db, {
+          rows: parsed.rows,
+          sourceVersionId,
+        });
+
+        result.runsIngested += 1;
+        if (runInit.getTime() !== scheduled.getTime()) {
+          result.runsFallenBack += 1;
+        }
+        result.hourZeroRowsExcluded += parsed.hourZeroRowsExcluded;
+        result.nullValues += parsed.nullValues;
+        result.inserted += written.inserted;
+        result.revised += written.revised;
+        result.unchanged += written.unchanged;
+        result.supersededByNewerRun += written.supersededByNewerRun;
+        result.runs.push({
+          targetDay: day,
+          cycle,
+          scheduledRunInit: scheduled.toISOString(),
+          runInit: runInit.toISOString(),
+          runAgeHours: runAgeHours(scheduled, runInit),
+          rows: parsed.rows.length,
+          missing: false,
+        });
+
+        report({ done, total: result.runsScheduled });
+      }
+    }
+
+    return result;
+  };
+}

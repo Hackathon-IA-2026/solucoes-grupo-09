@@ -57,6 +57,13 @@
       "when": 1787962938960,
       "tag": "0007_rainy_silver_sable",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1787963303930,
+      "tag": "0008_mute_quasar",
+      "breakpoints": true
     }
   ]
 }
