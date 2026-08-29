@@ -13,16 +13,18 @@ Routes:
   GET /ready                  readiness — database reachable, read-only, migrated
   GET /v1/meta                what this instance can actually do right now
   GET /v1/forecast/day-ahead  the stub the gateway proxies to
+  POST /v1/optimize           the MILP and the simulator, inside one request
 """
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
-from fastapi import FastAPI, Query
+from fastapi import Body, Depends, FastAPI, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -30,8 +32,20 @@ from . import __version__, artifacts
 from .config import settings
 from .constants import Subsystem
 from .database import database
-from .optimizer import configured_milp_backend
+from .optimizer import (
+    OptimizerBugError,
+    SolverNotOptimalError,
+    configured_milp_backend,
+)
+from .optimizer.result import (
+    OPTIMIZER_BUILD,
+    ProfileSource,
+    no_forecast_yet,
+    optimization_result,
+)
 from .promotions import PROMOTION_LOG_FILENAME
+from .scenario import ScenarioTransportError, decode_scenario_body
+from .scenario_validation import ScenarioValidationError, validate_scenario
 
 #: `Subsystem` comes from `constants.py`, which is bound to the TypeScript
 #: definition by a shared golden vector rather than by a comment. It is a
@@ -53,6 +67,9 @@ HORIZON_HOURS = 24
 #: every canonical read with `relation does not exist`, and the old probe would
 #: have called that ready.
 CANONICAL_VIEW = "canonical_system_context"
+
+#: Where a `SOLVER_BUG` says which scenario it was, by hash and never by value.
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -309,4 +326,130 @@ def day_ahead(
         artifact=None,
         hours=[],
         generated_at=now,
+    )
+
+
+# --- the flex optimizer's synchronous endpoint --------------------------------
+#
+# `docs/specs/flex-optimizer.md`: one HTTP request, no job id, no polling and no
+# `OptimizationJob` noun. The research measured 3.15 ms at real size, 33.7 ms at
+# ten batteries plus ten loads and 63.2 ms at 96 periods, so there is nothing a
+# queue would buy — and Mitigate is a what-if tool, where a slider must move the
+# chart.
+#
+# The handler below is a **`def`, not an `async def`**, and that is load-bearing
+# rather than stylistic: FastAPI runs a sync handler on the threadpool, so a
+# worst-case 2 s solve cannot block the event loop and stall every other
+# in-flight request. `test_optimize_endpoint.py` asserts it is not a coroutine
+# function, because "someone adds `async` while adding a field" is exactly the
+# kind of change that looks harmless in a diff.
+
+
+def profile_source() -> ProfileSource:
+    """Which resolver serves the curtailment band this deployment plans against.
+
+    A dependency rather than a module-level constant so that ticket 07 replaces
+    one function, and so a test that needs a band can inject one, without either
+    reaching into the other's module. What ships today is
+    :func:`~wattsteer_ml.optimizer.result.no_forecast_yet`, which refuses.
+    """
+    return no_forecast_yet
+
+
+def _refusal(
+    status: int, code: str, message: str, details: dict[str, Any] | None = None
+) -> JSONResponse:
+    """The error shape `ml-proxy.ts` reads the code out of.
+
+    `{"error": {"code": …}}` where this service owns the shape. The gateway
+    re-wraps it in its own envelope and admits the *code* into its closed enum
+    rather than forwarding the body, so what has to survive the trip is this
+    pair — the status and the identifier — and nothing else.
+    """
+    body: dict[str, Any] = {"error": {"code": code, "message": message}}
+    if details:
+        body["error"]["details"] = details
+    return JSONResponse(status_code=status, content=body)
+
+
+def _refused_scenario(
+    error: ScenarioTransportError | ScenarioValidationError,
+) -> JSONResponse:
+    """Every row of the refusal table is a 422 except the one that is not.
+
+    `FORECAST_UNAVAILABLE` says the scenario was fine and there is nothing to
+    plan against, so it is a 404: a 422 would tell the caller their request was
+    malformed when it was not.
+    """
+    details = getattr(error, "details", None)
+    status = 404 if error.code == "FORECAST_UNAVAILABLE" else 422
+    return _refusal(status, error.code, str(error), details)
+
+
+#: `SolverNotOptimalError.status` → the pair the caller reads. A `FEASIBLE`
+#: result means the gap was not closed at the time limit, so the Avoidability
+#: Score would be a lower bound, and there is no honest way to put a lower bound
+#: in a box labelled with a percentage — hence a 503 and never a rendered
+#: result. Everything not named here is a `SOLVER_BUG` (500), `INFEASIBLE`
+#: included: the do-nothing dispatch satisfies every constraint, so the model is
+#: feasible by construction for every scenario that passes validation, and
+#: infeasibility can only mean validation let something through.
+_SOLVER_FAILURES: dict[str, tuple[int, str]] = {
+    "FEASIBLE": (503, "SOLVER_GAP_UNCLOSED"),
+    "NOT_SOLVED": (504, "SOLVER_TIMEOUT"),
+}
+
+
+@app.post("/v1/optimize", tags=["optimizer"])
+def optimize(
+    scenario: Annotated[dict[str, Any], Body()],
+    resolve: Annotated[ProfileSource, Depends(profile_source)],
+) -> JSONResponse:
+    """A `Scenario` in, an `OptimizationResult` out, inside one request.
+
+    Gateway-only: `apps/api` validates, applies the rate limit, checks the cache
+    and proxies, and this service is not publicly routable. It re-decodes and
+    re-validates anyway — it trusts nothing it did not validate itself, and a
+    hash it did not compute is a hash it cannot stand behind.
+    """
+    try:
+        decoded = decode_scenario_body(scenario)
+        validate_scenario(decoded.scenario, datetime.now(tz=UTC))
+    except (ScenarioTransportError, ScenarioValidationError) as refusal:
+        return _refused_scenario(refusal)
+
+    wire = decoded.scenario
+    origin = wire.get("forecast_origin")
+    try:
+        profile = resolve(
+            subsystem=str(wire["subsystem"]),
+            target_date=date.fromisoformat(str(wire["target_date"])),
+            forecast_origin=origin if isinstance(origin, str) else None,
+        )
+    except ScenarioValidationError as refusal:
+        return _refused_scenario(refusal)
+
+    try:
+        body = optimization_result(wire, decoded.hash, profile)
+    except OptimizerBugError as bug:
+        status = bug.status if isinstance(bug, SolverNotOptimalError) else None
+        # The scenario hash, never the scenario: `label` is attacker-controlled,
+        # and the hash is what makes the run reproducible from a bug report.
+        logger.error(
+            "optimize: %s for scenario %s",
+            status or type(bug).__name__,
+            decoded.hash,
+        )
+        mapped = _SOLVER_FAILURES.get(status) if status is not None else None
+        if mapped is not None:
+            return _refusal(mapped[0], mapped[1], str(bug))
+        return _refusal(500, "SOLVER_BUG", str(bug), {"scenario_hash": decoded.hash})
+
+    return JSONResponse(
+        content=body,
+        # Not a field on the body: `optimization-result.schema.json` is closed,
+        # and the build is a property of *this deploy* rather than of the plan.
+        # The gateway keys its cache on it, so a deploy that changes the
+        # formulation cannot serve yesterday's plan under today's code.
+        headers={"x-optimizer-build": OPTIMIZER_BUILD},
     )
