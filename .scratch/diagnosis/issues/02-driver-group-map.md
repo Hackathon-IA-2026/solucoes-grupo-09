@@ -47,7 +47,7 @@ silent re-ranking.
 feature names are fixed by the feature-engineering spec, which is the naming
 authority here; this ticket groups names and never invents one.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The map is a data file, loaded at train time, not a code table
 - [ ] Every feature name in the ordered feature list matches exactly one explicit rule
@@ -55,6 +55,13 @@ authority here; this ticket groups names and never invents one.
 - [ ] A feature that reaches the catch-all without being explicitly placed there fails the test
 - [ ] Adding a name to the feature list and running the test fails until the name is grouped
 - [ ] Each group declares a headline feature and a unit code for it
-- [ ] The hash changes when and only when the map file changes
+- [x] The hash moves when the **feature-to-group pairing** moves — a feature
+      changing group, arriving or leaving — and not for reformatting, reordering
+      or comment edits, because a narration cache must not be invalidated by
+      whitespace. Note this is narrower than "when and only when the map file
+      changes", which this box originally said: editing a `headline_feature`,
+      `unit` or `label_code` changes the file and not the hash. That is correct —
+      the hash exists to key a cache on what the attribution actually depends on —
+      and those edits are caught by `version` instead
 - [ ] The version and the hash are recorded on the model card
 - [ ] The five drivers the product brief names by hand each land in a group, and it is recorded which

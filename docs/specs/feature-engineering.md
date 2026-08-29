@@ -844,7 +844,10 @@ a day must not be read as an hourly signal.
 | Window start driver | solar constrained-off begins 2024-04 | DESSEM begins 2025-05-23 |
 
 **Features present only in the augmented set** are exactly the `dessem_*` block
-above — 21 columns, of which four are the ones that would justify the trade:
+above — **22 feature names across 21 table rows**, since the
+`dessem_residual_load_min_of_day` / `_rank_in_day` row carries two. (An earlier
+draft said "21 columns", counting rows.) Four are the ones that would justify
+the trade:
 `dessem_residual_load_mwh`, `dessem_implied_net_export_mwh`,
 `dessem_export_utilisation` and `dessem_absorber_residual_load_mwh`. Everything
 else DESSEM contributes has a weather- or programming-derived analogue in set A.

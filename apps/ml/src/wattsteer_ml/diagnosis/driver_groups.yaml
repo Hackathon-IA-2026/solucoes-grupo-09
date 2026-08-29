@@ -1,0 +1,234 @@
+# The driver group map — eight players, one total partition.
+#
+# `docs/specs/diagnosis.md`, "Feature grouping — eight players, one total
+# partition", is the authority for the eight codes, their label codes and their
+# mechanisms. `docs/specs/feature-engineering.md` is the authority for every
+# feature *name* below: this file groups names and never invents one.
+#
+# WHY THIS IS DATA AND NOT A PYTHON TABLE
+# ---------------------------------------
+# The grouping is a product decision, frozen against retrains. It changes only
+# by editing this file, which bumps `version` and changes `driver_group_hash`,
+# which is stamped on the model card and invalidates every cached narration. A
+# retrain never touches it.
+#
+# WHY EVERY MEMBER IS A LITERAL NAME AND NOT A GLOB
+# -------------------------------------------------
+# The spec's Members column writes shorthand like `weather_wind_*` and
+# `every *_ramp_1h`. Expanding that shorthand into literal names here is what
+# makes the totality test bite: a feature added upstream that nobody has placed
+# matches nothing, and `assert_total_partition` fails until somebody adds a
+# line. A glob would quietly absorb it, and `data_conditions` has no catch-all
+# rule at all — the loader rejects any member containing `*`, so there is no
+# spelling of "everything else" available in this file.
+#
+# Expanding the shorthand also settles the two places the spec's globs overlap,
+# and settles them the way the spec's own prose does:
+#   - `weather_wind_speed_120m_{ramp_1h,mean_3h,std_6h}` are named by group 5,
+#     not swept up by group 1's `weather_wind_*`.
+#   - `proxy_residual_load_ramp_1h` and `dessem_residual_load_ramp_1h` are
+#     named by group 5's `every *_ramp_1h`, not by group 3's
+#     `proxy_residual_load_*`.
+#
+# HEADLINE FEATURES
+# -----------------
+# A group has no single value, so each declares the one feature whose observed
+# and typical values the Explain screen may show beside the bar. Every headline
+# is chosen from features present in *both* feature sets, so a `dessem_free_v1`
+# model does not put a NULL on screen; `test_driver_groups.py` asserts that.
+
+version: 1
+
+groups:
+  - code: renewable_resource
+    label_code: driver.renewable_resource
+    mechanism: How much wind and sun there is to spill
+    headline_feature: weather_expected_wind_mwh
+    unit: mwh
+    members:
+      - weather_wind_speed_120m
+      - weather_wind_speed_100m
+      - weather_wind_direction_120m_sin
+      - weather_wind_direction_120m_cos
+      - weather_wind_gusts_10m
+      - weather_temperature_2m
+      - weather_surface_pressure
+      - weather_relative_humidity_2m
+      - weather_precipitation
+      - weather_shortwave_radiation
+      - weather_direct_normal_irradiance
+      - weather_diffuse_radiation
+      - weather_cloud_cover
+      - weather_clearness_index
+      - weather_wind_power_curve_cf
+      - weather_expected_wind_mwh
+      - weather_expected_solar_mwh
+      - capacity_wind_mw
+      - capacity_solar_mw
+      - capacity_wind_added_28d_mw
+      - capacity_solar_added_28d_mw
+      - dessem_wind_mwh
+      - dessem_solar_mwh
+      - dessem_mmgd_mwh
+      - dessem_wind_capacity_factor
+      - dessem_solar_capacity_factor
+      - observed_wind_capacity_factor_mean_7d
+      - observed_solar_capacity_factor_mean_7d
+      - observed_wind_generation_lag_168h
+      - observed_solar_generation_lag_168h
+
+  - code: demand_level
+    label_code: driver.demand_level
+    mechanism: How much load there is to absorb it
+    headline_feature: programmed_load_mwh
+    unit: mwh
+    members:
+      - programmed_load_mwh
+      - programmed_load_mean_3h
+      - programmed_load_daily_min_mwh
+      - programmed_load_rank_in_day
+      - dessem_demand_mwh
+      - dessem_pumping_mwh
+      - observed_load_lag_168h
+
+  - code: net_surplus
+    label_code: driver.net_surplus
+    mechanism: The balance itself — the renewable/load ratio and low residual load
+    headline_feature: proxy_renewable_load_ratio
+    unit: ratio
+    members:
+      - proxy_residual_load_mwh
+      - proxy_residual_load_ratio
+      - proxy_residual_load_min_of_day
+      - proxy_residual_load_rank_in_day
+      - proxy_renewable_load_ratio
+      - proxy_vre_surplus_mwh
+      - dessem_residual_load_mwh
+      - dessem_residual_load_min_of_day
+      - dessem_residual_load_rank_in_day
+      - dessem_renewable_load_ratio
+      - dessem_vre_surplus_mwh
+      - dessem_inflexible_share
+      - dessem_hydro_mwh
+      - dessem_thermal_mwh
+      - dessem_sin_residual_load_mwh
+
+  - code: export_stress
+    label_code: driver.export_stress
+    mechanism: Whether the surplus can leave
+    # `dessem_export_utilisation` is the sharper reading and exists only in
+    # `dessem_augmented_v1`; the observed 24-hour mean is the same quantity
+    # measured on lagged actuals and is present in both sets.
+    headline_feature: observed_export_utilisation_mean_24h_to_cutoff
+    unit: ratio
+    members:
+      - dessem_implied_net_export_mwh
+      - dessem_export_utilisation
+      - dessem_absorber_residual_load_mwh
+      - observed_net_exchange_lag_168h
+      - observed_net_exchange_mean_24h_to_cutoff
+      - observed_corridor_flow_ne_se_lag_168h
+      - observed_corridor_flow_n_ne_lag_168h
+      - observed_export_utilisation_mean_24h_to_cutoff
+      - observed_corridor_utilisation_ne_se_max_7d
+
+  - code: ramp_shape
+    label_code: driver.ramp_shape
+    mechanism: Intraday shape and steepness — the solar ramp
+    # A delta of an MWh quantity across one hour is still MWh, so the unit is
+    # `mwh` rather than a rate code that exists nowhere else on the wire.
+    headline_feature: weather_expected_vre_ramp_1h
+    unit: mwh
+    members:
+      - weather_wind_speed_120m_ramp_1h
+      - weather_shortwave_radiation_ramp_1h
+      - weather_expected_vre_ramp_1h
+      - weather_wind_speed_120m_mean_3h
+      - weather_wind_speed_120m_std_6h
+      - weather_shortwave_radiation_mean_3h
+      - programmed_load_ramp_1h
+      - proxy_residual_load_ramp_1h
+      - dessem_demand_ramp_1h
+      - dessem_residual_load_ramp_1h
+      - dessem_vre_ramp_1h
+
+  - code: calendar_season
+    label_code: driver.calendar_season
+    mechanism: Weekend, holiday, season and sun angle
+    # `api-surface.md` names `calendar_season` as the group whose headline
+    # reading is categorical rather than a quantity — the `term` variant of
+    # `DriverReading`. The unit code says so; rendering it is API 07's call.
+    headline_feature: calendar_is_weekend
+    unit: boolean
+    members:
+      - calendar_local_hour
+      - calendar_hour_sin
+      - calendar_hour_cos
+      - calendar_doy_sin
+      - calendar_doy_cos
+      - calendar_day_of_week
+      - calendar_is_weekend
+      - calendar_is_holiday_national
+      - calendar_holiday_state_share
+      - calendar_is_day_before_holiday
+      - calendar_is_bridge_day
+      - solar_zenith_cos
+      - solar_extraterrestrial_ghi
+
+  - code: recent_history
+    label_code: driver.recent_history
+    mechanism: What has been happening lately
+    headline_feature: observed_constrained_off_total_7d_mwh
+    unit: mwh
+    members:
+      - observed_constrained_off_lag_168h
+      - observed_constrained_off_wind_lag_168h
+      - observed_constrained_off_solar_lag_168h
+      - observed_constrained_off_lag_48h
+      - observed_constrained_off_same_hour_mean_7d
+      - observed_constrained_off_hours_above_threshold_7d
+      - observed_constrained_off_total_7d_mwh
+      - observed_reason_share_ene_7d
+      - observed_reason_share_cnf_7d
+      - observed_reason_share_rel_7d
+      - observed_actual_lag_hours
+
+  # A player, not a leftover. Its `φ` is a Shapley value like any other, so this
+  # row carries a real contribution and a real sign — unlike the prototype's
+  # `other`, which is a rounding remainder. Its members are listed here in full
+  # and nothing arrives by falling through: there is no catch-all rule.
+  #
+  # `subsystem` sits here and `calendar_local_hour` sits in `calendar_season`.
+  # Both are neutralised by construction, because the attribution background is
+  # matched on both — but neither has a `φ` of its own to inspect, the players
+  # being the eight groups. They are listed for totality; the property that they
+  # cannot move the answer is asserted on the background sampler (diagnosis
+  # seam 5, ticket 01), never on a member `φ`.
+  - code: data_conditions
+    label_code: driver.data_conditions
+    mechanism: The state of the pipeline, and the residual
+    headline_feature: weather_centroid_coverage
+    unit: ratio
+    members:
+      - weather_run_age_hours
+      - weather_centroid_coverage
+      - subsystem
+
+# The five drivers the product brief (IDEA §25) names by hand, and where each
+# one landed. Recorded here rather than in prose so the claim is testable.
+idea_drivers:
+  - brief_name: high wind
+    group: renewable_resource
+    witness: weather_expected_wind_mwh
+  - brief_name: low residual load
+    group: net_surplus
+    witness: proxy_residual_load_mwh
+  - brief_name: high NE export
+    group: export_stress
+    witness: observed_export_utilisation_mean_24h_to_cutoff
+  - brief_name: solar ramp
+    group: ramp_shape
+    witness: weather_shortwave_radiation_ramp_1h
+  - brief_name: Sunday
+    group: calendar_season
+    witness: calendar_is_weekend

@@ -43,6 +43,32 @@ The R$/MWh rate is why the module exists. It used to live in `apps/web`, which
 made it "the single place it is written down" for one of the two languages that
 quote it, and the optimizer that needs it is this one.
 
+## The driver group map
+
+`src/wattsteer_ml/diagnosis/driver_groups.yaml` is the vocabulary the Explain
+screen ranks: eight driver groups, every feature in exactly one of them, each
+group declaring the headline feature whose `observed` / `typical` pair the
+screen may show. `docs/specs/diagnosis.md` fixes the eight codes;
+`docs/specs/feature-engineering.md` is the naming authority for every feature
+name in it. The map groups names and never invents one.
+
+It is **data, not a code table**, and it is **frozen against retrains**. Editing
+the YAML bumps `version` and moves `driver_group_hash` — sha256 over the sorted
+`feature → group` pairs — which the forecaster stamps on the model card and
+which invalidates every cached narration. A retrain never touches it.
+
+**There is no catch-all, and that is the point.** `data_conditions` is a player
+whose `φ` is a Shapley value like any other, not a bucket features fall into:
+its three members are written down like everyone else's. A feature added
+upstream that nobody placed matches nothing, and `test_driver_groups.py` fails
+until somebody adds a line — the loader rejects a member containing `*`, so
+there is no spelling of "everything else" available in the file.
+
+`ordered_features.yaml` beside it is the ordered feature list transcribed from
+the feature spec, standing in for the artifact's own list until the feature
+builder lands. `assert_total_partition` already takes the names as an argument,
+so that substitution is one call site.
+
 ## Run it
 
 ```sh
