@@ -573,3 +573,65 @@ export interface SubsystemLoadDayParse {
   /** Rows whose local day was not 24 hours long. Zero from 2019 onward. */
   irregularDays: number;
 }
+
+// --- Weather from named model runs (Open-Meteo Single Runs, pinned ECMWF IFS).
+// Appended rather than merged into the blocks above so that two adapters
+// landing at once cannot conflict on this file.
+
+/**
+ * The twelve stored weather measures, in the order they are requested.
+ *
+ * Units are the API's own and are named in the field, because a silent unit is
+ * how a wind speed in km/h gets fed to a power curve in m/s. Every one is
+ * nullable: a hole in the middle of a series is a hole, and only a variable
+ * that is null *everywhere* is a failure (see `UndefinedWeatherVariableError`).
+ */
+export interface WeatherValues {
+  windSpeed100mKmh: number | null;
+  windSpeed120mKmh: number | null;
+  windDirection120mDeg: number | null;
+  windGusts10mKmh: number | null;
+  temperature2mC: number | null;
+  surfacePressureHpa: number | null;
+  relativeHumidity2mPct: number | null;
+  precipitationMm: number | null;
+  shortwaveRadiationWm2: number | null;
+  directNormalIrradianceWm2: number | null;
+  diffuseRadiationWm2: number | null;
+  cloudCoverPct: number | null;
+}
+
+/**
+ * One canonical forecast hour at one centroid, from one named model run.
+ *
+ * `runInitTime` is both the run's identity and the row's `published_at` — the
+ * whole reason the D−1 12 Z run superseding the D−1 00 Z run needs no special
+ * case. `runAgeHours` is zero on the normal path and 12 or 24 when the
+ * scheduled run was missing from the archive and an older one was used.
+ */
+export interface WeatherForecastHour extends WeatherValues {
+  centroidId: string;
+  /** Start of the forecast hour, UTC. */
+  validTime: Date;
+  /** The model grid cell the query snapped to, as echoed by the API. */
+  gridLatitude: number;
+  gridLongitude: number;
+  gridElevationM: number;
+  runInitTime: Date;
+  runCycle: "00Z" | "12Z";
+  /** `run_init(scheduled) − run_init(used)` in hours. 0 on the normal path. */
+  runAgeHours: number;
+}
+
+/** What the weather adapter produces from one model run. */
+export interface WeatherRunParse {
+  rows: WeatherForecastHour[];
+  /**
+   * Rows dropped because they were the run's own hour zero, where the
+   * accumulated variables have no preceding accumulation window. One per
+   * centroid per run on the normal path.
+   */
+  hourZeroRowsExcluded: number;
+  /** Individual missing values in retained rows. A hole, not a failure. */
+  nullValues: number;
+}

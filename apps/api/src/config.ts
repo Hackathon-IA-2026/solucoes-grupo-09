@@ -103,4 +103,22 @@ export const config = {
    * auth/network protection.
    */
   dashboard: bool(process.env.WATTSTEER_DASHBOARD),
+
+  // --- weather (Open-Meteo Single Runs) ---
+  /**
+   * Host of the Single Runs API.
+   *
+   * Configuration rather than a constant because the whole historical family —
+   * Historical Weather, Historical Forecast, Previous Model Runs and Single
+   * Runs — sits behind Open-Meteo's Professional plan the moment WattSteer
+   * monetises, and the commercial tier is a different hostname
+   * (`https://customer-single-runs-api.open-meteo.com`) plus a key. Moving to
+   * it must be an environment change, not a rewrite.
+   */
+  openMeteoHost: process.env.WATTSTEER_OPEN_METEO_HOST || undefined,
+  /**
+   * Commercial-tier API key, sent as `apikey`. Unset on the free tier, which is
+   * non-commercial-only. It is redacted out of every stored request URL.
+   */
+  openMeteoApiKey: process.env.WATTSTEER_OPEN_METEO_KEY || undefined,
 } as const;
