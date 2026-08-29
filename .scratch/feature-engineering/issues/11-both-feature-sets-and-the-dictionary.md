@@ -43,7 +43,7 @@ question with no answer before a model exists.
 **Blocked by:** 03, 04, 05, 06, 07, 08, 09, 10 — every feature block. This is
 the ticket that closes the spec.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Both feature sets build over their full windows from the same function under different arguments, and the row counts match the arithmetic above
 - [ ] The row grain is (`Subsystem`, `valid_time`); both technologies' labels are columns on the shared row
