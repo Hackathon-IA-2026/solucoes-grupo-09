@@ -50,6 +50,13 @@
       "when": 1787962518130,
       "tag": "0006_goofy_network",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787962938960,
+      "tag": "0007_rainy_silver_sable",
+      "breakpoints": true
     }
   ]
 }

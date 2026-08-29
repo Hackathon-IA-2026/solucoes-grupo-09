@@ -1149,3 +1149,195 @@ export const plantDetailHour = pgTable(
     check("plant_detail_invalid_boolean", sql`${t.measurementInvalid} in (0, 1)`),
   ],
 );
+
+/**
+ * Why SIGA's own coordinate was refused.
+ *
+ * Stored beside the fallback rather than discarded: "this plant is at its
+ * municipality's centroid" and "this plant is at its municipality's centroid
+ * because ANEEL wrote (0,0)" are different facts, and only the second tells
+ * an operator to go and look at the registration.
+ */
+export const coordinateRejection = pgEnum("coordinate_rejection", [
+  "missing",
+  "unparsable",
+  "null_island",
+  "out_of_bounds",
+]);
+
+/** Where a stored plant location actually came from. Never inferred at read. */
+export const plantLocationSource = pgEnum("plant_location_source", [
+  "siga_coordinate",
+  "siga_municipality_centroid",
+  "unlocated",
+]);
+
+/**
+ * Everything the ANEEL SIGA extract contributes to a plant — and nothing else.
+ *
+ * **A separate table, and the separation is deliberate on two counts.**
+ *
+ * **Attribute ownership.** SIGA gives coordinates, municipality and ownership.
+ * Capacity, commissioning and deactivation stay in `generating_unit`, from ONS,
+ * which has them per unit and without SIGA's registration lag — twelve plants
+ * were being curtailed by ONS while SIGA still showed them as `Construção` at
+ * 0 kW. Keeping the two sources in two tables is what makes that split a fact
+ * of the schema rather than a convention someone has to remember.
+ *
+ * **Licensing.** SIGA is **ODbL 1.0**, ONS is CC-BY and Open-Meteo is CC-BY with
+ * its own terms; ODbL §4.4 makes any database extracting a substantial part of
+ * SIGA a **Derivative Database** subject to share-alike, and §4.4(c) pulls that
+ * obligation in as soon as a Produced Work built from it is publicly used.
+ * ODbL §4.5(a)'s Collective Database exemption is what keeps that from being an
+ * argument about the whole schema — but only while the SIGA-sourced columns sit
+ * in their own table, which is this one. The obligations that follow (the §4.3
+ * bilingual notice on every public surface, the §4.4(a) declaration, the §4.6
+ * machine-readable alterations file) are recorded in
+ * `docs/research/plant-registry.md` §7 and are **not** discharged here: this
+ * table is the boundary, not the notice.
+ *
+ * **Versioned like a fact table, because a location is a belief with a date.**
+ * SIGA is a snapshot that is overwritten in place with no archive, and it
+ * represents a retirement by *deleting the row*. So `withdrawn_on` is written
+ * by diffing successive snapshots, and the only way it can ever be populated is
+ * that WattSteer kept its own vintages.
+ *
+ * `ceg_core` is the key on both sides. `ceg_raw` here is **ANEEL's** rendering
+ * (unpadded version segment) against `plant.ceg_raw`'s ONS one (zero-padded) —
+ * the two strings that match 0 of 1,614 times when compared directly, kept
+ * side by side so that fact stays visible instead of becoming folklore.
+ */
+export const plantGeo = pgTable(
+  "plant_geo",
+  {
+    plantCegCore: text()
+      .notNull()
+      .references(() => plant.cegCore),
+    /** ANEEL `CodCEG` verbatim. Not ONS's rendering — see the table note. */
+    cegRaw: text().notNull(),
+    /** `NomEmpreendimento`. Provenance and diffing only; carries `(Antiga …)` aliases. */
+    sigaName: text().notNull(),
+
+    /**
+     * The location WattSteer will actually sample weather at, or null.
+     *
+     * Null is a real state, not a defect: `location_source = 'unlocated'` means
+     * the plant keeps its capacity and loses only its weather sample. A plant
+     * is never given a plausible-looking wrong point to avoid a null.
+     */
+    latitude: doublePrecision(),
+    longitude: doublePrecision(),
+    locationSource: plantLocationSource().notNull(),
+    /** Populated whenever SIGA's own pair was refused, fallback or not. */
+    coordinateRejection: coordinateRejection(),
+
+    municipalityName: text(),
+    municipalityUf: text(),
+    /** `DscMuninicpios` verbatim — a plant may straddle several municipalities. */
+    municipalitiesRaw: text().notNull(),
+    /**
+     * `DscPropriRegimePariticipacao` verbatim.
+     *
+     * Free text of the form `100% para <agent> - <CNPJ> (<regime>)`, and the
+     * only ownership record with a percentage. It contains **CNPJs of named
+     * legal persons**, which ODbL §2.4 explicitly does not license: it is
+     * stored because ownership is a modelled attribute, and it is not to be
+     * republished as a bulk dump without a second look.
+     */
+    ownership: text().notNull(),
+
+    /**
+     * `DatGeracaoConjuntoDados` of the snapshot this belief began in — this
+     * table's `valid_time`. It does not move when a later snapshot restates the
+     * same values, so it reads as "SIGA has asserted this location since".
+     */
+    observedOn: timestamp({ withTimezone: true }).notNull(),
+    /**
+     * The snapshot date the row stopped appearing in SIGA. Null while present.
+     *
+     * There is no phase value, no date and no tombstone for a retirement in
+     * this source — the row simply stops existing. This column is that event,
+     * and it can only ever be written by a diff against WattSteer's own prior
+     * snapshot.
+     */
+    withdrawnOn: timestamp({ withTimezone: true }),
+
+    ...vintageColumns(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.plantCegCore, t.dataVersion] }),
+    index("plant_geo_as_of").on(t.plantCegCore, t.ingestedAt),
+    index("plant_geo_municipality").on(t.municipalityUf, t.municipalityName),
+    // A located row has both halves or neither. Half a coordinate is not a
+    // partial location, it is a corrupt one — `docs/domain-model.md` §3.
+    check(
+      "plant_geo_coordinate_pair",
+      sql`(${t.latitude} is null) = (${t.longitude} is null)`,
+    ),
+    // And an `unlocated` row is exactly the one with no point. Without this the
+    // enum and the columns could disagree, which is the failure this whole
+    // ticket is about: a value that looks present and means nothing.
+    check(
+      "plant_geo_location_source",
+      sql`(${t.locationSource} = 'unlocated') = (${t.latitude} is null)`,
+    ),
+    // The bounding box, enforced for any writer — not only this adapter.
+    check(
+      "plant_geo_within_brazil",
+      sql`${t.latitude} is null or (${t.latitude} between -34 and 6
+           and ${t.longitude} between -74 and -33
+           and not (${t.latitude} = 0 and ${t.longitude} = 0))`,
+    ),
+  ],
+);
+
+/**
+ * One SIGA ingest, and what the join measured.
+ *
+ * **The point of this table is the regression check.** The join's failure mode
+ * is silence — comparing `CodCEG` to ONS `ceg` verbatim matches 0 of 1,614 and
+ * raises nothing — so the rate is asserted on every ingest, and asserting
+ * against a floor alone would miss the slow case where the rate slides a
+ * percent a month. The previous run's rate has to be readable, so it is stored.
+ *
+ * `verbatim_matched` is kept beside it as a live canary: it is measured at
+ * exactly zero, and it is the number that would move if ANEEL ever started
+ * zero-padding the version segment the way ONS does.
+ */
+export const sigaSnapshot = pgTable(
+  "siga_snapshot",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    /** `DatGeracaoConjuntoDados` of the extract. */
+    snapshotDate: timestamp({ withTimezone: true }).notNull(),
+    sourceVersionId: uuid()
+      .notNull()
+      .references(() => onsResourceVersion.id),
+
+    /** Rows in the extract, after duplicate `CodCEG` cores are folded. */
+    sourceRows: integer().notNull(),
+    /** Rows passing the technology, phase and size filters. */
+    fleetRows: integer().notNull(),
+
+    /** Denominator of the match rate: plants in the ONS registry. */
+    registryPlants: integer().notNull(),
+    matchedPlants: integer().notNull(),
+    matchRate: doublePrecision().notNull(),
+    /** Raw `CodCEG` against raw ONS `ceg`. Expected to stay at zero. */
+    verbatimMatchedPlants: integer().notNull(),
+
+    /** Rows at exactly (0, 0), and rows outside the bounding box. */
+    nullIslandRows: integer().notNull(),
+    outOfBoundsRows: integer().notNull(),
+
+    /** How the matched plants ended up located. */
+    locatedPlants: integer().notNull(),
+    centroidFallbackPlants: integer().notNull(),
+    unlocatedPlants: integer().notNull(),
+    /** Plants that disappeared from SIGA since the prior snapshot. */
+    withdrawnPlants: integer().notNull(),
+
+    ingestedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("siga_snapshot_ingested").on(t.ingestedAt)],
+);

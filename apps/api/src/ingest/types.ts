@@ -683,3 +683,136 @@ export interface PlantDetailParse {
    */
   modalityConjuntoMismatches: number;
 }
+
+/**
+ * A point on the earth, as one value.
+ *
+ * A pair rather than two loose columns because `docs/domain-model.md` §3 makes
+ * the whole coordinate optional: half a coordinate is not a partial location,
+ * it is a corrupt one, and two nullable numbers make that state expressible.
+ */
+export interface Coordinate {
+  latitude: number;
+  longitude: number;
+}
+
+/** Why a SIGA coordinate was refused. Never "it was null" alone. */
+export type CoordinateRejection =
+  /** The column was present but empty. */
+  | "missing"
+  /** Present and not a number the ANEEL decimal-comma reader could parse. */
+  | "unparsable"
+  /** Exactly (0, 0) — the Gulf of Guinea. 1.72% of operating EOL/UFV rows. */
+  | "null_island"
+  /** A number, outside the Brazil bounding box. A sign error or a transposition. */
+  | "out_of_bounds";
+
+/** A `Município - UF` entry from `DscMuninicpios`. The UF is what disambiguates. */
+export interface Municipality {
+  name: string;
+  uf: string;
+}
+
+/** Where a plant's stored location actually came from. */
+export type PlantLocationSource =
+  /** SIGA's own `NumCoordN/E`, validated. */
+  | "siga_coordinate"
+  /** Mean of the valid SIGA coordinates registered in the same municipality. */
+  | "siga_municipality_centroid"
+  /** No usable coordinate and no municipality to fall back to. */
+  | "unlocated";
+
+/** One SIGA row, normalised. Capacity appears only as the size-filter input. */
+export interface SigaRegistration {
+  /** `CodCEG` with the version segment stripped — the join key, both sides. */
+  cegCore: string;
+  /** ANEEL's own rendering, unpadded version segment and all. */
+  cegRaw: string;
+  /** `IdeNucleoCEG`. Retained: the nucleus is the durable identity on rename. */
+  nucleus: string;
+  /** `NomEmpreendimento` — never a join key and never rendered raw. */
+  name: string;
+  /** `SigUFPrincipal`. "Principal" is load-bearing; never a subsystem input. */
+  ufPrincipal: string;
+  /** `SigTipoGeracao` verbatim: `EOL`, `UFV`, `UTE`, … */
+  sourceTechnology: string;
+  /** `DscFaseUsina`: `Operação`, `Construção`, `Construção não iniciada`. */
+  phase: string;
+  /**
+   * `MdaPotenciaFiscalizadaKw`, read **only** as the input to the fleet size
+   * filter. It is not a capacity WattSteer stores or aggregates: ONS owns
+   * capacity, per unit, and SIGA retains the last operating value forever.
+   */
+  inspectedCapacityKw: number | null;
+  /** The validated coordinate, or null when SIGA's pair was not usable. */
+  coordinate: Coordinate | null;
+  coordinateRejection: CoordinateRejection | null;
+  /** The raw pair as parsed, kept so a refusal can be explained. */
+  rawLatitude: number | null;
+  rawLongitude: number | null;
+  municipalities: Municipality[];
+  /** `DscMuninicpios` verbatim — provenance survives normalisation. */
+  municipalitiesRaw: string;
+  /** `DscPropriRegimePariticipacao` verbatim: `100% para <agent> - <CNPJ> (<regime>)`. */
+  ownership: string;
+}
+
+/** What the SIGA adapter produces from one daily extract. */
+export interface SigaParse {
+  /** `DatGeracaoConjuntoDados` — one value per file, asserted to be one. */
+  snapshotDate: Date;
+  rows: SigaRegistration[];
+  rejected: RejectedRow[];
+  /** Rows at exactly (0, 0). Counted separately from the bounding box. */
+  nullIslandRows: number;
+  /** Rows with a numeric pair outside Brazil. */
+  outOfBoundsRows: number;
+  /** Repeated `CodCEG` cores. Three exist in the live file, all hydro. */
+  duplicateCegCores: number;
+  /** Of those, the ones whose location or municipality disagreed. Should be 0. */
+  conflictingDuplicates: number;
+  /** The header actually present in this file, read fresh on every ingest. */
+  columns: string[];
+}
+
+/** The identity columns the match rate is measured over. */
+export interface RegistryPlantKey {
+  cegCore: string;
+  cegRaw: string;
+}
+
+/** Both match rates, measured. The verbatim one is a canary, not a fallback. */
+export interface SigaMatchRate {
+  /** Denominator: plants in the ONS registry, not rows in SIGA. */
+  registryPlants: number;
+  matched: number;
+  rate: number;
+  /** Raw `CodCEG` against raw ONS `ceg`. Measured at exactly zero. */
+  verbatimMatched: number;
+  verbatimRate: number;
+  /** CEG cores in the registry that SIGA does not carry, ascending. */
+  unmatched: string[];
+}
+
+/** One plant's location as resolved from a SIGA snapshot, ready to store. */
+export interface ResolvedPlantLocation {
+  cegCore: string;
+  cegRaw: string;
+  sigaName: string;
+  coordinate: Coordinate | null;
+  locationSource: PlantLocationSource;
+  /** Why SIGA's own coordinate was refused, when it was. */
+  coordinateRejection: CoordinateRejection | null;
+  municipality: Municipality | null;
+  municipalitiesRaw: string;
+  ownership: string;
+  /**
+   * The snapshot date on which this plant stopped appearing in SIGA.
+   *
+   * Null on every row read from a file — a withdrawal is not in the data. SIGA
+   * deletes rather than tombstones, so this is set only by diffing successive
+   * snapshots, and it is the only representation of a retirement the source
+   * offers.
+   */
+  withdrawnOn: Date | null;
+}

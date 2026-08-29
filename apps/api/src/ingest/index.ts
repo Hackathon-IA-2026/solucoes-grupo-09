@@ -1,4 +1,35 @@
 export {
+  ANEEL_CKAN_BASE,
+  fetchAneelPackage,
+  SIGA_DATASET_SLUG,
+  selectDailySigaResource,
+} from "./aneel/catalogue.js";
+export {
+  assertMatchRate,
+  DEFAULT_MATCH_RATE_FLOOR,
+  DEFAULT_MATCH_RATE_TOLERANCE,
+  type MatchOptions,
+  measureMatchRate,
+} from "./aneel/match-rate.js";
+export {
+  BRAZIL_BBOX,
+  classifyCoordinate,
+  FLEET_MIN_CAPACITY_KW,
+  FLEET_TECHNOLOGIES,
+  isFleetScale,
+  type MunicipalityCentroidSource,
+  municipalityCentroids,
+  municipalityKey,
+  OPERATING_PHASE,
+  parseAneelDecimal,
+  parseMunicipalities,
+  parseSigaCsv,
+  type ResolveLocationsOptions,
+  resolveLocations,
+  type SigaFleetSummary,
+  summariseSigaFleetCapacity,
+} from "./aneel/siga.js";
+export {
   acquireBulkResource,
   BULK_STEPS,
   type BulkResource,
@@ -279,6 +310,27 @@ export {
   markResourceFetched,
   recordResourceVersion,
 } from "./resource-version.js";
+export {
+  createSigaIngestor,
+  type IngestSigaPayload,
+  type IngestSigaResult,
+  type SigaIngestorDeps,
+} from "./siga-job.js";
+export {
+  findWithdrawnPlants,
+  type PlantLocationQuery,
+  type PlantLocationResult,
+  type PlantLocationWrite,
+  plantLocationDigest,
+  readCurrentPlantLocations,
+  readPlantLocationsAsOf,
+  readPreviousMatchRate,
+  readRegistryPlantKeys,
+  recordSigaSnapshot,
+  type SigaSnapshotRecord,
+  type StoredPlantLocation,
+  writePlantLocations,
+} from "./siga-repository.js";
 export { ONS_TIME_ZONE, zonedWallClockToUtc } from "./time.js";
 export type {
   CurtailmentParse,

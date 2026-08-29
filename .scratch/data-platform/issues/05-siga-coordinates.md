@@ -17,13 +17,13 @@ missing coordinates.
 
 **Blocked by:** 04
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The daily registry resource is ingested, not the monthly one
-- [ ] The join key strips the version segment on both sides; raw identifiers are retained
-- [ ] The match rate is asserted on every ingest, and ingestion fails if it regresses
-- [ ] Plants at the null-island coordinate are treated as missing, not as located
-- [ ] A municipality fallback exists for plants without usable coordinates
-- [ ] Technology and size filters are applied before any capacity aggregation
-- [ ] Row deletions are detected by diffing against the prior snapshot
-- [ ] A fixture test proves the naive verbatim key comparison matches nothing
+- [x] The daily registry resource is ingested, not the monthly one
+- [x] The join key strips the version segment on both sides; raw identifiers are retained
+- [x] The match rate is asserted on every ingest, and ingestion fails if it regresses
+- [x] Plants at the null-island coordinate are treated as missing, not as located
+- [x] A municipality fallback exists for plants without usable coordinates
+- [x] Technology and size filters are applied before any capacity aggregation
+- [x] Row deletions are detected by diffing against the prior snapshot
+- [x] A fixture test proves the naive verbatim key comparison matches nothing
