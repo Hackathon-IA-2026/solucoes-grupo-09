@@ -63,10 +63,14 @@ describe("prototype heuristic", () => {
       load: DEFAULT_LOAD,
       thresholdMw: 5,
     });
-    const result = evaluatePlan(plan, offered, 5);
+    // The battery is passed: without it the execution rule has no asset to
+    // clip, and the assertion below would hold vacuously.
+    const result = evaluatePlan(plan, offered, 5, DEFAULT_BATTERY);
     for (const hour of result.dispatch) {
       expect(hour.absorbedMwh).toBeLessThanOrEqual(hour.offeredMwh + 1e-9);
       expect(hour.absorbedMwh).toBeGreaterThanOrEqual(0);
+      // The charging leg never exceeds what was actually curtailed.
+      expect(hour.batteryChargeMw).toBeLessThanOrEqual(hour.offeredMwh + 1e-9);
     }
   });
 

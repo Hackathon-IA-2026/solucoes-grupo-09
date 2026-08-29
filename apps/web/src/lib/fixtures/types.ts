@@ -200,6 +200,15 @@ export interface OptimizationResult {
   /** Per-hour dispatch, MW. Positive = added demand, negative = discharge. */
   dispatch: HourlyDispatch[];
   thresholdMw: number;
+  /**
+   * Because "recovered" is not "delivered": absorbed energy is metered at the
+   * grid boundary, and some of it is still inside the battery when the horizon
+   * ends. There is no terminal state-of-charge constraint, so the consequence
+   * is reported rather than constrained away.
+   */
+  storedAtHorizonEndMwh: number;
+  /** The other half of the same honesty: what did not survive the round trip. */
+  roundTripLossMwh: number;
 }
 
 export interface HourlyDispatch {

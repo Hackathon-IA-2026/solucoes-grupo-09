@@ -55,7 +55,7 @@ recovered and absorbed energy are **one quantity with one name**.
 
 **Blocked by:** 01 — the plan shape and the efficiency split come from the builder.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] One function, in one place, imported by the live path, by Replay and by the tests; a structural check (grep/AST level, in the default test path) asserts exactly one implementation of the execution rule exists in the repository
 - [ ] Monotonicity, property-based: if a realisation `r ≥ P10` pointwise then `recovered(plan, r) ≥ recovered(plan, P10)` — the floor is a floor over the band, not a hope
