@@ -179,6 +179,27 @@ const ALLOWED_RELATIONS = new Set([
   // block composes two blocks and names no view at all.
   "terms",
   "proxy",
+  // Ticket 10's CTEs. The estimator reads the trailing year once
+  // (`trailing_year`), unfolds each stored link into both directions
+  // (`directed`) and quantiles them (`estimated`); the block reads the seven-day
+  // window once (`exchange_window`), unfolds it the same way (`directed_hours`)
+  // and derives the subsystem's export (`export_hours`) and the three ratios
+  // (`subsystem_capability`, `export_utilisation`, `corridor_utilisation`) from
+  // that one read. `corridor` is the set of directed corridors that have an
+  // estimate, and everything joins through it so a short sample contributes to
+  // no numerator and to no denominator. `utilisation` is its CTE in
+  // `feature_rows`.
+  "trailing_year",
+  "directed",
+  "estimated",
+  "corridor",
+  "subsystem_capability",
+  "exchange_window",
+  "directed_hours",
+  "export_hours",
+  "export_utilisation",
+  "corridor_utilisation",
+  "utilisation",
 ]);
 
 const functionSegments = (): Map<string, string> => {
@@ -564,11 +585,11 @@ describe("the actuals cutoff, structurally", () => {
       }
       expect(column).not.toContain("ramp");
       expect(column).not.toContain("_diff");
-      // The utilisation ratios need an estimated denominator that no ONS
-      // dataset publishes. The directed flows they would divide are here; the
-      // ratios are ticket 10's.
-      expect(column).not.toContain("utilisation");
     }
+    // The two utilisation ratios ticket 05 deferred are levels-over-a-constant
+    // and belong to the same class, but they live in ticket 10's block beside
+    // the estimate they divide by — so this block still holds none of them.
+    expect(block).not.toContain("utilisation");
   });
 
   it("keeps PAR out of the reason-share set", () => {
@@ -722,16 +743,18 @@ describe("DESSEM and the feature-set argument, structurally", () => {
     expect(SQL).not.toMatch(/'SIN'/);
   });
 
-  it("leaves the export utilisation ratio to the ticket that has a denominator", () => {
-    // The spec names 22 `dessem_*` features across 21 table rows. Twenty-one
-    // are here; `dessem_export_utilisation` needs an export capability estimate
-    // no ONS dataset publishes, and a ratio with an invented denominator would
-    // be a worse answer than a missing column.
+  it("carries all 22 names, the last of them once a denominator existed", () => {
+    // The spec names 22 `dessem_*` features across 21 table rows. Ticket 07
+    // shipped twenty-one and left `dessem_export_utilisation` out rather than
+    // invent a denominator for it; ticket 10 estimated one and closed it. The
+    // ratio is *not* in the class-`D` block, though — it is in the utilisation
+    // block, beside the estimate it divides by, so that the augmented set
+    // cannot grow a second disagreeing estimate of the same quantity.
     const dessem = FEATURE_ROW_COLUMNS.filter((column) => column.startsWith("dessem_"));
-    expect(dessem).toHaveLength(21);
-    for (const column of dessem) {
-      expect(column).not.toContain("utilisation");
-    }
+    expect(dessem).toHaveLength(22);
+    expect(dessem).toContain("dessem_export_utilisation");
+    const segment = functionSegments().get("feature_dessem_block") ?? "";
+    expect(segment.slice(0, segment.indexOf("END $$"))).not.toContain("utilisation");
   });
 
   it("states the eleven hours of lost notice beside the shorter window", () => {
@@ -940,7 +963,7 @@ describe("the proxy residual load, structurally", () => {
     const proxy = FEATURE_ROW_COLUMNS.filter((column) => column.startsWith("proxy_"));
     const dessem = FEATURE_ROW_COLUMNS.filter((column) => column.startsWith("dessem_"));
     expect(proxy).toHaveLength(7);
-    expect(dessem).toHaveLength(21);
+    expect(dessem).toHaveLength(22);
     // The pair the A/B compares, both in the one row type.
     expect(proxy).toContain("proxy_residual_load_mwh");
     expect(dessem).toContain("dessem_residual_load_mwh");
@@ -969,6 +992,142 @@ describe("the proxy residual load, structurally", () => {
     expect(headline).toContain("No input is a day-D actual");
     expect(headline).toContain("no input is a model output");
     expect(headline).toContain("gate_early");
+  });
+});
+
+describe("the interchange utilisation proxy, structurally", () => {
+  const estimator = () =>
+    functionSegments().get("feature_export_capability_estimate") ?? "";
+  const block = () =>
+    functionSegments().get("feature_interchange_utilisation_block") ?? "";
+
+  it("states the absence of any published limit rather than working around it", () => {
+    // The ticket's first acceptance claim, and it is a claim about *prose* on
+    // purpose: a modeller who finds this column has to be able to find out,
+    // from the column, that its denominator was never published by anybody.
+    // So the finding is in the migration, in the function comment and in all
+    // three column comments — not only in the spec, which is not what travels
+    // with the number.
+    expect(RAW).toContain("transfer-limit dataset at any grain");
+    expect(SQL).toContain("No ONS dataset publishes a transfer limit at any grain");
+    const catalogue = functionSegments().get("feature_export_capability_estimate") ?? "";
+    expect(catalogue).toContain("ESTIMATE");
+    for (const column of FEATURE_ROW_COLUMNS) {
+      if (!column.includes("utilisation")) {
+        continue;
+      }
+      const comment = RAW.slice(
+        RAW.indexOf(`COMMENT ON COLUMN feature_row.${column} IS`),
+      ).slice(0, 1400);
+      expect({ column, labelled: comment.includes("ESTIMATE") }).toEqual({
+        column,
+        labelled: true,
+      });
+    }
+  });
+
+  it("is a high quantile over a trailing gate-bounded year, with a minimum sample", () => {
+    // Each number is load-bearing and each is spelled in the one place the
+    // estimator lives. A maximum would let one outlier hour define a year of
+    // denominators; a whole-history window would leak a 2026 record flow into a
+    // 2024 feature; a P99.5 over a dozen observations is a maximum wearing a
+    // quantile's name.
+    const body = estimator().slice(0, estimator().indexOf("END $$"));
+    expect(body).toContain("percentile_cont(0.995)");
+    expect(body).toContain("interval '365 days'");
+    expect(body).toContain("sample_hours >= 300");
+    // Not a maximum, anywhere in the estimator.
+    expect(body).not.toMatch(/\bmax\s*\(/i);
+  });
+
+  it("bounds the denominator on the cutoff, and derives the gate rather than taking one", () => {
+    // The leak this column would otherwise be. A denominator is as capable of
+    // seeing the future as a numerator, and it is *less* likely to be reviewed
+    // — so the estimator is cut on `valid_time <= actuals_cutoff` like every
+    // other observation read, and there is no argument through which a
+    // hand-chosen window could arrive.
+    expect(
+      /FUNCTION\s+feature_export_capability_estimate\(\s*target_date date, gate_profile text\s*\)/.test(
+        estimator(),
+      ),
+    ).toBe(true);
+    const signature = estimator().slice(0, estimator().indexOf("RETURNS"));
+    for (const forbidden of ["timestamp", "as_of", "published_at", "cutoff"]) {
+      expect({ forbidden, present: signature.includes(forbidden) }).toEqual({
+        forbidden,
+        present: false,
+      });
+    }
+    const occurrences = (haystack: string, needle: string): number =>
+      haystack.split(needle).length - 1;
+    for (const segment of [estimator(), block()]) {
+      const reads = occurrences(segment, "FROM canonical_system_exchange");
+      expect(reads).toBe(1);
+      expect(occurrences(segment, "valid_time <= cut_exchange")).toBe(reads);
+    }
+  });
+
+  it("publishes the estimate per directed corridor with its sample size", () => {
+    // A capability is a property of a direction, not of a link — NE→SE and
+    // SE→NE are different limits — and the view stores one row per undirected
+    // pair, so the reverse direction is the stored flow negated. The sample
+    // size travels with the estimate because it is what distinguishes an
+    // estimate from a measurement to whoever reads it.
+    expect(SQL).toContain("CREATE TYPE feature_export_capability_corridor AS (");
+    const type = SQL.slice(
+      SQL.indexOf("CREATE TYPE feature_export_capability_corridor AS ("),
+    ).slice(0, 400);
+    expect(type).toContain("from_subsystem subsystem_code");
+    expect(type).toContain("to_subsystem subsystem_code");
+    expect(type).toContain("export_capability_mwh double precision");
+    expect(type).toContain("sample_hours integer");
+    // The sign flip that makes both directions available from one stored row.
+    expect(estimator()).toContain("-t.verified_exchange_mwh");
+  });
+
+  it("has exactly one estimate, and every ratio reaches it", () => {
+    // The reason the DESSEM ratio and the two observed ratios land in one
+    // ticket. Split across two, each would have grown a denominator of its own
+    // and the augmented set would carry two disagreeing estimates of the same
+    // physical quantity in one row.
+    expect([...SQL.matchAll(/percentile_cont/g)]).toHaveLength(1);
+    const owners = [...functionSegments()]
+      .filter(([, body]) => body.includes("percentile_cont"))
+      .map(([name]) => name);
+    expect(owners).toEqual(["feature_export_capability_estimate"]);
+    // And the block that publishes the three ratios reads the estimate rather
+    // than computing one.
+    expect(block()).toContain(
+      "feature_export_capability_estimate(target_date, gate_profile)",
+    );
+  });
+
+  it("composes the DESSEM block rather than re-reading the balance", () => {
+    // `0030`'s rule. The numerator of `dessem_export_utilisation` is the class-`D`
+    // block's own `dessem_implied_net_export_mwh`, so the ratio and the quantity
+    // it divides are the same number in the same row and cannot disagree — and
+    // at `dessem_free_v1` the ratio is NULL because that block returns no rows,
+    // by the same mechanism as the other twenty-one `dessem_*` columns.
+    const body = block().slice(0, block().indexOf("END $$"));
+    expect(body).toContain("feature_dessem_block(");
+    expect(body).not.toContain("canonical_day_ahead_balance");
+    expect(body).toContain("balance_hour.dessem_implied_net_export_mwh");
+    // One view of its own, and it is the exchange series.
+    expect(body).toContain("canonical_system_exchange");
+  });
+
+  it("refuses a denominator it cannot stand behind, rather than falling back", () => {
+    // Two refusals, both NULL and neither repaired: too few hours in the
+    // trailing year, and a direction that never carried energy. A `coalesce` to
+    // a nearby corridor's estimate, or to a whole-history maximum, would make
+    // the column non-null by asserting something nothing measured.
+    const body = estimator().slice(0, estimator().indexOf("END $$"));
+    expect(body).toContain("estimated.p995 > 0");
+    expect(body).not.toContain("coalesce(estimated");
+    // And the block joins every numerator through the corridors that *have* an
+    // estimate, so a short sample contributes to no ratio rather than to a
+    // numerator alone.
+    expect(block()).toContain("WHERE c.export_capability_mwh IS NOT NULL");
   });
 });
 
@@ -1077,6 +1236,9 @@ describe("the feature/label partition", () => {
       "proxy_residual_load_ramp_1h",
       "proxy_residual_load_min_of_day",
       "proxy_residual_load_rank_in_day",
+      "observed_export_utilisation_mean_24h_to_cutoff",
+      "observed_corridor_utilisation_ne_se_max_7d",
+      "dessem_export_utilisation",
     ]);
   });
 
@@ -1131,6 +1293,8 @@ describe("the feature dictionary's grain marking", () => {
       "programmed_load_daily_min_mwh",
       "dessem_residual_load_min_of_day",
       "proxy_residual_load_min_of_day",
+      "observed_export_utilisation_mean_24h_to_cutoff",
+      "observed_corridor_utilisation_ne_se_max_7d",
     ]);
     for (const column of FEATURE_ROW_COLUMNS) {
       expect({ column, grain: featureGrain(column) }).toEqual({

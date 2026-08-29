@@ -873,6 +873,43 @@ suite("the gate, end to end (real Postgres)", () => {
           verifiedExchangeMwh: 9999,
           programmedExchangeMwh: null,
         },
+        // ----------------------------------- ticket 10's trailing year
+        //
+        // A denominator needs a year to be estimated from, and 300 non-null
+        // hours before it is allowed to exist at all - so the three rows above
+        // are not enough to produce one, which is the point of the ones below.
+        //
+        // 800 hourly NE->SE rows ending exactly at the cutoff, one of them
+        // skipped because the D-7 row above already occupies that hour. The
+        // distribution is chosen so every number this suite asserts is one a
+        // reader can recompute:
+        //
+        //   * 774 hours at 400 - the bulk, and the P99.5;
+        //   * the last 24 hours at 200 - so the 24-hour mean is 0.5 and cannot
+        //     be confused with the bulk;
+        //   * one hour at 900, inside the trailing week - so the seven-day
+        //     maximum is 2.25 and a *maximum* estimator would have produced 900
+        //     rather than 400;
+        //   * the D-7 row at 500, already above.
+        //
+        // Sorted, that is 24 x 200, 774 x 400, one 500 and one 900. P99.5 over
+        // 800 values interpolates at index 795.005, which lands inside the 400s:
+        // **the two largest observations do not touch the estimate**, which is
+        // the whole reason it is a quantile and not a maximum.
+        //
+        // The reverse direction, SE->NE, is the same series negated, so its
+        // P99.5 is -200 - not positive, and therefore no estimate at all. N->NE
+        // keeps its single sample and is refused for the other reason. Both
+        // refusals are exercised without a second fixture.
+        ...Array.from({ length: 800 }, (_, i) => i)
+          .filter((i) => i !== 114)
+          .map((i) => ({
+            fromSubsystem: "NE" as const,
+            toSubsystem: "SE" as const,
+            validTime: new Date(CUTOFF.getTime() - i * 3_600_000),
+            verifiedExchangeMwh: i <= 23 ? 200 : i === 54 ? 900 : 400,
+            programmedExchangeMwh: null,
+          })),
       ],
       ...observationVintage,
     });
@@ -2263,7 +2300,12 @@ suite("the gate, end to end (real Postgres)", () => {
     const dessemColumns = FEATURE_ROW_COLUMNS.filter((column) =>
       column.startsWith("dessem_"),
     );
-    expect(dessemColumns).toHaveLength(21);
+    // Twenty-two since ticket 10: `dessem_export_utilisation` is the
+    // twenty-second name, and it is NULL for set A by the same mechanism as the
+    // other twenty-one - the utilisation block composes `feature_dessem_block`,
+    // which returns no rows here, so its numerator is missing rather than
+    // blanked.
+    expect(dessemColumns).toHaveLength(22);
 
     for (const gateProfile of ["gate_early", "gate_late"] as const) {
       const rows = await readServingRows(db, {
@@ -2470,6 +2512,201 @@ suite("the gate, end to end (real Postgres)", () => {
       Number(neAt(ne, 12)?.dessem_residual_load_mwh),
       3,
     );
+  });
+
+  // ---------------------------- the interchange utilisation proxy, ticket 10
+  //
+  // The fixture's NE->SE series is 774 hours at 400 MWh, the last 24 at 200,
+  // one hour at 900 inside the trailing week and the D-7 row at 500 - 800 hours
+  // in the year ending at the cutoff, and a 9999 MWh hour past it. Every number
+  // below is a consequence of that series and of nothing else.
+  const ESTIMATE_NE_SE = 400;
+
+  const capability = async (gateProfile: "gate_early" | "gate_late") => [
+    ...(await db.execute<{
+      from_subsystem: string;
+      to_subsystem: string;
+      export_capability_mwh: number | null;
+      sample_hours: number;
+    }>(sql`
+      select * from feature_export_capability_estimate(
+        ${TARGET}::date, ${gateProfile}
+      )
+    `)),
+  ];
+
+  it("publishes the estimate per directed corridor, with its sample size", async () => {
+    // The ticket's third claim, and the shape it asks for: per *directed*
+    // corridor, and with the sample it was computed from - because that is what
+    // distinguishes an estimate from a measurement to whoever reads it. A
+    // corridor that never binds is visibly not a constraint here rather than
+    // silently a scaled flow downstream.
+    const corridors = await capability("gate_late");
+    const of = (from: string, to: string) =>
+      corridors.find((row) => row.from_subsystem === from && row.to_subsystem === to);
+
+    // The one direction with a year behind it. P99.5 over the 800 hours is 400:
+    // neither the 900 nor the 500 reaches it, which is the quantile refusing to
+    // be a maximum.
+    expect(Number(of("NE", "SE")?.export_capability_mwh)).toBeCloseTo(ESTIMATE_NE_SE, 9);
+    expect(Number(of("NE", "SE")?.sample_hours)).toBe(800);
+
+    // The same series reversed. Its P99.5 is -200 - the direction never carried
+    // energy - so there is no estimate, and the sample size beside it says the
+    // refusal was not for want of data.
+    expect(of("SE", "NE")?.export_capability_mwh).toBeNull();
+    expect(Number(of("SE", "NE")?.sample_hours)).toBe(800);
+
+    // The other refusal: one observation is not a year. A P99.5 over a single
+    // hour is that hour, and a denominator computed from noise is worse than no
+    // denominator at all.
+    expect(of("N", "NE")?.export_capability_mwh).toBeNull();
+    expect(Number(of("N", "NE")?.sample_hours)).toBe(1);
+    expect(of("NE", "N")?.export_capability_mwh).toBeNull();
+  });
+
+  it("differs from a whole-history maximum, and from a trailing one", async () => {
+    // The ticket asks for this demonstration by name, and it is the reason the
+    // estimator is trailing *and* gate-bounded rather than either alone.
+    //
+    // Three numbers over the same corridor: the whole-history maximum is 9999,
+    // an hour the gate could not have seen at all; the maximum inside the
+    // trailing gate-bounded year is 900; and the estimate is 400. A naive
+    // `max(flow)` would have leaked the first into every historical row, and a
+    // gate-bounded maximum would still have let one outlier hour define a year
+    // of denominators.
+    const [extremes] = [
+      ...(await db.execute<{ whole_history: number; trailing: number }>(sql`
+        select
+          max(verified_exchange_mwh) as whole_history,
+          max(verified_exchange_mwh) filter (
+            where valid_time <= ${CUTOFF.toISOString()}::timestamptz
+          ) as trailing
+        from subsystem_exchange_hour
+        where from_subsystem = 'NE' and to_subsystem = 'SE'
+      `)),
+    ] as [{ whole_history: number; trailing: number }];
+
+    expect(Number(extremes.whole_history)).toBe(9999);
+    expect(Number(extremes.trailing)).toBe(900);
+    const corridors = await capability("gate_late");
+    const estimate = Number(
+      corridors.find((row) => row.from_subsystem === "NE" && row.to_subsystem === "SE")
+        ?.export_capability_mwh,
+    );
+    expect(estimate).toBe(ESTIMATE_NE_SE);
+    expect(estimate).toBeLessThan(Number(extremes.trailing));
+    expect(estimate).toBeLessThan(Number(extremes.whole_history));
+  });
+
+  it("carries the two observed ratios, at day grain and against that estimate", async () => {
+    // Ticket 05 built the directed flows and left these two out, because the
+    // denominator they divide did not exist. It does now, and it is the one in
+    // the test above rather than a second one.
+    const rows = await readServingRows(db, { targetDate: TARGET, ...query });
+    const ne = rows.filter((row) => row.subsystem === "NE");
+    expect(ne).toHaveLength(24);
+
+    // The last 24 available hours are 200 MWh against a 400 MWh estimate.
+    for (const row of ne) {
+      expect(Number(row.observed_export_utilisation_mean_24h_to_cutoff)).toBeCloseTo(
+        200 / ESTIMATE_NE_SE,
+        9,
+      );
+    }
+    // Day grain: one number for the whole target date, not an hourly signal.
+    expect(
+      new Set(ne.map((row) => Number(row.observed_export_utilisation_mean_24h_to_cutoff)))
+        .size,
+    ).toBe(1);
+
+    // The trailing seven days hold the 900 MWh hour, so the corridor maximum is
+    // 2.25 - above one, which is what a capability *estimate* looks like when
+    // the corridor exceeds it. It is a system fact, so all four subsystems
+    // carry it, exactly as they carry the corridor flows.
+    for (const row of rows) {
+      expect({
+        subsystem: row.subsystem,
+        max: Number(row.observed_corridor_utilisation_ne_se_max_7d),
+      }).toEqual({ subsystem: row.subsystem, max: 900 / ESTIMATE_NE_SE });
+    }
+
+    // A subsystem whose outgoing corridors have no estimate has no ratio -
+    // never a zero, and never a fallback to somebody else's denominator.
+    for (const subsystem of ["N", "S", "SE"] as const) {
+      for (const row of rows.filter((each) => each.subsystem === subsystem)) {
+        expect(row.observed_export_utilisation_mean_24h_to_cutoff).toBeNull();
+      }
+    }
+  });
+
+  it("moves the observed ratio with the gate, because the window does", async () => {
+    // Unlike ticket 09's family, nothing here is NULL at `gate_early`: these are
+    // class-`K` columns and the early gate simply sees a cutoff ten hours
+    // earlier. The window that ends there holds fourteen 200 MWh hours and ten
+    // 400 MWh ones, so the mean ratio is 17/24 rather than 1/2 - the same
+    // definition answering a different question, which is what a gate is for.
+    const early = await readFeatureRows(db, {
+      targetFrom: TARGET,
+      targetTo: TARGET,
+      ...query,
+      gateProfile: "gate_early",
+    });
+    const ne = early.filter((row) => row.subsystem === "NE");
+    expect(ne).toHaveLength(24);
+    for (const row of ne) {
+      expect(Number(row.observed_export_utilisation_mean_24h_to_cutoff)).toBeCloseTo(
+        17 / 24,
+        9,
+      );
+    }
+    // And the estimate itself is unchanged, because the bulk of the year is.
+    const corridors = await capability("gate_early");
+    expect(
+      Number(
+        corridors.find((row) => row.from_subsystem === "NE" && row.to_subsystem === "SE")
+          ?.export_capability_mwh,
+      ),
+    ).toBeCloseTo(ESTIMATE_NE_SE, 9);
+  });
+
+  it("closes the augmented set's twenty-second name with the same denominator", async () => {
+    // `dessem_export_utilisation`, which ticket 07 left out of its twenty-one
+    // rather than invent a denominator for. The numerator is the class-`D`
+    // block's own implied net export - read out of the same row, so the two
+    // cannot disagree - and the denominator is the class-`K` estimate above.
+    // There is no second estimate for this column to have grown.
+    const rows = await dessemRows(TARGET);
+    const ne = rows.filter((row) => row.subsystem === "NE");
+    expect(ne).toHaveLength(24);
+    expect(ne.every((row) => row.dessem_implied_net_export_mwh !== null)).toBe(true);
+    for (const row of ne) {
+      expect(Number(row.dessem_export_utilisation)).toBeCloseTo(
+        Number(row.dessem_implied_net_export_mwh) / ESTIMATE_NE_SE,
+        9,
+      );
+    }
+    // Hourly, not day grain: the numerator is DESSEM's own hourly profile even
+    // though the denominator is constant across the day.
+    expect(
+      new Set(ne.map((row) => Number(row.dessem_export_utilisation))).size,
+    ).toBeGreaterThan(1);
+
+    // The other three subsystems have an implied net export and no capability
+    // estimate, so the ratio is NULL rather than a number divided by somebody
+    // else's corridor.
+    for (const row of rows.filter((each) => each.subsystem !== "NE")) {
+      expect(row.dessem_export_utilisation).toBeNull();
+    }
+
+    // And it is absent from set A for the reason every other `dessem_*` column
+    // is: the block behind it returned no rows.
+    const setA = await readServingRows(db, { targetDate: TARGET, ...query });
+    expect(setA.every((row) => row.dessem_export_utilisation === null)).toBe(true);
+    // Non-vacuous: the two class-`K` ratios beside it are present in set A.
+    expect(
+      setA.some((row) => row.observed_corridor_utilisation_ne_se_max_7d !== null),
+    ).toBe(true);
   });
 
   // ---------------------------------------------------------------- Seam 1

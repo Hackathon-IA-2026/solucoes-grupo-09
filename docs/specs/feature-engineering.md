@@ -901,6 +901,36 @@ export_capability_estimate(corridor, gate)
   (external grid unavailability) names. The estimate is published per corridor
   with its sample size so a screen can show it as an estimate.
 
+> **Implemented in ticket 10**, in
+> `drizzle/0031_the_interchange_utilisation_proxy.sql`. Three facts about the
+> shipped shape are not derivable from the rules above.
+>
+> - **A capability is a property of a *direction*, not of a link.**
+>   `canonical_system_exchange` stores one row per undirected pair in the
+>   canonical orientation, so `feature_export_capability_estimate` unfolds each
+>   stored row into both directions — the reverse one negated — and quantiles
+>   them separately. NE→SE and SE→NE are different limits and get different
+>   estimates.
+> - **A non-positive estimate is NULL**, alongside the short-sample refusal. A
+>   direction whose P99.5 is at or below zero never carried energy that way in
+>   the trailing year, and dividing by it would produce a sign flip rather than
+>   a ratio.
+> - **A subsystem's export capability is the sum of its outgoing corridors'
+>   estimates**, over exactly those that have one. Two of the three ratios are
+>   per subsystem and the estimate is per corridor, so something has to bridge
+>   them; the bridge is an aggregation of the one estimate rather than a second
+>   one. It is an **upper** bound — the corridors do not peak together — so the
+>   ratios it denominates are conservative in a known direction, and every
+>   column comment says so.
+>
+> The three columns are `observed_export_utilisation_mean_24h_to_cutoff` and
+> `observed_corridor_utilisation_ne_se_max_7d` (deferred by ticket 05, which
+> built the directed flows they divide) and `dessem_export_utilisation`
+> (deferred by ticket 07, which shipped 21 of the augmented set's 22 names
+> rather than invent a denominator). All three land in one block so that exactly
+> one estimate exists — split across two tickets, each would have grown a
+> denominator of its own.
+
 ### SQL or Python — SQL, and why the single definition is the point
 
 **Features are computed in SQL**, as a versioned set-returning function in the
@@ -1067,7 +1097,12 @@ half the trade.
 > **Implemented in ticket 07.** Twenty-one of the twenty-two names are built by
 > `feature_dessem_block` in `drizzle/0025_dessem_and_the_feature_set.sql`.
 > `dessem_export_utilisation` is not: it needs an export capability estimate no
-> ONS dataset publishes, and that denominator is ticket 10's. Two properties of
+> ONS dataset publishes. **Ticket 10 estimated one and closed that column** — it
+> lives in `feature_interchange_utilisation_block`
+> (`drizzle/0031_the_interchange_utilisation_proxy.sql`) rather than in the
+> class-`D` block, beside the estimate it divides by, so the augmented set
+> cannot grow a second disagreeing estimate of the same quantity. Two properties
+> of
 > that block are worth restating here because they are what the feature-set
 > argument *means* in code. At `dessem_free_v1` it returns **no rows at all**,
 > at either gate — so a set-A row's `dessem_*` columns are NULL because there

@@ -286,9 +286,9 @@ export interface FeatureRow {
    * DESSEM publishes no exchange column, so net export is derived from the
    * energy identity. **Named *implied* because transmission losses are not
    * modelled** — ONS publishes no day-ahead loss figure to model them from — so
-   * it is a signal for the northern export limits, not a measured flow. The
-   * utilisation ratio that would divide it needs an export capability estimate
-   * that does not exist yet; that denominator is ticket 10's.
+   * it is a signal for the northern export limits, not a measured flow.
+   * `dessem_export_utilisation` divides it by the one estimated export
+   * capability — no ONS dataset publishes a real limit to divide it by.
    */
   dessem_implied_net_export_mwh: number | null;
   /**
@@ -485,6 +485,47 @@ export interface FeatureRow {
   proxy_residual_load_min_of_day: number | null;
   /** Rank of t among D's 24 reconstructed residual loads, ascending: 1 is the trough. */
   proxy_residual_load_rank_in_day: number | null;
+
+  // The interchange utilisation ratios. See
+  // `drizzle/0031_the_interchange_utilisation_proxy.sql`.
+  //
+  // **No ONS dataset publishes a transfer limit at any grain.** The catalogue
+  // was enumerated in full; `intercambio-nacional` publishes realised flow and,
+  // from 2026 only, programmed flow. So the denominator of all three columns is
+  // an **estimate** — P99.5 of directed flow over the 365 days ending at
+  // `actuals_cutoff`, per directed corridor, NULL below 300 non-null hours —
+  // and there is exactly one of it: `feature_export_capability_estimate`, which
+  // publishes it per corridor with its sample size.
+  //
+  // It is a *capability* proxy. It cannot see a temporary derate from a line
+  // outage, which is exactly the condition `REL` names, so a corridor at its
+  // reduced limit reads as comfortably below its estimated one.
+
+  /**
+   * Mean over the last 24 available hours of realised export / estimated
+   * capability. **Day grain** — the window is anchored to the cutoff.
+   *
+   * The subsystem's denominator is the sum of the estimates of the corridors
+   * leaving it, which is an aggregation of the one estimate rather than a
+   * second one, and an **upper** bound: the corridors do not peak together.
+   */
+  observed_export_utilisation_mean_24h_to_cutoff: number | null;
+  /**
+   * Maximum over the seven days ending at the cutoff of directed NE→SE flow /
+   * that corridor's estimated capability. **Day grain**, and a system-level
+   * fact broadcast to all four subsystems exactly as the corridor flows are.
+   */
+  observed_corridor_utilisation_ne_se_max_7d: number | null;
+  /**
+   * `dessem_implied_net_export_mwh` / the same estimated capability — the
+   * twenty-second name of the augmented set, which `drizzle/0025` left out
+   * rather than invent a denominator for.
+   *
+   * The one column in the row whose numerator is class `D` and whose
+   * denominator is class `K`. NULL for `dessem_free_v1`, where the class-`D`
+   * block returns no rows at all.
+   */
+  dessem_export_utilisation: number | null;
 }
 
 /**
@@ -619,6 +660,15 @@ export const FEATURE_ROW_COLUMNS: readonly (keyof FeatureRow)[] = [
   "proxy_residual_load_ramp_1h",
   "proxy_residual_load_min_of_day",
   "proxy_residual_load_rank_in_day",
+  // The utilisation ratios, appended by
+  // `drizzle/0031_the_interchange_utilisation_proxy.sql`. Two class-`K` names
+  // deferred by ticket 05 and one class-`D`+`K` name deferred by ticket 07,
+  // landing together because they share the one estimated denominator. They sit
+  // after the `proxy_` family rather than beside their siblings because
+  // `ALTER TYPE ... ADD ATTRIBUTE` appends: this list is the tree's history.
+  "observed_export_utilisation_mean_24h_to_cutoff",
+  "observed_corridor_utilisation_ne_se_max_7d",
+  "dessem_export_utilisation",
 ];
 
 /**
@@ -675,6 +725,14 @@ const DAY_GRAIN_COLUMNS: readonly string[] = [
   // deliberately *not* here: it is computed over the day and selected by the
   // target hour, so it genuinely varies across the 24.
   "proxy_residual_load_min_of_day",
+  // The two observed utilisation ratios. Both are anchored to `actuals_cutoff`
+  // — one a mean over the last 24 available hours, one a maximum over the
+  // trailing seven days — so both carry one value for the whole target date.
+  // `dessem_export_utilisation` is deliberately *not* here: its numerator is
+  // DESSEM's hourly implied net export, so only its denominator is constant
+  // across the day.
+  "observed_export_utilisation_mean_24h_to_cutoff",
+  "observed_corridor_utilisation_ne_se_max_7d",
 ];
 
 /** The grain of one column. Hourly is the default because the row is. */
