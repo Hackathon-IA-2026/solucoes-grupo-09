@@ -25,7 +25,7 @@ band.
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The composed band and the expectation come from one function, and its
       inputs are `p`, a positive-magnitude quantile function, a conditional

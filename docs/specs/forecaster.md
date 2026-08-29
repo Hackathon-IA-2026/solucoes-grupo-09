@@ -94,6 +94,15 @@ Q_Y(q | x) =  0                                  if q ≤ 1 − p(x)
               Q_pos( (q − (1 − p(x))) / p(x) )   otherwise
 ```
 
+**`Q_pos` is flat outside the fitted knots, not extrapolated.** The composition
+asks for `Q_pos((q − (1 − p))/p)`, which equals `q` only when `p = 1`, so it
+routinely needs the magnitude quantile at an `u` no alpha was fitted at. Between
+knots it interpolates linearly; **outside the outermost alphas it holds flat**. A
+straight line drawn past `α = 0.9` is an invented tail, and the day totals and
+the 500-path ensemble would inherit it as though it had been fitted. Holding flat
+understates the extreme tail, which is the direction this spec already errs in
+everywhere else — the promise errs low.
+
 Three consequences fall straight out, and each is a decision the rest of this
 spec builds on:
 
