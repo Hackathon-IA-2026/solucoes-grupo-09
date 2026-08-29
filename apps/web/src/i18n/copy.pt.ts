@@ -54,9 +54,10 @@ export const pt: Copy = {
 
   readout: {
     title: "Amanhã na rede brasileira",
-    nationalLabel: "Energia prevista em constrained-off, os quatro subsistemas",
+    nationalLabel: "Energia esperada em constrained-off, os quatro subsistemas",
     nationalGrainNote:
-      "O número nacional é a soma dos quatro subsistemas. O ONS publica uma linha SIN; o WattSteer nunca a usa, porque ela duplicaria a contagem em relação às linhas de subsistema ao lado.",
+      "O número nacional é a soma da energia esperada dos quatro subsistemas, e essa soma é exata — valores esperados somam qualquer que seja a dependência entre os subsistemas. O ONS publica uma linha SIN; o WattSteer nunca a usa, porque ela duplicaria a contagem em relação às linhas de subsistema ao lado.",
+    riskCounts: "Subsistemas por risco: alto {high} · elevado {elevated} · baixo {low}",
     sampleBadge: "Dados de exemplo",
     sampleNote:
       "Fixture ilustrativa. O dado ao vivo chega junto com o serviço de previsão; nada nesta página é uma previsão real ainda.",
@@ -67,8 +68,10 @@ export const pt: Copy = {
     profileCaption:
       "A faixa sombreada é P10–P90; a linha é a P50. Uma hora conta como cortada acima do limiar de 5 MW por subsistema, que é carimbado em todo número que o WattSteer publica.",
     additivityNote:
-      "As faixas por subsistema não somam a faixa nacional, e as faixas horárias não somam a diária. Quantis não são aditivos — apenas as medianas P50 aparecem somando, e mesmo isso é uma convenção.",
+      "Nada nesta coluna soma o número ao lado. Faixas não são aditivas, e medianas também não: a P50 de uma soma só é a soma das P50 se os quatro subsistemas se moverem juntos, e eles não se movem. O valor esperado é a única grandeza que soma exatamente — por isso o número nacional é um.",
     originLabel: "Origem da previsão",
+    originValue:
+      "{producer} · {run} · publicada em {published} · rodada meteorológica {weatherRun}",
   },
 
   band: {
@@ -76,6 +79,13 @@ export const pt: Copy = {
     medianLabel: "P50",
     observedLabel: "Observado",
     observedNote: "Valor medido. Sem faixa, porque não há previsão.",
+    expectedLabel: "Valor esperado",
+    figureExpected:
+      "{label}: valor esperado de {value} {unit}, publicado sem faixa de previsão",
+    noBand: {
+      no_joint_ensemble:
+        "Sem faixa: a previsão sorteia seu ensemble de 500 trajetórias um subsistema por vez, então não existe distribuição conjunta de onde ler uma P10–P90 nacional. Somar os quantis dos quatro subsistemas inventaria uma. O valor esperado não precisa dessa suposição.",
+    },
     explainerTitle: "Todo número aqui tem uma largura",
     explainerConfident: "Uma previsão confiante",
     explainerUncertain: "Uma bem aberta",

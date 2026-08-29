@@ -248,3 +248,26 @@ the first three folds should confirm a gate that never fires is not being built;
 (3) split conformal on non-exchangeable data is approximate and adaptive
 conformal is the named next step if `δ_lo` drifts; (4) the technology split's
 missing band constrains the UI and that constraint has not been agreed.
+
+**Hand-back from ticket 013, recorded by product-fix 01 — one line in the draw
+loop.** The landing hero's national headline was the componentwise sum of the
+four subsystem P50s, and medians do not add: the P50 of a sum is the sum of the
+P50s only for comonotone components. The web app now publishes
+`national.expected_mwh` with `band: null` and
+`band_unavailable_reason: "no_joint_ensemble"`, because expectations add
+exactly and nothing else here does.
+
+The upgrade is owed by this ticket and is nearly free. The path ensemble
+already draws **whole rows of the PIT matrix `U`** — whole days, which is what
+preserves intra-day dependence. **Share the drawn day-row index `k` across all
+four subsystems within a draw**, and cross-subsystem dependence is preserved by
+exactly the same argument, so
+
+```
+national day total quantiles = quantiles over k of  Σ_s Σ_t Q_Y(u_{k,t} | x_{s,t})
+```
+
+is a legitimate joint band from the existing 500 draws — no copula, no new
+model, no new parameter. It costs the shared index and one more persisted row
+grain (`national`), alongside the day-grain quantiles ticket 012 already handed
+back. Until it lands, `national.band` stays null and the hero says why.

@@ -29,10 +29,10 @@ Two smaller errors on the same panel:
 until it merges. Not blocked by the forecaster — the expected-MWh fallback is
 correct today and stays correct after.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The national headline is a quantity that survives aggregation
-- [ ] `national.band` is null until a joint band exists, and the UI says why
-- [ ] The forecast origin names WattSteer, not the weather provider
-- [ ] A test asserts the national figure is not a componentwise sum of medians
-- [ ] Hand-back recorded on ticket 009: share the ensemble draw index across subsystems
+- [x] The national headline is a quantity that survives aggregation
+- [x] `national.band` is null until a joint band exists, and the UI says why
+- [x] The forecast origin names WattSteer, not the weather provider
+- [x] A test asserts the national figure is not a componentwise sum of medians
+- [x] Hand-back recorded on ticket 009: share the ensemble draw index across subsystems

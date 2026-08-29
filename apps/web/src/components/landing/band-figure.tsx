@@ -1,7 +1,9 @@
 import { Badge, radius, space, usePalette } from "@wattsteer/ui";
+import type { ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useCopy, useI18n } from "@/i18n";
 import { fill } from "@/i18n/format";
+import type { BandUnavailableReason } from "@/lib/domain";
 import {
   type Band,
   type Figure,
@@ -166,11 +168,110 @@ export function BandFigure({
   highlight?: boolean;
 }) {
   const copy = useCopy();
-  const { locale } = useI18n();
   const railLabel = useRailLabel();
-  const colors = usePalette();
   const value = figure.kind === "band" ? figure.band.p50 : figure.value;
   const railMax = max ?? upper(figure) * 1.1;
+
+  return (
+    <FigureCard
+      label={label}
+      value={value}
+      unit={unit}
+      size={size}
+      highlight={highlight}
+      badge={
+        figure.kind === "observed" ? (
+          <Badge label={copy.band.observedLabel} tone="neutral" />
+        ) : (
+          <Badge label={copy.band.medianLabel} tone={highlight ? "neutral" : "violet"} />
+        )
+      }
+    >
+      {/* On the lime card the grape span would fight the fill, so the rail is
+          only drawn on surface cards; the range text still carries it. */}
+      {highlight ? null : (
+        <BandRail figure={figure} max={railMax} label={railLabel(figure, unit, label)} />
+      )}
+      <BandCaption figure={figure} unit={unit} />
+    </FigureCard>
+  );
+}
+
+/**
+ * The same card, for a figure that is an **expectation** rather than a
+ * quantile — `E[Y]`, which is the one quantity here that survives
+ * aggregation.
+ *
+ * It gets its own component rather than a third `Figure` variant because it
+ * is not a forecast interval at all: there is no rail to draw and no range to
+ * print, and the space those occupied is spent on the reason the band is
+ * missing. That reason is mandatory — a `BandUnavailableReason`, not a
+ * string — so a missing band always reads as a claim about what the
+ * forecaster can honestly publish and never as an omission, which is the same
+ * rule `observed` follows.
+ */
+export function ExpectationFigure({
+  label,
+  value,
+  unit,
+  reason,
+  size = "lg",
+  highlight = false,
+}: {
+  label: string;
+  value: number;
+  unit: string;
+  /** Why there is no band. Keyed copy, so the card cannot fail to say. */
+  reason: BandUnavailableReason;
+  size?: "lg" | "md";
+  highlight?: boolean;
+}) {
+  const copy = useCopy();
+  const { locale } = useI18n();
+  const colors = usePalette();
+  return (
+    <FigureCard
+      label={label}
+      value={value}
+      unit={unit}
+      size={size}
+      highlight={highlight}
+      badge={<Badge label={copy.band.expectedLabel} tone="info" />}
+      accessibilityLabel={fill(copy.band.figureExpected, {
+        label,
+        value: formatMwhExact(locale, value),
+        unit,
+      })}
+    >
+      <Text style={{ fontSize: 12, lineHeight: 18, color: colors.inkMuted }}>
+        {copy.band.noBand[reason]}
+      </Text>
+    </FigureCard>
+  );
+}
+
+/** The card both figures are drawn on: a label, a badge, a big number, a body. */
+function FigureCard({
+  label,
+  value,
+  unit,
+  size,
+  highlight,
+  badge,
+  accessibilityLabel,
+  children,
+}: {
+  label: string;
+  value: number;
+  unit: string;
+  size: "lg" | "md";
+  highlight: boolean;
+  badge: ReactNode;
+  accessibilityLabel?: string;
+  children: ReactNode;
+}) {
+  const { locale } = useI18n();
+  const colors = usePalette();
   const onCard = highlight ? colors.onAccent : colors.ink;
   const onCardMuted = highlight ? "rgba(30, 43, 16, 0.7)" : colors.inkMuted;
 
@@ -203,15 +304,12 @@ export function BandFigure({
         <Text style={{ flex: 1, fontSize: 14, fontWeight: "500", color: onCardMuted }}>
           {label}
         </Text>
-        {figure.kind === "observed" ? (
-          <Badge label={copy.band.observedLabel} tone="neutral" />
-        ) : (
-          <Badge label={copy.band.medianLabel} tone={highlight ? "neutral" : "violet"} />
-        )}
+        {badge}
       </View>
 
       <Text
         selectable={true}
+        accessibilityLabel={accessibilityLabel}
         style={{
           fontSize: size === "lg" ? 44 : 30,
           lineHeight: size === "lg" ? 48 : 34,
@@ -227,12 +325,7 @@ export function BandFigure({
         </Text>
       </Text>
 
-      {/* On the lime card the grape span would fight the fill, so the rail is
-          only drawn on surface cards; the range text still carries it. */}
-      {highlight ? null : (
-        <BandRail figure={figure} max={railMax} label={railLabel(figure, unit, label)} />
-      )}
-      <BandCaption figure={figure} unit={unit} />
+      {children}
     </View>
   );
 }
