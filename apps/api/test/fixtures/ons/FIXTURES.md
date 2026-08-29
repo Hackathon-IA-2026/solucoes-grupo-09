@@ -246,3 +246,58 @@ curl -s 'https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/intercambio_naci
    `2018-02-17` values do not show a fiftieths repetend — so those rows are
    converted the same honest way and flagged: `day_minutes` is stored on every
    row and the run reports how many days were irregular.
+
+## Constrained-off, plant grain — the `_detail` files (ticket 03)
+
+Captured **2026-08-28** from `dados.ons.org.br`. Real bytes, taken as whole
+logical rows from the live files and concatenated in file order — nothing is
+retyped and no value is edited. Recapture the sources with, for example:
+
+```
+curl -s 'https://dados.ons.org.br/api/3/action/package_show?id=restricao_coff_eolica_detail'
+curl -s https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/restricao_coff_eolica_detail_tm/RESTRICAO_COFF_EOLICA_DETAIL_2026_08.csv
+```
+
+Note the host: `RESTRICAO_COFF_EOLICA_DETAIL_2021_10.csv` is served from
+`ons-aws-prod-opendata.s3.us-west-2.amazonaws.com`, not the global endpoint, so
+the URL is read from `package_show` and never constructed.
+
+| File | Source rows | Pins |
+| --- | --- | --- |
+| `RESTRICAO_COFF_EOLICA_DETAIL_2026_08.head.csv` | lines 2, 8, 392, 397 and their `00:30` twins | The wind header (12 columns, **no reason, no reference generation**); the numeric flag dialect `0.0`/`1.0`; one flagged plant (`MAEDT7`); a Tipo I and a Tipo II-B plant, both with `nom_conjuntousina` empty |
+| `RESTRICAO_COFF_EOLICA_DETAIL_2021_10.blank.csv` | lines 17, 586, 745, 1314, 105 436, 106 164 | The three blank patterns of the earliest wind month: an absent estimate (`BAEABL`), an absent measurement *and* verified generation with an estimate present (`RNEM09`), and a row where all four measures are blank (`RNTEB1`) |
+| `RESTRICAO_COFF_FOTOVOLTAICA_DETAIL_2026_08.head.csv` | lines 2, 72 and their `00:30` twins | The solar header — identical but for the irradiance pair — and the boolean flag dialect `False`/`True` |
+| `RESTRICAO_COFF_FOTOVOLTAICA_DETAIL_2024_04.duplicate.csv` | lines 4, 326, 188 350–188 351, 188 679–188 680 | ONS publishing one plant-half-hour **twice with different values** (`MGJCN`, 2024-04-13); and a **negative irradiance** flagged *valid* (`BAUFB1`) |
+
+Findings from full scans of the four source files, none of which is in
+`docs/research/ons-datasets.md`:
+
+1. **`_detail` files contain no conjunto rows at all.** 0 of 1 365 984 rows in
+   the 2026-08 wind file and 0 of 710 640 in the solar one begin `CJU_`, and
+   `ceg` is populated on every row — no `"-"` anywhere. The entity-grain files
+   are 93% conjunto rows. These really are per-usina.
+2. **ONS republishes one plant-half-hour twice, with different values.**
+   `MGJCN` appears twice for all 48 half-hours of 2024-04-13 in
+   `RESTRICAO_COFF_FOTOVOLTAICA_DETAIL_2024_04.csv`; the copies differ in
+   `val_geracaoestimada` (empty vs `0.0`) and `val_geracaoverificada`. Both are
+   rejected as `duplicate_key` — a duplicate inside one file is not a revision.
+3. **Every measure can be empty, and the measurement pair is empty together.**
+   In the 2021-10 wind file: 117 209 rows have no `val_geracaoestimada`; 480
+   have neither wind speed nor flag, of which 336 have no generation at all
+   either and 144 carry an estimate. **No row in 1 084 896 blanks the wind speed
+   without also blanking its flag**, which is what makes the measurement one
+   value object rather than two nullable columns.
+4. **Negative irradiance is real and is flagged valid.** 3 069 rows of the
+   2024-04 solar file read between −1 and −2 W/m² at night with
+   `flg_dadoirradianciainvalido = False` — a pyranometer offset, not a defect.
+   Stored as published; clamping would invent a measurement.
+5. **`nom_conjuntousina` is named exactly when the plant is Tipo II-C.** 14 256
+   blanks in the 2026-08 wind file against exactly 14 256 Tipo I + Tipo II-B
+   rows; 5 184 against 5 184 in the solar one. The adapter counts the agreement
+   and stores neither the name nor the count — the name is the one field from
+   which the reason-bearing entity could be rebuilt.
+6. **`restricao_coff_fotovoltaica_detail` lists 30 CSV resources for 29
+   months.** `RESTRICAO_COFF_FOTOVOLTAICA_DETAIL_2024_09.csv` appears **twice**
+   in `package_show`, as two resource ids with the same URL. The month selector
+   matches on the URL basename and takes the first, which is deterministic; the
+   research's "30 months" for this dataset is a miscount of that duplicate.

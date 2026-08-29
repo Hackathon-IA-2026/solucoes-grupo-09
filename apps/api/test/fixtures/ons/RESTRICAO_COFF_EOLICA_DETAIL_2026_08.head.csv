@@ -1,0 +1,9 @@
+id_subsistema;id_estado;nom_modalidadeoperacao;nom_conjuntousina;nom_usina;id_ons;ceg;din_instante;val_ventoverificado;flg_dadoventoinvalido;val_geracaoestimada;val_geracaoverificada
+N;MA;Tipo II-C;Conj. Paulino Neves;Delta 3 I;MAEDT1;EOL.CV.MA.033682-3.01;2026-08-01 00:00:00;5.079;0.0;3.808;4.755
+N;MA;Tipo II-C;Conj. Paulino Neves;Delta 3 VII;MAEDT7;EOL.CV.MA.033680-7.01;2026-08-01 00:00:00;5.282;1.0;9.444;7.21
+NE;CE;Tipo II-B;;Cataventos do Acaraú I;CEECVA;EOL.CV.CE.033756-0.01;2026-08-01 00:00:00;0.0;1.0;0.0;0.0
+NE;CE;Tipo I;;Eol Icaraizinho;CEUCZ;EOL.CV.CE.028699-0.01;2026-08-01 00:00:00;8.219;0.0;19.865;16.985
+N;MA;Tipo II-C;Conj. Paulino Neves;Delta 3 I;MAEDT1;EOL.CV.MA.033682-3.01;2026-08-01 00:30:00;4.845;0.0;3.161;4.892
+N;MA;Tipo II-C;Conj. Paulino Neves;Delta 3 VII;MAEDT7;EOL.CV.MA.033680-7.01;2026-08-01 00:30:00;5.489;1.0;10.746;7.384
+NE;CE;Tipo II-B;;Cataventos do Acaraú I;CEECVA;EOL.CV.CE.033756-0.01;2026-08-01 00:30:00;0.0;1.0;0.0;0.0
+NE;CE;Tipo I;;Eol Icaraizinho;CEUCZ;EOL.CV.CE.028699-0.01;2026-08-01 00:30:00;5.302;0.0;4.023;2.927

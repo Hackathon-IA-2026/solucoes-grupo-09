@@ -94,6 +94,19 @@ const MODALITIES: Record<string, OperationModality> = {
   "TIPO II-C": "TIPO_II_C",
 };
 
+/**
+ * Read `nom_modalidadeoperacao`, or `undefined` if it is not one of the four.
+ *
+ * Exported because `capacidade-geracao` is not the only file that publishes the
+ * modality: the constrained-off `_detail` files carry it inline on every row,
+ * and modality is what decides which `ReportingEntity` variant a plant settles
+ * under (`docs/domain-model.md` §3). Two spellings of that vocabulary would be
+ * two chances to disagree about it.
+ */
+export function parseOperationModality(raw: string): OperationModality | undefined {
+  return MODALITIES[trimmed(raw).toUpperCase()];
+}
+
 function assertColumns(columns: string[]): void {
   const present = new Set(columns);
   const missing = REQUIRED_COLUMNS.filter((column) => !present.has(column));
@@ -144,7 +157,7 @@ function normaliseRow(row: Record<string, string>, rowNumber: number): Normalise
     );
   }
 
-  const modality = MODALITIES[trimmed(row.nom_modalidadeoperacao ?? "").toUpperCase()];
+  const modality = parseOperationModality(row.nom_modalidadeoperacao ?? "");
   if (!modality) {
     return reject(
       "unknown_modality",

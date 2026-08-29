@@ -1,0 +1,7 @@
+id_subsistema;id_estado;nom_modalidadeoperacao;nom_conjuntousina;nom_usina;id_ons;ceg;din_instante;val_irradianciaverificado;flg_dadoirradianciainvalido;val_geracaoestimada;val_geracaoverificada
+NE;BA;Tipo II-C;Conj. Bom Jesus;Bom Jesus da Lapa I;BAUFB1;UFV.RS.BA.032892-8.01;2024-04-01 00:00:00;-1.691;False;0.0;0.0
+NE;BA;Tipo II-C;Conj. Bom Jesus;Bom Jesus da Lapa I;BAUFB1;UFV.RS.BA.032892-8.01;2024-04-01 00:30:00;-1.728;False;0.0;0.0
+SE;MG;Tipo II-C;Conj. Jaiba V;Jaíba CN;MGJCN;UFV.RS.MG.043147-8.01;2024-04-13 00:00:00;0.0;True;;-0.064
+SE;MG;Tipo II-C;Conj. Jaiba V;Jaíba CN;MGJCN;UFV.RS.MG.043147-8.01;2024-04-13 00:00:00;0.0;True;0.0;-0.072
+SE;MG;Tipo II-C;Conj. Jaiba V;Jaíba CN;MGJCN;UFV.RS.MG.043147-8.01;2024-04-13 00:30:00;0.0;True;;-0.062
+SE;MG;Tipo II-C;Conj. Jaiba V;Jaíba CN;MGJCN;UFV.RS.MG.043147-8.01;2024-04-13 00:30:00;0.0;True;0.0;-0.072

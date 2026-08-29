@@ -74,7 +74,15 @@ export type RejectionReason =
    */
   | "duplicate_key"
   /** An interchange row whose origin and destination are the same subsystem. */
-  | "self_directed_exchange";
+  | "self_directed_exchange"
+  /**
+   * A `_detail` row gave a measured wind speed / irradiance without its
+   * invalid-data flag, or the flag without the measurement. The two are one
+   * value object — blank together on all 480 such rows of the 2021-10 wind
+   * file and populated together everywhere else — so half-populated is an
+   * illegal state rather than a partial one.
+   */
+  | "half_populated_measurement";
 
 /** A rejected source row, kept so a run can explain itself. */
 export interface RejectedRow {
@@ -572,4 +580,106 @@ export interface SubsystemLoadDayParse {
   columns: string[];
   /** Rows whose local day was not 24 hours long. Zero from 2019 onward. */
   irregularDays: number;
+}
+
+// The plant-grain constrained-off `_detail` datasets (ONS 2 & 4) — the true
+// per-usina view. Appended rather than merged into the constrained-off block
+// above so that two adapters landing at once cannot conflict on this file.
+
+/**
+ * The measured resource behind a plant-hour: wind speed or irradiance, with the
+ * flag saying whether the measurement can be trusted.
+ *
+ * **One value object, not two loose columns.** ONS blanks the measurement and
+ * its flag together and fills them together — 480 rows of the 2021-10 wind file
+ * blank both, and no row in 1,084,896 blanks one alone — so half-populated is
+ * an illegal state and this shape removes it.
+ *
+ * `value` is **m/s** when the row's technology is `WIND` and **W/m²** when it is
+ * `SOLAR`. Which one is fixed by the technology and never carried twice; the
+ * database keeps them in separate, separately-named columns so a unit can never
+ * be read off the wrong one.
+ *
+ * The ONS dictionary documents `val_ventoverificado` as `m3/s`, which is
+ * dimensionally wrong for a wind speed. WattSteer stores m/s; see
+ * `MEASURED_WIND_SPEED_UNIT_CORRECTION` in the adapter.
+ */
+export interface ResourceMeasurement {
+  /** m/s (`WIND`) or W/m² (`SOLAR`). Negative values are real and kept. */
+  value: number;
+  /** `flg_dadoventoinvalido` / `flg_dadoirradianciainvalido`, unified. */
+  invalid: boolean;
+}
+
+/**
+ * A plant as observed in a constrained-off `_detail` file.
+ *
+ * These files are the only ONS source in scope that publishes `id_ons` and
+ * `ceg` on the same row for an *individual plant* — `capacidade-geracao` has no
+ * `id_ons`, and the entity-grain files carry a `CJU_` code for the 93% of rows
+ * that are Tipo II-C. That makes this the identity bridge, which is why both
+ * identifiers are carried and neither is derived from the other.
+ *
+ * `nom_conjuntousina` is deliberately absent. It is the one field from which a
+ * plant's settling entity could be reconstructed by name, and that
+ * reconstruction is the first step of the plant → conjunto → reason join this
+ * grain must not enable. Membership is read from the time-resolved bridge or
+ * not at all.
+ */
+export interface ObservedPlant {
+  /** ONS `id_ons`. The identity, per `docs/domain-model.md` §3. */
+  onsCode: string;
+  /** ANEEL CEG, version segment stripped — the bridge to `plant` and SIGA. */
+  cegCore: string;
+  /** ONS's own rendering, zero-padded version segment and all. */
+  cegRaw: string;
+  name: string;
+  subsystem: SubsystemCode;
+  stateCode: string;
+  technology: Technology;
+  /** `nom_modalidadeoperacao` — what decides the plant's `ReportingEntity`. */
+  operationModality: OperationModality;
+}
+
+/**
+ * One canonical plant-grain row: a plant, a technology, one hour.
+ *
+ * **There is no cause on this type and there is no column for one.** The
+ * `_detail` files carry no reason code and no reference generation, so
+ * curtailment volume cannot be computed here and a reason cannot be attached
+ * here. For a Tipo II-C plant the reason exists only at conjunto grain and
+ * pushing it down is an allocation, which v1 does not compute
+ * (`docs/domain-model.md` §3).
+ */
+export interface PlantDetailHour {
+  plantOnsCode: string;
+  technology: Technology;
+  /** Start of the hour, UTC. */
+  validTime: Date;
+  /** From wind × power curve, or from history. Null where ONS published none. */
+  estimatedGenerationMwh: number | null;
+  verifiedGenerationMwh: number | null;
+  /** Mean over the hour — a speed and an irradiance are intensive, not summed. */
+  measurement: ResourceMeasurement | null;
+  /** 1 or 2; below 2 the source hour was incomplete. */
+  halfHoursObserved: number;
+}
+
+/** What the plant-grain constrained-off adapter produces from one source file. */
+export interface PlantDetailParse {
+  rows: PlantDetailHour[];
+  plants: ObservedPlant[];
+  rejected: RejectedRow[];
+  /** The header actually present in this file, read fresh on every ingest. */
+  columns: string[];
+  /**
+   * Rows where `nom_conjuntousina` was named without the plant being Tipo II-C,
+   * or the reverse.
+   *
+   * Zero on every file scanned, and reported rather than stored: it is the
+   * evidence that modality alone decides which `ReportingEntity` variant a
+   * plant settles under. A non-zero count means that claim has stopped holding
+   * upstream, which is worth knowing and is not worth guessing about.
+   */
+  modalityConjuntoMismatches: number;
 }
