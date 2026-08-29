@@ -49,3 +49,30 @@ anything, and five round trips before first paint is worse.
 - [ ] The response is `no-store` and carries no ETag
 - [ ] The attribution block names each source's licence identifier untranslated
 - [ ] The reference fleet is echoed, and a test asserts nothing fetches it in order to use it
+
+---
+
+## A latent bug, found by ticket 19 before you hit it
+
+`encodeWire` deliberately passes **map values through unrenamed** — its own
+comment says so, citing this endpoint's attribution block. But the generated
+`MetaAttribution` is `Record<string, SourceAttribution>` whose fields are
+camelCase, so `derivativeDatabase` will **not** become `derivative_database` on
+the wire, and no test will notice: the object validates, it just carries the
+wrong key.
+
+Ticket 19 hit this when it tried to `$ref` your `source_attribution` definition,
+and worked around it by emitting only casing-stable keys (`name`, `licence`,
+`url`) with a test pinning that exact set. It did not fix the generator, because
+`packages/core` was contended and this is your ticket's problem to solve
+properly.
+
+Two ways out, and the choice is real: teach the generator that a
+`Record<string, T>` value is still a named shape whose fields need renaming, or
+make attribution an array of `{key, …}` rather than a map. The first is more
+work and fixes every future map; the second is a schema change and fixes only
+this one.
+
+- [ ] `/v1/meta`'s attribution block round-trips through `encodeWire` with
+      snake_case keys, and a test asserts a multi-word field name specifically
+

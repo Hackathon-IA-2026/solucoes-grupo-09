@@ -9,6 +9,8 @@ import {
 } from "drizzle-orm/pg-core";
 import {
   forecastProducer,
+  operationModality,
+  plantLocationSource,
   reasonCode,
   reportingEntityKind,
   restrictionOrigin,
@@ -597,4 +599,126 @@ export const canonicalSolarCentroid = pgView("canonical_solar_centroid", {
   from centroid_point
   where technology = 'SOLAR'
   group by set_version
+`);
+
+/**
+ * The plant registry at one grain per plant — identity, attributes, the
+ * location and its provenance, and installed capacity **as of a fleet date**.
+ *
+ * The read behind `GET /v1/plants`, which exists for ODbL §4.6 and not for a
+ * screen. It is a view rather than a query in the route for the reason every
+ * other canonical read is one: `apps/api` and `apps/ml` must not each own a
+ * copy of the two `AsOf` picks and the ONS↔SIGA join, and a product route that
+ * reached into `plant`, `plant_geo` and `generating_unit` itself would be that
+ * second copy in the one place where being wrong is a licence breach as well
+ * as a bug.
+ *
+ * Four decisions are in the SQL rather than downstream, because downstream is
+ * where each of them gets forgotten:
+ *
+ * - **Capacity is summed here, over the units live on `canonical_fleet_date()`.**
+ *   The `DISTINCT ON` runs before the interval filter, exactly as
+ *   `canonical_installed_capacity` does and for the same reason: a revision can
+ *   move a commissioning date, and filtering first compares the question's date
+ *   against a superseded answer. A plant with no live unit on that date did not
+ *   exist yet and is not a row — an `inner join`, not a zero.
+ * - **The name is ONS's `nom_usina`.** `plant_geo.siga_name` carries
+ *   `(Antiga …)` aliases and is never projected here, so no consumer can render
+ *   it by reaching for the nearest string.
+ * - **The location is left-joined and its source rides beside it.** A plant SIGA
+ *   does not name keeps its capacity and loses only its point;
+ *   `location_source` distinguishes a surveyed coordinate from the municipality
+ *   centroid four plants fall back to, so a fallback can never be presented as
+ *   a survey. Withdrawn SIGA rows are excluded — the source represents a
+ *   retirement by deleting the row, and `withdrawn_on` is the diff that records it.
+ * - **Ownership is ONS's agent, not SIGA's `DscPropriRegimePariticipacao`.**
+ *   That field is free text carrying CNPJs of named legal persons, which ODbL
+ *   §2.4 explicitly does not license. It is ingested because ownership is a
+ *   modelled attribute; it is not projected into the endpoint that publishes
+ *   the database in bulk.
+ *
+ * `ingested_at` is the freshest of the two snapshots behind the row — the ONS
+ * capacity cut and the SIGA location cut — which is what the endpoint's ETag is
+ * built from.
+ */
+export const canonicalPlantRegistry = pgView("canonical_plant_registry", {
+  /** ANEEL CEG, version segment stripped. The identity and the SIGA bridge. */
+  cegCore: text().notNull(),
+  /** ONS's own rendering, zero-padded version segment and all. */
+  cegRaw: text().notNull(),
+  /** ONS `id_ons`. Null where no dataset in scope names one. */
+  onsPlantCode: text(),
+  /** ONS `nom_usina`. Never SIGA's alias-carrying `NomEmpreendimento`. */
+  name: text().notNull(),
+  /** The **electrical** assignment, never derived from `state_code`. */
+  subsystem: subsystemCode().notNull(),
+  stateCode: text().notNull(),
+  technology: technology().notNull(),
+  operationModality: operationModality().notNull(),
+  ownerName: text().notNull(),
+  operatorName: text().notNull(),
+  /** Summed over the units live on `canonical_fleet_date()`. Never stored. */
+  installedCapacityMw: doublePrecision().notNull(),
+  generatingUnits: integer().notNull(),
+  /** Null unless `location_source` is a located one — the two cannot disagree. */
+  latitude: doublePrecision(),
+  longitude: doublePrecision(),
+  /** `siga_coordinate`, `siga_municipality_centroid` or `unlocated`. */
+  locationSource: plantLocationSource().notNull(),
+  municipalityName: text(),
+  municipalityUf: text(),
+  /** The freshest of the ONS capacity and SIGA location cuts behind the row. */
+  ingestedAt: timestamp({ withTimezone: true }).notNull(),
+}).as(sql`
+  with live_units as (
+    select distinct on (plant_ceg_core, equipment_code)
+      plant_ceg_core, equipment_code, rated_power_mw,
+      commissioned_on, decommissioned_on, ingested_at
+    from generating_unit
+    where ingested_at <= canonical_as_of()
+    order by plant_ceg_core, equipment_code, ingested_at desc, data_version desc
+  ),
+  capacity as (
+    select plant_ceg_core,
+           sum(rated_power_mw) as installed_capacity_mw,
+           count(*)::int as generating_units,
+           max(ingested_at) as ingested_at
+    from live_units
+    where commissioned_on <= canonical_fleet_date()
+      and (decommissioned_on is null
+           or decommissioned_on > canonical_fleet_date())
+    group by plant_ceg_core
+  ),
+  location as (
+    select distinct on (plant_ceg_core)
+      plant_ceg_core, latitude, longitude, location_source,
+      municipality_name, municipality_uf, withdrawn_on, ingested_at
+    from plant_geo
+    where ingested_at <= canonical_as_of()
+    order by plant_ceg_core, ingested_at desc, data_version desc
+  )
+  select
+    p.ceg_core,
+    p.ceg_raw,
+    p.ons_plant_code,
+    p.name,
+    p.subsystem,
+    p.state_code,
+    p.technology,
+    p.operation_modality,
+    p.owner_name,
+    p.operator_name,
+    capacity.installed_capacity_mw,
+    capacity.generating_units,
+    l.latitude,
+    l.longitude,
+    coalesce(l.location_source, 'unlocated') as location_source,
+    l.municipality_name,
+    l.municipality_uf,
+    greatest(capacity.ingested_at,
+             coalesce(l.ingested_at, capacity.ingested_at)) as ingested_at
+  from capacity
+  join plant p on p.ceg_core = capacity.plant_ceg_core
+  left join location l
+    on l.plant_ceg_core = p.ceg_core and l.withdrawn_on is null
 `);

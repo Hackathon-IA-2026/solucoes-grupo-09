@@ -6,7 +6,7 @@ import type { GridNowObservation } from "../contract/grid-now.js";
 import { readGridNow } from "../contract/grid-now.js";
 import type { Database } from "../database/connection.js";
 import { database } from "../database/connection.js";
-import { BadInputError, CodedError } from "../errors.js";
+import { CodedError } from "../errors.js";
 import { instant } from "./params.js";
 
 /**
