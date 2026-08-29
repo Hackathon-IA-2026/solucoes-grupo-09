@@ -34,10 +34,20 @@ does not load, which is the correct outcome for an artifact that predates its
 own calibration, and it is *why* the field was added required rather than with a
 default.
 
-**What this module still does not hold.** ``δ_lo``/``δ_hi`` and the PIT residual
-matrix, fitted by forecaster tickets 06 and 07 on the same calibration window.
-They are absent rather than present-and-``None``, and each will arrive the same
-way this one did.
+**The conformal correction is one required field, added by forecaster ticket
+06.** The bundle carries a
+:class:`~wattsteer_ml.training.conformal.ConformalCorrection` — ``δ_lo``,
+``δ_hi``, the window they were ranked over and the order statistic they are —
+and it is required for the same reason the calibration is. A band served without
+it is three booster outputs with no coverage statement behind them, and the
+product prints the P10 as a floor in prose. A bundle written before 06 does not
+load. The card gains the Quantiles group at the same time: a card with no
+``delta_lo`` in it is a card that has not made a coverage statement, and that
+absence was stated rather than defaulted right up until this ticket filled it.
+
+**What this module still does not hold.** The PIT residual matrix, fitted by
+forecaster ticket 07 on the same calibration window. It is absent rather than
+present-and-``None``, and it will arrive the same way these two did.
 """
 
 from __future__ import annotations
@@ -60,6 +70,7 @@ from wattsteer_ml.constants import SUBSYSTEM_CODES, Subsystem
 from wattsteer_ml.evaluation import Fold, FoldBlocks
 from wattsteer_ml.lanes import Lane, format_instant, is_artifact_id
 from wattsteer_ml.training.calibration import Calibration, IsotonicCalibrator
+from wattsteer_ml.training.conformal import ConformalCorrection, CoverageReport
 from wattsteer_ml.training.contract import FeatureContract
 from wattsteer_ml.training.hyperparameters import ESTIMATOR_FAMILY, ModelConfig
 
@@ -178,6 +189,12 @@ class HurdleBundle:
     #: :attr:`Calibration.isotonic` and through no other route, so a bundle
     #: without one has no probability to compose with.
     calibration: Calibration
+    #: ``δ_lo`` and ``δ_hi``, fitted on the same calibration window against the
+    #: *composed* band. Required: they are what turns the P10 from the name of a
+    #: booster's output into a measured floor, and
+    #: :func:`~wattsteer_ml.training.hurdle.forecast_rows` applies them to
+    #: ``Q_pos`` before the one composition — never after it.
+    conformal: ConformalCorrection
     #: ``lightgbm`` — the allow-list the hot-swap gate's second check enforces.
     estimator_family: str = ESTIMATOR_FAMILY
 
@@ -248,11 +265,17 @@ class TrainingCounts:
 class ModelCard:
     """The document beside the bundle. Written whatever the gate later decides.
 
-    The groups written here — Identity, Lane, Contract, Data, Calibration, plus
-    the Environment block — are fields. The Quantiles, Metrics, Experiments and
-    Decision groups accrete in forecaster tickets 06, 09 and 13 and are absent
+    The groups written here — Identity, Lane, Contract, Data, Calibration,
+    Quantiles, plus the Environment block — are fields. The Metrics, Experiments
+    and Decision groups accrete in forecaster tickets 09 and 13 and are absent
     here rather than present and empty, so a reader can tell "not measured yet"
     from "measured as nothing".
+
+    **Quantiles is two halves with two different statuses.** ``δ_lo`` and
+    ``δ_hi`` are always there, because a bundle cannot exist without them. The
+    coverage block is ``None`` when the fold's test period held no curtailed
+    hour to score — absent, and absent for a stated reason, rather than a row of
+    zeros that would read as total failure.
     """
 
     artifact_id: str
@@ -265,6 +288,14 @@ class ModelCard:
     counts: TrainingCounts
     sub_threshold_means: SubThresholdMeans
     calibration: Calibration
+    conformal: ConformalCorrection
+    #: Empirical coverage of this fold's test period, marginally and per
+    #: subsystem and per local hour. ``None`` when the test period held no
+    #: curtailed hour — see the class docstring. **Reported, never corrected**:
+    #: nothing in :class:`~wattsteer_ml.training.conformal.ConformalCorrection`
+    #: reads this field, and nothing can, because the correction is fitted
+    #: before the test period is scored.
+    coverage: CoverageReport | None = None
     #: The feature dictionary's version. `docs/specs/feature-engineering.md`
     #: owns it and its issue set has not published one yet, so this is ``None``
     #: until it does — recorded as an explicit null rather than defaulted to a
@@ -321,6 +352,20 @@ class ModelCard:
             },
             "model_config": self.config.card_fields(),
             "calibration": dict(self.calibration.card_fields()),
+            "quantiles": {
+                **self.conformal.card_fields(),
+                **(
+                    self.coverage.card_fields()
+                    if self.coverage is not None
+                    else {
+                        "coverage": None,
+                        "coverage_absent_reason": (
+                            "this fold's test period held no curtailed hour, so "
+                            "there is no interval whose coverage could fail"
+                        ),
+                    }
+                ),
+            },
             "sub_threshold_means": self.sub_threshold_means.as_card_table(),
             "environment": environment_versions(),
         }
@@ -439,7 +484,28 @@ def _validated(loaded: object) -> HurdleBundle:
                 f"{name} is a {type(estimator).__name__}, not a LightGBM Booster"
             )
     _validated_calibration(loaded.calibration)
+    _validated_conformal(loaded.conformal)
     return loaded
+
+
+def _validated_conformal(conformal: object) -> None:
+    """The two deltas, after the same ``__init__``-less load.
+
+    A bundle whose correction came back as something else would serve the raw
+    booster quantiles under a card that publishes a ``δ_lo``, which is the one
+    failure this ticket exists to prevent: a P10 printed as a floor with no
+    coverage statement behind it. The re-validation runs
+    ``__post_init__``'s checks over the loaded values rather than trusting the
+    pickle's shape, so a truncated ``rank`` or a window that ran backwards fails
+    here rather than on a screen.
+    """
+    if not isinstance(conformal, ConformalCorrection):
+        raise PartialBundleError(
+            f"the bundle's conformal correction is a {type(conformal).__name__}, "
+            "not a ConformalCorrection; a band with no measured correction is "
+            "three booster outputs and a promise"
+        )
+    conformal.__post_init__()
 
 
 def _validated_calibration(calibration: object) -> None:

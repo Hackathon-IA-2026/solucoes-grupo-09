@@ -38,7 +38,7 @@ across folds means the boosters' intervals are drifting narrow.
 
 **Blocked by:** 04. (01 arrives with it.)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Both corrections are fitted on the calibration window's positive rows,
       against the **composed** band, and stored in the bundle
