@@ -26,6 +26,14 @@ dependencies = [
   # The bundle's on-disk format. `*.joblib` is the stem the artifact layout
   # already names, and `artifacts.ARTIFACT_SUFFIX` is the one place it is spelt.
   "joblib>=1.4",
+  # The baseline ladder's rungs 2 and 3 (`docs/specs/forecaster.md`). These are
+  # never served and never enter an artifact: they exist so that "the model adds
+  # value" is a measured delta against the interpretable and the untuned-
+  # non-linear rung, on identical folds. scikit-learn supplies the L2 logistic
+  # and the forests; statsmodels supplies the quantile regression the spec names
+  # by library, because its IRLS is the one that stays tractable at fold scale.
+  "scikit-learn>=1.5",
+  "statsmodels>=0.14",
 ]
 
 [project.scripts]
@@ -147,4 +155,13 @@ ignore_missing_imports = true
 # trusting the pickle's shape.
 [[tool.mypy.overrides]]
 module = ["joblib.*"]
+ignore_missing_imports = true
+
+# scikit-learn and statsmodels ship no `py.typed` marker either. The same narrow
+# override the other untyped dependencies get, and for the same reason:
+# `evaluation/ladder.py` is the only module that touches an estimator handle,
+# and every prediction is copied out through `float()` or `np.asarray(...,
+# dtype=np.float64)` before anything else sees it.
+[[tool.mypy.overrides]]
+module = ["sklearn.*", "statsmodels.*"]
 ignore_missing_imports = true

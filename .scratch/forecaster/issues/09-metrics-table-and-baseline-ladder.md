@@ -48,7 +48,7 @@ carries.
 
 **Blocked by:** 03, 05, 06.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] All five rungs run on the shared fold calendar and produce a full metrics
       row each, per fold and per subsystem where the grain says so

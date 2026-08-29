@@ -11,8 +11,26 @@ harnesses, two outputs, two names.
   the split at ingestion go-live that is never averaged away.
 - :mod:`~wattsteer_ml.evaluation.matrix` — the runs, and the row-identity
   assertion that makes them a comparison rather than four numbers.
+- :mod:`~wattsteer_ml.evaluation.collapse` — the ticket-011 block: whether a
+  P50-planned day has any hour to act in.
+- :mod:`~wattsteer_ml.evaluation.metrics` — the metrics table, and `qloss_mwh`.
+- :mod:`~wattsteer_ml.evaluation.ladder` — the five rungs, on identical folds.
+
+**The last two are imported as submodules, not re-exported here.** They read
+:mod:`wattsteer_ml.training`, which reads this package; re-exporting them would
+close the cycle and make `import wattsteer_ml.evaluation` depend on LightGBM
+being installed. `from wattsteer_ml.evaluation.metrics import MetricsRow` is the
+spelling, and it is deliberate rather than an oversight.
 """
 
+from wattsteer_ml.evaluation.collapse import (
+    POOLED_LABEL,
+    CollapseBlock,
+    CollapseError,
+    HoursPerDay,
+    P50Collapse,
+    ServedHour,
+)
 from wattsteer_ml.evaluation.folds import (
     FOLD_CALENDAR_PATH,
     FOLD_CALENDAR_RULES,
@@ -59,7 +77,10 @@ __all__ = [
     "HOURS_PER_DAY",
     "MATRIX_RUNS",
     "MATRIX_RUN_BY_NAME",
+    "POOLED_LABEL",
     "ROW_ID_SEPARATOR",
+    "CollapseBlock",
+    "CollapseError",
     "Fold",
     "FoldBlocks",
     "FoldCalendar",
@@ -68,12 +89,15 @@ __all__ = [
     "FoldOrderError",
     "FoldSegment",
     "FoldWindowError",
+    "HoursPerDay",
     "MatrixRun",
     "MixedFidelityError",
+    "P50Collapse",
     "PinnedFold",
     "RowIdentityError",
     "RowKey",
     "ScoredFold",
+    "ServedHour",
     "WeatherArm",
     "assert_folds_in_order",
     "assert_identical_test_rows",
