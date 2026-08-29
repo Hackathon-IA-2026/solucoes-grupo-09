@@ -1,0 +1,26 @@
+{
+  "name": "half an efficiency pair",
+  "description": "One number or two, never one and a half. The loss enters the SOC balance asymmetrically and a modeller who has the asymmetric pair supplies both; half a pair is refused rather than mirrored, because mirroring invents the number the caller did not have.",
+  "now": "2026-08-28T12:00:00Z",
+  "scenario": {
+    "v": 1,
+    "subsystem": "NE",
+    "target_date": "2026-08-29",
+    "assets": [
+      {
+        "asset_type": "battery",
+        "label": "Battery",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "initial_state_of_charge": 0.2,
+        "charge_efficiency": 0.959
+      }
+    ],
+    "economic_assumptions": {
+      "brl_per_mwh": 180
+    }
+  },
+  "expected_code": "EFFICIENCY_PAIR_INCOMPLETE",
+  "expected_field": "assets[0].charge_efficiency"
+}

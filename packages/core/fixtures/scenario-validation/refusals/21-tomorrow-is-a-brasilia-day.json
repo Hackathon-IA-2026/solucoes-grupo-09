@@ -1,0 +1,26 @@
+{
+  "name": "tomorrow is a brasilia day",
+  "description": "The same rule with the clock at 23:00 on 2026-08-28 in Brasilia, which is already 2026-08-29 in UTC. Tomorrow is still 2026-08-29, so 2026-08-30 is still refused - a validator reading the UTC day would admit it, and the horizon it planned would be the wrong 24 hours.",
+  "now": "2026-08-29T02:00:00Z",
+  "scenario": {
+    "v": 1,
+    "subsystem": "NE",
+    "target_date": "2026-08-30",
+    "assets": [
+      {
+        "asset_type": "battery",
+        "label": "Battery",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      }
+    ],
+    "economic_assumptions": {
+      "brl_per_mwh": 180
+    }
+  },
+  "expected_code": "TARGET_DATE_OUT_OF_RANGE",
+  "expected_field": "target_date"
+}

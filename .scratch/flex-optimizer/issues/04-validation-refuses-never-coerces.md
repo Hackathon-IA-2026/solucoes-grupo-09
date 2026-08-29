@@ -42,7 +42,7 @@ returns codes, never translated strings.**
 against. `FORECAST_UNAVAILABLE` needs 07 to be exercised end to end; the code and
 its shape are defined here.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] One test case per code, each asserting rejection rather than coercion
 - [ ] An out-of-bounds `initial_state_of_charge` is a `422`, not a clamp

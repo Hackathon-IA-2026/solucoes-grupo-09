@@ -1,0 +1,207 @@
+{
+  "name": "twenty one assets",
+  "description": "The other half of `SCENARIO_TOO_LARGE`. The blob cap bounds what is parsed; this bounds what is *modelled*, and every asset is a block of MILP variables. Note which of the two actually fires at the gateway: twenty-one minimal batteries canonicalise to a 4 550-byte blob, so the transport's 4 096-byte cap refuses this one first - with the same code and a different `details.field`, which is why the gateway field is pinned separately below. The two bounds share a code deliberately: a caller who hand-edited a URL into either of them is told the same thing.",
+  "now": "2026-08-28T12:00:00Z",
+  "scenario": {
+    "v": 1,
+    "subsystem": "NE",
+    "target_date": "2026-08-29",
+    "assets": [
+      {
+        "asset_type": "battery",
+        "label": "Battery 0",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "Battery 1",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "Battery 2",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "Battery 3",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "Battery 4",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "Battery 5",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "Battery 6",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "Battery 7",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "Battery 8",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "Battery 9",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "Battery 10",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "Battery 11",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "Battery 12",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "Battery 13",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "Battery 14",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "Battery 15",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "Battery 16",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "Battery 17",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "Battery 18",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "Battery 19",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "battery",
+        "label": "Battery 20",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      }
+    ],
+    "economic_assumptions": {
+      "brl_per_mwh": 180
+    }
+  },
+  "expected_code": "SCENARIO_TOO_LARGE",
+  "expected_field": "assets",
+  "gateway_field": "s"
+}

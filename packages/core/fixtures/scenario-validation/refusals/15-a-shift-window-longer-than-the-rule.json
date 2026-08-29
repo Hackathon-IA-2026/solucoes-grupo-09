@@ -1,0 +1,26 @@
+{
+  "name": "a shift window longer than the rule",
+  "description": "`L` in `[1, 8]` whole hours. The window is the distance within which an up-shift must be compensated; at 12 hours a load could 'shift' across half a day, which is avoidance wearing a shift's clothes.",
+  "now": "2026-08-28T12:00:00Z",
+  "scenario": {
+    "v": 1,
+    "subsystem": "NE",
+    "target_date": "2026-08-29",
+    "assets": [
+      {
+        "asset_type": "shiftable_load",
+        "label": "Flexible load",
+        "subsystem": "NE",
+        "max_power_mw": 70,
+        "max_shift_mw": 50,
+        "shift_window_hours": 12,
+        "daily_energy_mwh": 1700
+      }
+    ],
+    "economic_assumptions": {
+      "brl_per_mwh": 180
+    }
+  },
+  "expected_code": "SHIFT_WINDOW_OUT_OF_RANGE",
+  "expected_field": "assets[0].shift_window_hours"
+}

@@ -1,0 +1,28 @@
+{
+  "name": "an availability window with no hours",
+  "description": "Half-open `[from, to)`, so `to <= from` covers no hour at all. Refused rather than read as 'available all day' or as 'never dispatched': both are guesses about which the caller meant.",
+  "now": "2026-08-28T12:00:00Z",
+  "scenario": {
+    "v": 1,
+    "subsystem": "NE",
+    "target_date": "2026-08-29",
+    "assets": [
+      {
+        "asset_type": "battery",
+        "label": "Battery",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2,
+        "available_from": "18:00",
+        "available_to": "11:00"
+      }
+    ],
+    "economic_assumptions": {
+      "brl_per_mwh": 180
+    }
+  },
+  "expected_code": "AVAILABILITY_INVALID",
+  "expected_field": "assets[0].available_to"
+}

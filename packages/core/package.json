@@ -15,6 +15,7 @@
     "./wire": "./src/wire.ts",
     "./client": "./src/client.ts",
     "./scenario": "./src/scenario.ts",
+    "./scenario-validation": "./src/scenario-validation.ts",
     "./schema": "./src/schema.ts",
     "./schema/*": "./schema/*"
   },

@@ -29,4 +29,5 @@ export * from "./domain.js";
 export * from "./errors.js";
 export * from "./format.js";
 export * from "./scenario.js";
+export * from "./scenario-validation.js";
 export * from "./wire.js";

@@ -1,0 +1,27 @@
+{
+  "name": "a recovery time beyond the day",
+  "description": "(D5) is emitted only when `recovery_time_hours` is supplied, and then it must fit inside `[1, 24]`. A recovery longer than the horizon is a constraint the model cannot express rather than one it can satisfy.",
+  "now": "2026-08-28T12:00:00Z",
+  "scenario": {
+    "v": 1,
+    "subsystem": "NE",
+    "target_date": "2026-08-29",
+    "assets": [
+      {
+        "asset_type": "shiftable_load",
+        "label": "Flexible load",
+        "subsystem": "NE",
+        "max_power_mw": 70,
+        "max_shift_mw": 50,
+        "shift_window_hours": 3,
+        "daily_energy_mwh": 1700,
+        "recovery_time_hours": 36
+      }
+    ],
+    "economic_assumptions": {
+      "brl_per_mwh": 180
+    }
+  },
+  "expected_code": "RECOVERY_TIME_OUT_OF_RANGE",
+  "expected_field": "assets[0].recovery_time_hours"
+}

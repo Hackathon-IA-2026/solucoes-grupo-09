@@ -612,8 +612,16 @@ plan for a battery the user did not describe.
 | `RECOVERY_TIME_OUT_OF_RANGE` | `recovery_time_hours` present and ∉ [1, 24] |
 | `AVAILABILITY_INVALID` | not `"HH:00"`, or `to ≤ from` |
 | `TARGET_DATE_OUT_OF_RANGE` | before the data window opens (2024-04) or after tomorrow |
-| `FORECAST_UNAVAILABLE` | no forecast exists for that subsystem/date/origin |
+| `FORECAST_UNAVAILABLE` | no forecast exists for that subsystem/date/origin — **404, not 422**; see below |
 | `ECONOMIC_ASSUMPTION_OUT_OF_RANGE` | `brl_per_mwh` ∉ (0, 10 000] |
+
+**`FORECAST_UNAVAILABLE` is the one row in this table that is not a 422.** Every
+other code here says the submitted scenario is not physical, and 422 is the right
+answer to that. This one says the scenario was fine and we have nothing to plan
+against — so `errors.ts` publishes it at **404**, as one of the four no-forecast
+states, and a 422 would be telling the caller their request was malformed when
+it was not. The table is a list of refusal *codes*, not an assertion that they
+all share a status.
 
 Every code is bilingual at the UI layer, per the i18n spec: **the API returns
 codes, never translated strings.**
