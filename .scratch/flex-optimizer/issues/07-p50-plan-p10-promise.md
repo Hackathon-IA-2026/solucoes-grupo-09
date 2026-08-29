@@ -50,9 +50,9 @@ R$ enters exactly once, *after* the solve, as a labelled display multiplier on
 down in one place) never enters the model. Changing it changes the money and
 nothing else.
 
-**Blocked by:** 02, 04, 06. **Cross-spec, external: the Forecaster spec must serve
-a persisted hour-wise P10/P50/P90 profile per (`Subsystem`, `valid_time`),
-resolvable at a pinned `ForecastOrigin`.** That profile is a contract this ticket
+**Blocked by:** 02, 04, 06. **Cross-spec, external: Forecaster 14** — a served and
+persisted hour-wise P10/P50/P90 profile per (`Subsystem`, `valid_time`), resolvable at a
+pinned `ForecastOrigin`. That profile is a contract this ticket
 consumes and does not specify — its hurdle model, its quantiles and its calibration
 are owned there. Until it exists, this ticket runs against a fixture profile of the
 same shape and the wiring is the last step.

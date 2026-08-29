@@ -27,8 +27,11 @@ as an argument, the result records which one it was in `planning_basis`, and the
 simulator and every KPI definition are untouched — the whole point is that the two
 arms are comparable because they differ in exactly one input.
 
-**Blocked by:** 07. **Cross-spec, external: the Forecaster spec must serve `E[Y]`
-as a persisted per-hour field alongside the quantiles.**
+**Blocked by:** 07. **Cross-spec, external: Forecaster 14** must serve and persist
+`E[Y]` as a per-hour field alongside the quantiles. **Forecaster 11 is the consumer** —
+it runs both arms and publishes both arms' `recovered_floor_mwh`, and it is blocked on
+this ticket and on 02. The arm is not run here; it is only made possible here, and made
+unreachable from the public surface.
 
 **Status:** ready-for-agent
 

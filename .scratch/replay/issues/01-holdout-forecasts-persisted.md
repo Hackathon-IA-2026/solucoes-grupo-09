@@ -29,10 +29,12 @@ error this project keeps ruling out. So `origin_kind ∈ {served, backfilled_hol
 it travels on every surface that carries a `ForecastOrigin`, and
 **`/v1/forecast/day-ahead` filters `origin_kind = 'served'` unconditionally.**
 
-**Blocked by:** None in this graph. **Cross-spec, external: the Forecaster spec owns
-the fold calendar (F1–F6), the fold artifacts and the backtest run that computes
-these predictions; the Feature-engineering spec owns `gate_at(target_date,
-gate_profile)`.** Both are consumed here, neither is specified here.
+**Blocked by:** None in this graph. **Cross-spec, external: Forecaster 03** (the fold
+calendar as data), **Forecaster 09** (the backtest harness that computes these
+out-of-fold predictions and currently discards them) and **Forecaster 14** (persisted
+`Forecast` rows and the `ForecastOrigin` this adds a field to). The
+**Feature-engineering spec** owns `gate_at(target_date, gate_profile)`. All are
+consumed here; none is specified here.
 
 **Status:** ready-for-agent
 

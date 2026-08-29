@@ -48,8 +48,9 @@ question asked of the wrong artifact: under this spec the serving artifact is ne
 consulted for a historical day, so the predicate is false by construction for every
 replayable day and the badge becomes a **provenance statement** instead of a warning.
 
-**Blocked by:** 01. **Cross-spec, external: the Forecaster spec must publish artifact
-cards recording each fold artifact's train and calibration windows.**
+**Blocked by:** 01. **Cross-spec, external: Forecaster 02** (the artifact card and its
+recorded train and calibration windows — the held-out assertion has nothing to assert
+against without it) and **Forecaster 03** (the fold calendar that fixes F1's start).
 
 **Status:** ready-for-agent
 

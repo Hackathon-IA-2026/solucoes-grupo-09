@@ -63,8 +63,8 @@ on the result so the run of hours shown is traceable to the parameters that prod
 
 **Blocked by:** 01, 02; **Flex-optimizer 02** (the simulator — this is the import that
 makes a backtest number and a forecast number the same kind of number), **Flex-optimizer
-07** (the P50-plan / P10-promise path this replays). **Cross-spec, external: the
-Forecaster spec's persisted hour-wise band.**
+07** (the P50-plan / P10-promise path this replays). **Cross-spec, external:
+Forecaster 14** (persisted hour-wise `Forecast` rows, read through `AsOf(published_at)`).
 
 **Status:** ready-for-agent
 
