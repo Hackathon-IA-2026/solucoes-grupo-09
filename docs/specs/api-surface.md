@@ -702,8 +702,9 @@ locale, because it is the only one that returns generated prose.
 
 The attribution half is a row read from `diagnosis_attribution`. The narration
 half is the Redis-cached LLM call, keyed exactly as `diagnosis.md` specifies. A
-`withhold` rule produces a **200** carrying `drivers: []`,
-`withheld_by: ["attribution_is_noise"]` and a template narration — not an error;
+`withhold` rule produces a **200** carrying the **drivers untouched**,
+`withheld_by: ["attribution_is_noise"]` and a template narration in place of the
+model's — not an error;
 see [the error contract](#the-error-contract-and-what-a-missing-forecast-looks-like).
 
 ```jsonc
@@ -744,6 +745,24 @@ see [the error contract](#the-error-contract-and-what-a-missing-forecast-looks-l
 assigns that rule to the screen, and putting it server-side would mean the
 `other` row's `direction: "mixed"` computation lives in two places the first
 time a second client appears.
+
+**`share_j` is computed over all eight groups, not over the displayed ones.**
+`diagnosis.md` defined it over "the displayed rows", which is circular: the
+client decides what is displayed by applying a `share ≥ 0.03` cut to the very
+number being defined. A share whose denominator does not exist until after the
+cut cannot be put on a wire. Over all eight it is well-defined, the cut has
+something to act on, and the LLM's numeric whitelist — which whitelists wire
+values — stays honest.
+
+**Selection is shared; the merge is not.** The narration is assembled
+server-side and `diagnosis.md` needs "any *displayed* group" to state a driver
+acted both ways, so the server must know which groups are notable. That is the
+selection predicate — `share ≥ 0.03`, top six — and applying it to identical
+wire numbers on both sides is deterministic and cannot drift. What stays
+client-only is the part that is a *rendering* decision: merging the remainder
+into `other` and computing its `direction: "mixed"`. Duplicating a predicate
+over agreed numbers is not the duplication this rule was written to prevent;
+duplicating the `mixed` computation is.
 
 #### 9. `GET /v1/model/card?lane=`
 
@@ -866,7 +885,7 @@ five, and the two unflagged ones are larger.
 | # | What the fixture says today | What the specs require | Flagged by 010? |
 |---|---|---|---|
 | 1 | `Driver.direction: "raises" \| "lowers"` | `\| "mixed"` — for the merged `other` row when `Σ\|φ\| > 1.5·\|Σφ\|` | ✓ |
-| 2 | `Driver.observed: string`, `typical: string` (`"310 MW left"`, `"+1.4 GW YoY"`) | `observed: number`, `typical: number`, `unit: string` — the client formats through `Intl` | ✓ |
+| 2 | `Driver.observed`/`typical` are already a structured `DriverReading` sum type — `{kind:"quantity", value, unit?, …}` \| `{kind:"term", term}` \| `{kind:"none"}` | Add the headline-feature name. **Do not** flatten to `observed: number, unit: string`: that model has no home for the `term` variant (`weekend`, `importing`), and `calendar_season` is precisely the group whose headline reading is categorical | ✓ |
 | 3 | `Driver.share` doc: "share of the total attributed magnitude" | share of **attributed movement**, `\|φ_j\| / Σ_k\|φ_k\|` over displayed rows | ✓ |
 | 4 | `buildExplain(subsystem, technology)`; `ExplainFixture.technology` | **one attribution per subsystem-day**; no technology dimension exists | ✗ — named in 010's "calls the dev" but not as a contract change |
 | 5 | `SubsystemDayForecast.technology` — a forecast *per technology* | one forecast per subsystem; technology is a **scalar split** of the P50 and the expectation | ✗ — no spec names it |
@@ -896,9 +915,13 @@ export interface Driver {
 }
 ```
 
-`label` becomes `labelCode` on the same grounds as everything else in this
-spec — `i18n.md` says the API returns codes — and it is a sixth change nobody
-flagged, but a small one.
+~~`label` becomes `labelCode`.~~ **Withdrawn: there is no `Driver.label` to
+rename.** The i18n work removed it; labels live in the two dictionaries keyed by
+the driver's code, under a comment noting that a `label` field "would be an
+English string travelling through the data layer". This spec called `labelCode`
+"a sixth change nobody flagged", which was right about the flagging and wrong
+about the direction — it would reintroduce a field the current design
+deliberately does not have. The code alone travels, as it already does.
 
 **`"mixed"` reaches the UI in exactly one place and a test says so.** Only the
 merged `other` row can carry it; the eight real groups always have a sign

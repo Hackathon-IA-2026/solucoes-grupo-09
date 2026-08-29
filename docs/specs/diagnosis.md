@@ -346,10 +346,12 @@ residual load → 3, high NE export → 4, solar ramp → 5, Sunday → 6.
   `data_conditions` is a bad outcome — hence the test: a feature added upstream
   that matches no explicit rule fails the group-map test, and the fix is a line
   in the YAML, not a fallback.
-- **`calendar_local_hour` and `subsystem` contribute ≈ 0 by construction**,
-  because the background is matched on both. They stay in the map for totality
-  and their `φ` is expected to be numerically zero; a non-zero value is a bug in
-  the background sampler and a test says so.
+- **`calendar_local_hour` and `subsystem` are neutralised by construction**,
+  because the background is matched on both, so neither can move the composed
+  expectation relative to its own background. They stay in the map for totality.
+  Note they have no `φ` of their own to inspect — they are members, and the game
+  is played by groups — so the property is asserted on the sampler instead: every
+  background row shares its target's subsystem and local hour. See seam 5.
 - **`data_conditions` is a player, not a leftover.** Its `φ` is a Shapley value
   like any other, so the "everything else" row on the screen has a real
   contribution and a real sign — unlike the fixture's `other`, which is
@@ -379,7 +381,10 @@ step in the whole design, so it carries the sign rule explicitly:
 `"mixed"` is a **new third member of `Driver.direction`** and is a required
 change to `apps/web/src/lib/domain.ts` — flagged below rather than assumed.
 
-**Shares.** `share_j = |φ_j| / Σ_k |φ_k|` over the displayed rows, so shares sum
+**Shares.** `share_j = |φ_j| / Σ_k |φ_k|` **over all eight groups** — not over
+the displayed rows, which was circular, since the display cut is itself applied
+to `share`. See `api-surface.md`, "`share_j` is computed over all eight groups".
+Shares therefore sum
 to 1 and a day whose drivers cancel still produces a full bar chart. This makes
 the shares **shares of the total attributed movement**, not of the curtailment
 and not of "the attributed magnitude" — which is what the current UI footnote
@@ -443,7 +448,7 @@ recent_observations)` with exactly one of three actions:**
 |---|---|---|
 | `annotate` | Attach a typed fact to `rule_flags[]`, which the renderer is **required** to state | Touch any number |
 | `demote` | Force a driver group below the fold regardless of its `|share|` | Change its `φ`, its sign or its share |
-| `withhold` | Suppress the model narration; the template renders instead | Change any number, or delete a driver |
+| `withhold` | Suppress the model narration; the template renders instead. **The drivers are returned untouched** — withholding acts on the narration, never on the attribution | Change any number, or delete a driver |
 
 **No rule may change a number, and no rule may create a driver.** This is the
 whole design. An attribution that a rule could overwrite would no longer be the
@@ -765,6 +770,14 @@ interaction term. Together these pin down that the implementation solves the
 game it claims to solve, and they are what a future session that wants to
 "simplify" grouping into summation has to confront.
 
+> **This does not contradict seam 3.** Seam 2 computes member-level
+> interventional Shapley values *in the test*, on a synthetic model, in order to
+> prove that grouped Shapley is not their sum in general. Seam 3 forbids any
+> **production** code path from summing member values into a group value. The
+> test needs the forbidden quantity precisely so it can demonstrate the
+> forbidden shortcut is wrong; seam 3's grep is scoped to the diagnosis module,
+> not to its test fixtures.
+
 **Seam 3 — the sign-honesty property, stated as a test.** Construct a group
 whose two members have `φ` of `+40` and `−35` under a per-feature attribution.
 Assert the group's own `φ` is computed from the coalition and is *not* `+5`
@@ -780,11 +793,22 @@ placed there. A feature added to `feature-engineering.md` fails this test until
 it is grouped, which is the point. Also: `driver_group_hash` changes when and
 only when the YAML changes.
 
-**Seam 5 — the matched background.** `φ` for `subsystem` and for
-`calendar_local_hour` is numerically zero (within tolerance) on every instance,
-because the background is matched on both. A non-zero value means the sampler
-leaked across cells and every "typical" on the screen is wrong. This test is
-cheap and catches the single most likely implementation bug.
+**Seam 5 — the matched background, asserted on the sampler.** Every background
+row drawn for a target shares that target's `subsystem` and its
+`calendar_local_hour`. A row that does not means the sampler leaked across cells
+and every "typical" on the screen is wrong. This test is cheap and catches the
+single most likely implementation bug.
+
+> **It is stated on the sampler, not on a `φ`, because the `φ` does not exist.**
+> An earlier draft asserted that `φ` for `subsystem` and for
+> `calendar_local_hour` is numerically zero on every instance. The game is
+> group-first: the players are the eight groups, `calendar_local_hour` sits
+> inside `calendar_season` and `subsystem` inside `data_conditions`, and neither
+> member has a Shapley value of its own — seam 3 forbids any code path from
+> producing one. The test the spec calls its most valuable had no quantity to
+> assert on. Asserting the matching directly is strictly stronger anyway: it
+> catches a leak on the row that leaked, rather than inferring one from an
+> attribution that came out near zero for some other reason.
 
 **Seam 6 — the day sum.** For a seeded fixture, `Φ_j == Σ_t φ_{j,t}` exactly;
 `Σ_j Φ_j == day_expected_mwh − baseline_expected_mwh` exactly;
