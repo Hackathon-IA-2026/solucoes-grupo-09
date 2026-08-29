@@ -1,6 +1,6 @@
 {
-  "id": "6615871d-810a-4539-baad-ffcaf44ca469",
-  "prevId": "20ea489e-9091-4746-9cc2-cf02338fa81b",
+  "id": "2535af8e-6ca3-4b2e-bca3-0323a5458111",
+  "prevId": "10a2074b-a6bd-4205-bfda-9896d2f80246",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -3738,7 +3738,708 @@
   "sequences": {},
   "roles": {},
   "policies": {},
-  "views": {},
+  "views": {
+    "public.canonical_conjunto_membership": {
+      "columns": {
+        "plantOnsCode": {
+          "name": "plantOnsCode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "conjuntoCode": {
+          "name": "conjuntoCode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "plantCegCore": {
+          "name": "plantCegCore",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "memberFrom": {
+          "name": "memberFrom",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "memberTo": {
+          "name": "memberTo",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dataVersion": {
+          "name": "dataVersion",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "publishedAt": {
+          "name": "publishedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingestedAt": {
+          "name": "ingestedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "definition": "\n  with latest as (\n    select distinct on (plant_ons_code, conjunto_code, member_from)\n      plant_ons_code, plant_ceg_core, conjunto_code, member_from, member_to,\n      data_version, published_at, ingested_at\n    from conjunto_membership\n    where ingested_at <= canonical_as_of()\n    order by plant_ons_code, conjunto_code, member_from,\n             ingested_at desc, data_version desc\n  )\n  select\n    plant_ons_code,\n    conjunto_code,\n    plant_ceg_core,\n    member_from,\n    member_to,\n    data_version,\n    published_at,\n    ingested_at\n  from latest\n  where member_from <= canonical_fleet_date()\n    and (member_to is null or member_to >= canonical_fleet_date())\n",
+      "name": "canonical_conjunto_membership",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
+    },
+    "public.canonical_curtailment_by_plant": {
+      "columns": {
+        "plantOnsCode": {
+          "name": "plantOnsCode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "technology": {
+          "name": "technology",
+          "type": "technology",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "validTime": {
+          "name": "validTime",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "estimatedGenerationMwh": {
+          "name": "estimatedGenerationMwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "verifiedGenerationMwh": {
+          "name": "verifiedGenerationMwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "measuredQuantity": {
+          "name": "measuredQuantity",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "measurementValue": {
+          "name": "measurementValue",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "measurementInvalid": {
+          "name": "measurementInvalid",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "halfHoursObserved": {
+          "name": "halfHoursObserved",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dataVersion": {
+          "name": "dataVersion",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "publishedAt": {
+          "name": "publishedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingestedAt": {
+          "name": "ingestedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "definition": "\n  select distinct on (plant_ons_code, technology, valid_time)\n    plant_ons_code,\n    technology,\n    valid_time,\n    estimated_generation_mwh,\n    verified_generation_mwh,\n    case technology when 'WIND' then 'wind_speed_ms' else 'irradiance_wm2' end\n      as measured_quantity,\n    case technology\n      when 'WIND' then measured_wind_speed_ms\n      else measured_irradiance_wm2\n    end as measurement_value,\n    (measurement_invalid = 1) as measurement_invalid,\n    half_hours_observed,\n    data_version,\n    published_at,\n    ingested_at\n  from plant_detail_hour\n  where ingested_at <= canonical_as_of()\n  order by plant_ons_code, technology, valid_time,\n           ingested_at desc, data_version desc\n",
+      "name": "canonical_curtailment_by_plant",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
+    },
+    "public.canonical_curtailment_by_reporting_entity": {
+      "columns": {
+        "reportingEntityCode": {
+          "name": "reportingEntityCode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reportingEntityKind": {
+          "name": "reportingEntityKind",
+          "type": "reporting_entity_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "technology": {
+          "name": "technology",
+          "type": "technology",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "validTime": {
+          "name": "validTime",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "constrainedOffMwh": {
+          "name": "constrainedOffMwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "verifiedGenerationMwh": {
+          "name": "verifiedGenerationMwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "referenceGenerationMwh": {
+          "name": "referenceGenerationMwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "finalReferenceGenerationMwh": {
+          "name": "finalReferenceGenerationMwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "availableCapacityMw": {
+          "name": "availableCapacityMw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "halfHoursObserved": {
+          "name": "halfHoursObserved",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "restrictionReason": {
+          "name": "restrictionReason",
+          "type": "reason_code",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "restrictionOrigin": {
+          "name": "restrictionOrigin",
+          "type": "restriction_origin",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "restrictionDescription": {
+          "name": "restrictionDescription",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "restrictionCauseMixed": {
+          "name": "restrictionCauseMixed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dataVersion": {
+          "name": "dataVersion",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "publishedAt": {
+          "name": "publishedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingestedAt": {
+          "name": "ingestedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "definition": "\n  select distinct on (c.reporting_entity_code, c.technology, c.valid_time)\n    c.reporting_entity_code,\n    e.kind as reporting_entity_kind,\n    c.technology,\n    c.valid_time,\n    c.constrained_off_mwh,\n    c.verified_generation_mwh,\n    c.reference_generation_mwh,\n    c.final_reference_generation_mwh,\n    c.available_capacity_mw,\n    c.half_hours_observed,\n    c.reason as restriction_reason,\n    c.origin as restriction_origin,\n    c.restriction_description,\n    (c.cause_mixed = 1) as restriction_cause_mixed,\n    c.data_version,\n    c.published_at,\n    c.ingested_at\n  from curtailment_report_hour c\n  join reporting_entity e on e.ons_code = c.reporting_entity_code\n  where c.ingested_at <= canonical_as_of()\n  order by c.reporting_entity_code, c.technology, c.valid_time,\n           c.ingested_at desc, c.data_version desc\n",
+      "name": "canonical_curtailment_by_reporting_entity",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
+    },
+    "public.canonical_day_ahead_balance": {
+      "columns": {
+        "subsystem": {
+          "name": "subsystem",
+          "type": "subsystem_code",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "validTime": {
+          "name": "validTime",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "forecastProducer": {
+          "name": "forecastProducer",
+          "type": "forecast_producer",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "runLabel": {
+          "name": "runLabel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "demandMw": {
+          "name": "demandMw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "hydroGenerationMw": {
+          "name": "hydroGenerationMw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "smallHydroGenerationMw": {
+          "name": "smallHydroGenerationMw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "thermalGenerationMw": {
+          "name": "thermalGenerationMw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "smallThermalGenerationMw": {
+          "name": "smallThermalGenerationMw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "windGenerationMw": {
+          "name": "windGenerationMw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "solarGenerationMw": {
+          "name": "solarGenerationMw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mmgdGenerationMw": {
+          "name": "mmgdGenerationMw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pumpingConsumptionMw": {
+          "name": "pumpingConsumptionMw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dataVersion": {
+          "name": "dataVersion",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "publishedAt": {
+          "name": "publishedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingestedAt": {
+          "name": "ingestedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "definition": "\n  select distinct on (subsystem, valid_time)\n    subsystem,\n    valid_time,\n    forecast_producer,\n    run_label,\n    demand_mw,\n    hydro_generation_mw,\n    small_hydro_generation_mw,\n    thermal_generation_mw,\n    small_thermal_generation_mw,\n    wind_generation_mw,\n    solar_generation_mw,\n    mmgd_generation_mw,\n    pumping_consumption_mw,\n    data_version,\n    published_at,\n    ingested_at\n  from dessem_balance_half_hour\n  where ingested_at <= canonical_as_of()\n    and (canonical_published_at_or_before() is null\n         or published_at <= canonical_published_at_or_before())\n  order by subsystem, valid_time, ingested_at desc, data_version desc\n",
+      "name": "canonical_day_ahead_balance",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
+    },
+    "public.canonical_installed_capacity": {
+      "columns": {
+        "subsystem": {
+          "name": "subsystem",
+          "type": "subsystem_code",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "technology": {
+          "name": "technology",
+          "type": "technology",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "plants": {
+          "name": "plants",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "units": {
+          "name": "units",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "capacityMw": {
+          "name": "capacityMw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "definition": "\n  with live_units as (\n    select distinct on (plant_ceg_core, equipment_code)\n      plant_ceg_core, equipment_code, rated_power_mw,\n      commissioned_on, decommissioned_on\n    from generating_unit\n    where ingested_at <= canonical_as_of()\n    order by plant_ceg_core, equipment_code, ingested_at desc, data_version desc\n  )\n  select\n    p.subsystem,\n    p.technology,\n    count(distinct live_units.plant_ceg_core)::int as plants,\n    count(*)::int as units,\n    sum(live_units.rated_power_mw) as capacity_mw\n  from live_units\n  join plant p on p.ceg_core = live_units.plant_ceg_core\n  where live_units.commissioned_on <= canonical_fleet_date()\n    and (live_units.decommissioned_on is null\n         or live_units.decommissioned_on > canonical_fleet_date())\n  group by p.subsystem, p.technology\n",
+      "name": "canonical_installed_capacity",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
+    },
+    "public.canonical_read_go_live": {
+      "columns": {
+        "read": {
+          "name": "read",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "goLiveAt": {
+          "name": "goLiveAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "definition": "\n  select 'curtailment-by-reporting-entity' as read,\n         min(ingested_at) as go_live_at from curtailment_report_hour\n  union all\n  select 'curtailment-by-plant', min(ingested_at) from plant_detail_hour\n  union all\n  select 'system-context', min(ingested_at) from subsystem_energy_balance_hour\n  union all\n  select 'system-exchange', min(ingested_at) from subsystem_exchange_hour\n  union all\n  select 'day-ahead-balance', min(ingested_at) from dessem_balance_half_hour\n  union all\n  select 'weather-forecast', min(ingested_at) from weather_forecast_hour\n  union all\n  select 'installed-capacity', min(ingested_at) from generating_unit\n  union all\n  select 'conjunto-membership', min(ingested_at) from conjunto_membership\n",
+      "name": "canonical_read_go_live",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
+    },
+    "public.canonical_system_context": {
+      "columns": {
+        "subsystem": {
+          "name": "subsystem",
+          "type": "subsystem_code",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "validTime": {
+          "name": "validTime",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "loadMwh": {
+          "name": "loadMwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "windGenerationMwh": {
+          "name": "windGenerationMwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "solarGenerationMwh": {
+          "name": "solarGenerationMwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "hydroGenerationMwh": {
+          "name": "hydroGenerationMwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "thermalGenerationMwh": {
+          "name": "thermalGenerationMwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "netExchangeMwh": {
+          "name": "netExchangeMwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dataVersion": {
+          "name": "dataVersion",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "publishedAt": {
+          "name": "publishedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingestedAt": {
+          "name": "ingestedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "definition": "\n  select distinct on (subsystem, valid_time)\n    subsystem,\n    valid_time,\n    load_mwh,\n    wind_generation_mwh,\n    solar_generation_mwh,\n    hydro_generation_mwh,\n    thermal_generation_mwh,\n    net_exchange_mwh,\n    data_version,\n    published_at,\n    ingested_at\n  from subsystem_energy_balance_hour\n  where ingested_at <= canonical_as_of()\n  order by subsystem, valid_time, ingested_at desc, data_version desc\n",
+      "name": "canonical_system_context",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
+    },
+    "public.canonical_system_exchange": {
+      "columns": {
+        "fromSubsystem": {
+          "name": "fromSubsystem",
+          "type": "subsystem_code",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "toSubsystem": {
+          "name": "toSubsystem",
+          "type": "subsystem_code",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "validTime": {
+          "name": "validTime",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "verifiedExchangeMwh": {
+          "name": "verifiedExchangeMwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "programmedExchangeMwh": {
+          "name": "programmedExchangeMwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dataVersion": {
+          "name": "dataVersion",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "publishedAt": {
+          "name": "publishedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingestedAt": {
+          "name": "ingestedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "definition": "\n  select distinct on (from_subsystem, to_subsystem, valid_time)\n    from_subsystem,\n    to_subsystem,\n    valid_time,\n    verified_exchange_mwh,\n    programmed_exchange_mwh,\n    data_version,\n    published_at,\n    ingested_at\n  from subsystem_exchange_hour\n  where ingested_at <= canonical_as_of()\n  order by from_subsystem, to_subsystem, valid_time,\n           ingested_at desc, data_version desc\n",
+      "name": "canonical_system_exchange",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
+    },
+    "public.canonical_weather_forecast": {
+      "columns": {
+        "centroidId": {
+          "name": "centroidId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "validTime": {
+          "name": "validTime",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "runCycle": {
+          "name": "runCycle",
+          "type": "weather_run_cycle",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "gridLatitude": {
+          "name": "gridLatitude",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "gridLongitude": {
+          "name": "gridLongitude",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "gridElevationM": {
+          "name": "gridElevationM",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "runAgeHours": {
+          "name": "runAgeHours",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "windSpeed100mKmh": {
+          "name": "windSpeed100mKmh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "windSpeed120mKmh": {
+          "name": "windSpeed120mKmh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "windDirection120mDeg": {
+          "name": "windDirection120mDeg",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "windGusts10mKmh": {
+          "name": "windGusts10mKmh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "temperature2mC": {
+          "name": "temperature2mC",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "surfacePressureHpa": {
+          "name": "surfacePressureHpa",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "relativeHumidity2mPct": {
+          "name": "relativeHumidity2mPct",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "precipitationMm": {
+          "name": "precipitationMm",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "shortwaveRadiationWm2": {
+          "name": "shortwaveRadiationWm2",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "directNormalIrradianceWm2": {
+          "name": "directNormalIrradianceWm2",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "diffuseRadiationWm2": {
+          "name": "diffuseRadiationWm2",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cloudCoverPct": {
+          "name": "cloudCoverPct",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dataVersion": {
+          "name": "dataVersion",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "publishedAt": {
+          "name": "publishedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingestedAt": {
+          "name": "ingestedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "definition": "\n  select distinct on (centroid_id, valid_time)\n    centroid_id,\n    valid_time,\n    run_cycle,\n    grid_latitude,\n    grid_longitude,\n    grid_elevation_m,\n    run_age_hours,\n    wind_speed100m_kmh,\n    wind_speed120m_kmh,\n    wind_direction120m_deg,\n    wind_gusts10m_kmh,\n    temperature2m_c,\n    surface_pressure_hpa,\n    relative_humidity2m_pct,\n    precipitation_mm,\n    shortwave_radiation_wm2,\n    direct_normal_irradiance_wm2,\n    diffuse_radiation_wm2,\n    cloud_cover_pct,\n    data_version,\n    published_at,\n    ingested_at\n  from weather_forecast_hour\n  where ingested_at <= canonical_as_of()\n    and (canonical_weather_run_cycle() is null\n         or run_cycle::text = canonical_weather_run_cycle())\n  order by centroid_id, valid_time, ingested_at desc, data_version desc\n",
+      "name": "canonical_weather_forecast",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
+    }
+  },
   "_meta": {
     "columns": {},
     "schemas": {},

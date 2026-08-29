@@ -154,12 +154,12 @@ export interface CurtailmentReportHour {
   technology: Technology;
   /** Start of the hour, UTC. */
   validTime: Date;
-  generationMwh: number;
+  verifiedGenerationMwh: number;
   constrainedOffMwh: number;
   referenceGenerationMwh: number | null;
   finalReferenceGenerationMwh: number | null;
   /** Mean over the hour — availability is a power, so it is not summed. */
-  availabilityMw: number | null;
+  availableCapacityMw: number | null;
   /** 1 or 2; below 2 the source hour was incomplete. */
   halfHoursObserved: number;
   cause: RestrictionCause | null;

@@ -312,11 +312,11 @@ const report = (
   reportingEntityCode: ENTITY,
   technology: "WIND",
   validTime: CURTAILED_HOUR,
-  generationMwh: 100,
+  verifiedGenerationMwh: 100,
   constrainedOffMwh,
   referenceGenerationMwh: 150,
   finalReferenceGenerationMwh: null,
-  availabilityMw: 200,
+  availableCapacityMw: 200,
   halfHoursObserved: 2,
   cause,
   causeMixed: false,
@@ -482,7 +482,7 @@ suite("constrained-off · bitemporal store (real Postgres)", () => {
       await db.execute(sql`
         insert into curtailment_report_hour (
           reporting_entity_code, technology, valid_time, data_version,
-          generation_mwh, constrained_off_mwh, half_hours_observed,
+          verified_generation_mwh, constrained_off_mwh, half_hours_observed,
           reason, origin, cause_mixed,
           published_at, published_at_precision, value_digest, source_version_id
         ) values (

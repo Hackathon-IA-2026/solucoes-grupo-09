@@ -40,9 +40,16 @@ Subsystem = Literal["N", "NE", "S", "SE"]
 #: hour count is a constant of the domain rather than a request parameter.
 HORIZON_HOURS = 24
 
-#: A table Drizzle creates. `/ready` uses it to tell "migrations have not run"
-#: apart from "there is no database".
-CANONICAL_TABLE = "subsystem_energy_balance_hour"
+#: A canonical **view** Drizzle creates. `/ready` uses it to tell "migrations
+#: have not run" apart from "there is no database".
+#:
+#: A view rather than a table since ticket 016, and the change is not cosmetic:
+#: the views are what this service actually reads, and a readiness probe should
+#: assert the surface it depends on rather than one underneath it. A database
+#: migrated as far as the base tables but not as far as the views would answer
+#: every canonical read with `relation does not exist`, and the old probe would
+#: have called that ready.
+CANONICAL_VIEW = "canonical_system_context"
 
 
 @asynccontextmanager
@@ -166,7 +173,7 @@ async def ready() -> JSONResponse:
         state = Readiness(ready=False, database="unreachable")
     else:
         read_only = await database.is_read_only()
-        migrated = await database.table_exists(CANONICAL_TABLE)
+        migrated = await database.relation_exists(CANONICAL_VIEW)
         state = Readiness(
             ready=read_only and migrated,
             database="ok",

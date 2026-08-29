@@ -45,6 +45,7 @@ export {
   type TrainingWindowQuery,
   type WeatherReadQuery,
 } from "./reads.js";
+export { applyAxes, type ReadAxes, withAxes } from "./scope.js";
 export type {
   CanonicalReadResult,
   ConjuntoMembershipAtDate,

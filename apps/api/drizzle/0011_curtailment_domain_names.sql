@@ -1,0 +1,2 @@
+ALTER TABLE "curtailment_report_hour" RENAME COLUMN "generation_mwh" TO "verified_generation_mwh";--> statement-breakpoint
+ALTER TABLE "curtailment_report_hour" RENAME COLUMN "availability_mw" TO "available_capacity_mw";

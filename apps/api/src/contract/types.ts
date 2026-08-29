@@ -1,6 +1,7 @@
 import type { SubsystemCode } from "../ingest/normalise.js";
 import type {
   ReasonCode,
+  ReportingEntityKind,
   RestrictionCause,
   RestrictionOrigin,
   Technology,
@@ -11,21 +12,20 @@ import type { VintageFidelity, VintageSource } from "./vintage.js";
 /**
  * The row and envelope vocabulary of the canonical read contract.
  *
- * Every name in this file is `docs/domain-model.md`'s. Where the ingest layer's
- * own field name has drifted from the domain model, **the contract restores the
- * domain model's name** — that is the point of the layer. Two cases today, both
- * on the curtailment observation:
- *
- * | Ingest field | Contract field | Authority |
- * |---|---|---|
- * | `generationMwh` | `verifiedGenerationMwh` | §4, `val_geracao` |
- * | `availabilityMw` | `availableCapacityMw` | §4, `val_disponibilidade` |
- *
- * The consumer sees the second column of that table and nothing else.
+ * Every name in this file is `docs/domain-model.md`'s, and — since ticket 016 —
+ * so is every name underneath it. Ticket 013 corrected two drifted field names
+ * at this layer's edge: `generationMwh` became `verifiedGenerationMwh` and
+ * `availabilityMw` became `availableCapacityMw` on the way past. That made
+ * the domain model true for a consumer while leaving it false in the schema,
+ * which is the wrong half to fix. The columns are `verified_generation_mwh`
+ * (§4, `val_geracao`) and `available_capacity_mw` (§4, `val_disponibilidade`)
+ * in `curtailment_report_hour` itself now, the canonical view selects them under
+ * those names, and there is no compensating rename left anywhere to perform.
  */
 
 export type {
   ReasonCode,
+  ReportingEntityKind,
   RestrictionCause,
   RestrictionOrigin,
   SubsystemCode,
@@ -99,6 +99,16 @@ export interface RowVintage {
  */
 export interface CurtailmentObservation extends RowVintage {
   reportingEntityCode: string;
+  /**
+   * Whether that code names a `Conjunto` or a self-reporting `Plant`.
+   *
+   * On the row because the grain is not derivable from the code, and a screen
+   * showing a restriction cause has to say which grain it is showing. Before
+   * ticket 016 this took a second call to the registry; it is reachable now
+   * because the canonical view joins `reporting_entity`, which the composing
+   * version of this contract had no place to do.
+   */
+  reportingEntityKind: ReportingEntityKind;
   technology: Technology;
   /** Start of the hour, UTC. */
   validTime: Date;

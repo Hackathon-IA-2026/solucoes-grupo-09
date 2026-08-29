@@ -81,8 +81,8 @@ class Database:
             value = await conn.fetchval("show default_transaction_read_only")
         return bool(value == "on")
 
-    async def table_exists(self, name: str) -> bool:
-        """Whether a Drizzle-owned table is present yet.
+    async def relation_exists(self, name: str) -> bool:
+        """Whether a Drizzle-owned table or view is present yet.
 
         Used by `/ready` to distinguish "no database" from "database, but
         migrations have not run" — two failures with very different fixes, and

@@ -1,6 +1,6 @@
+import { combineFidelity, type VintageFidelity } from "../contract/vintage.js";
 import type { Database } from "../database/connection.js";
 import { type SubsystemCode, toUtcDay } from "../ingest/normalise.js";
-import type { VintageFidelity } from "../ingest/repository.js";
 import type { Coordinate } from "../ingest/types.js";
 import type { RunCycle } from "../ingest/weather/single-runs.js";
 import { readWeatherForecastAsOf } from "../ingest/weather-repository.js";
@@ -406,11 +406,21 @@ export async function readSubsystemWeatherAsOf(
   const weights = [...weightsByDay.values()].sort(
     (a, b) => a.on.getTime() - b.on.getTime(),
   );
-  const vintageFidelity: VintageFidelity =
-    weather.vintageFidelity === "point_in_time" &&
-    weights.every((set) => set.vintageFidelity === "point_in_time")
-      ? "point_in_time"
-      : "revision_optimistic";
+  // The composition rule, from the one place it is written: the aggregate is
+  // only as honest as its weakest input, and a fleet date that predates go-live
+  // degrades the whole series rather than the day it weighted.
+  const vintageFidelity: VintageFidelity = combineFidelity([
+    {
+      read: "weather-forecast",
+      vintageFidelity: weather.vintageFidelity,
+      goLiveAt: null,
+    },
+    ...weights.map((set) => ({
+      read: "installed-capacity",
+      vintageFidelity: set.vintageFidelity,
+      goLiveAt: null,
+    })),
+  ]);
 
   return { hours, weights, vintageFidelity };
 }

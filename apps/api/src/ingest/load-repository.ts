@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
+import { type VintageFidelity, vintageFidelity } from "../contract/vintage.js";
 import type { Database } from "../database/connection.js";
 import {
   loadApiRequest,
@@ -16,7 +17,6 @@ import type {
   LoadResponse,
   LoadSeries,
 } from "./ons/carga-api.js";
-import type { VintageFidelity } from "./repository.js";
 import type { ProgrammedLoadHalfHour, VerifiedLoadHalfHour } from "./types.js";
 import {
   digestValues,
@@ -249,9 +249,6 @@ async function goLiveOf(db: Database, table: string): Promise<Date | null> {
   return row?.go_live ? new Date(row.go_live) : null;
 }
 
-const fidelity = (from: Date, goLiveAt: Date | null): VintageFidelity =>
-  goLiveAt && from >= goLiveAt ? "point_in_time" : "revision_optimistic";
-
 /**
  * `AsOf(t)` over the verified series — the only sanctioned read of the table.
  *
@@ -321,7 +318,7 @@ export async function readVerifiedLoadAsOf(
       publishedAtPrecision: row.published_at_precision,
       ingestedAt: new Date(row.ingested_at),
     })),
-    vintageFidelity: fidelity(query.from, goLiveAt),
+    vintageFidelity: vintageFidelity(query.from, goLiveAt),
     goLiveAt,
   };
 }
@@ -380,7 +377,7 @@ export async function readProgrammedLoadAsOf(
       publishedAt: new Date(row.published_at),
       ingestedAt: new Date(row.ingested_at),
     })),
-    vintageFidelity: fidelity(query.from, goLiveAt),
+    vintageFidelity: vintageFidelity(query.from, goLiveAt),
     goLiveAt,
   };
 }

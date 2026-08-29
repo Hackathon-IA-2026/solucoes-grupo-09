@@ -25,9 +25,9 @@ from wattsteer_ml.canonical import (
     VintageSource,
     combine_fidelity,
     combine_go_live,
-    read_url,
     vintage_fidelity,
 )
+from wattsteer_ml.canonical_reads import _filters, _shift, view_name
 
 # apps/ml/tests/… → repo root → packages/core/fixtures/canonical-contract
 FIXTURES = (
@@ -136,18 +136,98 @@ def test_combine_fidelity(file: str, case: dict[str, Any]) -> None:
     assert combined == _instant(case["expected_go_live_at"]), file
 
 
-def test_read_url_builds_the_path_from_the_manifest() -> None:
-    url = read_url(
-        "https://api.example/",
-        "curtailment-by-reporting-entity",
-        as_of="2026-03-01T00:00:00Z",
-    )
-    assert url == (
-        "https://api.example/v1/canonical/curtailment-by-reporting-entity"
-        "?as_of=2026-03-01T00%3A00%3A00Z"
-    )
+# --- The views, and the path this service takes to them ---------------------
+#
+# Ticket 016 moved the contract into SQL and this service onto the views. What
+# can be asserted without a database is the part that decides whether the two
+# languages are pointing at the same thing, and the part that decides whether
+# this service could ever start talking HTTP again.
 
 
-def test_read_url_refuses_a_name_that_is_not_in_the_contract() -> None:
+def test_every_read_resolves_to_a_view_by_the_shared_rule() -> None:
+    """The view name is derived from the manifest, not tabulated beside it.
+
+    `apps/api/src/database/canonical-views.ts` declares the same eight names
+    under the same rule, and `apps/api/test/contract.test.ts` checks it from the
+    other side. A lookup table would be a second place the pairing is written,
+    and the failure it invites is the quiet one: a renamed view and a stale entry
+    that still parses.
+    """
+    assert [view_name(read.name) for read in CANONICAL_READS] == [
+        "canonical_curtailment_by_reporting_entity",
+        "canonical_curtailment_by_plant",
+        "canonical_system_context",
+        "canonical_system_exchange",
+        "canonical_day_ahead_balance",
+        "canonical_weather_forecast",
+        "canonical_installed_capacity",
+        "canonical_conjunto_membership",
+    ]
+
+
+def test_a_name_that_is_not_a_canonical_read_has_no_view() -> None:
     with pytest.raises(KeyError):
-        read_url("https://api.example", "constrained_off_hour")
+        view_name("constrained_off_hour")
+
+
+def test_a_filter_the_contract_does_not_offer_is_refused() -> None:
+    """The column name reaches the SQL text, so the whitelist is the safety.
+
+    It is also the vocabulary boundary: `reason` is not filterable on the plant
+    read because no reason exists at plant grain, and asking says so loudly
+    rather than returning every row.
+    """
+    with pytest.raises(KeyError):
+        _filters("curtailment-by-plant", {"reason": "CNF"})
+    with pytest.raises(KeyError):
+        _filters("system-context", {"subsystem; drop table plant": "NE"})
+    # And the offered ones render as bind parameters, never as literals.
+    clauses, values = _filters("system-context", {"subsystem": "NE"})
+    assert clauses == "and subsystem = $1"
+    assert values == ["NE"]
+
+
+def test_filter_parameters_are_renumbered_past_the_window() -> None:
+    """`$1` and `$2` are the window; a read's own filters start at `$3`.
+
+    Renumbered descending, so `$2` cannot be rewritten twice on its way to `$4`
+    — the bug this test exists for.
+    """
+    clauses, _ = _filters(
+        "curtailment-by-reporting-entity",
+        {"technology": "WIND", "reporting_entity_code": "CJU_X"},
+    )
+    assert _shift(clauses, 2) == "and technology = $3 and reporting_entity_code = $4"
+
+
+def test_the_service_holds_no_http_client() -> None:
+    """The acceptance criterion, checked over the source rather than intended.
+
+    Ticket 016's whole point is that the modelling side reads Postgres directly.
+    An HTTP dependency reappearing here would restore the `ml → api → ml` cycle
+    the ticket removed, and it would do it quietly, one import at a time.
+    """
+    package = Path(__file__).resolve().parents[1] / "src" / "wattsteer_ml"
+    sources = "\n".join(path.read_text() for path in sorted(package.glob("*.py")))
+    for client in ("import httpx", "import requests", "import aiohttp", "urlencode"):
+        assert client not in sources, client
+
+
+def test_no_module_here_names_a_base_table() -> None:
+    """The views are the surface; the tables underneath them are not ours.
+
+    `canonical_read_go_live` is a view and is allowed; the tables it aggregates
+    over are named only inside it, on the platform's side of the boundary.
+    """
+    package = Path(__file__).resolve().parents[1] / "src" / "wattsteer_ml"
+    sources = "\n".join(path.read_text() for path in sorted(package.glob("*.py")))
+    for table in (
+        "curtailment_report_hour",
+        "plant_detail_hour",
+        "subsystem_energy_balance_hour",
+        "subsystem_exchange_hour",
+        "dessem_balance_half_hour",
+        "weather_forecast_hour",
+        "generating_unit",
+    ):
+        assert table not in sources, table

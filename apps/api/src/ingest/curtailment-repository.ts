@@ -1,7 +1,9 @@
 import { sql } from "drizzle-orm";
+import { readGoLive, withAxes } from "../contract/scope.js";
+import { type VintageFidelity, vintageFidelity } from "../contract/vintage.js";
+import { canonicalCurtailmentByReportingEntity } from "../database/canonical-views.js";
 import type { Database } from "../database/connection.js";
 import { curtailmentReportHour, reportingEntity } from "../database/schema.js";
-import type { VintageFidelity } from "./repository.js";
 import type {
   CurtailmentReportHour,
   ObservedReportingEntity,
@@ -39,11 +41,11 @@ export function curtailmentDigest(row: CurtailmentReportHour): string {
     row.reportingEntityCode,
     row.technology,
     row.validTime.toISOString(),
-    row.generationMwh,
+    row.verifiedGenerationMwh,
     row.constrainedOffMwh,
     row.referenceGenerationMwh,
     row.finalReferenceGenerationMwh,
-    row.availabilityMw,
+    row.availableCapacityMw,
     String(row.halfHoursObserved),
     row.cause?.reason ?? null,
     row.cause?.origin ?? null,
@@ -69,11 +71,11 @@ const SPEC: VersionedTableSpec<
     technology: row.technology,
     validTime: row.validTime,
     dataVersion: version.dataVersion,
-    generationMwh: row.generationMwh,
+    verifiedGenerationMwh: row.verifiedGenerationMwh,
     constrainedOffMwh: row.constrainedOffMwh,
     referenceGenerationMwh: row.referenceGenerationMwh,
     finalReferenceGenerationMwh: row.finalReferenceGenerationMwh,
-    availabilityMw: row.availabilityMw,
+    availableCapacityMw: row.availableCapacityMw,
     halfHoursObserved: row.halfHoursObserved,
     // Written as a whole or not at all — the CHECK constraint on this table
     // makes a half-populated pair unrepresentable, not merely discouraged.
@@ -169,9 +171,12 @@ export interface CurtailmentAsOfQuery {
 /**
  * `AsOf(t)` — the only sanctioned read of the fact table.
  *
- * `DISTINCT ON` over the business key ordered by descending `ingested_at`
- * returns exactly one row per key or none. The `data_version` tiebreak matters
- * because a backfill can write several versions at one instant.
+ * **The `DISTINCT ON` is not here.** Since ticket 016 it lives in
+ * `canonical_curtailment_by_reporting_entity`, and this reads that view: the
+ * as-of pick is one definition, in SQL, shared with `src/contract/reads.ts` and
+ * with `apps/ml`. What is left here is the row shape this module's callers
+ * already expect — the cause put back together as a value object, and the
+ * result envelope with its fidelity.
  */
 export async function readCurtailmentAsOf(
   db: Database,
@@ -184,79 +189,69 @@ export async function readCurtailmentAsOf(
     ? sql`and reporting_entity_code = ${query.reportingEntityCode}`
     : sql``;
 
-  const rows = await db.execute<{
-    reporting_entity_code: string;
-    technology: Technology;
-    valid_time: string;
-    data_version: number;
-    generation_mwh: number;
-    constrained_off_mwh: number;
-    reference_generation_mwh: number | null;
-    final_reference_generation_mwh: number | null;
-    availability_mw: number | null;
-    half_hours_observed: number;
-    reason: string | null;
-    origin: string | null;
-    restriction_description: string | null;
-    cause_mixed: number;
-    published_at: string;
-    ingested_at: string;
-  }>(sql`
-    select distinct on (reporting_entity_code, technology, valid_time)
-      reporting_entity_code, technology, valid_time, data_version,
-      generation_mwh, constrained_off_mwh,
-      reference_generation_mwh, final_reference_generation_mwh,
-      availability_mw, half_hours_observed,
-      reason, origin, restriction_description, cause_mixed,
-      published_at, ingested_at
-    from curtailment_report_hour
-    where ingested_at <= ${query.asOf.toISOString()}::timestamptz
-      and valid_time >= ${query.from.toISOString()}::timestamptz
-      and valid_time < ${query.to.toISOString()}::timestamptz
-      ${technologyFilter}
-      ${entityFilter}
-    order by reporting_entity_code, technology, valid_time,
-             ingested_at desc, data_version desc
-  `);
+  return withAxes(db, { asOf: query.asOf }, async (tx) => {
+    const rows = await tx.execute<{
+      reporting_entity_code: string;
+      technology: Technology;
+      valid_time: string;
+      data_version: number;
+      verified_generation_mwh: number;
+      constrained_off_mwh: number;
+      reference_generation_mwh: number | null;
+      final_reference_generation_mwh: number | null;
+      available_capacity_mw: number | null;
+      half_hours_observed: number;
+      restriction_reason: string | null;
+      restriction_origin: string | null;
+      restriction_description: string | null;
+      restriction_cause_mixed: boolean;
+      published_at: string;
+      ingested_at: string;
+    }>(sql`
+      select * from ${canonicalCurtailmentByReportingEntity}
+      where valid_time >= ${query.from.toISOString()}::timestamptz
+        and valid_time < ${query.to.toISOString()}::timestamptz
+        ${technologyFilter}
+        ${entityFilter}
+      order by reporting_entity_code, technology, valid_time
+    `);
 
-  const [goLive] = await db.execute<{ go_live: string | null }>(
-    sql`select min(ingested_at) as go_live from curtailment_report_hour`,
-  );
-  const goLiveAt = goLive?.go_live ? new Date(goLive.go_live) : null;
+    const goLiveAt = await readGoLive(tx, "curtailment-by-reporting-entity");
 
-  return {
-    rows: [...rows].map((row) => ({
-      reportingEntityCode: row.reporting_entity_code,
-      technology: row.technology,
-      validTime: new Date(row.valid_time),
-      generationMwh: Number(row.generation_mwh),
-      constrainedOffMwh: Number(row.constrained_off_mwh),
-      referenceGenerationMwh:
-        row.reference_generation_mwh === null
-          ? null
-          : Number(row.reference_generation_mwh),
-      finalReferenceGenerationMwh:
-        row.final_reference_generation_mwh === null
-          ? null
-          : Number(row.final_reference_generation_mwh),
-      availabilityMw: row.availability_mw === null ? null : Number(row.availability_mw),
-      halfHoursObserved: row.half_hours_observed,
-      // Reconstructed as the value object it is: all three or none.
-      cause:
-        row.reason === null || row.origin === null
-          ? null
-          : {
-              reason: row.reason as ReasonCode,
-              origin: row.origin as RestrictionOrigin,
-              description: row.restriction_description,
-            },
-      causeMixed: row.cause_mixed === 1,
-      dataVersion: row.data_version,
-      publishedAt: new Date(row.published_at),
-      ingestedAt: new Date(row.ingested_at),
-    })),
-    vintageFidelity:
-      goLiveAt && query.from >= goLiveAt ? "point_in_time" : "revision_optimistic",
-    goLiveAt,
-  };
+    return {
+      rows: [...rows].map((row) => ({
+        reportingEntityCode: row.reporting_entity_code,
+        technology: row.technology,
+        validTime: new Date(row.valid_time),
+        verifiedGenerationMwh: Number(row.verified_generation_mwh),
+        constrainedOffMwh: Number(row.constrained_off_mwh),
+        referenceGenerationMwh:
+          row.reference_generation_mwh === null
+            ? null
+            : Number(row.reference_generation_mwh),
+        finalReferenceGenerationMwh:
+          row.final_reference_generation_mwh === null
+            ? null
+            : Number(row.final_reference_generation_mwh),
+        availableCapacityMw:
+          row.available_capacity_mw === null ? null : Number(row.available_capacity_mw),
+        halfHoursObserved: row.half_hours_observed,
+        // Reconstructed as the value object it is: all three or none.
+        cause:
+          row.restriction_reason === null || row.restriction_origin === null
+            ? null
+            : {
+                reason: row.restriction_reason as ReasonCode,
+                origin: row.restriction_origin as RestrictionOrigin,
+                description: row.restriction_description,
+              },
+        causeMixed: row.restriction_cause_mixed,
+        dataVersion: row.data_version,
+        publishedAt: new Date(row.published_at),
+        ingestedAt: new Date(row.ingested_at),
+      })),
+      vintageFidelity: vintageFidelity(query.from, goLiveAt),
+      goLiveAt,
+    };
+  });
 }

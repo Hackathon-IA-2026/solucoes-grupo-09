@@ -326,7 +326,7 @@ That keeps the read-only guarantee intact and keeps every write in the service
 that owns the Drizzle schema.
 
 **What the ML service reads are the canonical views, not the tables.** The
-contract of ticket 013 is a set of SQL views owning the row vocabulary — the
+contract of ticket 013, made SQL views by ticket 016, owns the row vocabulary — the
 renames, the grain, the unit and timestamp resolution — so "the ML service reads
 Postgres directly" and "there is exactly one definition of a canonical read" are
 both true at once, which they cannot be if the contract is TypeScript. Ticket 016

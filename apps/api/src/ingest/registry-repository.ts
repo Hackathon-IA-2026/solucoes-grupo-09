@@ -1,4 +1,10 @@
 import { sql } from "drizzle-orm";
+import { readGoLive, withAxes } from "../contract/scope.js";
+import { type VintageFidelity, vintageFidelity } from "../contract/vintage.js";
+import {
+  canonicalConjuntoMembership,
+  canonicalInstalledCapacity,
+} from "../database/canonical-views.js";
 import type { Database } from "../database/connection.js";
 import {
   conjunto,
@@ -8,7 +14,6 @@ import {
 } from "../database/schema.js";
 import type { SubsystemCode } from "./normalise.js";
 import { toUtcDay } from "./normalise.js";
-import type { VintageFidelity } from "./repository.js";
 import type {
   OperationModality,
   RegistryConjunto,
@@ -374,13 +379,6 @@ const liveOn = (on: Date) => sql`
        or units.decommissioned_on > ${asDay(on)}::timestamptz)
 `;
 
-async function registryGoLive(db: Database, table: string): Promise<Date | null> {
-  const [row] = await db.execute<{ go_live: string | null }>(
-    sql`select min(ingested_at) as go_live from ${sql.identifier(table)}`,
-  );
-  return row?.go_live ? new Date(row.go_live) : null;
-}
-
 /**
  * `InstalledCapacityAsOf(scope, technology, t) → MW` — the domain model's
  * function, made a query.
@@ -395,51 +393,46 @@ export async function readInstalledCapacityAsOf(
   query: InstalledCapacityQuery,
 ): Promise<InstalledCapacityResult> {
   const subsystemFilter = query.subsystem
-    ? sql`and p.subsystem = ${query.subsystem}`
+    ? sql`and subsystem = ${query.subsystem}`
     : sql``;
   const technologyFilter = query.technology
-    ? sql`and p.technology = ${query.technology}`
+    ? sql`and technology = ${query.technology}`
     : sql``;
 
-  const rows = await db.execute<{
-    subsystem: SubsystemCode;
-    technology: Technology;
-    plants: number;
-    units: number;
-    capacity_mw: number;
-  }>(sql`
-    with units as (${latestUnits(query.asOf)})
-    select p.subsystem, p.technology,
-           count(distinct units.plant_ceg_core)::int as plants,
-           count(*)::int as units,
-           sum(units.rated_power_mw) as capacity_mw
-    from units
-    join plant p on p.ceg_core = units.plant_ceg_core
-    where ${liveOn(query.on)}
-      ${subsystemFilter}
-      ${technologyFilter}
-    group by p.subsystem, p.technology
-    order by p.subsystem, p.technology
-  `);
+  return withAxes(db, { asOf: query.asOf, fleetDate: query.on }, async (tx) => {
+    const rows = await tx.execute<{
+      subsystem: SubsystemCode;
+      technology: Technology;
+      plants: number;
+      units: number;
+      capacity_mw: number;
+    }>(sql`
+      select * from ${canonicalInstalledCapacity}
+      where true
+        ${subsystemFilter}
+        ${technologyFilter}
+      order by subsystem, technology
+    `);
 
-  const groups = [...rows].map((row) => ({
-    subsystem: row.subsystem,
-    technology: row.technology,
-    plants: row.plants,
-    units: row.units,
-    capacityMw: Number(row.capacity_mw),
-  }));
-  const goLiveAt = await registryGoLive(db, "generating_unit");
+    const groups = [...rows].map((row) => ({
+      subsystem: row.subsystem,
+      technology: row.technology,
+      plants: row.plants,
+      units: row.units,
+      capacityMw: Number(row.capacity_mw),
+    }));
+    const goLiveAt = await readGoLive(tx, "installed-capacity");
 
-  return {
-    groups,
-    totalMw: groups.reduce((total, group) => total + group.capacityMw, 0),
-    // The registry snapshot is today's record of the past: a fleet date before
-    // WattSteer's first ingest can only be answered from ONS's current cut.
-    vintageFidelity:
-      goLiveAt && query.on >= goLiveAt ? "point_in_time" : "revision_optimistic",
-    goLiveAt,
-  };
+    return {
+      groups,
+      totalMw: groups.reduce((total, group) => total + group.capacityMw, 0),
+      // The registry snapshot is today's record of the past: a fleet date before
+      // WattSteer's first ingest can only be answered from ONS's current cut,
+      // which is why the fidelity axis here is the fleet date and not `asOf`.
+      vintageFidelity: vintageFidelity(query.on, goLiveAt),
+      goLiveAt,
+    };
+  });
 }
 
 /** One plant's capacity at a date — the grain capacity weighting consumes. */
@@ -543,54 +536,45 @@ export async function readConjuntoMembershipAsOf(
   query: ConjuntoMembershipQuery,
 ): Promise<ConjuntoMembershipResult> {
   const conjuntoFilter = query.conjuntoCode
-    ? sql`and m.conjunto_code = ${query.conjuntoCode}`
+    ? sql`and conjunto_code = ${query.conjuntoCode}`
     : sql``;
   const plantFilter = query.plantOnsCode
-    ? sql`and m.plant_ons_code = ${query.plantOnsCode}`
+    ? sql`and plant_ons_code = ${query.plantOnsCode}`
     : sql``;
 
-  const rows = await db.execute<{
-    plant_ons_code: string;
-    plant_ceg_core: string | null;
-    conjunto_code: string;
-    member_from: string;
-    member_to: string | null;
-    data_version: number;
-    published_at: string;
-    ingested_at: string;
-  }>(sql`
-    with latest as (
-      select distinct on (plant_ons_code, conjunto_code, member_from)
-        plant_ons_code, plant_ceg_core, conjunto_code, member_from, member_to,
-        data_version, published_at, ingested_at
-      from conjunto_membership
-      where ingested_at <= ${query.asOf.toISOString()}::timestamptz
-      order by plant_ons_code, conjunto_code, member_from,
-               ingested_at desc, data_version desc
-    )
-    select * from latest m
-    where m.member_from <= ${asDay(query.on)}::timestamptz
-      and (m.member_to is null or m.member_to >= ${asDay(query.on)}::timestamptz)
-      ${conjuntoFilter}
-      ${plantFilter}
-    order by m.conjunto_code, m.plant_ons_code
-  `);
+  return withAxes(db, { asOf: query.asOf, fleetDate: query.on }, async (tx) => {
+    const rows = await tx.execute<{
+      plant_ons_code: string;
+      plant_ceg_core: string | null;
+      conjunto_code: string;
+      member_from: string;
+      member_to: string | null;
+      data_version: number;
+      published_at: string;
+      ingested_at: string;
+    }>(sql`
+      select * from ${canonicalConjuntoMembership}
+      where true
+        ${conjuntoFilter}
+        ${plantFilter}
+      order by conjunto_code, plant_ons_code
+    `);
 
-  const goLiveAt = await registryGoLive(db, "conjunto_membership");
+    const goLiveAt = await readGoLive(tx, "conjunto-membership");
 
-  return {
-    rows: [...rows].map((row) => ({
-      plantOnsCode: row.plant_ons_code,
-      plantCegCore: row.plant_ceg_core,
-      conjuntoCode: row.conjunto_code,
-      memberFrom: new Date(row.member_from),
-      memberTo: row.member_to === null ? null : new Date(row.member_to),
-      dataVersion: row.data_version,
-      publishedAt: new Date(row.published_at),
-      ingestedAt: new Date(row.ingested_at),
-    })),
-    vintageFidelity:
-      goLiveAt && query.on >= goLiveAt ? "point_in_time" : "revision_optimistic",
-    goLiveAt,
-  };
+    return {
+      rows: [...rows].map((row) => ({
+        plantOnsCode: row.plant_ons_code,
+        plantCegCore: row.plant_ceg_core,
+        conjuntoCode: row.conjunto_code,
+        memberFrom: new Date(row.member_from),
+        memberTo: row.member_to === null ? null : new Date(row.member_to),
+        dataVersion: row.data_version,
+        publishedAt: new Date(row.published_at),
+        ingestedAt: new Date(row.ingested_at),
+      })),
+      vintageFidelity: vintageFidelity(query.on, goLiveAt),
+      goLiveAt,
+    };
+  });
 }
