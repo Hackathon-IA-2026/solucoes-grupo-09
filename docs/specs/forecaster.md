@@ -708,10 +708,19 @@ provides before that fold's start.
 |---|---|---|---|---|
 | F1 | 2025-04-01 → 2025-06-30 | 91 | 2025-03-31 | 2025-01-01 → 2025-03-31 |
 | F2 | 2025-07-01 → 2025-09-30 | 92 | 2025-06-30 | 2025-04-02 → 2025-06-30 |
-| F3 | 2025-10-01 → 2025-12-31 | 92 | 2025-09-30 | 2025-07-02 → 2025-09-30 |
-| F4 | 2026-01-01 → 2026-03-31 | 90 | 2025-12-31 | 2025-10-02 → 2025-12-31 |
+| F3 | 2025-10-01 → 2025-12-31 | 92 | 2025-09-30 | 2025-07-03 → 2025-09-30 |
+| F4 | 2026-01-01 → 2026-03-31 | 90 | 2025-12-31 | 2025-10-03 → 2025-12-31 |
 | F5 | 2026-04-01 → 2026-06-30 | 91 | 2026-03-31 | 2026-01-01 → 2026-03-31 |
-| F6 | 2026-07-01 → *today − 1* | growing | 2026-06-30 | 2026-04-01 → 2026-06-30 |
+| F6 | 2026-07-01 → *today − 1* | growing | 2026-06-30 | 2026-04-02 → 2026-06-30 |
+
+> **Three of these dates were wrong and are corrected.** F3, F4 and F6 spanned
+> **91** days, not 90 — they had been computed as "quarter start minus three
+> months", which lands on 90 days only when the months happen to sum that way.
+> The 90-day rule is stated four times in prose and is the authority; the table
+> is derived from it. Nothing downstream moves: F4's base fit is 133 days and
+> F5's 223 either way, so the DESSEM verdict is still F5 and F6 only. The
+> calendar loader now refuses a file whose pinned rows disagree with its own
+> rules, so this class of drift cannot recur silently.
 
 - **Quarterly test folds.** Short enough that six exist over the window, long
   enough that a fold contains a season rather than a weather regime. A monthly

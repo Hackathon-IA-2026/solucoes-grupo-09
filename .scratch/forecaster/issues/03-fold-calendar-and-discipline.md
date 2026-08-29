@@ -25,7 +25,7 @@ averaged — averaging is precisely how a caveat disappears.
 row-identity assertions only: the feature function, sliced in parallel in the
 feature-engineering issue set.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The fold calendar is a stored, versioned data artifact — test period,
       test day count, train end, calibration window — and a change to it
