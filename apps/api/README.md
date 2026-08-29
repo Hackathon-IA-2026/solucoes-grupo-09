@@ -26,8 +26,9 @@ to it. That service does not exist yet.
 | `GET /health` | Liveness |
 | `GET /ready` | Readiness — database reachable when configured |
 | `GET /docs` | Swagger UI |
+| `GET /ingest/health` | Ingestion freshness, runs, custody and join match rates (503 when any source is stale) |
 
-There are no domain routes yet. They arrive with the API-surface work.
+The domain read routes arrive with the API-surface work.
 
 ## Running
 
@@ -37,6 +38,16 @@ bun run api          # http://localhost:3000
 bun run api:dev      # watch mode
 bun run worker       # BullMQ worker (requires REDIS_URL)
 ```
+
+The worker owns ingestion: one handler dispatches every source, and three
+repeatable jobs sweep the refresh tiers — `live` hourly, `recent` weekly,
+`history` monthly (`WATTSTEER_REFRESH=off` disables them). The `history` sweep
+is the one that catches ONS re-publishing a closed month years later, which it
+does. Raw payloads are retained in the archive named by `WATTSTEER_ARCHIVE_*`
+(an S3-compatible bucket) or `WATTSTEER_ARCHIVE_DIR` (a directory); with
+neither, the worker warns loudly at boot, because a deployment that ran without
+custody cannot be repaired afterwards — the vintages it did not keep are gone
+from ONS too.
 
 Configuration is read in exactly one place, `src/config.ts`. Copy
 `.env.example` to `.env` and adjust. Postgres and Redis are both optional in

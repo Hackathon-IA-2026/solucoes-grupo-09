@@ -43,6 +43,13 @@
       "when": 1787961441327,
       "tag": "0005_glorious_leopardon",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787962644351,
+      "tag": "0006_great_micromacro",
+      "breakpoints": true
     }
   ]
 }

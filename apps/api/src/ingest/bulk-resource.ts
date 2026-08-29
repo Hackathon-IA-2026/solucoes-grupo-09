@@ -1,13 +1,20 @@
 import type { Database } from "../database/connection.js";
 import { UpstreamError } from "../errors.js";
 import type { ReportProgress } from "../jobs/index.js";
+import type { PayloadArchive } from "./archive.js";
+import { retainPayload } from "./custody.js";
 import {
   type CatalogueResource,
   fetchPackage,
   headResource,
   type ResourceFormat,
 } from "./ons/catalogue.js";
-import { markResourceFetched, recordResourceVersion } from "./resource-version.js";
+import {
+  markResourceFetched,
+  type ObservationContext,
+  type Republication,
+  recordResourceVersion,
+} from "./resource-version.js";
 
 /**
  * The bulk-file acquisition step, once.
@@ -39,6 +46,14 @@ export interface BulkResource {
   /** Null when the run stopped at the `HEAD`. */
   bytes: ArrayBuffer | null;
   /**
+   * Set when these bytes replaced bytes WattSteer had already downloaded — ONS
+   * rewrote the file under the same name. The prior vintage is unrecoverable
+   * upstream, which is exactly why the event is surfaced rather than absorbed.
+   */
+  republication: Republication | null;
+  /** Archive locator of the retained payload; null when custody is off. */
+  archiveUri: string | null;
+  /**
    * When the source asserted these values. Bulk files carry no row-level
    * stamp, so the file's `Last-Modified` is the coarsest honest answer — and
    * the row records that coarseness rather than implying precision.
@@ -69,6 +84,14 @@ export interface BulkResourceRequest {
   force?: boolean;
   /** Progress across the four acquisition steps. */
   report?: ReportProgress;
+  /**
+   * Where the downloaded bytes are retained. Optional because a development
+   * process may have no archive configured; when it is absent the payload is
+   * ingested and not kept, and `archiveUri` says so.
+   */
+  archive?: PayloadArchive;
+  /** The sweep this acquisition belongs to, so a discovery can be attributed. */
+  context?: ObservationContext;
 }
 
 /** Steps this helper reports against, so callers share one progress scale. */
@@ -90,7 +113,13 @@ export async function acquireBulkResource(
   report?.({ done: 1, total: BULK_STEPS });
 
   const fingerprint = await headResource(resource.url, fetchImpl);
-  const version = await recordResourceVersion(db, slug, resource, fingerprint);
+  const version = await recordResourceVersion(
+    db,
+    slug,
+    resource,
+    fingerprint,
+    request.context,
+  );
   report?.({ done: 2, total: BULK_STEPS });
 
   const base = {
@@ -100,10 +129,11 @@ export async function acquireBulkResource(
     changed: !version.alreadySeen,
     publishedAt: fingerprint.lastModified ?? resource.lastModified ?? new Date(),
     publishedAtPrecision: "file" as const,
+    republication: version.republication,
   };
 
   if (version.alreadySeen && !request.force) {
-    return { ...base, downloaded: false, bytes: null };
+    return { ...base, downloaded: false, bytes: null, archiveUri: null };
   }
 
   const response = await fetchImpl(resource.url);
@@ -112,7 +142,22 @@ export async function acquireBulkResource(
   }
   const bytes = await response.arrayBuffer();
   await markResourceFetched(db, version.id, bytes);
+
+  // Custody before parsing, deliberately. The payload is retained for what it
+  // is — the only surviving copy of what ONS said today — and a parser that
+  // throws on an unexpected column must not be what decides whether the bytes
+  // were kept.
+  const fetchedAt = new Date();
+  const retained = await retainPayload(db, request.archive, {
+    provenance: "bulk_resource",
+    provenanceId: version.id,
+    datasetSlug: slug,
+    resourceName: resource.name,
+    extension: resource.format.toLowerCase(),
+    bytes: new Uint8Array(bytes),
+    fetchedAt,
+  });
   report?.({ done: 3, total: BULK_STEPS });
 
-  return { ...base, downloaded: true, bytes };
+  return { ...base, downloaded: true, bytes, archiveUri: retained?.archiveUri ?? null };
 }

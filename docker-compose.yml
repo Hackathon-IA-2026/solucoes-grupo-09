@@ -88,6 +88,12 @@ services:
       DATABASE_URL: postgres://wattsteer:wattsteer@postgres:5432/wattsteer
       WATTSTEER_ROLE: worker
       WATTSTEER_ML_URL: http://ml:8000
+      # Raw-payload custody. On Railway this is a bucket (WATTSTEER_ARCHIVE_*);
+      # locally a directory, because the point of the local topology is that a
+      # missing archive shows up here rather than in production.
+      WATTSTEER_ARCHIVE_DIR: /data/archive
+    volumes:
+      - raw-payloads:/data/archive
     env_file:
       - path: .env
         required: false
@@ -140,6 +146,7 @@ services:
       start_period: 20s
 
 volumes:
+  raw-payloads:
   redis-data:
   postgres-data:
   ml-artifacts:

@@ -1,5 +1,6 @@
 import type { Database } from "../database/connection.js";
 import type { Execute } from "../jobs/index.js";
+import type { PayloadArchive } from "./archive.js";
 import { acquireBulkResource } from "./bulk-resource.js";
 import { writeDessemBalance } from "./dessem-repository.js";
 import {
@@ -13,6 +14,7 @@ import {
   DESSEM_DETAIL_DATASET_SLUG,
   parseDessemBalanceCsv,
 } from "./ons/dessem-balance.js";
+import type { ObservationContext } from "./resource-version.js";
 
 /**
  * Ingestion for the DESSEM day-ahead balance — the only **daily-split** source
@@ -38,6 +40,12 @@ export interface IngestDessemPayload {
   to?: string;
   /** Re-download and re-diff even where the fingerprint is unchanged. */
   force?: boolean;
+  /**
+   * The sweep this run belongs to. Stamped on any re-publication the run
+   * discovers, which is what makes "the history sweep found this" — the
+   * evidence that a settled period was rewritten — a queryable fact.
+   */
+  context?: ObservationContext;
 }
 
 /** What one reference day did. */
@@ -80,6 +88,11 @@ export interface DessemIngestorDeps {
   db: Database;
   /** Injected so the job is testable without the network. */
   fetch?: typeof fetch;
+  /**
+   * Where raw payloads are retained. Absent means the payload is ingested and
+   * not kept — correct for a test, and visible in the health view otherwise.
+   */
+  archive?: PayloadArchive;
 }
 
 /**
@@ -137,6 +150,8 @@ export function createDessemIngestor(
         select: (candidates) =>
           selectResourceForDay(candidates, year, month, dayOfMonth, FORMATS),
         force: payload.force,
+        archive: deps.archive,
+        context: payload.context,
       });
 
       result.daysProcessed += 1;

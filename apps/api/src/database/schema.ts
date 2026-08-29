@@ -1003,3 +1003,192 @@ export const subsystemLoadDay = pgTable(
     check("subsystem_load_day_length", sql`${t.dayMinutes} in (1380, 1440, 1500)`),
   ],
 );
+
+/* -------------------------------------------------------------------------
+ * Tiered refresh, raw-payload custody and ingestion observability.
+ *
+ * Appended as one block, never interleaved with the tables above: none of
+ * these four objects is a fact table, and three of them are read together by
+ * the health view.
+ * ---------------------------------------------------------------------- */
+
+/**
+ * The ingestable sources, named once.
+ *
+ * One member per *ingestor*, not per CKAN dataset: the plant registry is two
+ * files acquired by one job and the two carga series are one job with a
+ * parameter, and an operator watching for a source that went quiet cares about
+ * the thing that runs, not about the files it happens to read.
+ */
+export const ingestionSource = pgEnum("ingestion_source", [
+  "energy_balance",
+  "constrained_off_wind",
+  "constrained_off_solar",
+  "interchange",
+  "daily_load",
+  "dessem_balance",
+  "verified_load",
+  "programmed_load",
+  "plant_registry",
+]);
+
+/**
+ * How volatile the period a run covered is — the refresh regime, in the schema.
+ *
+ * `live` is the period ONS is still writing to, `recent` the periods closed
+ * within the last couple of months, `history` everything older. The tiers are
+ * not cosmetic: a change found by the `history` sweep is a re-publication of
+ * settled data, which is the highest-impact and quietest kind of revision, and
+ * the tier is the evidence that it was one.
+ */
+export const refreshTier = pgEnum("refresh_tier", [
+  "live",
+  "recent",
+  "history",
+  "manual",
+]);
+
+/** Lifecycle of one recorded ingestion run. */
+export const ingestionRunStatus = pgEnum("ingestion_run_status", [
+  "running",
+  "ok",
+  "failed",
+]);
+
+/** Which provenance table a custody row's payload belongs to. */
+export const custodyProvenance = pgEnum("custody_provenance", [
+  "bulk_resource",
+  "load_api_request",
+]);
+
+/**
+ * One attempt at one source over one period — the log a freshness view reads.
+ *
+ * **Written even when nothing changed**, and that is the point: the failure
+ * mode this table exists for is silence. A source that quietly stops updating
+ * produces successful runs that download nothing, which is indistinguishable
+ * from a healthy quiet source unless you can see both the last successful run
+ * together with the newest fact it carries. The health view reads both, from here and
+ * from the fact tables.
+ *
+ * A `running` row that never reaches `ok` or `failed` is a crashed worker, and
+ * leaving it visible is deliberate — a run log that only records endings cannot
+ * show you a run that never ended.
+ */
+export const ingestionRun = pgTable(
+  "ingestion_run",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    source: ingestionSource().notNull(),
+    tier: refreshTier().notNull(),
+    /** What the run covered, in the source's own unit: `2026`, `2026-08`, `2026-08-01..2026-08-28`. */
+    periodLabel: text(),
+    status: ingestionRunStatus().notNull(),
+    /** `HEAD`s spent, or API calls made — work done whether or not it found anything. */
+    resourcesProbed: integer().notNull().default(0),
+    /** Payloads actually downloaded, i.e. fingerprints that moved. */
+    resourcesDownloaded: integer().notNull().default(0),
+    rowsParsed: integer().notNull().default(0),
+    rowsInserted: integer().notNull().default(0),
+    rowsRevised: integer().notNull().default(0),
+    rowsUnchanged: integer().notNull().default(0),
+    /** Re-publications of already-fetched resources observed during this run. */
+    republications: integer().notNull().default(0),
+    /** Client-safe failure message; null while running and on success. */
+    errorMessage: text(),
+    startedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [
+    index("ingestion_run_source").on(t.source, t.startedAt),
+    index("ingestion_run_status_time").on(t.status, t.startedAt),
+  ],
+);
+
+/**
+ * A resource that changed after WattSteer had already downloaded it.
+ *
+ * ONS republishes closed months under the same filename with no version
+ * marker — the whole of 2025 was rewritten in 2026, 2021–22 in May 2024 — so
+ * "this file is not the file we ingested" is an *event*, not a diff, and it has
+ * to be recorded where something can look at it. Absorbing it silently into a
+ * new `data_version` would leave the bulk campaigns invisible, which is exactly
+ * how they stayed invisible upstream.
+ *
+ * `settled_days` is the gap between the prior download and this observation. It
+ * is what separates a normal restatement of last week's file from a campaign
+ * over data everyone had stopped watching; `tier` says the same thing from the
+ * other direction, when a sweep rather than an ad-hoc run made the discovery.
+ */
+export const resourceRepublication = pgTable(
+  "resource_republication",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    datasetSlug: text().notNull(),
+    resourceName: text().notNull(),
+    resourceUrl: text().notNull(),
+    /** The version this one supersedes — bytes now unrecoverable upstream. */
+    priorVersionId: uuid()
+      .notNull()
+      .references(() => onsResourceVersion.id),
+    /** The newly observed state. */
+    versionId: uuid()
+      .notNull()
+      .references(() => onsResourceVersion.id),
+    /** When the superseded bytes were downloaded. */
+    priorFetchedAt: timestamp({ withTimezone: true }).notNull(),
+    /** Whole days the prior version stood before being overwritten. */
+    settledDays: integer().notNull(),
+    /** The sweep that found it, when a sweep did. */
+    tier: refreshTier(),
+    runId: uuid(),
+    detectedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // One republication per (superseded, superseding) pair, so a re-probe of
+    // the same pair cannot inflate a campaign.
+    uniqueIndex("resource_republication_pair").on(t.priorVersionId, t.versionId),
+    index("resource_republication_detected").on(t.detectedAt),
+    index("resource_republication_dataset").on(t.datasetSlug, t.detectedAt),
+  ],
+);
+
+/**
+ * The ledger of retained raw payloads — what WattSteer holds, and where.
+ *
+ * The bytes live outside Postgres (a Railway bucket in production, a directory
+ * locally; see `ingest/archive.ts`), because a full backfill is gigabytes and
+ * does not belong in the row store. This table is the index over them: it is
+ * what makes "can this vintage still be reprocessed?" one query, and what
+ * retention enumerates rather than listing a bucket.
+ *
+ * `purged_at` is set rather than the row deleted. The point of custody is being
+ * able to say what was known and when; "we held these bytes and dropped them
+ * under policy on this date" is a different and better answer than a gap.
+ */
+export const payloadCustody = pgTable(
+  "payload_custody",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    provenance: custodyProvenance().notNull(),
+    /** `ons_resource_version.id` or `load_api_request.id`, per `provenance`. */
+    provenanceId: uuid().notNull(),
+    datasetSlug: text().notNull(),
+    resourceName: text().notNull(),
+    /** Archive-relative locator, e.g. `bulk/<slug>/<sha>.csv`. Never an absolute path. */
+    archiveUri: text().notNull(),
+    contentSha256: text().notNull(),
+    byteSize: bigint({ mode: "number" }).notNull(),
+    fetchedAt: timestamp({ withTimezone: true }).notNull(),
+    purgedAt: timestamp({ withTimezone: true }),
+    /** Why the bytes were dropped — the policy clause, not a sentence. */
+    purgeReason: text(),
+  },
+  (t) => [
+    // One custody row per provenance row: re-archiving the same payload is an
+    // idempotent no-op rather than a second claim on the same bytes.
+    uniqueIndex("payload_custody_provenance").on(t.provenance, t.provenanceId),
+    index("payload_custody_retention").on(t.purgedAt, t.fetchedAt),
+    index("payload_custody_uri").on(t.archiveUri),
+  ],
+);
