@@ -14,10 +14,14 @@ import {
 } from "../src/features/index.js";
 import {
   type CurtailmentReportHour,
+  type RegistryGeneratingUnit,
+  type RegistryPlant,
   recordWeatherRunRequest,
+  upsertPlants,
   upsertReportingEntities,
   type WeatherForecastHour,
   writeCurtailment,
+  writeGeneratingUnits,
   writeWeatherForecast,
 } from "../src/ingest/index.js";
 
@@ -74,6 +78,71 @@ const RUN_AFTER_GATE = new Date("2026-08-20T00:00:00.000Z");
  * ingestion instants would let the as-of hide a broken gate.
  */
 const WEATHER_INGESTED_AT = new Date("2026-08-01T00:00:00.000Z");
+
+/**
+ * The fleet, and the four dates that make the double as-of visible.
+ *
+ * `InstalledCapacityAsOf` takes two times and they are not interchangeable, so
+ * the fixture has to be able to tell a wrong answer on either axis from a right
+ * one — which means a unit that moves each axis independently:
+ *
+ * | unit | MW | commissioned | ONS recorded it | in `TARGET`'s row? |
+ * |---|---|---|---|---|
+ * | `UG1` | 100 | 2024-01-15 | before the gate | yes, and at D−28 too |
+ * | `UG2` | 40 | 2026-08-05 | before the gate | yes — inside the 28 days |
+ * | `UG3` | 7 | **2026-08-20** | before the gate | yes at D, **no at D−1** |
+ * | `UG4` | 500 | 2024-01-15 | **after the gate** | **no** — unknowable then |
+ *
+ * `UG4` is the vintage trap and it is deliberately enormous: it is the newest
+ * row in the table and would dominate the number, so a read that forgot the
+ * vintage axis cannot produce the expected value by accident.
+ */
+const PLANT_WIND = "EOL.FG.BA.000901-1";
+const PLANT_SOLAR = "UFV.FG.BA.000902-9";
+
+/** Before the late gate of every target date this suite asks about. */
+const REGISTRY_INGESTED_AT = new Date("2026-08-01T00:00:00.000Z");
+/** After `TARGET`'s gate (D−1 19:00 BRT = 22:00Z) and before the next day's. */
+const REGISTRY_LATE_INGEST = new Date("2026-08-19T23:00:00.000Z");
+
+/** D−1: the day before `TARGET`, whose fleet must not contain `UG3`. */
+const TARGET_MINUS_1 = "2026-08-19";
+
+const registryPlant = (
+  cegCore: string,
+  overrides: Partial<RegistryPlant> = {},
+): RegistryPlant => ({
+  cegCore,
+  cegRaw: `${cegCore}.01`,
+  onsPlantCode: null,
+  name: `PLANT ${cegCore}`,
+  subsystem: "NE",
+  stateCode: "BA",
+  technology: "WIND",
+  operationModality: "TIPO_II_C",
+  ownerName: "AGENTE",
+  operatorName: "AGENTE",
+  ...overrides,
+});
+
+const registryUnit = (
+  plantCegCore: string,
+  equipmentCode: string,
+  ratedPowerMw: number,
+  commissionedOn: string,
+): RegistryGeneratingUnit => ({
+  plantCegCore,
+  equipmentCode,
+  unitNumber: equipmentCode.slice(-1),
+  name: `UG ${equipmentCode}`,
+  ratedPowerMw,
+  testEntryOn: null,
+  commissionedOn: new Date(`${commissionedOn}T00:00:00.000Z`),
+  // Never set. ONS records zero VRE deactivations across the window and the
+  // assumption is asserted at ingest by `findRenewableDeactivations` rather
+  // than modelled here — see `0017_capacity_at_the_gate.sql`.
+  decommissionedOn: null,
+});
 
 /** The labels arrive after the fact, which is what makes them labels. */
 const LABEL_PUBLISHED_AT = new Date("2026-08-25T00:00:00.000Z");
@@ -187,6 +256,9 @@ suite("the gate, end to end (real Postgres)", () => {
     await db.execute(sql`truncate table weather_run_request cascade`);
     await db.execute(sql`truncate table curtailment_report_hour`);
     await db.execute(sql`truncate table reporting_entity cascade`);
+    // The units, not the plants: `plant` cascades into three other suites'
+    // fixtures, and a plant with no live units contributes no capacity anyway.
+    await db.execute(sql`truncate table generating_unit`);
     await db.execute(sql`truncate table ons_resource_version cascade`);
 
     const [version] = await db
@@ -223,6 +295,49 @@ suite("the gate, end to end (real Postgres)", () => {
       sourceVersionId: version?.id ?? "",
       ingestedAt: LABEL_INGESTED_AT,
     });
+
+    const [registryVersion] = await db
+      .insert(onsResourceVersion)
+      .values({
+        datasetSlug: "capacidade-geracao",
+        resourceName: "Capacidade_Geracao",
+        resourceUrl: "https://example.invalid/FEATURES_CAPACIDADE.csv",
+        format: "CSV",
+        changeKey: `features-capacity-test|${Date.now()}`,
+      })
+      .returning({ id: onsResourceVersion.id });
+
+    await upsertPlants(db, [
+      registryPlant(PLANT_WIND),
+      registryPlant(PLANT_SOLAR, { technology: "SOLAR" }),
+    ]);
+
+    const writeUnits = (units: RegistryGeneratingUnit[], ingestedAt: Date) =>
+      writeGeneratingUnits(db, {
+        units,
+        publishedAt: ingestedAt,
+        publishedAtPrecision: "file",
+        sourceVersionId: registryVersion?.id ?? "",
+        ingestedAt,
+      });
+
+    // What ONS had recorded before the gate.
+    await writeUnits(
+      [
+        registryUnit(PLANT_WIND, "UG1", 100, "2024-01-15"),
+        registryUnit(PLANT_WIND, "UG2", 40, "2026-08-05"),
+        registryUnit(PLANT_WIND, "UG3", 7, TARGET),
+        registryUnit(PLANT_SOLAR, "UG5", 30, "2024-01-15"),
+        registryUnit(PLANT_SOLAR, "UG6", 10, "2026-08-10"),
+      ],
+      REGISTRY_INGESTED_AT,
+    );
+    // …and what it recorded after it. Commissioned long before the window, so
+    // only the vintage axis can keep it out.
+    await writeUnits(
+      [registryUnit(PLANT_WIND, "UG4", 500, "2024-01-15")],
+      REGISTRY_LATE_INGEST,
+    );
 
     // Order matters: the store keeps the newest run per hour, so the pre-gate
     // run has to land first or it would be discarded as superseded.
@@ -293,6 +408,90 @@ suite("the gate, end to end (real Postgres)", () => {
     expect(values).toEqual(new Set([20]));
   });
 
+  it("reads the fleet as of the target date, at the gate's vintage", async () => {
+    // The double as-of, both halves at once. 100 + 40 + 7 = 147 MW of wind:
+    // `UG3` commissioned on D counts, and `UG4` — 500 MW, commissioned in 2024,
+    // recorded by ONS an hour after the gate — does not.
+    const rows = await readServingRows(db, { targetDate: TARGET, ...query });
+    const ne = rows.filter((row) => row.subsystem === "NE");
+    expect(ne).toHaveLength(24);
+    for (const row of ne) {
+      expect(Number(row.capacity_wind_mw)).toBe(147);
+      expect(Number(row.capacity_solar_mw)).toBe(40);
+    }
+
+    // Non-vacuous: the post-gate row really is in the table, really is the
+    // newest thing there, and really would dominate the answer.
+    const [{ post_gate_units }] = [
+      ...(await db.execute<{ post_gate_units: number }>(sql`
+        select count(*)::int as post_gate_units from generating_unit
+        where ingested_at > ${GATE_LATE.toISOString()}::timestamptz
+      `)),
+    ] as [{ post_gate_units: number }];
+    expect(post_gate_units).toBeGreaterThan(0);
+
+    // A subsystem with no units is zero and not null: the registry covers the
+    // whole VRE fleet, so "no group" means "nothing commissioned yet".
+    const elsewhere = rows.find((row) => row.subsystem === "S");
+    expect(Number(elsewhere?.capacity_wind_mw)).toBe(0);
+    expect(Number(elsewhere?.capacity_solar_mw)).toBe(0);
+  });
+
+  it("leaves a unit commissioned on D out of D−1's row", async () => {
+    // The valid-time half. `UG3` enters service on 2026-08-20, so the row for
+    // 2026-08-19 is 140 MW and the row for 2026-08-20 is 147 — the seven
+    // megawatts appear on the day the unit does, and not a day earlier.
+    const dayBefore = await readServingRows(db, {
+      targetDate: TARGET_MINUS_1,
+      ...query,
+    });
+    const ne = dayBefore.filter((row) => row.subsystem === "NE");
+    expect(ne.length).toBeGreaterThan(0);
+    for (const row of ne) {
+      expect(Number(row.capacity_wind_mw)).toBe(140);
+    }
+  });
+
+  it("leaves a unit ONS recorded after the gate out of that row", async () => {
+    // The vintage half, on its own. `UG4` is invisible at `TARGET`'s gate and
+    // visible at a later date's, and nothing about the unit changed in between
+    // — only what WattSteer had been told.
+    const later = await readServingRows(db, { targetDate: AFTER_GO_LIVE, ...query });
+    const ne = later.find((row) => row.subsystem === "NE");
+    // 147 + 500: the same fleet, a week later, with the late snapshot now
+    // inside the gate.
+    expect(Number(ne?.capacity_wind_mw)).toBe(647);
+  });
+
+  it("derives the 28-day addition from the same double as-of", async () => {
+    // D−28 is 2026-07-23: `UG1` (100 MW) and `UG5` (30 MW) were live, `UG2`,
+    // `UG3` and `UG6` were not. Both reads are at the gate's vintage, so the
+    // difference is an addition rather than two vintages subtracted.
+    const rows = await readServingRows(db, { targetDate: TARGET, ...query });
+    const ne = rows.filter((row) => row.subsystem === "NE");
+    for (const row of ne) {
+      expect(Number(row.capacity_wind_added_28d_mw)).toBe(47);
+      expect(Number(row.capacity_solar_added_28d_mw)).toBe(10);
+    }
+    const elsewhere = rows.find((row) => row.subsystem === "S");
+    expect(Number(elsewhere?.capacity_wind_added_28d_mw)).toBe(0);
+  });
+
+  it("broadcasts capacity identically across the 24 hours of the day", async () => {
+    // Day grain, and the reason the dictionary marks it: the row is hourly and
+    // this column is not, so a modeller who reads it as an hourly signal will
+    // find intraday structure in a constant.
+    const rows = await readServingRows(db, { targetDate: TARGET, ...query });
+    for (const subsystem of ["N", "NE", "S", "SE"]) {
+      const values = new Set(
+        rows
+          .filter((row) => row.subsystem === subsystem)
+          .map((row) => Number(row.capacity_wind_mw)),
+      );
+      expect({ subsystem, distinct: values.size }).toEqual({ subsystem, distinct: 1 });
+    }
+  });
+
   it("carries the targets, and derives the positive class from the argument", async () => {
     const rows = await readServingRows(db, { targetDate: TARGET, ...query });
     const at = (validTime: Date): FeatureRow => {
@@ -361,6 +560,36 @@ suite("the gate, end to end (real Postgres)", () => {
     for (const row of after) {
       expect(row.vintage_fidelity).toBe("point_in_time");
     }
+  });
+
+  it("counts the registry's go-live in the fidelity stamp, not just the hourly sources", async () => {
+    // The capacity caveat, made a property. Over the backfill window a registry
+    // snapshot is today's record of the past, so a row whose capacity had to be
+    // answered from one cannot claim to be point-in-time — and the weakest-link
+    // rule is what carries that up to the row.
+    //
+    // The other two sources are held still and only the registry's go-live is
+    // moved, so a stamp that ignored capacity would keep saying point_in_time.
+    let stamped: string | undefined;
+    try {
+      await db.transaction(async (tx) => {
+        const scoped = tx as unknown as Database;
+        await scoped.execute(
+          sql`update generating_unit set ingested_at = '2026-09-15T00:00:00.000Z'`,
+        );
+        const rows = await readServingRows(scoped, {
+          targetDate: AFTER_GO_LIVE,
+          ...query,
+        });
+        stamped = rows[0]?.vintage_fidelity;
+        tx.rollback();
+      });
+    } catch (error) {
+      if (!(error instanceof Error && /rollback/i.test(error.message))) {
+        throw error;
+      }
+    }
+    expect(stamped).toBe("revision_optimistic");
   });
 
   it("agrees with the golden vintage vectors both languages are bound by", async () => {
@@ -442,11 +671,21 @@ suite("the gate, end to end (real Postgres)", () => {
     try {
       await db.transaction(async (tx) => {
         const scoped = tx as unknown as Database;
-        for (const table of ["weather_forecast_hour", "curtailment_report_hour"]) {
+        // Everything the gate could not have seen, on either axis: a row the
+        // source published later, and a row WattSteer learned later. The
+        // registry needs the second one — a snapshot is *ingested* after the
+        // fact, which is exactly how a unit ONS records late would leak.
+        for (const table of [
+          "weather_forecast_hour",
+          "curtailment_report_hour",
+          "generating_unit",
+        ]) {
           const removed = await scoped.execute<{ n: number }>(sql`
             with gone as (
               delete from ${sql.raw(table)}
-              where published_at > ${GATE_LATE.toISOString()}::timestamptz returning 1
+              where published_at > ${GATE_LATE.toISOString()}::timestamptz
+                 or ingested_at > ${GATE_LATE.toISOString()}::timestamptz
+              returning 1
             ) select count(*)::int as n from gone
           `);
           deleted += Number([...removed][0]?.n ?? 0);

@@ -1,9 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   FEATURE_ROW_COLUMNS,
   FEATURE_SETS,
+  featureGrain,
   GATE_PROFILES,
   isFeatureColumn,
   isLabelColumn,
@@ -26,8 +27,26 @@ import {
  * standing a server up.
  */
 
-const MIGRATION_PATH = join(import.meta.dir, "../drizzle/0016_the_feature_gate.sql");
-const RAW = readFileSync(MIGRATION_PATH, "utf8");
+/**
+ * Every migration that defines part of the feature layer, in migration order.
+ *
+ * Discovered rather than listed. Ticket 01 wrote one file and the twelve
+ * tickets behind it write more — this ticket's is
+ * `0017_capacity_at_the_gate.sql` — and a test naming the one file it scans
+ * would quietly stop covering the layer on the first one it was not told
+ * about. The rule that decides membership is the one the layer is built on: a
+ * file that declares a `feature_*` function is part of it.
+ */
+const FEATURE_MIGRATIONS = readdirSync(join(import.meta.dir, "../drizzle"))
+  .filter((name) => name.endsWith(".sql"))
+  .toSorted()
+  .map((name) => ({
+    name,
+    text: readFileSync(join(import.meta.dir, "../drizzle", name), "utf8"),
+  }))
+  .filter((file) => /CREATE OR REPLACE FUNCTION\s+feature_/.test(file.text));
+
+const RAW = FEATURE_MIGRATIONS.map((file) => file.text).join("\n");
 
 /**
  * The SQL with every comment removed.
@@ -80,7 +99,13 @@ const ALLOWED_RELATIONS = new Set([
   "lateral",
   "spine",
   "weather",
+  "capacity",
   "labels",
+  // The two arrays the capacity block materialises its own reads into, so the
+  // fleet at D and the fleet at D-28 cannot be evaluated under one another's
+  // axes. They are local variables, not relations.
+  "at_target",
+  "at_minus_28",
 ]);
 
 const functionSegments = (): Map<string, string> => {
@@ -124,7 +149,7 @@ describe("the gate, structurally", () => {
     }
   });
 
-  it("writes the read axes in three places, all of which derive the instant", () => {
+  it("writes the read axes in four places, all of which derive the instant", () => {
     // A block that could be handed an instant is a block that could be handed
     // the wrong one. `feature_apply_gate` takes a target date and a profile;
     // `feature_apply_label_vintage` takes nothing at all.
@@ -134,6 +159,7 @@ describe("the gate, structurally", () => {
 
     expect(writers.toSorted()).toEqual([
       "feature_apply_gate",
+      "feature_apply_gate_for_fleet_offset",
       "feature_apply_label_vintage",
       "feature_release_axes",
     ]);
@@ -143,6 +169,19 @@ describe("the gate, structurally", () => {
     expect(
       /FUNCTION\s+feature_apply_gate\(target_date date, gate_profile text\)/.test(gate),
     ).toBe(true);
+
+    // The second writer moves the *valid-time* axis and only that. It takes a
+    // whole number of days back from the target date — never a fleet date and
+    // never an instant — so the trailing window a capacity addition needs
+    // cannot become a second cut-off.
+    const offset = functionSegments().get("feature_apply_gate_for_fleet_offset") ?? "";
+    expect(offset).toContain("gate_at(target_date, gate_profile)");
+    expect(
+      /FUNCTION\s+feature_apply_gate_for_fleet_offset\(\s*target_date date, gate_profile text, days_back int\s*\)/.test(
+        offset,
+      ),
+    ).toBe(true);
+    expect(offset).toContain("target_date - days_back");
   });
 
   it("writes every axis on every call, absent ones as the empty string", () => {
@@ -169,30 +208,48 @@ describe("the gate, structurally", () => {
   });
 
   it("offers the caller nowhere to put a cut-off", () => {
-    const signature = SQL.slice(
-      SQL.indexOf("CREATE OR REPLACE FUNCTION feature_rows("),
-      SQL.indexOf("RETURNS SETOF feature_row"),
+    // Every definition of it. A composite type that gains attributes needs the
+    // function returning it re-created, so `feature_rows` is written once per
+    // ticket that adds a column — and each copy has to hold the same five
+    // arguments and no sixth.
+    const definitions = [
+      ...SQL.matchAll(/CREATE OR REPLACE FUNCTION feature_rows\(/g),
+    ].map((match) =>
+      SQL.slice(
+        match.index ?? 0,
+        SQL.indexOf("RETURNS SETOF feature_row", match.index ?? 0),
+      ),
     );
-    expect(signature.length).toBeGreaterThan(0);
+    expect(definitions.length).toBeGreaterThan(0);
 
-    // The five arguments the spec names, and not one more. `as_of`,
-    // `published_at_or_before` and every other instant are absent because the
-    // gate is derived per row from `target_date` — so training and serving
-    // cannot differ in what they were allowed to see.
-    for (const forbidden of ["timestamp", "as_of", "published_at", "cutoff", "gate_at"]) {
-      expect({ forbidden, present: signature.includes(forbidden) }).toEqual({
-        forbidden,
-        present: false,
-      });
-    }
-    for (const parameter of [
-      "target_from date",
-      "target_to date",
-      "gate_profile text",
-      "feature_set text",
-      "threshold_mw double precision",
-    ]) {
-      expect(signature).toContain(parameter);
+    for (const signature of definitions) {
+      expect(signature.length).toBeGreaterThan(0);
+
+      // The five arguments the spec names, and not one more. `as_of`,
+      // `published_at_or_before` and every other instant are absent because the
+      // gate is derived per row from `target_date` — so training and serving
+      // cannot differ in what they were allowed to see.
+      for (const forbidden of [
+        "timestamp",
+        "as_of",
+        "published_at",
+        "cutoff",
+        "gate_at",
+      ]) {
+        expect({ forbidden, present: signature.includes(forbidden) }).toEqual({
+          forbidden,
+          present: false,
+        });
+      }
+      for (const parameter of [
+        "target_from date",
+        "target_to date",
+        "gate_profile text",
+        "feature_set text",
+        "threshold_mw double precision",
+      ]) {
+        expect(signature).toContain(parameter);
+      }
     }
   });
 
@@ -222,7 +279,17 @@ describe("the gate, structurally", () => {
       .filter((line) => /^[a-z_]\w*\s/.test(line))
       .map((line) => line.split(/\s+/)[0] as string);
 
-    expect(declared).toEqual([...FEATURE_ROW_COLUMNS]);
+    // …plus what later migrations appended to the same declaration. `ALTER
+    // TYPE ... ADD ATTRIBUTE` appends in file order, and that order is what a
+    // positional read of the composite gets back.
+    const appended = [
+      ...SQL.matchAll(/ALTER TYPE feature_row ADD ATTRIBUTE\s+([a-z_]\w*)/g),
+    ].map((match) => match[1] as string);
+
+    expect([...declared, ...appended]).toEqual([...FEATURE_ROW_COLUMNS]);
+    // Non-vacuous: a ticket really did add columns to the one declaration
+    // rather than restating the shape.
+    expect(appended.length).toBeGreaterThan(0);
   });
 
   it("knows both gate profiles and both feature sets, and no third of either", () => {
@@ -253,6 +320,10 @@ describe("the feature/label partition", () => {
     expect(FEATURE_ROW_COLUMNS.filter(isLabelColumn).length).toBeGreaterThan(0);
     expect(FEATURE_ROW_COLUMNS.filter(isFeatureColumn)).toEqual([
       "weather_temperature_2m",
+      "capacity_wind_mw",
+      "capacity_solar_mw",
+      "capacity_wind_added_28d_mw",
+      "capacity_solar_added_28d_mw",
     ]);
   });
 
@@ -262,6 +333,49 @@ describe("the feature/label partition", () => {
     expect(isFeatureColumn("dessem_residual_load_mwh")).toBe(true);
     expect(isFeatureColumn("observed_constrained_off_lag_168h")).toBe(true);
     expect(isFeatureColumn("y_something_new")).toBe(false);
+  });
+});
+
+describe("the feature dictionary's grain marking", () => {
+  it("marks the capacity columns day grain, and everything else hourly", () => {
+    // A column constant within a day must not be read as an hourly signal, and
+    // that is invisible in the data: twenty-four equal numbers look exactly
+    // like a flat hourly series. The marking is the only thing that
+    // distinguishes them.
+    for (const column of FEATURE_ROW_COLUMNS) {
+      expect({ column, grain: featureGrain(column) }).toEqual({
+        column,
+        grain: column.startsWith("capacity_") ? "day" : "hour",
+      });
+    }
+    expect(
+      FEATURE_ROW_COLUMNS.filter((column) => featureGrain(column) === "day"),
+    ).toEqual([
+      "capacity_wind_mw",
+      "capacity_solar_mw",
+      "capacity_wind_added_28d_mw",
+      "capacity_solar_added_28d_mw",
+    ]);
+  });
+
+  it("says so in the catalogue too, at the column itself", () => {
+    // The copy that travels with the number. A caveat a modeller cannot find
+    // from the column is a caveat nobody applies, so the day grain and the
+    // `revision_optimistic` reason are stated in `COMMENT ON COLUMN` as well as
+    // in the spec and in `featureGrain`.
+    for (const column of ["capacity_wind_mw", "capacity_solar_mw"]) {
+      const comment = RAW.slice(
+        RAW.indexOf(`COMMENT ON COLUMN feature_row.${column} IS`),
+      ).slice(0, 600);
+      expect(comment).toContain("Day grain");
+      expect(comment).toContain("revision_optimistic");
+    }
+    for (const column of ["capacity_wind_added_28d_mw", "capacity_solar_added_28d_mw"]) {
+      const comment = RAW.slice(
+        RAW.indexOf(`COMMENT ON COLUMN feature_row.${column} IS`),
+      ).slice(0, 600);
+      expect(comment).toContain("Day grain");
+    }
   });
 });
 
