@@ -172,6 +172,13 @@ const ALLOWED_RELATIONS = new Set([
   "aggregated",
   "converted",
   "extraterrestrial",
+  // Ticket 09's CTEs: the proxy block joins the three terms once (`terms`) and
+  // derives the reconstruction, the two ratios, the surplus and the profile
+  // shapes (`shaped`, shared with the three blocks above) from that one join.
+  // `proxy` is its CTE in `feature_rows`. There is no read here to allow: the
+  // block composes two blocks and names no view at all.
+  "terms",
+  "proxy",
 ]);
 
 const functionSegments = (): Map<string, string> => {
@@ -858,6 +865,113 @@ describe("the weather block, structurally", () => {
   });
 });
 
+describe("the proxy residual load, structurally", () => {
+  const proxyBlock = () =>
+    functionSegments().get("feature_proxy_residual_load_block") ?? "";
+
+  it("composes the two blocks rather than re-reading what they read", () => {
+    // The whole reason this block exists in this shape. A third place that
+    // re-derived the programme or the two conversions would be a third
+    // definition of them, and `proxy_residual_load_mwh` could then disagree with
+    // `programmed_load_mwh` and `weather_expected_wind_mwh` **in its own row**.
+    // So the block reads no view at all: it names the two blocks and nothing
+    // else, which is also why it has no vintage to write.
+    const block = proxyBlock();
+    // The segment runs to the next function header, which is `feature_rows` —
+    // so the body alone, or the catalogue comments beneath it would be read as
+    // code.
+    const body = block.slice(0, block.indexOf("END $$"));
+    expect(body).toContain("feature_programmed_load_block(target_date, gate_profile)");
+    expect(body).toContain("feature_weather_block(target_date, gate_profile)");
+    expect(body).not.toContain("canonical_");
+    expect(body).not.toContain("set_config");
+  });
+
+  it("takes every term or none, and coalesces nothing to zero", () => {
+    // "The registry places no VRE here at this gate" and "the fleet is forecast
+    // to generate nothing" are different statements, and only one of them is a
+    // number. A coalesce to zero would turn the first into the second and
+    // publish a *load* forecast under a residual load's name — in exactly the
+    // rows where the fleet read had failed.
+    const body = proxyBlock();
+    expect(body).not.toContain("coalesce(p.");
+    expect(body).not.toContain("coalesce(w.");
+    expect(body).toContain("p.programmed_load_mwh IS NOT NULL");
+    expect(body).toContain("w.weather_expected_wind_mwh IS NOT NULL");
+    expect(body).toContain("w.weather_expected_solar_mwh IS NOT NULL");
+  });
+
+  it("reaches for no earlier publication hour to fill the early gate", () => {
+    // The finding this ticket inherits, as a property of the SQL. Every column
+    // here is NULL at `gate_early` because the programme it subtracts from is,
+    // and the repair — an earlier assumed publication, or a load forecast of our
+    // own — is the leak the spec exists to prevent. The block cannot express
+    // either: it has no publication instant, and its only load term is the one
+    // the class-`P` block returns.
+    const body = proxyBlock();
+    for (const forbidden of ["published_at", "gate_at(", "actuals_cutoff", "15:00"]) {
+      expect({ forbidden, present: body.includes(forbidden) }).toEqual({
+        forbidden,
+        present: false,
+      });
+    }
+  });
+
+  it("never lets a ramp span a gap, and refuses a day-grain summary of a partial day", () => {
+    // The same two rules as `0024` and `0025`, and for the same reasons: a
+    // neighbouring row is not a neighbouring hour once a term went missing, and
+    // a rank among nineteen is not the rank the column's name promises.
+    const body = proxyBlock();
+    expect(body.split("previous_hour = shaped.valid_time - interval").length - 1).toBe(1);
+    expect(body.split("hours_in_day = 24").length - 1).toBe(2);
+  });
+
+  it("keeps both views of residual load, in both feature sets", () => {
+    // The augmented set is set A plus the DESSEM block, so it carries the
+    // rebuilt residual load *and* DESSEM's own — which is what makes the A/B a
+    // comparison of two views rather than of two disjoint sets. The block is
+    // therefore not handed the feature set: there is no argument through which
+    // one set could be given the family and the other refused it.
+    const header =
+      /CREATE OR REPLACE FUNCTION feature_proxy_residual_load_block\(\s*target_date date, gate_profile text\s*\)/;
+    expect(header.test(SQL)).toBe(true);
+    expect(proxyBlock()).not.toContain("feature_set");
+
+    const proxy = FEATURE_ROW_COLUMNS.filter((column) => column.startsWith("proxy_"));
+    const dessem = FEATURE_ROW_COLUMNS.filter((column) => column.startsWith("dessem_"));
+    expect(proxy).toHaveLength(7);
+    expect(dessem).toHaveLength(21);
+    // The pair the A/B compares, both in the one row type.
+    expect(proxy).toContain("proxy_residual_load_mwh");
+    expect(dessem).toContain("dessem_residual_load_mwh");
+  });
+
+  it("records the classification of every input at the column", () => {
+    // Class `P`+`W`+`T` is the claim the ticket asks to be recorded, and the
+    // place a modeller can find it is the catalogue comment that travels with
+    // the number. Nothing else in the row can tell them that no term here is an
+    // actual and no term is a model output.
+    for (const column of FEATURE_ROW_COLUMNS) {
+      if (!column.startsWith("proxy_")) {
+        continue;
+      }
+      const comment = RAW.slice(
+        RAW.indexOf(`COMMENT ON COLUMN feature_row.${column} IS`),
+      ).slice(0, 1200);
+      expect({ column, classified: comment.includes("Class P+W+T") }).toEqual({
+        column,
+        classified: true,
+      });
+    }
+    const headline = RAW.slice(
+      RAW.indexOf("COMMENT ON COLUMN feature_row.proxy_residual_load_mwh IS"),
+    ).slice(0, 1200);
+    expect(headline).toContain("No input is a day-D actual");
+    expect(headline).toContain("no input is a model output");
+    expect(headline).toContain("gate_early");
+  });
+});
+
 describe("the feature/label partition", () => {
   it("puts every column in exactly one of the three categories", () => {
     for (const column of FEATURE_ROW_COLUMNS) {
@@ -956,6 +1070,13 @@ describe("the feature/label partition", () => {
       "weather_shortwave_radiation_mean_3h",
       "weather_run_age_hours",
       "weather_centroid_coverage",
+      "proxy_residual_load_mwh",
+      "proxy_residual_load_ratio",
+      "proxy_renewable_load_ratio",
+      "proxy_vre_surplus_mwh",
+      "proxy_residual_load_ramp_1h",
+      "proxy_residual_load_min_of_day",
+      "proxy_residual_load_rank_in_day",
     ]);
   });
 
@@ -1009,6 +1130,7 @@ describe("the feature dictionary's grain marking", () => {
       "observed_reason_share_rel_7d",
       "programmed_load_daily_min_mwh",
       "dessem_residual_load_min_of_day",
+      "proxy_residual_load_min_of_day",
     ]);
     for (const column of FEATURE_ROW_COLUMNS) {
       expect({ column, grain: featureGrain(column) }).toEqual({

@@ -440,6 +440,51 @@ export interface FeatureRow {
    * refuses on.
    */
   weather_centroid_coverage: number | null;
+
+  // Class `P`+`W`+`T` — residual load, rebuilt for the DESSEM-free set. See
+  // `drizzle/0030_the_proxy_residual_load.sql`.
+  //
+  // The original feature list asked for `load − solar − wind` at the target
+  // hour: three day-D **actuals**, and a description of the oversupply
+  // condition after the fact. This family is that quantity rebuilt from terms
+  // that exist at D−1 — ONS's day-ahead programme minus the two deterministic
+  // conversions of the pinned weather run against the fleet at the gate — so it
+  // is a **forecast** of the same condition, which is what a day-ahead product
+  // should condition on. No term is an actual and no term is a model output.
+  //
+  // **Every column here is NULL at `gate_early`**, because `programmed_load_mwh`
+  // is: D−1 09:00 BRT is six hours before the programme's decided publication
+  // instant, and a subtraction from NULL is NULL. That hole is reported rather
+  // than filled — an earlier hour, or a load forecast of our own, would be a
+  // value the served model will not have at 09:00.
+
+  /**
+   * `programmed_load_mwh − weather_expected_wind_mwh − weather_expected_solar_mwh`.
+   *
+   * The most important feature in the DESSEM-free set, and the reason that set
+   * is worth training at all. NULL unless all three terms are present: a
+   * subsystem the registry places no VRE in at the gate carries no residual
+   * load, rather than a programmed load with two zeroes taken off it.
+   */
+  proxy_residual_load_mwh: number | null;
+  /** `proxy_residual_load_mwh / programmed_load_mwh`. NULL on a zero programme. */
+  proxy_residual_load_ratio: number | null;
+  /** `(expected_wind + expected_solar) / programmed_load_mwh` — one minus the ratio above. */
+  proxy_renewable_load_ratio: number | null;
+  /** `(expected_wind + expected_solar) − programmed_load_mwh`; the unguarded form. */
+  proxy_vre_surplus_mwh: number | null;
+  /**
+   * Difference within the day-D proxy profile.
+   *
+   * NULL at the local day's first hour: its predecessor needs a programmed load
+   * from D−1's own publication. The weather run spans that boundary and the
+   * programme does not, and the narrower parent decides the profile.
+   */
+  proxy_residual_load_ramp_1h: number | null;
+  /** Minimum over D's 24 reconstructed hours. **Day grain**, and NULL if any is missing. */
+  proxy_residual_load_min_of_day: number | null;
+  /** Rank of t among D's 24 reconstructed residual loads, ascending: 1 is the trough. */
+  proxy_residual_load_rank_in_day: number | null;
 }
 
 /**
@@ -563,6 +608,17 @@ export const FEATURE_ROW_COLUMNS: readonly (keyof FeatureRow)[] = [
   "weather_shortwave_radiation_mean_3h",
   "weather_run_age_hours",
   "weather_centroid_coverage",
+  // Class `P`+`W`+`T`, appended by `drizzle/0030_the_proxy_residual_load.sql`.
+  // Seven, and the spec's seven: the reconstruction, the three quantities
+  // derived from the same three terms, and the three shapes of the day-D proxy
+  // profile.
+  "proxy_residual_load_mwh",
+  "proxy_residual_load_ratio",
+  "proxy_renewable_load_ratio",
+  "proxy_vre_surplus_mwh",
+  "proxy_residual_load_ramp_1h",
+  "proxy_residual_load_min_of_day",
+  "proxy_residual_load_rank_in_day",
 ];
 
 /**
@@ -614,6 +670,11 @@ const DAY_GRAIN_COLUMNS: readonly string[] = [
   // across subsystems is not day grain; nothing in this marking is about the
   // other axis.
   "dessem_residual_load_min_of_day",
+  // The proxy family's one summary of the whole profile, on the same terms as
+  // class `P`'s and class `D`'s. `proxy_residual_load_rank_in_day` is
+  // deliberately *not* here: it is computed over the day and selected by the
+  // target hour, so it genuinely varies across the 24.
+  "proxy_residual_load_min_of_day",
 ];
 
 /** The grain of one column. Hourly is the default because the row is. */

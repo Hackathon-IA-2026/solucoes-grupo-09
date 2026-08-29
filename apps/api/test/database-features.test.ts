@@ -2289,6 +2289,189 @@ suite("the gate, end to end (real Postgres)", () => {
     expect(setB.every((row) => row.dessem_demand_mwh !== null)).toBe(true);
   });
 
+  // ------------------------------------------ class `P`+`W`+`T`, the proxy
+  //
+  // Residual load rebuilt from the day-ahead programme and the pinned run. The
+  // fixture makes the arithmetic checkable end to end: NE's programme is
+  // `1000 + 10h`, its weather is flat, its fleet at `TARGET`'s gate is 147 MW of
+  // wind and 40 MW of solar, and `feature_wind_power_curve_cf` is pinned — so
+  // every column below is a number this test can compute rather than read back.
+  const PROXY_EXPECTED_SOLAR = 40 * (500 / 1000);
+  const PROXY_EXPECTED_WIND = (((32 / 3.6) ** 3 - 3 ** 3) / (12 ** 3 - 3 ** 3)) * 147;
+  const PROXY_EXPECTED_VRE = PROXY_EXPECTED_WIND + PROXY_EXPECTED_SOLAR;
+  const proxyResidual = (localHour: number): number =>
+    NE_PROGRAMMED(localHour) - PROXY_EXPECTED_VRE;
+
+  it("rebuilds the residual load from terms that exist at D−1", async () => {
+    const rows = await readServingRows(db, { targetDate: TARGET, ...query });
+    const ne = rows.filter((row) => row.subsystem === "NE");
+    expect(ne).toHaveLength(24);
+
+    // The acceptance claim: non-null across the window, for a subsystem that
+    // has both a programme and a fleet.
+    expect(ne.every((row) => row.proxy_residual_load_mwh !== null)).toBe(true);
+
+    for (let hour = 0; hour < 24; hour += 1) {
+      const row = neAt(ne, hour);
+      expect(Number(row?.proxy_residual_load_mwh)).toBeCloseTo(proxyResidual(hour), 6);
+      // …and it is the *row's own* three terms, not a second reading of them.
+      // The block composes `feature_programmed_load_block` and
+      // `feature_weather_block` rather than re-deriving what they derive, so
+      // this identity holds inside every row by construction. A third
+      // definition of either term would show up here first.
+      expect(Number(row?.proxy_residual_load_mwh)).toBeCloseTo(
+        Number(row?.programmed_load_mwh) -
+          Number(row?.weather_expected_wind_mwh) -
+          Number(row?.weather_expected_solar_mwh),
+        9,
+      );
+    }
+  });
+
+  it("derives the ratios and the surplus from the same three terms", async () => {
+    const rows = await readServingRows(db, { targetDate: TARGET, ...query });
+    const ne = rows.filter((row) => row.subsystem === "NE");
+
+    for (let hour = 0; hour < 24; hour += 1) {
+      const row = neAt(ne, hour);
+      const programmed = NE_PROGRAMMED(hour);
+      expect(Number(row?.proxy_residual_load_ratio)).toBeCloseTo(
+        proxyResidual(hour) / programmed,
+        9,
+      );
+      expect(Number(row?.proxy_renewable_load_ratio)).toBeCloseTo(
+        PROXY_EXPECTED_VRE / programmed,
+        9,
+      );
+      expect(Number(row?.proxy_vre_surplus_mwh)).toBeCloseTo(
+        PROXY_EXPECTED_VRE - programmed,
+        6,
+      );
+      // The three are one quantity seen three ways, and the identities that say
+      // so are worth asserting: the two ratios sum to one, and the surplus is
+      // the residual load's negative.
+      expect(
+        Number(row?.proxy_residual_load_ratio) + Number(row?.proxy_renewable_load_ratio),
+      ).toBeCloseTo(1, 9);
+      expect(Number(row?.proxy_vre_surplus_mwh)).toBeCloseTo(
+        -Number(row?.proxy_residual_load_mwh),
+        6,
+      );
+    }
+  });
+
+  it("derives the shape inside the proxy profile, and stops at the day's near edge", async () => {
+    const rows = await readServingRows(db, { targetDate: TARGET, ...query });
+    const ne = rows.filter((row) => row.subsystem === "NE");
+
+    // NE's programme rises by a flat 10 MWh an hour and its weather is flat, so
+    // the reconstructed profile ramps by exactly 10 — a window that had slipped
+    // by one, or a conversion that had leaked an hour, would show.
+    for (let hour = 1; hour < 24; hour += 1) {
+      expect(Number(neAt(ne, hour)?.proxy_residual_load_ramp_1h)).toBeCloseTo(10, 6);
+    }
+    // The near edge. The weather run carries 23:00 BRT on D−1 in the same
+    // publication as 00:00 on D, but the programme does not — its predecessor
+    // hour belongs to D−1's own file — so the narrower parent decides and the
+    // first hour has no ramp.
+    expect(neAt(ne, 0)?.proxy_residual_load_mwh).not.toBeNull();
+    expect(neAt(ne, 0)?.proxy_residual_load_ramp_1h).toBeNull();
+
+    // Day grain: one minimum for the whole date, broadcast identically, and it
+    // is the trough of the *reconstruction* rather than of the programme.
+    expect(new Set(ne.map((row) => Number(row.proxy_residual_load_min_of_day)))).toEqual(
+      new Set([Number(neAt(ne, 0)?.proxy_residual_load_mwh)]),
+    );
+    expect(Number(neAt(ne, 0)?.proxy_residual_load_min_of_day)).toBeCloseTo(
+      proxyResidual(0),
+      6,
+    );
+    // Rank is hourly, ascending and partitioned by subsystem: 1 is the trough.
+    expect(neAt(ne, 0)?.proxy_residual_load_rank_in_day).toBe(1);
+    expect(neAt(ne, 23)?.proxy_residual_load_rank_in_day).toBe(24);
+  });
+
+  it("is a hole where a term is missing, and never a load with two zeroes taken off it", async () => {
+    // SE has a programme and no fleet: the registry places no VRE there at this
+    // gate, so there is no expected generation to subtract. `programmed_load`
+    // with two zeroes taken off it would be a load forecast wearing a residual
+    // load's name — plausible, and wrong in exactly the rows where the fleet
+    // read had failed.
+    const rows = await readServingRows(db, { targetDate: TARGET, ...query });
+    const se = rows.filter((row) => row.subsystem === "SE");
+    expect(se).toHaveLength(24);
+    expect(se.every((row) => row.programmed_load_mwh !== null)).toBe(true);
+    expect(se.every((row) => row.weather_expected_wind_mwh === null)).toBe(true);
+
+    for (const row of se) {
+      for (const column of FEATURE_ROW_COLUMNS.filter((name) =>
+        name.startsWith("proxy_"),
+      )) {
+        expect({ column, value: row[column] }).toEqual({ column, value: null });
+      }
+    }
+  });
+
+  it("is NULL at the early gate, because the programme it subtracts from is", async () => {
+    // The finding this ticket inherits and does not paper over. `gate_early` is
+    // D−1 09:00 BRT and the programme for day D is stamped D−1 15:00 BRT, so
+    // there is no load term at 09:00 and every column here is NULL — while the
+    // *weather* half of the reconstruction is present at the same gate, which is
+    // what makes the hole unambiguously the programme's.
+    //
+    // Filling it would mean assuming an earlier publication nothing has
+    // measured, and a model trained on a value it will not have at 09:00 cannot
+    // be served. Issue 12's measurement is what settles this, not a fallback.
+    const proxyColumns = FEATURE_ROW_COLUMNS.filter((name) => name.startsWith("proxy_"));
+    expect(proxyColumns).toHaveLength(7);
+
+    const early = await readServingRows(db, {
+      targetDate: TARGET,
+      ...query,
+      gateProfile: "gate_early",
+    });
+    expect(early).toHaveLength(96);
+    expect(early.some((row) => row.weather_expected_wind_mwh !== null)).toBe(true);
+    for (const row of early) {
+      expect(row.programmed_load_mwh).toBeNull();
+      for (const column of proxyColumns) {
+        expect({ column, value: row[column] }).toEqual({ column, value: null });
+      }
+    }
+
+    // Non-vacuous: the same rows at the late gate carry the whole family.
+    const late = await readServingRows(db, { targetDate: TARGET, ...query });
+    expect(late.some((row) => row.proxy_residual_load_mwh !== null)).toBe(true);
+  });
+
+  it("keeps both views of residual load where the augmented set has both", async () => {
+    // The A/B compares two *views* of one quantity, so set B carries the
+    // rebuilt residual load beside DESSEM's own rather than replacing it. A
+    // model that can see both is what makes the comparison answerable at all.
+    const setB = await dessemRows(TARGET);
+    const ne = setB.filter((row) => row.subsystem === "NE");
+    expect(ne).toHaveLength(24);
+    expect(ne.every((row) => row.proxy_residual_load_mwh !== null)).toBe(true);
+    expect(ne.every((row) => row.dessem_residual_load_mwh !== null)).toBe(true);
+
+    // And they are genuinely two views: the proxy is a forecast built from the
+    // programme and the run, DESSEM's is the balance's own statement, and the
+    // fixture's two disagree — as the real ones will.
+    const setA = await readServingRows(db, { targetDate: TARGET, ...query });
+    for (let hour = 0; hour < 24; hour += 1) {
+      // The proxy is the same number in both sets: nothing about it is
+      // conditioned on the feature set.
+      expect(Number(neAt(ne, hour)?.proxy_residual_load_mwh)).toBeCloseTo(
+        Number(neAt(setA, hour)?.proxy_residual_load_mwh),
+        9,
+      );
+    }
+    expect(Number(neAt(ne, 12)?.proxy_residual_load_mwh)).not.toBeCloseTo(
+      Number(neAt(ne, 12)?.dessem_residual_load_mwh),
+      3,
+    );
+  });
+
   // ---------------------------------------------------------------- Seam 1
   it("seam 1 — the training row and the serving row are the same row", async () => {
     // The central claim of the spec, and it is cheap because the claim is that

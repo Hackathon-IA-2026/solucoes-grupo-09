@@ -27,7 +27,7 @@ training and in serving by construction rather than by care.
 
 **Blocked by:** 06 — ONS day-ahead programming. 08 — the weather block.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Proxy residual load is programmed load minus expected wind minus expected solar, all at the gate
 - [ ] The residual-load ratio, the renewable load ratio and the VRE surplus are derived from the same three terms
