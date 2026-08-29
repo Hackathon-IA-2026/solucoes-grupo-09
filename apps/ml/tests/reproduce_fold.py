@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from conftest import AS_OF, FUNCTION_DEFINITION, WINDOW_START
 from feature_row_fixtures import feature_rows
+from out_of_fold_fixtures import pool
 from wattsteer_ml.evaluation import materialize_fold_calendar
 from wattsteer_ml.training import forecast_rows, train_fold
 
@@ -32,6 +33,7 @@ def digest() -> tuple[str, str]:
         fold=fold,
         blocks=blocks,
         function_definition=FUNCTION_DEFINITION,
+        pool=pool(),
         artifact_id="2026-08-29T04:00:00Z",
     )
     test_rows = [row for row in rows if row["target_date"] >= blocks.test_start]

@@ -24,15 +24,20 @@ against the live ``feature_rows`` definition, the bundle's copy is what the
 design matrix is actually encoded under — and an artifact whose two copies
 disagree cannot be served under either, so it does not load at all.
 
-**What this module does not hold yet.** The spec's bundle also carries the
-isotonic calibrator and its clip bounds, ``δ_lo``/``δ_hi``, the PIT residual
-matrix and ``risk_bins``. Those are fitted by forecaster tickets 05, 06 and 07
-on the calibration window, and they are deliberately absent rather than
-present-and-``None``: an optional field is a field a serving path can forget to
-check, and the point of this dataclass is that there is no partial mixture to
-serve. When 05 lands it adds a required field, and every bundle written before
-it stops loading — which is the correct outcome for an artifact that predates
-its own calibration.
+**Calibration is one required field, added by forecaster ticket 05.** The
+bundle carries a :class:`~wattsteer_ml.training.calibration.Calibration` — the
+isotonic map and its clip bounds, the reliability curve measured on pooled
+out-of-fold predictions, and the derived ``risk_bins`` — and it is required
+rather than optional for the same reason the six estimators are: an optional
+field is a field a serving path can forget to check. A bundle written before 05
+does not load, which is the correct outcome for an artifact that predates its
+own calibration, and it is *why* the field was added required rather than with a
+default.
+
+**What this module still does not hold.** ``δ_lo``/``δ_hi`` and the PIT residual
+matrix, fitted by forecaster tickets 06 and 07 on the same calibration window.
+They are absent rather than present-and-``None``, and each will arrive the same
+way this one did.
 """
 
 from __future__ import annotations
@@ -54,6 +59,7 @@ from wattsteer_ml.artifacts import ARTIFACT_SUFFIX, CARD_SUFFIX
 from wattsteer_ml.constants import SUBSYSTEM_CODES, Subsystem
 from wattsteer_ml.evaluation import Fold, FoldBlocks
 from wattsteer_ml.lanes import Lane, format_instant, is_artifact_id
+from wattsteer_ml.training.calibration import Calibration, IsotonicCalibrator
 from wattsteer_ml.training.contract import FeatureContract
 from wattsteer_ml.training.hyperparameters import ESTIMATOR_FAMILY, ModelConfig
 
@@ -166,6 +172,12 @@ class HurdleBundle:
     magnitude_mean: Booster
     wind_share: Booster
     sub_threshold_means: SubThresholdMeans
+    #: The isotonic map, the reliability curve it is checked by, and the
+    #: published ``risk_bins``. Required: ``p`` reaches
+    #: :func:`wattsteer_ml.mixture.compose` through
+    #: :attr:`Calibration.isotonic` and through no other route, so a bundle
+    #: without one has no probability to compose with.
+    calibration: Calibration
     #: ``lightgbm`` — the allow-list the hot-swap gate's second check enforces.
     estimator_family: str = ESTIMATOR_FAMILY
 
@@ -236,11 +248,11 @@ class TrainingCounts:
 class ModelCard:
     """The document beside the bundle. Written whatever the gate later decides.
 
-    The groups this ticket owns — Identity, Lane, Contract, Data, plus the
-    Environment block — are fields. The Calibration, Quantiles, Metrics,
-    Experiments and Decision groups accrete in forecaster tickets 05, 06, 09 and
-    13 and are absent here rather than present and empty, so a reader can tell
-    "not measured yet" from "measured as nothing".
+    The groups written here — Identity, Lane, Contract, Data, Calibration, plus
+    the Environment block — are fields. The Quantiles, Metrics, Experiments and
+    Decision groups accrete in forecaster tickets 06, 09 and 13 and are absent
+    here rather than present and empty, so a reader can tell "not measured yet"
+    from "measured as nothing".
     """
 
     artifact_id: str
@@ -252,6 +264,7 @@ class ModelCard:
     blocks: FoldBlocks
     counts: TrainingCounts
     sub_threshold_means: SubThresholdMeans
+    calibration: Calibration
     #: The feature dictionary's version. `docs/specs/feature-engineering.md`
     #: owns it and its issue set has not published one yet, so this is ``None``
     #: until it does — recorded as an explicit null rather than defaulted to a
@@ -307,6 +320,7 @@ class ModelCard:
                 **self.counts.as_card_fields(),
             },
             "model_config": self.config.card_fields(),
+            "calibration": dict(self.calibration.card_fields()),
             "sub_threshold_means": self.sub_threshold_means.as_card_table(),
             "environment": environment_versions(),
         }
@@ -424,7 +438,36 @@ def _validated(loaded: object) -> HurdleBundle:
             raise PartialBundleError(
                 f"{name} is a {type(estimator).__name__}, not a LightGBM Booster"
             )
+    _validated_calibration(loaded.calibration)
     return loaded
+
+
+def _validated_calibration(calibration: object) -> None:
+    """The calibration, part by part, after the same ``__init__``-less load.
+
+    Checked as closely as the estimators are, and for the same failure: a bundle
+    whose isotonic map came back as ``None`` would serve ``p_raw`` under a card
+    that claims a calibrated probability, which is a worse outcome than not
+    serving — the number would be wrong in the one place the product renders a
+    percentage and names a risk class from it.
+    """
+    if not isinstance(calibration, Calibration):
+        raise PartialBundleError(
+            f"the bundle's calibration is a {type(calibration).__name__}, not a "
+            "Calibration"
+        )
+    for name in ("isotonic", "reliability", "risk_bins"):
+        if getattr(calibration, name, None) is None:
+            raise PartialBundleError(
+                f"the bundle's calibration is missing {name}; a calibrated "
+                "probability with no measured curve behind it and no published "
+                "edges is a claim nobody checked"
+            )
+    if not isinstance(calibration.isotonic, IsotonicCalibrator):
+        raise PartialBundleError(
+            f"the calibrator is a {type(calibration.isotonic).__name__}, not an "
+            "IsotonicCalibrator"
+        )
 
 
 def _window(start: Any, end: Any) -> dict[str, str]:
