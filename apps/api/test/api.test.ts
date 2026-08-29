@@ -63,7 +63,10 @@ describe("api · error mapping (global handler)", () => {
   it("maps unknown errors to 500 without leaking the message", async () => {
     const res = await hit("/boom");
     expect(res.status).toBe(500);
-    expect(await res.json()).toEqual({ error: "Internal server error" });
+    expect(await res.json()).toEqual({
+      error: "Internal server error",
+      code: "INTERNAL",
+    });
   });
 });
 
@@ -190,7 +193,8 @@ describe("api · ML proxy", () => {
     const res = await hit("?subsystem=NE");
     expect(res.status).toBe(502);
     expect(await res.json()).toEqual({
-      error: "The forecasting service is not configured",
+      error: "The ML service is not configured",
+      code: "OPTIMIZER_NOT_CONFIGURED",
     });
   });
 
