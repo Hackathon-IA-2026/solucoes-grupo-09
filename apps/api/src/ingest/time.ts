@@ -72,6 +72,30 @@ function wallClockEpoch(instant: number, timeZone: string): number {
   );
 }
 
+/**
+ * The wall clock an instant shows in `timeZone`.
+ *
+ * The inverse of `zonedWallClockToUtc`, and unambiguous in the direction it
+ * runs: every instant shows exactly one wall clock, where a wall clock may
+ * name no instant or two. Exported because an adapter that has to say which
+ * local civil day an instant belongs to — the ONS programme's reference day is
+ * one — must not reach for a fixed −3 offset to find out.
+ */
+export function zonedWallClock(
+  instant: Date,
+  timeZone: string = ONS_TIME_ZONE,
+): WallClock {
+  const local = new Date(wallClockEpoch(instant.getTime(), timeZone));
+  return {
+    year: local.getUTCFullYear(),
+    month: local.getUTCMonth() + 1,
+    day: local.getUTCDate(),
+    hour: local.getUTCHours(),
+    minute: local.getUTCMinutes(),
+    second: local.getUTCSeconds(),
+  };
+}
+
 /** Zone offset in ms at a given instant (positive east of Greenwich). */
 function offsetAt(instant: number, timeZone: string): number {
   return wallClockEpoch(instant, timeZone) - instant;

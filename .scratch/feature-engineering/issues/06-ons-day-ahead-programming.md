@@ -30,7 +30,7 @@ lag has to be measured before either feature set is trusted (see 12).
 
 **Blocked by:** 01 — the gate, end to end.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Programmed load for the subsystem-hour is a feature, cut on `published_at ≤ gate`
 - [ ] The ramp inside the programmed profile, the centred three-hour mean, the day's minimum and the hour's rank within the day are derived from the same profile

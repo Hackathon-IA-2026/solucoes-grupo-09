@@ -12,6 +12,7 @@ import {
   isLabelColumn,
   servingTargetDate,
 } from "../src/features/index.js";
+import { PROGRAMME_PUBLICATION_HOUR_BRT } from "../src/ingest/ons/load.js";
 
 /**
  * The claims that hold before a database is involved.
@@ -143,6 +144,11 @@ const ALLOWED_RELATIONS = new Set([
   "context_window",
   "exchange_hours",
   "fleet_capacity",
+  // Ticket 06's CTEs: the class-`P` block reads the day-ahead programme once
+  // and derives every shape feature from that one read, so there are two.
+  "programmed",
+  "profile",
+  "shaped",
 ]);
 
 const functionSegments = (): Map<string, string> => {
@@ -550,6 +556,66 @@ describe("the actuals cutoff, structurally", () => {
   });
 });
 
+describe("the day-ahead programme, structurally", () => {
+  it("cuts on publication, and never on the actuals cutoff", () => {
+    // The class this block belongs to is decided by what kind of fact it reads,
+    // not by which ticket built it. `carga-energia-programada` is a `Forecast`,
+    // so its D−1 availability is *genuine* — `published_at` is a publication
+    // instant — and the gate alone is the right cut. Reaching for
+    // `actuals_cutoff` here would move a forecast onto the enforced axis that
+    // exists because observations have no honest publication stamp, which is a
+    // category error that would look conservative and be meaningless.
+    const block = functionSegments().get("feature_programmed_load_block") ?? "";
+    expect(block).toContain("feature_apply_gate(target_date, gate_profile)");
+    expect(block).toContain("canonical_programmed_load");
+    expect(block).not.toContain("actuals_cutoff");
+    expect(block).not.toContain("feature_publication_lag");
+  });
+
+  it("never lets a ramp or a centred window span a gap in the profile", () => {
+    // `lag()` returns the previous *row*, which is the previous *hour* only
+    // while the profile is complete. Without the adjacency check a column named
+    // `_ramp_1h` would silently be a two-hour difference in exactly the rows
+    // where the programme was already thin — the same failure as a lag that
+    // slides, which ticket 05 refused on the actuals side.
+    const block = functionSegments().get("feature_programmed_load_block") ?? "";
+    const guards = block.split("previous_hour = shaped.valid_time - interval").length - 1;
+    expect(guards).toBe(2);
+    expect(block).toContain("next_hour = shaped.valid_time + interval");
+  });
+
+  it("refuses a day-grain summary of a partial day", () => {
+    // A minimum over nineteen hours is the minimum of a different day, and a
+    // rank among nineteen is not the rank the column name promises. Both are
+    // NULL rather than computed over what happens to be there.
+    const block = functionSegments().get("feature_programmed_load_block") ?? "";
+    expect(block.split("hours_in_day = 24").length - 1).toBe(2);
+  });
+
+  it("keeps the publication decision at the adapter, in one place", () => {
+    // The instant a programme row carries is a property of the fact, so it is
+    // written at ingest and the feature layer has no opinion about it. A second
+    // copy of the hour spelled in SQL would be a second definition of
+    // "published", reachable only from the database — and it would make the
+    // ablation seam unable to see a leak it had itself caused.
+    expect(PROGRAMME_PUBLICATION_HOUR_BRT).toBe(15);
+    const adapter = readFileSync(
+      join(import.meta.dir, "../src/ingest/ons/load.ts"),
+      "utf8",
+    );
+    expect(adapter).toContain("export const PROGRAMME_PUBLICATION_HOUR_BRT = 15;");
+    // The migration points at the adapter rather than restating the rule.
+    expect(RAW).toContain("programmePublishedAt");
+    // The body itself, not the catalogue comments that follow it: those name
+    // the hour precisely so a modeller reading the column can find it, which is
+    // the opposite of a second definition.
+    const segment = functionSegments().get("feature_programmed_load_block") ?? "";
+    const body = segment.slice(0, segment.indexOf("END $$"));
+    expect(body).not.toContain("15:00");
+    expect(body).not.toMatch(/published_at/);
+  });
+});
+
 describe("the feature/label partition", () => {
   it("puts every column in exactly one of the three categories", () => {
     for (const column of FEATURE_ROW_COLUMNS) {
@@ -598,6 +664,11 @@ describe("the feature/label partition", () => {
       "observed_reason_share_ene_7d",
       "observed_reason_share_cnf_7d",
       "observed_reason_share_rel_7d",
+      "programmed_load_mwh",
+      "programmed_load_ramp_1h",
+      "programmed_load_mean_3h",
+      "programmed_load_daily_min_mwh",
+      "programmed_load_rank_in_day",
     ]);
   });
 
@@ -637,6 +708,7 @@ describe("the feature dictionary's grain marking", () => {
       "observed_reason_share_ene_7d",
       "observed_reason_share_cnf_7d",
       "observed_reason_share_rel_7d",
+      "programmed_load_daily_min_mwh",
     ]);
     for (const column of FEATURE_ROW_COLUMNS) {
       expect({ column, grain: featureGrain(column) }).toEqual({
