@@ -6,6 +6,7 @@ import { config } from "../config.js";
 import { database } from "../database/connection.js";
 import { canonicalReads } from "./canonical.js";
 import { curtailmentRoutes } from "./curtailment.js";
+import { forecastRoutes } from "./forecast.js";
 import { gridRoutes } from "./grid.js";
 import { ingestHealth } from "./ingest-health.js";
 import { metaRoutes } from "./meta.js";
@@ -130,6 +131,7 @@ export const app = new Elysia()
   .use(canonicalReads)
   .use(gridRoutes)
   .use(curtailmentRoutes)
+  .use(forecastRoutes)
   .use(plantRoutes)
   .use(optimizeRoutes)
   .use(metaRoutes);
@@ -162,6 +164,7 @@ if (import.meta.main) {
     console.log(
       "   • GET /v1/curtailment/{hours,episodes,reasons} — the observed record",
     );
+    console.log("   • GET /v1/forecast/day-ahead — the published band, from Postgres");
     console.log(
       "   • GET /v1/plants       — the plant registry (ODbL §4.6), JSON or CSV",
     );

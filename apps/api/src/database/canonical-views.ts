@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  date,
   doublePrecision,
   integer,
   pgView,
@@ -8,6 +9,8 @@ import {
   timestamp,
 } from "drizzle-orm/pg-core";
 import {
+  forecastGateProfile,
+  forecastOriginKind,
   forecastProducer,
   operationModality,
   plantLocationSource,
@@ -956,4 +959,179 @@ export const canonicalCapacityWeight = pgView("canonical_capacity_weight", {
     on scope_totals.subsystem = by_centroid.subsystem
    and scope_totals.technology = by_centroid.technology
   where scope_totals.located_mw > 0
+`);
+
+// ---------------------------------------------------------------------------
+// The published forecast, as canonical reads — forecaster ticket 14.
+//
+// Two views rather than one, because a day-grain figure is not an aggregate of
+// the hourly one and a single view would have to invent the join that makes it
+// look like one. `docs/specs/replay.md` forbids exactly that arithmetic, and
+// the shape of this layer is where the prohibition is cheapest to hold.
+// ---------------------------------------------------------------------------
+
+/**
+ * `AsOf(t)` over the published hourly forecast.
+ *
+ * The `DISTINCT ON` key is the whole business key —
+ * (`subsystem`, `valid_time`, `origin_kind`, `gate_profile`) — which is what
+ * makes the two things it separates separable:
+ *
+ * - a **record** and a **reconstruction** of the same hour coexist, and
+ *   `/v1/forecast/day-ahead` filters `origin_kind = 'served'` in its query. A
+ *   view that collapsed them would make a `backfilled_holdout` row reachable
+ *   from the day-ahead route whenever it happened to be the newer vintage,
+ *   which is precisely the leak `replay.md` seam 6 tests for.
+ * - the **early and the late gate** are two forecasts of one day, not two
+ *   versions of one forecast, so a re-publication supersedes only within its
+ *   own gate.
+ *
+ * There is no `published_at_or_before` axis here, and its absence is deliberate.
+ * That axis exists for *upstream* forecasts — DESSEM, the weather run — where
+ * the question is "what had been published by the gate the features were cut
+ * against". These rows **are** the publication: their `published_at` is the
+ * gate, and cutting them on a gate would be asking whether our own forecast had
+ * been published before it was published.
+ */
+export const canonicalForecastHour = pgView("canonical_forecast_hour", {
+  subsystem: subsystemCode().notNull(),
+  /** Start of the hour the forecast is about, UTC. */
+  validTime: timestamp({ withTimezone: true }).notNull(),
+  /** `served` or `backfilled_holdout` — a record, or a reconstruction. */
+  originKind: forecastOriginKind().notNull(),
+  gateProfile: forecastGateProfile().notNull(),
+  /** The civil day in `America/Sao_Paulo` the hour belongs to. */
+  targetDate: date({ mode: "string" }).notNull(),
+  localHour: integer().notNull(),
+  forecastProducer: forecastProducer().notNull(),
+  /** `ForecastOrigin.run_label` — the artifact id. */
+  runLabel: text().notNull(),
+  featureSet: text().notNull(),
+  /** Which correction regime composed this band. See the table's own note. */
+  correctionRegime: text().notNull(),
+  thresholdMw: doublePrecision().notNull(),
+  occurrenceProbability: doublePrecision().notNull(),
+  p10Mwh: doublePrecision().notNull(),
+  p50Mwh: doublePrecision().notNull(),
+  p90Mwh: doublePrecision().notNull(),
+  /** A sibling of the band, never inside it. */
+  expectedMwh: doublePrecision().notNull(),
+  p50WindMwh: doublePrecision().notNull(),
+  p50SolarMwh: doublePrecision().notNull(),
+  expectedWindMwh: doublePrecision().notNull(),
+  expectedSolarMwh: doublePrecision().notNull(),
+  crossed: boolean().notNull(),
+  ...rowVintage,
+}).as(sql`
+  select distinct on (subsystem, valid_time, origin_kind, gate_profile)
+    subsystem,
+    valid_time,
+    origin_kind,
+    gate_profile,
+    target_date,
+    local_hour,
+    forecast_producer,
+    run_label,
+    feature_set,
+    correction_regime,
+    threshold_mw,
+    occurrence_probability,
+    p10_mwh,
+    p50_mwh,
+    p90_mwh,
+    expected_mwh,
+    p50_wind_mwh,
+    p50_solar_mwh,
+    expected_wind_mwh,
+    expected_solar_mwh,
+    crossed,
+    data_version,
+    published_at,
+    ingested_at
+  from curtailment_forecast_hour
+  where ingested_at <= canonical_as_of()
+  order by subsystem, valid_time, origin_kind, gate_profile,
+           ingested_at desc, data_version desc
+`);
+
+/**
+ * `AsOf(t)` over the day-grain companion row.
+ *
+ * The read `replay.md` needs so that a day total is a **query** rather than
+ * either a re-run of the ensemble or a sum of twenty-four quantiles. Nothing in
+ * this view aggregates the hourly one: it selects a stored row, and the only
+ * relation between the two is that they were written by one publication.
+ *
+ * `derivation` is projected rather than filtered on, so a reader can see what
+ * produced the figure instead of trusting that this view only ever returns one
+ * kind. The table's check constraint is what makes it always `path_ensemble`.
+ */
+export const canonicalForecastDay = pgView("canonical_forecast_day", {
+  subsystem: subsystemCode().notNull(),
+  /** The civil day in `America/Sao_Paulo` being forecast. */
+  targetDate: date({ mode: "string" }).notNull(),
+  originKind: forecastOriginKind().notNull(),
+  gateProfile: forecastGateProfile().notNull(),
+  forecastProducer: forecastProducer().notNull(),
+  runLabel: text().notNull(),
+  featureSet: text().notNull(),
+  correctionRegime: text().notNull(),
+  thresholdMw: doublePrecision().notNull(),
+  /** Quantiles of the drawn day totals. Never a sum of the hourly band. */
+  dayTotalP10Mwh: doublePrecision().notNull(),
+  dayTotalP50Mwh: doublePrecision().notNull(),
+  dayTotalP90Mwh: doublePrecision().notNull(),
+  peakPowerP10Mw: doublePrecision().notNull(),
+  peakPowerP50Mw: doublePrecision().notNull(),
+  peakPowerP90Mw: doublePrecision().notNull(),
+  dayOccurrenceProbability: doublePrecision().notNull(),
+  expectedMwh: doublePrecision().notNull(),
+  expectedWindMwh: doublePrecision().notNull(),
+  expectedSolarMwh: doublePrecision().notNull(),
+  hoursP50Nonzero: integer().notNull(),
+  /** `path_ensemble`, stored so a reader can check it rather than assume it. */
+  derivation: text().notNull(),
+  ensembleDraws: integer().notNull(),
+  ensembleSeed: integer().notNull(),
+  ensembleCalibrationDays: integer().notNull(),
+  trainedThrough: date({ mode: "string" }).notNull(),
+  riskBinElevatedFrom: doublePrecision().notNull(),
+  riskBinHighFrom: doublePrecision().notNull(),
+  ...rowVintage,
+}).as(sql`
+  select distinct on (subsystem, target_date, origin_kind, gate_profile)
+    subsystem,
+    target_date,
+    origin_kind,
+    gate_profile,
+    forecast_producer,
+    run_label,
+    feature_set,
+    correction_regime,
+    threshold_mw,
+    day_total_p10_mwh,
+    day_total_p50_mwh,
+    day_total_p90_mwh,
+    peak_power_p10_mw,
+    peak_power_p50_mw,
+    peak_power_p90_mw,
+    day_occurrence_probability,
+    expected_mwh,
+    expected_wind_mwh,
+    expected_solar_mwh,
+    hours_p50_nonzero,
+    derivation,
+    ensemble_draws,
+    ensemble_seed,
+    ensemble_calibration_days,
+    trained_through,
+    risk_bin_elevated_from,
+    risk_bin_high_from,
+    data_version,
+    published_at,
+    ingested_at
+  from curtailment_forecast_day
+  where ingested_at <= canonical_as_of()
+  order by subsystem, target_date, origin_kind, gate_profile,
+           ingested_at desc, data_version desc
 `);
