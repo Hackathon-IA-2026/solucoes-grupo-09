@@ -43,9 +43,19 @@ through :attr:`Calibration.isotonic <wattsteer_ml.training.calibration.\
 Calibration.isotonic>` and through nothing else, so calibration changes the
 breakpoint at ``1 − p`` and changes nothing else about the band. There is still
 exactly one composition in this service and this file still holds none of it.
-The conformal corrections are forecaster ticket 06; until they land the card
-carries no Quantiles group, which is a stated absence — a card without that
-group is a card that has not made a coverage statement.
+
+**The conformal correction is applied to ``Q_pos``, before the composition and
+never after it.** Forecaster ticket 06 fits ``δ_lo`` and ``δ_hi`` on the
+calibration window's curtailed hours, against the band *this file composed*
+there with the uncorrected knots, and
+:meth:`ConformalCorrection.apply <wattsteer_ml.training.conformal.\
+ConformalCorrection.apply>` then maps one
+:class:`~wattsteer_ml.mixture.MagnitudeQuantiles` to another on the way into
+``compose``. So the correction changes the knots the mixture inverts and
+changes nothing else about how a band is built — there is still one call to
+:func:`~wattsteer_ml.mixture.compose` in this service, and no second route from
+a scalar to a served interval. What that costs at the upper tail, and why the
+lower one is exact, is written down in :mod:`wattsteer_ml.training.conformal`.
 
 **The pool the reliability curve is measured on is an argument, not a
 derivation.** :func:`train_fold` cannot compute out-of-fold predictions across
@@ -55,13 +65,23 @@ supplies a :class:`~wattsteer_ml.training.calibration.OutOfFoldPool`, which has
 already checked every prediction against its own fold's test period, and this
 module refuses rather than fabricates when one is not offered.
 
-**The honest caveat this ticket inherits.** The calibration block is passed to
-LightGBM as an early-stopping monitor, so it has chosen the tree count even
-though no gradient came from it and no base learner was refit. ``p_raw`` on
-that window is therefore slightly optimistic, and an isotonic map fitted to it
-under-corrects a little. What that does *not* affect is the published curve: it
-is measured on rows outside the calibration window entirely. Setting
-``early_stopping_rounds`` to 0 in a configuration removes the caveat outright.
+**The honest caveat this ticket inherits, and where it now reaches.** The
+calibration block is passed to LightGBM as an early-stopping monitor, so it has
+chosen the tree count even though no gradient came from it and no base learner
+was refit. ``p_raw`` on that window is therefore slightly optimistic, and an
+isotonic map fitted to it under-corrects a little. What that does *not* affect
+is the published curve: it is measured on rows outside the calibration window
+entirely.
+
+It does reach ``δ_lo`` and ``δ_hi``. The two pinball boosters were early-stopped
+on that same window, so ``q̂^0.10`` and ``q̂^0.90`` sit a hair closer to its
+labels than they will on the test fold; the ``p`` that decides where the band's
+breakpoint falls comes from an isotonic map fitted to the same rows. Both push
+the composed band toward the labels, both shrink the residuals the corrections
+are ranked from, and so both make ``δ`` **slightly small** — the direction
+forecaster ticket 04 predicted. Setting ``early_stopping_rounds`` to 0 in a
+configuration removes the booster half outright; the isotonic half is inherent
+to fitting the map and the correction on one window.
 """
 
 from __future__ import annotations
@@ -93,9 +113,16 @@ from wattsteer_ml.training.bundle import (
 )
 from wattsteer_ml.training.calibration import (
     Calibration,
+    IsotonicCalibrator,
     OutOfFoldPool,
     RiskBins,
     calibrate,
+)
+from wattsteer_ml.training.conformal import (
+    ConformalCorrection,
+    CoverageReport,
+    ScoredHour,
+    conformalise,
 )
 from wattsteer_ml.training.contract import FeatureContract
 from wattsteer_ml.training.design import FeatureBlock, RowStamp
@@ -208,39 +235,54 @@ def train_fold(
         incumbent_risk_bins=incumbent_risk_bins,
     )
 
+    magnitude_p10 = _fit_quantile(config, positives, monitor_positives, FITTED_ALPHAS[0])
+    magnitude_p50 = _fit_quantile(config, positives, monitor_positives, FITTED_ALPHAS[1])
+    magnitude_p90 = _fit_quantile(config, positives, monitor_positives, FITTED_ALPHAS[2])
+    magnitude_mean = _fit(
+        config=config,
+        params=config.params(objective="l2", role="magnitude_mean"),
+        train=positives,
+        label=positives.total_mwh,
+        monitor=monitor_positives,
+        monitor_label=monitor_positives.total_mwh,
+    )
+    wind_share = _fit(
+        config=config,
+        params=config.params(objective="l2", role="wind_share"),
+        train=positives,
+        label=_wind_share(positives),
+        monitor=monitor_positives,
+        monitor_label=_wind_share(monitor_positives),
+    )
+    sub_threshold_means = fit_sub_threshold_means(fit_block)
+    correction = _fit_conformal(
+        monitor_positives,
+        blocks=blocks,
+        fold=fold,
+        occurrence=occurrence,
+        isotonic=fitted_calibration.isotonic,
+        magnitude_p10=magnitude_p10,
+        magnitude_p50=magnitude_p50,
+        magnitude_p90=magnitude_p90,
+        magnitude_mean=magnitude_mean,
+        wind_share=wind_share,
+        sub_threshold_means=sub_threshold_means,
+        threshold_mw=stamp.threshold_mw,
+    )
     bundle = HurdleBundle(
         lane=stamp.lane,
         contract=contract,
         model_config_version=config.version,
         threshold_mw=stamp.threshold_mw,
         occurrence=occurrence,
-        magnitude_p10=_fit_quantile(
-            config, positives, monitor_positives, FITTED_ALPHAS[0]
-        ),
-        magnitude_p50=_fit_quantile(
-            config, positives, monitor_positives, FITTED_ALPHAS[1]
-        ),
-        magnitude_p90=_fit_quantile(
-            config, positives, monitor_positives, FITTED_ALPHAS[2]
-        ),
-        magnitude_mean=_fit(
-            config=config,
-            params=config.params(objective="l2", role="magnitude_mean"),
-            train=positives,
-            label=positives.total_mwh,
-            monitor=monitor_positives,
-            monitor_label=monitor_positives.total_mwh,
-        ),
-        wind_share=_fit(
-            config=config,
-            params=config.params(objective="l2", role="wind_share"),
-            train=positives,
-            label=_wind_share(positives),
-            monitor=monitor_positives,
-            monitor_label=_wind_share(monitor_positives),
-        ),
-        sub_threshold_means=fit_sub_threshold_means(fit_block),
+        magnitude_p10=magnitude_p10,
+        magnitude_p50=magnitude_p50,
+        magnitude_p90=magnitude_p90,
+        magnitude_mean=magnitude_mean,
+        wind_share=wind_share,
+        sub_threshold_means=sub_threshold_means,
         calibration=fitted_calibration,
+        conformal=correction,
     )
     counts = TrainingCounts(
         base_fit_rows=len(base_fit),
@@ -266,6 +308,8 @@ def train_fold(
         counts=counts,
         sub_threshold_means=bundle.sub_threshold_means,
         calibration=fitted_calibration,
+        conformal=correction,
+        coverage=_fold_coverage(bundle, test_rows, fold=fold),
         feature_set_version=feature_set_version,
         git_sha_ml=git_sha_ml,
         git_sha_api=git_sha_api,
@@ -287,6 +331,12 @@ def forecast_rows(
     and then straight into ``compose`` as the breakpoint. There is no second
     route: nothing else in this function reads ``bundle.occurrence``.
 
+    ``Q_pos`` is the **conformalised** quantile function. The three pinball
+    outputs go through ``bundle.conformal``, which moves the 0.10 and 0.90 knots
+    and leaves the median alone, and the corrected knots are what ``compose``
+    inverts. A served band is therefore never uncorrected, and the correction is
+    never applied to a composed number.
+
     Two clamps, and they are type-level rather than corrective. The raw output
     and the share are clipped to ``[0, 1]`` because a regression has no
     constraint saying so and a probability outside it is not one; the magnitudes
@@ -300,35 +350,88 @@ def forecast_rows(
     if not rows:
         return ()
     block = FeatureBlock.of(rows, bundle.contract, threshold_mw=bundle.threshold_mw)
-    matrix = block.matrix
-    raw = np.clip(_predict(bundle.occurrence, matrix), 0.0, 1.0)
-    occurrence = [bundle.calibration.isotonic(float(value)) for value in raw]
-    q10 = _predict(bundle.magnitude_p10, matrix)
-    q50 = _predict(bundle.magnitude_p50, matrix)
-    q90 = _predict(bundle.magnitude_p90, matrix)
-    mean = _predict(bundle.magnitude_mean, matrix)
-    share = np.clip(_predict(bundle.wind_share, matrix), 0.0, 1.0)
-    floor = 0.0
-    return tuple(
-        HourForecast(
-            key=key,
-            forecast=compose(
-                occurrence_probability=occurrence[index],
-                positive_quantiles=MagnitudeQuantiles.from_boosters(
-                    q10=max(floor, float(q10[index])),
-                    q50=max(floor, float(q50[index])),
-                    q90=max(floor, float(q90[index])),
-                ),
-                positive_mean_mwh=max(floor, float(mean[index])),
-                sub_threshold_mean_mwh=bundle.sub_threshold_means.mean_for(
-                    key.subsystem, key.local_hour
-                ),
-                threshold_mw=bundle.threshold_mw,
-                wind_share=float(share[index]),
-            ),
-        )
-        for index, key in enumerate(block.keys)
+    return _compose_with(bundle, block)
+
+
+def _compose_with(bundle: HurdleBundle, block: FeatureBlock) -> tuple[HourForecast, ...]:
+    """A finished bundle's estimators, unpacked onto :func:`_compose_block`."""
+    return _compose_block(
+        block,
+        occurrence=bundle.occurrence,
+        isotonic=bundle.calibration.isotonic,
+        magnitude_p10=bundle.magnitude_p10,
+        magnitude_p50=bundle.magnitude_p50,
+        magnitude_p90=bundle.magnitude_p90,
+        magnitude_mean=bundle.magnitude_mean,
+        wind_share=bundle.wind_share,
+        sub_threshold_means=bundle.sub_threshold_means,
+        threshold_mw=bundle.threshold_mw,
+        correction=bundle.conformal,
     )
+
+
+def _compose_block(
+    block: FeatureBlock,
+    *,
+    occurrence: lgb.Booster,
+    isotonic: IsotonicCalibrator,
+    magnitude_p10: lgb.Booster,
+    magnitude_p50: lgb.Booster,
+    magnitude_p90: lgb.Booster,
+    magnitude_mean: lgb.Booster,
+    wind_share: lgb.Booster,
+    sub_threshold_means: SubThresholdMeans,
+    threshold_mw: float,
+    correction: ConformalCorrection | None,
+) -> tuple[HourForecast, ...]:
+    """The one place a band is built, from loose estimators rather than a bundle.
+
+    Loose because of an ordering that is real rather than incidental: ``δ_lo``
+    and ``δ_hi`` are fitted against the band this function composes on the
+    calibration window, and a :class:`~wattsteer_ml.training.bundle.HurdleBundle`
+    cannot exist before them. So the fit calls this with ``correction=None`` and
+    serving calls it with the bundle's, and both reach
+    :func:`wattsteer_ml.mixture.compose` — the only call to it in this
+    service — by the same three lines.
+
+    ``correction=None`` means *uncorrected*, and it is reachable from exactly
+    one caller: :func:`_fit_conformal`, which is measuring how wrong the
+    uncorrected band was. It is not a serving mode.
+    """
+    matrix = block.matrix
+    raw = np.clip(_predict(occurrence, matrix), 0.0, 1.0)
+    probability = [isotonic(float(value)) for value in raw]
+    q10 = _predict(magnitude_p10, matrix)
+    q50 = _predict(magnitude_p50, matrix)
+    q90 = _predict(magnitude_p90, matrix)
+    mean = _predict(magnitude_mean, matrix)
+    share = np.clip(_predict(wind_share, matrix), 0.0, 1.0)
+    floor = 0.0
+    forecasts: list[HourForecast] = []
+    for index, key in enumerate(block.keys):
+        quantiles = MagnitudeQuantiles.from_boosters(
+            q10=max(floor, float(q10[index])),
+            q50=max(floor, float(q50[index])),
+            q90=max(floor, float(q90[index])),
+        )
+        forecasts.append(
+            HourForecast(
+                key=key,
+                forecast=compose(
+                    occurrence_probability=probability[index],
+                    positive_quantiles=(
+                        quantiles if correction is None else correction.apply(quantiles)
+                    ),
+                    positive_mean_mwh=max(floor, float(mean[index])),
+                    sub_threshold_mean_mwh=sub_threshold_means.mean_for(
+                        key.subsystem, key.local_hour
+                    ),
+                    threshold_mw=threshold_mw,
+                    wind_share=float(share[index]),
+                ),
+            )
+        )
+    return tuple(forecasts)
 
 
 def _fit_calibration(
@@ -354,6 +457,113 @@ def _fit_calibration(
         pool=pool,
         calibration_window=(blocks.calibration_start, blocks.calibration_end),
         incumbent_risk_bins=incumbent_risk_bins,
+    )
+
+
+def _fit_conformal(
+    monitor_positives: FeatureBlock,
+    *,
+    blocks: FoldBlocks,
+    fold: Fold,
+    occurrence: lgb.Booster,
+    isotonic: IsotonicCalibrator,
+    magnitude_p10: lgb.Booster,
+    magnitude_p50: lgb.Booster,
+    magnitude_p90: lgb.Booster,
+    magnitude_mean: lgb.Booster,
+    wind_share: lgb.Booster,
+    sub_threshold_means: SubThresholdMeans,
+    threshold_mw: float,
+) -> ConformalCorrection:
+    """``δ_lo`` and ``δ_hi``, on the calibration window's curtailed hours.
+
+    Against the **composed** band, which is what the spec asks for and what
+    makes the correction a statement about the interval the product ships
+    rather than about one booster's output: this function composes the window
+    with ``correction=None`` and hands the resulting bands to
+    :func:`~wattsteer_ml.training.conformal.conformalise`.
+
+    The rows are the calibration block's curtailed hours, and only those.
+    ``Q_pos`` is conditional on ``Y > τ``, so a sub-threshold hour is not a test
+    of the tail's width; the block is already masked by the feature function's
+    own ``y_has_curtailment``, and
+    :func:`~wattsteer_ml.training.conformal.residuals` re-checks each label
+    against ``τ`` so the two definitions cannot silently diverge.
+
+    The arithmetic is entirely in :mod:`wattsteer_ml.training.conformal`; this
+    function's whole job is to hand it the right block, exactly as
+    :func:`_fit_calibration` does for the isotonic map.
+    """
+    if not len(monitor_positives):
+        raise TrainingError(
+            f"{fold.id}: no hour of the calibration block "
+            f"{blocks.calibration_start.isoformat()}–"
+            f"{blocks.calibration_end.isoformat()} is above τ = {threshold_mw} MWh, "
+            "so there are no residuals to rank and the P10 cannot carry a "
+            "coverage statement; this is a statement about the window, not a "
+            "configuration to relax"
+        )
+    composed = _compose_block(
+        monitor_positives,
+        occurrence=occurrence,
+        isotonic=isotonic,
+        magnitude_p10=magnitude_p10,
+        magnitude_p50=magnitude_p50,
+        magnitude_p90=magnitude_p90,
+        magnitude_mean=magnitude_mean,
+        wind_share=wind_share,
+        sub_threshold_means=sub_threshold_means,
+        threshold_mw=threshold_mw,
+        correction=None,
+    )
+    return conformalise(
+        _scored(composed, monitor_positives),
+        window=(blocks.calibration_start, blocks.calibration_end),
+    )
+
+
+def _fold_coverage(
+    bundle: HurdleBundle, rows: Sequence[Mapping[str, Any]], *, fold: Fold
+) -> CoverageReport | None:
+    """Empirical coverage of this fold's test period, or ``None`` if unmeasured.
+
+    Measured on the **served** band — the correction is already in the bundle
+    and :func:`_compose_with` applies it — because the number the card publishes
+    has to be a property of what the product would have shown, not of an
+    intermediate. Nothing about it feeds back: the correction was fitted before
+    this function ran, on a different window, and
+    :class:`~wattsteer_ml.training.conformal.ConformalCorrection` has no field a
+    coverage number could reach.
+
+    ``None`` when the test period holds no settled curtailed hour. A fold with
+    nothing above ``τ`` has no interval whose coverage could fail, and a row of
+    zeros in that slot would read as total failure.
+    """
+    if not rows:
+        return None
+    block = FeatureBlock.of(rows, bundle.contract, threshold_mw=bundle.threshold_mw)
+    labelled = block.select(block.labelled)
+    scored = labelled.select(labelled.positive)
+    if not len(scored):
+        return None
+    return CoverageReport.of(
+        _scored(_compose_with(bundle, scored), scored), fold_id=fold.id
+    )
+
+
+def _scored(
+    forecasts: Sequence[HourForecast], block: FeatureBlock
+) -> tuple[ScoredHour, ...]:
+    """Pair each composed hour with the label of the row it was composed from.
+
+    ``strict=True``: :func:`_compose_block` walks ``block.keys`` in order and
+    emits one forecast per row, so a length mismatch here would mean the two
+    have drifted apart, and a silently truncated ``zip`` would score a band
+    against another hour's label.
+    """
+    return tuple(
+        ScoredHour(key=hour.key, forecast=hour.forecast, observed_mwh=float(observed))
+        for hour, observed in zip(forecasts, block.total_mwh.tolist(), strict=True)
     )
 
 

@@ -134,6 +134,15 @@ def test_the_magnitude_models_saw_curtailed_hours_only(
     would move. One fitted on `y > τ` alone cannot see the change at all — so
     its predictions must be identical to the last float, while the occurrence
     classifier, which does see every row, is free to move.
+
+    **The comparison is on the boosters, not on the served quantile function,
+    and forecaster ticket 06 is why.** ``Q_pos`` as served now carries the
+    conformal correction, and ``δ`` is fitted against the *composed* band —
+    which the classifier's ``p`` decides the shape of. So blinding sub-threshold
+    covariates legitimately moves the served knots through ``p``, and asserting
+    on them would assert something this model does not claim. What it does claim
+    is that the three pinball fits saw curtailed hours only, and that is a
+    statement about ``bundle.magnitude_q*``, tested here directly.
     """
     blinded = train_fold(
         blinded_sub_threshold(rows),
@@ -143,17 +152,20 @@ def test_the_magnitude_models_saw_curtailed_hours_only(
         pool=out_of_fold_pool(),
         artifact_id="2026-08-29T05:00:00Z",
     )
+    for name in ("magnitude_p10", "magnitude_p50", "magnitude_p90", "magnitude_mean"):
+        one = getattr(trained.bundle, name)
+        other = getattr(blinded.bundle, name)
+        assert one.model_to_string() == other.model_to_string(), (
+            f"{name} moved when sub-threshold covariates were blinded, so it saw "
+            "rows below τ"
+        )
     before = forecast_rows(trained.bundle, test_rows)
     after = forecast_rows(blinded.bundle, test_rows)
-    for one, other in zip(before, after, strict=True):
-        assert one.key == other.key
-        assert one.forecast.mixture.positive_mean_mwh == (
-            other.forecast.mixture.positive_mean_mwh
+    for one_hour, other_hour in zip(before, after, strict=True):
+        assert one_hour.key == other_hour.key
+        assert one_hour.forecast.mixture.positive_mean_mwh == (
+            other_hour.forecast.mixture.positive_mean_mwh
         )
-        for quantile in (0.0, 0.25, 0.5, 0.75, 1.0):
-            assert one.forecast.mixture.positive_quantiles(quantile) == (
-                other.forecast.mixture.positive_quantiles(quantile)
-            )
 
 
 def test_a_fold_with_no_curtailed_hour_refuses_rather_than_fits(

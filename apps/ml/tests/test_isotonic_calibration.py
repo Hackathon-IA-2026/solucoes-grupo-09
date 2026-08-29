@@ -163,15 +163,22 @@ def test_with_early_stopping_off_the_calibration_window_touches_nothing_but_the_
     That is "the base learners are not refit afterwards" observed rather than
     argued, and it is also the configuration under which no coverage number
     anywhere is optimistic.
+
+    **Forecaster ticket 06 widened the list of things that window is allowed to
+    reach, and this test now names both.** The isotonic map and the two conformal
+    corrections are both fitted there; the boosters still are not. So the
+    assertion is not "only the map moves" — it is "the map and ``δ`` move, and
+    the six boosters do not".
+
+    The flip is applied to the whole label, not to ``y_has_curtailment`` alone.
+    A row marked curtailed with a zero MWh is not a label a fold can carry: the
+    conformal residuals re-check each label against ``τ``, so a half-flipped
+    window would present zero curtailed hours and the fit would refuse — which
+    would be this fixture failing, not the code.
     """
     config = replace(MODEL_CONFIG_V1, early_stopping_rounds=0)
     flipped = [
-        dict(
-            row,
-            y_has_curtailment=not row["y_has_curtailment"]
-            if row["y_has_curtailment"] is not None
-            else None,
-        )
+        _flipped_label(row)
         if blocks.calibration_start <= row["target_date"] <= blocks.calibration_end
         else row
         for row in rows
@@ -200,7 +207,39 @@ def test_with_early_stopping_off_the_calibration_window_touches_nothing_but_the_
         ), f"{name} saw the calibration window's labels"
     assert (
         perturbed.bundle.calibration.isotonic != baseline.bundle.calibration.isotonic
-    ), "the calibration window's labels must reach the isotonic map, and only it"
+    ), "the calibration window's labels must reach the isotonic map"
+    assert perturbed.bundle.conformal != baseline.bundle.conformal, (
+        "the calibration window's labels must reach δ_lo and δ_hi too; those two "
+        "and the isotonic map are the whole of what that window is used for"
+    )
+
+
+def _flipped_label(row: dict[str, Any]) -> dict[str, Any]:
+    """One row's settled label, inverted and left coherent.
+
+    A curtailed hour becomes a quiet one with zero MWh; a quiet hour becomes a
+    curtailed one carrying a magnitude well above ``τ``. Unlabelled rows are
+    passed through — an absence has nothing to invert.
+    """
+    if row["y_has_curtailment"] is None:
+        return row
+    if row["y_has_curtailment"]:
+        return dict(
+            row,
+            y_has_curtailment=False,
+            y_constrained_off_total_mwh=0.0,
+            y_constrained_off_wind_mwh=0.0,
+            y_constrained_off_solar_mwh=0.0,
+            y_magnitude_mwh=None,
+        )
+    return dict(
+        row,
+        y_has_curtailment=True,
+        y_constrained_off_total_mwh=40.0,
+        y_constrained_off_wind_mwh=25.0,
+        y_constrained_off_solar_mwh=15.0,
+        y_magnitude_mwh=40.0,
+    )
 
 
 def test_a_calibration_block_with_no_settled_label_refuses(

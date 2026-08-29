@@ -11,6 +11,9 @@ package owns is everything between a feature row and an artifact on the volume:
 - :mod:`~wattsteer_ml.training.calibration` — the isotonic map fitted on the
   calibration window, the reliability curve measured on pooled out-of-fold
   predictions, and the risk-class edges derived from it.
+- :mod:`~wattsteer_ml.training.conformal` — the two one-sided conformal
+  corrections fitted on the same window, the coverage they are checked by, and
+  the drift hook that reports rather than adapts.
 - :mod:`~wattsteer_ml.training.bundle` — the frozen bundle, the card, and a load
   that refuses a partial mixture.
 - :mod:`~wattsteer_ml.training.hurdle` — the fit, and the composition, which is
@@ -60,6 +63,22 @@ from wattsteer_ml.training.calibration import (
     outside_calibration_window,
     wilson_half_width,
 )
+from wattsteer_ml.training.conformal import (
+    COVERAGE_GUARDRAIL,
+    NOMINAL_MISCOVERAGE,
+    TARGET_COVERAGE,
+    ConformalCorrection,
+    ConformalError,
+    CoverageCell,
+    CoverageReport,
+    DeltaDrift,
+    ScoredHour,
+    conformal_rank,
+    conformalise,
+    minimum_calibration_rows,
+    residuals,
+    upper_correction_fraction,
+)
 from wattsteer_ml.training.contract import (
     FUNCTION_DEFINITION_SQL,
     LABEL_PREFIX,
@@ -95,6 +114,7 @@ from wattsteer_ml.training.hyperparameters import (
 )
 
 __all__ = [
+    "COVERAGE_GUARDRAIL",
     "ESTIMATOR_FAMILY",
     "ESTIMATOR_FIELDS",
     "FUNCTION_DEFINITION_SQL",
@@ -104,15 +124,22 @@ __all__ = [
     "MODEL_CONFIGS",
     "MODEL_CONFIG_V1",
     "MODEL_CONFIG_VERSION",
+    "NOMINAL_MISCOVERAGE",
     "RELIABILITY_BINS",
     "RISK_CLASSES",
     "RISK_EDGE_STEP",
     "STAMP_COLUMNS",
+    "TARGET_COVERAGE",
     "BinMerge",
     "BundleError",
     "Calibration",
     "CalibrationError",
+    "ConformalCorrection",
+    "ConformalError",
     "ContractMismatchError",
+    "CoverageCell",
+    "CoverageReport",
+    "DeltaDrift",
     "DesignError",
     "Dtype",
     "FeatureBlock",
@@ -136,23 +163,29 @@ __all__ = [
     "RiskBinsUndeterminedError",
     "RiskClass",
     "RowStamp",
+    "ScoredHour",
     "SubThresholdMeans",
     "TrainedFold",
     "TrainingCounts",
     "TrainingError",
     "UnknownModelConfigError",
     "calibrate",
+    "conformal_rank",
+    "conformalise",
     "derive_risk_bins",
     "environment_versions",
     "feature_column_names",
     "fit_sub_threshold_means",
     "forecast_rows",
     "load_artifact",
+    "minimum_calibration_rows",
     "model_config",
     "new_artifact_id",
     "outside_calibration_window",
     "read_feature_function_definition",
+    "residuals",
     "save_artifact",
     "train_fold",
+    "upper_correction_fraction",
     "wilson_half_width",
 ]
