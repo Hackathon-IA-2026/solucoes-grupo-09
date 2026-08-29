@@ -138,8 +138,17 @@ const SOURCES: SourceHealthSpec[] = [
   },
 ];
 
-/** One source's line in the view. */
-export interface SourceHealth {
+/**
+ * One source's freshness, and nothing about the runs behind it.
+ *
+ * Split out of `SourceHealth` because `/v1/meta` needs exactly these five
+ * fields and none of the rest: the run log, the custody summary and the join
+ * rates are `GET /ingest/health`'s business, and a meta endpoint that computed
+ * them would be doing four extra table scans to answer a question nobody asked
+ * it. Splitting the *type* is what let the read be split without the source
+ * table being written down twice.
+ */
+export interface SourceFreshness {
   source: IngestionSource;
   /** Fact rows stored, all versions — the volume an operator recognises. */
   rows: number;
@@ -155,6 +164,10 @@ export interface SourceHealth {
    * has ever been ingested. This is the flag that turns silence into an alert.
    */
   stale: boolean;
+}
+
+/** One source's line in the view. */
+export interface SourceHealth extends SourceFreshness {
   lastRunAt: Date | null;
   lastRunStatus: "running" | "ok" | "failed" | null;
   lastSuccessAt: Date | null;
@@ -204,6 +217,58 @@ function toDate(value: unknown): Date | null {
 }
 
 /**
+ * Per-source freshness, and nothing else.
+ *
+ * The read behind `/v1/meta`'s `data.freshness` block, and the first half of
+ * `GET /ingest/health`'s. One function rather than two because the eleven
+ * sources and what "fresh" means for each are a single table — `SOURCES` above
+ * — and a second copy of it in the meta route is exactly how the two surfaces
+ * would come to disagree about whether the weather feed is late.
+ */
+export async function readSourceFreshness(
+  db: Database,
+  options: { now?: Date } = {},
+): Promise<SourceFreshness[]> {
+  const now = options.now ?? new Date();
+  const freshness: SourceFreshness[] = [];
+  for (const spec of SOURCES) {
+    const [facts] = await db.execute<{
+      rows: number;
+      latest_valid: string | null;
+      latest_ingested: string | null;
+    }>(sql`
+      select
+        count(*)::int as rows,
+        max(${sql.identifier(spec.validTimeColumn ?? "valid_time")}) as latest_valid,
+        max(ingested_at) as latest_ingested
+      from ${sql.identifier(spec.table)}
+      ${spec.where ? sql`where ${sql.raw(spec.where)}` : sql``}
+    `);
+
+    const latestValidTime = toDate(facts?.latest_valid);
+    const latestIngestedAt = toDate(facts?.latest_ingested);
+    const basis = spec.basis === "valid_time" ? latestValidTime : latestIngestedAt;
+    const lagHours =
+      basis === null
+        ? null
+        : Math.round(((now.getTime() - basis.getTime()) / MS_PER_HOUR) * 10) / 10;
+
+    freshness.push({
+      source: spec.source,
+      rows: Number(facts?.rows ?? 0),
+      latestValidTime,
+      latestIngestedAt,
+      lagHours,
+      toleranceHours: spec.toleranceHours,
+      // Never ingested is stale, not unknown: a source that has produced
+      // nothing is exactly as useless as one that stopped.
+      stale: lagHours === null || lagHours > spec.toleranceHours,
+    });
+  }
+  return freshness;
+}
+
+/**
  * Read the whole view in one call.
  *
  * Deliberately a handful of aggregates rather than a materialised view: it is
@@ -248,39 +313,11 @@ export async function readIngestionHealth(
   const runBySource = new Map(runs.map((row) => [row.source, row]));
 
   const sources: SourceHealth[] = [];
-  for (const spec of SOURCES) {
-    const [facts] = await db.execute<{
-      rows: number;
-      latest_valid: string | null;
-      latest_ingested: string | null;
-    }>(sql`
-      select
-        count(*)::int as rows,
-        max(${sql.identifier(spec.validTimeColumn ?? "valid_time")}) as latest_valid,
-        max(ingested_at) as latest_ingested
-      from ${sql.identifier(spec.table)}
-      ${spec.where ? sql`where ${sql.raw(spec.where)}` : sql``}
-    `);
-
-    const latestValidTime = toDate(facts?.latest_valid);
-    const latestIngestedAt = toDate(facts?.latest_ingested);
-    const basis = spec.basis === "valid_time" ? latestValidTime : latestIngestedAt;
-    const lagHours =
-      basis === null
-        ? null
-        : Math.round(((now.getTime() - basis.getTime()) / MS_PER_HOUR) * 10) / 10;
-    const run = runBySource.get(spec.source);
+  for (const freshness of await readSourceFreshness(db, { now })) {
+    const run = runBySource.get(freshness.source);
 
     sources.push({
-      source: spec.source,
-      rows: Number(facts?.rows ?? 0),
-      latestValidTime,
-      latestIngestedAt,
-      lagHours,
-      toleranceHours: spec.toleranceHours,
-      // Never ingested is stale, not unknown: a source that has produced
-      // nothing is exactly as useless as one that stopped.
-      stale: lagHours === null || lagHours > spec.toleranceHours,
+      ...freshness,
       lastRunAt: toDate(run?.last_run_at),
       lastRunStatus: run?.last_run_status ?? null,
       lastSuccessAt: toDate(run?.last_success_at),

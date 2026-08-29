@@ -40,15 +40,15 @@ anything, and five round trips before first paint is worse.
 
 **Blocked by:** 03, 04.
 
-**Status:** ready-for-agent
+**Status:** done — branch `api-06-meta-endpoint`
 
-- [ ] One request returns the window bounds, the defaults, the gate table, the model lanes, the forecast publication state, the ingestion freshness, the reference fleet and the attribution block
-- [ ] With the modelling service unreachable, the response is a 200 and only the model block degrades
-- [ ] The three artifact states are reported verbatim, and the volume state is reported separately from them
-- [ ] The gate instants are data, so no screen hardcodes a publication time
-- [ ] The response is `no-store` and carries no ETag
-- [ ] The attribution block names each source's licence identifier untranslated
-- [ ] The reference fleet is echoed, and a test asserts nothing fetches it in order to use it
+- [x] One request returns the window bounds, the defaults, the gate table, the model lanes, the forecast publication state, the ingestion freshness, the reference fleet and the attribution block — with one caveat: `forecast.latest_published` is `[]` because there is no `curtailment_forecast_hour` yet (ticket 10/11). `next_publication_at` is real, derived from the gate table.
+- [x] With the modelling service unreachable, the response is a 200 and only the model block degrades — and it says *which* failure it was, in `model.unreachable_reason`
+- [x] The three artifact states are reported verbatim, and the volume state is reported separately from them — plus `unresolvable`, carried rather than rounded down to one of the three (see the note added to `docs/specs/api-surface.md`)
+- [x] The gate instants are data, so no screen hardcodes a publication time
+- [x] The response is `no-store` and carries no ETag
+- [x] The attribution block names each source's licence identifier untranslated
+- [x] The reference fleet is echoed, and a test asserts nothing fetches it in order to use it
 
 ---
 
@@ -73,6 +73,22 @@ make attribution an array of `{key, …}` rather than a map. The first is more
 work and fixes every future map; the second is a schema change and fixes only
 this one.
 
-- [ ] `/v1/meta`'s attribution block round-trips through `encodeWire` with
+- [x] `/v1/meta`'s attribution block round-trips through `encodeWire` with
       snake_case keys, and a test asserts a multi-word field name specifically
+
+**Which way it was fixed: the generator.** `nestedShapeName` now recognises a
+`Record<string, T>` whose value has a named shape and emits `map: true` beside
+the value's shape name; `wire.ts` grew one branch that renames every value and
+touches no key. `error.details`, whose values are scalars, still has no shape to
+recurse into and is still carried through whole — the distinction the old
+comment was trying to make, made precisely. The schema-change alternative
+(attribution as an array of `{key, …}`) was rejected because it fixes one field
+and changes a published contract to do it, while the map is a shape the schemas
+will keep producing.
+
+With the generator fixed, ticket 19's workaround is **lifted**: `/v1/plants`
+emits the whole `SOURCE_ATTRIBUTION` entry again, `plant-registry.schema.json`
+`$ref`s `meta.schema.json#/$defs/source_attribution` instead of restating a
+narrower copy, and the test that pinned the exact three-key set now asserts the
+rename on `derivative_database` instead.
 

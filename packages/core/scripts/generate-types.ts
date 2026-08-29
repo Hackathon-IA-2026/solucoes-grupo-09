@@ -277,6 +277,9 @@ class Generator {
       if (nested.list) {
         parts.push("list: true");
       }
+      if (nested.map) {
+        parts.push("map: true");
+      }
     }
     if (!required) {
       parts.push("optional: true");
@@ -288,7 +291,7 @@ class Generator {
     property: Node,
     file: string,
     inlineName: string,
-  ): { name: string; list: boolean } | null {
+  ): { name: string; list: boolean; map?: boolean } | null {
     const unwrapped = this.unwrapNullable(property, file);
     if (unwrapped === null) {
       return null;
@@ -316,6 +319,33 @@ class Generator {
         name: this.register(`${file}#inline/${inlineName}`, node, inlineName),
         list: false,
       };
+    }
+    // A **map whose keys are data and whose values are a named shape**:
+    // `attribution` on `/v1/meta` and on `/v1/plants`. The keys are the source
+    // identifiers and must survive untouched, but the *values* are a
+    // `SourceAttribution` like any other object, and `derivative_database` is
+    // as much a field name as any other field name. Before this branch existed
+    // the codec carried the whole map through unrenamed and nothing noticed:
+    // the object still validated, it just travelled under the wrong keys. A
+    // map whose values are scalars — `error.details` — has no shape to recurse
+    // into and still passes through untouched, which is the distinction that
+    // was being made badly before and is made precisely here.
+    const values = node.additionalProperties;
+    if (typeof values === "object" && values !== null) {
+      const inner = this.nestedShapeName(values as Node, nodeFile, `${inlineName}Value`);
+      if (inner === null) {
+        return null;
+      }
+      if (inner.list || inner.map === true) {
+        // A map of lists, or a map of maps. Representable in JSON Schema and
+        // not in `WireField`, so it is refused at generation time rather than
+        // renamed halfway at runtime.
+        throw new Error(
+          `${inlineName}: a map of lists or of maps has no wire-table form; ` +
+            "give the value a named object shape instead",
+        );
+      }
+      return { name: inner.name, list: false, map: true };
     }
     return null;
   }
@@ -404,6 +434,14 @@ export interface WireField {
    */
   readonly shape?: string;
   readonly list?: boolean;
+  /**
+   * True where the field is a **map whose keys are data** and whose values are
+   * \`shape\` — \`/v1/meta\`'s and \`/v1/plants\`' \`attribution\`. The keys are
+   * carried through untouched and every value is renamed, which is the whole
+   * distinction: a source identifier is not a field name, and
+   * \`derivative_database\` is.
+   */
+  readonly map?: boolean;
   readonly optional?: boolean;
   /**
    * The single value a \`const\` property is fixed to — the discriminant of a

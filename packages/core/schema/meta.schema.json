@@ -53,11 +53,17 @@
       "additionalProperties": false
     },
     "reference_fleet": {
-      "description": "`REFERENCE_FLEET`, echoed for diagnosability. Echoed, never fetched in order to be used: a caller that reads it over HTTP can be served a different battery than the one the number it is looking at was computed against.",
-      "type": "object"
+      "description": "`REFERENCE_FLEET`, echoed for diagnosability. Echoed, never fetched in order to be used: a caller that reads it over HTTP can be served a different battery than the one the number it is looking at was computed against. Its fields are named here rather than left as a free-form object so that the one translator renames them: `max_power_mw` is a field name, and a block whose shape the table does not know travels in whatever casing the gateway happened to build it in.",
+      "type": "object",
+      "properties": {
+        "battery": { "$ref": "#/$defs/reference_battery" },
+        "shiftable_load": { "$ref": "#/$defs/reference_shiftable_load" }
+      },
+      "required": ["battery", "shiftable_load"],
+      "additionalProperties": false
     },
     "attribution": {
-      "description": "Data rather than copy, because the ODbL/CC-BY notice is bilingual and a bilingual notice assembled from translated strings around untranslated licence identifiers is exactly the shape `docs/specs/i18n.md` asks for.",
+      "description": "Data rather than copy, because the ODbL/CC-BY notice is bilingual and a bilingual notice assembled from translated strings around untranslated licence identifiers is exactly the shape `docs/specs/i18n.md` asks for. The keys are source identifiers and are *data*, so they travel untouched; the values are a named shape and their fields are renamed like any other object's, which is what puts `derivative_database` on the wire under that name.",
       "type": "object",
       "additionalProperties": { "$ref": "#/$defs/source_attribution" }
     }
@@ -97,8 +103,13 @@
       "properties": {
         "lane": { "type": "string" },
         "state": {
+          "description": "The forecaster's three states, verbatim, plus `unresolvable` - which is not a fourth state so much as the refusal to guess between the first three. `apps/ml/src/wattsteer_ml/artifacts.py` produces it for a corrupt promotion log or a `promote` line naming an artifact that is not on the volume, and the one thing that module must never do when it cannot tell is fall back to the newest file. Neither may this endpoint: mapping it onto `no_artifact` would report a damaged volume as an untrained lane.",
           "type": "string",
-          "enum": ["no_artifact", "present_unpromoted", "promoted"]
+          "enum": ["no_artifact", "present_unpromoted", "promoted", "unresolvable"]
+        },
+        "fault": {
+          "description": "Why the lane is `unresolvable`, in the modelling service's own prose. Absent for every other state.",
+          "type": "string"
         },
         "artifact_id": { "type": ["string", "null"] },
         "trained_through": {
@@ -117,16 +128,25 @@
       "type": "object",
       "properties": {
         "reachable": { "type": "boolean" },
+        "unreachable_reason": {
+          "description": "The error code the gateway's edge onto the modelling service produced - `OPTIMIZER_UNAVAILABLE`, `OPTIMIZER_TIMEOUT`, `OPTIMIZER_NOT_CONFIGURED`. Present only when `reachable` is false, and it is the difference between \"not deployed\" and \"deployed and broken\", which is the whole reason an operator reads this endpoint.",
+          "type": "string"
+        },
         "lanes": { "type": "array", "items": { "$ref": "#/$defs/lane" } },
         "volume": {
-          "description": "Reported separately from the lane state, so an unmounted volume is diagnosable rather than inferred from an absent artifact.",
-          "type": "object",
-          "properties": {
-            "mounted": { "type": "boolean" },
-            "writable": { "type": "boolean" }
-          },
-          "required": ["mounted", "writable"],
-          "additionalProperties": false
+          "description": "Reported separately from the lane state, so an unmounted volume is diagnosable rather than inferred from an absent artifact. `null` when the modelling service is unreachable: the volume is mounted into *that* process, so with the service unreachable its state is unknown, and `{mounted: false}` would be a claim this endpoint cannot support.",
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "properties": {
+                "mounted": { "type": "boolean" },
+                "writable": { "type": "boolean" }
+              },
+              "required": ["mounted", "writable"],
+              "additionalProperties": false
+            }
+          ]
         }
       },
       "required": ["reachable", "lanes", "volume"],
@@ -170,14 +190,76 @@
     },
     "freshness": {
       "title": "MetaFreshness",
+      "description": "One ingestion source, and how far behind it is. The three instants are nullable because a source that has **never** ingested is the most diagnostic line this endpoint can carry, and the alternative - omitting the source - is precisely how a feed that silently stopped becomes invisible. A null lag is not a zero lag.",
       "type": "object",
       "properties": {
         "source": { "type": "string" },
-        "latest_valid_time": { "$ref": "common.schema.json#/$defs/utc_instant" },
-        "latest_ingested_at": { "$ref": "common.schema.json#/$defs/utc_instant" },
-        "lag_hours": { "type": "number", "minimum": 0 }
+        "latest_valid_time": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "common.schema.json#/$defs/utc_instant" }
+          ]
+        },
+        "latest_ingested_at": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "common.schema.json#/$defs/utc_instant" }
+          ]
+        },
+        "lag_hours": {
+          "description": "Hours behind now, on the basis this source is judged by - the newest fact time for an observation series, the newest ingestion for a forecast whose valid time is in the future by construction.",
+          "oneOf": [{ "type": "null" }, { "type": "number", "minimum": 0 }]
+        }
       },
       "required": ["source", "latest_valid_time", "latest_ingested_at", "lag_hours"],
+      "additionalProperties": false
+    },
+    "reference_battery": {
+      "title": "ReferenceBattery",
+      "description": "The published battery. Deliberately not `flexibility-asset.schema.json`'s `battery`: that one requires a `subsystem`, and the reference fleet is subsystem-agnostic by construction - it is the fleet every subsystem's floor coverage is measured against.",
+      "type": "object",
+      "properties": {
+        "asset_type": { "const": "battery" },
+        "label": { "type": "string" },
+        "max_power_mw": { "type": "number", "exclusiveMinimum": 0 },
+        "energy_capacity_mwh": { "type": "number", "exclusiveMinimum": 0 },
+        "round_trip_efficiency": {
+          "type": "number",
+          "minimum": 0.5,
+          "exclusiveMaximum": 1
+        },
+        "initial_state_of_charge": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "required": [
+        "asset_type",
+        "label",
+        "max_power_mw",
+        "energy_capacity_mwh",
+        "round_trip_efficiency",
+        "initial_state_of_charge"
+      ],
+      "additionalProperties": false
+    },
+    "reference_shiftable_load": {
+      "title": "ReferenceShiftableLoad",
+      "description": "The published flexible load. Subsystem-agnostic for the same reason the battery is.",
+      "type": "object",
+      "properties": {
+        "asset_type": { "const": "shiftable_load" },
+        "label": { "type": "string" },
+        "max_power_mw": { "type": "number", "exclusiveMinimum": 0 },
+        "max_shift_mw": { "type": "number", "exclusiveMinimum": 0 },
+        "shift_window_hours": { "type": "integer", "minimum": 1 },
+        "daily_energy_mwh": { "type": "number", "exclusiveMinimum": 0 }
+      },
+      "required": [
+        "asset_type",
+        "label",
+        "max_power_mw",
+        "max_shift_mw",
+        "shift_window_hours",
+        "daily_energy_mwh"
+      ],
       "additionalProperties": false
     },
     "source_attribution": {

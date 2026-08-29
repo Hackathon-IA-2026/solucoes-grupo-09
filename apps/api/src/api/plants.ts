@@ -125,16 +125,16 @@ function toPlantRegistry(
       alterationsAt: ODBL_ALTERATIONS_AT,
       attributionRequired: true,
     },
-    // Every source the shared constant names, with the three casing-stable
-    // fields. `attribution` is a map whose keys are *data*, which the one
-    // translator carries through unrenamed by design — so the ODbL specifics
-    // that would need a rename live under `licence`, which is a named object,
-    // and this block stays `{ name, licence, url }` and validates as-is.
+    // Every source the shared constant names, whole. This block used to be
+    // narrowed to `{ name, licence, url }` — the three field names that are
+    // spelled identically in both casings — because the one translator carried
+    // a *map's* values through unrenamed, so `derivativeDatabase` would have
+    // reached the wire under that name and validated anyway. The generator now
+    // knows a map value is still a named shape (`packages/core/src/wire.ts`),
+    // so the narrowing is gone and the ODbL specifics ride here as well as
+    // under `licence`.
     attribution: Object.fromEntries(
-      Object.entries(SOURCE_ATTRIBUTION).map(([key, source]) => [
-        key,
-        { name: source.name, licence: source.licence, url: source.url },
-      ]),
+      Object.entries(SOURCE_ATTRIBUTION).map(([key, source]) => [key, { ...source }]),
     ),
     plants: observation.plants.map(
       (plant): RegistryPlantRow => ({

@@ -195,6 +195,8 @@ export {
   type RegistryJoinRates,
   type RepublicationHealth,
   readIngestionHealth,
+  readSourceFreshness,
+  type SourceFreshness,
   type SourceHealth,
 } from "./observability.js";
 export {
