@@ -39,6 +39,13 @@ retrained.
 - [ ] Every served forecast is persisted as `Forecast` rows with a `wattsteer`
       `ForecastOrigin`, and the rows round-trip through `AsOf` returning exactly
       the numbers served
+- [ ] **The day-grain figures are persisted too, not only served.** `replay.md`
+      requires `forecast.day_total` from the path ensemble and forbids
+      reconstructing it by summing quantiles — so if only hour rows are stored,
+      a replay can either re-run the ensemble or commit the arithmetic the spec
+      bans. Ticket 07 computes them and nothing else persists them; this ticket
+      owns it. A test asserts a replayed day reads its day total from storage
+      and that no code path sums hour-grain quantiles to obtain one.
 - [ ] An unmounted volume, a mounted volume with no artifact, and an artifact
       that is present but unpromoted are three distinguishable states on the
       meta endpoint and produce three distinguishable refusals

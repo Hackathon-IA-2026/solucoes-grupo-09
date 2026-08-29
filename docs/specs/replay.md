@@ -185,7 +185,7 @@ metric `flex-optimizer.md` requires and the map's open gate item needs.
     capped by what was actually curtailed, so that a day that came in bigger
     than forecast cannot be scored with hindsight.
 18. As a user, I want a day that came in bigger than forecast to show a *lower*
-    reduction percentage, so that the fixed-fleet arithmetic is visible rather
+    `avoidability` ratio, so that the fixed-fleet arithmetic is visible rather
     than surprising.
 19. As an engineer, I want the state of charge recomputed from the executed
     dispatch, so that on a small day the battery does not report filling up on
@@ -288,7 +288,7 @@ The pre-F1 year is a real loss — it is a third of the window and it contains
 notable events — and the loss is accepted rather than papered over. What is
 offered for those days is an **observed-only view**: the settled profile, the
 episodes at the threshold in force, and the perfect-foresight upper bound
-(which needs no forecast at all). No plan, no recovery number, no reduction
+(which needs no forecast at all). No plan, no recovery number, no avoidability
 percentage, and the screen says why in one sentence.
 
 **Why the current screen's test is the wrong test.** The prototype computes
@@ -529,7 +529,7 @@ actual_mwh     = Σ_t a[t]                    ← the denominator, always
 recovered_mwh  = Σ_t absorb_obs[t]
 remaining_mwh  = actual_mwh − recovered_mwh
 avoided_mwh    ≡ recovered_mwh ≡ absorbed_mwh        (one quantity, one name)
-reduction      = recovered_mwh / actual_mwh
+avoidability   = recovered_mwh / actual_mwh
                  null unless ∃t: a[t] ≥ threshold_mw
 ```
 
@@ -569,7 +569,7 @@ built against a smaller `curt[t]`. The simulator **must not take it**:
 The unabsorbed excess `a[t] − absorb[t]` flows straight into `remaining_mwh`.
 The visible consequence — and the answer the ticket asks for — is:
 
-> **Under-forecasting shows up as a lower reduction percentage, never as a
+> **Under-forecasting shows up as a lower `avoidability`, never as a
 > smaller actual.** The denominator is the observed total whatever the forecast
 > said. A day that came in twice as large as forecast, met by a fixed fleet,
 > earns roughly half the percentage — which is the same arithmetic
@@ -666,12 +666,22 @@ in the same shape as the forecaster's hot-swap gate:
 
 **The reference fleet is one constant in one place.** Floor coverage and the
 forecaster's `Δ recovered_floor_mwh` must be computed against the same battery
-or neither number means what it says. It is the fleet
-`flex-optimizer.md` already names for the DESSEM comparison, and it is
-`packages/core`'s single published `REFERENCE_FLEET`, stamped on every
-aggregate. Note that the prototype's default flexible load
-(70 MW shift against 1200 MWh/day) is invalid under `SHIFT_EXCEEDS_BASELINE`;
-the reference fleet must move with the Mitigate fixture, not separately.
+or neither number means what it says. It is the fleet **`forecaster.md`** names
+for the DESSEM comparison — not `flex-optimizer.md`, which never mentions DESSEM
+— and it is `packages/core`'s single published `REFERENCE_FLEET`, stamped on
+every aggregate.
+
+**Its flexible load is 1,700 MWh/day with 50 MW of shift**, and the reference
+fleet moves with the Mitigate fixture rather than separately. The prototype's
+default (70 MW against 1,200 MWh/day) is invalid under `SHIFT_EXCEEDS_BASELINE`,
+which requires `max_shift_mw ≤ daily_energy_mwh / 24`. `flex-optimizer.md`
+offered two repairs and picked neither, and **both of them sit on the validity
+boundary**: 70 MW against 1,700 MWh/day is 98.8 % of the cap, and 50 MW against
+1,200 MWh/day is exactly 100 % of it. A published constant that many numbers are
+compared against must not be one rounding away from a `422`, and a load that is
+shiftable in its entirety is not a plausible industrial load either. Taking the
+energy from one repair and the shift from the other puts it at 71 % of the cap,
+with headroom, and invents nothing.
 
 ### The output contract
 
@@ -696,11 +706,15 @@ existing.
       "train_window": ["2024-04-01", "2025-06-30"],
       "calibration_window": ["2025-07-02", "2025-09-30"]
     },
-    "vintage_fidelity": "revision_optimistic",
     "vintage_affects": ["settled_actuals", "lagged_actual_features"],
     "vintage_exempt": ["weather_run", "dessem", "ons_programming"],
     "revision_premium_recovered_mwh": null   // null ⇒ unmeasured, and said so
   },
+
+  // Top level, exactly as in `OptimizationResult`. A field whose whole purpose
+  // is that shared names do not shift meaning must not shift position either;
+  // the vintage *detail* above is replay-only, the verdict is not.
+  "vintage_fidelity": "revision_optimistic",
 
   "forecast_origin": {
     "producer": "wattsteer",
@@ -921,6 +935,10 @@ A fold straddling go-live emits two rows.
 
 **Seam 10 — the endpoint.** One case per refusal code, each asserting rejection
 rather than a caveated answer. Scenario validation parity with `/v1/optimize`
+**minus its date clause** — the two endpoints cannot agree there, since a
+2024-06 target is valid at `/v1/optimize` (the window opens 2024-04) and refused
+here as pre-F1 — and identical everywhere else. Stating parity without that
+carve-out asserts something no implementation can satisfy. Otherwise, parity
 (the same blob rejected by both). Cache hit returns byte-identical output; a
 changed `forecast_origin` or `optimizer_build` misses. Rate limit applies.
 

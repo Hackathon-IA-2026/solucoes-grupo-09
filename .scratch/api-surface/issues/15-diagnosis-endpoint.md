@@ -50,8 +50,8 @@ guard.
 
 **Blocked by:** 04, 05, 11 (the origin object it shares), and cross-spec
 **diagnosis 06** (the persisted attribution), **diagnosis 07** (the rules and the
-withheld state), **diagnosis 09** (the template) and **diagnosis 12** (the
-narration cache key). It can be built against fixtures for the attribution half
+withheld state), **diagnosis 09** (the template) and **diagnosis 11** (the
+generated narration whose key this endpoint caches). It can be built against fixtures for the attribution half
 as soon as diagnosis 06 fixes the row shape.
 
 **Status:** ready-for-agent

@@ -500,8 +500,9 @@ constraint on it:
    observed profile, using the same simulator, and reports it beside the P10
    floor that was promised. **Floor coverage** — the share of replayed days
    where observed-scored recovery ≥ the promised floor — is a first-class
-   Backtest metric. Its gate threshold belongs to the backtest-gate item still
-   open on the map; the metric itself is required here.
+   **Backtest** metric, in `domain-model.md`'s sense: the aggregate over many
+   Replays, owned by `replay.md`, not the forecaster's fold evaluation. Its gate
+   threshold belongs to the hot-swap gate; the metric itself is required here.
 4. **Perfect foresight is a labelled upper bound, never a recovery claim.**
    Replay may re-solve the MILP with `curt[t]` = observed, and must present the
    result as "the best any plan could have done knowing the answer", visually
@@ -1026,9 +1027,17 @@ about the execution rule goes in.
    surfaces now depend on that number.
 5. **The prototype's default flexible load becomes invalid** under
    `SHIFT_EXCEEDS_BASELINE`: 70 MW of shift against 1200 MWh/day is a 50 MW
-   baseline. Either the fixture changes (1200 → 1700 MWh/day, or 70 → 50 MW of
-   shift) or the rule is wrong. The rule looks right — a freezer cannot shed
-   more than it draws — so the fixture should move.
+   baseline. The rule is right — a freezer cannot shed more than it draws — so
+   the fixture moves. **It becomes 1,700 MWh/day with 50 MW of shift**, which is
+   also `packages/core`'s published `REFERENCE_FLEET` (see `replay.md`, "the
+   reference fleet is one constant in one place"). Neither of the two repairs
+   this spec originally offered was taken, because both sit on the validity
+   boundary — 70 MW against 1,700 is 98.8 % of the cap and 50 MW against 1,200
+   is exactly 100 % — and a constant that floor coverage, `Δ
+   recovered_floor_mwh`, the featured-days list and the hot-swap guardrail are
+   all measured against must not be one rounding away from a `422`. Taking the
+   energy from one repair and the shift from the other leaves it at 71 % of the
+   cap.
 6. **The prototype's `evaluatePlan` clips absorption but not state of charge**,
    so on a realisation below the planning basis it reports a battery filling up
    on energy it never received. The simulator specified here fixes it; the

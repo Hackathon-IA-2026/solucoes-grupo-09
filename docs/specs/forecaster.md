@@ -68,14 +68,14 @@ fail:
    and a peak-power band, and ticket 014 already made "nothing in the UI sums
    two bands" a test. Which means the day-grain numbers cannot come from the
    hour-grain numbers by any arithmetic, and something else has to produce them.
-4. **The gate.** The map's own "Not yet specified" list says the backtest gate
+4. **The gate.** The map's own "Not yet specified" list says the hot-swap gate
    threshold cannot be set before the first honest numbers exist. That is true
    of any *absolute* threshold, and it is an argument for a gate that needs no
    constants rather than an argument for deferring the gate.
 
 Underneath all four is the same failure class the feature spec exists to
 prevent, one layer up: **a number that is wrong in a direction nobody can see.**
-A leaky feature produces a flattering backtest. A mis-composed quantile produces
+A leaky feature produces a flattering fold evaluation. A mis-composed quantile produces
 a flattering *promise* — `recovered_floor_mwh` is the sentence the product
 quotes, and it is computed by simulating a plan against this spec's P10.
 
@@ -144,10 +144,10 @@ On top of that spine:
    the quantiles and as a fitted per-hour constant in the expectation, so that
    the direction of each approximation is stated rather than discovered.
 4. As the optimizer, I want the share of hours whose P50 is zero published as a
-   first-class backtest number, so that my planning posture is falsifiable
+   first-class fold-evaluation number, so that my planning posture is falsifiable
    against data rather than argued.
 5. As a developer, I want the composition implemented once in one function
-   imported by training, serving, backtesting and Replay, so that four callers
+   imported by training, serving, fold evaluation and Replay, so that four callers
    cannot hold four mixtures.
 
 **Intervals that mean something**
@@ -201,7 +201,7 @@ On top of that spine:
 21. As an operator, I want a rollback to be an append rather than a delete, so
     that undoing a bad promotion cannot destroy the evidence.
 
-**The backtest**
+**Fold evaluation**
 
 22. As a modeller, I want expanding-origin walk-forward folds with fixed
     calendar boundaries, so that every run in the A/B matrix is scored on
@@ -339,7 +339,7 @@ it is a fact about the plan that nobody has written down, and it means the
 plan's shape is decided by the *classifier's* operating region rather than by
 the magnitude model at all.
 
-So the backtest publishes, per fold and per subsystem, the distribution that
+So fold evaluation publishes, per fold and per subsystem, the distribution that
 makes it decidable:
 
 ```
@@ -353,7 +353,7 @@ posture collapses in the same way it argued P10 would, and ticket 011 has to
 reopen. That number is the deliverable this spec owes ticket 011.
 
 **And the alternative is measured at the same time, rather than argued about
-later.** The backtest scores a second planning arm — the plan built against
+later.** Fold evaluation scores a second planning arm — the plan built against
 `E[Y]` instead of P50 — through the identical simulator, and publishes both
 arms' `recovered_floor_mwh`. This costs almost nothing: the expectation is
 already a served field, and the scoring path is already shared. It is worth the
@@ -679,7 +679,14 @@ this is the IDEA §15 table, corrected for a hurdle model:
 | `share_p50_zero`, `hours_per_day_p_ge_50` | fold | the deliverable to ticket 011 |
 | `vintage_fidelity` | fold | never averaged across values |
 
-### The backtest protocol
+### The fold-evaluation protocol
+
+> **Naming.** What this section describes is *fold evaluation*: the
+> walk-forward harness that scores model quality on held-out folds and produces
+> `qloss_mwh`. It is deliberately **not** called a Backtest. `domain-model.md`
+> §`Replay` and `Backtest` gives that noun to a different object — the aggregate
+> of many Replays, each a full plan-and-score against the reference fleet,
+> consumed by the hot-swap gate. Two harnesses, two outputs, two names.
 
 **Expanding-origin walk-forward, fixed calendar test folds, never shuffled.**
 
@@ -752,8 +759,8 @@ ingestion go-live date.
   scored once against the labels as ingested at the time and once against the
   latest vintage — yields `revision_premium_qloss`, the difference between the
   two. It is the measured size of the caveat every earlier number carries, and
-  it is the honest answer to "how much should I discount the 2024–2025
-  backtest". Nothing else in this project measures that.
+  it is the honest answer to "how much should I discount the
+  2024–2025 evaluation". Nothing else in this project measures that.
 
 Note the asymmetry the feature spec already established and this protocol
 inherits: **labels are always read `AsOf(now)`**, in training and in evaluation
@@ -875,7 +882,7 @@ name its `ForecastOrigin`. So:
 > it.**
 
 This is the recommendation. It costs a second artifact lane, a second model
-card, a doubled retrain (seconds) and a second row in the backtest matrix; it
+card, a doubled retrain (seconds) and a second row in the evaluation matrix; it
 costs *nothing* in operator notice, and it makes the DESSEM question a question
 about the evening view alone — which is a much smaller decision, and one the two
 decision folds can actually carry. The early view exists either way, so a wrong
@@ -1193,7 +1200,7 @@ rung.
 - **The optimizer, the simulator and `recovered_floor_mwh`'s arithmetic.**
   **Flex optimizer spec** (ticket 011). Consumed here only as the unit for the
   DESSEM comparison.
-- **Time Machine screens, backtest aggregation for humans, and which days are
+- **Time Machine screens, Backtest aggregation for humans, and which days are
   replayable.** **Replay spec** (ticket 012). This spec supplies the per-fold
   artifacts and the persisted D−1 forecasts that make a fold-honest replay
   possible; choosing between "fold-specific model", "test folds only" and
@@ -1246,7 +1253,7 @@ is published per fold so ticket 011 can see whether its own posture collapses on
 the days that matter.
 
 **The gate needed no constants and that was the whole difficulty.** The map
-records the backtest gate threshold as unspecifiable before the first honest
+records the hot-swap gate threshold as unspecifiable before the first honest
 numbers. That is an argument against an *absolute* bar, not against a gate. A
 paired block bootstrap against the incumbent — and, at cold start, against the
 7-day same-hour baseline — is decidable on day one, gets stricter automatically
