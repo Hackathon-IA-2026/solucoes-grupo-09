@@ -1,3 +1,4 @@
+import type { Technology } from "@wattsteer/core/domain";
 import type { SubsystemCode } from "./normalise.js";
 import type { LoadAreaCode, LoadAreaKind } from "./ons/carga-api.js";
 
@@ -108,8 +109,18 @@ export interface EnergyBalanceParse {
   columns: string[];
 }
 
-/** WattSteer's technology vocabulary for the two curtailed renewable fleets. */
-export type Technology = "WIND" | "SOLAR";
+/**
+ * WattSteer's technology vocabulary for the two curtailed renewable fleets.
+ *
+ * Re-exported from `@wattsteer/core`, not declared. It was declared here while
+ * the shared package held no vocabulary, and a second declaration of a closed
+ * enum is the failure `packages/core/src/domain.ts` records: the web app and
+ * the landing page once disagreed about this exact type's casing, one
+ * lowercase and one upper, and nothing caught it because neither imported the
+ * other. An ingest row and an API response now name the same two values by
+ * construction.
+ */
+export type { Technology };
 
 /** Which variant of `ReportingEntity` an ONS `id_ons` denotes. */
 export type ReportingEntityKind = "CONJUNTO" | "PLANT";

@@ -1,0 +1,295 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wattsteer.com/schema/common.schema.json",
+  "title": "Shared wire vocabulary",
+  "description": "Every name a WattSteer response uses more than once, defined exactly once. `docs/domain-model.md` is the naming authority; `docs/specs/api-surface.md` fixes the casing (snake_case on the wire) and the nine vocabulary rules these definitions exist to make structural. A grep for `common.schema.json#/$defs/band` finds every band on the surface, which is rule 1.",
+  "$defs": {
+    "subsystem": {
+      "title": "Subsystem",
+      "description": "An enum with exactly four members. `SIN` is ONS's national aggregate row, filtered at the ingest boundary, and is deliberately NOT a member: a national figure lives under a `national` key with its derivation named (vocabulary rule 6).",
+      "type": "string",
+      "enum": ["N", "NE", "S", "SE"]
+    },
+    "technology": {
+      "title": "Technology",
+      "description": "The two variable renewable fleets. Uppercase, case-sensitively, everywhere a value is serialized including the `technology=` query parameter. `wind_mwh` is a snake_case *field name* under the wire's casing rule and is not a spelling of the value.",
+      "type": "string",
+      "enum": ["WIND", "SOLAR"]
+    },
+    "band": {
+      "title": "Band",
+      "description": "A P10/P50/P90 triple - the shape of every quantity the forecaster emits. Quantiles do not add: two bands are never summed componentwise. Referenced rather than inlined everywhere it appears (vocabulary rule 1), and closed to additional properties so an expectation cannot be smuggled inside one (vocabulary rule 2).",
+      "type": "object",
+      "properties": {
+        "p10": { "type": "number", "description": "10th percentile." },
+        "p50": { "type": "number", "description": "Median. Not the expectation." },
+        "p90": { "type": "number", "description": "90th percentile." }
+      },
+      "required": ["p10", "p50", "p90"],
+      "additionalProperties": false,
+      "x-quantile-ordering": ["p10", "p50", "p90"]
+    },
+    "technology_split": {
+      "title": "TechnologySplit",
+      "description": "Two scalars, and nothing else (vocabulary rule 3). The forecaster publishes no per-technology band, so an object carrying a `p10` under the split must fail validation rather than reach a chart that would draw it.",
+      "type": "object",
+      "properties": {
+        "wind_mwh": { "type": "number" },
+        "solar_mwh": { "type": "number" }
+      },
+      "required": ["wind_mwh", "solar_mwh"],
+      "additionalProperties": false
+    },
+    "vintage_fidelity": {
+      "title": "VintageFidelity",
+      "description": "Stamped on every object carrying a metric or a historical number (vocabulary rule 9), and never averaged across values by anything.",
+      "type": "string",
+      "enum": ["point_in_time", "revision_optimistic"]
+    },
+    "threshold_mw": {
+      "title": "ThresholdMw",
+      "description": "The parameter that produced the numbers beside it, carried on every object it applies to (vocabulary rule 8). Defaults: 5 MW at subsystem grain, 1 MW at reporting-entity grain.",
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "max_gap_hours": {
+      "title": "MaxGapHours",
+      "description": "How many sub-threshold hours an episode may contain. Default 0: one hour below the threshold ends the episode.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "utc_instant": {
+      "title": "UtcInstant",
+      "description": "ISO-8601 with an explicit `Z`. There is no offset-carrying local timestamp anywhere on this surface; the two representations are UTC instants and Brasilia civil dates, and mixing them is what the domain model's interval convention exists to prevent.",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+    },
+    "civil_date": {
+      "title": "CivilDate",
+      "description": "`YYYY-MM-DD`, a civil date in `America/Sao_Paulo`. Never an instant.",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "hour_local": {
+      "title": "HourLocal",
+      "description": "Integer 0-23, in `America/Sao_Paulo`.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 23
+    },
+    "clock_time": {
+      "title": "ClockTime",
+      "description": "`HH:MM` in `America/Sao_Paulo`; minutes are always `00`. `24:00` is the exclusive end of the day.",
+      "type": "string",
+      "pattern": "^([01]\\d|2[0-4]):[0-5]\\d$"
+    },
+    "gate_profile": {
+      "title": "GateProfile",
+      "description": "Which of the two daily gates published this. `gate_early` is D-1 09:00 BRT on the 00Z weather run; `gate_late` is D-1 19:00 BRT on the 12Z run.",
+      "type": "string",
+      "enum": ["gate_early", "gate_late"]
+    },
+    "origin_kind": {
+      "title": "OriginKind",
+      "description": "`served` is a record of a publication. `backfilled_holdout` is a counterfactual publication instant and is never returned by a live forecast route under any query.",
+      "type": "string",
+      "enum": ["served", "backfilled_holdout"]
+    },
+    "producer": {
+      "title": "ForecastProducer",
+      "description": "Identity, never copy. The producer of a *curtailment* forecast is `wattsteer`; `open_meteo` is the producer of the weather run it consumed, which is a different fact about a different artifact.",
+      "type": "string",
+      "enum": ["open_meteo", "ons_dessem", "wattsteer"]
+    },
+    "forecast_origin": {
+      "title": "ForecastOrigin",
+      "description": "The identity of the run that produced a forecast. Every surface that shows a forecast must name it. `weather_run_label` rides beside the WattSteer origin rather than making a screen choose which of the two facts to call \"the run\".",
+      "type": "object",
+      "properties": {
+        "producer": { "$ref": "#/$defs/producer" },
+        "run_label": {
+          "type": "string",
+          "description": "For a `wattsteer` forecast, the artifact version."
+        },
+        "published_at": {
+          "$ref": "#/$defs/utc_instant",
+          "description": "`gate_at(target_date, gate_profile)` - a property of the target date, not of the request."
+        },
+        "age_hours": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Derived and returned, so no screen computes a date difference against a clock it may not have."
+        },
+        "origin_kind": { "$ref": "#/$defs/origin_kind" },
+        "gate_profile": { "$ref": "#/$defs/gate_profile" },
+        "weather_run_label": {
+          "type": "string",
+          "description": "The weather run the forecast was built on, e.g. \"D-1 12Z\"."
+        }
+      },
+      "required": ["producer", "run_label", "published_at"],
+      "additionalProperties": false
+    },
+    "risk_class": {
+      "title": "RiskClass",
+      "description": "A code; the client translates it.",
+      "type": "string",
+      "enum": ["low", "elevated", "high"]
+    },
+    "risk_bin": {
+      "title": "RiskBin",
+      "description": "A half-open probability interval `[lo, hi)`.",
+      "type": "array",
+      "prefixItems": [
+        { "type": "number", "minimum": 0, "maximum": 1 },
+        { "type": "number", "minimum": 0, "maximum": 1 }
+      ],
+      "items": false,
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "risk_bins": {
+      "title": "RiskBins",
+      "description": "The cut points the risk class was read off, published beside every risk class so the class is checkable rather than asserted.",
+      "type": "object",
+      "properties": {
+        "low": { "$ref": "#/$defs/risk_bin" },
+        "elevated": { "$ref": "#/$defs/risk_bin" },
+        "high": { "$ref": "#/$defs/risk_bin" }
+      },
+      "required": ["low", "elevated", "high"],
+      "additionalProperties": false
+    },
+    "probability": {
+      "title": "Probability",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "avoidability": {
+      "title": "Avoidability",
+      "description": "`avoided / baseline`. **`null`, never 0, when baseline curtailment is zero** (vocabulary rule 4): the ratio is undefined, and a zero would read as \"nothing could be avoided\" rather than \"there was nothing to avoid\". The null is meaningful and the schema admits it explicitly.",
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "reason_code": {
+      "title": "ReasonCode",
+      "description": "ONS's restriction reason, verbatim from the dictionary. The identifier travels and the English gloss does not (vocabulary rule 7); the gloss is a `t()` key. `REL` is grid unavailability, not \"relaxamento\".",
+      "type": "string",
+      "enum": ["REL", "CNF", "ENE", "PAR"]
+    },
+    "restriction_origin": {
+      "title": "RestrictionOrigin",
+      "description": "Whether a restriction was local to the entity or systemic.",
+      "type": "string",
+      "enum": ["LOC", "SIS"]
+    },
+    "unit_code": {
+      "title": "UnitCode",
+      "description": "A unit as a code, so a reading is formatted in the reader's locale rather than the server's.",
+      "type": "string",
+      "enum": ["mwh", "mw", "ratio", "pct", "hours", "brl", "count", "m_s"]
+    },
+    "band_unavailable_reason": {
+      "title": "BandUnavailableReason",
+      "description": "Why a published figure has no band - an identity, never a sentence. One member today: a quantile of a sum needs a joint draw, and the path ensemble is drawn per subsystem.",
+      "type": "string",
+      "enum": ["no_joint_ensemble"]
+    },
+    "scenario_hash": {
+      "title": "ScenarioHash",
+      "description": "`sha256:` followed by the digest of the canonical scenario bytes.",
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "solver": {
+      "title": "SolverReceipt",
+      "description": "What actually solved it. Carried so a plan is attributable to a backend and a build.",
+      "type": "object",
+      "properties": {
+        "backend": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": ["OPTIMAL", "FEASIBLE", "INFEASIBLE", "UNBOUNDED"]
+        },
+        "wall_time_ms": { "type": "number", "minimum": 0 },
+        "objective": { "type": "number" },
+        "ortools_version": { "type": "string" },
+        "scip_version": { "type": "string" }
+      },
+      "required": ["backend", "status", "wall_time_ms"],
+      "additionalProperties": false
+    },
+    "economic_scenario": {
+      "title": "EconomicScenario",
+      "description": "Money appears only as a labelled scenario with its assumed rate visible. Never a market price.",
+      "type": "object",
+      "properties": {
+        "brl_per_mwh": { "type": "number", "exclusiveMinimum": 0, "maximum": 10000 },
+        "brl": { "type": "number" }
+      },
+      "required": ["brl_per_mwh", "brl"],
+      "additionalProperties": false
+    },
+    "scored_realisation": {
+      "title": "ScoredRealisation",
+      "description": "The four scalars evaluated on one realisation of the forecast.",
+      "type": "object",
+      "properties": {
+        "baseline_mwh": { "type": "number", "minimum": 0 },
+        "remaining_mwh": { "type": "number", "minimum": 0 },
+        "recovered_mwh": { "type": "number", "minimum": 0 },
+        "avoidability": { "$ref": "#/$defs/avoidability" }
+      },
+      "required": ["baseline_mwh", "remaining_mwh", "recovered_mwh", "avoidability"],
+      "additionalProperties": false
+    },
+    "dispatch_hour": {
+      "title": "DispatchHour",
+      "description": "One hour of the plan, in `America/Sao_Paulo` local hours.",
+      "type": "object",
+      "properties": {
+        "hour_local": { "$ref": "#/$defs/hour_local" },
+        "offered_mwh": { "type": "number", "minimum": 0 },
+        "battery_charge_mw": { "type": "number", "minimum": 0 },
+        "battery_discharge_mw": { "type": "number", "minimum": 0 },
+        "state_of_charge_mwh": { "type": "number", "minimum": 0 },
+        "load_shift_up_mw": { "type": "number", "minimum": 0 },
+        "load_shift_down_mw": { "type": "number", "minimum": 0 },
+        "absorbed_mwh": { "type": "number", "minimum": 0 }
+      },
+      "required": ["hour_local"],
+      "additionalProperties": false
+    },
+    "episode": {
+      "title": "CurtailmentEpisode",
+      "description": "A read-time view, never a stored table. Every episode carries the `threshold_mw` and `max_gap_hours` that produced it (vocabulary rule 8), because an unstamped duration cannot be compared with another one.",
+      "type": "object",
+      "properties": {
+        "subsystem": { "$ref": "#/$defs/subsystem" },
+        "technology": { "$ref": "#/$defs/technology" },
+        "started_at": { "$ref": "#/$defs/utc_instant" },
+        "ended_at": {
+          "$ref": "#/$defs/utc_instant",
+          "description": "Exclusive: the valid_time of the first hour below threshold."
+        },
+        "duration_hours": { "type": "integer", "minimum": 1 },
+        "total_mwh": { "type": "number", "minimum": 0 },
+        "peak_mw": { "type": "number", "minimum": 0 },
+        "threshold_mw": { "$ref": "#/$defs/threshold_mw" },
+        "max_gap_hours": { "$ref": "#/$defs/max_gap_hours" }
+      },
+      "required": [
+        "started_at",
+        "ended_at",
+        "duration_hours",
+        "total_mwh",
+        "peak_mw",
+        "threshold_mw",
+        "max_gap_hours"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -25,7 +25,7 @@
  * the vector is what stops the two drifting.
  */
 
-import type { SubsystemCode } from "./domain";
+import type { SubsystemCode } from "./domain.js";
 
 /** A subsystem and the names it is written with. */
 export interface SubsystemMeta {

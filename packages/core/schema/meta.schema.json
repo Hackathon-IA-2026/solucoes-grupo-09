@@ -1,0 +1,203 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wattsteer.com/schema/meta.schema.json",
+  "title": "Meta",
+  "description": "`GET /v1/meta` - the precondition every screen reads first, and the endpoint that makes a misconfigured deployment diagnosable in one request. It is the gateway's own answer and not a proxy of the modelling service's: it merges what only the gateway knows with what only the modelling service knows, and it **degrades** - if the modelling service is unreachable, `model.reachable` is false and the rest of the body is still correct. `no-store`, because it is what you read to discover something is broken.",
+  "type": "object",
+  "properties": {
+    "service": { "type": "string" },
+    "version": { "type": "string" },
+    "environment": { "type": "string" },
+    "server_time": { "$ref": "common.schema.json#/$defs/utc_instant" },
+    "window": {
+      "type": "object",
+      "properties": {
+        "opens_on": { "$ref": "common.schema.json#/$defs/civil_date" },
+        "ingestion_go_live": { "$ref": "common.schema.json#/$defs/civil_date" },
+        "first_holdout_fold_start": { "$ref": "common.schema.json#/$defs/civil_date" }
+      },
+      "required": ["opens_on", "ingestion_go_live", "first_holdout_fold_start"],
+      "additionalProperties": false
+    },
+    "defaults": {
+      "description": "The four published constants, echoed. `packages/core/src/constants.ts` is the definition; this is diagnosability, never a source a client should fetch in order to use.",
+      "type": "object",
+      "properties": {
+        "subsystem_threshold_mw": { "$ref": "common.schema.json#/$defs/threshold_mw" },
+        "reporting_entity_threshold_mw": {
+          "$ref": "common.schema.json#/$defs/threshold_mw"
+        },
+        "max_gap_hours": { "$ref": "common.schema.json#/$defs/max_gap_hours" },
+        "brl_per_mwh": { "type": "number", "exclusiveMinimum": 0 }
+      },
+      "required": [
+        "subsystem_threshold_mw",
+        "reporting_entity_threshold_mw",
+        "max_gap_hours",
+        "brl_per_mwh"
+      ],
+      "additionalProperties": false
+    },
+    "gates": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/gate" }
+    },
+    "model": { "$ref": "#/$defs/model" },
+    "forecast": { "$ref": "#/$defs/forecast_state" },
+    "data": {
+      "type": "object",
+      "properties": {
+        "freshness": { "type": "array", "items": { "$ref": "#/$defs/freshness" } }
+      },
+      "required": ["freshness"],
+      "additionalProperties": false
+    },
+    "reference_fleet": {
+      "description": "`REFERENCE_FLEET`, echoed for diagnosability. Echoed, never fetched in order to be used: a caller that reads it over HTTP can be served a different battery than the one the number it is looking at was computed against.",
+      "type": "object"
+    },
+    "attribution": {
+      "description": "Data rather than copy, because the ODbL/CC-BY notice is bilingual and a bilingual notice assembled from translated strings around untranslated licence identifiers is exactly the shape `docs/specs/i18n.md` asks for.",
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/source_attribution" }
+    }
+  },
+  "required": [
+    "service",
+    "version",
+    "environment",
+    "server_time",
+    "window",
+    "defaults",
+    "gates",
+    "model",
+    "forecast",
+    "data",
+    "reference_fleet",
+    "attribution"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "gate": {
+      "title": "MetaGate",
+      "type": "object",
+      "properties": {
+        "profile": { "$ref": "common.schema.json#/$defs/gate_profile" },
+        "publishes_at_local": { "$ref": "common.schema.json#/$defs/clock_time" },
+        "timezone": { "type": "string", "enum": ["America/Sao_Paulo"] },
+        "weather_run": { "type": "string", "enum": ["00Z", "12Z"] }
+      },
+      "required": ["profile", "publishes_at_local", "timezone", "weather_run"],
+      "additionalProperties": false
+    },
+    "lane": {
+      "title": "MetaLane",
+      "description": "`state` reproduces the forecaster's three artifact states verbatim, because a stale forecast and an unmounted volume must not look alike.",
+      "type": "object",
+      "properties": {
+        "lane": { "type": "string" },
+        "state": {
+          "type": "string",
+          "enum": ["no_artifact", "present_unpromoted", "promoted"]
+        },
+        "artifact_id": { "type": ["string", "null"] },
+        "trained_through": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "common.schema.json#/$defs/civil_date" }
+          ]
+        },
+        "vintage_fidelity": { "$ref": "common.schema.json#/$defs/vintage_fidelity" }
+      },
+      "required": ["lane", "state"],
+      "additionalProperties": false
+    },
+    "model": {
+      "title": "MetaModel",
+      "type": "object",
+      "properties": {
+        "reachable": { "type": "boolean" },
+        "lanes": { "type": "array", "items": { "$ref": "#/$defs/lane" } },
+        "volume": {
+          "description": "Reported separately from the lane state, so an unmounted volume is diagnosable rather than inferred from an absent artifact.",
+          "type": "object",
+          "properties": {
+            "mounted": { "type": "boolean" },
+            "writable": { "type": "boolean" }
+          },
+          "required": ["mounted", "writable"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["reachable", "lanes", "volume"],
+      "additionalProperties": false
+    },
+    "forecast_state": {
+      "title": "MetaForecastState",
+      "type": "object",
+      "properties": {
+        "latest_published": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "target_date": { "$ref": "common.schema.json#/$defs/civil_date" },
+              "gate_profile": { "$ref": "common.schema.json#/$defs/gate_profile" },
+              "published_at": { "$ref": "common.schema.json#/$defs/utc_instant" },
+              "age_hours": { "type": "number", "minimum": 0 },
+              "subsystems": {
+                "type": "array",
+                "items": { "$ref": "common.schema.json#/$defs/subsystem" }
+              }
+            },
+            "required": [
+              "target_date",
+              "gate_profile",
+              "published_at",
+              "age_hours",
+              "subsystems"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "next_publication_at": {
+          "$ref": "common.schema.json#/$defs/utc_instant",
+          "description": "What makes this surface pull-shaped rather than push-shaped: the data changes twice a day at known instants."
+        }
+      },
+      "required": ["latest_published", "next_publication_at"],
+      "additionalProperties": false
+    },
+    "freshness": {
+      "title": "MetaFreshness",
+      "type": "object",
+      "properties": {
+        "source": { "type": "string" },
+        "latest_valid_time": { "$ref": "common.schema.json#/$defs/utc_instant" },
+        "latest_ingested_at": { "$ref": "common.schema.json#/$defs/utc_instant" },
+        "lag_hours": { "type": "number", "minimum": 0 }
+      },
+      "required": ["source", "latest_valid_time", "latest_ingested_at", "lag_hours"],
+      "additionalProperties": false
+    },
+    "source_attribution": {
+      "title": "SourceAttribution",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "licence": {
+          "description": "An SPDX-style identifier, untranslated, with the bilingual notice built around it by the client.",
+          "type": "string"
+        },
+        "url": { "type": "string" },
+        "derivative_database": { "type": "boolean" },
+        "machine_readable_at": {
+          "type": "string",
+          "description": "ODbL 4.6 obliges machine-readable access to a Derivative Database. This is where the obligation is discharged."
+        }
+      },
+      "required": ["name", "licence", "url"],
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wattsteer.com/schema/optimization-result.schema.json",
+  "title": "OptimizationResult",
+  "description": "The response of `POST /v1/optimize` - `docs/specs/flex-optimizer.md`'s contract, re-pathed and never re-shaped. `avoided_energy_mwh`, `absorbed` and `recovered` are **one quantity with three names**; `avoidability` is `null` and never `0` when the baseline is zero. Every number here is evaluated on the *planning envelope*, which is why a Replay - which evaluates the same field names on the observed realisation - names its realisation on the object.",
+  "type": "object",
+  "properties": {
+    "scenario_hash": { "$ref": "common.schema.json#/$defs/scenario_hash" },
+    "forecast_origin": {
+      "$ref": "common.schema.json#/$defs/utc_instant",
+      "description": "The resolved origin this was optimised against; part of the cache key, so a superseding 12Z run cannot be served an 00Z plan."
+    },
+    "vintage_fidelity": { "$ref": "common.schema.json#/$defs/vintage_fidelity" },
+    "threshold_mw": { "$ref": "common.schema.json#/$defs/threshold_mw" },
+    "planning_basis": {
+      "type": "string",
+      "enum": ["p10", "p50", "p90"],
+      "description": "Which realisation of the forecast the plan was built against."
+    },
+    "execution_rule": { "type": "string", "enum": ["follow_curtailment"] },
+    "baseline_curtailment_mwh": { "type": "number", "minimum": 0 },
+    "optimized_curtailment_mwh": { "type": "number", "minimum": 0 },
+    "avoided_energy_mwh": {
+      "type": "number",
+      "minimum": 0,
+      "description": "baseline - optimized. Past tense: what *this* dispatch achieves under *this* scenario, not a property of the day."
+    },
+    "avoidability": { "$ref": "common.schema.json#/$defs/avoidability" },
+    "recovered_floor_mwh": {
+      "type": "number",
+      "minimum": 0,
+      "description": "= scored.p10.recovered_mwh. The promise a Replay later scores against."
+    },
+    "scored": {
+      "type": "object",
+      "properties": {
+        "p10": { "$ref": "common.schema.json#/$defs/scored_realisation" },
+        "p50": { "$ref": "common.schema.json#/$defs/scored_realisation" },
+        "p90": { "$ref": "common.schema.json#/$defs/scored_realisation" }
+      },
+      "required": ["p10", "p50", "p90"],
+      "additionalProperties": false
+    },
+    "dispatch": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/dispatch_hour" }
+    },
+    "stored_at_horizon_end_mwh": { "type": "number", "minimum": 0 },
+    "round_trip_loss_mwh": { "type": "number", "minimum": 0 },
+    "economic_scenario": { "$ref": "common.schema.json#/$defs/economic_scenario" },
+    "solver": { "$ref": "common.schema.json#/$defs/solver" }
+  },
+  "required": [
+    "scenario_hash",
+    "forecast_origin",
+    "vintage_fidelity",
+    "threshold_mw",
+    "planning_basis",
+    "execution_rule",
+    "baseline_curtailment_mwh",
+    "optimized_curtailment_mwh",
+    "avoided_energy_mwh",
+    "avoidability",
+    "recovered_floor_mwh",
+    "scored",
+    "dispatch",
+    "stored_at_horizon_end_mwh",
+    "round_trip_loss_mwh",
+    "economic_scenario",
+    "solver"
+  ],
+  "additionalProperties": false
+}

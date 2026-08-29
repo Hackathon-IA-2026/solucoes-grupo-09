@@ -88,6 +88,10 @@
       "json": { "parser": { "allowComments": true, "allowTrailingCommas": true } }
     },
     {
+      "includes": ["packages/core/src/types.generated.ts"],
+      "linter": { "rules": { "security": { "noSecrets": "off" } } }
+    },
+    {
       "includes": ["**/test/**", "**/e2e/**", "**/*.test.ts"],
       "linter": {
         "rules": {

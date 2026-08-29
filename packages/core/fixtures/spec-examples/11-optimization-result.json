@@ -1,0 +1,59 @@
+{
+  "scenario_hash": "sha256:9f2c4a1b7e05d38c6a1f0b93e27d4c5a8b16f30d92e47c5a0b3d81f6e2a94c07",
+  "forecast_origin": "2026-08-28T12:00:00Z",
+  "vintage_fidelity": "point_in_time",
+  "threshold_mw": 5,
+  "planning_basis": "p50",
+  "execution_rule": "follow_curtailment",
+  "baseline_curtailment_mwh": 397,
+  "optimized_curtailment_mwh": 245.2,
+  "avoided_energy_mwh": 151.8,
+  "avoidability": 0.382,
+  "recovered_floor_mwh": 84.1,
+  "scored": {
+    "p10": {
+      "baseline_mwh": 231,
+      "remaining_mwh": 146.9,
+      "recovered_mwh": 84.1,
+      "avoidability": 0.364
+    },
+    "p50": {
+      "baseline_mwh": 397,
+      "remaining_mwh": 245.2,
+      "recovered_mwh": 151.8,
+      "avoidability": 0.382
+    },
+    "p90": {
+      "baseline_mwh": 612,
+      "remaining_mwh": 401.4,
+      "recovered_mwh": 210.6,
+      "avoidability": 0.344
+    }
+  },
+  "dispatch": [
+    {
+      "hour_local": 13,
+      "offered_mwh": 110,
+      "battery_charge_mw": 100,
+      "battery_discharge_mw": 0,
+      "state_of_charge_mwh": 231.4,
+      "load_shift_up_mw": 10,
+      "load_shift_down_mw": 0,
+      "absorbed_mwh": 110
+    }
+  ],
+  "stored_at_horizon_end_mwh": 96.3,
+  "round_trip_loss_mwh": 11.4,
+  "economic_scenario": {
+    "brl_per_mwh": 180,
+    "brl": 27324
+  },
+  "solver": {
+    "backend": "SCIP",
+    "status": "OPTIMAL",
+    "wall_time_ms": 3.2,
+    "objective": 251.7,
+    "ortools_version": "9.15.6755",
+    "scip_version": "9.x"
+  }
+}

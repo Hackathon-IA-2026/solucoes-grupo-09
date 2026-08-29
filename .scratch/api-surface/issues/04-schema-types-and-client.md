@@ -51,7 +51,7 @@ between "retry" and "show the no-model state".
 
 **Blocked by:** 02, 03.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The schema directory is the authority and the generated TypeScript types are checked in, with CI asserting they are current
 - [ ] The generated client converts `snake_case` to `camelCase` in exactly one place, and a grep-level test says so

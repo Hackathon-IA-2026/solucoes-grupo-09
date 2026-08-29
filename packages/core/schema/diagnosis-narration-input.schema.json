@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wattsteer.com/schema/diagnosis-narration-input.schema.json",
+  "title": "DiagnosisNarrationInput",
+  "description": "The renderer's entire world - the JSON handed to the language model that writes the Explain paragraph. It is not an API response and never reaches a client; it is here because it crosses the same boundary the wire does and because `docs/specs/diagnosis.md`'s rule \"the renderer may not compute\" is only enforceable if every number the copy could want is present *as a number*. `top_two_share` looks redundant and is not: the prototype's own fixture narration added two shares together.",
+  "type": "object",
+  "properties": {
+    "schema_version": { "const": "diagnosis.narration.v1" },
+    "prompt_version": { "type": "string" },
+    "locale": { "type": "string", "enum": ["pt-BR", "en-US"] },
+    "subsystem": { "$ref": "common.schema.json#/$defs/subsystem" },
+    "subsystem_display_name": {
+      "type": "string",
+      "description": "ONS's proper noun, untranslated."
+    },
+    "target_date": { "$ref": "common.schema.json#/$defs/civil_date" },
+    "threshold_mw": { "$ref": "common.schema.json#/$defs/threshold_mw" },
+    "forecast_origin": {
+      "description": "A reduced origin: the renderer needs the run's label, its gate and its instant, and has nothing to say about the producer.",
+      "type": "object",
+      "properties": {
+        "run_label": { "type": "string" },
+        "gate_profile": { "$ref": "common.schema.json#/$defs/gate_profile" },
+        "published_at": { "$ref": "common.schema.json#/$defs/utc_instant" }
+      },
+      "required": ["run_label", "gate_profile", "published_at"],
+      "additionalProperties": false
+    },
+    "vintage_fidelity": { "$ref": "common.schema.json#/$defs/vintage_fidelity" },
+    "risk": {
+      "type": "object",
+      "properties": {
+        "day_occurrence_probability": { "$ref": "common.schema.json#/$defs/probability" },
+        "risk_class": { "$ref": "common.schema.json#/$defs/risk_class" },
+        "hours_p50_nonzero": { "type": "integer", "minimum": 0, "maximum": 24 }
+      },
+      "required": ["day_occurrence_probability", "risk_class", "hours_p50_nonzero"],
+      "additionalProperties": false
+    },
+    "magnitude": {
+      "description": "The day band arrives as three named scalars rather than as a `Band`, because the renderer's numeric whitelist is flat and a nested object would let a quantile be quoted as if it were the expectation. `day_expected_mwh` stays a separate name from every `p*` for the same reason.",
+      "type": "object",
+      "properties": {
+        "day_expected_mwh": { "type": "number" },
+        "baseline_expected_mwh": { "type": "number" },
+        "day_energy_p10_mwh": { "type": "number" },
+        "day_energy_p50_mwh": { "type": "number" },
+        "day_energy_p90_mwh": { "type": "number" },
+        "peak_power_p50_mw": { "type": "number" },
+        "peak_hour_local": { "$ref": "common.schema.json#/$defs/hour_local" }
+      },
+      "required": [
+        "day_expected_mwh",
+        "baseline_expected_mwh",
+        "day_energy_p10_mwh",
+        "day_energy_p50_mwh",
+        "day_energy_p90_mwh",
+        "peak_power_p50_mw",
+        "peak_hour_local"
+      ],
+      "additionalProperties": false,
+      "x-quantile-ordering": [
+        "day_energy_p10_mwh",
+        "day_energy_p50_mwh",
+        "day_energy_p90_mwh"
+      ]
+    },
+    "attribution": {
+      "type": "object",
+      "properties": {
+        "target": { "const": "expected_mwh_day" },
+        "total_attributed_mwh": { "type": "number" },
+        "sum_abs_attributed_mwh": { "type": "number", "minimum": 0 },
+        "stderr_mwh": { "type": "number", "minimum": 0 },
+        "top_two_share": {
+          "$ref": "common.schema.json#/$defs/probability",
+          "description": "Pre-computed: the renderer may not add."
+        },
+        "groups": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": { "$ref": "diagnosis.schema.json#/$defs/driver" }
+        }
+      },
+      "required": [
+        "target",
+        "total_attributed_mwh",
+        "sum_abs_attributed_mwh",
+        "stderr_mwh",
+        "top_two_share",
+        "groups"
+      ],
+      "additionalProperties": false
+    },
+    "rule_flags": {
+      "type": "array",
+      "items": { "$ref": "diagnosis.schema.json#/$defs/rule_flag" }
+    },
+    "observed_reasons_latest": {
+      "$ref": "diagnosis.schema.json#/$defs/observed_reasons_latest"
+    }
+  },
+  "required": [
+    "schema_version",
+    "prompt_version",
+    "locale",
+    "subsystem",
+    "subsystem_display_name",
+    "target_date",
+    "threshold_mw",
+    "forecast_origin",
+    "vintage_fidelity",
+    "risk",
+    "magnitude",
+    "attribution",
+    "rule_flags"
+  ],
+  "additionalProperties": false
+}

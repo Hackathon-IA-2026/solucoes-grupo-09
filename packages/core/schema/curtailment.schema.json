@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wattsteer.com/schema/curtailment.schema.json",
+  "title": "Observed curtailment",
+  "description": "The three observed reads - `GET /v1/curtailment/hours`, `/episodes` and `/reasons`. Nothing here needs a model, which is why these are the panels that survive an unpromoted artifact. Every response carries the `vintage_fidelity` and the `data_version` its rows were read at, and every episode carries the `threshold_mw` and `max_gap_hours` that produced it, so a screen cannot render an episode list beside a threshold it did not use.",
+  "$defs": {
+    "hours": {
+      "title": "CurtailmentHours",
+      "type": "object",
+      "properties": {
+        "subsystem": { "$ref": "common.schema.json#/$defs/subsystem" },
+        "technology": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "common.schema.json#/$defs/technology" }
+          ],
+          "description": "`null` when the range was not filtered by technology. A technology dimension genuinely exists on the observed panels, which is why the `technology=` parameter survives here and not on the forecast."
+        },
+        "from": { "$ref": "common.schema.json#/$defs/utc_instant" },
+        "to": { "$ref": "common.schema.json#/$defs/utc_instant" },
+        "as_of": { "$ref": "common.schema.json#/$defs/utc_instant" },
+        "data_version": { "type": "string" },
+        "vintage_fidelity": { "$ref": "common.schema.json#/$defs/vintage_fidelity" },
+        "rows": { "type": "array", "items": { "$ref": "#/$defs/hour" } },
+        "next_cursor": {
+          "type": ["string", "null"],
+          "description": "There is no response envelope on this surface. Pagination is needed on exactly two routes and carries its own cursor field rather than buying a `{data, meta}` wrapper for all fourteen."
+        }
+      },
+      "required": [
+        "subsystem",
+        "technology",
+        "from",
+        "to",
+        "as_of",
+        "data_version",
+        "vintage_fidelity",
+        "rows",
+        "next_cursor"
+      ],
+      "additionalProperties": false
+    },
+    "hour": {
+      "title": "CurtailmentHour",
+      "type": "object",
+      "properties": {
+        "subsystem": { "$ref": "common.schema.json#/$defs/subsystem" },
+        "technology": { "$ref": "common.schema.json#/$defs/technology" },
+        "valid_time": { "$ref": "common.schema.json#/$defs/utc_instant" },
+        "hour_local": { "$ref": "common.schema.json#/$defs/hour_local" },
+        "constrained_off_mwh": {
+          "type": "number",
+          "minimum": 0,
+          "description": "A measured actual. No band, because there is nothing to be uncertain about."
+        }
+      },
+      "required": [
+        "subsystem",
+        "technology",
+        "valid_time",
+        "hour_local",
+        "constrained_off_mwh"
+      ],
+      "additionalProperties": false
+    },
+    "episodes": {
+      "title": "CurtailmentEpisodes",
+      "type": "object",
+      "properties": {
+        "subsystem": { "$ref": "common.schema.json#/$defs/subsystem" },
+        "from": { "$ref": "common.schema.json#/$defs/utc_instant" },
+        "to": { "$ref": "common.schema.json#/$defs/utc_instant" },
+        "as_of": { "$ref": "common.schema.json#/$defs/utc_instant" },
+        "data_version": { "type": "string" },
+        "vintage_fidelity": { "$ref": "common.schema.json#/$defs/vintage_fidelity" },
+        "threshold_mw": {
+          "$ref": "common.schema.json#/$defs/threshold_mw",
+          "description": "Echoed at the top level as well as on every episode, so the parameter in force is visible without reading a row."
+        },
+        "max_gap_hours": { "$ref": "common.schema.json#/$defs/max_gap_hours" },
+        "episodes": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/episode" }
+        }
+      },
+      "required": [
+        "subsystem",
+        "from",
+        "to",
+        "as_of",
+        "data_version",
+        "vintage_fidelity",
+        "threshold_mw",
+        "max_gap_hours",
+        "episodes"
+      ],
+      "additionalProperties": false
+    },
+    "reasons": {
+      "title": "ObservedReasons",
+      "type": "object",
+      "properties": {
+        "subsystem": { "$ref": "common.schema.json#/$defs/subsystem" },
+        "date": { "$ref": "common.schema.json#/$defs/civil_date" },
+        "as_of": { "$ref": "common.schema.json#/$defs/utc_instant" },
+        "data_version": { "type": "string" },
+        "vintage_fidelity": { "$ref": "common.schema.json#/$defs/vintage_fidelity" },
+        "rows": { "type": "array", "items": { "$ref": "#/$defs/reason_row" } }
+      },
+      "required": [
+        "subsystem",
+        "date",
+        "as_of",
+        "data_version",
+        "vintage_fidelity",
+        "rows"
+      ],
+      "additionalProperties": false
+    },
+    "reason_row": {
+      "title": "ObservedReason",
+      "description": "Reported at `ReportingEntity` grain. Nothing is aggregated to plant grain and there is no `plant` parameter.",
+      "type": "object",
+      "properties": {
+        "grain": {
+          "type": "string",
+          "enum": ["conjunto", "self_reporting_plant"],
+          "description": "Required on every row, per the domain model's rule that screens label the grain rather than assume it."
+        },
+        "entity_code": { "type": "string" },
+        "entity_label": {
+          "type": "string",
+          "description": "ONS's own name for the entity - a proper noun, not translated copy."
+        },
+        "reason": {
+          "$ref": "common.schema.json#/$defs/reason_code",
+          "description": "The identifier. The English gloss is not returned (vocabulary rule 7); it is a `t()` key."
+        },
+        "origin": { "$ref": "common.schema.json#/$defs/restriction_origin" },
+        "constrained_off_mwh": { "type": "number", "minimum": 0 },
+        "description": {
+          "type": ["string", "null"],
+          "description": "ONS's free-text note, passed through verbatim when present. Not a gloss of `reason`."
+        },
+        "cause_mixed": {
+          "type": "boolean",
+          "description": "The hour changed cause mid-way. Surfaced rather than hidden, because the single stored reason is a simplification and hiding that would make it look like an observation."
+        }
+      },
+      "required": [
+        "grain",
+        "entity_code",
+        "entity_label",
+        "reason",
+        "origin",
+        "constrained_off_mwh",
+        "description",
+        "cause_mixed"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

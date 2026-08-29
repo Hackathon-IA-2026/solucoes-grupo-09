@@ -1,0 +1,115 @@
+{
+  "target_date": "2026-08-29",
+  "threshold_mw": 5,
+  "forecast_origin": {
+    "producer": "wattsteer",
+    "run_label": "…artifact_id…",
+    "published_at": "2026-08-28T22:00:00Z",
+    "age_hours": 0.1,
+    "origin_kind": "served",
+    "gate_profile": "gate_late",
+    "weather_run_label": "D−1 12Z"
+  },
+  "vintage_fidelity": "point_in_time",
+  "risk_bins": {
+    "low": [0, 0.25],
+    "elevated": [0.25, 0.6],
+    "high": [0.6, 1]
+  },
+  "subsystems": [
+    {
+      "subsystem": "NE",
+      "ons_display_name": "NORDESTE",
+      "day_occurrence_probability": 0.89,
+      "risk_class": "high",
+      "day_energy_mwh": {
+        "p10": 1720,
+        "p50": 2780,
+        "p90": 4260
+      },
+      "peak_power_mw": {
+        "p10": 118,
+        "p50": 186,
+        "p90": 271
+      },
+      "day_expected_mwh": 2960,
+      "split": {
+        "wind_mwh": 2410,
+        "solar_mwh": 550
+      }
+    },
+    {
+      "subsystem": "N",
+      "ons_display_name": "NORTE",
+      "day_occurrence_probability": 0.21,
+      "risk_class": "low",
+      "day_energy_mwh": {
+        "p10": 0,
+        "p50": 140,
+        "p90": 610
+      },
+      "peak_power_mw": {
+        "p10": 0,
+        "p50": 18,
+        "p90": 74
+      },
+      "day_expected_mwh": 196,
+      "split": {
+        "wind_mwh": 171,
+        "solar_mwh": 25
+      }
+    },
+    {
+      "subsystem": "S",
+      "ons_display_name": "SUL",
+      "day_occurrence_probability": 0.44,
+      "risk_class": "elevated",
+      "day_energy_mwh": {
+        "p10": 0,
+        "p50": 310,
+        "p90": 980
+      },
+      "peak_power_mw": {
+        "p10": 0,
+        "p50": 41,
+        "p90": 118
+      },
+      "day_expected_mwh": 402,
+      "split": {
+        "wind_mwh": 388,
+        "solar_mwh": 14
+      }
+    },
+    {
+      "subsystem": "SE",
+      "ons_display_name": "SUDESTE/CENTRO-OESTE",
+      "day_occurrence_probability": 0.18,
+      "risk_class": "low",
+      "day_energy_mwh": {
+        "p10": 0,
+        "p50": 520,
+        "p90": 1410
+      },
+      "peak_power_mw": {
+        "p10": 0,
+        "p50": 63,
+        "p90": 162
+      },
+      "day_expected_mwh": 760,
+      "split": {
+        "wind_mwh": 402,
+        "solar_mwh": 358
+      }
+    }
+  ],
+  "national": {
+    "expected_mwh": 4318,
+    "risk_class_counts": {
+      "low": 2,
+      "elevated": 1,
+      "high": 1
+    },
+    "band": null,
+    "band_unavailable_reason": "no_joint_ensemble"
+  }
+}

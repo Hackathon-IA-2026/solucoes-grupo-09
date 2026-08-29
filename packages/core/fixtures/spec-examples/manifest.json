@@ -1,0 +1,89 @@
+{
+  "$comment": "The specs' own JSON examples, classified. See README.md. Every fenced json/jsonc document in docs/specs/*.md must appear here exactly once, or packages/core/test/spec-examples.test.ts fails. NOTE: keys carry a line number, so any edit above a fenced block in a spec shifts them and this test fails until the manifest is remapped. That is loud rather than silent, which is the right failure \u2014 but see .scratch/data-platform/issues/18 for keying on content instead.",
+  "examples": [
+    {
+      "key": "api-surface.md:487#0",
+      "schema": "meta.schema.json",
+      "fixture": "01-meta.json",
+      "completes": [],
+      "note": "The spec elides REFERENCE_FLEET with a comment; the fixture echoes the published constant, which is what the endpoint does."
+    },
+    {
+      "key": "api-surface.md:553#0",
+      "schema": "grid-outlook.schema.json",
+      "fixture": "02-grid-outlook.json",
+      "completes": [],
+      "note": "The spec writes NE and says \"\u2026 N, S, SE\". The other three are filled in, because the route answers with four and the schema says so."
+    },
+    {
+      "key": "api-surface.md:592#0",
+      "schema": "grid-now.schema.json",
+      "fixture": "03-grid-now.json",
+      "completes": ["subsystems"],
+      "note": "The spec's block writes NE alone with no elision marker, so it reads as complete and is not. The route answers with four subsystems, which is what makes national.derived = sum_of_four true; the fixture is the four."
+    },
+    {
+      "key": "api-surface.md:619#0",
+      "schema": "forecast-day-ahead.schema.json",
+      "fixture": "04-forecast-day-ahead.json",
+      "completes": ["forecast_origin.published_at"],
+      "note": "The spec writes published_at as the bare string \"\u2026\", which reads as data rather than as an elision. It is an instant, and gate_at(target_date, gate_profile) is the whole argument for the boundary decision, so the fixture states one."
+    },
+    {
+      "key": "api-surface.md:710#0",
+      "schema": "diagnosis.schema.json",
+      "fixture": "05-diagnosis-day-ahead.json",
+      "completes": ["attribution.drivers", "attribution.driver_group_hash"],
+      "note": "The spec elides the ForecastOrigin (\"the same object as the forecast route's\") and the peak-hour eight, but writes `drivers` as a one-element list with no elision marker even though its own prose two paragraphs later says all eight groups are returned, ranked by |share|; the fixture is the eight. `driver_group_hash` is written \"sha256:\u2026\", which is prose. vintage_fidelity is added rather than changed: the block never states it and vocabulary rule 9 requires it."
+    },
+    {
+      "key": "api-surface.md:1149#0",
+      "schema": "error.schema.json",
+      "fixture": "06-error-envelope.json",
+      "completes": [],
+      "note": "Complete as written."
+    },
+    {
+      "key": "diagnosis.md:576#0",
+      "schema": "diagnosis-narration-input.schema.json",
+      "fixture": "07-diagnosis-narration-input.json",
+      "completes": [],
+      "note": "The spec writes one group and says \"... eight entries, ranked by |share|\"."
+    },
+    {
+      "key": "flex-optimizer.md:537#0",
+      "schema": "flexibility-asset.schema.json",
+      "fixture": "08-flexibility-asset-battery.json",
+      "completes": [],
+      "note": "One fence, two documents: the battery variant."
+    },
+    {
+      "key": "flex-optimizer.md:537#1",
+      "schema": "flexibility-asset.schema.json",
+      "fixture": "09-flexibility-asset-shiftable-load.json",
+      "completes": [],
+      "note": "The shiftable-load variant. Its 70 MW against 1200 MWh/day is the SHIFT_EXCEEDS_BASELINE case the spec names in its own prose - a cross-field rule the gateway validates and a schema cannot express, which is why this validates here and would be a 422 at the boundary."
+    },
+    {
+      "key": "flex-optimizer.md:635#0",
+      "schema": "scenario.schema.json",
+      "fixture": "10-scenario.json",
+      "completes": [],
+      "note": "The spec elides the assets; the fixture uses REFERENCE_FLEET, which is the one fleet every published figure is measured against."
+    },
+    {
+      "key": "flex-optimizer.md:673#0",
+      "schema": "optimization-result.schema.json",
+      "fixture": "11-optimization-result.json",
+      "completes": ["scenario_hash"],
+      "note": "The spec writes scenario_hash as \"sha256:\u2026\", which reads as a stated value. A hash is 64 hex characters and the schema says so, because a hash that is not one is a cache key that never matches."
+    },
+    {
+      "key": "replay.md:692#0",
+      "schema": "replay.schema.json",
+      "fixture": "12-replay.json",
+      "completes": ["scenario_hash"],
+      "note": "Same as the optimization result. Everything else the spec elides - the 24 hours on both sides, the dispatch, the executed plan, the episodes and the solver receipt - is filled in."
+    }
+  ]
+}
