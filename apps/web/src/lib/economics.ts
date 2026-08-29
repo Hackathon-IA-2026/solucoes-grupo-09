@@ -13,7 +13,8 @@
 /** Assumed value of recovered energy. A scenario input, never a market price. */
 export const SCENARIO_BRL_PER_MWH = 180;
 
-/** Brazilian thousands separator, so money never renders in the en-US style. */
-export function formatBrl(value: number): string {
-  return Math.round(value).toLocaleString("pt-BR");
-}
+// There is deliberately no formatter here. Money is written by
+// `i18n/format.ts`'s `formatBrl`, which is locale-aware and always BRL; a
+// second one pinned to `pt-BR` used to live here, and two money formatters
+// that disagree about the same rate is exactly the inconsistency the constant
+// above exists to prevent.

@@ -146,15 +146,74 @@ export function spread(band_: Band): number {
  * `share` rather than `contribution`: the value is a share of the total
  * attributed magnitude and the shares sum to one, which the name should say.
  */
+/**
+ * The drivers the Diagnosis engine can attribute to, as a closed set.
+ *
+ * Closed rather than `string` on purpose: the words for each of these live in
+ * the dictionaries, keyed by the code, and a union makes "every driver has a
+ * label in both locales" a compile error rather than a blank row on screen.
+ * Adding a driver means adding its two words, which is the intended friction.
+ */
+export type DriverCode =
+  | "vre_load_ratio"
+  | "export_headroom"
+  | "load_level"
+  | "overnight_load_level"
+  | "hub_wind_speed"
+  | "day_of_week"
+  | "midday_net_load"
+  | "clear_sky_index"
+  | "installed_pv"
+  | "hydro_flexibility"
+  | "import_position"
+  | "other";
+
 export interface Driver {
-  /** Stable identifier; the label is UI copy and would be translated. */
-  code: string;
-  label: string;
+  /**
+   * Stable identifier, and the **only** thing a fixture or an API response
+   * carries. The label is copy: it lives in the dictionaries, keyed by this
+   * code, exactly as the reason codes and the risk classes do. A `label`
+   * field here would be an English string travelling through the data layer,
+   * which is precisely how a bilingual product goes monolingual again.
+   */
+  code: DriverCode;
   /** Share of the total attributed magnitude, 0..1. Shares sum to 1. */
   share: number;
   /** Which way this driver pushed the forecast on this day. */
-  direction: "raises" | "lowers";
-  /** What the feature actually read, and what it usually reads. */
-  observed: string;
-  typical: string;
+  direction: DriverDirection;
+}
+
+export type DriverDirection = "raises" | "lowers";
+
+/**
+ * A non-numeric feature reading — "the day was a weekend", "the subsystem was
+ * importing". Held as a term rather than as a word so both locales can say it.
+ */
+export type DriverTerm = "weekend" | "weekday" | "importing" | "balanced";
+
+/**
+ * What a feature actually read, and what it usually reads.
+ *
+ * Structured rather than a preformatted string: `"1,900 MW"` bakes in en-US
+ * grouping, and `"weekend"` bakes in English. A reading is a quantity or a
+ * term, and the locale decides how either one is written.
+ */
+export type DriverReading =
+  | {
+      readonly kind: "quantity";
+      readonly value: number;
+      readonly decimals?: number;
+      /** Appended verbatim — units are untranslated in both locales. */
+      readonly unit?: string;
+      /** Show a leading `+` for a positive value, where the sign is the point. */
+      readonly signed?: boolean;
+    }
+  | { readonly kind: "term"; readonly term: DriverTerm }
+  /** No meaningful reading — the residual bucket. The row is omitted. */
+  | { readonly kind: "none" };
+
+/** A driver with its feature readings attached, as the Explain screen shows it. */
+export interface AttributedDriver extends Driver {
+  readonly observed: DriverReading;
+  readonly typical: DriverReading;
 }

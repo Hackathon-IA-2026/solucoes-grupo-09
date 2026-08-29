@@ -27,6 +27,7 @@ import { router, usePathname } from "expo-router";
 import type { ReactNode } from "react";
 import { Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { LanguageSwitch } from "@/components/language-switch";
+import { type Copy, useCopy, useFormat } from "@/i18n";
 import {
   RUN_LABELS,
   type RunLabel,
@@ -36,18 +37,22 @@ import {
 } from "@/lib/fixtures";
 import { sharedParams, useAppParams } from "./use-app-params";
 
+/**
+ * A screen is a key and a route. Its name is copy and lives in the
+ * dictionaries — the route never is, which is why `path` is a literal here and
+ * `label` is not: translating `/app/explain` would break navigation in one
+ * locale only, and that is the kind of bug that hides until someone switches.
+ */
 interface ScreenDef {
-  key: string;
-  label: string;
-  short: string;
+  key: keyof Copy["app"]["shell"]["screens"];
   path: string;
 }
 
 const SCREENS: ScreenDef[] = [
-  { key: "overview", label: "Grid Overview", short: "Overview", path: "/app" },
-  { key: "explain", label: "Explain", short: "Explain", path: "/app/explain" },
-  { key: "mitigate", label: "Mitigate", short: "Mitigate", path: "/app/mitigate" },
-  { key: "replay", label: "Time Machine", short: "Replay", path: "/app/replay" },
+  { key: "overview", path: "/app" },
+  { key: "explain", path: "/app/explain" },
+  { key: "mitigate", path: "/app/mitigate" },
+  { key: "replay", path: "/app/replay" },
 ];
 
 export function AppShell({
@@ -58,6 +63,7 @@ export function AppShell({
   showSelection?: boolean;
 }) {
   const colors = usePalette();
+  const copy = useCopy();
   const pathname = usePathname();
   const params = useAppParams();
 
@@ -94,7 +100,7 @@ export function AppShell({
           <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
             <Pressable
               accessibilityRole="link"
-              accessibilityLabel="WattSteer — back to the landing page"
+              accessibilityLabel={copy.app.shell.backToLanding}
               onPress={() => router.push("/")}
               style={(state) => {
                 const { focused = false } = state as { focused?: boolean };
@@ -124,7 +130,7 @@ export function AppShell({
               }}
             >
               <Text style={{ fontSize: 11, fontWeight: "600", color: colors.inkFaint }}>
-                PROTOTYPE · FIXTURE DATA
+                {copy.app.shell.prototypeBadge}
               </Text>
             </View>
             {/* Pushes the switch to the far edge of the header row. */}
@@ -150,7 +156,7 @@ export function AppShell({
               <Pill
                 key={screen.key}
                 accessibilityRole="tab"
-                label={screen.label}
+                label={copy.app.shell.screens[screen.key]}
                 tone="secondary"
                 active={
                   screen.path === "/app"
@@ -185,6 +191,8 @@ export function AppShell({
 /** Subsystem, technology and run — the selection every screen reads. */
 export function SelectionBar() {
   const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
   const params = useAppParams();
   return (
     <View
@@ -220,7 +228,7 @@ export function SelectionBar() {
             paddingVertical: 12,
           }}
         >
-          <Group label="Subsystem">
+          <Group label={copy.app.shell.selection.subsystem}>
             {SUBSYSTEMS.map((s) => (
               <MiniPill
                 key={s.code}
@@ -230,17 +238,17 @@ export function SelectionBar() {
               />
             ))}
           </Group>
-          <Group label="Technology">
+          <Group label={copy.app.shell.selection.technology}>
             {(["WIND", "SOLAR"] as Technology[]).map((tech) => (
               <MiniPill
                 key={tech}
-                label={tech === "WIND" ? "Wind" : "Solar"}
+                label={copy.app.technology[tech]}
                 active={params.technology === tech}
                 onPress={() => params.setParams({ technology: tech })}
               />
             ))}
           </Group>
-          <Group label="D−1 run">
+          <Group label={copy.app.shell.selection.run}>
             {RUN_LABELS.map((run) => (
               <MiniPill
                 key={run}
@@ -252,10 +260,10 @@ export function SelectionBar() {
           </Group>
           <View>
             <Text style={{ fontSize: 10, color: colors.inkFaint, marginBottom: 4 }}>
-              Target day
+              {copy.app.shell.selection.targetDay}
             </Text>
             <Text style={{ fontSize: 13, fontWeight: "600", color: colors.ink }}>
-              {params.date}
+              {f.date(params.date)}
             </Text>
           </View>
         </ScrollView>

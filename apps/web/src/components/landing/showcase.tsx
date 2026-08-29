@@ -1,8 +1,9 @@
 import { Badge, Panel, radius, space, usePalette } from "@wattsteer/ui";
 import { StyleSheet, Text, View } from "react-native";
-import { useCopy } from "@/i18n";
-import { band, formatMwhExact, formatRange } from "./band";
-import { BandRail, railLabel } from "./band-figure";
+import { useCopy, useI18n } from "@/i18n";
+import { fill } from "@/i18n/format";
+import { band, centre, formatMwhExact, formatRange } from "./band";
+import { BandRail, useRailLabel } from "./band-figure";
 import { DriverBars } from "./driver-bars";
 import { MitigationStack } from "./mitigation-stack";
 import { ReplayCompare } from "./replay-compare";
@@ -87,6 +88,7 @@ const UNCERTAIN = band(1400, 4180, 8600);
  */
 function BandExplainer({ wide }: { wide: boolean }) {
   const copy = useCopy();
+  const { locale } = useI18n();
   const colors = usePalette();
   const max = 9000;
   return (
@@ -104,10 +106,20 @@ function BandExplainer({ wide }: { wide: boolean }) {
         <View
           style={{ flex: wide ? 1 : undefined, gap: space.lg, justifyContent: "center" }}
         >
-          <ExampleRail label="A confident forecast" figure={CONFIDENT} max={max} />
-          <ExampleRail label="A wide-open one" figure={UNCERTAIN} max={max} />
+          <ExampleRail
+            label={copy.band.explainerConfident}
+            figure={CONFIDENT}
+            max={max}
+          />
+          <ExampleRail
+            label={copy.band.explainerUncertain}
+            figure={UNCERTAIN}
+            max={max}
+          />
           <Text style={{ fontSize: 12, color: colors.inkFaint }}>
-            {`Same median — ${formatMwhExact(4180)} MWh — and a single-number card would print them identically.`}
+            {fill(copy.band.explainerSame, {
+              value: formatMwhExact(locale, centre(CONFIDENT)),
+            })}
           </Text>
         </View>
       </View>
@@ -124,6 +136,8 @@ function ExampleRail({
   figure: ReturnType<typeof band>;
   max: number;
 }) {
+  const { locale } = useI18n();
+  const railLabel = useRailLabel();
   const colors = usePalette();
   return (
     <View style={{ gap: 6 }}>
@@ -139,7 +153,7 @@ function ExampleRail({
             color: colors.onVioletSoft,
           }}
         >
-          {figure.kind === "band" ? formatRange(figure.band) : ""}
+          {figure.kind === "band" ? formatRange(locale, figure.band) : ""}
         </Text>
       </View>
       <BandRail figure={figure} max={max} label={railLabel(figure, "MWh", label)} />

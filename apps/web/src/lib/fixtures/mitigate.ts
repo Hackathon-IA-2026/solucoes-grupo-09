@@ -20,7 +20,6 @@ import type {
  */
 export const DEFAULT_BATTERY: BatteryAsset = {
   assetType: "battery",
-  label: "Battery",
   maxPowerMw: 100,
   energyCapacityMwh: 300,
   roundTripEfficiency: 0.92,
@@ -40,7 +39,6 @@ export const DEFAULT_BATTERY: BatteryAsset = {
  */
 export const DEFAULT_LOAD: ShiftableLoadAsset = {
   assetType: "shiftable_load",
-  label: "Flexible load",
   maxShiftMw: 70,
   shiftWindowHours: 3,
   dailyEnergyMwh: 2400,
@@ -140,13 +138,15 @@ export function buildMitigationSteps(input: MitigateInput): MitigationStep[] {
     thresholdMw: forecast.thresholdMw,
   });
 
-  const steps: { key: MitigationStep["key"]; label: string; plan: DispatchPlan }[] = [
-    { key: "no_action", label: "No action", plan: nothing },
-    { key: "battery", label: `+ ${battery.label}`, plan: batteryOnly },
-    { key: "battery_and_load", label: `+ ${load.label}`, plan: both },
+  // Keys, not labels: the three steps are named in the dictionaries, so the
+  // reveal reads "+ Bateria" or "+ Battery" without the fixture knowing which.
+  const steps: { key: MitigationStep["key"]; plan: DispatchPlan }[] = [
+    { key: "no_action", plan: nothing },
+    { key: "battery", plan: batteryOnly },
+    { key: "battery_and_load", plan: both },
   ];
 
-  return steps.map(({ key, label, plan }) => {
+  return steps.map(({ key, plan }) => {
     const scored = scoreAcrossBand(forecast, plan, battery);
     const onP50 = evaluatePlan(
       plan,
@@ -156,7 +156,6 @@ export function buildMitigationSteps(input: MitigateInput): MitigationStep[] {
     );
     return {
       key,
-      label,
       remaining: scored.remaining,
       recovered: scored.recovered,
       avoidability: key === "no_action" ? null : scored.avoidability,

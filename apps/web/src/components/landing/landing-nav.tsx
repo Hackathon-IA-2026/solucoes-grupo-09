@@ -14,15 +14,16 @@ import type { SectionId } from "./section";
 /**
  * The landing page's own header.
  *
- * The existing `TopNavFull` is a *dashboard* header — tab pills, a
+ * The template's `TopNavFull` was a *dashboard* header — tab pills, a
  * notification bell, an avatar — which the placeholder landing page was
  * rendering because it was the only nav that existed. It promises an
  * application to a visitor who has not entered one yet, and its avatar
  * promises an account this product does not have. So the landing page gets a
  * marketing header instead: wordmark, section links, one call to action.
  *
- * `top-nav.tsx` is left untouched — the app screens are being built in
- * parallel and `TopNavFull` is theirs.
+ * It was kept at the time on the assumption the app screens would want it.
+ * They did not — they use `AppShell` — so it has been deleted rather than
+ * left as a dead file the hardcoded-copy guard would have to exempt.
  */
 export function LandingNav({ onNavigate }: { onNavigate: (section: SectionId) => void }) {
   const copy = useCopy();

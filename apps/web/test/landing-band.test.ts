@@ -71,17 +71,25 @@ describe("band", () => {
 
 describe("formatting", () => {
   it("formats energy with separators and an en dash range", () => {
-    expect(formatMwhExact(4180)).toBe("4,180");
-    expect(formatMwhExact(4180.4)).toBe("4,180");
-    expect(formatRange({ p10: 2640, p50: 4180, p90: 6320 })).toBe("2,640–6,320");
+    expect(formatMwhExact("en", 4180)).toBe("4,180");
+    expect(formatMwhExact("en", 4180.4)).toBe("4,180");
+    expect(formatRange("en", { p10: 2640, p50: 4180, p90: 6320 })).toBe("2,640–6,320");
     // An en dash, not a hyphen — a hyphen reads as a minus next to numbers.
-    expect(formatRange({ p10: 1, p50: 2, p90: 3 })).toContain("–");
+    expect(formatRange("en", { p10: 1, p50: 2, p90: 3 })).toContain("–");
+  });
+
+  it("groups Portuguese numbers the Brazilian way, not the American one", () => {
+    // The page is served from `/pt/` as its own static file, and "4,180" reads
+    // there as four point one eight — an order of magnitude out, silently.
+    expect(formatMwhExact("pt", 4180)).toBe("4.180");
+    expect(formatRange("pt", { p10: 2640, p50: 4180, p90: 6320 })).toBe("2.640–6.320");
+    expect(formatPercent("pt", 0.459)).toBe("45,9%");
   });
 
   it("formats shares and probabilities at their respective precisions", () => {
-    expect(formatPercent(0.459)).toBe("45.9%");
-    expect(formatProbability(0.89)).toBe("89%");
-    expect(formatProbability(0.085)).toBe("9%");
+    expect(formatPercent("en", 0.459)).toBe("45.9%");
+    expect(formatProbability("en", 0.89)).toBe("89%");
+    expect(formatProbability("en", 0.085)).toBe("9%");
   });
 });
 

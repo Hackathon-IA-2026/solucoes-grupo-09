@@ -44,14 +44,14 @@ export function DriverBars() {
       <View style={{ gap: space.md }}>
         {DRIVERS.map((driver, index) => (
           <View
-            key={driver.label}
+            key={driver.code}
             style={{ flexDirection: "row", alignItems: "center", gap: space.md }}
           >
             <Text
               numberOfLines={1}
               style={{ flex: 1, fontSize: 13, color: colors.inkMuted }}
             >
-              {driver.label}
+              {copy.showcase.explain.drivers[driver.code]}
             </Text>
             <View
               style={{

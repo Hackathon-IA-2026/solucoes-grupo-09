@@ -25,6 +25,22 @@ export const pt: Copy = {
     cta: "Ver a rede agora",
   },
 
+  gate: {
+    tagline: "Inteligência de curtailment para a rede elétrica brasileira.",
+  },
+
+  footer: {
+    tagline: "Inteligência de curtailment de renováveis.",
+    rights: "© WattSteer {year}. Todos os direitos reservados.",
+  },
+
+  notFound: {
+    metaTitle: "Página não encontrada — WattSteer",
+    title: "Página não encontrada",
+    body: "A página que você procura não existe.",
+    back: "Voltar para o WattSteer",
+  },
+
   hero: {
     eyebrow: "Previsão de curtailment para o dia seguinte · rede brasileira",
     headline: {
@@ -61,6 +77,13 @@ export const pt: Copy = {
     observedLabel: "Observado",
     observedNote: "Valor medido. Sem faixa, porque não há previsão.",
     explainerTitle: "Todo número aqui tem uma largura",
+    explainerConfident: "Uma previsão confiante",
+    explainerUncertain: "Uma bem aberta",
+    explainerSame:
+      "Mesma mediana — {value} MWh — e um card de número único imprimiria as duas igualzinhas.",
+    railObserved: "{label}: {value} {unit}, observado",
+    railBand: "{label}: mediana {p50} {unit}, percentil 10 a 90 de {p10} a {p90} {unit}",
+    hourFigure: "{hour} — mediana {p50} {unit}, P10 a P90 de {p10} a {p90} {unit}",
     explainerBody:
       "Uma previsão de curtailment que diz 4.180 MWh e mais nada é um número se passando por fato. O WattSteer publica P10, P50 e P90 juntos e desenha a distância entre eles, para que a largura da incerteza seja tão visível quanto o meio dela. Onde um número genuinamente não tem faixa — um valor histórico medido — ele é marcado como observado, para que a ausência signifique alguma coisa.",
   },
@@ -103,6 +126,14 @@ export const pt: Copy = {
       panelTitle: "Diagnóstico",
       panelSub: "NORDESTE · amanhã",
       heading: "A quais condições o risco está associado",
+      drivers: {
+        renewable_load_ratio: "Razão renovável / carga",
+        ne_se_export_utilisation: "Estresse de exportação, NE → SE",
+        residual_load: "Carga residual baixa",
+        solar_ramp_1h: "Rampa solar",
+        is_weekend: "Fim de semana",
+        other: "Outras variáveis",
+      },
       note: "Contribuição SHAP para a previsão do modelo, normalizada em 100%. São os drivers do modelo, não uma afirmação causal sobre a rede.",
     },
     mitigate: {
@@ -111,9 +142,15 @@ export const pt: Copy = {
       heading: "Que flexibilidade absorveria isso",
       baselineLabel: "Sem ação",
       note: "Os parâmetros dos ativos são entradas de cenário, não um inventário — o ONS não publica registro de ativos de flexibilidade, então isto é um e-se, não um plano.",
+      stepBattery: "+ Bateria",
+      stepLoad: "+ Carga flexível",
+      detailBattery: "{power} MW / {energy} MWh, ciclo completo {efficiency}",
+      detailLoad: "{shift} MW deslocáveis, janela de {window} h",
       recoveredLabel: "Energia recuperada",
       avoidedLabel: "Curtailment evitado",
+      medianToMedian: "de mediana para mediana",
       scenarioLabel: "Cenário econômico",
+      economicNote: "{value} a um valor assumido de {rate}/MWh",
     },
     replay: {
       panelTitle: "Replay",
@@ -123,6 +160,8 @@ export const pt: Copy = {
       optimizedLabel: "Com o WattSteer",
       recoveredLabel: "Recuperado",
       reductionLabel: "Redução de curtailment",
+      vintageBadge: "otimista por revisão",
+      medianToObserved: "de mediana para observado",
       vintageNote:
         "Esta janela é anterior à ingestão do WattSteer, então o passado mostrado aqui é a reafirmação atual do ONS sobre ele, não o que era conhecível no dia. Marcado como otimista quanto a revisões, e isso nunca poderá ser corrigido: o ONS reescreve o histórico no lugar.",
     },
@@ -277,6 +316,265 @@ export const pt: Copy = {
         title: "Atribuição e licenciamento dos dados",
         body: "Os conjuntos de dados de origem seguem sendo propriedade de quem os publica e são usados sob suas respectivas licenças abertas. Onde a licença exige atribuição ou tratamento share-alike do dado derivado, o WattSteer cumpre; esses avisos aparecem junto ao dado que cobrem.",
       },
+    },
+  },
+
+  app: {
+    shell: {
+      backToLanding: "WattSteer — voltar para a página inicial",
+      prototypeBadge: "PROTÓTIPO · DADOS DE FIXTURE",
+      screens: {
+        overview: "Visão da rede",
+        explain: "Explicar",
+        mitigate: "Mitigar",
+        replay: "Máquina do tempo",
+      },
+      selection: {
+        subsystem: "Subsistema",
+        technology: "Tecnologia",
+        run: "Rodada D−1",
+        targetDay: "Dia alvo",
+      },
+    },
+
+    technology: { WIND: "Eólica", SOLAR: "Solar" },
+
+    stamp: {
+      published: "{producer} · {run} · publicado {when} BRT",
+      threshold: " · limiar {mw} MW",
+    },
+
+    vintage: {
+      point_in_time: "PONTO NO TEMPO",
+      revision_optimistic: "OTIMISTA POR REVISÃO",
+    },
+
+    heuristic: {
+      title: "Isto é uma heurística de protótipo, não o otimizador",
+      points: [
+        "O Flex Optimizer de produção é um MILP com binários de verdade para a exclusão mútua entre carga e descarga da bateria, resolvido pelo SCIP em poucos milissegundos dentro da requisição. Nada nesta página resolve um MILP.",
+        "A passada gulosa aqui preserva as duas propriedades cuja ausência tornaria os números errados em vez de aproximados: a energia absorvida é o aumento líquido da demanda flexível, e os ativos nunca podem importar da rede.",
+        "Espere que o otimizador real recupere um pouco mais do que esta página mostra, nunca menos.",
+      ],
+    },
+
+    band: {
+      medianMarked: "P50 marcada",
+      strip: "P10 {p10}, P50 {p50}, P90 {p90}",
+    },
+
+    risk: {
+      low: "Baixo",
+      elevated: "Elevado",
+      high: "Alto",
+      caveat:
+        "O risco é P(pelo menos uma hora acima do limiar), agrupado em faixas. As faixas são largas porque o classificador não é calibrado com precisão suficiente para justificar faixas mais estreitas — veja a curva de confiabilidade em Explicar.",
+    },
+
+    fan: {
+      figure:
+        "Perfil de curtailment para o dia seguinte, faixa de P10 a P90 em torno da mediana",
+      thresholdMark: "limiar {mw} MW",
+      medianLegend: "Previsão P50",
+      bandLegend: "Faixa P10–P90",
+      observedDefault: "Observado",
+      hint: "Toque em uma hora para ler o intervalo",
+      hourLabel: "Hora",
+      exceedance: "P(acima do limiar)",
+      hourFigure: "Hora {hour}: P50 {p50} MWh, P10 a P90 {p10} a {p90}",
+    },
+
+    dispatch: {
+      figure:
+        "Despacho horário: curtailment oferecido, energia absorvida e estado de carga da bateria",
+      offered: "Curtailment oferecido (MWh)",
+      absorbed: "Absorvido (MWh)",
+      soc: "SOC da bateria (MWh, eixo direito)",
+      discharge: "Descarga (abaixo da linha)",
+    },
+
+    drivers: {
+      labels: {
+        vre_load_ratio: "Razão renovável / carga",
+        export_headroom: "Folga de exportação para SE/CO",
+        load_level: "Nível de carga",
+        overnight_load_level: "Nível de carga na madrugada",
+        hub_wind_speed: "Velocidade do vento na altura do rotor",
+        day_of_week: "Dia da semana",
+        midday_net_load: "Carga líquida ao meio-dia",
+        clear_sky_index: "Índice de céu claro",
+        installed_pv: "Fotovoltaica comissionada na janela",
+        hydro_flexibility: "Rampa de descida hidráulica disponível",
+        import_position: "Posição líquida importadora",
+        other: "Todo o resto",
+      },
+      terms: {
+        weekend: "fim de semana",
+        weekday: "dia útil",
+        importing: "importando",
+        balanced: "equilibrado",
+      },
+      direction: { raises: "aumenta", lowers: "reduz" },
+      reading: "observado {observed} · típico {typical}",
+      figure: "{driver}: {share} da magnitude atribuída, {direction} o risco",
+      note: "As parcelas são da magnitude atribuída para este subsistema-dia, não do curtailment em si. Um driver que aumenta o risco não é causa de nenhum MWh cortado em particular.",
+    },
+
+    reliability: {
+      figure:
+        "Diagrama de confiabilidade: probabilidade prevista contra frequência observada",
+      axis: "probabilidade prevista (%)",
+      note: "Pontos abaixo da linha de identidade tracejada são previsões excessivamente confiantes: das horas anunciadas como 85%, 77% de fato ultrapassaram o limiar. A área do ponto é o número de horas na faixa.",
+    },
+
+    overview: {
+      metaTitle: "Visão da rede — WattSteer",
+      title: "Visão da rede",
+      lede: "Risco de curtailment para o dia seguinte em {date}, por subsistema. Todo número é um intervalo P10/P50/P90, não um ponto.",
+      rowFigure: "{subsystem}: abrir Explicar",
+      rowEnergy: "Energia cortada esperada",
+      rowPeak: "pico {low}–{high} MW",
+      profileSubtitle: "Perfil de 24 horas, P10–P90",
+      dailyEnergy: "Energia cortada esperada, dia inteiro",
+      dailyEnergyNote:
+        "O total do dia é uma previsão conjunta. Não é a soma das P90 horárias — quantis não somam.",
+      peakPower: "Pico de potência horária",
+      peakPowerNote: "Hora da maior P50. Limiar em vigor: {mw} MW no grão de subsistema.",
+      grainNote:
+        "O grão da previsão é o subsistema. O curtailment observado é publicado por entidade de reporte — um conjunto, na maior parte — e os motivos de restrição só existem lá; veja Explicar.",
+    },
+
+    explain: {
+      metaTitle: "Explicar — WattSteer",
+      title: "Por que {subsystem}?",
+      lede: "O que o modelo está lendo em {date}, e quanto disso vale acreditar.",
+      riskTitle: "Risco de curtailment",
+      riskSubtitle: "P(qualquer hora acima do limiar)",
+      magnitude: "Magnitude esperada, dia inteiro",
+      magnitudeNote: "Condicionada a o dia ultrapassar o limiar em alguma hora.",
+      peakPower: "Pico de potência horária",
+      narrationTitle: "Narrativa",
+      narrationSubtitle: "Gerada no idioma solicitado",
+      narration:
+        "O modelo coloca o curtailment de {technology} em {subsystem} acima do limiar de {mw} MW na maior parte do dia. A maior contribuição isolada é {top} ({observed} contra um típico de {typical}), seguida por {second}. As duas juntas respondem por {share} da magnitude atribuída. A faixa fica larga nas horas de ombro porque o classificador de ocorrência está perto de meio a meio ali — leia a P10 como “pode não ultrapassar o limiar de jeito nenhum”, e não como um número pequeno.",
+      narrationNote:
+        "Escrita por um modelo de linguagem a partir da tabela de atribuição abaixo. Ela reapresenta os números; não acrescenta nenhum.",
+      driversTitle: "Atribuição de drivers",
+      driversSubtitle: "SHAP, no grão de subsistema",
+      reliabilityTitle: "Confiabilidade",
+      reliabilitySubtitle: "Previsto vs frequência observada",
+      reliabilityNote:
+        "{hours} horas de {from} a {to}. A janela inteira é anterior ao início da ingestão, então ela é avaliada contra a reapresentação atual do passado feita pelo ONS, e não contra o que era conhecível na época.",
+      reasonsTitle: "Motivos de restrição observados",
+      reasonsSubtitle: "Apurados pelo ONS para {date}",
+      grainConjunto: "motivo observado no grão de conjunto",
+      grainPlant:
+        "motivo observado no grão de usina — esta usina é sua própria entidade de reporte",
+      reasonLegend:
+        "Códigos de motivo: REL indisponibilidade externa (rede) · CNF exigência de confiabilidade · ENE energético (sobreoferta) · PAR restrição por parecer de acesso. Origem: LOC local, SIS sistêmica. O motivo de um conjunto nunca é alocado às usinas que o compõem — isso seria apresentar uma alocação como observação, e o WattSteer não calcula nenhuma.",
+      next: "A seguir:",
+      nextMitigate: "O que absorveria isso →",
+    },
+
+    mitigate: {
+      metaTitle: "Mitigar — WattSteer",
+      title: "O que dá para fazer?",
+      lede: "{subsystem} {technology}, {date}. Armazenamento e demanda flexível dimensionados contra a previsão do dia seguinte.",
+      basisTitle: "Planejar contra",
+      basisMedian: "a previsão mediana (P50)",
+      basisConservative: "uma previsão conservadora (P10)",
+      basisMedianPill: "P50 mediana",
+      basisConservativePill: "P10 conservadora",
+      basisMedianBody:
+        "O plano é ótimo se a mediana se confirmar. Se o dia vier abaixo da P50, os ativos terão se comprometido a carregar com energia que nunca foi cortada — a coluna P10 abaixo é o custo disso.",
+      basisConservativeBody:
+        "O plano é viável contra uma realização pessimista, então a energia recuperada é um piso, não uma mediana. Ele subutiliza a frota de forma sistemática, que é a direção de erro que vale preferir.",
+      steps: {
+        no_action: "Sem ação",
+        battery: "+ Bateria",
+        battery_and_load: "+ Carga flexível",
+      },
+      reveal: "Revelar",
+      hidden: "Oculto — revele na ordem para ver a variação do passo.",
+      remaining: "MWh restantes",
+      baselineStep: "O dia como previsto, sem nada despachado.",
+      stepDelta: "−{delta} MWh em relação ao passo anterior (P50)",
+      recovered: "Energia recuperada",
+      recoveredNote:
+        "Um plano, avaliado contra as três realizações da previsão. O intervalo é da previsão, não do otimizador.",
+      avoided: "Curtailment evitado",
+      avoidedNote:
+        "Invertido de propósito: a parcela evitada é menor na realização P90, porque uma frota fixa cobre menos de um evento maior.",
+      avoidedUndefined:
+        "Indefinido, não zero: sem ativos não há por que dividir. Um zero aqui seria lido como nada poderia ser evitado.",
+      economicTitle: "Cenário econômico (rotulado)",
+      economicNote:
+        "A um valor assumido de {rate}/MWh, na realização P50. Isto é um cenário, não um valor de liquidação, e é o único lugar em que R$ aparece. Nenhuma alegação de carbono decorre disso e nenhuma é feita.",
+      dispatchTitle: "Despacho",
+      dispatchSubtitle: "{step} · avaliado na realização P50",
+      batteryTitle: "Bateria",
+      loadTitle: "Carga flexível",
+      assetSubtitle: "Entrada de cenário, não um inventário",
+      includeBattery: "Incluir bateria",
+      includeLoad: "Incluir carga",
+      reset: "Voltar para {power} MW / {energy} MWh + {shift} MW",
+      footnote:
+        "O ONS não publica cadastro de ativos de flexibilidade, então todo parâmetro acima é uma suposição sua. Mitigar é uma ferramenta hipotética, não um inventário — o cenário é codificado na URL em vez de salvo, então compartilhar é só mandar o link.",
+    },
+
+    assets: {
+      decrease: "Diminuir {label}",
+      increase: "Aumentar {label}",
+      batteryPower: "Potência (MW)",
+      batteryEnergy: "Energia (MWh)",
+      roundTrip: "Eficiência de ciclo completo",
+      initialSoc: "Estado de carga inicial",
+      batteryNote:
+        "Duração de {hours} horas. A eficiência se divide em uma perna de carga e uma de descarga (√RTE cada); a perda entra de forma assimétrica no balanço do estado de carga.",
+      loadShift: "Potência deslocável (MW)",
+      loadWindow: "Janela de deslocamento (h)",
+      loadDailyEnergy: "Energia diária (MWh)",
+      loadNote:
+        "A energia diária é conservada por construção: cada hora deslocada para cima é compensada por deslocamentos para baixo dentro da janela, então a carga consome os mesmos MWh de qualquer jeito.",
+    },
+
+    replay: {
+      metaTitle: "Máquina do tempo — WattSteer",
+      title: "E se o WattSteer estivesse rodando?",
+      lede: "Um dia passado, reexecutado contra a safra de previsão disponível em D−1 e avaliado contra o que o ONS apurou.",
+      dayLabel: "{date} · {subsystem} {technology}",
+      scenarioLabel:
+        "bateria de {power} MW / {energy} MWh + {shift} MW de carga flexível",
+      inSample: "DENTRO DA AMOSTRA",
+      outOfSample: "FORA DA AMOSTRA",
+      honestyTitle: "O que esta reexecução é, e o que ela não é",
+      inSampleNote:
+        "O modelo em serviço foi treinado com dados até {through}, o que inclui este dia. A previsão D−1 aqui é um ajuste dentro da amostra, então isto é uma reexecução, não um contrafactual: trate a energia recuperada como um limite superior otimista do que o sistema ao vivo teria alcançado.",
+      outOfSampleNote:
+        "Este dia é posterior ao corte de treino do modelo em serviço ({through}), então a previsão D−1 está genuinamente fora da amostra. É o mais próximo de um contrafactual real que esta tela tem.",
+      revisionOptimisticNote:
+        "Este dia é anterior ao início da ingestão ({goLive}). O ONS reescreve o histórico no lugar, sem marcador de versão, então o valor apurado acima é a reapresentação atual do dia feita pelo ONS, não o que foi publicado na época. As safras anteriores são irrecuperáveis e isso nunca poderá ser corrigido retroativamente.",
+      pointInTimeNote:
+        "Este dia é posterior ao início da ingestão ({goLive}), então todo valor aqui é o que era genuinamente conhecível na época — uma leitura as-of, não a reapresentação de hoje.",
+      scenarioNote:
+        "A energia recuperada é o que este despacho alcança sob este cenário contra esta safra de previsão. É uma propriedade do cenário, não do dia, e mudar qualquer parâmetro de ativo muda o resultado.",
+      claimsNote:
+        "MWh recuperados e % evitado são as únicas alegações feitas. Nenhuma economia de carbono decorre de energia renovável recuperada sem um modelo de emissões marginais, e nenhuma é oferecida.",
+      rowActual: "Cortado — apurado pelo ONS",
+      rowActualNote: "{hours} horas contíguas acima de {mw} MW, pico de {peak} MW.",
+      rowForecast: "O que a rodada D−1 disse",
+      rowForecastNote:
+        "P10–P90 sombreada, P50 sólida. Um total conjunto do dia, nunca a soma dos quantis horários.",
+      rowRecovered: "Com o cenário despachado",
+      compareSubtitle: "Apurado vs previsto vs recuperado",
+      headlineCurtailed: "Energia renovável cortada",
+      headlineRecovered: "Potencialmente recuperada",
+      headlineAvoided: "Curtailment evitado",
+      hourlyTitle: "Hora a hora",
+      hourlySubtitle: "O que foi previsto, e o que aconteceu",
+      settledActual: "Apurado pelo ONS",
+      episodeNote:
+        "Um episódio é uma visão de leitura das horas de curtailment, nunca uma linha armazenada — ele carrega o limiar de {mw} MW e a tolerância de intervalo de 0 hora que o produziram, e um limiar diferente produziria um episódio diferente a partir dos mesmos dados.",
     },
   },
 };

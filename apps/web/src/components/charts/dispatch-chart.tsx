@@ -18,6 +18,7 @@
 import { useContainerWidth, usePalette } from "@wattsteer/ui";
 import { Text, View } from "react-native";
 import Svg, { G, Line, Path, Rect, Text as SvgText } from "react-native-svg";
+import { useCopy, useFormat } from "@/i18n";
 import type { HourlyDispatch } from "@/lib/fixtures";
 
 const W = 640;
@@ -34,6 +35,8 @@ export function DispatchChart({
   energyCapacityMwh: number;
 }) {
   const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
   const [containerWidth, onLayout] = useContainerWidth();
 
   if (dispatch.length === 0) {
@@ -62,7 +65,7 @@ export function DispatchChart({
         viewBox={`0 0 ${W} ${H}`}
         width="100%"
         height={scale > 0 ? scale * H : H}
-        accessibilityLabel="Hourly dispatch: curtailment offered, energy absorbed, and battery state of charge"
+        accessibilityLabel={copy.app.dispatch.figure}
       >
         {[1, 0.5, 0].map((g) => (
           <G key={g}>
@@ -82,7 +85,7 @@ export function DispatchChart({
               fontFamily={FONT}
               fill={colors.inkMuted}
             >
-              {Math.round(max * g)}
+              {f.number(max * g)}
             </SvgText>
             <SvgText
               x={W - PAD.right + 6}
@@ -92,7 +95,7 @@ export function DispatchChart({
               fontFamily={FONT}
               fill={colors.violet}
             >
-              {Math.round(socMax * g)}
+              {f.number(socMax * g)}
             </SvgText>
           </G>
         ))}
@@ -169,10 +172,10 @@ export function DispatchChart({
           marginTop: 8,
         }}
       >
-        <Key color={colors.inkFaint} label="Curtailment offered (MWh)" faded={true} />
-        <Key color={colors.accent} label="Absorbed (MWh)" />
-        <Key color={colors.violet} label="Battery SOC (MWh, right axis)" />
-        <Key color={colors.violet} label="Discharge (below the line)" faded={true} />
+        <Key color={colors.inkFaint} label={copy.app.dispatch.offered} faded={true} />
+        <Key color={colors.accent} label={copy.app.dispatch.absorbed} />
+        <Key color={colors.violet} label={copy.app.dispatch.soc} />
+        <Key color={colors.violet} label={copy.app.dispatch.discharge} faded={true} />
       </View>
     </View>
   );

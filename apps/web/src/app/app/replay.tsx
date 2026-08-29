@@ -39,13 +39,36 @@ import { Text, View } from "react-native";
 import { AppShell, MiniPill, ScreenTitle } from "@/components/app/app-shell";
 import { ForecastStamp, HonestyNote, VintageBadge } from "@/components/app/honesty";
 import { useAppParams } from "@/components/app/use-app-params";
-import { formatMwhCompact } from "@/components/charts/band-figure";
 import { CompareBars, type CompareRow } from "@/components/charts/compare-bars";
 import { FanChart } from "@/components/charts/fan-chart";
-import { INGESTION_GO_LIVE, REPLAY_DAYS, replayDay } from "@/lib/fixtures";
+import { type Copy, type Formatters, useCopy, useFormat } from "@/i18n";
+import { fill } from "@/i18n/format";
+import {
+  INGESTION_GO_LIVE,
+  REPLAY_DAYS,
+  type ReplayDay,
+  replayDay,
+  subsystemMeta,
+} from "@/lib/fixtures";
+
+/**
+ * A replayed day's name: the date in the reader's convention, then the ONS
+ * subsystem and the technology. It used to be the stored string
+ * "14 Sep 2025 · NORDESTE wind", which was English in the data layer and
+ * an en-US date besides.
+ */
+function dayLabel(day: ReplayDay, copy: Copy, f: Formatters): string {
+  return fill(copy.app.replay.dayLabel, {
+    date: f.date(day.date),
+    subsystem: subsystemMeta(day.episode.subsystem).onsDisplayName,
+    technology: copy.app.technology[day.episode.technology].toLowerCase(),
+  });
+}
 
 export default function TimeMachineScreen() {
   const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
   const params = useAppParams();
   const day = replayDay(params.episode);
 
@@ -69,40 +92,50 @@ export default function TimeMachineScreen() {
   // precisely so the joint total exists.
   const forecastBand = day.forecastDayEnergy;
 
+  const scenarioLabel = fill(copy.app.replay.scenarioLabel, {
+    power: f.number(day.scenario.batteryPowerMw),
+    energy: f.number(day.scenario.batteryEnergyMwh),
+    shift: f.number(day.scenario.loadShiftMw),
+  });
+
   const rows: CompareRow[] = [
     {
       key: "actual",
-      label: "Curtailed — settled by ONS",
+      label: copy.app.replay.rowActual,
       value: actual,
       tone: "actual",
-      note: `${day.episode.durationHours} contiguous hours above ${day.episode.thresholdMw} MW, peak ${day.episode.peakMw} MW.`,
+      note: fill(copy.app.replay.rowActualNote, {
+        hours: f.number(day.episode.durationHours),
+        mw: f.number(day.episode.thresholdMw),
+        peak: f.number(day.episode.peakMw),
+      }),
     },
     {
       key: "forecast",
-      label: "What the D−1 run said",
+      label: copy.app.replay.rowForecast,
       band: forecastBand,
       tone: "forecast",
-      note: "P10–P90 shaded, P50 solid. Summed over the day's hours for display only — a joint day-total forecast would be narrower.",
+      note: copy.app.replay.rowForecastNote,
     },
     {
       key: "recovered",
-      label: "With the scenario dispatched",
+      label: copy.app.replay.rowRecovered,
       value: remaining,
       tone: "recovered",
-      note: day.scenarioLabel,
+      note: scenarioLabel,
     },
   ];
 
   return (
     <>
       <Head>
-        <title>Time Machine — WattSteer</title>
+        <title>{copy.app.replay.metaTitle}</title>
         <meta name="robots" content="noindex" />
       </Head>
       <AppShell showSelection={false}>
         <ScreenTitle
-          title="What if WattSteer had been running?"
-          lede="A past day, replayed against the forecast vintage available at D−1 and scored against what ONS settled."
+          title={copy.app.replay.title}
+          lede={copy.app.replay.lede}
           right={
             <ForecastStamp
               origin={day.forecastOrigin}
@@ -115,7 +148,7 @@ export default function TimeMachineScreen() {
           {REPLAY_DAYS.map((candidate) => (
             <MiniPill
               key={candidate.episode.id}
-              label={candidate.label}
+              label={dayLabel(candidate, copy, f)}
               active={candidate.episode.id === day.episode.id}
               onPress={() => params.setParams({ episode: candidate.episode.id })}
             />
@@ -123,33 +156,43 @@ export default function TimeMachineScreen() {
         </View>
 
         <HonestyNote
-          title="What this replay is, and what it is not"
+          title={copy.app.replay.honestyTitle}
           right={
             <View style={{ flexDirection: "row", gap: 6 }}>
               <VintageBadge fidelity={day.vintageFidelity} />
               <Badge
-                label={day.inTrainingWindow ? "IN-SAMPLE" : "OUT-OF-SAMPLE"}
+                label={
+                  day.inTrainingWindow
+                    ? copy.app.replay.inSample
+                    : copy.app.replay.outOfSample
+                }
                 tone={day.inTrainingWindow ? "warning" : "accent"}
               />
             </View>
           }
           points={[
-            day.inTrainingWindow
-              ? `The serving model was trained on data through ${day.modelTrainedThrough}, which includes this day. Its "D−1 forecast" here is an in-sample fit, so this is a replay, not a counterfactual: treat the recovered energy as an optimistic upper bound on what the live system would have achieved.`
-              : `This day postdates the serving model's training cut (${day.modelTrainedThrough}), so the D−1 forecast is genuinely out of sample. This is the closest thing on this screen to a real counterfactual.`,
-            day.vintageFidelity === "revision_optimistic"
-              ? `This day predates ingestion go-live (${INGESTION_GO_LIVE}). ONS rewrites history in place with no version marker, so the "actual" above is ONS's current restatement of the day, not what was published at the time. Prior vintages are unrecoverable and this can never be repaired retroactively.`
-              : `This day postdates ingestion go-live (${INGESTION_GO_LIVE}), so every value here is the one that was genuinely knowable at the time — an as-of read, not today's restatement.`,
-            "Recovered energy is what this dispatch achieves under this scenario against this forecast vintage. It is a property of the scenario, not of the day, and changing any asset parameter changes it.",
-            "MWh recovered and % avoided are the only claims made. No carbon saving is derivable from recovered renewable energy without a marginal-emissions model, and none is offered.",
+            fill(
+              day.inTrainingWindow
+                ? copy.app.replay.inSampleNote
+                : copy.app.replay.outOfSampleNote,
+              { through: f.date(day.modelTrainedThrough) },
+            ),
+            fill(
+              day.vintageFidelity === "revision_optimistic"
+                ? copy.app.replay.revisionOptimisticNote
+                : copy.app.replay.pointInTimeNote,
+              { goLive: f.date(INGESTION_GO_LIVE) },
+            ),
+            copy.app.replay.scenarioNote,
+            copy.app.replay.claimsNote,
           ]}
         />
 
         <Panel>
           <PanelHeader
             icon={<RotateCcwIcon size={18} color={colors.inkMuted} />}
-            title={day.label}
-            subtitle="Actual vs forecast vs recovered"
+            title={dayLabel(day, copy, f)}
+            subtitle={copy.app.replay.compareSubtitle}
           />
           <View style={{ marginTop: space.lg }}>
             <CompareBars rows={rows} />
@@ -158,18 +201,18 @@ export default function TimeMachineScreen() {
 
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
           <Headline
-            label="Renewable energy curtailed"
-            value={`${formatMwhCompact(actual)} MWh`}
+            label={copy.app.replay.headlineCurtailed}
+            value={`${f.compact(actual)} MWh`}
             tone="ink"
           />
           <Headline
-            label="Potentially recovered"
-            value={`${formatMwhCompact(day.recoveredMwh)} MWh`}
+            label={copy.app.replay.headlineRecovered}
+            value={`${f.compact(day.recoveredMwh)} MWh`}
             tone="accent"
           />
           <Headline
-            label="Curtailment avoided"
-            value={avoidedShare === null ? "—" : `↓ ${(avoidedShare * 100).toFixed(1)}%`}
+            label={copy.app.replay.headlineAvoided}
+            value={avoidedShare === null ? "—" : `↓ ${f.percent(avoidedShare, 1)}`}
             tone="accent"
           />
         </View>
@@ -177,24 +220,23 @@ export default function TimeMachineScreen() {
         <Panel>
           <PanelHeader
             icon={<ClockIcon size={18} color={colors.inkMuted} />}
-            title="Hour by hour"
-            subtitle="What was forecast, and what happened"
+            title={copy.app.replay.hourlyTitle}
+            subtitle={copy.app.replay.hourlySubtitle}
           />
           <View style={{ marginTop: space.lg }}>
             <FanChart
               hours={day.forecast}
               observed={day.observed}
               thresholdMw={day.episode.thresholdMw}
-              observedLabel="Settled actual"
+              observedLabel={copy.app.replay.settledActual}
             />
           </View>
         </Panel>
 
         <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkFaint }}>
-          An episode is a read-time view of curtailment hours, never a stored row — it
-          carries the {day.episode.thresholdMw} MW threshold and the 0-hour gap tolerance
-          that produced it, and a different threshold would produce a different episode
-          from the same data.
+          {fill(copy.app.replay.episodeNote, {
+            mw: f.number(day.episode.thresholdMw),
+          })}
         </Text>
       </AppShell>
     </>

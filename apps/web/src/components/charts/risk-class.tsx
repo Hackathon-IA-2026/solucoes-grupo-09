@@ -41,14 +41,11 @@
 
 import { radius, space, usePalette } from "@wattsteer/ui";
 import { Text, View } from "react-native";
+import { useCopy, useFormat } from "@/i18n";
 import type { RiskClass } from "@/lib/fixtures";
 import { RISK_BINS, riskClass, roundProbability } from "@/lib/fixtures";
 
 const LEVEL: Record<RiskClass, number> = { low: 1, elevated: 2, high: 3 };
-
-export function riskLabel(klass: RiskClass): string {
-  return RISK_BINS.find((b) => b.klass === klass)?.label ?? "Low";
-}
 
 function useRiskColor(klass: RiskClass): { fg: string; bg: string } {
   const colors = usePalette();
@@ -87,6 +84,8 @@ export function RiskSteps({ klass, size = 12 }: { klass: RiskClass; size?: numbe
 }
 
 export function RiskChip({ probability }: { probability: number }) {
+  const copy = useCopy();
+  const f = useFormat();
   const klass = riskClass(probability);
   const { fg, bg } = useRiskColor(klass);
   return (
@@ -104,10 +103,10 @@ export function RiskChip({ probability }: { probability: number }) {
     >
       <RiskSteps klass={klass} />
       <Text style={{ fontSize: 13, fontWeight: "700", color: fg }}>
-        {riskLabel(klass)}
+        {copy.app.risk[klass]}
       </Text>
       <Text style={{ fontSize: 13, fontWeight: "500", color: fg, opacity: 0.8 }}>
-        {`≈${roundProbability(probability)}%`}
+        {`≈${f.percentPoints(roundProbability(probability))}`}
       </Text>
     </View>
   );
@@ -120,6 +119,8 @@ export function RiskChip({ probability }: { probability: number }) {
  */
 export function RiskScale({ probability }: { probability: number }) {
   const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
   const klass = riskClass(probability);
   const active = useRiskColor(klass);
   return (
@@ -170,7 +171,9 @@ export function RiskScale({ probability }: { probability: number }) {
               fontWeight: bin.klass === klass ? "700" : "400",
             }}
           >
-            {`${bin.label} ${Math.round(bin.from * 100)}–${Math.round(bin.to * 100)}%`}
+            {`${copy.app.risk[bin.klass]} ${f.number(bin.from * 100)}–${f.percentPoints(
+              bin.to * 100,
+            )}`}
           </Text>
         ))}
       </View>
@@ -181,11 +184,10 @@ export function RiskScale({ probability }: { probability: number }) {
 /** The one-line caveat that has to travel with any risk number. */
 export function RiskCaveat() {
   const colors = usePalette();
+  const copy = useCopy();
   return (
     <Text style={{ fontSize: 11, color: colors.inkFaint, marginTop: space.sm }}>
-      Risk is P(at least one hour above the threshold), binned. The bins are wide because
-      the classifier is not calibrated finely enough to justify narrower ones — see the
-      reliability curve on Explain.
+      {copy.app.risk.caveat}
     </Text>
   );
 }

@@ -8,11 +8,12 @@ import {
   usePalette,
 } from "@wattsteer/ui";
 import { Text, View } from "react-native";
-import { useCopy } from "@/i18n";
-import { formatBrl, SCENARIO_BRL_PER_MWH } from "@/lib/economics";
+import { useCopy, useFormat, useI18n } from "@/i18n";
+import { fill } from "@/i18n/format";
+import { SCENARIO_BRL_PER_MWH } from "@/lib/economics";
 import { centre, formatMwhExact, formatPercent, formatRange, upper } from "./band";
-import { BandRail, railLabel } from "./band-figure";
-import { MITIGATION, type MitigationStep } from "./fixtures";
+import { BandRail, useRailLabel } from "./band-figure";
+import { MITIGATION, type MitigationStep, stepDetail, stepLabel } from "./fixtures";
 import { Footnote } from "./section";
 
 /**
@@ -39,6 +40,8 @@ import { Footnote } from "./section";
  */
 export function MitigationStack() {
   const copy = useCopy();
+  const f = useFormat();
+  const { locale } = useI18n();
   const colors = usePalette();
   const baseline = MITIGATION[0];
   const final = MITIGATION[MITIGATION.length - 1];
@@ -64,7 +67,7 @@ export function MitigationStack() {
 
       <View style={{ gap: space.lg }}>
         {MITIGATION.map((step) => (
-          <StepRow key={step.label} step={step} max={max} />
+          <StepRow key={step.key} step={step} max={max} />
         ))}
       </View>
 
@@ -80,18 +83,18 @@ export function MitigationStack() {
       >
         <Kpi
           label={copy.showcase.mitigate.recoveredLabel}
-          value={`${formatMwhExact(recoveredMedian)} MWh`}
+          value={`${formatMwhExact(locale, recoveredMedian)} MWh`}
           detail={
             final.recovered !== null && final.recovered.kind === "band"
-              ? `${copy.band.rangeLabel} ${formatRange(final.recovered.band)}`
+              ? `${copy.band.rangeLabel} ${formatRange(locale, final.recovered.band)}`
               : null
           }
           highlight={true}
         />
         <Kpi
           label={copy.showcase.mitigate.avoidedLabel}
-          value={formatPercent(avoided)}
-          detail="median to median"
+          value={formatPercent(locale, avoided)}
+          detail={copy.showcase.mitigate.medianToMedian}
           highlight={false}
         />
       </View>
@@ -118,7 +121,10 @@ export function MitigationStack() {
             fontVariant: ["tabular-nums"],
           }}
         >
-          {`R$ ${formatBrl(scenarioBrl)} at an assumed R$ ${SCENARIO_BRL_PER_MWH}/MWh`}
+          {fill(copy.showcase.mitigate.economicNote, {
+            value: f.brl(scenarioBrl),
+            rate: f.brl(SCENARIO_BRL_PER_MWH),
+          })}
         </Text>
       </View>
 
@@ -129,7 +135,12 @@ export function MitigationStack() {
 
 function StepRow({ step, max }: { step: MitigationStep; max: number }) {
   const copy = useCopy();
+  const f = useFormat();
+  const { locale } = useI18n();
+  const railLabel = useRailLabel();
   const colors = usePalette();
+  const label = stepLabel(copy, step.key);
+  const detail = stepDetail(copy, f, step.key);
   return (
     <View style={{ gap: 8 }}>
       <View
@@ -141,7 +152,7 @@ function StepRow({ step, max }: { step: MitigationStep; max: number }) {
         }}
       >
         <Text style={{ fontSize: 13, fontWeight: "600", color: colors.ink }}>
-          {step.label}
+          {label}
         </Text>
         <Text
           style={{
@@ -151,20 +162,20 @@ function StepRow({ step, max }: { step: MitigationStep; max: number }) {
             color: step.recovered === null ? colors.inkMuted : colors.accent,
           }}
         >
-          {`${formatMwhExact(centre(step.remaining))} MWh`}
+          {`${formatMwhExact(locale, centre(step.remaining))} MWh`}
         </Text>
       </View>
       <BandRail
         figure={step.remaining}
         max={max}
-        label={railLabel(step.remaining, "MWh", step.label)}
+        label={railLabel(step.remaining, "MWh", label)}
       />
       <Text
         style={{ fontSize: 12, color: colors.inkMuted, fontVariant: ["tabular-nums"] }}
       >
         {step.remaining.kind === "band"
-          ? `${copy.band.rangeLabel} ${formatRange(step.remaining.band)}${step.detail === null ? "" : ` · ${step.detail}`}`
-          : step.detail}
+          ? `${copy.band.rangeLabel} ${formatRange(locale, step.remaining.band)}${detail === null ? "" : ` · ${detail}`}`
+          : detail}
       </Text>
     </View>
   );

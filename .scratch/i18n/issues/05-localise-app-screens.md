@@ -16,7 +16,7 @@ regardless of the viewer's timezone, because a grid hour is a Brazilian hour.
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Every user-visible string in `app/app/**` and `components/app/**` comes from the dictionaries
 - [ ] Chart axis labels, legends and accessibility labels are localised

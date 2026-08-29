@@ -11,6 +11,7 @@ import { Image } from "expo-image";
 import { Link } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useI18n } from "@/i18n";
+import { fill } from "@/i18n/format";
 import { DEFAULT_LOCALE, localePath } from "@/i18n/locale";
 import { APP_HREF, CtaLink } from "./landing/cta-link";
 
@@ -175,12 +176,12 @@ export function SiteFooter() {
           }}
         >
           <Text style={{ fontSize: 13, color: colors.inkFaint }}>
-            © WattSteer {year}. All rights reserved.
+            {fill(copy.footer.rights, { year })}
           </Text>
         </View>
         <View style={{ flex: wide ? 1 : undefined, alignItems: "center" }}>
           <Text style={{ fontSize: 13, color: colors.inkFaint, textAlign: "center" }}>
-            Renewable curtailment intelligence.
+            {copy.footer.tagline}
           </Text>
         </View>
         <View

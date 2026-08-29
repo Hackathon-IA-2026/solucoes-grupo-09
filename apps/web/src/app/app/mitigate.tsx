@@ -37,8 +37,10 @@ import { AppShell, MiniPill, ScreenTitle } from "@/components/app/app-shell";
 import { BatteryEditor, LoadEditor } from "@/components/app/asset-editor";
 import { ForecastStamp, HeuristicNote } from "@/components/app/honesty";
 import { useAppParams } from "@/components/app/use-app-params";
-import { BandFigure, BandStrip, formatMwhCompact } from "@/components/charts/band-figure";
+import { BandFigure, BandStrip } from "@/components/charts/band-figure";
 import { DispatchChart } from "@/components/charts/dispatch-chart";
+import { useCopy, useFormat } from "@/i18n";
+import { fill } from "@/i18n/format";
 import {
   type Band,
   type BatteryAsset,
@@ -66,6 +68,8 @@ function percentBand(band: Band): Band {
 
 export default function MitigateScreen() {
   const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
   const params = useAppParams();
   const forecast = buildForecast(params.subsystem, params.technology, params.run);
   const meta = subsystemMeta(params.subsystem);
@@ -90,13 +94,17 @@ export default function MitigateScreen() {
   return (
     <>
       <Head>
-        <title>Mitigate — WattSteer</title>
+        <title>{copy.app.mitigate.metaTitle}</title>
         <meta name="robots" content="noindex" />
       </Head>
       <AppShell>
         <ScreenTitle
-          title="What can we do?"
-          lede={`${meta.onsDisplayName} ${params.technology}, ${params.date}. Storage and flexible demand sized against the day-ahead forecast.`}
+          title={copy.app.mitigate.title}
+          lede={fill(copy.app.mitigate.lede, {
+            subsystem: meta.onsDisplayName,
+            technology: copy.app.technology[params.technology].toLowerCase(),
+            date: f.date(params.date),
+          })}
           right={
             <ForecastStamp
               origin={forecast.forecastOrigin}
@@ -108,21 +116,21 @@ export default function MitigateScreen() {
         <Panel>
           <PanelHeader
             icon={<SlidersHorizontalIcon size={18} color={colors.inkMuted} />}
-            title="Plan against"
+            title={copy.app.mitigate.basisTitle}
             subtitle={
               basis === "p50"
-                ? "the median forecast (P50)"
-                : "a conservative forecast (P10)"
+                ? copy.app.mitigate.basisMedian
+                : copy.app.mitigate.basisConservative
             }
             right={
               <View style={{ flexDirection: "row", gap: 6 }}>
                 <MiniPill
-                  label="P50 median"
+                  label={copy.app.mitigate.basisMedianPill}
                   active={basis === "p50"}
                   onPress={() => setBasis("p50")}
                 />
                 <MiniPill
-                  label="P10 conservative"
+                  label={copy.app.mitigate.basisConservativePill}
                   active={basis === "p10"}
                   onPress={() => setBasis("p10")}
                 />
@@ -138,8 +146,8 @@ export default function MitigateScreen() {
             }}
           >
             {basis === "p50"
-              ? "The plan is optimal if the median comes true. If the day comes in below P50 the assets will have committed to charging from energy that was never curtailed — the P10 column below is what that costs."
-              : "The plan is feasible against a pessimistic realisation, so the recovered energy is a floor rather than a median. It systematically under-uses the fleet, which is the direction of error worth preferring."}
+              ? copy.app.mitigate.basisMedianBody
+              : copy.app.mitigate.basisConservativeBody}
           </Text>
         </Panel>
 
@@ -160,41 +168,40 @@ export default function MitigateScreen() {
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
           <Panel style={{ flexGrow: 1, flexBasis: 300 }}>
             <BandFigure
-              label="Energy recovered"
+              label={copy.app.mitigate.recovered}
               band={active.recovered}
               unit="MWh"
               domainMax={domainMax}
-              footnote="One plan, scored against all three realisations of the forecast. The interval is the forecast's, not the optimizer's."
+              footnote={copy.app.mitigate.recoveredNote}
             />
           </Panel>
           <Panel style={{ flexGrow: 1, flexBasis: 300 }}>
             {active.avoidability === null ? (
               <View style={{ gap: space.sm }}>
                 <Text style={{ fontSize: 13, color: colors.inkMuted }}>
-                  Curtailment avoided
+                  {copy.app.mitigate.avoided}
                 </Text>
                 <Text style={{ fontSize: 40, fontWeight: "600", color: colors.inkFaint }}>
                   —
                 </Text>
                 <Text style={{ fontSize: 11, color: colors.inkFaint }}>
-                  Undefined, not zero: with no assets there is nothing to divide by. A
-                  zero here would read as "nothing could be avoided".
+                  {copy.app.mitigate.avoidedUndefined}
                 </Text>
               </View>
             ) : (
               <BandFigure
-                label="Curtailment avoided"
+                label={copy.app.mitigate.avoided}
                 band={percentBand(active.avoidability)}
                 unit="%"
                 domainMax={100}
                 tone="violet"
-                footnote="Inverted on purpose: the share avoided is lowest on the P90 realisation, because a fixed fleet covers less of a bigger event."
+                footnote={copy.app.mitigate.avoidedNote}
               />
             )}
           </Panel>
           <Panel style={{ flexGrow: 1, flexBasis: 300, gap: space.sm }}>
             <Text style={{ fontSize: 13, color: colors.inkMuted }}>
-              Economic scenario (labelled)
+              {copy.app.mitigate.economicTitle}
             </Text>
             <Text
               style={{
@@ -204,12 +211,12 @@ export default function MitigateScreen() {
                 color: colors.ink,
               }}
             >
-              {`R$ ${Math.round(
-                (active.recovered.p50 * ECONOMIC_ASSUMPTION_BRL_PER_MWH) / 1000,
-              ).toLocaleString("en-US")}k`}
+              {f.brlThousands(active.recovered.p50 * ECONOMIC_ASSUMPTION_BRL_PER_MWH)}
             </Text>
             <Text style={{ fontSize: 11, lineHeight: 18, color: colors.inkFaint }}>
-              {`At an assumed R$ ${ECONOMIC_ASSUMPTION_BRL_PER_MWH}/MWh, on the P50 realisation. This is a scenario, not a settlement value, and it is the only place R$ appears. No carbon claim is derivable from any of this and none is made.`}
+              {fill(copy.app.mitigate.economicNote, {
+                rate: f.brl(ECONOMIC_ASSUMPTION_BRL_PER_MWH),
+              })}
             </Text>
           </Panel>
         </View>
@@ -217,8 +224,10 @@ export default function MitigateScreen() {
         <Panel>
           <PanelHeader
             icon={<ZapIcon size={18} color={colors.inkMuted} />}
-            title="Dispatch"
-            subtitle={`${active.label} · scored on the P50 realisation`}
+            title={copy.app.mitigate.dispatchTitle}
+            subtitle={fill(copy.app.mitigate.dispatchSubtitle, {
+              step: copy.app.mitigate.steps[active.key],
+            })}
           />
           <View style={{ marginTop: space.lg }}>
             <DispatchChart
@@ -232,11 +241,11 @@ export default function MitigateScreen() {
           <Panel style={{ flexGrow: 1, flexBasis: 380 }}>
             <PanelHeader
               icon={<ZapIcon size={18} color={colors.inkMuted} />}
-              title="Battery"
-              subtitle="Scenario input, not an inventory"
+              title={copy.app.mitigate.batteryTitle}
+              subtitle={copy.app.mitigate.assetSubtitle}
               right={
                 <Toggle
-                  label="Include battery"
+                  label={copy.app.mitigate.includeBattery}
                   value={batteryOn}
                   onValueChange={setBatteryOn}
                 />
@@ -249,10 +258,14 @@ export default function MitigateScreen() {
           <Panel style={{ flexGrow: 1, flexBasis: 380 }}>
             <PanelHeader
               icon={<SlidersHorizontalIcon size={18} color={colors.inkMuted} />}
-              title="Flexible load"
-              subtitle="Scenario input, not an inventory"
+              title={copy.app.mitigate.loadTitle}
+              subtitle={copy.app.mitigate.assetSubtitle}
               right={
-                <Toggle label="Include load" value={loadOn} onValueChange={setLoadOn} />
+                <Toggle
+                  label={copy.app.mitigate.includeLoad}
+                  value={loadOn}
+                  onValueChange={setLoadOn}
+                />
               }
             />
             <View style={{ marginTop: space.lg, opacity: loadOn ? 1 : 0.45 }}>
@@ -263,7 +276,11 @@ export default function MitigateScreen() {
 
         <View style={{ flexDirection: "row", gap: space.md, flexWrap: "wrap" }}>
           <Pill
-            label="Reset to 100 MW / 300 MWh + 70 MW"
+            label={fill(copy.app.mitigate.reset, {
+              power: f.number(DEFAULT_BATTERY.maxPowerMw),
+              energy: f.number(DEFAULT_BATTERY.energyCapacityMwh),
+              shift: f.number(DEFAULT_LOAD.maxShiftMw),
+            })}
             tone="secondary"
             onPress={() => {
               setBattery(DEFAULT_BATTERY);
@@ -277,9 +294,7 @@ export default function MitigateScreen() {
         <HeuristicNote />
 
         <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkFaint }}>
-          ONS publishes no flexibility-asset registry, so every parameter above is your
-          assumption. Mitigate is a what-if tool, not an inventory — the scenario is
-          encoded in the URL rather than saved, so a link is the whole of sharing it.
+          {copy.app.mitigate.footnote}
         </Text>
       </AppShell>
     </>
@@ -302,6 +317,8 @@ function StepCard({
   onReveal: () => void;
 }) {
   const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
   const delta = previous === null ? null : previous.remaining.p50 - step.remaining.p50;
 
   return (
@@ -327,9 +344,11 @@ function StepCard({
         }}
       >
         <Text style={{ fontSize: 14, fontWeight: "700", color: colors.ink }}>
-          {step.label}
+          {copy.app.mitigate.steps[step.key]}
         </Text>
-        {revealed ? null : <MiniPill label="Reveal" active={false} onPress={onReveal} />}
+        {revealed ? null : (
+          <MiniPill label={copy.app.mitigate.reveal} active={false} onPress={onReveal} />
+        )}
       </View>
 
       {revealed ? (
@@ -344,9 +363,11 @@ function StepCard({
                 color: colors.ink,
               }}
             >
-              {formatMwhCompact(step.remaining.p50)}
+              {f.compact(step.remaining.p50)}
             </Text>
-            <Text style={{ fontSize: 13, color: colors.inkMuted }}>MWh remaining</Text>
+            <Text style={{ fontSize: 13, color: colors.inkMuted }}>
+              {copy.app.mitigate.remaining}
+            </Text>
           </View>
           <BandStrip band={step.remaining} domainMax={domainMax} tone="muted" />
           <Text
@@ -356,21 +377,21 @@ function StepCard({
               fontVariant: ["tabular-nums"],
             }}
           >
-            {`P10 ${formatMwhCompact(step.remaining.p10)} · P90 ${formatMwhCompact(step.remaining.p90)}`}
+            {`P10 ${f.compact(step.remaining.p10)} · P90 ${f.compact(step.remaining.p90)}`}
           </Text>
           {delta === null ? (
             <Text style={{ fontSize: 12, color: colors.inkFaint }}>
-              The day as forecast, with nothing dispatched.
+              {copy.app.mitigate.baselineStep}
             </Text>
           ) : (
             <Text style={{ fontSize: 12, color: colors.accent, fontWeight: "700" }}>
-              {`−${formatMwhCompact(delta)} MWh vs the previous step (P50)`}
+              {fill(copy.app.mitigate.stepDelta, { delta: f.compact(delta) })}
             </Text>
           )}
         </>
       ) : (
         <Text style={{ fontSize: 12, color: colors.inkFaint }}>
-          Hidden — reveal it in order to see the step change.
+          {copy.app.mitigate.hidden}
         </Text>
       )}
 

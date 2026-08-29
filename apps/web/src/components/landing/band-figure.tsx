@@ -1,6 +1,7 @@
 import { Badge, radius, space, usePalette } from "@wattsteer/ui";
 import { StyleSheet, Text, View } from "react-native";
-import { useCopy } from "@/i18n";
+import { useCopy, useI18n } from "@/i18n";
+import { fill } from "@/i18n/format";
 import {
   type Band,
   type Figure,
@@ -124,6 +125,7 @@ export function BandRail({
 /** "P10–P90 · 2,640–6,320 MWh", or the observed marker. */
 export function BandCaption({ figure, unit }: { figure: Figure; unit: string }) {
   const copy = useCopy();
+  const { locale } = useI18n();
   const colors = usePalette();
   if (figure.kind === "observed") {
     return (
@@ -137,7 +139,7 @@ export function BandCaption({ figure, unit }: { figure: Figure; unit: string }) 
       <Text style={{ fontWeight: "700", color: colors.onVioletSoft }}>
         {copy.band.rangeLabel}
       </Text>{" "}
-      {formatRange(figure.band)} {unit}
+      {formatRange(locale, figure.band)} {unit}
     </Text>
   );
 }
@@ -164,6 +166,8 @@ export function BandFigure({
   highlight?: boolean;
 }) {
   const copy = useCopy();
+  const { locale } = useI18n();
+  const railLabel = useRailLabel();
   const colors = usePalette();
   const value = figure.kind === "band" ? figure.band.p50 : figure.value;
   const railMax = max ?? upper(figure) * 1.1;
@@ -217,7 +221,7 @@ export function BandFigure({
           color: onCard,
         }}
       >
-        {formatMwhExact(value)}{" "}
+        {formatMwhExact(locale, value)}{" "}
         <Text style={{ fontSize: size === "lg" ? 18 : 15, fontWeight: "500" }}>
           {unit}
         </Text>
@@ -233,11 +237,31 @@ export function BandFigure({
   );
 }
 
-/** One accessible sentence per rail — screen readers get the numbers, not a bar. */
-export function railLabel(figure: Figure, unit: string, label: string): string {
-  if (figure.kind === "observed") {
-    return `${label}: ${formatMwhExact(figure.value)} ${unit}, observed`;
-  }
-  const b: Band = figure.band;
-  return `${label}: median ${formatMwhExact(b.p50)} ${unit}, 10th to 90th percentile ${formatMwhExact(b.p10)} to ${formatMwhExact(b.p90)} ${unit}`;
+/**
+ * One accessible sentence per rail — screen readers get the numbers, not a bar.
+ *
+ * A hook rather than a plain function because the sentence is copy: it needs
+ * the dictionary and the locale, and a screen reader reading an English
+ * sentence over a Portuguese page is the failure this whole ticket is about.
+ */
+export function useRailLabel(): (figure: Figure, unit: string, label: string) => string {
+  const copy = useCopy();
+  const { locale } = useI18n();
+  return (figure, unit, label) => {
+    if (figure.kind === "observed") {
+      return fill(copy.band.railObserved, {
+        label,
+        value: formatMwhExact(locale, figure.value),
+        unit,
+      });
+    }
+    const b: Band = figure.band;
+    return fill(copy.band.railBand, {
+      label,
+      p50: formatMwhExact(locale, b.p50),
+      p10: formatMwhExact(locale, b.p10),
+      p90: formatMwhExact(locale, b.p90),
+      unit,
+    });
+  };
 }

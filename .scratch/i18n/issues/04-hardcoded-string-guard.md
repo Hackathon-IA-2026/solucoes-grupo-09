@@ -19,7 +19,7 @@ codes, `P10–P90`), test IDs, and accessibility identifiers that are not copy.
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] A new inline English string in a component fails the check
 - [ ] Domain terms that stay untranslated do not trip it

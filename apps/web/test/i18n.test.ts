@@ -65,7 +65,16 @@ describe("i18n", () => {
   test("Portuguese is not just the English strings copied over", () => {
     // A locale that silently duplicates English would satisfy every other
     // check here. Prose must actually differ; notation legitimately does not.
-    const NOTATION = new Set(["band.rangeLabel", "band.medianLabel"]);
+    const NOTATION = new Set([
+      "band.rangeLabel",
+      "band.medianLabel",
+      // Quantile notation and placeholders, with no prose between them: both
+      // locales genuinely say "P10 {p10}, P50 {p50}, P90 {p90}" and
+      // "{date} · {subsystem} {technology}". Translating either would mean
+      // translating `P50`, which is not a word.
+      "app.band.strip",
+      "app.replay.dayLabel",
+    ]);
     const prose = [...PT].filter(
       ([key, value]) =>
         !(NOTATION.has(key) || key.endsWith(".target")) && value.length > 24,

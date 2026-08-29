@@ -23,17 +23,47 @@
 
 import { space, TrendingDownIcon, TrendingUpIcon, usePalette } from "@wattsteer/ui";
 import { Text, View } from "react-native";
-import type { Driver } from "@/lib/fixtures";
+import { type Copy, type Formatters, useCopy, useFormat } from "@/i18n";
+import { fill } from "@/i18n/format";
+import type { AttributedDriver, DriverReading } from "@/lib/fixtures";
 
-export function DriverBars({ drivers }: { drivers: Driver[] }) {
+/**
+ * A feature reading, written in the reader's convention.
+ *
+ * The fixture stores `{ value: 1900, unit: "MW" }`, never `"1,900 MW"` —
+ * a preformatted string bakes in en-US grouping, and `"weekend"` bakes in
+ * English. Both decisions belong here, at the edge.
+ */
+export function formatReading(
+  reading: DriverReading,
+  copy: Copy,
+  f: Formatters,
+): string | null {
+  if (reading.kind === "none") {
+    return null;
+  }
+  if (reading.kind === "term") {
+    return copy.app.drivers.terms[reading.term];
+  }
+  const magnitude = f.number(reading.value, reading.decimals ?? 0);
+  const signed = reading.signed && reading.value > 0 ? `+${magnitude}` : magnitude;
+  return reading.unit === undefined ? signed : `${signed} ${reading.unit}`;
+}
+
+export function DriverBars({ drivers }: { drivers: AttributedDriver[] }) {
   const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
   const max = Math.max(...drivers.map((d) => d.share), 0.01);
 
   return (
     <View style={{ gap: space.lg }}>
       {drivers.map((driver) => {
         const raises = driver.direction === "raises";
-        const fill = raises ? colors.violet : colors.accent;
+        const barColor = raises ? colors.violet : colors.accent;
+        const label = copy.app.drivers.labels[driver.code];
+        const observed = formatReading(driver.observed, copy, f);
+        const typical = formatReading(driver.typical, copy, f);
         return (
           <View key={driver.code} style={{ gap: 6 }}>
             <View
@@ -58,7 +88,7 @@ export function DriverBars({ drivers }: { drivers: Driver[] }) {
                   <TrendingDownIcon size={14} color={colors.accent} />
                 )}
                 <Text style={{ fontSize: 14, fontWeight: "500", color: colors.ink }}>
-                  {driver.label}
+                  {label}
                 </Text>
               </View>
               <Text
@@ -69,15 +99,17 @@ export function DriverBars({ drivers }: { drivers: Driver[] }) {
                   color: colors.ink,
                 }}
               >
-                {`${Math.round(driver.share * 100)}%`}
+                {f.percent(driver.share)}
               </Text>
             </View>
 
             <View
               accessibilityRole="image"
-              accessibilityLabel={`${driver.label}: ${Math.round(
-                driver.share * 100,
-              )}% of attributed magnitude, ${driver.direction} risk`}
+              accessibilityLabel={fill(copy.app.drivers.figure, {
+                driver: label,
+                share: f.percent(driver.share),
+                direction: copy.app.drivers.direction[driver.direction],
+              })}
               style={{
                 height: 10,
                 borderRadius: 5,
@@ -90,23 +122,21 @@ export function DriverBars({ drivers }: { drivers: Driver[] }) {
                   width: `${(driver.share / max) * 100}%`,
                   height: "100%",
                   borderRadius: 5,
-                  backgroundColor: fill,
+                  backgroundColor: barColor,
                 }}
               />
             </View>
 
-            {driver.observed === "—" ? null : (
+            {observed === null || typical === null ? null : (
               <Text style={{ fontSize: 11, color: colors.inkFaint }}>
-                {`observed ${driver.observed} · typical ${driver.typical}`}
+                {fill(copy.app.drivers.reading, { observed, typical })}
               </Text>
             )}
           </View>
         );
       })}
       <Text style={{ fontSize: 11, color: colors.inkFaint }}>
-        Shares are of the attributed magnitude for this subsystem-day, not of the
-        curtailment itself. A driver that raises risk is not a cause of any individual
-        curtailed MWh.
+        {copy.app.drivers.note}
       </Text>
     </View>
   );

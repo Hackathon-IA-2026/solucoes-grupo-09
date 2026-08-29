@@ -16,8 +16,8 @@
 import { space, usePalette } from "@wattsteer/ui";
 import { useEffect, useState } from "react";
 import { Animated, Text, View } from "react-native";
+import { useFormat } from "@/i18n";
 import type { Band } from "@/lib/fixtures";
-import { formatMwhCompact } from "./band-figure";
 
 export interface CompareRow {
   key: string;
@@ -37,6 +37,7 @@ export function CompareBars({
   unit?: string;
 }) {
   const colors = usePalette();
+  const f = useFormat();
   const [progress] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
@@ -87,7 +88,7 @@ export function CompareBars({
                   color,
                 }}
               >
-                {`${formatMwhCompact(headline)} ${unit}`}
+                {`${f.compact(headline)} ${unit}`}
               </Text>
             </View>
 

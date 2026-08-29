@@ -1,13 +1,22 @@
 /**
- * Explain fixtures: driver attribution, narration, reliability curve, and the
- * observed restriction reasons — the last of which is the one panel on this
- * screen that is an *observation* rather than a model output, and is labelled
- * with the grain ONS reports it at.
+ * Explain fixtures: driver attribution, narration inputs, reliability curve,
+ * and the observed restriction reasons — the last of which is the one panel on
+ * this screen that is an *observation* rather than a model output, and is
+ * labelled with the grain ONS reports it at.
+ *
+ * Nothing in here is copy. A driver is a `code` and two readings; the words
+ * live in `src/i18n/copy.*.ts`, keyed by that code. The two exceptions are
+ * both deliberate:
+ *
+ *  - `entityLabel` is an ONS identifier (`CJU_MAPLN`), not a name we chose.
+ *  - `description` is `dsc_restricao` verbatim from ONS — displayable
+ *    evidence, never a vocabulary. It arrives in Portuguese because ONS wrote
+ *    it in Portuguese, and translating a source record would be inventing one.
  */
 
 import { TARGET_DATE } from "./grid";
 import type {
-  Driver,
+  AttributedDriver,
   ExplainFixture,
   ObservedReason,
   ReliabilityPoint,
@@ -15,156 +24,148 @@ import type {
   Technology,
 } from "./types";
 
-const NE_WIND_DRIVERS: Driver[] = [
+/** A quantity reading, written by the reader's locale rather than by us. */
+function quantity(
+  value: number,
+  decimals = 0,
+  unit?: string,
+  signed?: boolean,
+): AttributedDriver["observed"] {
+  return { kind: "quantity", value, decimals, unit, signed };
+}
+
+const NE_WIND_DRIVERS: AttributedDriver[] = [
   {
     code: "vre_load_ratio",
-    label: "Renewable / load ratio",
     share: 0.31,
     direction: "raises",
-    observed: "1.42",
-    typical: "0.96",
+    observed: quantity(1.42, 2),
+    typical: quantity(0.96, 2),
   },
   {
     code: "export_headroom",
-    label: "Export headroom to SE/CO",
     share: 0.25,
     direction: "raises",
-    observed: "310 MW left",
-    typical: "1,900 MW left",
+    observed: quantity(310, 0, "MW"),
+    typical: quantity(1900, 0, "MW"),
   },
   {
-    code: "load_level",
-    label: "Overnight load level",
+    code: "overnight_load_level",
     share: 0.18,
     direction: "raises",
-    observed: "8.1 GW",
-    typical: "9.4 GW",
+    observed: quantity(8.1, 1, "GW"),
+    typical: quantity(9.4, 1, "GW"),
   },
   {
     code: "hub_wind_speed",
-    label: "Hub-height wind speed",
     share: 0.14,
     direction: "raises",
-    observed: "11.8 m/s",
-    typical: "8.7 m/s",
+    observed: quantity(11.8, 1, "m/s"),
+    typical: quantity(8.7, 1, "m/s"),
   },
   {
     code: "day_of_week",
-    label: "Saturday",
     share: 0.07,
     direction: "raises",
-    observed: "weekend",
-    typical: "weekday",
+    observed: { kind: "term", term: "weekend" },
+    typical: { kind: "term", term: "weekday" },
   },
   {
     code: "other",
-    label: "Everything else",
     share: 0.05,
     direction: "lowers",
-    observed: "—",
-    typical: "—",
+    observed: { kind: "none" },
+    typical: { kind: "none" },
   },
 ];
 
-const NE_SOLAR_DRIVERS: Driver[] = [
+const NE_SOLAR_DRIVERS: AttributedDriver[] = [
   {
     code: "midday_net_load",
-    label: "Midday net load",
     share: 0.34,
     direction: "raises",
-    observed: "3.2 GW",
-    typical: "5.1 GW",
+    observed: quantity(3.2, 1, "GW"),
+    typical: quantity(5.1, 1, "GW"),
   },
   {
     code: "export_headroom",
-    label: "Export headroom to SE/CO",
     share: 0.22,
     direction: "raises",
-    observed: "480 MW left",
-    typical: "1,900 MW left",
+    observed: quantity(480, 0, "MW"),
+    typical: quantity(1900, 0, "MW"),
   },
   {
     code: "clear_sky_index",
-    label: "Clear-sky index",
     share: 0.19,
     direction: "raises",
-    observed: "0.94",
-    typical: "0.78",
+    observed: quantity(0.94, 2),
+    typical: quantity(0.78, 2),
   },
   {
     code: "installed_pv",
-    label: "PV commissioned in window",
     share: 0.12,
     direction: "raises",
-    observed: "+1.4 GW YoY",
-    typical: "+0.6 GW YoY",
+    observed: quantity(1.4, 1, "GW", true),
+    typical: quantity(0.6, 1, "GW", true),
   },
   {
     code: "hydro_flexibility",
-    label: "Hydro down-ramp available",
     share: 0.08,
     direction: "lowers",
-    observed: "2.1 GW",
-    typical: "1.3 GW",
+    observed: quantity(2.1, 1, "GW"),
+    typical: quantity(1.3, 1, "GW"),
   },
   {
     code: "other",
-    label: "Everything else",
     share: 0.05,
     direction: "lowers",
-    observed: "—",
-    typical: "—",
+    observed: { kind: "none" },
+    typical: { kind: "none" },
   },
 ];
 
-const GENERIC_DRIVERS: Driver[] = [
+const GENERIC_DRIVERS: AttributedDriver[] = [
   {
     code: "vre_load_ratio",
-    label: "Renewable / load ratio",
     share: 0.29,
     direction: "raises",
-    observed: "0.71",
-    typical: "0.64",
+    observed: quantity(0.71, 2),
+    typical: quantity(0.64, 2),
   },
   {
     code: "load_level",
-    label: "Load level",
     share: 0.24,
     direction: "lowers",
-    observed: "12.6 GW",
-    typical: "11.9 GW",
+    observed: quantity(12.6, 1, "GW"),
+    typical: quantity(11.9, 1, "GW"),
   },
   {
     code: "import_position",
-    label: "Net import position",
     share: 0.21,
     direction: "lowers",
-    observed: "importing",
-    typical: "balanced",
+    observed: { kind: "term", term: "importing" },
+    typical: { kind: "term", term: "balanced" },
   },
   {
     code: "clear_sky_index",
-    label: "Clear-sky index",
     share: 0.14,
     direction: "raises",
-    observed: "0.81",
-    typical: "0.74",
+    observed: quantity(0.81, 2),
+    typical: quantity(0.74, 2),
   },
   {
     code: "day_of_week",
-    label: "Saturday",
     share: 0.07,
     direction: "raises",
-    observed: "weekend",
-    typical: "weekday",
+    observed: { kind: "term", term: "weekend" },
+    typical: { kind: "term", term: "weekday" },
   },
   {
     code: "other",
-    label: "Everything else",
     share: 0.05,
     direction: "lowers",
-    observed: "—",
-    typical: "—",
+    observed: { kind: "none" },
+    typical: { kind: "none" },
   },
 ];
 
@@ -247,26 +248,6 @@ const GENERIC_REASONS: ObservedReason[] = [
   },
 ];
 
-function narrationFor(
-  subsystem: SubsystemCode,
-  technology: Technology,
-  drivers: Driver[],
-): string {
-  const top = drivers[0];
-  const second = drivers[1];
-  const where = subsystem === "NE" ? "NORDESTE" : subsystem;
-  return (
-    `The model puts ${where} ${technology} curtailment above the 5 MW threshold ` +
-    `for most of the day. The largest single contribution is ${top.label.toLowerCase()} ` +
-    `(${top.observed} against a typical ${top.typical}), followed by ` +
-    `${second.label.toLowerCase()}. Those two together account for ` +
-    `${Math.round((top.share + second.share) * 100)}% of the attributed magnitude. ` +
-    `The band is wide in the shoulder hours because the occurrence classifier is ` +
-    `near an even chance there — read the P10 as "it may not clear the threshold ` +
-    `at all", not as a small number.`
-  );
-}
-
 export function buildExplain(
   subsystem: SubsystemCode,
   technology: Technology,
@@ -282,10 +263,14 @@ export function buildExplain(
     technology,
     targetDate: TARGET_DATE,
     drivers,
-    narration: narrationFor(subsystem, technology, drivers),
+    // The two drivers the narration is about, and how much of the attributed
+    // magnitude they carry between them. The sentence itself is the screen's
+    // to compose, per locale — see `ExplainFixture.narration`.
+    narrationTopShare: drivers[0].share + drivers[1].share,
     reliability: RELIABILITY,
     reliabilitySampleHours: RELIABILITY.reduce((acc, p) => acc + p.hourCount, 0),
-    reliabilityWindow: "2024-04-01 → 2026-08-27",
+    reliabilityWindowFrom: "2024-04-01",
+    reliabilityWindowTo: "2026-08-27",
     // The whole reliability window predates ingestion go-live, so it is scored
     // against ONS's *current* restatement of the past.
     reliabilityFidelity: "revision_optimistic",
