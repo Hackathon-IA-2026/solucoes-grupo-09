@@ -1,0 +1,62 @@
+# Publication-lag conformance — the feature layer's scheduled measurement.
+#
+# Scheduled, never triggered by a push or a pull request, for the same reason as
+# `live-conformance.yml`: a failure here does not mean a commit broke something,
+# it means one of the conservative defaults `docs/specs/feature-engineering.md`
+# is built on stopped covering the world. See
+# `apps/api/test/publication-lag-conformance.test.ts` and the spec's
+# "Seam 6 — live conformance, gated and scheduled".
+name: publication-lag-conformance
+
+on:
+  schedule:
+    # 11:00 UTC = 08:00 BRT, and the hour is the instrument.
+    #
+    # The carga API publishes the day-ahead programme with no stamp of any kind,
+    # so "when was it published" can only be answered by asking whether it is
+    # there yet. gate_early is D−1 09:00 BRT. A run at 08:00 BRT therefore
+    # settles the largest open question in the spec — whether `dessem_free_v1`
+    # can have a programme, and a residual load, at the early gate — in one
+    # observation. A run at any later hour tightens an upper bound and cannot
+    # answer it at all.
+    #
+    # It is also after the previous evening's ONS 19h cycle, so the lag cases
+    # measure a settled publication rather than one in flight.
+    - cron: "0 11 * * *"
+    # 14:45 and 21:45 UTC = 11:45 and 18:45 BRT — the two moments just before
+    # ONS's documented "Diariamente, as 12h e 19h" cycles, and therefore the two
+    # candidates for peak staleness.
+    #
+    # Staleness is sawtoothed: it climbs all day and drops when ONS publishes,
+    # so one daily sample measures one point on the tooth and the configured
+    # 40 h has to cover the top of it. Measured 2026-08-29 at 11:53 BRT, the
+    # balance and curtailment files were 36.9 h stale with 3.1 h of headroom,
+    # and the 12h cycle republished them without advancing their coverage at
+    # all. If that is the ordinary pattern, the 18:45 BRT sample reads ~43.7 h
+    # and fails —
+    # and that failure is the finding, not a flake: it would mean the cutoff at
+    # gate_late admits hours ONS has not published yet. See
+    # docs/research/publication-lag.md § "What is still open".
+    - cron: "45 14 * * *"
+    - cron: "45 21 * * *"
+  # So a human can ask the question on demand after changing a lag or the
+  # programme's publication constant.
+  workflow_dispatch:
+
+# Never on push. The default `bun test` path must stay offline, and this suite
+# must never be able to fail a commit.
+permissions:
+  contents: read
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Measure the real publication lags against the configured ones
+        run: bun run test:lag

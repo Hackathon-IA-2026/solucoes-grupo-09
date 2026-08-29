@@ -1308,6 +1308,32 @@ research measured 0.03% agreement, so a divergence is evidence one of the two
 changed meaning. Watches for the first appearance of reason code `PAR`, and for
 `dat_desativacao` becoming non-null on any VRE unit.
 
+Built as `apps/api/test/publication-lag-conformance.test.ts`, gated on
+`WATTSTEER_PUBLICATION_LAG_CONFORMANCE` (`bun run test:lag`) and scheduled from
+`.github/workflows/publication-lag-conformance.yml`. It reads the configured
+numbers out of the migrations that seed them rather than restating them, and it
+**publishes its measurements on a passing run** — an alarm that only speaks when
+it fires cannot tell an operator that a 40-hour default has been running with
+three hours of headroom. The findings live in `docs/research/publication-lag.md`.
+
+The first run measured a real lag of ~20 h at publication against the configured
+40 h — and only 3.1 h of headroom at the sampled instant, because the bulk files
+advance their coverage **once a day**, on the ~19:05 BRT cycle, so staleness
+sawtooths from ~20 h up to ~44 h. That upper end is past the configured 40 h and
+lands exactly where `gate_late` falls, so the 40 h looks like a candidate for
+*loosening* rather than tightening. It has not been touched here: the measurement
+is one day's, the suite now samples the peak directly on its schedule, and moving
+it is a migration beside a new feature-set version plus a retrain, never an edit.
+
+**The schedule is 11:00 UTC = 08:00 BRT, and the hour is the instrument.**
+`/cargaprogramada` carries no publication stamp, so the only way to learn whether
+the day-ahead programme exists at `gate_early` (D−1 09:00 BRT) is to ask before
+09:00 BRT. Every other hour tightens an upper bound and settles nothing. Until a
+run at that hour reports, `programmed_load_mwh` and the whole `proxy_*` family
+stay NULL at `gate_early` by decision rather than by measurement, and the
+DESSEM-free set's early-gate arm is weather, calendar and lagged actuals alone —
+a different experiment from its late-gate arm, and it should be read as one.
+
 **Seam 7 — the two experiments this spec inherits.** Both belong here because
 both are feature-level questions, and both were left open by the research:
 

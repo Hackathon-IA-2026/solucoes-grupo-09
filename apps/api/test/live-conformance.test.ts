@@ -35,6 +35,14 @@ import {
   WIND_DETAIL_DATASET_SLUG,
 } from "../src/ingest/index.js";
 import { selectSingleResource } from "../src/ingest/ons/catalogue.js";
+import {
+  AssumptionExpiredError,
+  assertClaim,
+  type Claim,
+  get,
+  measuring,
+  parsing,
+} from "./support/conformance.js";
 
 /**
  * Seam 3 — **live conformance**. The one suite in this platform that talks to
@@ -46,7 +54,9 @@ import { selectSingleResource } from "../src/ingest/ons/catalogue.js";
  * the live sources whether the claims in `docs/research/` are still true.
  *
  * **A failure here is a notification, not a bug.** So the assertion is not the
- * deliverable — the *message* is. `assertClaim` below refuses to report a bare
+ * deliverable — the *message* is. `assertClaim`, in `test/support/conformance.ts`
+ * since the feature layer's lag suite began reporting in the same terms
+ * (`test/publication-lag-conformance.test.ts`), refuses to report a bare
  * comparison: every failure names the research note and section that recorded
  * the claim, states the claim in prose, states what the source returned
  * instead, says what in WattSteer breaks because of it, and points at the
@@ -68,199 +78,6 @@ const suite = ENABLED ? describe : describe.skip;
 
 /** Live calls cross the public internet; ONS S3 is not fast. */
 const TIMEOUT_MS = 120_000;
-
-/**
- * A documented claim, and everything a human needs in order to act when the
- * world stops honouring it.
- *
- * `code` is not decoration. The point of naming it is that the reader of a
- * failed CI run learns *where the assumption is spent* — a research note that
- * expires with no code depending on it is a documentation edit, and one with an
- * adapter behind it is an outage waiting for the next ingest.
- */
-interface Claim {
-  /** Repo-relative path of the research note that recorded it. */
-  note: string;
-  /** Section or heading within the note. */
-  section: string;
-  /** The claim, in the note's own terms. */
-  claim: string;
-  /** What in WattSteer stops working when the claim stops being true. */
-  breaks: string;
-  /** The module that encodes the assumption. */
-  code: string;
-}
-
-/**
- * The failure this suite exists to produce.
- *
- * Named rather than a bare `Error` so the output says what kind of event this
- * is before it says anything else: an assumption reached its expiry date.
- */
-class AssumptionExpiredError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "AssumptionExpiredError";
-  }
-}
-
-/** Wrap a long prose line so a CI log stays readable. */
-function wrap(text: string, indent: string, width = 76): string {
-  const lines: string[] = [];
-  let line = "";
-  for (const word of text.split(/\s+/)) {
-    if (line === "") {
-      line = word;
-    } else if (`${line} ${word}`.length > width) {
-      lines.push(line);
-      line = word;
-    } else {
-      line = `${line} ${word}`;
-    }
-  }
-  if (line !== "") {
-    lines.push(line);
-  }
-  return lines
-    .map((entry, index) => (index === 0 ? entry : `${indent}${entry}`))
-    .join("\n");
-}
-
-/**
- * Assert one documented claim against what the live source actually did.
- *
- * `expect(x).toBe(y)` is deliberately not used anywhere in this file. A diff
- * tells the reader that two values differ; it does not tell them *which
- * research finding just expired*, and that is the entire product of this suite.
- * `observed` is prose too, for the same reason — "16 columns, `dsc_restricao`
- * absent" is actionable where `false !== true` is not.
- */
-function assertClaim(claim: Claim, holds: boolean, observed: string): void {
-  if (holds) {
-    return;
-  }
-  throw new AssumptionExpiredError(
-    [
-      "",
-      `ASSUMPTION EXPIRED — ${claim.section}`,
-      "",
-      `  Documented in : ${claim.note} § ${claim.section}`,
-      `  The claim     : ${wrap(claim.claim, "                  ")}`,
-      `  Observed now  : ${wrap(observed, "                  ")}`,
-      `  What it breaks: ${wrap(claim.breaks, "                  ")}`,
-      `  Encoded in    : ${claim.code}`,
-      "",
-      `  ${wrap(
-        "This suite is expected to fail when the world moves. Nothing is wrong " +
-          "with the code that ran — a source WattSteer depends on changed. Fix " +
-          "it by re-measuring the source, updating the research note above and " +
-          "the adapter together, and re-pinning the claim in this file. Do not " +
-          "relax the assertion without changing the note.",
-        "  ",
-      )}`,
-      "",
-    ].join("\n"),
-  );
-}
-
-/**
- * A source that could not be reached at all.
- *
- * Distinct from an expired assumption, and the distinction is the actionable
- * part: an expiry says *the world changed and the platform is now wrong*, while
- * this says *the question was not answered, so nothing below was proven either
- * way*. Both fail the scheduled run — a source WattSteer cannot reach is also
- * news — but the reader is told which of the two they are looking at before
- * they start investigating.
- */
-class SourceUnreachableError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "SourceUnreachableError";
-  }
-}
-
-/**
- * Run one live measurement, turning a transport failure into prose as well.
- *
- * Without this, a DNS failure or a refused TLS handshake reaches the log as a
- * stack trace from inside an adapter — which reads exactly like a WattSteer
- * bug and is the opposite of what this suite promises to report.
- */
-function measuring(source: string, body: () => Promise<void>): () => Promise<void> {
-  return async () => {
-    try {
-      await body();
-    } catch (error) {
-      if (error instanceof AssumptionExpiredError) {
-        throw error;
-      }
-      if (error instanceof SourceUnreachableError) {
-        throw error;
-      }
-      throw new SourceUnreachableError(
-        [
-          "",
-          `SOURCE UNREACHABLE — ${source}`,
-          "",
-          `  What happened : ${wrap(
-            error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-            "                  ",
-          )}`,
-          "",
-          `  ${wrap(
-            "No documented assumption was disproved here — the source did not " +
-              "answer, so this run measured nothing. Treat a single occurrence as " +
-              "the source being down or throttling (the registry cases pull whole " +
-              "files, and both agencies rate-limit), and a persistent one as a " +
-              "finding in its own right: the endpoint moved, and the adapter that " +
-              "reads it is about to start failing in production too.",
-            "  ",
-          )}`,
-          "",
-        ].join("\n"),
-      );
-    }
-  };
-}
-
-/**
- * Parse a live payload with the platform's own parser, and report a refusal as
- * an expired claim rather than as an unreachable source.
- *
- * The adapters assert their required columns and throw when one is missing.
- * That throw *is* a conformance finding — the header moved — but it reaches
- * this suite as an ordinary exception, which `measuring` would otherwise
- * mislabel as a transport failure. The distinction matters: "ANEEL is down"
- * and "ANEEL renamed a column" call for very different mornings.
- */
-function parsing<T>(claim: Claim, parse: () => T): T {
-  try {
-    return parse();
-  } catch (error) {
-    assertClaim(
-      claim,
-      false,
-      `the platform's own parser refused the live file: ${
-        error instanceof Error ? `${error.name}: ${error.message}` : String(error)
-      }`,
-    );
-    throw error;
-  }
-}
-
-/** GET, with a prose failure rather than a status code. */
-async function get(url: string, init?: RequestInit): Promise<Response> {
-  const response = await fetch(url, init);
-  if (!response.ok && response.status !== 206) {
-    throw new AssumptionExpiredError(
-      `\n\nSOURCE UNREACHABLE — GET ${url} answered HTTP ${response.status}.\n` +
-        "  Conformance could not be measured, so nothing below was proven either\n" +
-        "  way. If this persists it is itself a finding: the URL moved.\n",
-    );
-  }
-  return response;
-}
 
 /**
  * Read only a published file's header row.

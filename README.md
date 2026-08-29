@@ -73,6 +73,14 @@ Point the web app at a different API with `EXPO_PUBLIC_API_URL`.
   sources and asserts they still look the way `docs/research/` found them; a
   failure names the expired assumption in prose. It never runs in the default
   test path.
+- **Publication-lag conformance** — `apps/api/test/publication-lag-conformance.test.ts`,
+  gated on `WATTSTEER_PUBLICATION_LAG_CONFORMANCE` (`bun run test:lag`) and
+  scheduled separately. Measures the real publication lag of every observation
+  dataset against the constants the feature layer's migrations seed, and the
+  day-ahead programme's availability relative to each gate. It reports in the
+  same vocabulary (`apps/api/test/support/conformance.ts`) and publishes its
+  numbers even when it passes; findings live in
+  `docs/research/publication-lag.md`. It never runs in the default test path.
 - **`apps/web`** — legal table-of-contents unit tests, plus a Playwright e2e
   suite covering the footer and legal pages against the real exported bundle.
   Run `bun run web:export` before `bun run test:e2e`.
