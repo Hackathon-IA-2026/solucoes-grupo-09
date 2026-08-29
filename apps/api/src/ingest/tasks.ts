@@ -15,6 +15,8 @@ import type {
   IngestPlantRegistryPayload,
   IngestPlantRegistryResult,
 } from "./registry-job.js";
+import type { IngestSigaPayload, IngestSigaResult } from "./siga-job.js";
+import type { IngestWeatherPayload, IngestWeatherResult } from "./weather-job.js";
 
 /**
  * The unit of work the queue carries — one tagged payload per ingestor.
@@ -36,7 +38,9 @@ export type IngestTask =
   | { kind: "daily_load"; payload: IngestDailyLoadPayload }
   | { kind: "dessem_balance"; payload: IngestDessemPayload }
   | { kind: "load"; payload: IngestLoadPayload }
-  | { kind: "plant_registry"; payload: IngestPlantRegistryPayload };
+  | { kind: "plant_registry"; payload: IngestPlantRegistryPayload }
+  | { kind: "siga"; payload: IngestSigaPayload }
+  | { kind: "weather"; payload: IngestWeatherPayload };
 
 /** What one ingestion produced, tagged so a caller can narrow it back. */
 export type IngestTaskResult =
@@ -46,7 +50,9 @@ export type IngestTaskResult =
   | { kind: "daily_load"; result: IngestDailyLoadResult }
   | { kind: "dessem_balance"; result: IngestDessemResult }
   | { kind: "load"; result: IngestLoadResult }
-  | { kind: "plant_registry"; result: IngestPlantRegistryResult };
+  | { kind: "plant_registry"; result: IngestPlantRegistryResult }
+  | { kind: "siga"; result: IngestSigaResult }
+  | { kind: "weather"; result: IngestWeatherResult };
 
 /**
  * Which source a task belongs to.
@@ -82,8 +88,14 @@ export function periodLabelOf(task: IngestTask): string | null {
       return `${task.payload.from ?? "start"}..${task.payload.to ?? "latest"}`;
     case "load":
       return `${task.payload.from}..${task.payload.to}`;
+    case "weather":
+      // Target days, not run initialisations: the runs are always D−1 of each
+      // day in the range, so the days are the shorter and the truer label.
+      return `${task.payload.from}..${task.payload.to}`;
     default:
-      // `plant_registry` — a snapshot of now, which has no period.
+      // `plant_registry` and `siga` — snapshots of now, which have no period.
+      // SIGA follows the registry exactly here: the extract is overwritten in
+      // place and carries a generation date, not a period it covers.
       return null;
   }
 }
@@ -106,6 +118,30 @@ export function rowsOf(task: IngestTaskResult): {
       unchanged: units.unchanged + memberships.unchanged,
       downloaded: task.result.downloaded ? 2 : 0,
       probed: 2,
+    };
+  }
+  if (task.kind === "siga") {
+    const { locations } = task.result;
+    return {
+      parsed: task.result.sourceRows,
+      inserted: locations.inserted,
+      revised: locations.revised,
+      unchanged: locations.unchanged,
+      downloaded: task.result.downloaded ? 1 : 0,
+      probed: 1,
+    };
+  }
+  if (task.kind === "weather") {
+    return {
+      parsed: task.result.runs.reduce((total, run) => total + run.rows, 0),
+      inserted: task.result.inserted,
+      revised: task.result.revised,
+      unchanged: task.result.unchanged,
+      // One HTTP call per run tried. A slot the local probe answered is neither
+      // downloaded nor probed remotely, which is exactly what the counters
+      // should show for a sweep that spent nothing.
+      downloaded: task.result.requests,
+      probed: task.result.runsScheduled,
     };
   }
   if (task.kind === "dessem_balance") {

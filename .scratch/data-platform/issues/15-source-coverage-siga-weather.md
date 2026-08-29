@@ -19,7 +19,7 @@ handling is the prior art.
 
 **Blocked by:** 05, 09, 11 — all merged, can start immediately
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] `ingestion_source` covers both, and the enum change ships as a migration
 - [ ] Both are planned by `planRefresh` with a cadence that suits their real publication rhythm, documented in the code

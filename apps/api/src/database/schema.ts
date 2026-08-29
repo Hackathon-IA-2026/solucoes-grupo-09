@@ -1574,6 +1574,13 @@ export const ingestionSource = pgEnum("ingestion_source", [
   "verified_load",
   "programmed_load",
   "plant_registry",
+  /** The ANEEL SIGA daily extract — locations, one snapshot of now. */
+  "siga",
+  /**
+   * Open-Meteo Single Runs — the only non-ONS source, and the only one whose
+   * unit of publication is a model run rather than a file over a period.
+   */
+  "weather",
 ]);
 
 /**
@@ -1603,6 +1610,12 @@ export const ingestionRunStatus = pgEnum("ingestion_run_status", [
 export const custodyProvenance = pgEnum("custody_provenance", [
   "bulk_resource",
   "load_api_request",
+  /**
+   * One answered Single Runs call. Here for the carga API's reason: the
+   * endpoint serves no file to re-fetch and Open-Meteo publishes no archive of
+   * its own responses, so the JSON body *is* the vintage.
+   */
+  "weather_run_request",
 ]);
 
 /**

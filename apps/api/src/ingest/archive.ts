@@ -41,8 +41,12 @@ export interface PayloadArchive {
 
 /** What a payload is, for key purposes. */
 export interface ArchiveKeyParts {
-  /** `bulk` for a downloaded file, `carga` for an API response. */
-  family: "bulk" | "carga";
+  /**
+   * `bulk` for a downloaded file, `carga` for a carga API response, `weather`
+   * for a Single Runs response. The family is the archive's top-level split, so
+   * a transport that acquires bytes a different way gets its own segment.
+   */
+  family: "bulk" | "carga" | "weather";
   /** CKAN package id, or the carga series — the first path segment. */
   datasetSlug: string;
   contentSha256: string;

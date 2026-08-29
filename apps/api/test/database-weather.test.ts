@@ -381,7 +381,10 @@ suite("weather · bitemporal store (real Postgres)", () => {
         centroidIds: ["W1", "W7", "S5"],
       };
       const first = await run(ingestor, payload);
-      const second = await run(ingestor, payload);
+      // Forced, because the ordinary second pass does not fetch at all — see
+      // the next test. What is under test here is the *write*: that re-reading
+      // the same bytes cannot move a belief.
+      const second = await run(ingestor, { ...payload, force: true });
       expect(first.inserted + first.revised).toBeGreaterThan(0);
       expect(second.inserted).toBe(0);
       expect(second.revised).toBe(0);
@@ -392,6 +395,38 @@ suite("weather · bitemporal store (real Postgres)", () => {
       expect(second.unchanged + second.supersededByNewerRun).toBe(
         first.inserted + first.revised + first.unchanged + first.supersededByNewerRun,
       );
+    });
+
+    it("never re-fetches a run it already holds", async () => {
+      // A published model run is immutable, so the second fetch cannot discover
+      // anything — and the refresh sweep plans the same slots every hour. This
+      // is the local probe that makes that affordable: it costs one query, not
+      // a `HEAD`, because there is nothing upstream worth asking.
+      const seen: string[] = [];
+      const ingestor = createWeatherIngestor({
+        db,
+        fetch: archive(
+          { "2024-04-09T00:00": RUN_00Z, "2024-04-09T12:00": RUN_12Z },
+          seen,
+        ),
+      });
+      const payload = {
+        from: "2024-04-10",
+        to: "2024-04-10",
+        centroidIds: ["W1", "W7", "S5"],
+      };
+
+      const first = await run(ingestor, payload);
+      expect(first.runsAlreadyHeld).toBe(0);
+      expect(first.runsIngested).toBe(2);
+      expect(seen).toHaveLength(2);
+
+      const second = await run(ingestor, payload);
+      expect(second.runsAlreadyHeld).toBe(2);
+      expect(second.runsIngested).toBe(0);
+      expect(second.requests).toBe(0);
+      // The number that matters: not one further call left the process.
+      expect(seen).toHaveLength(2);
     });
   });
 

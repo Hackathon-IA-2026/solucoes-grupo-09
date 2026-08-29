@@ -2,6 +2,7 @@ import { config } from "../config.js";
 import type { Database } from "../database/connection.js";
 import { BadInputError } from "../errors.js";
 import type { Execute } from "../jobs/index.js";
+import type { PayloadArchive } from "./archive.js";
 import {
   asQueryPoints,
   CENTROID_SET_VERSION,
@@ -21,7 +22,11 @@ import {
   scheduledRunFor,
   WEATHER_VARIABLES,
 } from "./weather/single-runs.js";
-import { recordWeatherRunRequest, writeWeatherForecast } from "./weather-repository.js";
+import {
+  readHeldRunInits,
+  recordWeatherRunRequest,
+  writeWeatherForecast,
+} from "./weather-repository.js";
 
 /**
  * Ingestion for weather from named model runs.
@@ -32,6 +37,14 @@ import { recordWeatherRunRequest, writeWeatherForecast } from "./weather-reposit
  * measured cost of 20 locations × 12 variables × 3 forecast days in one request
  * is 84 KB and 10.5 s. Splitting it per point would multiply the call count by
  * twenty against an endpoint that already 429s at 6-way concurrency.
+ *
+ * **A model run is immutable, so a run already held is never fetched again.**
+ * The bulk sources spend a `HEAD` to learn that a file has not moved; here the
+ * equivalent question is answered locally, from the provenance table, because
+ * ECMWF does not rewrite a published run. That is what makes it affordable for
+ * the refresh sweep to plan the same slots over and over — see the tier note in
+ * `refresh.ts`. A slot answered only by an *older* fallback run is deliberately
+ * not counted as held, so a later pass can pick up a run that published late.
  *
  * Both cycles are ingested for every target day. The 00 Z run publishes sooner
  * and buys operators notice; the 12 Z run is measurably better, especially in
@@ -65,6 +78,15 @@ export interface IngestWeatherPayload {
    * Zero disables the fallback and makes a missing run a hard failure.
    */
   maxRunFallbackSteps?: number;
+  /**
+   * Re-fetch run slots already answered by the run that was asked for.
+   *
+   * Off by default, and that default is what lets the refresh sweep plan the
+   * same slots repeatedly at no cost: a model run is immutable, so the only
+   * reason to fetch one twice is to reprocess bytes, never to discover a
+   * revision. See `readHeldRunInits`.
+   */
+  force?: boolean;
 }
 
 /** What one run contributed, and which run it actually was. */
@@ -86,6 +108,11 @@ export interface IngestWeatherResult {
   variables: string[];
   /** Run slots asked for — target days × cycles. */
   runsScheduled: number;
+  /**
+   * Slots skipped because the scheduled run was already held. The number that
+   * makes a repeated sweep cheap, so it is reported rather than inferred.
+   */
+  runsAlreadyHeld: number;
   /** Runs that produced rows. */
   runsIngested: number;
   /** Slots where the scheduled run was missing and an older one was used. */
@@ -116,6 +143,8 @@ export interface WeatherIngestorDeps {
   db: Database;
   /** Injected so the job is testable without the network. */
   fetch?: typeof fetch;
+  /** Where raw responses are retained. Absent means custody is off. */
+  archive?: PayloadArchive;
   /**
    * Host. Defaults to `WATTSTEER_OPEN_METEO_HOST`, then to the free-tier host —
    * so moving to the Professional tier's `customer-` hostname is an environment
@@ -227,6 +256,21 @@ async function fetchWithFallback(
   return { response: null, runInit: null, requests };
 }
 
+/** Which of these slots are already answered by the exact run asked for. */
+async function heldSlots(
+  db: WeatherIngestorDeps["db"],
+  slots: { scheduled: Date }[],
+): Promise<Set<string>> {
+  if (slots.length === 0) {
+    return new Set();
+  }
+  const times = slots.map((slot) => slot.scheduled.getTime());
+  return readHeldRunInits(db, {
+    from: new Date(Math.min(...times)),
+    to: new Date(Math.max(...times)),
+  });
+}
+
 /**
  * Build the job handler.
  *
@@ -263,6 +307,7 @@ export function createWeatherIngestor(
       centroidIds: centroids.map((centroid) => centroid.id),
       variables: [...WEATHER_VARIABLES],
       runsScheduled: days.length * cycles.length,
+      runsAlreadyHeld: 0,
       runsIngested: 0,
       runsFallenBack: 0,
       runsMissing: 0,
@@ -277,83 +322,97 @@ export function createWeatherIngestor(
       runs: [],
     };
 
+    // The local probe, read once for the whole range rather than per slot: it
+    // is the thing that stops a sweep re-downloading an immutable archive.
+    const slots = days.flatMap((day) =>
+      cycles.map((cycle) => ({ day, cycle, scheduled: scheduledRunFor(day, cycle) })),
+    );
+    const held = payload.force ? new Set<string>() : await heldSlots(deps.db, slots);
+
     let done = 0;
-    for (const day of days) {
-      for (const cycle of cycles) {
-        const scheduled = scheduledRunFor(day, cycle);
-        const attempt = await fetchWithFallback(
-          scheduled,
-          points,
-          configured,
-          maxSteps,
-          forecastDays,
-        );
-        result.requests += attempt.requests;
+    for (const { day, cycle, scheduled } of slots) {
+      if (held.has(scheduled.toISOString())) {
+        result.runsAlreadyHeld += 1;
         done += 1;
+        report({ done, total: result.runsScheduled });
+        continue;
+      }
+      const attempt = await fetchWithFallback(
+        scheduled,
+        points,
+        configured,
+        maxSteps,
+        forecastDays,
+      );
+      result.requests += attempt.requests;
+      done += 1;
 
-        if (!(attempt.response && attempt.runInit)) {
-          result.runsMissing += 1;
-          result.runs.push({
-            targetDay: day,
-            cycle,
-            scheduledRunInit: scheduled.toISOString(),
-            runInit: null,
-            runAgeHours: 0,
-            rows: 0,
-            missing: true,
-          });
-          report({ done, total: result.runsScheduled });
-          continue;
-        }
-
-        const { response, runInit } = attempt;
-        result.rateLimitRetries += response.rateLimitRetries;
-
-        // Parsed before anything is recorded: an all-null variable or a grid
-        // collision must abort the ingest, not leave a provenance row claiming
-        // a run was successfully taken in.
-        const parsed = parseModelRun(response, {
-          centroids,
-          runInit,
-          scheduledRunInit: scheduled,
+      if (!(attempt.response && attempt.runInit)) {
+        result.runsMissing += 1;
+        result.runs.push({
+          targetDay: day,
+          cycle,
+          scheduledRunInit: scheduled.toISOString(),
+          runInit: null,
+          runAgeHours: 0,
+          rows: 0,
+          missing: true,
         });
+        report({ done, total: result.runsScheduled });
+        continue;
+      }
 
-        const sourceVersionId = await recordWeatherRunRequest(deps.db, {
+      const { response, runInit } = attempt;
+      result.rateLimitRetries += response.rateLimitRetries;
+
+      // Parsed before anything is recorded: an all-null variable or a grid
+      // collision must abort the ingest, not leave a provenance row claiming
+      // a run was successfully taken in.
+      const parsed = parseModelRun(response, {
+        centroids,
+        runInit,
+        scheduledRunInit: scheduled,
+      });
+
+      const sourceVersionId = await recordWeatherRunRequest(
+        deps.db,
+        {
           runInit,
           scheduledRunInit: scheduled,
           centroidCount: centroids.length,
           forecastDays,
           rowCount: parsed.rows.length,
           response,
-        });
+        },
+        deps.archive,
+      );
 
-        const written = await writeWeatherForecast(deps.db, {
-          rows: parsed.rows,
-          sourceVersionId,
-        });
+      const written = await writeWeatherForecast(deps.db, {
+        rows: parsed.rows,
+        sourceVersionId,
+      });
 
-        result.runsIngested += 1;
-        if (runInit.getTime() !== scheduled.getTime()) {
-          result.runsFallenBack += 1;
-        }
-        result.hourZeroRowsExcluded += parsed.hourZeroRowsExcluded;
-        result.nullValues += parsed.nullValues;
-        result.inserted += written.inserted;
-        result.revised += written.revised;
-        result.unchanged += written.unchanged;
-        result.supersededByNewerRun += written.supersededByNewerRun;
-        result.runs.push({
-          targetDay: day,
-          cycle,
-          scheduledRunInit: scheduled.toISOString(),
-          runInit: runInit.toISOString(),
-          runAgeHours: runAgeHours(scheduled, runInit),
-          rows: parsed.rows.length,
-          missing: false,
-        });
-
-        report({ done, total: result.runsScheduled });
+      result.runsIngested += 1;
+      if (runInit.getTime() !== scheduled.getTime()) {
+        result.runsFallenBack += 1;
       }
+      result.hourZeroRowsExcluded += parsed.hourZeroRowsExcluded;
+      result.nullValues += parsed.nullValues;
+      result.inserted += written.inserted;
+      result.revised += written.revised;
+      result.unchanged += written.unchanged;
+      result.supersededByNewerRun += written.supersededByNewerRun;
+      result.runs.push({
+        targetDay: day,
+        cycle,
+        scheduledRunInit: scheduled.toISOString(),
+        runInit: runInit.toISOString(),
+        runAgeHours: runAgeHours(scheduled, runInit),
+        rows: parsed.rows.length,
+        missing: false,
+      });
+
+      report({ done, total: result.runsScheduled });
     }
 
     return result;

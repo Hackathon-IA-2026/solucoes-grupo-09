@@ -13,6 +13,7 @@ import {
   resolveLocations,
 } from "./aneel/siga.js";
 import { acquireBulkResource } from "./bulk-resource.js";
+import type { ObservationContext } from "./resource-version.js";
 import {
   findWithdrawnPlants,
   readCurrentPlantLocations,
@@ -55,6 +56,8 @@ export interface IngestSigaPayload {
   matchRateFloor?: number;
   /** Override the slack allowed against the previous ingest's rate. */
   matchRateTolerance?: number;
+  /** Which refresh tier and run this acquisition belongs to, when swept. */
+  context?: ObservationContext;
 }
 
 export interface IngestSigaResult {
@@ -121,6 +124,7 @@ export function createSigaIngestor(
       resources,
       select: (available) => selectDailySigaResource(available, FORMATS),
       force: payload.force,
+      context: payload.context,
       report: ({ done }) => report({ done, total: SIGA_STEPS }),
     });
 
