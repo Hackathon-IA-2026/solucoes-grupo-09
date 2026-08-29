@@ -16,6 +16,7 @@ import {
 } from "../src/features/index.js";
 import {
   type CurtailmentReportHour,
+  type EnergyBalanceHour,
   type RegistryGeneratingUnit,
   type RegistryPlant,
   recordWeatherRunRequest,
@@ -23,7 +24,9 @@ import {
   upsertReportingEntities,
   type WeatherForecastHour,
   writeCurtailment,
+  writeEnergyBalance,
   writeGeneratingUnits,
+  writeSubsystemExchange,
   writeWeatherForecast,
 } from "../src/ingest/index.js";
 
@@ -49,11 +52,66 @@ const TARGET = "2026-08-20";
 const GATE_LATE = new Date("2026-08-19T22:00:00.000Z");
 /** A later target date, after every go-live in the fixture. */
 const AFTER_GO_LIVE = "2026-08-27";
+/**
+ * A target date before every go-live in the fixture.
+ *
+ * Ticket 05 moved this. Before it, `TARGET` itself predated the label source's
+ * go-live, because the only constrained-off rows in the fixture were the
+ * settled labels ingested days *after* the target date. The class-`K` block
+ * needs a backward view that survives the vintage ablation, so the fixture now
+ * also carries a week of *backfilled* observations ingested long before the
+ * gate — which is exactly the backfill window the whole cutoff exists for, and
+ * which moves every go-live back with it. The fidelity claim is unchanged and
+ * is asserted here instead.
+ */
+const BEFORE_GO_LIVE = "2026-07-15";
 
 /** The local civil day of `TARGET`, in UTC. Brasília is UTC−3 all year. */
 const DAY_FROM = new Date("2026-08-20T03:00:00.000Z");
 const HOUR_CURTAILED = new Date("2026-08-20T12:00:00.000Z");
 const HOUR_QUIET = new Date("2026-08-20T13:00:00.000Z");
+
+/**
+ * `actuals_cutoff(gate_at(TARGET, 'gate_late'), 40 h)` — D-2 03:00 BRT.
+ *
+ * 2026-08-19 19:00 BRT is 22:00Z; forty hours earlier is 2026-08-18 06:00Z,
+ * which is 03:00 in Brasilia. So **no hour of 2026-08-19 is available at all**,
+ * and of 2026-08-18 only the first four local hours are — which is the spec's
+ * "the nearest usable same-hour actual is t-48 h, and even that is
+ * conditional", written out as an instant.
+ */
+const CUTOFF = new Date("2026-08-18T06:00:00.000Z");
+
+/** t-168 h from `HOUR_CURTAILED`: same local hour, seven days back. */
+const D_MINUS_7 = new Date("2026-08-13T12:00:00.000Z");
+/** Also 12:00Z, also inside the trailing week — the second same-hour sample. */
+const D_MINUS_4 = new Date("2026-08-16T12:00:00.000Z");
+/** Inside the trailing **24** hours as well as the trailing week. */
+const D_MINUS_3 = new Date("2026-08-17T12:00:00.000Z");
+/** 00:00 local on D-2 — the last hour that clears the cutoff. */
+const D_MINUS_2_EARLY = new Date("2026-08-18T03:00:00.000Z");
+/**
+ * 09:00 local on D-2 — six hours *past* the cutoff, and the decoy.
+ *
+ * Published and ingested before the gate, so `AsOf(gate)` and
+ * `published_at <= gate` both return it happily. Only the valid-time cut keeps
+ * it out, which is the entire point of this ticket: over the backfill window
+ * neither vintage axis filters an observation at all.
+ */
+const D_MINUS_2_NOON = new Date("2026-08-18T12:00:00.000Z");
+/** One hour before the trailing week opens — the frame's lower edge. */
+const BEFORE_WINDOW = new Date("2026-08-11T05:00:00.000Z");
+/** The first local hour of `TARGET`, whose t-48 h is `D_MINUS_2_EARLY`. */
+const HOUR_FIRST = new Date("2026-08-20T03:00:00.000Z");
+
+/**
+ * When WattSteer learned the backfilled observations: long before the gate.
+ *
+ * Deliberately *not* an honest ingestion instant per row. That is what a
+ * backfill looks like — one bulk load of years of history — and it is why
+ * `AsOf(gate)` filters nothing over the window and why the cutoff has to exist.
+ */
+const OBSERVED_INGESTED_AT = new Date("2026-08-01T00:00:00.000Z");
 
 const ENTITY = "CJU_FE01";
 const CENTROID_A = "FE01_A";
@@ -205,6 +263,42 @@ const report = (
   halfHoursObserved: 2,
   cause: null,
   causeMixed: false,
+});
+
+/**
+ * A backfilled observation, with the restriction reason the shares aggregate.
+ *
+ * The reason travels **upward** only: it is a property of the reporting entity
+ * and the share below counts entity-hours of a subsystem. Nothing here
+ * attributes a conjunto's reason downward to a member plant, which the domain
+ * model forbids as an allocation presented as an observation.
+ */
+const observed = (
+  validTime: Date,
+  technology: "WIND" | "SOLAR",
+  constrainedOffMwh: number,
+  reason: "REL" | "CNF" | "ENE" | null = null,
+): CurtailmentReportHour => ({
+  ...report(validTime, technology, constrainedOffMwh),
+  cause: reason === null ? null : { reason, origin: "SIS", description: null },
+});
+
+/** One NE hour of the balance file. The numbers are the assertions' arithmetic. */
+const balance = (
+  validTime: Date,
+  loadMwh: number,
+  windGenerationMwh: number,
+  solarGenerationMwh: number,
+  netExchangeMwh: number,
+): EnergyBalanceHour => ({
+  subsystem: "NE",
+  validTime,
+  loadMwh,
+  hydroGenerationMwh: 10,
+  thermalGenerationMwh: 20,
+  windGenerationMwh,
+  solarGenerationMwh,
+  netExchangeMwh,
 });
 
 /** Column-by-column, `null` and `undefined` included, dates comparable. */
@@ -404,6 +498,101 @@ suite("the gate, end to end (real Postgres)", () => {
         ingestedAt: WEATHER_INGESTED_AT,
       });
     }
+
+    // ------------------------------------------------ ticket 05's backward view
+    //
+    // A week of NE observations behind the cutoff, and four decoys in front of
+    // it or behind the frame's far edge. Every row is published *and* ingested
+    // at `OBSERVED_INGESTED_AT`, before the gate — so both vintage axes let all
+    // of them through and only `valid_time <= actuals_cutoff` does any work.
+    // That is not a quirk of the fixture; it is the backfill window, and a
+    // fixture that gave these rows honest per-row ingestion instants would let
+    // an as-of read hide a missing cutoff.
+    await writeCurtailment(db, {
+      rows: [
+        // The D-7 hour, and the same-hour mean's first sample: 6 + 3 = 9 MWh.
+        observed(D_MINUS_7, "WIND", 6, "ENE"),
+        observed(D_MINUS_7, "SOLAR", 3, "ENE"),
+        // The same-hour mean's second sample: 2 + 1 = 3 MWh.
+        observed(D_MINUS_4, "WIND", 2, "CNF"),
+        observed(D_MINUS_4, "SOLAR", 1),
+        // The last hour that clears the cutoff, and the only t-48 h any row of
+        // TARGET can reach.
+        observed(D_MINUS_2_EARLY, "WIND", 2, "REL"),
+        observed(D_MINUS_2_EARLY, "SOLAR", 1),
+        // Past the cutoff. Enormous on purpose: it is the t-48 h of the hour
+        // the assertions look at, so a missing cutoff cannot pass by accident.
+        observed(D_MINUS_2_NOON, "WIND", 555, "CNF"),
+        // Behind the frame's far edge, and equally enormous: an aggregate that
+        // reached back 169 hours instead of 168 would swallow it.
+        observed(BEFORE_WINDOW, "WIND", 700, "ENE"),
+      ],
+      publishedAt: OBSERVED_INGESTED_AT,
+      publishedAtPrecision: "file",
+      sourceVersionId: version?.id ?? "",
+      ingestedAt: OBSERVED_INGESTED_AT,
+    });
+
+    const [observationVersion] = await db
+      .insert(onsResourceVersion)
+      .values({
+        datasetSlug: "balanco-energia-subsistema",
+        resourceName: "BALANCO_ENERGIA_SUBSISTEMA",
+        resourceUrl: "https://example.invalid/FEATURES_BALANCO.csv",
+        format: "CSV",
+        changeKey: `features-observations-test|${Date.now()}`,
+      })
+      .returning({ id: onsResourceVersion.id });
+
+    const observationVintage = {
+      publishedAt: OBSERVED_INGESTED_AT,
+      publishedAtPrecision: "file",
+      sourceVersionId: observationVersion?.id ?? "",
+      ingestedAt: OBSERVED_INGESTED_AT,
+    } as const;
+
+    await writeEnergyBalance(db, {
+      rows: [
+        // Wind 70 and 42 against a 140 MW fleet, solar 20 and 12 against 40 MW:
+        // both capacity factors come to exactly 0.4.
+        balance(D_MINUS_7, 1000, 70, 20, 150),
+        balance(D_MINUS_3, 900, 42, 12, 50),
+        // Past the cutoff, and inside the trailing 24 hours if it were not.
+        balance(D_MINUS_2_NOON, 9999, 9999, 9999, 9999),
+        // Behind the frame.
+        balance(BEFORE_WINDOW, 8888, 8888, 8888, 8888),
+      ],
+      ...observationVintage,
+    });
+
+    await writeSubsystemExchange(db, {
+      rows: [
+        // Canonical orientation, `from < to` in enum order, positive from to.
+        // So NE to SE and N to NE are both stored the way they are named.
+        {
+          fromSubsystem: "NE",
+          toSubsystem: "SE",
+          validTime: D_MINUS_7,
+          verifiedExchangeMwh: 500,
+          programmedExchangeMwh: null,
+        },
+        {
+          fromSubsystem: "N",
+          toSubsystem: "NE",
+          validTime: D_MINUS_7,
+          verifiedExchangeMwh: 200,
+          programmedExchangeMwh: null,
+        },
+        {
+          fromSubsystem: "NE",
+          toSubsystem: "SE",
+          validTime: D_MINUS_2_NOON,
+          verifiedExchangeMwh: 9999,
+          programmedExchangeMwh: null,
+        },
+      ],
+      ...observationVintage,
+    });
   });
 
   afterAll(() => handle.close());
@@ -588,7 +777,7 @@ suite("the gate, end to end (real Postgres)", () => {
   });
 
   it("reports a window predating go-live as revision_optimistic", async () => {
-    const before = await readServingRows(db, { targetDate: TARGET, ...query });
+    const before = await readServingRows(db, { targetDate: BEFORE_GO_LIVE, ...query });
     for (const row of before) {
       expect(row.vintage_fidelity).toBe("revision_optimistic");
     }
@@ -665,6 +854,212 @@ suite("the gate, end to end (real Postgres)", () => {
     }
   });
 
+  // ------------------------------------------------------- lagged actuals (K)
+  it("resolves the cutoff from the gate and the configured lag, and refuses an unknown dataset", async () => {
+    // `actuals_cutoff(gate, dataset) = gate - publication_lag_hours[dataset]`,
+    // with the gate derived from the target date rather than handed in. Forty
+    // hours from 2026-08-19 19:00 BRT lands at 2026-08-18 03:00 BRT: no hour of
+    // D-1 is assumed available at all.
+    const rows = await db.execute<{ cutoff: string; early: string }>(sql`
+      select actuals_cutoff(${TARGET}::date, 'gate_late', 'restricao-coff') as cutoff,
+             actuals_cutoff(${TARGET}::date, 'gate_early', 'restricao-coff') as early
+    `);
+    const [row] = [...rows];
+    expect(new Date(row?.cutoff ?? 0).toISOString()).toBe(CUTOFF.toISOString());
+    // The early gate is ten hours earlier, so its cutoff is too.
+    expect(new Date(row?.early ?? 0).toISOString()).toBe("2026-08-17T20:00:00.000Z");
+
+    // An unmeasured latency must not become an unmeasured leak: an unknown
+    // dataset raises rather than defaulting to a zero-hour lag, which would be
+    // an unfiltered observation read that looks exactly like a correct answer.
+    const outcome = await db
+      .execute(
+        sql`select actuals_cutoff(${TARGET}::date, 'gate_late', 'carga-inventada')`,
+      )
+      .then(
+        () => "resolved",
+        (error: unknown) => sqlStateOf(error),
+      );
+    expect(outcome).toBe("22023");
+  });
+
+  it("cuts the lagged actuals on valid_time, where neither vintage axis would", async () => {
+    // The claim the whole ticket rests on. The decoy hour is six hours past the
+    // cutoff, carries 555 MWh, and was both published and ingested before the
+    // gate - so `AsOf(gate)` returns it and `published_at <= gate` returns it.
+    // It is the t-48 h of the hour asserted below, and it appears nowhere.
+    const [{ visible }] = [
+      ...(await db.execute<{ visible: number }>(sql`
+        select count(*)::int as visible from curtailment_report_hour
+        where valid_time = ${D_MINUS_2_NOON.toISOString()}::timestamptz
+          and published_at <= ${GATE_LATE.toISOString()}::timestamptz
+          and ingested_at <= ${GATE_LATE.toISOString()}::timestamptz
+      `)),
+    ] as [{ visible: number }];
+    expect(visible).toBeGreaterThan(0);
+
+    const rows = await readServingRows(db, { targetDate: TARGET, ...query });
+    const values = rows.flatMap((row) => [
+      row.observed_constrained_off_lag_48h,
+      row.observed_constrained_off_lag_168h,
+      row.observed_constrained_off_same_hour_mean_7d,
+      row.observed_constrained_off_total_7d_mwh,
+      row.observed_load_lag_168h,
+      row.observed_net_exchange_mean_24h_to_cutoff,
+      row.observed_corridor_flow_ne_se_lag_168h,
+    ]);
+    for (const forbidden of [555, 700, 8888, 9999]) {
+      expect({ forbidden, present: values.some((v) => Number(v) === forbidden) }).toEqual(
+        {
+          forbidden,
+          present: false,
+        },
+      );
+    }
+  });
+
+  it("carries the D-7 levels, and the windows that end at the cutoff", async () => {
+    const rows = await readServingRows(db, { targetDate: TARGET, ...query });
+    const at = (subsystem: string, validTime: Date): FeatureRow => {
+      const found = rows.find(
+        (row) =>
+          row.subsystem === subsystem &&
+          new Date(row.valid_time).getTime() === validTime.getTime(),
+      );
+      expect(found).toBeDefined();
+      return found as FeatureRow;
+    };
+
+    const noon = at("NE", HOUR_CURTAILED);
+    // t-168 h: 6 MWh of wind and 3 of solar on 2026-08-13 at the same local hour.
+    expect(Number(noon.observed_constrained_off_lag_168h)).toBe(9);
+    expect(Number(noon.observed_constrained_off_wind_lag_168h)).toBe(6);
+    expect(Number(noon.observed_constrained_off_solar_lag_168h)).toBe(3);
+    // The same local hour over the seven days ending at the cutoff: 9 and 3.
+    // The 555 MWh hour past the cutoff is the third occurrence and is absent,
+    // which is the `168 PRECEDING AND 1 PRECEDING` frame doing its one job.
+    expect(Number(noon.observed_constrained_off_same_hour_mean_7d)).toBe(6);
+    // Every hour of the trailing week: 9 + 3 + 3. Neither decoy is in it.
+    expect(Number(noon.observed_constrained_off_total_7d_mwh)).toBe(15);
+    // One of those three hours is above the 5 MW threshold.
+    expect(Number(noon.observed_constrained_off_hours_above_threshold_7d)).toBe(1);
+    // The balance series, same hour, seven days back.
+    expect(Number(noon.observed_load_lag_168h)).toBe(1000);
+    expect(Number(noon.observed_wind_generation_lag_168h)).toBe(70);
+    expect(Number(noon.observed_solar_generation_lag_168h)).toBe(20);
+    expect(Number(noon.observed_net_exchange_lag_168h)).toBe(150);
+    // The last 24 available hours hold one balance row, at 50 MWh.
+    expect(Number(noon.observed_net_exchange_mean_24h_to_cutoff)).toBe(50);
+    // Realised fleet CF: (70 + 42) / 2 over 140 MW, (20 + 12) / 2 over 40 MW.
+    // The denominator is the fleet of the *last available day*, so UG3 - which
+    // enters service on the target date - is not in it.
+    expect(Number(noon.observed_wind_capacity_factor_mean_7d)).toBeCloseTo(0.4, 10);
+    expect(Number(noon.observed_solar_capacity_factor_mean_7d)).toBeCloseTo(0.4, 10);
+    // Directed corridor flow, in the canonical orientation, seven days back.
+    expect(Number(noon.observed_corridor_flow_ne_se_lag_168h)).toBe(500);
+    expect(Number(noon.observed_corridor_flow_n_ne_lag_168h)).toBe(200);
+    // Four reason-carrying entity-hours in the week: two ENE, one CNF, one REL.
+    expect(Number(noon.observed_reason_share_ene_7d)).toBeCloseTo(0.5, 10);
+    expect(Number(noon.observed_reason_share_cnf_7d)).toBeCloseTo(0.25, 10);
+    expect(Number(noon.observed_reason_share_rel_7d)).toBeCloseTo(0.25, 10);
+    // The three shares sum to one because `PAR` has never been observed. The day
+    // it is, they will not - which is the monitoring signal, not a class.
+    expect(
+      Number(noon.observed_reason_share_ene_7d) +
+        Number(noon.observed_reason_share_cnf_7d) +
+        Number(noon.observed_reason_share_rel_7d),
+    ).toBeCloseTo(1, 10);
+
+    // A subsystem with no observations is null, not zero - and the corridors,
+    // which are system facts rather than properties of one end, are not.
+    const elsewhere = at("S", HOUR_CURTAILED);
+    expect(elsewhere.observed_constrained_off_lag_168h).toBeNull();
+    expect(elsewhere.observed_constrained_off_total_7d_mwh).toBeNull();
+    expect(elsewhere.observed_wind_capacity_factor_mean_7d).toBeNull();
+    expect(elsewhere.observed_reason_share_ene_7d).toBeNull();
+    expect(Number(elsewhere.observed_corridor_flow_ne_se_lag_168h)).toBe(500);
+  });
+
+  it("yields NULL for a lag that does not clear the cutoff, and never slides", async () => {
+    // The fixture test the spec asks for by name. At `gate_late` the cutoff is
+    // 2026-08-18 03:00 BRT, so t-48 h clears it only for the first local hour
+    // of the day and is NULL for the other twenty-three - and the NULL is a
+    // NULL, not the nearest available hour wearing a 48-hour label.
+    const rows = await readServingRows(db, { targetDate: TARGET, ...query });
+    const ne = rows.filter((row) => row.subsystem === "NE");
+
+    const first = ne.find(
+      (row) => new Date(row.valid_time).getTime() === HOUR_FIRST.getTime(),
+    );
+    expect(Number(first?.observed_constrained_off_lag_48h)).toBe(3);
+
+    const noon = ne.find(
+      (row) => new Date(row.valid_time).getTime() === HOUR_CURTAILED.getTime(),
+    );
+    expect(noon?.observed_constrained_off_lag_48h).toBeNull();
+
+    const cleared = ne.filter((row) => row.observed_constrained_off_lag_48h !== null);
+    expect(cleared).toHaveLength(1);
+
+    // At the early gate the cutoff is ten hours earlier still, so no hour of the
+    // day can reach a t-48 h at all.
+    const early = await readServingRows(db, {
+      targetDate: TARGET,
+      ...query,
+      gateProfile: "gate_early",
+    });
+    for (const row of early) {
+      expect(row.observed_constrained_off_lag_48h).toBeNull();
+    }
+  });
+
+  it("tells the model how stale its own backward view is", async () => {
+    // `valid_time - actuals_cutoff`, in hours. The model is given the distance
+    // to the last actual it was allowed to see rather than left to assume the
+    // lag is constant - it is not, and it moves by ten hours between profiles.
+    const rows = await readServingRows(db, { targetDate: TARGET, ...query });
+    const noon = rows.find(
+      (row) =>
+        row.subsystem === "NE" &&
+        new Date(row.valid_time).getTime() === HOUR_CURTAILED.getTime(),
+    );
+    expect(Number(noon?.observed_actual_lag_hours)).toBeCloseTo(54, 10);
+
+    const first = rows.find(
+      (row) =>
+        row.subsystem === "NE" &&
+        new Date(row.valid_time).getTime() === HOUR_FIRST.getTime(),
+    );
+    expect(Number(first?.observed_actual_lag_hours)).toBeCloseTo(45, 10);
+    // Never negative: the backward view is behind the row by construction.
+    for (const row of rows) {
+      expect(Number(row.observed_actual_lag_hours)).toBeGreaterThan(0);
+    }
+  });
+
+  it("broadcasts the cutoff-anchored windows identically across the 24 hours", async () => {
+    // Day grain, and the reason the dictionary marks it: these windows are
+    // anchored to the cutoff rather than to the target hour, so they carry one
+    // value for the whole day. Read as an hourly signal they are a constant a
+    // model will find intraday structure in.
+    const rows = await readServingRows(db, { targetDate: TARGET, ...query });
+    const ne = rows.filter((row) => row.subsystem === "NE");
+    for (const column of [
+      "observed_constrained_off_total_7d_mwh",
+      "observed_constrained_off_hours_above_threshold_7d",
+      "observed_net_exchange_mean_24h_to_cutoff",
+      "observed_reason_share_ene_7d",
+    ] as const) {
+      const distinct = new Set(ne.map((row) => Number(row[column])));
+      expect({ column, distinct: distinct.size }).toEqual({ column, distinct: 1 });
+    }
+    // The same-hour mean is *not* day grain, and this fixture proves it can
+    // vary: 12:00Z has samples and the rest of the day does not.
+    expect(
+      new Set(ne.map((row) => row.observed_constrained_off_same_hour_mean_7d)).size,
+    ).toBeGreaterThan(1);
+  });
+
   // ---------------------------------------------------------------- Seam 1
   it("seam 1 — the training row and the serving row are the same row", async () => {
     // The central claim of the spec, and it is cheap because the claim is that
@@ -707,6 +1102,7 @@ suite("the gate, end to end (real Postgres)", () => {
     const before = await readServingRows(db, { targetDate: TARGET, ...query });
     let after: FeatureRow[] = [];
     let deleted = 0;
+    let deletedPastCutoff = 0;
 
     try {
       await db.transaction(async (tx) => {
@@ -730,6 +1126,29 @@ suite("the gate, end to end (real Postgres)", () => {
           `);
           deleted += Number([...removed][0]?.n ?? 0);
         }
+
+        // The second axis, and the one ticket 05 added. Over the backfill window
+        // the two vintage deletes above remove *nothing* from an observation
+        // table - every row was learned at go-live and published from an S3
+        // `Last-Modified` that may post-date the hour by two years - so a
+        // class-`K` feature that depended on the future would sail through the
+        // ablation as it stood. Cutting on `valid_time > actuals_cutoff` is what
+        // makes the seam able to see it.
+        for (const table of [
+          "curtailment_report_hour",
+          "subsystem_energy_balance_hour",
+          "subsystem_exchange_hour",
+        ]) {
+          const removed = await scoped.execute<{ n: number }>(sql`
+            with gone as (
+              delete from ${sql.raw(table)}
+              where valid_time > ${CUTOFF.toISOString()}::timestamptz
+              returning 1
+            ) select count(*)::int as n from gone
+          `);
+          deletedPastCutoff += Number([...removed][0]?.n ?? 0);
+        }
+
         after = await readServingRows(scoped, { targetDate: TARGET, ...query });
         tx.rollback();
       });
@@ -743,6 +1162,9 @@ suite("the gate, end to end (real Postgres)", () => {
     // Non-vacuous in both directions: rows really were removed, and the row set
     // is unchanged because the spine comes from the calendar.
     expect(deleted).toBeGreaterThan(0);
+    // Non-vacuous on the new axis too: rows the gate could see on both vintage
+    // axes, and could not see on valid time, really were there to be removed.
+    expect(deletedPastCutoff).toBeGreaterThan(0);
     expect(after).toHaveLength(before.length);
 
     const byKey = new Map(

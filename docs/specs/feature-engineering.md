@@ -362,6 +362,21 @@ changes the feature distribution — so it is a retrain trigger, not a config
 tweak. A scheduled conformance job measures the real lag and fails if it exceeds
 the configured value.
 
+> **Implemented in ticket 05.** The table is `feature_publication_lag`
+> (`apps/api/src/database/schema.ts`), seeded with the defaults above by
+> `drizzle/0021_lagged_actuals_behind_the_cutoff.sql`, and read by
+> `actuals_cutoff(target_date, gate_profile, dataset)`. Two consequences of that
+> shape are deliberate. **Nothing writes the table at runtime and no repository
+> exists through which it could**, so loosening a lag is a migration — a diff, a
+> review and a retrain — rather than an `UPDATE` somebody ran once. And the
+> function takes a *target date and a profile* rather than the `gate` the formula
+> above names, because a `gate timestamptz` parameter would be the one door into
+> the feature layer through which a hand-chosen instant could arrive; the gate is
+> derived inside it by `gate_at`, exactly as `feature_apply_gate` derives it. An
+> unconfigured dataset raises `22023` rather than defaulting to a zero-hour lag,
+> which would be an unfiltered observation read that looks exactly like a correct
+> answer.
+
 The consequence is the sharpest single fact in this document: **at `gate_late`,
 no hour of day D−1 is assumed available.** The nearest usable same-hour actual is
 `t − 48 h`, and even that is conditional.

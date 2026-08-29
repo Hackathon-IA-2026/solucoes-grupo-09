@@ -120,6 +120,86 @@ export interface FeatureRow {
   solar_zenith_cos: number | null;
   /** Top-of-atmosphere horizontal irradiance, W/m². The clearness denominator. */
   solar_extraterrestrial_ghi: number | null;
+
+  // Class `K` — lagged actuals, every one cut on
+  // `valid_time <= actuals_cutoff(gate, dataset)` rather than on a vintage.
+  // See `drizzle/0021_lagged_actuals_behind_the_cutoff.sql`.
+  //
+  // Every column here is a **level**. There is no difference, no ramp and no
+  // window centred on the target hour, because those are the three shapes
+  // last-known-value substitution cannot carry honestly — the spec's §"Dropped"
+  // table names the forecast-side replacement for each of them.
+
+  /**
+   * `valid_time − actuals_cutoff(gate, dataset)`, in hours, at the widest of
+   * the three observation lags the row reads.
+   *
+   * How stale the backward view is, so the model can condition on its own
+   * blindness rather than assume the lag is constant. It is not: it moves by a
+   * day between the two gate profiles.
+   */
+  observed_actual_lag_hours: number | null;
+  /** Subsystem constrained-off total at t−168 h, same local hour. */
+  observed_constrained_off_lag_168h: number | null;
+  observed_constrained_off_wind_lag_168h: number | null;
+  observed_constrained_off_solar_lag_168h: number | null;
+  /**
+   * t−48 h, and **NULL rather than slid** where the cutoff excludes it.
+   *
+   * At `gate_late` the cutoff falls at D−2 03:00 BRT, so this clears only for
+   * the first four local hours of the day; at `gate_early` it never clears. A
+   * lag that slid to the nearest available hour would mean "48 hours" in one row
+   * and something else in the next, with nothing in the row to say which.
+   */
+  observed_constrained_off_lag_48h: number | null;
+  /**
+   * Mean at the same local hour over the seven days ending at the cutoff.
+   *
+   * **The mandatory baseline's definition** (`docs/specs/forecaster.md` rung 1),
+   * computed here rather than reimplemented so the baseline and the model
+   * cannot disagree about what "the last seven days" means.
+   */
+  observed_constrained_off_same_hour_mean_7d: number | null;
+  /** Hours above `threshold_mw` over the trailing seven days. Day grain. */
+  observed_constrained_off_hours_above_threshold_7d: number | null;
+  /** Sum over the trailing seven days. Day grain. */
+  observed_constrained_off_total_7d_mwh: number | null;
+  observed_load_lag_168h: number | null;
+  observed_wind_generation_lag_168h: number | null;
+  observed_solar_generation_lag_168h: number | null;
+  /**
+   * Realised fleet capacity factor over the trailing seven days. **Day grain.**
+   *
+   * The denominator is the fleet of the **last available day** at the gate's
+   * vintage, never the target date's: a ratio of last week's generation to
+   * tomorrow's fleet would drift down with every commissioning, and a modeller
+   * would read the drift as weather.
+   */
+  observed_wind_capacity_factor_mean_7d: number | null;
+  /** As above, `SOLAR`. Day grain. */
+  observed_solar_capacity_factor_mean_7d: number | null;
+  observed_net_exchange_lag_168h: number | null;
+  /** Mean over the last 24 available hours, ending at the cutoff. Day grain. */
+  observed_net_exchange_mean_24h_to_cutoff: number | null;
+  /** Directed NE→SE flow at t−168 h. A system fact, broadcast to all four. */
+  observed_corridor_flow_ne_se_lag_168h: number | null;
+  /** Directed N→NE flow at t−168 h. */
+  observed_corridor_flow_n_ne_lag_168h: number | null;
+  /**
+   * Share of reason-carrying entity-hours in the subsystem, trailing seven
+   * days. **Day grain**, and aggregated **upward** from reporting entities
+   * only — nothing attributes a conjunto's reason downward to a member plant.
+   *
+   * `PAR` has no share column: it is a live enum member with zero observations,
+   * and a share of a class that has never occurred is a column of zeroes. It
+   * stays in the denominator, so the day it first appears these three stop
+   * summing to one — which is the monitoring signal rather than a silent
+   * redistribution.
+   */
+  observed_reason_share_ene_7d: number | null;
+  observed_reason_share_cnf_7d: number | null;
+  /** `REL` is external grid unavailability, not *relaxamento*. */
+  observed_reason_share_rel_7d: number | null;
 }
 
 /**
@@ -165,6 +245,26 @@ export const FEATURE_ROW_COLUMNS: readonly (keyof FeatureRow)[] = [
   "calendar_is_bridge_day",
   "solar_zenith_cos",
   "solar_extraterrestrial_ghi",
+  "observed_actual_lag_hours",
+  "observed_constrained_off_lag_168h",
+  "observed_constrained_off_wind_lag_168h",
+  "observed_constrained_off_solar_lag_168h",
+  "observed_constrained_off_lag_48h",
+  "observed_constrained_off_same_hour_mean_7d",
+  "observed_constrained_off_hours_above_threshold_7d",
+  "observed_constrained_off_total_7d_mwh",
+  "observed_load_lag_168h",
+  "observed_wind_generation_lag_168h",
+  "observed_solar_generation_lag_168h",
+  "observed_wind_capacity_factor_mean_7d",
+  "observed_solar_capacity_factor_mean_7d",
+  "observed_net_exchange_lag_168h",
+  "observed_net_exchange_mean_24h_to_cutoff",
+  "observed_corridor_flow_ne_se_lag_168h",
+  "observed_corridor_flow_n_ne_lag_168h",
+  "observed_reason_share_ene_7d",
+  "observed_reason_share_cnf_7d",
+  "observed_reason_share_rel_7d",
 ];
 
 /**
@@ -188,6 +288,21 @@ const DAY_GRAIN_COLUMNS: readonly string[] = [
   "capacity_solar_mw",
   "capacity_wind_added_28d_mw",
   "capacity_solar_added_28d_mw",
+  // Class `K`'s trailing windows. These are anchored to `actuals_cutoff` rather
+  // than to the target hour, so they carry one value for the whole target date
+  // — and the marking matters more here than for capacity, because a lagged
+  // *level* beside a trailing *window* looks like two hourly series until
+  // somebody says otherwise. The same-hour mean is **not** in this list: its
+  // window is anchored to the cutoff but selected by the target's local hour, so
+  // it genuinely varies across the day.
+  "observed_constrained_off_hours_above_threshold_7d",
+  "observed_constrained_off_total_7d_mwh",
+  "observed_wind_capacity_factor_mean_7d",
+  "observed_solar_capacity_factor_mean_7d",
+  "observed_net_exchange_mean_24h_to_cutoff",
+  "observed_reason_share_ene_7d",
+  "observed_reason_share_cnf_7d",
+  "observed_reason_share_rel_7d",
 ];
 
 /** The grain of one column. Hourly is the default because the row is. */
