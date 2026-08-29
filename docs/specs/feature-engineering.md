@@ -641,7 +641,9 @@ real lag before either set is trusted.
 >   trained on a value it will not have at serve time is the exact leak this
 >   spec exists to prevent, not a convenience.
 > - **The consequence at `gate_early` is a column of NULLs, and it is real.**
->   D−1 09:00 BRT is four hours before the assumed publication, so every
+>   D−1 09:00 BRT is six hours before the assumed publication — the four hours
+>   above are `gate_late`'s clearance, and this line said four until ticket 09
+>   subtracted them again — so every
 >   `programmed_*` (and, downstream, every `proxy_*`) column is NULL at the early
 >   gate. `dessem_free_v1` has its spine at `gate_late` across the full
 >   2021-03-05 → now coverage and does **not** have one at `gate_early`. That is
@@ -669,6 +671,45 @@ real lag before either set is trusted.
 > difference. `programmed_load_daily_min_mwh` and `programmed_load_rank_in_day`
 > are NULL unless the profile has all 24 hours, and the rank is **ascending** —
 > 1 is the day's trough — so it points the same way as the minimum beside it.
+
+> **Settled while implementing ticket 09.** The seven `proxy_*` rows above are
+> built by `feature_proxy_residual_load_block` in
+> `drizzle/0030_the_proxy_residual_load.sql`. Four decisions the table left
+> open, and one consequence restated because it is the whole point:
+>
+> - **The block composes the two blocks it needs rather than re-reading their
+>   sources.** It calls `feature_programmed_load_block` and
+>   `feature_weather_block` and names no view at all, which is the same trade
+>   `0025` and `0029` took with `feature_capacity_block`: a second evaluation,
+>   bought for one definition of "the programme at the gate" and one of "the
+>   expected generation at the gate". The identity
+>   `proxy_residual_load_mwh = programmed_load_mwh − weather_expected_wind_mwh −
+>   weather_expected_solar_mwh` therefore holds *inside a row*, and
+>   `database-features.test.ts` asserts it row by row.
+> - **Every term, or nothing.** All three terms are required and none is
+>   coalesced to zero. A subsystem the registry places no VRE in at the gate
+>   carries no proxy residual load, rather than a programmed load with two
+>   zeroes taken off it — the same rule `0025` states at the capacity factors,
+>   because "the fleet is unknown here" and "the fleet generates nothing" are
+>   different statements and only one of them is a number.
+> - **The profile is the calendar day, because the narrower parent decides.**
+>   The weather run carries 23:00 BRT on D−1 and 00:00 on D in one publication;
+>   the programme does not. So `proxy_residual_load_ramp_1h` is NULL at the first
+>   hour of D — the class-`P` edge, inherited — and the day-grain pair is NULL
+>   unless all 24 hours reconstructed.
+> - **The family is in both feature sets.** Nothing in the block is conditioned
+>   on the feature set, so `dessem_augmented_v1` carries the proxy family beside
+>   the DESSEM one and the A/B compares two *views* of residual load rather than
+>   two disjoint sets.
+> - **At `gate_early` all seven columns are NULL, and that is the finding rather
+>   than a defect to repair.** The programme they subtract from is NULL there,
+>   and the weather half of the reconstruction is present at the same gate — so
+>   the hole is unambiguously the publication instant's. Reaching for an earlier
+>   hour, or substituting a load forecast of our own, would put a value in the
+>   column that the served model will not have at 09:00. Issue 12's measurement
+>   is what closes it. Until then set A's most important feature exists at
+>   `gate_late` only, and the early-gate arm of the A/B is weaker than the table
+>   above assumes.
 
 #### DESSEM — class `D`, `dessem_augmented_v1` only
 
