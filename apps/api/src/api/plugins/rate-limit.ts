@@ -1,4 +1,6 @@
 import { Elysia } from "elysia";
+import { envelope } from "../../errors.js";
+import { requestIdOf } from "./request-context.js";
 
 /**
  * Fixed-window, per-client rate limiting for the expensive scrape surface.
@@ -85,11 +87,22 @@ export const rateLimit = (options: RateLimitOptions) => {
       );
       const { limited, retryAfterSec } = consume(windows, key, now, options);
       if (limited) {
-        set.status = 429;
-        set.headers["retry-after"] = String(retryAfterSec);
-        return {
-          error: "Too many requests — this endpoint is rate limited. Try again shortly.",
-        };
+        // The envelope, not a bare string: a 429 is the failure a client is
+        // most likely to handle programmatically, so it is the last one that
+        // should arrive in a shape of its own. `Retry-After` still travels —
+        // the header says how long, the code says why.
+        const mapped = envelope(
+          "RATE_LIMITED",
+          "Too many requests — this endpoint is rate limited. Try again shortly.",
+          {
+            details: { retry_after_sec: retryAfterSec },
+            requestId: requestIdOf(request),
+            retryAfterSec,
+          },
+        );
+        set.status = mapped.status;
+        set.headers["retry-after"] = String(mapped.retryAfterSec ?? retryAfterSec);
+        return mapped.body;
       }
     })
     .as("global");

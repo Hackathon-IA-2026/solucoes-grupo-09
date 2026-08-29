@@ -19,6 +19,11 @@ COPY packages/core/package.json ./packages/core/
 COPY packages/ui/package.json ./packages/ui/
 RUN bun install --frozen-lockfile --production --filter=wattsteer-api
 
+# The shared package's source, not just its manifest. `@wattsteer/core` resolves
+# to `packages/core/src`, so copying only the package.json installs a workspace
+# link pointing at nothing and the container dies on first import.
+COPY packages/core/src ./packages/core/src
+
 WORKDIR /app/apps/api
 
 # Application source.

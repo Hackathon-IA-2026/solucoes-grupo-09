@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from "bun:test";
 import type { Server } from "bun";
 import { callMl, type MlEndpoint } from "../src/api/ml-proxy.js";
-import { type ErrorCode, type ErrorStatus, toHttpError } from "../src/errors.js";
+import { type ErrorCode, type ErrorStatus, toErrorEnvelope } from "../src/errors.js";
 
 // The module's whole purpose is that a caller can tell whose fault a failure
 // was, so these tests are one per failure branch and each asserts the pair the
@@ -42,8 +42,8 @@ async function outcome(
   try {
     await callMl("/v1/optimize", new URLSearchParams(), ep);
   } catch (error) {
-    const { status, body } = toHttpError(error);
-    return { status, code: body.code, details: body.details };
+    const { status, body } = toErrorEnvelope(error);
+    return { status, code: body.error.code, details: body.error.details };
   }
   throw new Error("expected callMl to throw");
 }

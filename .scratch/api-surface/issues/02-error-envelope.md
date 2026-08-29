@@ -51,7 +51,7 @@ ever be.
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Every error response, including validation failures and not-found, uses the one envelope
 - [ ] The code enum is closed, published in the shared package, and importable by both the gateway and the web app

@@ -1,6 +1,6 @@
 import { type ConnectionOptions, Queue, Worker } from "bullmq";
 import { Redis } from "ioredis";
-import { toHttpError } from "../errors.js";
+import { clientSafeMessage } from "../errors.js";
 import type {
   Execute,
   JobProgress,
@@ -111,7 +111,7 @@ export function createBullMqRunner<TPayload, TResult>(
           });
         } catch (err) {
           // Persist only a client-safe message as the job's failedReason.
-          throw new Error(toHttpError(err).body.error);
+          throw new Error(clientSafeMessage(err));
         }
       },
       { connection: connection(workerConn), concurrency: opts.concurrency ?? 2 },

@@ -41,6 +41,101 @@ export const pt: Copy = {
     back: "Voltar para o WattSteer",
   },
 
+  error: {
+    // Os erros do próprio gateway
+    BAD_INPUT: "Havia algo errado nessa requisição.",
+    REQUEST_INVALID: "Essa requisição não corresponde ao que este endpoint aceita.",
+    ROUTE_NOT_FOUND: "Esse endereço não existe nesta API.",
+    INTERNAL: "Algo deu errado do nosso lado. O erro foi registrado.",
+    UPSTREAM_UNAVAILABLE: "Uma fonte de dados da qual dependemos não respondeu.",
+    SERVICE_BUSY: "O WattSteer está no limite de capacidade. Tente de novo em instantes.",
+    PAYLOAD_TOO_LARGE: "Essa requisição é maior do que este endpoint aceita.",
+
+    // Os quatro estados de "sem previsão", e a falha de publicação ao lado deles
+    FORECAST_NOT_YET_PUBLISHED:
+      "A previsão desse dia ainda não foi publicada — o horário de corte ainda não passou.",
+    FORECAST_UNAVAILABLE:
+      "O horário de corte passou e nenhuma previsão foi gravada para esse dia. Isso é uma falha de publicação nossa, não um resultado vazio.",
+    MODEL_UNAVAILABLE:
+      "Nenhum modelo está promovido para atendimento, então nenhuma previsão é oferecida. Os painéis do que foi observado seguem valendo.",
+    DATA_UNAVAILABLE:
+      "Não conseguimos alcançar nosso banco de dados. Tente de novo em instantes.",
+    DIAGNOSIS_UNAVAILABLE:
+      "Esse dia tem previsão, mas nenhuma explicação foi calculada para ele.",
+
+    // O que esta superfície recusa
+    SUBSYSTEM_UNKNOWN: "Esse não é um dos quatro subsistemas.",
+    TARGET_DATE_OUT_OF_RANGE:
+      "Essa data está fora da janela que o WattSteer cobre — nada antes do início dos dados, e nada depois de amanhã.",
+    DATE_RANGE_TOO_LARGE:
+      "Esse intervalo de datas é maior do que uma única requisição pode pedir.",
+    GATE_PROFILE_UNKNOWN: "Esse não é um dos horários de publicação.",
+    LOCALE_UNSUPPORTED: "O WattSteer responde apenas em português e inglês.",
+    RATE_LIMITED: "Requisições demais. Espere um momento e tente de novo.",
+
+    // O serviço de modelagem
+    OPTIMIZER_NOT_CONFIGURED:
+      "O otimizador não está configurado nesta instalação, então cenários não podem ser resolvidos aqui.",
+    OPTIMIZER_UNAVAILABLE: "Não foi possível alcançar o otimizador.",
+    OPTIMIZER_TIMEOUT: "O otimizador não respondeu a tempo.",
+    OPTIMIZER_NOT_READY: "O otimizador está subindo e ainda não consegue resolver.",
+    UPSTREAM_REJECTED: "O otimizador recusou essa requisição.",
+    UPSTREAM_FAILED: "O otimizador falhou nessa requisição.",
+
+    // A resolução
+    SOLVER_GAP_UNCLOSED:
+      "O solver esgotou o tempo antes de provar que a resposta era ótima, então nenhum despacho é oferecido.",
+    SOLVER_TIMEOUT: "O solver desistiu de esperar por esse cenário.",
+    SOLVER_BUG: "Esse cenário quebrou o solver. O erro foi registrado.",
+
+    // A tabela de validação do cenário
+    SCENARIO_VERSION_UNSUPPORTED: "Esse cenário foi escrito para outra versão.",
+    SCENARIO_TOO_LARGE: "Esse cenário é maior do que o limite publicado.",
+    ASSET_TYPE_UNKNOWN: "Esse não é um tipo de ativo que o otimizador conhece.",
+    SUBSYSTEM_MISMATCH:
+      "Todos os ativos de um cenário precisam estar no mesmo subsistema.",
+    FIELD_NOT_ON_VARIANT: "Esse campo não pertence a este tipo de ativo.",
+    MAGNITUDE_OUT_OF_RANGE: "Esse valor está fora da faixa que o otimizador aceita.",
+    RTE_OUT_OF_RANGE: "Uma eficiência de ciclo completo precisa ficar entre 0 e 1.",
+    EFFICIENCY_PAIR_INCOMPLETE:
+      "As eficiências de carga e descarga são informadas juntas ou nenhuma das duas.",
+    SOC_BOUNDS_INVALID: "O estado de carga mínimo precisa ficar abaixo do máximo.",
+    SOC_INITIAL_OUT_OF_BOUNDS:
+      "O estado de carga inicial está fora dos próprios limites.",
+    POWER_LIMIT_INCONSISTENT: "Esses limites de potência se contradizem.",
+    SHIFT_EXCEEDS_CONNECTION:
+      "Esse deslocamento é maior do que a conexão consegue transportar.",
+    SHIFT_EXCEEDS_BASELINE: "Esse deslocamento é maior do que a carga que ele moveria.",
+    SHIFT_WINDOW_OUT_OF_RANGE: "Essa janela de deslocamento não cabe dentro de um dia.",
+    RECOVERY_TIME_OUT_OF_RANGE: "Esse tempo de recuperação está fora da faixa aceita.",
+    AVAILABILITY_INVALID:
+      "A disponibilidade precisa ser informada para cada hora, entre 0 e 1.",
+    ECONOMIC_ASSUMPTION_OUT_OF_RANGE:
+      "Essa premissa econômica está fora da faixa que o otimizador aceita.",
+
+    // As cinco recusas do Replay
+    REPLAY_DATE_BEFORE_HOLDOUT_WINDOW:
+      "Esse dia estava dentro da janela de treino do modelo, então repeti-lo inflaria o resultado. Só o que foi observado é mostrado para ele.",
+    REPLAY_DATE_OUT_OF_RANGE:
+      "Esse dia não pode ser repetido — ele ainda não está fechado.",
+    REPLAY_FORECAST_UNAVAILABLE:
+      "Não existe previsão fora da amostra guardada para esse dia.",
+    REPLAY_OBSERVATION_INCOMPLETE:
+      "O ONS ainda não fechou todas as horas desse dia, então ele não pode ser avaliado.",
+    REPLAY_INTEGRITY_VIOLATION:
+      "Não conseguimos provar que esse dia ficou fora do treino, então nada é mostrado para ele. O caso foi registrado.",
+  },
+
+  noForecast: {
+    notYetPublished:
+      "A visão de amanhã é publicada às {gate}. O que está abaixo é a previsão de hoje.",
+    noPromotedArtifact:
+      "Nenhum modelo está promovido para atendimento, então nada é previsto. O que foi observado segue valendo, e a Máquina do Tempo continua funcionando.",
+    stale: "Publicada {age} — antes do horário de corte mais recente.",
+    unavailable:
+      "O serviço de previsão está inacessível no momento. Tente de novo em instantes.",
+  },
+
   hero: {
     eyebrow: "Previsão de curtailment para o dia seguinte · rede brasileira",
     headline: {

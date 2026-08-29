@@ -62,6 +62,111 @@ export const en = {
     back: "Back to WattSteer",
   },
 
+  /**
+   * One sentence per error code, and one per "no forecast" state.
+   *
+   * The API answers every failure with `{ error: { code, message, … } }`. The
+   * `code` is a member of a closed enum published in `@wattsteer/core/errors`;
+   * the `message` beside it is **English developer prose for logs and `/docs`
+   * and is never rendered**. What a reader sees is `t("error." + code)` — this
+   * table — which is why the table has to be exhaustive: a code with no key is
+   * a screen with no sentence, and `apps/web/test/error-copy.test.ts` fails the
+   * build rather than let one ship.
+   *
+   * `noForecast` is the other half of the same contract. "Not published yet",
+   * "no promoted artifact", "stale" and "the gateway is down" are four
+   * different sentences, and the whole point of the error contract is that a
+   * screen must not collapse them into one spinner. Three of the four have a
+   * code; the fourth — stale — is a `200`, because a forecast from this
+   * morning is a real forecast, so it has a sentence here and no code anywhere.
+   */
+  error: {
+    // The gateway's own
+    BAD_INPUT: "Something in that request wasn't right.",
+    REQUEST_INVALID: "That request didn't match what this endpoint accepts.",
+    ROUTE_NOT_FOUND: "That address doesn't exist on this API.",
+    INTERNAL: "Something went wrong on our side. It has been logged.",
+    UPSTREAM_UNAVAILABLE: "A data source we depend on didn't answer.",
+    SERVICE_BUSY: "WattSteer is at capacity right now. Try again shortly.",
+    PAYLOAD_TOO_LARGE: "That request was larger than this endpoint accepts.",
+
+    // The four "no forecast" states, and the publication failure beside them
+    FORECAST_NOT_YET_PUBLISHED:
+      "That day's forecast hasn't been published yet — its gate hasn't passed.",
+    FORECAST_UNAVAILABLE:
+      "The gate passed but no forecast was written for that day. This is a publication failure on our side, not an empty result.",
+    MODEL_UNAVAILABLE:
+      "No promoted model is serving right now, so no forecast is offered. The observed panels are unaffected.",
+    DATA_UNAVAILABLE: "We couldn't reach our database. Try again shortly.",
+    DIAGNOSIS_UNAVAILABLE:
+      "That day has a forecast but no explanation was computed for it.",
+
+    // What this surface refuses
+    SUBSYSTEM_UNKNOWN: "That isn't one of the four subsystems.",
+    TARGET_DATE_OUT_OF_RANGE:
+      "That date is outside the window WattSteer covers — nothing before the data opens, and nothing past tomorrow.",
+    DATE_RANGE_TOO_LARGE: "That date range is longer than a single request may ask for.",
+    GATE_PROFILE_UNKNOWN: "That isn't one of the publication gates.",
+    LOCALE_UNSUPPORTED: "WattSteer answers in Portuguese and English only.",
+    RATE_LIMITED: "Too many requests. Wait a moment and try again.",
+
+    // The modelling service
+    OPTIMIZER_NOT_CONFIGURED:
+      "The optimizer isn't configured in this deployment, so scenarios can't be solved here.",
+    OPTIMIZER_UNAVAILABLE: "The optimizer couldn't be reached.",
+    OPTIMIZER_TIMEOUT: "The optimizer didn't answer in time.",
+    OPTIMIZER_NOT_READY: "The optimizer is starting up and can't solve yet.",
+    UPSTREAM_REJECTED: "The optimizer refused that request.",
+    UPSTREAM_FAILED: "The optimizer failed on that request.",
+
+    // The solve
+    SOLVER_GAP_UNCLOSED:
+      "The solver ran out of time before it could prove the answer optimal, so no dispatch is offered.",
+    SOLVER_TIMEOUT: "The solver gave up waiting on that scenario.",
+    SOLVER_BUG: "That scenario broke the solver. It has been logged.",
+
+    // The scenario's validation table
+    SCENARIO_VERSION_UNSUPPORTED: "That scenario was written for another version.",
+    SCENARIO_TOO_LARGE: "That scenario is larger than the published limit.",
+    ASSET_TYPE_UNKNOWN: "That isn't an asset type the optimizer knows.",
+    SUBSYSTEM_MISMATCH: "Every asset in a scenario has to sit in the same subsystem.",
+    FIELD_NOT_ON_VARIANT: "That field doesn't belong to this kind of asset.",
+    MAGNITUDE_OUT_OF_RANGE: "That value is outside the range the optimizer accepts.",
+    RTE_OUT_OF_RANGE: "A round-trip efficiency has to sit between 0 and 1.",
+    EFFICIENCY_PAIR_INCOMPLETE:
+      "Charge and discharge efficiency are given together or not at all.",
+    SOC_BOUNDS_INVALID: "The minimum state of charge has to sit below the maximum.",
+    SOC_INITIAL_OUT_OF_BOUNDS:
+      "The starting state of charge sits outside its own bounds.",
+    POWER_LIMIT_INCONSISTENT: "Those power limits contradict each other.",
+    SHIFT_EXCEEDS_CONNECTION: "That shift is larger than the connection can carry.",
+    SHIFT_EXCEEDS_BASELINE: "That shift is larger than the load it would move.",
+    SHIFT_WINDOW_OUT_OF_RANGE: "That shifting window doesn't fit inside a day.",
+    RECOVERY_TIME_OUT_OF_RANGE: "That recovery time is outside the accepted range.",
+    AVAILABILITY_INVALID: "Availability has to be given for every hour, between 0 and 1.",
+    ECONOMIC_ASSUMPTION_OUT_OF_RANGE:
+      "That economic assumption is outside the range the optimizer accepts.",
+
+    // Replay's five refusals
+    REPLAY_DATE_BEFORE_HOLDOUT_WINDOW:
+      "That day was inside the model's training window, so replaying it would flatter the score. Only observed data is shown for it.",
+    REPLAY_DATE_OUT_OF_RANGE: "That day can't be replayed — it isn't settled yet.",
+    REPLAY_FORECAST_UNAVAILABLE: "No held-out forecast exists for that day.",
+    REPLAY_OBSERVATION_INCOMPLETE:
+      "ONS hasn't settled every hour of that day yet, so it can't be scored.",
+    REPLAY_INTEGRITY_VIOLATION:
+      "We couldn't prove that day was held out of training, so nothing is shown for it. It has been logged.",
+  },
+
+  noForecast: {
+    notYetPublished:
+      "Tomorrow's view publishes at {gate}. What's below is today's forecast.",
+    noPromotedArtifact:
+      "No model is promoted for serving, so nothing is forecast. What was observed is unaffected, and the Time Machine still works.",
+    stale: "Published {age} — before the most recent gate.",
+    unavailable: "The forecast service is unreachable right now. Try again shortly.",
+  },
+
   hero: {
     eyebrow: "Day-ahead curtailment forecast · Brazilian grid",
     headline: {

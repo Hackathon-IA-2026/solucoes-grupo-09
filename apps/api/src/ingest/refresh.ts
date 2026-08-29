@@ -1,7 +1,7 @@
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import type { Database } from "../database/connection.js";
 import { ingestionRun, resourceRepublication } from "../database/schema.js";
-import { toHttpError } from "../errors.js";
+import { clientSafeMessage } from "../errors.js";
 import type { Execute, ReportProgress } from "../jobs/index.js";
 import { DEFAULT_AREA_CODES } from "./load-job.js";
 import { DESSEM_COVERAGE_START } from "./ons/dessem-balance.js";
@@ -490,7 +490,7 @@ export function createRefreshSweep(
             .where(eq(ingestionRun.id, runId));
         }
       } catch (error) {
-        const message = toHttpError(error).body.error;
+        const message = clientSafeMessage(error);
         result.failed += 1;
         result.failures.push({ source, period: periodLabel, error: message });
         if (runId) {
