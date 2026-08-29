@@ -63,7 +63,9 @@ describe("the web bundle can resolve @wattsteer/core", () => {
     const orphans = files
       .map((name) => name.replace(/\.ts$/, ""))
       .filter((name) => {
-        if (barrel.includes(`from "./${name}.js"`)) return false;
+        if (barrel.includes(`from "./${name}.js"`)) {
+          return false;
+        }
         const specifier = `from "./${name}.js"`;
         return !sources.some((text) => text.includes(specifier));
       })
