@@ -17,6 +17,7 @@ import {
   rateLimit,
   tiersFrom,
 } from "../src/api/plugins/rate-limit.js";
+import { config } from "../src/config.js";
 import type { ErrorEnvelope } from "../src/errors.js";
 
 /**
@@ -59,6 +60,19 @@ describe("clientKey · the hop a trusted proxy set", () => {
     expect(clientKey(null, "192.168.1.5")).toBe("192.168.1.5");
     expect(clientKey("", "192.168.1.5")).toBe("192.168.1.5");
     expect(clientKey("   ", "192.168.1.5")).toBe("192.168.1.5");
+  });
+});
+
+describe("the published budgets", () => {
+  test("are the three the spec publishes", () => {
+    // 120 / 30 burst 10 / 200 a day. Invented constants, placed where being
+    // wrong is conservative — but published, so they are asserted.
+    expect(config.rateLimitMax).toBe(120);
+    expect(config.rateLimitWindowMs).toBe(60_000);
+    expect(config.rateLimitSolveMax).toBe(30);
+    expect(config.rateLimitSolveBurst).toBe(10);
+    expect(config.narrationDailyCap).toBe(200);
+    expect(config.trustedProxyDepth).toBe(1);
   });
 });
 
