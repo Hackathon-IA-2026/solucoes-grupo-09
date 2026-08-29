@@ -39,7 +39,7 @@ What it measures:
 **Blocked by:** 05 — the configured lag table it measures against. 06 — the
 day-ahead programme whose timing is the open question.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] A scheduled job measures the real publication lag per observation dataset and fails when it exceeds the configured constant
 - [ ] Loosening a lag after measurement is recorded as a retrain trigger, with the feature-distribution change acknowledged
