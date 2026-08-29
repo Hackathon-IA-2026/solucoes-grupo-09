@@ -43,6 +43,13 @@
       "when": 1787961441327,
       "tag": "0005_glorious_leopardon",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787962707255,
+      "tag": "0006_silent_brother_voodoo",
+      "breakpoints": true
     }
   ]
 }

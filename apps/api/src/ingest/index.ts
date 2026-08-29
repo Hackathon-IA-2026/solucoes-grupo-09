@@ -1,3 +1,37 @@
+// ANEEL SIGA (ODbL 1.0) — coordinates, municipality and ownership, and nothing
+// else. Appended rather than merged into the blocks above so that two adapters
+// landing at once cannot conflict on this file.
+export {
+  ANEEL_CKAN_BASE,
+  fetchAneelPackage,
+  SIGA_DATASET_SLUG,
+  selectDailySigaResource,
+} from "./aneel/catalogue.js";
+export {
+  assertMatchRate,
+  DEFAULT_MATCH_RATE_FLOOR,
+  DEFAULT_MATCH_RATE_TOLERANCE,
+  type MatchOptions,
+  measureMatchRate,
+} from "./aneel/match-rate.js";
+export {
+  BRAZIL_BBOX,
+  classifyCoordinate,
+  FLEET_MIN_CAPACITY_KW,
+  FLEET_TECHNOLOGIES,
+  isFleetScale,
+  type MunicipalityCentroidSource,
+  municipalityCentroids,
+  municipalityKey,
+  OPERATING_PHASE,
+  parseAneelDecimal,
+  parseMunicipalities,
+  parseSigaCsv,
+  type ResolveLocationsOptions,
+  resolveLocations,
+  type SigaFleetSummary,
+  summariseSigaFleetCapacity,
+} from "./aneel/siga.js";
 export {
   acquireBulkResource,
   BULK_STEPS,
@@ -247,8 +281,31 @@ export {
   markResourceFetched,
   recordResourceVersion,
 } from "./resource-version.js";
+export {
+  createSigaIngestor,
+  type IngestSigaPayload,
+  type IngestSigaResult,
+  type SigaIngestorDeps,
+} from "./siga-job.js";
+export {
+  findWithdrawnPlants,
+  type PlantLocationQuery,
+  type PlantLocationResult,
+  type PlantLocationWrite,
+  plantLocationDigest,
+  readCurrentPlantLocations,
+  readPlantLocationsAsOf,
+  readPreviousMatchRate,
+  readRegistryPlantKeys,
+  recordSigaSnapshot,
+  type SigaSnapshotRecord,
+  type StoredPlantLocation,
+  writePlantLocations,
+} from "./siga-repository.js";
 export { ONS_TIME_ZONE, zonedWallClockToUtc } from "./time.js";
 export type {
+  Coordinate,
+  CoordinateRejection,
   CurtailmentParse,
   CurtailmentReportHour,
   DessemBalanceHalfHour,
@@ -256,14 +313,21 @@ export type {
   EnergyBalanceHour,
   EnergyBalanceParse,
   LoadParse,
+  Municipality,
   ObservedReportingEntity,
+  PlantLocationSource,
   ProgrammedLoadHalfHour,
   ReasonCode,
+  RegistryPlantKey,
   RejectedRow,
   RejectionReason,
   ReportingEntityKind,
+  ResolvedPlantLocation,
   RestrictionCause,
   RestrictionOrigin,
+  SigaMatchRate,
+  SigaParse,
+  SigaRegistration,
   Technology,
   VerifiedLoadHalfHour,
 } from "./types.js";

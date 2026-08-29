@@ -1,0 +1,18 @@
+{
+  "accept-ranges": "bytes",
+  "cache-control": "no-cache, public, max-age=0, must-revalidate",
+  "content-disposition": "inline; filename=siga-empreendimentos-geracao-diario.csv",
+  "content-length": "8446772",
+  "content-type": "text/csv",
+  "date": "Sat, 29 Aug 2026 00:12:18 GMT",
+  "etag": "\"1787913722.5088766-8446772-1847136755\"",
+  "last-modified": "Fri, 28 Aug 2026 10:42:02 GMT",
+  "permissions-policy": "geolocation=(), microphone=(), camera=()",
+  "referrer-policy": "strict-origin-when-cross-origin",
+  "server": "nginx",
+  "strict-transport-security": "max-age=31536000; includeSubDomains",
+  "vary": "Cookie",
+  "x-content-type-options": "nosniff",
+  "x-frame-options": "SAMEORIGIN",
+  "x-xss-protection": "1; mode=block"
+}
