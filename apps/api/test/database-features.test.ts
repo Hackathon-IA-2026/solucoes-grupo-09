@@ -9,11 +9,18 @@ import {
   assertWeatherCompleteness,
   FEATURE_ROW_COLUMNS,
   type FeatureRow,
+  featureGrain,
   isFeatureColumn,
+  isLabelColumn,
   loadCalendar,
   loadCalendarArtifact,
+  readAbConfigurations,
   readCapacityWeightsAsOf,
+  readDroppedFeatures,
+  readExpectedRowCount,
+  readFeatureDictionary,
   readFeatureRows,
+  readFeatureSetModelInputs,
   readServingRows,
   ServingCompletenessError,
 } from "../src/features/index.js";
@@ -577,6 +584,16 @@ suite("the gate, end to end (real Postgres)", () => {
   const rowsForDay = (targetDate: string) =>
     readFeatureRows(db, { targetFrom: targetDate, targetTo: targetDate, ...query });
 
+  /**
+   * The constrained-off resource version this suite writes under.
+   *
+   * Captured out of `beforeAll` because ticket 11's frame test writes one more
+   * observation of its own, inside a transaction it rolls back — and a row
+   * written under a second version would be a second file rather than another
+   * hour of the same one.
+   */
+  let curtailmentVersionId = "";
+
   beforeAll(async () => {
     await db.execute(sql`truncate table weather_forecast_hour`);
     await db.execute(sql`truncate table weather_run_request cascade`);
@@ -599,6 +616,7 @@ suite("the gate, end to end (real Postgres)", () => {
         changeKey: `features-test|${Date.now()}`,
       })
       .returning({ id: onsResourceVersion.id });
+    curtailmentVersionId = version?.id ?? "";
 
     // Ticket 03's inputs, seeded here on purpose rather than left empty.
     //
@@ -2769,8 +2787,17 @@ suite("the gate, end to end (real Postgres)", () => {
   // Run for both feature sets, because the augmented set is the only one in
   // which twenty-one of the columns exist at all — and an ablation that never
   // asked for them would pass on a DESSEM leak without noticing.
+  //
+  // Ticket 11 gave it a gate: set A exists at *both* profiles, and an ablation
+  // run only at the late one says nothing about the early one — where the gate
+  // is ten hours earlier, the cutoff ten hours further back, and a different
+  // set of source rows is invisible. The two instants travel together because
+  // the cutoff is derived from the gate.
   const ablate = async (
     featureSet: "dessem_free_v1" | "dessem_augmented_v1",
+    gateProfile: "gate_early" | "gate_late" = "gate_late",
+    gateAt: Date = GATE_LATE,
+    cutoffAt: Date = CUTOFF,
   ): Promise<{
     before: FeatureRow[];
     after: FeatureRow[];
@@ -2778,7 +2805,7 @@ suite("the gate, end to end (real Postgres)", () => {
     deletedFromDessem: number;
     deletedPastCutoff: number;
   }> => {
-    const asked = { ...query, featureSet } as const;
+    const asked = { ...query, featureSet, gateProfile } as const;
     const before = await readServingRows(db, { targetDate: TARGET, ...asked });
     let after: FeatureRow[] = [];
     let deleted = 0;
@@ -2810,8 +2837,8 @@ suite("the gate, end to end (real Postgres)", () => {
           const removed = await scoped.execute<{ n: number }>(sql`
             with gone as (
               delete from ${sql.raw(table)}
-              where published_at > ${GATE_LATE.toISOString()}::timestamptz
-                 or ingested_at > ${GATE_LATE.toISOString()}::timestamptz
+              where published_at > ${gateAt.toISOString()}::timestamptz
+                 or ingested_at > ${gateAt.toISOString()}::timestamptz
               returning 1
             ) select count(*)::int as n from gone
           `);
@@ -2837,7 +2864,7 @@ suite("the gate, end to end (real Postgres)", () => {
           const removed = await scoped.execute<{ n: number }>(sql`
             with gone as (
               delete from ${sql.raw(table)}
-              where valid_time > ${CUTOFF.toISOString()}::timestamptz
+              where valid_time > ${cutoffAt.toISOString()}::timestamptz
               returning 1
             ) select count(*)::int as n from gone
           `);
@@ -2916,6 +2943,544 @@ suite("the gate, end to end (real Postgres)", () => {
         new Date(row.valid_time).getTime() === HOUR_CURTAILED.getTime(),
     );
     expect(curtailedAfter?.y_constrained_off_total_mwh).toBeNull();
+  });
+
+  it("seam 1 — and at the early gate, where set A is the only set there is", async () => {
+    // Set A exists at both profiles and the augmented set at neither but the
+    // late one, so "both sets at both applicable gates" is three calls and not
+    // four. This is the third: ten hours earlier, a cutoff ten hours further
+    // back, and twelve columns that are NULL here and not at `gate_late`.
+    const early = { ...query, gateProfile: "gate_early" } as const;
+    const trained = await readFeatureRows(db, {
+      targetFrom: TARGET_MINUS_1,
+      targetTo: TARGET,
+      ...early,
+    });
+    const served = await readServingRows(db, { targetDate: TARGET, ...early });
+
+    const trainedForTarget = trained.filter((row) =>
+      String(row.target_date).includes(TARGET),
+    );
+    expect(served.length).toBe(96);
+    expect(trainedForTarget).toHaveLength(served.length);
+    expect(trained.length).toBe(served.length * 2);
+    // Non-vacuous, and it is the whole difference between the two gates: the
+    // early rows really are the early rows.
+    expect(served.every((row) => row.gate_profile === "gate_early")).toBe(true);
+    expect(served.every((row) => row.programmed_load_mwh === null)).toBe(true);
+
+    const byKey = new Map(trainedForTarget.map((row) => [keyOf(row), comparable(row)]));
+    for (const row of served) {
+      expect(byKey.get(keyOf(row))).toEqual(comparable(row));
+    }
+  });
+
+  it("seam 2 — and the early gate's own ablation, at its own cutoff", async () => {
+    // `gate_at(TARGET, 'gate_early')` is D−1 09:00 BRT = 12:00Z, and the
+    // cutoff forty hours behind it is 2026-08-17 20:00Z. Both move together
+    // because one is derived from the other, which is exactly the property the
+    // ablation is testing: delete what *this* gate could not have seen, and
+    // nothing the row calls a feature may move.
+    const gate = new Date("2026-08-19T12:00:00.000Z");
+    const cutoff = new Date("2026-08-17T20:00:00.000Z");
+    const { before, after, deleted, deletedPastCutoff } = await ablate(
+      "dessem_free_v1",
+      "gate_early",
+      gate,
+      cutoff,
+    );
+
+    expect(deleted).toBeGreaterThan(0);
+    // Non-vacuous on the axis the early gate moves furthest: the cutoff is ten
+    // hours further back than `gate_late`'s, so it excludes strictly more.
+    expect(deletedPastCutoff).toBeGreaterThan(0);
+    expect(after).toHaveLength(before.length);
+
+    const byKey = new Map(
+      after.map((row) => [keyOf(row), featuresOnly(comparable(row))]),
+    );
+    for (const row of before) {
+      expect(byKey.get(keyOf(row))).toEqual(featuresOnly(comparable(row)));
+    }
+  });
+
+  // ------------------------------------------- seam 3, the frame's own edge
+  it("ends the trailing frame AT the cutoff, and not one hour past it", async () => {
+    // The off-by-one the spec names first: `168 PRECEDING AND 1 PRECEDING`
+    // versus `... AND CURRENT ROW` is one token, and it decides whether a
+    // feature is honest. The fixture's decoys straddle the cutoff by three
+    // hours and six; this one straddles it by nothing at all, which is where a
+    // `<` written as `<=` — or the reverse — is invisible.
+    //
+    // The rule is `valid_time <= actuals_cutoff`, so the hour *at* the cutoff
+    // is in and the hour after it is out.
+    const before = await readServingRows(db, { targetDate: TARGET, ...query });
+    const totalBefore = Number(
+      before.find(
+        (row) =>
+          row.subsystem === "NE" &&
+          new Date(row.valid_time).getTime() === HOUR_CURTAILED.getTime(),
+      )?.observed_constrained_off_total_7d_mwh,
+    );
+    expect(totalBefore).toBe(15);
+
+    /** One hand-built observation at `at`, then the window it lands in. */
+    const withAnHourAt = async (at: Date): Promise<number> => {
+      let total = Number.NaN;
+      try {
+        await db.transaction(async (tx) => {
+          const scoped = tx as unknown as Database;
+          await writeCurtailment(scoped, {
+            rows: [observed(at, "WIND", 100)],
+            publishedAt: OBSERVED_INGESTED_AT,
+            publishedAtPrecision: "file",
+            sourceVersionId: curtailmentVersionId,
+            ingestedAt: OBSERVED_INGESTED_AT,
+          });
+          const rows = await readServingRows(scoped, { targetDate: TARGET, ...query });
+          total = Number(
+            rows.find(
+              (row) =>
+                row.subsystem === "NE" &&
+                new Date(row.valid_time).getTime() === HOUR_CURTAILED.getTime(),
+            )?.observed_constrained_off_total_7d_mwh,
+          );
+          tx.rollback();
+        });
+      } catch (error) {
+        if (!(error instanceof Error && /rollback/i.test(error.message))) {
+          throw error;
+        }
+      }
+      return total;
+    };
+
+    // The hour *at* the cutoff is inside the frame; the hour after it is not.
+    // One hour apart, and the whole difference is which side of `<=` it falls.
+    expect(await withAnHourAt(CUTOFF)).toBe(totalBefore + 100);
+    expect(await withAnHourAt(new Date(CUTOFF.getTime() + 3_600_000))).toBe(totalBefore);
+  });
+
+  // --------------------------------------------------- the dictionary, live
+  it("describes every column of the row, from the type rather than from a list", async () => {
+    const dictionary = await readFeatureDictionary(db);
+
+    // Names, order and types all come from `pg_attribute`, so this is the
+    // catalogue's own list compared against TypeScript's copy of it.
+    expect(dictionary).toHaveLength(111);
+    expect(dictionary.map((entry) => entry.column_name)).toEqual([
+      ...FEATURE_ROW_COLUMNS,
+    ]);
+    expect(dictionary.map((entry) => entry.ordinal)).toEqual(
+      dictionary.map((_, index) => index + 1),
+    );
+
+    // Nothing is unclassified, and nothing is undescribed.
+    for (const entry of dictionary) {
+      expect({
+        column: entry.column_name,
+        classified: entry.role === "feature" ? entry.classes.length > 0 : true,
+        described: entry.description.length > 0,
+        sourced: entry.source.length > 0,
+      }).toEqual({
+        column: entry.column_name,
+        classified: true,
+        described: true,
+        sourced: true,
+      });
+    }
+
+    // The spec's own notation, reproduced: a column can be made of a forecast
+    // and a deterministic quantity, and one letter would hide which half can go
+    // missing.
+    const labelOf = (column: string) =>
+      dictionary.find((entry) => entry.column_name === column)?.class_label;
+    expect(labelOf("weather_clearness_index")).toBe("W+T");
+    expect(labelOf("proxy_residual_load_mwh")).toBe("P+W+T");
+    expect(labelOf("dessem_export_utilisation")).toBe("D+K");
+    expect(labelOf("observed_constrained_off_lag_168h")).toBe("K");
+    expect(labelOf("y_has_curtailment")).toBe("label");
+  });
+
+  it("refuses the whole dictionary rather than answering with a gap in it", async () => {
+    // The enforcement, exercised. A ticket that appends an attribute and forgets
+    // the entry does not get a dictionary with a hole; it gets a refusal — and
+    // a dictionary with one unclassified column in it is exactly the shape a
+    // reader would trust.
+    const failures: string[] = [];
+    /**
+     * One edit to the dictionary, rolled back — each in its own transaction.
+     *
+     * Separate transactions because the first raise aborts the one it happened
+     * in, and Postgres will not take a second statement after that. The refusal
+     * is the point, so the shape of the test has to survive it.
+     */
+    const refusedAfter = async (edit: string, what: string): Promise<void> => {
+      try {
+        await db.transaction(async (tx) => {
+          const scoped = tx as unknown as Database;
+          await scoped.execute(sql.raw(edit));
+          try {
+            await readFeatureDictionary(scoped);
+            failures.push(what);
+          } catch (error) {
+            expect(sqlStateOf(error)).toBe("22023");
+            throw new Error("rollback: the refusal happened, so the edit goes back");
+          }
+          tx.rollback();
+        });
+      } catch (error) {
+        if (!(error instanceof Error && /rollback/i.test(error.message))) {
+          throw error;
+        }
+      }
+    };
+
+    await refusedAfter(
+      `delete from feature_dictionary_entry where column_name = 'dessem_residual_load_mwh'`,
+      "an unclassified attribute was tolerated",
+    );
+    await refusedAfter(
+      `insert into feature_dictionary_entry (
+         column_name, role, classes, source, grain,
+         in_dessem_free_v1, in_dessem_augmented_v1, available_at_gate_early,
+         is_proxy, justifies_dessem_trade, model_input
+       ) values (
+         'a_column_that_is_not_an_attribute', 'feature', array['T']::text[], 'derived',
+         'hour', true, true, true, false, false, true
+       )`,
+      "an entry naming no attribute was tolerated",
+    );
+    expect(failures).toEqual([]);
+    // And outside the transaction it answers again, so the refusals were about
+    // the edits and not about the dictionary.
+    expect(await readFeatureDictionary(db)).toHaveLength(111);
+  });
+
+  it("binds the TypeScript grain marking to the dictionary's, rather than trusting it", async () => {
+    // The same arrangement `canonical_capacity_weight` has with
+    // `capacity-weights.ts`: two implementations of one marking, compared. The
+    // TypeScript copy exists because the serve path and the ablation seam need
+    // it without a database; it is a copy, and this is what says so.
+    const dictionary = await readFeatureDictionary(db);
+    for (const entry of dictionary) {
+      // The dictionary marks grain only where the question is asked - identity
+      // and stamp columns say which row this is, not what was measured - while
+      // `featureGrain` answers "hour" for anything it was not told about.
+      if (entry.grain !== null) {
+        expect({
+          column: entry.column_name,
+          grain: featureGrain(entry.column_name),
+        }).toEqual({ column: entry.column_name, grain: entry.grain });
+      }
+      expect({
+        column: entry.column_name,
+        feature: isFeatureColumn(entry.column_name),
+        label: isLabelColumn(entry.column_name),
+      }).toEqual({
+        column: entry.column_name,
+        feature: entry.role === "feature",
+        label: entry.role === "label",
+      });
+    }
+    // Non-vacuous in both directions.
+    expect(dictionary.filter((entry) => entry.grain === "day")).toHaveLength(17);
+    expect(dictionary.filter((entry) => entry.role === "feature")).toHaveLength(98);
+  });
+
+  it("enumerates the augmented set's twenty-two names, and the four that would justify the trade", async () => {
+    const dictionary = await readFeatureDictionary(db);
+    const only = dictionary.filter((entry) => entry.augmented_only);
+
+    // 22 feature names across 21 rows of the spec's table: the
+    // `dessem_residual_load_min_of_day` / `_rank_in_day` row carries two, and
+    // `dessem_export_utilisation` came from ticket 10 rather than ticket 07.
+    expect(only.map((entry) => entry.column_name)).toHaveLength(22);
+    expect(only.every((entry) => entry.column_name.startsWith("dessem_"))).toBe(true);
+    expect(only.every((entry) => !entry.available_at_gate_early)).toBe(true);
+
+    // Everything else DESSEM contributes has a weather- or programming-derived
+    // analogue in set A. These four do not.
+    expect(
+      dictionary
+        .filter((entry) => entry.justifies_dessem_trade)
+        .map((entry) => entry.column_name),
+    ).toEqual([
+      "dessem_residual_load_mwh",
+      "dessem_implied_net_export_mwh",
+      "dessem_absorber_residual_load_mwh",
+      "dessem_export_utilisation",
+    ]);
+
+    // And the ordered model inputs of the two sets differ by exactly those 22.
+    const inputsA = await readFeatureSetModelInputs(db, "dessem_free_v1");
+    const inputsB = await readFeatureSetModelInputs(db, "dessem_augmented_v1");
+    expect(inputsA).toHaveLength(77);
+    expect(inputsB).toHaveLength(99);
+    expect(inputsB.map((input) => input.column_name)).toEqual(
+      expect.arrayContaining(inputsA.map((input) => input.column_name)),
+    );
+    expect(
+      inputsB
+        .map((input) => input.column_name)
+        .filter((column) => !inputsA.some((input) => input.column_name === column)),
+    ).toEqual(only.map((entry) => entry.column_name));
+    // `subsystem` is an input and the rest of the identity and the stamp is not.
+    expect(inputsA[0]?.column_name).toBe("subsystem");
+    expect(inputsA.some((input) => input.column_name === "gate_at")).toBe(false);
+    expect(inputsA.some((input) => input.column_name.startsWith("y_"))).toBe(false);
+  });
+
+  it("marks the proxies, and the columns the early gate does not have", async () => {
+    // Two claims the dictionary makes that the *data* can be asked about, so
+    // this is a binding rather than a restatement.
+    const dictionary = await readFeatureDictionary(db);
+
+    const early = await readServingRows(db, {
+      targetDate: TARGET,
+      ...query,
+      gateProfile: "gate_early",
+    });
+    const late = await readServingRows(db, { targetDate: TARGET, ...query });
+
+    const absent = dictionary.filter(
+      (entry) => !entry.available_at_gate_early && entry.in_dessem_free_v1,
+    );
+    expect(absent.map((entry) => entry.column_name)).toHaveLength(12);
+    for (const entry of absent) {
+      const column = entry.column_name as keyof FeatureRow;
+      // NULL everywhere at the early gate, and present at the late one. Both
+      // halves matter: the first is the finding, the second is what makes it a
+      // publication-time hole rather than a missing feature.
+      expect({
+        column: entry.column_name,
+        early: early.every((row) => row[column] === null),
+        late: late.some((row) => row[column] !== null),
+      }).toEqual({ column: entry.column_name, early: true, late: true });
+    }
+
+    // Twelve columns are estimates of quantities WattSteer cannot observe, and
+    // every one of them says the word in the catalogue that its reader needs.
+    // The three `weather_expected_*` conversions are deliberately not among
+    // them: the proxy stands one step behind, in `weather_wind_power_curve_cf`,
+    // and flagging everything downstream of a proxy dilutes the flag.
+    const proxies = dictionary.filter((entry) => entry.is_proxy);
+    expect(proxies).toHaveLength(12);
+    expect(
+      proxies.some((entry) => entry.column_name.startsWith("weather_expected_")),
+    ).toBe(false);
+    for (const entry of proxies) {
+      // Named in the column's own name or in its prose — the `proxy_` family
+      // wears it as a prefix, and the rest say "estimate" or "generic" where a
+      // reader will meet the caveat.
+      expect({
+        column: entry.column_name,
+        named:
+          entry.column_name.startsWith("proxy_") ||
+          /proxy|estimate|upper bound|generic/i.test(entry.description),
+      }).toEqual({ column: entry.column_name, named: true });
+    }
+    // The utilisation denominators are conservative in a *known* direction, and
+    // the direction is in the column comment.
+    const utilisation = dictionary.find(
+      (entry) => entry.column_name === "observed_export_utilisation_mean_24h_to_cutoff",
+    );
+    expect(utilisation?.description).toContain("upper bound");
+  });
+
+  it("names a replacement for every dropped feature, and every replacement is a column", async () => {
+    const dropped = await readDroppedFeatures(db);
+    expect(dropped).toHaveLength(11);
+
+    for (const entry of dropped) {
+      expect({ feature: entry.idea_feature, reason: entry.reason.length > 0 }).toEqual({
+        feature: entry.idea_feature,
+        reason: true,
+      });
+      for (const column of entry.replacement_columns) {
+        expect({
+          feature: entry.idea_feature,
+          column,
+          exists: FEATURE_ROW_COLUMNS.includes(column as keyof FeatureRow),
+        }).toEqual({ feature: entry.idea_feature, column, exists: true });
+      }
+    }
+
+    // Exactly one is excluded rather than replaced, and it is the one whose
+    // inclusion would be the mirror-image skew.
+    const empty = dropped.filter((entry) => entry.replacement_columns.length === 0);
+    expect(empty).toHaveLength(1);
+    expect(empty[0]?.idea_feature).toContain("val_intercambioprogmwmed");
+
+    // And a replacement pointing at a column that does not exist is refused
+    // rather than published, so a rename cannot leave a stale sentence behind.
+    let tolerated = false;
+    try {
+      await db.transaction(async (tx) => {
+        const scoped = tx as unknown as Database;
+        await scoped.execute(sql`
+          insert into feature_dropped_feature (idea_feature, reason, replacement, replacement_columns)
+          values ('a_feature_nobody_proposed', 'because', 'a column that is not there',
+                  array['residual_load_at_t']::text[])
+        `);
+        try {
+          await readDroppedFeatures(scoped);
+          tolerated = true;
+        } catch (error) {
+          expect(sqlStateOf(error)).toBe("22023");
+        }
+        tx.rollback();
+      });
+    } catch (error) {
+      if (!(error instanceof Error && /rollback/i.test(error.message))) {
+        throw error;
+      }
+    }
+    expect(tolerated).toBe(false);
+  });
+
+  it("expresses all three A/B configurations as arguments to the one function", async () => {
+    // The acceptance claim, run rather than asserted: each configuration is a
+    // call to `feature_rows` with different arguments, and none of them reaches
+    // a second code path. The window each names is its own; what is exercised
+    // here is one target date through each, because the fixture carries one.
+    const configurations = await readAbConfigurations(db);
+    expect(configurations.map((entry) => entry.run)).toEqual([
+      "A-common",
+      "A-full",
+      "B-common",
+    ]);
+
+    for (const configuration of configurations) {
+      const rows = await readFeatureRows(db, {
+        targetFrom: TARGET,
+        targetTo: TARGET,
+        gateProfile: configuration.gate_profile,
+        featureSet: configuration.feature_set,
+        thresholdMw: 5,
+      });
+      expect({ run: configuration.run, rows: rows.length }).toEqual({
+        run: configuration.run,
+        rows: 96,
+      });
+      expect(rows.every((row) => row.feature_set === configuration.feature_set)).toBe(
+        true,
+      );
+      expect(rows.every((row) => row.gate_profile === configuration.gate_profile)).toBe(
+        true,
+      );
+    }
+
+    // A-full and A-common differ in the window alone; B-common is the one that
+    // changes the feature content. That is the whole reason there are three.
+    const byRun = new Map(configurations.map((entry) => [entry.run, entry]));
+    expect(byRun.get("A-full")?.feature_set).toBe(byRun.get("A-common")?.feature_set);
+    expect(byRun.get("A-full")?.window_from).not.toBe(byRun.get("A-common")?.window_from);
+    expect(byRun.get("B-common")?.window_from).toBe(byRun.get("A-common")?.window_from);
+    expect(byRun.get("B-common")?.feature_set).toBe("dessem_augmented_v1");
+    // All three at the same gate, so the comparison is not confounded by it.
+    expect(new Set(configurations.map((entry) => entry.gate_profile))).toEqual(
+      new Set(["gate_late"]),
+    );
+
+    // A configuration asking for a gate or a window its set does not have is
+    // refused, rather than building eleven months of NULL DESSEM columns.
+    let tolerated = false;
+    try {
+      await db.transaction(async (tx) => {
+        const scoped = tx as unknown as Database;
+        await scoped.execute(sql`
+          insert into feature_ab_configuration (run, feature_set, window_from, gate_profile, isolates)
+          values ('B-early', 'dessem_augmented_v1', '2024-04-01', 'gate_early', 'nothing it can have')
+        `);
+        try {
+          await readAbConfigurations(scoped);
+          tolerated = true;
+        } catch (error) {
+          expect(sqlStateOf(error)).toBe("22023");
+        }
+        tx.rollback();
+      });
+    } catch (error) {
+      if (!(error instanceof Error && /rollback/i.test(error.message))) {
+        throw error;
+      }
+    }
+    expect(tolerated).toBe(false);
+  });
+
+  it("builds both sets over their full windows, and the row counts are the arithmetic", async () => {
+    // Four subsystems by twenty-four local hours by the days of the window. The
+    // hours are counted through `feature_local_day_hours` rather than
+    // multiplied by 24, so this cannot agree with a calendar that lost one.
+    //
+    // Fixed far end so the numbers are checkable: 2026-08-28.
+    const setA = await readExpectedRowCount(db, "dessem_free_v1", "2026-08-28");
+    const setB = await readExpectedRowCount(db, "dessem_augmented_v1", "2026-08-28");
+
+    // 880 days x 96, and 463 x 96 — the spec's "≈ 84,500" and "≈ 44,200".
+    expect(setA).toBe(880 * 96);
+    expect(setB).toBe(463 * 96);
+    expect(setA % 96).toBe(0);
+    expect(setB % 96).toBe(0);
+
+    // And a build really does produce 96 rows for a day, in both sets, so the
+    // arithmetic is over the same row the function returns.
+    for (const featureSet of ["dessem_free_v1", "dessem_augmented_v1"] as const) {
+      const rows = await readFeatureRows(db, {
+        targetFrom: TARGET,
+        targetTo: TARGET,
+        gateProfile: "gate_late",
+        featureSet,
+        thresholdMw: 5,
+      });
+      expect({ featureSet, rows: rows.length }).toEqual({ featureSet, rows: 96 });
+      // The row grain, restated where it can be seen: one row per
+      // (Subsystem, valid_time), carrying BOTH technologies' labels as columns
+      // rather than duplicating sixty-odd shared context columns per technology.
+      expect(new Set(rows.map(keyOf)).size).toBe(96);
+      const curtailed = rows.find(
+        (row) =>
+          row.subsystem === "NE" &&
+          new Date(row.valid_time).getTime() === HOUR_CURTAILED.getTime(),
+      );
+      expect(curtailed?.y_constrained_off_wind_mwh).not.toBeNull();
+      expect(curtailed?.y_constrained_off_solar_mwh).not.toBeNull();
+    }
+
+    // The window is the part the function cannot hold, so it is refused here.
+    expect(await readExpectedRowCount(db, "dessem_augmented_v1", "2024-04-01")).toBe(0);
+  });
+
+  it("builds a day in one call, and a week in seven days' worth of work", async () => {
+    // The time and call budget, measured rather than promised. Two properties,
+    // and the second is the one that matters for an 880-day build: the cost is
+    // linear in the range, so a full window is days x the per-day cost and not
+    // something worse. A range query that re-read a source per day would show
+    // as a per-day cost that grows with the range.
+    //
+    // One call, always: `readFeatureRows` binds five arguments and issues a
+    // single statement whatever the range, because the loop is inside the
+    // function. That is what makes the serving call the training call.
+    const ask = (from: string, to: string) =>
+      readFeatureRows(db, { targetFrom: from, targetTo: to, ...query });
+
+    await ask(TARGET, TARGET); // warm the plan, so the first call is not the sample
+    const oneStart = performance.now();
+    const one = await ask(TARGET, TARGET);
+    const onePerDay = performance.now() - oneStart;
+
+    const sevenStart = performance.now();
+    const seven = await ask("2026-08-14", TARGET);
+    const sevenPerDay = (performance.now() - sevenStart) / 7;
+
+    expect(one).toHaveLength(96);
+    expect(seven).toHaveLength(96 * 7);
+    // A generous absolute ceiling, so this is a budget rather than a benchmark.
+    expect(onePerDay).toBeLessThan(5000);
+    // And the shape: per-day cost does not grow with the range. Three times is
+    // slack for a cold cache on one of the seven days, not for an algorithm.
+    expect(sevenPerDay).toBeLessThan(Math.max(onePerDay * 3, 1000));
   });
 
   // ------------------------------------------------------------ fail closed

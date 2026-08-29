@@ -511,7 +511,7 @@ variables by combined VRE capacity.
 | `weather_expected_solar_mwh` | `capacity_solar_mw × weather_shortwave_radiation / 1000 × 1 h` | **W**+**T** | derived |
 | `weather_wind_speed_120m_ramp_1h` | `x[t] − x[t−1]` **within the forecast profile** | **W** | derived |
 | `weather_shortwave_radiation_ramp_1h` | as above | **W** | derived |
-| `weather_expected_vre_ramp_1h` | Δ(`expected_wind` + `expected_solar`) | **W** | derived |
+| `weather_expected_vre_ramp_1h` | Δ(`expected_wind` + `expected_solar`) | **W**+**T** | derived |
 | `weather_wind_speed_120m_mean_3h` | centred on t, forecast profile | **W** | derived |
 | `weather_wind_speed_120m_std_6h` | centred on t, forecast profile | **W** | derived |
 | `weather_shortwave_radiation_mean_3h` | centred on t | **W** | derived |
@@ -535,6 +535,20 @@ so it and the model cannot disagree about the last seven days" — a promise tha
 could not be kept for the occurrence head with no column to read. Note it is not
 `observed_constrained_off_hours_above_threshold_7d`, which counts *all* hours
 across seven days rather than the seven observations of one local hour.
+
+> **Still not built, and ticket 11 found it rather than closing it.** The
+> dictionary is derived from `feature_row`, and `feature_row` has **111**
+> attributes — this column is not among them. Ticket 05 shipped twenty of the
+> class-`K` names and not this one; the spec table above says it exists and it
+> does not. Two consequences are live. `apps/ml`'s `evaluation/ladder.py` names
+> `observed_constrained_off_same_hour_exceedance_7d` as `EXCEEDANCE_FEATURE`
+> and cannot read it from a real row, so rung 1's occurrence head is not yet
+> "computed from the feature function". And the hand-transcribed
+> `ordered_features.yaml` omits it too — so that file matches the
+> *implementation* rather than its stated authority, which is exactly the way a
+> second list fails. Adding it is a class-`K` block change and a 112th
+> attribute, which moves `feature_hash`; it belongs in a ticket of its own
+> rather than inside the one that writes the dictionary.
 
 **Ramps and centred windows are legal here and nowhere else on the actuals side.**
 A D−1 run publishes all 24 hours of day D at once, so `x[t] − x[t−1]` inside that
@@ -1128,6 +1142,77 @@ content with window length:
 held-out period at `gate_late` with the same threshold. **DESSEM ships only if
 `B-common` beats `A-common` by more than the eleven hours of lost notice are
 worth** — and that trade is a product decision, not a metric.
+
+> **Implemented in ticket 11 — the ticket that closes this spec.** Nothing here
+> adds a feature or changes a value: the eleven blocks were already built, both
+> sets already came from one function under different arguments, and the three
+> A/B configurations were already expressible as three argument tuples. What
+> `drizzle/0033_both_feature_sets_and_the_dictionary.sql` adds is the artifact
+> that makes the other 111 columns readable, and four things about its shape are
+> decisions rather than mechanics.
+>
+> - **The dictionary is derived from the composite type, never hand-listed.**
+>   `feature_dictionary()` takes the column names, their order and their SQL
+>   types from `pg_attribute` on `feature_row`, and the prose from
+>   `col_description` — where every block from `0017` onward already wrote its
+>   argument. `feature_dictionary_entry` supplies only the structured facts no
+>   catalogue field can hold: class, source, grain, set membership, gate-early
+>   availability, proxy flag, model-input flag. That direction is the whole
+>   point. A hand-listed dictionary would be a second place the feature set is
+>   written down, and `forecaster.md` hashes the *type's* ordered names into a
+>   lane's `feature_hash` — so a hand-listed dictionary could describe a vector
+>   the hash was not taken over. It **raises `22023` rather than answering**
+>   when an attribute has no entry, an entry has no attribute, or an attribute
+>   has no comment: a dictionary with one unclassified column in it still reads
+>   like a dictionary, and that column is the one a reader will assume somebody
+>   classified.
+> - **The thirty-five uncommented attributes were commented.** `0016`, `0019`
+>   and `0021` declared their columns before the `COMMENT ON COLUMN` habit set
+>   in. Since the dictionary reads `col_description`, a comment is not
+>   decoration — it is the description column — so the catalogue is now total
+>   over all 111.
+> - **`apps/ml/.../ordered_features.yaml` is now redundant, and provably so.**
+>   `feature_set_model_inputs(feature_set)` returns the same 77 names for set A
+>   and the same 99 for set B, derived rather than transcribed; the two agree
+>   exactly as sets. That file's own header says the transcription goes away
+>   once the names can come from the builder, and it can: the substitution is
+>   the one call site `load_ordered_features` has. It is left in place here only
+>   because `apps/ml` was another agent's tree during this ticket.
+> - **The four dictionary facts that are uncomfortable are recorded rather than
+>   tidied.** `available_at_gate_early` is `false` for all five `programmed_*`,
+>   all seven `proxy_*` and all 22 `dessem_*` columns, and the two reasons are
+>   different: DESSEM's absence is structural, the programme's is a publication
+>   instant nobody repaired. The augmented set is exactly 22 names, held there
+>   by a CHECK rather than by care. The three utilisation ratios carry
+>   `is_proxy` and say "upper bound" in their comments. And `is_proxy` is
+>   **twelve** columns, not fifteen: the three `weather_expected_*` conversions
+>   are deterministic by design — "no model inside a model" — and the proxy
+>   stands one step behind them in `weather_wind_power_curve_cf`, where it is
+>   flagged. Flagging everything downstream of a proxy dilutes the flag.
+>
+> Two smaller corrections. `weather_expected_vre_ramp_1h` is class **W+T**
+> above, where this document wrote **W**: it is the difference of two columns
+> that each multiply a forecast by `InstalledCapacityAsOf`, so a capacity read
+> stands behind it. And the row arithmetic is now countable rather than
+> asserted — `feature_set_expected_rows(feature_set, target_to)` counts
+> subsystems × local hours × days *through* `feature_local_day_hours`, so it
+> cannot agree with a calendar that lost an hour. To 2026-08-28 it returns
+> 84,480 for set A (880 days) and 44,448 for set B (463 days), against the
+> "≈ 84,500" and "≈ 44,200" above.
+>
+> **The build's time and call budget.** One SQL call per build, whatever the
+> range: the per-day loop is inside `feature_rows`, which is why the serving
+> call *is* the training call. Cost is linear in the range, and
+> `database-features.test.ts` asserts that shape rather than a number, so a
+> future range query that re-read a source per day fails rather than merely
+> getting slower. Measured against this suite's fixture on `postgres:17-alpine`:
+> 101 ms for one day cold, 18.5 ms per day over twenty days for `dessem_free_v1`
+> and 24 ms per day for `dessem_augmented_v1` — so a full-window build is
+> ~16 s for set A's 880 days and ~11 s for set B's 463. **Those are
+> fixture-scale numbers**: the fixture holds one weather run, one week of
+> observations and two plants, so they bound the function's own overhead and
+> not the scan cost against a populated database. The full-window build over
+> real data has not been run and is the forecaster's first act.
 
 ### Labels: features at the gate, labels at the latest vintage
 

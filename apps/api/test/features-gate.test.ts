@@ -200,6 +200,15 @@ const ALLOWED_RELATIONS = new Set([
   "export_utilisation",
   "corridor_utilisation",
   "utilisation",
+  // Ticket 11's two, and the only catalogue reads in the tree. The dictionary
+  // is *derived* from `feature_row` rather than hand-listed — the names, the
+  // order, the SQL types and the prose all come from `pg_attribute` and
+  // `col_description` — so it has to read the catalogue to exist at all. These
+  // two are allowed for that one function and are the reason this list is
+  // reviewed rather than assumed: a feature *value* read out of `pg_catalog`
+  // would be a very different event, and there is none.
+  "pg_attribute",
+  "pg_type",
 ]);
 
 const functionSegments = (): Map<string, string> => {
@@ -460,7 +469,13 @@ describe("the gate, structurally", () => {
       expect(column).not.toBe("calendar_month");
       expect(column).not.toBe("calendar_week_of_year");
     }
-    expect(SQL).not.toMatch(/\bweek_of_year\b/);
+    // Against the code, not against the text. Ticket 11's dictionary *records*
+    // the drop — `feature_dropped_feature` carries "month, week_of_year" with
+    // `calendar_doy_sin`/`_cos` named as the replacement — and a string literal
+    // saying a feature was dropped is the opposite of the event this guards
+    // against. `CODE` is the SQL with the literals blanked out, so a column
+    // named `week_of_year`, or any expression computing one, still fails here.
+    expect(CODE).not.toMatch(/\bweek_of_year\b/);
   });
 
   it("knows both gate profiles and both feature sets, and no third of either", () => {
@@ -1333,6 +1348,199 @@ describe("the feature dictionary's grain marking", () => {
       ).slice(0, 600);
       expect(comment).toContain("Day grain");
     }
+  });
+});
+
+describe("the feature dictionary, structurally", () => {
+  /** The dictionary's own migration, read whole — prose, seed and all. */
+  const DICTIONARY = readFileSync(
+    join(MIGRATION_DIRECTORY, "0033_both_feature_sets_and_the_dictionary.sql"),
+    "utf8",
+  );
+
+  /** The `column_name` of every seeded entry, in the order the seed writes it. */
+  const seededEntries = (): string[] => {
+    const start = DICTIONARY.indexOf("INSERT INTO feature_dictionary_entry (");
+    const end = DICTIONARY.indexOf(";", start);
+    expect(start).toBeGreaterThan(-1);
+    return [...DICTIONARY.slice(start, end).matchAll(/^ {2}\('(\w+)',/gm)].map(
+      (match) => match[1] as string,
+    );
+  };
+
+  it("takes the columns from the type and never from a list of its own", () => {
+    // The whole design, asserted at the one function that could betray it. A
+    // dictionary that named its columns would be a second place the feature set
+    // is written down — which is exactly what `ordered_features.yaml` is, and
+    // why it already disagrees with its own authority.
+    const body = DICTIONARY.slice(
+      DICTIONARY.indexOf("CREATE OR REPLACE FUNCTION feature_dictionary()"),
+      DICTIONARY.indexOf("COMMENT ON FUNCTION feature_dictionary()"),
+    );
+    expect(body.length).toBeGreaterThan(0);
+
+    // Names, order, type and prose: all four come from the catalogue.
+    expect(body).toContain("pg_attribute");
+    expect(body).toContain("'feature_row'::regtype");
+    expect(body).toContain("format_type(a.atttypid, a.atttypmod)");
+    expect(body).toContain("col_description(attrs, a.attnum::integer)");
+    expect(body).toContain("ORDER BY a.attnum");
+
+    // And no column name is spelled inside it. The function mentions
+    // `feature_row` and its own columns; it must not mention a *feature*.
+    for (const column of FEATURE_ROW_COLUMNS) {
+      if (column === "subsystem" || column === "feature_set") {
+        continue; // `subsystem` and the set are the dictionary's own vocabulary.
+      }
+      expect({ column, spelled: body.includes(column) }).toEqual({
+        column,
+        spelled: false,
+      });
+    }
+  });
+
+  it("classifies every attribute the tree declares, and nothing else", () => {
+    // The seed is checked against the *type's* attribute list rather than
+    // against itself. A ticket that appends an attribute and forgets the entry
+    // fails here without a database, and fails again at the function with one.
+    expect(seededEntries()).toEqual([...FEATURE_ROW_COLUMNS]);
+    expect(seededEntries()).toHaveLength(111);
+  });
+
+  it("refuses the whole answer rather than returning a gap in it", () => {
+    // Three raises, and they are total in both directions: an attribute with no
+    // entry, an entry with no attribute, and an attribute with no prose. A
+    // dictionary with one unclassified column in it still reads like a
+    // dictionary, and that column is exactly the one a reader will assume
+    // somebody classified.
+    const body = DICTIONARY.slice(
+      DICTIONARY.indexOf("CREATE OR REPLACE FUNCTION feature_dictionary()"),
+      DICTIONARY.indexOf("COMMENT ON FUNCTION feature_dictionary()"),
+    );
+    expect([...body.matchAll(/RAISE EXCEPTION/g)]).toHaveLength(3);
+    expect(body).toContain("carry no dictionary entry");
+    expect(body).toContain("name no feature_row attribute");
+    expect(body).toContain("carry no catalogue comment");
+    expect(body).toContain("Unclassified is not an option");
+  });
+
+  it("writes the prose once, at the column, for all 111 of them", () => {
+    // The dictionary reads `col_description`, so a comment is not decoration —
+    // it is the description column. Ticket 11 completed the thirty-five that
+    // `0016`, `0019` and `0021` declared before the habit set in.
+    const commented = new Set(
+      [...RAW.matchAll(/COMMENT ON COLUMN feature_row\.(\w+) IS/g)].map(
+        (match) => match[1] as string,
+      ),
+    );
+    expect([...FEATURE_ROW_COLUMNS].filter((column) => !commented.has(column))).toEqual(
+      [],
+    );
+  });
+
+  it("keeps the dropped features out of the type and their replacements in it", () => {
+    // The sixth class. A dropped feature has no attribute — giving it a
+    // dictionary row would break the derivation — so it lives in its own table,
+    // and every replacement it names is checked against the type at runtime.
+    const start = DICTIONARY.indexOf("INSERT INTO feature_dropped_feature (");
+    const seed = DICTIONARY.slice(start, DICTIONARY.indexOf(";\n--> statement", start));
+    expect(start).toBeGreaterThan(-1);
+
+    const dropped = [...seed.matchAll(/^ {2}\('([^']+(?:''[^']*)*)',$/gm)];
+    expect(dropped).toHaveLength(11);
+
+    // Exactly one has no replacement column, and it is the one that is excluded
+    // rather than replaced: a series richer at serve time than in training.
+    expect([...seed.matchAll(/'\{\}'::text\[\]/g)]).toHaveLength(1);
+    expect(seed).toContain("val_intercambioprogmwmed");
+
+    // Every replacement named is a real attribute. The function raises on this
+    // too; here it is checked without standing a server up.
+    const replacements = new Set(
+      [...seed.matchAll(/array\[([^\]]*)\]::text\[\]/g)].flatMap((match) =>
+        [...(match[1] as string).matchAll(/'(\w+)'/g)].map((m) => m[1] as string),
+      ),
+    );
+    expect(replacements.size).toBeGreaterThan(0);
+    for (const column of replacements) {
+      expect({ column, exists: FEATURE_ROW_COLUMNS.includes(column) }).toEqual({
+        column,
+        exists: true,
+      });
+    }
+    // Non-vacuous on the point of the table: residual load was rebuilt in both
+    // sets rather than abandoned, which is what keeps the product.
+    expect(replacements.has("proxy_residual_load_mwh")).toBe(true);
+    expect(replacements.has("dessem_residual_load_mwh")).toBe(true);
+  });
+
+  it("records the early-gate hole rather than repairing it", () => {
+    // The finding ticket 06 made and ticket 09 inherited, carried into the
+    // dictionary as data. `programmed_*` and every `proxy_*` column is NULL at
+    // `gate_early` because the programme for day D is stamped D-1 15:00 BRT,
+    // six hours after that gate — and reaching for an earlier hour would claim
+    // an availability nothing has measured.
+    // The six trailing booleans of a seed row, in the order the INSERT names
+    // them: in_free, in_augmented, available_at_gate_early, is_proxy,
+    // justifies_dessem_trade, model_input.
+    const flags = [
+      ...DICTIONARY.matchAll(
+        /^ {2}\('(\w+)',.*?, (true|false), (true|false), (true|false), (true|false), (true|false), (true|false)\)[,;]$/gm,
+      ),
+    ].map((match) => ({
+      column: match[1] as string,
+      inFree: match[2] === "true",
+      availableEarly: match[4] === "true",
+    }));
+    expect(flags).toHaveLength(111);
+
+    const absentEarly = flags
+      .filter((entry) => !entry.availableEarly)
+      .map((entry) => entry.column)
+      .toSorted();
+    expect(absentEarly).toEqual(
+      FEATURE_ROW_COLUMNS.filter(
+        (column) =>
+          column.startsWith("programmed_") ||
+          column.startsWith("proxy_") ||
+          column.startsWith("dessem_"),
+      ).toSorted(),
+    );
+    // Five programmed, seven proxy, twenty-two DESSEM. The first twelve are
+    // the ones set A loses at the early gate, and they are its spine.
+    expect(absentEarly).toHaveLength(34);
+    expect(absentEarly.filter((column) => !column.startsWith("dessem_"))).toHaveLength(
+      12,
+    );
+
+    // Class `D` is the augmented set and nothing else: 22 names, none of them
+    // in set A. The table's own CHECK makes the opposite unrepresentable; this
+    // asserts the seed does not merely happen to comply.
+    const dessemOnly = flags
+      .filter((entry) => !entry.inFree)
+      .map((entry) => entry.column);
+    expect(dessemOnly).toHaveLength(22);
+    expect(dessemOnly.every((column) => column.startsWith("dessem_"))).toBe(true);
+  });
+
+  it("expresses the A/B as three argument tuples and not as a second function", () => {
+    // "All three configurations are expressible as arguments to the one
+    // function; none needs a second code path." The check that no second path
+    // was written is that this migration defines no row-building function at
+    // all — it adds no attribute, restates no `feature_rows`, and changes no
+    // value.
+    expect(DICTIONARY).not.toContain("ALTER TYPE feature_row ADD ATTRIBUTE");
+    expect(DICTIONARY).not.toContain("CREATE OR REPLACE FUNCTION feature_rows(");
+
+    const start = DICTIONARY.indexOf("INSERT INTO feature_ab_configuration (");
+    const seed = DICTIONARY.slice(start, DICTIONARY.indexOf(";\n--> statement", start));
+    expect(start).toBeGreaterThan(-1);
+    for (const run of ["A-full", "A-common", "B-common"]) {
+      expect(seed).toContain(`('${run}'`);
+    }
+    // Two would confound feature content with window length, which is the whole
+    // reason there are three.
+    expect([...seed.matchAll(/^ {2}\('/gm)]).toHaveLength(3);
   });
 });
 
