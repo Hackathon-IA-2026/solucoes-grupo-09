@@ -9,6 +9,8 @@ dependencies = [
   "asyncpg>=0.30",
   "pydantic>=2.9",
   "pydantic-settings>=2.6",
+  # The driver group map is a YAML data file, loaded at train time.
+  "pyyaml>=6.0",
 ]
 
 [project.scripts]
@@ -69,6 +71,13 @@ warn_unreachable = true
 # globally for one dependency.
 [[tool.mypy.overrides]]
 module = ["asyncpg.*"]
+ignore_missing_imports = true
+
+# PyYAML ships no py.typed marker either. Same narrow override, same reason:
+# `driver_groups.py` narrows every value it reads out of `safe_load` before
+# using it, so nothing untyped escapes the loader.
+[[tool.mypy.overrides]]
+module = ["yaml"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
