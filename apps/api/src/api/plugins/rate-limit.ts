@@ -1,109 +1,197 @@
-import { Elysia } from "elysia";
-import { envelope } from "../../errors.js";
-import { requestIdOf } from "./request-context.js";
-
 /**
- * Fixed-window, per-client rate limiting for the expensive scrape surface.
- * Every counted request may launch a real Chromium session, so the budget is
- * deliberately small; cheap endpoints (/, /health, /ready, /docs) are exempt.
+ * The published budget, and the three tiers it is published as.
  *
- * In-memory by design: with the in-process runner there is exactly one API
- * process, and with BullMQ the API tier still fronts all submissions. Behind a
- * load balancer, enforce a shared limit at the proxy as well.
+ * The surface is public, unauthenticated and account-free, so there is no key
+ * to meter and no `Authorization` header to `Vary` on — and behind it sit a
+ * branch-and-bound solver and a language model. One budget cannot protect
+ * both, and neither is protected by counting page views:
+ *
+ * | Tier      | Routes                              | Budget              | Shape        |
+ * |-----------|-------------------------------------|---------------------|--------------|
+ * | Unmetered | `/`, `/health`, `/ready`, `/docs`    | ∞                   | as built     |
+ * | Read      | every other `/v1` read              | 120 / min / IP      | fixed window |
+ * | Solve     | `/v1/optimize`, `/v1/replay`        | 30 / min / IP, burst 10 | token bucket |
+ *
+ * Reads get a fixed window because almost every hit is a shared-cache hit and
+ * the window boundary effect is harmless. The solve tier gets a bucket because
+ * it is not: a fixed window lets 60 requests through across a boundary, and
+ * `flex-optimizer.md` asked for a burst, which a window cannot express.
+ *
+ * The language model is deliberately **not** metered by IP. `diagnosis.md`
+ * counts the real volume — 4 subsystems × 2 locales × 2 gates ≈ 16 distinct
+ * narrations a day — so an IP budget would protect nothing while doing nothing
+ * about the actual risk, a cache stampede. That is `dailyCap` in
+ * `daily-cap.ts`, which counts *calls* rather than requests.
+ *
+ * Where the counting happens is `limit-store.ts`: Redis when configured, so
+ * the published budget survives a second replica, and the in-memory map
+ * otherwise.
  */
 
+import { Elysia } from "elysia";
+import { RateLimitedError, toErrorEnvelope } from "../../errors.js";
+import {
+  createLimitStore,
+  type LimitPolicy,
+  type LimitStore,
+  memoryStore,
+} from "./limit-store.js";
+import { requestIdOf } from "./request-context.js";
+
+export type { Decision, LimitPolicy, LimitStore } from "./limit-store.js";
+export {
+  consume,
+  consumeBucket,
+  createLimitStore,
+  memoryStore,
+  redisStore,
+  sweep,
+  sweepBuckets,
+} from "./limit-store.js";
+
+/** The three tiers. `null` is the unmetered one — it spends nothing. */
+export type Tier = "read" | "solve";
+
+/** Paths that are never metered: cheap probes a monitor must never be throttled on. */
+export const UNMETERED_PATHS: ReadonlySet<string> = new Set(["/", "/health", "/ready"]);
+
+/**
+ * The solve tier's routes: the MILP and the replay, by `POST` and by the
+ * shareable `GET ?s=` form alike — the budget is on the solver, not on the verb.
+ */
+export const SOLVE_PATHS: readonly string[] = ["/v1/optimize", "/v1/replay"];
+
+/** Pure: is this path one the solver answers (including sub-paths like `/v1/replay/days`)? */
+export function isSolvePath(pathname: string): boolean {
+  return SOLVE_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+}
+
+/**
+ * Pure: which budget this request spends against, or `null` for unmetered.
+ *
+ * `/v1/replay/days` is a calendar read and not a solve, so it is called out
+ * rather than swept in by the prefix: the shortlist is a cached list of dates
+ * and metering it at the solver's rate would throttle a date picker.
+ */
+export function classifyTier(_method: string, pathname: string): Tier | null {
+  if (UNMETERED_PATHS.has(pathname) || pathname.startsWith("/docs")) {
+    return null;
+  }
+  if (pathname === "/v1/replay/days") {
+    return "read";
+  }
+  return isSolvePath(pathname) ? "solve" : "read";
+}
+
+/**
+ * Pure: the client this request is charged to.
+ *
+ * The old rule was "the first `X-Forwarded-For` hop", which is correct behind
+ * a proxy that *overwrites* the header and is a free budget reset for anyone
+ * who can reach the port directly and send one: `X-Forwarded-For: <random>`
+ * bought a fresh 120 requests every time.
+ *
+ * The rule is now positional. With `depth` trusted proxies in front, the only
+ * hop none of them could have been lied to about is the `depth`-th from the
+ * **end** — everything to its left was written by whoever was talking, and is
+ * evidence about nothing. `depth = 0` ignores the header entirely (direct
+ * exposure); a header too short for the configured depth is a header that did
+ * not come through the expected proxy chain, so the socket address wins.
+ */
+export function clientKey(
+  forwardedFor: string | null,
+  socketIp: string,
+  depth = 1,
+): string {
+  if (depth <= 0) {
+    return socketIp;
+  }
+  const hops = (forwardedFor ?? "")
+    .split(",")
+    .map((hop) => hop.trim())
+    .filter(Boolean);
+  return hops[hops.length - depth] || socketIp;
+}
+
 export interface RateLimitOptions {
-  /** Requests allowed per client per window; 0 disables the limiter. */
-  max: number;
-  /** Window length in ms. */
+  /** The policy each tier is metered under. */
+  tiers: Record<Tier, LimitPolicy>;
+  /** Which tier a request spends against; `null` is unmetered. */
+  classify?: (method: string, pathname: string) => Tier | null;
+  /** Where the counting happens. Defaults to the per-process map. */
+  store?: LimitStore;
+  /** How many proxies sit in front of this process. See `clientKey`. */
+  trustedProxyDepth?: number;
+}
+
+/** The budgets the spec publishes, as policies. */
+export function tiersFrom(limits: {
+  readMax: number;
   windowMs: number;
-  /** Which requests count against the budget. */
-  counts: (method: string, pathname: string) => boolean;
+  solveMax: number;
+  solveBurst: number;
+}): Record<Tier, LimitPolicy> {
+  return {
+    read: { kind: "fixed-window", max: limits.readMax, windowMs: limits.windowMs },
+    solve: {
+      kind: "token-bucket",
+      max: limits.solveMax,
+      windowMs: limits.windowMs,
+      burst: limits.solveBurst,
+    },
+  };
 }
-
-interface Window {
-  count: number;
-  resetAt: number;
-}
-
-/** Pure: first hop of X-Forwarded-For (set by the proxy), else the socket IP. */
-export function clientKey(forwardedFor: string | null, socketIp: string): string {
-  const first = forwardedFor?.split(",")[0]?.trim();
-  return first || socketIp;
-}
-
-/** Pure: advance/reset the client's window and report whether it's over. */
-export function consume(
-  windows: Map<string, Window>,
-  key: string,
-  now: number,
-  options: Pick<RateLimitOptions, "max" | "windowMs">,
-): { limited: boolean; retryAfterSec: number } {
-  const current = windows.get(key);
-  if (!current || current.resetAt <= now) {
-    windows.set(key, { count: 1, resetAt: now + options.windowMs });
-    return { limited: false, retryAfterSec: 0 };
-  }
-  current.count += 1;
-  if (current.count > options.max) {
-    return {
-      limited: true,
-      retryAfterSec: Math.max(1, Math.ceil((current.resetAt - now) / 1000)),
-    };
-  }
-  return { limited: false, retryAfterSec: 0 };
-}
-
-/** Drop expired windows so the map can't grow unbounded under churn. */
-export function sweep(windows: Map<string, Window>, now: number): void {
-  for (const [key, value] of windows) {
-    if (value.resetAt <= now) {
-      windows.delete(key);
-    }
-  }
-}
-
-/** Sweep whenever the map crosses this size (amortized cleanup). */
-const SWEEP_THRESHOLD = 10_000;
 
 export const rateLimit = (options: RateLimitOptions) => {
-  const windows = new Map<string, Window>();
-  return new Elysia({ name: "rate-limit", seed: options })
-    .onRequest(({ request, set, server }) => {
-      if (options.max <= 0 || request.method === "OPTIONS") {
-        return; // disabled, or a CORS preflight (never a scrape)
+  const classify = options.classify ?? classifyTier;
+  const store = options.store ?? memoryStore();
+  const depth = options.trustedProxyDepth ?? 1;
+  return new Elysia({ name: "rate-limit", seed: options.tiers })
+    .onRequest(async ({ request, set, server }) => {
+      if (request.method === "OPTIONS") {
+        return; // a CORS preflight is never the thing being protected
       }
       const pathname = new URL(request.url).pathname;
-      if (!options.counts(request.method, pathname)) {
+      const tier = classify(request.method, pathname);
+      if (!tier) {
         return;
       }
-      const now = Date.now();
-      if (windows.size > SWEEP_THRESHOLD) {
-        sweep(windows, now);
+      const policy = options.tiers[tier];
+      if (policy.max <= 0) {
+        return; // this tier's budget is disabled
       }
       const key = clientKey(
         request.headers.get("x-forwarded-for"),
         server?.requestIP(request)?.address ?? "unknown",
+        depth,
       );
-      const { limited, retryAfterSec } = consume(windows, key, now, options);
-      if (limited) {
-        // The envelope, not a bare string: a 429 is the failure a client is
-        // most likely to handle programmatically, so it is the last one that
-        // should arrive in a shape of its own. `Retry-After` still travels —
-        // the header says how long, the code says why.
-        const mapped = envelope(
-          "RATE_LIMITED",
-          "Too many requests — this endpoint is rate limited. Try again shortly.",
-          {
-            details: { retry_after_sec: retryAfterSec },
-            requestId: requestIdOf(request),
-            retryAfterSec,
-          },
-        );
-        set.status = mapped.status;
-        set.headers["retry-after"] = String(mapped.retryAfterSec ?? retryAfterSec);
-        return mapped.body;
+      const { limited, retryAfterSec } = await store.consume(
+        policy,
+        `${tier}:${key}`,
+        Date.now(),
+      );
+      if (!limited) {
+        return;
       }
+      // The envelope, not a bare string: a 429 is the failure a client is most
+      // likely to handle programmatically, so it is the last one that should
+      // arrive in a shape of its own. And the wait travels *inside the error*
+      // — `Retry-After` and `details.retry_after_sec` are read off one object,
+      // so the header and the body cannot disagree about how long to wait.
+      const mapped = toErrorEnvelope(
+        new RateLimitedError(
+          retryAfterSec,
+          "Too many requests — this endpoint is rate limited. Try again shortly.",
+          { details: { tier, retry_after_sec: retryAfterSec } },
+        ),
+        requestIdOf(request),
+      );
+      set.status = mapped.status;
+      set.headers["retry-after"] = String(mapped.retryAfterSec ?? retryAfterSec);
+      return mapped.body;
     })
     .as("global");
 };
+
+/** Re-exported so a caller can build the configured store in one import. */
+export const limitStoreFor = createLimitStore;

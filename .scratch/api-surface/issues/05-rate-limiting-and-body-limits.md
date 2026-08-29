@@ -40,7 +40,7 @@ is the call and not the request.
 **Blocked by:** 02 (the 429 envelope). Independent of every model and every
 endpoint — it can run alongside 03 and 04.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Three tiers with three budgets, each asserted
 - [ ] The solve tier is a token bucket that permits a burst of ten and then throttles

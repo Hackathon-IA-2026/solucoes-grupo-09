@@ -22,7 +22,7 @@ and a screen should never compute it from a clock.
 canonical reads this endpoint composes are becoming SQL views. This endpoint
 reads those views and does not re-query base tables.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] One request returns the latest settled hour, the lag, and the four subsystems' observed totals with their scalar splits
 - [ ] The national total names its derivation on the payload

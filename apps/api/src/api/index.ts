@@ -8,16 +8,27 @@ import { canonicalReads } from "./canonical.js";
 import { gridRoutes } from "./grid.js";
 import { ingestHealth } from "./ingest-health.js";
 import { mlProxy } from "./ml-proxy.js";
-import { bodyLimit, MAX_BODY_BYTES } from "./plugins/body-limit.js";
+import {
+  bodyLimit,
+  MAX_BODY_BYTES,
+  SOLVE_MAX_BODY_BYTES,
+  solveBodyLimit,
+} from "./plugins/body-limit.js";
 import { errorHandler } from "./plugins/errors.js";
-import { rateLimit } from "./plugins/rate-limit.js";
+import { createLimitStore } from "./plugins/limit-store.js";
+import { rateLimit, tiersFrom } from "./plugins/rate-limit.js";
 import { requestContext } from "./plugins/request-context.js";
 import { securityHeaders } from "./plugins/security.js";
 
 const isProd = config.isProd;
 
-/** Paths exempt from rate limiting — cheap probes and docs. */
-const UNMETERED = new Set(["/", "/health", "/ready"]);
+/**
+ * Where the budgets are counted: Redis when one is configured, so two API
+ * replicas share one budget, and the per-process map otherwise. The boot log
+ * says which, because "the published budget is the real budget" is not
+ * something an operator should have to infer.
+ */
+export const limitStore = createLimitStore(config.redisUrl);
 
 /**
  * Readiness: when a database is configured it must answer before we accept
@@ -43,13 +54,19 @@ export const app = new Elysia()
   .use(securityHeaders)
   .use(requestContext)
   .use(bodyLimit())
+  // The solve routes' 16 KB ceiling, mounted centrally so it is in force from
+  // the moment such a route exists rather than when someone remembers it.
+  .use(solveBodyLimit())
   .use(
     rateLimit({
-      max: config.rateLimitMax,
-      windowMs: config.rateLimitWindowMs,
-      // Probes and docs stay free so a monitor is never throttled.
-      counts: (_method, pathname) =>
-        !(UNMETERED.has(pathname) || pathname.startsWith("/docs")),
+      tiers: tiersFrom({
+        readMax: config.rateLimitMax,
+        windowMs: config.rateLimitWindowMs,
+        solveMax: config.rateLimitSolveMax,
+        solveBurst: config.rateLimitSolveBurst,
+      }),
+      store: limitStore,
+      trustedProxyDepth: config.trustedProxyDepth,
     }),
   )
   .use(
@@ -135,7 +152,23 @@ if (import.meta.main) {
     console.log("   • Content-Security-Policy (relaxed for /docs)");
     console.log("   • X-Frame-Options: DENY, X-Content-Type-Options: nosniff");
     console.log(`   • XSS protection, Referrer-Policy${isProd ? ", HSTS" : ""}`);
-    console.log(`   • ${MAX_BODY_BYTES / (1024 * 1024)} MB request body limit, CORS`);
+    console.log(
+      `   • ${MAX_BODY_BYTES / (1024 * 1024)} MB request body limit ` +
+        `(${SOLVE_MAX_BODY_BYTES / 1024} KB on the solve routes), CORS`,
+    );
+    console.log("🚦 Budgets:");
+    console.log(
+      `   • read ${config.rateLimitMax}/${config.rateLimitWindowMs / 1000}s/IP · ` +
+        `solve ${config.rateLimitSolveMax}/${config.rateLimitWindowMs / 1000}s/IP ` +
+        `burst ${config.rateLimitSolveBurst} · narration ${config.narrationDailyCap}/day`,
+    );
+    console.log(
+      `   • counted in ${limitStore.detail}` +
+        (limitStore.kind === "memory"
+          ? " — with more than one replica the real budget is this × replicas"
+          : ""),
+    );
+    console.log(`   • trusted proxy depth ${config.trustedProxyDepth}`);
     console.log(
       `🗄️  Persistence: ${database ? "Postgres (Drizzle)" : "off (no DATABASE_URL)"}`,
     );
@@ -150,6 +183,7 @@ if (import.meta.main) {
     force.unref();
     await app.stop();
     await database?.close().catch(() => {});
+    await limitStore.close().catch(() => {});
     console.log("✅ Server closed");
     process.exit(0);
   };
