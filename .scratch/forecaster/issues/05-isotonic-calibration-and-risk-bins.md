@@ -36,7 +36,7 @@ is worse than one three points off, and a change is a product-visible event.
 
 **Blocked by:** 04.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Isotonic is fitted on the calibration window only, and the base learners
       are not refit afterwards

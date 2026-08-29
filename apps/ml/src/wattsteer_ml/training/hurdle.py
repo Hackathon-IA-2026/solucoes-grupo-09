@@ -37,12 +37,31 @@ and the base learners are **not refit** afterwards, which is the invariant
 ``early_stopping_rounds`` to 0 in a configuration that wants the calibration
 window untouched entirely.
 
-**``p`` is the classifier's raw output here.** Isotonic calibration is
-forecaster ticket 05 and the conformal corrections are ticket 06; until they
-land the composition is fed ``p_raw``, the band is uncalibrated and the card
-carries no Calibration or Quantiles group to claim otherwise. That is a stated
-absence, not a silent one: a card without those groups is a card that has not
-made a coverage statement.
+**``p`` is the calibrated probability, and there is one route to it.** The
+occurrence booster's raw output reaches :func:`wattsteer_ml.mixture.compose`
+through :attr:`Calibration.isotonic <wattsteer_ml.training.calibration.\
+Calibration.isotonic>` and through nothing else, so calibration changes the
+breakpoint at ``1 − p`` and changes nothing else about the band. There is still
+exactly one composition in this service and this file still holds none of it.
+The conformal corrections are forecaster ticket 06; until they land the card
+carries no Quantiles group, which is a stated absence — a card without that
+group is a card that has not made a coverage statement.
+
+**The pool the reliability curve is measured on is an argument, not a
+derivation.** :func:`train_fold` cannot compute out-of-fold predictions across
+every walk-forward fold from one fold's rows, and a curve measured on the fold
+it was trained on would be the self-portrait the spec forbids. So the caller
+supplies a :class:`~wattsteer_ml.training.calibration.OutOfFoldPool`, which has
+already checked every prediction against its own fold's test period, and this
+module refuses rather than fabricates when one is not offered.
+
+**The honest caveat this ticket inherits.** The calibration block is passed to
+LightGBM as an early-stopping monitor, so it has chosen the tree count even
+though no gradient came from it and no base learner was refit. ``p_raw`` on
+that window is therefore slightly optimistic, and an isotonic map fitted to it
+under-corrects a little. What that does *not* affect is the published curve: it
+is measured on rows outside the calibration window entirely. Setting
+``early_stopping_rounds`` to 0 in a configuration removes the caveat outright.
 """
 
 from __future__ import annotations
@@ -71,6 +90,12 @@ from wattsteer_ml.training.bundle import (
     SubThresholdMeans,
     TrainingCounts,
     new_artifact_id,
+)
+from wattsteer_ml.training.calibration import (
+    Calibration,
+    OutOfFoldPool,
+    RiskBins,
+    calibrate,
 )
 from wattsteer_ml.training.contract import FeatureContract
 from wattsteer_ml.training.design import FeatureBlock, RowStamp
@@ -105,6 +130,8 @@ def train_fold(
     fold: Fold,
     blocks: FoldBlocks,
     function_definition: str,
+    pool: OutOfFoldPool,
+    incumbent_risk_bins: RiskBins | None = None,
     config: ModelConfig = MODEL_CONFIG_V1,
     created_at: datetime | None = None,
     artifact_id: str | None = None,
@@ -122,6 +149,13 @@ def train_fold(
         blocks: the three windows, from :meth:`Fold.blocks_for`.
         function_definition: ``pg_get_functiondef(feature_rows)``, the half of
             the feature contract a column list cannot see.
+        pool: pooled out-of-fold predictions across the walk-forward folds, for
+            the reliability curve and the risk-class edges. Required: an
+            artifact whose calibrated probability has no measured curve behind
+            it cannot state a risk class, and the risk classes are published.
+        incumbent_risk_bins: the edges the live artifact publishes, if there is
+            one. Held unless this pool violates the rule that chose them — a
+            named class that moves weekly is worse than one three points off.
         config: the published configuration. Named, never searched.
 
     Returns:
@@ -150,20 +184,36 @@ def train_fold(
         )
     monitor = calibration.select(calibration.labelled)
     monitor_positives = monitor.select(monitor.positive)
+    if not len(monitor):
+        raise TrainingError(
+            f"{fold.id}: the calibration block "
+            f"{blocks.calibration_start.isoformat()}–"
+            f"{blocks.calibration_end.isoformat()} carries no settled label, so "
+            "there is nothing to fit the isotonic map on; an uncalibrated "
+            "probability is not a probability this product may render"
+        )
+    occurrence = _fit(
+        config=config,
+        params=config.params(objective="binary", role="occurrence"),
+        train=fit_block,
+        label=fit_block.positive.astype(np.float64),
+        monitor=monitor,
+        monitor_label=monitor.positive.astype(np.float64),
+    )
+    fitted_calibration = _fit_calibration(
+        occurrence,
+        monitor,
+        blocks=blocks,
+        pool=pool,
+        incumbent_risk_bins=incumbent_risk_bins,
+    )
 
     bundle = HurdleBundle(
         lane=stamp.lane,
         contract=contract,
         model_config_version=config.version,
         threshold_mw=stamp.threshold_mw,
-        occurrence=_fit(
-            config=config,
-            params=config.params(objective="binary", role="occurrence"),
-            train=fit_block,
-            label=fit_block.positive.astype(np.float64),
-            monitor=monitor,
-            monitor_label=monitor.positive.astype(np.float64),
-        ),
+        occurrence=occurrence,
         magnitude_p10=_fit_quantile(
             config, positives, monitor_positives, FITTED_ALPHAS[0]
         ),
@@ -190,6 +240,7 @@ def train_fold(
             monitor_label=_wind_share(monitor_positives),
         ),
         sub_threshold_means=fit_sub_threshold_means(fit_block),
+        calibration=fitted_calibration,
     )
     counts = TrainingCounts(
         base_fit_rows=len(base_fit),
@@ -214,6 +265,7 @@ def train_fold(
         blocks=blocks,
         counts=counts,
         sub_threshold_means=bundle.sub_threshold_means,
+        calibration=fitted_calibration,
         feature_set_version=feature_set_version,
         git_sha_ml=git_sha_ml,
         git_sha_api=git_sha_api,
@@ -230,9 +282,15 @@ def forecast_rows(
     :func:`wattsteer_ml.mixture.compose`. The six predictions are the *inputs* to
     that call; none of them is multiplied by another here.
 
-    Two clamps, and they are type-level rather than corrective. ``p`` and the
-    share are clipped to ``[0, 1]`` because a regression has no constraint
-    saying so and a probability outside it is not one; the magnitudes are
+    ``p`` is the **calibrated** probability. The booster's raw output goes
+    through the bundle's isotonic map, which clips it away from both endpoints,
+    and then straight into ``compose`` as the breakpoint. There is no second
+    route: nothing else in this function reads ``bundle.occurrence``.
+
+    Two clamps, and they are type-level rather than corrective. The raw output
+    and the share are clipped to ``[0, 1]`` because a regression has no
+    constraint saying so and a probability outside it is not one; the magnitudes
+    are
     floored at zero because MWh are non-negative and
     :class:`~wattsteer_ml.mixture.MagnitudeQuantiles` refuses a negative knot.
     The floor **into** ``F_pos``'s support — strictly above ``τ`` — is the
@@ -243,7 +301,8 @@ def forecast_rows(
         return ()
     block = FeatureBlock.of(rows, bundle.contract, threshold_mw=bundle.threshold_mw)
     matrix = block.matrix
-    occurrence = np.clip(_predict(bundle.occurrence, matrix), 0.0, 1.0)
+    raw = np.clip(_predict(bundle.occurrence, matrix), 0.0, 1.0)
+    occurrence = [bundle.calibration.isotonic(float(value)) for value in raw]
     q10 = _predict(bundle.magnitude_p10, matrix)
     q50 = _predict(bundle.magnitude_p50, matrix)
     q90 = _predict(bundle.magnitude_p90, matrix)
@@ -254,7 +313,7 @@ def forecast_rows(
         HourForecast(
             key=key,
             forecast=compose(
-                occurrence_probability=float(occurrence[index]),
+                occurrence_probability=occurrence[index],
                 positive_quantiles=MagnitudeQuantiles.from_boosters(
                     q10=max(floor, float(q10[index])),
                     q50=max(floor, float(q50[index])),
@@ -269,6 +328,32 @@ def forecast_rows(
             ),
         )
         for index, key in enumerate(block.keys)
+    )
+
+
+def _fit_calibration(
+    occurrence: lgb.Booster,
+    monitor: FeatureBlock,
+    *,
+    blocks: FoldBlocks,
+    pool: OutOfFoldPool,
+    incumbent_risk_bins: RiskBins | None,
+) -> Calibration:
+    """Isotonic on the calibration window; the curve and the edges on the pool.
+
+    The classifier is scored on the calibration window it was early-stopped
+    against, which is the one thing that window is used for after the fits, and
+    the base learners are **not** refit. The arithmetic lives in
+    :mod:`wattsteer_ml.training.calibration`; this function's whole job is to
+    hand it the right block.
+    """
+    raw = np.clip(_predict(occurrence, monitor.matrix), 0.0, 1.0)
+    return calibrate(
+        raw=[float(value) for value in raw],
+        observed=[bool(value) for value in monitor.positive],
+        pool=pool,
+        calibration_window=(blocks.calibration_start, blocks.calibration_end),
+        incumbent_risk_bins=incumbent_risk_bins,
     )
 
 

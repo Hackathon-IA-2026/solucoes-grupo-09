@@ -23,9 +23,16 @@ import pytest
 import reproduce_fold
 from conftest import FUNCTION_DEFINITION
 from feature_row_fixtures import blinded_sub_threshold
+from out_of_fold_fixtures import pool as out_of_fold_pool
 from wattsteer_ml.evaluation import Fold, FoldBlocks, expected_test_rows
 from wattsteer_ml.mixture import SERVED_QUANTILES, ComposedForecast
-from wattsteer_ml.training import ESTIMATOR_FIELDS, TrainedFold, forecast_rows, train_fold
+from wattsteer_ml.training import (
+    ESTIMATOR_FIELDS,
+    OutOfFoldPool,
+    TrainedFold,
+    forecast_rows,
+    train_fold,
+)
 from wattsteer_ml.training import hurdle as hurdle_module
 
 HOURS_PER_DAY = 24
@@ -133,6 +140,7 @@ def test_the_magnitude_models_saw_curtailed_hours_only(
         fold=fold,
         blocks=blocks,
         function_definition=FUNCTION_DEFINITION,
+        pool=out_of_fold_pool(),
         artifact_id="2026-08-29T05:00:00Z",
     )
     before = forecast_rows(trained.bundle, test_rows)
@@ -169,6 +177,7 @@ def test_a_fold_with_no_curtailed_hour_refuses_rather_than_fits(
             fold=fold,
             blocks=blocks,
             function_definition=FUNCTION_DEFINITION,
+            pool=out_of_fold_pool(),
             artifact_id="2026-08-29T06:00:00Z",
         )
 
@@ -255,6 +264,7 @@ def test_same_inputs_and_same_seed_reproduce_identical_predictions(
     fold: Fold,
     blocks: FoldBlocks,
     trained: TrainedFold,
+    pool: OutOfFoldPool,
 ) -> None:
     """A retrain the gate can compare against is a retrain that reproduces itself."""
     again = train_fold(
@@ -262,6 +272,7 @@ def test_same_inputs_and_same_seed_reproduce_identical_predictions(
         fold=fold,
         blocks=blocks,
         function_definition=FUNCTION_DEFINITION,
+        pool=pool,
         artifact_id="2026-08-29T07:00:00Z",
     )
     assert again.bundle.contract.feature_hash == trained.bundle.contract.feature_hash
@@ -324,5 +335,6 @@ def test_a_row_outside_the_three_blocks_is_refused(
             fold=fold,
             blocks=blocks,
             function_definition=FUNCTION_DEFINITION,
+            pool=out_of_fold_pool(),
             artifact_id="2026-08-29T08:00:00Z",
         )
