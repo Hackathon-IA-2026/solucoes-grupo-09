@@ -657,6 +657,45 @@ session *would* have reached for.
 
 ---
 
+## 10. The causality boundary — a word this product does not say
+
+The vocabulary rule that has an enforcer rather than a reviewer. Stated here
+once, so that every surface, spec and test can cite one sentence:
+
+> WattSteer says the model **raised** or **lowered** its forecast. It never says
+> a condition **caused** curtailment. The product name for this engine is
+> **Diagnosis**; the phrase "Causal AI" does not appear anywhere, including in
+> marketing copy, and no surface claims to explain why an event physically
+> occurred.
+
+The reason is not modesty. An attribution answers "which features moved this
+model's output", and the honest reading of a driver bar is a statement about the
+model. "Why the grid curtailed" is a counterfactual about the physical system
+that observational data at this grain cannot support, and a product that claims
+it is wrong in a way no test of its numbers would ever catch.
+
+`RestrictionCause` (§4) is not an exception and is not affected. ONS's own
+`cod_razaorestricao` is a **reported reason**, recorded by the operator; it is
+evidence the product displays, not a causal claim the product makes.
+
+Two automated enforcers, one lexicon:
+
+| | Where | What |
+|---|---|---|
+| Build time | `test/causality-boundary.test.ts` | Scans `apps/web/src`, `packages/ui/src`, both message catalogues and the narration system prompt for the banned lemma set. Exceptions are enumerated in `apps/web/src/lib/copy/causality-allowlist.ts`, one per occurrence, each with its location and its reason, and an entry whose string has since been edited away fails the check. |
+| Run time | the narration output validator's lexical gate | Rejects the same lemmas in generated prose, in both locales, before it reaches a user. A sentence written per request is never seen by a copy review. |
+
+Both read `CAUSALITY_BANNED_LEMMAS` and `findCausalityHits` from
+`packages/core/src/causality.ts`, so there is one list and one matcher rather
+than two that drift. [`specs/diagnosis.md`](specs/diagnosis.md) owns the
+enforcers' detail; this section owns the rule.
+
+The permitted uses are the disclaimers that use the word in order to *deny* the
+claim — the driver-bars footnote is the canonical one. That is what the
+allowlist is for, and it is the only thing it is for.
+
+---
+
 ## Renames against the data-platform spec
 
 [`specs/data-platform.md`](specs/data-platform.md) was written first and states

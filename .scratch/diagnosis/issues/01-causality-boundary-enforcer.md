@@ -29,7 +29,7 @@ and because every later ticket that writes copy is checked by it.
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] A planted banned lemma in a message catalogue fails the check
 - [ ] Moving that string to the allowlist with a reason makes the check pass
