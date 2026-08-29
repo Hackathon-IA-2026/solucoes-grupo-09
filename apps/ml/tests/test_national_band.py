@@ -375,9 +375,11 @@ def test_the_national_median_is_not_the_componentwise_sum_of_four_medians(
     """The number the landing hero used to show, and why it is not this one.
 
     The median of a sum is the sum of the medians only under comonotonicity. The
-    fit's four subsystems are not comonotone, so the two figures differ — and
-    the assertion is on the difference rather than on its sign, because which
-    way it falls is a property of the window rather than a law.
+    fit's four subsystems are not comonotone, so the two figures differ on
+    every day of it — and the assertion is on the difference rather than on its
+    sign, because which way it falls is a property of the window rather than a
+    law. A window whose subsystems really were comonotone would make the two
+    agree, which is the boundary case tested above.
     """
     days = day_grain_rows(trained.bundle, test_rows)
     nationals = national_day_grain(
@@ -385,13 +387,11 @@ def test_the_national_median_is_not_the_componentwise_sum_of_four_medians(
         expectations=subsystem_day_expectations(forecast_rows(trained.bundle, test_rows)),
         origin=ForecastOrigin.of_artifact(trained.card.artifact_id),
     )
-    differences = []
+    assert nationals
     for national in nationals:
         four = [day for day in days if day.target_date == national.target_date]
         summed_p50 = math.fsum(day.day_total.p50 for day in four)
-        differences.append(abs(national.day_total.p50 - summed_p50))
-    assert differences
-    assert max(differences) > 0.0
+        assert national.day_total.p50 != summed_p50
 
 
 def test_the_national_expectation_is_exactly_the_sum_of_the_four(
