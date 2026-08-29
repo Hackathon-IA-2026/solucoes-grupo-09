@@ -19,6 +19,7 @@ import { toWire } from "../contract/wire.js";
 import type { Database } from "../database/connection.js";
 import { database } from "../database/connection.js";
 import { BadInputError, BusyError } from "../errors.js";
+import { instant, optionalInstant } from "./params.js";
 
 /**
  * `GET /v1/canonical/*` — the canonical read contract, over HTTP.
@@ -44,20 +45,6 @@ import { BadInputError, BusyError } from "../errors.js";
  *   the router exposes no verb but `GET`, so the modelling side holds no
  *   migration rights and no write path, by construction rather than by policy.
  */
-
-/** Parse an instant, refusing anything that is not one rather than defaulting. */
-function instant(label: string, raw: string): Date {
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) {
-    throw new BadInputError(`${label} must be an ISO-8601 instant, got "${raw}"`);
-  }
-  return parsed;
-}
-
-/** Parse the optional form. `undefined` stays `undefined`; junk still throws. */
-function optionalInstant(label: string, raw?: string): Date | undefined {
-  return raw === undefined ? undefined : instant(label, raw);
-}
 
 /** The window, validated once so every read gets the same treatment. */
 function factWindow(query: { as_of: string; from: string; to: string }): {
