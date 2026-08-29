@@ -1,4 +1,10 @@
-import type { Meta, MetaFreshness, MetaLane, MetaModel } from "@wattsteer/core/api";
+import type {
+  Meta,
+  MetaForecastStateLatestPublishedItem,
+  MetaFreshness,
+  MetaLane,
+  MetaModel,
+} from "@wattsteer/core/api";
 import {
   BRL_PER_MWH,
   MAX_GAP_HOURS,
@@ -13,6 +19,7 @@ import { Elysia } from "elysia";
 import { config } from "../config.js";
 import type { Database } from "../database/connection.js";
 import { database } from "../database/connection.js";
+import { type PublishedOrigin, readLatestPublished } from "../forecast/reads.js";
 import { readSourceFreshness } from "../ingest/index.js";
 import { callMl, type MlEndpoint } from "./ml-proxy.js";
 
@@ -197,6 +204,30 @@ function toFreshness(source: {
 }
 
 /**
+ * One published origin, in the wire's vocabulary.
+ *
+ * `age_hours` is derived here rather than on a screen, for the reason the
+ * day-ahead response derives it: "is this stale?" is a question every surface
+ * asks, and none of them should answer it by differencing against a clock the
+ * server has and the client may not.
+ */
+function toPublished(
+  origin: PublishedOrigin,
+  now: Date,
+): MetaForecastStateLatestPublishedItem {
+  return {
+    targetDate: origin.targetDate,
+    gateProfile: origin.gateProfile,
+    publishedAt: origin.publishedAt.toISOString(),
+    ageHours:
+      Math.round(
+        Math.max(0, (now.getTime() - origin.publishedAt.getTime()) / 3_600_000) * 10,
+      ) / 10,
+    subsystems: origin.subsystems,
+  };
+}
+
+/**
  * The whole body, built field by field against the generated interface.
  *
  * Field by field rather than by handing an observation to the encoder, as
@@ -210,6 +241,7 @@ export function toMeta(parts: {
   environment: string;
   model: MetaModel;
   freshness: MetaFreshness[];
+  latestPublished?: MetaForecastStateLatestPublishedItem[];
 }): Meta {
   const next = nextPublication(parts.now);
   return {
@@ -239,13 +271,13 @@ export function toMeta(parts: {
     })),
     model: parts.model,
     forecast: {
-      // Empty until the publication job exists (`api-surface` ticket 10): there
-      // is no `curtailment_forecast_hour` to read, and nothing has been
-      // published, so an empty list is the true statement rather than a
-      // placeholder. `next_publication_at` is already real — it is derived from
-      // the gate table, which is why a failed publication is visible as an
-      // instant that passed with no origin behind it.
-      latestPublished: [],
+      // The publications that exist, newest target date first, read from the
+      // day-grain rows — one per (subsystem, day), so a publication is one
+      // group rather than 96 rows. Empty is a true statement and never a
+      // placeholder: nothing has been published. `next_publication_at` is
+      // derived from the gate table, which is what makes a failed publication
+      // visible as an instant that passed with no origin behind it.
+      latestPublished: parts.latestPublished ?? [],
       nextPublicationAt: next.at.toISOString(),
     },
     data: { freshness: parts.freshness },
@@ -280,9 +312,10 @@ export function createMetaRoutes(deps: {
       // the caller the freshness block, and a database that is not configured
       // does not cost them the lane states. Neither absence is an error on this
       // endpoint — being able to say *which* things are missing is its job.
-      const [model, freshness] = await Promise.all([
+      const [model, freshness, published] = await Promise.all([
         readModel(deps.ml),
         deps.db === undefined ? [] : readSourceFreshness(deps.db, { now }),
+        deps.db === undefined ? [] : readLatestPublished(deps.db, { asOf: now }),
       ]);
 
       set.headers["cache-control"] = "no-store";
@@ -293,6 +326,7 @@ export function createMetaRoutes(deps: {
           environment: deps.environment ?? config.nodeEnv,
           model,
           freshness: freshness.map(toFreshness),
+          latestPublished: published.map((origin) => toPublished(origin, now)),
         }),
       );
     },

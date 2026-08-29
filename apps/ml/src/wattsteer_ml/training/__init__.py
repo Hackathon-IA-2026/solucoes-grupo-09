@@ -70,6 +70,7 @@ from wattsteer_ml.training.calibration import (
     wilson_half_width,
 )
 from wattsteer_ml.training.conformal import (
+    CORRECTION_REGIME,
     COVERAGE_GUARDRAIL,
     NOMINAL_MISCOVERAGE,
     TARGET_COVERAGE,
@@ -158,6 +159,7 @@ from wattsteer_ml.training.national import (
 )
 
 __all__ = [
+    "CORRECTION_REGIME",
     "COVERAGE_GUARDRAIL",
     "ENSEMBLE_DRAWS",
     "ENSEMBLE_SEED",

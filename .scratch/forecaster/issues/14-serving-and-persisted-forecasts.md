@@ -27,7 +27,7 @@ retrained.
 
 **Blocked by:** 02, 07.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The endpoint serves from `current(lane)` and refuses with a typed body
       when no artifact is promoted

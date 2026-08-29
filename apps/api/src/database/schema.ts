@@ -2240,6 +2240,236 @@ export const featureDictionaryEntry = pgTable(
   ],
 );
 
+// The published forecast — forecaster ticket 14.
+//
+// Appended as its own block, for the reason the publication-lag block above is:
+// two tickets landing at once must not conflict on this file.
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether a forecast row is a **record** or a **reconstruction**.
+ *
+ * `served` is a publication that happened: the worker asked the modelling
+ * service for tomorrow ten minutes after the gate and wrote what came back.
+ * `backfilled_holdout` is `docs/specs/replay.md`'s out-of-fold prediction,
+ * persisted with a **counterfactual** `published_at` — the instant that
+ * forecast *would* have been published — so that a replay of a historical day
+ * never consults the currently promoted artifact.
+ *
+ * The discriminator is load-bearing rather than descriptive. Without it a
+ * reconstruction is indistinguishable from a record, which is the exact class
+ * of error this project keeps ruling out, and `/v1/forecast/day-ahead` filters
+ * on `served` **unconditionally, in the query** — never in a branch a later
+ * refactor can drop.
+ */
+export const forecastOriginKind = pgEnum("forecast_origin_kind", [
+  "served",
+  "backfilled_holdout",
+]);
+
+/**
+ * Which decision gate produced a forecast row.
+ *
+ * Part of the business key and not a stored detail: `gate_early` and
+ * `gate_late` forecast the *same* hours from different information — the 00Z
+ * weather run without DESSEM, and the 12Z run with it — so they are two
+ * forecasts of one day rather than two versions of one forecast. A schema that
+ * made the late gate supersede the early one would make "what did the early
+ * gate say?" unanswerable the moment the late one published.
+ *
+ * Named `forecast_gate_profile` rather than `gate_profile` because
+ * `gate_at(target_date, gate_profile)` in `drizzle/0016_the_feature_gate.sql`
+ * already uses that identifier as a parameter name, and a type sharing a name
+ * with a parameter inside the same function body is a resolution question
+ * nobody should have to answer.
+ */
+export const forecastGateProfile = pgEnum("forecast_gate_profile", [
+  "gate_early",
+  "gate_late",
+]);
+
+/**
+ * The vintage columns a WattSteer-produced fact carries.
+ *
+ * Not `vintageColumns()`: that one requires a `source_version_id` pointing at
+ * `ons_resource_version`, and these rows were not parsed from an ONS file. They
+ * were produced by an artifact, and the artifact is named by `run_label` — the
+ * provenance is the model, not a payload. Everything else is identical, because
+ * `AsOf(t)` has to work here exactly as it works on an observation: a
+ * republication is a new `data_version` and no prior belief is destroyed.
+ */
+function forecastVintageColumns() {
+  return {
+    /** Monotonic per business key; bumped only when the values change. */
+    dataVersion: integer().notNull(),
+    /**
+     * `gate_at(target_date, gate_profile)` — a property of the target date and
+     * never of the request that produced the row. The publication instant is
+     * what makes the `ForecastOrigin` true, and a request-time stamp would make
+     * it a lie (`docs/specs/api-surface.md`, "The boundary").
+     */
+    publishedAt: timestamp({ withTimezone: true }).notNull(),
+    /** When WattSteer wrote it. The axis `AsOf(t)` filters on. */
+    ingestedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    /** Digest of the stored values, so an identical republication writes nothing. */
+    valueDigest: text().notNull(),
+  };
+}
+
+/**
+ * The identity columns every forecast row carries — who said it, out of what.
+ *
+ * `run_label` is the `artifact_id` and `forecast_producer` is `wattsteer`
+ * (`docs/domain-model.md` §4). `correction_regime` is the one column that is
+ * neither identity nor measurement: see `curtailmentForecastHour`.
+ */
+function forecastOriginColumns() {
+  return {
+    /** `ForecastOrigin.producer`. Always `wattsteer` in these two tables. */
+    forecastProducer: forecastProducer().notNull(),
+    /** `ForecastOrigin.run_label` — the artifact id that produced the numbers. */
+    runLabel: text().notNull(),
+    /** The lane's feature set, so a row says which model family made it. */
+    featureSet: text().notNull(),
+    /**
+     * Which conformal correction regime composed this band.
+     *
+     * A stored string, and the answer to a question forecaster ticket 21 makes
+     * unavoidable: the composed P90 currently receives only
+     * `upper_correction_fraction(p)` of `δ_hi` — zero below p = 0.20 — and the
+     * shortfall compounds at day grain and again nationally. Whatever ticket 21
+     * decides, every row written before the decision inherits today's band, and
+     * a row written after it is a different statement about the same hour.
+     *
+     * Without this column the two are indistinguishable in storage, and a
+     * replay reading "what did we say at D−1" would be unable to tell a
+     * re-servable row from a misleading one. `run_label` does not answer it: an
+     * artifact id changes on every retrain, including retrains that changed
+     * nothing about the correction, and does not change at all when the
+     * correction rule changes underneath a bundle that is still promoted.
+     *
+     * The value is `wattsteer_ml.training.conformal.CORRECTION_REGIME`, which
+     * names the *rule* rather than the release.
+     */
+    correctionRegime: text().notNull(),
+  };
+}
+
+/**
+ * One published hour of one subsystem's day-ahead forecast.
+ *
+ * **A `Forecast`, and its own table family** (`docs/domain-model.md` §4): a
+ * forecast has `published_at < valid_time`, an observation has the inequality
+ * the other way, and the check constraint below makes reading one as the other
+ * unrepresentable rather than merely avoided. There is no `horizon` column and
+ * no flag.
+ *
+ * **The business key is (`subsystem`, `valid_time`, `origin_kind`,
+ * `gate_profile`)**, with `data_version` completing the primary key. Four
+ * components rather than two, and each of the two extra ones is a different
+ * forecast rather than a different vintage:
+ *
+ * - `origin_kind` — a record and a reconstruction of one hour coexist, and the
+ *   day-ahead route filters to the record.
+ * - `gate_profile` — the early and the late gate forecast the same hours from
+ *   different information. "Superseding" happens *within* a gate: a republished
+ *   `gate_late` forecast of the same hour is a new `data_version` of the same
+ *   key, which is what makes `AsOf` handle supersession for free.
+ *
+ * **The band is monotone in storage**, not merely in the response. The
+ * composition sorts crossed quantiles and records that it did (`crossed`), so a
+ * row that reached this table with `p10 > p50` did not come from the
+ * composition at all.
+ *
+ * **The split is two scalars and there is no split band.** Two splits are
+ * stored — of the P50 and of the expectation — because the share model produces
+ * both and the served contract splits the expectation; storing only the served
+ * one would make the other a re-run rather than a query. There is no column any
+ * quantile of a technology could go in.
+ */
+export const curtailmentForecastHour = pgTable(
+  "curtailment_forecast_hour",
+  {
+    subsystem: subsystemCode().notNull(),
+    /** Start of the hour the forecast is about, UTC. */
+    validTime: timestamp({ withTimezone: true }).notNull(),
+    originKind: forecastOriginKind().notNull(),
+    gateProfile: forecastGateProfile().notNull(),
+
+    /**
+     * The civil day in `America/Sao_Paulo` this hour belongs to.
+     *
+     * Stored rather than derived, because it is the grain the *product* asks
+     * questions at — a day-ahead forecast is about a Brazilian calendar day —
+     * and deriving it at read time would put a timezone conversion inside every
+     * predicate on the most-read table. It is also the join key onto the
+     * day-grain companion row, which has no `valid_time` to join on.
+     */
+    targetDate: date({ mode: "string" }).notNull(),
+    /** The same hour on the grid's clock: 0–23. Given, never inferred. */
+    localHour: integer().notNull(),
+
+    ...forecastOriginColumns(),
+
+    /** `curtailment_threshold_mw` in force — carried with every number it made. */
+    thresholdMw: doublePrecision().notNull(),
+    /** `p(x)`, calibrated. The band's shape is decided by it. */
+    occurrenceProbability: doublePrecision().notNull(),
+    p10Mwh: doublePrecision().notNull(),
+    p50Mwh: doublePrecision().notNull(),
+    p90Mwh: doublePrecision().notNull(),
+    /** `E[Y | x]` — a sibling of the band and never inside it. */
+    expectedMwh: doublePrecision().notNull(),
+    /** The share model applied to the P50. Two scalars, not a band. */
+    p50WindMwh: doublePrecision().notNull(),
+    p50SolarMwh: doublePrecision().notNull(),
+    /** The share model applied to the expectation — what the contract publishes. */
+    expectedWindMwh: doublePrecision().notNull(),
+    expectedSolarMwh: doublePrecision().notNull(),
+    /**
+     * Whether the three composed quantiles arrived out of order and were
+     * sorted. `crossing_rate` over a fold is a hot-swap veto; this is the only
+     * place a reader learns the boosters disagreed about *this* hour.
+     */
+    crossed: boolean().notNull(),
+
+    ...forecastVintageColumns(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.subsystem, t.validTime, t.originKind, t.gateProfile, t.dataVersion],
+    }),
+    // `AsOf` orders by ingested_at within a key; the day-ahead read's predicate
+    // is on target_date and subsystem. Two indexes, because they are two
+    // different questions: "what did we believe at t" and "what is tomorrow".
+    index("curtailment_forecast_hour_as_of").on(t.validTime, t.subsystem, t.ingestedAt),
+    index("curtailment_forecast_hour_day").on(
+      t.targetDate,
+      t.subsystem,
+      t.gateProfile,
+      t.originKind,
+    ),
+    // The structural discriminator. A row whose publication does not precede
+    // the hour it describes is not a forecast, and this table holds nothing
+    // else — including the backfilled rows, whose counterfactual instant is
+    // still the gate of the day they describe.
+    check(
+      "curtailment_forecast_hour_is_a_forecast",
+      sql`${t.publishedAt} < ${t.validTime}`,
+    ),
+    check(
+      "curtailment_forecast_hour_band_monotone",
+      sql`${t.p10Mwh} <= ${t.p50Mwh} and ${t.p50Mwh} <= ${t.p90Mwh}`,
+    ),
+    check(
+      "curtailment_forecast_hour_probability",
+      sql`${t.occurrenceProbability} between 0 and 1`,
+    ),
+    check("curtailment_forecast_hour_local_hour", sql`${t.localHour} between 0 and 23`),
+    check("curtailment_forecast_hour_threshold_positive", sql`${t.thresholdMw} > 0`),
+  ],
+);
+
 /**
  * The `✗` class: an IDEA.md feature that cannot be served at D−1, and the
  * column that replaces it.
@@ -2354,6 +2584,130 @@ export const featureAbConfiguration = pgTable(
     check(
       "feature_ab_configuration_gate",
       sql`${t.gateProfile} in ('gate_early', 'gate_late')`,
+    ),
+  ],
+);
+
+/**
+ * The day-grain companion row: two bands, a probability and an expectation.
+ *
+ * **This table is the whole of forecaster ticket 14's inherited box.**
+ * `docs/specs/replay.md` requires `forecast.day_total` to come from the path
+ * ensemble and forbids reconstructing it by summing the hourly band; ticket 07
+ * computes it and, before this table, nothing carried it out of the modelling
+ * process. Without the row a replay has two options and the spec forbids both:
+ * re-run the ensemble (a model in the request path) or add up twenty-four
+ * quantiles (arithmetic that is simply wrong — the day total depends on the
+ * intra-day dependence structure the marginals discard).
+ *
+ * `derivation` is stored and is not a comment. It is `path_ensemble` on every
+ * row this product writes, and a reader of the database can check that rather
+ * than take it on trust — which is the point, because the prototype's summed
+ * row is exactly what would otherwise be indistinguishable from this one.
+ *
+ * **`peak_power_*_mw` is power and `day_total_*_mwh` is energy**, and the column
+ * names say which (`docs/domain-model.md` §1). A day's largest hourly MWh is
+ * numerically its peak MW at hour grain, and the rename is where that
+ * conversion is admitted rather than assumed.
+ */
+export const curtailmentForecastDay = pgTable(
+  "curtailment_forecast_day",
+  {
+    subsystem: subsystemCode().notNull(),
+    /** The civil day in `America/Sao_Paulo` being forecast. */
+    targetDate: date({ mode: "string" }).notNull(),
+    originKind: forecastOriginKind().notNull(),
+    gateProfile: forecastGateProfile().notNull(),
+
+    ...forecastOriginColumns(),
+
+    thresholdMw: doublePrecision().notNull(),
+
+    /** Quantiles of `Σ_t y*_t` over the 500 draws. Never a sum of quantiles. */
+    dayTotalP10Mwh: doublePrecision("day_total_p10_mwh").notNull(),
+    dayTotalP50Mwh: doublePrecision("day_total_p50_mwh").notNull(),
+    dayTotalP90Mwh: doublePrecision("day_total_p90_mwh").notNull(),
+    /** Quantiles of `max_t y*_t`, in MW. Never a maximum of quantiles either. */
+    peakPowerP10Mw: doublePrecision("peak_power_p10_mw").notNull(),
+    peakPowerP50Mw: doublePrecision("peak_power_p50_mw").notNull(),
+    peakPowerP90Mw: doublePrecision("peak_power_p90_mw").notNull(),
+    /**
+     * The share of draws with at least one hour above τ. **Not**
+     * `1 − Π(1 − p_t)`, which assumes independence across hours and overstates
+     * the day badly.
+     */
+    dayOccurrenceProbability: doublePrecision().notNull(),
+    /** `Σ_t E[Y_t]` — expectations add exactly, and this is the one thing summed. */
+    expectedMwh: doublePrecision().notNull(),
+    expectedWindMwh: doublePrecision().notNull(),
+    expectedSolarMwh: doublePrecision().notNull(),
+    /** How many of the day's hours have a non-zero P50 — a count, not a sum. */
+    hoursP50Nonzero: integer("hours_p50_nonzero").notNull(),
+
+    /** How the day figures were produced. `path_ensemble`, and checked below. */
+    derivation: text().notNull(),
+    /** The draw count, seed and calibration-day count the bands came off. */
+    ensembleDraws: integer().notNull(),
+    ensembleSeed: integer().notNull(),
+    ensembleCalibrationDays: integer().notNull(),
+
+    /**
+     * How far the artifact's training window reached, and the published class
+     * edges it read a risk class off.
+     *
+     * On the row rather than fetched from the volume, because the gateway has
+     * no volume: `docs/specs/api-surface.md` requires the response to name its
+     * artifact and to publish the `risk_bins` beside the class "so the class is
+     * checkable rather than asserted", and a gateway that had to ask the
+     * modelling service for them would be a data path across the boundary the
+     * boundary decision closed.
+     */
+    trainedThrough: date({ mode: "string" }).notNull(),
+    /** `low = [0, elevated_from)`, `elevated = [elevated_from, high_from)`. */
+    riskBinElevatedFrom: doublePrecision().notNull(),
+    riskBinHighFrom: doublePrecision().notNull(),
+
+    ...forecastVintageColumns(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.subsystem, t.targetDate, t.originKind, t.gateProfile, t.dataVersion],
+    }),
+    index("curtailment_forecast_day_as_of").on(t.targetDate, t.subsystem, t.ingestedAt),
+    // The day's publication instant is the same gate its hours carry, so the
+    // forecast-shape check is expressible here too: the gate precedes the local
+    // day it describes.
+    check(
+      "curtailment_forecast_day_is_a_forecast",
+      sql`${t.publishedAt} < (${t.targetDate}::timestamp at time zone 'America/Sao_Paulo')`,
+    ),
+    check(
+      "curtailment_forecast_day_total_monotone",
+      sql`${t.dayTotalP10Mwh} <= ${t.dayTotalP50Mwh} and ${t.dayTotalP50Mwh} <= ${t.dayTotalP90Mwh}`,
+    ),
+    check(
+      "curtailment_forecast_day_peak_monotone",
+      sql`${t.peakPowerP10Mw} <= ${t.peakPowerP50Mw} and ${t.peakPowerP50Mw} <= ${t.peakPowerP90Mw}`,
+    ),
+    check(
+      "curtailment_forecast_day_probability",
+      sql`${t.dayOccurrenceProbability} between 0 and 1`,
+    ),
+    // A day figure this product publishes came off the path ensemble. The
+    // constraint is what makes "never a sum of quantiles" a property of the
+    // database rather than a habit of the one writer that exists today.
+    check(
+      "curtailment_forecast_day_from_the_ensemble",
+      sql`${t.derivation} = 'path_ensemble'`,
+    ),
+    check("curtailment_forecast_day_drew_something", sql`${t.ensembleDraws} > 0`),
+    check(
+      "curtailment_forecast_day_hours_counted",
+      sql`${t.hoursP50Nonzero} between 0 and 24`,
+    ),
+    check(
+      "curtailment_forecast_day_risk_edges_ordered",
+      sql`0 < ${t.riskBinElevatedFrom} and ${t.riskBinElevatedFrom} < ${t.riskBinHighFrom} and ${t.riskBinHighFrom} < 1`,
     ),
   ],
 );

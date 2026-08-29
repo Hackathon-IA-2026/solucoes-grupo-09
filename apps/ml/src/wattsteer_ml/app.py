@@ -13,6 +13,7 @@ Routes:
   GET /ready                  readiness — database reachable, read-only, migrated
   GET /v1/meta                what this instance can actually do right now
   GET /v1/forecast/day-ahead  the stub the gateway proxies to
+  POST /internal/publish/forecast  worker-only; returns rows, writes nothing
   POST /v1/optimize           the MILP and the simulator, inside one request
 """
 
@@ -22,7 +23,7 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 
 from fastapi import Body, Depends, FastAPI, Query
 from fastapi.responses import JSONResponse
@@ -32,6 +33,8 @@ from . import __version__, artifacts
 from .config import settings
 from .constants import Subsystem
 from .database import database
+from .features import FeatureSet, GateProfile, read_serving_rows, serving_target_date
+from .lanes import Lane, LaneNameError
 from .optimizer import (
     OptimizerBugError,
     SolverNotOptimalError,
@@ -44,6 +47,13 @@ from .optimizer.result import (
     optimization_result,
 )
 from .promotions import PROMOTION_LOG_FILENAME
+from .publication import (
+    ForecastPublication,
+    PublicationError,
+    PublicationRefusedError,
+    build_publication,
+    load_promoted,
+)
 from .scenario import ScenarioTransportError, decode_scenario_body
 from .scenario_validation import ScenarioValidationError, validate_scenario
 
@@ -327,6 +337,120 @@ def day_ahead(
         hours=[],
         generated_at=now,
     )
+
+
+# --- the publication route ----------------------------------------------------
+#
+# `docs/specs/api-surface.md`, "The boundary": **worker → ml, never gateway →
+# ml**. The public day-ahead read resolves entirely from Postgres, and this
+# route is what puts the rows there — ten minutes after each gate, called by the
+# worker, computed here and *written by the caller*. This service is read-only
+# against Postgres and stays that way; what it returns is rows, not an effect.
+#
+# It is under `/internal` and not `/v1` because it is not part of the public
+# contract and never will be: the gateway does not call it, the app cannot reach
+# it, and its shape is free to follow the tables it feeds.
+
+
+class PublishForecastRequest(BaseModel):
+    """Which lane, and which day of it."""
+
+    #: The lane directory name — `dessem_free_v1__gate_late__thr5`. The lane is
+    #: the addressable unit a forecast is served from, so the caller names one
+    #: rather than passing three loose fields that could disagree.
+    lane: str
+    #: The civil day being forecast, in Brasília. Defaults to tomorrow, which is
+    #: what the two gate jobs publish; a caller that wants another day says so.
+    target_date: date | None = None
+
+
+@app.post("/internal/publish/forecast", tags=["forecast"])
+async def publish_forecast(
+    request: Annotated[PublishForecastRequest, Body()],
+) -> JSONResponse:
+    """Compose one lane's day and hand the rows back. Writes nothing.
+
+    Refuses rather than invents, in the four ways the spec distinguishes:
+
+    - no promoted artifact — `MODEL_UNAVAILABLE`, 503, carrying which of the
+      three lane states holds, which is what reaches a screen as its own
+      sentence instead of a spinner;
+    - no database — `DATA_UNAVAILABLE`, 503, because features come from
+      Postgres and a publication built without them would be built from nothing;
+    - no feature rows for the day — `FORECAST_UNAVAILABLE`, 404: the model is
+      fine and the inputs are not, and the two are different repairs;
+    - a lane name that is not one — `REQUEST_INVALID`, 422.
+
+    None of them is an empty band.
+    """
+    try:
+        lane = Lane.parse(request.lane)
+    except LaneNameError as error:
+        return _refusal(422, "REQUEST_INVALID", str(error))
+
+    try:
+        loaded = load_promoted(lane, root=settings.artifact_dir)
+    except PublicationRefusedError as refusal:
+        return _refusal(
+            503,
+            "MODEL_UNAVAILABLE",
+            refusal.reason,
+            {
+                "lane": lane.directory_name,
+                "lane_state": refusal.lane_state,
+                # Beside the state, never folded into it: an unmounted volume
+                # and an untrained lane are the same `no_artifact` and two
+                # completely different repairs.
+                "volume_mounted": refusal.volume_mounted,
+            },
+        )
+
+    if database is None:
+        return _refusal(
+            503,
+            "DATA_UNAVAILABLE",
+            "this instance has no database configured, and a forecast is a "
+            "function of feature rows that only Postgres holds",
+        )
+
+    target_date = request.target_date or serving_target_date(datetime.now(tz=UTC))
+    pool = await database.connect()
+    async with pool.acquire() as conn:
+        rows = await read_serving_rows(
+            conn,
+            target_date=target_date,
+            # The lane is the authority on all three. They are strings on it —
+            # it is deliberately not pinned to a literal, since the feature
+            # dictionary owns which sets exist — so the cast is at this edge and
+            # the refusal for an unknown one comes from the database.
+            gate_profile=cast(GateProfile, lane.gate_profile),
+            feature_set=cast(FeatureSet, lane.feature_set),
+            threshold_mw=lane.threshold_mw,
+        )
+
+    if not rows:
+        return _refusal(
+            404,
+            "FORECAST_UNAVAILABLE",
+            f"the feature function returned no row for "
+            f"{target_date.isoformat()} in {lane.directory_name}; the model is "
+            "promoted and its inputs are not there",
+            {"lane": lane.directory_name, "target_date": target_date.isoformat()},
+        )
+
+    try:
+        publication: ForecastPublication = build_publication(
+            rows, lane=lane, loaded=loaded, target_date=target_date
+        )
+    except PublicationError as error:
+        # A 500 and not a 422: the caller asked for a well-formed thing and
+        # the rows it was built from are the database's own. Something upstream
+        # is wrong, and rounding that to "your request was bad" would send an
+        # operator to the wrong place.
+        logger.error("publish: %s", error)
+        return _refusal(500, "INTERNAL", str(error))
+
+    return JSONResponse(content=publication.as_payload())
 
 
 # --- the flex optimizer's synchronous endpoint --------------------------------

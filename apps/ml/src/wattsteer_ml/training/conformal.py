@@ -119,6 +119,27 @@ TARGET_COVERAGE = 1.0 - NOMINAL_MISCOVERAGE
 #: forecaster ticket 13's and nothing in this file refuses anything.
 COVERAGE_GUARDRAIL: tuple[float, float] = (0.85, 0.97)
 
+#: Which correction regime a served number was produced under — a **stored
+#: string**, stamped on every persisted forecast row by
+#: :mod:`wattsteer_ml.publication`.
+#:
+#: The band this module produces is the one forecaster ticket 21 is open about:
+#: the lower tail receives ``δ_lo`` in full, the upper receives ``δ_hi`` scaled
+#: by :func:`upper_correction_fraction` — zero below ``p = 0.20`` — and that
+#: shortfall compounds at day grain and again nationally. Whatever ticket 21
+#: decides, the rows written *before* the decision inherit the old band, and a
+#: reader of the database has to be able to tell them apart from rows written
+#: after: one is re-servable at its own origin, the other is a different
+#: statement about the same hour. A stored regime is what makes that a query.
+#:
+#: **It is bumped when the composed band's correction changes, and never
+#: otherwise.** A retrain under the same rule produces a new ``artifact_id`` and
+#: the same regime; a change to how ``δ_hi`` reaches the composed P90 produces
+#: a new regime, whatever the artifact ids say. So the value names the rule and
+#: not the release: ``v1`` is one-sided split conformal on ``Q_pos`` with the
+#: upper knot's shift reaching the composed P90 only in proportion.
+CORRECTION_REGIME = "conformal_v1_partial_upper"
+
 #: Guard against ``⌈9.0000000000000002⌉ = 10``. ``(n + 1)(1 − α)`` is an exact
 #: integer at the ``n`` where the rank first becomes attainable, and binary
 #: floating point does not always agree; a tolerance of a billionth cannot move
