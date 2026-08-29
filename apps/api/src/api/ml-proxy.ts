@@ -11,10 +11,11 @@ import {
 } from "../errors.js";
 
 /**
- * The gateway's edge onto the ML service — and, once `/v1/optimize` is wired
- * through it, onto the solver, which is the only thing that will be left
- * behind it. Forecasts and diagnoses resolve from Postgres; a solve cannot be
- * precomputed, so this is where a request crosses the language boundary.
+ * The gateway's edge onto the ML service — and, since flex-optimizer ticket 06
+ * wired `/v1/optimize` through it, onto the solver, which is the only thing
+ * that will be left behind it. Forecasts and diagnoses resolve from Postgres; a
+ * solve cannot be precomputed, so this is where a request crosses the language
+ * boundary.
  *
  * The architecture decision this implements: Expo talks only to Elysia, and
  * Elysia forwards anything model-shaped. Keeping that boundary in one small
@@ -162,13 +163,50 @@ export async function mapUpstreamFailure(response: Response): Promise<AppError> 
 /**
  * `GET` the ML service, or throw the error that says whose fault it was.
  *
- * Exported so the routes that will sit in front of the solver share one
- * mapping — the point of the module is that there is exactly one.
+ * Exported so the routes in front of the solver share one mapping — the point
+ * of the module is that there is exactly one. `postMl` below is the same call
+ * with a body, and both land on `request`.
  */
 export async function callMl(
   path: string,
   query: URLSearchParams,
   endpoint: MlEndpoint = configuredEndpoint(),
+): Promise<Response> {
+  return request(`${path}?${query.toString()}`, {}, endpoint);
+}
+
+/**
+ * `POST` the canonical scenario bytes to the ML service, through the same
+ * mapping.
+ *
+ * A second function rather than a `method` argument on `callMl`, because the
+ * two calls differ in more than a verb: this one carries a body, and the body
+ * is *bytes and not an object* — the exact canonical UTF-8 the gateway hashed.
+ * Re-serialising a parsed scenario here would let the answer be stamped with a
+ * hash of something the solver never saw, which is the one thing the canonical
+ * encoding exists to prevent.
+ */
+export async function postMl(
+  path: string,
+  body: Uint8Array | string,
+  endpoint: MlEndpoint = configuredEndpoint(),
+): Promise<Response> {
+  return request(
+    path,
+    {
+      method: "POST",
+      body: body as BodyInit,
+      headers: { "content-type": "application/json" },
+    },
+    endpoint,
+  );
+}
+
+/** The one call, the one timeout and the one failure mapping. */
+async function request(
+  pathAndQuery: string,
+  init: RequestInit,
+  endpoint: MlEndpoint,
 ): Promise<Response> {
   if (!endpoint.baseUrl) {
     // Not configured is not the same as broken. Say so rather than dialling
@@ -178,12 +216,16 @@ export async function callMl(
     });
   }
 
-  const url = `${endpoint.baseUrl.replace(/\/$/, "")}${path}?${query.toString()}`;
+  const url = `${endpoint.baseUrl.replace(/\/$/, "")}${pathAndQuery}`;
   const signal = AbortSignal.timeout(endpoint.timeoutMs);
 
   let response: Response;
   try {
-    response = await fetch(url, { signal, headers: { accept: "application/json" } });
+    response = await fetch(url, {
+      ...init,
+      signal,
+      headers: { accept: "application/json", ...init.headers },
+    });
   } catch (error) {
     // A timeout is not the same failure as a refused connection: one says the
     // service is overloaded, the other that it is absent. 503 tells a caller

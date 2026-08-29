@@ -156,6 +156,21 @@ export const config = {
    * an exhausted connection pool.
    */
   mlTimeoutMs: int(process.env.WATTSTEER_ML_TIMEOUT_MS, 5000, 100, 60_000),
+  /**
+   * The optimizer build a cached plan is keyed on.
+   *
+   * `flex-optimizer.md` puts it in the cache key because a deploy that changes
+   * the formulation must not serve yesterday's plan under today's code — a
+   * staleness no TTL is short enough to prevent, because the entry is not stale,
+   * the code underneath it is.
+   *
+   * It defaults to this repository's version, which is also `apps/ml`'s
+   * `__version__`, so the two agree with nothing set. The ML service stamps the
+   * build that actually solved on the response, and `/v1/optimize` declines to
+   * store an answer whose build disagrees with this one: a cache that stops
+   * working is a better failure than one that starts lying.
+   */
+  optimizerBuild: process.env.WATTSTEER_OPTIMIZER_BUILD || "0.1.0",
 
   // --- persistence ---
   /** Postgres URL. Unset → persistence disabled. */

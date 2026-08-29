@@ -10,6 +10,9 @@ module split follows the spec's own seams:
 * :mod:`.backend` — which solver runs, and which are refused before they can.
 * :mod:`.milp` — the model of the research's §2, built and solved.
 * :mod:`.simulator` — the execution rule, and every KPI derived from it.
+* :mod:`.scenario_fleet` — a validated `Scenario`'s assets, as the model sees
+  them.
+* :mod:`.result` — one scenario in, one published `OptimizationResult` out.
 
 :mod:`.simulator` is deliberately separate from :mod:`.milp`: the objective
 value carries a throughput penalty, is not a physical quantity, and must never
@@ -47,6 +50,17 @@ from .milp import (
     SolverReport,
     solve,
 )
+from .result import (
+    EXECUTION_RULE,
+    OPTIMIZER_BUILD,
+    PLANNING_BASIS,
+    PlanningProfile,
+    ProfileSource,
+    build_plan,
+    no_forecast_yet,
+    optimization_result,
+)
+from .scenario_fleet import fleet_from_scenario
 from .shiftable import Compensation, LoadDispatch
 from .simulator import (
     TOLERANCE_MWH,
@@ -59,11 +73,14 @@ from .simulator import (
 )
 
 __all__ = [
+    "EXECUTION_RULE",
     "GRID_ZONE",
     "HORIZON_HOURS",
     "LP_BACKENDS",
     "MILP_BACKENDS",
+    "OPTIMIZER_BUILD",
     "PERIOD_HOURS",
+    "PLANNING_BASIS",
     "REFUSED_BACKENDS",
     "SHIPPED",
     "TOLERANCE_MWH",
@@ -79,6 +96,8 @@ __all__ = [
     "LoadDispatch",
     "ModelOptions",
     "OptimizerBugError",
+    "PlanningProfile",
+    "ProfileSource",
     "Schedule",
     "ScoredBand",
     "ScoredRealisation",
@@ -87,8 +106,12 @@ __all__ = [
     "SolverReport",
     "Versions",
     "available_between",
+    "build_plan",
     "configured_milp_backend",
+    "fleet_from_scenario",
     "local_day",
+    "no_forecast_yet",
+    "optimization_result",
     "reference_battery",
     "reference_load",
     "resolve_backend",

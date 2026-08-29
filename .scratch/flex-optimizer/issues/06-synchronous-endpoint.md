@@ -55,7 +55,7 @@ formulation must not serve yesterday's plan under today's code.
 **Blocked by:** 01, 04. (05 is not a blocker — a battery-only endpoint is a
 complete slice, and the load variant flows through unchanged.)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] `POST` and `GET ?s=` both answer inside one request with no job id anywhere in the contract
 - [ ] The handler is a `def`; `SetNumThreads(1)` and `SetTimeLimit(2000)` are set per solve; the gateway timeout is 5 s

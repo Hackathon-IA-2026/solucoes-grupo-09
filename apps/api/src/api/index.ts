@@ -10,6 +10,7 @@ import { gridRoutes } from "./grid.js";
 import { ingestHealth } from "./ingest-health.js";
 import { metaRoutes } from "./meta.js";
 import { mlProxy } from "./ml-proxy.js";
+import { optimizeCache, optimizeRoutes } from "./optimize.js";
 import { plantRoutes } from "./plants.js";
 import {
   bodyLimit,
@@ -130,6 +131,7 @@ export const app = new Elysia()
   .use(gridRoutes)
   .use(curtailmentRoutes)
   .use(plantRoutes)
+  .use(optimizeRoutes)
   .use(metaRoutes);
 
 // Opt-in BullMQ dashboard at /jobs (requires Redis). Protect it in production.
@@ -163,6 +165,9 @@ if (import.meta.main) {
     console.log(
       "   • GET /v1/plants       — the plant registry (ODbL §4.6), JSON or CSV",
     );
+    console.log(
+      "   • POST/GET /v1/optimize — the MILP and the simulator, in one request",
+    );
     console.log("🔒 Security:");
     console.log("   • Content-Security-Policy (relaxed for /docs)");
     console.log("   • X-Frame-Options: DENY, X-Content-Type-Options: nosniff");
@@ -185,6 +190,10 @@ if (import.meta.main) {
     );
     console.log(`   • trusted proxy depth ${config.trustedProxyDepth}`);
     console.log(
+      `🧠 Plans: cached in ${optimizeCache.detail}, keyed on ` +
+        `scenario + origin + build ${config.optimizerBuild}`,
+    );
+    console.log(
       `🗄️  Persistence: ${database ? "Postgres (Drizzle)" : "off (no DATABASE_URL)"}`,
     );
   });
@@ -199,6 +208,7 @@ if (import.meta.main) {
     await app.stop();
     await database?.close().catch(() => {});
     await limitStore.close().catch(() => {});
+    await optimizeCache.close().catch(() => {});
     console.log("✅ Server closed");
     process.exit(0);
   };
