@@ -1,0 +1,34 @@
+# Live conformance — the one suite that talks to the real sources.
+#
+# It is scheduled, never triggered by a push or a pull request. A failure here
+# does not mean a commit broke something; it means a source WattSteer depends on
+# changed, and the job's output names which documented assumption expired. See
+# `apps/api/test/live-conformance.test.ts` and `docs/specs/data-platform.md`
+# ("Seam 3 — live conformance, gated and scheduled").
+name: live-conformance
+
+on:
+  schedule:
+    # 07:00 UTC daily — after the ONS 12h/19h Brasília publication cycles of the
+    # previous day have both landed, and after the ANEEL SIGA daily cut.
+    - cron: "0 7 * * *"
+  # So a human can ask the question on demand after changing a research note.
+  workflow_dispatch:
+
+# Never on push. The default `bun test` path must stay offline, and this suite
+# must never be able to fail a commit.
+permissions:
+  contents: read
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Assert the research notes still describe the live sources
+        run: bun run test:live

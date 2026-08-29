@@ -53,6 +53,7 @@ Point the web app at a different API with `EXPO_PUBLIC_API_URL`.
 | `bun run web:export` | Static web build (SEO-ready) to `apps/web/dist` |
 | `bun run test` | Unit tests: core + api + web |
 | `bun run test:e2e` | Playwright e2e (exported web bundle) |
+| `bun run test:live` | Live conformance against the real ONS / ANEEL / Open-Meteo sources (gated, scheduled) |
 | `bun run typecheck` | TypeScript across all workspaces |
 | `bun run lint` | Biome |
 | `bun run docker:up` | Postgres + Redis + API + worker via compose |
@@ -64,6 +65,11 @@ Point the web app at a different API with `EXPO_PUBLIC_API_URL`.
   mapping, rate limiting, security headers, body limit, CORS, request
   correlation, and both job runners. The BullMQ suite needs a throwaway Redis
   (`bun run test:redis`).
+- **Live conformance** — `apps/api/test/live-conformance.test.ts`, gated on
+  `WATTSTEER_LIVE_CONFORMANCE` and scheduled daily in CI. It talks to the real
+  sources and asserts they still look the way `docs/research/` found them; a
+  failure names the expired assumption in prose. It never runs in the default
+  test path.
 - **`apps/web`** — legal table-of-contents unit tests, plus a Playwright e2e
   suite covering the footer and legal pages against the real exported bundle.
   Run `bun run web:export` before `bun run test:e2e`.

@@ -61,6 +61,7 @@ BullMQ.
 bun run test         # default: no network, no database
 bun run test:db      # as-of reads against a real Postgres
 bun run test:redis   # BullMQ against a real Redis
+bun run test:live    # live conformance: the real ONS, ANEEL and Open-Meteo
 ```
 
 The default suite runs entirely offline against captured upstream payloads in
@@ -72,6 +73,14 @@ The database and Redis suites are gated behind their own environment variables
 so the default path never needs either. Both truncate the tables they use, so
 point them at a throwaway instance — `docker compose up postgres redis` gives
 you one.
+
+`test/live-conformance.test.ts` is gated the same way, on
+`WATTSTEER_LIVE_CONFORMANCE`, and is the one suite that is *expected to fail
+eventually*: it asks the live sources whether the claims in `docs/research/`
+are still true. It runs on a schedule
+(`.github/workflows/live-conformance.yml`), never on a commit, and every
+failure names the research note and claim that expired in prose rather than
+reporting a diff.
 
 ## Layout
 
