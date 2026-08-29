@@ -327,6 +327,71 @@ export const canonicalDayAheadBalance = pgView("canonical_day_ahead_balance", {
 `);
 
 /**
+ * ONS's day-ahead load programme per subsystem-hour — `carga-energia-programada`,
+ * dataset 7, and `dessem_free_v1`'s spine.
+ *
+ * A `Forecast`, and cut on `published_at <= gate` for the reason
+ * `canonical_day_ahead_balance` and `canonical_weather_forecast` are: the
+ * publication instant is what makes a D−1 availability *genuine* in the
+ * backfill window, where `as_of` filters nothing. Which instant a programme row
+ * carries is decided at the adapter and argued there
+ * (`ingest/ons/load.ts`, `programmePublishedAt`).
+ *
+ * Three conventions are removed here so that no feature can meet them:
+ *
+ * - **`SECO` never leaves the adapter.** The subsystem column is already
+ *   WattSteer's `SE`; this view exposes only the four subsystem areas, because
+ *   the forecast grain is the subsystem and ONS publishes no assignment from a
+ *   geoelectric or loss area to one (`schema.ts`, `programmed_load_half_hour`).
+ * - **Half hours become hours.** The source grain is 30 minutes and the feature
+ *   row is hourly, so the two half hours of an hour are summed into it — they
+ *   are MWh after the adapter's MWmed conversion, so a sum is the hour's energy
+ *   and a mean would be its average power.
+ * - **A half-empty hour is a hole, not a half-sized one.** The sum is taken
+ *   only where both half hours survive the gate; with one of them the hour
+ *   would be published as a number roughly half its true size, which is the
+ *   kind of wrong that looks exactly like a quiet evening.
+ *
+ * The vintage columns are the *latest* of the pair, because the hour is as new
+ * as its newer half and as late-published as its later half — the weakest-link
+ * rule the fidelity stamp already uses, applied to an aggregate.
+ */
+export const canonicalProgrammedLoad = pgView("canonical_programmed_load", {
+  subsystem: subsystemCode().notNull(),
+  /** Start of the hour, UTC. */
+  validTime: timestamp({ withTimezone: true }).notNull(),
+  /** `val_cargaglobalprogramada`, both half hours of the hour, as MWh. */
+  programmedLoadMwh: doublePrecision().notNull(),
+  ...rowVintage,
+}).as(sql`
+  with half_hours as (
+    select distinct on (area_code, valid_time)
+      subsystem,
+      valid_time,
+      programmed_load_mwh,
+      data_version,
+      published_at,
+      ingested_at
+    from programmed_load_half_hour
+    where subsystem is not null
+      and ingested_at <= canonical_as_of()
+      and (canonical_published_at_or_before() is null
+           or published_at <= canonical_published_at_or_before())
+    order by area_code, valid_time, ingested_at desc, data_version desc
+  )
+  select
+    subsystem,
+    date_trunc('hour', valid_time) as valid_time,
+    sum(programmed_load_mwh) as programmed_load_mwh,
+    max(data_version) as data_version,
+    max(published_at) as published_at,
+    max(ingested_at) as ingested_at
+  from half_hours
+  group by subsystem, date_trunc('hour', valid_time)
+  having count(*) = 2
+`);
+
+/**
  * Weather at capacity-weighted cluster centroids, from a named run.
  *
  * With no run cycle set — the normal read — the later run simply wins as a
@@ -510,7 +575,18 @@ export const canonicalConjuntoMembership = pgView("canonical_conjunto_membership
  * same input in both languages while remaining a pure function in each.
  */
 export const canonicalReadGoLive = pgView("canonical_read_go_live", {
-  /** A `CanonicalReadName` — the manifest's name, not a table's. */
+  /**
+   * A `CanonicalReadName` — the manifest's name, not a table's.
+   *
+   * With one deliberate exception. `programmed-load` names a canonical *view*
+   * that no `/v1/canonical` read is published for: the ONS day-ahead programme
+   * feeds `dessem_free_v1`'s spine and nothing else yet, and the feature
+   * function needs its go-live for the fidelity stamp. Putting the row here is
+   * strictly better than the alternative, which is a feature reaching into
+   * `programmed_load_half_hour` for a `min(ingested_at)` — the one thing a
+   * feature may never do. Publishing the read itself is an api-surface ticket,
+   * and this row is what it will find waiting.
+   */
   read: text().notNull(),
   goLiveAt: timestamp({ withTimezone: true }),
 }).as(sql`
@@ -524,6 +600,8 @@ export const canonicalReadGoLive = pgView("canonical_read_go_live", {
   select 'system-exchange', min(ingested_at) from subsystem_exchange_hour
   union all
   select 'day-ahead-balance', min(ingested_at) from dessem_balance_half_hour
+  union all
+  select 'programmed-load', min(ingested_at) from programmed_load_half_hour
   union all
   select 'weather-forecast', min(ingested_at) from weather_forecast_hour
   union all

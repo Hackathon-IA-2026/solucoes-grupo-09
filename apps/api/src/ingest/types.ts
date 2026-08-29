@@ -271,6 +271,17 @@ export interface ProgrammedLoadHalfHour {
   validTime: Date;
   /** `val_cargaglobalprogramada`. */
   programmedLoadMwh: number;
+  /**
+   * When ONS published the programme this half hour belongs to.
+   *
+   * **Derived from the row's own reference day, never from the fetch instant.**
+   * The endpoint returns no update stamp of any kind, so the fetch instant was
+   * the only thing to hand — and over a backfill that makes `published_at`
+   * later than `valid_time` by up to five years, which is the shape
+   * `docs/domain-model.md` §4 reserves for an `Observation`. See
+   * `programmePublishedAt` in `ons/load.ts` for the instant and the argument.
+   */
+  publishedAt: Date;
 }
 
 /** What the carga adapter produces from one API response. */

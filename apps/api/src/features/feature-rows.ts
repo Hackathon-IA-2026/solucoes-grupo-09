@@ -200,6 +200,36 @@ export interface FeatureRow {
   observed_reason_share_cnf_7d: number | null;
   /** `REL` is external grid unavailability, not *relaxamento*. */
   observed_reason_share_rel_7d: number | null;
+
+  // Class `P` — ONS day-ahead programming, and `dessem_free_v1`'s spine. A
+  // `Forecast`, so it is cut on `published_at <= gate` like the weather and
+  // unlike the class-`K` block above it. See
+  // `drizzle/0024_day_ahead_programming.sql`.
+  //
+  // **The publication instant is a decision, not a measurement.** The endpoint
+  // returns no update stamp of any kind, so the programme for day D is stamped
+  // D−1 15:00 BRT at the adapter — the DESSEM-anchored upper bound, argued at
+  // `programmePublishedAt` in `ingest/ons/load.ts`. It clears `gate_late` by
+  // four hours and does **not** clear `gate_early`, where every column here is
+  // NULL: a visible hole rather than a leak, and one only measurement closes.
+
+  /** ONS's programmed load for the subsystem-hour. */
+  programmed_load_mwh: number | null;
+  /**
+   * Difference within the day-D programmed profile.
+   *
+   * Legal where the actuals-side ramp is not, and for one reason: a D−1
+   * programme publishes the whole of day D at once, so the difference is
+   * computed from data that exists at the gate. NULL at the local day's first
+   * hour, whose predecessor belongs to a different publication.
+   */
+  programmed_load_ramp_1h: number | null;
+  /** Centred on t, within the same profile. NULL at both edges of the day. */
+  programmed_load_mean_3h: number | null;
+  /** Minimum over D's 24 programmed hours. **Day grain**, and NULL if any is missing. */
+  programmed_load_daily_min_mwh: number | null;
+  /** Rank of t among D's 24 programmed loads, ascending: 1 is the trough. */
+  programmed_load_rank_in_day: number | null;
 }
 
 /**
@@ -265,6 +295,12 @@ export const FEATURE_ROW_COLUMNS: readonly (keyof FeatureRow)[] = [
   "observed_reason_share_ene_7d",
   "observed_reason_share_cnf_7d",
   "observed_reason_share_rel_7d",
+  // Class `P`, appended by `drizzle/0024_day_ahead_programming.sql`.
+  "programmed_load_mwh",
+  "programmed_load_ramp_1h",
+  "programmed_load_mean_3h",
+  "programmed_load_daily_min_mwh",
+  "programmed_load_rank_in_day",
 ];
 
 /**
@@ -303,6 +339,11 @@ const DAY_GRAIN_COLUMNS: readonly string[] = [
   "observed_reason_share_ene_7d",
   "observed_reason_share_cnf_7d",
   "observed_reason_share_rel_7d",
+  // Class `P`'s one summary of the whole profile. `programmed_load_rank_in_day`
+  // is deliberately *not* here: it is computed over the day but selected by the
+  // target hour, so it genuinely varies across the 24 — the same distinction
+  // that keeps `observed_constrained_off_same_hour_mean_7d` out of this list.
+  "programmed_load_daily_min_mwh",
 ];
 
 /** The grain of one column. Hourly is the default because the row is. */

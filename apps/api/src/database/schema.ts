@@ -551,6 +551,18 @@ export const verifiedLoadHalfHour = pgTable(
  * It also carries no `din_atualizacao`: this endpoint returns none, so every
  * row's `published_at_precision` is `file` and revisions are detectable only by
  * the value digest, which is what the shared versioned write does anyway.
+ *
+ * **And it carries no fetch instant either, which is the part worth reading.**
+ * With no stamp of any kind from ONS, the adapter's first answer was the
+ * response's fetch time — the coarsest honest reading of a value the source
+ * said nothing about. Over a backfill of 2021 → now that answer is not merely
+ * coarse: it puts `published_at` *after* `valid_time` on every row, which is
+ * the shape `docs/domain-model.md` §4 reserves for an `Observation`, and it
+ * puts the whole series behind every historical gate. The publication instant
+ * is therefore derived from the row's own reference day — see
+ * `programmePublishedAt` in `ingest/ons/load.ts`, which holds the decision and
+ * the evidence — and the check below is what makes the forecast shape a
+ * guarantee of the database rather than a habit of one adapter.
  */
 export const programmedLoadHalfHour = pgTable(
   "programmed_load_half_hour",
@@ -573,6 +585,10 @@ export const programmedLoadHalfHour = pgTable(
       "programmed_load_subsystem_only_for_subsystem_area",
       sql`(${t.subsystem} is null) = (${t.areaKind} <> 'SUBSYSTEM')`,
     ),
+    // The domain model's discriminator, enforced. A programme published after
+    // the half hour it programmes is not a programme, and a writer that reached
+    // for the fetch instant would produce exactly that for every backfilled row.
+    check("programmed_load_is_a_forecast", sql`${t.publishedAt} < ${t.validTime}`),
   ],
 );
 /**

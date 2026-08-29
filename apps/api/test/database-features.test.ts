@@ -19,6 +19,7 @@ import {
   type EnergyBalanceHour,
   type RegistryGeneratingUnit,
   type RegistryPlant,
+  recordLoadApiRequest,
   recordWeatherRunRequest,
   upsertPlants,
   upsertReportingEntities,
@@ -26,9 +27,11 @@ import {
   writeCurtailment,
   writeEnergyBalance,
   writeGeneratingUnits,
+  writeProgrammedLoad,
   writeSubsystemExchange,
   writeWeatherForecast,
 } from "../src/ingest/index.js";
+import { programmePublishedAt } from "../src/ingest/ons/load.js";
 
 // The gate, against a real Postgres — where the two acceptance seams live.
 //
@@ -103,6 +106,10 @@ const D_MINUS_2_NOON = new Date("2026-08-18T12:00:00.000Z");
 const BEFORE_WINDOW = new Date("2026-08-11T05:00:00.000Z");
 /** The first local hour of `TARGET`, whose t-48 h is `D_MINUS_2_EARLY`. */
 const HOUR_FIRST = new Date("2026-08-20T03:00:00.000Z");
+/** The last local hour of `TARGET` — 23:00 BRT, the far edge of the profile. */
+const HOUR_LAST = new Date("2026-08-21T02:00:00.000Z");
+/** The first local hour of D+1, whose programme is published after the gate. */
+const HOUR_NEXT_DAY = new Date("2026-08-21T03:00:00.000Z");
 
 /**
  * When WattSteer learned the backfilled observations: long before the gate.
@@ -301,6 +308,52 @@ const balance = (
   netExchangeMwh,
 });
 
+/**
+ * Half an hour of ONS's day-ahead programme.
+ *
+ * `publishedAt` is not chosen here. It comes from `programmePublishedAt`, which
+ * is the decision this ticket had to make and the one place it is made — so the
+ * fixture cannot accidentally test a stamp the adapter would never write.
+ */
+const programmed = (
+  areaCode: "NE" | "SECO",
+  validTime: Date,
+  programmedLoadMwh: number,
+) => ({
+  areaCode,
+  areaKind: "SUBSYSTEM" as const,
+  subsystem: (areaCode === "SECO" ? "SE" : "NE") as "SE" | "NE",
+  validTime,
+  programmedLoadMwh,
+  publishedAt: programmePublishedAt(validTime) as Date,
+});
+
+/**
+ * A whole local day's programme, as the 48 half hours ONS publishes.
+ *
+ * The hourly value is `atHour(h)` and each half hour carries half of it, so the
+ * canonical view's summing back to an hour is exercised rather than assumed.
+ */
+const programmedDay = (
+  areaCode: "NE" | "SECO",
+  dayStart: Date,
+  atHour: (localHour: number) => number,
+) => {
+  const rows: ReturnType<typeof programmed>[] = [];
+  for (let hour = 0; hour < 24; hour += 1) {
+    const half = atHour(hour) / 2;
+    const start = new Date(dayStart.getTime() + hour * 3_600_000);
+    rows.push(programmed(areaCode, start, half));
+    rows.push(programmed(areaCode, new Date(start.getTime() + 1_800_000), half));
+  }
+  return rows;
+};
+
+/** NE's profile: a clean ramp of +10 MWh an hour, so every shape is arithmetic. */
+const NE_PROGRAMMED = (localHour: number): number => 1000 + 10 * localHour;
+/** SE's runs the other way, so a rank or a minimum cannot be shared by accident. */
+const SE_PROGRAMMED = (localHour: number): number => 2000 - 20 * localHour;
+
 /** Column-by-column, `null` and `undefined` included, dates comparable. */
 const comparable = (row: FeatureRow): Record<string, unknown> => {
   const out: Record<string, unknown> = {};
@@ -355,6 +408,7 @@ suite("the gate, end to end (real Postgres)", () => {
     // The units, not the plants: `plant` cascades into three other suites'
     // fixtures, and a plant with no live units contributes no capacity anyway.
     await db.execute(sql`truncate table generating_unit`);
+    await db.execute(sql`truncate table programmed_load_half_hour`);
     await db.execute(sql`truncate table ons_resource_version cascade`);
 
     const [version] = await db
@@ -592,6 +646,67 @@ suite("the gate, end to end (real Postgres)", () => {
         },
       ],
       ...observationVintage,
+    });
+
+    // --------------------------------------------- ticket 06's class-`P` spine
+    //
+    // ONS's day-ahead programme, for the target day and for the day after it.
+    //
+    // Nothing here chooses a `published_at`: every row's comes from
+    // `programmePublishedAt`, so the fixture exercises the decision the adapter
+    // makes rather than a stamp invented for the test. For `TARGET` that lands
+    // at 2026-08-19 15:00 BRT, four hours inside `gate_late`; for D+1 it lands
+    // at 2026-08-20 15:00 BRT, which is *after* `TARGET`'s gate — which is what
+    // makes the next day's programme a decoy the ablation can remove.
+    const programmedRequest = await recordLoadApiRequest(db, {
+      series: "PROGRAMMED",
+      areaCode: "NE",
+      rangeStart: TARGET,
+      rangeEnd: "2026-08-21",
+      response: {
+        rows: [],
+        url: "https://apicarga.ons.invalid/prd/cargaprogramada",
+        fetchedAt: OBSERVED_INGESTED_AT,
+        body: "[]",
+        repaired: false,
+        httpStatus: 200,
+      },
+    });
+    const programmedVintage = {
+      // Ignored by the write — the row carries its own — and passed as the
+      // fetch instant it would really have been, so that a regression which
+      // went back to using it would produce a visibly wrong stamp.
+      publishedAt: OBSERVED_INGESTED_AT,
+      publishedAtPrecision: "file",
+      sourceVersionId: programmedRequest,
+    } as const;
+
+    await writeProgrammedLoad(db, {
+      rows: [
+        ...programmedDay("NE", DAY_FROM, NE_PROGRAMMED),
+        ...programmedDay("SECO", DAY_FROM, SE_PROGRAMMED),
+        // D+1's first half hour. Its programme is published after `TARGET`'s
+        // gate, so it must be invisible to every row of `TARGET` — including
+        // the last hour's centred mean, which is the only feature that would
+        // reach for it.
+        programmed("NE", HOUR_NEXT_DAY, 9999),
+        programmed("NE", new Date(HOUR_NEXT_DAY.getTime() + 1_800_000), 9999),
+      ],
+      ...programmedVintage,
+      ingestedAt: OBSERVED_INGESTED_AT,
+    });
+
+    // A restatement of one hour, learned *after* the gate. Its `published_at`
+    // is identical to the original's — the stamp is derived from the reference
+    // day, so a revision cannot move it — which is precisely why the as-of axis
+    // has to be the thing that keeps this out, and why this row is here.
+    await writeProgrammedLoad(db, {
+      rows: [
+        programmed("NE", HOUR_CURTAILED, 4444),
+        programmed("NE", new Date(HOUR_CURTAILED.getTime() + 1_800_000), 4444),
+      ],
+      ...programmedVintage,
+      ingestedAt: REGISTRY_LATE_INGEST,
     });
   });
 
@@ -1060,6 +1175,159 @@ suite("the gate, end to end (real Postgres)", () => {
     ).toBeGreaterThan(1);
   });
 
+  // ------------------------------------------------------- class `P`, the spine
+  it("carries the programmed profile, summed back to the hour", async () => {
+    const rows = await readServingRows(db, { targetDate: TARGET, ...query });
+    const ne = rows.filter((row) => row.subsystem === "NE");
+    const se = rows.filter((row) => row.subsystem === "SE");
+
+    // Every hour of the day, for both subsystems that have a programme. This is
+    // the acceptance claim: the spine is non-null across the window it covers.
+    expect(ne).toHaveLength(24);
+    expect(ne.every((row) => row.programmed_load_mwh !== null)).toBe(true);
+    expect(se.every((row) => row.programmed_load_mwh !== null)).toBe(true);
+    // …and it is the *sum* of the two half hours ONS publishes, not one of
+    // them and not their mean. Each half carries half the hourly value, so a
+    // mean would come back at half the size and look entirely plausible.
+    const byHour = new Map(
+      ne.map((row) => [new Date(row.valid_time).toISOString(), row]),
+    );
+    for (let hour = 0; hour < 24; hour += 1) {
+      const at = new Date(DAY_FROM.getTime() + hour * 3_600_000).toISOString();
+      expect({ at, mwh: byHour.get(at)?.programmed_load_mwh }).toEqual({
+        at,
+        mwh: NE_PROGRAMMED(hour),
+      });
+    }
+
+    // A subsystem with no programme is a hole, not a zero — and the two that
+    // have one do not share a profile.
+    expect(
+      rows.filter((row) => row.subsystem === "S" || row.subsystem === "N"),
+    ).toHaveLength(48);
+    for (const row of rows.filter((r) => r.subsystem === "S")) {
+      expect(row.programmed_load_mwh).toBeNull();
+      expect(row.programmed_load_rank_in_day).toBeNull();
+    }
+  });
+
+  it("derives the shape inside the profile, and stops at the day's edges", async () => {
+    const rows = await readServingRows(db, { targetDate: TARGET, ...query });
+    const ne = new Map(
+      rows
+        .filter((row) => row.subsystem === "NE")
+        .map((row) => [new Date(row.valid_time).toISOString(), row]),
+    );
+    const at = (instant: Date) => ne.get(instant.toISOString());
+
+    // A ramp inside a profile whose whole day is published at once. NE rises by
+    // a flat 10 MWh an hour, so any window that had slipped by one would show.
+    const noon = at(HOUR_CURTAILED);
+    expect(noon?.programmed_load_ramp_1h).toBeCloseTo(10, 6);
+    expect(noon?.programmed_load_mean_3h).toBeCloseTo(NE_PROGRAMMED(9), 6);
+
+    // The near edge: the first hour of the local day has no predecessor inside
+    // its own publication, so it has no ramp and no centred mean.
+    expect(at(HOUR_FIRST)?.programmed_load_mwh).toBeCloseTo(NE_PROGRAMMED(0), 6);
+    expect(at(HOUR_FIRST)?.programmed_load_ramp_1h).toBeNull();
+    expect(at(HOUR_FIRST)?.programmed_load_mean_3h).toBeNull();
+
+    // The far edge, and the one that would be a leak rather than a wrong
+    // number: the hour after 23:00 belongs to D+1's programme, published at
+    // D 15:00 BRT — four hours *after* this row's gate. It is in the fixture,
+    // it is enormous, and the centred mean must not have found it.
+    expect(at(HOUR_LAST)?.programmed_load_ramp_1h).toBeCloseTo(10, 6);
+    expect(at(HOUR_LAST)?.programmed_load_mean_3h).toBeNull();
+  });
+
+  it("summarises the day, and says which hour of it this is", async () => {
+    const rows = await readServingRows(db, { targetDate: TARGET, ...query });
+    const ne = rows.filter((row) => row.subsystem === "NE");
+    const se = rows.filter((row) => row.subsystem === "SE");
+
+    // Day grain: one number for the whole date, broadcast identically.
+    expect(new Set(ne.map((row) => row.programmed_load_daily_min_mwh))).toEqual(
+      new Set([NE_PROGRAMMED(0)]),
+    );
+    // The two subsystems' profiles run in opposite directions, so a minimum
+    // computed across subsystems rather than within one would collapse here.
+    expect(new Set(se.map((row) => row.programmed_load_daily_min_mwh))).toEqual(
+      new Set([SE_PROGRAMMED(23)]),
+    );
+
+    // Rank is hourly, ascending, and partitioned by subsystem: NE's trough is
+    // its first local hour and SE's is its last.
+    const rank = (rowsOf: typeof ne, instant: Date) =>
+      rowsOf.find((row) => new Date(row.valid_time).getTime() === instant.getTime())
+        ?.programmed_load_rank_in_day;
+    expect(rank(ne, HOUR_FIRST)).toBe(1);
+    expect(rank(ne, HOUR_LAST)).toBe(24);
+    expect(rank(se, HOUR_FIRST)).toBe(24);
+    expect(rank(se, HOUR_LAST)).toBe(1);
+  });
+
+  it("holds a programme back until its own gate, and never past it", async () => {
+    // The whole publication decision, as a property of two rows rather than a
+    // paragraph. `gate_late` is D−1 19:00 BRT and the programme is stamped
+    // D−1 15:00 BRT, so `TARGET` sees its own programme and D−1 sees the one
+    // published the day before that — but no target date ever sees the
+    // programme of the day after it, because that one is published at D 15:00.
+    const late = await readServingRows(db, { targetDate: TARGET, ...query });
+    const noon = late.find(
+      (row) =>
+        row.subsystem === "NE" &&
+        new Date(row.valid_time).getTime() === HOUR_CURTAILED.getTime(),
+    );
+    // And the restatement ingested after the gate did not win, even though its
+    // `published_at` is identical to the original's: the as-of axis is what
+    // keeps a later revision out, which is exactly the division of labour the
+    // derived stamp makes necessary.
+    expect(noon?.programmed_load_mwh).toBeCloseTo(NE_PROGRAMMED(9), 6);
+
+    // `gate_early` is D−1 09:00 BRT, four hours *before* the programme is taken
+    // to be published, so every class-`P` column is NULL there. That is the
+    // visible hole this ticket reports rather than papers over: assuming an
+    // earlier hour with no measurement behind it would be a leak into a model
+    // that cannot be served at 09:00.
+    const early = await readServingRows(db, {
+      targetDate: TARGET,
+      ...query,
+      gateProfile: "gate_early",
+    });
+    expect(early.length).toBe(late.length);
+    for (const row of early) {
+      expect(row.programmed_load_mwh).toBeNull();
+      expect(row.programmed_load_ramp_1h).toBeNull();
+      expect(row.programmed_load_mean_3h).toBeNull();
+      expect(row.programmed_load_daily_min_mwh).toBeNull();
+      expect(row.programmed_load_rank_in_day).toBeNull();
+    }
+  });
+
+  it("refuses to store a programme published after the half hour it programmes", async () => {
+    // `docs/domain-model.md` §4's discriminator, enforced by the database
+    // rather than by the adapter's good manners. This is the shape the fetch
+    // instant produced for every backfilled row, and it is now unrepresentable.
+    let sqlstate: string | undefined;
+    try {
+      await db.execute(sql`
+        insert into programmed_load_half_hour (
+          area_code, area_kind, subsystem, valid_time, programmed_load_mwh,
+          data_version, published_at, published_at_precision, value_digest,
+          source_request_id
+        )
+        select 'NE', 'SUBSYSTEM', 'NE', ${HOUR_QUIET.toISOString()}::timestamptz, 1,
+               99, ${HOUR_QUIET.toISOString()}::timestamptz + interval '1 day',
+               'file', 'not-a-real-digest', id
+        from load_api_request limit 1
+      `);
+    } catch (error) {
+      sqlstate = sqlStateOf(error);
+    }
+    // 23514 — check_violation.
+    expect(sqlstate).toBe("23514");
+  });
+
   // ---------------------------------------------------------------- Seam 1
   it("seam 1 — the training row and the serving row are the same row", async () => {
     // The central claim of the spec, and it is cheap because the claim is that
@@ -1115,6 +1383,11 @@ suite("the gate, end to end (real Postgres)", () => {
           "weather_forecast_hour",
           "curtailment_report_hour",
           "generating_unit",
+          // Ticket 06's spine. It is a forecast, so the publication axis is the
+          // one that bites: D+1's programme and the post-gate restatement of one
+          // of `TARGET`'s hours both go, and nothing the row calls a feature may
+          // move when they do.
+          "programmed_load_half_hour",
         ]) {
           const removed = await scoped.execute<{ n: number }>(sql`
             with gone as (

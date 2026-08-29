@@ -181,9 +181,18 @@ const PROGRAMMED_SPEC: VersionedTableSpec<
     validTime: row.validTime,
     dataVersion: version.dataVersion,
     programmedLoadMwh: row.programmedLoadMwh,
-    // This endpoint returns no row-level stamp at all, so the honest answer is
-    // always the response's fetch time at `file` precision.
-    publishedAt: vintage.publishedAt,
+    // **Not `vintage.publishedAt`.** This endpoint returns no row-level stamp,
+    // and the fetch instant it used to fall back on made a forecast carry an
+    // observation's shape — `published_at > valid_time` — for every backfilled
+    // row, and put the whole series behind every historical gate. The stamp is
+    // now derived from the row's own reference day by `programmePublishedAt`,
+    // whose comment holds the decision and the evidence for it.
+    //
+    // The precision stays `file`: the instant is a property of the programme
+    // for a reference day, not of this row, and `file` is the enum's word for
+    // "coarser than a row". Claiming `row` would say ONS stamped it, which is
+    // the one thing this endpoint definitively does not do.
+    publishedAt: row.publishedAt,
     publishedAtPrecision: "file",
     ingestedAt: vintage.ingestedAt,
     valueDigest: version.valueDigest,

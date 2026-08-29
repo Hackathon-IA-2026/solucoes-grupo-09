@@ -592,6 +592,53 @@ as-of join drops it and the feature is NULL. The failure mode is therefore a
 visible hole, not a leak — but the ingestion conformance suite must measure the
 real lag before either set is trusted.
 
+> **Settled while implementing ticket 06.** There is no update stamp to capture:
+> `/cargaprogramada` returns none, and the adapter's fallback — the response's
+> fetch instant — is not merely coarse. It makes `published_at > valid_time` on
+> every backfilled row, which is the shape §4 of the domain model reserves for an
+> **`Observation`**, and it puts the whole series behind every historical gate.
+> So the instant is **decided**, at the adapter, in
+> `PROGRAMME_PUBLICATION_HOUR_BRT` / `programmePublishedAt`
+> (`apps/api/src/ingest/ons/load.ts`), and four things travel with it:
+>
+> - **The programme for day D is stamped D−1 15:00 BRT**, derived from the row's
+>   own reference day rather than from the request. The instant is the tightest
+>   *evidenced* upper bound rounded conservatively: ONS's DESSEM file for D was
+>   measured created at D−1 17:48Z, and DESSEM's `val_demanda` agrees with this
+>   series to 0.03%, so a run consumed the programme before then. Assuming an
+>   earlier hour would claim availability nothing has measured — and a model
+>   trained on a value it will not have at serve time is the exact leak this
+>   spec exists to prevent, not a convenience.
+> - **The consequence at `gate_early` is a column of NULLs, and it is real.**
+>   D−1 09:00 BRT is four hours before the assumed publication, so every
+>   `programmed_*` (and, downstream, every `proxy_*`) column is NULL at the early
+>   gate. `dessem_free_v1` has its spine at `gate_late` across the full
+>   2021-03-05 → now coverage and does **not** have one at `gate_early`. That is
+>   a visible hole rather than a leak, which is the machinery working; closing it
+>   needs the measurement issue 12 owns, and until then the A/B's early-gate arm
+>   is weaker than this document assumed.
+> - **`published_at` cannot distinguish a revision from the original**, because
+>   it is derived from the reference day and a restatement shares it. The as-of
+>   axis carries that instead — a revision ingested after the gate is excluded by
+>   `ingested_at <= gate` — which works live and, over the backfill window where
+>   every row shares one `ingested_at`, does not. A backfilled programme is
+>   therefore `revision_optimistic`, and `programmed-load` now joins the
+>   weakest-link fidelity stamp so the row says so.
+> - **The forecast shape is enforced, not asserted.** `programmed_load_half_hour`
+>   carries a `published_at < valid_time` check, so the stamp that started this
+>   is now unrepresentable.
+>
+> Two shape features have edges worth stating. A **D−1 programme publishes the
+> whole of day D at once**, which is what makes a ramp and a centred window legal
+> here — but only *inside* that day: the first hour has no ramp (its predecessor
+> belongs to a different publication) and the first and last have no centred mean
+> (D+1's programme is published after both gates). Both are NULL rather than
+> computed over a partial window, and both check that the adjacent row is the
+> adjacent hour so a gap in the profile cannot turn `_ramp_1h` into a two-hour
+> difference. `programmed_load_daily_min_mwh` and `programmed_load_rank_in_day`
+> are NULL unless the profile has all 24 hours, and the rank is **ascending** —
+> 1 is the day's trough — so it points the same way as the minimum beside it.
+
 #### DESSEM — class `D`, `dessem_augmented_v1` only
 
 From `balanco_dessem_detalhe`, 30-min × subsystem, end-labelled via
