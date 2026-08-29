@@ -28,6 +28,14 @@ export {
   type ForecastProducer,
   type ReadGrain,
 } from "./manifest.js";
+export {
+  type PlantCoordinate,
+  type PlantLocationSource,
+  type PlantRegistryObservation,
+  type PlantRegistryReadQuery,
+  type RegistryPlantRecord,
+  readPlantRegistry,
+} from "./plant-registry.js";
 export { readOnly } from "./read-only.js";
 export {
   type ConjuntoMembershipReadQuery,

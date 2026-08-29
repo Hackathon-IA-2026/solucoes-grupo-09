@@ -113,6 +113,15 @@ export function Provenance({ wide }: { wide: boolean }) {
         <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkMuted }}>
           {copy.provenance.odbl}
         </Text>
+        {/*
+          §4.3 says the data is available under ODbL; §4.6 obliges the actual
+          offer of a machine-readable copy. Naming the endpoint in body text —
+          beside the notice, on the same public surface — is what turns the
+          second clause from a claim into an offer a reader can act on.
+        */}
+        <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkMuted }}>
+          {copy.provenance.registryAccess}
+        </Text>
         <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkFaint }}>
           {copy.provenance.disclaimer}
         </Text>

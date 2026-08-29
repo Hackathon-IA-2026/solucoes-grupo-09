@@ -177,3 +177,78 @@ export const REFERENCE_FLEET: ReferenceFleet = {
     dailyEnergyMwh: 1700,
   },
 };
+
+/**
+ * Where WattSteer's data comes from, and under what licence — published once,
+ * as **data**.
+ *
+ * `docs/specs/api-surface.md` puts this block on `GET /v1/meta`, and
+ * `GET /v1/plants` carries the same object because ODbL §4.6 obliges the
+ * machine-readable copy of the Derivative Database to say what it is: a
+ * recipient who holds the download and not the meta endpoint is still a
+ * recipient. One constant rather than two literals is the whole point — an
+ * attribution that lived inside each route is an attribution a route can be
+ * refactored out of.
+ *
+ * It is data rather than copy for the reason `docs/specs/i18n.md` gives: the
+ * §4.3 notice is bilingual, and a bilingual sentence is assembled by the client
+ * from translated strings around these **untranslated** identifiers. `ODbL-1.0`
+ * is not a word that gets a Portuguese spelling.
+ *
+ * The wire shape is `SourceAttribution` in `meta.schema.json`, which stays the
+ * authority; `plant-registry.schema.json` `$ref`s it rather than declaring a
+ * second one.
+ */
+export interface SourceAttributionEntry {
+  name: string;
+  /** SPDX-style, untranslated. The client builds the sentence around it. */
+  licence: string;
+  url: string;
+  /** True where WattSteer's own table is a Derivative Database of this source. */
+  derivativeDatabase?: boolean;
+  /** Where ODbL §4.6's machine-readable access is discharged. */
+  machineReadableAt?: string;
+}
+
+/**
+ * ONS is CC-BY; ANEEL SIGA is ODbL, and SIGA is the one that carries
+ * share-alike.
+ *
+ * Only SIGA gets `derivativeDatabase` and `machineReadableAt`: the distinction
+ * is the whole of `docs/research/plant-registry.md` §7, and flattening the three
+ * sources under one licence would either over-claim against ONS or understate
+ * the obligation ANEEL's licence actually imposes.
+ */
+export const SOURCE_ATTRIBUTION: Readonly<Record<string, SourceAttributionEntry>> = {
+  ons: {
+    name: "ONS Dados Abertos",
+    licence: "CC-BY-4.0",
+    url: "https://dados.ons.org.br/",
+  },
+  aneel_siga: {
+    name: "ANEEL SIGA — Sistema de Informações de Geração",
+    licence: "ODbL-1.0",
+    url: "https://dadosabertos.aneel.gov.br/dataset/siga-sistema-de-informacoes-de-geracao-da-aneel",
+    derivativeDatabase: true,
+    machineReadableAt: "/v1/plants",
+  },
+  open_meteo: {
+    name: "Open-Meteo",
+    licence: "CC-BY-4.0",
+    url: "https://open-meteo.com/",
+  },
+};
+
+/** The licence text ANEEL's dataset — and WattSteer's derivative — is under. */
+export const ODBL_LICENCE_URL = "https://opendatacommons.org/licenses/odbl/1-0/";
+
+/**
+ * ODbL §4.6(b): where the *alterations* are published.
+ *
+ * The licence offers two ways to discharge §4.6 — a copy of the whole
+ * Derivative Database, or a file describing the alterations. WattSteer offers
+ * both: this document is the algorithm (the `ceg_core` derivation, the
+ * coordinate validation, the ONS join, the as-of capacity reconstruction), and
+ * `/v1/plants` is the database.
+ */
+export const ODBL_ALTERATIONS_AT = "docs/research/plant-registry.md#7";

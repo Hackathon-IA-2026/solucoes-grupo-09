@@ -951,6 +951,183 @@ export interface OptimizationResult {
 }
 
 /**
+ * `GET /v1/plants` - the plant registry, machine-readable. The one endpoint in
+ * `docs/specs/api-surface.md` that no screen asked for: WattSteer's plant
+ * table is a Derivative Database of ANEEL SIGA, ODbL 4.4(c) pulls it under
+ * share-alike because the public charts built from it are Publicly Used
+ * Produced Works, and 4.6 then obliges machine-readable access. `licence` and
+ * `attribution` are `required` here rather than documented as a courtesy, so a
+ * build that drops the notice fails to compile against this schema instead of
+ * quietly shipping a licence breach.
+ */
+export interface PlantRegistry {
+  /**
+   * The vintage cut: what WattSteer had learned by this instant.
+   */
+  asOf: UtcInstant;
+  /**
+   * The date `installed_capacity_mw` is summed at. Stamped on the response
+   * because capacity is a function of time and not an attribute: the units of
+   * one plant routinely commission months apart, and fixed present-day weights
+   * were measured misallocating half the SE-solar weight mass at window start.
+   */
+  fleetDate: CivilDate;
+  /**
+   * SIGA has no archive before WattSteer's first snapshot, so an early `as_of`
+   * is honestly a restatement rather than a point-in-time reconstruction.
+   */
+  vintageFidelity: VintageFidelity;
+  filters: RegistryFilters;
+  /**
+   * Rows in `plants`, after the filters. On the payload so a truncated download
+   * is detectable.
+   */
+  plantCount: number;
+  licence: RegistryLicence;
+  /**
+   * Source attribution, keyed by source. Data rather than copy: the bilingual
+   * 4.3 notice is assembled by the client from translated strings around these
+   * untranslated identifiers. Three fields and no more - `name`, `licence` and
+   * `url` are spelled identically in both casings, which is what lets a map
+   * whose keys are *data* pass through the one translator untouched and still
+   * validate. The ODbL specifics that would need renaming live under `licence`,
+   * which is a named object and is renamed properly.
+   */
+  attribution: Record<string, RegistrySource>;
+  plants: RegistryPlantRow[];
+}
+
+/**
+ * The filters the caller asked for, echoed. `null` means unfiltered - stated
+ * rather than left to be inferred from the row count.
+ */
+export interface RegistryFilters {
+  subsystem: Subsystem | null;
+  technology: Technology | null;
+}
+
+/**
+ * One upstream source and the licence it publishes under. Deliberately
+ * narrower than `meta.schema.json`'s `source_attribution`: every key here is
+ * casing-stable, so the block survives the wire translation unrenamed.
+ */
+export interface RegistrySource {
+  name: string;
+  /**
+   * An SPDX-style identifier, untranslated, with the bilingual notice built
+   * around it by the client.
+   */
+  licence: string;
+  url: string;
+}
+
+/**
+ * ODbL 4.4(a) and 4.6, discharged on the payload rather than only on
+ * `/v1/meta`. A consumer of this file is a recipient of the Derivative
+ * Database and has to be told, in the file, what it may do with it.
+ */
+export interface RegistryLicence {
+  /**
+   * The licence this Derivative Database is offered under, SPDX-style and
+   * untranslated.
+   */
+  database: string;
+  url: string;
+  /**
+   * ODbL 4.4: extracting a substantial part of SIGA into Postgres creates one.
+   * Stated as a fact on the payload rather than argued about in a wiki.
+   */
+  derivativeDatabase: boolean;
+  /**
+   * ODbL 4.6(b): where the alterations - the `ceg_core` derivation, the
+   * coordinate validation, the ONS join, the as-of capacity reconstruction - are
+   * published. The cheap and honest half of the obligation; 4.6(a), the database
+   * itself, is this endpoint.
+   */
+  alterationsAt: string;
+  /**
+   * ODbL 4.3: a Produced Work built from this file must carry a notice naming
+   * the source database and its licence.
+   */
+  attributionRequired: boolean;
+}
+
+/**
+ * A surveyed or fallback point, in WGS-84 decimal degrees, inside the Brazil
+ * bounding box. Never `(0, 0)`: nearly two percent of registry rows sit at
+ * exactly Null Island, which is an absence wearing a location's clothes, and
+ * an absent coordinate is `null` here.
+ */
+export interface RegistryCoordinate {
+  latitude: number;
+  longitude: number;
+}
+
+export interface RegistryPlantRow {
+  /**
+   * ONS `id_ons`, recovered from the conjunto bridge where one names it. Null is
+   * genuinely unknown - a Tipo I or II-B plant belongs to no conjunto - and not
+   * optional.
+   */
+  onsPlantCode: string | null;
+  /**
+   * ANEEL CEG with the version segment stripped. The identity, and the only join
+   * to SIGA that works: verbatim `CodCEG` against ONS `ceg` matches 0 of 1,619
+   * plants because ANEEL writes `.1` where ONS writes `.01`.
+   */
+  cegCore: string;
+  /**
+   * ONS `nom_usina`. Never SIGA's `NomEmpreendimento`, which carries `(Antiga
+   * ...)` aliases and is kept for provenance and diffing only.
+   */
+  name: string;
+  subsystem: Subsystem;
+  /**
+   * ONS `id_estado`. An attribute of the plant, and never a subsystem input:
+   * twelve VRE units in Bahia are electrically `SE`.
+   */
+  stateCode: string;
+  technology: Technology;
+  operationModality: "TIPO_I" | "TIPO_II_A" | "TIPO_II_B" | "TIPO_II_C";
+  /**
+   * The SIGA municipality, `Name - UF`. Null where SIGA names no municipality
+   * for the plant.
+   */
+  municipality: string | null;
+  /**
+   * ONS `nom_agenteproprietario`. Deliberately ONS's agent name and not SIGA's
+   * `DscPropriRegimePariticipacao`, which carries CNPJs of named legal persons
+   * that ODbL 2.4 does not license.
+   */
+  ownerName: string;
+  /**
+   * ONS `nom_agenteoperador`.
+   */
+  operatorName: string;
+  /**
+   * Summed over the generating units live on `fleet_date`. Never a stored
+   * scalar.
+   */
+  installedCapacityMw: number;
+  /**
+   * How many units that sum is over. A plant with none live on `fleet_date` did
+   * not exist yet and is not a row.
+   */
+  generatingUnits: number;
+  /**
+   * `null` when absent, and absent includes out-of-bounds and Null Island. Never
+   * a zero pair.
+   */
+  coordinate: RegistryCoordinate | null;
+  /**
+   * Where the point came from, per row. A municipality centroid is a fallback
+   * and is labelled as one: presenting it as a surveyed coordinate would be a
+   * plausible-looking lie about four plants.
+   */
+  locationSource: "siga_coordinate" | "siga_municipality_centroid" | "unlocated";
+}
+
+/**
  * `GET /v1/replay?d=&s=&subsystem=` and `POST /v1/replay` -
  * `docs/specs/replay.md`'s contract, re-pathed and never re-shaped. The
  * top-level scalars share their names with `OptimizationResult` and mean
@@ -1709,6 +1886,52 @@ export const WIRE_SHAPES = {
     roundTripLossMwh: { wire: "round_trip_loss_mwh" },
     economicScenario: { wire: "economic_scenario", shape: "EconomicScenario" },
     solver: { wire: "solver", shape: "SolverReceipt" },
+  },
+  PlantRegistry: {
+    asOf: { wire: "as_of" },
+    fleetDate: { wire: "fleet_date" },
+    vintageFidelity: { wire: "vintage_fidelity" },
+    filters: { wire: "filters", shape: "RegistryFilters" },
+    plantCount: { wire: "plant_count" },
+    licence: { wire: "licence", shape: "RegistryLicence" },
+    attribution: { wire: "attribution" },
+    plants: { wire: "plants", shape: "RegistryPlantRow", list: true },
+  },
+  RegistryFilters: {
+    subsystem: { wire: "subsystem" },
+    technology: { wire: "technology" },
+  },
+  RegistrySource: {
+    name: { wire: "name" },
+    licence: { wire: "licence" },
+    url: { wire: "url" },
+  },
+  RegistryLicence: {
+    database: { wire: "database" },
+    url: { wire: "url" },
+    derivativeDatabase: { wire: "derivative_database" },
+    alterationsAt: { wire: "alterations_at" },
+    attributionRequired: { wire: "attribution_required" },
+  },
+  RegistryCoordinate: {
+    latitude: { wire: "latitude" },
+    longitude: { wire: "longitude" },
+  },
+  RegistryPlantRow: {
+    onsPlantCode: { wire: "ons_plant_code" },
+    cegCore: { wire: "ceg_core" },
+    name: { wire: "name" },
+    subsystem: { wire: "subsystem" },
+    stateCode: { wire: "state_code" },
+    technology: { wire: "technology" },
+    operationModality: { wire: "operation_modality" },
+    municipality: { wire: "municipality" },
+    ownerName: { wire: "owner_name" },
+    operatorName: { wire: "operator_name" },
+    installedCapacityMw: { wire: "installed_capacity_mw" },
+    generatingUnits: { wire: "generating_units" },
+    coordinate: { wire: "coordinate", shape: "RegistryCoordinate" },
+    locationSource: { wire: "location_source" },
   },
   Replay: {
     targetDate: { wire: "target_date" },
