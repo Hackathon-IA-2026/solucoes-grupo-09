@@ -35,7 +35,7 @@ the model** — and the test needs to know neither which group nor which model.
 
 **Blocked by:** 03, 04.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The additive-model cross-check passes and the interaction-model cross-check fails, with the gap equal to the interaction term
 - [ ] A group with members of opposing sign is asserted not to report their arithmetic sum
