@@ -35,11 +35,16 @@ Bun.serve({
     }
 
     // Prevent path traversal; map "/" and route paths to their HTML files.
+    // `${path}/index.html` is what makes the locale roots work: the export
+    // writes `/pt/` as dist/pt/index.html, and a request for a directory has
+    // to find it. Trailing slashes are trimmed so `/pt` and `/pt/` are the
+    // same lookup.
     const clean = normalize(url.pathname).replace(/^(\.\.[/\\])+/, "");
+    const path = clean.replace(/^\/+/, "").replace(/\/+$/, "");
     const candidates =
-      clean === "/"
+      path === ""
         ? ["index.html"]
-        : [clean.slice(1), `${clean.slice(1)}.html`, "index.html"];
+        : [path, `${path}.html`, `${path}/index.html`, "index.html"];
     for (const candidate of candidates) {
       const file = Bun.file(join(ROOT, candidate));
       if (await file.exists()) {

@@ -179,4 +179,104 @@ export const pt: Copy = {
     sub: "Risco de curtailment para o dia seguinte na rede brasileira, a partir de dados abertos.",
     button: "Ver a rede agora",
   },
+
+  meta: {
+    home: {
+      title: "WattSteer — inteligência de curtailment renovável para a rede brasileira",
+      description:
+        "Risco de curtailment para o dia seguinte nos quatro subsistemas brasileiros, previsto como faixa P10–P90 a partir de dados abertos do ONS — com as condições de rede por trás dele e o armazenamento e a demanda flexível capazes de absorvê-lo.",
+    },
+    privacy: {
+      title: "Política de Privacidade — WattSteer",
+      description:
+        "O WattSteer não tem contas nem dados pessoais. Esta política descreve o pouco que tratamos.",
+    },
+    terms: {
+      title: "Termos de Uso — WattSteer",
+      description:
+        "O WattSteer é uma análise pública e somente leitura de dados abertos da rede brasileira. Estes termos regem o seu uso.",
+    },
+  },
+
+  legal: {
+    homeLink: "WattSteer — início",
+    privacyLink: "Privacidade",
+    termsLink: "Termos",
+
+    privacy: {
+      badge: "Política de Privacidade",
+      updated: "Última atualização: 28 de agosto de 2026",
+      title: "Política de Privacidade",
+      intro:
+        "O WattSteer não tem contas nem dados pessoais. Esta política descreve o pouco que tratamos.",
+      summary: {
+        title: "A versão curta",
+        body: "O WattSteer não tem contas de usuário, não tem login e não tem dados pessoais a coletar. Ele analisa dados do sistema elétrico publicados abertamente — nenhum deles descreve pessoas.",
+        cardTitle: "O que isso significa",
+        cardItems: [
+          "Sem cadastro, sem conta, sem perfil",
+          "Sem cookies de publicidade ou rastreamento entre sites",
+          "Nenhuma venda ou compartilhamento de dados sobre você",
+          "Nada do que você digita é guardado atrelado a uma identidade",
+        ],
+      },
+      processing: {
+        title: "O que passa pelo WattSteer",
+        body: "Os dados com que o WattSteer trabalha são publicados abertamente por órgãos do setor elétrico e reguladores e descrevem usinas, carga, geração e clima — não pessoas.",
+        scenarios:
+          "Se você explorar um cenário hipotético, os parâmetros que digitar servem apenas para calcular o resultado que você pediu. Eles não são associados a nenhuma identidade.",
+      },
+      logs: {
+        title: "Registros de servidor",
+        body: "Como qualquer serviço web, nossa infraestrutura registra logs comuns de requisição — endereço IP, horário, caminho, user agent — para segurança, prevenção de abuso e depuração. Eles são retidos por pouco tempo e não são usados para montar um perfil seu.",
+      },
+      cookies: {
+        title: "Cookies e armazenamento",
+        body: "O WattSteer não usa cookies de publicidade nem de rastreamento entre sites. Qualquer armazenamento no navegador se limita a lembrar suas próprias preferências de exibição — o idioma escolhido, por exemplo — no seu próprio dispositivo, e nunca chega aos nossos servidores.",
+      },
+      contact: {
+        title: "Contato",
+        body: "Dúvidas sobre esta política podem ser enviadas ao endereço publicado no nosso repositório.",
+      },
+    },
+
+    terms: {
+      badge: "Termos de Uso",
+      updated: "Última atualização: 28 de agosto de 2026",
+      title: "Termos de Uso",
+      intro:
+        "O WattSteer é uma análise pública e somente leitura de dados abertos da rede elétrica. Estes termos regem o seu uso.",
+      overview: {
+        title: "Visão geral",
+        body: "Estes Termos de Uso regem a utilização do WattSteer, um site público e somente leitura que analisa dados abertos do sistema elétrico brasileiro para estimar o curtailment de renováveis e a flexibilidade capaz de absorvê-lo. Ao usar o WattSteer você concorda com estes Termos.",
+        cardTitle: "Princípios",
+        cardItems: [
+          "Uso gratuito — sem conta e sem cadastro",
+          "Trabalhamos apenas com dados abertos publicados publicamente",
+          "Previsões e cenários são estimativas, não instruções de operação",
+          "Transparência sobre o que o serviço faz e o que não faz",
+        ],
+      },
+      service: {
+        title: "O serviço",
+        body: "O WattSteer publica estimativas de curtailment de renováveis por subsistema para o dia seguinte, uma explicação das condições de rede associadas a essa estimativa e cenários hipotéticos mostrando quanto do curtailment estimado uma dada quantidade de armazenamento ou demanda flexível conseguiria absorver.",
+        sources:
+          "Os dados de origem são publicados pelo ONS (Operador Nacional do Sistema Elétrico), pela ANEEL e por provedores de dados meteorológicos. O WattSteer não é afiliado a nenhum deles, não é endossado por eles nem opera em seu nome.",
+      },
+      reliance: {
+        title: "Nada aqui serve para operar a rede",
+        body: "Tudo que o WattSteer publica é uma estimativa modelada, carrega incerteza e pode estar errado. Não é instrução de operação da rede, não é sinal de negociação e não é recomendação de investimento, engenharia ou regulação.",
+        yours:
+          "Não use o WattSteer como insumo de operação em tempo real, despacho ou liquidação. Decisões com consequências físicas ou financeiras continuam sendo suas e devem se apoiar nas fontes oficiais.",
+      },
+      availability: {
+        title: "Disponibilidade e mudanças",
+        body: "O serviço é oferecido no estado em que se encontra, sem garantia de disponibilidade ou exatidão. As fontes revisam o histórico que publicam, às vezes anos depois, então os números aqui podem mudar. Podemos alterar ou descontinuar qualquer parte do serviço a qualquer momento.",
+      },
+      attribution: {
+        title: "Atribuição e licenciamento dos dados",
+        body: "Os conjuntos de dados de origem seguem sendo propriedade de quem os publica e são usados sob suas respectivas licenças abertas. Onde a licença exige atribuição ou tratamento share-alike do dado derivado, o WattSteer cumpre; esses avisos aparecem junto ao dado que cobrem.",
+      },
+    },
+  },
 };

@@ -3,8 +3,8 @@
  *
  * Kept separate from the provider so the dictionaries and their invariants can
  * be tested without pulling the whole RN runtime into a unit test, and so a
- * non-React consumer (a script, a future server route) can ask what the
- * default locale is.
+ * non-React consumer (the post-export script, the static server, a future
+ * server route) can ask what the default locale is.
  */
 
 export type Locale = "pt" | "en";
@@ -24,4 +24,66 @@ export const LOCALE_STORAGE_KEY = "wattsteer.locale";
 /** The BCP-47 tag for a locale, for `<html lang>` and `Intl`. */
 export function languageTag(locale: Locale): string {
   return locale === "pt" ? "pt-BR" : "en";
+}
+
+/** Endonyms — a language chooser names each language *in* that language. */
+export const LOCALE_NAME: Record<Locale, string> = {
+  pt: "Português (Brasil)",
+  en: "English",
+};
+
+/** The two-letter chip label used by the in-page switch. */
+export const LOCALE_LABEL: Record<Locale, string> = { pt: "PT", en: "EN" };
+
+/** Narrowing guard — the only sanctioned way to trust a `[locale]` param. */
+export function isLocale(value: unknown): value is Locale {
+  return value === "pt" || value === "en";
+}
+
+/**
+ * The pages that exist under every locale prefix, as the path *below* the
+ * prefix. `""` is the locale root. This is the single list that the route
+ * tree, `sitemap.xml` and the hreflang alternates all have to agree on.
+ */
+export const LOCALIZED_PATHS = ["", "/privacy", "/terms"] as const;
+export type LocalizedPath = (typeof LOCALIZED_PATHS)[number];
+
+/**
+ * The URL path for a page in a locale. A locale root keeps its trailing slash
+ * (`/pt/`) so there is exactly one canonical form of it, matching what the
+ * sitemap and the gate page's links say.
+ */
+export function localePath(locale: Locale, path: LocalizedPath = ""): string {
+  return path === "" ? `/${locale}/` : `/${locale}${path}`;
+}
+
+/**
+ * Move a pathname to another locale, preserving the page.
+ *
+ * Used by the language switch, which is a *link* rather than a state toggle:
+ * `/en/privacy` ⇄ `/pt/privacy`. A path that is not already locale-prefixed
+ * (the gate, `/app`) is prefixed rather than rewritten.
+ */
+export function swapLocale(pathname: string, next: Locale): string {
+  const segments = pathname.split("/").filter(Boolean);
+  const rest = isLocale(segments[0]) ? segments.slice(1) : segments;
+  return rest.length === 0 ? `/${next}/` : `/${next}/${rest.join("/")}`;
+}
+
+/**
+ * Which locale a BCP-47 tag list asks for, or `null` if none of them match.
+ *
+ * Deliberately prefix-matching on the primary subtag: `pt-PT` and `pt-BR` both
+ * mean "give this reader Portuguese", and the site has only one Portuguese.
+ * Used by the gate page **only** — inside the `[locale]` tree the URL is the
+ * single source of truth and the browser is never consulted.
+ */
+export function matchLocale(tags: readonly string[]): Locale | null {
+  for (const tag of tags) {
+    const primary = tag.toLowerCase().split("-")[0];
+    if (primary === "pt" || primary === "en") {
+      return primary;
+    }
+  }
+  return null;
 }

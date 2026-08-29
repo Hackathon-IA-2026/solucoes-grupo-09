@@ -20,11 +20,14 @@ Bun.serve({
   async fetch(request) {
     const url = new URL(request.url);
     // Prevent path traversal; map "/" and route paths to their HTML files.
+    // Mirrors server.ts, including the `${path}/index.html` candidate that
+    // makes the locale roots (/pt/, /en/) resolve.
     const clean = normalize(url.pathname).replace(/^(\.\.[/\\])+/, "");
+    const path = clean.replace(/^\/+/, "").replace(/\/+$/, "");
     const candidates =
-      clean === "/"
+      path === ""
         ? ["index.html"]
-        : [clean.slice(1), `${clean.slice(1)}.html`, "index.html"];
+        : [path, `${path}.html`, `${path}/index.html`, "index.html"];
     for (const candidate of candidates) {
       const file = Bun.file(join(ROOT, candidate));
       if (await file.exists()) {
