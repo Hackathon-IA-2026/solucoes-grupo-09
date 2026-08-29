@@ -11,6 +11,10 @@ dependencies = [
   "pydantic-settings>=2.6",
   # The driver group map is a YAML data file, loaded at train time.
   "pyyaml>=6.0",
+  # The flex optimizer's MILP. Pinned at >= 9.7 because that is the first
+  # release shipping SCIP >= 8.0.3, the Apache-2.0 relicense — earlier SCIPs
+  # were academic-use-only. See `docs/research/optimizer-formulation.md` §6.
+  "ortools>=9.7",
 ]
 
 [project.scripts]
@@ -64,6 +68,12 @@ ignore = [
   # RUF002/RUF003 exist to catch a homoglyph smuggled into an identifier-adjacent
   # string; here every hit is a deliberate quotation, and transliterating them
   # would make the code stop matching the document it is accountable to.
+  # The optimizer's docstrings quote `docs/research/optimizer-formulation.md`
+  # symbol for symbol — `ηc`, `δ_b`, `Δ[t]`, `S̄`, `×`, `÷`. Transliterating
+  # them would make the code and its authority impossible to read against each
+  # other, which is the one thing this engine's silent failure modes require.
+  # The rules only fire on prose, never on identifiers.
+  "RUF001", # ambiguous unicode in a string
   "RUF002", # ambiguous unicode in a docstring
   "RUF003", # ambiguous unicode in a comment
 ]
@@ -86,6 +96,14 @@ ignore_missing_imports = true
 # using it, so nothing untyped escapes the loader.
 [[tool.mypy.overrides]]
 module = ["yaml"]
+ignore_missing_imports = true
+
+# OR-Tools ships `pywraplp.pyi` but no `py.typed` marker, so strict mode will
+# not read it. Same narrow override, same reason: one untyped dependency should
+# not cost strictness anywhere else. `optimizer/milp.py` is the only module that
+# touches the solver handles, and it copies every value out through `float()`.
+[[tool.mypy.overrides]]
+module = ["ortools.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

@@ -340,6 +340,17 @@ The sign split of (C2)/(C5) is a **build-time** branch on the parameter
 everywhere and produces a feasible, plausible plan in which the battery never
 discharges. Both have tests.
 
+**The converse is intended and is worth stating, so nobody later "fixes" it.**
+With the sign split applied correctly, `Δ[t] ≥ 0` still holds in every hour
+where `curt[t] > 0` — that is what `absorb[t] ≥ 0` and `absorb[t] ≤ Δ[t]`
+together mean there — so the battery cannot *net*-discharge during a curtailment
+event, only outside one. That is the physical claim: an asset absorbing spilled
+energy in a given hour is not simultaneously exporting in that hour. What the
+sign split buys is freedom in the **zero-curtailment** hours, where `Δ[t]` is
+unconstrained in sign and the battery is free to discharge. The bug above is
+`Δ[t] ≥ 0` leaking into *those* hours; the same inequality inside a curtailment
+hour is the model working.
+
 ### The objective — decided
 
 ```

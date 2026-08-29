@@ -60,7 +60,7 @@ constraint and it fails silently, not loudly.
 **Blocked by:** None — can start immediately. The forecast profile is a fixture at
 this stage; wiring it to a real `Forecast` is ticket 07.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The research's reference case (`curt = [0]×10, 20, 70, 110, 90, 30, 10, [0]×8`, one 100 MW / 250 MWh battery, `ηc = ηd = 0.959`, SOC 20 % initial, bounds 5–95 %) returns `OPTIMAL` with **95.4 MWh** remaining at `ρ = 0`
 - [ ] At the shipped `ρ = 1.5` the same case is within 0.1 MWh of 95.4 — the penalty breaks ties and never buys off a real MWh
