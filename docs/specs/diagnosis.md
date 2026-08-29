@@ -381,6 +381,14 @@ step in the whole design, so it carries the sign rule explicitly:
 `"mixed"` is a **new third member of `Driver.direction`** and is a required
 change to `apps/web/src/lib/domain.ts` — flagged below rather than assumed.
 
+**The selection predicate is shared; the merge is not.** The narration is
+assembled server-side and has to know which groups it is allowed to name, so the
+`share ≥ 0.03` / top-six cut is computed on the server too — it is one predicate
+over a published number and duplicating it is not a second definition of
+anything. What stays client-only is the *merge*: collapsing the remainder into
+one `other` row, summing its `φ` and deciding whether that row reads `"mixed"`.
+The API still returns all eight groups, ranked, whatever the cut selects.
+
 **Shares.** `share_j = |φ_j| / Σ_k |φ_k|` **over all eight groups** — not over
 the displayed rows, which was circular, since the display cut is itself applied
 to `share`. See `api-surface.md`, "`share_j` is computed over all eight groups".

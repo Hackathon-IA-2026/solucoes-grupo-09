@@ -51,7 +51,7 @@ measurement rather than a taste, and the rules ticket consumes it.
 
 **Blocked by:** 03.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] One `(subsystem, target_date)` yields eight signed day contributions, ranked by absolute share
 - [ ] The day value is exactly the hour-wise sum, asserted against a seeded fixture
