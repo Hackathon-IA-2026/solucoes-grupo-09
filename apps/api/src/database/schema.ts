@@ -1995,3 +1995,60 @@ export const featureCalendarDay = pgTable(
     index("feature_calendar_day_lookup").on(t.calendarVersion, t.day, t.uf),
   ],
 );
+
+// ---------------------------------------------------------------------------
+// The publication lag — feature-engineering ticket 05.
+//
+// Appended as its own block so that two tickets landing at once cannot conflict
+// on this file.
+// ---------------------------------------------------------------------------
+
+/**
+ * `publication_lag_hours[dataset]` — the configured latency an observation is
+ * cut against, and the only input `actuals_cutoff` has beyond the gate.
+ *
+ * **A table rather than a constant in SQL**, because these numbers are
+ * configuration carrying conservative defaults, and the whole point of the
+ * design is that changing one is a visible event. A dataset with no row here raises
+ * rather than defaulting to zero: an observation cut on an unmeasured latency is
+ * an unmeasured leak.
+ *
+ * **Loosening a lag is a retrain trigger, not a config change.** The defaults
+ * are deliberately pessimistic — 40 h for the twice-daily bulk files, which
+ * assumes nothing at all about whether the earlier publication carries any hour
+ * of D−1 — and they may only ever be *loosened by measurement*
+ * (`docs/specs/feature-engineering.md` §"Where the cut actually falls", and the
+ * scheduled conformance job of seam 6). Loosening one moves the cutoff, which
+ * moves every lag and every trailing window built behind it, which changes the
+ * feature distribution the model was fitted on. So the rows are seeded by a
+ * migration and are expected to be *edited by a migration*: the diff is the
+ * record and the retrain is the consequence. Nothing writes this table at
+ * runtime, and there is deliberately no repository through which it could.
+ *
+ * This is a `feature_` table for the reason `feature_calendar_day` is one — it
+ * is read by the feature functions and by nothing else, and the feature layer's
+ * single reading rule (`canonical_*` views and `feature_*` relations) is what
+ * keeps an ingest table out of a feature.
+ */
+export const featurePublicationLag = pgTable(
+  "feature_publication_lag",
+  {
+    /** The ONS dataset slug: the publication regime belongs to the file. */
+    dataset: text().primaryKey(),
+    /**
+     * The canonical read this dataset feeds, spelled as `canonical_read_go_live`
+     * spells it — so the lag and the go-live of one source are joinable by a
+     * name rather than by a convention held in someone's head.
+     */
+    canonicalRead: text().notNull(),
+    /** Hours subtracted from the gate. Never negative: the cutoff looks back. */
+    publicationLagHours: integer().notNull(),
+    /** Why this number. Prose carried with the row, not only in the spec. */
+    rationale: text().notNull(),
+  },
+  (t) => [
+    // A negative lag would put the cutoff *after* the gate, which is a feature
+    // reading the future through a configuration row.
+    check("feature_publication_lag_non_negative", sql`${t.publicationLagHours} >= 0`),
+  ],
+);

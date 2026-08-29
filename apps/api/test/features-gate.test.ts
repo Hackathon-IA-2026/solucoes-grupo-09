@@ -130,6 +130,19 @@ const ALLOWED_RELATIONS = new Set([
   "solar",
   "geometry",
   "sun_position",
+  // Ticket 05's CTEs: the class-`K` block, and the seven windows it reads the
+  // three observation series through. Every one of them is bounded by
+  // `actuals_cutoff`, which is what the ablation seam checks and what these
+  // names exist to keep in one place.
+  "lagged",
+  "curtailment_hours",
+  "curtailment_same_hour",
+  "curtailment_window",
+  "reason_shares",
+  "context_hours",
+  "context_window",
+  "exchange_hours",
+  "fleet_capacity",
 ]);
 
 const functionSegments = (): Map<string, string> => {
@@ -410,6 +423,133 @@ describe("the gate, structurally", () => {
   });
 });
 
+describe("the actuals cutoff, structurally", () => {
+  it("derives the gate rather than accepting one", () => {
+    // The spec writes the rule as `actuals_cutoff(gate, dataset)`. A `gate
+    // timestamptz` parameter would be a door into the feature layer through
+    // which a hand-chosen instant could arrive, and ticket 01's first property
+    // is that there is no such door — so the gate is derived here exactly as
+    // `feature_apply_gate` derives it, and the caller chooses a date and a
+    // profile or nothing at all.
+    const cutoff = functionSegments().get("actuals_cutoff") ?? "";
+    expect(cutoff).toContain("gate_at(target_date, gate_profile)");
+    expect(
+      /FUNCTION\s+actuals_cutoff\(\s*target_date date, gate_profile text, dataset text\s*\)/.test(
+        cutoff,
+      ),
+    ).toBe(true);
+    for (const forbidden of ["timestamp", "as_of", "published_at"]) {
+      const signature = cutoff.slice(0, cutoff.indexOf("RETURNS"));
+      expect({ forbidden, present: signature.includes(forbidden) }).toEqual({
+        forbidden,
+        present: false,
+      });
+    }
+  });
+
+  it("takes the lag from the configured table and never from a literal", () => {
+    // A number spelled in a function is a number a reviewer cannot find and a
+    // migration cannot show moving. `publication_lag_hours` is a table, the
+    // cutoff reads it, and an unknown dataset raises rather than defaulting to
+    // zero hours — because a default of zero is an *unfiltered* observation read
+    // that looks exactly like a correct answer.
+    const cutoff = functionSegments().get("actuals_cutoff") ?? "";
+    expect(cutoff).toContain("feature_publication_lag");
+    expect(cutoff).toContain("USING ERRCODE = '22023'");
+    // No lag spelled in the body — the defaults live in the seeded table and
+    // nowhere else, so moving one is a migration and shows up as a diff.
+    const body = cutoff.slice(0, cutoff.indexOf("END $$"));
+    expect(body).not.toMatch(/\b(?:40|24|6)\b/);
+  });
+
+  it("pins the conservative defaults, so loosening one is a visible diff", () => {
+    // These may only ever be loosened *by measurement*, and loosening one moves
+    // the cutoff, which moves every lag and trailing window behind it, which
+    // changes the feature distribution: a retrain trigger, not a config tweak.
+    // Pinned here so the retrain trigger cannot be pulled quietly.
+    const seed = SQL.slice(SQL.indexOf("INSERT INTO feature_publication_lag"));
+    for (const [dataset, hours] of [
+      ["balanco-energia-subsistema", 40],
+      ["intercambio-nacional", 40],
+      ["restricao-coff", 40],
+      ["restricao-coff-detalhe", 40],
+      ["carga-verificada", 6],
+      ["capacidade-geracao", 24],
+    ] as const) {
+      const row = new RegExp(`'${dataset}',\\s*'[a-z-]+',\\s*${hours},`);
+      expect({ dataset, configured: row.test(seed) }).toEqual({
+        dataset,
+        configured: true,
+      });
+    }
+  });
+
+  it("bounds every observation read on valid_time, once per read", () => {
+    // The whole ticket in one assertion. `AsOf(gate)` filters `ingested_at` and
+    // over the backfill window filters *nothing*, so an observation read that
+    // relied on it would be unfiltered and look correct. Each of the three
+    // series is therefore cut on its own dataset's cutoff, and the count has to
+    // match the number of reads — a second read added without a bound is
+    // exactly the failure this catches.
+    const block = functionSegments().get("feature_lagged_actuals_block") ?? "";
+    const occurrences = (haystack: string, needle: string): number =>
+      haystack.split(needle).length - 1;
+
+    for (const [view, cut] of [
+      ["canonical_curtailment_by_reporting_entity", "cut_curtailment"],
+      ["canonical_system_context", "cut_context"],
+      ["canonical_system_exchange", "cut_exchange"],
+    ] as const) {
+      const reads = occurrences(block, `FROM ${view}`);
+      expect({ view, reads: reads > 0 }).toEqual({ view, reads: true });
+      expect({ view, bounded: occurrences(block, `valid_time <= ${cut}`) }).toEqual({
+        view,
+        bounded: reads,
+      });
+    }
+  });
+
+  it("builds no difference, no ramp and no window that reaches the target hour", () => {
+    // Last-known-value substitution is honest for a level and dishonest for a
+    // local difference: a ramp reconstructed from one last-observed value is one
+    // number broadcast across 24 hours, and a tree model will read it as
+    // intraday shape. So the dropped class is dropped *here* too — not merely
+    // unimplemented — and the replacements are forecast-side.
+    const block = functionSegments().get("feature_lagged_actuals_block") ?? "";
+    for (const forbidden of ["CURRENT ROW", "lag(", "lead(", "FOLLOWING"]) {
+      expect({ forbidden, present: block.includes(forbidden) }).toEqual({
+        forbidden,
+        present: false,
+      });
+    }
+    for (const column of FEATURE_ROW_COLUMNS) {
+      if (!column.startsWith("observed_")) {
+        continue;
+      }
+      expect(column).not.toContain("ramp");
+      expect(column).not.toContain("_diff");
+      // The utilisation ratios need an estimated denominator that no ONS
+      // dataset publishes. The directed flows they would divide are here; the
+      // ratios are ticket 10's.
+      expect(column).not.toContain("utilisation");
+    }
+  });
+
+  it("keeps PAR out of the reason-share set", () => {
+    // A live enum member with zero observations. A share column for a class that
+    // has never occurred is a column of zeroes a model spends split points on —
+    // and `PAR` stays in the *denominator*, so the day it first appears the
+    // three shares stop summing to one. That is the monitoring signal.
+    for (const column of FEATURE_ROW_COLUMNS) {
+      expect(column).not.toBe("observed_reason_share_par_7d");
+    }
+    expect(SQL).not.toMatch(/'PAR'/);
+    for (const reason of ["ENE", "CNF", "REL"]) {
+      expect(SQL).toContain(`'${reason}'`);
+    }
+  });
+});
+
 describe("the feature/label partition", () => {
   it("puts every column in exactly one of the three categories", () => {
     for (const column of FEATURE_ROW_COLUMNS) {
@@ -438,6 +578,26 @@ describe("the feature/label partition", () => {
       "calendar_is_bridge_day",
       "solar_zenith_cos",
       "solar_extraterrestrial_ghi",
+      "observed_actual_lag_hours",
+      "observed_constrained_off_lag_168h",
+      "observed_constrained_off_wind_lag_168h",
+      "observed_constrained_off_solar_lag_168h",
+      "observed_constrained_off_lag_48h",
+      "observed_constrained_off_same_hour_mean_7d",
+      "observed_constrained_off_hours_above_threshold_7d",
+      "observed_constrained_off_total_7d_mwh",
+      "observed_load_lag_168h",
+      "observed_wind_generation_lag_168h",
+      "observed_solar_generation_lag_168h",
+      "observed_wind_capacity_factor_mean_7d",
+      "observed_solar_capacity_factor_mean_7d",
+      "observed_net_exchange_lag_168h",
+      "observed_net_exchange_mean_24h_to_cutoff",
+      "observed_corridor_flow_ne_se_lag_168h",
+      "observed_corridor_flow_n_ne_lag_168h",
+      "observed_reason_share_ene_7d",
+      "observed_reason_share_cnf_7d",
+      "observed_reason_share_rel_7d",
     ]);
   });
 
@@ -451,25 +611,45 @@ describe("the feature/label partition", () => {
 });
 
 describe("the feature dictionary's grain marking", () => {
-  it("marks the capacity columns day grain, and everything else hourly", () => {
+  it("marks every cutoff-anchored column day grain, and everything else hourly", () => {
     // A column constant within a day must not be read as an hourly signal, and
     // that is invisible in the data: twenty-four equal numbers look exactly
     // like a flat hourly series. The marking is the only thing that
     // distinguishes them.
-    for (const column of FEATURE_ROW_COLUMNS) {
-      expect({ column, grain: featureGrain(column) }).toEqual({
-        column,
-        grain: column.startsWith("capacity_") ? "day" : "hour",
-      });
-    }
-    expect(
-      FEATURE_ROW_COLUMNS.filter((column) => featureGrain(column) === "day"),
-    ).toEqual([
+    //
+    // Two families are day grain and for two different reasons. Capacity is a
+    // fact about a day. Ticket 05's trailing windows are anchored to
+    // `actuals_cutoff` rather than to the target hour, so the window is the same
+    // window for all twenty-four rows — which is *more* confusable than
+    // capacity, because it sits in the row beside lagged levels that really are
+    // hourly.
+    const day = FEATURE_ROW_COLUMNS.filter((column) => featureGrain(column) === "day");
+    expect(day).toEqual([
       "capacity_wind_mw",
       "capacity_solar_mw",
       "capacity_wind_added_28d_mw",
       "capacity_solar_added_28d_mw",
+      "observed_constrained_off_hours_above_threshold_7d",
+      "observed_constrained_off_total_7d_mwh",
+      "observed_wind_capacity_factor_mean_7d",
+      "observed_solar_capacity_factor_mean_7d",
+      "observed_net_exchange_mean_24h_to_cutoff",
+      "observed_reason_share_ene_7d",
+      "observed_reason_share_cnf_7d",
+      "observed_reason_share_rel_7d",
     ]);
+    for (const column of FEATURE_ROW_COLUMNS) {
+      expect({ column, grain: featureGrain(column) }).toEqual({
+        column,
+        grain: day.includes(column) ? "day" : "hour",
+      });
+    }
+    // The same-hour mean is deliberately *not* day grain: its window ends at
+    // the cutoff, but which seven hours it averages is chosen by the target
+    // row's local hour, so it genuinely varies across the day.
+    expect(featureGrain("observed_constrained_off_same_hour_mean_7d")).toBe("hour");
+    // Nor is the staleness: it is a distance from this hour to the cutoff.
+    expect(featureGrain("observed_actual_lag_hours")).toBe("hour");
   });
 
   it("says so in the catalogue too, at the column itself", () => {

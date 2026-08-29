@@ -68,7 +68,7 @@ denominator do not — see 10.
 
 **Blocked by:** 01 — the gate, end to end.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] `actuals_cutoff(gate, dataset)` exists, driven by a configured `publication_lag_hours` table with the defaults above
 - [ ] Every observation-sourced feature is cut on `valid_time ≤ actuals_cutoff(gate, dataset)`, never on the vintage axis alone
@@ -85,3 +85,20 @@ denominator do not — see 10.
 - [ ] No difference, ramp or centred window is built over actuals; the dropped features name their forecast-side replacement
 - [ ] The seven-day same-hour baseline is computed from this function, not reimplemented
 - [ ] **Seam 2 extends**: gate ablation also deletes rows with `valid_time > actuals_cutoff(gate, dataset)` and no feature value changes
+
+---
+
+## Follow-up: one column still owed
+
+`observed_constrained_off_same_hour_exceedance_7d` was added to the feature spec
+during this ticket's merge and is **not implemented**. `forecaster.md`'s baseline
+ladder needs it for rung 1's *occurrence* head — the magnitude head reads
+`observed_constrained_off_same_hour_mean_7d`, which this ticket built. It is the
+share of the seven same-local-hour observations at or above `threshold_mw`, and
+it is not `observed_constrained_off_hours_above_threshold_7d`, which counts all
+hours across seven days rather than the seven observations of one local hour.
+
+Whoever picks it up: the block, the cutoff and the seven-day frame all exist
+here, so it is one more expression in `feature_lagged_actuals_block` plus an
+`ALTER TYPE ... ADD ATTRIBUTE`. Forecaster ticket 09 (the metrics table and
+baseline ladder) is what will notice its absence.

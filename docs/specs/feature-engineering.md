@@ -362,6 +362,21 @@ changes the feature distribution — so it is a retrain trigger, not a config
 tweak. A scheduled conformance job measures the real lag and fails if it exceeds
 the configured value.
 
+> **Implemented in ticket 05.** The table is `feature_publication_lag`
+> (`apps/api/src/database/schema.ts`), seeded with the defaults above by
+> `drizzle/0021_lagged_actuals_behind_the_cutoff.sql`, and read by
+> `actuals_cutoff(target_date, gate_profile, dataset)`. Two consequences of that
+> shape are deliberate. **Nothing writes the table at runtime and no repository
+> exists through which it could**, so loosening a lag is a migration — a diff, a
+> review and a retrain — rather than an `UPDATE` somebody ran once. And the
+> function takes a *target date and a profile* rather than the `gate` the formula
+> above names, because a `gate timestamptz` parameter would be the one door into
+> the feature layer through which a hand-chosen instant could arrive; the gate is
+> derived inside it by `gate_at`, exactly as `feature_apply_gate` derives it. An
+> unconfigured dataset raises `22023` rather than defaulting to a zero-hour lag,
+> which would be an unfiltered observation read that looks exactly like a correct
+> answer.
+
 The consequence is the sharpest single fact in this document: **at `gate_late`,
 no hour of day D−1 is assumed available.** The nearest usable same-hour actual is
 `t − 48 h`, and even that is conditional.
@@ -510,6 +525,17 @@ losing W7 (4,172 MW) are the same fraction of centroids and are not remotely the
 same event. The weighted reading still gives 1 when everything arrived, so the
 `stale_inputs` rule in the diagnosis spec is unaffected.
 
+**`observed_constrained_off_same_hour_exceedance_7d` was missing and is added.**
+`forecaster.md`'s baseline ladder gives rung 1 two columns, one per head of the
+hurdle: the magnitude side reads
+`observed_constrained_off_same_hour_mean_7d`, which existed, and the
+**occurrence** side needs the exceedance frequency at the same local hour, which
+did not. That spec also says rung 1 is "computed *from the feature function* …
+so it and the model cannot disagree about the last seven days" — a promise that
+could not be kept for the occurrence head with no column to read. Note it is not
+`observed_constrained_off_hours_above_threshold_7d`, which counts *all* hours
+across seven days rather than the seven observations of one local hour.
+
 **Ramps and centred windows are legal here and nowhere else on the actuals side.**
 A D−1 run publishes all 24 hours of day D at once, so `x[t] − x[t−1]` inside that
 profile is computed from data that exists at the gate. This is the single largest
@@ -618,6 +644,7 @@ cutoff — an offset that does not clear it yields NULL rather than sliding.
 | `observed_constrained_off_lag_48h` | same local hour, D−2; NULL if cutoff excludes it | **K** | ONS 1, 3 |
 | `observed_constrained_off_same_hour_mean_7d` | mean at the same local hour over the 7 available days ending at the cutoff day | **K** | ONS 1, 3 |
 | `observed_constrained_off_hours_above_threshold_7d` | count over the trailing 7 available days | **K** | ONS 1, 3 |
+| `observed_constrained_off_same_hour_exceedance_7d` | share of the 7 same-local-hour observations at or above `threshold_mw`, in 1/7 steps | **K** | ONS 1, 3 |
 | `observed_constrained_off_total_7d_mwh` | sum over the trailing 7 available days | **K** | ONS 1, 3 |
 | `observed_load_lag_168h` | `load_mwh`, D−7 same hour | **K** | ONS 5 |
 | `observed_wind_generation_lag_168h` / `observed_solar_generation_lag_168h` | D−7 same hour | **K** | ONS 5 |
