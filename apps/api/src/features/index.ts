@@ -6,6 +6,11 @@
  * because the two central quantities are functions of a date rather than
  * columns: `InstalledCapacityAsOf` and, on top of it,
  * `CapacityWeight(centroid, technology, t)`.
+ *
+ * The **model's** feature rows are not derived here at all. They are
+ * `feature_rows(...)`, a set-returning function in the migration tree, and
+ * `feature-rows.ts` only calls it — one definition, owned by the schema
+ * authority, called identically from TypeScript and from Python.
  */
 
 export {
@@ -22,6 +27,22 @@ export {
   type WeightedCell,
   weightMisallocation,
 } from "./capacity-weights.js";
+export {
+  FEATURE_ROW_COLUMNS,
+  FEATURE_ROW_STAMP_COLUMNS,
+  FEATURE_SETS,
+  type FeatureRow,
+  type FeatureRowsQuery,
+  type FeatureSet,
+  GATE_PROFILES,
+  type GateProfile,
+  isFeatureColumn,
+  isLabelColumn,
+  readFeatureRows,
+  readServingRows,
+  type ServingQuery,
+  servingTargetDate,
+} from "./feature-rows.js";
 export {
   aggregateSubsystemHour,
   readSubsystemWeatherAsOf,

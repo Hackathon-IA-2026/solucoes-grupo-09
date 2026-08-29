@@ -1,0 +1,4868 @@
+{
+  "id": "c9c5e992-9404-4746-b66f-43981e50ff2a",
+  "prevId": "2f8bd593-05d9-422a-afde-498f81ac726b",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.centroid_drift_check": {
+      "name": "centroid_drift_check",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "set_version": {
+          "name": "set_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fleet_on": {
+          "name": "fleet_on",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "registry_as_of": {
+          "name": "registry_as_of",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mean_distance_km": {
+          "name": "mean_distance_km",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "baseline_mean_distance_km": {
+          "name": "baseline_mean_distance_km",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "drift_ratio": {
+          "name": "drift_ratio",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "trigger_ratio": {
+          "name": "trigger_ratio",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "centroid_drift_outcome",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "located_mw": {
+          "name": "located_mw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "plants": {
+          "name": "plants",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "checked_at": {
+          "name": "checked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "centroid_drift_check_set": {
+          "name": "centroid_drift_check_set",
+          "columns": [
+            {
+              "expression": "set_version",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "checked_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "centroid_drift_check_set_version_centroid_set_version_fk": {
+          "name": "centroid_drift_check_set_version_centroid_set_version_fk",
+          "tableFrom": "centroid_drift_check",
+          "tableTo": "centroid_set",
+          "columnsFrom": ["set_version"],
+          "columnsTo": ["version"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.centroid_point": {
+      "name": "centroid_point",
+      "schema": "",
+      "columns": {
+        "set_version": {
+          "name": "set_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "centroid_id": {
+          "name": "centroid_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "latitude": {
+          "name": "latitude",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "longitude": {
+          "name": "longitude",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "technology": {
+          "name": "technology",
+          "type": "technology",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "represented_mw": {
+          "name": "represented_mw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "origin": {
+          "name": "origin",
+          "type": "centroid_point_origin",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "municipalities": {
+          "name": "municipalities",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "plants": {
+          "name": "plants",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "merged_from": {
+          "name": "merged_from",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "grid_latitude": {
+          "name": "grid_latitude",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "grid_longitude": {
+          "name": "grid_longitude",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "centroid_point_cell": {
+          "name": "centroid_point_cell",
+          "columns": [
+            {
+              "expression": "set_version",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "grid_latitude",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "grid_longitude",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "centroid_point_technology": {
+          "name": "centroid_point_technology",
+          "columns": [
+            {
+              "expression": "set_version",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "technology",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "centroid_point_set_version_centroid_set_version_fk": {
+          "name": "centroid_point_set_version_centroid_set_version_fk",
+          "tableFrom": "centroid_point",
+          "tableTo": "centroid_set",
+          "columnsFrom": ["set_version"],
+          "columnsTo": ["version"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "centroid_point_set_version_centroid_id_pk": {
+          "name": "centroid_point_set_version_centroid_id_pk",
+          "columns": ["set_version", "centroid_id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.centroid_set": {
+      "name": "centroid_set",
+      "schema": "",
+      "columns": {
+        "version": {
+          "name": "version",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "centroid_set_source",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "geometry_digest": {
+          "name": "geometry_digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "centroid_count": {
+          "name": "centroid_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "represented_mw": {
+          "name": "represented_mw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "registry_as_of": {
+          "name": "registry_as_of",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fleet_on": {
+          "name": "fleet_on",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "freeze_mean_distance_km": {
+          "name": "freeze_mean_distance_km",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "freeze_located_mw": {
+          "name": "freeze_located_mw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "freeze_plants": {
+          "name": "freeze_plants",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cluster_radius_km": {
+          "name": "cluster_radius_km",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "min_cluster_mw": {
+          "name": "min_cluster_mw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "collision_check": {
+          "name": "collision_check",
+          "type": "centroid_collision_check",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "frozen_at": {
+          "name": "frozen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "centroid_set_frozen": {
+          "name": "centroid_set_frozen",
+          "columns": [
+            {
+              "expression": "frozen_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.conjunto": {
+      "name": "conjunto",
+      "schema": "",
+      "columns": {
+        "ons_conjunto_code": {
+          "name": "ons_conjunto_code",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subsystem": {
+          "name": "subsystem",
+          "type": "subsystem_code",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "state_code": {
+          "name": "state_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "technology": {
+          "name": "technology",
+          "type": "technology",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_type_code": {
+          "name": "source_type_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "first_seen_at": {
+          "name": "first_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "last_seen_at": {
+          "name": "last_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "conjunto_subsystem_technology": {
+          "name": "conjunto_subsystem_technology",
+          "columns": [
+            {
+              "expression": "subsystem",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "technology",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.conjunto_membership": {
+      "name": "conjunto_membership",
+      "schema": "",
+      "columns": {
+        "plant_ons_code": {
+          "name": "plant_ons_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "conjunto_code": {
+          "name": "conjunto_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "member_from": {
+          "name": "member_from",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "member_to": {
+          "name": "member_to",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "plant_ceg_core": {
+          "name": "plant_ceg_core",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "data_version": {
+          "name": "data_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at": {
+          "name": "published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at_precision": {
+          "name": "published_at_precision",
+          "type": "published_at_precision",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingested_at": {
+          "name": "ingested_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "value_digest": {
+          "name": "value_digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_version_id": {
+          "name": "source_version_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "conjunto_membership_as_of": {
+          "name": "conjunto_membership_as_of",
+          "columns": [
+            {
+              "expression": "member_from",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "plant_ons_code",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ingested_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "conjunto_membership_conjunto": {
+          "name": "conjunto_membership_conjunto",
+          "columns": [
+            {
+              "expression": "conjunto_code",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "member_from",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "conjunto_membership_conjunto_code_conjunto_ons_conjunto_code_fk": {
+          "name": "conjunto_membership_conjunto_code_conjunto_ons_conjunto_code_fk",
+          "tableFrom": "conjunto_membership",
+          "tableTo": "conjunto",
+          "columnsFrom": ["conjunto_code"],
+          "columnsTo": ["ons_conjunto_code"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "conjunto_membership_source_version_id_ons_resource_version_id_fk": {
+          "name": "conjunto_membership_source_version_id_ons_resource_version_id_fk",
+          "tableFrom": "conjunto_membership",
+          "tableTo": "ons_resource_version",
+          "columnsFrom": ["source_version_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "conjunto_membership_plant_ons_code_conjunto_code_member_from_data_version_pk": {
+          "name": "conjunto_membership_plant_ons_code_conjunto_code_member_from_data_version_pk",
+          "columns": ["plant_ons_code", "conjunto_code", "member_from", "data_version"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "conjunto_membership_ordered": {
+          "name": "conjunto_membership_ordered",
+          "value": "\"conjunto_membership\".\"member_to\" is null or \"conjunto_membership\".\"member_to\" >= \"conjunto_membership\".\"member_from\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.curtailment_report_hour": {
+      "name": "curtailment_report_hour",
+      "schema": "",
+      "columns": {
+        "reporting_entity_code": {
+          "name": "reporting_entity_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "technology": {
+          "name": "technology",
+          "type": "technology",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "valid_time": {
+          "name": "valid_time",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "verified_generation_mwh": {
+          "name": "verified_generation_mwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "constrained_off_mwh": {
+          "name": "constrained_off_mwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reference_generation_mwh": {
+          "name": "reference_generation_mwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "final_reference_generation_mwh": {
+          "name": "final_reference_generation_mwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "available_capacity_mw": {
+          "name": "available_capacity_mw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "half_hours_observed": {
+          "name": "half_hours_observed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "reason_code",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "origin": {
+          "name": "origin",
+          "type": "restriction_origin",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "restriction_description": {
+          "name": "restriction_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cause_mixed": {
+          "name": "cause_mixed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "data_version": {
+          "name": "data_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at": {
+          "name": "published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at_precision": {
+          "name": "published_at_precision",
+          "type": "published_at_precision",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingested_at": {
+          "name": "ingested_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "value_digest": {
+          "name": "value_digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_version_id": {
+          "name": "source_version_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "curtailment_report_hour_as_of": {
+          "name": "curtailment_report_hour_as_of",
+          "columns": [
+            {
+              "expression": "valid_time",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "reporting_entity_code",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "technology",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ingested_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "curtailment_report_hour_time": {
+          "name": "curtailment_report_hour_time",
+          "columns": [
+            {
+              "expression": "valid_time",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "technology",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "curtailment_report_hour_reporting_entity_code_reporting_entity_ons_code_fk": {
+          "name": "curtailment_report_hour_reporting_entity_code_reporting_entity_ons_code_fk",
+          "tableFrom": "curtailment_report_hour",
+          "tableTo": "reporting_entity",
+          "columnsFrom": ["reporting_entity_code"],
+          "columnsTo": ["ons_code"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "curtailment_report_hour_source_version_id_ons_resource_version_id_fk": {
+          "name": "curtailment_report_hour_source_version_id_ons_resource_version_id_fk",
+          "tableFrom": "curtailment_report_hour",
+          "tableTo": "ons_resource_version",
+          "columnsFrom": ["source_version_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "curtailment_report_hour_reporting_entity_code_technology_valid_time_data_version_pk": {
+          "name": "curtailment_report_hour_reporting_entity_code_technology_valid_time_data_version_pk",
+          "columns": ["reporting_entity_code", "technology", "valid_time", "data_version"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "curtailment_cause_whole": {
+          "name": "curtailment_cause_whole",
+          "value": "(\"curtailment_report_hour\".\"reason\" is null) = (\"curtailment_report_hour\".\"origin\" is null)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.dessem_balance_half_hour": {
+      "name": "dessem_balance_half_hour",
+      "schema": "",
+      "columns": {
+        "subsystem": {
+          "name": "subsystem",
+          "type": "subsystem_code",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "valid_time": {
+          "name": "valid_time",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "forecast_producer": {
+          "name": "forecast_producer",
+          "type": "forecast_producer",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "run_label": {
+          "name": "run_label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "demand_mw": {
+          "name": "demand_mw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "hydro_generation_mw": {
+          "name": "hydro_generation_mw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "small_hydro_generation_mw": {
+          "name": "small_hydro_generation_mw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "thermal_generation_mw": {
+          "name": "thermal_generation_mw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "small_thermal_generation_mw": {
+          "name": "small_thermal_generation_mw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "wind_generation_mw": {
+          "name": "wind_generation_mw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "solar_generation_mw": {
+          "name": "solar_generation_mw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mmgd_generation_mw": {
+          "name": "mmgd_generation_mw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pumping_consumption_mw": {
+          "name": "pumping_consumption_mw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "data_version": {
+          "name": "data_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at": {
+          "name": "published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at_precision": {
+          "name": "published_at_precision",
+          "type": "published_at_precision",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingested_at": {
+          "name": "ingested_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "value_digest": {
+          "name": "value_digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_version_id": {
+          "name": "source_version_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "dessem_balance_half_hour_as_of": {
+          "name": "dessem_balance_half_hour_as_of",
+          "columns": [
+            {
+              "expression": "valid_time",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "subsystem",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ingested_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "dessem_balance_half_hour_published": {
+          "name": "dessem_balance_half_hour_published",
+          "columns": [
+            {
+              "expression": "published_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "valid_time",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "dessem_balance_half_hour_source_version_id_ons_resource_version_id_fk": {
+          "name": "dessem_balance_half_hour_source_version_id_ons_resource_version_id_fk",
+          "tableFrom": "dessem_balance_half_hour",
+          "tableTo": "ons_resource_version",
+          "columnsFrom": ["source_version_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "dessem_balance_half_hour_subsystem_valid_time_data_version_pk": {
+          "name": "dessem_balance_half_hour_subsystem_valid_time_data_version_pk",
+          "columns": ["subsystem", "valid_time", "data_version"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "dessem_balance_is_a_forecast": {
+          "name": "dessem_balance_is_a_forecast",
+          "value": "\"dessem_balance_half_hour\".\"published_at\" < \"dessem_balance_half_hour\".\"valid_time\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.generating_unit": {
+      "name": "generating_unit",
+      "schema": "",
+      "columns": {
+        "plant_ceg_core": {
+          "name": "plant_ceg_core",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "equipment_code": {
+          "name": "equipment_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unit_number": {
+          "name": "unit_number",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rated_power_mw": {
+          "name": "rated_power_mw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "test_entry_on": {
+          "name": "test_entry_on",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "commissioned_on": {
+          "name": "commissioned_on",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "decommissioned_on": {
+          "name": "decommissioned_on",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "data_version": {
+          "name": "data_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at": {
+          "name": "published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at_precision": {
+          "name": "published_at_precision",
+          "type": "published_at_precision",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingested_at": {
+          "name": "ingested_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "value_digest": {
+          "name": "value_digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_version_id": {
+          "name": "source_version_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "generating_unit_as_of": {
+          "name": "generating_unit_as_of",
+          "columns": [
+            {
+              "expression": "commissioned_on",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "plant_ceg_core",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ingested_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "generating_unit_interval": {
+          "name": "generating_unit_interval",
+          "columns": [
+            {
+              "expression": "commissioned_on",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "decommissioned_on",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "generating_unit_plant_ceg_core_plant_ceg_core_fk": {
+          "name": "generating_unit_plant_ceg_core_plant_ceg_core_fk",
+          "tableFrom": "generating_unit",
+          "tableTo": "plant",
+          "columnsFrom": ["plant_ceg_core"],
+          "columnsTo": ["ceg_core"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "generating_unit_source_version_id_ons_resource_version_id_fk": {
+          "name": "generating_unit_source_version_id_ons_resource_version_id_fk",
+          "tableFrom": "generating_unit",
+          "tableTo": "ons_resource_version",
+          "columnsFrom": ["source_version_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "generating_unit_plant_ceg_core_equipment_code_data_version_pk": {
+          "name": "generating_unit_plant_ceg_core_equipment_code_data_version_pk",
+          "columns": ["plant_ceg_core", "equipment_code", "data_version"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.ingestion_run": {
+      "name": "ingestion_run",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "source": {
+          "name": "source",
+          "type": "ingestion_source",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tier": {
+          "name": "tier",
+          "type": "refresh_tier",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "period_label": {
+          "name": "period_label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "ingestion_run_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "resources_probed": {
+          "name": "resources_probed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "resources_downloaded": {
+          "name": "resources_downloaded",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "rows_parsed": {
+          "name": "rows_parsed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "rows_inserted": {
+          "name": "rows_inserted",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "rows_revised": {
+          "name": "rows_revised",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "rows_unchanged": {
+          "name": "rows_unchanged",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "republications": {
+          "name": "republications",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "error_message": {
+          "name": "error_message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "finished_at": {
+          "name": "finished_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "ingestion_run_source": {
+          "name": "ingestion_run_source",
+          "columns": [
+            {
+              "expression": "source",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "started_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ingestion_run_status_time": {
+          "name": "ingestion_run_status_time",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "started_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.load_api_request": {
+      "name": "load_api_request",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "series": {
+          "name": "series",
+          "type": "load_series",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "area_code": {
+          "name": "area_code",
+          "type": "load_area_code",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "range_start": {
+          "name": "range_start",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "range_end": {
+          "name": "range_end",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "request_url": {
+          "name": "request_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "http_status": {
+          "name": "http_status",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "row_count": {
+          "name": "row_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content_sha256": {
+          "name": "content_sha256",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "byte_size": {
+          "name": "byte_size",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "json_repaired": {
+          "name": "json_repaired",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "archive_uri": {
+          "name": "archive_uri",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fetched_at": {
+          "name": "fetched_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "load_api_request_window": {
+          "name": "load_api_request_window",
+          "columns": [
+            {
+              "expression": "series",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "area_code",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "range_start",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "load_api_request_fetched": {
+          "name": "load_api_request_fetched",
+          "columns": [
+            {
+              "expression": "fetched_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.observed_plant": {
+      "name": "observed_plant",
+      "schema": "",
+      "columns": {
+        "ons_code": {
+          "name": "ons_code",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ceg_core": {
+          "name": "ceg_core",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ceg_raw": {
+          "name": "ceg_raw",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subsystem": {
+          "name": "subsystem",
+          "type": "subsystem_code",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "state_code": {
+          "name": "state_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "technology": {
+          "name": "technology",
+          "type": "technology",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operation_modality": {
+          "name": "operation_modality",
+          "type": "operation_modality",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "first_seen_at": {
+          "name": "first_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "last_seen_at": {
+          "name": "last_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "observed_plant_ceg_core": {
+          "name": "observed_plant_ceg_core",
+          "columns": [
+            {
+              "expression": "ceg_core",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "observed_plant_subsystem_technology": {
+          "name": "observed_plant_subsystem_technology",
+          "columns": [
+            {
+              "expression": "subsystem",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "technology",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.ons_resource_version": {
+      "name": "ons_resource_version",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "dataset_slug": {
+          "name": "dataset_slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "resource_name": {
+          "name": "resource_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "resource_url": {
+          "name": "resource_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "format": {
+          "name": "format",
+          "type": "resource_format",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "change_key": {
+          "name": "change_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_modified": {
+          "name": "last_modified",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "content_length": {
+          "name": "content_length",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "etag": {
+          "name": "etag",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "content_sha256": {
+          "name": "content_sha256",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "byte_size": {
+          "name": "byte_size",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "archive_uri": {
+          "name": "archive_uri",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "first_seen_at": {
+          "name": "first_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "fetched_at": {
+          "name": "fetched_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "ons_resource_version_identity": {
+          "name": "ons_resource_version_identity",
+          "columns": [
+            {
+              "expression": "resource_url",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "change_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ons_resource_version_dataset": {
+          "name": "ons_resource_version_dataset",
+          "columns": [
+            {
+              "expression": "dataset_slug",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "first_seen_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.payload_custody": {
+      "name": "payload_custody",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "provenance": {
+          "name": "provenance",
+          "type": "custody_provenance",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provenance_id": {
+          "name": "provenance_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dataset_slug": {
+          "name": "dataset_slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "resource_name": {
+          "name": "resource_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "archive_uri": {
+          "name": "archive_uri",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content_sha256": {
+          "name": "content_sha256",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "byte_size": {
+          "name": "byte_size",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fetched_at": {
+          "name": "fetched_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "purged_at": {
+          "name": "purged_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "purge_reason": {
+          "name": "purge_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "payload_custody_provenance": {
+          "name": "payload_custody_provenance",
+          "columns": [
+            {
+              "expression": "provenance",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "provenance_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "payload_custody_retention": {
+          "name": "payload_custody_retention",
+          "columns": [
+            {
+              "expression": "purged_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "fetched_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "payload_custody_uri": {
+          "name": "payload_custody_uri",
+          "columns": [
+            {
+              "expression": "archive_uri",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.plant": {
+      "name": "plant",
+      "schema": "",
+      "columns": {
+        "ceg_core": {
+          "name": "ceg_core",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ceg_raw": {
+          "name": "ceg_raw",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ons_plant_code": {
+          "name": "ons_plant_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subsystem": {
+          "name": "subsystem",
+          "type": "subsystem_code",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "state_code": {
+          "name": "state_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "technology": {
+          "name": "technology",
+          "type": "technology",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operation_modality": {
+          "name": "operation_modality",
+          "type": "operation_modality",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "owner_name": {
+          "name": "owner_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operator_name": {
+          "name": "operator_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "first_seen_at": {
+          "name": "first_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "last_seen_at": {
+          "name": "last_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "plant_subsystem_technology": {
+          "name": "plant_subsystem_technology",
+          "columns": [
+            {
+              "expression": "subsystem",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "technology",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "plant_ons_code": {
+          "name": "plant_ons_code",
+          "columns": [
+            {
+              "expression": "ons_plant_code",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.plant_detail_hour": {
+      "name": "plant_detail_hour",
+      "schema": "",
+      "columns": {
+        "plant_ons_code": {
+          "name": "plant_ons_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "technology": {
+          "name": "technology",
+          "type": "technology",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "valid_time": {
+          "name": "valid_time",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "estimated_generation_mwh": {
+          "name": "estimated_generation_mwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "verified_generation_mwh": {
+          "name": "verified_generation_mwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "measured_wind_speed_ms": {
+          "name": "measured_wind_speed_ms",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "measured_irradiance_wm2": {
+          "name": "measured_irradiance_wm2",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "measurement_invalid": {
+          "name": "measurement_invalid",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "half_hours_observed": {
+          "name": "half_hours_observed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "data_version": {
+          "name": "data_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at": {
+          "name": "published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at_precision": {
+          "name": "published_at_precision",
+          "type": "published_at_precision",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingested_at": {
+          "name": "ingested_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "value_digest": {
+          "name": "value_digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_version_id": {
+          "name": "source_version_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "plant_detail_hour_as_of": {
+          "name": "plant_detail_hour_as_of",
+          "columns": [
+            {
+              "expression": "valid_time",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "plant_ons_code",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "technology",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ingested_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "plant_detail_hour_time": {
+          "name": "plant_detail_hour_time",
+          "columns": [
+            {
+              "expression": "valid_time",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "technology",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "plant_detail_hour_plant_ons_code_observed_plant_ons_code_fk": {
+          "name": "plant_detail_hour_plant_ons_code_observed_plant_ons_code_fk",
+          "tableFrom": "plant_detail_hour",
+          "tableTo": "observed_plant",
+          "columnsFrom": ["plant_ons_code"],
+          "columnsTo": ["ons_code"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "plant_detail_hour_source_version_id_ons_resource_version_id_fk": {
+          "name": "plant_detail_hour_source_version_id_ons_resource_version_id_fk",
+          "tableFrom": "plant_detail_hour",
+          "tableTo": "ons_resource_version",
+          "columnsFrom": ["source_version_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "plant_detail_hour_plant_ons_code_technology_valid_time_data_version_pk": {
+          "name": "plant_detail_hour_plant_ons_code_technology_valid_time_data_version_pk",
+          "columns": ["plant_ons_code", "technology", "valid_time", "data_version"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "plant_detail_measurement_whole": {
+          "name": "plant_detail_measurement_whole",
+          "value": "(coalesce(\"plant_detail_hour\".\"measured_wind_speed_ms\", \"plant_detail_hour\".\"measured_irradiance_wm2\") is null) = (\"plant_detail_hour\".\"measurement_invalid\" is null)"
+        },
+        "plant_detail_measurement_technology": {
+          "name": "plant_detail_measurement_technology",
+          "value": "case \"plant_detail_hour\".\"technology\"\n            when 'WIND' then \"plant_detail_hour\".\"measured_irradiance_wm2\" is null\n            else \"plant_detail_hour\".\"measured_wind_speed_ms\" is null\n          end"
+        },
+        "plant_detail_invalid_boolean": {
+          "name": "plant_detail_invalid_boolean",
+          "value": "\"plant_detail_hour\".\"measurement_invalid\" in (0, 1)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.plant_geo": {
+      "name": "plant_geo",
+      "schema": "",
+      "columns": {
+        "plant_ceg_core": {
+          "name": "plant_ceg_core",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ceg_raw": {
+          "name": "ceg_raw",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "siga_name": {
+          "name": "siga_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "latitude": {
+          "name": "latitude",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "longitude": {
+          "name": "longitude",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_source": {
+          "name": "location_source",
+          "type": "plant_location_source",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "coordinate_rejection": {
+          "name": "coordinate_rejection",
+          "type": "coordinate_rejection",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "municipality_name": {
+          "name": "municipality_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "municipality_uf": {
+          "name": "municipality_uf",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "municipalities_raw": {
+          "name": "municipalities_raw",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ownership": {
+          "name": "ownership",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "observed_on": {
+          "name": "observed_on",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "withdrawn_on": {
+          "name": "withdrawn_on",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "data_version": {
+          "name": "data_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at": {
+          "name": "published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at_precision": {
+          "name": "published_at_precision",
+          "type": "published_at_precision",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingested_at": {
+          "name": "ingested_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "value_digest": {
+          "name": "value_digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_version_id": {
+          "name": "source_version_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "plant_geo_as_of": {
+          "name": "plant_geo_as_of",
+          "columns": [
+            {
+              "expression": "plant_ceg_core",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ingested_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "plant_geo_municipality": {
+          "name": "plant_geo_municipality",
+          "columns": [
+            {
+              "expression": "municipality_uf",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "municipality_name",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "plant_geo_plant_ceg_core_plant_ceg_core_fk": {
+          "name": "plant_geo_plant_ceg_core_plant_ceg_core_fk",
+          "tableFrom": "plant_geo",
+          "tableTo": "plant",
+          "columnsFrom": ["plant_ceg_core"],
+          "columnsTo": ["ceg_core"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "plant_geo_source_version_id_ons_resource_version_id_fk": {
+          "name": "plant_geo_source_version_id_ons_resource_version_id_fk",
+          "tableFrom": "plant_geo",
+          "tableTo": "ons_resource_version",
+          "columnsFrom": ["source_version_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "plant_geo_plant_ceg_core_data_version_pk": {
+          "name": "plant_geo_plant_ceg_core_data_version_pk",
+          "columns": ["plant_ceg_core", "data_version"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "plant_geo_coordinate_pair": {
+          "name": "plant_geo_coordinate_pair",
+          "value": "(\"plant_geo\".\"latitude\" is null) = (\"plant_geo\".\"longitude\" is null)"
+        },
+        "plant_geo_location_source": {
+          "name": "plant_geo_location_source",
+          "value": "(\"plant_geo\".\"location_source\" = 'unlocated') = (\"plant_geo\".\"latitude\" is null)"
+        },
+        "plant_geo_within_brazil": {
+          "name": "plant_geo_within_brazil",
+          "value": "\"plant_geo\".\"latitude\" is null or (\"plant_geo\".\"latitude\" between -34 and 6\n           and \"plant_geo\".\"longitude\" between -74 and -33\n           and not (\"plant_geo\".\"latitude\" = 0 and \"plant_geo\".\"longitude\" = 0))"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.programmed_load_half_hour": {
+      "name": "programmed_load_half_hour",
+      "schema": "",
+      "columns": {
+        "area_code": {
+          "name": "area_code",
+          "type": "load_area_code",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "area_kind": {
+          "name": "area_kind",
+          "type": "load_area_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subsystem": {
+          "name": "subsystem",
+          "type": "subsystem_code",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "valid_time": {
+          "name": "valid_time",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "programmed_load_mwh": {
+          "name": "programmed_load_mwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "data_version": {
+          "name": "data_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at": {
+          "name": "published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at_precision": {
+          "name": "published_at_precision",
+          "type": "published_at_precision",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingested_at": {
+          "name": "ingested_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "value_digest": {
+          "name": "value_digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_request_id": {
+          "name": "source_request_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "programmed_load_half_hour_as_of": {
+          "name": "programmed_load_half_hour_as_of",
+          "columns": [
+            {
+              "expression": "valid_time",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "area_code",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ingested_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "programmed_load_half_hour_source_request_id_load_api_request_id_fk": {
+          "name": "programmed_load_half_hour_source_request_id_load_api_request_id_fk",
+          "tableFrom": "programmed_load_half_hour",
+          "tableTo": "load_api_request",
+          "columnsFrom": ["source_request_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "programmed_load_half_hour_area_code_valid_time_data_version_pk": {
+          "name": "programmed_load_half_hour_area_code_valid_time_data_version_pk",
+          "columns": ["area_code", "valid_time", "data_version"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "programmed_load_subsystem_only_for_subsystem_area": {
+          "name": "programmed_load_subsystem_only_for_subsystem_area",
+          "value": "(\"programmed_load_half_hour\".\"subsystem\" is null) = (\"programmed_load_half_hour\".\"area_kind\" <> 'SUBSYSTEM')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.reporting_entity": {
+      "name": "reporting_entity",
+      "schema": "",
+      "columns": {
+        "ons_code": {
+          "name": "ons_code",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "reporting_entity_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ceg_core": {
+          "name": "ceg_core",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subsystem": {
+          "name": "subsystem",
+          "type": "subsystem_code",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "state_code": {
+          "name": "state_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "first_seen_at": {
+          "name": "first_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "last_seen_at": {
+          "name": "last_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "reporting_entity_subsystem": {
+          "name": "reporting_entity_subsystem",
+          "columns": [
+            {
+              "expression": "subsystem",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.resource_republication": {
+      "name": "resource_republication",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "dataset_slug": {
+          "name": "dataset_slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "resource_name": {
+          "name": "resource_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "resource_url": {
+          "name": "resource_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "prior_version_id": {
+          "name": "prior_version_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "version_id": {
+          "name": "version_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "prior_fetched_at": {
+          "name": "prior_fetched_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "settled_days": {
+          "name": "settled_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tier": {
+          "name": "tier",
+          "type": "refresh_tier",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "run_id": {
+          "name": "run_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "detected_at": {
+          "name": "detected_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "resource_republication_pair": {
+          "name": "resource_republication_pair",
+          "columns": [
+            {
+              "expression": "prior_version_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "version_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "resource_republication_detected": {
+          "name": "resource_republication_detected",
+          "columns": [
+            {
+              "expression": "detected_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "resource_republication_dataset": {
+          "name": "resource_republication_dataset",
+          "columns": [
+            {
+              "expression": "dataset_slug",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "detected_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "resource_republication_prior_version_id_ons_resource_version_id_fk": {
+          "name": "resource_republication_prior_version_id_ons_resource_version_id_fk",
+          "tableFrom": "resource_republication",
+          "tableTo": "ons_resource_version",
+          "columnsFrom": ["prior_version_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "resource_republication_version_id_ons_resource_version_id_fk": {
+          "name": "resource_republication_version_id_ons_resource_version_id_fk",
+          "tableFrom": "resource_republication",
+          "tableTo": "ons_resource_version",
+          "columnsFrom": ["version_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.siga_snapshot": {
+      "name": "siga_snapshot",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "snapshot_date": {
+          "name": "snapshot_date",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_version_id": {
+          "name": "source_version_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_rows": {
+          "name": "source_rows",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fleet_rows": {
+          "name": "fleet_rows",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "registry_plants": {
+          "name": "registry_plants",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "matched_plants": {
+          "name": "matched_plants",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "match_rate": {
+          "name": "match_rate",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "verbatim_matched_plants": {
+          "name": "verbatim_matched_plants",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "null_island_rows": {
+          "name": "null_island_rows",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "out_of_bounds_rows": {
+          "name": "out_of_bounds_rows",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "located_plants": {
+          "name": "located_plants",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "centroid_fallback_plants": {
+          "name": "centroid_fallback_plants",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unlocated_plants": {
+          "name": "unlocated_plants",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "withdrawn_plants": {
+          "name": "withdrawn_plants",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingested_at": {
+          "name": "ingested_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "siga_snapshot_ingested": {
+          "name": "siga_snapshot_ingested",
+          "columns": [
+            {
+              "expression": "ingested_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "siga_snapshot_source_version_id_ons_resource_version_id_fk": {
+          "name": "siga_snapshot_source_version_id_ons_resource_version_id_fk",
+          "tableFrom": "siga_snapshot",
+          "tableTo": "ons_resource_version",
+          "columnsFrom": ["source_version_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.subsystem_energy_balance_hour": {
+      "name": "subsystem_energy_balance_hour",
+      "schema": "",
+      "columns": {
+        "subsystem": {
+          "name": "subsystem",
+          "type": "subsystem_code",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "valid_time": {
+          "name": "valid_time",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "load_mwh": {
+          "name": "load_mwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "hydro_generation_mwh": {
+          "name": "hydro_generation_mwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "thermal_generation_mwh": {
+          "name": "thermal_generation_mwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "wind_generation_mwh": {
+          "name": "wind_generation_mwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "solar_generation_mwh": {
+          "name": "solar_generation_mwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "net_exchange_mwh": {
+          "name": "net_exchange_mwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "data_version": {
+          "name": "data_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at": {
+          "name": "published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at_precision": {
+          "name": "published_at_precision",
+          "type": "published_at_precision",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingested_at": {
+          "name": "ingested_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "value_digest": {
+          "name": "value_digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_version_id": {
+          "name": "source_version_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "subsystem_energy_balance_hour_as_of": {
+          "name": "subsystem_energy_balance_hour_as_of",
+          "columns": [
+            {
+              "expression": "valid_time",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "subsystem",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ingested_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "subsystem_energy_balance_hour_source_version_id_ons_resource_version_id_fk": {
+          "name": "subsystem_energy_balance_hour_source_version_id_ons_resource_version_id_fk",
+          "tableFrom": "subsystem_energy_balance_hour",
+          "tableTo": "ons_resource_version",
+          "columnsFrom": ["source_version_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "subsystem_energy_balance_hour_subsystem_valid_time_data_version_pk": {
+          "name": "subsystem_energy_balance_hour_subsystem_valid_time_data_version_pk",
+          "columns": ["subsystem", "valid_time", "data_version"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.subsystem_exchange_hour": {
+      "name": "subsystem_exchange_hour",
+      "schema": "",
+      "columns": {
+        "from_subsystem": {
+          "name": "from_subsystem",
+          "type": "subsystem_code",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "to_subsystem": {
+          "name": "to_subsystem",
+          "type": "subsystem_code",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "valid_time": {
+          "name": "valid_time",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "verified_exchange_mwh": {
+          "name": "verified_exchange_mwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "programmed_exchange_mwh": {
+          "name": "programmed_exchange_mwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "data_version": {
+          "name": "data_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at": {
+          "name": "published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at_precision": {
+          "name": "published_at_precision",
+          "type": "published_at_precision",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingested_at": {
+          "name": "ingested_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "value_digest": {
+          "name": "value_digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_version_id": {
+          "name": "source_version_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "subsystem_exchange_hour_as_of": {
+          "name": "subsystem_exchange_hour_as_of",
+          "columns": [
+            {
+              "expression": "valid_time",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "from_subsystem",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "to_subsystem",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ingested_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "subsystem_exchange_hour_source_version_id_ons_resource_version_id_fk": {
+          "name": "subsystem_exchange_hour_source_version_id_ons_resource_version_id_fk",
+          "tableFrom": "subsystem_exchange_hour",
+          "tableTo": "ons_resource_version",
+          "columnsFrom": ["source_version_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "subsystem_exchange_hour_from_subsystem_to_subsystem_valid_time_data_version_pk": {
+          "name": "subsystem_exchange_hour_from_subsystem_to_subsystem_valid_time_data_version_pk",
+          "columns": ["from_subsystem", "to_subsystem", "valid_time", "data_version"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "subsystem_exchange_canonical_orientation": {
+          "name": "subsystem_exchange_canonical_orientation",
+          "value": "\"subsystem_exchange_hour\".\"from_subsystem\" < \"subsystem_exchange_hour\".\"to_subsystem\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.subsystem_load_day": {
+      "name": "subsystem_load_day",
+      "schema": "",
+      "columns": {
+        "subsystem": {
+          "name": "subsystem",
+          "type": "subsystem_code",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "valid_time": {
+          "name": "valid_time",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "load_mwh": {
+          "name": "load_mwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "day_minutes": {
+          "name": "day_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "methodology_regime": {
+          "name": "methodology_regime",
+          "type": "load_methodology_regime",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "data_version": {
+          "name": "data_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at": {
+          "name": "published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at_precision": {
+          "name": "published_at_precision",
+          "type": "published_at_precision",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingested_at": {
+          "name": "ingested_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "value_digest": {
+          "name": "value_digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_version_id": {
+          "name": "source_version_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "subsystem_load_day_as_of": {
+          "name": "subsystem_load_day_as_of",
+          "columns": [
+            {
+              "expression": "valid_time",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "subsystem",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ingested_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "subsystem_load_day_source_version_id_ons_resource_version_id_fk": {
+          "name": "subsystem_load_day_source_version_id_ons_resource_version_id_fk",
+          "tableFrom": "subsystem_load_day",
+          "tableTo": "ons_resource_version",
+          "columnsFrom": ["source_version_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "subsystem_load_day_subsystem_valid_time_data_version_pk": {
+          "name": "subsystem_load_day_subsystem_valid_time_data_version_pk",
+          "columns": ["subsystem", "valid_time", "data_version"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "subsystem_load_day_length": {
+          "name": "subsystem_load_day_length",
+          "value": "\"subsystem_load_day\".\"day_minutes\" in (1380, 1440, 1500)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.verified_load_half_hour": {
+      "name": "verified_load_half_hour",
+      "schema": "",
+      "columns": {
+        "area_code": {
+          "name": "area_code",
+          "type": "load_area_code",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "area_kind": {
+          "name": "area_kind",
+          "type": "load_area_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subsystem": {
+          "name": "subsystem",
+          "type": "subsystem_code",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "valid_time": {
+          "name": "valid_time",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "load_mwh": {
+          "name": "load_mwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "consisted_load_mwh": {
+          "name": "consisted_load_mwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "load_net_of_mmgd_mwh": {
+          "name": "load_net_of_mmgd_mwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "supervised_load_mwh": {
+          "name": "supervised_load_mwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "unsupervised_load_mwh": {
+          "name": "unsupervised_load_mwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "mmgd_load_mwh": {
+          "name": "mmgd_load_mwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "consistency_adjustment_mwh": {
+          "name": "consistency_adjustment_mwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "data_version": {
+          "name": "data_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at": {
+          "name": "published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at_precision": {
+          "name": "published_at_precision",
+          "type": "published_at_precision",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingested_at": {
+          "name": "ingested_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "value_digest": {
+          "name": "value_digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_request_id": {
+          "name": "source_request_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "verified_load_half_hour_as_of": {
+          "name": "verified_load_half_hour_as_of",
+          "columns": [
+            {
+              "expression": "valid_time",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "area_code",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ingested_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "verified_load_half_hour_subsystem": {
+          "name": "verified_load_half_hour_subsystem",
+          "columns": [
+            {
+              "expression": "subsystem",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "valid_time",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "verified_load_half_hour_source_request_id_load_api_request_id_fk": {
+          "name": "verified_load_half_hour_source_request_id_load_api_request_id_fk",
+          "tableFrom": "verified_load_half_hour",
+          "tableTo": "load_api_request",
+          "columnsFrom": ["source_request_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "verified_load_half_hour_area_code_valid_time_data_version_pk": {
+          "name": "verified_load_half_hour_area_code_valid_time_data_version_pk",
+          "columns": ["area_code", "valid_time", "data_version"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "verified_load_subsystem_only_for_subsystem_area": {
+          "name": "verified_load_subsystem_only_for_subsystem_area",
+          "value": "(\"verified_load_half_hour\".\"subsystem\" is null) = (\"verified_load_half_hour\".\"area_kind\" <> 'SUBSYSTEM')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.weather_forecast_hour": {
+      "name": "weather_forecast_hour",
+      "schema": "",
+      "columns": {
+        "centroid_id": {
+          "name": "centroid_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "valid_time": {
+          "name": "valid_time",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "grid_latitude": {
+          "name": "grid_latitude",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "grid_longitude": {
+          "name": "grid_longitude",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "grid_elevation_m": {
+          "name": "grid_elevation_m",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "run_cycle": {
+          "name": "run_cycle",
+          "type": "weather_run_cycle",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "run_age_hours": {
+          "name": "run_age_hours",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "wind_speed100m_kmh": {
+          "name": "wind_speed100m_kmh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "wind_speed120m_kmh": {
+          "name": "wind_speed120m_kmh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "wind_direction120m_deg": {
+          "name": "wind_direction120m_deg",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "wind_gusts10m_kmh": {
+          "name": "wind_gusts10m_kmh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "temperature2m_c": {
+          "name": "temperature2m_c",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "surface_pressure_hpa": {
+          "name": "surface_pressure_hpa",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "relative_humidity2m_pct": {
+          "name": "relative_humidity2m_pct",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "precipitation_mm": {
+          "name": "precipitation_mm",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "shortwave_radiation_wm2": {
+          "name": "shortwave_radiation_wm2",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "direct_normal_irradiance_wm2": {
+          "name": "direct_normal_irradiance_wm2",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "diffuse_radiation_wm2": {
+          "name": "diffuse_radiation_wm2",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cloud_cover_pct": {
+          "name": "cloud_cover_pct",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "data_version": {
+          "name": "data_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at": {
+          "name": "published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at_precision": {
+          "name": "published_at_precision",
+          "type": "published_at_precision",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingested_at": {
+          "name": "ingested_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "value_digest": {
+          "name": "value_digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_request_id": {
+          "name": "source_request_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "weather_forecast_hour_as_of": {
+          "name": "weather_forecast_hour_as_of",
+          "columns": [
+            {
+              "expression": "valid_time",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "centroid_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ingested_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "weather_forecast_hour_run": {
+          "name": "weather_forecast_hour_run",
+          "columns": [
+            {
+              "expression": "published_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "run_cycle",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "weather_forecast_hour_source_request_id_weather_run_request_id_fk": {
+          "name": "weather_forecast_hour_source_request_id_weather_run_request_id_fk",
+          "tableFrom": "weather_forecast_hour",
+          "tableTo": "weather_run_request",
+          "columnsFrom": ["source_request_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "weather_forecast_hour_centroid_id_valid_time_data_version_pk": {
+          "name": "weather_forecast_hour_centroid_id_valid_time_data_version_pk",
+          "columns": ["centroid_id", "valid_time", "data_version"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "weather_forecast_published_at_is_run_init": {
+          "name": "weather_forecast_published_at_is_run_init",
+          "value": "date_part('minute', \"weather_forecast_hour\".\"published_at\" at time zone 'UTC') = 0\n          and date_part('second', \"weather_forecast_hour\".\"published_at\" at time zone 'UTC') = 0\n          and date_part('hour', \"weather_forecast_hour\".\"published_at\" at time zone 'UTC')\n              = case when \"weather_forecast_hour\".\"run_cycle\" = '00Z' then 0 else 12 end"
+        },
+        "weather_forecast_run_age_non_negative": {
+          "name": "weather_forecast_run_age_non_negative",
+          "value": "\"weather_forecast_hour\".\"run_age_hours\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.weather_run_request": {
+      "name": "weather_run_request",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "model": {
+          "name": "model",
+          "type": "weather_model",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "run_init": {
+          "name": "run_init",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "run_cycle": {
+          "name": "run_cycle",
+          "type": "weather_run_cycle",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "scheduled_run_init": {
+          "name": "scheduled_run_init",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "centroid_set_version": {
+          "name": "centroid_set_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "centroid_count": {
+          "name": "centroid_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "variables": {
+          "name": "variables",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "forecast_days": {
+          "name": "forecast_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "request_url": {
+          "name": "request_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "http_status": {
+          "name": "http_status",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "row_count": {
+          "name": "row_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content_sha256": {
+          "name": "content_sha256",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "byte_size": {
+          "name": "byte_size",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rate_limit_retries": {
+          "name": "rate_limit_retries",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "archive_uri": {
+          "name": "archive_uri",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fetched_at": {
+          "name": "fetched_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "weather_run_request_run": {
+          "name": "weather_run_request_run",
+          "columns": [
+            {
+              "expression": "run_init",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "run_cycle",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "weather_run_request_fetched": {
+          "name": "weather_run_request_fetched",
+          "columns": [
+            {
+              "expression": "fetched_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.centroid_collision_check": {
+      "name": "centroid_collision_check",
+      "schema": "public",
+      "values": ["asserted", "unchecked"]
+    },
+    "public.centroid_drift_outcome": {
+      "name": "centroid_drift_outcome",
+      "schema": "public",
+      "values": ["within_tolerance", "regeneration_triggered"]
+    },
+    "public.centroid_point_origin": {
+      "name": "centroid_point_origin",
+      "schema": "public",
+      "values": ["municipality_centroid", "hand_transcribed"]
+    },
+    "public.centroid_set_source": {
+      "name": "centroid_set_source",
+      "schema": "public",
+      "values": ["hand_transcribed", "generated"]
+    },
+    "public.coordinate_rejection": {
+      "name": "coordinate_rejection",
+      "schema": "public",
+      "values": ["missing", "unparsable", "null_island", "out_of_bounds"]
+    },
+    "public.custody_provenance": {
+      "name": "custody_provenance",
+      "schema": "public",
+      "values": ["bulk_resource", "load_api_request", "weather_run_request"]
+    },
+    "public.forecast_producer": {
+      "name": "forecast_producer",
+      "schema": "public",
+      "values": ["ons_dessem", "open_meteo", "wattsteer"]
+    },
+    "public.ingestion_run_status": {
+      "name": "ingestion_run_status",
+      "schema": "public",
+      "values": ["running", "ok", "failed"]
+    },
+    "public.ingestion_source": {
+      "name": "ingestion_source",
+      "schema": "public",
+      "values": [
+        "energy_balance",
+        "constrained_off_wind",
+        "constrained_off_solar",
+        "interchange",
+        "daily_load",
+        "dessem_balance",
+        "verified_load",
+        "programmed_load",
+        "plant_registry",
+        "siga",
+        "weather"
+      ]
+    },
+    "public.load_area_code": {
+      "name": "load_area_code",
+      "schema": "public",
+      "values": [
+        "SECO",
+        "S",
+        "NE",
+        "N",
+        "RJ",
+        "SP",
+        "MG",
+        "ES",
+        "MT",
+        "MS",
+        "DF",
+        "GO",
+        "AC",
+        "RO",
+        "PR",
+        "SC",
+        "RS",
+        "BASE",
+        "BAOE",
+        "ALPE",
+        "PBRN",
+        "CE",
+        "PI",
+        "TON",
+        "PA",
+        "MA",
+        "AP",
+        "AM",
+        "RR",
+        "PESE",
+        "PES",
+        "PENE",
+        "PEN"
+      ]
+    },
+    "public.load_area_kind": {
+      "name": "load_area_kind",
+      "schema": "public",
+      "values": ["SUBSYSTEM", "GEOELECTRIC", "LOSSES"]
+    },
+    "public.load_methodology_regime": {
+      "name": "load_methodology_regime",
+      "schema": "public",
+      "values": ["DISPATCHED_ONLY", "WITH_NON_DISPATCHED", "WITH_MMGD"]
+    },
+    "public.load_series": {
+      "name": "load_series",
+      "schema": "public",
+      "values": ["VERIFIED", "PROGRAMMED"]
+    },
+    "public.operation_modality": {
+      "name": "operation_modality",
+      "schema": "public",
+      "values": ["TIPO_I", "TIPO_II_A", "TIPO_II_B", "TIPO_II_C"]
+    },
+    "public.plant_location_source": {
+      "name": "plant_location_source",
+      "schema": "public",
+      "values": ["siga_coordinate", "siga_municipality_centroid", "unlocated"]
+    },
+    "public.published_at_precision": {
+      "name": "published_at_precision",
+      "schema": "public",
+      "values": ["row", "file"]
+    },
+    "public.reason_code": {
+      "name": "reason_code",
+      "schema": "public",
+      "values": ["REL", "CNF", "ENE", "PAR"]
+    },
+    "public.refresh_tier": {
+      "name": "refresh_tier",
+      "schema": "public",
+      "values": ["live", "recent", "history", "manual"]
+    },
+    "public.reporting_entity_kind": {
+      "name": "reporting_entity_kind",
+      "schema": "public",
+      "values": ["CONJUNTO", "PLANT"]
+    },
+    "public.resource_format": {
+      "name": "resource_format",
+      "schema": "public",
+      "values": ["PARQUET", "CSV"]
+    },
+    "public.restriction_origin": {
+      "name": "restriction_origin",
+      "schema": "public",
+      "values": ["LOC", "SIS"]
+    },
+    "public.subsystem_code": {
+      "name": "subsystem_code",
+      "schema": "public",
+      "values": ["N", "NE", "S", "SE"]
+    },
+    "public.technology": {
+      "name": "technology",
+      "schema": "public",
+      "values": ["WIND", "SOLAR"]
+    },
+    "public.weather_model": {
+      "name": "weather_model",
+      "schema": "public",
+      "values": ["ecmwf_ifs"]
+    },
+    "public.weather_run_cycle": {
+      "name": "weather_run_cycle",
+      "schema": "public",
+      "values": ["00Z", "12Z"]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {
+    "public.canonical_conjunto_membership": {
+      "columns": {
+        "plantOnsCode": {
+          "name": "plantOnsCode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "conjuntoCode": {
+          "name": "conjuntoCode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "plantCegCore": {
+          "name": "plantCegCore",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "memberFrom": {
+          "name": "memberFrom",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "memberTo": {
+          "name": "memberTo",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dataVersion": {
+          "name": "dataVersion",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "publishedAt": {
+          "name": "publishedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingestedAt": {
+          "name": "ingestedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "definition": "\n  with latest as (\n    select distinct on (plant_ons_code, conjunto_code, member_from)\n      plant_ons_code, plant_ceg_core, conjunto_code, member_from, member_to,\n      data_version, published_at, ingested_at\n    from conjunto_membership\n    where ingested_at <= canonical_as_of()\n    order by plant_ons_code, conjunto_code, member_from,\n             ingested_at desc, data_version desc\n  )\n  select\n    plant_ons_code,\n    conjunto_code,\n    plant_ceg_core,\n    member_from,\n    member_to,\n    data_version,\n    published_at,\n    ingested_at\n  from latest\n  where member_from <= canonical_fleet_date()\n    and (member_to is null or member_to >= canonical_fleet_date())\n",
+      "name": "canonical_conjunto_membership",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
+    },
+    "public.canonical_curtailment_by_plant": {
+      "columns": {
+        "plantOnsCode": {
+          "name": "plantOnsCode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "technology": {
+          "name": "technology",
+          "type": "technology",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "validTime": {
+          "name": "validTime",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "estimatedGenerationMwh": {
+          "name": "estimatedGenerationMwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "verifiedGenerationMwh": {
+          "name": "verifiedGenerationMwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "measuredQuantity": {
+          "name": "measuredQuantity",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "measurementValue": {
+          "name": "measurementValue",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "measurementInvalid": {
+          "name": "measurementInvalid",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "halfHoursObserved": {
+          "name": "halfHoursObserved",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dataVersion": {
+          "name": "dataVersion",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "publishedAt": {
+          "name": "publishedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingestedAt": {
+          "name": "ingestedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "definition": "\n  select distinct on (plant_ons_code, technology, valid_time)\n    plant_ons_code,\n    technology,\n    valid_time,\n    estimated_generation_mwh,\n    verified_generation_mwh,\n    case technology when 'WIND' then 'wind_speed_ms' else 'irradiance_wm2' end\n      as measured_quantity,\n    case technology\n      when 'WIND' then measured_wind_speed_ms\n      else measured_irradiance_wm2\n    end as measurement_value,\n    (measurement_invalid = 1) as measurement_invalid,\n    half_hours_observed,\n    data_version,\n    published_at,\n    ingested_at\n  from plant_detail_hour\n  where ingested_at <= canonical_as_of()\n  order by plant_ons_code, technology, valid_time,\n           ingested_at desc, data_version desc\n",
+      "name": "canonical_curtailment_by_plant",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
+    },
+    "public.canonical_curtailment_by_reporting_entity": {
+      "columns": {
+        "reportingEntityCode": {
+          "name": "reportingEntityCode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reportingEntityKind": {
+          "name": "reportingEntityKind",
+          "type": "reporting_entity_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subsystem": {
+          "name": "subsystem",
+          "type": "subsystem_code",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "technology": {
+          "name": "technology",
+          "type": "technology",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "validTime": {
+          "name": "validTime",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "constrainedOffMwh": {
+          "name": "constrainedOffMwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "verifiedGenerationMwh": {
+          "name": "verifiedGenerationMwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "referenceGenerationMwh": {
+          "name": "referenceGenerationMwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "finalReferenceGenerationMwh": {
+          "name": "finalReferenceGenerationMwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "availableCapacityMw": {
+          "name": "availableCapacityMw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "halfHoursObserved": {
+          "name": "halfHoursObserved",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "restrictionReason": {
+          "name": "restrictionReason",
+          "type": "reason_code",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "restrictionOrigin": {
+          "name": "restrictionOrigin",
+          "type": "restriction_origin",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "restrictionDescription": {
+          "name": "restrictionDescription",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "restrictionCauseMixed": {
+          "name": "restrictionCauseMixed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dataVersion": {
+          "name": "dataVersion",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "publishedAt": {
+          "name": "publishedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingestedAt": {
+          "name": "ingestedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "definition": "\n  select distinct on (c.reporting_entity_code, c.technology, c.valid_time)\n    c.reporting_entity_code,\n    e.kind as reporting_entity_kind,\n    e.subsystem,\n    c.technology,\n    c.valid_time,\n    c.constrained_off_mwh,\n    c.verified_generation_mwh,\n    c.reference_generation_mwh,\n    c.final_reference_generation_mwh,\n    c.available_capacity_mw,\n    c.half_hours_observed,\n    c.reason as restriction_reason,\n    c.origin as restriction_origin,\n    c.restriction_description,\n    (c.cause_mixed = 1) as restriction_cause_mixed,\n    c.data_version,\n    c.published_at,\n    c.ingested_at\n  from curtailment_report_hour c\n  join reporting_entity e on e.ons_code = c.reporting_entity_code\n  where c.ingested_at <= canonical_as_of()\n  order by c.reporting_entity_code, c.technology, c.valid_time,\n           c.ingested_at desc, c.data_version desc\n",
+      "name": "canonical_curtailment_by_reporting_entity",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
+    },
+    "public.canonical_day_ahead_balance": {
+      "columns": {
+        "subsystem": {
+          "name": "subsystem",
+          "type": "subsystem_code",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "validTime": {
+          "name": "validTime",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "forecastProducer": {
+          "name": "forecastProducer",
+          "type": "forecast_producer",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "runLabel": {
+          "name": "runLabel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "demandMw": {
+          "name": "demandMw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "hydroGenerationMw": {
+          "name": "hydroGenerationMw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "smallHydroGenerationMw": {
+          "name": "smallHydroGenerationMw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "thermalGenerationMw": {
+          "name": "thermalGenerationMw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "smallThermalGenerationMw": {
+          "name": "smallThermalGenerationMw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "windGenerationMw": {
+          "name": "windGenerationMw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "solarGenerationMw": {
+          "name": "solarGenerationMw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mmgdGenerationMw": {
+          "name": "mmgdGenerationMw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pumpingConsumptionMw": {
+          "name": "pumpingConsumptionMw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dataVersion": {
+          "name": "dataVersion",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "publishedAt": {
+          "name": "publishedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingestedAt": {
+          "name": "ingestedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "definition": "\n  select distinct on (subsystem, valid_time)\n    subsystem,\n    valid_time,\n    forecast_producer,\n    run_label,\n    demand_mw,\n    hydro_generation_mw,\n    small_hydro_generation_mw,\n    thermal_generation_mw,\n    small_thermal_generation_mw,\n    wind_generation_mw,\n    solar_generation_mw,\n    mmgd_generation_mw,\n    pumping_consumption_mw,\n    data_version,\n    published_at,\n    ingested_at\n  from dessem_balance_half_hour\n  where ingested_at <= canonical_as_of()\n    and (canonical_published_at_or_before() is null\n         or published_at <= canonical_published_at_or_before())\n  order by subsystem, valid_time, ingested_at desc, data_version desc\n",
+      "name": "canonical_day_ahead_balance",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
+    },
+    "public.canonical_installed_capacity": {
+      "columns": {
+        "subsystem": {
+          "name": "subsystem",
+          "type": "subsystem_code",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "technology": {
+          "name": "technology",
+          "type": "technology",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "plants": {
+          "name": "plants",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "units": {
+          "name": "units",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "capacityMw": {
+          "name": "capacityMw",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "definition": "\n  with live_units as (\n    select distinct on (plant_ceg_core, equipment_code)\n      plant_ceg_core, equipment_code, rated_power_mw,\n      commissioned_on, decommissioned_on\n    from generating_unit\n    where ingested_at <= canonical_as_of()\n    order by plant_ceg_core, equipment_code, ingested_at desc, data_version desc\n  )\n  select\n    p.subsystem,\n    p.technology,\n    count(distinct live_units.plant_ceg_core)::int as plants,\n    count(*)::int as units,\n    sum(live_units.rated_power_mw) as capacity_mw\n  from live_units\n  join plant p on p.ceg_core = live_units.plant_ceg_core\n  where live_units.commissioned_on <= canonical_fleet_date()\n    and (live_units.decommissioned_on is null\n         or live_units.decommissioned_on > canonical_fleet_date())\n  group by p.subsystem, p.technology\n",
+      "name": "canonical_installed_capacity",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
+    },
+    "public.canonical_read_go_live": {
+      "columns": {
+        "read": {
+          "name": "read",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "goLiveAt": {
+          "name": "goLiveAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "definition": "\n  select 'curtailment-by-reporting-entity' as read,\n         min(ingested_at) as go_live_at from curtailment_report_hour\n  union all\n  select 'curtailment-by-plant', min(ingested_at) from plant_detail_hour\n  union all\n  select 'system-context', min(ingested_at) from subsystem_energy_balance_hour\n  union all\n  select 'system-exchange', min(ingested_at) from subsystem_exchange_hour\n  union all\n  select 'day-ahead-balance', min(ingested_at) from dessem_balance_half_hour\n  union all\n  select 'weather-forecast', min(ingested_at) from weather_forecast_hour\n  union all\n  select 'installed-capacity', min(ingested_at) from generating_unit\n  union all\n  select 'conjunto-membership', min(ingested_at) from conjunto_membership\n",
+      "name": "canonical_read_go_live",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
+    },
+    "public.canonical_system_context": {
+      "columns": {
+        "subsystem": {
+          "name": "subsystem",
+          "type": "subsystem_code",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "validTime": {
+          "name": "validTime",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "loadMwh": {
+          "name": "loadMwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "windGenerationMwh": {
+          "name": "windGenerationMwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "solarGenerationMwh": {
+          "name": "solarGenerationMwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "hydroGenerationMwh": {
+          "name": "hydroGenerationMwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "thermalGenerationMwh": {
+          "name": "thermalGenerationMwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "netExchangeMwh": {
+          "name": "netExchangeMwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dataVersion": {
+          "name": "dataVersion",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "publishedAt": {
+          "name": "publishedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingestedAt": {
+          "name": "ingestedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "definition": "\n  select distinct on (subsystem, valid_time)\n    subsystem,\n    valid_time,\n    load_mwh,\n    wind_generation_mwh,\n    solar_generation_mwh,\n    hydro_generation_mwh,\n    thermal_generation_mwh,\n    net_exchange_mwh,\n    data_version,\n    published_at,\n    ingested_at\n  from subsystem_energy_balance_hour\n  where ingested_at <= canonical_as_of()\n  order by subsystem, valid_time, ingested_at desc, data_version desc\n",
+      "name": "canonical_system_context",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
+    },
+    "public.canonical_system_exchange": {
+      "columns": {
+        "fromSubsystem": {
+          "name": "fromSubsystem",
+          "type": "subsystem_code",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "toSubsystem": {
+          "name": "toSubsystem",
+          "type": "subsystem_code",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "validTime": {
+          "name": "validTime",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "verifiedExchangeMwh": {
+          "name": "verifiedExchangeMwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "programmedExchangeMwh": {
+          "name": "programmedExchangeMwh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dataVersion": {
+          "name": "dataVersion",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "publishedAt": {
+          "name": "publishedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingestedAt": {
+          "name": "ingestedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "definition": "\n  select distinct on (from_subsystem, to_subsystem, valid_time)\n    from_subsystem,\n    to_subsystem,\n    valid_time,\n    verified_exchange_mwh,\n    programmed_exchange_mwh,\n    data_version,\n    published_at,\n    ingested_at\n  from subsystem_exchange_hour\n  where ingested_at <= canonical_as_of()\n  order by from_subsystem, to_subsystem, valid_time,\n           ingested_at desc, data_version desc\n",
+      "name": "canonical_system_exchange",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
+    },
+    "public.canonical_weather_forecast": {
+      "columns": {
+        "centroidId": {
+          "name": "centroidId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "validTime": {
+          "name": "validTime",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "runCycle": {
+          "name": "runCycle",
+          "type": "weather_run_cycle",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "gridLatitude": {
+          "name": "gridLatitude",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "gridLongitude": {
+          "name": "gridLongitude",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "gridElevationM": {
+          "name": "gridElevationM",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "runAgeHours": {
+          "name": "runAgeHours",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "windSpeed100mKmh": {
+          "name": "windSpeed100mKmh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "windSpeed120mKmh": {
+          "name": "windSpeed120mKmh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "windDirection120mDeg": {
+          "name": "windDirection120mDeg",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "windGusts10mKmh": {
+          "name": "windGusts10mKmh",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "temperature2mC": {
+          "name": "temperature2mC",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "surfacePressureHpa": {
+          "name": "surfacePressureHpa",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "relativeHumidity2mPct": {
+          "name": "relativeHumidity2mPct",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "precipitationMm": {
+          "name": "precipitationMm",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "shortwaveRadiationWm2": {
+          "name": "shortwaveRadiationWm2",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "directNormalIrradianceWm2": {
+          "name": "directNormalIrradianceWm2",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "diffuseRadiationWm2": {
+          "name": "diffuseRadiationWm2",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cloudCoverPct": {
+          "name": "cloudCoverPct",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dataVersion": {
+          "name": "dataVersion",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "publishedAt": {
+          "name": "publishedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingestedAt": {
+          "name": "ingestedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "definition": "\n  select distinct on (centroid_id, valid_time)\n    centroid_id,\n    valid_time,\n    run_cycle,\n    grid_latitude,\n    grid_longitude,\n    grid_elevation_m,\n    run_age_hours,\n    wind_speed100m_kmh,\n    wind_speed120m_kmh,\n    wind_direction120m_deg,\n    wind_gusts10m_kmh,\n    temperature2m_c,\n    surface_pressure_hpa,\n    relative_humidity2m_pct,\n    precipitation_mm,\n    shortwave_radiation_wm2,\n    direct_normal_irradiance_wm2,\n    diffuse_radiation_wm2,\n    cloud_cover_pct,\n    data_version,\n    published_at,\n    ingested_at\n  from weather_forecast_hour\n  where ingested_at <= canonical_as_of()\n    and (canonical_published_at_or_before() is null\n         or published_at <= canonical_published_at_or_before())\n    and (canonical_weather_run_cycle() is null\n         or run_cycle::text = canonical_weather_run_cycle())\n  order by centroid_id, valid_time, ingested_at desc, data_version desc\n",
+      "name": "canonical_weather_forecast",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
+    }
+  },
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

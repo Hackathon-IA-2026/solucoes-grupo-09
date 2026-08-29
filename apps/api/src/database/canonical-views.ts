@@ -90,6 +90,16 @@ const rowVintage = {
  * exactly the kind of question a screen showing a cause has to answer. The
  * join is safe: `reporting_entity_code` is a foreign key, so it neither drops
  * nor duplicates a row.
+ *
+ * **`subsystem` comes from the same join**, and for the same class of reason.
+ * The label the day-ahead model is trained on is defined at (`Subsystem`,
+ * `valid_time`) grain (`docs/specs/feature-engineering.md` §"The feature
+ * table"), and constrained-off is settled at `ReportingEntity` grain, so
+ * something has to carry the entity's subsystem across. If the view did not,
+ * the feature function would have to reach into `reporting_entity` itself —
+ * which is the one thing it must never do, because an ingest table is where
+ * ONS's conventions still exist. One more projected column here is strictly
+ * cheaper than a second path to the base tables.
  */
 export const canonicalCurtailmentByReportingEntity = pgView(
   "canonical_curtailment_by_reporting_entity",
@@ -98,6 +108,8 @@ export const canonicalCurtailmentByReportingEntity = pgView(
     reportingEntityCode: text().notNull(),
     /** `CONJUNTO` or `PLANT` — the grain of the row, on the row. */
     reportingEntityKind: reportingEntityKind().notNull(),
+    /** The entity's electrical subsystem — the grain the label is defined at. */
+    subsystem: subsystemCode().notNull(),
     technology: technology().notNull(),
     /** Start of the hour, UTC. */
     validTime: timestamp({ withTimezone: true }).notNull(),
@@ -122,6 +134,7 @@ export const canonicalCurtailmentByReportingEntity = pgView(
   select distinct on (c.reporting_entity_code, c.technology, c.valid_time)
     c.reporting_entity_code,
     e.kind as reporting_entity_kind,
+    e.subsystem,
     c.technology,
     c.valid_time,
     c.constrained_off_mwh,
@@ -322,6 +335,20 @@ export const canonicalDayAheadBalance = pgView("canonical_day_ahead_balance", {
  *
  * `published_at` **is** the run initialisation, which is why supersession needs
  * no rule of its own.
+ *
+ * **The day-ahead gate applies here too**, and its absence was a hole. Ticket
+ * 016 put the gate in the day-ahead balance and left it out of this view,
+ * because within a target day the newer run winning is exactly right. It is
+ * exactly wrong across the gate: the D 00Z run is a newer version of D's hours
+ * than the D−1 12Z run, so with no publication cut a feature built for day D at
+ * `gate_late` silently reads a run that will not exist for another three hours.
+ * Over backfilled history every row shares one `ingested_at`, so `as_of` filters
+ * nothing and there is no second line of defence — the read simply returns the
+ * future, and it looks exactly like a correct answer.
+ *
+ * Inside the `DISTINCT ON` for this file's header reason: what reproduces what
+ * was knowable is the latest-ingested row *among those published by the gate*,
+ * not the latest-ingested row discarded if it turned out to be late.
  */
 export const canonicalWeatherForecast = pgView("canonical_weather_forecast", {
   centroidId: text().notNull(),
@@ -374,6 +401,8 @@ export const canonicalWeatherForecast = pgView("canonical_weather_forecast", {
     ingested_at
   from weather_forecast_hour
   where ingested_at <= canonical_as_of()
+    and (canonical_published_at_or_before() is null
+         or published_at <= canonical_published_at_or_before())
     and (canonical_weather_run_cycle() is null
          or run_cycle::text = canonical_weather_run_cycle())
   order by centroid_id, valid_time, ingested_at desc, data_version desc

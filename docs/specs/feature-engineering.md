@@ -333,6 +333,16 @@ So:
   `valid_time ≤ actuals_cutoff(gate, dataset)`, and their D−1 availability is
   *enforced*, not observed.
 
+> **Corrected while implementing ticket 01.** The canonical weather view carried
+> no publication cut at all — ticket 016 put the gate on the day-ahead balance
+> and left it off the weather read, because within a target day the newer run
+> winning is exactly right. It is exactly wrong *across* the gate: the D 00Z run
+> is a newer version of day D's hours than the D−1 12Z run, so a `gate_late`
+> feature silently read a run that would not exist for another three hours, and
+> over backfill `AsOf(gate)` filters nothing and caught none of it. The gate is
+> now applied inside both forecast views. The rule above was always right; one
+> of the two views did not implement it.
+
 ```
 actuals_cutoff(gate, dataset) = gate − publication_lag_hours[dataset]
 ```
