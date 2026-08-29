@@ -11,7 +11,7 @@ contaminate every backtest built on them.
 
 **Blocked by:** 05, 09
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Weights are computed as of each timestamp from as-of installed capacity
 - [ ] Wind and solar carry separate weight vectors, since the two fleets sit in different places

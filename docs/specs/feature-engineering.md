@@ -461,7 +461,14 @@ variables by combined VRE capacity.
 | `weather_wind_speed_120m_std_6h` | centred on t, forecast profile | **W** | derived |
 | `weather_shortwave_radiation_mean_3h` | centred on t | **W** | derived |
 | `weather_run_age_hours` | `run_init(used) − run_init(scheduled)`; 0 normally, 12 or 24 on fallback | **W** | ingest metadata |
-| `weather_centroid_coverage` | fraction of centroids returning non-null | **W** | ingest metadata |
+| `weather_centroid_coverage` | share of the subsystem's **capacity weight mass** that a centroid reported for | **W** | ingest metadata |
+
+**`weather_centroid_coverage` is weighted, not counted.** An earlier draft of
+this spec said "fraction of centroids returning non-null". A count is the wrong
+denominator once the points carry capacity weights: losing W12 (426 MW) and
+losing W7 (4,172 MW) are the same fraction of centroids and are not remotely the
+same event. The weighted reading still gives 1 when everything arrived, so the
+`stale_inputs` rule in the diagnosis spec is unaffected.
 
 **Ramps and centred windows are legal here and nowhere else on the actuals side.**
 A D−1 run publishes all 24 hours of day D at once, so `x[t] − x[t−1]` inside that
