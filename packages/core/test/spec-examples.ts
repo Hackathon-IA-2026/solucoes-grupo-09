@@ -34,8 +34,19 @@ export const ELIDED = "@@ELIDED@@";
 export interface SpecExample {
   /** Spec file name, e.g. `api-surface.md`. */
   spec: string;
-  /** 1-based line of the opening fence — the manifest's key, and a grep target. */
+  /** 1-based line of the opening fence. A grep target, deliberately NOT the key. */
   line: number;
+  /**
+   * Which fenced block this is within the file, counting from zero.
+   *
+   * This is the manifest's key, and it used to be `line`. A line number keys an
+   * example to prose that has not moved — which sounds like a virtue until you
+   * notice that *editing a spec above a block* then breaks the manifest, and the
+   * fix is a mechanical remap that teaches nobody anything. It happened twice.
+   * An ordinal still changes when a block is added, removed or reordered, which
+   * is the change actually worth a second look.
+   */
+  fence: number;
   /** Which document within the fence. Zero unless the block holds several. */
   position: number;
   /** The raw block, comments and all. */
@@ -237,6 +248,7 @@ function splitDocuments(cleaned: string): string[] {
 export function examplesIn(spec: string): SpecExample[] {
   const lines = readFileSync(join(SPEC_DIR, spec), "utf8").split("\n");
   const found: SpecExample[] = [];
+  let fence = 0;
   for (let index = 0; index < lines.length; index += 1) {
     if (!/^```jsonc?$/.test(lines[index] ?? "")) {
       continue;
@@ -247,6 +259,8 @@ export function examplesIn(spec: string): SpecExample[] {
     if (documents.length === 0) {
       throw new SyntaxError(`${spec}:${index + 1} holds no JSON document`);
     }
+    const fenceIndex = fence;
+    fence += 1;
     documents.forEach((document, position) => {
       let value: unknown;
       try {
@@ -259,6 +273,7 @@ export function examplesIn(spec: string): SpecExample[] {
       found.push({
         spec,
         line: index + 1,
+        fence: fenceIndex,
         position,
         raw,
         value,
@@ -270,9 +285,9 @@ export function examplesIn(spec: string): SpecExample[] {
   return found;
 }
 
-/** The manifest key for one document: `api-surface.md:487#0`. */
+/** The manifest key for one document: `api-surface.md#2.0` — file, fence, position. */
 export function exampleKey(example: SpecExample): string {
-  return `${example.spec}:${example.line}#${example.position}`;
+  return `${example.spec}#${example.fence}.${example.position}`;
 }
 
 /** Every example in every spec, in file then line order. */
