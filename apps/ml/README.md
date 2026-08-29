@@ -5,8 +5,9 @@ SHAP, backtesting and the OR-Tools flex optimizer. It is an **internal**
 service: the Elysia gateway in `apps/api` is its only caller, and the Expo app
 never reaches it directly.
 
-Today it is a scaffold — a healthcheck, a read-only database connection, an
-artifact volume and one stub endpoint. The engines land in later tickets.
+Today it is a healthcheck, a read-only database connection, an artifact volume,
+one stub endpoint and the flex optimizer's MILP. The forecaster and the
+simulator land in later tickets.
 
 ## What it reads
 
@@ -42,6 +43,30 @@ that stops them drifting — same harness, same rules, one directory over.
 The R$/MWh rate is why the module exists. It used to live in `apps/web`, which
 made it "the single place it is written down" for one of the two languages that
 quote it, and the optimizer that needs it is this one.
+
+## The flex optimizer
+
+`src/wattsteer_ml/optimizer/` is the MILP of
+[`docs/research/optimizer-formulation.md`](../../docs/research/optimizer-formulation.md)
+§2, decided by [`docs/specs/flex-optimizer.md`](../../docs/specs/flex-optimizer.md).
+A curtailment profile and a fleet in, a 24-hour dispatch schedule out —
+`horizon.py` (the local civil day), `fleet.py` (the assets, with both
+efficiencies separated), `backend.py` (which solver runs) and `milp.py` (the
+model). v1 implements `Battery`; the shiftable load is a later ticket.
+
+**OR-Tools' `pywraplp`, on SCIP, with HiGHS permitted.** `CBC` is refused at
+startup — it aborts the whole process on a duplicate variable name — and CP-SAT
+is not a configuration option at all, because the state-of-charge balance over
+the integers becomes a divisibility constraint and fails silently.
+
+**The binaries ship.** Dropping (B7)-(B8) leaves the model feasible, the status
+`OPTIMAL` and the answer 16 % better than physics allows. Every failure mode in
+this formulation is that shape, which is why `tests/test_optimizer_milp.py`
+asserts the numbers the research measured — 95.4 MWh remaining on the reference
+case, an 80.1 objective and five simultaneous hours for the relaxation — rather
+than that a function exists. The objective is denominated in MWh-equivalents and
+is never a KPI: it carries a throughput tie-breaker and is not a physical
+quantity.
 
 ## Run it
 

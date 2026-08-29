@@ -30,6 +30,7 @@ from . import __version__, artifacts
 from .config import settings
 from .constants import Subsystem
 from .database import database
+from .optimizer import configured_milp_backend
 
 #: `Subsystem` comes from `constants.py`, which is bound to the TypeScript
 #: definition by a shared golden vector rather than by a comment. It is a
@@ -60,7 +61,13 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     Nothing is opened eagerly: a pool created at boot would make Postgres a
     startup dependency, and a database blip would then become a restart loop of
     a service whose job is mostly reading files off a volume.
+
+    The solver backend is the one exception, and deliberately so: `CBC` aborts
+    the whole Python process on a duplicate variable name, which in a worker is
+    a crash and not an exception. A deploy configured onto it has to die at
+    boot with the reason, not on whichever request first reaches the optimizer.
     """
+    configured_milp_backend()
     yield
     if database is not None:
         await database.close()
