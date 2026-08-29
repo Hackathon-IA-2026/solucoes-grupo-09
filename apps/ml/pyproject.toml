@@ -56,6 +56,14 @@ select = [
 ]
 ignore = [
   "S101", # asserts are how pytest asserts
+  # The specs this service implements are written in mathematical notation, and
+  # the docstrings quote them verbatim so a reader can diff prose against code:
+  # `1 - p` in a docstring is the spec's `1 − p`, `alpha` is `α`, `tau` is `τ`.
+  # RUF002/RUF003 exist to catch a homoglyph smuggled into an identifier-adjacent
+  # string; here every hit is a deliberate quotation, and transliterating them
+  # would make the code stop matching the document it is accountable to.
+  "RUF002", # ambiguous unicode in a docstring
+  "RUF003", # ambiguous unicode in a comment
 ]
 
 [tool.mypy]
