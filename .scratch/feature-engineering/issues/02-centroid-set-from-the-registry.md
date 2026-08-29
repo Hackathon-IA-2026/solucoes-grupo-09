@@ -1,9 +1,14 @@
 # 02 — The centroid set, generated from the registry and frozen
 
-**What to build:** the twenty points where weather enters WattSteer are produced
-by a script from the plant registry rather than transcribed by hand, frozen for
-the life of a feature-set version, and watched for the day the fleet grows away
-from them.
+**What to build:** the points where weather enters WattSteer are produced by a
+script from the plant registry rather than transcribed by hand, frozen for the
+life of a feature-set version, and watched for the day the fleet grows away from
+them.
+
+**There are nineteen, not twenty.** `weather-sources.md` says "that is 20
+points" and then lists W1–W12 and S1–S7. Data-platform ticket 09 counted them,
+froze nineteen and said so in the code. Do not restore a twentieth to match the
+prose.
 
 The points currently in the codebase were transcribed from research, and two of
 them — the RS/SC north-coast point and the MA coastal point — were never
@@ -24,6 +29,11 @@ not a warning: the column would be averaged in twice under different weights.
 Open-Meteo echoes the snapped coordinates, so the generator can see the
 collision and merge the colliding points, summing their weights, before
 freezing.
+
+Note what ticket 09 measured: on the current frozen set **no pair collides**,
+including the W1/W3 and W7/W8 pairs the research warned might. The assertion is
+a guard, not a fix for a live problem — and ticket 10's dedup path exists for
+the case where this generator merges points deliberately.
 
 Regeneration is never an in-place edit. A drift trigger produces a new centroid
 set version, which is a new feature-set version and a retrain.
