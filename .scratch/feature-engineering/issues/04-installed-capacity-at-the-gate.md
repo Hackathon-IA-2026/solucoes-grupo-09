@@ -32,7 +32,7 @@ currently exactly zero.
 
 **Blocked by:** 01 — the gate, end to end.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Wind and solar installed capacity enter the feature row as a function of the target date read at the gate's vintage
 - [ ] The 28-day capacity addition for each technology is derived from the same double as-of

@@ -120,6 +120,13 @@
       "when": 1787978560645,
       "tag": "0016_the_feature_gate",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1787979279202,
+      "tag": "0017_capacity_at_the_gate",
+      "breakpoints": true
     }
   ]
 }

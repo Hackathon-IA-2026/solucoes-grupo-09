@@ -72,6 +72,19 @@ export interface FeatureRow {
   /** Derived from `threshold_mw` inside the function, and never stored. */
   y_has_curtailment: boolean | null;
   y_magnitude_mwh: number | null;
+  /**
+   * `InstalledCapacityAsOf(subsystem, WIND, target_date)`, read at the gate.
+   *
+   * Class `T`, **day grain**: one value for the day, broadcast identically
+   * across its 24 hours. Null when the registry had nothing to say at the gate.
+   */
+  capacity_wind_mw: number | null;
+  /** As above, `SOLAR`. Day grain. */
+  capacity_solar_mw: number | null;
+  /** `capacity_wind_mw(D) − capacity_wind_mw(D−28)`, one vintage. Day grain. */
+  capacity_wind_added_28d_mw: number | null;
+  /** As above, `SOLAR`. Day grain. */
+  capacity_solar_added_28d_mw: number | null;
 }
 
 /**
@@ -97,7 +110,41 @@ export const FEATURE_ROW_COLUMNS: readonly (keyof FeatureRow)[] = [
   "y_constrained_off_total_mwh",
   "y_has_curtailment",
   "y_magnitude_mwh",
+  // Appended, because `ALTER TYPE ... ADD ATTRIBUTE` appends. The ordinal
+  // position is the composite type's and this list is a copy of it, never an
+  // opinion about it.
+  "capacity_wind_mw",
+  "capacity_solar_mw",
+  "capacity_wind_added_28d_mw",
+  "capacity_solar_added_28d_mw",
 ];
+
+/**
+ * The grain a feature column varies at — the feature dictionary's marking,
+ * spelled where the row type is.
+ *
+ * Every column is hourly unless it is named here, because the row grain is
+ * hourly and the exception is the thing worth writing down. A **day**-grain
+ * column carries one value for the target date, broadcast identically across
+ * its 24 hours, and the marking exists because that is invisible in the data:
+ * twenty-four equal numbers look exactly like a signal that happens to be flat,
+ * and a model given `capacity_wind_mw` as an hourly series will find intraday
+ * structure in a constant. `docs/specs/feature-engineering.md` §"Installed
+ * capacity" marks them the same way, and so does the column comment in
+ * `drizzle/0017_capacity_at_the_gate.sql`.
+ */
+export type FeatureGrain = "hour" | "day";
+
+const DAY_GRAIN_COLUMNS: readonly string[] = [
+  "capacity_wind_mw",
+  "capacity_solar_mw",
+  "capacity_wind_added_28d_mw",
+  "capacity_solar_added_28d_mw",
+];
+
+/** The grain of one column. Hourly is the default because the row is. */
+export const featureGrain = (column: string): FeatureGrain =>
+  DAY_GRAIN_COLUMNS.includes(column) ? "day" : "hour";
 
 /**
  * The label columns — the ones read `AsOf(now())` rather than at the gate.
