@@ -1,0 +1,26 @@
+{
+  "name": "the prototypes flexible load",
+  "description": "The prototype's default fixture, verbatim: 70 MW of shift against 1 200 MWh/day is a 50 MW flat baseline, and a freezer cannot shed more power than it draws. The rule is right, so **the fixture moved** - `REFERENCE_FLEET` is 50 MW against 1 700 MWh/day, at 71 % of the cap. This vector is what stops the rule moving back instead.",
+  "now": "2026-08-28T12:00:00Z",
+  "scenario": {
+    "v": 1,
+    "subsystem": "NE",
+    "target_date": "2026-08-29",
+    "assets": [
+      {
+        "asset_type": "shiftable_load",
+        "label": "Flexible load",
+        "subsystem": "NE",
+        "max_power_mw": 70,
+        "max_shift_mw": 70,
+        "shift_window_hours": 3,
+        "daily_energy_mwh": 1200
+      }
+    ],
+    "economic_assumptions": {
+      "brl_per_mwh": 180
+    }
+  },
+  "expected_code": "SHIFT_EXCEEDS_BASELINE",
+  "expected_field": "assets[0].max_shift_mw"
+}

@@ -1,0 +1,24 @@
+{
+  "name": "the first day of the window",
+  "description": "The window opens 2024-04-01 and that day is inside it. The refusal vector next door is 2024-03-31, so the two together pin the boundary from both sides rather than asserting it once.",
+  "now": "2024-04-01T12:00:00Z",
+  "scenario": {
+    "v": 1,
+    "subsystem": "NE",
+    "target_date": "2024-04-01",
+    "assets": [
+      {
+        "asset_type": "battery",
+        "label": "Battery",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      }
+    ],
+    "economic_assumptions": {
+      "brl_per_mwh": 180
+    }
+  }
+}

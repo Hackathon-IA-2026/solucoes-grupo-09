@@ -1,0 +1,35 @@
+{
+  "name": "a load in another subsystem",
+  "description": "One subsystem per scenario. `curt[t]` is a subsystem-level series and an asset elsewhere cannot absorb it, so a mixed-subsystem fleet is **rejected, never summed** - summing would report Northeast curtailment absorbed by a load in the South.",
+  "now": "2026-08-28T12:00:00Z",
+  "scenario": {
+    "v": 1,
+    "subsystem": "NE",
+    "target_date": "2026-08-29",
+    "assets": [
+      {
+        "asset_type": "battery",
+        "label": "Battery",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      },
+      {
+        "asset_type": "shiftable_load",
+        "label": "Flexible load",
+        "subsystem": "S",
+        "max_power_mw": 70,
+        "max_shift_mw": 50,
+        "shift_window_hours": 3,
+        "daily_energy_mwh": 1700
+      }
+    ],
+    "economic_assumptions": {
+      "brl_per_mwh": 180
+    }
+  },
+  "expected_code": "SUBSYSTEM_MISMATCH",
+  "expected_field": "assets[1].subsystem"
+}

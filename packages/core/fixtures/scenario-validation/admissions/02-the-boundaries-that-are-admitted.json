@@ -1,0 +1,38 @@
+{
+  "name": "the boundaries that are admitted",
+  "description": "Every bound from the inclusive side, in one scenario: `max_power_mw` exactly at the 10 000 cap, `energy_capacity_mwh` at 100 000, `round_trip_efficiency` exactly at the 0.50 floor, an initial state of charge exactly at `max_state_of_charge`, `max_charge_mw` exactly at `max_power_mw`, a shift exactly at the flat baseline, `L` at 8, a recovery time at 24 and `brl_per_mwh` exactly at 10 000. A cap read as `>=` rather than `>` fails here rather than in production.",
+  "now": "2026-08-28T12:00:00Z",
+  "scenario": {
+    "v": 1,
+    "subsystem": "NE",
+    "target_date": "2026-08-29",
+    "assets": [
+      {
+        "asset_type": "battery",
+        "label": "Battery",
+        "subsystem": "NE",
+        "max_power_mw": 10000,
+        "energy_capacity_mwh": 100000,
+        "round_trip_efficiency": 0.5,
+        "initial_state_of_charge": 1.0,
+        "min_state_of_charge": 0.0,
+        "max_state_of_charge": 1.0,
+        "max_charge_mw": 10000,
+        "max_discharge_mw": 10000
+      },
+      {
+        "asset_type": "shiftable_load",
+        "label": "Flexible load",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "max_shift_mw": 100,
+        "shift_window_hours": 8,
+        "daily_energy_mwh": 2400,
+        "recovery_time_hours": 24
+      }
+    ],
+    "economic_assumptions": {
+      "brl_per_mwh": 10000
+    }
+  }
+}

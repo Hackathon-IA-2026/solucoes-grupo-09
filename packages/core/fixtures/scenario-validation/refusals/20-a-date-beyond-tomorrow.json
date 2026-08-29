@@ -1,0 +1,26 @@
+{
+  "name": "a date beyond tomorrow",
+  "description": "Day-ahead is the only horizon the forecaster serves. `now` is 09:00 in Brasilia on 2026-08-28, so tomorrow is 2026-08-29 and 2026-08-30 is a day nobody has a forecast for.",
+  "now": "2026-08-28T12:00:00Z",
+  "scenario": {
+    "v": 1,
+    "subsystem": "NE",
+    "target_date": "2026-08-30",
+    "assets": [
+      {
+        "asset_type": "battery",
+        "label": "Battery",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      }
+    ],
+    "economic_assumptions": {
+      "brl_per_mwh": 180
+    }
+  },
+  "expected_code": "TARGET_DATE_OUT_OF_RANGE",
+  "expected_field": "target_date"
+}

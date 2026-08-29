@@ -1,0 +1,26 @@
+{
+  "name": "a shift above the connection",
+  "description": "(D2)/(D3): the shiftable portion cannot exceed the connection it arrives through. Checked before the baseline rule, so this scenario's 2 400 MWh/day - a 100 MW baseline - leaves only one rule that can fire.",
+  "now": "2026-08-28T12:00:00Z",
+  "scenario": {
+    "v": 1,
+    "subsystem": "NE",
+    "target_date": "2026-08-29",
+    "assets": [
+      {
+        "asset_type": "shiftable_load",
+        "label": "Flexible load",
+        "subsystem": "NE",
+        "max_power_mw": 70,
+        "max_shift_mw": 90,
+        "shift_window_hours": 3,
+        "daily_energy_mwh": 2400
+      }
+    ],
+    "economic_assumptions": {
+      "brl_per_mwh": 180
+    }
+  },
+  "expected_code": "SHIFT_EXCEEDS_CONNECTION",
+  "expected_field": "assets[0].max_shift_mw"
+}

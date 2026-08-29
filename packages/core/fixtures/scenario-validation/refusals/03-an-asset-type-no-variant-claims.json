@@ -1,0 +1,26 @@
+{
+  "name": "an asset type no variant claims",
+  "description": "`EV`, `DataCentre`, `Electrolyzer` and `HVAC` are named in the spec as future variants and v1 implements none of them. An unknown `asset_type` is refused rather than treated as the nearest thing, because there is no nearest thing.",
+  "now": "2026-08-28T12:00:00Z",
+  "scenario": {
+    "v": 1,
+    "subsystem": "NE",
+    "target_date": "2026-08-29",
+    "assets": [
+      {
+        "asset_type": "electrolyzer",
+        "label": "Battery",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2
+      }
+    ],
+    "economic_assumptions": {
+      "brl_per_mwh": 180
+    }
+  },
+  "expected_code": "ASSET_TYPE_UNKNOWN",
+  "expected_field": "assets[0].asset_type"
+}

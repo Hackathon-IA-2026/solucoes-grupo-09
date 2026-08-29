@@ -1,0 +1,27 @@
+{
+  "name": "a charge limit above the inverter",
+  "description": "(B4) and (B6) together: a per-direction limit above the inverter's own limit is a contradiction in the asset, not a tighter constraint. Refused rather than taken as the smaller of the two.",
+  "now": "2026-08-28T12:00:00Z",
+  "scenario": {
+    "v": 1,
+    "subsystem": "NE",
+    "target_date": "2026-08-29",
+    "assets": [
+      {
+        "asset_type": "battery",
+        "label": "Battery",
+        "subsystem": "NE",
+        "max_power_mw": 100,
+        "energy_capacity_mwh": 300,
+        "round_trip_efficiency": 0.92,
+        "initial_state_of_charge": 0.2,
+        "max_charge_mw": 150
+      }
+    ],
+    "economic_assumptions": {
+      "brl_per_mwh": 180
+    }
+  },
+  "expected_code": "POWER_LIMIT_INCONSISTENT",
+  "expected_field": "assets[0].max_charge_mw"
+}
