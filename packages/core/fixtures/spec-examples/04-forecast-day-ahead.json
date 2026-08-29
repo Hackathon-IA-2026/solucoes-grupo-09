@@ -1,0 +1,61 @@
+{
+  "subsystem": "NE",
+  "ons_display_name": "NORDESTE",
+  "target_date": "2026-08-29",
+  "threshold_mw": 5,
+  "forecast_origin": {
+    "producer": "wattsteer",
+    "run_label": "…",
+    "published_at": "2026-08-28T22:00:00Z",
+    "age_hours": 0.1,
+    "origin_kind": "served",
+    "gate_profile": "gate_late",
+    "weather_run_label": "D−1 12Z"
+  },
+  "vintage_fidelity": "point_in_time",
+  "artifact": {
+    "artifact_id": "…",
+    "feature_set": "dessem_free_v1",
+    "trained_through": "2026-06-30"
+  },
+  "risk_bins": {
+    "low": [0, 0.25],
+    "elevated": [0.25, 0.6],
+    "high": [0.6, 1]
+  },
+  "day_occurrence_probability": 0.89,
+  "risk_class": "high",
+  "day_energy_mwh": {
+    "p10": 1720,
+    "p50": 2780,
+    "p90": 4260
+  },
+  "peak_power_mw": {
+    "p10": 118,
+    "p50": 186,
+    "p90": 271
+  },
+  "day_expected_mwh": 2960,
+  "split": {
+    "wind_mwh": 2410,
+    "solar_mwh": 550
+  },
+  "hours_p50_nonzero": 9,
+  "hours": [
+    {
+      "valid_time": "2026-08-29T03:00:00Z",
+      "hour_local": 0,
+      "constrained_off_mwh": {
+        "p10": 0,
+        "p50": 0,
+        "p90": 41
+      },
+      "expected_mwh": 12.4,
+      "occurrence_probability": 0.31,
+      "split": {
+        "wind_mwh": 10.1,
+        "solar_mwh": 2.3
+      }
+    }
+  ]
+}

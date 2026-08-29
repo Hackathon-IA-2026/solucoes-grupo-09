@@ -1,0 +1,106 @@
+{
+  "service": "wattsteer-api",
+  "version": "0.1.0",
+  "environment": "production",
+  "server_time": "2026-08-28T18:04:11Z",
+  "window": {
+    "opens_on": "2024-04-01",
+    "ingestion_go_live": "2026-07-01",
+    "first_holdout_fold_start": "2025-04-01"
+  },
+  "defaults": {
+    "subsystem_threshold_mw": 5,
+    "reporting_entity_threshold_mw": 1,
+    "max_gap_hours": 0,
+    "brl_per_mwh": 180
+  },
+  "gates": [
+    {
+      "profile": "gate_late",
+      "publishes_at_local": "19:00",
+      "timezone": "America/Sao_Paulo",
+      "weather_run": "12Z"
+    },
+    {
+      "profile": "gate_early",
+      "publishes_at_local": "09:00",
+      "timezone": "America/Sao_Paulo",
+      "weather_run": "00Z"
+    }
+  ],
+  "model": {
+    "reachable": true,
+    "lanes": [
+      {
+        "lane": "dessem_free_v1__gate_late__thr5",
+        "state": "promoted",
+        "artifact_id": "…/2026-08-28T03:11:07Z",
+        "trained_through": "2026-06-30",
+        "vintage_fidelity": "point_in_time"
+      }
+    ],
+    "volume": {
+      "mounted": true,
+      "writable": true
+    }
+  },
+  "forecast": {
+    "latest_published": [
+      {
+        "target_date": "2026-08-29",
+        "gate_profile": "gate_late",
+        "published_at": "2026-08-28T22:00:00Z",
+        "age_hours": 0.1,
+        "subsystems": ["N", "NE", "S", "SE"]
+      }
+    ],
+    "next_publication_at": "2026-08-29T12:00:00Z"
+  },
+  "data": {
+    "freshness": [
+      {
+        "source": "constrained_off",
+        "latest_valid_time": "2026-08-26T23:00:00Z",
+        "latest_ingested_at": "2026-08-28T15:02:11Z",
+        "lag_hours": 40.1
+      }
+    ]
+  },
+  "reference_fleet": {
+    "battery": {
+      "asset_type": "battery",
+      "label": "Battery",
+      "max_power_mw": 100,
+      "energy_capacity_mwh": 300,
+      "round_trip_efficiency": 0.92,
+      "initial_state_of_charge": 0.2
+    },
+    "shiftable_load": {
+      "asset_type": "shiftable_load",
+      "label": "Flexible load",
+      "max_power_mw": 70,
+      "max_shift_mw": 50,
+      "shift_window_hours": 3,
+      "daily_energy_mwh": 1700
+    }
+  },
+  "attribution": {
+    "ons": {
+      "name": "ONS Dados Abertos",
+      "licence": "CC-BY-4.0",
+      "url": "…"
+    },
+    "aneel_siga": {
+      "name": "ANEEL SIGA",
+      "licence": "ODbL-1.0",
+      "url": "…",
+      "derivative_database": true,
+      "machine_readable_at": "/v1/plants"
+    },
+    "open_meteo": {
+      "name": "Open-Meteo",
+      "licence": "CC-BY-4.0",
+      "url": "…"
+    }
+  }
+}

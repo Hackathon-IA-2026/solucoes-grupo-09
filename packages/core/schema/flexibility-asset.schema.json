@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wattsteer.com/schema/flexibility-asset.schema.json",
+  "title": "FlexibilityAsset",
+  "description": "A sum type discriminated by `asset_type`, per `docs/domain-model.md` - not one wide struct with mutually-exclusive nullable fields, which is what stops a battery arriving with a `max_shift_mw`. `additionalProperties: false` on each variant is what makes `FIELD_NOT_ON_VARIANT` a schema fact rather than a hand-written rule. A value object with no persisted identity: ONS publishes no flexibility-asset registry, so these are user-supplied scenario inputs.",
+  "oneOf": [{ "$ref": "#/$defs/battery" }, { "$ref": "#/$defs/shiftable_load" }],
+  "$defs": {
+    "battery": {
+      "title": "Battery",
+      "type": "object",
+      "properties": {
+        "asset_type": { "const": "battery" },
+        "label": { "type": "string" },
+        "subsystem": { "$ref": "common.schema.json#/$defs/subsystem" },
+        "max_power_mw": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 10000,
+          "description": "Inverter limit on charge and discharge. The cap is `MAGNITUDE_OUT_OF_RANGE`: the endpoint is public and unauthenticated, and the cap's job is to bound the solver, not to model the market."
+        },
+        "energy_capacity_mwh": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 100000
+        },
+        "round_trip_efficiency": {
+          "type": "number",
+          "minimum": 0.5,
+          "exclusiveMaximum": 1,
+          "description": "`RTE_OUT_OF_RANGE` is [0.50, 1.00)."
+        },
+        "charge_efficiency": { "type": "number", "minimum": 0.5, "exclusiveMaximum": 1 },
+        "discharge_efficiency": {
+          "type": "number",
+          "minimum": 0.5,
+          "exclusiveMaximum": 1
+        },
+        "initial_state_of_charge": { "type": "number", "minimum": 0, "maximum": 1 },
+        "min_state_of_charge": { "type": "number", "minimum": 0, "maximum": 1 },
+        "max_state_of_charge": { "type": "number", "minimum": 0, "maximum": 1 },
+        "max_charge_mw": { "type": "number", "exclusiveMinimum": 0 },
+        "max_discharge_mw": { "type": "number", "exclusiveMinimum": 0 },
+        "available_from": { "$ref": "common.schema.json#/$defs/clock_time" },
+        "available_to": { "$ref": "common.schema.json#/$defs/clock_time" }
+      },
+      "required": [
+        "asset_type",
+        "label",
+        "subsystem",
+        "max_power_mw",
+        "energy_capacity_mwh",
+        "initial_state_of_charge"
+      ],
+      "additionalProperties": false
+    },
+    "shiftable_load": {
+      "title": "ShiftableLoad",
+      "type": "object",
+      "properties": {
+        "asset_type": { "const": "shiftable_load" },
+        "label": { "type": "string" },
+        "subsystem": { "$ref": "common.schema.json#/$defs/subsystem" },
+        "max_power_mw": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 10000,
+          "description": "Connection limit."
+        },
+        "max_shift_mw": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "The shiftable portion. `SHIFT_EXCEEDS_CONNECTION` and `SHIFT_EXCEEDS_BASELINE` are cross-field rules the gateway validates; a schema cannot express either."
+        },
+        "shift_window_hours": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8,
+          "description": "`L` - the window within which a shift must be compensated."
+        },
+        "daily_energy_mwh": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 100000,
+          "description": "A validation input, not a constraint: with no baseline profile supplied it fixes the flat baseline at `daily_energy_mwh / 24`."
+        },
+        "recovery_time_hours": {
+          "type": ["number", "null"],
+          "minimum": 1,
+          "maximum": 24
+        },
+        "available_from": { "$ref": "common.schema.json#/$defs/clock_time" },
+        "available_to": { "$ref": "common.schema.json#/$defs/clock_time" }
+      },
+      "required": [
+        "asset_type",
+        "label",
+        "subsystem",
+        "max_power_mw",
+        "max_shift_mw",
+        "shift_window_hours",
+        "daily_energy_mwh"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wattsteer.com/schema/forecast-day-ahead.schema.json",
+  "title": "ForecastDayAhead",
+  "description": "`GET /v1/forecast/day-ahead?subsystem=&target_date=&gate_profile=`. **There is no `technology` parameter and no per-technology band**: the forecast grain is the subsystem and the split is two scalars. `day_energy_mwh` and `peak_power_mw` are read from the persisted day-grain row - they are path-ensemble quantiles and are never a componentwise sum of `hours[].constrained_off_mwh`.",
+  "type": "object",
+  "properties": {
+    "subsystem": { "$ref": "common.schema.json#/$defs/subsystem" },
+    "ons_display_name": { "type": "string" },
+    "target_date": { "$ref": "common.schema.json#/$defs/civil_date" },
+    "threshold_mw": { "$ref": "common.schema.json#/$defs/threshold_mw" },
+    "forecast_origin": { "$ref": "common.schema.json#/$defs/forecast_origin" },
+    "vintage_fidelity": { "$ref": "common.schema.json#/$defs/vintage_fidelity" },
+    "artifact": { "$ref": "#/$defs/artifact" },
+    "risk_bins": { "$ref": "common.schema.json#/$defs/risk_bins" },
+    "day_occurrence_probability": {
+      "$ref": "common.schema.json#/$defs/probability",
+      "description": "From the path ensemble, not from 1 - prod(1 - p) over the hours."
+    },
+    "risk_class": { "$ref": "common.schema.json#/$defs/risk_class" },
+    "day_energy_mwh": { "$ref": "common.schema.json#/$defs/band" },
+    "peak_power_mw": { "$ref": "common.schema.json#/$defs/band" },
+    "day_expected_mwh": {
+      "type": "number",
+      "minimum": 0,
+      "description": "A sibling of the day band, never its centre (vocabulary rule 2)."
+    },
+    "split": { "$ref": "common.schema.json#/$defs/technology_split" },
+    "hours_p50_nonzero": { "type": "integer", "minimum": 0, "maximum": 24 },
+    "hours": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/forecast_hour" }
+    }
+  },
+  "required": [
+    "subsystem",
+    "ons_display_name",
+    "target_date",
+    "threshold_mw",
+    "forecast_origin",
+    "vintage_fidelity",
+    "artifact",
+    "risk_bins",
+    "day_occurrence_probability",
+    "risk_class",
+    "day_energy_mwh",
+    "peak_power_mw",
+    "day_expected_mwh",
+    "split",
+    "hours_p50_nonzero",
+    "hours"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "artifact": {
+      "title": "ForecastArtifact",
+      "description": "Which model produced this, and how far its training window reached.",
+      "type": "object",
+      "properties": {
+        "artifact_id": { "type": "string" },
+        "feature_set": { "type": "string" },
+        "trained_through": { "$ref": "common.schema.json#/$defs/civil_date" }
+      },
+      "required": ["artifact_id", "feature_set", "trained_through"],
+      "additionalProperties": false
+    },
+    "forecast_hour": {
+      "title": "CurtailmentHourForecast",
+      "description": "One hour, carrying its own expectation and its own scalar split. `valid_time` is a UTC instant at the start of the interval; `hour_local` is the same hour written as a Brasilia clock hour, and the two are given rather than one being derivable only with a timezone database the client may not have.",
+      "type": "object",
+      "properties": {
+        "valid_time": { "$ref": "common.schema.json#/$defs/utc_instant" },
+        "hour_local": { "$ref": "common.schema.json#/$defs/hour_local" },
+        "constrained_off_mwh": { "$ref": "common.schema.json#/$defs/band" },
+        "expected_mwh": {
+          "type": "number",
+          "minimum": 0,
+          "description": "A sibling of the hourly band, never inside it."
+        },
+        "occurrence_probability": { "$ref": "common.schema.json#/$defs/probability" },
+        "split": { "$ref": "common.schema.json#/$defs/technology_split" }
+      },
+      "required": [
+        "valid_time",
+        "hour_local",
+        "constrained_off_mwh",
+        "expected_mwh",
+        "occurrence_probability",
+        "split"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

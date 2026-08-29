@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wattsteer.com/schema/grid-outlook.schema.json",
+  "title": "GridOutlook",
+  "description": "`GET /v1/grid/outlook` - the one call the landing hero and the Overview's first paint both make. Four subsystems, one target date, no hourly detail and no drivers. The national figure is an expectation and a count of subsystems per risk class, because expectations add exactly and quantiles do not: `national.band` is `null` with `band_unavailable_reason` until the path ensemble shares its draw index across subsystems.",
+  "type": "object",
+  "properties": {
+    "target_date": { "$ref": "common.schema.json#/$defs/civil_date" },
+    "threshold_mw": { "$ref": "common.schema.json#/$defs/threshold_mw" },
+    "forecast_origin": { "$ref": "common.schema.json#/$defs/forecast_origin" },
+    "vintage_fidelity": { "$ref": "common.schema.json#/$defs/vintage_fidelity" },
+    "risk_bins": { "$ref": "common.schema.json#/$defs/risk_bins" },
+    "subsystems": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": { "$ref": "#/$defs/subsystem_outlook" }
+    },
+    "national": { "$ref": "#/$defs/national_outlook" }
+  },
+  "required": [
+    "target_date",
+    "threshold_mw",
+    "forecast_origin",
+    "vintage_fidelity",
+    "risk_bins",
+    "subsystems",
+    "national"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "subsystem_outlook": {
+      "title": "SubsystemOutlook",
+      "description": "One subsystem's day-grain readout. `day_expected_mwh` is a **sibling** of `day_energy_mwh`, never its `p50` (vocabulary rule 2): for a mixture the expectation exceeds the median whenever the occurrence probability is below a half.",
+      "type": "object",
+      "properties": {
+        "subsystem": { "$ref": "common.schema.json#/$defs/subsystem" },
+        "ons_display_name": {
+          "type": "string",
+          "description": "ONS's own string, untranslated, so a subsystem stays searchable against the files it came from."
+        },
+        "day_occurrence_probability": {
+          "$ref": "common.schema.json#/$defs/probability",
+          "description": "From the path ensemble, not from 1 - prod(1 - p) over the hours."
+        },
+        "risk_class": { "$ref": "common.schema.json#/$defs/risk_class" },
+        "day_energy_mwh": {
+          "$ref": "common.schema.json#/$defs/band",
+          "description": "Path-ensemble quantiles read from the persisted day-grain row. Never a componentwise sum of the hourly band."
+        },
+        "peak_power_mw": { "$ref": "common.schema.json#/$defs/band" },
+        "day_expected_mwh": {
+          "type": "number",
+          "minimum": 0,
+          "description": "E[Y] for the day. The diagnosis engine's attribution target, and the one national-additive quantity."
+        },
+        "split": { "$ref": "common.schema.json#/$defs/technology_split" }
+      },
+      "required": [
+        "subsystem",
+        "ons_display_name",
+        "day_occurrence_probability",
+        "risk_class",
+        "day_energy_mwh",
+        "peak_power_mw",
+        "day_expected_mwh",
+        "split"
+      ],
+      "additionalProperties": false
+    },
+    "national_outlook": {
+      "title": "NationalOutlook",
+      "description": "The one place a national number exists, with its derivation named. `SIN` is not a subsystem (vocabulary rule 6), so the national figure lives under this key rather than as a fifth row. The band is `null` and says why: the median of a sum is not the sum of the medians, and the four subsystems' curtailment is not comonotone.",
+      "type": "object",
+      "properties": {
+        "expected_mwh": {
+          "type": "number",
+          "minimum": 0,
+          "description": "The sum of the four `day_expected_mwh`. Expectations add exactly; this is the only additive forecast quantity."
+        },
+        "risk_class_counts": {
+          "type": "object",
+          "properties": {
+            "low": { "type": "integer", "minimum": 0, "maximum": 4 },
+            "elevated": { "type": "integer", "minimum": 0, "maximum": 4 },
+            "high": { "type": "integer", "minimum": 0, "maximum": 4 }
+          },
+          "required": ["low", "elevated", "high"],
+          "additionalProperties": false
+        },
+        "band": {
+          "description": "`null` until the path ensemble shares one drawn day-row index across the four subsystems. A national band needs a joint distribution and no published quantity supports one today.",
+          "oneOf": [{ "type": "null" }, { "$ref": "common.schema.json#/$defs/band" }]
+        },
+        "band_unavailable_reason": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "common.schema.json#/$defs/band_unavailable_reason" }
+          ]
+        }
+      },
+      "required": [
+        "expected_mwh",
+        "risk_class_counts",
+        "band",
+        "band_unavailable_reason"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "$comment": "A null band is unrepresentable without a stated reason, and a present band must not carry one.",
+          "if": { "properties": { "band": { "type": "null" } } },
+          "then": {
+            "properties": {
+              "band_unavailable_reason": {
+                "$ref": "common.schema.json#/$defs/band_unavailable_reason"
+              }
+            }
+          },
+          "else": { "properties": { "band_unavailable_reason": { "type": "null" } } }
+        }
+      ]
+    }
+  }
+}

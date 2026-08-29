@@ -1,0 +1,11 @@
+{
+  "error": {
+    "code": "SHIFT_EXCEEDS_BASELINE",
+    "message": "max_shift_mw (70) exceeds daily_energy_mwh / 24 (50).",
+    "details": {
+      "field": "assets[1].max_shift_mw",
+      "limit": 50
+    },
+    "request_id": "1f2c…"
+  }
+}

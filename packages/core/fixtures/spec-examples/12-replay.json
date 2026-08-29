@@ -1,0 +1,360 @@
+{
+  "target_date": "2025-09-14",
+  "subsystem": "NE",
+  "threshold_mw": 5,
+  "max_gap_hours": 0,
+  "scenario_hash": "sha256:9f2c4a1b7e05d38c6a1f0b93e27d4c5a8b16f30d92e47c5a0b3d81f6e2a94c07",
+  "integrity": {
+    "provenance": "fold_holdout",
+    "model_saw_this_day": false,
+    "held_out_by": {
+      "fold": "F3",
+      "artifact_id": "dessem_free_v1__gate_late__thr5/2025-10-01T…Z",
+      "train_window": ["2024-04-01", "2025-06-30"],
+      "calibration_window": ["2025-07-02", "2025-09-30"]
+    },
+    "vintage_affects": ["settled_actuals", "lagged_actual_features"],
+    "vintage_exempt": ["weather_run", "dessem", "ons_programming"],
+    "revision_premium_recovered_mwh": null
+  },
+  "vintage_fidelity": "revision_optimistic",
+  "forecast_origin": {
+    "producer": "wattsteer",
+    "run_label": "…artifact_id…",
+    "published_at": "2025-09-13T22:00:00Z",
+    "origin_kind": "backfilled_holdout",
+    "gate_profile": "gate_late"
+  },
+  "actual": {
+    "total_mwh": 612,
+    "peak_mw": 138,
+    "hours": [
+      1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 66.4, 66.4, 66.4, 66.4, 66.4, 66.4,
+      66.4, 66.4, 66.4, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2
+    ]
+  },
+  "forecast": {
+    "hours": [
+      {
+        "constrained_off_mwh": {
+          "p10": 0,
+          "p50": 0,
+          "p90": 96
+        },
+        "expected_mwh": 2,
+        "occurrence_probability": 0.12
+      },
+      {
+        "constrained_off_mwh": {
+          "p10": 0,
+          "p50": 0,
+          "p90": 96
+        },
+        "expected_mwh": 2,
+        "occurrence_probability": 0.12
+      },
+      {
+        "constrained_off_mwh": {
+          "p10": 0,
+          "p50": 0,
+          "p90": 96
+        },
+        "expected_mwh": 2,
+        "occurrence_probability": 0.12
+      },
+      {
+        "constrained_off_mwh": {
+          "p10": 0,
+          "p50": 0,
+          "p90": 96
+        },
+        "expected_mwh": 2,
+        "occurrence_probability": 0.12
+      },
+      {
+        "constrained_off_mwh": {
+          "p10": 0,
+          "p50": 0,
+          "p90": 96
+        },
+        "expected_mwh": 2,
+        "occurrence_probability": 0.12
+      },
+      {
+        "constrained_off_mwh": {
+          "p10": 0,
+          "p50": 0,
+          "p90": 96
+        },
+        "expected_mwh": 2,
+        "occurrence_probability": 0.12
+      },
+      {
+        "constrained_off_mwh": {
+          "p10": 0,
+          "p50": 0,
+          "p90": 96
+        },
+        "expected_mwh": 2,
+        "occurrence_probability": 0.12
+      },
+      {
+        "constrained_off_mwh": {
+          "p10": 0,
+          "p50": 0,
+          "p90": 96
+        },
+        "expected_mwh": 2,
+        "occurrence_probability": 0.12
+      },
+      {
+        "constrained_off_mwh": {
+          "p10": 0,
+          "p50": 0,
+          "p90": 96
+        },
+        "expected_mwh": 2,
+        "occurrence_probability": 0.12
+      },
+      {
+        "constrained_off_mwh": {
+          "p10": 0,
+          "p50": 41,
+          "p90": 96
+        },
+        "expected_mwh": 38,
+        "occurrence_probability": 0.81
+      },
+      {
+        "constrained_off_mwh": {
+          "p10": 0,
+          "p50": 41,
+          "p90": 96
+        },
+        "expected_mwh": 38,
+        "occurrence_probability": 0.81
+      },
+      {
+        "constrained_off_mwh": {
+          "p10": 0,
+          "p50": 41,
+          "p90": 96
+        },
+        "expected_mwh": 38,
+        "occurrence_probability": 0.81
+      },
+      {
+        "constrained_off_mwh": {
+          "p10": 0,
+          "p50": 41,
+          "p90": 96
+        },
+        "expected_mwh": 38,
+        "occurrence_probability": 0.81
+      },
+      {
+        "constrained_off_mwh": {
+          "p10": 0,
+          "p50": 41,
+          "p90": 96
+        },
+        "expected_mwh": 38,
+        "occurrence_probability": 0.81
+      },
+      {
+        "constrained_off_mwh": {
+          "p10": 0,
+          "p50": 41,
+          "p90": 96
+        },
+        "expected_mwh": 38,
+        "occurrence_probability": 0.81
+      },
+      {
+        "constrained_off_mwh": {
+          "p10": 0,
+          "p50": 41,
+          "p90": 96
+        },
+        "expected_mwh": 38,
+        "occurrence_probability": 0.81
+      },
+      {
+        "constrained_off_mwh": {
+          "p10": 0,
+          "p50": 41,
+          "p90": 96
+        },
+        "expected_mwh": 38,
+        "occurrence_probability": 0.81
+      },
+      {
+        "constrained_off_mwh": {
+          "p10": 0,
+          "p50": 41,
+          "p90": 96
+        },
+        "expected_mwh": 38,
+        "occurrence_probability": 0.81
+      },
+      {
+        "constrained_off_mwh": {
+          "p10": 0,
+          "p50": 0,
+          "p90": 96
+        },
+        "expected_mwh": 2,
+        "occurrence_probability": 0.12
+      },
+      {
+        "constrained_off_mwh": {
+          "p10": 0,
+          "p50": 0,
+          "p90": 96
+        },
+        "expected_mwh": 2,
+        "occurrence_probability": 0.12
+      },
+      {
+        "constrained_off_mwh": {
+          "p10": 0,
+          "p50": 0,
+          "p90": 96
+        },
+        "expected_mwh": 2,
+        "occurrence_probability": 0.12
+      },
+      {
+        "constrained_off_mwh": {
+          "p10": 0,
+          "p50": 0,
+          "p90": 96
+        },
+        "expected_mwh": 2,
+        "occurrence_probability": 0.12
+      },
+      {
+        "constrained_off_mwh": {
+          "p10": 0,
+          "p50": 0,
+          "p90": 96
+        },
+        "expected_mwh": 2,
+        "occurrence_probability": 0.12
+      },
+      {
+        "constrained_off_mwh": {
+          "p10": 0,
+          "p50": 0,
+          "p90": 96
+        },
+        "expected_mwh": 2,
+        "occurrence_probability": 0.12
+      }
+    ],
+    "day_total": {
+      "p10": 402,
+      "p50": 548,
+      "p90": 731
+    },
+    "peak_power": {
+      "p10": 61,
+      "p50": 104,
+      "p90": 151
+    },
+    "day_occurrence_probability": 0.93
+  },
+  "planning_basis": "p50",
+  "execution_rule": "follow_curtailment",
+  "scored_on": "observed",
+  "baseline_curtailment_mwh": 612,
+  "optimized_curtailment_mwh": 331,
+  "avoided_energy_mwh": 281,
+  "avoidability": 0.459,
+  "recovered_floor_mwh": 84.1,
+  "floor_met": true,
+  "floor_margin_mwh": 196.9,
+  "scored": {
+    "p10": {
+      "baseline_mwh": 402,
+      "remaining_mwh": 317.9,
+      "recovered_mwh": 84.1,
+      "avoidability": 0.209
+    },
+    "p50": {
+      "baseline_mwh": 548,
+      "remaining_mwh": 351,
+      "recovered_mwh": 197,
+      "avoidability": 0.359
+    },
+    "p90": {
+      "baseline_mwh": 731,
+      "remaining_mwh": 470,
+      "recovered_mwh": 261,
+      "avoidability": 0.357
+    },
+    "observed": {
+      "baseline_mwh": 612,
+      "remaining_mwh": 331,
+      "recovered_mwh": 281,
+      "avoidability": 0.459
+    }
+  },
+  "upper_bound": {
+    "label": "perfect_foresight",
+    "recovered_mwh": 402,
+    "avoidability": 0.657,
+    "forecast_value_gap_mwh": 121
+  },
+  "dispatch": [
+    {
+      "hour_local": 13,
+      "offered_mwh": 110,
+      "battery_charge_mw": 100,
+      "battery_discharge_mw": 0,
+      "state_of_charge_mwh": 231.4,
+      "load_shift_up_mw": 10,
+      "load_shift_down_mw": 0,
+      "absorbed_mwh": 110
+    }
+  ],
+  "executed": [
+    {
+      "hour_local": 13,
+      "offered_mwh": 138,
+      "battery_charge_mw": 100,
+      "battery_discharge_mw": 0,
+      "state_of_charge_mwh": 231.4,
+      "load_shift_up_mw": 38,
+      "load_shift_down_mw": 0,
+      "absorbed_mwh": 138
+    }
+  ],
+  "stored_at_horizon_end_mwh": 96.3,
+  "round_trip_loss_mwh": 11.4,
+  "economic_scenario": {
+    "brl_per_mwh": 180,
+    "brl": 50580
+  },
+  "episodes": [
+    {
+      "subsystem": "NE",
+      "technology": "WIND",
+      "started_at": "2025-09-14T12:00:00Z",
+      "ended_at": "2025-09-14T21:00:00Z",
+      "duration_hours": 9,
+      "total_mwh": 598,
+      "peak_mw": 138,
+      "threshold_mw": 5,
+      "max_gap_hours": 0
+    }
+  ],
+  "solver": {
+    "backend": "SCIP",
+    "status": "OPTIMAL",
+    "wall_time_ms": 3.4,
+    "objective": 281,
+    "ortools_version": "9.15.6755",
+    "scip_version": "9.x"
+  }
+}

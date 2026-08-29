@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wattsteer.com/schema/grid-now.schema.json",
+  "title": "GridNow",
+  "description": "`GET /v1/grid/now` - observed, not forecast. It needs no model, which is what makes it the honest thing to show on a landing page when no artifact is promoted. Its national total *is* legitimate where the forecast's is not: observations add exactly, and `national.derived` is a field rather than a comment so the addition is stated on the wire.",
+  "type": "object",
+  "properties": {
+    "as_of": {
+      "$ref": "common.schema.json#/$defs/utc_instant",
+      "description": "The vintage cut: what WattSteer had learned by this instant."
+    },
+    "latest_settled_hour": { "$ref": "common.schema.json#/$defs/utc_instant" },
+    "lag_hours": { "type": "number", "minimum": 0 },
+    "vintage_fidelity": { "$ref": "common.schema.json#/$defs/vintage_fidelity" },
+    "subsystems": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": { "$ref": "#/$defs/subsystem_now" }
+    },
+    "national": { "$ref": "#/$defs/national_now" }
+  },
+  "required": [
+    "as_of",
+    "latest_settled_hour",
+    "lag_hours",
+    "vintage_fidelity",
+    "subsystems",
+    "national"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "subsystem_now": {
+      "title": "SubsystemNow",
+      "type": "object",
+      "properties": {
+        "subsystem": { "$ref": "common.schema.json#/$defs/subsystem" },
+        "ons_display_name": { "type": "string" },
+        "last_24h_constrained_off_mwh": { "type": "number", "minimum": 0 },
+        "latest_hour_constrained_off_mwh": { "type": "number", "minimum": 0 },
+        "split": { "$ref": "common.schema.json#/$defs/technology_split" }
+      },
+      "required": [
+        "subsystem",
+        "ons_display_name",
+        "last_24h_constrained_off_mwh",
+        "latest_hour_constrained_off_mwh",
+        "split"
+      ],
+      "additionalProperties": false
+    },
+    "national_now": {
+      "title": "NationalNow",
+      "description": "The national observed total, with its derivation named on the object. `SIN` is not a subsystem; this key is where a national number is allowed to exist.",
+      "type": "object",
+      "properties": {
+        "last_24h_constrained_off_mwh": { "type": "number", "minimum": 0 },
+        "derived": {
+          "type": "string",
+          "enum": ["sum_of_four"],
+          "description": "A field and not a comment: it says which four rows were added, so a reader cannot mistake it for an ONS `SIN` row."
+        }
+      },
+      "required": ["last_24h_constrained_off_mwh", "derived"],
+      "additionalProperties": false
+    }
+  }
+}

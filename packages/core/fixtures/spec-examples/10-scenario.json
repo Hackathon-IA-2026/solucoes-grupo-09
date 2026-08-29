@@ -1,0 +1,34 @@
+{
+  "v": 1,
+  "subsystem": "NE",
+  "target_date": "2026-08-29",
+  "forecast_origin": "2026-08-28T12:00:00Z",
+  "assets": [
+    {
+      "asset_type": "battery",
+      "label": "Battery",
+      "subsystem": "NE",
+      "max_power_mw": 100,
+      "energy_capacity_mwh": 300,
+      "round_trip_efficiency": 0.92,
+      "initial_state_of_charge": 0.2,
+      "available_from": "00:00",
+      "available_to": "24:00"
+    },
+    {
+      "asset_type": "shiftable_load",
+      "label": "Flexible load",
+      "subsystem": "NE",
+      "max_power_mw": 70,
+      "max_shift_mw": 50,
+      "shift_window_hours": 3,
+      "daily_energy_mwh": 1700,
+      "recovery_time_hours": null,
+      "available_from": "00:00",
+      "available_to": "24:00"
+    }
+  ],
+  "economic_assumptions": {
+    "brl_per_mwh": 180
+  }
+}

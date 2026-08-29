@@ -1,0 +1,52 @@
+{
+  "as_of": "2026-08-28T15:02:11Z",
+  "latest_settled_hour": "2026-08-26T23:00:00Z",
+  "lag_hours": 40.1,
+  "vintage_fidelity": "point_in_time",
+  "subsystems": [
+    {
+      "subsystem": "NE",
+      "ons_display_name": "NORDESTE",
+      "last_24h_constrained_off_mwh": 2140,
+      "latest_hour_constrained_off_mwh": 96.4,
+      "split": {
+        "wind_mwh": 1980,
+        "solar_mwh": 160
+      }
+    },
+    {
+      "subsystem": "N",
+      "ons_display_name": "NORTE",
+      "last_24h_constrained_off_mwh": 210,
+      "latest_hour_constrained_off_mwh": 4.1,
+      "split": {
+        "wind_mwh": 198,
+        "solar_mwh": 12
+      }
+    },
+    {
+      "subsystem": "S",
+      "ons_display_name": "SUL",
+      "last_24h_constrained_off_mwh": 431,
+      "latest_hour_constrained_off_mwh": 18.9,
+      "split": {
+        "wind_mwh": 420,
+        "solar_mwh": 11
+      }
+    },
+    {
+      "subsystem": "SE",
+      "ons_display_name": "SUDESTE/CENTRO-OESTE",
+      "last_24h_constrained_off_mwh": 230,
+      "latest_hour_constrained_off_mwh": 9.7,
+      "split": {
+        "wind_mwh": 120,
+        "solar_mwh": 110
+      }
+    }
+  ],
+  "national": {
+    "last_24h_constrained_off_mwh": 3011,
+    "derived": "sum_of_four"
+  }
+}

@@ -1,0 +1,259 @@
+{
+  "subsystem": "NE",
+  "target_date": "2026-08-29",
+  "threshold_mw": 5,
+  "forecast_origin": {
+    "producer": "wattsteer",
+    "run_label": "dessem_free_v1__gate_late__thr5/2026-08-28T22:00:00Z",
+    "published_at": "2026-08-28T22:00:00Z",
+    "age_hours": 0.1,
+    "origin_kind": "served",
+    "gate_profile": "gate_late",
+    "weather_run_label": "D-1 12Z"
+  },
+  "attribution": {
+    "target": "expected_mwh_day",
+    "total_attributed_mwh": 316,
+    "sum_abs_attributed_mwh": 402,
+    "stderr_mwh": 4.1,
+    "baseline_expected_mwh": 96,
+    "day_expected_mwh": 412,
+    "driver_group_version": "3",
+    "driver_group_hash": "sha256:9f2c4a1b7e05d38c6a1f0b93e27d4c5a8b16f30d92e47c5a0b3d81f6e2a94c07",
+    "drivers": [
+      {
+        "code": "net_surplus",
+        "label_code": "driver.net_surplus",
+        "phi_mwh": 128,
+        "share": 0.31,
+        "direction": "raises",
+        "headline_feature": "proxy_renewable_load_ratio",
+        "observed": 1.42,
+        "typical": 0.96,
+        "unit": "ratio",
+        "hour_disagreement": 1.1,
+        "demoted": false
+      },
+      {
+        "code": "renewable_resource",
+        "label_code": "driver.renewable_resource",
+        "phi_mwh": 64,
+        "share": 0.16,
+        "direction": "raises",
+        "headline_feature": "weather_wind_speed_120m_mean",
+        "observed": 1,
+        "typical": 0.9,
+        "unit": "m_s",
+        "hour_disagreement": 0.4,
+        "demoted": false
+      },
+      {
+        "code": "demand_level",
+        "label_code": "driver.demand_level",
+        "phi_mwh": -41,
+        "share": 0.1,
+        "direction": "lowers",
+        "headline_feature": "proxy_load_mwh",
+        "observed": 1.1,
+        "typical": 1,
+        "unit": "mwh",
+        "hour_disagreement": 0.5,
+        "demoted": false
+      },
+      {
+        "code": "export_stress",
+        "label_code": "driver.export_stress",
+        "phi_mwh": 33,
+        "share": 0.08,
+        "direction": "raises",
+        "headline_feature": "dessem_export_headroom_mwh",
+        "observed": 1.2,
+        "typical": 1.1,
+        "unit": "mwh",
+        "hour_disagreement": 0.6000000000000001,
+        "demoted": false
+      },
+      {
+        "code": "ramp_shape",
+        "label_code": "driver.ramp_shape",
+        "phi_mwh": -22,
+        "share": 0.06,
+        "direction": "lowers",
+        "headline_feature": "proxy_residual_load_ramp_1h",
+        "observed": 1.3,
+        "typical": 1.2,
+        "unit": "mwh",
+        "hour_disagreement": 0.7,
+        "demoted": false
+      },
+      {
+        "code": "calendar_season",
+        "label_code": "driver.calendar_season",
+        "phi_mwh": 18,
+        "share": 0.04,
+        "direction": "raises",
+        "headline_feature": "calendar_day_of_week",
+        "observed": 1.4,
+        "typical": 1.3,
+        "unit": "count",
+        "hour_disagreement": 0.8,
+        "demoted": false
+      },
+      {
+        "code": "recent_history",
+        "label_code": "driver.recent_history",
+        "phi_mwh": -12,
+        "share": 0.03,
+        "direction": "lowers",
+        "headline_feature": "lagged_constrained_off_24h_mwh",
+        "observed": 1.5,
+        "typical": 1.4,
+        "unit": "mwh",
+        "hour_disagreement": 0.9,
+        "demoted": false
+      },
+      {
+        "code": "data_conditions",
+        "label_code": "driver.data_conditions",
+        "phi_mwh": 4,
+        "share": 0.01,
+        "direction": "raises",
+        "headline_feature": "weather_run_age_hours",
+        "observed": 1.6,
+        "typical": 1.5,
+        "unit": "hours",
+        "hour_disagreement": 1,
+        "demoted": false
+      }
+    ],
+    "peak_hour_local": 13,
+    "peak_hour_drivers": [
+      {
+        "code": "net_surplus",
+        "label_code": "driver.net_surplus",
+        "phi_mwh": 96,
+        "share": 0.28,
+        "direction": "raises",
+        "headline_feature": "proxy_renewable_load_ratio",
+        "observed": 1.42,
+        "typical": 0.96,
+        "unit": "ratio",
+        "hour_disagreement": 1.1,
+        "demoted": false
+      },
+      {
+        "code": "renewable_resource",
+        "label_code": "driver.renewable_resource",
+        "phi_mwh": 64,
+        "share": 0.16,
+        "direction": "raises",
+        "headline_feature": "weather_wind_speed_120m_mean",
+        "observed": 1,
+        "typical": 0.9,
+        "unit": "m_s",
+        "hour_disagreement": 0.4,
+        "demoted": false
+      },
+      {
+        "code": "demand_level",
+        "label_code": "driver.demand_level",
+        "phi_mwh": -41,
+        "share": 0.1,
+        "direction": "lowers",
+        "headline_feature": "proxy_load_mwh",
+        "observed": 1.1,
+        "typical": 1,
+        "unit": "mwh",
+        "hour_disagreement": 0.5,
+        "demoted": false
+      },
+      {
+        "code": "export_stress",
+        "label_code": "driver.export_stress",
+        "phi_mwh": 33,
+        "share": 0.08,
+        "direction": "raises",
+        "headline_feature": "dessem_export_headroom_mwh",
+        "observed": 1.2,
+        "typical": 1.1,
+        "unit": "mwh",
+        "hour_disagreement": 0.6000000000000001,
+        "demoted": false
+      },
+      {
+        "code": "ramp_shape",
+        "label_code": "driver.ramp_shape",
+        "phi_mwh": -22,
+        "share": 0.06,
+        "direction": "lowers",
+        "headline_feature": "proxy_residual_load_ramp_1h",
+        "observed": 1.3,
+        "typical": 1.2,
+        "unit": "mwh",
+        "hour_disagreement": 0.7,
+        "demoted": false
+      },
+      {
+        "code": "calendar_season",
+        "label_code": "driver.calendar_season",
+        "phi_mwh": 18,
+        "share": 0.04,
+        "direction": "raises",
+        "headline_feature": "calendar_day_of_week",
+        "observed": 1.4,
+        "typical": 1.3,
+        "unit": "count",
+        "hour_disagreement": 0.8,
+        "demoted": false
+      },
+      {
+        "code": "recent_history",
+        "label_code": "driver.recent_history",
+        "phi_mwh": -12,
+        "share": 0.03,
+        "direction": "lowers",
+        "headline_feature": "lagged_constrained_off_24h_mwh",
+        "observed": 1.5,
+        "typical": 1.4,
+        "unit": "mwh",
+        "hour_disagreement": 0.9,
+        "demoted": false
+      },
+      {
+        "code": "data_conditions",
+        "label_code": "driver.data_conditions",
+        "phi_mwh": 4,
+        "share": 0.01,
+        "direction": "raises",
+        "headline_feature": "weather_run_age_hours",
+        "observed": 1.6,
+        "typical": 1.5,
+        "unit": "hours",
+        "hour_disagreement": 1,
+        "demoted": false
+      }
+    ]
+  },
+  "rule_flags": [
+    {
+      "code": "stale_inputs",
+      "severity": "annotate",
+      "facts": {
+        "weather_run_age_hours": 12
+      }
+    }
+  ],
+  "withheld_by": [],
+  "narration": {
+    "text": "…",
+    "source": "model",
+    "locale": "pt-BR",
+    "prompt_version": "2026-08-28.1"
+  },
+  "observed_reasons_latest": {
+    "date": "2026-08-27",
+    "top_reason": "ENE",
+    "top_reason_share": 0.62
+  },
+  "vintage_fidelity": "point_in_time"
+}

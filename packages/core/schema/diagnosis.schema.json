@@ -1,0 +1,189 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wattsteer.com/schema/diagnosis.schema.json",
+  "title": "DiagnosisDayAhead",
+  "description": "`GET /v1/diagnosis/day-ahead?subsystem=&date=&gate_profile=&locale=`. One attribution per subsystem-day and **no `technology` parameter** - there is no per-technology head to explain. All eight driver groups are returned, ranked by |share|; the `share >= 0.03` / six-row / merge-into-`other` display rule is the client's, so the merged row's `direction: \"mixed\"` is computed in exactly one place. A withheld diagnosis is a **200** carrying the drivers untouched and a template narration, never an error.",
+  "type": "object",
+  "properties": {
+    "subsystem": { "$ref": "common.schema.json#/$defs/subsystem" },
+    "target_date": { "$ref": "common.schema.json#/$defs/civil_date" },
+    "threshold_mw": { "$ref": "common.schema.json#/$defs/threshold_mw" },
+    "forecast_origin": { "$ref": "common.schema.json#/$defs/forecast_origin" },
+    "vintage_fidelity": { "$ref": "common.schema.json#/$defs/vintage_fidelity" },
+    "attribution": { "$ref": "#/$defs/attribution" },
+    "rule_flags": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/rule_flag" }
+    },
+    "withheld_by": {
+      "description": "Empty when nothing was withheld. A non-empty list is still a 200: \"there is nothing to explain\" is an answer rather than an error.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "narration": { "$ref": "#/$defs/narration" },
+    "observed_reasons_latest": { "$ref": "#/$defs/observed_reasons_latest" }
+  },
+  "required": [
+    "subsystem",
+    "target_date",
+    "threshold_mw",
+    "forecast_origin",
+    "vintage_fidelity",
+    "attribution",
+    "rule_flags",
+    "withheld_by",
+    "narration"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "driver_code": {
+      "title": "DriverCode",
+      "description": "The eight groups of the driver-group map (`apps/ml/src/wattsteer_ml/diagnosis/driver_groups.yaml`), which are a total partition of the feature space. `other` is **not** a member: it is the client's merged remainder and never travels on the wire.",
+      "type": "string",
+      "enum": [
+        "renewable_resource",
+        "demand_level",
+        "net_surplus",
+        "export_stress",
+        "ramp_shape",
+        "calendar_season",
+        "recent_history",
+        "data_conditions"
+      ]
+    },
+    "driver_direction": {
+      "title": "DriverDirection",
+      "description": "`mixed` is deliberately absent. A grouped Shapley value is one number, so each of the eight always has a sign; only the client's merged `other` row can be mixed, and it is computed client-side so that the mixed rule lives in one place.",
+      "type": "string",
+      "enum": ["raises", "lowers"]
+    },
+    "driver": {
+      "title": "Driver",
+      "type": "object",
+      "properties": {
+        "code": { "$ref": "#/$defs/driver_code" },
+        "label_code": {
+          "type": "string",
+          "description": "A `t()` key, not copy. An English label travelling through the data layer is how a bilingual product goes monolingual again."
+        },
+        "phi_mwh": {
+          "type": "number",
+          "description": "The signed grouped Shapley contribution itself, in MWh."
+        },
+        "share": {
+          "$ref": "common.schema.json#/$defs/probability",
+          "description": "Share of the attributed *movement*: |phi_j| / sum_k |phi_k|, computed over **all eight** groups, not over the displayed ones. A denominator that does not exist until after the display cut cannot be put on a wire."
+        },
+        "direction": { "$ref": "#/$defs/driver_direction" },
+        "headline_feature": {
+          "type": "string",
+          "description": "The feature name whose reading is quoted beside the group."
+        },
+        "observed": { "type": ["number", "string"] },
+        "typical": { "type": ["number", "string"] },
+        "unit": { "$ref": "common.schema.json#/$defs/unit_code" },
+        "hour_disagreement": { "type": "number", "minimum": 0 },
+        "demoted": { "type": "boolean" }
+      },
+      "required": [
+        "code",
+        "label_code",
+        "phi_mwh",
+        "share",
+        "direction",
+        "headline_feature",
+        "observed",
+        "typical",
+        "unit",
+        "hour_disagreement",
+        "demoted"
+      ],
+      "additionalProperties": false
+    },
+    "attribution": {
+      "title": "DiagnosisAttribution",
+      "type": "object",
+      "properties": {
+        "target": { "type": "string", "enum": ["expected_mwh_day"] },
+        "total_attributed_mwh": {
+          "type": "number",
+          "description": "day_expected_mwh - baseline_expected_mwh."
+        },
+        "sum_abs_attributed_mwh": { "type": "number", "minimum": 0 },
+        "stderr_mwh": { "type": "number", "minimum": 0 },
+        "baseline_expected_mwh": { "type": "number" },
+        "day_expected_mwh": { "type": "number" },
+        "driver_group_version": { "type": "string" },
+        "driver_group_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "drivers": {
+          "description": "All eight groups, ranked by |share|. Not a shortlist: the cut is the client's.",
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/driver" }
+        },
+        "peak_hour_local": { "$ref": "common.schema.json#/$defs/hour_local" },
+        "peak_hour_drivers": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/driver" }
+        }
+      },
+      "required": [
+        "target",
+        "total_attributed_mwh",
+        "sum_abs_attributed_mwh",
+        "stderr_mwh",
+        "baseline_expected_mwh",
+        "day_expected_mwh",
+        "driver_group_version",
+        "driver_group_hash",
+        "drivers",
+        "peak_hour_local",
+        "peak_hour_drivers"
+      ],
+      "additionalProperties": false
+    },
+    "rule_flag": {
+      "title": "RuleFlag",
+      "description": "A domain rule that fired, as a code plus the facts it fired on. The sentence is the client's.",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "severity": { "type": "string", "enum": ["annotate", "demote", "withhold"] },
+        "facts": {
+          "type": "object",
+          "additionalProperties": { "type": ["string", "number", "boolean", "null"] }
+        }
+      },
+      "required": ["code", "severity", "facts"],
+      "additionalProperties": false
+    },
+    "narration": {
+      "title": "Narration",
+      "description": "The single settled exception to \"codes on the wire, never translated strings\": generated prose. `source` says whether the model or the template wrote it, so the panel's footnote stays true when the daily cap is reached.",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string" },
+        "source": { "type": "string", "enum": ["model", "template"] },
+        "locale": { "type": "string", "enum": ["pt-BR", "en-US"] },
+        "prompt_version": { "type": "string" }
+      },
+      "required": ["text", "source", "locale", "prompt_version"],
+      "additionalProperties": false
+    },
+    "observed_reasons_latest": {
+      "title": "ObservedReasonsLatest",
+      "description": "The most recent settled day's dominant restriction reason, as a code. The gloss is a `t()` key and is not returned (vocabulary rule 7).",
+      "type": "object",
+      "properties": {
+        "date": { "$ref": "common.schema.json#/$defs/civil_date" },
+        "top_reason": { "$ref": "common.schema.json#/$defs/reason_code" },
+        "top_reason_share": { "$ref": "common.schema.json#/$defs/probability" }
+      },
+      "required": ["date", "top_reason", "top_reason_share"],
+      "additionalProperties": false
+    }
+  }
+}

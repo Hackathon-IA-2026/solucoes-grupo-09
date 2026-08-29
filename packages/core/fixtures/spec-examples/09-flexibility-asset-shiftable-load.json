@@ -1,0 +1,12 @@
+{
+  "asset_type": "shiftable_load",
+  "label": "Flexible load",
+  "subsystem": "NE",
+  "max_power_mw": 70,
+  "max_shift_mw": 50,
+  "shift_window_hours": 3,
+  "daily_energy_mwh": 1200,
+  "recovery_time_hours": null,
+  "available_from": "00:00",
+  "available_to": "24:00"
+}

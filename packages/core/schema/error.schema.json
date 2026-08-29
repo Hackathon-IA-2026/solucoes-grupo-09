@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wattsteer.com/schema/error.schema.json",
+  "title": "ErrorEnvelope",
+  "description": "The body of every error this API returns. There is no second shape - not for validation, not for a 404, not for an upstream refusal. The closed code enum is `ERROR_STATUS` in `packages/core/src/errors.ts`, which this schema does not restate: `packages/core/test/schema-generated-types.test.ts` asserts the two agree member for member, so the TypeScript table stays the single authority (ticket 02 built it; this schema is generated against it).",
+  "type": "object",
+  "properties": {
+    "error": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "description": "A member of the closed enum. The only field a client branches on; it renders `t(\"error.\" + code)` and never the message.",
+          "type": "string",
+          "$comment": "The `enum` array is generated from ERROR_STATUS by scripts/generate-types.ts.",
+          "enum": [
+            "BAD_INPUT",
+            "REQUEST_INVALID",
+            "ROUTE_NOT_FOUND",
+            "INTERNAL",
+            "UPSTREAM_UNAVAILABLE",
+            "SERVICE_BUSY",
+            "PAYLOAD_TOO_LARGE",
+            "FORECAST_NOT_YET_PUBLISHED",
+            "FORECAST_UNAVAILABLE",
+            "MODEL_UNAVAILABLE",
+            "DATA_UNAVAILABLE",
+            "DIAGNOSIS_UNAVAILABLE",
+            "SUBSYSTEM_UNKNOWN",
+            "TARGET_DATE_OUT_OF_RANGE",
+            "DATE_RANGE_TOO_LARGE",
+            "GATE_PROFILE_UNKNOWN",
+            "LOCALE_UNSUPPORTED",
+            "RATE_LIMITED",
+            "OPTIMIZER_NOT_CONFIGURED",
+            "OPTIMIZER_UNAVAILABLE",
+            "OPTIMIZER_TIMEOUT",
+            "OPTIMIZER_NOT_READY",
+            "UPSTREAM_REJECTED",
+            "UPSTREAM_FAILED",
+            "SOLVER_GAP_UNCLOSED",
+            "SOLVER_TIMEOUT",
+            "SOLVER_BUG",
+            "SCENARIO_VERSION_UNSUPPORTED",
+            "SCENARIO_TOO_LARGE",
+            "ASSET_TYPE_UNKNOWN",
+            "SUBSYSTEM_MISMATCH",
+            "FIELD_NOT_ON_VARIANT",
+            "MAGNITUDE_OUT_OF_RANGE",
+            "RTE_OUT_OF_RANGE",
+            "EFFICIENCY_PAIR_INCOMPLETE",
+            "SOC_BOUNDS_INVALID",
+            "SOC_INITIAL_OUT_OF_BOUNDS",
+            "POWER_LIMIT_INCONSISTENT",
+            "SHIFT_EXCEEDS_CONNECTION",
+            "SHIFT_EXCEEDS_BASELINE",
+            "SHIFT_WINDOW_OUT_OF_RANGE",
+            "RECOVERY_TIME_OUT_OF_RANGE",
+            "AVAILABILITY_INVALID",
+            "ECONOMIC_ASSUMPTION_OUT_OF_RANGE",
+            "REPLAY_DATE_BEFORE_HOLDOUT_WINDOW",
+            "REPLAY_DATE_OUT_OF_RANGE",
+            "REPLAY_FORECAST_UNAVAILABLE",
+            "REPLAY_OBSERVATION_INCOMPLETE",
+            "REPLAY_INTEGRITY_VIOLATION"
+          ]
+        },
+        "message": {
+          "description": "English developer prose, for logs and `/docs`. **Never shown to a user.** A client that renders it has a bug.",
+          "type": "string"
+        },
+        "details": {
+          "description": "Optional machine-readable context, typed per code: the field path of a validation failure, the limit it broke, `lane_state` on a MODEL_UNAVAILABLE, `upstream_code` on an admitted upstream refusal. Never free-form prose.",
+          "type": "object",
+          "additionalProperties": {
+            "type": ["string", "number", "boolean", "null"]
+          }
+        },
+        "request_id": {
+          "description": "The `x-request-id` this failure was answered under, so a user-reported failure is one grep.",
+          "type": "string"
+        }
+      },
+      "required": ["code", "message"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["error"],
+  "additionalProperties": false
+}

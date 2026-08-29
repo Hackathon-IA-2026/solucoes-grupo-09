@@ -1,3 +1,5 @@
+import { SUBSYSTEM_CODES } from "@wattsteer/core/constants";
+import { TECHNOLOGIES } from "@wattsteer/core/domain";
 import { Elysia, t } from "elysia";
 import {
   CANONICAL_BASE_PATH,
@@ -114,10 +116,33 @@ const REGISTRY_QUERY = {
   on: t.String({ description: "Fleet date the question is asked about (ISO-8601)." }),
 };
 
-const SUBSYSTEM = t.Optional(
-  t.Union([t.Literal("N"), t.Literal("NE"), t.Literal("S"), t.Literal("SE")]),
-);
-const TECHNOLOGY = t.Optional(t.Union([t.Literal("WIND"), t.Literal("SOLAR")]));
+/**
+ * The two closed enums, built from `@wattsteer/core` rather than restated here.
+ *
+ * They were written out as literals while the shared package held no
+ * vocabulary, which made this file a **second definition** of two enums the
+ * domain model calls closed — and a gateway that has its own opinion about how
+ * many subsystems there are is exactly the drift `packages/core` exists to
+ * remove. Deriving them means a fifth subsystem, or a lowercase technology,
+ * cannot be admitted here alone.
+ *
+ * `t.Union` needs a non-empty tuple, so the arrays are read through a helper
+ * that asserts they are one. That assertion is not ceremony: an empty enum
+ * would compile to a query parameter that accepts nothing, which is a 422 on
+ * every request and a very confusing one.
+ */
+const literalUnion = <T extends string>(values: readonly T[]) => {
+  const members = values.map((value) => t.Literal(value));
+  const [first, ...rest] = members;
+  if (first === undefined) {
+    throw new RangeError("A closed enum with no members cannot be a query parameter");
+  }
+  return t.Union([first, ...rest]);
+};
+
+const SUBSYSTEM = t.Optional(literalUnion(SUBSYSTEM_CODES));
+/** Uppercase, case-sensitively: `technology=wind` is a 422, not a synonym. */
+const TECHNOLOGY = t.Optional(literalUnion(TECHNOLOGIES));
 
 /** Comma-separated ids, because a repeated query key is not portable. */
 const idList = (raw?: string): string[] | undefined =>
