@@ -48,6 +48,7 @@ from .optimizer.result import (
 )
 from .promotions import PROMOTION_LOG_FILENAME
 from .publication import (
+    SERVED_ORIGIN_KIND,
     ForecastPublication,
     PublicationError,
     PublicationRefusedError,
@@ -440,7 +441,14 @@ async def publish_forecast(
 
     try:
         publication: ForecastPublication = build_publication(
-            rows, lane=lane, loaded=loaded, target_date=target_date
+            rows,
+            lane=lane,
+            loaded=loaded,
+            target_date=target_date,
+            # Said, not defaulted. This route is the serving path and the only
+            # thing it may mint is a record; the counterfactual publication
+            # instant belongs to the backtest, which does not come through here.
+            origin_kind=SERVED_ORIGIN_KIND,
         )
     except PublicationError as error:
         # A 500 and not a 422: the caller asked for a well-formed thing and

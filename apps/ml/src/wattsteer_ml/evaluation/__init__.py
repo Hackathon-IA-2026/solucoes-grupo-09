@@ -15,8 +15,11 @@ harnesses, two outputs, two names.
   P50-planned day has any hour to act in.
 - :mod:`~wattsteer_ml.evaluation.metrics` — the metrics table, and `qloss_mwh`.
 - :mod:`~wattsteer_ml.evaluation.ladder` — the five rungs, on identical folds.
+- :mod:`~wattsteer_ml.evaluation.holdout` — `docs/specs/replay.md`'s one
+  storage requirement: the out-of-fold forecasts, kept rather than
+  discarded, and stamped `backfilled_holdout` so they cannot be served.
 
-**The last two are imported as submodules, not re-exported here.** They read
+**The last three are imported as submodules, not re-exported here.** They read
 :mod:`wattsteer_ml.training`, which reads this package; re-exporting them would
 close the cycle and make `import wattsteer_ml.evaluation` depend on LightGBM
 being installed. `from wattsteer_ml.evaluation.metrics import MetricsRow` is the
