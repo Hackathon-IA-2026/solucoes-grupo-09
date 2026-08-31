@@ -4,11 +4,15 @@ import {
   date,
   doublePrecision,
   integer,
+  jsonb,
   pgView,
   text,
   timestamp,
 } from "drizzle-orm/pg-core";
 import {
+  diagnosisAttributionGrain,
+  diagnosisDriverDirection,
+  diagnosisRuleAction,
   forecastGateProfile,
   forecastOriginKind,
   forecastProducer,
@@ -1134,4 +1138,179 @@ export const canonicalForecastDay = pgView("canonical_forecast_day", {
   where ingested_at <= canonical_as_of()
   order by subsystem, target_date, origin_kind, gate_profile,
            ingested_at desc, data_version desc
+`);
+
+// ---------------------------------------------------------------------------
+// The published attribution, as canonical reads — diagnosis ticket 06.
+//
+// Two views, parent and children, and the second is defined *through* the
+// first. A driver row is only meaningful as part of the vintage it was written
+// with, so selecting drivers independently — by their own newest `ingested_at`
+// — could return the day's eight from one publication and the peak hour's from
+// another. Joining onto the parent view makes "the drivers you read are the
+// drivers of the attribution you read" a property of the SQL.
+// ---------------------------------------------------------------------------
+
+/**
+ * `AsOf(t)` over the published attribution.
+ *
+ * The `DISTINCT ON` key is the whole business key —
+ * (`subsystem`, `target_date`, `origin_kind`, `gate_profile`) — for the reason
+ * `canonical_forecast_day`'s is: a record and a reconstruction of the same day
+ * coexist, and the early and the late gate are two explanations of one day
+ * rather than two versions of one explanation. Supersession happens *within* a
+ * gate, where a re-publication is a new `data_version`.
+ *
+ * `driver_group_hash` and `background_source` are projected rather than
+ * filtered on. A reader is meant to *see* which grouping ranked these bars and
+ * which background defined their "typical", and a view that quietly returned
+ * only rows agreeing with today's map would answer "what did we say at D−1"
+ * with silence on exactly the days the question is interesting.
+ */
+export const canonicalDiagnosisAttribution = pgView("canonical_diagnosis_attribution", {
+  subsystem: subsystemCode().notNull(),
+  /** The civil day in `America/Sao_Paulo` that was explained. */
+  targetDate: date({ mode: "string" }).notNull(),
+  /** `served` or `backfilled_holdout` — a record, or a reconstruction. */
+  originKind: forecastOriginKind().notNull(),
+  gateProfile: forecastGateProfile().notNull(),
+  forecastProducer: forecastProducer().notNull(),
+  /** `ForecastOrigin.run_label` — the artifact that produced the numbers. */
+  runLabel: text().notNull(),
+  featureSet: text().notNull(),
+  correctionRegime: text().notNull(),
+  thresholdMw: doublePrecision().notNull(),
+  /** `expected_mwh_day` — what the eight bars decompose. */
+  target: text().notNull(),
+  explains: text().notNull(),
+  hoursAttributed: integer().notNull(),
+  baselineExpectedMwh: doublePrecision().notNull(),
+  dayExpectedMwh: doublePrecision().notNull(),
+  totalAttributedMwh: doublePrecision().notNull(),
+  sumAbsAttributedMwh: doublePrecision().notNull(),
+  localAccuracyResidualMwh: doublePrecision().notNull(),
+  topTwoShare: doublePrecision().notNull(),
+  attributionStderrMwh: doublePrecision().notNull(),
+  baselineStderrMwh: doublePrecision().notNull(),
+  stderrResamples: integer().notNull(),
+  stderrSeed: integer().notNull(),
+  peakHourLocal: integer().notNull(),
+  peakHourExpectedMwh: doublePrecision().notNull(),
+  peakHourBaselineExpectedMwh: doublePrecision().notNull(),
+  /** The vocabulary the bars were ranked under, so a change is visible. */
+  driverGroupVersion: text().notNull(),
+  driverGroupHash: text().notNull(),
+  /** Which matched background defined "typical", and how it was drawn. */
+  backgroundSource: text().notNull(),
+  backgroundSeed: integer().notNull(),
+  backgroundRows: integer().notNull(),
+  coalitions: integer().notNull(),
+  /** Every rule that fired, with the inputs that fired it. */
+  ruleFlags: jsonb().notNull(),
+  /** The strictest action any of them took, or null when none fired. */
+  governingRuleAction: diagnosisRuleAction(),
+  ...rowVintage,
+}).as(sql`
+  select distinct on (subsystem, target_date, origin_kind, gate_profile)
+    subsystem,
+    target_date,
+    origin_kind,
+    gate_profile,
+    forecast_producer,
+    run_label,
+    feature_set,
+    correction_regime,
+    threshold_mw,
+    target,
+    explains,
+    hours_attributed,
+    baseline_expected_mwh,
+    day_expected_mwh,
+    total_attributed_mwh,
+    sum_abs_attributed_mwh,
+    local_accuracy_residual_mwh,
+    top_two_share,
+    attribution_stderr_mwh,
+    baseline_stderr_mwh,
+    stderr_resamples,
+    stderr_seed,
+    peak_hour_local,
+    peak_hour_expected_mwh,
+    peak_hour_baseline_expected_mwh,
+    driver_group_version,
+    driver_group_hash,
+    background_source,
+    background_seed,
+    background_rows,
+    coalitions,
+    rule_flags,
+    governing_rule_action,
+    data_version,
+    published_at,
+    ingested_at
+  from diagnosis_attribution
+  where ingested_at <= canonical_as_of()
+  order by subsystem, target_date, origin_kind, gate_profile,
+           ingested_at desc, data_version desc
+`);
+
+/**
+ * `AsOf(t)` over the eight contributions — both rankings, ranked.
+ *
+ * **All eight groups, always.** The `share ≥ 0.03` cut and the merge into one
+ * `other` row are the client's, applied to identical wire numbers on both
+ * sides; a view that applied the cut would be publishing shares whose
+ * denominator no longer exists. `demoted` travels as a flag beside a full
+ * contribution for the same reason: a `demote` rule moves a bar below the fold
+ * and never removes it, and a row that is missing cannot be shown to be intact.
+ */
+export const canonicalDiagnosisDriver = pgView("canonical_diagnosis_driver", {
+  subsystem: subsystemCode().notNull(),
+  targetDate: date({ mode: "string" }).notNull(),
+  originKind: forecastOriginKind().notNull(),
+  gateProfile: forecastGateProfile().notNull(),
+  dataVersion: integer().notNull(),
+  /** The day's ranking, or the peak hour's. */
+  grain: diagnosisAttributionGrain().notNull(),
+  driverGroup: text().notNull(),
+  labelCode: text().notNull(),
+  rank: integer().notNull(),
+  phiMwh: doublePrecision().notNull(),
+  /** A share of all eight groups, never of the displayed rows. */
+  share: doublePrecision().notNull(),
+  direction: diagnosisDriverDirection().notNull(),
+  /** Day rows only — one hour has nothing to disagree with. */
+  hourDisagreement: doublePrecision(),
+  headlineFeature: text().notNull(),
+  observed: doublePrecision().notNull(),
+  typical: doublePrecision().notNull(),
+  unit: text().notNull(),
+  demoted: boolean().notNull(),
+}).as(sql`
+  select
+    d.subsystem,
+    d.target_date,
+    d.origin_kind,
+    d.gate_profile,
+    d.data_version,
+    d.grain,
+    d.driver_group,
+    d.label_code,
+    d.rank,
+    d.phi_mwh,
+    d.share,
+    d.direction,
+    d.hour_disagreement,
+    d.headline_feature,
+    d.observed,
+    d.typical,
+    d.unit,
+    d.demoted
+  from diagnosis_attribution_driver d
+  join canonical_diagnosis_attribution a
+    on a.subsystem = d.subsystem
+   and a.target_date = d.target_date
+   and a.origin_kind = d.origin_kind
+   and a.gate_profile = d.gate_profile
+   and a.data_version = d.data_version
 `);

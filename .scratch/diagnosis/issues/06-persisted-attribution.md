@@ -23,7 +23,7 @@ publication jobs and the worker's private call into the modelling service; this
 ticket owns the row's content, its grain and its write. Whether and how Time
 Machine renders it belongs to the replay ticket set, not here.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The attribution table exists at the stated grain, append-only, with the project's four time columns
 - [ ] A published attribution carries the eight day contributions, the baseline, the day expectation, the standard error and the driver-group hash
