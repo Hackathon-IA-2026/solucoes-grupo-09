@@ -5,8 +5,10 @@ import {
   check,
   date,
   doublePrecision,
+  foreignKey,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   primaryKey,
@@ -2708,6 +2710,383 @@ export const curtailmentForecastDay = pgTable(
     check(
       "curtailment_forecast_day_risk_edges_ordered",
       sql`0 < ${t.riskBinElevatedFrom} and ${t.riskBinElevatedFrom} < ${t.riskBinHighFrom} and ${t.riskBinHighFrom} < 1`,
+    ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// The published attribution — diagnosis ticket 06.
+//
+// `docs/specs/diagnosis.md`, "Persistence, so Replay can read it": every
+// attribution the product publishes is written once, at publication time, so
+// that "what did we say at D−1" is a **query** rather than a re-run against a
+// model that has since been retrained. The same sentence the forecast tables
+// were built on, applied to the one thing they do not carry.
+// ---------------------------------------------------------------------------
+
+/**
+ * Which of the two attributions on a publication a driver row belongs to.
+ *
+ * `docs/specs/diagnosis.md` returns the peak hour's eight contributions
+ * **beside** the day's, never instead of them, so the two are one enum value
+ * apart on rows that are otherwise identical in shape. A `grain` column rather
+ * than a `local_hour` one because the peak hour's identity is on the parent
+ * (`peak_hour_local`): an hour that is not the peak has no attribution stored,
+ * and a nullable hour column would suggest one could exist.
+ */
+export const diagnosisAttributionGrain = pgEnum("diagnosis_attribution_grain", [
+  "day",
+  "peak_hour",
+]);
+
+/** The sign of a contribution. Never a separate decision from `phi_mwh`. */
+export const diagnosisDriverDirection = pgEnum("diagnosis_driver_direction", [
+  "raises",
+  "lowers",
+]);
+
+/**
+ * What a fired domain rule did — `docs/specs/diagnosis.md`'s one-way valve.
+ *
+ * Three actions and no fourth. `annotate` attaches a typed fact the narration
+ * is required to state, `demote` forces a group below the fold, `withhold`
+ * suppresses the model narration so the template renders instead. **No rule may
+ * change a number and no rule may delete a driver**, which is why this enum
+ * appears on the *parent* row and on `demoted`, and nowhere near a `phi_mwh`.
+ *
+ * The column carrying the strictest action is nullable, and the null means "no
+ * rule fired". An absence rather than a fourth member: a `none` action would be
+ * an action, and something would eventually take it.
+ */
+export const diagnosisRuleAction = pgEnum("diagnosis_rule_action", [
+  "annotate",
+  "demote",
+  "withhold",
+]);
+
+/**
+ * One published attribution: a subsystem's day, as the product explained it.
+ *
+ * **The grain is a publication.** `docs/specs/diagnosis.md` writes it
+ * `(artifact_id, subsystem, target_date, published_at)`; the key here is
+ * (`subsystem`, `target_date`, `origin_kind`, `gate_profile`) with
+ * `data_version` completing the primary key, which is that statement in this
+ * schema's vocabulary and is the forecast tables' key exactly:
+ *
+ * - `published_at` **is** `gate_at(target_date, gate_profile)`, so it is
+ *   determined by two components of the key already, and a key column that
+ *   cannot vary independently is not a key column.
+ * - `run_label` is the `artifact_id`, and it is an identity column rather than
+ *   a key component on purpose. A re-publication from a newly promoted artifact
+ *   is a **new vintage of the same day's explanation** — a `data_version`, kept
+ *   beside its predecessor and reachable at its own `as_of` — whereas a key
+ *   containing the artifact id would make the two unrelated rows and leave
+ *   `AsOf(t)` with two answers to one question.
+ * - `origin_kind` is in the key for the reason it is in the forecast's: a
+ *   record and a reconstruction of the same day coexist and must stay
+ *   distinguishable, never merged.
+ *
+ * **The row is the evidence.** A rule may annotate, demote or withhold; it may
+ * never change a number and never delete a driver. So the eight contributions
+ * are written whatever fired, `rule_flags` travels beside them, and the
+ * strictest action is recorded rather than applied to any figure in this table.
+ *
+ * **`driver_group_hash` is on the row**, not looked up at read time. The map is
+ * data with a version and a hash over its feature→group pairs, and a stored
+ * attribution whose grouping has since changed must be identifiable as such
+ * rather than silently re-rendered under a new map. The hash is what makes that
+ * a comparison instead of a guess.
+ *
+ * **`background_source` is the diagnosis's `correction_regime`.** The forecast
+ * rows name the *rule* that composed their band because `run_label` changes on
+ * retrains that changed nothing and does not change when a rule changes under a
+ * promoted bundle. The attribution has the same exposure and a live instance of
+ * it: "typical" is defined by the matched background, ticket 03's is a seeded
+ * fixture rather than the artifact's, and that hand-back has not landed. A row
+ * that does not say which background it was measured against cannot be told
+ * apart from one measured against the other.
+ */
+export const diagnosisAttribution = pgTable(
+  "diagnosis_attribution",
+  {
+    subsystem: subsystemCode().notNull(),
+    /** The civil day in `America/Sao_Paulo` that was explained. */
+    targetDate: date({ mode: "string" }).notNull(),
+    originKind: forecastOriginKind().notNull(),
+    gateProfile: forecastGateProfile().notNull(),
+
+    ...forecastOriginColumns(),
+
+    /** `curtailment_threshold_mw` in force for the forecast being explained. */
+    thresholdMw: doublePrecision().notNull(),
+
+    /**
+     * What was attributed — `expected_mwh_day`, and checked below.
+     *
+     * Stored so the row says it rather than the reader assuming it, and
+     * constrained so a row explaining the P90, the band's width or the
+     * occurrence probability cannot arrive here wearing this table's name.
+     */
+    target: text().notNull(),
+    /**
+     * The disclaimer code the screen is required to state once: the bars
+     * explain the **expected MWh**, not the band. A code, never prose.
+     */
+    explains: text().notNull(),
+
+    /** 24, asserted. A day summed from fewer hours is a different quantity. */
+    hoursAttributed: integer().notNull(),
+
+    /** `Σ_t v_t(∅)` — a typical day in this subsystem, in MWh. */
+    baselineExpectedMwh: doublePrecision().notNull(),
+    /** `Σ_t g(x_t)` — this day's composed expected MWh. */
+    dayExpectedMwh: doublePrecision().notNull(),
+    /** `Σ_j Φ_j`. Equal to the movement, and stored so a reader can check it. */
+    totalAttributedMwh: doublePrecision().notNull(),
+    /** `Σ_j |Φ_j|` — the shares' denominator, and the movement's size. */
+    sumAbsAttributedMwh: doublePrecision().notNull(),
+    /** Published rather than swallowed. Zero in exact arithmetic. */
+    localAccuracyResidualMwh: doublePrecision().notNull(),
+    /**
+     * The two largest shares, added at publication time.
+     *
+     * On the row for the reason it is on the narration payload: the renderer
+     * may not compute, and that rule is only enforceable if nothing the copy
+     * wants requires arithmetic. A figure the request path adds up is
+     * indistinguishable from one a language model invented.
+     */
+    topTwoShare: doublePrecision().notNull(),
+
+    /**
+     * The bootstrap over the background sample, and its parameters.
+     *
+     * `attribution_stderr_mwh` is what turns "this ranking is noise" into a
+     * measurement — the `attribution_is_noise` rule fires on
+     * `Σ_j |Φ_j| ≤ 2 × stderr`. Stored with its resample count and its seed,
+     * because a standard error whose sampling parameters are unknown is a
+     * number nobody can reproduce.
+     */
+    attributionStderrMwh: doublePrecision().notNull(),
+    baselineStderrMwh: doublePrecision().notNull(),
+    stderrResamples: integer().notNull(),
+    stderrSeed: integer().notNull(),
+
+    /** The local hour with the largest `E[Y_t]`, and that hour's own figures. */
+    peakHourLocal: integer().notNull(),
+    peakHourExpectedMwh: doublePrecision().notNull(),
+    peakHourBaselineExpectedMwh: doublePrecision().notNull(),
+
+    /** The vocabulary the eight bars were ranked under. See the table's note. */
+    driverGroupVersion: text().notNull(),
+    driverGroupHash: text().notNull(),
+
+    /**
+     * Which matched background defined "typical", and how it was drawn.
+     *
+     * `artifact` is the frozen sample in the joblib bundle; `base_fit` is one
+     * drawn from the base-fit block under a stamped seed. The seed and the row
+     * count sit beside it because a background is reproducible only with both.
+     */
+    backgroundSource: text().notNull(),
+    backgroundSeed: integer().notNull(),
+    backgroundRows: integer().notNull(),
+    /**
+     * `2⁸`. "Exact, not sampled" is a claim the row carries rather than one a
+     * reader takes on trust.
+     */
+    coalitions: integer().notNull(),
+
+    /**
+     * Every rule that fired, with the inputs that fired it.
+     *
+     * `[{ "code": …, "action": "annotate" | "demote" | "withhold",
+     * "facts": { … } }]`. A strange narration is traced back to the rule that
+     * shaped it by reading this column, which is the only reason it exists —
+     * nothing downstream re-evaluates a rule to find out what one did.
+     */
+    ruleFlags: jsonb().notNull().default([]),
+    /**
+     * The strictest action any fired rule took — `withhold` > `demote` >
+     * `annotate` — or null when none fired. It governs the *narration*, and it
+     * governs nothing in this table's numbers.
+     */
+    governingRuleAction: diagnosisRuleAction(),
+
+    ...forecastVintageColumns(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.subsystem, t.targetDate, t.originKind, t.gateProfile, t.dataVersion],
+    }),
+    index("diagnosis_attribution_as_of").on(t.targetDate, t.subsystem, t.ingestedAt),
+    // The explanation is published with the forecast it explains, at the same
+    // gate, and the gate precedes the local day. The same inequality that makes
+    // a forecast row a forecast.
+    check(
+      "diagnosis_attribution_is_a_forecast",
+      sql`${t.publishedAt} < (${t.targetDate}::timestamp at time zone 'America/Sao_Paulo')`,
+    ),
+    check("diagnosis_attribution_target", sql`${t.target} = 'expected_mwh_day'`),
+    check("diagnosis_attribution_whole_day", sql`${t.hoursAttributed} = 24`),
+    check("diagnosis_attribution_peak_hour", sql`${t.peakHourLocal} between 0 and 23`),
+    check(
+      "diagnosis_attribution_stderr_non_negative",
+      sql`${t.attributionStderrMwh} >= 0 and ${t.baselineStderrMwh} >= 0`,
+    ),
+    check(
+      "diagnosis_attribution_sum_abs_non_negative",
+      sql`${t.sumAbsAttributedMwh} >= 0`,
+    ),
+    check("diagnosis_attribution_top_two_share", sql`${t.topTwoShare} between 0 and 1`),
+    check(
+      "diagnosis_attribution_measured_against_something",
+      sql`${t.backgroundRows} > 0 and ${t.coalitions} > 0 and ${t.stderrResamples} > 0`,
+    ),
+    // The hash is what a changed grouping is recognised by, so a row carrying
+    // an empty one carries nothing.
+    check(
+      "diagnosis_attribution_group_hash_present",
+      sql`${t.driverGroupHash} <> '' and ${t.driverGroupVersion} <> ''`,
+    ),
+    // An array, always — `[]` when nothing fired. A rule log that is sometimes
+    // an object and sometimes a list is one every reader has to branch on.
+    check(
+      "diagnosis_attribution_rule_flags_array",
+      sql`jsonb_typeof(${t.ruleFlags}) = 'array'`,
+    ),
+  ],
+);
+
+/**
+ * One driver group's contribution to one published attribution.
+ *
+ * Sixteen rows per publication per subsystem: the day's eight and the peak
+ * hour's eight. A child table rather than a JSON blob on the parent, because
+ * every property the spec asserts about these numbers — that all eight are
+ * present, that a share is a share of all eight rather than of the displayed
+ * rows, that a direction is never a separate decision from a sign — is a
+ * property the database can hold about a row and cannot hold about a document.
+ *
+ * **The foreign key is the "no partial publication" guarantee.** A driver row
+ * cannot exist without the exact vintage of the parent it belongs to, so a
+ * half-written publication is not representable even if the transaction that
+ * writes both were somehow torn.
+ *
+ * **A rule may never delete a driver.** `demoted` is where a `demote` action
+ * lands, and it is a display fact stored beside the number rather than a
+ * replacement for it: the contribution, its sign and its share are what the
+ * model said, and they are written whatever any rule decided. `withhold` has no
+ * column here at all — it acts on the narration and never on these rows.
+ */
+export const diagnosisAttributionDriver = pgTable(
+  "diagnosis_attribution_driver",
+  {
+    subsystem: subsystemCode().notNull(),
+    targetDate: date({ mode: "string" }).notNull(),
+    originKind: forecastOriginKind().notNull(),
+    gateProfile: forecastGateProfile().notNull(),
+    dataVersion: integer().notNull(),
+    /** The day's ranking, or the peak hour's. */
+    grain: diagnosisAttributionGrain().notNull(),
+
+    /**
+     * The group code — `net_surplus`, `demand_level`, … — as text rather than
+     * as an enum.
+     *
+     * The eight are data: they live in `driver_groups.yaml` with a version and
+     * a hash, and the hash on the parent says which vocabulary this row was
+     * ranked under. A Postgres enum would be a second authority to migrate in
+     * step with a YAML file, and a row written under an older map would become
+     * unreadable at exactly the moment it is most interesting.
+     */
+    driverGroup: text().notNull(),
+    /** The translation key. Codes travel; the client translates. */
+    labelCode: text().notNull(),
+    /** `1` is the largest `|share|`. Stored, because the ranking is the answer. */
+    rank: integer().notNull(),
+
+    /** `Φ_j` in MWh, signed. A statement about the model, never about the grid. */
+    phiMwh: doublePrecision().notNull(),
+    /**
+     * `|Φ_j| / Σ_k |Φ_k|` **over all eight groups**, never over the rows the
+     * screen displays — the display cut is applied to this very number, so a
+     * denominator that does not exist until after the cut cannot be stored.
+     */
+    share: doublePrecision().notNull(),
+    direction: diagnosisDriverDirection().notNull(),
+    /**
+     * `Σ_t |φ_{j,t}| / max(|Σ_t φ_{j,t}|, ε)` — how much the group's hours
+     * disagreed with each other. Day rows only, and the check below makes that
+     * exact: the peak hour is one hour and has nothing to disagree with.
+     */
+    hourDisagreement: doublePrecision(),
+
+    /**
+     * The one feature whose value the screen may show beside the bar, and the
+     * observed/typical pair for it.
+     *
+     * Numbers with a unit code, never preformatted strings: a preformatted
+     * value is a translated string by another name. Stored rather than derived
+     * at read time because deriving `typical` means holding the matched
+     * background, which means loading the artifact — the one thing a stored
+     * attribution exists to make unnecessary.
+     */
+    headlineFeature: text().notNull(),
+    observed: doublePrecision().notNull(),
+    typical: doublePrecision().notNull(),
+    unit: text().notNull(),
+
+    /** Whether a `demote` rule forced this group below the fold. */
+    demoted: boolean().notNull().default(false),
+  },
+  (t) => [
+    primaryKey({
+      columns: [
+        t.subsystem,
+        t.targetDate,
+        t.originKind,
+        t.gateProfile,
+        t.dataVersion,
+        t.grain,
+        t.driverGroup,
+      ],
+    }),
+    foreignKey({
+      name: "diagnosis_attribution_driver_publication",
+      columns: [t.subsystem, t.targetDate, t.originKind, t.gateProfile, t.dataVersion],
+      foreignColumns: [
+        diagnosisAttribution.subsystem,
+        diagnosisAttribution.targetDate,
+        diagnosisAttribution.originKind,
+        diagnosisAttribution.gateProfile,
+        diagnosisAttribution.dataVersion,
+      ],
+    }),
+    index("diagnosis_attribution_driver_ranked").on(
+      t.targetDate,
+      t.subsystem,
+      t.grain,
+      t.rank,
+    ),
+    check("diagnosis_attribution_driver_share", sql`${t.share} between 0 and 1`),
+    check("diagnosis_attribution_driver_rank", sql`${t.rank} between 1 and 8`),
+    // The sign is not a separate decision. A row whose direction disagrees with
+    // its own contribution is the one corruption no rule could have caused and
+    // a writer could.
+    check(
+      "diagnosis_attribution_driver_direction_follows_sign",
+      sql`(${t.phiMwh} < 0) = (${t.direction} = 'lowers')`,
+    ),
+    // Present exactly on the day's rows, absent exactly on the peak hour's.
+    check(
+      "diagnosis_attribution_driver_disagreement_is_a_day_figure",
+      sql`(${t.grain} = 'day') = (${t.hourDisagreement} is not null)`,
+    ),
+    // `Σ_t |φ_t| ≥ |Σ_t φ_t|` is a triangle inequality; a ratio below 1 means
+    // the two were computed from different hours.
+    check(
+      "diagnosis_attribution_driver_disagreement_at_least_one",
+      sql`${t.hourDisagreement} is null or ${t.hourDisagreement} >= 1`,
     ),
   ],
 );

@@ -246,6 +246,13 @@
       "when": 1788014575344,
       "tag": "0034_the_published_forecast",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1788139871945,
+      "tag": "0035_the_persisted_attribution",
+      "breakpoints": true
     }
   ]
 }
