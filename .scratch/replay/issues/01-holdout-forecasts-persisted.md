@@ -36,7 +36,7 @@ out-of-fold predictions and currently discards them) and **Forecaster 14** (pers
 **Feature-engineering spec** owns `gate_at(target_date, gate_profile)`. All are
 consumed here; none is specified here.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] `origin_kind` exists on `ForecastOrigin`, round-trips through persistence and through the API, and appears on every surface that carries an origin
 - [ ] A backtest run persists its out-of-fold predictions rather than discarding them, at (`Subsystem`, `valid_time`) grain, carrying the fold artifact's id as `run_label`

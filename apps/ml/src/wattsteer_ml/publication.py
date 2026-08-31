@@ -66,6 +66,18 @@ and the P50 split is carried beside it because it is already computed and a
 stored figure nobody can reconstruct later is a figure that has to be re-run for.
 There is no ``p10`` under a split and there is nowhere for one to go.
 
+**Every row says whether it is a record or a reconstruction.**
+``origin_kind`` is on the publication itself and therefore on every row it
+produces. `docs/specs/replay.md` makes it load-bearing: a ``served`` row is a
+record of a publication that happened, while a ``backfilled_holdout`` row —
+minted by :mod:`wattsteer_ml.evaluation.holdout` from a fold's held-out days —
+carries a *counterfactual* ``published_at``, the instant the gate would have
+been for a day nothing was ever published for. The two share this module's
+composition on purpose, so a replayed band is the band the product would have
+shown; they are kept apart by the discriminator, and the gateway's
+``/v1/forecast/day-ahead`` filters ``origin_kind = 'served'`` in the query
+rather than in a branch. :func:`build_publication` has **no default** for it.
+
 **Every row is stamped with its correction regime.**
 :data:`~wattsteer_ml.training.conformal.CORRECTION_REGIME` names the rule that
 produced the band, not the release that shipped it. Forecaster ticket 21 is open
@@ -110,12 +122,24 @@ from wattsteer_ml.training import (
 #: path assembled.
 HOUR_DERIVATION = "hurdle_mixture"
 
-#: ``origin_kind`` on every row this module produces. A publication is a
-#: **record**; `docs/specs/replay.md`'s ``backfilled_holdout`` is a
-#: counterfactual publication instant and is produced by the backtest, never
-#: here. The field is written rather than defaulted so the discriminator is on
-#: the row from the moment it is minted.
-SERVED_ORIGIN_KIND: Literal["served"] = "served"
+#: The two things a `Forecast` row can be. `docs/specs/replay.md`: ``served`` is
+#: a **record** of a publication that happened; ``backfilled_holdout`` is a
+#: **reconstruction** whose ``published_at`` is the instant the gate *would* have
+#: been. Storing the second without a discriminator would make it
+#: indistinguishable from the first, and the discriminator is the whole reason
+#: the two may share a table.
+OriginKind = Literal["served", "backfilled_holdout"]
+
+#: ``origin_kind`` on a publication the serving path produces. The field is
+#: written rather than defaulted so the discriminator is on the row from the
+#: moment it is minted: :func:`build_publication` has no default for it and
+#: every caller says which of the two it is producing.
+SERVED_ORIGIN_KIND: OriginKind = "served"
+
+#: ``origin_kind`` on a publication reconstructed from a fold's held-out days.
+#: Minted only by :mod:`wattsteer_ml.evaluation.holdout`, and never returned by
+#: ``/v1/forecast/day-ahead`` — the gateway filters ``served`` in the query.
+BACKFILLED_HOLDOUT_ORIGIN_KIND: OriginKind = "backfilled_holdout"
 
 #: ``ForecastOrigin.producer`` for a WattSteer curtailment forecast.
 PRODUCER: Literal["wattsteer"] = "wattsteer"
@@ -268,7 +292,14 @@ class ForecastPublication:
     lane: Lane
     artifact_id: str
     target_date: date
-    #: ``gate_at(target_date, gate_profile)``, read off the feature rows.
+    #: Record or reconstruction. Required, and required *here* rather than at
+    #: the point the payload is built, so there is no moment at which a
+    #: publication exists without knowing which of the two it is.
+    origin_kind: OriginKind
+    #: ``gate_at(target_date, gate_profile)``, read off the feature rows. On a
+    #: ``backfilled_holdout`` publication this is the counterfactual instant —
+    #: the same gate, resolved by the same database function, for a day that was
+    #: never actually published.
     published_at: datetime
     threshold_mw: float
     feature_set: str
@@ -299,7 +330,7 @@ class ForecastPublication:
                 "producer": PRODUCER,
                 "run_label": self.artifact_id,
                 "published_at": self.published_at.isoformat(),
-                "origin_kind": SERVED_ORIGIN_KIND,
+                "origin_kind": self.origin_kind,
                 "gate_profile": self.lane.gate_profile,
             },
             "artifact": {
@@ -321,6 +352,7 @@ def build_publication(
     lane: Lane,
     loaded: LoadedArtifact,
     target_date: date,
+    origin_kind: OriginKind,
 ) -> ForecastPublication:
     """Compose one lane's day into the rows that will be persisted.
 
@@ -332,6 +364,11 @@ def build_publication(
         loaded: the bundle and its card, from
             :func:`~wattsteer_ml.training.bundle.load_artifact`.
         target_date: the civil day being forecast, checked against the rows.
+        origin_kind: :data:`SERVED_ORIGIN_KIND` for the serving path,
+            :data:`BACKFILLED_HOLDOUT_ORIGIN_KIND` for a fold's held-out day.
+            There is no default: a publication that could not say which of the
+            two it is would be exactly the row `docs/specs/replay.md` refuses to
+            let exist.
 
     Raises:
         PublicationError: the rows are not one target date's, carry no gate, or
@@ -377,6 +414,7 @@ def build_publication(
         lane=lane,
         artifact_id=loaded.artifact_id,
         target_date=target_date,
+        origin_kind=origin_kind,
         published_at=published_at,
         threshold_mw=bundle.threshold_mw,
         feature_set=lane.feature_set,

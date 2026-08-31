@@ -47,6 +47,7 @@ from wattsteer_ml.lanes import Lane
 from wattsteer_ml.promotions import PROMOTION_LOG_FILENAME, PromotionRecord, append
 from wattsteer_ml.publication import (
     HOUR_DERIVATION,
+    SERVED_ORIGIN_KIND,
     ForecastPublication,
     PublicationError,
     PublicationRefusedError,
@@ -105,7 +106,11 @@ def published(
     serving_rows: Sequence[dict[str, Any]], loaded: LoadedArtifact, target_day: date
 ) -> ForecastPublication:
     return build_publication(
-        serving_rows, lane=LANE, loaded=loaded, target_date=target_day
+        serving_rows,
+        lane=LANE,
+        loaded=loaded,
+        target_date=target_day,
+        origin_kind=SERVED_ORIGIN_KIND,
     )
 
 
@@ -284,14 +289,26 @@ def test_two_gates_in_one_publication_are_refused(
     rows = [dict(row) for row in serving_rows]
     rows[0]["gate_at"] = rows[0]["gate_at"] - timedelta(hours=10)
     with pytest.raises(PublicationError, match="distinct"):
-        build_publication(rows, lane=LANE, loaded=loaded, target_date=target_day)
+        build_publication(
+            rows,
+            lane=LANE,
+            loaded=loaded,
+            target_date=target_day,
+            origin_kind=SERVED_ORIGIN_KIND,
+        )
 
 
 def test_a_publication_of_no_rows_is_refused_rather_than_empty(
     loaded: LoadedArtifact, target_day: date
 ) -> None:
     with pytest.raises(PublicationError):
-        build_publication([], lane=LANE, loaded=loaded, target_date=target_day)
+        build_publication(
+            [],
+            lane=LANE,
+            loaded=loaded,
+            target_date=target_day,
+            origin_kind=SERVED_ORIGIN_KIND,
+        )
 
 
 # --- the day grain, which is the box this ticket inherited --------------------
