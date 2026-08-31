@@ -3,6 +3,7 @@ import { config } from "../config.js";
 import type { Database } from "../database/connection.js";
 import {
   type ForecastPublication,
+  PublicationPayloadError,
   type PublicationWriteResult,
   parsePublication,
   writePublication,
@@ -59,6 +60,19 @@ export interface PublishForecastRequest {
   lane: string;
   /** The civil day to publish. The service defaults it to tomorrow in Brasília. */
   targetDate?: string;
+  /**
+   * The instant every row of this publication must carry — the caller's own
+   * `gate_at(target_date, gate_profile)`.
+   *
+   * Checked between the parse and the write, so a disagreement costs nothing
+   * and writes nothing. Absent means "trust the payload", which is what the
+   * seam test does when it is asserting the round trip rather than the
+   * schedule; the scheduled job always supplies it, because the publication
+   * instant being the gate is an acceptance line rather than a convention, and
+   * the two spellings of `gate_at` — the SQL one the feature rows were stamped
+   * with and `forecast/gate.ts` — agreeing is exactly the seam this catches.
+   */
+  expectPublishedAt?: Date;
   /** Overridable so a test can point at a stub without a network. */
   endpoint?: MlEndpoint;
   /** Overridable so a test can place a publication at a chosen instant. */
@@ -102,6 +116,21 @@ export async function publishForecast(
     endpoint,
   );
   const publication: ForecastPublication = parsePublication(await response.json());
+  if (
+    request.expectPublishedAt !== undefined &&
+    publication.publishedAt.getTime() !== request.expectPublishedAt.getTime()
+  ) {
+    // Before the first insert, and a refusal rather than a correction: a row
+    // stamped with anything but its gate makes the origin a lie, and this side
+    // does not know which of the two clocks is wrong.
+    throw new PublicationPayloadError(
+      `${publication.lane}: ${publication.targetDate} came back published at ` +
+        `${publication.publishedAt.toISOString()}, and the ` +
+        `${publication.gateProfile} gate for that date is ` +
+        `${request.expectPublishedAt.toISOString()}. A published row's ` +
+        "publication instant is the gate exactly.",
+    );
+  }
   const written = await writePublication(db, publication, {
     ...(request.ingestedAt === undefined ? {} : { ingestedAt: request.ingestedAt }),
   });

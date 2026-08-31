@@ -1,13 +1,14 @@
 import { config } from "./config.js";
 import { database } from "./database/connection.js";
-import {
-  createIngestDispatcher,
-  createPayloadArchive,
-  type QueueTask,
-  type QueueTaskResult,
-  REFRESH_CADENCE,
-} from "./ingest/index.js";
+import { createPayloadArchive, REFRESH_CADENCE } from "./ingest/index.js";
 import { createBullMqRunner } from "./jobs/bullmq.js";
+import { FORECAST_PUBLICATIONS, PUBLICATION_TIME_ZONE } from "./jobs/publication.js";
+import {
+  createWorkerDispatch,
+  forecastPublicationSchedules,
+  type WorkerTask,
+  type WorkerTaskResult,
+} from "./jobs/worker-tasks.js";
 
 // Dedicated worker process: pulls jobs off the BullMQ queue and runs them. Use
 // this (with the API set to WATTSTEER_ROLE=api) to scale background work
@@ -35,7 +36,7 @@ const archive = createPayloadArchive({
   directory: config.archiveDir,
 });
 
-const dispatch = createIngestDispatcher({
+const dispatch = createWorkerDispatch({
   db: database.db,
   archive,
   retention: {
@@ -44,7 +45,7 @@ const dispatch = createIngestDispatcher({
   },
 });
 
-const runner = createBullMqRunner<QueueTask, QueueTaskResult>(
+const runner = createBullMqRunner<WorkerTask, WorkerTaskResult>(
   (payload, report) => dispatch(payload, report),
   config.redisUrl,
   {
@@ -86,13 +87,37 @@ if (config.refreshSchedules) {
     pattern: "0 6 * * 1",
     payload: { kind: "centroid_drift", payload: {} },
   });
+  // The publication: ten minutes after each gate, in Brasília civil time.
+  //
+  // Registered here and only here — `docs/specs/api-surface.md`'s boundary
+  // decision is that the forecast is a row this schedule wrote, so the API
+  // process (WATTSTEER_ROLE=api) has no path to the modelling service for a
+  // forecast and needs none.
+  //
+  // Skipped, loudly, without a modelling service to ask: a schedule that fires
+  // twice a day into an unconfigured `mlUrl` is two guaranteed job failures a
+  // day, and `ml-proxy` is right to call that a misconfiguration rather than an
+  // outage. What the reader sees either way is the last published origin with
+  // its real age.
+  if (config.mlUrl) {
+    for (const publication of forecastPublicationSchedules()) {
+      await runner.schedule(publication);
+    }
+  } else {
+    console.warn(
+      "⚠️  publication: WATTSTEER_ML_URL is unset — the day-ahead forecast will " +
+        "not be published, and /v1/forecast/day-ahead will keep serving the last " +
+        "origin with its real age.",
+    );
+  }
 }
 
 console.log(
   `👷 WattSteer worker started — concurrency ${config.jobConcurrency}, queue on Redis`,
 );
 console.log(
-  "   handlers: ONS ingestion (7 sources), refresh sweeps, retention, centroid drift",
+  "   handlers: ONS ingestion (7 sources), refresh sweeps, retention, centroid " +
+    "drift, forecast publication",
 );
 if (archive) {
   console.log(`   custody: raw payloads retained in the ${archive.kind} archive`);
@@ -111,6 +136,13 @@ if (config.refreshSchedules) {
   );
 } else {
   console.log("   refresh: schedules disabled (WATTSTEER_REFRESH=off)");
+}
+if (config.refreshSchedules && config.mlUrl) {
+  console.log(
+    `   publication: ${FORECAST_PUBLICATIONS.map(
+      (publication) => `${publication.payload.gateProfile} ${publication.pattern}`,
+    ).join(" · ")} (${PUBLICATION_TIME_ZONE})`,
+  );
 }
 
 const shutdown = async (signal: string) => {
