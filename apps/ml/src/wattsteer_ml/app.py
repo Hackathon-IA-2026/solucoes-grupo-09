@@ -34,6 +34,7 @@ from .config import settings
 from .constants import Subsystem
 from .database import database
 from .features import FeatureSet, GateProfile, read_serving_rows, serving_target_date
+from .forecast_reads import served_profile_source
 from .lanes import Lane, LaneNameError
 from .optimizer import (
     OptimizerBugError,
@@ -472,12 +473,21 @@ async def publish_forecast(
 def profile_source() -> ProfileSource:
     """Which resolver serves the curtailment band this deployment plans against.
 
-    A dependency rather than a module-level constant so that ticket 07 replaces
-    one function, and so a test that needs a band can inject one, without either
-    reaching into the other's module. What ships today is
-    :func:`~wattsteer_ml.optimizer.result.no_forecast_yet`, which refuses.
+    A dependency rather than a module-level constant so that the resolver is one
+    function, and so a test that needs a band can inject one, without either
+    reaching into the other's module.
+
+    A configured database means the published band is readable, so
+    :func:`~wattsteer_ml.forecast_reads.served_profile_source` is what runs —
+    that is flex-optimizer 07, and it is what turns the 404 that ticket 06
+    shipped into a plan. With no database there is nothing to read, and
+    :func:`~wattsteer_ml.optimizer.result.no_forecast_yet` still refuses: an
+    instance that cannot reach Postgres has no forecast, and saying so is the
+    only answer that is not invented.
     """
-    return no_forecast_yet
+    if database is None:
+        return no_forecast_yet
+    return served_profile_source(database)
 
 
 def _refusal(

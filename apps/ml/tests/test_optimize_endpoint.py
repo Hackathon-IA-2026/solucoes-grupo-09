@@ -6,11 +6,12 @@ on both the status *and* the code is the defect this file exists to catch: "the
 gap was not closed" is a different thing to tell a user than "we gave up
 waiting", and `INFEASIBLE` is a WattSteer bug rather than a bad request.
 
-The band is injected. `no_forecast_yet` is the resolver this deployment ships
-with, and it refuses — Forecaster 14 persists the profile and flex-optimizer 07
-wires it up. So a fixture band lives *here*, in the tests, where it cannot reach
-a screen: a service that served one would be putting invented numbers behind a
-percentage, which is the thing `ForecastStub` already refuses to do.
+The band is injected. Reading a real one is `forecast_reads.py`'s job and
+`test_planning_profile.py`'s to check; what this file needs is a band that is the
+same on every run, so that a failure here is a failure of the *table* and never
+of the day's forecast. So a fixture band lives *here*, in the tests, where it
+cannot reach a screen: a service that served one would be putting invented
+numbers behind a percentage, which is the thing `ForecastStub` already refuses.
 """
 
 from __future__ import annotations
@@ -241,13 +242,23 @@ def test_an_unreadable_version_is_refused_before_a_model_exists(
     assert response.json()["error"]["code"] == "SCENARIO_VERSION_UNSUPPORTED"
 
 
-def test_no_forecast_is_a_404_and_not_a_422() -> None:
-    """The one row of the table that is not a 422, with no override in force.
+def test_no_forecast_is_a_404_and_not_a_422(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The one row of the table that is not a 422, with the shipped resolver.
 
     The scenario is fine and describes a real fleet; there is simply nothing to
     plan against. A 422 would tell the caller their request was malformed.
+
+    The database is pinned to `None` rather than left to the environment: since
+    flex-optimizer 07 a configured `DATABASE_URL` makes `profile_source` read a
+    real band, and a refusal test that quietly depended on the developer's shell
+    would pass for the wrong reason on one machine and fail on another.
     """
-    response = client.post("/v1/optimize", json=scenario())
+    monkeypatch.setattr(app_module, "database", None)
+    app.dependency_overrides[profile_source] = app_module.profile_source
+    try:
+        response = client.post("/v1/optimize", json=scenario())
+    finally:
+        app.dependency_overrides.clear()
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "FORECAST_UNAVAILABLE"
 

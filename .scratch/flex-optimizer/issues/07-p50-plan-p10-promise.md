@@ -57,7 +57,7 @@ consumes and does not specify — its hurdle model, its quantiles and its calibr
 are owned there. Until it exists, this ticket runs against a fixture profile of the
 same shape and the wiring is the last step.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] One MILP built on P50; three simulator passes; the result carries all three under `scored`
 - [ ] `recovered_floor_mwh == scored.p10.recovered_mwh` always, asserted as a property

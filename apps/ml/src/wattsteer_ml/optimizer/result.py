@@ -12,15 +12,17 @@ decided posture. Nothing here takes a quantile argument and no request field can
 select one: the basis is a property of the product, not of a call, and ticket 09
 is where it becomes an *internal* parameter for the `E[Y]` measurement arm.
 
-**Where the profile comes from is a seam and today it is empty.** The forecaster
+**Where the profile comes from is a seam, and it is filled.** The forecaster
 that persists an hour-wise P10/P50/P90 band per (`Subsystem`, `valid_time`) is
-Forecaster 14, and wiring this to it is flex-optimizer ticket 07. Until then
-:data:`no_forecast_yet` is the resolver in force and every real request is a
-`FORECAST_UNAVAILABLE` — a 404, which is exactly the row the refusal table
-already publishes for "the scenario was fine and we have nothing to plan
-against". The alternative, a fixture band served as though it were a forecast,
-would put invented numbers behind a percentage on a screen, which is the one
-thing this project has ruled out everywhere else (see `ForecastStub`).
+Forecaster 14; :mod:`wattsteer_ml.forecast_reads` reads it back at a pinned
+`ForecastOrigin` and is the resolver a deployment with a database runs with.
+:data:`no_forecast_yet` remains, and remains correct, for an instance with no
+database: every request is then a `FORECAST_UNAVAILABLE` — a 404, which is
+exactly the row the refusal table publishes for "the scenario was fine and we
+have nothing to plan against". The alternative, a fixture band served as though
+it were a forecast, would put invented numbers behind a percentage on a screen,
+which is the one thing this project has ruled out everywhere else (see
+`ForecastStub`).
 """
 
 from __future__ import annotations
@@ -93,7 +95,7 @@ class ProfileSource(Protocol):
 def no_forecast_yet(
     *, subsystem: str, target_date: date, forecast_origin: str | None
 ) -> PlanningProfile:
-    """The resolver in force until Forecaster 14 persists a profile.
+    """The resolver for an instance with no database to read a profile from.
 
     Raises rather than inventing. `FORECAST_UNAVAILABLE` is the refusal table's
     one non-422 row precisely because it is not a statement about the scenario:
