@@ -57,7 +57,7 @@ review, because withholding is the only action a user can notice as an absence.
 
 **Blocked by:** 04 (the attribution and its standard error), 06.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] A rule can annotate, demote or withhold, and can do nothing else
 - [ ] Property test: for randomly generated payloads and every rule, the probability, the band, the expectation, every contribution, every share and every rank-underlying value are byte-identical before and after the rules run
