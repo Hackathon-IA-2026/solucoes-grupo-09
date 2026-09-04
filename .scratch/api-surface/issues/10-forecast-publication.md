@@ -147,3 +147,32 @@ another agent this cycle.
 - [ ] `published_at == gate_at(target_date, gate_profile)` is a table constraint,
       not a publisher-side check
 
+---
+
+## A third thing this ticket will own, from diagnosis 07
+
+The rules valve is enforced four ways *inside* `apply_rules` — a rule is never
+handed a number it could change, cannot return one, is held to that by an AST
+walk, and the whole payload is compared byte-for-byte before and after. But
+`AttributionRow.rule_flags` still defaults to `()`, so **nothing structurally
+forces a publish path to run the rules at all**. A future job that assembles an
+attribution row and skips `apply_rules` writes a valid, empty-flagged row and no
+test notices.
+
+That is the one place the valve is still a convention rather than a mechanism,
+and it is here rather than in `diagnosis/` because the publish job is what would
+skip it. Diagnosis 07 deliberately did not break ticket 06's tested signature to
+fix it.
+
+Also inherited: `unmodelled_outage_regime` cannot fire until a caller supplies
+`recent_reasons`. The rule, its predicate and its facts are complete and tested
+against a supplied `ReasonMix`; the read is not built, because
+`curtailment-by-reporting-entity` is not filterable by subsystem and "the most
+recent settled day's reason shares for this subsystem" is a new canonical read
+that belongs with the job rather than under `diagnosis/`.
+
+- [ ] A publish path that assembles an attribution row without running the rules
+      fails, rather than writing an empty-flagged row
+- [ ] `recent_reasons` is supplied from a real read, so
+      `unmodelled_outage_regime` can fire
+

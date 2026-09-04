@@ -15,6 +15,12 @@ The second sentence orders the aggregation: **the day is summed from the hours,
 and nothing else is.** `day_attribution` adds no game and solves none — it sums
 24 hourly attributions exactly, because expectations add and quantiles do not,
 and it publishes what that sum hides.
+
+The third orders the arbitration: **a rule may speak and may not write.**
+`rule_context` projects the four inputs a rule reads into scalars and codes, and
+`rules` evaluates predicates that cannot see an attribution and cannot return a
+number — so `annotate`, `demote` and `withhold` are the whole of what a rule
+can do, as a property of the types rather than of anyone's intent.
 """
 
 from wattsteer_ml.diagnosis.attribution import (
@@ -87,6 +93,30 @@ from wattsteer_ml.diagnosis.publication import (
     build_attribution_publication,
     headline_readings,
 )
+from wattsteer_ml.diagnosis.rule_context import (
+    FIELD_PROVENANCE,
+    REASON_CODES,
+    UNMODELLED_REASON,
+    WEATHER_CENTROID_COVERAGE_FEATURE,
+    WEATHER_RUN_AGE_FEATURE,
+    ReasonCode,
+    ReasonMix,
+    RuleContext,
+    RuleContextError,
+    build_rule_context,
+    context_field_names,
+)
+from wattsteer_ml.diagnosis.rules import (
+    REOPENING_TRIGGER,
+    SHIPPING_RULE_CODES,
+    SHIPPING_RULES,
+    Fact,
+    NarrationSource,
+    Rule,
+    RuleError,
+    RuleOutcome,
+    apply_rules,
+)
 
 __all__ = [
     "ARTIFACT_SOURCE",
@@ -99,13 +129,21 @@ __all__ = [
     "DRIVER_GROUP_CODES",
     "DRIVER_GROUP_MAP",
     "EXPLAINS_CODE",
+    "FIELD_PROVENANCE",
     "LOCAL_ACCURACY_TOLERANCE",
     "NOTABLE_ROW_CAP",
     "NOTABLE_SHARE_FLOOR",
     "PRODUCER",
+    "REASON_CODES",
+    "REOPENING_TRIGGER",
     "RULE_ACTION_ORDER",
     "SERVED_ORIGIN_KIND",
+    "SHIPPING_RULES",
+    "SHIPPING_RULE_CODES",
     "STDERR_RESAMPLES",
+    "UNMODELLED_REASON",
+    "WEATHER_CENTROID_COVERAGE_FEATURE",
+    "WEATHER_RUN_AGE_FEATURE",
     "AttributionError",
     "AttributionPublication",
     "AttributionPublicationError",
@@ -123,6 +161,7 @@ __all__ = [
     "DriverGroupMapError",
     "DriverReading",
     "EmptyPlayerError",
+    "Fact",
     "FiredRule",
     "Grain",
     "GroupCode",
@@ -134,14 +173,25 @@ __all__ = [
     "LocalAccuracyError",
     "MatchedBackground",
     "MissingBackgroundCellError",
+    "NarrationSource",
+    "ReasonCode",
+    "ReasonMix",
+    "Rule",
     "RuleAction",
+    "RuleContext",
+    "RuleContextError",
+    "RuleError",
+    "RuleOutcome",
     "UngroupedFeatureError",
     "UnitCode",
+    "apply_rules",
     "assert_total_partition",
     "attribute_day",
     "attribute_hour",
     "build_attribution_publication",
+    "build_rule_context",
     "bundle_expectation",
+    "context_field_names",
     "day_rows",
     "draw_matched_background",
     "group_columns",

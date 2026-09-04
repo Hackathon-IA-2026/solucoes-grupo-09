@@ -264,6 +264,12 @@ class AttributionRow:
                     f"no {grain} reading for {', '.join(missing)}; every bar the "
                     "screen may show carries the pair its subtitle is drawn from"
                 )
+        invented = sorted(set(self.demoted) - set(DRIVER_GROUP_CODES))
+        if invented:
+            raise AttributionPublicationError(
+                f"{', '.join(invented)} is demoted and is not a driver group; a "
+                "rule may push a bar below the fold and may never invent one"
+            )
 
     @property
     def subsystem(self) -> Subsystem:
