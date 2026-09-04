@@ -15,6 +15,8 @@ Routes:
   GET /v1/forecast/day-ahead  the stub the gateway proxies to
   POST /internal/publish/forecast  worker-only; returns rows, writes nothing
   POST /v1/optimize           the MILP and the simulator, inside one request
+  GET /v1/replay/days         which days are replayable, and why the others are not
+  GET /v1/replay/days/{date}  one day, at the status of the clause that refused it
 """
 
 from __future__ import annotations
@@ -33,6 +35,8 @@ from . import __version__, artifacts
 from .config import settings
 from .constants import Subsystem
 from .database import database
+from .evaluation.folds import FOLD_CALENDAR_RULES
+from .evaluation.holdout import HoldoutLeakError
 from .features import FeatureSet, GateProfile, read_serving_rows, serving_target_date
 from .forecast_reads import served_profile_source
 from .lanes import Lane, LaneNameError
@@ -56,6 +60,14 @@ from .publication import (
     build_publication,
     load_promoted,
 )
+from .replay.calendar import (
+    ReplayCalendar,
+    build_calendar,
+    integrity_violation,
+    latest_replayable_date,
+)
+from .replay.cards import read_windows
+from .replay.reads import read_calendar_evidence
 from .scenario import ScenarioTransportError, decode_scenario_body
 from .scenario_validation import ScenarioValidationError, validate_scenario
 
@@ -594,4 +606,177 @@ def optimize(
         # The gateway keys its cache on it, so a deploy that changes the
         # formulation cannot serve yesterday's plan under today's code.
         headers={"x-optimizer-build": OPTIMIZER_BUILD},
+    )
+
+
+# --- the replayable calendar ---------------------------------------------------
+#
+# `docs/specs/replay.md`, "The endpoint": `GET /v1/replay/days` returns the
+# replayable calendar, **server-evaluated**. The gateway proxies it rather than
+# computing it, and that is forced rather than chosen: the held-out assertion is
+# made against the *artifact card*, the cards live on this service's volume, and
+# `apps/api` has no volume. A gateway that fetched the windows and then judged
+# them would be a second implementation of the predicate on the far side of a
+# network hop, which is the shape this project keeps ruling out.
+#
+# Two routes. The calendar answers `200` with a verdict per day; the single-day
+# route answers **at the failing clause's own status** — 422 for a date outside
+# the window or before the first fold, 404 for a missing forecast or an
+# unsettled day — because "never a computed answer with a caveat" is only a
+# property when the refusal *is* the response.
+
+
+async def _replay_calendar(
+    subsystem: str, lane: Lane, window_from: date | None, window_to: date | None
+) -> ReplayCalendar | JSONResponse:
+    """One subsystem's calendar, or the refusal that stands in for it.
+
+    Returns the calendar so both routes share one evaluation; the two of them
+    then differ only in how much of it they render, which is what keeps the
+    single-day answer from being a second predicate.
+    """
+    if database is None:
+        return _refusal(
+            503,
+            "DATA_UNAVAILABLE",
+            "this instance has no database configured, and a replayable "
+            "calendar is a question about rows that only Postgres holds",
+        )
+
+    now = datetime.now(tz=UTC)
+    latest = latest_replayable_date(now)
+    rules = FOLD_CALENDAR_RULES
+    start = window_from if window_from is not None else rules.window_start
+    end = window_to if window_to is not None else latest
+    if start > end:
+        return _refusal(
+            422,
+            "REPLAY_DATE_OUT_OF_RANGE",
+            f"the window {start.isoformat()}–{end.isoformat()} closes before it opens",
+            {"from": start.isoformat(), "to": end.isoformat()},
+        )
+
+    pool = await database.connect()
+    async with pool.acquire() as conn:
+        evidence = await read_calendar_evidence(
+            conn,
+            subsystem=subsystem,
+            lane=lane,
+            window_start=start,
+            window_end=end,
+            as_of=now,
+        )
+
+    try:
+        return build_calendar(
+            evidence.days,
+            subsystem=subsystem,
+            lane=lane.directory_name,
+            rules=rules,
+            window_start=start,
+            window_end=end,
+            latest=latest,
+            # Bound to the volume and to this lane, and taking an artifact id —
+            # the one the *row* names. `artifacts.current` is not called here and
+            # is imported by nothing under `wattsteer_ml.replay`: `replay.md`
+            # story 5, a replay never consults the promoted serving artifact for
+            # a historical day, so a retrain cannot turn an honest replay into
+            # an in-sample one.
+            windows_for=lambda artifact_id: read_windows(
+                settings.artifact_dir, lane, artifact_id
+            ),
+            sources=evidence.sources,
+        )
+    except HoldoutLeakError as leak:
+        # A `500`, and never a badge. The whole calendar fails rather than
+        # carrying the leaking day as one refused entry among many, because an
+        # entry in a list is exactly the label this spec refuses to ship.
+        logger.error("replay: integrity violation — %s", leak)
+        violation = integrity_violation(
+            leak, subsystem=subsystem, lane=lane.directory_name
+        )
+        return _refusal(
+            violation.status,
+            violation.code,
+            violation.message,
+            dict(violation.details),
+        )
+
+
+def _replay_lane(lane: str) -> Lane | JSONResponse:
+    try:
+        return Lane.parse(lane)
+    except LaneNameError as error:
+        return _refusal(422, "REQUEST_INVALID", str(error))
+
+
+@app.get("/v1/replay/days", tags=["replay"])
+async def replay_days(
+    subsystem: Annotated[Subsystem, Query(description="ONS subsystem code.")],
+    lane: Annotated[
+        str,
+        Query(
+            description=(
+                "The artifact lane a replay is pinned to, e.g. "
+                "dessem_free_v1__gate_late__thr5. Required and never defaulted: "
+                "a post-go-live day has one candidate forecast per served lane "
+                "and no rule yet says which one a replay is of."
+            )
+        ),
+    ],
+    window_from: Annotated[
+        date | None,
+        Query(alias="from", description="Window start. Defaults to the data window."),
+    ] = None,
+    window_to: Annotated[
+        date | None,
+        Query(alias="to", description="Window end. Defaults to yesterday, BRT."),
+    ] = None,
+) -> JSONResponse:
+    """Which days of the window are replayable, and why the others are not.
+
+    Every day in range is present with a verdict. The refused ones are the
+    deliverable as much as the replayable ones: `replay.md` story 14 asks that
+    an unreplayable date explain *why*, "so that the boundary is legible rather
+    than arbitrary", and a calendar of only the good days makes the boundary
+    something a client discovers by being told no.
+    """
+    parsed = _replay_lane(lane)
+    if isinstance(parsed, JSONResponse):
+        return parsed
+    calendar = await _replay_calendar(subsystem, parsed, window_from, window_to)
+    if isinstance(calendar, JSONResponse):
+        return calendar
+    return JSONResponse(content=calendar.as_payload())
+
+
+@app.get("/v1/replay/days/{target_date}", tags=["replay"])
+async def replay_day(
+    target_date: date,
+    subsystem: Annotated[Subsystem, Query(description="ONS subsystem code.")],
+    lane: Annotated[str, Query(description="The artifact lane a replay is pinned to.")],
+) -> JSONResponse:
+    """One day, answered at the status of the clause that refused it.
+
+    The four refusals of `replay.md`'s table, as statuses rather than as fields:
+    `REPLAY_DATE_OUT_OF_RANGE` and `REPLAY_DATE_BEFORE_HOLDOUT_WINDOW` are 422,
+    `REPLAY_FORECAST_UNAVAILABLE` and `REPLAY_OBSERVATION_INCOMPLETE` are 404,
+    and a failed held-out assertion is a 500 logged with the artifact id. None of
+    them is a number with a caveat over it.
+    """
+    parsed = _replay_lane(lane)
+    if isinstance(parsed, JSONResponse):
+        return parsed
+    calendar = await _replay_calendar(subsystem, parsed, target_date, target_date)
+    if isinstance(calendar, JSONResponse):
+        return calendar
+
+    day = calendar.days[0]
+    if day.refusal is None:
+        return JSONResponse(content=day.as_payload())
+    return _refusal(
+        day.refusal.status,
+        day.refusal.code,
+        day.refusal.message,
+        dict(day.refusal.details),
     )
