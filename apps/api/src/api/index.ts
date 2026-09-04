@@ -10,7 +10,6 @@ import { forecastRoutes } from "./forecast.js";
 import { gridRoutes } from "./grid.js";
 import { ingestHealth } from "./ingest-health.js";
 import { metaRoutes } from "./meta.js";
-import { mlProxy } from "./ml-proxy.js";
 import { optimizeCache, optimizeRoutes } from "./optimize.js";
 import { plantRoutes } from "./plants.js";
 import {
@@ -126,7 +125,6 @@ export const app = new Elysia()
     },
     { detail: { summary: "Readiness — database reachable when configured" } },
   )
-  .use(mlProxy)
   .use(ingestHealth)
   .use(canonicalReads)
   .use(gridRoutes)

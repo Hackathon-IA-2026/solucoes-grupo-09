@@ -63,7 +63,7 @@ Portuguese first, through the dictionaries and under the hardcoded-string guard.
 exist — until then it stays and is documented as provisional (ticket 01 keeps its
 mapping honest in the meantime).
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The route resolves entirely from Postgres, returning a 200 against a fixture database with the modelling service's URL unset
 - [ ] The proxy's forecast route is deleted; the module and its failure mapping survive

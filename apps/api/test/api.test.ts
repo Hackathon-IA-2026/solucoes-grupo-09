@@ -170,38 +170,36 @@ describe("api · CORS (browser frontend contract)", () => {
   });
 });
 
-describe("api · ML proxy", () => {
-  // The proxy's whole job is to answer "whose fault is this?" honestly, so
-  // these test the failure branches rather than the happy path — an outage
-  // reported as an API bug is the defect this module exists to prevent.
-  const hit = (qs: string) =>
-    app.handle(new Request(`http://localhost/forecast/day-ahead${qs}`));
+describe("api · the day-ahead read is versioned and served from Postgres", () => {
+  // This block used to exercise `ml-proxy`'s provisional `GET
+  // /forecast/day-ahead`. api-surface ticket 11 deleted that route: it was
+  // unversioned, it returned the modelling service's body verbatim where the
+  // gateway owes a shaped *record*, it could not filter `origin_kind`, and it
+  // put the most-viewed screen behind the ML service. What it tested — the
+  // failure mapping, which survives and is the reason the module survives —
+  // is `ml-proxy.test.ts`, one test per branch.
+  const hit = (path: string) => app.handle(new Request(`http://localhost${path}`));
 
-  it("rejects an unknown subsystem before dialling out", async () => {
-    const res = await hit("?subsystem=SIN");
-    expect(res.status).toBe(422);
+  it("has no unversioned forecast route", async () => {
+    // 404 and not a 502: nothing is dialled, because nothing is mounted.
+    const res = await hit("/forecast/day-ahead?subsystem=NE");
+    expect(res.status).toBe(404);
   });
 
-  it("requires a subsystem", async () => {
-    expect((await hit("")).status).toBe(422);
-  });
-
-  it("reports 'not configured' as an upstream fault, not an internal one", async () => {
-    // WATTSTEER_ML_URL is unset in the test env. The distinction that matters:
-    // a 502 says the dependency is absent; a 500 would say WattSteer is broken.
-    const res = await hit("?subsystem=NE");
-    expect(res.status).toBe(502);
-    expect(await res.json()).toMatchObject({
-      error: {
-        code: "OPTIMIZER_NOT_CONFIGURED",
-        message: "The ML service is not configured",
-      },
-    });
-  });
-
-  it("advertises the route in the OpenAPI schema", async () => {
-    const res = await app.handle(new Request("http://localhost/docs/json"));
+  it("publishes only the versioned route in the OpenAPI schema", async () => {
+    const res = await hit("/docs/json");
     const spec = (await res.json()) as { paths: Record<string, unknown> };
-    expect(spec.paths["/forecast/day-ahead"]).toBeDefined();
+    expect(spec.paths["/forecast/day-ahead"]).toBeUndefined();
+    expect(spec.paths["/v1/forecast/day-ahead"]).toBeDefined();
+  });
+
+  it("answers the versioned route without the modelling service", async () => {
+    // WATTSTEER_ML_URL is unset in the test env, and so is a database. The old
+    // route answered 502 OPTIMIZER_NOT_CONFIGURED here — a modelling-service
+    // fault on the most-viewed screen. The new one never looks: what is
+    // missing is persistence, and it says so.
+    const res = await hit("/v1/forecast/day-ahead?subsystem=NE");
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ error: { code: "DATA_UNAVAILABLE" } });
   });
 });

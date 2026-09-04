@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { NO_FORECAST_STATES } from "@wattsteer/core/errors";
 import { Elysia } from "elysia";
 import { createForecastRoutes, toForecastDayAhead } from "../src/api/forecast.js";
 import { errorHandler } from "../src/api/plugins/errors.js";
@@ -25,6 +26,23 @@ const SOURCE = (path: string): string =>
 /** The `import` lines of a module, so a structural test reads code and not prose. */
 const importsOf = (source: string): string[] =>
   source.split("\n").filter((line) => line.startsWith("import "));
+
+/**
+ * A module with its comments stripped.
+ *
+ * Several claims below are about what a module *does*, and every one of these
+ * modules argues its own case in prose that necessarily quotes the thing it
+ * refuses to do — `forecast.ts` explains why it cannot answer
+ * `MODEL_UNAVAILABLE`, `ml-proxy.ts` explains the route it no longer carries.
+ * A `toContain` over the whole file would read the argument and call it the
+ * defect.
+ */
+const codeOf = (source: string): string =>
+  source
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("//"))
+    .join("\n");
 
 /** The rows of a payload array, so a mutation reads without a non-null assertion. */
 const rowsOf = (value: unknown): Record<string, unknown>[] =>
@@ -432,5 +450,135 @@ describe("the boundary, asserted structurally", () => {
     const route = SOURCE("api/forecast.ts");
     expect(route).not.toContain("writePublication");
     expect(route).not.toContain("publishForecast");
+  });
+});
+
+describe("the provisional proxy route is gone", () => {
+  it("leaves no unversioned forecast route on the gateway", () => {
+    // The public surface is `/v1/forecast/day-ahead`, from Postgres. The
+    // stopgap it replaced was `GET /forecast/day-ahead` — unversioned, against
+    // a modelling service whose own path *was* versioned, which is exactly
+    // backwards: the public surface is the one that needs the version.
+    //
+    // Asserted on the code and not the prose, as the boundary test above is:
+    // the module's comment now explains the deletion, so it necessarily says
+    // the words. Prose is where the argument lives; code is where the route
+    // would have to be.
+    const proxy = codeOf(SOURCE("api/ml-proxy.ts"));
+    expect(proxy).not.toContain("/forecast/day-ahead");
+    expect(proxy).not.toContain("new Elysia(");
+    expect(proxy).not.toContain("mlProxy");
+  });
+
+  it("keeps the module, its six failure branches and the two calls that share them", () => {
+    // The deletion is a route, not a module. `callMl` and `postMl` are the
+    // gateway's edge onto the solver, and `mapUpstreamFailure` is the reason
+    // the module deserves to exist: an ML outage must not be filed as a
+    // WattSteer bug. `ml-proxy.test.ts` asserts each branch's status and code.
+    const proxy = SOURCE("api/ml-proxy.ts");
+    for (const survivor of [
+      "export async function callMl",
+      "export async function postMl",
+      "export async function mapUpstreamFailure",
+      "export interface MlEndpoint",
+    ]) {
+      expect(proxy).toContain(survivor);
+    }
+    for (const code of [
+      "OPTIMIZER_NOT_CONFIGURED",
+      "OPTIMIZER_UNAVAILABLE",
+      "OPTIMIZER_TIMEOUT",
+      "OPTIMIZER_NOT_READY",
+      "UPSTREAM_REJECTED",
+      "UPSTREAM_FAILED",
+    ]) {
+      expect(proxy).toContain(code);
+    }
+  });
+
+  it("is not mounted, and the importers that remain want the calls, not a route", () => {
+    const index = SOURCE("api/index.ts");
+    expect(index).not.toContain("mlProxy");
+    // The three modules that still cross the boundary do so for a solve, for
+    // self-description, and for a publication — never for a page view.
+    for (const module of ["api/optimize.ts", "api/meta.ts", "forecast/publish.ts"]) {
+      const line = importsOf(SOURCE(module)).find((entry) => entry.includes("ml-proxy"));
+      expect(line).toBeDefined();
+      expect(line).not.toContain("mlProxy");
+    }
+  });
+});
+
+describe("the four absence states stay four different sentences", () => {
+  it("is four states in the shared table, and stale is the 200 among them", () => {
+    expect(NO_FORECAST_STATES.length).toBe(4);
+    const stale = NO_FORECAST_STATES.find((entry) => entry.state === "stale");
+    // The one that is not an error: rows from an earlier gate are a real
+    // forecast, and refusing them would be the same lie in the other direction.
+    expect(stale?.status).toBe(200);
+    expect(stale?.code).toBeNull();
+    // No two of the four agree on both the status and the code — a pair shared
+    // by two states is the defect this table exists to prevent.
+    const pairs = NO_FORECAST_STATES.map((entry) => `${entry.status}:${entry.code}`);
+    expect(new Set(pairs).size).toBe(4);
+  });
+
+  it("builds 'the gate has not passed' from the schedule, not from a literal", () => {
+    // The state itself needs rows to be *absent from a database that exists*,
+    // so the live 404 is `database-forecast.test.ts`; what is provable without
+    // one is that the instant a screen renders is computed. The sentence — the
+    // Overview's "tomorrow's view publishes at 19:00 BRT" — is data, and the
+    // datum is `publishes_at`, which the handler fills from `gateAt` rather
+    // than from a hardcoded time.
+    const route = codeOf(SOURCE("api/forecast.ts"));
+    expect(route).toContain("FORECAST_NOT_YET_PUBLISHED");
+    expect(route).toContain("publishes_at: gate.toISOString()");
+    expect(route).toContain("gateAt(targetDate, gateProfile)");
+    // `gateAt` is the schedule's, and it agrees with the SQL the publication
+    // jobs run — asserted above against `drizzle/0016_the_feature_gate.sql`.
+    expect(gateAt("2026-08-29", "gate_late").toISOString()).toBe(
+      "2026-08-28T22:00:00.000Z",
+    );
+  });
+
+  it("says 'the database is down' with the generic code, and only there", async () => {
+    // The only one of the four that gets a generic message, and the only one
+    // carrying a `Retry-After`.
+    const response = await get("?subsystem=NE");
+    expect(response.status).toBe(503);
+    expect((await body(response)).error.code).toBe("DATA_UNAVAILABLE");
+    expect(response.headers.get("retry-after")).toBe("30");
+  });
+
+  it("does not answer MODEL_UNAVAILABLE, and points at the surface that can", () => {
+    // Honest rather than convenient. Which lane state holds is a fact about the
+    // artifact volume, mounted into the modelling service; this route reaching
+    // for it per request is the boundary crossing the spec closed — and that
+    // crossing is what made the old proxy route a liability. So with the gate
+    // passed and no rows it answers `FORECAST_UNAVAILABLE` — "the gate passed
+    // and no rows exist — a publication failure" — which is true whether the
+    // publication failed because nothing was promoted or because the job never
+    // ran, and it names `/v1/meta`, which carries `model.lanes[].state`.
+    const route = codeOf(SOURCE("api/forecast.ts"));
+    expect(route).not.toContain("MODEL_UNAVAILABLE");
+    expect(route).toContain("FORECAST_UNAVAILABLE");
+    // The pointer is in the message a client renders, not only in a comment.
+    expect(route).toContain("/v1/meta");
+    // And `/v1/meta` really does carry the lane states, so the pointer resolves.
+    expect(codeOf(SOURCE("api/meta.ts"))).toContain("LANE_STATES");
+  });
+
+  it("never zero-fills: no refusal carries a band, and none is a spinner", async () => {
+    for (const query of [
+      "?subsystem=NE", // no database
+      "?subsystem=NE&target_date=2026-08-29", // an explicit day, still no database
+      "?subsystem=SIN", // not one of the four subsystems
+      "?subsystem=NE&gate_profile=gate_middle", // not a published gate
+    ]) {
+      const text = await (await get(query)).text();
+      for (const field of ["p10", "p50", "p90", "hours", "expected_mwh"]) {
+        expect(text).not.toContain(field);
+      }
+    }
   });
 });

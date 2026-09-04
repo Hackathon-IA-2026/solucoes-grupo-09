@@ -11,7 +11,7 @@ The band is injected. Reading a real one is `forecast_reads.py`'s job and
 same on every run, so that a failure here is a failure of the *table* and never
 of the day's forecast. So a fixture band lives *here*, in the tests, where it
 cannot reach a screen: a service that served one would be putting invented
-numbers behind a percentage, which is the thing `ForecastStub` already refuses.
+numbers behind a percentage, which is the thing this project refuses everywhere.
 """
 
 from __future__ import annotations

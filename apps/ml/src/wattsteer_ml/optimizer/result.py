@@ -21,8 +21,7 @@ database: every request is then a `FORECAST_UNAVAILABLE` — a 404, which is
 exactly the row the refusal table publishes for "the scenario was fine and we
 have nothing to plan against". The alternative, a fixture band served as though
 it were a forecast, would put invented numbers behind a percentage on a screen,
-which is the one thing this project has ruled out everywhere else (see
-`ForecastStub`).
+which is the one thing this project has ruled out everywhere else.
 """
 
 from __future__ import annotations

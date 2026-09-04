@@ -2,8 +2,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test"
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
-import { toForecastDayAhead } from "../src/api/forecast.js";
+import { Elysia } from "elysia";
+import { createForecastRoutes, toForecastDayAhead } from "../src/api/forecast.js";
 import { createMetaRoutes } from "../src/api/meta.js";
+import { errorHandler } from "../src/api/plugins/errors.js";
 import { createDatabase } from "../src/database/connection.js";
 import {
   type ForecastPublication,
@@ -489,6 +491,160 @@ suite("the published forecast · persistence and AsOf (real Postgres)", () => {
       const summed = hours.reduce((total, hour) => total + hour.p90Mwh, 0);
       expect(back?.day.dayTotalMwh.p90).not.toBe(summed);
     }
+  });
+
+  describe("the HTTP route, with no modelling service at all", () => {
+    /**
+     * The route over these rows, with `WATTSTEER_ML_URL` unset for the length
+     * of the block.
+     *
+     * api-surface ticket 11's first acceptance line, taken literally: the
+     * modelling service's URL is removed from the environment and the
+     * most-viewed screen's read still answers 200. `forecast-day-ahead.test.ts`
+     * proves the same thing structurally — no import of `ml-proxy`, no
+     * `callMl` — and structure is the stronger argument, but this is the one a
+     * sceptic can run. It replaces a proxy route that could not have passed it
+     * under any circumstances.
+     */
+    const priorMlUrl = process.env.WATTSTEER_ML_URL;
+
+    beforeAll(() => {
+      delete process.env.WATTSTEER_ML_URL;
+    });
+
+    afterAll(() => {
+      if (priorMlUrl === undefined) {
+        delete process.env.WATTSTEER_ML_URL;
+      } else {
+        process.env.WATTSTEER_ML_URL = priorMlUrl;
+      }
+    });
+
+    /** `now` is pinned so `target_date` bounds and `age_hours` are arithmetic. */
+    const askAt = (now: Date, query: string): Promise<Response> =>
+      new Elysia()
+        .use(errorHandler)
+        .use(createForecastRoutes({ db, now: () => now }))
+        .handle(new Request(`http://localhost/v1/forecast/day-ahead${query}`));
+
+    it("answers 200 from Postgres with the modelling service's URL unset", async () => {
+      expect(process.env.WATTSTEER_ML_URL).toBeUndefined();
+      await writePublication(db, publication(), { ingestedAt: NOW });
+
+      const response = await askAt(
+        new Date("2024-04-04T23:00:00.000Z"),
+        `?subsystem=NE&target_date=${TARGET_DATE}&gate_profile=gate_late`,
+      );
+      expect(response.status).toBe(200);
+      const wire = (await response.json()) as {
+        subsystem: string;
+        target_date: string;
+        forecast_origin: { origin_kind: string; gate_profile: string; age_hours: number };
+        day_energy_mwh: { p10: number; p50: number; p90: number };
+        peak_power_mw: { p90: number };
+        hours: unknown[];
+      };
+      expect(wire.subsystem).toBe("NE");
+      expect(wire.target_date).toBe(TARGET_DATE);
+      // Every origin carries its kind, and this route filters to `served` in
+      // the query — so the field is a statement, not a hope.
+      expect(wire.forecast_origin.origin_kind).toBe("served");
+      expect(wire.forecast_origin.gate_profile).toBe("gate_late");
+      expect(wire.hours.length).toBe(24);
+      // The day figures came off the day row: neither is the componentwise sum
+      // of the hours beside it, and the fixture is built so that shows.
+      const summed = (wire.hours as { constrained_off_mwh: { p90: number } }[]).reduce(
+        (total, hour) => total + hour.constrained_off_mwh.p90,
+        0,
+      );
+      expect(wire.day_energy_mwh.p90).not.toBe(summed);
+    });
+
+    it("serves an earlier gate's rows as a 200 carrying their real age", async () => {
+      // The third absence state — **stale** — and the one that is not an
+      // error. The early gate published; the late gate did not. An hour later
+      // the route still answers, with the age on the origin and the gate that
+      // produced it named, because a forecast from this morning is a real
+      // forecast and hiding it is the same lie as inventing one.
+      await writePublication(db, publication({ gateProfile: "gate_early" }), {
+        ingestedAt: new Date(GATE_EARLY),
+      });
+
+      const response = await askAt(
+        // Six hours after the early gate, and past the late gate's instant.
+        new Date("2024-04-04T23:00:00.000Z"),
+        `?subsystem=NE&target_date=${TARGET_DATE}&gate_profile=gate_early`,
+      );
+      expect(response.status).toBe(200);
+      const wire = (await response.json()) as {
+        forecast_origin: { age_hours: number; gate_profile: string };
+        day_expected_mwh: number;
+        hours: { expected_mwh: number }[];
+      };
+      // Derived server-side, so no screen differences two clocks.
+      expect(wire.forecast_origin.age_hours).toBe(11);
+      expect(wire.forecast_origin.gate_profile).toBe("gate_early");
+      // And it is a real band, not a zeroed one: the standing rule is that a
+      // 200 never zero-fills a field it does not have.
+      expect(wire.day_expected_mwh).toBeGreaterThan(0);
+      expect(wire.hours.length).toBe(24);
+
+      // Meanwhile the *late* gate for the same day is a refusal and not a
+      // silent fallback to these rows — the two gates stay two answers.
+      const late = await askAt(
+        new Date("2024-04-04T23:00:00.000Z"),
+        `?subsystem=NE&target_date=${TARGET_DATE}&gate_profile=gate_late`,
+      );
+      expect(late.status).toBe(404);
+      expect(((await late.json()) as { error: { code: string } }).error.code).toBe(
+        "FORECAST_UNAVAILABLE",
+      );
+    });
+
+    it("tells 'the gate has not passed' apart from 'the publication failed'", async () => {
+      // The first two of the four absence states, on the same empty table and
+      // the same target date — the only thing that differs is where `now` sits
+      // relative to the gate. Two 404s with two codes, because "wait" and
+      // "something went wrong" are two different sentences and a screen that
+      // showed one spinner for both is the failure this ticket exists to
+      // prevent. Both need a database that *works* and has no rows, which is
+      // why they are here rather than beside the no-database case.
+      const beforeGate = await askAt(
+        new Date("2024-04-04T20:00:00.000Z"),
+        `?subsystem=NE&target_date=${TARGET_DATE}&gate_profile=gate_late`,
+      );
+      expect(beforeGate.status).toBe(404);
+      const waiting = (await beforeGate.json()) as {
+        error: { code: string; details: { publishes_at: string } };
+      };
+      expect(waiting.error.code).toBe("FORECAST_NOT_YET_PUBLISHED");
+      // The instant the Overview renders is the gate, computed and returned.
+      expect(waiting.error.details.publishes_at).toBe(GATE_LATE);
+
+      const afterGate = await askAt(
+        new Date("2024-04-04T23:00:00.000Z"),
+        `?subsystem=NE&target_date=${TARGET_DATE}&gate_profile=gate_late`,
+      );
+      expect(afterGate.status).toBe(404);
+      expect(((await afterGate.json()) as { error: { code: string } }).error.code).toBe(
+        "FORECAST_UNAVAILABLE",
+      );
+    });
+
+    it("refuses a day with no rows rather than serving an empty band", async () => {
+      const response = await askAt(
+        new Date("2024-04-04T23:00:00.000Z"),
+        `?subsystem=S&target_date=${TARGET_DATE}&gate_profile=gate_late`,
+      );
+      expect(response.status).toBe(404);
+      const text = await response.text();
+      expect(text).toContain("FORECAST_UNAVAILABLE");
+      // Not an empty `hours: []` with zeroed day figures — the failure this
+      // ticket exists to prevent.
+      for (const field of ["p10", "p50", "p90", "day_energy_mwh"]) {
+        expect(text).not.toContain(field);
+      }
+    });
   });
 
   describe("the publication job, worker to modelling service and back", () => {
