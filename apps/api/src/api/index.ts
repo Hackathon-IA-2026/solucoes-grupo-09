@@ -23,6 +23,7 @@ import { createLimitStore } from "./plugins/limit-store.js";
 import { rateLimit, tiersFrom } from "./plugins/rate-limit.js";
 import { requestContext } from "./plugins/request-context.js";
 import { securityHeaders } from "./plugins/security.js";
+import { replayRoutes } from "./replay.js";
 
 const isProd = config.isProd;
 
@@ -132,6 +133,7 @@ export const app = new Elysia()
   .use(forecastRoutes)
   .use(plantRoutes)
   .use(optimizeRoutes)
+  .use(replayRoutes)
   .use(metaRoutes);
 
 // Opt-in BullMQ dashboard at /jobs (requires Redis). Protect it in production.
@@ -171,6 +173,9 @@ if (import.meta.main) {
     );
     console.log(
       "   • POST/GET /v1/optimize — the MILP and the simulator, in one request",
+    );
+    console.log(
+      "   • GET /v1/replay/days   — which days are replayable, and why the rest are not",
     );
     console.log("🔒 Security:");
     console.log("   • Content-Security-Policy (relaxed for /docs)");

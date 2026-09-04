@@ -52,7 +52,7 @@ replayable day and the badge becomes a **provenance statement** instead of a war
 recorded train and calibration windows — the held-out assertion has nothing to assert
 against without it) and **Forecaster 03** (the fold calendar that fixes F1's start).
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] `GET /v1/replay/days` returns the replayable calendar, server-evaluated
 - [ ] One typed refusal per failing clause: `REPLAY_DATE_BEFORE_HOLDOUT_WINDOW` (`422`), `REPLAY_DATE_OUT_OF_RANGE` (`422`), `REPLAY_FORECAST_UNAVAILABLE` (`404`), `REPLAY_OBSERVATION_INCOMPLETE` (`404`) — never a computed answer with a caveat
