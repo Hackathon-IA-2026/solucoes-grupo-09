@@ -12,9 +12,17 @@ Routes:
   GET /health                 liveness — process only, never touches Postgres
   GET /ready                  readiness — database reachable, read-only, migrated
   GET /v1/meta                what this instance can actually do right now
-  GET /v1/forecast/day-ahead  the stub the gateway proxies to
   POST /internal/publish/forecast  worker-only; returns rows, writes nothing
   POST /v1/optimize           the MILP and the simulator, inside one request
+
+There is deliberately **no day-ahead read here**. This service carried a
+`GET /v1/forecast/day-ahead` stub for the gateway to proxy — a typed shape with
+an empty `hours` list, so the boundary could be wired and tested before a model
+existed. api-surface ticket 11 deleted it together with the gateway's proxy
+route: the public read is `GET /v1/forecast/day-ahead` on Elysia and it resolves
+entirely from Postgres, so the most-viewed screen survives this process being
+down. What crosses this boundary now is a publication (worker → ml, ten minutes
+after each gate) and a solve, neither of which a row can answer.
 """
 
 from __future__ import annotations
@@ -25,13 +33,12 @@ from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime
 from typing import Annotated, Any, Literal, cast
 
-from fastapi import Body, Depends, FastAPI, Query
+from fastapi import Body, Depends, FastAPI
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from . import __version__, artifacts
 from .config import settings
-from .constants import Subsystem
 from .database import database
 from .features import FeatureSet, GateProfile, read_serving_rows, serving_target_date
 from .forecast_reads import served_profile_source
@@ -58,16 +65,6 @@ from .publication import (
 )
 from .scenario import ScenarioTransportError, decode_scenario_body
 from .scenario_validation import ScenarioValidationError, validate_scenario
-
-#: `Subsystem` comes from `constants.py`, which is bound to the TypeScript
-#: definition by a shared golden vector rather than by a comment. It is a
-#: literal rather than a database lookup so a request naming a nonsense
-#: subsystem — or `SIN`, which is not one — is rejected by the schema before it
-#: reaches Postgres.
-
-#: Day-ahead is the only horizon WattSteer forecasts (charting decision), so the
-#: hour count is a constant of the domain rather than a request parameter.
-HORIZON_HOURS = 24
 
 #: A canonical **view** Drizzle creates. `/ready` uses it to tell "migrations
 #: have not run" apart from "there is no database".
@@ -203,35 +200,6 @@ class Meta(BaseModel):
     artifacts: ArtifactState
 
 
-class ForecastStub(BaseModel):
-    """The day-ahead response shape, with no forecast in it yet.
-
-    Deliberately carries `status: "not_implemented"` and an empty `hours` list
-    rather than plausible-looking numbers. A stub that invents a P10/P50/P90
-    profile is indistinguishable from a trained model having a bad day, and this
-    project's standing rule is that nothing reaches a screen it cannot defend.
-    The gateway can wire and test its proxy against this shape today, and the
-    only thing that changes when the forecaster lands is that `hours` fills in
-    and `status` becomes `ok`.
-    """
-
-    subsystem: Subsystem
-    target_date: date
-    horizon_hours: int = Field(default=HORIZON_HOURS)
-    status: Literal["not_implemented"]
-    detail: str
-    #: Which artifact produced the numbers. Always `None` here, and for a
-    #: sharper reason than "there is no model yet": an artifact is served *from
-    #: a lane*, and this stub takes no lane argument, so there is no lane whose
-    #: promotion log could name one. Ticket 14 gives the route its lane and
-    #: fills this in from `artifacts.current(lane)`; until then, naming the
-    #: newest file on the volume would be inventing a provenance — precisely
-    #: the newest-file rule the promotion log replaced.
-    artifact: str | None
-    hours: list[dict[str, float]]
-    generated_at: datetime
-
-
 @app.get("/", response_model=Identity, tags=["meta"])
 def identity() -> Identity:
     return Identity(
@@ -308,36 +276,6 @@ def meta() -> Meta:
             ),
             unrecognised=list(store.unrecognised),
         ),
-    )
-
-
-@app.get("/v1/forecast/day-ahead", response_model=ForecastStub, tags=["forecast"])
-def day_ahead(
-    subsystem: Annotated[Subsystem, Query(description="ONS subsystem code.")],
-    target_date: Annotated[
-        date | None,
-        Query(description="The day being forecast (UTC). Defaults to today."),
-    ] = None,
-) -> ForecastStub:
-    """The endpoint the Elysia gateway proxies, standing in for the forecaster.
-
-    It exists to prove the boundary — gateway → ml over the compose/Railway
-    private network, with a typed request and a typed response — before any
-    model exists to serve.
-    """
-    now = datetime.now(tz=UTC)
-    return ForecastStub(
-        subsystem=subsystem,
-        target_date=target_date or now.date(),
-        status="not_implemented",
-        detail=(
-            "The day-ahead forecaster is not built yet. This endpoint returns "
-            "its shape so the gateway proxy can be wired and tested; it will "
-            "never return invented numbers."
-        ),
-        artifact=None,
-        hours=[],
-        generated_at=now,
     )
 
 

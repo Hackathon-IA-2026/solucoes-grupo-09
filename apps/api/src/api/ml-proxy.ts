@@ -1,4 +1,3 @@
-import { Elysia, t } from "elysia";
 import { config } from "../config.js";
 import {
   type AppError,
@@ -22,6 +21,22 @@ import {
  * module means the web app never learns the ML service exists, and the ML
  * service never grows a second public surface with its own CORS, rate limits
  * and error vocabulary to keep in step.
+ *
+ * **This module carries no routes.** It used to carry one — an unversioned
+ * `GET /forecast/day-ahead` that forwarded the modelling service's body
+ * verbatim — and api-surface ticket 11 deleted it once the published rows
+ * existed. It was a stopgap in four ways: unversioned against a service whose
+ * own path is versioned; verbatim, which is right for a proxy and wrong for a
+ * record the gateway must stamp with the origin kind, the as-of pin, the risk
+ * class read off the artifact's bins and the licence attribution; unable to
+ * honour the `origin_kind = 'served'` filter, because a verbatim proxy has no
+ * row to filter, so a `backfilled_holdout` reconstruction could have left by
+ * it; and it made the most-viewed screen depend on the modelling service being
+ * up. `api/forecast.ts` answers that read from Postgres now, and imports
+ * nothing from here. What survives is the failure mapping below and the two
+ * calls that share it, which is what `/v1/optimize`, `/v1/meta` and the
+ * publication job need — a solve cannot be precomputed, so the boundary
+ * crossing stays even though the route does not.
  *
  * The reason it is a module rather than three lines inline is the failure
  * mapping. A proxy that lets upstream statuses through unexamined reports an
@@ -246,45 +261,3 @@ async function request(
   }
   return response;
 }
-
-/**
- * `GET /forecast/day-ahead`.
- *
- * **Provisional**, and documented as such: it stands in until a published
- * forecast is persisted and served from Postgres, at which point this route is
- * deleted and the module keeps only the solve. Until then it returns the ML
- * service's response verbatim. The gateway deliberately does not reshape it:
- * the forecast contract belongs to the service that computes it, and a
- * translation layer here would be a second place for the P10/P50/P90 shape to
- * drift out of step with the model that produces it.
- */
-export const mlProxy = new Elysia({ name: "ml-proxy" }).get(
-  "/forecast/day-ahead",
-  async ({ query }) => {
-    const params = new URLSearchParams({ subsystem: query.subsystem });
-    if (query.target_date) {
-      params.set("target_date", query.target_date);
-    }
-    const response = await callMl("/v1/forecast/day-ahead", params);
-    return response.json();
-  },
-  {
-    query: t.Object({
-      subsystem: t.Union([
-        t.Literal("N"),
-        t.Literal("NE"),
-        t.Literal("S"),
-        t.Literal("SE"),
-      ]),
-      target_date: t.Optional(t.String({ format: "date" })),
-    }),
-    detail: {
-      summary: "Day-ahead curtailment forecast (provisional)",
-      description:
-        "Proxied to the modelling service. Returns P10/P50/P90 per hour once the " +
-        "forecaster is built; until then it returns the contract's shape with an " +
-        "empty profile and a status saying so, never invented numbers. Provisional: " +
-        "it is replaced by a Postgres-backed route once forecasts are published.",
-    },
-  },
-);

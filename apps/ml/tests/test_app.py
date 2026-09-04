@@ -2,8 +2,9 @@
 
 Every test here runs with no Postgres and no mounted volume, because that is the
 state a fresh checkout and a broken deploy share — and the interesting claims
-(the probe is process-only, the stub invents nothing, an unconfigured database
-is reported rather than hidden) are all true in exactly that state.
+(the probe is process-only, an unconfigured database is reported rather than
+hidden, a lane never claims a state it cannot know) are all true in exactly that
+state.
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from wattsteer_ml.app import HORIZON_HOURS, app
+from wattsteer_ml.app import app
 from wattsteer_ml.config import settings
 from wattsteer_ml.lanes import Lane
 from wattsteer_ml.promotions import (
@@ -115,25 +116,20 @@ def test_meta_says_when_the_promotion_log_cannot_be_read(
     assert body["lanes"][0]["promoted"] is None
 
 
-def test_day_ahead_stub_returns_no_invented_numbers() -> None:
-    response = client.get("/v1/forecast/day-ahead", params={"subsystem": "SE"})
-    assert response.status_code == 200
-    body = response.json()
-    assert body["subsystem"] == "SE"
-    assert body["status"] == "not_implemented"
-    assert body["horizon_hours"] == HORIZON_HOURS
-    # The point of the stub: a shape to proxy, not a forecast to believe.
-    assert body["hours"] == []
-    assert body["artifact"] is None
+def test_this_service_serves_no_day_ahead_read() -> None:
+    """The stub is gone, and with it the gateway's dependency on this process.
 
-
-def test_day_ahead_rejects_a_subsystem_ons_does_not_publish() -> None:
-    """`SECO` is a real ONS spelling, but not one of the four canonical codes."""
-    assert (
-        client.get("/v1/forecast/day-ahead", params={"subsystem": "SECO"}).status_code
-        == 422
-    )
-
-
-def test_day_ahead_requires_a_subsystem() -> None:
-    assert client.get("/v1/forecast/day-ahead").status_code == 422
+    It stood in until forecasts were persisted; api-surface ticket 11 deleted it
+    together with the gateway's proxy route. The public day-ahead read is on
+    Elysia and resolves from Postgres, so asserting its absence *here* is what
+    stops the proxy quietly coming back: a route on this service is the only
+    thing one could point at. Asserted on the route table rather than on a 404,
+    because a 404 is also what a typo produces.
+    """
+    paths = {route.path for route in app.routes if hasattr(route, "path")}
+    assert "/v1/forecast/day-ahead" not in paths
+    assert not any(path.endswith("forecast/day-ahead") for path in paths)
+    # What does cross the boundary: a publication and a solve, both of which
+    # need this process because neither can be answered from a row.
+    assert "/internal/publish/forecast" in paths
+    assert "/v1/optimize" in paths

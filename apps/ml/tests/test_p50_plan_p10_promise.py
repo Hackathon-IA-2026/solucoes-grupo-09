@@ -412,7 +412,7 @@ def test_an_instance_with_no_database_still_refuses_rather_than_inventing(
 
     With nothing to read there is no forecast, and saying so is the only answer
     that is not invented — the alternative, a fixture band served as though it
-    were a forecast, is the thing `ForecastStub` already refuses.
+    were a forecast, is the thing this project refuses everywhere.
     """
     monkeypatch.setattr(app_module, "database", None)
     assert app_module.profile_source() is no_forecast_yet
