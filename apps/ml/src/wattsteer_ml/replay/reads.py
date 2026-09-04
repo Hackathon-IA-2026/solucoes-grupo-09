@@ -57,13 +57,18 @@ from wattsteer_ml.evaluation.vintage import earliest_valid_instant
 from wattsteer_ml.lanes import Lane
 from wattsteer_ml.replay.calendar import VINTAGE_READS, DayEvidence
 
-#: Every publication of one subsystem's window, newest vintage per (day, lane).
+#: One publication per (day, lane) of one subsystem's window.
 #:
-#: ``distinct on`` picks the newest ``published_at`` and then the highest
-#: ``data_version``, which is the supersession rule `AsOf` applies to any
-#: re-publication: a second backtest run writes a newer vintage beside the first
-#: and this returns it. A replay that wants the older one pins its origin, which
-#: is a later ticket's job and is why nothing here caches across vintages.
+#: The view has already resolved ``AsOf`` — it is ``distinct on (subsystem,
+#: target_date, origin_kind, gate_profile)`` over ``ingested_at <=
+#: canonical_as_of()`` — so what is left here is a choice this module has to
+#: make and the view cannot: **a record outranks a reconstruction**. A
+#: post-go-live day can hold both a `served` row and a `backfilled_holdout` one
+#: for the same lane, once a backtest run reaches a quarter the product was
+#: already serving. `replay.md` pairs those days with `served`, because a
+#: reconstruction of a day WattSteer actually published is not what WattSteer
+#: said. Hence ``origin_kind = 'served' desc`` first in the ordering, before the
+#: publication instant — a rule, rather than whichever row happened to be newer.
 PUBLISHED_DAYS_SQL = """
 select distinct on (target_date, feature_set, gate_profile, threshold_mw)
   target_date,
@@ -76,6 +81,7 @@ from canonical_forecast_day
 where subsystem = $1::subsystem_code
   and target_date between $2::date and $3::date
 order by target_date, feature_set, gate_profile, threshold_mw,
+         (origin_kind = 'served'::forecast_origin_kind) desc,
          published_at desc, data_version desc
 """
 
