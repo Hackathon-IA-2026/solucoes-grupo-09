@@ -44,12 +44,12 @@ artifact version. Two facts, two fields, so the screen never has to choose.
 **product-fixes 01**, which is already sliced; this ticket supplies the payload it
 renders and must not re-specify the copy.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] One request returns all four subsystems' outlook plus the shared origin, threshold and risk bins
-- [ ] The national figure is the summed expectation plus a count of subsystems per risk class
-- [ ] The national band is null and carries a machine-readable reason
-- [ ] A test asserts the national figure is not a componentwise sum of medians
-- [ ] The weather run label and the WattSteer run label are separate fields
-- [ ] The origin-kind filter applies here exactly as on the day-ahead route
-- [ ] The hand-back is recorded on the forecaster ticket set: share the ensemble draw index across subsystems, and persist a national row grain
+- [x] One request returns all four subsystems' outlook plus the shared origin, threshold and risk bins
+- [x] The national figure is the summed expectation plus a count of subsystems per risk class
+- [x] The national band is null and carries a machine-readable reason
+- [x] A test asserts the national figure is not a componentwise sum of medians
+- [x] The weather run label and the WattSteer run label are separate fields
+- [x] The origin-kind filter applies here exactly as on the day-ahead route
+- [x] The hand-back is recorded on the forecaster ticket set: share the ensemble draw index across subsystems, and persist a national row grain

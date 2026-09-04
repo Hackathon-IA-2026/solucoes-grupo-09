@@ -163,6 +163,55 @@ interface HourRecord {
 const asNumber = (value: unknown): number => Number(value);
 
 /**
+ * One day-grain row, mapped.
+ *
+ * One mapping for both reads, because `/v1/grid/outlook` publishes the same
+ * day-grain numbers `/v1/forecast/day-ahead` does, for four subsystems instead
+ * of one. A second mapping is how the hero would come to show a different band
+ * from the detail view for the same subsystem-day, and nothing would say which
+ * of the two was the published row.
+ */
+function toDayRow(
+  record: DayRecord,
+  subsystem: SubsystemCode,
+  targetDate: string,
+): ForecastDayRow {
+  return {
+    subsystem,
+    targetDate,
+    gateProfile: record.gate_profile as ForecastGateProfile,
+    thresholdMw: asNumber(record.threshold_mw),
+    artifactId: record.run_label,
+    featureSet: record.feature_set,
+    trainedThrough: String(record.trained_through).slice(0, 10),
+    correctionRegime: record.correction_regime,
+    publishedAt: new Date(record.published_at),
+    ingestedAt: new Date(record.ingested_at),
+    dataVersion: asNumber(record.data_version),
+    dayTotalMwh: {
+      p10: asNumber(record.day_total_p10_mwh),
+      p50: asNumber(record.day_total_p50_mwh),
+      p90: asNumber(record.day_total_p90_mwh),
+    },
+    peakPowerMw: {
+      p10: asNumber(record.peak_power_p10_mw),
+      p50: asNumber(record.peak_power_p50_mw),
+      p90: asNumber(record.peak_power_p90_mw),
+    },
+    dayOccurrenceProbability: asNumber(record.day_occurrence_probability),
+    dayExpectedMwh: asNumber(record.expected_mwh),
+    split: {
+      windMwh: asNumber(record.expected_wind_mwh),
+      solarMwh: asNumber(record.expected_solar_mwh),
+    },
+    hoursP50Nonzero: asNumber(record.hours_p50_nonzero),
+    derivation: record.derivation,
+    riskBinElevatedFrom: asNumber(record.risk_bin_elevated_from),
+    riskBinHighFrom: asNumber(record.risk_bin_high_from),
+  };
+}
+
+/**
  * The forecast for one subsystem-day at one gate, or `null` if none was published.
  *
  * `null` is an absence and the route answers it as one. It is never an empty
@@ -227,42 +276,65 @@ export async function readForecastDayAhead(
     }));
 
     return {
-      day: {
-        subsystem: query.subsystem,
-        targetDate: query.targetDate,
-        gateProfile: day.gate_profile as ForecastGateProfile,
-        thresholdMw: asNumber(day.threshold_mw),
-        artifactId: day.run_label,
-        featureSet: day.feature_set,
-        trainedThrough: String(day.trained_through).slice(0, 10),
-        correctionRegime: day.correction_regime,
-        publishedAt: new Date(day.published_at),
-        ingestedAt: new Date(day.ingested_at),
-        dataVersion: asNumber(day.data_version),
-        dayTotalMwh: {
-          p10: asNumber(day.day_total_p10_mwh),
-          p50: asNumber(day.day_total_p50_mwh),
-          p90: asNumber(day.day_total_p90_mwh),
-        },
-        peakPowerMw: {
-          p10: asNumber(day.peak_power_p10_mw),
-          p50: asNumber(day.peak_power_p50_mw),
-          p90: asNumber(day.peak_power_p90_mw),
-        },
-        dayOccurrenceProbability: asNumber(day.day_occurrence_probability),
-        dayExpectedMwh: asNumber(day.expected_mwh),
-        split: {
-          windMwh: asNumber(day.expected_wind_mwh),
-          solarMwh: asNumber(day.expected_solar_mwh),
-        },
-        hoursP50Nonzero: asNumber(day.hours_p50_nonzero),
-        derivation: day.derivation,
-        riskBinElevatedFrom: asNumber(day.risk_bin_elevated_from),
-        riskBinHighFrom: asNumber(day.risk_bin_high_from),
-      },
+      day: toDayRow(day, query.subsystem, query.targetDate),
       hours,
       vintageFidelity: "point_in_time",
     };
+  });
+}
+
+/** The two axes `/v1/grid/outlook` reads on: one day, one gate, one vintage. */
+export interface OutlookQuery {
+  /** The civil day in `America/Sao_Paulo`, `YYYY-MM-DD`. */
+  targetDate: string;
+  gateProfile: ForecastGateProfile;
+  /** The vintage cut. The route defaults it to the request instant. */
+  asOf: Date;
+}
+
+/**
+ * The four subsystems' day-grain rows for one target date and one gate.
+ *
+ * **Day grain only, and no aggregate.** This is `/v1/grid/outlook`'s whole
+ * read: the hero has no hourly detail to draw, so there is no second select
+ * over `canonical_forecast_hour` here and nothing that could reduce one into a
+ * day figure. Every band on the response is the persisted path-ensemble row.
+ *
+ * **Nothing is summed in SQL, and nothing is summed here.** The one additive
+ * national quantity — the expectation — is added by the route, in one visible
+ * place, beside the `band: null` that says why the other quantities are not.
+ * An aggregate in this query would be the first step of exactly the arithmetic
+ * `docs/specs/api-surface.md` exists to remove.
+ *
+ * **What comes back may be fewer than four rows, and that is an absence.** The
+ * route refuses a partial publication rather than filling the gap: three
+ * subsystems and a zero reads as "no curtailment in the north", which is a
+ * different and much worse statement than "the publication is incomplete".
+ * `origin_kind = 'served'` is filtered in the SQL, as a constant, exactly as on
+ * the day-ahead read — there is no argument that reaches it, so no query can
+ * widen this route onto a `backfilled_holdout` row.
+ */
+export async function readGridOutlook(
+  db: Database,
+  query: OutlookQuery,
+): Promise<ForecastDayRow[]> {
+  return readOnly(db, async (tx) => {
+    // The vintage axis on the transaction, never in the predicate — the same
+    // rule the day-ahead read follows, and for the same reason.
+    await applyAxes(tx, { asOf: query.asOf });
+
+    const rows = await tx.execute<DayRecord & { subsystem: string }>(sql`
+      select *
+      from ${canonicalForecastDay}
+      where target_date = ${query.targetDate}::date
+        and gate_profile = ${query.gateProfile}::forecast_gate_profile
+        and origin_kind = 'served'::forecast_origin_kind
+      order by subsystem
+    `);
+
+    return [...rows].map((row) =>
+      toDayRow(row, row.subsystem as SubsystemCode, query.targetDate),
+    );
   });
 }
 

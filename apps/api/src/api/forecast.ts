@@ -1,19 +1,17 @@
 import type { ForecastDayAhead, RiskClass } from "@wattsteer/core/api";
 import { SUBSYSTEMS, subsystemMeta } from "@wattsteer/core/constants";
-import {
-  DATA_WINDOW_OPENS_ON,
-  latestTargetDate,
-} from "@wattsteer/core/scenario-validation";
-import { GATES } from "@wattsteer/core/schedule";
 import { encodeWire } from "@wattsteer/core/wire";
 import { Elysia, t } from "elysia";
 import type { Database } from "../database/connection.js";
 import { database } from "../database/connection.js";
 import { CodedError } from "../errors.js";
 import { gateAt } from "../forecast/gate.js";
-import type { ForecastGateProfile } from "../forecast/publication.js";
 import { type PublishedForecast, readForecastDayAhead } from "../forecast/reads.js";
 import type { SubsystemCode } from "../ingest/normalise.js";
+import {
+  gateProfile as parseGateProfile,
+  targetDate as parseTargetDate,
+} from "./params.js";
 
 /**
  * `GET /v1/forecast/day-ahead?subsystem=&target_date=&gate_profile=`.
@@ -76,13 +74,14 @@ import type { SubsystemCode } from "../ingest/normalise.js";
  * failed because nothing was promoted or because the job never ran.
  */
 
-/** The gate profiles this route accepts, from the published table. */
-const GATE_PROFILES: readonly ForecastGateProfile[] = GATES.map(
-  (gate) => gate.profile as ForecastGateProfile,
-);
-
-/** The default, and the primary of the two: D−1 19:00 BRT on the 12Z run. */
-const DEFAULT_GATE: ForecastGateProfile = "gate_late";
+/**
+ * `target_date` and `gate_profile` are parsed by `params.ts`, not here.
+ *
+ * They are the same two axes `/v1/grid/outlook` takes, defaulted the same way
+ * and refused with the same codes — so they are parsed once. A second copy is
+ * how the hero and the detail view would come to disagree about which day
+ * "tomorrow" is.
+ */
 
 const HOUR_MS = 3_600_000;
 
@@ -101,56 +100,16 @@ function parseSubsystem(raw: string): SubsystemCode {
   return raw as SubsystemCode;
 }
 
-function parseGateProfile(raw: string | undefined): ForecastGateProfile {
-  if (raw === undefined) {
-    return DEFAULT_GATE;
-  }
-  if (!GATE_PROFILES.includes(raw as ForecastGateProfile)) {
-    throw new CodedError(
-      "GATE_PROFILE_UNKNOWN",
-      `"${raw}" is not a published gate profile (${GATE_PROFILES.join(", ")})`,
-      { details: { gate_profile: raw } },
-    );
-  }
-  return raw as ForecastGateProfile;
-}
-
-/**
- * The target date, defaulted to tomorrow in Brasília and bounded on both sides.
- *
- * Bounded because the error table says so: before the window opens or beyond
- * tomorrow is `TARGET_DATE_OUT_OF_RANGE`, and a day-ahead product has nothing
- * to say about the day after tomorrow. Refused rather than clamped — a clamped
- * date would return real numbers for a day nobody asked about.
- */
-function parseTargetDate(raw: string | undefined, now: Date): string {
-  const value = raw ?? latestTargetDate(now);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(value))) {
-    throw new CodedError(
-      "TARGET_DATE_OUT_OF_RANGE",
-      `target_date must be a civil date (YYYY-MM-DD), got "${value}"`,
-      { details: { target_date: value } },
-    );
-  }
-  const latest = latestTargetDate(now);
-  if (value < DATA_WINDOW_OPENS_ON || value > latest) {
-    throw new CodedError(
-      "TARGET_DATE_OUT_OF_RANGE",
-      `target_date must be between ${DATA_WINDOW_OPENS_ON} and ${latest}, got ${value}`,
-      { details: { target_date: value, opens_on: DATA_WINDOW_OPENS_ON, latest } },
-    );
-  }
-  return value;
-}
-
 /**
  * The named class, read off the published edges.
  *
  * The edges travel on the response beside the class, so a reader can check the
  * class rather than take it: `risk_bins` is an artifact's published output, not
  * a styling constant, and this is the one place the comparison is made.
+ * `/v1/grid/outlook` classifies its four subsystems with this same function, so
+ * the hero and the detail view cannot put a subsystem in two different classes.
  */
-function riskClass(
+export function riskClass(
   probability: number,
   elevatedFrom: number,
   highFrom: number,

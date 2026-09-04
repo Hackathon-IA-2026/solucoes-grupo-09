@@ -91,6 +91,27 @@ export const GATES: readonly GateSchedule[] = [
   },
 ];
 
+/**
+ * The weather run a gate saw, as the label a screen renders.
+ *
+ * Two facts, two fields. A `wattsteer` forecast's `run_label` is the artifact
+ * version; the string the landing hero and the Overview print — "D−1 12Z" —
+ * names the **weather** run the forecast was built on. `common.schema.json`
+ * gives `forecast_origin` a `weather_run_label` beside `run_label` for exactly
+ * that reason, and this is where the label is derived — from the same gate
+ * table the publication instants come from — rather than typed into a route.
+ */
+export function weatherRunLabel(profile: GateProfile): string {
+  const gate = GATES.find((entry) => entry.profile === profile);
+  if (gate === undefined) {
+    // Unreachable through the generated enum, and thrown rather than defaulted:
+    // a label invented for a gate that does not exist would be a run name on a
+    // payload whose whole job is to say which run produced the numbers.
+    throw new RangeError(`No published gate has the profile "${profile}"`);
+  }
+  return `D−1 ${gate.weatherRun}`;
+}
+
 const MS_PER_DAY = 86_400_000;
 
 const WALL_CLOCK = new Intl.DateTimeFormat("en-CA", {

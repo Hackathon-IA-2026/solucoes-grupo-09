@@ -1,4 +1,10 @@
+import {
+  DATA_WINDOW_OPENS_ON,
+  latestTargetDate,
+} from "@wattsteer/core/scenario-validation";
+import { GATES } from "@wattsteer/core/schedule";
 import { BadInputError, CodedError } from "../errors.js";
+import type { ForecastGateProfile } from "../forecast/publication.js";
 import { localDayInterval, ONS_TIME_ZONE, parseCalendarDate } from "../ingest/time.js";
 
 /**
@@ -118,4 +124,67 @@ export function nonNegativeInteger(label: string, raw: string): number {
     );
   }
   return parsed;
+}
+
+/**
+ * The forecast axes — the two parameters every published-forecast route takes.
+ *
+ * `/v1/forecast/day-ahead` and `/v1/grid/outlook` are the same read at two
+ * grains: one subsystem with its hours, and four subsystems without them. They
+ * take the same `target_date` and the same `gate_profile`, they default them
+ * the same way and they refuse the same values with the same codes — so they
+ * parse them with the same function. A second copy is how the two routes would
+ * come to disagree about which day "tomorrow" is, and a caller comparing the
+ * hero against the detail would see two different days with no way to tell why.
+ */
+
+/** The gate profiles the published routes accept, from the published table. */
+const GATE_PROFILES: readonly ForecastGateProfile[] = GATES.map(
+  (gate) => gate.profile as ForecastGateProfile,
+);
+
+/** The default, and the primary of the two: D−1 19:00 BRT on the 12Z run. */
+export const DEFAULT_GATE: ForecastGateProfile = "gate_late";
+
+/** Parse a gate profile, defaulting to the late gate and refusing any other. */
+export function gateProfile(raw: string | undefined): ForecastGateProfile {
+  if (raw === undefined) {
+    return DEFAULT_GATE;
+  }
+  if (!GATE_PROFILES.includes(raw as ForecastGateProfile)) {
+    throw new CodedError(
+      "GATE_PROFILE_UNKNOWN",
+      `"${raw}" is not a published gate profile (${GATE_PROFILES.join(", ")})`,
+      { details: { gate_profile: raw } },
+    );
+  }
+  return raw as ForecastGateProfile;
+}
+
+/**
+ * The target date, defaulted to tomorrow in Brasília and bounded on both sides.
+ *
+ * Bounded because the error table says so: before the window opens or beyond
+ * tomorrow is `TARGET_DATE_OUT_OF_RANGE`, and a day-ahead product has nothing
+ * to say about the day after tomorrow. Refused rather than clamped — a clamped
+ * date would return real numbers for a day nobody asked about.
+ */
+export function targetDate(raw: string | undefined, now: Date): string {
+  const value = raw ?? latestTargetDate(now);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(value))) {
+    throw new CodedError(
+      "TARGET_DATE_OUT_OF_RANGE",
+      `target_date must be a civil date (YYYY-MM-DD), got "${value}"`,
+      { details: { target_date: value } },
+    );
+  }
+  const latest = latestTargetDate(now);
+  if (value < DATA_WINDOW_OPENS_ON || value > latest) {
+    throw new CodedError(
+      "TARGET_DATE_OUT_OF_RANGE",
+      `target_date must be between ${DATA_WINDOW_OPENS_ON} and ${latest}, got ${value}`,
+      { details: { target_date: value, opens_on: DATA_WINDOW_OPENS_ON, latest } },
+    );
+  }
+  return value;
 }
