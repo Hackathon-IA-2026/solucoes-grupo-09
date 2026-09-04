@@ -24,6 +24,18 @@ computed inside each ensemble member, and is never an ONS aggregate row.
 
 **Status:** done
 
+> **Hand-back, recorded by api-surface 13.** The computation landed here and is
+> correct — `training/national.py` shares the draw index, takes peak-of-sum and
+> counts occurrence over draws — but it is **not persisted**: ticket 14 found
+> that `NationalDayGrain.as_row()` has no table, because `SIN` is not a
+> `Subsystem` and the national grain cannot borrow `curtailment_forecast_day`'s
+> key. So `/v1/grid/outlook` serves `national.expected_mwh` with `band: null`
+> and `band_unavailable_reason: "no_joint_ensemble"` — the honest headline this
+> ticket's own text names — and the row grain is **ticket 22**. Until 22 lands
+> nothing may synthesise a national band by summing the four subsystems'
+> quantiles; that is the defect the thread exists to remove, and the gateway has
+> no arithmetic that could produce one.
+
 - [ ] One draw of day-row indices is shared across all four subsystems, so
       ensemble member *k* is the same calendar day everywhere
 - [ ] National day energy, peak power and occurrence probability are quantiles

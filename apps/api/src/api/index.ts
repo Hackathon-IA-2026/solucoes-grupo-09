@@ -160,6 +160,9 @@ if (import.meta.main) {
     );
     console.log("   • GET /v1/grid/now     — the observed right-now readout");
     console.log(
+      "   • GET /v1/grid/outlook — four subsystems in one request, national expectation",
+    );
+    console.log(
       "   • GET /v1/curtailment/{hours,episodes,reasons} — the observed record",
     );
     console.log("   • GET /v1/forecast/day-ahead — the published band, from Postgres");

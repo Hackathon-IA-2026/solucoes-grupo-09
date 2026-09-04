@@ -430,8 +430,9 @@ describe("the boundary, asserted structurally", () => {
   it("filters origin_kind = served in the query, not in a branch", () => {
     const reads = SOURCE("forecast/reads.ts");
     const filters = reads.match(/origin_kind = 'served'::forecast_origin_kind/g) ?? [];
-    // Once per read: the day row, the hour rows, and the meta listing.
-    expect(filters.length).toBe(3);
+    // Once per read: the day row, the hour rows, the meta listing, and the
+    // four-subsystem outlook read `/v1/grid/outlook` is.
+    expect(filters.length).toBe(4);
     // No parameter reaches it — a widened filter is what would let a
     // `backfilled_holdout` row out of this route.
     expect(reads).not.toContain("query.originKind");
