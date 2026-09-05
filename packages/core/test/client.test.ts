@@ -92,6 +92,72 @@ describe("a successful read arrives in the app's vocabulary", () => {
   });
 });
 
+describe("a replay is the optimizer's blob, asked as a question about the past", () => {
+  test("the pinned day goes out as a GET, with the blob and the lane", async () => {
+    // A `GET` and not the `POST`: the scenario is already in the address bar of
+    // the screen that asks, so sending it as a query parameter keeps the
+    // request a shared-cacheable function of exactly what a shared link
+    // contains — which is the only way the gateway's `max-age` on this route is
+    // reachable. `lane` is required and never defaulted, because a
+    // post-go-live day has one candidate forecast per served lane and no rule
+    // yet says which one a replay is of.
+    const { doFetch, calls } = stub(200, fixture("12-replay.json"));
+    const client = createClient({ baseUrl: "https://api.example.com", fetch: doFetch });
+    const replay = await client.replay({
+      d: "2025-09-14",
+      s: "eyJ2IjoxfQ",
+      lane: "dessem_free_v1__gate_late__thr5",
+    });
+    expect(calls[0]?.url).toBe(
+      "https://api.example.com/v1/replay?d=2025-09-14&s=eyJ2IjoxfQ" +
+        "&lane=dessem_free_v1__gate_late__thr5",
+    );
+    expect(calls[0]?.init.method).toBe("GET");
+    // And it arrives in the app's vocabulary, through the one translator.
+    expect(replay.integrity.provenance).toBe("fold_holdout");
+    expect(replay.integrity.heldOutBy?.trainWindow).toHaveLength(2);
+    expect(replay.forecast.dayTotal.p50).toBeGreaterThan(0);
+    expect(replay.scoredOn).toBe("observed");
+  });
+
+  test("an observed-only body is sent verbatim, byte for byte", async () => {
+    // The answer is stamped with the hash of the bytes that arrived, so a body
+    // this client re-serialised would be a different document answering under
+    // the same name. `bodyText` is the path that guarantees it, and this is the
+    // assertion that says so: the string that went in is the string on the
+    // wire, key order and all.
+    const { doFetch, calls } = stub(200, fixture("12-replay.json"));
+    const client = createClient({ baseUrl: "https://api.example.com", fetch: doFetch });
+    const canonical = '{"v":1,"subsystem":"NE","target_date":"2024-11-05"}';
+    await client.replayObservedOnly(canonical, { lane: "lane_a" });
+    expect(calls[0]?.url).toBe(
+      "https://api.example.com/v1/replay/observed-only?lane=lane_a",
+    );
+    expect(calls[0]?.init.method).toBe("POST");
+    expect(calls[0]?.init.body).toBe(canonical);
+  });
+
+  test("a refused day is a code, not a caveated answer", async () => {
+    // The one refusal with a view behind it. Every other clause is answered
+    // with its sentence and no figures.
+    const { doFetch } = stub(422, {
+      error: {
+        code: "REPLAY_DATE_BEFORE_HOLDOUT_WINDOW",
+        message: "2024-11-05 precedes the first walk-forward test fold",
+        details: {},
+      },
+    });
+    const client = createClient({ baseUrl: "https://api.example.com", fetch: doFetch });
+    const failure = await client
+      .replay({ d: "2024-11-05", s: "blob", lane: "lane_a" })
+      .catch((cause: unknown) => cause);
+    expect(failure).toBeInstanceOf(ApiError);
+    expect((failure as ApiError).code).toBe("REPLAY_DATE_BEFORE_HOLDOUT_WINDOW");
+    expect((failure as ApiError).status).toBe(422);
+    expect((failure as ApiError).retryable).toBe(false);
+  });
+});
+
 describe("the typed error carries status, domain code and a retryable flag", () => {
   test("a 404 envelope becomes an ApiError with all three", async () => {
     const { doFetch } = stub(404, {

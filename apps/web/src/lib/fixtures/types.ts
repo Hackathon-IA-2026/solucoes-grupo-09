@@ -60,11 +60,8 @@ import type {
   ReasonCode,
   RestrictionOrigin,
   SubsystemCode,
-  Technology,
   TechnologySplit,
-  VintageFidelity,
 } from "@wattsteer/core";
-import type { ReplayIntegrity, ReplayIntegrityHeldOutBy } from "@wattsteer/core/api";
 
 /** `CurtailmentHour`, forecast side: the atom the model predicts. */
 export interface CurtailmentHourForecast {
@@ -88,8 +85,18 @@ export interface CurtailmentHourForecast {
   expectedMwh: number;
   /** Hurdle model, part one: P(this hour exceeds the threshold). */
   occurrenceProbability: number;
-  /** Two scalars summing to `expectedMwh`. There is no per-technology band. */
-  split: TechnologySplit;
+  /**
+   * Two scalars summing to `expectedMwh`. There is no per-technology band.
+   *
+   * **Optional, because one surface genuinely has no split to publish.** A
+   * replayed day's `forecast.hours` carries the band, the expectation and the
+   * occurrence probability and stops there — `docs/specs/replay.md`'s contract
+   * has no technology division on it, and the forecaster has one head per
+   * subsystem, so a screen that invented a dominant-fleet ratio to fill this
+   * field would be publishing a number no model produced. Absent, not zeroed:
+   * `0 MWh wind / 0 MWh solar` is a claim and an absence is not.
+   */
+  split?: TechnologySplit;
 }
 
 /** `CurtailmentHour`, observed side. */
@@ -342,103 +349,19 @@ export interface MitigationStep {
   forecastOrigin: string;
 }
 
-/** A `CurtailmentEpisode` — a read-time view, carrying its own threshold. */
-export interface CurtailmentEpisode {
-  id: string;
-  subsystem: SubsystemCode;
-  technology: Technology;
-  startedAt: string;
-  endedAt: string;
-  durationHours: number;
-  totalMwh: number;
-  peakMw: number;
-  thresholdMw: number;
-  maxGapHours: number;
-}
-
-/** The fixed asset scenario a replayed day is scored against. */
-export interface ReplayScenario {
-  batteryPowerMw: number;
-  batteryEnergyMwh: number;
-  loadShiftMw: number;
-}
-
-/** One replayed day for the Time Machine. */
-export interface ReplayDay {
-  episode: CurtailmentEpisode;
-  /** The replayed civil date, `America/Sao_Paulo`. The label is built from it. */
-  date: string;
-  /** What ONS settled, hour by hour. */
-  observed: CurtailmentHourObservation[];
-  /** What the D−1 run said, pinned to the vintage available at D−1. */
-  forecast: CurtailmentHourForecast[];
-  /**
-   * `forecast.day_total` on the wire — the day's energy as a JOINT band, read
-   * off the payload and never rebuilt from `forecast`.
-   *
-   * Adding 24 hourly P90s assumes every hour lands at its 90th percentile at
-   * once, which describes a day far worse than a 90th-percentile day. The
-   * forecaster produces this from a path ensemble and `docs/specs/replay.md`
-   * puts it on the contract for exactly this reason; the fixture draws it the
-   * same way, so the screens cannot learn the wrong habit.
-   * `test/no-summed-bands.test.ts` is the standing guard.
-   */
-  forecastDayTotal: Band;
-  forecastOrigin: ForecastOrigin;
-  /** What the reference scenario's dispatch would have absorbed. */
-  recoveredMwh: number;
-  /** The reference scenario, as parameters rather than as an English sentence. */
-  scenario: ReplayScenario;
-  vintageFidelity: VintageFidelity;
-  /**
-   * What the vintage caveat touches, and what it explicitly does not.
-   *
-   * `docs/specs/replay.md`: the label and the lagged-actual features are read
-   * as ONS states them today; the weather run, DESSEM and the ONS programming
-   * are cut on `published_at` and are genuinely point-in-time on both sides of
-   * go-live. The lists travel as data so the screen names them by reading
-   * rather than by repeating — a blanket "this day is unreliable" would be both
-   * vaguer and less true.
-   */
-  vintageAffects: readonly string[];
-  vintageExempt: readonly string[];
-  /**
-   * The measured size of the vintage caveat, in Replay's own currency, or
-   * `null`.
-   *
-   * `null` means **unmeasured**, and the screen says that word. It is
-   * computable only after ingestion go-live and only once ONS has restated days
-   * WattSteer holds both vintages of, so it will be `null` for months. A zero
-   * here would read as "measured, and small", which is the one thing an
-   * unmeasured caveat must never look like.
-   */
-  revisionPremiumRecoveredMwh: number | null;
-  /**
-   * `integrity.provenance` — how the forecast for this day was kept out of
-   * the model that produced it.
-   *
-   * This replaces the prototype's `inTrainingWindow` /`modelTrainedThrough`
-   * pair, which compared the replayed date against the *serving* artifact's
-   * training cut: the right question asked of the wrong artifact.
-   * `docs/specs/replay.md` refuses to label an in-sample day at all — it
-   * refuses to replay it — so no replayable day is in-sample and the badge
-   * stops being a warning and becomes a provenance statement.
-   *
-   * `served` and `fold_holdout` are `replay.md`'s own spellings, adopted
-   * verbatim rather than restated; `packages/core`'s `ReplayIntegrity` is the
-   * generated type they come from.
-   */
-  provenance: ReplayIntegrity["provenance"];
-  /**
-   * `integrity.held_out_by` — the identity of what held this day out, so the
-   * claim is checkable rather than asserted.
-   *
-   * `null` on a `served` day, and that is not an omission: a served forecast
-   * was published before the day it describes, so no fold had to hold it out
-   * and there is no fold id to name. A `fold_holdout` day names its fold, the
-   * artifact and both windows — the training block *and* the calibration
-   * window, because a day inside the calibration window shaped the interval
-   * the replay promises a floor from.
-   */
-  heldOutBy: ReplayIntegrityHeldOutBy | null;
-}
+/**
+ * There is no `ReplayDay` shape here any more, and no `CurtailmentEpisode`
+ * either.
+ *
+ * Both used to be narrowed local copies of the replay contract, for a fixture
+ * that built a whole replayed day in the browser. `@wattsteer/core`'s generated
+ * `Replay`, `ReplayObservedOnly` and `CurtailmentEpisode` are now the only
+ * ones: the screen renders what `GET /v1/replay` returned, `lib/replay.ts` is
+ * the single place that reads it, and `lib/fixtures/replay.ts` is left holding
+ * the one thing an endpoint could not supply — which days to offer.
+ *
+ * The shapes the charts take (`CurtailmentHourForecast`,
+ * `CurtailmentHourObservation`, `HourlyDispatch`) survive above, because a
+ * chart's input is a rendering concern and both a fixture and a response are
+ * mapped onto it.
+ */

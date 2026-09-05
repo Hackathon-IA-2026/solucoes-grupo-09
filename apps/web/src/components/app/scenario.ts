@@ -43,6 +43,7 @@ import {
   REFERENCE_FLEET,
   SCENARIO_PARAM,
   type SubsystemCode,
+  type TargetDateRule,
   validateScenarioWire,
 } from "@wattsteer/core";
 import type { Battery, Scenario, ShiftableLoad } from "@wattsteer/core/api";
@@ -136,7 +137,7 @@ export function refusalCode(cause: unknown): ErrorCode {
 export function readScenario(
   raw: string | undefined,
   fallback: Scenario,
-  options: { now?: Date } = {},
+  options: { now?: Date; targetDate?: TargetDateRule } = {},
 ): ScenarioReadout {
   if (raw === undefined || raw === "") {
     return { ok: true, scenario: fallback };
@@ -145,6 +146,7 @@ export function readScenario(
     const decoded = decodeScenarioParam(raw);
     validateScenarioWire(JSON.parse(decoded.canonical) as JsonValue, {
       now: options.now,
+      targetDate: options.targetDate,
     });
     const batteries = decoded.scenario.assets.filter(isBattery);
     const loads = decoded.scenario.assets.filter(isLoad);
@@ -282,6 +284,19 @@ export function withLoad(scenario: Scenario, next: ShiftableLoadAsset): Scenario
  */
 export function withBrlPerMwh(scenario: Scenario, brlPerMwh: number): Scenario {
   return { ...scenario, economicAssumptions: { brlPerMwh } };
+}
+
+/**
+ * The scenario moved to another day.
+ *
+ * Its own function rather than a spread at the call site, because the day is
+ * the one field that means something different on the two screens that carry a
+ * scenario: on Mitigate it is the day being planned and it does not move, and
+ * on the Time Machine it is the day being replayed and it is the selection. The
+ * assets are untouched — a fleet is not a property of a date.
+ */
+export function withTargetDate(scenario: Scenario, targetDate: string): Scenario {
+  return { ...scenario, targetDate };
 }
 
 /** The scenario moved to another subsystem, assets and all. */

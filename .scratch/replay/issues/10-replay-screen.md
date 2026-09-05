@@ -68,7 +68,7 @@ Forecaster 22 is the **national** day grain (`curtailment_forecast_national_day`
 the screen grows a national band; the per-subsystem read is what the acceptance criteria
 below describe.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The honesty block is above the headline figures and is not collapsible
 - [ ] The provenance badge names the artifact and its training window; the `IN-SAMPLE` branch is deleted, not left unreachable
@@ -82,3 +82,28 @@ below describe.
 - [ ] No carbon field is rendered and none exists in the contract
 - [ ] The fleet controls re-plan without re-forecasting, and an unreplayable date explains why
 - [ ] Every refusal renders in both locales from a typed code
+
+## Open after this ticket: nothing writes the holdout forecast rows
+
+Found while merging, and **verified** rather than taken on report. `replay.md`'s
+Further Notes says Replay owes ticket 009 two hand-backs and "neither exists
+today". One of them — the day-grain quantiles — does exist (migration `0034`),
+which is the correction struck above. The other does not:
+
+`forecast_origin_kind` is `ENUM('served', 'backfilled_holdout')` since `0034`,
+and 42 files reference the kind — `forecast/reads.ts` is careful that a
+`backfilled_holdout` row is never returned by a live route, and the Python side
+mirrors the rule. But a repository-wide search finds **no writer**. Nothing under
+`apps/api/src/replay/`, `apps/api/src/jobs/` or `apps/ml/src/` ever persists a
+row with that origin kind.
+
+**Consequence at runtime:** a `fold_holdout` date — the Time Machine's whole
+point — has no out-of-fold forecast row to replay, so `/v1/replay` answers
+`REPLAY_FORECAST_UNAVAILABLE` and the screen renders the refusal rather than the
+numbers. The screen is correct either way; the data is not there yet.
+
+This is not a defect in this ticket, and the screen should not fake it. It needs
+its own ticket: persist out-of-fold predictions with
+`origin_kind = 'backfilled_holdout'` when a fold artifact is scored — which is
+work that belongs beside forecaster 15's retrain driver, since that is what
+produces the fold artifacts in the first place.

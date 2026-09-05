@@ -44,6 +44,8 @@ import type {
   Meta,
   ObservedReasons,
   OptimizationResult,
+  Replay,
+  ReplayObservedOnly,
   Scenario,
 } from "./types.generated.js";
 import { decodeWire, encodeWire, type WireShapeName } from "./wire.js";
@@ -169,6 +171,16 @@ export class ApiClient {
       method?: string;
       body?: unknown;
       bodyShape?: WireShapeName;
+      /**
+       * A body that is already the exact bytes the route must receive, sent
+       * verbatim.
+       *
+       * The one caller is a replay of a past day: `/v1/replay` answers over the
+       * **canonical** scenario bytes and stamps the hash of what arrived, so a
+       * body this client re-serialised would be a different document under the
+       * same name. It is mutually exclusive with `body`.
+       */
+      bodyText?: string;
       signal?: AbortSignal;
     },
   ): Promise<T> {
@@ -178,7 +190,10 @@ export class ApiClient {
       ...this.headers,
     };
     let payload: string | undefined;
-    if (init?.body !== undefined) {
+    if (init?.bodyText !== undefined) {
+      headers["content-type"] = "application/json";
+      payload = init.bodyText;
+    } else if (init?.body !== undefined) {
       headers["content-type"] = "application/json";
       payload = JSON.stringify(
         init.bodyShape === undefined ? init.body : encodeWire(init.bodyShape, init.body),
@@ -395,6 +410,70 @@ export class ApiClient {
       bodyShape: "Scenario",
       signal,
     });
+  }
+
+  /**
+   * `GET /v1/replay?d=&s=&lane=` — one past day, replayed at its pinned origin.
+   *
+   * **A `GET` and not the `POST`, deliberately.** `docs/specs/replay.md` makes
+   * a replay a `Scenario` with a past `target_date`, so the transport is the
+   * optimizer's blob byte-for-byte — and the blob is already in the address bar
+   * of the screen that asks. Sending it as a query parameter keeps the request
+   * a shared-cacheable function of exactly what a shared link contains: the
+   * gateway's own `max-age=600` on this route is only reachable this way.
+   *
+   * `d` is the civil day, redundant with the scenario's own `target_date` and
+   * checked against it by the gateway: a link whose visible date is not the day
+   * it replays is not a link anybody can read.
+   *
+   * `lane` is required and never defaulted here for the reason the gateway
+   * gives — a post-go-live day has one candidate forecast per served lane, and
+   * no rule yet says which one a replay is of. A client-side default would be
+   * this module inventing that rule.
+   *
+   * The forecast is a **pinned row**: there is no joblib load and no feature
+   * build behind this call, which is why it answers inside one request and why
+   * changing the fleet re-plans without ever re-forecasting.
+   */
+  replay(
+    query: { d: string; s: string; lane: string },
+    signal?: AbortSignal,
+  ): Promise<Replay> {
+    return this.request<Replay>("Replay", "/v1/replay", {
+      query: { d: query.d, s: query.s, lane: query.lane },
+      signal,
+    });
+  }
+
+  /**
+   * `POST /v1/replay/observed-only` — what a pre-F1 day gets instead.
+   *
+   * Every artifact was fitted on the pre-F1 block, so no honest counterfactual
+   * exists and the day is **refused** rather than labelled. What comes back is
+   * the settled profile, its episodes and the perfect-foresight bound, which
+   * needs no forecast and therefore no model. `scored`, `avoided_energy_mwh`
+   * and `recovered_floor_mwh` are absent rather than zero, because a zero would
+   * be a claim about a plan WattSteer was never asked to build.
+   *
+   * `canonicalScenario` is sent verbatim — `canonicalScenarioJson(scenario)`,
+   * whose bytes the answer is hashed over. A body re-serialised on the way out
+   * would be a different document answering under the same hash.
+   */
+  replayObservedOnly(
+    canonicalScenario: string,
+    query: { lane: string },
+    signal?: AbortSignal,
+  ): Promise<ReplayObservedOnly> {
+    return this.request<ReplayObservedOnly>(
+      "ReplayObservedOnly",
+      "/v1/replay/observed-only",
+      {
+        method: "POST",
+        query: { lane: query.lane },
+        bodyText: canonicalScenario,
+        signal,
+      },
+    );
   }
 }
 

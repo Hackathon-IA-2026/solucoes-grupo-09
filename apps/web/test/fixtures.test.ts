@@ -1,14 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { DATA_WINDOW } from "@wattsteer/core";
 import { parseAppParams, technologyParam } from "../src/components/app/params";
-import { en as EN } from "../src/i18n/copy.en";
-import { pt as PT } from "../src/i18n/copy.pt";
 import {
   buildForecast,
   DEFAULT_LOAD,
-  FOLDS,
   FORECAST_ORIGINS,
   INGESTION_GO_LIVE,
   REPLAY_DAYS,
@@ -96,8 +91,17 @@ describe("forecast fixtures", () => {
     expect(typeof day.solarMwh).toBe("number");
     expect(day.windMwh + day.solarMwh).toBe(forecast.dayExpectedMwh);
     for (const hour of forecast.hours) {
-      expect(Object.keys(hour.split).sort()).toEqual(["solarMwh", "windMwh"]);
-      expect(hour.split.windMwh + hour.split.solarMwh).toBeCloseTo(hour.expectedMwh, 6);
+      // `split` is optional on the shape because a *replayed* day's forecast
+      // hours carry none — the replay contract has no technology division on
+      // them. Every hour a day-ahead forecast builds carries one, and that is
+      // what is asserted here.
+      const hourly = hour.split;
+      expect(hourly).toBeDefined();
+      if (hourly === undefined) {
+        throw new Error("asserted above");
+      }
+      expect(Object.keys(hourly).sort()).toEqual(["solarMwh", "windMwh"]);
+      expect(hourly.windMwh + hourly.solarMwh).toBeCloseTo(hour.expectedMwh, 6);
     }
   });
 
@@ -136,135 +140,76 @@ describe("risk classification", () => {
   });
 });
 
-describe("replay honesty", () => {
-  test("a day says how it was held out, and carries neither replaced field", () => {
-    // `docs/specs/replay.md` fixes these names and this fixture adopts them.
-    // The pair they replace asked the right question of the wrong artifact —
-    // `date <= MODEL_TRAINED_THROUGH` compares a historical day against the
-    // *serving* model's training cut, and the serving model is never consulted
-    // for a historical day. Asserting their absence is what stops the old pair
-    // reappearing beside the new one as a convenience.
+describe("the replay day catalogue", () => {
+  /**
+   * What is left of the Time Machine's fixture, and what is deliberately not.
+   *
+   * The forecast, the settled profile, the integrity statement and every figure
+   * on the screen now come from `GET /v1/replay` — `docs/specs/replay.md`
+   * requires exactly one implementation of the execution rule in the
+   * repository, so a fixture that produced a recovered number would have had
+   * to be a second one, and `test/one-execution-rule.test.ts` walks the whole
+   * repository to say so. What an endpoint could not supply is the list of days
+   * worth opening on, which is what this fixture is now.
+   *
+   * The contract-level honesty properties those tests used to assert did not
+   * go away: they moved to `replay-screen.test.ts`, where they are asserted
+   * against the **published** example of the contract rather than against a
+   * fixture that could restate it.
+   */
+
+  test("the catalogue is dates and nothing else", () => {
+    // A verdict here would be a second opinion about the thing the endpoint
+    // answers, and the two would eventually disagree with nothing failing.
     for (const day of REPLAY_DAYS) {
-      expect(["served", "fold_holdout"]).toContain(day.provenance);
-      expect(day).not.toHaveProperty("inTrainingWindow");
-      expect(day).not.toHaveProperty("modelTrainedThrough");
+      expect(Object.keys(day).sort()).toEqual(["date", "id", "subsystem"]);
+      expect(day.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(day.id).toContain(day.date);
     }
   });
 
-  test("the fixture contains both provenances and both vintage fidelities", () => {
-    expect(new Set(REPLAY_DAYS.map((d) => d.provenance))).toEqual(
-      new Set(["served", "fold_holdout"]),
+  test("the days span the three ranges the window partitions into", () => {
+    // Not a restatement of the fold calendar — the boundaries come from the
+    // published constants — but the property that matters for a screen: all
+    // three of its arms are reachable from the picker, so it cannot be built
+    // having only ever seen the flattering one.
+    const dates = REPLAY_DAYS.map((day) => day.date);
+    const holdoutStart = DATA_WINDOW.firstHoldoutFoldStart;
+    // Pre-F1: refused as a replay, rendered observed-only.
+    expect(dates.some((date) => date < holdoutStart)).toBe(true);
+    // Held out by a frozen fold, and still pre-go-live.
+    expect(dates.some((date) => date >= holdoutStart && date < INGESTION_GO_LIVE)).toBe(
+      true,
     );
-    expect(new Set(REPLAY_DAYS.map((d) => d.vintageFidelity))).toEqual(
-      new Set(["point_in_time", "revision_optimistic"]),
-    );
+    // Post-go-live: what WattSteer actually published, scored point-in-time.
+    expect(dates.some((date) => date >= INGESTION_GO_LIVE)).toBe(true);
   });
 
-  test("provenance and vintage are two fields, and today they agree", () => {
-    // They coincide, and `docs/specs/replay.md` says so in the same breath as
-    // it refuses to merge them: F6 opens on the date ingestion goes live, so
-    // in v1 every `fold_holdout` day is `revision_optimistic` and every
-    // `served` day is `point_in_time`. The pair `fold_holdout` +
-    // `point_in_time` becomes populated the moment F6 freezes and F7 opens —
-    // at which point a single merged badge would be wrong with no edit having
-    // been made. The agreement is asserted here so that it is a recorded fact
-    // about v1 rather than an assumption a screen quietly built on.
+  test("the fixture's window dates are the published ones", () => {
+    // `/v1/meta` returns it. A fixture that restated it could put the screen a
+    // quarter out of step with the API with nothing failing.
+    expect(INGESTION_GO_LIVE).toBe(DATA_WINDOW.ingestionGoLive);
+  });
+
+  test("every day the picker offers is one a link can address", () => {
+    // `parseAppParams` falls back rather than crashing, so a catalogue entry
+    // whose id the parser rejects would silently redirect the reader to the
+    // first day. Asserted both ways: the ids round-trip, and an unknown one
+    // does not.
     for (const day of REPLAY_DAYS) {
-      expect(day.vintageFidelity).toBe(
-        day.provenance === "served" ? "point_in_time" : "revision_optimistic",
-      );
+      expect(parseAppParams({ episode: day.id }).episode).toBe(day.id);
     }
-  });
-
-  test("a served day names no fold, and that is the contract's own shape", () => {
-    // `held_out_by` is nullable on the wire. A served forecast was published
-    // before the day it describes, which is a stronger statement than being
-    // held out of a fold and needs no fold id to make it.
-    for (const day of REPLAY_DAYS) {
-      expect(day.heldOutBy === null).toBe(day.provenance === "served");
-    }
-  });
-
-  test("the held-out assertion holds: neither window contains the replayed date", () => {
-    // The property `docs/specs/replay.md` re-checks at read time, asserted
-    // here over every day the fixture offers. **Both** windows, because the
-    // calibration window is where the isotonic fit and the two conformal
-    // scalars were fitted: a day inside it has shaped the interval the replay
-    // promises a floor from, which is subtler than the base fit and is the one
-    // a future session is most likely to forget.
-    const held = REPLAY_DAYS.filter((d) => d.heldOutBy !== null);
-    expect(held.length).toBeGreaterThan(0);
-    for (const day of held) {
-      const windows = day.heldOutBy;
-      if (windows === null) {
-        throw new Error("filtered above");
-      }
-      for (const [from, to] of [windows.trainWindow, windows.calibrationWindow]) {
-        expect(day.date >= from && day.date <= to).toBe(false);
-      }
-    }
-  });
-
-  test("the fold windows are the calendar's, not this fixture's", () => {
-    // `apps/ml/src/wattsteer_ml/evaluation/fold_calendar.yaml` is the stored
-    // artifact every fold result is keyed by. Two files that must agree and
-    // are only ever edited by hand do not agree for long, so the agreement is
-    // checked rather than asserted in a comment.
-    const calendar = Bun.YAML.parse(
-      readFileSync(
-        join(
-          import.meta.dir,
-          "..",
-          "..",
-          "ml",
-          "src",
-          "wattsteer_ml",
-          "evaluation",
-          "fold_calendar.yaml",
-        ),
-        "utf8",
-      ),
-    ) as {
-      window_start: string;
-      pinned_folds: {
-        id: string;
-        test_start: string;
-        quarter_end: string;
-        train_end: string;
-        calibration_start: string;
-        calibration_end: string;
-      }[];
-    };
-    for (const fold of FOLDS) {
-      const pinned = calendar.pinned_folds.find((row) => row.id === fold.fold);
-      expect(pinned).toBeDefined();
-      if (pinned === undefined) {
-        throw new Error("asserted above");
-      }
-      expect([fold.testStart, fold.testEnd]).toEqual([
-        pinned.test_start,
-        pinned.quarter_end,
-      ]);
-      expect(fold.trainWindow).toEqual([calendar.window_start, pinned.train_end]);
-      expect(fold.calibrationWindow).toEqual([
-        pinned.calibration_start,
-        pinned.calibration_end,
-      ]);
-    }
+    expect(parseAppParams({ episode: "1999-01-01-ne" }).episode).toBe(REPLAY_DAYS[0].id);
   });
 
   test("the forecast origin names two artifacts, in two fields", () => {
-    // The defect `docs/specs/api-surface.md` found on the landing hero, which
-    // the app fixtures had in a second form: the WattSteer run label with the
-    // weather run glued onto it as " · weather 12Z". One string cannot be
-    // filtered, compared or superseded on either fact, and a screen reading it
-    // has no way to say which artifact it is naming. `run_label` is now the
-    // WattSteer artifact version and the weather run is its own field.
-    const origins = [
-      ...REPLAY_DAYS.map((d) => d.forecastOrigin),
-      ...RUN_LABELS.map((run) => FORECAST_ORIGINS[run]),
-    ];
-    for (const origin of origins) {
+    // The defect `docs/specs/api-surface.md` found on the landing hero: the
+    // WattSteer run label with the weather run glued onto it as
+    // " · weather 12Z". One string cannot be filtered, compared or superseded
+    // on either fact, and a screen reading it has no way to say which artifact
+    // it is naming.
+    for (const run of RUN_LABELS) {
+      const origin = FORECAST_ORIGINS[run];
       expect(origin.producer).toBe("wattsteer");
       expect(origin.runLabel).not.toContain("weather");
       expect(origin.weatherRunLabel).toMatch(/^D−1 (00Z|12Z)$/);
@@ -274,70 +219,6 @@ describe("replay honesty", () => {
     expect(new Set(RUN_LABELS.map((r) => FORECAST_ORIGINS[r].weatherRunLabel)).size).toBe(
       2,
     );
-  });
-
-  test("a held-out day's run label is the artifact that held it out", () => {
-    // `docs/specs/replay.md` writes `forecast_origin.run_label` as the
-    // artifact id. On a `fold_holdout` day that is the *fold's* artifact, and
-    // naming it is what lets a reader check the provenance claim against the
-    // windows printed beside it rather than take it on trust.
-    for (const day of REPLAY_DAYS) {
-      if (day.heldOutBy !== null) {
-        expect(day.forecastOrigin.runLabel).toBe(day.heldOutBy.artifactId);
-      }
-    }
-  });
-
-  test("the fixture's window dates are the published ones", () => {
-    // `/v1/meta` returns both. A fixture that restated them could put the
-    // screen a quarter out of step with the API with nothing failing.
-    expect(INGESTION_GO_LIVE).toBe(DATA_WINDOW.ingestionGoLive);
-    expect(FOLDS[0].testStart).toBe(DATA_WINDOW.firstHoldoutFoldStart);
-  });
-
-  test("the caveat's extent is the response's, not the screen's", () => {
-    // `packages/core/fixtures/spec-examples/12-replay.json` is the published
-    // example of the contract. Asserting the fixture against it is what makes
-    // "vintage_affects names the actuals and the lagged features" a checked
-    // property rather than a sentence somebody typed into two places.
-    const example = JSON.parse(
-      readFileSync(
-        join(
-          import.meta.dir,
-          "..",
-          "..",
-          "..",
-          "packages",
-          "core",
-          "fixtures",
-          "spec-examples",
-          "12-replay.json",
-        ),
-        "utf8",
-      ),
-    ) as { integrity: { vintage_affects: string[]; vintage_exempt: string[] } };
-    for (const day of REPLAY_DAYS) {
-      expect([...day.vintageAffects]).toEqual(example.integrity.vintage_affects);
-      expect([...day.vintageExempt]).toEqual(example.integrity.vintage_exempt);
-      // Every part the screen may have to name has copy in both locales; a part
-      // with none would render as its wire token to a user.
-      for (const part of [...day.vintageAffects, ...day.vintageExempt]) {
-        expect(Object.keys(EN.app.replay.vintagePart)).toContain(part);
-        expect(Object.keys(PT.app.replay.vintagePart)).toContain(part);
-      }
-    }
-  });
-
-  test("the revision premium is null, and null means unmeasured", () => {
-    // The one thing this field must never be until it is computable. A zero
-    // would read as "measured, and small", which is the failure mode the
-    // nullable field exists to prevent — and the screen's `null` branch says
-    // the word rather than falling silent.
-    for (const day of REPLAY_DAYS) {
-      expect(day.revisionPremiumRecoveredMwh).toBeNull();
-    }
-    expect(EN.app.replay.revisionPremiumUnmeasured).toContain("unmeasured");
-    expect(EN.app.replay.revisionPremiumUnmeasured).not.toContain("0");
   });
 });
 
@@ -378,31 +259,13 @@ describe("URL params", () => {
 });
 
 describe("defects the specs found in this prototype", () => {
-  test("the replay day band is joint, never the sum of the hourly bands", () => {
-    // `docs/specs/replay.md` caught this screen adding 24 hourly P90s, with a
-    // note conceding a joint day total would be narrower. The concession has
-    // expired: `forecast.day_total` is on the contract, drawn from the path
-    // ensemble, and the fixture draws it the same way.
-    //
-    // As on the Overview, the *inequality* is asserted and not its direction.
-    // The P90 sits below the componentwise sum, which is the whole point — 24
-    // hours do not all land at their own 90th percentile together. The P10 can
-    // sit either side of it, because an hourly hurdle puts mass at exactly
-    // zero: a drawn day whose common level runs low turns several episode
-    // hours off entirely, which no componentwise P10 can express. Pinning a
-    // direction there would pin an assumption about the dependence structure
-    // rather than the rule.
-    for (const day of REPLAY_DAYS) {
-      const sum = (key: "p10" | "p50" | "p90") =>
-        Math.round(day.forecast.reduce((acc, h) => acc + h.constrainedOff[key], 0));
-      const joint = day.forecastDayTotal;
-      expect(joint.p90).toBeLessThan(sum("p90"));
-      expect(joint.p50).not.toBe(sum("p50"));
-      expect(joint.p10).not.toBe(sum("p10"));
-      expect(joint.p10).toBeLessThanOrEqual(joint.p50);
-      expect(joint.p50).toBeLessThanOrEqual(joint.p90);
-    }
-  });
+  /**
+   * The replay day band's "joint, never a sum" property is asserted in
+   * `replay-screen.test.ts`, against the **published** example of the contract
+   * rather than against a fixture. It used to be checked here on a day this
+   * module built; the screen now reads `forecast.day_total` off the payload, so
+   * the property belongs to the contract and the fixture has no band to check.
+   */
 
   test("the reference flexible load can actually shed what it claims", () => {
     // flex-optimizer.md rejects max_shift_mw above the implied baseline as
