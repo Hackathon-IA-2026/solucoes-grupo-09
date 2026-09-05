@@ -13,6 +13,7 @@ fix is a line in the YAML rather than a silent landing in `data_conditions`.
 from __future__ import annotations
 
 import dataclasses
+import json
 from pathlib import Path
 
 import pytest
@@ -22,6 +23,9 @@ from wattsteer_ml.diagnosis.driver_groups import (
     DRIVER_GROUP_CODES,
     DRIVER_GROUP_MAP,
     DRIVER_GROUPS_PATH,
+    MODEL_INPUTS_GENERATOR,
+    MODEL_INPUTS_PATH,
+    MODEL_INPUTS_SOURCE,
     UNIT_CODES,
     DriverGroup,
     DriverGroupMap,
@@ -30,10 +34,10 @@ from wattsteer_ml.diagnosis.driver_groups import (
     UngroupedFeatureError,
     assert_total_partition,
     load_driver_group_map,
-    load_ordered_features,
+    load_model_inputs,
 )
 
-FEATURE_SETS = load_ordered_features()
+FEATURE_SETS = load_model_inputs()
 
 #: Every name the map must cover: the union over both feature sets. Set B is set
 #: A plus the DESSEM block, but the union is what has to be total — a model of
@@ -48,8 +52,8 @@ ALL_FEATURES: tuple[str, ...] = tuple(
 #:
 #: A change here is a product-visible event: it re-ranks the Explain screen and
 #: invalidates every cached narration.
-EXPECTED_VERSION = 1
-EXPECTED_HASH = "sha256:afcef8358f313a6808a734836b47e7752bf90b6e7e1a6373fed925fe2226dc87"
+EXPECTED_VERSION = 2
+EXPECTED_HASH = "sha256:aab7c87c5cfa0cbd34718b0b8fb8bb3ef74fdec6c97d59655fd692962fb9d1eb"
 
 
 def _map_with(
@@ -342,7 +346,7 @@ def test_the_loader_rejects_a_named_driver_whose_witness_is_elsewhere() -> None:
         )
 
 
-# --- the ordered feature list -------------------------------------------------
+# --- the generated model-input artifact ---------------------------------------
 
 
 def test_set_b_is_set_a_plus_the_dessem_block() -> None:
@@ -363,3 +367,78 @@ def test_no_label_is_in_the_feature_list() -> None:
     """`y_*` are labels. A label in the feature vector is the leak this whole
     programme exists to prevent, and it would also be grouped as a driver."""
     assert not [name for name in ALL_FEATURES if name.startswith("y_")]
+
+
+def test_the_artifact_says_it_was_generated_and_by_what() -> None:
+    """The one property that separates it from the list it replaced.
+
+    `ordered_features.yaml` was a hand transcription, and it failed by *agreeing*
+    with `feature_set_model_inputs()` — 77 names and 99 — while both were one
+    name short of the spec's class-`K` table. Nothing noticed, because a second
+    list only speaks when it disagrees. This file cannot make that mistake for
+    the same reason it cannot make any other one: nobody types a feature name
+    into it. That is a claim about provenance, so the provenance is asserted.
+    """
+    document = json.loads(MODEL_INPUTS_PATH.read_text(encoding="utf-8"))
+    assert document["generated_by"] == MODEL_INPUTS_GENERATOR
+    assert document["source"] == MODEL_INPUTS_SOURCE
+    assert "Do not edit by hand" in document["do_not_edit"]
+    # The attribute count `feature_hash` moves with, carried so that a stale
+    # artifact is legible as one rather than merely wrong.
+    assert document["feature_row_attributes"] == 112
+
+
+def test_the_loader_refuses_an_artifact_that_does_not_name_its_generator(
+    tmp_path: Path,
+) -> None:
+    """A hand-written file is exactly what an unprovenanced one looks like."""
+    path = tmp_path / "model_inputs.json"
+    path.write_text(
+        json.dumps(
+            {
+                "generated_by": "somebody's editor",
+                "source": "the spec's feature table",
+                "do_not_edit": "",
+                "feature_row_attributes": 112,
+                "sets": {"dessem_free_v1": [{"column_name": "subsystem"}]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(DriverGroupMapError, match="features:snapshot"):
+        load_model_inputs(path)
+
+
+def test_a_name_in_the_type_and_absent_from_the_group_map_still_fails() -> None:
+    """The failure the second list stopped being able to produce.
+
+    The names now come from `feature_row`'s attributes rather than from a
+    transcription of the spec, so this is the real shape of the event: a ticket
+    appends an attribute, the artifact is regenerated, and the map has no line
+    for it. It must stop the build — which is what `ordered_features.yaml` could
+    not do about `observed_constrained_off_same_hour_exceedance_7d`, because the
+    transcription had the same hole the type did.
+    """
+    appended = (*ALL_FEATURES, "observed_constrained_off_p95_7d")
+    with pytest.raises(DriverGroupMapError, match="observed_constrained_off_p95_7d"):
+        assert_total_partition(appended, DRIVER_GROUP_MAP)
+
+
+def test_the_exceedance_column_the_spec_always_had_is_now_in_both() -> None:
+    """The column ticket 05 owed, pinned in the artifact and in the map.
+
+    Not a restatement of totality: totality would pass if this name were absent
+    from *both*, which is precisely the state that survived two tickets. This
+    test is the one that fails if it disappears from either.
+    """
+    exceedance = "observed_constrained_off_same_hour_exceedance_7d"
+    assert exceedance in FEATURE_SETS["dessem_free_v1"]
+    assert exceedance in FEATURE_SETS["dessem_augmented_v1"]
+    assert DRIVER_GROUP_MAP.group_of(exceedance) == "recent_history"
+    # And it is not the column it is easily confused with, which is still here
+    # and is a different feature: all 168 hours, not the seven observations of
+    # one local hour.
+    assert (
+        "observed_constrained_off_hours_above_threshold_7d"
+        in FEATURE_SETS["dessem_free_v1"]
+    )

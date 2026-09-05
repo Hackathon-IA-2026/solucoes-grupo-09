@@ -77,7 +77,7 @@ from wattsteer_ml.diagnosis.driver_groups import (
     UnitCode,
     assert_total_partition,
     load_driver_group_map,
-    load_ordered_features,
+    load_model_inputs,
 )
 from wattsteer_ml.diagnosis.publication import (
     PRODUCER,
@@ -197,6 +197,6 @@ __all__ = [
     "group_columns",
     "headline_readings",
     "load_driver_group_map",
-    "load_ordered_features",
+    "load_model_inputs",
     "resample_hour",
 ]

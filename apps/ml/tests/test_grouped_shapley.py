@@ -503,9 +503,9 @@ def test_the_diagnosis_module_holds_no_composition_of_its_own() -> None:
 
 def test_both_real_feature_sets_give_every_group_a_column() -> None:
     """A player who cannot move is a bar that is structurally zero."""
-    from wattsteer_ml.diagnosis.driver_groups import load_ordered_features
+    from wattsteer_ml.diagnosis.driver_groups import load_model_inputs
 
-    for names in load_ordered_features().values():
+    for names in load_model_inputs().values():
         columns = group_columns(names, DRIVER_GROUP_MAP)
         assert len(columns) == len(DRIVER_GROUP_CODES)
         assert all(columns)

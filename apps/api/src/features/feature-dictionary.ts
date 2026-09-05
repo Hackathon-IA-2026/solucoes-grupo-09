@@ -19,9 +19,10 @@ import type { FeatureSet, GateProfile } from "./feature-rows.js";
  *
  * ## Why the dictionary is not a constant in this file
  *
- * Because a constant here would be the fourth place the feature set is written
- * down, after the composite type, `ordered_features.yaml` and
- * `DAY_GRAIN_COLUMNS`. The dictionary is *derived* from `pg_attribute` on
+ * Because a constant here would be a third place the feature set is written
+ * down, after the composite type and `DAY_GRAIN_COLUMNS` — it used to be a
+ * fourth, and `ordered_features.yaml` was the one ticket 14 retired. The
+ * dictionary is *derived* from `pg_attribute` on
  * `feature_row` — that is the whole design — so reading it requires a database,
  * and that cost is the point rather than an inconvenience. What can be answered
  * without one is answered without one: `isFeatureColumn` and `featureGrain` in
@@ -106,17 +107,24 @@ export interface FeatureSetModelInput {
   input_index: number;
   column_name: string;
   class_label: string;
-  grain: FeatureColumnGrain;
+  /**
+   * NULL for `subsystem` — the one identity column that is also a model input,
+   * and the one the dictionary does not ask the grain question about. Every
+   * other input answers `hour` or `day`.
+   */
+  grain: FeatureColumnGrain | null;
   available_at_gate_early: boolean;
 }
 
 /**
  * The ordered model inputs of one feature set — what an artifact is bound to.
  *
- * This is the list `apps/ml`'s `ordered_features.yaml` transcribes by hand, and
- * that file's own header says the transcription goes away once the builder
- * lands and the names can come from the artifact instead. They can now come
- * from here.
+ * `apps/ml`'s `ordered_features.yaml` used to transcribe this list by hand.
+ * Ticket 14 retired it: `model-inputs-artifact.ts` serialises what this
+ * function returns into `apps/ml/src/wattsteer_ml/diagnosis/model_inputs.json`,
+ * so the Python side reads names that were derived from the composite type
+ * rather than typed out beside it. The argument for that shape, and for why the
+ * transcription's *agreement* was the thing wrong with it, is at that module.
  */
 export async function readFeatureSetModelInputs(
   db: Database,

@@ -526,6 +526,32 @@ export interface FeatureRow {
    * block returns no rows at all.
    */
   dessem_export_utilisation: number | null;
+
+  // The one class-`K` name ticket 05 owed, appended by
+  // `drizzle/0036_the_same_hour_exceedance.sql`. It sits here rather than
+  // beside the same-hour mean it is the twin of, because `ALTER TYPE ... ADD
+  // ATTRIBUTE` appends and this list is the tree's history — the same reason
+  // the two `observed_` utilisation ratios above sit after the `proxy_` family.
+
+  /**
+   * Share of the seven same-local-hour observations ending at the cutoff whose
+   * constrained-off total is **above** `threshold_mw`, in 1/7 steps.
+   *
+   * The occurrence twin of `observed_constrained_off_same_hour_mean_7d`, and
+   * the occurrence head of `docs/specs/forecaster.md`'s rung 1 — the mandatory
+   * baseline, computed from the feature function rather than reimplemented so
+   * the baseline and the model cannot disagree about the last seven days.
+   *
+   * **Not** `observed_constrained_off_hours_above_threshold_7d`, which counts
+   * all 168 hours of the window rather than the seven observations of one local
+   * hour: that column is day grain and this one is hourly, because the window
+   * is anchored to the cutoff but *selected* by the target's local hour.
+   *
+   * The comparison is strict, exactly as `y_has_curtailment` and the hours
+   * count are, so the threshold sweep cannot make the baseline and the label
+   * disagree about what curtailment is.
+   */
+  observed_constrained_off_same_hour_exceedance_7d: number | null;
 }
 
 /**
@@ -669,6 +695,12 @@ export const FEATURE_ROW_COLUMNS: readonly (keyof FeatureRow)[] = [
   "observed_export_utilisation_mean_24h_to_cutoff",
   "observed_corridor_utilisation_ne_se_max_7d",
   "dessem_export_utilisation",
+  // The class-`K` name ticket 05 owed and did not ship, appended by
+  // `drizzle/0036_the_same_hour_exceedance.sql`. The 112th attribute, and the
+  // one that finally makes this list and the spec's class-`K` table agree —
+  // they had agreed with each other and with `ordered_features.yaml`, and all
+  // three were one name short of the authority.
+  "observed_constrained_off_same_hour_exceedance_7d",
 ];
 
 /**
