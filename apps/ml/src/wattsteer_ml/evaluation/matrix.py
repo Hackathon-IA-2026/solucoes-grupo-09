@@ -50,12 +50,15 @@ folds agree about nothing.
   data had" and "the rows the calendar names" are the same set by construction,
   and a run that returns anything else has a fault worth stopping for.
 
-**What is not here, and why.** The end-to-end assertion — run all four arms
+**What is not here, and why.** The end-to-end assertion — run all five arms
 against the database, key the rows they actually return and compare the hashes —
-needs the feature function to exist for both feature sets. `features.py` is the
-seam and `feature_rows(...)` is in the migration tree, but only the weather
-block of set A is populated so far and `dessem_augmented_v1` has no columns of
-its own yet. :meth:`RowKey.from_feature_row` is the adapter that assertion will
+needs a migrated database with the sources behind both feature sets ingested.
+`features.py` is the seam and `feature_rows(...)` is in the migration tree, and
+both sets now have their columns: `dessem_augmented_v1` carries the
+twenty-two `dessem_*` attributes of `feature_dessem_block`
+(`apps/api/drizzle/0025_dessem_and_the_feature_set.sql`), fed by
+`apps/api/src/ingest/dessem-job.ts`. What is missing is the *run*, not the
+columns. :meth:`RowKey.from_feature_row` is the adapter that assertion will
 use, and it is tested against the row shape the migration declares; the
 assertion itself is deliberately absent rather than written against a stub, because
 a row-identity test that passes against fabricated rows is worse than no test.

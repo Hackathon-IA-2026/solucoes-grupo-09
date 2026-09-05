@@ -236,10 +236,10 @@ On top of that spine:
     only point metrics, so that the harm the research predicts is measured where
     it was predicted to land.
 29. As a product owner, I want the DESSEM A/B expressed in MWh of promised floor
-    rather than in pinball loss, so that "3% better" and "eleven hours of notice"
+    rather than in pinball loss, so that "3% better" and "ten hours of notice"
     are comparable quantities.
 30. As a product owner, I want the option of serving both an early and a late
-    artifact costed, so that the eleven hours are only spent if they have to be.
+    artifact costed, so that the ten hours are only spent if they have to be.
 
 **The artifact**
 
@@ -869,7 +869,7 @@ window, so the `B-common − A-common` contrast is clean and the
 
 **The unit of comparison is not pinball loss.** `Δ qloss_mwh` is the gate's
 metric and it is the wrong currency for a product decision, because the other
-side of the trade is eleven hours of operator notice and nobody can convert
+side of the trade is ten hours of operator notice and nobody can convert
 hours into pinball loss. So the A/B additionally reports, for the same days:
 
 > **`Δ recovered_floor_mwh`** — both forecasts run through the optimizer's
@@ -877,7 +877,7 @@ hours into pinball loss. So the A/B additionally reports, for the same days:
 > way `flex-optimizer.md` specifies. The result is the difference in the number
 > the product actually promises, per day, in MWh.
 
-That is a quantity a human can weigh against eleven hours, because eleven hours
+That is a quantity a human can weigh against ten hours, because ten hours
 of notice is worth whatever it lets an operator do with the same fleet. The
 reference fleet is a fixed, published scenario (one battery, one shiftable load,
 the sizes the Mitigate default uses once its `SHIFT_EXCEEDS_BASELINE` fixture is
@@ -892,8 +892,15 @@ corrected) and is stamped on the comparison so the number is reproducible.
 | DESSEM | ✗ structurally | ✗ | ✓ |
 | Training history | 29 months | 29 months | 15 months |
 | Decision-grade folds | 6 | 6 | **2** |
-| Operator notice | +11 h | — | — |
+| Operator notice | +10 h | — | — |
 
+
+> **Corrected.** This document said *eleven* hours of operator notice in five
+> places. The authority is `gate_at` in `0016_the_feature_gate.sql`, which puts
+> `gate_early` at D−1 09:00 BRT and `gate_late` at D−1 19:00 BRT — **ten** hours
+> apart. Found by forecaster 18, which deliberately wrote no number into Python
+> either way: its `operator_notice` names `gate_at` and its two instants and
+> converts nothing, so the figure cannot go stale in a third place.
 > **Ship DESSEM iff** B-common's `recovered_floor_mwh` advantage over A-common,
 > on F5–F6, is positive under the same paired block bootstrap the hot-swap gate
 > uses (P ≥ 0.9), **and** the product accepts a 19:00 BRT publication for the
@@ -901,7 +908,7 @@ corrected) and is stamped on the comparison so the number is reproducible.
 > `dessem_*` features as a monitored candidate that is re-run each quarter as
 > the window lengthens.
 
-**And the third option, which dissolves the trade.** The eleven hours are only a
+**And the third option, which dissolves the trade.** The ten hours are only a
 cost if the late artifact *replaces* the early one. It does not have to. The
 bitemporal design already treats the D−1 12Z weather run as a superseding
 vintage of the same valid hours, and the domain model requires every surface to
@@ -1373,7 +1380,7 @@ it thicker. Which is why the recommendation is to stop treating it as permanent:
 serve the early artifact *and* the late one, let DESSEM compete only for the
 evening view, and re-run the comparison each quarter as its window grows. The
 bitemporal design already handles a superseding forecast as a newer vintage; the
-eleven hours were only ever a cost under the assumption that one artifact must
+ten hours were only ever a cost under the assumption that one artifact must
 win.
 
 **Where this spec is weakest.** Four places, ranked:

@@ -49,12 +49,20 @@ harnesses, two outputs, two names.
   non-promotion is the gate's estimator allow-list rather than a lane nobody
   serves — the benchmark runs in the evening view's own lane, because that is
   the model it is a benchmark of.
+- :mod:`~wattsteer_ml.evaluation.dessem_ab` — the DESSEM A/B, priced in MWh of
+  promised floor rather than in pinball loss: three runs on the shared
+  calendar, two contrasts so that the short-window handicap is priced separately
+  and not charged to DESSEM's features, the optimizer simulator's
+  `recovered_floor_mwh` on the published reference fleet as the unit, and the
+  verdict taken over the decision-grade folds under the hot-swap gate's own
+  paired block bootstrap. Quarterly, never on the weekly retrain, and it can
+  promote nothing.
 - :mod:`~wattsteer_ml.evaluation.serving_lanes` — the two served lanes, the
   morning view and the evening view, gated on one schedule and independently:
   one lane's refusal does not block the other's promotion, and the report
   carries the attribute census that says the two are different experiments.
 
-**The last nine are imported as submodules, not re-exported here.** They read
+**The last ten are imported as submodules, not re-exported here.** They read
 :mod:`wattsteer_ml.training`, which reads this package; re-exporting them would
 close the cycle and make `import wattsteer_ml.evaluation` depend on LightGBM
 being installed. `from wattsteer_ml.evaluation.metrics import MetricsRow` is the

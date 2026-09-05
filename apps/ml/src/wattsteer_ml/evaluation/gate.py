@@ -42,6 +42,14 @@ aggregate of many `Replay`s; what this module reads is *fold evaluation*
   target days and has no parameter that would let it do anything else. Hours
   within a day are strongly dependent, and an hour-wise resample reports a
   confidence the data does not support.
+- **A second bootstrap.** The resampling is :func:`resample_day_blocks` and
+  :func:`paired_block_bootstrap` is the ``qloss_mwh`` statistic laid over it.
+  :mod:`~wattsteer_ml.evaluation.dessem_ab` lays a floor-MWh statistic over the
+  *same* function, with the same :data:`BOOTSTRAP_DRAWS`, the same
+  :data:`BOOTSTRAP_SEED` and the same whole-day blocks, because
+  `docs/specs/forecaster.md` ships DESSEM only under "the same paired block
+  bootstrap the hot-swap gate uses" — and two implementations of one sentence
+  is how that stops being true.
 - **A promotion onto a value the gate could not have seen.** Check 7 refuses a
   candidate whose serving rows carry an attribute its gate profile withholds —
   a ``gate_early`` artifact holding a ``programmed_*`` value has been fitted on
@@ -655,6 +663,117 @@ def hour_loss(hour: ScoredHour) -> float:
     ) / len(SERVED_QUANTILES)
 
 
+@dataclass(frozen=True)
+class DayBlock:
+    """One target day's paired totals, and the units they are totals over.
+
+    The block the bootstrap resamples. It is a **day** and not an hour, and not
+    a subsystem-day, because the dependence the block exists to respect is the
+    weather's: the front that curtails one hour of one subsystem curtails the
+    next hour and the subsystem beside it.
+
+    :attr:`units` is the denominator — hours for the gate's ``qloss_mwh``,
+    complete subsystem-days for
+    :mod:`~wattsteer_ml.evaluation.dessem_ab`'s floor — so that a resample's
+    statistic is ``Σ block totals / Σ block units`` and a day with fewer units
+    weighs less, exactly as it does in the pooled figure.
+    """
+
+    day: date
+    left: float
+    right: float
+    units: int
+
+    def __post_init__(self) -> None:
+        if self.units <= 0:
+            raise GateInputError(
+                f"{self.day.isoformat()} contributes {self.units} units; a block "
+                "over nothing has no total to resample"
+            )
+
+
+@dataclass(frozen=True)
+class DayBlockResample:
+    """What resampling whole days said, before any statistic is named.
+
+    Deliberately holds **both** directions and the ties. Which of the two is the
+    promotion probability depends on whether the statistic is a loss or a floor,
+    and that is the caller's sentence to write: the gate reads
+    :attr:`left_lower` because a smaller ``qloss_mwh`` is better, and the DESSEM
+    A/B reads :attr:`left_higher` because more recovered floor is better. A
+    resampler that had already picked one would have decided which way the
+    number points.
+    """
+
+    days: int
+    units: int
+    draws: int
+    seed: int
+    #: Draws in which the left side's per-unit statistic came out **lower**.
+    left_lower: int
+    #: Draws in which it came out **higher**.
+    left_higher: int
+    #: And draws in which the two were equal, published so a probability of zero
+    #: reads as "never better" rather than as "always worse".
+    ties: int
+    #: The two per-unit statistics over the observed blocks — not over a
+    #: resample. ``Σ totals / Σ units``, which is the pooled figure exactly.
+    left_per_unit: float
+    right_per_unit: float
+
+    def __post_init__(self) -> None:
+        counted = self.left_lower + self.left_higher + self.ties
+        if counted != self.draws:
+            raise GateInputError(
+                f"{counted} of {self.draws} draws were classified; a resample "
+                "whose draws do not account for themselves is not one"
+            )
+
+
+def resample_day_blocks(
+    blocks: Sequence[DayBlock],
+    *,
+    draws: int = BOOTSTRAP_DRAWS,
+    seed: int = BOOTSTRAP_SEED,
+) -> DayBlockResample:
+    """**The one resampler.** Draw ``k`` selects the same days for both sides.
+
+    Paired by construction: a :class:`DayBlock` carries both sides, so there is
+    no argument here that could resample the left over one set of days and the
+    right over another. The pairing of the *rows underneath* the blocks is the
+    caller's to assert — :func:`paired_block_bootstrap` does it with
+    :func:`assert_paired_hours`, and
+    :mod:`~wattsteer_ml.evaluation.dessem_ab` does it by row digest before it
+    builds a block at all.
+
+    The default ``draws`` and ``seed`` are the gate's, so a statistic laid over
+    this function is reproducible from the card the way the gate's is.
+    """
+    if draws <= 0:
+        raise GateInputError(f"a bootstrap of {draws} draws decides nothing")
+    if not blocks:
+        raise GateInputError("a paired bootstrap over no day block")
+    left_block = np.asarray([block.left for block in blocks], dtype=np.float64)
+    right_block = np.asarray([block.right for block in blocks], dtype=np.float64)
+    weight = np.asarray([block.units for block in blocks], dtype=np.float64)
+    generator = np.random.default_rng(seed)
+    picks = generator.integers(0, len(blocks), size=(draws, len(blocks)))
+    units = weight[picks].sum(axis=1)
+    left = left_block[picks].sum(axis=1) / units
+    right = right_block[picks].sum(axis=1) / units
+    return DayBlockResample(
+        days=len(blocks),
+        units=int(weight.sum()),
+        draws=draws,
+        seed=seed,
+        left_lower=int(np.count_nonzero(left < right)),
+        left_higher=int(np.count_nonzero(left > right)),
+        ties=int(np.count_nonzero(left == right)),
+        left_per_unit=float(left_block.sum() / weight.sum()),
+        right_per_unit=float(right_block.sum() / weight.sum()),
+    )
+
+
 def paired_block_bootstrap(
     candidate: Sequence[ScoredHour],
     comparator: Sequence[ScoredHour],
@@ -674,9 +793,12 @@ def paired_block_bootstrap(
     comparison is of two predictions of one week and not of two weeks. The two
     sequences must therefore carry identical keys in identical order and identical
     labels, which is checked rather than assumed.
+
+    The resampling itself is :func:`resample_day_blocks`; what is here is the
+    ``qloss_mwh`` statistic laid over it — the per-day loss sums, and the reading
+    that ``P(candidate better)`` is the share of draws in which the candidate's
+    loss came out **lower**.
     """
-    if draws <= 0:
-        raise GateInputError(f"a bootstrap of {draws} draws decides nothing")
     if not candidate:
         raise GateInputError("a paired bootstrap over no scored hour")
     if len(candidate) != len(comparator):
@@ -684,9 +806,10 @@ def paired_block_bootstrap(
             f"the candidate was scored on {len(candidate)} hours and the "
             f"comparator on {len(comparator)}; these are not paired"
         )
-    _assert_paired(candidate, comparator)
+    assert_paired_hours(candidate, comparator)
 
     index_of: dict[date, int] = {}
+    days: list[date] = []
     candidate_sums: list[float] = []
     comparator_sums: list[float] = []
     counts: list[int] = []
@@ -694,6 +817,7 @@ def paired_block_bootstrap(
         day = left.key.target_date
         if day not in index_of:
             index_of[day] = len(counts)
+            days.append(day)
             candidate_sums.append(0.0)
             comparator_sums.append(0.0)
             counts.append(0)
@@ -702,24 +826,26 @@ def paired_block_bootstrap(
         comparator_sums[index] += hour_loss(right)
         counts[index] += 1
 
-    left_block = np.asarray(candidate_sums, dtype=np.float64)
-    right_block = np.asarray(comparator_sums, dtype=np.float64)
-    weight = np.asarray(counts, dtype=np.float64)
-    generator = np.random.default_rng(seed)
-    picks = generator.integers(0, len(counts), size=(draws, len(counts)))
-    hours = weight[picks].sum(axis=1)
-    left_loss = left_block[picks].sum(axis=1) / hours
-    right_loss = right_block[picks].sum(axis=1) / hours
-    return PairedBootstrap(
-        kind=kind,
-        days=len(counts),
-        hours=len(candidate),
+    resample = resample_day_blocks(
+        [
+            DayBlock(day=day, left=left, right=right, units=units)
+            for day, left, right, units in zip(
+                days, candidate_sums, comparator_sums, counts, strict=True
+            )
+        ],
         draws=draws,
         seed=seed,
-        probability=float(np.count_nonzero(left_loss < right_loss)) / draws,
-        ties=int(np.count_nonzero(left_loss == right_loss)),
-        candidate_qloss_mwh=float(left_block.sum() / weight.sum()),
-        comparator_qloss_mwh=float(right_block.sum() / weight.sum()),
+    )
+    return PairedBootstrap(
+        kind=kind,
+        days=resample.days,
+        hours=len(candidate),
+        draws=resample.draws,
+        seed=resample.seed,
+        probability=resample.left_lower / resample.draws,
+        ties=resample.ties,
+        candidate_qloss_mwh=resample.left_per_unit,
+        comparator_qloss_mwh=resample.right_per_unit,
     )
 
 
@@ -1543,10 +1669,17 @@ def _weaker_than(fidelity: VintageFidelity, floor: VintageFidelity) -> bool:
     return fidelity == "revision_optimistic" and floor == "point_in_time"
 
 
-def _assert_paired(
+def assert_paired_hours(
     candidate: Sequence[ScoredHour], comparator: Sequence[ScoredHour]
 ) -> None:
-    """The two sequences are two predictions of one row set, in one order."""
+    """The two sequences are two predictions of one row set, in one order.
+
+    Public because it is the pairing rule, and a second expression of it is a
+    second thing to keep in step: :mod:`~wattsteer_ml.evaluation.dessem_ab`
+    holds three arms to it before it builds a floor out of any of them, for the
+    reason this one holds two — two sequences scored against different labels
+    look exactly like a difference between two models.
+    """
     for left, right in zip(candidate, comparator, strict=True):
         if left.key != right.key:
             raise GateInputError(
