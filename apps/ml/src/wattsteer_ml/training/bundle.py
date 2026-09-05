@@ -64,8 +64,10 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import platform
-from collections.abc import Mapping
+import tempfile
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, fields
 from datetime import UTC, datetime
 from importlib import metadata
@@ -470,6 +472,18 @@ def save_artifact(
     the card second, so a crash between the two leaves an artifact whose card is
     missing — which :func:`load_artifact` refuses — rather than a card promising
     a bundle that is not there, which the promotion log would believe.
+
+    **Neither file is ever seen half-written.** Each is composed under a
+    temporary name in the destination directory and moved into place with
+    :func:`os.replace`, which is atomic within a filesystem. Ordering alone was
+    not enough for the case forecaster 15 has to survive: a retrain killed —
+    OOM, redeploy, ``SIGKILL`` — part-way through ``joblib.dump`` used to leave a
+    truncated ``.joblib`` under a real artifact id, which
+    :mod:`wattsteer_ml.artifacts` lists as an artifact and a later
+    :func:`~wattsteer_ml.evaluation.gate.rollback` would accept as a rollback
+    target on the strength of the file existing. A partial write now leaves a
+    ``.tmp`` file that no artifact-id rule matches, and the next run overwrites
+    it.
     """
     if card.lane != bundle.lane:
         raise ContractMismatchError(
@@ -484,8 +498,8 @@ def save_artifact(
     directory.mkdir(parents=True, exist_ok=True)
     bundle_path = directory / f"{card.artifact_id}{ARTIFACT_SUFFIX}"
     card_path = directory / f"{card.artifact_id}{CARD_SUFFIX}"
-    joblib.dump(bundle, bundle_path)
-    card_path.write_text(card.to_json(), encoding="utf-8")
+    _atomically(bundle_path, lambda path: joblib.dump(bundle, path))
+    _atomically(card_path, lambda path: path.write_text(card.to_json(), encoding="utf-8"))
     return bundle_path, card_path
 
 
@@ -517,9 +531,30 @@ def write_card(path: Path, card: Mapping[str, Any]) -> None:
     trailing newline, so a rewritten card diffs against its predecessor by the
     group that was added and nothing else.
     """
-    path.write_text(
-        json.dumps(dict(card), indent=2, sort_keys=False) + "\n", encoding="utf-8"
+    body = json.dumps(dict(card), indent=2, sort_keys=False) + "\n"
+    _atomically(path, lambda target: target.write_text(body, encoding="utf-8"))
+
+
+def _atomically(path: Path, write: Callable[[Path], Any]) -> None:
+    """Compose the file beside its destination, then move it into place.
+
+    The temporary name carries the destination's own stem so an interrupted run
+    is traceable to the artifact it was writing, and a suffix no artifact id can
+    have, so :mod:`wattsteer_ml.artifacts` never lists it. Same directory, so
+    the :func:`os.replace` is a rename within one filesystem rather than a copy
+    across two — which is the only form of it that is atomic.
+    """
+    handle, name = tempfile.mkstemp(
+        dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
     )
+    os.close(handle)
+    temporary = Path(name)
+    try:
+        write(temporary)
+        os.replace(temporary, path)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
 
 
 def contract_fault(card: Mapping[str, Any]) -> str | None:

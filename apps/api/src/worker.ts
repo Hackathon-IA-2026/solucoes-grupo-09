@@ -3,9 +3,11 @@ import { database } from "./database/connection.js";
 import { createPayloadArchive, REFRESH_CADENCE } from "./ingest/index.js";
 import { createBullMqRunner } from "./jobs/bullmq.js";
 import { FORECAST_PUBLICATIONS, PUBLICATION_TIME_ZONE } from "./jobs/publication.js";
+import { RETRAIN_JOB_ID, RETRAIN_PATTERN, RETRAIN_TIME_ZONE } from "./jobs/retrain.js";
 import {
   createWorkerDispatch,
   forecastPublicationSchedules,
+  retrainScheduleForQueue,
   type WorkerTask,
   type WorkerTaskResult,
 } from "./jobs/worker-tasks.js";
@@ -110,6 +112,30 @@ if (config.refreshSchedules) {
         "origin with its real age.",
     );
   }
+  // The weekly retrain: Fridays at 03:10 UTC, `docs/specs/forecaster.md`'s
+  // seam 11. Forecaster 19 gated both lanes in one pass and left nothing
+  // calling it; this is the cron entry, and it is the only one.
+  //
+  // Registered here and only here, beside the publications and for the same
+  // reason: one queue, one scheduler. It is a separate `if` from theirs because
+  // the two need the modelling service for different things — they ask it for
+  // a day, this asks it to spend forty minutes fitting — and a deployment
+  // without `WATTSTEER_ML_URL` should be told about each in its own sentence.
+  //
+  // Skipped, loudly, without one: a schedule firing weekly into an unconfigured
+  // `mlUrl` is a guaranteed job failure every Friday. What an operator sees
+  // instead is the incumbent going on serving, ageing, with no new decision
+  // line — which is exactly what the promotion log is for.
+  if (config.mlUrl) {
+    for (const schedule of retrainScheduleForQueue()) {
+      await runner.schedule(schedule);
+    }
+  } else {
+    console.warn(
+      "⚠️  retrain: WATTSTEER_ML_URL is unset — no lane will be retrained or " +
+        "gated, and whatever is promoted today goes on serving indefinitely.",
+    );
+  }
 }
 
 console.log(
@@ -143,6 +169,7 @@ if (config.refreshSchedules && config.mlUrl) {
       (publication) => `${publication.payload.gateProfile} ${publication.pattern}`,
     ).join(" · ")} (${PUBLICATION_TIME_ZONE})`,
   );
+  console.log(`   retrain: ${RETRAIN_JOB_ID} ${RETRAIN_PATTERN} (${RETRAIN_TIME_ZONE})`);
 }
 
 const shutdown = async (signal: string) => {

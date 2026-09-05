@@ -140,6 +140,7 @@ from wattsteer_ml.training.hurdle import (
     expected_mwh_for_block,
     fit_sub_threshold_means,
     forecast_rows,
+    out_of_fold_occurrence,
     partition_rows,
     train_fold,
 )
@@ -265,6 +266,7 @@ __all__ = [
     "national_day_grain",
     "national_rows",
     "new_artifact_id",
+    "out_of_fold_occurrence",
     "outside_calibration_window",
     "partition_rows",
     "pit_column",
