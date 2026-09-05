@@ -211,6 +211,27 @@ export const CACHE_POLICIES = {
 
   /** `/v1/plants`. Key: the registry snapshot's `ingested_at`. Daily SIGA/ONS. */
   registry: { name: "registry", directive: shared(maxAge(ONE_DAY_SEC)) },
+
+  /**
+   * **Any error, on any route** — applied by `./errors.ts`, not by a handler.
+   *
+   * The row the table does not have and the surface needs, because a route
+   * that revalidates *before* it does its work has already written a success
+   * directive by the time the work fails. `/v1/optimize` is the sharp case: a
+   * pinned scenario is 304-checked before the solver is called, so an upstream
+   * 503 would otherwise be served under `public, max-age=300` **carrying the
+   * validator the eventual 200 will carry** — a shared cache that stored the
+   * failure would then revalidate it to a 304 and re-extend the window, which
+   * is a cached outage with no expiry. A 503 is not shared-cacheable by
+   * default, and the whole defect is that an explicit `max-age` overrides that
+   * default.
+   *
+   * So the envelope clears the validator and says `no-store`, once, where every
+   * error already passes. Putting it in the handlers instead would be twelve
+   * more transcriptions of one rule, which is the thing this module exists to
+   * stop.
+   */
+  error: { name: "error", directive: NO_STORE },
 } as const satisfies Record<string, CachePolicy>;
 
 /** Every row of the table, for the assertions that must hold of all of them. */
@@ -289,6 +310,21 @@ export interface CacheContext {
  * revalidate: a `no-store` response has no stored copy to compare against, and
  * an ETag on one would be a validator for a version nobody may keep.
  */
+/**
+ * Take back a validator and a freshness window a handler had already written.
+ *
+ * For `./errors.ts`, and the reason it is here rather than there: an error is a
+ * caching decision, and the one place that makes caching decisions is this
+ * module. Deleting the `ETag` is the half that matters — a stored error whose
+ * validator matches the success it replaces is an outage a shared cache can
+ * refresh forever.
+ */
+export function refuseToCache(set: MutableResponse): void {
+  set.headers["cache-control"] = CACHE_POLICIES.error.directive;
+  delete set.headers.etag;
+  delete set.headers.vary;
+}
+
 export function applyCachePolicy(
   context: CacheContext,
   policy: CachePolicy,

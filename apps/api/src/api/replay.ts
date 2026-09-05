@@ -9,7 +9,6 @@ import {
   applyCachePolicy,
   CACHE_POLICIES,
   type CacheContext,
-  etagOf,
 } from "./plugins/cache-policy.js";
 import { OPTIMIZE_TTL_SEC, type ResultCache, replayKey } from "./plugins/result-cache.js";
 import {
@@ -529,9 +528,21 @@ export function createReplaySolveRoutes(deps: ReplayDeps) {
    * waited out by the ten-minute window rather than evicted by the key, and
    * `vintage_fidelity` on the payload is what tells a reader the ground may
    * have moved.
+   *
+   * Returns `true` when the client already holds this replay, in which case the
+   * status is 304 and there is no body to write.
    */
-  const validator = (decoded: DecodedScenario, origin: string): string =>
-    etagOf([decoded.hash, decoded.scenario.targetDate, origin, build]);
+  const revalidate = (
+    context: CacheContext,
+    decoded: DecodedScenario,
+    origin: string,
+  ): boolean =>
+    applyCachePolicy(context, CACHE_POLICIES.replay, [
+      decoded.hash,
+      decoded.scenario.targetDate,
+      origin,
+      build,
+    ]);
 
   /**
    * The deep link's visible date, checked against the blob it links to.
@@ -572,14 +583,24 @@ export function createReplaySolveRoutes(deps: ReplayDeps) {
         // underneath it is the *observed* half — ONS restates history in place —
         // so this is a `max-age` and never `immutable`, and the response is
         // deliberately not frozen against a restatement.
-        applyCachePolicy({ set, request }, CACHE_POLICIES.replay);
         // A body carrying no origin gets no validator, for the reason
         // `result-cache.ts` refuses to remember one: an entry whose provenance
         // is unknown cannot be invalidated by the thing that supersedes it, and
         // a validator over an unknown provenance would collide two answers that
         // are not the same answer.
-        if (answered.origin !== null) {
-          set.headers.etag = validator(decoded, answered.origin);
+        //
+        // The pin resolves to one of two origin kinds and only the answer says
+        // which, so unlike `/v1/optimize` this route cannot revalidate before
+        // it computes. The 304 is still served: it costs the replay it could
+        // not avoid and saves a payload carrying 24 dispatch hours, an episode
+        // list and a perfect-foresight bound.
+        if (answered.origin === null) {
+          applyCachePolicy({ set, request }, CACHE_POLICIES.replay);
+          set.headers["content-type"] = "application/json";
+          return answered.body;
+        }
+        if (revalidate({ set, request }, decoded, answered.origin)) {
+          return null;
         }
         set.headers["content-type"] = "application/json";
         return answered.body;

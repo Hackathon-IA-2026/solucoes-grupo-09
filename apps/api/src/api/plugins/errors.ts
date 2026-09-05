@@ -5,6 +5,7 @@ import {
   envelope,
   toErrorEnvelope,
 } from "../../errors.js";
+import { refuseToCache } from "./cache-policy.js";
 import { requestIdOf } from "./request-context.js";
 
 /**
@@ -105,6 +106,17 @@ export function validationFailure(error: unknown): {
 export const errorHandler = new Elysia({ name: "error-handler" })
   .onError(({ code, error, set, request }) => {
     const requestId = requestIdOf(request);
+
+    // Before anything else: an error is never shared-cacheable, and it never
+    // carries a validator. A route that revalidates *before* it does its work
+    // — `/v1/optimize` 304-checks a pinned scenario before calling the solver —
+    // has already written a success directive and a success ETag by the time
+    // the work fails, and `set` is the same object this handler answers on. A
+    // shared cache that stored an upstream 503 under `public, max-age=300`
+    // could then revalidate it to a 304 against the validator the eventual 200
+    // will carry, and re-extend the window forever. `refuseToCache` is one call
+    // in the one place every error already passes.
+    refuseToCache(set);
 
     if (code === "VALIDATION") {
       // Elysia's native 422 body never reaches a client. Its field path does.

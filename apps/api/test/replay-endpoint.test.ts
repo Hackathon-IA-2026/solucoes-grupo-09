@@ -613,6 +613,28 @@ describe("replay · one scenario, two verbs, one set of bytes", () => {
     const posted = await replayPost(api, JSON.stringify(scenarioWire()));
     expect(posted.headers.get("etag")).toBeNull();
   });
+
+  it("revalidates the deep link to a 304 once the origin is known", async () => {
+    // The pin resolves to one of two origin kinds and only the answer says
+    // which, so unlike `/v1/optimize` this route cannot revalidate before it
+    // computes. It still serves the 304: an ETag that never produced one would
+    // be a header with no mechanism behind it, and the payload it saves carries
+    // 24 dispatch hours, an episode list and the perfect-foresight bound.
+    const api = replayRoutes();
+    const etag = (await replayGet(api, blob())).headers.get("etag") ?? "";
+    expect(etag).not.toBe("");
+
+    const again = await api.handle(
+      new Request(
+        `http://localhost/v1/replay?d=${PAST_DATE}&lane=${encodeURIComponent(LANE)}` +
+          `&s=${encodeURIComponent(blob())}`,
+        { headers: { "if-none-match": etag } },
+      ),
+    );
+    expect(again.status).toBe(304);
+    expect(await again.text()).toBe("");
+    expect(again.headers.get("cache-control")).toBe("public, max-age=600");
+  });
 });
 
 function scenarioWire(): Record<string, unknown> {

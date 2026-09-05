@@ -441,6 +441,42 @@ describe("optimize · the cache is keyed on provenance", () => {
     expect(received).toHaveLength(1);
   });
 
+  it("puts no caching on a failure, even though the 304 check ran first", async () => {
+    // The route revalidates a pinned scenario *before* it calls the solver, so
+    // on an upstream failure the success directive and the success ETag are
+    // already on the same `set` the error envelope answers on. A shared cache
+    // that stored a 503 under `public, max-age=300` could then revalidate it
+    // to a 304 against the validator the eventual 200 carries — an outage with
+    // no expiry, which is the opposite of what an ETag is for.
+    const api = routes({
+      cache: memoryCache(),
+      endpoint: endpoint({ baseUrl: `http://127.0.0.1:${closedPort}` }),
+    });
+    const response = await get(api, BLOB);
+    expect(response.status).toBe(502);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("etag")).toBeNull();
+  });
+
+  it("304s an unpinned scenario once its origin is known", async () => {
+    // The origin resolves on the answer, so this 304 costs the solve it could
+    // not avoid and saves the payload. It is still a 304 — an ETag that never
+    // produced one would be a header with no mechanism behind it.
+    const unpinned = encodeScenario({ ...SCENARIO, forecastOrigin: undefined });
+    const api = fresh();
+    const first = await get(api, unpinned);
+    const etag = first.headers.get("etag") ?? "";
+    expect(etag).not.toBe("");
+
+    const again = await api.handle(
+      new Request(`http://localhost/v1/optimize?s=${encodeURIComponent(unpinned)}`, {
+        headers: { "if-none-match": etag },
+      }),
+    );
+    expect(again.status).toBe(304);
+    expect(await again.text()).toBe("");
+  });
+
   it("gives the POST no validator, because nothing may store it", async () => {
     const api = fresh();
     const response = await post(api, BODY);

@@ -2,7 +2,11 @@ import { type DecodedScenario, SCENARIO_PARAM } from "@wattsteer/core/scenario";
 import { Elysia, t } from "elysia";
 import { config } from "../config.js";
 import { type MlEndpoint, postMl } from "./ml-proxy.js";
-import { applyCachePolicy, CACHE_POLICIES, etagOf } from "./plugins/cache-policy.js";
+import {
+  applyCachePolicy,
+  CACHE_POLICIES,
+  type CacheContext,
+} from "./plugins/cache-policy.js";
 import {
   createResultCache,
   OPTIMIZE_TTL_SEC,
@@ -87,7 +91,8 @@ export function createOptimizeRoutes(deps: OptimizeDeps) {
   const build = deps.optimizerBuild ?? config.optimizerBuild;
 
   /**
-   * The provenance an answer to this scenario has, as an ETag.
+   * Apply the shared-link row over this answer's provenance, and say whether
+   * the client already holds it.
    *
    * The Redis key's own three components — `result-cache.ts` builds the key
    * from exactly these — because they are the same statement in two places: a
@@ -95,8 +100,16 @@ export function createOptimizeRoutes(deps: OptimizeDeps) {
    * that drifted from the key would be a 304 served against an entry the key
    * had already replaced.
    */
-  const validator = (scenarioHash: string, forecastOrigin: string): string =>
-    etagOf([scenarioHash, forecastOrigin, build]);
+  const revalidate = (
+    context: CacheContext,
+    scenarioHash: string,
+    forecastOrigin: string,
+  ): boolean =>
+    applyCachePolicy(context, CACHE_POLICIES.solveShared, [
+      scenarioHash,
+      forecastOrigin,
+      build,
+    ]);
 
   /**
    * Decode, validate, answer — from the cache when the key is fully known, and
@@ -165,27 +178,26 @@ export function createOptimizeRoutes(deps: OptimizeDeps) {
         // read/solve distinction this ticket keeps making: the cheapest solve
         // is the one a validator answers.
         const pinned = decoded.scenario.forecastOrigin ?? null;
-        if (
-          pinned !== null &&
-          applyCachePolicy({ set, request }, CACHE_POLICIES.solveShared, [
-            decoded.hash,
-            pinned,
-            build,
-          ])
-        ) {
+        if (pinned !== null && revalidate({ set, request }, decoded.hash, pinned)) {
           return null;
         }
         const body = await solve(decoded);
-        applyCachePolicy({ set, request }, CACHE_POLICIES.solveShared);
         // An unpinned scenario resolves its origin *on the answer*, so its
-        // validator can only be built once the answer exists — a 304 it serves
-        // on the next request, which is the one that matters. A body carrying
-        // no origin at all gets no validator: `result-cache.ts` refuses to
-        // remember such an answer for the same reason, and a validator over an
-        // unknown provenance would collide two answers that are not the same.
+        // validator can only be built once the answer exists. The 304 is still
+        // offered here rather than only on the next request: it costs the
+        // solve it could not avoid, and saves the payload — which for a
+        // 96-period plan is the larger of the two. A body carrying no origin at
+        // all gets no validator: `result-cache.ts` refuses to remember such an
+        // answer for the same reason, and a validator over an unknown
+        // provenance would collide two answers that are not the same.
         const resolved = pinned ?? resolvedOrigin(body);
-        if (resolved !== null) {
-          set.headers.etag = validator(decoded.hash, resolved);
+        if (resolved === null) {
+          applyCachePolicy({ set, request }, CACHE_POLICIES.solveShared);
+          set.headers["content-type"] = "application/json";
+          return body;
+        }
+        if (revalidate({ set, request }, decoded.hash, resolved)) {
+          return null;
         }
         set.headers["content-type"] = "application/json";
         return body;

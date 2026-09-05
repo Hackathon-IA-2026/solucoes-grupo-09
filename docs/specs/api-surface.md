@@ -1215,6 +1215,18 @@ a grep over every response — which is what makes the "nothing carries
 `cache-policy.test.ts` also reads every provenance call site and fails on a
 clock or a TTL inside one.
 
+**The table needs a thirteenth row the ticket did not ask for: an error.** A
+route that revalidates *before* it does its work — `/v1/optimize` 304-checks a
+pinned scenario before calling the solver, because the cheapest solve is the one
+a validator answers — has already written a success directive and a success ETag
+onto the response by the time the work fails. A shared cache that stored an
+upstream 503 under `public, max-age=300` could then revalidate it to a 304
+against the validator the eventual 200 carries, and re-extend the window
+forever: a cached outage with no expiry. A 5xx is not shared-cacheable by
+default and the whole defect is that an explicit `max-age` overrides that
+default. So the error envelope clears the validator and says `no-store`, once,
+where every error already passes — `plugins/errors.ts`, first statement.
+
 **Two reads are outside the table and stay outside it.** `/v1/canonical/*` and
 `/ingest/health` are the modelling side's contract reads and an operations view;
 neither is a row above, so neither is given a directive here on this ticket's

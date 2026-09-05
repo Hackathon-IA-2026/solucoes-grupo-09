@@ -13,6 +13,7 @@ import {
   CACHE_POLICIES,
   type CacheContext,
   etagOf,
+  refuseToCache,
 } from "../src/api/plugins/cache-policy.js";
 import { optimizeKey, replayKey } from "../src/api/plugins/result-cache.js";
 
@@ -43,12 +44,29 @@ import { optimizeKey, replayKey } from "../src/api/plugins/result-cache.js";
 
 const API_DIR = join(import.meta.dir, "..", "src", "api");
 
-/** The route modules — the files that answer a request and set its headers. */
-const ROUTE_FILES: readonly string[] = readdirSync(API_DIR)
-  .filter((name) => name.endsWith(".ts"))
+/**
+ * Every module under `src/api`, plugins included, as paths relative to it.
+ *
+ * **Recursive, and that is the whole point.** A scan of the top level only
+ * would leave `src/api/plugins/` unread, and the claim this file makes — that a
+ * grep over `cache-policy.ts` is a grep over every response — is only true if
+ * nothing *else* can write a `Cache-Control`. A plugin is exactly the kind of
+ * thing that would, since `errors.ts` legitimately does touch the header (it
+ * clears it), and an assertion that could not see it would be asserting the
+ * claim over the half of the tree least likely to be checked by hand.
+ */
+const ROUTE_FILES: readonly string[] = readdirSync(API_DIR, {
+  recursive: true,
+  withFileTypes: true,
+})
+  .filter((entry) => entry.isFile() && entry.name.endsWith(".ts"))
+  .map((entry) => join(entry.parentPath.slice(API_DIR.length + 1), entry.name))
   .sort();
 
 const sourceOf = (file: string): string => readFileSync(join(API_DIR, file), "utf8");
+
+/** The one module allowed to write a `Cache-Control`, relative to `src/api`. */
+const POLICY_MODULE = join("plugins", "cache-policy.ts");
 
 /**
  * A module with its comments stripped.
@@ -142,8 +160,10 @@ describe("no response on this surface carries `immutable`", () => {
     // but "there is nothing else to check". A route assembling its own
     // directive would be a directive this suite cannot see, so the boundary is
     // what makes the grep above total.
-    const offenders = ROUTE_FILES.filter((file) =>
-      /["'`]cache-control["'`]\s*\]?\s*=/i.test(codeOf(sourceOf(file))),
+    const offenders = ROUTE_FILES.filter(
+      (file) =>
+        file !== POLICY_MODULE &&
+        /["'`]cache-control["'`]\s*\]?\s*=/i.test(codeOf(sourceOf(file))),
     );
     expect(offenders).toEqual([]);
   });
@@ -154,7 +174,7 @@ describe("no response on this surface carries `immutable`", () => {
     // `revision_optimistic` exists to surface, so the word is absent from the
     // code of the one module that could emit it — comments, which argue the
     // case at length, are stripped first.
-    const policy = codeOf(sourceOf(join("plugins", "cache-policy.ts")));
+    const policy = codeOf(sourceOf(POLICY_MODULE));
     expect(policy).not.toContain("immutable");
   });
 });
@@ -288,6 +308,24 @@ describe("applyCachePolicy revalidates rather than re-answering", () => {
     expect(ctx.set.headers.vary).toBe("Accept-Language");
   });
 
+  it("takes the validator back when the work behind it fails", () => {
+    // The regression the review caught, as its own assertion. `/v1/optimize`
+    // revalidates a pinned scenario *before* it calls the solver, so on an
+    // upstream failure the success directive and the success ETag are already
+    // written on the same `set` the error envelope answers on. Left there, a
+    // shared cache could store a 503 under `public, max-age=300` and then
+    // revalidate it to a 304 against the validator the eventual 200 carries —
+    // an outage with no expiry.
+    const ctx = context();
+    applyCachePolicy(ctx, CACHE_POLICIES.solveShared, ["sha256:abc", "origin", "build"]);
+    expect(ctx.set.headers.etag).toBeDefined();
+
+    refuseToCache(ctx.set);
+    expect(ctx.set.headers["cache-control"]).toBe("no-store");
+    expect(ctx.set.headers.etag).toBeUndefined();
+    expect(ctx.set.headers.vary).toBeUndefined();
+  });
+
   it("sets no validator where the spec says there is nothing to store", () => {
     // `/v1/meta` and the POST solves. An ETag on a `no-store` response would be
     // a validator for a version nobody may keep.
@@ -364,11 +402,14 @@ describe("the replay key changes on the four things it can see", () => {
     // to query Postgres on a route whose whole claim is that it contains
     // neither a model nor a read. This assertion fails the day either lands,
     // which is when someone should come back and read the paragraph above.
-    expect(replayKey(parts).split(":").length).toBe(
-      "replay:v1:sha256:abc:2025-03-14:served@2025-03-13T22:00:00Z:milp-v3".split(":")
-        .length,
+    // The whole key, spelled out. Not a length and not a `not.toContain` of a
+    // field name the builder could never emit — both of those pass under any
+    // reordering or substitution, which is to say they cannot fail. This can:
+    // the day a fifth component lands, it fails here, and whoever reads the
+    // paragraph above is the person who put it there.
+    expect(replayKey(parts)).toBe(
+      "replay:v1:sha256:abc:2025-03-14:served@2025-03-13T22:00:00Z:milp-v3",
     );
-    expect(replayKey(parts)).not.toContain("obs_data_version");
   });
 });
 
