@@ -268,47 +268,151 @@ export function spread(band_: Band): number {
 /**
  * Driver attribution — SHAP plus domain rules, at subsystem grain.
  *
- * `share` rather than `contribution`: the value is a share of the total
- * attributed magnitude and the shares sum to one, which the name should say.
+ * One attribution per **subsystem-day**. There is no technology dimension
+ * here and there is none on the wire: the forecaster has a single head per
+ * subsystem, so there is no per-technology model for a Shapley game to be
+ * played over. `docs/specs/api-surface.md`, contract change 4.
  */
+
 /**
- * The drivers the Diagnosis engine can attribute to, as a closed set.
+ * The eight driver groups, as a closed set.
+ *
+ * These are the players in the Shapley game — the groups of
+ * `apps/ml/src/wattsteer_ml/diagnosis/driver_groups.yaml`, a total partition
+ * of the feature space — and they are the same eight the wire carries
+ * (`@wattsteer/core/api`'s `DriverCode`, asserted against this one in
+ * `test/wire-domain-agreement.test.ts`).
+ *
+ * This used to be twelve prototype feature names (`vre_load_ratio`,
+ * `export_headroom`, `hub_wind_speed`, …). Those were *features*, not groups,
+ * and no model ever produced a `φ` for one of them: the game is played by
+ * groups. A feature now appears on this screen only as a group's declared
+ * **headline feature**, quoted beside the bar rather than standing in for it.
  *
  * Closed rather than `string` on purpose: the words for each of these live in
  * the dictionaries, keyed by the code, and a union makes "every driver has a
  * label in both locales" a compile error rather than a blank row on screen.
  * Adding a driver means adding its two words, which is the intended friction.
+ *
+ * `other` is **not** a member. It is the client's merged remainder, it never
+ * travels, and it is the one row that may report a direction the eight cannot
+ * — see `DriverDirection` and `apps/web/src/lib/driver-rows.ts`.
  */
 export type DriverCode =
-  | "vre_load_ratio"
-  | "export_headroom"
-  | "load_level"
-  | "overnight_load_level"
-  | "hub_wind_speed"
-  | "day_of_week"
-  | "midday_net_load"
-  | "clear_sky_index"
-  | "installed_pv"
-  | "hydro_flexibility"
-  | "import_position"
-  | "other";
+  | "renewable_resource"
+  | "demand_level"
+  | "net_surplus"
+  | "export_stress"
+  | "ramp_shape"
+  | "calendar_season"
+  | "recent_history"
+  | "data_conditions";
 
+/**
+ * The code of a row the Explain screen actually draws.
+ *
+ * The eight, plus the merged remainder. Separate from `DriverCode` so that
+ * "the API returned `other`" stays unrepresentable: nothing that decodes a
+ * response can produce this type, only the client's merge can.
+ */
+export type DisplayDriverCode = DriverCode | "other";
+
+/**
+ * Which way a row pushed the model's forecast.
+ *
+ * Three members, and the third is reachable from exactly one row. A grouped
+ * Shapley value is **one number**, so each of the eight always has a sign;
+ * only the merge — which sums several `φ` into one bar — can produce a row
+ * whose members disagreed. `docs/specs/diagnosis.md`:
+ *
+ * > An `other` row reports `direction: "mixed"` when
+ * > `Σ|φ_members| > 1.5 · |Σ φ_members|`, and `raises` / `lowers` otherwise.
+ *
+ * The rule is enforced by the types rather than by a convention:
+ * `Driver.direction` is `SignedDriverDirection` and cannot hold `"mixed"` at
+ * all, so a fixture or a decoder that tried to put it on one of the eight
+ * fails to compile. `apps/web/test/explain-contract.test.ts` asserts the same
+ * thing at runtime, over every shape the screen can be handed.
+ */
+export type DriverDirection = "raises" | "lowers" | "mixed";
+
+/** The two directions a single signed `φ` can have. */
+export type SignedDriverDirection = Exclude<DriverDirection, "mixed">;
+
+/** The sign of a contribution, as a direction. */
+export function directionOf(phiMwh: number): SignedDriverDirection {
+  return phiMwh >= 0 ? "raises" : "lowers";
+}
+
+/**
+ * One of the eight groups, as it is ranked and returned.
+ *
+ * Mirrors the wire row (`@wattsteer/core/api`'s `Driver`) minus the readings,
+ * which the domain holds as a sum type rather than as a bare number — see
+ * `DriverReading`.
+ *
+ * There is deliberately no `label` and no `labelCode`. `api-surface.md`
+ * proposed renaming one to the other and then withdrew the change, because
+ * there was nothing to rename: the i18n work removed the field. The code alone
+ * travels and the dictionaries hold the words, exactly as the reason codes and
+ * the risk classes do. A `label` here would be an English string travelling
+ * through the data layer, which is precisely how a bilingual product goes
+ * monolingual again.
+ */
 export interface Driver {
   /**
    * Stable identifier, and the **only** thing a fixture or an API response
-   * carries. The label is copy: it lives in the dictionaries, keyed by this
-   * code, exactly as the reason codes and the risk classes do. A `label`
-   * field here would be an English string travelling through the data layer,
-   * which is precisely how a bilingual product goes monolingual again.
+   * carries about what this group is called.
    */
   code: DriverCode;
-  /** Share of the total attributed magnitude, 0..1. Shares sum to 1. */
+  /**
+   * The signed grouped Shapley contribution itself, in MWh — the quantity the
+   * bar is a share of, and the one number that says how big the group's effect
+   * was rather than how big it was relative to the others.
+   */
+  phiMwh: number;
+  /**
+   * Share of the total attributed **movement**: `|φ_j| / Σ_k |φ_k|`, computed
+   * over **all eight** groups. Shares sum to 1.
+   *
+   * Not a share of the curtailment, and not a share of "the attributed
+   * magnitude" — which is what this comment used to say, and what the footnote
+   * under the bars used to say with it. The denominator is the whole movement
+   * the model attributes, so a day whose drivers cancel still produces a full
+   * bar chart, and the display cut has a fixed denominator to act on rather
+   * than one that changes with the cut.
+   */
   share: number;
-  /** Which way this driver pushed the forecast on this day. */
-  direction: DriverDirection;
+  /** Which way this group pushed the model's forecast. Never `"mixed"`. */
+  direction: SignedDriverDirection;
+  /**
+   * The name of the feature whose reading is quoted beside the group.
+   *
+   * A group has no single value, so it declares one headline feature in the
+   * group map and the reading pair belongs to *that feature* — never to the
+   * group as a whole. Carried so the screen can say which, because a value
+   * pair with no feature name beside it reads as though the whole group had
+   * one reading.
+   */
+  headlineFeature: string;
+  /**
+   * How much the group's hours disagreed with each other, in the units of `φ`.
+   *
+   * A day bar is `Φ_j = Σ_t φ_{j,t}`; a group can raise the forecast in the
+   * morning and lower it in the afternoon and still net out small. The screen
+   * says so for a displayed group at or above the threshold the narration uses.
+   */
+  hourDisagreement: number;
+  /**
+   * A `demote` rule fired on this group: it is shown, below the fold, and it
+   * is still ranked and still counted in the shares.
+   *
+   * A rule may annotate, demote or withhold; it may never change a `φ`, a sign
+   * or a share, and it may never delete a driver. So the flag travels with the
+   * row and the renderer decides what to do about it.
+   */
+  demoted: boolean;
 }
-
-export type DriverDirection = "raises" | "lowers";
 
 /**
  * A non-numeric feature reading — "the day was a weekend", "the subsystem was
@@ -317,11 +421,29 @@ export type DriverDirection = "raises" | "lowers";
 export type DriverTerm = "weekend" | "weekday" | "importing" | "balanced";
 
 /**
- * What a feature actually read, and what it usually reads.
+ * What the headline feature actually read, and what it usually reads.
  *
  * Structured rather than a preformatted string: `"1,900 MW"` bakes in en-US
  * grouping, and `"weekend"` bakes in English. A reading is a quantity or a
  * term, and the locale decides how either one is written.
+ *
+ * **The `term` variant survives, and this is the stated rule.**
+ * `api-surface.md`'s contract table proposed flattening the pair to
+ * `observed: number, unit: string`. That model has nowhere to put "the day was
+ * a weekend", and `calendar_season` — whose declared headline feature is
+ * `calendar_is_weekend` — is precisely the group whose headline reading is
+ * categorical. So:
+ *
+ *  - a headline feature with a numeric range reads as a `quantity`;
+ *  - a headline feature with a **categorical** range — a boolean flag, a
+ *    regime label — reads as a `term`, and its members are enumerated in
+ *    `DriverTerm` so both dictionaries have to name them;
+ *  - a group with no reading at serve time reads as `none`, and the pair line
+ *    is omitted rather than printed empty.
+ *
+ * Nothing is dropped silently: a numbers-only model would have forced
+ * `calendar_is_weekend` onto the screen as `1`, which is a value the reader
+ * cannot check against anything.
  */
 export type DriverReading =
   | {
@@ -334,10 +456,10 @@ export type DriverReading =
       readonly signed?: boolean;
     }
   | { readonly kind: "term"; readonly term: DriverTerm }
-  /** No meaningful reading — the residual bucket. The row is omitted. */
+  /** No meaningful reading. The pair line is omitted. */
   | { readonly kind: "none" };
 
-/** A driver with its feature readings attached, as the Explain screen shows it. */
+/** A group with its headline feature's readings attached, as ranked. */
 export interface AttributedDriver extends Driver {
   readonly observed: DriverReading;
   readonly typical: DriverReading;

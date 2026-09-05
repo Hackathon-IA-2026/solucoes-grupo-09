@@ -72,7 +72,18 @@ from **diagnosis 02**; the mixed-direction merge rule and the share definition
 come from **diagnosis 04**. The screen can be reshaped against fixtures before
 either lands, but the code set is not final until diagnosis 02 does.
 
-**Status:** ready-for-agent
+**Status:** done — branch `api-07-explain-screen-contract`
+
+Built to the spec's **corrected** text, not the table as first written:
+`labelCode` stays withdrawn (there is no `Driver.label` to rename), and
+`observed`/`typical` stay the structured `DriverReading` sum type rather than
+being flattened to a number plus a unit — the `term` variant is what
+`calendar_season` needs. `DriverDirection` has three members and
+`SignedDriverDirection` has two, so `"mixed"` on one of the eight is a compile
+error as well as a test failure. The share is normalised over all eight groups;
+`selectNotableDrivers` stays shared with the server and the merge lives in
+`apps/web/src/lib/driver-rows.ts`, which is the only place `"mixed"` is
+produced.
 
 - [ ] Direction has three members and only the merged row can carry the third
 - [ ] A test asserts no response carries a mixed direction on one of the eight group codes

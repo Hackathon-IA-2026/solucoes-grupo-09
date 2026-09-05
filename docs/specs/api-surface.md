@@ -970,22 +970,31 @@ file this spec proposes promoting into `packages/core`:
 export type DriverDirection = "raises" | "lowers" | "mixed";
 
 export interface Driver {
-  code: string;
-  labelCode: string;              // was `label` — a t() key, not copy
-  phiMwh: number;                 // new: the signed contribution itself
-  /** Share of the total attributed *movement*: |φ_j| / Σ_k |φ_k| over the
-   *  displayed rows. Shares sum to 1. This is not a share of the curtailment
+  code: DriverCode;               // one of the eight groups, never `other`
+  phiMwh: number;                 // the signed contribution itself
+  /** Share of the total attributed *movement*: |φ_j| / Σ_k |φ_k| over **all
+   *  eight groups**. Shares sum to 1. This is not a share of the curtailment
    *  and not a share of "the attributed magnitude". */
   share: number;
-  direction: DriverDirection;
+  /** The signed pair only. `"mixed"` belongs to the merged `other` row, which
+   *  the client builds — so a grouped Shapley value, which is one number,
+   *  cannot carry it. */
+  direction: SignedDriverDirection;
   headlineFeature: string;
-  observed: number;
-  typical: number;
-  unit: string;                   // a code: "mwh" | "mw" | "ratio" | "pct" | …
+  /** The sum type, not a number: `calendar_season`'s headline reading is
+   *  categorical, and a `{value, unit}` pair has no home for `weekend`. */
+  observed: DriverReading;
+  typical: DriverReading;
   hourDisagreement: number;
   demoted: boolean;
 }
 ```
+
+**The block above has been corrected to match the three notes below it.** It
+previously showed `labelCode`, a flat `observed: number` + `unit: string`, a
+three-member `direction`, and a share over "the displayed rows" — each of which
+the prose then withdrew, so the page disagreed with itself. api-surface 07
+implemented the prose; the code block now says the same thing.
 
 ~~`label` becomes `labelCode`.~~ **Withdrawn: there is no `Driver.label` to
 rename.** The i18n work removed it; labels live in the two dictionaries keyed by
