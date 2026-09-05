@@ -999,7 +999,26 @@ acted on.
 
 Each threshold produces its own artifact lane, since the triple
 (feature set, gate profile, threshold) is the artifact's identity. Only the
-5 MW lane is promoted for serving.
+5 MW lane is promoted for serving, and
+`evaluation/threshold_sweep.py`'s `assert_no_sweep_lane_promoted` is the check
+that makes that a property of the volume rather than of which lanes the retrain
+driver happens to walk: a sweep arm may accumulate refusals in
+`promotions.jsonl` and may not accumulate a `promote`.
+
+**Two of the six figures move with the threshold for reasons that are not about
+the model, and the block has to say so.** Because `Q_Y(q) = 0` for every
+`q ≤ 1 − p`, the composed P50 is zero exactly where `0.50 ≤ 1 − p`. Lowering the
+threshold raises the prevalence, which raises `p`, which moves hours across that
+breakpoint — so `share_p50_zero` falls at 1 MW with no change in model quality
+whatever. The published block therefore carries `share_p50_forced_zero`, the
+same quantity computed from `p` through the composition's own comparison, and
+refuses to be built if the two disagree. `coverage_p10` carries the hazard from
+the other side: it is measured over curtailed hours, and *which* hours those are
+is precisely what the threshold changes, so the three arms' coverages are three
+populations and the denominator travels with each. `qloss_mwh` is the one figure
+that survives a change of threshold — its target is the observed MWh, which does
+not move with `τ` — and it is the only one that may be read across the arms as a
+difference in quality.
 
 ### The artifact, and exactly what the gate checks
 

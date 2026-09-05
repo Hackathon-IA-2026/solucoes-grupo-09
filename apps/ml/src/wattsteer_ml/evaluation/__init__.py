@@ -31,12 +31,17 @@ harnesses, two outputs, two names.
 - :mod:`~wattsteer_ml.evaluation.gate` — the hot-swap gate: the paired block
   bootstrap that decides, the constants that only veto, and the one line
   appended either way.
+- :mod:`~wattsteer_ml.evaluation.threshold_sweep` — the 1 / 5 / 10 MW sweep,
+  three arms on identical rows, published rather than acted on: the six figures
+  per threshold and per fold, the two move-forcing prevalence conditions
+  evaluated rather than left to a reader, and the two figures that move with the
+  mixture's breakpoint rather than with the model, said so beside them.
 - :mod:`~wattsteer_ml.evaluation.serving_lanes` — the two served lanes, the
   morning view and the evening view, gated on one schedule and independently:
   one lane's refusal does not block the other's promotion, and the report
   carries the attribute census that says the two are different experiments.
 
-**The last six are imported as submodules, not re-exported here.** They read
+**The last seven are imported as submodules, not re-exported here.** They read
 :mod:`wattsteer_ml.training`, which reads this package; re-exporting them would
 close the cycle and make `import wattsteer_ml.evaluation` depend on LightGBM
 being installed. `from wattsteer_ml.evaluation.metrics import MetricsRow` is the
