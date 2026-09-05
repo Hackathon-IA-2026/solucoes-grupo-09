@@ -139,6 +139,7 @@ def test_a_randomly_generated_valid_scenario_always_solves_to_optimal(
         p10_mwh=_profile(rng),
         p50_mwh=_profile(rng),
         p90_mwh=_profile(rng),
+        expected_mwh=_profile(rng),
     )
     result = optimization_result(wire, decode_scenario_body(wire).hash, profile)
 

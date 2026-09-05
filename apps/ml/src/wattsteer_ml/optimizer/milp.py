@@ -11,8 +11,9 @@ state-of-charge constraint; and the horizon is a local civil day. The shiftable
 load's (D1)–(D5) lives in :mod:`.shiftable` and enters here as a second term in
 the coupling sum (C1) and nothing else — which is the property that makes `EV`,
 `DataCentre`, `Electrolyzer` and `HVAC` a variant and a constraint block later
-rather than a reformulation. Wiring `offered_mwh` to a real `Forecast` is ticket
-07; here it is a caller-supplied profile.
+rather than a reformulation. Wiring the envelope to a real `Forecast` is ticket
+07; here it is a caller-supplied :class:`~.basis.PlanningEnvelope`, named, so
+that the plan can record which one it was built on.
 
 **Every failure mode this file has is silent**, which is why it is written the
 way it is. Each of the four below leaves the model feasible, the status
@@ -54,6 +55,7 @@ from typing import Any
 
 from ..config import settings
 from .backend import Versions, create_solver, resolve_backend, versions
+from .basis import PlanningBasis, PlanningEnvelope
 from .errors import OptimizerBugError, SolverNotOptimalError
 from .fleet import HOURS_PER_DAY, Battery, ShiftableLoad
 from .horizon import PERIOD_HOURS, Horizon
@@ -208,6 +210,14 @@ class DispatchPlan:
     """
 
     horizon: Horizon
+    #: Which envelope this schedule was built against, read off the input the
+    #: builder was handed rather than asserted by the caller. `"p50"` on every
+    #: public path; `"expected"` only on `forecaster.md`'s measurement arm,
+    #: which no request can reach. The simulator never consults it — the
+    #: planning basis is the caller's, not that module's — and it is here so
+    #: that two arms scored through one function stay distinguishable
+    #: afterwards.
+    planning_basis: PlanningBasis
     #: The batteries, paired index-for-index with :attr:`batteries`. Named
     #: ``assets`` since ticket 01 and left alone: the simulator's `Schedule`
     #: pairs against it, and the loads have their own pair below because a
@@ -272,7 +282,7 @@ class DispatchPlan:
 
 def solve(
     *,
-    offered_mwh: Sequence[float],
+    envelope: PlanningEnvelope,
     batteries: Sequence[Battery],
     horizon: Horizon,
     loads: Sequence[ShiftableLoad] = (),
@@ -283,10 +293,16 @@ def solve(
 ) -> DispatchPlan:
     """Build and solve the model, returning plain Python objects.
 
-    ``offered_mwh`` is ``curt[t]``, the curtailment available to absorb in each
-    local hour. Its length must equal the horizon's — the horizon is derived
-    from the IANA zone and asserted to be 24, and a profile of a different
-    length would silently reindex the day.
+    ``envelope`` carries ``curt[t]`` — the curtailment available to absorb in
+    each local hour — together with the name of the basis it is. Its length must
+    equal the horizon's: the horizon is derived from the IANA zone and asserted
+    to be 24, and a profile of a different length would silently reindex the day.
+
+    The envelope is the *only* thing that differs between the P50 plan and
+    `forecaster.md`'s `E[Y]` arm. Nothing below branches on
+    :attr:`~.basis.PlanningEnvelope.basis`; it is copied onto the plan and never
+    read again here, which is what makes an arm difference attributable to the
+    input and to nothing else.
 
     The `MPSolver` is local to this call and every value is copied out before it
     goes out of scope: ``MPVariable::solution_value()`` segfaults once its
@@ -298,7 +314,7 @@ def solve(
     chosen = resolve_backend(
         backend if backend is not None else settings.milp_backend, integral=integral
     )
-    profile = tuple(float(value) for value in offered_mwh)
+    profile = envelope.offered_mwh
     fleet = tuple(batteries)
     flexible = tuple(loads)
     _check_shapes(profile, fleet, flexible, horizon)
@@ -341,6 +357,7 @@ def solve(
 
     return _extract(
         horizon=horizon,
+        basis=envelope.basis,
         fleet=fleet,
         flexible=flexible,
         blocks=blocks,
@@ -581,6 +598,7 @@ def _report(solver: Any, backend: str, status: int) -> SolverReport:
 def _extract(
     *,
     horizon: Horizon,
+    basis: PlanningBasis,
     fleet: tuple[Battery, ...],
     flexible: tuple[ShiftableLoad, ...],
     blocks: tuple[LoadBlock, ...],
@@ -627,6 +645,7 @@ def _extract(
         )
     return DispatchPlan(
         horizon=horizon,
+        planning_basis=basis,
         assets=fleet,
         hours=tuple(hours),
         batteries=dispatches,
@@ -647,6 +666,8 @@ __all__ = [
     "HourlyDispatch",
     "LoadDispatch",
     "ModelOptions",
+    "PlanningBasis",
+    "PlanningEnvelope",
     "SolverReport",
     "Versions",
     "solve",

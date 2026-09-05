@@ -78,10 +78,18 @@ P90: tuple[float, ...] = tuple(value * 1.5 for value in P50)
 ORIGIN = datetime(2026, 8, 28, 12, 0, tzinfo=UTC)
 
 
+#: `E[Y]`, in the shape a hurdle model actually produces: positive in the hours
+#: whose occurrence is uncertain — where the median is zero and the P50 plan is
+#: blind — and below the median where curtailment is near-certain. It rides on
+#: every profile here and is planned against by nothing on this route.
+EXPECTED: tuple[float, ...] = tuple(6.0 if value == 0.0 else value * 0.8 for value in P50)
+
+
 def band(
     p10: tuple[float, ...] = P10,
     p50: tuple[float, ...] = P50,
     p90: tuple[float, ...] = P90,
+    expected: tuple[float, ...] = EXPECTED,
 ) -> PlanningProfile:
     return PlanningProfile(
         forecast_origin=ORIGIN,
@@ -89,6 +97,7 @@ def band(
         p10_mwh=p10,
         p50_mwh=p50,
         p90_mwh=p90,
+        expected_mwh=expected,
         threshold_mw=THRESHOLD_MW,
     )
 
@@ -166,16 +175,20 @@ def test_one_milp_is_built_and_it_is_built_against_p50(
     "it was built on P50" is a fact about one call, and a result that happened to
     look right would prove nothing about which envelope produced it.
     """
-    seen: list[tuple[float, ...]] = []
+    seen: list[tuple[str, tuple[float, ...]]] = []
     real = result_module.solve  # type: ignore[attr-defined]
 
     def recording(*args: Any, **kwargs: Any) -> Any:
-        seen.append(tuple(kwargs["offered_mwh"]))
+        envelope = kwargs["envelope"]
+        seen.append((envelope.basis, envelope.offered_mwh))
         return real(*args, **kwargs)
 
     monkeypatch.setattr(result_module, "solve", recording)
     solved()
-    assert seen == [P50]
+    # The envelope carries its own name, so this is one assertion and not two
+    # that have to be kept agreeing: the numbers *are* P50 and they are labelled
+    # P50 by the object that supplied them.
+    assert seen == [("p50", P50)]
 
 
 def test_the_plan_is_executed_three_times_by_the_one_simulator(
@@ -365,16 +378,36 @@ def test_the_scenario_contract_has_no_key_that_could_select_a_quantile() -> None
         assert word not in text
 
 
-def test_nothing_in_the_solve_path_takes_a_quantile_argument() -> None:
+def test_the_published_assembly_takes_no_quantile_argument() -> None:
     """The basis is a property of the product, not a parameter of a call.
 
-    Ticket 09 makes it an *internal* parameter for the `E[Y]` measurement arm;
-    until then there is no argument to pass and therefore no caller who could.
+    :func:`optimization_result` is everything the endpoint reaches, and it has
+    no argument a basis could travel on — so there is nothing for a request to
+    reach even if one got past the schema. Ticket 09 put the internal parameter
+    one level down, on :func:`~wattsteer_ml.optimizer.result.build_plan`, and
+    the test below is what keeps it there.
     """
-    for function in (optimization_result, result_module.build_plan):
-        names = set(inspect.signature(function).parameters)
-        for word in ("quantile", "basis", "planning_basis", "envelope"):
-            assert word not in names
+    names = set(inspect.signature(optimization_result).parameters)
+    for word in ("quantile", "basis", "planning_basis", "envelope"):
+        assert word not in names
+
+
+def test_the_builders_internal_parameter_is_an_object_and_not_a_name() -> None:
+    """Ticket 09's seam, and the two properties that keep it internal.
+
+    The `E[Y]` arm has to be buildable — `forecaster.md` scores it through the
+    one simulator and publishes both arms' `recovered_floor_mwh` — and it has to
+    stay unreachable from a request. Both follow from the parameter being a
+    `PlanningEnvelope`: it cannot be decoded from JSON, cannot be spelled by a
+    query string, and defaults to the P50 the product ships. A `basis="p10"`
+    keyword would have been assignable straight out of the scenario's
+    ``dict[str, Any]`` with mypy none the wiser.
+    """
+    parameters = inspect.signature(result_module.build_plan).parameters
+    assert set(parameters) == {"wire", "profile", "envelope"}
+    assert parameters["envelope"].default is None
+    assert parameters["envelope"].annotation == "PlanningEnvelope | None"
+    assert not isinstance(band().envelope(), str | bytes | int | float)
 
 
 def test_a_body_key_that_asks_for_p10_changes_nothing_about_the_plan() -> None:

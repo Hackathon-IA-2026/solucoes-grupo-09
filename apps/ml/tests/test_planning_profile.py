@@ -58,6 +58,7 @@ def hours(
             "p10_mwh": float(hour),
             "p50_mwh": float(hour) * 2.0,
             "p90_mwh": float(hour) * 3.0,
+            "expected_mwh": float(hour) * 1.5,
             "published_at": published_at,
         }
         for hour in indices
@@ -121,6 +122,13 @@ def test_a_published_day_becomes_the_band_the_plan_is_built_on() -> None:
     assert profile.p10_mwh == tuple(float(hour) for hour in range(HORIZON_HOURS))
     assert profile.p50_mwh == tuple(float(hour) * 2.0 for hour in range(HORIZON_HOURS))
     assert profile.p90_mwh == tuple(float(hour) * 3.0 for hour in range(HORIZON_HOURS))
+    # `E[Y]`, read from the same publication and beside the band rather than
+    # inside it. The plan is not built on it here — nothing on this route is —
+    # but an arm read from a different query would differ from the P50 plan in
+    # two things instead of one.
+    assert profile.expected_mwh == tuple(
+        float(hour) * 1.5 for hour in range(HORIZON_HOURS)
+    )
     assert profile.threshold_mw == 5.0
 
 
@@ -231,16 +239,23 @@ def test_the_query_names_only_the_canonical_view() -> None:
 
 
 def test_no_predicate_or_projection_can_select_a_planning_quantile() -> None:
-    """All three envelopes on every read: one plan, three scorings.
+    """All three envelopes on every read, and `E[Y]` beside them.
 
     The quantile columns appear exactly once each, in the projection, and never
     in a predicate — so there is no shape of this query that returns one
-    envelope and no argument that could ask it to.
+    envelope and no argument that could ask it to. ``expected_mwh`` is held to
+    the same rule: `forecaster.md`'s second planning arm is built on it, and a
+    column a caller could switch on would be a planning basis selectable one
+    layer below the one the API refuses to expose.
     """
-    for column in ("p10_mwh", "p50_mwh", "p90_mwh"):
+    for column in ("p10_mwh", "p50_mwh", "p90_mwh", "expected_mwh"):
         assert PLANNING_PROFILE_SQL.count(column) == 1
     predicates = re.findall(r"(?:where|and)\s+[^\n]*", PLANNING_PROFILE_SQL)
-    assert not [line for line in predicates if "p10_" in line or "p90_" in line]
+    assert not [
+        line
+        for line in predicates
+        if "p10_" in line or "p90_" in line or "expected_" in line
+    ]
 
 
 # --- the bridge ----------------------------------------------------------------

@@ -52,6 +52,13 @@ read, because the plan is built on one and scored on three — and the planning
 basis is a property of the product, decided in
 :data:`~wattsteer_ml.optimizer.result.PLANNING_BASIS`, not of a call. No
 argument, column or predicate in this file can select one.
+
+``expected_mwh`` is selected unconditionally beside them, for the same reason
+and with the same lack of a choice: `E[Y]` is what `forecaster.md`'s second
+planning arm is built against, and an arm read from a *different* query than the
+P50 plan would differ from it in two things instead of one. It is a column on
+``canonical_forecast_hour`` — Forecaster 14 persists it per hour — not a
+quantity computed here.
 """
 
 from __future__ import annotations
@@ -101,6 +108,7 @@ select
   hour.p10_mwh,
   hour.p50_mwh,
   hour.p90_mwh,
+  hour.expected_mwh,
   hour.published_at
 from canonical_forecast_hour as hour
 join chosen
@@ -176,6 +184,7 @@ def _profile(
         p10_mwh=tuple(float(row["p10_mwh"]) for row in rows),
         p50_mwh=tuple(float(row["p50_mwh"]) for row in rows),
         p90_mwh=tuple(float(row["p90_mwh"]) for row in rows),
+        expected_mwh=tuple(float(row["expected_mwh"]) for row in rows),
         threshold_mw=thresholds.pop(),
     )
 

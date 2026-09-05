@@ -33,7 +33,7 @@ it runs both arms and publishes both arms' `recovered_floor_mwh`, and it is bloc
 this ticket and on 02. The arm is not run here; it is only made possible here, and made
 unreachable from the public surface.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The builder accepts the planning envelope as a parameter; nothing else in the model, the simulator or the KPI definitions changes between arms
 - [ ] `planning_basis` on the result names the envelope actually used

@@ -29,6 +29,7 @@ from wattsteer_ml.optimizer import (
     DispatchPlan,
     ModelOptions,
     OptimizerBugError,
+    PlanningEnvelope,
     available_between,
     local_day,
     reference_battery,
@@ -86,7 +87,7 @@ def plan(
     if backend is None:
         backend = "SCIP" if options.mutual_exclusion else "GLOP"
     return solve(
-        offered_mwh=profile,
+        envelope=PlanningEnvelope.p50(profile),
         batteries=[battery if battery is not None else reference_case()],
         horizon=HORIZON,
         backend=backend,
@@ -349,7 +350,7 @@ def test_a_day_with_nothing_to_absorb_yields_the_do_nothing_dispatch() -> None:
 def test_a_scenario_with_no_assets_is_the_baseline_itself() -> None:
     """ "Baseline" means no action at all, which here *is* the profile."""
     empty = solve(
-        offered_mwh=REFERENCE_PROFILE,
+        envelope=PlanningEnvelope.p50(REFERENCE_PROFILE),
         batteries=[],
         horizon=HORIZON,
         backend="SCIP",
@@ -435,7 +436,7 @@ def test_a_fleet_with_two_batteries_of_the_same_key_is_refused() -> None:
     duplicated = [reference_case(), reference_case()]
     with pytest.raises(OptimizerBugError, match="unique"):
         solve(
-            offered_mwh=REFERENCE_PROFILE,
+            envelope=PlanningEnvelope.p50(REFERENCE_PROFILE),
             batteries=duplicated,
             horizon=HORIZON,
             backend="SCIP",
@@ -446,7 +447,7 @@ def test_two_distinctly_keyed_batteries_build_and_solve() -> None:
     second = replace(reference_case(), key="battery-2", label="Battery 2")
     result = plan(battery=None, rho=1.5)
     pair = solve(
-        offered_mwh=REFERENCE_PROFILE,
+        envelope=PlanningEnvelope.p50(REFERENCE_PROFILE),
         batteries=[reference_case(), second],
         horizon=HORIZON,
         backend="SCIP",
@@ -473,7 +474,11 @@ def test_the_solution_survives_the_solver_going_out_of_scope() -> None:
 
 def test_a_profile_of_the_wrong_length_is_refused() -> None:
     with pytest.raises(OptimizerBugError, match="hours"):
-        solve(offered_mwh=[0.0] * 23, batteries=[reference_case()], horizon=HORIZON)
+        solve(
+            envelope=PlanningEnvelope.p50([0.0] * 23),
+            batteries=[reference_case()],
+            horizon=HORIZON,
+        )
 
 
 def test_the_reference_case_solves_well_inside_the_ci_guard() -> None:

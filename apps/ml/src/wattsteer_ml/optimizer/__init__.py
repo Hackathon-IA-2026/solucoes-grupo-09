@@ -31,6 +31,7 @@ from .backend import (
     configured_milp_backend,
     resolve_backend,
 )
+from .basis import PlanningBasis, PlanningEnvelope
 from .errors import BackendNotPermittedError, OptimizerBugError, SolverNotOptimalError
 from .fleet import (
     Availability,
@@ -100,6 +101,8 @@ __all__ = [
     "LoadDispatch",
     "ModelOptions",
     "OptimizerBugError",
+    "PlanningBasis",
+    "PlanningEnvelope",
     "PlanningProfile",
     "ProfileSource",
     "Schedule",

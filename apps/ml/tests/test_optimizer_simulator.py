@@ -31,6 +31,7 @@ from wattsteer_ml.optimizer import (
     BatteryDispatch,
     DispatchPlan,
     OptimizerBugError,
+    PlanningEnvelope,
     Schedule,
     local_day,
     reference_battery,
@@ -62,7 +63,7 @@ ALL_ZERO: tuple[float, ...] = (0.0,) * HORIZON_HOURS
 
 def reference_plan(profile: tuple[float, ...] = REFERENCE_PROFILE) -> DispatchPlan:
     return solve(
-        offered_mwh=profile,
+        envelope=PlanningEnvelope.p50(profile),
         batteries=[reference_battery()],
         horizon=HORIZON,
     )
