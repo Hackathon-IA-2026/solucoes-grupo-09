@@ -262,27 +262,15 @@ export interface ShiftableLoadAsset {
 
 export type FlexibilityAsset = BatteryAsset | ShiftableLoadAsset;
 
-/** `OptimizationResult`, narrowed to what the screen renders. */
-export interface OptimizationResult {
-  /** Baseline curtailment under the evaluated realisation, MWh. */
-  baselineCurtailmentMwh: number;
-  optimizedCurtailmentMwh: number;
-  avoidedEnergyMwh: number;
-  /** `avoided / baseline`; **null**, never 0, when baseline is 0. */
-  avoidability: number | null;
-  /** Per-hour dispatch, MW. Positive = added demand, negative = discharge. */
-  dispatch: HourlyDispatch[];
-  thresholdMw: number;
-  /**
-   * Because "recovered" is not "delivered": absorbed energy is metered at the
-   * grid boundary, and some of it is still inside the battery when the horizon
-   * ends. There is no terminal state-of-charge constraint, so the consequence
-   * is reported rather than constrained away.
-   */
-  storedAtHorizonEndMwh: number;
-  /** The other half of the same honesty: what did not survive the round trip. */
-  roundTripLossMwh: number;
-}
+/**
+ * There is no `OptimizationResult` shape here any more.
+ *
+ * It used to be a narrowed local copy of the contract, for a browser-side
+ * evaluator that no longer exists. `@wattsteer/core`'s generated
+ * `OptimizationResult` is now the only one: the screen renders what
+ * `POST /v1/optimize` returned, and `lib/optimization.ts` is the single place
+ * that reads it.
+ */
 
 export interface HourlyDispatch {
   hourLocal: number;
@@ -327,8 +315,31 @@ export interface MitigationStep {
   storedAtHorizonEndMwh: number;
   /** What did not survive the round trip, on the planning envelope. */
   roundTripLossMwh: number;
-  /** The **scheduled** dispatch, on the planning envelope. */
+  /**
+   * The **scheduled** dispatch, on the planning envelope, as the solver
+   * returned it. Empty for `no_action`, which is the day and not a plan.
+   */
   dispatch: HourlyDispatch[];
+  /**
+   * The economic scenario the solver stamped on this step, R$ — recovered
+   * energy on the planning envelope at the assumed rate. `null` for
+   * `no_action`, because nothing was recovered and a zero would read as a
+   * priced outcome.
+   */
+  brl: number | null;
+  /**
+   * `curtailment_threshold_mw` in force for the solve this step came from. On
+   * every step rather than on the screen: an unstamped figure cannot be
+   * compared with another one, and the threshold is the definition of the
+   * quantity being avoided.
+   */
+  thresholdMw: number;
+  /**
+   * The resolved `ForecastOrigin` this step was optimised against, as the
+   * instant the run published. A plan is a statement about a forecast; without
+   * the origin it is a statement about whenever the page happened to load.
+   */
+  forecastOrigin: string;
 }
 
 /** A `CurtailmentEpisode` — a read-time view, carrying its own threshold. */

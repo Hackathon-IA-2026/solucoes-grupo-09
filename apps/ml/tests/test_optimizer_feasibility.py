@@ -82,7 +82,7 @@ def _load(rng: random.Random) -> dict[str, Any]:
     daily = rng.uniform(24.0, 20_000.0)
     connection = rng.uniform(1.0, 2000.0)
     # Written as a branch rather than as a two-argument `min`, deliberately:
-    # `test_one_simulator.py` scans the repository for a *second* implementation
+    # `test/one-execution-rule.test.ts` scans the repository for a *second* implementation
     # of the execution rule, and a clip beside the words "charge", "discharge",
     # "efficiency" and "curtailment" is exactly the shape it is looking for.
     # This is a fixture bound, not a rule, and it should not read like one.

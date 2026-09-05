@@ -529,22 +529,13 @@ export const en = {
       // forecast has no weather run and must not print an empty one.
       weatherRun: " · weather run {run}",
       threshold: " · threshold {mw} MW",
+      optimisedAgainst: "Optimised against the forecast published {when} BRT",
     },
 
     /** `VintageFidelity`, product-visible by decision rather than by accident. */
     vintage: {
       point_in_time: "POINT-IN-TIME",
       revision_optimistic: "REVISION-OPTIMISTIC",
-    },
-
-    /** The prototype's standing caveat about its own optimizer. */
-    heuristic: {
-      title: "This is a prototype heuristic, not the optimizer",
-      points: [
-        "The shipped Flex Optimizer is a MILP with real binaries for the battery's charge/discharge mutual exclusion, solved by SCIP in single-digit milliseconds inside the request. Nothing on this page solves a MILP.",
-        "The greedy pass here keeps the two properties whose absence would make the numbers wrong rather than approximate: absorbed energy is the net increase in flexible demand, and the assets may never import from the grid.",
-        "Expect the real optimizer to recover somewhat more than this page shows, never less.",
-      ],
     },
 
     /** The band figure and its strip — `components/charts/band-figure.tsx`. */
@@ -906,6 +897,11 @@ export const en = {
         "At an assumed {rate}/MWh, on the median realisation. This is a scenario, not a settlement value, and it is the only place R$ appears. No carbon claim is derivable from any of this and none is made.",
       economicOnlyMoney:
         "Move it and only this figure moves. The optimizer is denominated in energy, never in money, so nothing it recommends is a function of a price WattSteer invented.",
+      solvingTitle: "Solving",
+      solvingNote:
+        "The Flex Optimizer is building and solving the MILP for this fleet. It answers inside the request — there is no job to poll for — so this should be gone before you finish reading it.",
+      economicNoPlan:
+        "No plan, no figure. Nothing was dispatched in this step, so there is nothing to price.",
       dispatchTitle: "Dispatch",
       dispatchSubtitle: "{step} · the scheduled plan, on the planning envelope",
       dispatchScheduled:

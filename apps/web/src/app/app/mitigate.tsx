@@ -28,9 +28,12 @@
  *     and high realisations *beside* it so a conservative promise does not hide
  *     the upside.
  *  2. **The dispatch is the *scheduled* plan on the planning envelope**, and is
- *     labelled so. The per-realisation numbers come from the simulator, which
- *     is `evaluatePlan` and is the only thing on this screen allowed to produce
- *     a KPI.
+ *     labelled so. Every number on this screen is read off a solved
+ *     `OptimizationResult`; this file computes no KPI at all. It used to: a
+ *     greedy planner and a second implementation of the execution rule ran in
+ *     the browser, and `docs/specs/api-surface.md` decision 6 deleted them
+ *     rather than porting them, because the rule exists once — in `apps/ml` —
+ *     and this copy was the known-wrong one.
  *  3. **The scenario is the URL.** There is no account and nothing is saved, so
  *     the address bar carries the canonical blob, a stepper commits on a
  *     trailing debounce, and a link that fails the refusal table renders the
@@ -53,7 +56,7 @@ import { useState } from "react";
 import { Text, View } from "react-native";
 import { AppShell, MiniPill, ScreenTitle } from "@/components/app/app-shell";
 import { BatteryEditor, LoadEditor, Stepper } from "@/components/app/asset-editor";
-import { ForecastStamp, HeuristicNote, HonestyNote } from "@/components/app/honesty";
+import { HonestyNote, SolveStamp } from "@/components/app/honesty";
 import {
   fixtureBattery,
   fixtureLoad,
@@ -65,6 +68,7 @@ import {
   withLoad,
 } from "@/components/app/scenario";
 import { useAppParams } from "@/components/app/use-app-params";
+import { useOptimization } from "@/components/app/use-optimization";
 import { useScenario } from "@/components/app/use-scenario";
 import { BandStrip } from "@/components/charts/band-figure";
 import { DispatchChart } from "@/components/charts/dispatch-chart";
@@ -73,8 +77,6 @@ import { fill } from "@/i18n/format";
 import {
   ASSET_LIMITS,
   type Band,
-  buildForecast,
-  buildMitigationSteps,
   DEFAULT_BATTERY,
   DEFAULT_LOAD,
   type MitigationStep,
@@ -90,11 +92,18 @@ export default function MitigateScreen() {
   const copy = useCopy();
   const f = useFormat();
   const params = useAppParams();
-  const forecast = buildForecast(params.subsystem, params.run);
   const meta = subsystemMeta(params.subsystem);
   const scenarioState = useScenario(params.subsystem, params.date);
+  // Before the refusal branch below, because a hook cannot be called
+  // conditionally. It parks itself on a `null` scenario.
+  const optimization = useOptimization(scenarioState.scenario);
   const [revealed, setRevealed] = useState(2);
 
+  // The stamp is read off the answer, never off the request: the threshold and
+  // the resolved forecast origin are what the plan was optimised against, and a
+  // screen that sourced them from anywhere else could label a plan with a
+  // forecast it was not built on.
+  const stamped = optimization.status === "solved" ? optimization.steps[0] : null;
   const header = (
     <ScreenTitle
       title={copy.app.mitigate.title}
@@ -103,10 +112,12 @@ export default function MitigateScreen() {
         date: f.date(params.date),
       })}
       right={
-        <ForecastStamp
-          origin={forecast.forecastOrigin}
-          thresholdMw={forecast.thresholdMw}
-        />
+        stamped === null ? null : (
+          <SolveStamp
+            forecastOrigin={stamped.forecastOrigin}
+            thresholdMw={stamped.thresholdMw}
+          />
+        )
       }
     />
   );
@@ -135,7 +146,44 @@ export default function MitigateScreen() {
   const load = fixtureLoad(scenarioLoad(scenario));
   const brlPerMwh = scenarioBrlPerMwh(scenario);
 
-  const steps = buildMitigationSteps({ forecast, battery, load });
+  // The solver refused, or could not be reached. Same treatment as a refused
+  // link: the code, in the reader's language, and no plan drawn beside it.
+  if (optimization.status === "refused") {
+    return (
+      <>
+        <Head>
+          <title>{copy.app.mitigate.metaTitle}</title>
+          <meta name="robots" content="noindex" />
+        </Head>
+        <AppShell>
+          {header}
+          <Refusal code={optimization.code} onReset={scenarioState.reset} />
+        </AppShell>
+      </>
+    );
+  }
+
+  // Solving. An absence, not a skeleton of numbers that are not there yet.
+  if (optimization.status !== "solved") {
+    return (
+      <>
+        <Head>
+          <title>{copy.app.mitigate.metaTitle}</title>
+          <meta name="robots" content="noindex" />
+        </Head>
+        <AppShell>
+          {header}
+          <HonestyNote
+            title={copy.app.mitigate.solvingTitle}
+            tone="neutral"
+            points={[copy.app.mitigate.solvingNote]}
+          />
+        </AppShell>
+      </>
+    );
+  }
+
+  const steps = optimization.steps;
   const active = steps[Math.min(revealed, steps.length - 1)];
   const baseline = steps[0].remaining;
   const domainMax = baseline.p90 * 1.05;
@@ -262,15 +310,24 @@ export default function MitigateScreen() {
             <Text style={{ fontSize: 13, color: colors.inkMuted }}>
               {copy.app.mitigate.economicTitle}
             </Text>
+            {/*
+              The solver's own figure — recovered energy on the planning
+              envelope at the assumed rate — rather than a second multiplication
+              on this screen. `no_action` dispatched nothing and is priced at
+              nothing, which is an absence and is drawn as one.
+            */}
             <Text
               style={{
                 fontSize: 32,
                 fontWeight: "600",
                 fontVariant: ["tabular-nums"],
-                color: colors.ink,
+                color: active.brl === null ? colors.inkFaint : colors.ink,
               }}
+              accessibilityLabel={
+                active.brl === null ? copy.app.mitigate.economicNoPlan : undefined
+              }
             >
-              {f.brlThousands(active.recovered.p50 * brlPerMwh)}
+              {active.brl === null ? "—" : f.brlThousands(active.brl)}
             </Text>
             <View style={{ marginTop: space.xs }}>
               <Stepper
@@ -414,8 +471,6 @@ export default function MitigateScreen() {
         <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkFaint }}>
           {copy.app.mitigate.shareNote}
         </Text>
-
-        <HeuristicNote />
 
         <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkFaint }}>
           {copy.app.mitigate.footnote}

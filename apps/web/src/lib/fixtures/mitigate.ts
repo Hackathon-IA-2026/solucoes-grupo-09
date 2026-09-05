@@ -1,30 +1,23 @@
 /**
- * Mitigate fixtures: the stepwise no-action → +battery → +flexible-load
- * reveal, computed from the day-ahead forecast and the user's asset
- * parameters through the prototype heuristic in `optimize.ts`.
+ * Mitigate's fixed inputs: the fleet the screen opens with, the ranges its
+ * steppers move over, and the planning basis the product does not offer as a
+ * choice.
+ *
+ * **Nothing here computes a plan any more.** `buildMitigationSteps`, the
+ * `planDispatch` heuristic and the `evaluatePlan` execution rule it scored
+ * against all lived in this directory; `docs/specs/api-surface.md` decision 6
+ * deletes them rather than porting them, because
+ * `docs/specs/flex-optimizer.md` requires exactly one implementation of the
+ * execution rule in the repository and records that this one was wrong — it
+ * clipped absorption but not the state of charge, so on a low realisation it
+ * reported a battery filled with energy it never received. The Mitigate screen
+ * calls `POST /v1/optimize` and `lib/optimization.ts` reads the answer;
+ * `test/one-execution-rule.test.ts` walks the repository and keeps it deleted.
  */
 
 import { REFERENCE_FLEET } from "@wattsteer/core";
-import { type DispatchPlan, evaluatePlan, planDispatch } from "./optimize";
-import type {
-  Band,
-  BatteryAsset,
-  MitigationStep,
-  ShiftableLoadAsset,
-  SubsystemDayForecast,
-} from "./types";
+import type { BatteryAsset, ShiftableLoadAsset } from "./types";
 
-/**
- * **The optimizer plans against P50, and the user is never asked.**
- *
- * `docs/specs/flex-optimizer.md` settles it: planning on P10 collapses at a
- * hurdle forecaster — the hour-wise P10 is legitimately zero in any hour whose
- * occurrence is uncertain, (C5) then forbids charging in exactly the hours the
- * day turns out to be about, and the "conservative plan" is the do-nothing
- * plan. The conservatism belongs in the *claim* instead, which is what
- * `recoveredFloorMwh` is. The prototype used to take this as a parameter and
- * the screen used to offer it as a toggle; both are gone.
- */
 export const PLANNING_BASIS = "p50" as const;
 
 /**
@@ -86,142 +79,6 @@ export const ASSET_LIMITS = {
   loadDailyEnergyMwh: { min: 100, max: 6000, step: 100 },
   brlPerMwh: { min: 20, max: 600, step: 10 },
 } as const;
-
-function realisation(forecast: SubsystemDayForecast, key: keyof Band): number[] {
-  return forecast.hours.map((h) => h.constrainedOff[key]);
-}
-
-function scoreAcrossBand(
-  forecast: SubsystemDayForecast,
-  plan: DispatchPlan,
-  battery: BatteryAsset,
-): { remaining: Band; recovered: Band; avoidability: Band | null } {
-  const p10 = evaluatePlan(
-    plan,
-    realisation(forecast, "p10"),
-    forecast.thresholdMw,
-    battery,
-  );
-  const p50 = evaluatePlan(
-    plan,
-    realisation(forecast, "p50"),
-    forecast.thresholdMw,
-    battery,
-  );
-  const p90 = evaluatePlan(
-    plan,
-    realisation(forecast, "p90"),
-    forecast.thresholdMw,
-    battery,
-  );
-  const avoidable =
-    p10.avoidability !== null && p50.avoidability !== null && p90.avoidability !== null;
-  return {
-    remaining: {
-      p10: p10.optimizedCurtailmentMwh,
-      p50: p50.optimizedCurtailmentMwh,
-      p90: p90.optimizedCurtailmentMwh,
-    },
-    recovered: {
-      p10: p10.avoidedEnergyMwh,
-      p50: p50.avoidedEnergyMwh,
-      p90: p90.avoidedEnergyMwh,
-    },
-    /**
-     * **Keyed by realisation, not sorted into an interval.**
-     *
-     * `p10` here is the share avoided *on the P10 realisation*, and so on. It
-     * used to be stored inverted — `p10` holding the P90 realisation's number —
-     * on the argument that the share avoided is lowest at P90, which is true
-     * and is the arithmetic the spec asks to make visible: a fixed fleet covers
-     * a smaller share of a bigger event, so `avoidability(P90) < avoidability(P50)`.
-     *
-     * What that inversion assumed, and the reference profile disproves, is that
-     * the three shares are *ordered*. They are not. The P10 realisation is
-     * lower than both, for a different reason: a P50-built plan cannot absorb
-     * energy that was never curtailed, so on the low edge the assets simply do
-     * less — 34.6 MWh against 684.6, on a forecast whose P10 is zero in
-     * nineteen hours of twenty-four. Stored as an ascending interval, that set
-     * drew a strip whose median marker sat outside its own fill.
-     *
-     * So the shape carries the three realisations and the screen draws the span
-     * between the smallest and the largest with the median marked, which is the
-     * only reading of these three numbers that is not a lie about their order.
-     */
-    avoidability: avoidable
-      ? {
-          p10: p10.avoidability ?? 0,
-          p50: p50.avoidability ?? 0,
-          p90: p90.avoidability ?? 0,
-        }
-      : null,
-  };
-}
-
-export interface MitigateInput {
-  forecast: SubsystemDayForecast;
-  battery: BatteryAsset;
-  load: ShiftableLoadAsset;
-}
-
-export function buildMitigationSteps(input: MitigateInput): MitigationStep[] {
-  const { forecast, battery, load } = input;
-  const offered = realisation(forecast, PLANNING_BASIS);
-
-  const nothing = planDispatch({
-    offeredMwh: offered,
-    battery: null,
-    load: null,
-    thresholdMw: forecast.thresholdMw,
-  });
-  const batteryOnly = planDispatch({
-    offeredMwh: offered,
-    battery,
-    load: null,
-    thresholdMw: forecast.thresholdMw,
-  });
-  const both = planDispatch({
-    offeredMwh: offered,
-    battery,
-    load,
-    thresholdMw: forecast.thresholdMw,
-  });
-
-  // Keys, not labels: the three steps are named in the dictionaries, so the
-  // reveal reads "+ Bateria" or "+ Battery" without the fixture knowing which.
-  const steps: { key: MitigationStep["key"]; plan: DispatchPlan }[] = [
-    { key: "no_action", plan: nothing },
-    { key: "battery", plan: batteryOnly },
-    { key: "battery_and_load", plan: both },
-  ];
-
-  return steps.map(({ key, plan }) => {
-    const scored = scoreAcrossBand(forecast, plan, battery);
-    // The **scheduled** plan, on the planning envelope. Every top-level scalar
-    // the contract carries is evaluated here and nowhere else; the promise is
-    // the P10 column of `scored`, which is a different realisation of the same
-    // plan rather than a different plan.
-    const onPlanningEnvelope = evaluatePlan(
-      plan,
-      realisation(forecast, PLANNING_BASIS),
-      forecast.thresholdMw,
-      battery,
-    );
-    return {
-      key,
-      remaining: scored.remaining,
-      recovered: scored.recovered,
-      avoidability: key === "no_action" ? null : scored.avoidability,
-      // `recovered_floor_mwh == scored.p10.recovered_mwh`, by construction and
-      // not by coincidence — the contract states the identity and this is the
-      // one place the prototype could break it.
-      recoveredFloorMwh: scored.recovered.p10,
-      storedAtHorizonEndMwh: onPlanningEnvelope.storedAtHorizonEndMwh,
-      roundTripLossMwh: onPlanningEnvelope.roundTripLossMwh,
-      dispatch: onPlanningEnvelope.dispatch,
-    };
-  });
-}
 
 /**
  * The economic scenario. R$ appears only as a labelled scenario, with the

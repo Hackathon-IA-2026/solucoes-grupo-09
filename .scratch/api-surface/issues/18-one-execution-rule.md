@@ -23,7 +23,7 @@ it runs over the whole repository including the web app, in the default test run
 
 **Blocked by:** 17.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The Mitigate screen calls the optimizer route and renders its result
 - [ ] The web app's plan evaluator and dispatch planner are deleted, not ported

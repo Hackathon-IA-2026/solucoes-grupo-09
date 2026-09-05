@@ -1,25 +1,28 @@
 # Execution-rule vectors
 
-The execution rule has **one implementation**, and it runs in two languages
-because the prototype scores a plan in a browser with no Python in the room:
+The execution rule has **one implementation**, in one language:
 
 | Language | Site |
 |---|---|
 | Python | `apps/ml/src/wattsteer_ml/optimizer/simulator.py` |
-| TypeScript | `apps/web/src/lib/fixtures/optimize.ts` (`evaluatePlan`) |
 
-`apps/ml/tests/test_one_simulator.py` walks the repository and fails if a third
-appears anywhere, in either language. These vectors are the other half of that
-edge: a port is not a second implementation *provided the two are proved
-identical*, and this is where that is proved.
+`test/one-execution-rule.test.ts` walks the whole repository — both languages —
+in the default `bun run test`, and fails if a second appears anywhere.
 
-- `apps/ml/tests/test_execution_rule_vectors.py` runs the Python one.
-- `apps/web/test/execution-rule.test.ts` runs the TypeScript one.
+**This directory is no longer a parity set, and that is the point.** It was one:
+`apps/web/src/lib/fixtures/optimize.ts` held a TypeScript port that these vectors
+proved identical, on the argument that a port is not a second implementation
+*provided the two are proved identical*. `docs/specs/api-surface.md` decision 6
+withdrew the argument and deleted the port — a proved-identical copy is still a
+copy, and this one was known wrong (it clipped absorption but not the state of
+charge, so on a low realisation it reported a battery filled with energy it
+never received). Mitigate calls `POST /v1/optimize` instead.
 
-**Neither side compares against the other — only against the vectors** — so a
-shared misunderstanding cannot cancel out. Both suites glob this directory and
-fail if it is empty, so adding a case here is sufficient and neither language
-can quietly skip one.
+What the vectors pin now is **regression, not parity**: six cases, each fully
+recomputed by `apps/ml/tests/test_execution_rule_vectors.py` on every run, so a
+change to the rule that was not meant to move these numbers fails there. The
+suite globs this directory and fails if it is empty, so adding a case here is
+sufficient.
 
 ## Why this matters more than a normal parity check
 
@@ -70,15 +73,14 @@ charge balance needs. `initialStateOfCharge` is inside the 5–95 % bounds in
 every vector, because an out-of-bounds initial state is a `422` at validation
 (flex-optimizer ticket 04) and not something the simulator is asked to absorb.
 
-**Comparison is to 1e-9 MWh, not to the bit.** Both languages are IEEE-754
-doubles doing the same arithmetic, but not in an identical association order —
-the Python side clips a fleet's charge through a shared scaling factor, which is
-a multiply where the single-battery TypeScript path is a `Math.min`. 1e-9 MWh
-against figures in the hundreds is eleven significant digits of agreement; a
-real divergence in the rule is many orders of magnitude larger than that.
+**Comparison is to 1e-9 MWh, not to the bit.** The tolerance dates from the
+two-language era, where the same arithmetic ran in a different association order
+on each side; it is kept because a fleet's charge is still clipped through a
+shared scaling factor whose association order is an implementation detail. 1e-9
+MWh against figures in the hundreds is eleven significant digits; a real
+divergence in the rule is many orders of magnitude larger than that.
 
 **Regenerating.** The expected values were emitted by the Python implementation.
-There is no committed generator, and none is needed: the Python suite recomputes
-every field on every run and asserts it against the file, so a change to the rule
-that was not meant to change these numbers fails there first — and one that *was*
-meant to fails in both languages, which is the point.
+There is no committed generator, and none is needed: the suite recomputes every
+field on every run and asserts it against the file, so a change to the rule that
+was not meant to change these numbers fails there first.

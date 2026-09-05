@@ -19,7 +19,7 @@ and this file is the pair held together:
   this file asserts it of the seam that ticket 09 opened.
 
 The execution rule itself is `simulator.py`'s and is **imported** here, never
-restated — ``test_one_simulator.py`` is the edge that keeps it that way, and the
+restated — ``test/one-execution-rule.test.ts`` is the edge that keeps it that way, and the
 arm is a second caller of one function rather than a fork of it.
 """
 

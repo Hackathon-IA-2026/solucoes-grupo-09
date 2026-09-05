@@ -40,7 +40,7 @@ is, and the generator is committed beside the vectors:
 | [`gate-instant/`](gate-instant/README.md) | `gate_at(target_date, gate_profile)` — the instant every `published_at` is | `packages/core/src/schedule.ts` + `apps/api/src/forecast/gate.ts` · `apps/ml/tests/feature_row_fixtures.py` · `apps/api/drizzle/0016_the_feature_gate.sql` |
 | [`scenario-canonical/`](scenario-canonical/README.md) | the canonical scenario bytes, the base64url blob and the sha256 | `packages/core/src/scenario.ts` · `apps/ml/src/wattsteer_ml/scenario.py` |
 | [`scenario-validation/`](scenario-validation/README.md) | the eighteen-rule validation table | `packages/core/src/scenario-validation.ts` · `apps/ml/src/wattsteer_ml/scenario_validation.py` · `apps/api/src/api/scenario-gate.ts` |
-| [`execution-rule/`](execution-rule/README.md) | the execution rule, and `avoidability` with its null rule | `apps/ml/src/wattsteer_ml/optimizer/simulator.py` · `apps/web/src/lib/fixtures/optimize.ts` |
+| [`execution-rule/`](execution-rule/README.md) | the execution rule, and `avoidability` with its null rule | `apps/ml/src/wattsteer_ml/optimizer/simulator.py` — the one implementation |
 
 Two directories here are **not** parity vectors and follow none of the above:
 [`spec-examples/`](spec-examples/README.md) holds the payloads
@@ -59,13 +59,15 @@ Three were already bound when it was picked up, and the fourth was not:
 | the eighteen scenario validation rules | `flex-optimizer.md` | `scenario-validation/` |
 | avoidability and its null rule | `flex-optimizer.md` | `execution-rule/` |
 
-**A fifth value is not a parity case — it is a deletion**, and it is
-`.scratch/api-surface/issues/18-one-execution-rule.md`. That ticket deletes the
-web app's copy of the execution rule, which is the TypeScript side of
-`execution-rule/`. When it lands, those vectors stop being a *parity* directory
-and become what `apps/ml/tests/test_execution_rule_vectors.py` alone asserts —
-still worth keeping, because the Python suite recomputes every field on every
-run, but no longer a cross-language binding. The `avoidability` null rule then
-lives on in TypeScript only as a **rendering** rule, which is ticket 18's own
-acceptance criterion: the screen shows an absence with its "undefined, not zero"
-explanation, never a zero.
+**A fifth value was not a parity case — it was a deletion**, and it has landed.
+API-surface ticket 18 deleted the web app's copy of the execution rule, which was
+the TypeScript side of `execution-rule/`. Those vectors are no longer a *parity*
+directory: they are what `apps/ml/tests/test_execution_rule_vectors.py` alone
+asserts — still worth keeping, because that suite recomputes every field on every
+run, but no longer a cross-language binding. The repository-wide count moved with
+the deletion, from `apps/ml`'s pytest suite to `test/one-execution-rule.test.ts`,
+so it runs in the default `bun run test` — which is where the change that would
+add a second copy is made. The `avoidability` null rule lives on in TypeScript
+only as a **rendering** rule, which is ticket 18's own acceptance criterion: the
+screen shows an absence with its "undefined, not zero" explanation, never a
+zero.
