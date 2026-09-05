@@ -414,6 +414,76 @@ describe("optimize · the cache is keyed on provenance", () => {
     ).toBe("opt:v1:sha256:abc:2026-08-28T12:00:00Z:0.1.0");
   });
 
+  it("puts the same three components on the ETag, and 304s the deep link", async () => {
+    // api-surface 20: the shared validator and the private key are the same
+    // statement in two places, invalidated by the same facts. A validator that
+    // drifted from the key would be a 304 served against an entry the key had
+    // already replaced.
+    const api = fresh();
+    const first = await get(api, BLOB);
+    expect(first.headers.get("cache-control")).toBe("public, max-age=300");
+    const etag = first.headers.get("etag") ?? "";
+    expect(etag).toContain(SCENARIO.forecastOrigin as string);
+    expect(etag).toContain(config.optimizerBuild);
+    expect(received).toHaveLength(1);
+
+    // The read/solve distinction paying off: a pinned scenario knows its whole
+    // provenance before anything is solved, so a client holding this version
+    // costs a header comparison rather than a MILP. Neither the solver nor the
+    // cache is reached.
+    const again = await api.handle(
+      new Request(`http://localhost/v1/optimize?s=${encodeURIComponent(BLOB)}`, {
+        headers: { "if-none-match": etag },
+      }),
+    );
+    expect(again.status).toBe(304);
+    expect(await again.text()).toBe("");
+    expect(received).toHaveLength(1);
+  });
+
+  it("puts no caching on a failure, even though the 304 check ran first", async () => {
+    // The route revalidates a pinned scenario *before* it calls the solver, so
+    // on an upstream failure the success directive and the success ETag are
+    // already on the same `set` the error envelope answers on. A shared cache
+    // that stored a 503 under `public, max-age=300` could then revalidate it
+    // to a 304 against the validator the eventual 200 carries — an outage with
+    // no expiry, which is the opposite of what an ETag is for.
+    const api = routes({
+      cache: memoryCache(),
+      endpoint: endpoint({ baseUrl: `http://127.0.0.1:${closedPort}` }),
+    });
+    const response = await get(api, BLOB);
+    expect(response.status).toBe(502);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("etag")).toBeNull();
+  });
+
+  it("304s an unpinned scenario once its origin is known", async () => {
+    // The origin resolves on the answer, so this 304 costs the solve it could
+    // not avoid and saves the payload. It is still a 304 — an ETag that never
+    // produced one would be a header with no mechanism behind it.
+    const unpinned = encodeScenario({ ...SCENARIO, forecastOrigin: undefined });
+    const api = fresh();
+    const first = await get(api, unpinned);
+    const etag = first.headers.get("etag") ?? "";
+    expect(etag).not.toBe("");
+
+    const again = await api.handle(
+      new Request(`http://localhost/v1/optimize?s=${encodeURIComponent(unpinned)}`, {
+        headers: { "if-none-match": etag },
+      }),
+    );
+    expect(again.status).toBe(304);
+    expect(await again.text()).toBe("");
+  });
+
+  it("gives the POST no validator, because nothing may store it", async () => {
+    const api = fresh();
+    const response = await post(api, BODY);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("etag")).toBeNull();
+  });
+
   it("the gateway's build agrees with the ML service's, with nothing configured", () => {
     // The two are one string in two languages. Read rather than restated: a
     // comment saying "keep these in sync" is how they stop being in sync.

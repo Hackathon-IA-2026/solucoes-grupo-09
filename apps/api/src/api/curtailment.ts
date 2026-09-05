@@ -36,6 +36,11 @@ import {
   observedRange,
   positiveNumber,
 } from "./params.js";
+import {
+  applyCachePolicy,
+  CACHE_POLICIES,
+  type CachePolicy,
+} from "./plugins/cache-policy.js";
 
 /**
  * `GET /v1/curtailment/hours`, `/episodes` and `/reasons` — **the observed
@@ -134,21 +139,18 @@ const MAX_REASON_LIMIT = 500;
 const SETTLING_TAIL_MS = 48 * 3_600_000;
 
 /**
- * Assembled from its parts rather than written as one literal — the joined
- * directive string trips the repo's high-entropy secret lint, and a suppression
- * comment on a `Cache-Control` header would be the wrong thing to teach.
+ * Which of the table's two observed rows this range falls on.
+ *
+ * The one switch on the whole surface that reads a clock, and it reads it to
+ * pick a *freshness window* and never a key: both rows key on the same
+ * provenance — the max `data_version` in range — so a restatement invalidates
+ * a settled range and a settling one identically, and the clock only decides
+ * how long a shared cache may go without asking.
  */
-const SETTLED_MAX_AGE_SEC = 3600;
-const STALE_WHILE_REVALIDATE_SEC = 86_400;
-const SETTLED_CACHE = [
-  "public",
-  `max-age=${SETTLED_MAX_AGE_SEC}`,
-  `stale-while-revalidate=${STALE_WHILE_REVALIDATE_SEC}`,
-].join(", ");
-const SETTLING_CACHE = "public, max-age=300";
-
-function cacheControl(to: Date, now: Date): string {
-  return to.getTime() > now.getTime() - SETTLING_TAIL_MS ? SETTLING_CACHE : SETTLED_CACHE;
+function policyFor(to: Date, now: Date): CachePolicy {
+  return to.getTime() > now.getTime() - SETTLING_TAIL_MS
+    ? CACHE_POLICIES.observedTail
+    : CACHE_POLICIES.observedSettled;
 }
 
 /** `2026-08-28` — a civil date in `America/Sao_Paulo`, never a UTC slice. */
@@ -336,12 +338,17 @@ export function createCurtailmentRoutes(deps: { db: Database | undefined }) {
 
         // A cache key is a provenance, never a duration: ONS restates settled
         // history in place, so the validator is the greatest data version
-        // behind the page and nothing else moves it.
-        const etag = `W/"${observation.dataVersion}:${query.subsystem}:${query.technology ?? "*"}:${pageFrom.toISOString()}"`;
-        set.headers["cache-control"] = cacheControl(range.to, new Date());
-        set.headers.etag = etag;
-        if (request.headers.get("if-none-match") === etag) {
-          set.status = 304;
+        // behind the page and nothing else moves it. The page boundary and the
+        // two filters are on it because they select *which* rows of that
+        // version answered.
+        if (
+          applyCachePolicy({ set, request }, policyFor(range.to, new Date()), [
+            observation.dataVersion,
+            query.subsystem,
+            query.technology ?? "*",
+            pageFrom,
+          ])
+        ) {
           return null;
         }
 
@@ -415,11 +422,15 @@ export function createCurtailmentRoutes(deps: { db: Database | undefined }) {
         // The parameters are part of the key: the same range under a
         // different threshold is a different answer, and an ETag that ignored
         // them would serve one screen's episodes to another screen's request.
-        const etag = `W/"${observation.dataVersion}:${query.subsystem}:${query.technology ?? "*"}:${thresholdMw}:${maxGapHours}"`;
-        set.headers["cache-control"] = cacheControl(range.to, new Date());
-        set.headers.etag = etag;
-        if (request.headers.get("if-none-match") === etag) {
-          set.status = 304;
+        if (
+          applyCachePolicy({ set, request }, policyFor(range.to, new Date()), [
+            observation.dataVersion,
+            query.subsystem,
+            query.technology ?? "*",
+            thresholdMw,
+            maxGapHours,
+          ])
+        ) {
           return null;
         }
 
@@ -491,11 +502,14 @@ export function createCurtailmentRoutes(deps: { db: Database | undefined }) {
           limit,
         });
 
-        const etag = `W/"${observation.dataVersion}:${query.subsystem}:${query.date}:${limit}"`;
-        set.headers["cache-control"] = cacheControl(day.to, new Date());
-        set.headers.etag = etag;
-        if (request.headers.get("if-none-match") === etag) {
-          set.status = 304;
+        if (
+          applyCachePolicy({ set, request }, policyFor(day.to, new Date()), [
+            observation.dataVersion,
+            query.subsystem,
+            query.date,
+            limit,
+          ])
+        ) {
           return null;
         }
 

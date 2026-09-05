@@ -46,7 +46,7 @@ publication failure into a slightly older number instead of a spinner.
 **Blocked by:** 11, 13, 14, 15, 17 — this ticket applies a policy to routes that
 must exist first.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Every read carries an ETag and revalidates to a 304 rather than re-querying
 - [ ] A superseding late-gate publication changes the forecast ETag by construction

@@ -546,11 +546,108 @@ suite("the published forecast · persistence and AsOf (real Postgres)", () => {
     });
 
     /** `now` is pinned so `target_date` bounds and `age_hours` are arithmetic. */
-    const askAt = (now: Date, query: string): Promise<Response> =>
+    const askAt = (
+      now: Date,
+      query: string,
+      headers: Record<string, string> = {},
+    ): Promise<Response> =>
       new Elysia()
         .use(errorHandler)
         .use(createForecastRoutes({ db, now: () => now }))
-        .handle(new Request(`http://localhost/v1/forecast/day-ahead${query}`));
+        .handle(
+          new Request(`http://localhost/v1/forecast/day-ahead${query}`, { headers }),
+        );
+
+    /**
+     * api-surface 20's caching boxes, on the route the table pairs with
+     * `/v1/grid/outlook`.
+     *
+     * Three of them can only be asserted here, because each is a statement
+     * about rows: a superseding publication, a re-ingest that writes no new
+     * version, and the 304 that follows from the pair. The validator is the
+     * artifact, the publication instant and the version — a **provenance** —
+     * so all three fall out of the table rather than out of a clock.
+     */
+    describe("the ETag is a provenance, and a shared cache revalidates on it", () => {
+      const READ_AT = new Date("2024-04-04T23:00:00.000Z");
+      const QUERY = `?subsystem=NE&target_date=${TARGET_DATE}&gate_profile=gate_late`;
+
+      it("carries the artifact, the publication instant and the version", async () => {
+        await writePublication(db, publication(), { ingestedAt: NOW });
+        const response = await askAt(READ_AT, QUERY);
+        const etag = response.headers.get("etag") ?? "";
+        expect(etag).toContain(ARTIFACT);
+        expect(etag).toContain(new Date(GATE_LATE).toISOString());
+        // The table's directive, `stale-while-revalidate` included: it is what
+        // turns a failed publication into a slightly older number rather than
+        // a spinner on the most-viewed screen there is.
+        expect(response.headers.get("cache-control")).toBe(
+          "public, max-age=300, stale-while-revalidate=3600",
+        );
+      });
+
+      it("revalidates to a 304 rather than re-querying", async () => {
+        await writePublication(db, publication(), { ingestedAt: NOW });
+        const first = await askAt(READ_AT, QUERY);
+        const etag = first.headers.get("etag") ?? "";
+        const again = await askAt(READ_AT, QUERY, { "if-none-match": etag });
+        expect(again.status).toBe(304);
+        expect(await again.text()).toBe("");
+        // A 304 that dropped the validator would be a revalidation the client
+        // cannot repeat.
+        expect(again.headers.get("etag")).toBe(etag);
+        expect(again.headers.get("cache-control")).toBe(
+          "public, max-age=300, stale-while-revalidate=3600",
+        );
+      });
+
+      it("changes when a superseding publication lands, by construction", async () => {
+        // A forecast changes **twice** daily and the second supersedes the
+        // first as a newer vintage of the same valid hours. There is no
+        // invalidation call here to forget: the new run is a new artifact at a
+        // new instant, which is two of the three components moving at once.
+        await writePublication(db, publication(), { ingestedAt: NOW });
+        const before = (await askAt(READ_AT, QUERY)).headers.get("etag");
+
+        await writePublication(
+          db,
+          publication({
+            scale: 2,
+            artifactId: "2024-04-04T15:11:07Z",
+            publishedAt: "2024-04-04T22:30:00.000Z",
+          }),
+          { ingestedAt: new Date("2024-04-04T23:45:00.000Z") },
+        );
+        // Read after the second ingestion, so the as-of axis can see it — the
+        // vintage cut is what decides which publication answers, exactly as it
+        // does for a replay.
+        const later = new Date("2024-04-05T00:00:00.000Z");
+        const after = (await askAt(later, QUERY)).headers.get("etag");
+        expect(after).not.toBe(before);
+        // And the stale validator no longer revalidates.
+        const stale = await askAt(later, QUERY, { "if-none-match": before ?? "" });
+        expect(stale.status).toBe(200);
+      });
+
+      it("does not change on a re-ingest that writes no new data version", async () => {
+        // The other half of "a provenance, never a duration": an identical
+        // republication writes nothing — `hoursUnchanged: 24` — so nothing
+        // about the answer moved and the validator must not move either. A
+        // validator that changed here would make every re-ingest a full
+        // cache miss across the CDN for a byte-identical answer.
+        await writePublication(db, publication(), { ingestedAt: NOW });
+        const before = (await askAt(READ_AT, QUERY)).headers.get("etag");
+
+        const again = await writePublication(db, publication(), {
+          ingestedAt: new Date("2024-04-04T23:30:00.000Z"),
+        });
+        expect(again.hoursUnchanged).toBe(24);
+        expect(again.hoursInserted + again.hoursRevised).toBe(0);
+
+        const after = await askAt(READ_AT, QUERY, { "if-none-match": before ?? "" });
+        expect(after.status).toBe(304);
+      });
+    });
 
     it("answers 200 from Postgres with the modelling service's URL unset", async () => {
       expect(process.env.WATTSTEER_ML_URL).toBeUndefined();

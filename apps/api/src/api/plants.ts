@@ -15,6 +15,7 @@ import { database } from "../database/connection.js";
 import { CodedError } from "../errors.js";
 import type { SubsystemCode } from "../ingest/normalise.js";
 import { optionalInstant } from "./params.js";
+import { applyCachePolicy, CACHE_POLICIES } from "./plugins/cache-policy.js";
 
 /**
  * `GET /v1/plants` — the plant registry, machine-readable, **because a licence
@@ -276,21 +277,34 @@ export function createPlantRoutes(deps: { db: Database | undefined }) {
         technology: technology ?? null,
       });
 
-      // The daily SIGA/ONS snapshot is the provenance; an empty registry has no
-      // snapshot behind it, so it validates on the cut instead of pretending to
-      // a freshness it does not have.
-      const validator =
-        observation.latestIngestedAt === null
-          ? `empty:${asOf.toISOString()}`
-          : observation.latestIngestedAt.toISOString();
-      const etag = `W/"${validator}:${format}:${subsystem ?? "*"}:${technology ?? "*"}:${registry.fleetDate}"`;
-      set.headers["cache-control"] = "public, max-age=86400";
-      set.headers.etag = etag;
       // The licence, in the headers too. Belt and braces, and it is what a
-      // `curl -I` shows someone deciding whether they may use the file.
+      // `curl -I` shows someone deciding whether they may use the file. Set
+      // before the validator, so a 304 carries it as well: a revalidation is
+      // still a response about a licensed download.
       set.headers.link = `<${ODBL_LICENCE_URL}>; rel="license"`;
-      if (request.headers.get("if-none-match") === etag) {
-        set.status = 304;
+
+      // The daily SIGA/ONS snapshot is the provenance. An empty registry has no
+      // snapshot behind it and validates on the *absence* — the literal
+      // `empty`, beside the fleet date the emptiness is asserted at.
+      //
+      // It used to validate on the as-of cut, which defaults to `new Date()`:
+      // a validator carrying the request's own clock, which changes on every
+      // request and is a cache that can never hit wearing an ETag. That is the
+      // duration-as-a-key this ticket exists to prevent, and it was on the one
+      // path nobody looks at. The absence is a fact about the record like any
+      // other, and it stops being true the moment a snapshot lands — at which
+      // point `latestIngestedAt` moves the validator by construction.
+      const validator =
+        observation.latestIngestedAt === null ? "empty" : observation.latestIngestedAt;
+      if (
+        applyCachePolicy({ set, request }, CACHE_POLICIES.registry, [
+          validator,
+          format,
+          subsystem ?? "*",
+          technology ?? "*",
+          registry.fleetDate,
+        ])
+      ) {
         return null;
       }
 

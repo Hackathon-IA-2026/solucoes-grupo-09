@@ -220,7 +220,13 @@ const MODULES: ReadonlyMap<string, string> = loadModules();
  *  and prose may not break one either: the doc comment above names every token
  *  the signals below look for. */
 function code(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/^[ \t]*\/\/.*$/gm, " ");
+  // Line comments FIRST, then block comments — the order is load-bearing and
+  // the reverse is silently wrong. `api/grid.ts:280` contains the line comment
+  // "`/v1/canonical/*` is the modelling ...", whose `/*` opens a block the
+  // block-stripper then runs to the next `*/` a hundred lines later, deleting
+  // real code from the scan. Measured: a `WATTSTEER_ML_URL` read placed after
+  // that line was NOT caught, and the identical read placed before it was.
+  return source.replace(/^[ \t]*\/\/.*$/gm, " ").replace(/\/\*[\s\S]*?\*\//g, " ");
 }
 
 /**

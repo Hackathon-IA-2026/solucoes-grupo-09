@@ -865,14 +865,24 @@ the gateway, the one structural rule this endpoint has could not be enforced.
 gateway serves no `/v1/backtest`, and `apps/ml` exposes none — so the day the
 aggregate lands, that test fails and names this route as the thing then owed.
 
-**Two other gaps on this surface, recorded rather than papered over.** The
-calendar `/v1/replay/days` currently returns a flat list of days and no featured
-shortlist, not the run-length encoding described above: the shortlist is replay
-07's and has not landed, and the encoding is `replay.md`'s contract to shape.
-This spec re-paths and never re-shapes, so neither is fixed here. And the
-calendar's caching row asks for an ETag of `W/"<featured-days computation id>"`,
-which is the same missing id; the route ships with the `max-age` and no
-validator until there is an id to build one from.
+**One gap on this surface, recorded rather than papered over.** The calendar
+`/v1/replay/days` returns a flat list of days rather than the run-length
+encoding described above; the encoding is `replay.md`'s contract to shape and
+this spec re-paths and never re-shapes.
+
+**The caching row's validator now exists.** Replay 07 landed
+`wattsteer_ml.replay.shortlist`, the shortlist travels *on* the calendar per
+`replay.md`'s endpoint table, and its `computation_id` — a digest over the
+basis, so a rerun that changes one hour of one day moves it and a rerun that
+changes nothing does not — is what `W/"<featured-days computation id>"` asked
+for. `/v1/replay/days` and `/v1/backtest` build the validator from it, beside
+the request's own axes because one computation id covers one (subsystem, lane)
+shortlist while the calendar around it is cut to a window. Two cases remain a
+`max-age` and no validator, both honestly: a shortlist the nightly job has not
+yet computed publishes `pending` and names no computation, and
+`/v1/replay/days/<date>` answers one day's verdict off a body that carries no
+shortlist at all. Inventing a hash of either answer would be a revalidation
+costing exactly what it saves.
 
 #### 14. `GET /v1/plants`
 
@@ -1155,12 +1165,16 @@ change" is half right and half a trap.
   `immutable`. **A cache that froze a replay against a restatement would hide
   precisely the thing `revision_optimistic` exists to surface.**
 
-**As built, the replay key has five components and not six.** `obs_data_version`
-is missing, because the replay contract publishes no observed data version to
-put in it: `replay_result` carries the target date, the origin, the fidelity and
-the numbers, and nothing on the wire names the vintage of the observed half.
-The cost is bounded and is worth stating rather than hiding — for up to the
-24 h TTL after ONS rewrites a day, a cached replay of that day answers with the
+**As built, the replay key has four components and not five** — the scenario
+hash, the target date, the origin and the optimizer build, after the
+`replay:v1` prefix; `plugins/result-cache.ts` counts them the same way.
+`obs_data_version` is missing, because the replay contract publishes no observed
+data version to put in it: `replay_result` carries the target date, the origin,
+the fidelity and the numbers, and nothing on the wire names the vintage of the
+observed half.
+
+The cost is bounded and is worth stating rather than hiding — for up to the 24 h
+TTL after ONS rewrites a day, a cached replay of that day answers with the
 numbers from before the rewrite. That is staleness on a *cache* and not a broken
 pin (the answer was true of the record when it was computed, and the response
 names the publication it planned against), but for that window
@@ -1185,6 +1199,40 @@ every `GET` is shared-cacheable and there is no `Vary` beyond
 values above are written for a CDN in front of the gateway; the ETags make
 revalidation a 304 rather than a query. `stale-while-revalidate` is what turns a
 publication failure into a slightly older number instead of a spinner.
+
+**Where the table lives.** `apps/api/src/api/plugins/cache-policy.ts`, once. It
+was twelve transcriptions of one rule and two of them had already drifted:
+`/v1/forecast/day-ahead` validated on the row's *ingestion* instant rather than
+on the artifact and the publication, and carried no `stale-while-revalidate`;
+`/v1/plants` validated an empty registry on `as_of`, which defaults to
+`new Date()` — a validator carrying the request's own clock, which changes on
+every request and is a cache that can never hit wearing an ETag. That is the
+duration-as-a-key this section exists to forbid, and it was on the one path
+nobody looks at. Both are fixed, and the boundary is what keeps them fixed: no
+route assembles a `Cache-Control` of its own, so a grep over that one module is
+a grep over every response — which is what makes the "nothing carries
+`immutable`" assertion total rather than a sample of twelve.
+`cache-policy.test.ts` also reads every provenance call site and fails on a
+clock or a TTL inside one.
+
+**The table needs a thirteenth row the ticket did not ask for: an error.** A
+route that revalidates *before* it does its work — `/v1/optimize` 304-checks a
+pinned scenario before calling the solver, because the cheapest solve is the one
+a validator answers — has already written a success directive and a success ETag
+onto the response by the time the work fails. A shared cache that stored an
+upstream 503 under `public, max-age=300` could then revalidate it to a 304
+against the validator the eventual 200 carries, and re-extend the window
+forever: a cached outage with no expiry. A 5xx is not shared-cacheable by
+default and the whole defect is that an explicit `max-age` overrides that
+default. So the error envelope clears the validator and says `no-store`, once,
+where every error already passes — `plugins/errors.ts`, first statement.
+
+**Two reads are outside the table and stay outside it.** `/v1/canonical/*` and
+`/ingest/health` are the modelling side's contract reads and an operations view;
+neither is a row above, so neither is given a directive here on this ticket's
+authority. They ship with no `Cache-Control` and are therefore subject to a
+shared cache's heuristic freshness, which is a real hole and the next caching
+ticket's to close — most likely as `no-store`, for `/v1/meta`'s reason.
 
 ### Rate limiting
 
@@ -1584,11 +1632,22 @@ two that return 200, that no field is zero-filled. Plus the positive: with no
 promoted artifact, `/v1/replay?d=…` still returns a complete replay.
 
 **Seam 11 — caching, as key behaviour.** A 12Z publication changes the forecast
-ETag; a re-ingest that writes no new `data_version` does not. A replay's Redis
-key changes when the observed `data_version` changes and not otherwise. A
-scenario re-encoded with `0.920` instead of `0.92` hits the same key. No
-response carries `immutable` — a grep-level assertion over the header
-middleware.
+ETag; a re-ingest that writes no new `data_version` does not — both against
+real Postgres in `database-forecast.test.ts`, because both are statements about
+rows. A scenario re-encoded with `0.920` instead of `0.92` hits the same key.
+No response carries `immutable` — a grep-level assertion, and it is total
+rather than a sample because no route assembles a `Cache-Control` of its own,
+so `cache-policy.ts` is the only file it has to read. The same scan reads every
+provenance call site and fails on a clock or a TTL inside one, which is the
+rule stated positively.
+
+**One line of this seam cannot be asserted, and it is not a test that is
+missing.** "A replay's Redis key changes when the observed `data_version`
+changes and not otherwise" needs a component the key does not have: the replay
+contract publishes no observed data version, per the "As built" paragraph in
+Caching above. The absence is pinned by a test that names what would close it
+and fails the day either route opens, which is the strongest form available —
+an assertion that the gap is still the gap.
 
 **Seam 12 — rate limiting.** The three tiers have three budgets; the solve tier
 is a token bucket that permits a burst of 10 then throttles; `clientKey` ignores

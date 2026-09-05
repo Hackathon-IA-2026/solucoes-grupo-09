@@ -14,6 +14,7 @@ import { Elysia, t } from "elysia";
 import { UpstreamError } from "../errors.js";
 import { callMl, type MlEndpoint } from "./ml-proxy.js";
 import { laneName } from "./params.js";
+import { applyCachePolicy, CACHE_POLICIES } from "./plugins/cache-policy.js";
 
 /**
  * `GET /v1/model/card` — the Explain screen's second call, and the reason it is
@@ -563,11 +564,11 @@ export function createModelCardRoutes(endpoint?: MlEndpoint) {
         // this response "changes only on promotion", so its cache identity *is*
         // the artifact — there is no clock in this key and no invalidation call
         // to forget, because a promotion mints a new id by construction.
-        const etag = `W/"${envelope.artifact_id}"`;
-        set.headers["cache-control"] = "public, max-age=3600";
-        set.headers.etag = etag;
-        if (request.headers.get("if-none-match") === etag) {
-          set.status = 304;
+        if (
+          applyCachePolicy({ set, request }, CACHE_POLICIES.modelCard, [
+            envelope.artifact_id,
+          ])
+        ) {
           return null;
         }
         return encodeWire("ModelCard", toModelCard(envelope));
@@ -594,11 +595,15 @@ export function createModelCardRoutes(endpoint?: MlEndpoint) {
       "/v1/model/card/raw",
       async ({ query, request, set }) => {
         const envelope = await fetchCard(laneName("lane", query.lane), endpoint);
-        const etag = `W/"${envelope.artifact_id}:raw"`;
-        set.headers["cache-control"] = "public, max-age=3600";
-        set.headers.etag = etag;
-        if (request.headers.get("if-none-match") === etag) {
-          set.status = 304;
+        // The same provenance with the representation on it: the raw card and
+        // the shaped one are two encodings of one artifact, and a shared cache
+        // holding both under one validator would serve either for the other.
+        if (
+          applyCachePolicy({ set, request }, CACHE_POLICIES.modelCard, [
+            envelope.artifact_id,
+            "raw",
+          ])
+        ) {
           return null;
         }
         // Verbatim, and deliberately not through `encodeWire`. The card is the

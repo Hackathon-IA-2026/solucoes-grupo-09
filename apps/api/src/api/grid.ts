@@ -22,6 +22,7 @@ import {
   gateProfile as parseGateProfile,
   targetDate as parseTargetDate,
 } from "./params.js";
+import { applyCachePolicy, CACHE_POLICIES } from "./plugins/cache-policy.js";
 
 /**
  * `GET /v1/grid/now` — the observed "right now".
@@ -299,15 +300,16 @@ export function createGridRoutes(deps: { db: Database | undefined; now?: () => D
           );
         }
 
-        // `api-surface.md`'s caching rule: a cache key is a provenance, never a
-        // duration. This response moves with ingestion, which is hourly at best,
-        // so the validator is the freshest ingestion instant behind it and the
-        // `max-age` is short enough that the clock is never what makes it right.
-        const etag = `W/"${observation.latestIngestedAt.toISOString()}"`;
-        set.headers["cache-control"] = "public, max-age=60";
-        set.headers.etag = etag;
-        if (request.headers.get("if-none-match") === etag) {
-          set.status = 304;
+        // `api-surface.md`'s caching rule, applied through the one place it
+        // lives: a cache key is a provenance, never a duration. This response
+        // moves with ingestion, which is hourly at best, so the validator is
+        // the freshest ingestion instant behind it and the `max-age` is short
+        // enough that the clock is never what makes it right.
+        if (
+          applyCachePolicy({ set, request }, CACHE_POLICIES.now, [
+            observation.latestIngestedAt,
+          ])
+        ) {
           return null;
         }
 
@@ -420,11 +422,13 @@ export function createGridRoutes(deps: { db: Database | undefined; now?: () => D
           (high, row) => Math.max(high, row.dataVersion),
           0,
         );
-        const etag = `W/"${origin.artifactId}:${origin.publishedAt.toISOString()}:${maxVersion}"`;
-        set.headers["cache-control"] = "public, max-age=300, stale-while-revalidate=3600";
-        set.headers.etag = etag;
-        if (request.headers.get("if-none-match") === etag) {
-          set.status = 304;
+        if (
+          applyCachePolicy({ set, request }, CACHE_POLICIES.forecast, [
+            origin.artifactId,
+            origin.publishedAt,
+            maxVersion,
+          ])
+        ) {
           return null;
         }
 

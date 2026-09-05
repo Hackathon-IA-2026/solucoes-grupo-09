@@ -22,6 +22,7 @@ import { database } from "../database/connection.js";
 import { type PublishedOrigin, readLatestPublished } from "../forecast/reads.js";
 import { readSourceFreshness } from "../ingest/index.js";
 import { callMl, type MlEndpoint } from "./ml-proxy.js";
+import { applyCachePolicy, CACHE_POLICIES } from "./plugins/cache-policy.js";
 
 /**
  * `GET /v1/meta` — what this deployment can actually do, in one request.
@@ -304,7 +305,7 @@ export function createMetaRoutes(deps: {
 }) {
   return new Elysia({ name: "meta" }).get(
     "/v1/meta",
-    async ({ set }) => {
+    async ({ set, request }) => {
       const now = deps.now?.() ?? new Date();
 
       // Both halves are attempted regardless of the other, which is what
@@ -318,7 +319,11 @@ export function createMetaRoutes(deps: {
         deps.db === undefined ? [] : readLatestPublished(deps.db, { asOf: now }),
       ]);
 
-      set.headers["cache-control"] = "no-store";
+      // No validator, and that is the point rather than an omission: a
+      // response that may not be stored has nothing to revalidate, and the 304
+      // one would enable is the wrong answer to "is anything broken?". See the
+      // note above on story 25.
+      applyCachePolicy({ set, request }, CACHE_POLICIES.meta);
       return encodeWire(
         "Meta",
         toMeta({

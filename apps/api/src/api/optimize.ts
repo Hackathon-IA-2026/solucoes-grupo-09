@@ -3,6 +3,11 @@ import { Elysia, t } from "elysia";
 import { config } from "../config.js";
 import { type MlEndpoint, postMl } from "./ml-proxy.js";
 import {
+  applyCachePolicy,
+  CACHE_POLICIES,
+  type CacheContext,
+} from "./plugins/cache-policy.js";
+import {
   createResultCache,
   OPTIMIZE_TTL_SEC,
   optimizeKey,
@@ -86,6 +91,27 @@ export function createOptimizeRoutes(deps: OptimizeDeps) {
   const build = deps.optimizerBuild ?? config.optimizerBuild;
 
   /**
+   * Apply the shared-link row over this answer's provenance, and say whether
+   * the client already holds it.
+   *
+   * The Redis key's own three components — `result-cache.ts` builds the key
+   * from exactly these — because they are the same statement in two places: a
+   * shared cache and a private one, invalidated by the same facts. A validator
+   * that drifted from the key would be a 304 served against an entry the key
+   * had already replaced.
+   */
+  const revalidate = (
+    context: CacheContext,
+    scenarioHash: string,
+    forecastOrigin: string,
+  ): boolean =>
+    applyCachePolicy(context, CACHE_POLICIES.solveShared, [
+      scenarioHash,
+      forecastOrigin,
+      build,
+    ]);
+
+  /**
    * Decode, validate, answer — from the cache when the key is fully known, and
    * from the solver otherwise.
    */
@@ -141,13 +167,38 @@ export function createOptimizeRoutes(deps: OptimizeDeps) {
   return new Elysia({ name: "optimize" })
     .get(
       "/v1/optimize",
-      async ({ query, set }) => {
-        const body = await solve(
-          admitScenarioParam(query.s, deps.now ? { now: deps.now() } : {}),
-        );
+      async ({ query, set, request }) => {
+        const decoded = admitScenarioParam(query.s, deps.now ? { now: deps.now() } : {});
         // A shared link is shared-cacheable: the answer is a function of the
         // blob, the origin and the build, none of which is the reader.
-        set.headers["cache-control"] = "public, max-age=300";
+        //
+        // A pinned scenario knows its whole provenance before anything is
+        // solved, so the revalidation happens *here* — a client holding this
+        // version costs a header comparison rather than a MILP. That is the
+        // read/solve distinction this ticket keeps making: the cheapest solve
+        // is the one a validator answers.
+        const pinned = decoded.scenario.forecastOrigin ?? null;
+        if (pinned !== null && revalidate({ set, request }, decoded.hash, pinned)) {
+          return null;
+        }
+        const body = await solve(decoded);
+        // An unpinned scenario resolves its origin *on the answer*, so its
+        // validator can only be built once the answer exists. The 304 is still
+        // offered here rather than only on the next request: it costs the
+        // solve it could not avoid, and saves the payload — which for a
+        // 96-period plan is the larger of the two. A body carrying no origin at
+        // all gets no validator: `result-cache.ts` refuses to remember such an
+        // answer for the same reason, and a validator over an unknown
+        // provenance would collide two answers that are not the same.
+        const resolved = pinned ?? resolvedOrigin(body);
+        if (resolved === null) {
+          applyCachePolicy({ set, request }, CACHE_POLICIES.solveShared);
+          set.headers["content-type"] = "application/json";
+          return body;
+        }
+        if (revalidate({ set, request }, decoded.hash, resolved)) {
+          return null;
+        }
         set.headers["content-type"] = "application/json";
         return body;
       },
@@ -170,13 +221,14 @@ export function createOptimizeRoutes(deps: OptimizeDeps) {
     )
     .post(
       "/v1/optimize",
-      async ({ body, set }) => {
+      async ({ body, set, request }) => {
         const answer = await solve(
           admitScenarioBody(body as string, deps.now ? { now: deps.now() } : {}),
         );
         // A POST is not shared-cacheable; Redis does that work behind the
-        // gateway, where the key can carry the provenance a URL cannot.
-        set.headers["cache-control"] = "no-store";
+        // gateway, where the key can carry the provenance a URL cannot. No
+        // validator: a response nobody may store has nothing to revalidate.
+        applyCachePolicy({ set, request }, CACHE_POLICIES.solveBody);
         set.headers["content-type"] = "application/json";
         return answer;
       },

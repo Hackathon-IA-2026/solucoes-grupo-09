@@ -220,9 +220,14 @@ function walk(dir: string, out: string[] = []): string[] {
  * findings with noise and teach the reader to ignore this test.
  */
 function strip(source: string): string {
+  // Line comments FIRST. The reverse order is silently wrong: a `//` comment
+  // containing `/*` — `api/grid.ts:280` has one — opens a block the
+  // block-stripper runs to the next `*/`, deleting real code from the scan.
+  // Measured on the boundary guard, which had the same ordering: a violation
+  // placed after such a line was not caught and the same one before it was.
   return source
-    .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/^[ \t]*\/\/.*$/gm, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/^import[\s\S]*?from\s+"[^"]*";$/gm, "");
 }
 
