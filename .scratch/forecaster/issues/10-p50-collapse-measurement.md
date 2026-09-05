@@ -29,7 +29,7 @@ posture has to reopen. This ticket produces the evidence; it does not decide.
 
 **Blocked by:** 09.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] All six figures are computed per fold and per subsystem and land in the
       metrics table and the card
