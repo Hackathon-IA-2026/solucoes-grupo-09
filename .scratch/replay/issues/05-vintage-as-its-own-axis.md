@@ -56,7 +56,7 @@ both vintages of. Until then the field is `null` and the screen says the caveat 
 **Blocked by:** 03. **Cross-spec, external: Forecaster 03** (each fold carries a
 `VintageFidelity`, and a fold straddling go-live is split at that date).
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] `integrity.vintage_fidelity` is stamped from the day's position relative to ingestion go-live, independently of `provenance`
 - [ ] `vintage_affects` names `settled_actuals` and `lagged_actual_features`; `vintage_exempt` names `weather_run`, `dessem` and `ons_programming`

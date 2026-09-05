@@ -884,6 +884,27 @@ export const en = {
         "This day predates ingestion go-live ({goLive}). ONS rewrites history in place with no version marker, so the actual above is ONS's current restatement of the day, not what was published at the time. Prior vintages are unrecoverable and this can never be repaired retroactively.",
       pointInTimeNote:
         "This day postdates ingestion go-live ({goLive}), so every value here is the one that was genuinely knowable at the time — an as-of read, not today's restatement.",
+      // The extent of the vintage caveat, named part by part. The parts are the
+      // response's `vintage_affects` / `vintage_exempt`; this map only spells
+      // them, so a part the service stops claiming disappears from the screen
+      // without an edit here.
+      vintageExtentNote:
+        "It touches {affects}. It does not touch {exempt}: those carry the run that produced them as their own publication instant, so the D−1 run this replay planned against is that run.",
+      vintagePart: {
+        settled_actuals: "the settled actual this day is scored against",
+        lagged_actual_features:
+          "the lagged-actual features (the right hours, possibly the wrong values)",
+        weather_run: "the weather run",
+        dessem: "DESSEM",
+        ons_programming: "the ONS programming",
+      },
+      // `null` on the wire, and the word the spec insists on. Never "0 MWh":
+      // an unmeasured caveat rendered as a small number is the failure this
+      // sentence exists to prevent.
+      revisionPremiumUnmeasured:
+        "The size of that caveat is unmeasured. It becomes measurable only once ONS has restated days WattSteer holds in both vintages, and until then no number is offered in its place.",
+      revisionPremiumMeasured:
+        "Measured against the days held in both vintages, the restatement is worth {mwh} MWh of recovered energy on average — the amount by which a revision-optimistic replay should be read down.",
       scenarioNote:
         "Recovered energy is what this dispatch achieves under this scenario against this forecast vintage. It is a property of the scenario, not of the day, and changing any asset parameter changes it.",
       claimsNote:

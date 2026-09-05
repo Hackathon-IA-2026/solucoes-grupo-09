@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { parseAppParams, technologyParam } from "../src/components/app/params";
+import { en as EN } from "../src/i18n/copy.en";
+import { pt as PT } from "../src/i18n/copy.pt";
 import {
   buildForecast,
   buildMitigationSteps,
@@ -217,6 +221,63 @@ describe("replay honesty", () => {
     const fidelities = new Set(REPLAY_DAYS.map((d) => d.vintageFidelity));
     expect(fidelities.has("point_in_time")).toBe(true);
     expect(fidelities.has("revision_optimistic")).toBe(true);
+  });
+
+  test("in-sample-ness and vintage are two axes and neither implies the other", () => {
+    // They coincide in the wild today, which is precisely the argument for
+    // keeping them apart: a merged badge would be observationally correct now
+    // and wrong the moment a post-go-live quarter is held out. The fixture
+    // therefore carries a day where the two disagree, so the screen has to
+    // render them as two facts rather than one.
+    const disagreeing = REPLAY_DAYS.filter(
+      (d) => (d.vintageFidelity === "point_in_time") !== !d.inTrainingWindow,
+    );
+    expect(disagreeing.length).toBeGreaterThan(0);
+  });
+
+  test("the caveat's extent is the response's, not the screen's", () => {
+    // `packages/core/fixtures/spec-examples/12-replay.json` is the published
+    // example of the contract. Asserting the fixture against it is what makes
+    // "vintage_affects names the actuals and the lagged features" a checked
+    // property rather than a sentence somebody typed into two places.
+    const example = JSON.parse(
+      readFileSync(
+        join(
+          import.meta.dir,
+          "..",
+          "..",
+          "..",
+          "packages",
+          "core",
+          "fixtures",
+          "spec-examples",
+          "12-replay.json",
+        ),
+        "utf8",
+      ),
+    ) as { integrity: { vintage_affects: string[]; vintage_exempt: string[] } };
+    for (const day of REPLAY_DAYS) {
+      expect([...day.vintageAffects]).toEqual(example.integrity.vintage_affects);
+      expect([...day.vintageExempt]).toEqual(example.integrity.vintage_exempt);
+      // Every part the screen may have to name has copy in both locales; a part
+      // with none would render as its wire token to a user.
+      for (const part of [...day.vintageAffects, ...day.vintageExempt]) {
+        expect(Object.keys(EN.app.replay.vintagePart)).toContain(part);
+        expect(Object.keys(PT.app.replay.vintagePart)).toContain(part);
+      }
+    }
+  });
+
+  test("the revision premium is null, and null means unmeasured", () => {
+    // The one thing this field must never be until it is computable. A zero
+    // would read as "measured, and small", which is the failure mode the
+    // nullable field exists to prevent — and the screen's `null` branch says
+    // the word rather than falling silent.
+    for (const day of REPLAY_DAYS) {
+      expect(day.revisionPremiumRecoveredMwh).toBeNull();
+    }
+    expect(EN.app.replay.revisionPremiumUnmeasured).toContain("unmeasured");
+    expect(EN.app.replay.revisionPremiumUnmeasured).not.toContain("0");
   });
 });
 

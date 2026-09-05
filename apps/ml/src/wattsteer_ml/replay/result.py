@@ -70,6 +70,7 @@ from wattsteer_ml.replay.calendar import (
     VINTAGE_AFFECTS,
     VINTAGE_EXEMPT,
 )
+from wattsteer_ml.replay.premium import RevisionPremium, published_premium
 from wattsteer_ml.replay.scoring import (
     SCORED_ON,
     ObservedOnlyView,
@@ -116,6 +117,7 @@ def replay_result(
     *,
     episodes: Sequence[ReplayEpisode] = (),
     max_gap_hours: int = MAX_GAP_HOURS,
+    premium: RevisionPremium | None = None,
 ) -> dict[str, Any]:
     """The published contract for one replayed day.
 
@@ -141,7 +143,7 @@ def replay_result(
         "threshold_mw": scores.threshold_mw,
         "max_gap_hours": max_gap_hours,
         "scenario_hash": scenario_hash,
-        "integrity": _integrity(scores),
+        "integrity": _integrity(scores, premium),
         # Top level, exactly as in `OptimizationResult`: a field whose whole
         # purpose is that shared names do not shift meaning must not shift
         # position either. The vintage *detail* under `integrity` is
@@ -264,18 +266,40 @@ def _headline(observed: ScoredRealisation) -> dict[str, Any]:
     }
 
 
-def _integrity(scores: ReplayScores) -> dict[str, Any]:
-    """Provenance, the artifact's windows, and the vintage caveat's extent.
+def _integrity(
+    scores: ReplayScores, premium: RevisionPremium | None = None
+) -> dict[str, Any]:
+    """The two honesty axes, side by side, and the extent of the second one.
 
     ``model_saw_this_day`` is `False` because
     :func:`~wattsteer_ml.replay.calendar.assert_held_out` raised if it were
     otherwise — asserted, never computed hopefully.
 
-    ``revision_premium_recovered_mwh`` is `None` and says so. It is computable
-    only once ONS has restated days WattSteer holds both vintages of, and until
-    then the largest caveat on the largest part of the replayable window is
-    honestly labelled and honestly unquantified. A zero would read as "measured,
-    and small".
+    **``provenance`` and ``vintage_fidelity`` are two fields and neither is
+    derived from the other.** The first is the *model's* information set and is
+    fixed by choosing the artifact; the second is the *data's* and is fixed by
+    when WattSteer started watching. Today every `fold_holdout` day is also
+    `revision_optimistic`, so one merged badge would be indistinguishable from
+    the right answer — right up to the moment a post-go-live quarter is held
+    out, at which point it would be wrong and would be discovered by a user.
+    The verdict here is :attr:`~wattsteer_ml.replay.calendar.ReplayDay.
+    vintage_fidelity`, read off the day the calendar judged; nothing in this
+    module recomputes it and nothing consults ``provenance`` to reach it.
+
+    It appears twice in the contract on purpose: at the top level, where an
+    `OptimizationResult` also carries it and a shared name must not shift
+    position, and here beside ``provenance``, where the two axes are read
+    against each other. One value, one source, two places a reader looks.
+
+    ``revision_premium_recovered_mwh`` is the measured size of the second
+    caveat, or `None`. It is computable only once ONS has restated days
+    WattSteer holds both vintages of, and until then the largest caveat on the
+    largest part of the replayable window is honestly labelled and honestly
+    unquantified — the screen says **unmeasured**, in that word. A zero would
+    read as "measured, and small", which is why
+    :func:`~wattsteer_ml.replay.premium.published_premium` is what turns the
+    absence into `null` and there is no arithmetic here that could produce a
+    ``0.0`` in its place.
     """
     held_out_by = scores.day.held_out_by
     # Unreachable: `ReplayScores` refuses a day without one. Narrowed rather
@@ -286,9 +310,10 @@ def _integrity(scores: ReplayScores) -> dict[str, Any]:
         "provenance": scores.day.provenance,
         "model_saw_this_day": False,
         "held_out_by": held_out_by.as_payload(),
+        "vintage_fidelity": scores.day.vintage_fidelity,
         "vintage_affects": list(VINTAGE_AFFECTS),
         "vintage_exempt": list(VINTAGE_EXEMPT),
-        "revision_premium_recovered_mwh": None,
+        "revision_premium_recovered_mwh": published_premium(premium),
     }
 
 

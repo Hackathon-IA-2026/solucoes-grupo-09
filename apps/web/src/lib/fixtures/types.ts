@@ -347,6 +347,29 @@ export interface ReplayDay {
   scenario: ReplayScenario;
   vintageFidelity: VintageFidelity;
   /**
+   * What the vintage caveat touches, and what it explicitly does not.
+   *
+   * `docs/specs/replay.md`: the label and the lagged-actual features are read
+   * as ONS states them today; the weather run, DESSEM and the ONS programming
+   * are cut on `published_at` and are genuinely point-in-time on both sides of
+   * go-live. The lists travel as data so the screen names them by reading
+   * rather than by repeating — a blanket "this day is unreliable" would be both
+   * vaguer and less true.
+   */
+  vintageAffects: readonly string[];
+  vintageExempt: readonly string[];
+  /**
+   * The measured size of the vintage caveat, in Replay's own currency, or
+   * `null`.
+   *
+   * `null` means **unmeasured**, and the screen says that word. It is
+   * computable only after ingestion go-live and only once ONS has restated days
+   * WattSteer holds both vintages of, so it will be `null` for months. A zero
+   * here would read as "measured, and small", which is the one thing an
+   * unmeasured caveat must never look like.
+   */
+  revisionPremiumRecoveredMwh: number | null;
+  /**
    * Whether the model that produced `forecast` had this period inside its
    * training window. If it did, the replay is in-sample and is not a
    * counterfactual — which the screen has to say out loud.

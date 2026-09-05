@@ -16,6 +16,10 @@ and this package reads them back and judges them.
 - :mod:`~wattsteer_ml.replay.scoring` — the scoring half: one MILP on the pinned
   D−1 P50, four realisations through the optimizer's *imported* simulator, the
   floor that was promised, and the fenced perfect-foresight bound.
+- :mod:`~wattsteer_ml.replay.premium` — the vintage caveat measured in Replay's
+  own currency: one plan, two vintages of the same day's actuals, and the mean
+  difference in recovered MWh. `null` until ONS has restated days WattSteer
+  holds both vintages of, and never a zero standing in for that.
 - :mod:`~wattsteer_ml.replay.result` — that, as the published contract, and the
   observed-only contract a pre-F1 day gets instead: the day, its episodes and
   the bound, with no recovery number anywhere on it.
@@ -53,6 +57,14 @@ from wattsteer_ml.replay.cards import (
     read_windows,
     windows_from_card,
 )
+from wattsteer_ml.replay.premium import (
+    PREMIUM_NOTE,
+    SETTLEMENT_LAG_HOURS,
+    DayVintages,
+    RevisionPremium,
+    published_premium,
+    revision_premium,
+)
 from wattsteer_ml.replay.result import (
     ReplayEpisode,
     observed_only_result,
@@ -71,6 +83,7 @@ from wattsteer_ml.replay.scoring import (
     ReplayPostureError,
     ReplayScores,
     plan_at_the_gate,
+    same_profile,
     score_observed_only,
     score_replay,
 )
@@ -78,14 +91,17 @@ from wattsteer_ml.replay.scoring import (
 __all__ = [
     "HOURS_PER_DAY",
     "PERFECT_FORESIGHT",
+    "PREMIUM_NOTE",
     "PROVENANCE_BY_ORIGIN_KIND",
     "SCORED_ON",
+    "SETTLEMENT_LAG_HOURS",
     "VINTAGE_AFFECTS",
     "VINTAGE_EXEMPT",
     "VINTAGE_READS",
     "ArtifactWindows",
     "CardWindowError",
     "DayEvidence",
+    "DayVintages",
     "ForecastHour",
     "HeldOutBy",
     "ObservedDay",
@@ -100,6 +116,7 @@ __all__ = [
     "ReplayPostureError",
     "ReplayRefused",
     "ReplayScores",
+    "RevisionPremium",
     "assert_held_out",
     "build_calendar",
     "card_path",
@@ -108,10 +125,13 @@ __all__ = [
     "latest_replayable_date",
     "observed_only_result",
     "plan_at_the_gate",
+    "published_premium",
     "read_windows",
     "refusal_counts",
     "replay_result",
     "resolve_day",
+    "revision_premium",
+    "same_profile",
     "score_observed_only",
     "score_replay",
     "windows_from_card",

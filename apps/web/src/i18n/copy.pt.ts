@@ -768,6 +768,20 @@ export const pt: Copy = {
         "Este dia é anterior ao início da ingestão ({goLive}). O ONS reescreve o histórico no lugar, sem marcador de versão, então o valor apurado acima é a reapresentação atual do dia feita pelo ONS, não o que foi publicado na época. As safras anteriores são irrecuperáveis e isso nunca poderá ser corrigido retroativamente.",
       pointInTimeNote:
         "Este dia é posterior ao início da ingestão ({goLive}), então todo valor aqui é o que era genuinamente conhecível na época — uma leitura as-of, não a reapresentação de hoje.",
+      vintageExtentNote:
+        "Isso afeta {affects}. Não afeta {exempt}: cada um carrega como instante de publicação a rodada que o produziu, então a rodada D−1 contra a qual esta reexecução planejou é aquela rodada.",
+      vintagePart: {
+        settled_actuals: "o valor apurado contra o qual este dia é avaliado",
+        lagged_actual_features:
+          "as variáveis de valores apurados defasados (as horas certas, possivelmente com os valores errados)",
+        weather_run: "a rodada meteorológica",
+        dessem: "o DESSEM",
+        ons_programming: "a programação do ONS",
+      },
+      revisionPremiumUnmeasured:
+        "O tamanho dessa ressalva não foi medido. Só se torna mensurável quando o ONS reapresentar dias que a WattSteer guarda nas duas safras, e até lá nenhum número é oferecido no lugar.",
+      revisionPremiumMeasured:
+        "Medida sobre os dias guardados nas duas safras, a reapresentação vale em média {mwh} MWh de energia recuperada — o quanto uma reexecução otimista quanto a revisões deve ser descontada.",
       scenarioNote:
         "A energia recuperada é o que este despacho alcança sob este cenário contra esta safra de previsão. É uma propriedade do cenário, não do dia, e mudar qualquer parâmetro de ativo muda o resultado.",
       claimsNote:
