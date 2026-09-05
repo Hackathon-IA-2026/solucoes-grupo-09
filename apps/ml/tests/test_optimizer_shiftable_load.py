@@ -34,6 +34,7 @@ from wattsteer_ml.optimizer import (
     Battery,
     DispatchPlan,
     OptimizerBugError,
+    PlanningEnvelope,
     Schedule,
     ShiftableLoad,
     available_between,
@@ -76,7 +77,7 @@ def plan(
     rho: float = 1.5,
 ) -> DispatchPlan:
     return solve(
-        offered_mwh=profile,
+        envelope=PlanningEnvelope.p50(profile),
         batteries=batteries,
         loads=loads,
         horizon=HORIZON,

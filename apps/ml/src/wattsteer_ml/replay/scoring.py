@@ -239,6 +239,16 @@ class PinnedForecast:
     def p90_mwh(self) -> tuple[float, ...]:
         return tuple(hour.constrained_off_mwh.p90 for hour in self.hours)
 
+    @property
+    def expected_mwh(self) -> tuple[float, ...]:
+        """`E[Y]`, hour by hour — a sibling of the band and never one of its edges.
+
+        Carried through to the builder's profile so a fold evaluation reading
+        pinned rows can build `forecaster.md`'s second arm from the same rows
+        the P50 plan came from. No replay on this path plans against it.
+        """
+        return tuple(hour.expected_mwh for hour in self.hours)
+
     def as_payload(self) -> dict[str, object]:
         return {
             "hours": [hour.as_payload() for hour in self.hours],
@@ -701,6 +711,7 @@ def _planning_profile(
         p10_mwh=forecast.p10_mwh,
         p50_mwh=tuple(float(value) for value in envelope),
         p90_mwh=forecast.p90_mwh,
+        expected_mwh=forecast.expected_mwh,
         threshold_mw=forecast.threshold_mw,
     )
 
@@ -730,6 +741,11 @@ def _bound_profile(observed: ObservedDay, *, threshold_mw: float) -> PlanningPro
         p10_mwh=profile,
         p50_mwh=profile,
         p90_mwh=profile,
+        # The day itself, a fourth time: on a day nobody forecast there is no
+        # expectation either, and the bound is scored on the array it was
+        # planned on. Never read here — the bound plans on `p50` like every
+        # other solve on this path.
+        expected_mwh=profile,
         threshold_mw=threshold_mw,
     )
 

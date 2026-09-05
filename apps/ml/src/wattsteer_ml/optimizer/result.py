@@ -8,9 +8,19 @@ from a test without a socket, and so that the HTTP layer above it contains
 nothing but the status mapping.
 
 **The planning envelope is P50 and the promise is the P10 edge**, per the spec's
-decided posture. Nothing here takes a quantile argument and no request field can
-select one: the basis is a property of the product, not of a call, and ticket 09
-is where it becomes an *internal* parameter for the `E[Y]` measurement arm.
+decided posture. :func:`optimization_result` — everything the endpoint reaches —
+takes no basis argument at all, and no request field can select one: the basis is
+a property of the product and not of a call.
+
+**Where the internal parameter is, then.** :func:`build_plan` takes an
+``envelope``, and it takes it as a :class:`~.basis.PlanningEnvelope` rather than
+as a name, so the `E[Y]` arm is reachable only by importing
+:mod:`wattsteer_ml.optimizer.basis` and calling a constructor in Python.
+``None`` means :data:`PLANNING_BASIS`, which is what the endpoint gets and the
+only thing it can get. The arm itself is run by `forecaster.md`'s fold
+evaluation, which scores both arms through the one simulator and publishes both
+arms' `recovered_floor_mwh`; it is made *possible* here and made unreachable
+from the public surface here.
 
 **Where the profile comes from is a seam, and it is filled.** The forecaster
 that persists an hour-wise P10/P50/P90 band per (`Subsystem`, `valid_time`) is
@@ -34,6 +44,7 @@ from typing import Any, Literal, Protocol
 from .. import __version__
 from ..constants import BRL_PER_MWH, SUBSYSTEM_THRESHOLD_MW
 from ..scenario_validation import forecast_unavailable
+from .basis import PlanningBasis, PlanningEnvelope
 from .horizon import local_day
 from .milp import DispatchPlan, HourlyDispatch, solve
 from .scenario_fleet import fleet_from_scenario
@@ -50,8 +61,10 @@ from .simulator import ExecutedHour, ScoredRealisation, score_band
 #: gateway is the same value, and `optimize.test.ts` asserts the two agree.
 OPTIMIZER_BUILD = __version__
 
-#: The realisation the MILP is built against. Not a parameter of the request,
-#: and deliberately not reachable from one.
+#: The realisation the MILP is built against on every public path. Not a
+#: parameter of the request, and deliberately not reachable from one: it is the
+#: default :func:`build_plan` uses when no caller hands it an envelope, and
+#: :func:`optimization_result` has no way to hand it one.
 PLANNING_BASIS: Literal["p50"] = "p50"
 
 #: The rule the simulator implements, carried on the result as *data* rather
@@ -75,9 +88,30 @@ class PlanningProfile:
     p10_mwh: tuple[float, ...]
     p50_mwh: tuple[float, ...]
     p90_mwh: tuple[float, ...]
+    #: `E[Y]`, hour by hour, a **sibling** of the three quantiles and never one
+    #: of them: an expectation adds across hours and a quantile envelope does
+    #: not. Read from the same publication as the band — `Forecaster 14`
+    #: persists it as ``expected_mwh`` on ``curtailment_forecast_hour`` — so
+    #: that the two planning arms differ in the envelope and in nothing else,
+    #: not even in which read produced them. Required rather than defaulted: a
+    #: profile that cannot say what the expectation was cannot build the arm,
+    #: and an empty tuple standing in for it would build a blind plan silently.
+    expected_mwh: tuple[float, ...]
     #: The `CurtailmentHour` grain in force. Never applied to the denominator;
     #: it gates whether the avoidability ratio is defined at all.
     threshold_mw: float = SUBSYSTEM_THRESHOLD_MW
+
+    def envelope(self, basis: PlanningBasis = PLANNING_BASIS) -> PlanningEnvelope:
+        """The named profile the builder plans against. The one place they map.
+
+        Both arms come out of this method, which is why "the arms differ in
+        exactly one input" is checkable rather than asserted: the fleet, the
+        horizon, the model and the KPI definitions are downstream of a call that
+        differs only here.
+        """
+        if basis == "expected":
+            return PlanningEnvelope.expectation(self.expected_mwh)
+        return PlanningEnvelope.p50(self.p50_mwh)
 
 
 class ProfileSource(Protocol):
@@ -179,8 +213,25 @@ def brl_per_mwh(wire: dict[str, Any]) -> float:
     return float(BRL_PER_MWH)
 
 
-def build_plan(wire: dict[str, Any], profile: PlanningProfile) -> DispatchPlan:
-    """One MILP, built on the planning envelope. The only call to `solve` here.
+def build_plan(
+    wire: dict[str, Any],
+    profile: PlanningProfile,
+    envelope: PlanningEnvelope | None = None,
+) -> DispatchPlan:
+    """One MILP, built on a named planning envelope. The only call to `solve` here.
+
+    ``envelope`` is the internal parameter of ticket 09 and the whole of it.
+    ``None`` — which is what every public path passes, because
+    :func:`optimization_result` has no argument to forward — means
+    :data:`PLANNING_BASIS`, the P50 the product ships. `forecaster.md`'s
+    measurement arm passes ``profile.envelope("expected")``, in Python, having
+    imported it.
+
+    It is typed as a :class:`~.basis.PlanningEnvelope` and not as a name so that
+    the parameter cannot become a field by accident: ``wire`` is a
+    ``dict[str, Any]``, every value out of it is ``Any``, and a string basis
+    would have been one assignment away from being selectable by a request
+    without mypy objecting. There is no string to assign.
 
     `SetNumThreads(1)` and `SetTimeLimit` are set inside :func:`~.milp.solve`,
     per solve: per-request CPU stays bounded under concurrency, and at these
@@ -188,7 +239,7 @@ def build_plan(wire: dict[str, Any], profile: PlanningProfile) -> DispatchPlan:
     """
     batteries, loads = fleet_from_scenario(wire)
     return solve(
-        offered_mwh=profile.p50_mwh,
+        envelope=profile.envelope() if envelope is None else envelope,
         batteries=batteries,
         loads=loads,
         horizon=local_day(date.fromisoformat(str(wire["target_date"]))),
@@ -223,7 +274,11 @@ def optimization_result(
         "forecast_origin": profile.forecast_origin.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "vintage_fidelity": profile.vintage_fidelity,
         "threshold_mw": profile.threshold_mw,
-        "planning_basis": PLANNING_BASIS,
+        # Read off the plan, so the field names the envelope the schedule was
+        # actually built on rather than repeating a constant beside it. Always
+        # `PLANNING_BASIS` here, and not by convention: this function takes no
+        # envelope and therefore has none to pass on.
+        "planning_basis": plan.planning_basis,
         "execution_rule": EXECUTION_RULE,
         "baseline_curtailment_mwh": planned.baseline_mwh,
         "optimized_curtailment_mwh": planned.remaining_mwh,

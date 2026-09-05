@@ -408,6 +408,7 @@ def test_the_milp_and_the_simulator_agree_on_every_realisation(realisation: str)
             p10_mwh=envelope,
             p50_mwh=envelope,
             p90_mwh=envelope,
+            expected_mwh=envelope,
             threshold_mw=THRESHOLD_MW,
         ),
     )
@@ -771,6 +772,7 @@ def test_a_plan_built_on_the_day_itself_cannot_be_presented_as_a_replay() -> Non
             p10_mwh=forecast.p10_mwh,
             p50_mwh=observed,
             p90_mwh=forecast.p90_mwh,
+            expected_mwh=forecast.expected_mwh,
             threshold_mw=THRESHOLD_MW,
         ),
     )
@@ -1127,6 +1129,7 @@ def test_the_observed_only_bound_is_the_day_itself_planned_against() -> None:
             p10_mwh=observed,
             p50_mwh=observed,
             p90_mwh=observed,
+            expected_mwh=observed,
             threshold_mw=THRESHOLD_MW,
         ),
     )

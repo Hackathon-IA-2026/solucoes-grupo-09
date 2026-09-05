@@ -58,6 +58,10 @@ P50: tuple[float, ...] = (
 )
 P10: tuple[float, ...] = tuple(value * 0.4 for value in P50)
 P90: tuple[float, ...] = tuple(value * 1.5 for value in P50)
+#: `E[Y]`, above the median in the quiet hours and below it in the loud ones,
+#: which is the shape a hurdle model produces. Never planned against on this
+#: route — it is here because a `PlanningProfile` carries it.
+EXPECTED: tuple[float, ...] = tuple(value * 0.7 + 3.0 for value in P50)
 
 BAND = PlanningProfile(
     forecast_origin=datetime(2026, 8, 28, 12, 0, tzinfo=UTC),
@@ -65,6 +69,7 @@ BAND = PlanningProfile(
     p10_mwh=P10,
     p50_mwh=P50,
     p90_mwh=P90,
+    expected_mwh=EXPECTED,
 )
 
 
