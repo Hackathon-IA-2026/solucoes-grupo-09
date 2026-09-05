@@ -607,32 +607,67 @@ export const en = {
         recent_history: "Recent history",
         data_conditions: "Pipeline conditions and residual",
       } satisfies Record<DriverCode, string>,
-      /** Keyed by `Driver.code`; the fixture and the API send the code. */
-      labels: {
-        vre_load_ratio: "Renewable / load ratio",
-        export_headroom: "Export headroom to SE/CO",
-        load_level: "Load level",
-        overnight_load_level: "Overnight load level",
-        hub_wind_speed: "Hub-height wind speed",
-        day_of_week: "Day of the week",
-        midday_net_load: "Midday net load",
-        clear_sky_index: "Clear-sky index",
-        installed_pv: "PV commissioned in window",
-        hydro_flexibility: "Hydro down-ramp available",
-        import_position: "Net import position",
-        other: "Everything else",
-      },
-      /** The non-numeric readings a driver can report. */
+      /**
+       * The merged remainder, named apart from the eight.
+       *
+       * `other` is not a group. It is what the client's display rule collapses
+       * everything below the cut into, and listing it inside `groups` would
+       * put a ninth entry in a dictionary the type says has eight.
+       */
+      merged: "Everything else",
+      mergedNote:
+        "{count} groups below the cut, merged into one bar. Their contributions are summed with their signs.",
+      /** The non-numeric readings a headline feature can report. */
       terms: {
         weekend: "weekend",
         weekday: "weekday",
         importing: "importing",
         balanced: "balanced",
       },
-      direction: { raises: "raises", lowers: "lowers" },
-      reading: "observed {observed} · typical {typical}",
-      figure: "{driver}: {share} of attributed magnitude, {direction} risk",
-      note: "Shares are of the attributed magnitude for this subsystem-day, not of the curtailment itself. A driver that raises risk is not a cause of any individual curtailed MWh.",
+      direction: { raises: "raises", lowers: "lowers", mixed: "acts in both directions" },
+      /**
+       * The signed contribution, beside the share.
+       *
+       * The sign is written by the formatter, always and for both signs: a
+       * bare "128 MWh" under a downward arrow is two claims about direction
+       * and only one of them is checkable.
+       */
+      contribution: "{phi} MWh",
+      /**
+       * The reading pair, named for the feature it came from.
+       *
+       * `{feature}` is a feature name from the model's artifact
+       * (`proxy_renewable_load_ratio`), untranslated in both locales for the
+       * same reason the ONS identifiers are: it is the name of a column, not a
+       * word we chose. Without it the two numbers read as though the whole
+       * group had one value, which no group ever has.
+       */
+      reading: "{feature}: observed {observed} · typical {typical}",
+      hourDisagreement:
+        "Acted in both directions during the day — its hours disagree by {value}.",
+      demoted: "A rule put this group below the fold. Its contribution is unchanged.",
+      figure: "{driver}: {share} of the attributed movement, {direction} risk",
+      /**
+       * The merged row's accessible label, written separately.
+       *
+       * "mixed risk" would be a claim neither half of a cancelled remainder
+       * supports, so the sentence changes rather than the placeholder.
+       */
+      figureMixed:
+        "{driver}: {share} of the attributed movement, acting in both directions",
+      note: "Shares are of the attributed movement for this subsystem-day — each group's contribution against the size of all of them — not of the curtailment itself. A driver that raises risk is not a cause of any individual curtailed MWh.",
+      /**
+       * The one sentence the screen was missing.
+       *
+       * The bars decompose the expected MWh and nothing else on this screen.
+       * The occurrence probability beside them is a day-level quantity read
+       * from the path ensemble — not a per-hour model output, and not
+       * something a Shapley game is played over at all — and the band's edges
+       * are not decomposed either. Adjacent panels, related quantities,
+       * different questions.
+       */
+      scopeNote:
+        "These bars explain the expected MWh for the day. They do not explain the P10, the P90, the width of the band, or the risk of the day containing any curtailment at all — that probability comes from the path ensemble, which is a different model output.",
     },
 
     /**
@@ -740,8 +775,15 @@ export const en = {
       peakPower: "Peak hourly power",
       narrationTitle: "Narration",
       narrationSubtitle: "Generated in the requested locale",
+      /**
+       * No `{technology}`.
+       *
+       * The paragraph used to open "{subsystem} {technology} curtailment",
+       * which described one of two explanations of a prediction the model only
+       * makes once. There is one attribution per subsystem-day.
+       */
       narration:
-        "The model puts {subsystem} {technology} curtailment above the {mw} MW threshold for most of the day. The largest single contribution is {top} ({observed} against a typical {typical}), followed by {second}. Those two together account for {share} of the attributed magnitude. The band is wide in the shoulder hours because the occurrence classifier is near an even chance there — read the P10 as “it may not clear the threshold at all”, not as a small number.",
+        "The model puts {subsystem} curtailment above the {mw} MW threshold for most of the day. The largest single contribution is {top}, whose headline feature {feature} reads {observed} against a typical {typical}, followed by {second}. Those two together account for {share} of the attributed movement. The band is wide in the shoulder hours because the occurrence classifier is near an even chance there — read the P10 as “it may not clear the threshold at all”, not as a small number.",
       /**
        * Two footnotes, because there are two authors.
        *

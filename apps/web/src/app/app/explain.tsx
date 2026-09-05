@@ -26,10 +26,11 @@ import { AppShell, MiniPill, ScreenTitle } from "@/components/app/app-shell";
 import { ForecastStamp, VintageBadge } from "@/components/app/honesty";
 import { sharedParams, useAppParams } from "@/components/app/use-app-params";
 import { BandFigure } from "@/components/charts/band-figure";
-import { DriverBars, formatReading } from "@/components/charts/driver-bars";
+import { DriverBars } from "@/components/charts/driver-bars";
 import { ReliabilityCurve } from "@/components/charts/reliability-curve";
 import { RiskCaveat, RiskChip, RiskScale } from "@/components/charts/risk-class";
 import { type Copy, useCopy, useFormat } from "@/i18n";
+import { driverLabel, formatReading } from "@/i18n/drivers";
 import { fill } from "@/i18n/format";
 import {
   buildExplain,
@@ -46,7 +47,14 @@ export default function ExplainScreen() {
   const f = useFormat();
   const params = useAppParams();
   const forecast = buildForecast(params.subsystem, params.run);
-  const explain = buildExplain(params.subsystem, params.technology);
+  // No technology argument, and none in the shape it returns. There is one
+  // attribution per subsystem-day because there is one forecasting head per
+  // subsystem, so a per-technology explanation would be explaining a model
+  // that does not exist (`docs/specs/api-surface.md`, contract change 4). The
+  // URL still carries `technology` — `sharedParams` still passes it on, and
+  // the Overview's observed panels still read it — it simply no longer
+  // reaches the diagnosis.
+  const explain = buildExplain(params.subsystem);
   // Two reads, not one. The attribution is a property of the day and the
   // reliability curve is a property of the model, so `api-surface.md` §9 puts
   // them behind `/v1/diagnosis/day-ahead` and `/v1/model/card?lane=` — the
@@ -229,12 +237,12 @@ function Narration({
     <>
       {fill(copy.app.explain.narration, {
         subsystem: meta.onsDisplayName,
-        technology: copy.app.technology[explain.technology].toLowerCase(),
         mw: f.number(thresholdMw),
-        top: copy.app.drivers.labels[top.code].toLowerCase(),
+        top: driverLabel(top.code, copy).toLowerCase(),
+        feature: top.headlineFeature,
         observed: formatReading(top.observed, copy, f) ?? "",
         typical: formatReading(top.typical, copy, f) ?? "",
-        second: copy.app.drivers.labels[second.code].toLowerCase(),
+        second: driverLabel(second.code, copy).toLowerCase(),
         share: f.percent(explain.narrationTopShare),
       })}
     </>

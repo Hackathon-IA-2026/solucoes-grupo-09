@@ -3,19 +3,44 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { SUBSYSTEM_CODES } from "../src/constants.js";
 import type {
+  DisplayDriverCode,
   Band as DomainBand,
+  DriverDirection as DomainDirection,
+  DriverCode as DomainDriverCode,
   TechnologySplit as DomainSplit,
+  SignedDriverDirection,
   SubsystemCode,
   Technology,
 } from "../src/domain.js";
-import { splitFor, splitOther, TECHNOLOGIES } from "../src/domain.js";
+import { directionOf, splitFor, splitOther, TECHNOLOGIES } from "../src/domain.js";
 import { readSchemas } from "../src/schema.js";
 import type {
   Band as WireBand,
+  DriverDirection as WireDirection,
+  DriverCode as WireDriverCode,
   TechnologySplit as WireSplit,
   Subsystem as WireSubsystem,
   Technology as WireTechnology,
 } from "../src/types.generated.js";
+
+/**
+ * The eight, written out rather than derived from either side.
+ *
+ * A list read off one of the two types would agree with that type by
+ * construction. The whole point is that a third party names them.
+ */
+const WIRE_DRIVER_CODES: readonly WireDriverCode[] = [
+  "renewable_resource",
+  "demand_level",
+  "net_surplus",
+  "export_stress",
+  "ramp_shape",
+  "calendar_season",
+  "recent_history",
+  "data_conditions",
+];
+
+const DISPLAY_CODES: readonly DisplayDriverCode[] = [...WIRE_DRIVER_CODES, "other"];
 
 /**
  * The generated wire contract and the hand-written domain module agree, and
@@ -78,6 +103,48 @@ describe("the wire's nouns and the domain's nouns are the same nouns", () => {
     // @ts-expect-error — there is no per-technology band to publish.
     const banded: DomainSplit = { windMwh: { p10: 1, p50: 2, p90: 3 }, solarMwh: 0 };
     expect(typeof (banded as unknown as { windMwh: unknown }).windMwh).toBe("object");
+  });
+
+  test("a wire DriverCode is a domain DriverCode and back — the same eight", () => {
+    // The change `api-surface.md` calls "a contract change nobody flagged":
+    // the domain's driver codes used to be twelve prototype *feature* names
+    // (`vre_load_ratio`, `hub_wind_speed`, …) while the wire's were the eight
+    // groups of the driver-group map. Two definitions of the closed set the
+    // dictionaries are keyed by — which is exactly the contradiction this file
+    // exists to prevent, and it survived because nothing compared them.
+    for (const wire of WIRE_DRIVER_CODES) {
+      const domain: DomainDriverCode = wire;
+      const backAgain: WireDriverCode = domain;
+      expect(backAgain).toBe(wire);
+    }
+    // @ts-expect-error — a feature name is not a group. The game is played by
+    // groups, and no model ever produced a `φ` for one feature.
+    const feature: DomainDriverCode = "hub_wind_speed";
+    expect(WIRE_DRIVER_CODES).not.toContain(feature as WireDriverCode);
+    // @ts-expect-error — `other` is the client's merged remainder. It is not a
+    // group, it never travels, and only `DisplayDriverCode` admits it.
+    const merged: WireDriverCode = "other";
+    expect(DISPLAY_CODES).toContain(merged as DisplayDriverCode);
+  });
+
+  test("a wire Driver's direction is a domain direction, and neither is mixed", () => {
+    // `"mixed"` is a member of the domain's `DriverDirection` because the
+    // merged `other` row reports it — and it is unreachable from anything the
+    // wire can produce, because `Driver.direction` is the signed pair. A
+    // grouped Shapley value is one number, so each of the eight has a sign;
+    // only a sum of several can have cancelled.
+    const wire: WireDirection = "raises";
+    const signed: SignedDriverDirection = wire;
+    const displayed: DomainDirection = signed;
+    expect(displayed).toBe("raises");
+    // @ts-expect-error — the wire has no third direction to send.
+    const fromTheWire: WireDirection = "mixed";
+    expect(fromTheWire as string).toBe("mixed");
+    // @ts-expect-error — and no signed contribution can carry it either.
+    const onAGroup: SignedDriverDirection = "mixed";
+    expect(onAGroup as string).toBe("mixed");
+    expect(directionOf(128)).toBe("raises");
+    expect(directionOf(-16)).toBe("lowers");
   });
 });
 

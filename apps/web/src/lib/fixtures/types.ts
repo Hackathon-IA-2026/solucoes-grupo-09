@@ -22,16 +22,19 @@ export {
   type Band,
   band,
   centre,
+  type DisplayDriverCode,
   type Driver,
   type DriverCode,
   type DriverDirection,
   type DriverReading,
   type DriverTerm,
+  directionOf,
   type Figure,
   type ForecastOrigin,
   observed,
   type ReasonCode,
   type RestrictionOrigin,
+  type SignedDriverDirection,
   type SubsystemCode,
   type SubsystemMeta,
   splitFor,
@@ -168,14 +171,33 @@ export interface ObservedReason {
   description: string | null;
 }
 
+/**
+ * The day's diagnosis for one `Subsystem` — **one object per subsystem-day**.
+ *
+ * There is deliberately no `technology` field, and `buildExplain` takes no
+ * technology argument. This shape used to carry one and the screen used to
+ * pass the URL's selection through to it; no such model exists. The forecaster
+ * has a single head per subsystem, so there is no per-technology prediction
+ * for a Shapley game to be played over and no per-technology head to explain
+ * — see `docs/specs/api-surface.md`, contract change 4, where the change is
+ * named a deletion rather than an edit.
+ *
+ * The `technology` URL parameter survives, because the *observed* panels have
+ * a technology dimension that genuinely exists. It simply stops reaching the
+ * attribution.
+ */
 export interface ExplainFixture {
   subsystem: SubsystemCode;
-  technology: Technology;
   targetDate: string;
+  /**
+   * All eight groups, ranked by share. **Not a shortlist**: the `share >= 0.03`
+   * cut, the six-row cap and the merge into `other` are the client's, and
+   * `lib/driver-rows.ts` applies them at render time.
+   */
   drivers: AttributedDriver[];
   /**
-   * The share of attributed magnitude the narration's two named drivers carry
-   * between them.
+   * The share of the attributed *movement* the narration's two named drivers
+   * carry between them.
    *
    * The narration is the one deliberate exception `docs/specs/i18n.md` carves
    * out of "the API returns codes, the client renders the words": there is no

@@ -31,11 +31,11 @@ import {
   type Band,
   type BandUnavailableReason,
   band,
-  type DriverDirection,
   type Figure,
   type ForecastOrigin,
   observed,
   REFERENCE_FLEET,
+  type SignedDriverDirection,
   type SubsystemCode,
 } from "@wattsteer/core";
 import type { Copy, Formatters } from "@/i18n";
@@ -62,9 +62,18 @@ export type LandingDriverCode =
 
 export interface LandingDriver {
   code: LandingDriverCode;
-  /** Share of the attributed magnitude, 0..1. */
+  /**
+   * Share of the attributed *movement*, 0..1 — the same quantity the product
+   * screen's `Driver.share` carries, named the same way. Illustrative here,
+   * because these are not the groups the engine attributes to.
+   */
   share: number;
-  direction: DriverDirection;
+  /**
+   * Always signed on this panel. `"mixed"` is a member of the union because
+   * the product's merged `other` row can report it; this illustration has no
+   * merge step, so nothing here produces it.
+   */
+  direction: SignedDriverDirection;
 }
 
 export interface SubsystemOutlook {

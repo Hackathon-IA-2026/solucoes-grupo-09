@@ -524,30 +524,26 @@ export const pt: Copy = {
         recent_history: "Histórico recente",
         data_conditions: "Condições do pipeline e residual",
       },
-      labels: {
-        vre_load_ratio: "Razão renovável / carga",
-        export_headroom: "Folga de exportação para SE/CO",
-        load_level: "Nível de carga",
-        overnight_load_level: "Nível de carga na madrugada",
-        hub_wind_speed: "Velocidade do vento na altura do rotor",
-        day_of_week: "Dia da semana",
-        midday_net_load: "Carga líquida ao meio-dia",
-        clear_sky_index: "Índice de céu claro",
-        installed_pv: "Fotovoltaica comissionada na janela",
-        hydro_flexibility: "Rampa de descida hidráulica disponível",
-        import_position: "Posição líquida importadora",
-        other: "Todo o resto",
-      },
+      merged: "Todo o resto",
+      mergedNote:
+        "{count} grupos abaixo do corte, reunidos em uma barra só. As contribuições são somadas com seus sinais.",
       terms: {
         weekend: "fim de semana",
         weekday: "dia útil",
         importing: "importando",
         balanced: "equilibrado",
       },
-      direction: { raises: "aumenta", lowers: "reduz" },
-      reading: "observado {observed} · típico {typical}",
-      figure: "{driver}: {share} da magnitude atribuída, {direction} o risco",
-      note: "As parcelas são da magnitude atribuída para este subsistema-dia, não do curtailment em si. Um driver que aumenta o risco não é causa de nenhum MWh cortado em particular.",
+      direction: { raises: "aumenta", lowers: "reduz", mixed: "atua nos dois sentidos" },
+      contribution: "{phi} MWh",
+      reading: "{feature}: observado {observed} · típico {typical}",
+      hourDisagreement:
+        "Atuou nos dois sentidos ao longo do dia — suas horas divergem em {value}.",
+      demoted: "Uma regra colocou este grupo abaixo da dobra. A contribuição não muda.",
+      figure: "{driver}: {share} do movimento atribuído, {direction} o risco",
+      figureMixed: "{driver}: {share} do movimento atribuído, atuando nos dois sentidos",
+      note: "As parcelas são do movimento atribuído para este subsistema-dia — a contribuição de cada grupo diante do tamanho de todas elas —, não do curtailment em si. Um driver que aumenta o risco não é causa de nenhum MWh cortado em particular.",
+      scopeNote:
+        "Estas barras explicam os MWh esperados do dia. Elas não explicam o P10, o P90, a largura da faixa nem o risco de o dia ter qualquer curtailment — essa probabilidade vem do ensemble de trajetórias, que é outra saída do modelo.",
     },
 
     /**
@@ -641,7 +637,7 @@ export const pt: Copy = {
       narrationTitle: "Narrativa",
       narrationSubtitle: "Gerada no idioma solicitado",
       narration:
-        "O modelo coloca o curtailment de {technology} em {subsystem} acima do limiar de {mw} MW na maior parte do dia. A maior contribuição isolada é {top} ({observed} contra um típico de {typical}), seguida por {second}. As duas juntas respondem por {share} da magnitude atribuída. A faixa fica larga nas horas de ombro porque o classificador de ocorrência está perto de meio a meio ali — leia a P10 como “pode não ultrapassar o limiar de jeito nenhum”, e não como um número pequeno.",
+        "O modelo coloca o curtailment em {subsystem} acima do limiar de {mw} MW na maior parte do dia. A maior contribuição isolada é {top}, cuja variável de destaque {feature} marca {observed} contra um típico de {typical}, seguida por {second}. As duas juntas respondem por {share} do movimento atribuído. A faixa fica larga nas horas de ombro porque o classificador de ocorrência está perto de meio a meio ali — leia a P10 como “pode não ultrapassar o limiar de jeito nenhum”, e não como um número pequeno.",
       narrationNoteModel:
         "Escrita por um modelo de linguagem a partir da tabela de atribuição abaixo. Ela reapresenta os números; não acrescenta nenhum.",
       narrationNoteTemplate:
