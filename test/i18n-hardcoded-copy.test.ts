@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 /**
@@ -145,6 +145,36 @@ const DOMAIN_TERMS = [
 const EXCEPTIONS: { file: string; reason: string }[] = [];
 
 /**
+ * The server-side exceptions — one file, and the distinction that earns it.
+ *
+ * The server scan below asks "is this literal a sentence?", which is the right
+ * question for a module that assembles a paragraph and the wrong one for the
+ * module that holds the language model's **instructions**. A system prompt is
+ * prose by necessity and is addressed to the renderer, not to a reader: it is
+ * never returned by any endpoint, never rendered by any screen, and translating
+ * it into Portuguese would not make the product more bilingual — the paragraph
+ * the model writes is already generated in the reader's locale, which is
+ * exactly what that prompt is telling it to do.
+ *
+ * That is the same distinction the diagnostics carve-out already turns on, one
+ * audience along: an error message is read by an operator, a prompt is read by
+ * a model, and only a narration clause is read by a user.
+ *
+ * Kept as a located, reasoned entry rather than as a name pattern (a scope that
+ * skipped `*-prompt.ts` would also skip a template that got renamed) and
+ * asserted against rot below: an entry whose file has gone, left the scope, or
+ * stopped containing anything this check would have flagged fails, so it cannot
+ * decay into a permission nobody can account for.
+ */
+const SERVER_EXCEPTIONS: { file: string; reason: string }[] = [
+  {
+    file: join("apps", "api", "src", "diagnosis", "narration-prompt.ts"),
+    reason:
+      "The narration system prompt. Its strings are the renderer's standing instruction, sent to the model and never returned to a client, and one of the things they instruct is that the paragraph be generated in the requested locale rather than translated into it. The build-time causality scan reads this file for the same reason this one skips it.",
+  },
+];
+
+/**
  * The other place copy is now written: the server, assembling a paragraph.
  *
  * `.scratch/api-surface/issues/00-README.md` recorded this as a standing risk
@@ -220,6 +250,12 @@ function residue(text: string): string {
       // much codes as `weather_run_age_hours` is, and a `t()` key written out
       // in full is the *opposite* of the leak this check looks for.
       .replace(/\b[a-z][a-z0-9]*(?:[._][a-z0-9]+)+\b/gi, " ")
+      // A module specifier and a kebab-case identifier are the same category,
+      // one punctuation mark along: `@anthropic-ai/sdk` and `claude-opus-5` are
+      // a package and a model id, not two words a reader was meant to read.
+      // Restricted to all-lowercase runs, so a capitalised phrase stays prose.
+      .replace(/@[a-z0-9]+(?:[-.][a-z0-9]+)*\/[a-z0-9]+(?:[-.][a-z0-9]+)*/g, " ")
+      .replace(/\b[a-z][a-z0-9]*(?:-[a-z0-9]+)+\b/g, " ")
       .replace(/[\d.,:;·—–\-+%/()[\]|~`'"!?°ºª§#@$&*=<>\\]/g, " ")
   );
 }
@@ -368,10 +404,11 @@ describe("i18n hygiene", () => {
     // sees. Without this the only thing standing between a Portuguese reader
     // and an English sentence would be a review.
     const offenders: string[] = [];
+    const exempt = new Set(SERVER_EXCEPTIONS.map((one) => one.file));
     for (const { root, nameMatches } of SERVER_SCOPE) {
       for (const file of walk(join(ROOT, root))) {
         const rel = relative(ROOT, file);
-        if (!nameMatches.test(rel)) {
+        if (!nameMatches.test(rel) || exempt.has(rel)) {
           continue;
         }
         for (const found of findServerOffenders(rel, readFileSync(file, "utf8"))) {
@@ -380,6 +417,29 @@ describe("i18n hygiene", () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+
+  it("cannot let a server-side exception rot into an unaccountable permission", () => {
+    // Three ways an entry stops meaning what it said, all of them failures.
+    for (const entry of SERVER_EXCEPTIONS) {
+      const absolute = join(ROOT, entry.file);
+      // 1. The file is gone or was renamed — the exemption went with it.
+      expect(existsSync(absolute)).toBe(true);
+      // 2. The file left the scope this exempts it from, so the entry is inert
+      //    and would silently outlive the scan it was written against.
+      const inScope = SERVER_SCOPE.some(
+        ({ root, nameMatches }) =>
+          entry.file.startsWith(root) && nameMatches.test(entry.file),
+      );
+      expect(inScope).toBe(true);
+      // 3. The file no longer contains anything this check would have flagged.
+      //    An exemption for a file with nothing to exempt is a permission
+      //    nobody needs, and deleting it costs one line.
+      const wouldFlag = findServerOffenders(entry.file, readFileSync(absolute, "utf8"));
+      expect(wouldFlag.length).toBeGreaterThan(0);
+      // And every entry says why, in more than a word.
+      expect(entry.reason.split(/\s+/).length).toBeGreaterThan(5);
+    }
   });
 
   it("watches the narration modules, and still lets a diagnostic through", () => {

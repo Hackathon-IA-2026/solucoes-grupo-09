@@ -1,0 +1,39 @@
+# The narration renderer against the real model — the one test that spends money.
+#
+# Scheduled, never triggered by a push or a pull request. `docs/specs/diagnosis.md`
+# seam 13: one real call per locale per deployment, asserting only that the
+# response passes all three output gates. A failure here does not mean a commit
+# broke something and does not mean the endpoint is down — a paragraph that
+# fails a gate falls back to the deterministic template, exactly as a withheld
+# day does. It means the prompt, the model or the output schema has regressed.
+#
+# See `apps/api/test/diagnosis-narration-live.test.ts`.
+name: narration-live
+
+on:
+  schedule:
+    # 08:00 UTC daily — after the previous day's late gate has published, so the
+    # prompt is exercised on the shape of document it actually renders.
+    - cron: "0 8 * * *"
+  # So a human can ask the question on demand after editing the prompt.
+  workflow_dispatch:
+
+# Never on push. The default `bun test` path must stay offline and free, and
+# this suite must never be able to fail a commit.
+permissions:
+  contents: read
+
+jobs:
+  narration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Assert the real model still writes a paragraph that passes the gates
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: bun run test:narration
