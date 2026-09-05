@@ -21,11 +21,13 @@ harnesses, two outputs, two names.
 - :mod:`~wattsteer_ml.evaluation.holdout` — `docs/specs/replay.md`'s one
   storage requirement: the out-of-fold forecasts, kept rather than
   discarded, and stamped `backfilled_holdout` so they cannot be served.
+- :mod:`~wattsteer_ml.evaluation.shuffled_label` — seam 6: the same ladder run
+  on labels permuted within a fold's date range, which must score at chance.
 - :mod:`~wattsteer_ml.evaluation.gate` — the hot-swap gate: the paired block
   bootstrap that decides, the constants that only veto, and the one line
   appended either way.
 
-**The last four are imported as submodules, not re-exported here.** They read
+**The last five are imported as submodules, not re-exported here.** They read
 :mod:`wattsteer_ml.training`, which reads this package; re-exporting them would
 close the cycle and make `import wattsteer_ml.evaluation` depend on LightGBM
 being installed. `from wattsteer_ml.evaluation.metrics import MetricsRow` is the
