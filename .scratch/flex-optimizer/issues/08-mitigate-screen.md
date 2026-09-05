@@ -39,7 +39,7 @@ spec; the API returns codes and the screen owns the strings.
 
 **Blocked by:** 03, 07.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The basis toggle is removed and the execution-rule sentence is on screen
 - [ ] Hour-by-hour dispatch per asset, with the battery's state of charge drawn alongside, labelled as the **scheduled** plan on the planning envelope

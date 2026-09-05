@@ -215,22 +215,20 @@ export interface BatteryAsset {
 
 export interface ShiftableLoadAsset {
   assetType: "shiftable_load";
+  /**
+   * The connection limit, and the ceiling `SHIFT_EXCEEDS_CONNECTION` is read
+   * against. It used to be absent here, which made the fixture load the one
+   * asset in the prototype that could not be written as a `Scenario` at all:
+   * `max_power_mw` is a required common field on every variant, and a shape
+   * that omits it cannot be encoded into the URL the screen now carries.
+   */
+  maxPowerMw: number;
   maxShiftMw: number;
   shiftWindowHours: number;
   dailyEnergyMwh: number;
 }
 
 export type FlexibilityAsset = BatteryAsset | ShiftableLoadAsset;
-
-/**
- * Which point of the forecast band the optimizer is pointed at.
- *
- * `docs/research/optimizer-formulation.md` §7 lays out P50 / P10 / robust-Γ /
- * scenario-based and *deliberately does not choose* — that is ticket 011. The
- * prototype therefore exposes the choice rather than hiding it, and reports
- * the outcome across the whole band either way.
- */
-export type CurtailmentBasis = "p10" | "p50";
 
 /** `OptimizationResult`, narrowed to what the screen renders. */
 export interface OptimizationResult {
@@ -275,9 +273,29 @@ export interface MitigationStep {
   remaining: Band;
   /** Recovered energy across the band, MWh. */
   recovered: Band;
-  /** % avoided across the band; null where the baseline is zero. */
+  /**
+   * The share avoided **on each realisation** — `p10` is the share on the P10
+   * realisation and not the low end of an interval. The three are not ordered
+   * (see `mitigate.ts`), so nothing may read this as an ascending band.
+   */
   avoidability: Band | null;
-  /** The dispatch, evaluated on the P50 realisation. */
+  /**
+   * `recovered_floor_mwh` — the P10-simulated recovery, and **the number the
+   * product quotes in prose**. Equal to `recovered.p10` by construction; it is
+   * named separately because the prose and the band are two different claims
+   * and only one of them is the promise.
+   */
+  recoveredFloorMwh: number;
+  /**
+   * Still in the battery when the horizon ends, on the planning envelope.
+   * Reported rather than constrained away: there is no terminal state-of-charge
+   * constraint, because requiring one would penalise absorption on the day
+   * being planned in order to serve a day the horizon does not cover.
+   */
+  storedAtHorizonEndMwh: number;
+  /** What did not survive the round trip, on the planning envelope. */
+  roundTripLossMwh: number;
+  /** The **scheduled** dispatch, on the planning envelope. */
   dispatch: HourlyDispatch[];
 }
 

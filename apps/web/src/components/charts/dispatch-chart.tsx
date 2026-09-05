@@ -8,11 +8,21 @@
  * that discharges are the same asset doing opposite things and a chart that
  * cannot show the sign cannot show a mistake.
  *
- * Read: grey bars are the curtailment offered in that hour, the lime portion
- * is what the assets absorbed, and the violet line is the battery's state of
- * charge on its own axis. The interesting failure this makes visible — the one
- * the research warns the LP relaxation produces — is charging and discharging
- * in the same hour, which would show as a bar with both signs.
+ * Read: grey bars are the curtailment offered in that hour; the stack inside
+ * them is the **scheduled dispatch, per asset** — lime for the battery's
+ * charge, amber for the load's up-shift — and the violet line is the battery's
+ * state of charge on its own axis. Below the zero line, the same two assets
+ * giving energy back: the battery discharging, and the load taking its shifted
+ * consumption. The interesting failure this makes visible — the one the
+ * research warns the LP relaxation produces — is charging and discharging in
+ * the same hour, which shows as a bar with both signs.
+ *
+ * **Per asset rather than one aggregate bar**, because "the assets absorbed
+ * 640 MWh" and "the battery absorbed 300 of it while the load moved 340" are
+ * different statements and only the second one is actionable. The aggregate is
+ * still readable off the stack: absorbed energy is the net increase in
+ * flexible demand, capped by what was offered, so it is the lime plus the
+ * amber less whatever sits below the line.
  */
 
 import { useContainerWidth, usePalette } from "@wattsteer/ui";
@@ -43,7 +53,15 @@ export function DispatchChart({
     return null;
   }
 
-  const max = Math.max(...dispatch.map((d) => Math.max(d.offeredMwh, d.absorbedMwh)), 1);
+  // The domain has to hold the stack, not only the tallest single quantity:
+  // a battery charging at 100 MW under a load shifting 50 would otherwise be
+  // drawn out of the top of the chart.
+  const max = Math.max(
+    ...dispatch.map((d) =>
+      Math.max(d.offeredMwh, d.absorbedMwh, d.batteryChargeMw + d.loadShiftUpMw),
+    ),
+    1,
+  );
   const socMax = Math.max(energyCapacityMwh, 1);
   const chartW = W - PAD.left - PAD.right;
   const chartH = H - PAD.top - PAD.bottom;
@@ -103,7 +121,15 @@ export function DispatchChart({
         {dispatch.map((d, i) => {
           const bx = x(i) - barW / 2;
           const offeredH = Math.max(0, (d.offeredMwh / max) * chartH);
-          const absorbedH = Math.max(0, (d.absorbedMwh / max) * chartH);
+          const chargeH = Math.max(0, (d.batteryChargeMw / max) * chartH);
+          const shiftUpH = Math.max(0, (d.loadShiftUpMw / max) * chartH);
+          // Below the line, at a third of the scale: giving energy back is a
+          // real quantity but it is not the subject of the chart, and drawing
+          // it at full height would make an hour with no curtailment look like
+          // the busiest one.
+          const belowScale = 0.35;
+          const dischargeH = (d.batteryDischargeMw / max) * chartH * belowScale;
+          const shiftDownH = (d.loadShiftDownMw / max) * chartH * belowScale;
           return (
             <G key={d.hourLocal}>
               {offeredH > 0 ? (
@@ -117,14 +143,24 @@ export function DispatchChart({
                   fillOpacity={0.28}
                 />
               ) : null}
-              {absorbedH > 0 ? (
+              {chargeH > 0 ? (
                 <Rect
                   x={bx}
-                  y={PAD.top + chartH - absorbedH}
+                  y={PAD.top + chartH - chargeH}
                   width={barW}
-                  height={absorbedH}
+                  height={chargeH}
                   rx={3}
                   fill={colors.accent}
+                />
+              ) : null}
+              {shiftUpH > 0 ? (
+                <Rect
+                  x={bx}
+                  y={PAD.top + chartH - chargeH - shiftUpH}
+                  width={barW}
+                  height={shiftUpH}
+                  rx={3}
+                  fill={colors.warning}
                 />
               ) : null}
               {d.batteryDischargeMw > 0 ? (
@@ -132,10 +168,21 @@ export function DispatchChart({
                   x={bx}
                   y={PAD.top + chartH}
                   width={barW}
-                  height={Math.max(2, (d.batteryDischargeMw / max) * chartH * 0.35)}
+                  height={Math.max(2, dischargeH)}
                   rx={2}
                   fill={colors.violet}
                   fillOpacity={0.55}
+                />
+              ) : null}
+              {d.loadShiftDownMw > 0 ? (
+                <Rect
+                  x={bx}
+                  y={PAD.top + chartH + Math.max(2, dischargeH)}
+                  width={barW}
+                  height={Math.max(2, shiftDownH)}
+                  rx={2}
+                  fill={colors.warning}
+                  fillOpacity={0.45}
                 />
               ) : null}
               {d.hourLocal % 3 === 0 ? (
@@ -173,9 +220,15 @@ export function DispatchChart({
         }}
       >
         <Key color={colors.inkFaint} label={copy.app.dispatch.offered} faded={true} />
-        <Key color={colors.accent} label={copy.app.dispatch.absorbed} />
+        <Key color={colors.accent} label={copy.app.dispatch.batteryCharge} />
+        <Key color={colors.warning} label={copy.app.dispatch.loadShiftUp} />
         <Key color={colors.violet} label={copy.app.dispatch.soc} />
         <Key color={colors.violet} label={copy.app.dispatch.discharge} faded={true} />
+        <Key
+          color={colors.warning}
+          label={copy.app.dispatch.loadShiftDown}
+          faded={true}
+        />
       </View>
     </View>
   );

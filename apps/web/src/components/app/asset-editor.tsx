@@ -202,6 +202,13 @@ export function LoadEditor({
     <View style={{ gap: space.md }}>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
         <Stepper
+          label={copy.app.assets.loadConnection}
+          value={load.maxPowerMw}
+          limit={ASSET_LIMITS.loadConnectionMw}
+          format={(v) => `${f.number(v)} MW`}
+          onChange={(maxPowerMw) => onChange({ ...load, maxPowerMw })}
+        />
+        <Stepper
           label={copy.app.assets.loadShift}
           value={load.maxShiftMw}
           limit={ASSET_LIMITS.loadShiftMw}

@@ -1,33 +1,50 @@
 /**
- * Screen 3 — Mitigate (IDEA.md §44). The screen that sells the product.
+ * Screen 3 — Mitigate. One plan, one promise, and the rule that makes it honest.
  *
- * The reveal is IDEA.md's: no action → + battery → + flexible load, each step
- * knocking the remaining curtailment down. Two things are different from the
- * sketch, and both are the point of the prototype:
+ * **The posture is decided and this screen expresses it rather than offering
+ * it.** The optimizer plans against P50, the product promises the P10 edge, and
+ * the user is never asked. `docs/specs/flex-optimizer.md` settles that, and the
+ * prototype's basis toggle — which used to sit at the top of this file — comes
+ * out with it. The spec is worth quoting on why, because the instinct behind
+ * the toggle was a good one:
  *
- *  1. **Every figure is a band.** The sketch reads `786 → 524 MWh, −33%`.
- *     There is no 786: the day's curtailment is an interval, and a fixed fleet
- *     covers a *smaller share* of a bigger event, so the percentage avoided is
- *     itself an interval — and an inverted one, worst at P90. Reporting −33%
- *     would be reporting the median twice and calling it a plan.
- *  2. **The optimizer has to be pointed at a point of the band, and the screen
- *     says which.** `docs/research/optimizer-formulation.md` §7 lays out P50 /
- *     P10 / robust-Γ / scenario-based and deliberately does not choose (that
- *     is ticket 011). So the choice is a visible control here: build the plan
- *     on the median, or on P10 for a defensible floor. Either way the plan is
- *     then scored against all three realisations, which is what turns
- *     "MWh recovered" back into an interval instead of a promise.
+ * > The prototype's P50/P10 toggle was the right question asked in the wrong
+ * > place. The screen was refusing to hide a modelling choice from the user;
+ * > but the choice it exposed was not a preference, it was a defect in the
+ * > framing.
+ *
+ * What replaces it is the **execution rule**, stated on screen: on the day, an
+ * asset charges the scheduled amount or the amount actually being curtailed,
+ * whichever is smaller. Without that sentence, "planned against P50" gets read
+ * as "assumes P50 comes true", which is exactly the misreading the posture
+ * depends on not happening. With it, over-planning has no downside worth
+ * protecting a reader from, and the conservatism moves to the claim — where one
+ * number, `recovered_floor_mwh`, can be quoted without a caveat.
+ *
+ * Three consequences run through the layout:
+ *
+ *  1. **The floor is what the prose says; the band is what the chart draws.**
+ *     The P10-simulated recovery is the number in the sentence, with the median
+ *     and high realisations *beside* it so a conservative promise does not hide
+ *     the upside.
+ *  2. **The dispatch is the *scheduled* plan on the planning envelope**, and is
+ *     labelled so. The per-realisation numbers come from the simulator, which
+ *     is `evaluatePlan` and is the only thing on this screen allowed to produce
+ *     a KPI.
+ *  3. **The scenario is the URL.** There is no account and nothing is saved, so
+ *     the address bar carries the canonical blob, a stepper commits on a
+ *     trailing debounce, and a link that fails the refusal table renders the
+ *     code's sentence rather than a plausible plan.
  */
 
-import { BRL_PER_MWH } from "@wattsteer/core";
 import {
+  LayersIcon,
   Panel,
   PanelHeader,
   Pill,
   radius,
   SlidersHorizontalIcon,
   space,
-  Toggle,
   usePalette,
   ZapIcon,
 } from "@wattsteer/ui";
@@ -35,32 +52,34 @@ import Head from "expo-router/head";
 import { useState } from "react";
 import { Text, View } from "react-native";
 import { AppShell, MiniPill, ScreenTitle } from "@/components/app/app-shell";
-import { BatteryEditor, LoadEditor } from "@/components/app/asset-editor";
-import { ForecastStamp, HeuristicNote } from "@/components/app/honesty";
+import { BatteryEditor, LoadEditor, Stepper } from "@/components/app/asset-editor";
+import { ForecastStamp, HeuristicNote, HonestyNote } from "@/components/app/honesty";
+import {
+  fixtureBattery,
+  fixtureLoad,
+  scenarioBattery,
+  scenarioBrlPerMwh,
+  scenarioLoad,
+  withBattery,
+  withBrlPerMwh,
+  withLoad,
+} from "@/components/app/scenario";
 import { useAppParams } from "@/components/app/use-app-params";
-import { BandFigure, BandStrip } from "@/components/charts/band-figure";
+import { useScenario } from "@/components/app/use-scenario";
+import { BandStrip } from "@/components/charts/band-figure";
 import { DispatchChart } from "@/components/charts/dispatch-chart";
-import { useCopy, useFormat } from "@/i18n";
+import { type Copy, useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
 import {
+  ASSET_LIMITS,
   type Band,
-  type BatteryAsset,
   buildForecast,
   buildMitigationSteps,
-  type CurtailmentBasis,
   DEFAULT_BATTERY,
   DEFAULT_LOAD,
   type MitigationStep,
-  type ShiftableLoadAsset,
   subsystemMeta,
 } from "@/lib/fixtures";
-
-const NO_ASSET_BATTERY: BatteryAsset = {
-  ...DEFAULT_BATTERY,
-  maxPowerMw: 0,
-  energyCapacityMwh: 0,
-};
-const NO_ASSET_LOAD: ShiftableLoadAsset = { ...DEFAULT_LOAD, maxShiftMw: 0 };
 
 function percentBand(band: Band): Band {
   return { p10: band.p10 * 100, p50: band.p50 * 100, p90: band.p90 * 100 };
@@ -73,20 +92,50 @@ export default function MitigateScreen() {
   const params = useAppParams();
   const forecast = buildForecast(params.subsystem, params.run);
   const meta = subsystemMeta(params.subsystem);
-
-  const [battery, setBattery] = useState<BatteryAsset>(DEFAULT_BATTERY);
-  const [load, setLoad] = useState<ShiftableLoadAsset>(DEFAULT_LOAD);
-  const [batteryOn, setBatteryOn] = useState(true);
-  const [loadOn, setLoadOn] = useState(true);
-  const [basis, setBasis] = useState<CurtailmentBasis>("p50");
+  const scenarioState = useScenario(params.subsystem, params.date);
   const [revealed, setRevealed] = useState(2);
 
-  const steps = buildMitigationSteps({
-    forecast,
-    battery: batteryOn ? battery : NO_ASSET_BATTERY,
-    load: loadOn ? load : NO_ASSET_LOAD,
-    basis,
-  });
+  const header = (
+    <ScreenTitle
+      title={copy.app.mitigate.title}
+      lede={fill(copy.app.mitigate.lede, {
+        subsystem: meta.onsDisplayName,
+        date: f.date(params.date),
+      })}
+      right={
+        <ForecastStamp
+          origin={forecast.forecastOrigin}
+          thresholdMw={forecast.thresholdMw}
+        />
+      }
+    />
+  );
+
+  // A scenario the refusal table would not let near a solver never gets a plan
+  // drawn for it. The code is rendered from the dictionaries; the gateway's own
+  // developer prose is not on this screen and never reaches a reader.
+  if (scenarioState.scenario === null) {
+    const code = scenarioState.readout.ok ? "BAD_INPUT" : scenarioState.readout.code;
+    return (
+      <>
+        <Head>
+          <title>{copy.app.mitigate.metaTitle}</title>
+          <meta name="robots" content="noindex" />
+        </Head>
+        <AppShell>
+          {header}
+          <Refusal code={code} onReset={scenarioState.reset} />
+        </AppShell>
+      </>
+    );
+  }
+
+  const scenario = scenarioState.scenario;
+  const battery = fixtureBattery(scenarioBattery(scenario));
+  const load = fixtureLoad(scenarioLoad(scenario));
+  const brlPerMwh = scenarioBrlPerMwh(scenario);
+
+  const steps = buildMitigationSteps({ forecast, battery, load });
   const active = steps[Math.min(revealed, steps.length - 1)];
   const baseline = steps[0].remaining;
   const domainMax = baseline.p90 * 1.05;
@@ -98,55 +147,182 @@ export default function MitigateScreen() {
         <meta name="robots" content="noindex" />
       </Head>
       <AppShell>
-        <ScreenTitle
-          title={copy.app.mitigate.title}
-          lede={fill(copy.app.mitigate.lede, {
-            subsystem: meta.onsDisplayName,
-            date: f.date(params.date),
-          })}
+        {header}
+
+        {/*
+          The execution rule, above every number it makes honest. Not a tooltip
+          and not collapsible: a caveat behind an interaction is a caveat nobody
+          reads, and this one changes what "planned against the median" means.
+        */}
+        <HonestyNote
+          title={copy.app.mitigate.postureTitle}
+          tone="neutral"
+          points={[copy.app.mitigate.postureRule, copy.app.mitigate.postureWhy]}
           right={
-            <ForecastStamp
-              origin={forecast.forecastOrigin}
-              thresholdMw={forecast.thresholdMw}
-            />
+            <Text style={{ fontSize: 11, color: colors.inkFaint }}>
+              {copy.app.mitigate.postureSubtitle}
+            </Text>
           }
         />
 
+        {/* The promise: the floor in prose, the band beside it. */}
         <Panel>
           <PanelHeader
-            icon={<SlidersHorizontalIcon size={18} color={colors.inkMuted} />}
-            title={copy.app.mitigate.basisTitle}
-            subtitle={
-              basis === "p50"
-                ? copy.app.mitigate.basisMedian
-                : copy.app.mitigate.basisConservative
-            }
-            right={
-              <View style={{ flexDirection: "row", gap: 6 }}>
-                <MiniPill
-                  label={copy.app.mitigate.basisMedianPill}
-                  active={basis === "p50"}
-                  onPress={() => setBasis("p50")}
-                />
-                <MiniPill
-                  label={copy.app.mitigate.basisConservativePill}
-                  active={basis === "p10"}
-                  onPress={() => setBasis("p10")}
-                />
-              </View>
-            }
+            icon={<LayersIcon size={18} color={colors.inkMuted} />}
+            title={copy.app.mitigate.floorTitle}
+            subtitle={copy.app.mitigate.floorLabel}
           />
+          <View
+            style={{
+              marginTop: space.lg,
+              flexDirection: "row",
+              flexWrap: "wrap",
+              gap: space.xl,
+            }}
+          >
+            <View style={{ flexGrow: 1, flexBasis: 320, gap: space.sm }}>
+              <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8 }}>
+                <Text
+                  selectable={true}
+                  style={{
+                    fontSize: 52,
+                    lineHeight: 58,
+                    fontWeight: "600",
+                    letterSpacing: -1.2,
+                    fontVariant: ["tabular-nums"],
+                    color: colors.accent,
+                  }}
+                >
+                  {f.compact(active.recoveredFloorMwh)}
+                </Text>
+                <Text style={{ fontSize: 16, fontWeight: "500", color: colors.inkMuted }}>
+                  MWh
+                </Text>
+              </View>
+              <Text style={{ fontSize: 13, lineHeight: 21, color: colors.inkMuted }}>
+                {fill(copy.app.mitigate.floorSentence, {
+                  floor: f.compact(active.recoveredFloorMwh),
+                })}
+              </Text>
+            </View>
+
+            {/*
+              Beside the floor, never in front of it: two secondary figures at
+              a fraction of the type size, with the band they belong to drawn
+              under them on the shared scale.
+            */}
+            <View style={{ flexGrow: 1, flexBasis: 260, gap: space.md }}>
+              <Beside
+                label={copy.app.mitigate.floorMedian}
+                value={`${f.compact(active.recovered.p50)} MWh`}
+              />
+              <Beside
+                label={copy.app.mitigate.floorHigh}
+                value={`${f.compact(active.recovered.p90)} MWh`}
+              />
+              <BandStrip band={active.recovered} domainMax={domainMax} tone="accent" />
+              <Text style={{ fontSize: 11, lineHeight: 18, color: colors.inkFaint }}>
+                {copy.app.mitigate.floorBesideNote}
+              </Text>
+            </View>
+          </View>
+        </Panel>
+
+        {/* Quantiles do not add, and the floor is not a day-level claim. */}
+        <HonestyNote
+          title={copy.app.mitigate.notJointTitle}
+          tone="warning"
+          points={[copy.app.mitigate.notJointBody]}
+        />
+
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
+          <Panel style={{ flexGrow: 1, flexBasis: 300 }}>
+            {active.avoidability === null ? (
+              <View style={{ gap: space.sm }}>
+                <Text style={{ fontSize: 13, color: colors.inkMuted }}>
+                  {copy.app.mitigate.avoided}
+                </Text>
+                <Text
+                  style={{ fontSize: 40, fontWeight: "600", color: colors.inkFaint }}
+                  accessibilityLabel={copy.app.mitigate.avoidedUndefined}
+                >
+                  —
+                </Text>
+                <Text style={{ fontSize: 11, lineHeight: 18, color: colors.inkFaint }}>
+                  {copy.app.mitigate.avoidedUndefined}
+                </Text>
+              </View>
+            ) : (
+              <Avoidability shares={active.avoidability} />
+            )}
+          </Panel>
+
+          {/* R$ once, with its assumption on screen and editable. */}
+          <Panel style={{ flexGrow: 1, flexBasis: 320, gap: space.sm }}>
+            <Text style={{ fontSize: 13, color: colors.inkMuted }}>
+              {copy.app.mitigate.economicTitle}
+            </Text>
+            <Text
+              style={{
+                fontSize: 32,
+                fontWeight: "600",
+                fontVariant: ["tabular-nums"],
+                color: colors.ink,
+              }}
+            >
+              {f.brlThousands(active.recovered.p50 * brlPerMwh)}
+            </Text>
+            <View style={{ marginTop: space.xs }}>
+              <Stepper
+                label={copy.app.mitigate.economicRate}
+                value={brlPerMwh}
+                limit={ASSET_LIMITS.brlPerMwh}
+                format={(v) => `${f.brl(v)}/MWh`}
+                onChange={(next) => scenarioState.update(withBrlPerMwh(scenario, next))}
+              />
+            </View>
+            <Text style={{ fontSize: 11, lineHeight: 18, color: colors.inkFaint }}>
+              {fill(copy.app.mitigate.economicNote, { rate: f.brl(brlPerMwh) })}
+            </Text>
+            <Text style={{ fontSize: 11, lineHeight: 18, color: colors.inkFaint }}>
+              {copy.app.mitigate.economicOnlyMoney}
+            </Text>
+          </Panel>
+        </View>
+
+        {/* "Recovered" is not "delivered", and the two numbers that say so. */}
+        <Panel>
+          <PanelHeader
+            icon={<ZapIcon size={18} color={colors.inkMuted} />}
+            title={copy.app.mitigate.deliveredTitle}
+            subtitle={copy.app.mitigate.deliveredSubtitle}
+          />
+          <View
+            style={{
+              marginTop: space.lg,
+              flexDirection: "row",
+              flexWrap: "wrap",
+              gap: space.xl,
+            }}
+          >
+            <Scalar
+              label={copy.app.mitigate.storedLabel}
+              value={`${f.compact(active.storedAtHorizonEndMwh)} MWh`}
+            />
+            <Scalar
+              label={copy.app.mitigate.lossLabel}
+              value={`${f.compact(active.roundTripLossMwh)} MWh`}
+            />
+          </View>
           <Text
             style={{
               marginTop: space.md,
-              fontSize: 12,
-              lineHeight: 19,
-              color: colors.inkMuted,
+              fontSize: 11,
+              lineHeight: 18,
+              color: colors.inkFaint,
             }}
           >
-            {basis === "p50"
-              ? copy.app.mitigate.basisMedianBody
-              : copy.app.mitigate.basisConservativeBody}
+            {copy.app.mitigate.deliveredNote}
           </Text>
         </Panel>
 
@@ -164,62 +340,6 @@ export default function MitigateScreen() {
           ))}
         </View>
 
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
-          <Panel style={{ flexGrow: 1, flexBasis: 300 }}>
-            <BandFigure
-              label={copy.app.mitigate.recovered}
-              band={active.recovered}
-              unit="MWh"
-              domainMax={domainMax}
-              footnote={copy.app.mitigate.recoveredNote}
-            />
-          </Panel>
-          <Panel style={{ flexGrow: 1, flexBasis: 300 }}>
-            {active.avoidability === null ? (
-              <View style={{ gap: space.sm }}>
-                <Text style={{ fontSize: 13, color: colors.inkMuted }}>
-                  {copy.app.mitigate.avoided}
-                </Text>
-                <Text style={{ fontSize: 40, fontWeight: "600", color: colors.inkFaint }}>
-                  —
-                </Text>
-                <Text style={{ fontSize: 11, color: colors.inkFaint }}>
-                  {copy.app.mitigate.avoidedUndefined}
-                </Text>
-              </View>
-            ) : (
-              <BandFigure
-                label={copy.app.mitigate.avoided}
-                band={percentBand(active.avoidability)}
-                unit="%"
-                domainMax={100}
-                tone="violet"
-                footnote={copy.app.mitigate.avoidedNote}
-              />
-            )}
-          </Panel>
-          <Panel style={{ flexGrow: 1, flexBasis: 300, gap: space.sm }}>
-            <Text style={{ fontSize: 13, color: colors.inkMuted }}>
-              {copy.app.mitigate.economicTitle}
-            </Text>
-            <Text
-              style={{
-                fontSize: 32,
-                fontWeight: "600",
-                fontVariant: ["tabular-nums"],
-                color: colors.ink,
-              }}
-            >
-              {f.brlThousands(active.recovered.p50 * BRL_PER_MWH)}
-            </Text>
-            <Text style={{ fontSize: 11, lineHeight: 18, color: colors.inkFaint }}>
-              {fill(copy.app.mitigate.economicNote, {
-                rate: f.brl(BRL_PER_MWH),
-              })}
-            </Text>
-          </Panel>
-        </View>
-
         <Panel>
           <PanelHeader
             icon={<ZapIcon size={18} color={colors.inkMuted} />}
@@ -231,9 +351,19 @@ export default function MitigateScreen() {
           <View style={{ marginTop: space.lg }}>
             <DispatchChart
               dispatch={active.dispatch}
-              energyCapacityMwh={batteryOn ? battery.energyCapacityMwh : 1}
+              energyCapacityMwh={battery.energyCapacityMwh}
             />
           </View>
+          <Text
+            style={{
+              marginTop: space.md,
+              fontSize: 11,
+              lineHeight: 18,
+              color: colors.inkFaint,
+            }}
+          >
+            {copy.app.mitigate.dispatchScheduled}
+          </Text>
         </Panel>
 
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
@@ -242,16 +372,12 @@ export default function MitigateScreen() {
               icon={<ZapIcon size={18} color={colors.inkMuted} />}
               title={copy.app.mitigate.batteryTitle}
               subtitle={copy.app.mitigate.assetSubtitle}
-              right={
-                <Toggle
-                  label={copy.app.mitigate.includeBattery}
-                  value={batteryOn}
-                  onValueChange={setBatteryOn}
-                />
-              }
             />
-            <View style={{ marginTop: space.lg, opacity: batteryOn ? 1 : 0.45 }}>
-              <BatteryEditor battery={battery} onChange={setBattery} />
+            <View style={{ marginTop: space.lg }}>
+              <BatteryEditor
+                battery={battery}
+                onChange={(next) => scenarioState.update(withBattery(scenario, next))}
+              />
             </View>
           </Panel>
           <Panel style={{ flexGrow: 1, flexBasis: 380 }}>
@@ -259,16 +385,12 @@ export default function MitigateScreen() {
               icon={<SlidersHorizontalIcon size={18} color={colors.inkMuted} />}
               title={copy.app.mitigate.loadTitle}
               subtitle={copy.app.mitigate.assetSubtitle}
-              right={
-                <Toggle
-                  label={copy.app.mitigate.includeLoad}
-                  value={loadOn}
-                  onValueChange={setLoadOn}
-                />
-              }
             />
-            <View style={{ marginTop: space.lg, opacity: loadOn ? 1 : 0.45 }}>
-              <LoadEditor load={load} onChange={setLoad} />
+            <View style={{ marginTop: space.lg }}>
+              <LoadEditor
+                load={load}
+                onChange={(next) => scenarioState.update(withLoad(scenario, next))}
+              />
             </View>
           </Panel>
         </View>
@@ -281,14 +403,17 @@ export default function MitigateScreen() {
               shift: f.number(DEFAULT_LOAD.maxShiftMw),
             })}
             tone="secondary"
-            onPress={() => {
-              setBattery(DEFAULT_BATTERY);
-              setLoad(DEFAULT_LOAD);
-              setBatteryOn(true);
-              setLoadOn(true);
-            }}
+            onPress={() =>
+              scenarioState.commit(
+                withLoad(withBattery(scenario, DEFAULT_BATTERY), DEFAULT_LOAD),
+              )
+            }
           />
         </View>
+
+        <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkFaint }}>
+          {copy.app.mitigate.shareNote}
+        </Text>
 
         <HeuristicNote />
 
@@ -297,6 +422,151 @@ export default function MitigateScreen() {
         </Text>
       </AppShell>
     </>
+  );
+}
+
+/**
+ * The share of curtailment avoided, on each of the three realisations.
+ *
+ * **Not a `BandFigure`, because these three are not an interval.** A
+ * `BandFigure` draws `p10 … p90` as an ascending track with `p50` marked, and
+ * on the reference profile the median share is the *largest* of the three —
+ * the marker would sit outside its own fill. The set is genuinely unordered
+ * and for two separate, both-true reasons:
+ *
+ *  - the high realisation sits **below** the median because a fixed fleet
+ *    covers a smaller share of a bigger event, which is the arithmetic the
+ *    spec asks to be made visible rather than surprising;
+ *  - the low realisation sits below both because a plan built on the median
+ *    cannot absorb energy that was never curtailed.
+ *
+ * So the median is the figure, the track spans the smallest and the largest of
+ * the three, and all three are spelled out and named by the realisation they
+ * belong to.
+ */
+function Avoidability({ shares }: { shares: Band }) {
+  const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
+  const points = percentBand(shares);
+  const span: Band = {
+    p10: Math.min(points.p10, points.p50, points.p90),
+    p50: points.p50,
+    p90: Math.max(points.p10, points.p50, points.p90),
+  };
+  return (
+    <View style={{ gap: space.sm }}>
+      <Text style={{ fontSize: 13, fontWeight: "500", color: colors.inkMuted }}>
+        {copy.app.mitigate.avoided}
+      </Text>
+      <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6 }}>
+        <Text
+          selectable={true}
+          style={{
+            fontSize: 40,
+            lineHeight: 44,
+            fontWeight: "600",
+            letterSpacing: -0.8,
+            fontVariant: ["tabular-nums"],
+            color: colors.ink,
+          }}
+        >
+          {f.percentPoints(points.p50, 1)}
+        </Text>
+      </View>
+      <BandStrip band={span} domainMax={100} tone="violet" />
+      <View style={{ gap: 2 }}>
+        <Beside
+          label={copy.app.mitigate.realisationLow}
+          value={f.percentPoints(points.p10, 1)}
+        />
+        <Beside
+          label={copy.app.mitigate.realisationMedian}
+          value={f.percentPoints(points.p50, 1)}
+        />
+        <Beside
+          label={copy.app.mitigate.realisationHigh}
+          value={f.percentPoints(points.p90, 1)}
+        />
+      </View>
+      <Text style={{ fontSize: 11, lineHeight: 18, color: colors.inkFaint }}>
+        {copy.app.mitigate.avoidedNote}
+      </Text>
+    </View>
+  );
+}
+
+/** A small figure that sits beside a headline without competing with it. */
+function Beside({ label, value }: { label: string; value: string }) {
+  const colors = usePalette();
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "baseline",
+        justifyContent: "space-between",
+        gap: 12,
+      }}
+    >
+      <Text style={{ fontSize: 12, color: colors.inkMuted, flexShrink: 1 }}>{label}</Text>
+      <Text
+        style={{
+          fontSize: 18,
+          fontWeight: "600",
+          fontVariant: ["tabular-nums"],
+          color: colors.ink,
+        }}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+/** A labelled scalar, for the two numbers that make "recovered" honest. */
+function Scalar({ label, value }: { label: string; value: string }) {
+  const colors = usePalette();
+  return (
+    <View style={{ flexGrow: 1, flexBasis: 220, gap: 4 }}>
+      <Text style={{ fontSize: 12, color: colors.inkMuted }}>{label}</Text>
+      <Text
+        style={{
+          fontSize: 26,
+          fontWeight: "600",
+          fontVariant: ["tabular-nums"],
+          color: colors.ink,
+        }}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+/**
+ * A refused scenario, named by its code.
+ *
+ * The reader gets `copy.error[code]` in their own locale. There is no path
+ * here by which the gateway's English developer prose reaches a screen, which
+ * is the half of the i18n rule a fixture-backed screen could otherwise skip.
+ */
+function Refusal({ code, onReset }: { code: keyof Copy["error"]; onReset: () => void }) {
+  const copy = useCopy();
+  const colors = usePalette();
+  return (
+    <View style={{ gap: space.lg }}>
+      <HonestyNote
+        title={copy.app.mitigate.refusalTitle}
+        tone="warning"
+        points={[copy.error[code], copy.app.mitigate.refusalNote]}
+      />
+      <View style={{ flexDirection: "row" }}>
+        <Pill label={copy.app.mitigate.refusalReset} tone="secondary" onPress={onReset} />
+      </View>
+      <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkFaint }}>
+        {copy.app.mitigate.shareNote}
+      </Text>
+    </View>
   );
 }
 

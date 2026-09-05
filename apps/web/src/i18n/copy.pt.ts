@@ -504,11 +504,13 @@ export const pt: Copy = {
 
     dispatch: {
       figure:
-        "Despacho horário: curtailment oferecido, energia absorvida e estado de carga da bateria",
+        "Despacho horário: curtailment oferecido, o que cada ativo está programado para fazer e o estado de carga da bateria",
       offered: "Curtailment oferecido (MWh)",
-      absorbed: "Absorvido (MWh)",
+      batteryCharge: "Bateria carregando (MW)",
+      loadShiftUp: "Carga deslocada para dentro da hora (MW)",
       soc: "SOC da bateria (MWh, eixo direito)",
       discharge: "Descarga (abaixo da linha)",
+      loadShiftDown: "Carga deslocada para fora da hora (abaixo da linha)",
     },
 
     drivers: {
@@ -665,15 +667,36 @@ export const pt: Copy = {
       metaTitle: "Mitigar — WattSteer",
       title: "O que dá para fazer?",
       lede: "{subsystem}, {date}. Armazenamento e demanda flexível dimensionados contra a previsão do dia seguinte.",
-      basisTitle: "Planejar contra",
-      basisMedian: "a previsão mediana (P50)",
-      basisConservative: "uma previsão conservadora (P10)",
-      basisMedianPill: "P50 mediana",
-      basisConservativePill: "P10 conservadora",
-      basisMedianBody:
-        "O plano é ótimo se a mediana se confirmar. Se o dia vier abaixo da P50, os ativos terão se comprometido a carregar com energia que nunca foi cortada — a coluna P10 abaixo é o custo disso.",
-      basisConservativeBody:
-        "O plano é viável contra uma realização pessimista, então a energia recuperada é um piso, não uma mediana. Ele subutiliza a frota de forma sistemática, que é a direção de erro que vale preferir.",
+      // --- flex-optimizer 08: a postura, declarada em vez de oferecida -------
+      postureTitle: "Um plano, uma promessa",
+      postureSubtitle: "Planejado na mediana · prometido na borda inferior",
+      postureRule:
+        "No dia, cada ativo carrega o valor programado ou o que estiver de fato sendo cortado, o que for menor — e descarrega o valor programado ou o que o estado de carga permitir, o que for menor. Os ativos absorvem o que é de fato cortado e nunca mais do que isso.",
+      postureWhy:
+        "Por isso planejar contra a mediana não é o mesmo que supor que a mediana vai se confirmar. Se o dia vier pequeno, os ativos simplesmente absorvem menos, o número abaixo cai e nada é importado da rede. É isso que permite ao plano ser otimista enquanto o número citado permanece conservador — e é por isso que você não precisa escolher um quantil para obter uma resposta.",
+      floorTitle: "O piso",
+      floorLabel: "Energia recuperada na borda inferior",
+      floorSentence:
+        "Este plano recupera {floor} MWh se cada hora ficar na borda inferior da sua faixa de previsão. É esse o número para citar a outra pessoa.",
+      floorMedian: "Na realização mediana",
+      floorHigh: "Na realização alta",
+      floorBesideNote:
+        "Mostrados ao lado do piso e não à frente dele: uma promessa conservadora não deve esconder o potencial, e o potencial não é a promessa.",
+      notJointTitle: "O que o piso não diz",
+      notJointBody:
+        "Um perfil P10 hora a hora não é uma afirmação de 90 % de confiança sobre o dia. O plano é viável contra a borda inferior de cada hora; a probabilidade conjunta de todas as 24 horas ficarem em ou acima da sua própria borda não é 90 %, não é calculada e não é afirmada. Quantis não somam.",
+      deliveredTitle: "Recuperado não é entregue",
+      deliveredSubtitle: "No envelope de planejamento",
+      storedLabel: "Ainda armazenado no fim do horizonte",
+      lossLabel: "Perdido no ciclo completo",
+      deliveredNote:
+        "A energia absorvida é medida na fronteira com a rede: é energia renovável que teria sido desperdiçada e em vez disso entrou em um ativo. O que o ativo entrega depois é menor pela perda de ciclo completo, com parte dela ainda dentro da bateria à meia-noite — não há meta de estado de carga final, porque exigir uma penalizaria a absorção no dia planejado para servir um dia que este horizonte não cobre.",
+      refusalTitle: "Este cenário foi recusado",
+      refusalNote:
+        "A mesma tabela que o gateway aplica antes de construir um modelo, rodando aqui sobre o link com que você chegou. Nada foi corrigido: uma entrada consertada produz um plano para uma frota que você não descreveu, e nada na tela diria isso.",
+      refusalReset: "Recomeçar da frota de referência",
+      shareNote:
+        "A barra de endereços é o cenário. Copie o link e quem receber vê esta frota, este dia e este valor assumido — não há conta, nada é salvo, e o botão voltar e um favorito funcionam como deveriam.",
       steps: {
         no_action: "Sem ação",
         battery: "+ Bateria",
@@ -684,24 +707,27 @@ export const pt: Copy = {
       remaining: "MWh restantes",
       baselineStep: "O dia como previsto, sem nada despachado.",
       stepDelta: "−{delta} MWh em relação ao passo anterior (P50)",
-      recovered: "Energia recuperada",
-      recoveredNote:
-        "Um plano, avaliado contra as três realizações da previsão. O intervalo é da previsão, não do otimizador.",
       avoided: "Curtailment evitado",
+      realisationLow: "Na realização baixa",
+      realisationMedian: "Na realização mediana",
+      realisationHigh: "Na realização alta",
       avoidedNote:
-        "Invertido de propósito: a parcela evitada é menor na realização P90, porque uma frota fixa cobre menos de um evento maior.",
+        "A parcela cai conforme o evento cresce: uma frota fixa cobre menos de um dia maior, então a realização alta fica abaixo da mediana. A realização baixa fica abaixo das duas por outro motivo — um plano não absorve energia que nunca foi cortada, então em um dia pequeno os ativos simplesmente fazem menos. São três parcelas, não um intervalo, e a trilha percorre as três com a mediana marcada.",
       avoidedUndefined:
-        "Indefinido, não zero: sem ativos não há por que dividir. Um zero aqui seria lido como nada poderia ser evitado.",
+        "Indefinido, não zero. Um dia sem nenhuma hora acima do limiar não tem por que dividir, e um zero aqui seria lido como nada poderia ser evitado em vez de não havia nada a evitar.",
       economicTitle: "Cenário econômico (rotulado)",
+      economicRate: "Valor assumido",
       economicNote:
-        "A um valor assumido de {rate}/MWh, na realização P50. Isto é um cenário, não um valor de liquidação, e é o único lugar em que R$ aparece. Nenhuma alegação de carbono decorre disso e nenhuma é feita.",
+        "A um valor assumido de {rate}/MWh, na realização mediana. Isto é um cenário, não um valor de liquidação, e é o único lugar em que R$ aparece. Nenhuma alegação de carbono decorre disso e nenhuma é feita.",
+      economicOnlyMoney:
+        "Mexa nele e só este número se mexe. O otimizador é denominado em energia, nunca em dinheiro, então nada do que ele recomenda depende de um preço que o WattSteer inventou.",
       dispatchTitle: "Despacho",
-      dispatchSubtitle: "{step} · avaliado na realização P50",
+      dispatchSubtitle: "{step} · o plano programado, no envelope de planejamento",
+      dispatchScheduled:
+        "Isto é o que os ativos estão programados para fazer contra a previsão mediana, com o estado de carga da bateria desenhado ao lado. No dia, a regra de execução acima corta as duas pernas, então a trajetória realizada é esta ou menor — nunca maior.",
       batteryTitle: "Bateria",
       loadTitle: "Carga flexível",
       assetSubtitle: "Entrada de cenário, não um inventário",
-      includeBattery: "Incluir bateria",
-      includeLoad: "Incluir carga",
       reset: "Voltar para {power} MW / {energy} MWh + {shift} MW",
       footnote:
         "O ONS não publica cadastro de ativos de flexibilidade, então todo parâmetro acima é uma suposição sua. Mitigar é uma ferramenta hipotética, não um inventário — o cenário é codificado na URL em vez de salvo, então compartilhar é só mandar o link.",
@@ -716,6 +742,7 @@ export const pt: Copy = {
       initialSoc: "Estado de carga inicial",
       batteryNote:
         "Duração de {hours} horas. A eficiência se divide em uma perna de carga e uma de descarga (√RTE cada); a perda entra de forma assimétrica no balanço do estado de carga.",
+      loadConnection: "Limite de conexão (MW)",
       loadShift: "Potência deslocável (MW)",
       loadWindow: "Janela de deslocamento (h)",
       loadDailyEnergy: "Energia diária (MWh)",
