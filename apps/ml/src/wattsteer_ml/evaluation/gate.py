@@ -42,6 +42,11 @@ aggregate of many `Replay`s; what this module reads is *fold evaluation*
   target days and has no parameter that would let it do anything else. Hours
   within a day are strongly dependent, and an hour-wise resample reports a
   confidence the data does not support.
+- **A promotion onto a value the gate could not have seen.** Check 7 refuses a
+  candidate whose serving rows carry an attribute its gate profile withholds —
+  a ``gate_early`` artifact holding a ``programmed_*`` value has been fitted on
+  a number it will not have at 09:00. The refusal is a fault rather than a
+  tolerance, because there is no acceptable amount of it.
 - **A promotion into a changed feature contract.** Check 3 compares the
   candidate's ``feature_hash`` against the hash the *live* ``feature_rows``
   produces right now. When they disagree the incumbent was fitted against the
@@ -81,6 +86,10 @@ from typing import Any, Literal
 
 import numpy as np
 
+from wattsteer_ml.admissibility import (
+    WithheldAtGateError,
+    assert_nothing_withheld_was_seen,
+)
 from wattsteer_ml.artifacts import ARTIFACT_SUFFIX, CARD_SUFFIX
 from wattsteer_ml.canonical import VintageFidelity
 from wattsteer_ml.constants import SUBSYSTEM_CODES, Subsystem
@@ -702,14 +711,27 @@ def serving_smoke(
 ) -> ServingSmoke:
     """Check 7 — a complete band for tomorrow, from the live feature function.
 
-    Four things, and the fourth is why this check exists at all:
+    Five things, and the last two are why this check exists at all:
 
     - a complete twenty-four-hour band for **every** subsystem;
     - no NaN anywhere in the band or the expectation, and every band in order;
     - a day-grain figure for every subsystem, finite and in order, drawn through
       the path ensemble;
     - no feature whose serve-time NULL rate exceeds its training NULL rate by
-      more than :data:`NULL_RATE_DRIFT_CEILING`.
+      more than :data:`NULL_RATE_DRIFT_CEILING`;
+    - **no attribute this lane's gate profile withholds carrying a value**
+      (:func:`~wattsteer_ml.admissibility.assert_nothing_withheld_was_seen`).
+
+    **The fifth is the leak, caught where it is visible.** At ``gate_early`` the
+    ONS day-ahead programme has not been published — it is stamped D−1 15:00
+    BRT, six hours after the 09:00 gate — so every ``programmed_*`` and
+    ``proxy_*`` column of the morning lane's vector must be NULL in tomorrow's
+    real rows. One value in one row means the model is about to be promoted on
+    a number it will not have at 09:00, which is precisely the failure
+    `docs/specs/feature-engineering.md` exists to prevent, and this is the one
+    check that runs against the live feature function at the lane's own gate. It
+    is a **fault** rather than a drift entry: drift is a rate compared against a
+    ceiling, and this one has no tolerance to compare against.
 
     **What the third bullet is not, and why.** `docs/specs/forecaster.md` writes
     that clause as "the ensemble's day total inside the summed band's range",
@@ -777,9 +799,14 @@ def serving_smoke(
                 f"{target_date.isoformat()}, not {HOURS_PER_DAY}"
             )
     faults.extend(_day_total_faults(bundle, rows, counted=counted))
+    serving_rates = null_rates(rows)
+    try:
+        assert_nothing_withheld_was_seen(bundle.lane, serving_rates)
+    except WithheldAtGateError as leak:
+        faults.append(str(leak))
     drifted = tuple(
         NullRateDrift(feature=name, training=training_null_rates[name], serving=rate)
-        for name, rate in sorted(null_rates(rows).items())
+        for name, rate in sorted(serving_rates.items())
         if name in training_null_rates
         and rate - training_null_rates[name] > NULL_RATE_DRIFT_CEILING
     )

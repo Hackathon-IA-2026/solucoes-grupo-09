@@ -7,10 +7,23 @@ whatever each run's window provides before that fold's start."
 
 Two things follow, and this module is both of them.
 
-**The runs differ in exactly three ways.** Feature set, window start and weather
-arm — nothing else, and in particular not the calendar. :class:`MatrixRun` has
-no field for a fold, a date range or a test period, so a run cannot carry a
-private view of what it is scored on.
+**The runs differ in exactly four ways.** Feature set, window start, weather arm
+and gate profile — nothing else, and in particular not the calendar.
+:class:`MatrixRun` has no field for a fold, a date range or a test period, so a
+run cannot carry a private view of what it is scored on.
+
+**The fourth way is not like the other three, and the matrix says so.** A gate
+profile decides which attributes *exist*: `docs/specs/feature-engineering.md`
+fixes the ONS day-ahead programme at D−1 15:00 BRT, six hours after
+``gate_early``'s 09:00, so ``A-full`` and ``A-full-early`` are the same feature
+set over the same window scored on the same rows, and twelve of set A's
+seventy-eight model inputs are structurally NULL in the second — the whole
+``programmed_*`` family and the ``proxy_*`` residual-load family that subtracts
+from it. Forecaster ticket 19 serves both as lanes in their own right, which
+makes ``A-full-early`` a row of this matrix rather than a footnote to one. It is
+the morning view's row and it is **not** a worse-tuned ``A-full``:
+:attr:`MatrixRun.vector` is on every run so that whatever prints two arms' loss
+figures also prints what the second one was not allowed to see.
 
 **Identity is asserted by hash, never by count.** Two runs with the same number
 of test rows can hold different rows: one missing hour and one extra day cancel
@@ -57,9 +70,10 @@ from datetime import date, datetime, timedelta
 from itertools import pairwise
 from typing import Any, Literal
 
+from wattsteer_ml.admissibility import LaneVector, vector_for
 from wattsteer_ml.constants import SUBSYSTEM_CODES, Subsystem
 from wattsteer_ml.evaluation.folds import Fold, FoldCalendar, FoldCalendarError
-from wattsteer_ml.features import BRASILIA, FeatureSet
+from wattsteer_ml.features import BRASILIA, FeatureSet, GateProfile
 
 #: Local hours in a target day. The same twenty-four `feature_rows(...)` builds
 #: its spine from, and the same count
@@ -177,6 +191,26 @@ class MatrixRun:
     #: What this arm exists to isolate, in one line, for the reviewer reading
     #: the matrix rather than the spec.
     isolates: str
+    #: The gate the arm's features are read at. Defaults to ``gate_late``, which
+    #: is where the DESSEM and weather A/Bs are run and the only gate
+    #: ``dessem_augmented_v1`` exists at; ``A-full-early`` is the one arm that
+    #: sets it, and it is a *fourth* difference rather than a variant of the
+    #: other three — the gate decides which attributes exist at all, so two arms
+    #: at two gates are two experiments and not two tunings.
+    gate_profile: GateProfile = "gate_late"
+
+    @property
+    def vector(self) -> LaneVector:
+        """What this arm may see, and what its gate withholds.
+
+        Beside every number the arm produces, because ``A-full`` and
+        ``A-full-early`` are the same feature set, the same window and the same
+        weather arm scored on the same rows — and twelve of set A's model inputs
+        are structurally NULL in the second. A reader handed the two
+        ``qloss_mwh`` figures without this is being invited to read a difference
+        in what the model was allowed to see as a difference in quality.
+        """
+        return vector_for(feature_set=self.feature_set, gate_profile=self.gate_profile)
 
     def decision_grade_folds(self, calendar: FoldCalendar) -> tuple[str, ...]:
         """The folds in which this run's base fit is long enough to decide.
@@ -232,6 +266,17 @@ MATRIX_RUNS: tuple[MatrixRun, ...] = (
         window_start=_FULL_WINDOW_START,
         weather_arm="archive",
         isolates="the size of the weather lead-time leak, evaluated lead-matched",
+    ),
+    MatrixRun(
+        name="A-full-early",
+        feature_set="dessem_free_v1",
+        window_start=_FULL_WINDOW_START,
+        weather_arm="lead_matched",
+        gate_profile="gate_early",
+        isolates=(
+            "the morning view — the same set A with the day-ahead programme and "
+            "the residual-load proxies withheld by the 09:00 gate"
+        ),
     ),
 )
 

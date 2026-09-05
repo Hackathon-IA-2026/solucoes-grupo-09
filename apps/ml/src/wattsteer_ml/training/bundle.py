@@ -75,6 +75,7 @@ from typing import Any
 import joblib
 from lightgbm import Booster
 
+from wattsteer_ml.admissibility import lane_vector
 from wattsteer_ml.artifacts import ARTIFACT_SUFFIX, CARD_SUFFIX
 from wattsteer_ml.constants import SUBSYSTEM_CODES, Subsystem
 from wattsteer_ml.evaluation import Fold, FoldBlocks
@@ -366,6 +367,12 @@ class ModelCard:
                 "threshold_mw": self.lane.threshold_mw,
                 "subsystems": list(SUBSYSTEM_CODES),
                 "directory": self.lane.directory_name,
+                # What this lane's gate profile lets it see, and what it
+                # withholds. On the same document as
+                # `contract.unpopulated_features`, and that is the point: at
+                # `gate_early` those two lists overlap, and only this one says
+                # which of the NULLs are the gate's and will never be filled.
+                "experiment": lane_vector(self.lane).card_fields(),
             },
             "contract": self.contract.card_fields(),
             "fold": {
