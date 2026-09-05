@@ -52,7 +52,7 @@ and never re-derived.
 
 **Blocked by:** 06, 07.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The payload is assembled from the persisted attribution row, the forecast row and the fired rules — nothing is recomputed at request time
 - [ ] Every figure the copy could want is present as a number, `top_two_share` included

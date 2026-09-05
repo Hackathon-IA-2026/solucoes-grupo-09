@@ -26,6 +26,7 @@ export * from "./causality.js";
 export * from "./client.js";
 export * from "./constants.js";
 export * from "./domain.js";
+export * from "./driver-display.js";
 export * from "./errors.js";
 export * from "./format.js";
 export * from "./scenario.js";
