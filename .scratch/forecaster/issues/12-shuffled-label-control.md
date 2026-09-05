@@ -17,7 +17,7 @@ signal cannot be mistaken for a leak.
 
 **Blocked by:** 09.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The control runs the same code path as a real run — no branch that skips
       calibration, conformal or the composition
