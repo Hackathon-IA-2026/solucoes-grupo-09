@@ -59,7 +59,7 @@ what was ticket 017):
 
 **Blocked by:** 13 (merged).
 
-**Status:** implemented on branch `ticket-16-canonical-views`
+**Status:** done (branch `ticket-16-canonical-views` verified merged into `main`; migration 0013 creates the nine views)
 
 - [x] The canonical reads are SQL views, shipped as a migration, owning the row vocabulary
 - [x] `contract/reads.ts` becomes a thin caller over the views; the composing logic and its compensating renames are gone
