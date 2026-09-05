@@ -46,6 +46,13 @@ export {
   type VintageFidelity,
 } from "@wattsteer/core";
 
+/**
+ * The replay contract's own vocabulary. `docs/specs/replay.md` fixes these
+ * names and `packages/core`'s generated types carry them; the fixture adopts
+ * them rather than inventing a parallel spelling.
+ */
+export type { ReplayIntegrity, ReplayIntegrityHeldOutBy } from "@wattsteer/core/api";
+
 import type {
   AttributedDriver,
   Band,
@@ -57,6 +64,7 @@ import type {
   TechnologySplit,
   VintageFidelity,
 } from "@wattsteer/core";
+import type { ReplayIntegrity, ReplayIntegrityHeldOutBy } from "@wattsteer/core/api";
 
 /** `CurtailmentHour`, forecast side: the atom the model predicts. */
 export interface CurtailmentHourForecast {
@@ -354,14 +362,17 @@ export interface ReplayDay {
   /** What the D−1 run said, pinned to the vintage available at D−1. */
   forecast: CurtailmentHourForecast[];
   /**
-   * The day total as a JOINT band — never the componentwise sum of `forecast`.
+   * `forecast.day_total` on the wire — the day's energy as a JOINT band, read
+   * off the payload and never rebuilt from `forecast`.
    *
    * Adding 24 hourly P90s assumes every hour lands at its 90th percentile at
    * once, which describes a day far worse than a 90th-percentile day. The
-   * forecaster produces this from a path ensemble; the fixture reproduces the
-   * sub-additivity so the screens cannot learn the wrong habit.
+   * forecaster produces this from a path ensemble and `docs/specs/replay.md`
+   * puts it on the contract for exactly this reason; the fixture draws it the
+   * same way, so the screens cannot learn the wrong habit.
+   * `test/no-summed-bands.test.ts` is the standing guard.
    */
-  forecastDayEnergy: Band;
+  forecastDayTotal: Band;
   forecastOrigin: ForecastOrigin;
   /** What the reference scenario's dispatch would have absorbed. */
   recoveredMwh: number;
@@ -392,10 +403,31 @@ export interface ReplayDay {
    */
   revisionPremiumRecoveredMwh: number | null;
   /**
-   * Whether the model that produced `forecast` had this period inside its
-   * training window. If it did, the replay is in-sample and is not a
-   * counterfactual — which the screen has to say out loud.
+   * `integrity.provenance` — how the forecast for this day was kept out of
+   * the model that produced it.
+   *
+   * This replaces the prototype's `inTrainingWindow` /`modelTrainedThrough`
+   * pair, which compared the replayed date against the *serving* artifact's
+   * training cut: the right question asked of the wrong artifact.
+   * `docs/specs/replay.md` refuses to label an in-sample day at all — it
+   * refuses to replay it — so no replayable day is in-sample and the badge
+   * stops being a warning and becomes a provenance statement.
+   *
+   * `served` and `fold_holdout` are `replay.md`'s own spellings, adopted
+   * verbatim rather than restated; `packages/core`'s `ReplayIntegrity` is the
+   * generated type they come from.
    */
-  inTrainingWindow: boolean;
-  modelTrainedThrough: string;
+  provenance: ReplayIntegrity["provenance"];
+  /**
+   * `integrity.held_out_by` — the identity of what held this day out, so the
+   * claim is checkable rather than asserted.
+   *
+   * `null` on a `served` day, and that is not an omission: a served forecast
+   * was published before the day it describes, so no fold had to hold it out
+   * and there is no fold id to name. A `fold_holdout` day names its fold, the
+   * artifact and both windows — the training block *and* the calibration
+   * window, because a day inside the calibration window shaped the interval
+   * the replay promises a floor from.
+   */
+  heldOutBy: ReplayIntegrityHeldOutBy | null;
 }

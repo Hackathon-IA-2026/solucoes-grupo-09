@@ -481,8 +481,8 @@ export const en = {
    *
    * The largest copy surface in the product, and the one where getting it
    * wrong costs the most: these screens carry the honesty the whole thing is
-   * built on — the vintage badges, the in-sample replay warning, the risk-class
-   * names, the "quantiles do not add" notes — and a caveat a reader cannot read
+   * built on — the vintage badges, the replay provenance statement, the
+   * risk-class names, the "quantiles do not add" notes — and a caveat a reader cannot read
    * is a caveat that is not there. A Portuguese-speaking grid operator must not
    * get the marketing in Portuguese and the product in English.
    *
@@ -524,6 +524,10 @@ export const en = {
     /** Stamped on every forecast surface — see `components/app/honesty.tsx`. */
     stamp: {
       published: "{producer} · {run} · published {when} BRT",
+      // A second artifact, and therefore a second clause. Appended rather than
+      // folded into `published`, because an origin that is not a WattSteer
+      // forecast has no weather run and must not print an empty one.
+      weatherRun: " · weather run {run}",
       threshold: " · threshold {mw} MW",
     },
 
@@ -938,13 +942,20 @@ export const en = {
       lede: "A past day, replayed against the forecast vintage available at D−1 and scored against what ONS settled.",
       dayLabel: "{date} · {subsystem} {technology}",
       scenarioLabel: "{power} MW / {energy} MWh battery + {shift} MW flexible load",
-      inSample: "IN-SAMPLE",
-      outOfSample: "OUT-OF-SAMPLE",
       honestyTitle: "What this replay is, and what it is not",
-      inSampleNote:
-        "The serving model was trained on data through {through}, which includes this day. Its D−1 forecast here is an in-sample fit, so this is a replay, not a counterfactual: treat the recovered energy as an optimistic upper bound on what the live system would have achieved.",
-      outOfSampleNote:
-        "This day postdates the serving model's training cut ({through}), so the D−1 forecast is genuinely out of sample. This is the closest thing on this screen to a real counterfactual.",
+      // `integrity.provenance` — a statement, not a warning. There is no
+      // IN-SAMPLE label here because there is no in-sample day: a day no
+      // artifact held out is refused rather than labelled, so the badge says
+      // *how* the day was held out and the notes below name the artifact that
+      // held it.
+      provenance: {
+        served: "SERVED",
+        fold_holdout: "FOLD-HOLDOUT",
+      },
+      provenanceServedNote:
+        "The forecast on this screen is the one WattSteer actually published, at {published} — before the day it describes had begun. No version of the model could have seen the day, so this is a counterfactual in the strict sense and not a reconstruction.",
+      provenanceFoldHoldoutNote:
+        "This day falls in walk-forward test fold {fold}, and the forecast comes from that fold's own artifact ({artifact}) — never from the model on serving duty today. That artifact was trained on {trainFrom} – {trainTo} and calibrated on {calibrationFrom} – {calibrationTo}; neither window contains this day, and both are re-checked against the artifact's own record every time the day is read rather than taken on trust.",
       revisionOptimisticNote:
         "This day predates ingestion go-live ({goLive}). ONS rewrites history in place with no version marker, so the actual above is ONS's current restatement of the day, not what was published at the time. Prior vintages are unrecoverable and this can never be repaired retroactively.",
       pointInTimeNote:

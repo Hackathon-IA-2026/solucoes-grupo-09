@@ -3,16 +3,19 @@
  *
  * The pitch wants this screen to close with "612 MWh curtailed, 281 MWh
  * recoverable, ↓45.9%". It can — but only with the labelling in front of the
- * number rather than behind it, because two separate things are wrong with the
- * naive reading and neither is a detail:
+ * number rather than behind it, because two separate things change what the
+ * naive reading means and neither is a detail:
  *
- *  1. **A replay of a period inside the model's training window is not a
- *     counterfactual.** The model has seen that day. Its D−1 "forecast" is an
- *     in-sample fit, and the recovered energy computed from it is an upper
- *     bound on what the live system would have achieved. The fixture
- *     deliberately contains days on both sides of the training cut so the
- *     screen has to distinguish them, and it does — a day inside the window
- *     gets a different, louder note than a day outside it.
+ *  1. **A replay is only a counterfactual if the model never saw the day.**
+ *     `docs/specs/replay.md` settles that by refusing to replay a day no
+ *     artifact held out, rather than by labelling one — a caveat above a
+ *     45.9 % does not stop the 45.9 % from being quoted. So the badge here is
+ *     a *provenance statement*, `SERVED` or `FOLD-HOLDOUT`, naming the
+ *     artifact that produced the forecast and the windows it was fitted on, so
+ *     the claim is checkable rather than asserted. The prototype's `IN-SAMPLE`
+ *     branch compared the replayed date against the *serving* artifact's
+ *     training cut — the right question asked of the wrong artifact — and it
+ *     is deleted rather than left unreachable.
  *  2. **Pre-go-live data is revision-optimistic.** ONS rewrites history in
  *     place; all of 2025 was rewritten in 2026 under the same filenames with
  *     no version marker, and prior vintages are unrecoverable. So for any date
@@ -26,7 +29,6 @@
  */
 
 import {
-  Badge,
   ClockIcon,
   Panel,
   PanelHeader,
@@ -37,7 +39,12 @@ import {
 import Head from "expo-router/head";
 import { Text, View } from "react-native";
 import { AppShell, MiniPill, ScreenTitle } from "@/components/app/app-shell";
-import { ForecastStamp, HonestyNote, VintageBadge } from "@/components/app/honesty";
+import {
+  ForecastStamp,
+  HonestyNote,
+  ProvenanceBadge,
+  VintageBadge,
+} from "@/components/app/honesty";
 import { useAppParams } from "@/components/app/use-app-params";
 import { CompareBars, type CompareRow } from "@/components/charts/compare-bars";
 import { FanChart } from "@/components/charts/fan-chart";
@@ -65,6 +72,41 @@ function dayLabel(day: ReplayDay, copy: Copy, f: Formatters): string {
     date: f.date(day.date),
     subsystem: subsystemMeta(day.episode.subsystem).onsDisplayName,
     technology: copy.app.technology[day.episode.technology].toLowerCase(),
+  });
+}
+
+/**
+ * The provenance sentence: which artifact produced this forecast, and what it
+ * was fitted on.
+ *
+ * Two branches, and neither is a warning. A `served` day's forecast was
+ * published before the day began, which is the strongest statement available
+ * and needs no fold to make it — `heldOutBy` is `null` there, and that is the
+ * contract's own shape rather than a missing value. A `fold_holdout` day names
+ * its fold, the fold's artifact and **both** recorded windows: the training
+ * block and the calibration window, because the calibration window is where
+ * the isotonic fit and the two conformal scalars were fitted, so a day inside
+ * it would have shaped the interval this screen promises a floor from.
+ *
+ * There is no third branch. The prototype had one — `IN-SAMPLE` — and it is
+ * gone rather than disabled: under `docs/specs/replay.md` a day no artifact
+ * held out is refused, so the branch is unreachable by construction and dead
+ * code that says otherwise is a claim the product does not make.
+ */
+function provenanceNote(day: ReplayDay, copy: Copy, f: Formatters): string {
+  if (day.heldOutBy === null) {
+    return fill(copy.app.replay.provenanceServedNote, {
+      published: f.dateTime(day.forecastOrigin.publishedAt),
+    });
+  }
+  const heldOut = day.heldOutBy;
+  return fill(copy.app.replay.provenanceFoldHoldoutNote, {
+    fold: heldOut.fold,
+    artifact: heldOut.artifactId,
+    trainFrom: f.date(heldOut.trainWindow[0]),
+    trainTo: f.date(heldOut.trainWindow[1]),
+    calibrationFrom: f.date(heldOut.calibrationWindow[0]),
+    calibrationTo: f.date(heldOut.calibrationWindow[1]),
   });
 }
 
@@ -123,13 +165,15 @@ export default function TimeMachineScreen() {
   // a single number and drawing it as one beside a measured actual would be
   // exactly the dishonesty this screen exists to avoid.
   //
-  // It is a JOINT day band carried on the fixture, not the componentwise sum
+  // It is `forecast.day_total` read off the payload, not the componentwise sum
   // of the hourly ones. Quantiles are not additive: adding 24 P90s assumes
   // every hour lands at its 90th percentile together, which describes a day
   // far worse than a 90th-percentile day. This screen summed them until
   // `docs/specs/replay.md` caught it; the forecaster emits a path ensemble
-  // precisely so the joint total exists.
-  const forecastBand = day.forecastDayEnergy;
+  // precisely so the joint total exists on the contract, and
+  // `test/no-summed-bands.test.ts` is the standing guard that no web code path
+  // rebuilds it.
+  const forecastBand = day.forecastDayTotal;
 
   const scenarioLabel = fill(copy.app.replay.scenarioLabel, {
     power: f.number(day.scenario.batteryPowerMw),
@@ -198,24 +242,12 @@ export default function TimeMachineScreen() {
           title={copy.app.replay.honestyTitle}
           right={
             <View style={{ flexDirection: "row", gap: 6 }}>
+              <ProvenanceBadge provenance={day.provenance} />
               <VintageBadge fidelity={day.vintageFidelity} />
-              <Badge
-                label={
-                  day.inTrainingWindow
-                    ? copy.app.replay.inSample
-                    : copy.app.replay.outOfSample
-                }
-                tone={day.inTrainingWindow ? "warning" : "accent"}
-              />
             </View>
           }
           points={[
-            fill(
-              day.inTrainingWindow
-                ? copy.app.replay.inSampleNote
-                : copy.app.replay.outOfSampleNote,
-              { through: f.date(day.modelTrainedThrough) },
-            ),
+            provenanceNote(day, copy, f),
             fill(
               day.vintageFidelity === "revision_optimistic"
                 ? copy.app.replay.revisionOptimisticNote
