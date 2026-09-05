@@ -31,7 +31,9 @@ Each of those is imported here and none is restated.
 """
 
 from wattsteer_ml.training.bundle import (
+    CONTRACT_FAULT_KEY,
     ESTIMATOR_FIELDS,
+    GATE_BLOCK_KEY,
     BundleError,
     ContractMismatchError,
     HurdleBundle,
@@ -40,10 +42,13 @@ from wattsteer_ml.training.bundle import (
     PartialBundleError,
     SubThresholdMeans,
     TrainingCounts,
+    contract_fault,
     environment_versions,
     load_artifact,
     new_artifact_id,
+    read_card,
     save_artifact,
+    write_card,
 )
 from wattsteer_ml.training.calibration import (
     MAX_RISK_BIN_GAP,
@@ -159,6 +164,7 @@ from wattsteer_ml.training.national import (
 )
 
 __all__ = [
+    "CONTRACT_FAULT_KEY",
     "CORRECTION_REGIME",
     "COVERAGE_GUARDRAIL",
     "ENSEMBLE_DRAWS",
@@ -166,6 +172,7 @@ __all__ = [
     "ESTIMATOR_FAMILY",
     "ESTIMATOR_FIELDS",
     "FUNCTION_DEFINITION_SQL",
+    "GATE_BLOCK_KEY",
     "KS_CRITICAL_95",
     "KS_FAMILYWISE_LEVEL",
     "LABEL_PREFIX",
@@ -238,6 +245,7 @@ __all__ = [
     "compose_estimates",
     "conformal_rank",
     "conformalise",
+    "contract_fault",
     "day_grain_rows",
     "derive_risk_bins",
     "draw_day_grain",
@@ -261,6 +269,7 @@ __all__ = [
     "partition_rows",
     "pit_column",
     "randomised_pit",
+    "read_card",
     "read_feature_function_definition",
     "residuals",
     "save_artifact",
@@ -268,4 +277,5 @@ __all__ = [
     "train_fold",
     "upper_correction_fraction",
     "wilson_half_width",
+    "write_card",
 ]
