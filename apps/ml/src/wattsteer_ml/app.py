@@ -20,6 +20,7 @@ Routes:
   GET /v1/backtest            the aggregate of many replays, per fold and fidelity
   POST /internal/replay/backtest  worker-only; the nightly aggregate
   GET /v1/model/card          the promoted artifact's card, verbatim, off the volume
+  POST /internal/retrain      worker-only; the weekly retrain, in a child process
 
 There is deliberately **no day-ahead read here**. This service carried a
 `GET /v1/forecast/day-ahead` stub for the gateway to proxy — a typed shape with
@@ -34,7 +35,10 @@ answer.
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
+import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -54,7 +58,7 @@ from .evaluation.folds import FOLD_CALENDAR_RULES
 from .evaluation.holdout import HoldoutLeakError
 from .features import FeatureSet, GateProfile, read_serving_rows, serving_target_date
 from .forecast_reads import served_profile_source
-from .lanes import Lane, LaneNameError
+from .lanes import Lane, LaneNameError, is_artifact_id
 from .optimizer import (
     OptimizerBugError,
     SolverNotOptimalError,
@@ -493,6 +497,145 @@ def _refusal(
     if details:
         body["error"]["details"] = details
     return JSONResponse(status_code=status, content=body)
+
+
+# --- the retrain route --------------------------------------------------------
+#
+# `docs/specs/forecaster.md`, seam 11 — "live, scheduled". The scheduler is the
+# worker's existing BullMQ queue (`apps/api/src/jobs/retrain.ts`), because
+# `docs/specs/data-platform.md` is emphatic that the one thing worse than no
+# scheduler is a second one, and a cron process inside this service would be a
+# second one that double-fires under two replicas.
+#
+# This route does not retrain. It **spawns** `python -m wattsteer_ml.retrain` and
+# waits for its JSON report, and that indirection is the deliverable rather than
+# an implementation detail:
+#
+#   - the ticket asks for peak memory on the card, and a peak RSS read inside
+#     this process is this process's peak — every request it has ever served —
+#     not the retrain's;
+#   - a multi-minute LightGBM fit on the event loop stalls every replay and
+#     every publication the same instance is answering;
+#   - a retrain killed by the container's memory limit takes the child down and
+#     leaves the service answering, which is the difference between a missed
+#     promotion and an outage;
+#   - and `tests/reproduce_fold.py` already records the determinism half of the
+#     same fact: "the weekly retrain is always a second interpreter".
+
+
+#: Run ids currently being retrained by this instance.
+#:
+#: The queue's retry policy is the reason this exists. A retrain outlives most
+#: HTTP client timeouts, so the worker can give up on a call that is still
+#: running here and hand the job back for another attempt; without this, the
+#: second attempt would spawn a second child writing the *same* artifact id in
+#: the same lane directory, and the two would race over one bundle. Refusing the
+#: overlap is the whole repair: the first child finishes, writes its line, and
+#: the retry after it short-circuits on the line rather than on this set.
+#:
+#: In-process, so it holds for one instance. Two ML replicas called for the same
+#: run id would still overlap — which is why the *durable* guard is the promotion
+#: log, and this is the cheap one that covers the case that actually happens.
+_RETRAINING: set[str] = set()
+
+
+class RetrainRequestBody(BaseModel):
+    """One run, named by the instant the schedule fired for it."""
+
+    #: ISO-8601 UTC to the second. It becomes the artifact id in every lane, so
+    #: a redelivered job retrains nothing and appends nothing.
+    run_id: str
+    #: Whether to fit the baseline ladder beside the served model. Only a
+    #: time-boxed rerun sets this false; the schedule does not.
+    ladder: bool = True
+
+
+@app.post("/internal/retrain", tags=["model"])
+async def retrain(request: Annotated[RetrainRequestBody, Body()]) -> JSONResponse:
+    """Run one weekly retrain in a child interpreter and return its report.
+
+    Three refusals, and none of them is a partially-run retrain:
+
+    - a `run_id` that is not an artifact id — `REQUEST_INVALID`, 422, before a
+      process is spawned, because the id is the artifact stem and a malformed
+      one would be discovered only after the fits;
+    - the same run already in flight here — `RETRAIN_IN_PROGRESS`, 409, checked
+      before the database because it is a fact about this instance and a
+      configuration complaint would send an operator to the wrong place;
+    - no database — `DATA_UNAVAILABLE`, 503;
+    - a child that failed — `RETRAIN_FAILED`, 500, carrying its exit code and
+      the tail of its stderr. A retrain that produced no decision at all is a
+      failure of the run; a lane that refused is not, and comes back 200 with
+      its refusal named in the report.
+    """
+    if not is_artifact_id(request.run_id):
+        return _refusal(
+            422,
+            "REQUEST_INVALID",
+            f"{request.run_id!r} is not an artifact id; the run id is the "
+            "scheduled instant as ISO-8601 UTC to the second, and it becomes the "
+            "stem every lane writes under",
+        )
+    if request.run_id in _RETRAINING:
+        return _refusal(
+            409,
+            "RETRAIN_IN_PROGRESS",
+            f"{request.run_id} is already being retrained by this instance; a "
+            "second run of the same id would race the first over one artifact",
+            {"run_id": request.run_id},
+        )
+    if settings.database_url is None:
+        return _refusal(
+            503,
+            "DATA_UNAVAILABLE",
+            "this instance has no database configured, and a retrain is a "
+            "function of feature rows that only Postgres holds",
+        )
+    argv = [
+        sys.executable,
+        "-m",
+        "wattsteer_ml.retrain",
+        "--run-id",
+        request.run_id,
+        "--root",
+        str(settings.artifact_dir),
+    ]
+    if not request.ladder:
+        argv.append("--no-ladder")
+    _RETRAINING.add(request.run_id)
+    try:
+        child = await asyncio.create_subprocess_exec(
+            *argv,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        out, err = await child.communicate()
+    finally:
+        _RETRAINING.discard(request.run_id)
+    if child.returncode != 0:
+        logger.error("retrain %s exited %s: %s", request.run_id, child.returncode, err)
+        return _refusal(
+            500,
+            "RETRAIN_FAILED",
+            f"the retrain process exited {child.returncode}",
+            {
+                "run_id": request.run_id,
+                # The tail, not the whole of it: a LightGBM traceback is long and
+                # this body is read by a job log, not by a debugger.
+                "stderr": err.decode("utf-8", "replace")[-2_000:],
+            },
+        )
+    try:
+        report = json.loads(out.decode("utf-8"))
+    except ValueError:
+        logger.error("retrain %s printed no report", request.run_id)
+        return _refusal(
+            500,
+            "RETRAIN_FAILED",
+            "the retrain process exited cleanly and printed no report",
+            {"run_id": request.run_id},
+        )
+    return JSONResponse(report)
 
 
 def _refused_scenario(

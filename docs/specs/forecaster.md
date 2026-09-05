@@ -1231,6 +1231,23 @@ Postgres, produces a card, reaches a decision, and appends exactly one line.
 Wall-clock and peak memory are recorded so a retrain that starts to outgrow the
 service is visible before it fails.
 
+Built by ticket 15. The schedule is one repeatable job on the worker's existing
+queue — `apps/api/src/jobs/retrain.ts`, `10 3 * * 5` UTC, registered beside the
+two publications and nowhere else — and the run itself is
+`wattsteer_ml.retrain`, spawned as a child interpreter by
+`POST /internal/retrain` so that the peak RSS it records is the retrain's and not
+the service's. **The run id is the artifact id**, which is what makes a retry
+idempotent: a lane already carrying a decision line for the run appends nothing.
+
+Two consequences of the constants above are worth stating where they can be
+read together. Check 4's sixty-test-day floor and the quarterly live edge mean a
+candidate can only be promoted in roughly the last third of each quarter; the
+weekly runs before that write cards and refusals, which is the gate working
+rather than a fault. And "the newest training target date" in check 4 is read as
+the newest target date the *run's data window* reached, not the base fit's last
+day — under a growing live edge those are two months apart, and the rule exists
+to notice that ingestion has stopped. The card records both.
+
 **Acceptance gate.** Default `bun test` / `pytest` pass with no network and no
 database (seams 1–5, 8, 9 are fixture- and synthetic-data-driven). Seams 6, 7,
 10 pass against real Postgres under the existing env-var gating. Seam 11 passes

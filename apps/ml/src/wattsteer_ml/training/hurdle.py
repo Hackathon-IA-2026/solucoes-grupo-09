@@ -126,6 +126,7 @@ from wattsteer_ml.training.calibration import (
     Calibration,
     IsotonicCalibrator,
     OutOfFoldPool,
+    OutOfFoldPrediction,
     RiskBins,
     calibrate,
 )
@@ -354,6 +355,84 @@ def train_fold(
         git_sha_api=git_sha_api,
     )
     return TrainedFold(bundle=bundle, card=card, blocks=blocks, counts=counts)
+
+
+def out_of_fold_occurrence(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    fold: Fold,
+    blocks: FoldBlocks,
+    function_definition: str,
+    config: ModelConfig = MODEL_CONFIG_V1,
+) -> tuple[OutOfFoldPrediction, ...]:
+    """This fold's *uncalibrated* occurrence probabilities on its own test days.
+
+    **The bootstrap for the pooled reliability curve, and only that.**
+    :func:`train_fold` requires an :class:`OutOfFoldPool`, and the pool is
+    assembled from the folds *before* the one being fitted — so the first fold in
+    a walk-forward has nothing to build one from, and a driver that tried to
+    build the pool by calling :func:`train_fold` over the prior folds would need
+    a pool to get a pool. This function is the way out, and it is a small one on
+    purpose.
+
+    The pool carries exactly two numbers per row — a raw occurrence probability
+    and the settled label — so the only estimator it can possibly need is the
+    occurrence booster. Fitting the five magnitude learners for a prior fold
+    would be minutes of work whose output is thrown away. What is *not* cut is
+    the fit itself: this is :func:`train_fold`'s occurrence stage, reached
+    through the same :func:`_fit`, the same params and the same blocks, so the
+    predictions pooled here are the predictions that model made and not a
+    cheaper model's approximation of them.
+
+    ``raw``, not calibrated, because the reliability curve exists to measure how
+    far the raw probability is from the truth; feeding it a calibrated number
+    would produce a curve of the calibrator instead of a curve of the model.
+    :func:`~wattsteer_ml.training.calibration.calibrate` drops whatever falls
+    inside the artifact's own calibration window, so a prior fold that overlaps
+    it does not become a self-portrait.
+
+    Only rows with a **settled label** are pooled: an hour ONS has not yet
+    restated is not an observation, and ``observed=False`` for it would be an
+    invented negative.
+    """
+    stamp = RowStamp.of(rows)
+    base_fit_rows, calibration_rows, test_rows = partition_rows(rows, blocks)
+    if not base_fit_rows:
+        raise TrainingError(
+            f"{fold.id}: the base-fit block {blocks.base_fit_start.isoformat()}–"
+            f"{blocks.base_fit_end.isoformat()} contains no rows"
+        )
+    contract = FeatureContract.of(base_fit_rows, function_definition=function_definition)
+    base_fit = FeatureBlock.of(base_fit_rows, contract, threshold_mw=stamp.threshold_mw)
+    calibration = FeatureBlock.of(
+        calibration_rows, contract, threshold_mw=stamp.threshold_mw
+    )
+    fit_block = base_fit.select(base_fit.labelled)
+    monitor = calibration.select(calibration.labelled)
+    occurrence = _fit(
+        config=config,
+        params=config.params(objective="binary", role="occurrence"),
+        train=fit_block,
+        label=fit_block.positive.astype(np.float64),
+        monitor=monitor,
+        monitor_label=monitor.positive.astype(np.float64),
+    )
+    test = FeatureBlock.of(test_rows, contract, threshold_mw=stamp.threshold_mw)
+    settled = test.select(test.labelled)
+    if not len(settled):
+        return ()
+    raw = np.clip(_predict(occurrence, settled.matrix), 0.0, 1.0)
+    return tuple(
+        OutOfFoldPrediction(
+            fold_id=fold.id,
+            key=key,
+            probability=float(probability),
+            observed=bool(positive),
+        )
+        for key, probability, positive in zip(
+            settled.keys, raw, settled.positive, strict=True
+        )
+    )
 
 
 def forecast_rows(

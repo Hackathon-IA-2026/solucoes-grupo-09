@@ -11,6 +11,13 @@ import {
   type PublishForecastPayload,
   publicationSchedules,
 } from "./publication.js";
+import {
+  createRetrainer,
+  type RetrainerDeps,
+  type RetrainPayload,
+  type RetrainResult,
+  retrainSchedules,
+} from "./retrain.js";
 import type { Execute, JobSchedule } from "./types.js";
 
 /**
@@ -34,12 +41,14 @@ import type { Execute, JobSchedule } from "./types.js";
  */
 export type WorkerTask =
   | QueueTask
-  | { kind: "publish_forecast"; payload: PublishForecastPayload };
+  | { kind: "publish_forecast"; payload: PublishForecastPayload }
+  | { kind: "retrain"; payload: RetrainPayload };
 
 /** What a worker task produced. */
 export type WorkerTaskResult =
   | QueueTaskResult
-  | { kind: "publish_forecast"; result: ForecastPublicationResult };
+  | { kind: "publish_forecast"; result: ForecastPublicationResult }
+  | { kind: "retrain"; result: RetrainResult };
 
 export interface WorkerDispatcherDeps extends IngestDispatcherDeps {
   /**
@@ -48,6 +57,12 @@ export interface WorkerDispatcherDeps extends IngestDispatcherDeps {
    * publication timeout and the system clock.
    */
   publication?: Omit<ForecastPublisherDeps, "db">;
+  /**
+   * Where the modelling service is, and the clock the retrain reads its run id
+   * from. Both optional: the defaults are `config.mlUrl` at the retrain timeout
+   * and the system clock.
+   */
+  retrain?: RetrainerDeps;
 }
 
 /** Build the single handler `worker.ts` registers on the queue. */
@@ -56,10 +71,14 @@ export function createWorkerDispatch(
 ): Execute<WorkerTask, WorkerTaskResult> {
   const ingest = createIngestDispatcher(deps);
   const publish = createForecastPublisher({ db: deps.db, ...deps.publication });
+  const retrain = createRetrainer(deps.retrain);
 
   return async (task, report) => {
     if (task.kind === "publish_forecast") {
       return { kind: "publish_forecast", result: await publish(task.payload, report) };
+    }
+    if (task.kind === "retrain") {
+      return { kind: "retrain", result: await retrain(task.payload, report) };
     }
     return ingest(task, report);
   };
@@ -77,4 +96,18 @@ export function forecastPublicationSchedules(): JobSchedule<WorkerTask>[] {
     kind: "publish_forecast",
     payload,
   }));
+}
+
+/**
+ * The one repeatable retrain, typed for this queue.
+ *
+ * Beside the publication's, for the same reason: the module that knows the cron
+ * pattern does not have to know what else the queue carries. It is a separate
+ * function rather than a second entry in `forecastPublicationSchedules` because
+ * the two are registered under different conditions — the publications need a
+ * modelling service to *ask*, the retrain needs one to *run in*, and the worker
+ * says so about each of them separately.
+ */
+export function retrainScheduleForQueue(): JobSchedule<WorkerTask>[] {
+  return retrainSchedules<WorkerTask>((payload) => ({ kind: "retrain", payload }));
 }
