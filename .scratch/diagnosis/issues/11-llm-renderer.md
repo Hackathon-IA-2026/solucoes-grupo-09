@@ -35,7 +35,7 @@ band's meaning; round nothing.
 
 **Blocked by:** 09, 10.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The Explain narration is generated in the requested locale, with no translation layer and no round trip
 - [ ] The assembled request carries no tools, declared as none

@@ -16,7 +16,12 @@
  * and it emits `t()` keys with their values rather than a paragraph, so the
  * decimal separator stays the reader's; `narration-validator.ts` is the three
  * mechanical gates every *generated* paragraph passes before anyone sees it,
- * and the one retry and fall-back-to-template that a failure buys.
+ * and the one retry and fall-back-to-template that a failure buys;
+ * `narration-prompt.ts` is the standing instruction the model is given, held as
+ * a constant so the cached system block is byte-identical on every request; and
+ * `narration-client.ts` assembles the call itself — no tools, one user turn, a
+ * one-field output schema — and composes the gate, the validator and the
+ * template into the one decision the endpoint asks for.
  * Nothing in here computes an attribution, and
  * nothing in here calls the modelling service — the scheduled `publish-diagnosis`
  * job and the worker's private call into `POST /internal/publish/diagnosis` are
@@ -34,6 +39,21 @@ export {
   narrationCacheKey,
   narrationPayloadDigest,
 } from "./narration-canonical.js";
+export {
+  type DiagnosisNarrationSources,
+  NARRATION_EFFORT,
+  NARRATION_MAX_TOKENS,
+  NARRATION_MODEL_ID,
+  type NarrationCallSources,
+  type NarrationMessages,
+  NarrationModelError,
+  type NarrationRequestParts,
+  narrationAttempt,
+  narrationRequest,
+  narrationText,
+  type RenderedDiagnosisNarration,
+  renderDiagnosisNarration,
+} from "./narration-client.js";
 export {
   type NarrationDecision,
   type NarrationRenderers,
@@ -55,6 +75,15 @@ export {
   observedReasonsFromFlags,
   toNarrationDocument,
 } from "./narration-payload.js";
+export {
+  COMPLAINT_BLOCK_KEY,
+  DOCUMENT_BLOCK_KEY,
+  LOCALE_BLOCK_KEY,
+  NARRATION_OUTPUT_FIELD,
+  NARRATION_OUTPUT_SCHEMA,
+  NARRATION_PROMPT_VERSION,
+  NARRATION_SYSTEM_PROMPT,
+} from "./narration-prompt.js";
 export {
   NarrationTemplateError,
   narrationClauses,

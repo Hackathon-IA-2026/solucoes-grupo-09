@@ -17,6 +17,7 @@
     "test:redis": "WATTSTEER_TEST_REDIS_URL=redis://localhost:6390 REDIS_URL= DATABASE_URL= bun test test/bullmq.test.ts test/rate-limit-redis.test.ts",
     "test:live": "WATTSTEER_LIVE_CONFORMANCE=1 REDIS_URL= DATABASE_URL= bun test test/live-conformance.test.ts",
     "test:lag": "WATTSTEER_PUBLICATION_LAG_CONFORMANCE=1 REDIS_URL= DATABASE_URL= bun test test/publication-lag-conformance.test.ts",
+    "test:narration": "WATTSTEER_NARRATION_LIVE=1 REDIS_URL= DATABASE_URL= bun test test/diagnosis-narration-live.test.ts",
     "test:db": "DATABASE_URL=postgres://postgres:wattsteer@localhost:5434/wattsteer bun run db:migrate && WATTSTEER_TEST_DATABASE_URL=postgres://postgres:wattsteer@localhost:5434/wattsteer TEST_DATABASE_URL=postgres://postgres:wattsteer@localhost:5434/wattsteer DATABASE_URL= REDIS_URL= bun test test",
     "docker:build": "docker build -f Dockerfile -t wattsteer-api:latest ../..",
     "docker:run": "docker run --rm -p 3000:3000 wattsteer-api:latest",
@@ -29,6 +30,7 @@
     "@sinclair/typebox": "0.34.49"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.124.0",
     "@elysiajs/cors": "^1.4.2",
     "@elysiajs/server-timing": "^1.4.1",
     "@elysiajs/swagger": "^1.3.1",
