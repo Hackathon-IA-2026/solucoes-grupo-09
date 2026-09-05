@@ -551,14 +551,28 @@ def test_the_replay_package_writes_down_no_date_at_all() -> None:
     not make the test pass or fail.
     """
     import ast
+    import importlib
+    import pkgutil
 
-    for module in (
-        calendar_module,
-        cards_module,
-        reads_module,
-        scoring_module,
-        result_module,
-    ):
+    # Enumerated rather than listed, so a module added to the package — the
+    # premium measurement was one — cannot join it without inheriting the
+    # property. A name written into a tuple here would make the guarantee
+    # about the tuple rather than about the package.
+    modules = [
+        importlib.import_module(f"{replay_package.__name__}.{info.name}")
+        for info in pkgutil.iter_modules(replay_package.__path__)
+    ]
+    assert {module.__name__ for module in modules} >= {
+        one.__name__
+        for one in (
+            calendar_module,
+            cards_module,
+            reads_module,
+            scoring_module,
+            result_module,
+        )
+    }
+    for module in modules:
         tree = ast.parse(inspect.getsource(module))
         for node in ast.walk(tree):
             if isinstance(node, ast.Constant) and isinstance(node.value, str):

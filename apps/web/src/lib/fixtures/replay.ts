@@ -27,6 +27,26 @@ export const INGESTION_GO_LIVE = "2026-07-01";
 /** The artifact on serving duty was trained on data up to this date. */
 export const MODEL_TRAINED_THROUGH = "2026-05-31";
 
+/**
+ * What a `revision_optimistic` replay's caveat actually touches, and what it
+ * does not — `integrity.vintage_affects` / `integrity.vintage_exempt` on the
+ * wire.
+ *
+ * Two lists rather than one sentence, because the caveat is *proportionate*: a
+ * weather row carries the run initialisation as its `published_at`, so the D−1
+ * 12Z run the replay planned against is that run on both sides of go-live, and
+ * DESSEM and the ONS programming are cut the same way. What is affected is the
+ * label the day is scored against and the lagged-actual features — the right
+ * hours with possibly the wrong values.
+ *
+ * They are the response's, not the screen's. `packages/core/fixtures/spec-
+ * examples/12-replay.json` is the published example and the fixture test
+ * asserts these against it, so a list edited in one place fails rather than
+ * leaving the screen naming parts the service does not.
+ */
+export const VINTAGE_AFFECTS = ["settled_actuals", "lagged_actual_features"] as const;
+export const VINTAGE_EXEMPT = ["weather_run", "dessem", "ons_programming"] as const;
+
 interface DaySpec {
   id: string;
   date: string;
@@ -78,6 +98,24 @@ const DAYS: DaySpec[] = [
     bias: 1.14,
     spread: 0.29,
     recoveredShare: 0.318,
+  },
+  {
+    // The day the two honesty axes disagree, and the reason they are two
+    // fields. It postdates the serving model's training cut, so the D−1
+    // forecast is genuinely out of sample — and it predates ingestion go-live,
+    // so the actual it is scored against is ONS's later restatement. A merged
+    // badge would have to call this day one thing or the other, and both
+    // answers would be wrong.
+    id: "2026-06-18-ne-wind",
+    date: "2026-06-18",
+    subsystem: "NE",
+    technology: "WIND",
+    startHour: 2,
+    endHour: 10,
+    peakMw: 164,
+    bias: 1.05,
+    spread: 0.31,
+    recoveredShare: 0.372,
   },
   {
     id: "2026-08-11-ne-wind",
@@ -189,6 +227,13 @@ function buildDay(spec: DaySpec, index: number): ReplayDay {
     recoveredMwh: Math.round(total * spec.recoveredShare),
     scenario: REFERENCE_SCENARIO,
     vintageFidelity: isPointInTime ? "point_in_time" : "revision_optimistic",
+    vintageAffects: VINTAGE_AFFECTS,
+    vintageExempt: VINTAGE_EXEMPT,
+    // `null`, on every day, and it is not an oversight: the premium is a mean
+    // over post-go-live days held in two vintages, and ONS has not yet restated
+    // one of those. The screen renders it as **unmeasured** rather than as a
+    // small number, which is what the whole field exists to keep possible.
+    revisionPremiumRecoveredMwh: null,
     inTrainingWindow: spec.date <= MODEL_TRAINED_THROUGH,
     modelTrainedThrough: MODEL_TRAINED_THROUGH,
   };

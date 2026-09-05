@@ -13,6 +13,7 @@
       "train_window": ["2024-04-01", "2025-06-30"],
       "calibration_window": ["2025-07-02", "2025-09-30"]
     },
+    "vintage_fidelity": "revision_optimistic",
     "vintage_affects": ["settled_actuals", "lagged_actual_features"],
     "vintage_exempt": ["weather_run", "dessem", "ons_programming"],
     "revision_premium_recovered_mwh": null

@@ -109,7 +109,7 @@
   "$defs": {
     "integrity": {
       "title": "ReplayIntegrity",
-      "description": "Asserted at read time, never computed hopefully. `revision_premium_recovered_mwh` is `null` when unmeasured, and says so, rather than standing in as a zero.",
+      "description": "Asserted at read time, never computed hopefully. `provenance` and `vintage_fidelity` are two axes and neither is derived from the other: the first is the model's information set, the second is the data's. `revision_premium_recovered_mwh` is `null` when unmeasured, and says so, rather than standing in as a zero.",
       "type": "object",
       "properties": {
         "provenance": { "type": "string", "enum": ["served", "fold_holdout"] },
@@ -130,6 +130,10 @@
             }
           ]
         },
+        "vintage_fidelity": {
+          "$ref": "common.schema.json#/$defs/vintage_fidelity",
+          "description": "The same verdict the top-level field carries, beside `provenance` so the two honesty axes are read against each other. One value, one source: the day's position relative to the go-live of the reads its actuals depend on. Today every `fold_holdout` day is also `revision_optimistic`, which is exactly why a merged badge is refused."
+        },
         "vintage_affects": { "type": "array", "items": { "type": "string" } },
         "vintage_exempt": { "type": "array", "items": { "type": "string" } },
         "revision_premium_recovered_mwh": { "type": ["number", "null"] }
@@ -138,6 +142,7 @@
         "provenance",
         "model_saw_this_day",
         "held_out_by",
+        "vintage_fidelity",
         "vintage_affects",
         "vintage_exempt",
         "revision_premium_recovered_mwh"

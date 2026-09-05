@@ -51,6 +51,9 @@ import {
   subsystemMeta,
 } from "@/lib/fixtures";
 
+/** The parts the caveat's two lists are drawn from, as the copy map spells them. */
+type VintagePart = keyof Copy["app"]["replay"]["vintagePart"];
+
 /**
  * A replayed day's name: the date in the reader's convention, then the ONS
  * subsystem and the technology. It used to be the stored string
@@ -63,6 +66,42 @@ function dayLabel(day: ReplayDay, copy: Copy, f: Formatters): string {
     subsystem: subsystemMeta(day.episode.subsystem).onsDisplayName,
     technology: copy.app.technology[day.episode.technology].toLowerCase(),
   });
+}
+
+/**
+ * The two sentences a `revision_optimistic` day owes a reader: *what* the
+ * caveat touches, and *how big* it is.
+ *
+ * Both are read off the day rather than written here. The parts come from the
+ * response's `vintageAffects` / `vintageExempt` and this function only spells
+ * them, so a part the service stops claiming stops being named on screen; and
+ * the size is `revisionPremiumRecoveredMwh`, which is `null` until ONS has
+ * restated days held in both vintages. `null` renders as the word
+ * **unmeasured** — never as a zero, and never as silence, because a caveat
+ * whose size is not stated reads as a caveat that is small.
+ *
+ * Nothing is emitted for a `point_in_time` day: there is no restatement to
+ * bound, and a sentence saying so would make the honest case look qualified.
+ */
+function vintageExtent(day: ReplayDay, copy: Copy): string[] {
+  if (day.vintageFidelity !== "revision_optimistic") {
+    return [];
+  }
+  const spell = (parts: readonly string[]): string =>
+    parts
+      .map((part) => copy.app.replay.vintagePart[part as VintagePart] ?? part)
+      .join(", ");
+  return [
+    fill(copy.app.replay.vintageExtentNote, {
+      affects: spell(day.vintageAffects),
+      exempt: spell(day.vintageExempt),
+    }),
+    day.revisionPremiumRecoveredMwh === null
+      ? copy.app.replay.revisionPremiumUnmeasured
+      : fill(copy.app.replay.revisionPremiumMeasured, {
+          mwh: day.revisionPremiumRecoveredMwh,
+        }),
+  ];
 }
 
 export default function TimeMachineScreen() {
@@ -183,6 +222,7 @@ export default function TimeMachineScreen() {
                 : copy.app.replay.pointInTimeNote,
               { goLive: f.date(INGESTION_GO_LIVE) },
             ),
+            ...vintageExtent(day, copy),
             copy.app.replay.scenarioNote,
             copy.app.replay.claimsNote,
           ]}

@@ -1399,7 +1399,9 @@ export interface Replay {
 }
 
 /**
- * Asserted at read time, never computed hopefully.
+ * Asserted at read time, never computed hopefully. `provenance` and
+ * `vintage_fidelity` are two axes and neither is derived from the other: the
+ * first is the model's information set, the second is the data's.
  * `revision_premium_recovered_mwh` is `null` when unmeasured, and says so,
  * rather than standing in as a zero.
  */
@@ -1407,6 +1409,14 @@ export interface ReplayIntegrity {
   provenance: "served" | "fold_holdout";
   modelSawThisDay: boolean;
   heldOutBy: ReplayIntegrityHeldOutBy | null;
+  /**
+   * The same verdict the top-level field carries, beside `provenance` so the two
+   * honesty axes are read against each other. One value, one source: the day's
+   * position relative to the go-live of the reads its actuals depend on. Today
+   * every `fold_holdout` day is also `revision_optimistic`, which is exactly why
+   * a merged badge is refused.
+   */
+  vintageFidelity: VintageFidelity;
   vintageAffects: string[];
   vintageExempt: string[];
   revisionPremiumRecoveredMwh: number | null;
@@ -2252,6 +2262,7 @@ export const WIRE_SHAPES = {
     provenance: { wire: "provenance" },
     modelSawThisDay: { wire: "model_saw_this_day" },
     heldOutBy: { wire: "held_out_by", shape: "ReplayIntegrityHeldOutBy" },
+    vintageFidelity: { wire: "vintage_fidelity" },
     vintageAffects: { wire: "vintage_affects" },
     vintageExempt: { wire: "vintage_exempt" },
     revisionPremiumRecoveredMwh: { wire: "revision_premium_recovered_mwh" },

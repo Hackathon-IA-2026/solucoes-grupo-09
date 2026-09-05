@@ -284,6 +284,20 @@ partition every date in range:
 | 2025-04-01 → 2026-06-30 (F1–F5) | yes | `fold_holdout` | `revision_optimistic` |
 | 2026-07-01 → yesterday (F6+, post-go-live) | yes | `served` | `point_in_time` |
 
+**This table is derived, and deliberately not asserted.** It is what falls out
+of the two constants *at today's values* — nothing in the code reproduces it,
+and no test pins it. The third column comes from `canonical_read_go_live` for
+the reads a replayed day's actuals depend on, combined by the weakest-link rule,
+so if a second such read goes live later the boundary moves and the third row
+above starts a day later than it says. That is the intended posture, and it
+matches `forecaster.md`, which treats `T_go` and the fold calendar as
+independent and specifies the straddling fold precisely because they may not
+coincide. A conformance test against this table would have to name 2026-07-01
+somewhere, which would turn a deployment fact into a modelling constant and
+would fail on the change — a read joining the list — that ought to be data. The
+cost is accepted and stated here rather than left for a reader to discover: when
+the boundary moves, **this table goes stale silently and the product does not**.
+
 The pre-F1 year is a real loss — it is a third of the window and it contains
 notable events — and the loss is accepted rather than papered over. What is
 offered for those days is an **observed-only view**: the settled profile, the
@@ -706,6 +720,11 @@ existing.
       "train_window": ["2024-04-01", "2025-06-30"],
       "calibration_window": ["2025-07-02", "2025-09-30"]
     },
+    // Beside `provenance`, and derived from neither it nor the fold calendar:
+    // the day's position relative to the go-live of the reads its actuals
+    // depend on. Repeated at the top level, where the name is shared with
+    // `OptimizationResult`; one value, one source, two places a reader looks.
+    "vintage_fidelity": "revision_optimistic",
     "vintage_affects": ["settled_actuals", "lagged_actual_features"],
     "vintage_exempt": ["weather_run", "dessem", "ons_programming"],
     "revision_premium_recovered_mwh": null   // null ⇒ unmeasured, and said so

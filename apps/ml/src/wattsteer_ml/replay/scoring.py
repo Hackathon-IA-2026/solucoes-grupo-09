@@ -453,7 +453,7 @@ class ReplayScores:
         makes planning on the actuals — the single most flattering thing a
         replay could do — a raise instead of a silently better percentage.
         """
-        if not _same_profile(self.plan.offered_mwh, self.forecast.p50_mwh):
+        if not same_profile(self.plan.offered_mwh, self.forecast.p50_mwh):
             raise ReplayPostureError(
                 f"{self.day.target_date.isoformat()}: the plan being scored was "
                 "built on a profile that is not the pinned P50. A replay plans "
@@ -471,7 +471,7 @@ class ReplayScores:
             (SCORED_ON, self.observed_scoring, self.observed.hours),
         ):
             offered = tuple(hour.offered_mwh for hour in scoring.hours)
-            if not _same_profile(offered, realisation):
+            if not same_profile(offered, realisation):
                 raise ReplayPostureError(
                     f"the {name!r} column was scored against a realisation that "
                     f"is not {name!r}; the four realisations are one plan "
@@ -786,7 +786,7 @@ def _hindsight_plan(
     larger than that means the plan and the simulator disagree, which is the one
     bug this architecture is arranged to surface.
     """
-    if not _same_profile(profile.p50_mwh, observed.hours):
+    if not same_profile(profile.p50_mwh, observed.hours):
         raise ReplayPostureError(
             f"{observed.target_date.isoformat()}: a perfect-foresight bound is "
             "the day itself, planned against — a solve on any other profile is "
@@ -818,7 +818,14 @@ def _hindsight_plan(
     )
 
 
-def _same_profile(left: Sequence[float], right: Sequence[float]) -> bool:
+def same_profile(left: Sequence[float], right: Sequence[float]) -> bool:
+    """Two hourly profiles equal within the simulator's own MWh tolerance.
+
+    Public because :mod:`wattsteer_ml.replay.premium` asks the same question of
+    two vintages of one day, and a second implementation of "the same profile"
+    is exactly how two modules come to disagree about whether ONS restated a
+    day.
+    """
     return len(left) == len(right) and all(
         abs(one - other) <= TOLERANCE_MWH for one, other in zip(left, right, strict=True)
     )
@@ -837,6 +844,7 @@ __all__ = [
     "ReplayPostureError",
     "ReplayScores",
     "plan_at_the_gate",
+    "same_profile",
     "score_observed_only",
     "score_replay",
 ]
