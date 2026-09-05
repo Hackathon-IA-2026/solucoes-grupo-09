@@ -23,7 +23,7 @@ screen change and is part of this ticket.
 lane states; this ticket exposes a subset of it and decides nothing about what is
 in it.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] One request returns the product-facing card subset for a named lane
 - [ ] The reliability window and its vintage fidelity are on the response and nothing averages across fidelity

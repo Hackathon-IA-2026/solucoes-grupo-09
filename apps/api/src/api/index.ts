@@ -10,6 +10,7 @@ import { forecastRoutes } from "./forecast.js";
 import { gridRoutes } from "./grid.js";
 import { ingestHealth } from "./ingest-health.js";
 import { metaRoutes } from "./meta.js";
+import { modelCardRoutes } from "./model-card.js";
 import { optimizeCache, optimizeRoutes } from "./optimize.js";
 import { plantRoutes } from "./plants.js";
 import {
@@ -134,6 +135,7 @@ export const app = new Elysia()
   .use(plantRoutes)
   .use(optimizeRoutes)
   .use(replayRoutes)
+  .use(modelCardRoutes)
   .use(metaRoutes);
 
 // Opt-in BullMQ dashboard at /jobs (requires Redis). Protect it in production.
@@ -176,6 +178,9 @@ if (import.meta.main) {
     );
     console.log(
       "   • GET /v1/replay/days   — which days are replayable, and why the rest are not",
+    );
+    console.log(
+      "   • GET /v1/model/card    — the reliability curve and the band's coverage, per tail",
     );
     console.log("🔒 Security:");
     console.log("   • Content-Security-Policy (relaxed for /docs)");

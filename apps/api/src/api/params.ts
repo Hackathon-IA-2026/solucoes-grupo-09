@@ -106,6 +106,32 @@ export function civilDayWindow(label: string, raw: string): ObservedRange {
   return { from: day.start, to: new Date(day.start.getTime() + day.minutes * 60_000) };
 }
 
+/**
+ * The lane's directory name, checked for shape before a network hop.
+ *
+ * `dessem_free_v1__gate_late__thr5` — a feature set, a gate profile and a
+ * threshold, in one identifier rather than three loose fields that could
+ * disagree. The modelling service owns which lanes *exist* and refuses an
+ * unknown one; what is refused here is a string that is not a lane name at all,
+ * for the reason `replay.ts` refuses a malformed date rather than forwarding
+ * it: "this is not a lane name" and "no artifact is promoted in that lane" are
+ * two different sentences, and answering the first with the second would tell a
+ * caller the model is missing when what is missing is a well-formed request.
+ *
+ * Never defaulted. Post-go-live the forecaster serves two lanes, and a default
+ * here would answer a question about a model the caller did not ask about.
+ */
+const LANE_NAME = /^[a-z0-9_]+__gate_(early|late)__thr\d+$/;
+
+export function laneName(label: string, raw: string): string {
+  if (!LANE_NAME.test(raw)) {
+    throw new BadInputError(
+      `${label} must be an artifact lane, e.g. dessem_free_v1__gate_late__thr5, got "${raw}"`,
+    );
+  }
+  return raw;
+}
+
 /** Parse a positive number, refusing junk and zero rather than defaulting. */
 export function positiveNumber(label: string, raw: string): number {
   const parsed = Number(raw);

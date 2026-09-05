@@ -1,0 +1,527 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wattsteer.com/schema/model-card.schema.json",
+  "title": "ModelCard",
+  "description": "`GET /v1/model/card` - the Explain screen's second call. Model metadata and never a day's answer: the reliability curve is a property of the *model*, so folding it into the per-day payload would give a weekly-changing object a daily cache key. This is the **product-facing subset** of the artifact card; `card_url` points at the whole document. Every field forwarded from the card keeps the card's own spelling, because the forecaster owns that vocabulary and a rename here is where two vocabularies start.",
+  "type": "object",
+  "properties": {
+    "lane": { "$ref": "#/$defs/lane_name" },
+    "lane_state": {
+      "description": "Always `promoted` on a 200. The other three states are not a card with empty groups - they are a `MODEL_UNAVAILABLE` carrying `details.lane_state`.",
+      "type": "string",
+      "const": "promoted"
+    },
+    "artifact": { "$ref": "#/$defs/card_artifact" },
+    "fold": { "$ref": "#/$defs/card_fold" },
+    "windows": { "$ref": "#/$defs/card_windows" },
+    "reliability": { "$ref": "#/$defs/reliability" },
+    "risk_bins": { "$ref": "common.schema.json#/$defs/risk_bins" },
+    "band": { "$ref": "#/$defs/band_calibration" },
+    "ensemble": { "$ref": "#/$defs/ensemble_summary" },
+    "metrics": {
+      "description": "The headline metrics table, one row per fold and per rung of the baseline ladder. `null` when the card carries no Metrics group - which is \"not measured yet\", and is why `metrics_absent_reason` is required beside it rather than an empty array standing in for a table nobody ran.",
+      "oneOf": [
+        { "type": "null" },
+        { "type": "array", "items": { "$ref": "#/$defs/metrics_row" } }
+      ]
+    },
+    "metrics_absent_reason": {
+      "description": "Why the metrics table is `null`. English prose for a developer and an auditor, in the same status as an error `message`: never rendered to a user.",
+      "type": ["string", "null"]
+    },
+    "decision": {
+      "description": "The hot-swap gate's Decision group - what it decided about this artifact and why. `null` on a card written before a gate ran over it.",
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/gate_decision" }]
+    },
+    "card_url": {
+      "description": "Where the raw `*.card.json` is served, for anyone auditing. A path relative to this API's own origin, because the API has no reliable knowledge of the origin a client reached it through.",
+      "type": "string",
+      "pattern": "^/v1/model/card/raw\\?"
+    }
+  },
+  "required": [
+    "lane",
+    "lane_state",
+    "artifact",
+    "fold",
+    "windows",
+    "reliability",
+    "risk_bins",
+    "band",
+    "ensemble",
+    "metrics",
+    "metrics_absent_reason",
+    "decision",
+    "card_url"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "lane_name": {
+      "title": "LaneName",
+      "description": "The artifact lane's directory name - `dessem_free_v1__gate_late__thr5`. The addressable unit a forecast is served from: a feature set, a gate profile and a threshold, in one identifier rather than three loose fields that could disagree.",
+      "type": "string",
+      "pattern": "^[a-z0-9_]+__gate_(early|late)__thr\\d+$"
+    },
+    "card_window": {
+      "title": "CardWindow",
+      "description": "A closed interval of Brasilia civil dates, both ends inclusive, exactly as the card records it.",
+      "type": "object",
+      "properties": {
+        "start": { "$ref": "common.schema.json#/$defs/civil_date" },
+        "end": { "$ref": "common.schema.json#/$defs/civil_date" }
+      },
+      "required": ["start", "end"],
+      "additionalProperties": false
+    },
+    "card_artifact": {
+      "title": "CardArtifact",
+      "description": "The lane's identity and the artifact's. `feature_hash` is the whole feature contract in one value: the names, the dtypes and the categorical levels are on the raw card and are not on this wire, because a client that needs them is auditing rather than rendering.",
+      "type": "object",
+      "properties": {
+        "artifact_id": {
+          "description": "The bundle's stem, which is an ISO-8601 UTC instant. This is also the `run_label` a `wattsteer` `ForecastOrigin` carries, and the response's own ETag.",
+          "$ref": "common.schema.json#/$defs/utc_instant"
+        },
+        "created_at": { "$ref": "common.schema.json#/$defs/utc_instant" },
+        "estimator_family": { "type": "string" },
+        "model_config_version": { "type": "string" },
+        "feature_set": { "type": "string" },
+        "feature_set_version": {
+          "description": "`null` until the feature dictionary publishes one. An explicit null rather than a string nobody minted: a card claiming a version that was never issued is worse than one saying the version is unknown.",
+          "type": ["string", "null"]
+        },
+        "gate_profile": { "$ref": "common.schema.json#/$defs/gate_profile" },
+        "threshold_mw": { "$ref": "common.schema.json#/$defs/threshold_mw" },
+        "feature_hash": { "type": "string" },
+        "git_sha_ml": { "type": ["string", "null"] },
+        "git_sha_api": { "type": ["string", "null"] }
+      },
+      "required": [
+        "artifact_id",
+        "created_at",
+        "estimator_family",
+        "model_config_version",
+        "feature_set",
+        "feature_set_version",
+        "gate_profile",
+        "threshold_mw",
+        "feature_hash",
+        "git_sha_ml",
+        "git_sha_api"
+      ],
+      "additionalProperties": false
+    },
+    "card_fold": {
+      "title": "CardFold",
+      "description": "Which fold of the walk-forward calendar this artifact was trained and scored on, and the two hashes that make the fold reproducible.",
+      "type": "object",
+      "properties": {
+        "fold_id": { "type": "string" },
+        "fold_hash": { "type": "string" },
+        "rules_digest": { "type": "string" }
+      },
+      "required": ["fold_id", "fold_hash", "rules_digest"],
+      "additionalProperties": false
+    },
+    "card_windows": {
+      "title": "CardWindows",
+      "description": "What the artifact saw, and when. The calibration window is carved out of the training block, so the two overlap by construction and are published separately anyway - Replay asserts a held-out day against **both**, and a check against one is a weaker check.",
+      "type": "object",
+      "properties": {
+        "training": { "$ref": "#/$defs/card_window" },
+        "base_fit": { "$ref": "#/$defs/card_window" },
+        "calibration": { "$ref": "#/$defs/card_window" },
+        "test": { "$ref": "#/$defs/card_window" },
+        "rows_by_vintage_fidelity": {
+          "description": "Training rows counted per `VintageFidelity`, never averaged across it (vocabulary rule 9). A fold spanning ingestion go-live is two numbers, because their mean describes no fold.",
+          "type": "object",
+          "propertyNames": { "$ref": "common.schema.json#/$defs/vintage_fidelity" },
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "required": [
+        "training",
+        "base_fit",
+        "calibration",
+        "test",
+        "rows_by_vintage_fidelity"
+      ],
+      "additionalProperties": false
+    },
+    "reliability_point": {
+      "title": "ReliabilityPoint",
+      "description": "One bin of the curve. `mean_predicted` and not the bin centre: after a merge a bin can be 0.2 wide, and the gap that matters is between what was *said* and what happened. `merged` is on the point so a wide bin is visibly a merged one rather than an oddly shaped chart.",
+      "type": "object",
+      "properties": {
+        "bin_lower": { "$ref": "common.schema.json#/$defs/probability" },
+        "bin_upper": { "$ref": "common.schema.json#/$defs/probability" },
+        "bin_centre": { "$ref": "common.schema.json#/$defs/probability" },
+        "mean_predicted": { "$ref": "common.schema.json#/$defs/probability" },
+        "observed_frequency": { "$ref": "common.schema.json#/$defs/probability" },
+        "hour_count": { "type": "integer", "minimum": 1 },
+        "merged": { "type": "boolean" }
+      },
+      "required": [
+        "bin_lower",
+        "bin_upper",
+        "bin_centre",
+        "mean_predicted",
+        "observed_frequency",
+        "hour_count",
+        "merged"
+      ],
+      "additionalProperties": false
+    },
+    "reliability": {
+      "title": "Reliability",
+      "description": "The calibration curve and the three scalars read off it, with the window and the vintage fidelity they are true over. The fidelity is one value and never a mix: a pooled curve that spanned ingestion go-live would be `revision_optimistic` with no way to say how much of it was, so the pool is refused rather than labelled.",
+      "type": "object",
+      "properties": {
+        "points": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/reliability_point" }
+        },
+        "sample_hours": {
+          "description": "Hours behind the whole curve. Equal to the sum of the points' `hour_count` by construction.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "window": { "$ref": "#/$defs/card_window" },
+        "vintage_fidelity": { "$ref": "common.schema.json#/$defs/vintage_fidelity" },
+        "folds": {
+          "description": "The folds whose out-of-fold predictions were pooled. A curve that cannot say which folds it pooled is a curve nobody can reproduce.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "excluded_calibration_hours": {
+          "description": "Pooled hours dropped because they fell inside the calibration window the isotonic map was fitted on. Published rather than silently netted off, so a reader can tell \"the pool had some and they were removed\" from \"the pool had none\".",
+          "type": "integer",
+          "minimum": 0
+        },
+        "ece": {
+          "description": "Expected calibration error: the hour-weighted mean absolute gap.",
+          "type": "number",
+          "minimum": 0
+        },
+        "mce": {
+          "description": "Maximum calibration error: the worst bin gap, unweighted.",
+          "type": "number",
+          "minimum": 0
+        },
+        "top_bin_gap": {
+          "description": "The **signed** gap of the bin reaching 1.0, reported on its own because that is where a curtailment classifier fails and where the product's confident sentences come from. Positive means the model said more than happened. Signed, so an absolute value cannot hide the direction.",
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "points",
+        "sample_hours",
+        "window",
+        "vintage_fidelity",
+        "folds",
+        "excluded_calibration_hours",
+        "ece",
+        "mce",
+        "top_bin_gap"
+      ],
+      "additionalProperties": false
+    },
+    "correction_reach": {
+      "title": "CorrectionReach",
+      "description": "How much of one tail's conformal correction reaches the **served** band. An identifier and never copy. It is a property of the `correction_regime`, resolved from a published table rather than inferred: a regime this API has no entry for is refused, because guessing a tail's status is exactly the number that is wrong in a direction nobody can see.",
+      "type": "string",
+      "enum": ["full", "partial"]
+    },
+    "lower_tail_coverage": {
+      "title": "LowerTailCoverage",
+      "description": "The half of the band that carries no correction caveat. `delta_lo` reaches the composed P10 in full at every occurrence probability, which is why `correction_applied` is `full` here and `partial` above.",
+      "type": "object",
+      "properties": {
+        "coverage_p10": { "$ref": "common.schema.json#/$defs/probability" },
+        "correction_applied": { "$ref": "#/$defs/correction_reach" },
+        "quoted_as": {
+          "description": "The product figure simulated against this half of the band. `recovered_floor_mwh` is the number the prose quotes, and it is a floor because it is simulated against P10 - so the exactness of *this* tail is the thing that sentence rests on.",
+          "type": "string",
+          "const": "recovered_floor_mwh"
+        }
+      },
+      "required": ["coverage_p10", "correction_applied", "quoted_as"],
+      "additionalProperties": false
+    },
+    "upper_tail_coverage": {
+      "title": "UpperTailCoverage",
+      "description": "The half of the band that does carry the caveat, with the caveat attached rather than beside it. `coverage_p90` is **not readable without** `upper_correction_realised`: the correction is applied to the 0.90 knot of `Q_pos` and composition reads `Q_pos` below that knot for every `p < 1`, reaching none of it at `p <= 0.20`. A P90 whose partial correction is invisible is worse than one that says so, so the schema makes the three fields required together.",
+      "type": "object",
+      "properties": {
+        "coverage_p90": { "$ref": "common.schema.json#/$defs/probability" },
+        "correction_applied": { "$ref": "#/$defs/correction_reach" },
+        "upper_correction_realised": {
+          "description": "The mean share of `delta_hi` that actually reached the composed P90 over the scored hours. `1.0` would be the correction applied in full everywhere; well below it says a short `coverage_p90` is under-*application* and not a bad fit.",
+          "$ref": "common.schema.json#/$defs/probability"
+        },
+        "upper_correction_note": {
+          "description": "The card's own sentence about the pair above, verbatim. English prose for a developer and an auditor, in the same status as an error `message`: it is never rendered to a user, and a client that renders it has a bug.",
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "coverage_p90",
+        "correction_applied",
+        "upper_correction_realised",
+        "upper_correction_note"
+      ],
+      "additionalProperties": false
+    },
+    "coverage": {
+      "title": "Coverage",
+      "description": "Empirical coverage of the fold's test period, **split by tail**. The two halves are separate objects and not two numbers side by side, because they have different statuses: the lower correction reaches the served band in full at every `p` and the upper one does not, and a reader comparing `coverage_p10` against `coverage_p90` without that fact draws the wrong conclusion about the fit. The population is the fold's curtailed hours - over *every* hour the lower statement is trivially true, because the composed P10 is zero wherever `p <= 0.90`.",
+      "type": "object",
+      "properties": {
+        "fold_id": { "type": "string" },
+        "population": { "type": "string", "const": "curtailed_hours" },
+        "rows": { "type": "integer", "minimum": 1 },
+        "target": { "$ref": "common.schema.json#/$defs/probability" },
+        "guardrail": {
+          "description": "The window the hot-swap gate vetoes outside. Published so the verdict beside it is checkable rather than asserted.",
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": { "$ref": "common.schema.json#/$defs/probability" }
+        },
+        "guardrail_satisfied": { "type": "boolean" },
+        "lower": { "$ref": "#/$defs/lower_tail_coverage" },
+        "upper": { "$ref": "#/$defs/upper_tail_coverage" },
+        "p50_unbiasedness": {
+          "description": "Share of scored hours below P50, target 0.50 - the guardrail standing in for the correction the median deliberately does not get.",
+          "$ref": "common.schema.json#/$defs/probability"
+        },
+        "crossing_rate": {
+          "description": "Share of scored hours whose composed quantiles arrived out of order. Beside the deltas because a band that had to be sorted is a band whose coverage statement is about three fits that disagreed.",
+          "$ref": "common.schema.json#/$defs/probability"
+        }
+      },
+      "required": [
+        "fold_id",
+        "population",
+        "rows",
+        "target",
+        "guardrail",
+        "guardrail_satisfied",
+        "lower",
+        "upper",
+        "p50_unbiasedness",
+        "crossing_rate"
+      ],
+      "additionalProperties": false
+    },
+    "band_calibration": {
+      "title": "BandCalibration",
+      "description": "What was added to the band and what it bought. `delta_lo` is subtracted from the 0.10 knot and `delta_hi` added to the 0.90 knot; either may be negative, which says the uncorrected knot was already conservative on that side.",
+      "type": "object",
+      "properties": {
+        "correction_regime": {
+          "description": "The **name of the rule** that produced the served band, stamped identically on every published forecast row. It is on this response because a number is only interpretable against the rule that made it: `conformal_v1_partial_upper` says in its own name that the upper correction reaches the served band only in part, and the `band.coverage.upper` block says by how much.",
+          "type": "string",
+          "minLength": 1
+        },
+        "delta_lo": { "type": "number" },
+        "delta_hi": { "type": "number" },
+        "method": { "type": "string" },
+        "miscoverage": { "$ref": "common.schema.json#/$defs/probability" },
+        "target_coverage": { "$ref": "common.schema.json#/$defs/probability" },
+        "calibration_rows": { "type": "integer", "minimum": 1 },
+        "rank": {
+          "description": "Which order statistic of the calibration residuals `delta` is. Published because the finite-sample correction is the whole of split conformal's guarantee.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "window": { "$ref": "#/$defs/card_window" },
+        "guarantee": {
+          "description": "The card's own statement of what the guarantee is worth here, verbatim - approximate, because exchangeability fails on a time series with a growing fleet. Auditor prose, never rendered to a user.",
+          "type": "string",
+          "minLength": 1
+        },
+        "coverage": {
+          "description": "`null` when the fold's test period held no curtailed hour - absent for a stated reason rather than a row of zeros that would read as total failure.",
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/coverage" }]
+        },
+        "coverage_absent_reason": { "type": ["string", "null"] }
+      },
+      "required": [
+        "correction_regime",
+        "delta_lo",
+        "delta_hi",
+        "method",
+        "miscoverage",
+        "target_coverage",
+        "calibration_rows",
+        "rank",
+        "window",
+        "guarantee",
+        "coverage",
+        "coverage_absent_reason"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "$comment": "An absent coverage block is unrepresentable without a stated reason, and a present one must not carry one.",
+          "if": { "properties": { "coverage": { "type": "null" } } },
+          "then": {
+            "properties": { "coverage_absent_reason": { "type": "string" } },
+            "required": ["coverage_absent_reason"]
+          },
+          "else": { "properties": { "coverage_absent_reason": { "type": "null" } } }
+        }
+      ]
+    },
+    "day_grain_coverage": {
+      "title": "DayGrainCoverage",
+      "description": "Coverage of the day-grain band and the peak, over the complete settled days of the fold's test period. A day total is a sum over twenty-four hours whose upper knot is under-corrected, so a shortfall here concentrated above the band is that same under-correction at day grain - reported, never repaired.",
+      "type": "object",
+      "properties": {
+        "fold_id": { "type": "string" },
+        "days": { "type": "integer", "minimum": 1 },
+        "day_total_coverage": { "$ref": "common.schema.json#/$defs/probability" },
+        "peak_coverage": { "$ref": "common.schema.json#/$defs/probability" },
+        "target": { "$ref": "common.schema.json#/$defs/probability" },
+        "population": { "type": "string", "const": "complete_settled_days" }
+      },
+      "required": [
+        "fold_id",
+        "days",
+        "day_total_coverage",
+        "peak_coverage",
+        "target",
+        "population"
+      ],
+      "additionalProperties": false
+    },
+    "ensemble_summary": {
+      "title": "EnsembleSummary",
+      "description": "What every figure above hour grain rests on. Day-grain quantiles are quantiles of whole-row draws of the PIT matrix `U`, so **the days in `U` are the days the published day band is a statement about** - and `pit_dropped_days` is therefore a limitation of the published band rather than a training log line. One row is one complete calibration day; a day missing any of its 96 subsystem-hours is dropped whole, because a row with a hole in it is not a coherent day.",
+      "type": "object",
+      "properties": {
+        "ensemble_draws": { "type": "integer", "minimum": 1 },
+        "pit_rows": {
+          "description": "Rows of `U` - the distinct calibration days every day-grain and national quantile is drawn from.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "pit_dropped_days": {
+          "description": "Calibration days dropped whole for holding an unsettled cell. Read against `pit_rows`: the two together say how much of the calibration window the day band actually rests on.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "pit_columns": { "type": "integer", "minimum": 1 },
+        "pit_window": { "$ref": "#/$defs/card_window" },
+        "pit_dropped_days_rule": {
+          "description": "The card's own statement of the drop rule, verbatim. Auditor prose, never rendered to a user.",
+          "type": "string",
+          "minLength": 1
+        },
+        "pit_max_ks": {
+          "description": "The largest per-column two-sided KS distance from U(0, 1). Above the tolerance the marginals are miscalibrated and every day-grain number drawn from `U` is meaningless.",
+          "type": "number",
+          "minimum": 0
+        },
+        "pit_ks_tolerance": { "type": "number", "minimum": 0 },
+        "pit_uniform_within_tolerance": { "type": "boolean" },
+        "day_grain": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/day_grain_coverage" }]
+        },
+        "day_grain_absent_reason": { "type": ["string", "null"] }
+      },
+      "required": [
+        "ensemble_draws",
+        "pit_rows",
+        "pit_dropped_days",
+        "pit_columns",
+        "pit_window",
+        "pit_dropped_days_rule",
+        "pit_max_ks",
+        "pit_ks_tolerance",
+        "pit_uniform_within_tolerance",
+        "day_grain",
+        "day_grain_absent_reason"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "$comment": "As with the hourly coverage block: absent, and absent for a stated reason.",
+          "if": { "properties": { "day_grain": { "type": "null" } } },
+          "then": {
+            "properties": { "day_grain_absent_reason": { "type": "string" } },
+            "required": ["day_grain_absent_reason"]
+          },
+          "else": { "properties": { "day_grain_absent_reason": { "type": "null" } } }
+        }
+      ]
+    },
+    "metrics_row": {
+      "title": "MetricsRow",
+      "description": "One rung of the baseline ladder, on one fold segment. `vintage_fidelity` is a group key and never a filter that could be omitted: nothing on this surface averages a metric across it.",
+      "type": "object",
+      "properties": {
+        "run": { "type": "string" },
+        "rung": { "type": "string" },
+        "rung_number": { "type": "integer", "minimum": 0 },
+        "fold_id": { "type": "string" },
+        "vintage_fidelity": { "$ref": "common.schema.json#/$defs/vintage_fidelity" },
+        "rows": { "type": "integer", "minimum": 0 },
+        "prevalence": { "$ref": "common.schema.json#/$defs/probability" },
+        "pr_auc": { "$ref": "common.schema.json#/$defs/probability" },
+        "brier": { "type": "number", "minimum": 0 },
+        "ece": { "type": "number", "minimum": 0 },
+        "mce": { "type": "number", "minimum": 0 },
+        "top_bin_gap": { "type": "number", "minimum": -1, "maximum": 1 },
+        "mae_positives_mwh": { "type": ["number", "null"], "minimum": 0 },
+        "pinball_10": { "type": ["number", "null"], "minimum": 0 },
+        "pinball_50": { "type": ["number", "null"], "minimum": 0 },
+        "pinball_90": { "type": ["number", "null"], "minimum": 0 }
+      },
+      "required": [
+        "run",
+        "rung",
+        "rung_number",
+        "fold_id",
+        "vintage_fidelity",
+        "rows",
+        "prevalence",
+        "pr_auc",
+        "brier",
+        "ece",
+        "mce",
+        "top_bin_gap",
+        "mae_positives_mwh",
+        "pinball_10",
+        "pinball_50",
+        "pinball_90"
+      ],
+      "additionalProperties": false
+    },
+    "gate_decision": {
+      "title": "GateDecision",
+      "description": "What the hot-swap gate decided about this artifact. `reason` is auditor prose and never rendered to a user; `decision` is the identifier a client may act on.",
+      "type": "object",
+      "properties": {
+        "decision": { "type": "string", "enum": ["promote", "refuse"] },
+        "reason": { "type": "string", "minLength": 1 },
+        "at": { "$ref": "common.schema.json#/$defs/utc_instant" },
+        "bootstrap_p": {
+          "description": "The bootstrap probability the promotion rested on. `null` when there was no incumbent to compare against, which is a cold start and not a failed comparison.",
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "common.schema.json#/$defs/probability" }
+          ]
+        },
+        "compared_against": { "type": ["string", "null"] }
+      },
+      "required": ["decision", "reason", "at", "bootstrap_p", "compared_against"],
+      "additionalProperties": false
+    }
+  }
+}

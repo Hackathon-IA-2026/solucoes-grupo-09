@@ -60,11 +60,23 @@ every side of the contract goes through.
 
 ## What is not here yet
 
-The route schemas land with their routes. `/v1/model/card`, `/v1/plants`,
-`/v1/replay/days` and `/v1/backtest` belong to API tickets 16, 19 and 17, and
-this directory is where they go. `curtailment.schema.json` is here ahead of API
-14 because vocabulary rules 7 and 8 needed a real home for an `ObservedReason`
-and an episode list.
+The route schemas land with their routes. `/v1/replay/days` and `/v1/backtest`
+belong to API ticket 17, and this directory is where they go.
+`curtailment.schema.json` is here ahead of API 14 because vocabulary rules 7 and
+8 needed a real home for an `ObservedReason` and an episode list.
+
+`model-card.schema.json` landed with API 16 and types the **product-facing
+subset** of the artifact card, not the card. The card is the forecaster's
+document and this schema decides nothing about what is in it: every field
+forwarded from it keeps the card's own spelling, and `card_url` points at the
+whole thing. Two shapes there are load-bearing rather than tidy. `coverage` is
+split into a `lower` and an `upper` object because the two tails have different
+statuses — the conformal lower correction reaches the served band in full at
+every occurrence probability and the upper one does not — so `coverage_p90`
+sits in the same object as the `upper_correction_realised` that makes it
+readable, and the schema requires them together. And `metrics` is
+`null` with a required `metrics_absent_reason` rather than `[]`, because an
+empty table reads as "measured as nothing" and the truth is "not measured yet".
 
 ## Conventions
 

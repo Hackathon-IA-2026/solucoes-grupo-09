@@ -187,13 +187,15 @@ export interface ExplainFixture {
    * narration arrives to replace it wholesale.
    */
   narrationTopShare: number;
-  reliability: ReliabilityPoint[];
-  /** How many hours the reliability curve was computed over. */
-  reliabilitySampleHours: number;
-  /** The scored window, as civil dates — formatted by the reader's locale. */
-  reliabilityWindowFrom: string;
-  reliabilityWindowTo: string;
-  reliabilityFidelity: VintageFidelity;
+  /**
+   * No reliability curve here, and that is the point.
+   *
+   * It used to live on this object, which gave a property of the *model* the
+   * cache key and the request shape of a property of the *day*.
+   * `docs/specs/api-surface.md` §9 splits it onto `GET /v1/model/card`, keyed
+   * by lane; `fixtures/model-card.ts` is its fixture, and the Explain screen
+   * reads the two separately.
+   */
   observedReasons: ObservedReason[];
   observedReasonsDate: string;
 }

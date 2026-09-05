@@ -1065,6 +1065,420 @@ export interface SourceAttribution {
 }
 
 /**
+ * `GET /v1/model/card` - the Explain screen's second call. Model metadata and
+ * never a day's answer: the reliability curve is a property of the *model*, so
+ * folding it into the per-day payload would give a weekly-changing object a
+ * daily cache key. This is the **product-facing subset** of the artifact card;
+ * `card_url` points at the whole document. Every field forwarded from the card
+ * keeps the card's own spelling, because the forecaster owns that vocabulary
+ * and a rename here is where two vocabularies start.
+ */
+export interface ModelCard {
+  lane: LaneName;
+  /**
+   * Always `promoted` on a 200. The other three states are not a card with empty
+   * groups - they are a `MODEL_UNAVAILABLE` carrying `details.lane_state`.
+   */
+  laneState: "promoted";
+  artifact: CardArtifact;
+  fold: CardFold;
+  windows: CardWindows;
+  reliability: Reliability;
+  riskBins: RiskBins;
+  band: BandCalibration;
+  ensemble: EnsembleSummary;
+  /**
+   * The headline metrics table, one row per fold and per rung of the baseline
+   * ladder. `null` when the card carries no Metrics group - which is "not
+   * measured yet", and is why `metrics_absent_reason` is required beside it
+   * rather than an empty array standing in for a table nobody ran.
+   */
+  metrics: MetricsRow[] | null;
+  /**
+   * Why the metrics table is `null`. English prose for a developer and an
+   * auditor, in the same status as an error `message`: never rendered to a user.
+   */
+  metricsAbsentReason: string | null;
+  /**
+   * The hot-swap gate's Decision group - what it decided about this artifact and
+   * why. `null` on a card written before a gate ran over it.
+   */
+  decision: GateDecision | null;
+  /**
+   * Where the raw `*.card.json` is served, for anyone auditing. A path relative
+   * to this API's own origin, because the API has no reliable knowledge of the
+   * origin a client reached it through.
+   */
+  cardUrl: string;
+}
+
+/**
+ * The artifact lane's directory name - `dessem_free_v1__gate_late__thr5`. The
+ * addressable unit a forecast is served from: a feature set, a gate profile
+ * and a threshold, in one identifier rather than three loose fields that could
+ * disagree.
+ */
+export type LaneName = string;
+
+/**
+ * A closed interval of Brasilia civil dates, both ends inclusive, exactly as
+ * the card records it.
+ */
+export interface CardWindow {
+  start: CivilDate;
+  end: CivilDate;
+}
+
+/**
+ * The lane's identity and the artifact's. `feature_hash` is the whole feature
+ * contract in one value: the names, the dtypes and the categorical levels are
+ * on the raw card and are not on this wire, because a client that needs them
+ * is auditing rather than rendering.
+ */
+export interface CardArtifact {
+  /**
+   * The bundle's stem, which is an ISO-8601 UTC instant. This is also the
+   * `run_label` a `wattsteer` `ForecastOrigin` carries, and the response's own
+   * ETag.
+   */
+  artifactId: UtcInstant;
+  createdAt: UtcInstant;
+  estimatorFamily: string;
+  modelConfigVersion: string;
+  featureSet: string;
+  /**
+   * `null` until the feature dictionary publishes one. An explicit null rather
+   * than a string nobody minted: a card claiming a version that was never issued
+   * is worse than one saying the version is unknown.
+   */
+  featureSetVersion: string | null;
+  gateProfile: GateProfile;
+  thresholdMw: ThresholdMw;
+  featureHash: string;
+  gitShaMl: string | null;
+  gitShaApi: string | null;
+}
+
+/**
+ * Which fold of the walk-forward calendar this artifact was trained and scored
+ * on, and the two hashes that make the fold reproducible.
+ */
+export interface CardFold {
+  foldId: string;
+  foldHash: string;
+  rulesDigest: string;
+}
+
+/**
+ * What the artifact saw, and when. The calibration window is carved out of the
+ * training block, so the two overlap by construction and are published
+ * separately anyway - Replay asserts a held-out day against **both**, and a
+ * check against one is a weaker check.
+ */
+export interface CardWindows {
+  training: CardWindow;
+  baseFit: CardWindow;
+  calibration: CardWindow;
+  test: CardWindow;
+  /**
+   * Training rows counted per `VintageFidelity`, never averaged across it
+   * (vocabulary rule 9). A fold spanning ingestion go-live is two numbers,
+   * because their mean describes no fold.
+   */
+  rowsByVintageFidelity: Record<string, number>;
+}
+
+/**
+ * One bin of the curve. `mean_predicted` and not the bin centre: after a merge
+ * a bin can be 0.2 wide, and the gap that matters is between what was *said*
+ * and what happened. `merged` is on the point so a wide bin is visibly a
+ * merged one rather than an oddly shaped chart.
+ */
+export interface ReliabilityPoint {
+  binLower: Probability;
+  binUpper: Probability;
+  binCentre: Probability;
+  meanPredicted: Probability;
+  observedFrequency: Probability;
+  hourCount: number;
+  merged: boolean;
+}
+
+/**
+ * The calibration curve and the three scalars read off it, with the window and
+ * the vintage fidelity they are true over. The fidelity is one value and never
+ * a mix: a pooled curve that spanned ingestion go-live would be
+ * `revision_optimistic` with no way to say how much of it was, so the pool is
+ * refused rather than labelled.
+ */
+export interface Reliability {
+  points: ReliabilityPoint[];
+  /**
+   * Hours behind the whole curve. Equal to the sum of the points' `hour_count`
+   * by construction.
+   */
+  sampleHours: number;
+  window: CardWindow;
+  vintageFidelity: VintageFidelity;
+  /**
+   * The folds whose out-of-fold predictions were pooled. A curve that cannot say
+   * which folds it pooled is a curve nobody can reproduce.
+   */
+  folds: string[];
+  /**
+   * Pooled hours dropped because they fell inside the calibration window the
+   * isotonic map was fitted on. Published rather than silently netted off, so a
+   * reader can tell "the pool had some and they were removed" from "the pool had
+   * none".
+   */
+  excludedCalibrationHours: number;
+  /**
+   * Expected calibration error: the hour-weighted mean absolute gap.
+   */
+  ece: number;
+  /**
+   * Maximum calibration error: the worst bin gap, unweighted.
+   */
+  mce: number;
+  /**
+   * The **signed** gap of the bin reaching 1.0, reported on its own because that
+   * is where a curtailment classifier fails and where the product's confident
+   * sentences come from. Positive means the model said more than happened.
+   * Signed, so an absolute value cannot hide the direction.
+   */
+  topBinGap: number;
+}
+
+/**
+ * How much of one tail's conformal correction reaches the **served** band. An
+ * identifier and never copy. It is a property of the `correction_regime`,
+ * resolved from a published table rather than inferred: a regime this API has
+ * no entry for is refused, because guessing a tail's status is exactly the
+ * number that is wrong in a direction nobody can see.
+ */
+export type CorrectionReach = "full" | "partial";
+
+/**
+ * The half of the band that carries no correction caveat. `delta_lo` reaches
+ * the composed P10 in full at every occurrence probability, which is why
+ * `correction_applied` is `full` here and `partial` above.
+ */
+export interface LowerTailCoverage {
+  coverageP10: Probability;
+  correctionApplied: CorrectionReach;
+  /**
+   * The product figure simulated against this half of the band.
+   * `recovered_floor_mwh` is the number the prose quotes, and it is a floor
+   * because it is simulated against P10 - so the exactness of *this* tail is the
+   * thing that sentence rests on.
+   */
+  quotedAs: "recovered_floor_mwh";
+}
+
+/**
+ * The half of the band that does carry the caveat, with the caveat attached
+ * rather than beside it. `coverage_p90` is **not readable without**
+ * `upper_correction_realised`: the correction is applied to the 0.90 knot of
+ * `Q_pos` and composition reads `Q_pos` below that knot for every `p < 1`,
+ * reaching none of it at `p <= 0.20`. A P90 whose partial correction is
+ * invisible is worse than one that says so, so the schema makes the three
+ * fields required together.
+ */
+export interface UpperTailCoverage {
+  coverageP90: Probability;
+  correctionApplied: CorrectionReach;
+  /**
+   * The mean share of `delta_hi` that actually reached the composed P90 over the
+   * scored hours. `1.0` would be the correction applied in full everywhere; well
+   * below it says a short `coverage_p90` is under-*application* and not a bad
+   * fit.
+   */
+  upperCorrectionRealised: Probability;
+  /**
+   * The card's own sentence about the pair above, verbatim. English prose for a
+   * developer and an auditor, in the same status as an error `message`: it is
+   * never rendered to a user, and a client that renders it has a bug.
+   */
+  upperCorrectionNote: string;
+}
+
+/**
+ * Empirical coverage of the fold's test period, **split by tail**. The two
+ * halves are separate objects and not two numbers side by side, because they
+ * have different statuses: the lower correction reaches the served band in
+ * full at every `p` and the upper one does not, and a reader comparing
+ * `coverage_p10` against `coverage_p90` without that fact draws the wrong
+ * conclusion about the fit. The population is the fold's curtailed hours -
+ * over *every* hour the lower statement is trivially true, because the
+ * composed P10 is zero wherever `p <= 0.90`.
+ */
+export interface Coverage {
+  foldId: string;
+  population: "curtailed_hours";
+  rows: number;
+  target: Probability;
+  /**
+   * The window the hot-swap gate vetoes outside. Published so the verdict beside
+   * it is checkable rather than asserted.
+   */
+  guardrail: Probability[];
+  guardrailSatisfied: boolean;
+  lower: LowerTailCoverage;
+  upper: UpperTailCoverage;
+  /**
+   * Share of scored hours below P50, target 0.50 - the guardrail standing in for
+   * the correction the median deliberately does not get.
+   */
+  p50Unbiasedness: Probability;
+  /**
+   * Share of scored hours whose composed quantiles arrived out of order. Beside
+   * the deltas because a band that had to be sorted is a band whose coverage
+   * statement is about three fits that disagreed.
+   */
+  crossingRate: Probability;
+}
+
+/**
+ * What was added to the band and what it bought. `delta_lo` is subtracted from
+ * the 0.10 knot and `delta_hi` added to the 0.90 knot; either may be negative,
+ * which says the uncorrected knot was already conservative on that side.
+ */
+export interface BandCalibration {
+  /**
+   * The **name of the rule** that produced the served band, stamped identically
+   * on every published forecast row. It is on this response because a number is
+   * only interpretable against the rule that made it:
+   * `conformal_v1_partial_upper` says in its own name that the upper correction
+   * reaches the served band only in part, and the `band.coverage.upper` block
+   * says by how much.
+   */
+  correctionRegime: string;
+  deltaLo: number;
+  deltaHi: number;
+  method: string;
+  miscoverage: Probability;
+  targetCoverage: Probability;
+  calibrationRows: number;
+  /**
+   * Which order statistic of the calibration residuals `delta` is. Published
+   * because the finite-sample correction is the whole of split conformal's
+   * guarantee.
+   */
+  rank: number;
+  window: CardWindow;
+  /**
+   * The card's own statement of what the guarantee is worth here, verbatim -
+   * approximate, because exchangeability fails on a time series with a growing
+   * fleet. Auditor prose, never rendered to a user.
+   */
+  guarantee: string;
+  /**
+   * `null` when the fold's test period held no curtailed hour - absent for a
+   * stated reason rather than a row of zeros that would read as total failure.
+   */
+  coverage: Coverage | null;
+  coverageAbsentReason: string | null;
+}
+
+/**
+ * Coverage of the day-grain band and the peak, over the complete settled days
+ * of the fold's test period. A day total is a sum over twenty-four hours whose
+ * upper knot is under-corrected, so a shortfall here concentrated above the
+ * band is that same under-correction at day grain - reported, never repaired.
+ */
+export interface DayGrainCoverage {
+  foldId: string;
+  days: number;
+  dayTotalCoverage: Probability;
+  peakCoverage: Probability;
+  target: Probability;
+  population: "complete_settled_days";
+}
+
+/**
+ * What every figure above hour grain rests on. Day-grain quantiles are
+ * quantiles of whole-row draws of the PIT matrix `U`, so **the days in `U` are
+ * the days the published day band is a statement about** - and
+ * `pit_dropped_days` is therefore a limitation of the published band rather
+ * than a training log line. One row is one complete calibration day; a day
+ * missing any of its 96 subsystem-hours is dropped whole, because a row with a
+ * hole in it is not a coherent day.
+ */
+export interface EnsembleSummary {
+  ensembleDraws: number;
+  /**
+   * Rows of `U` - the distinct calibration days every day-grain and national
+   * quantile is drawn from.
+   */
+  pitRows: number;
+  /**
+   * Calibration days dropped whole for holding an unsettled cell. Read against
+   * `pit_rows`: the two together say how much of the calibration window the day
+   * band actually rests on.
+   */
+  pitDroppedDays: number;
+  pitColumns: number;
+  pitWindow: CardWindow;
+  /**
+   * The card's own statement of the drop rule, verbatim. Auditor prose, never
+   * rendered to a user.
+   */
+  pitDroppedDaysRule: string;
+  /**
+   * The largest per-column two-sided KS distance from U(0, 1). Above the
+   * tolerance the marginals are miscalibrated and every day-grain number drawn
+   * from `U` is meaningless.
+   */
+  pitMaxKs: number;
+  pitKsTolerance: number;
+  pitUniformWithinTolerance: boolean;
+  dayGrain: DayGrainCoverage | null;
+  dayGrainAbsentReason: string | null;
+}
+
+/**
+ * One rung of the baseline ladder, on one fold segment. `vintage_fidelity` is
+ * a group key and never a filter that could be omitted: nothing on this
+ * surface averages a metric across it.
+ */
+export interface MetricsRow {
+  run: string;
+  rung: string;
+  rungNumber: number;
+  foldId: string;
+  vintageFidelity: VintageFidelity;
+  rows: number;
+  prevalence: Probability;
+  prAuc: Probability;
+  brier: number;
+  ece: number;
+  mce: number;
+  topBinGap: number;
+  maePositivesMwh: number | null;
+  pinball10: number | null;
+  pinball50: number | null;
+  pinball90: number | null;
+}
+
+/**
+ * What the hot-swap gate decided about this artifact. `reason` is auditor
+ * prose and never rendered to a user; `decision` is the identifier a client
+ * may act on.
+ */
+export interface GateDecision {
+  decision: "promote" | "refuse";
+  reason: string;
+  at: UtcInstant;
+  /**
+   * The bootstrap probability the promotion rested on. `null` when there was no
+   * incumbent to compare against, which is a cold start and not a failed
+   * comparison.
+   */
+  bootstrapP: Probability | null;
+  comparedAgainst: string | null;
+}
+
+/**
  * The response of `POST /v1/optimize` - `docs/specs/flex-optimizer.md`'s
  * contract, re-pathed and never re-shaped. `avoided_energy_mwh`, `absorbed`
  * and `recovered` are **one quantity with three names**; `avoidability` is
@@ -2132,6 +2546,153 @@ export const WIRE_SHAPES = {
     url: { wire: "url" },
     derivativeDatabase: { wire: "derivative_database", optional: true },
     machineReadableAt: { wire: "machine_readable_at", optional: true },
+  },
+  ModelCard: {
+    lane: { wire: "lane" },
+    laneState: { wire: "lane_state", const: "promoted" },
+    artifact: { wire: "artifact", shape: "CardArtifact" },
+    fold: { wire: "fold", shape: "CardFold" },
+    windows: { wire: "windows", shape: "CardWindows" },
+    reliability: { wire: "reliability", shape: "Reliability" },
+    riskBins: { wire: "risk_bins", shape: "RiskBins" },
+    band: { wire: "band", shape: "BandCalibration" },
+    ensemble: { wire: "ensemble", shape: "EnsembleSummary" },
+    metrics: { wire: "metrics", shape: "MetricsRow", list: true },
+    metricsAbsentReason: { wire: "metrics_absent_reason" },
+    decision: { wire: "decision", shape: "GateDecision" },
+    cardUrl: { wire: "card_url" },
+  },
+  CardWindow: {
+    start: { wire: "start" },
+    end: { wire: "end" },
+  },
+  CardArtifact: {
+    artifactId: { wire: "artifact_id" },
+    createdAt: { wire: "created_at" },
+    estimatorFamily: { wire: "estimator_family" },
+    modelConfigVersion: { wire: "model_config_version" },
+    featureSet: { wire: "feature_set" },
+    featureSetVersion: { wire: "feature_set_version" },
+    gateProfile: { wire: "gate_profile" },
+    thresholdMw: { wire: "threshold_mw" },
+    featureHash: { wire: "feature_hash" },
+    gitShaMl: { wire: "git_sha_ml" },
+    gitShaApi: { wire: "git_sha_api" },
+  },
+  CardFold: {
+    foldId: { wire: "fold_id" },
+    foldHash: { wire: "fold_hash" },
+    rulesDigest: { wire: "rules_digest" },
+  },
+  CardWindows: {
+    training: { wire: "training", shape: "CardWindow" },
+    baseFit: { wire: "base_fit", shape: "CardWindow" },
+    calibration: { wire: "calibration", shape: "CardWindow" },
+    test: { wire: "test", shape: "CardWindow" },
+    rowsByVintageFidelity: { wire: "rows_by_vintage_fidelity" },
+  },
+  ReliabilityPoint: {
+    binLower: { wire: "bin_lower" },
+    binUpper: { wire: "bin_upper" },
+    binCentre: { wire: "bin_centre" },
+    meanPredicted: { wire: "mean_predicted" },
+    observedFrequency: { wire: "observed_frequency" },
+    hourCount: { wire: "hour_count" },
+    merged: { wire: "merged" },
+  },
+  Reliability: {
+    points: { wire: "points", shape: "ReliabilityPoint", list: true },
+    sampleHours: { wire: "sample_hours" },
+    window: { wire: "window", shape: "CardWindow" },
+    vintageFidelity: { wire: "vintage_fidelity" },
+    folds: { wire: "folds" },
+    excludedCalibrationHours: { wire: "excluded_calibration_hours" },
+    ece: { wire: "ece" },
+    mce: { wire: "mce" },
+    topBinGap: { wire: "top_bin_gap" },
+  },
+  LowerTailCoverage: {
+    coverageP10: { wire: "coverage_p10" },
+    correctionApplied: { wire: "correction_applied" },
+    quotedAs: { wire: "quoted_as", const: "recovered_floor_mwh" },
+  },
+  UpperTailCoverage: {
+    coverageP90: { wire: "coverage_p90" },
+    correctionApplied: { wire: "correction_applied" },
+    upperCorrectionRealised: { wire: "upper_correction_realised" },
+    upperCorrectionNote: { wire: "upper_correction_note" },
+  },
+  Coverage: {
+    foldId: { wire: "fold_id" },
+    population: { wire: "population", const: "curtailed_hours" },
+    rows: { wire: "rows" },
+    target: { wire: "target" },
+    guardrail: { wire: "guardrail" },
+    guardrailSatisfied: { wire: "guardrail_satisfied" },
+    lower: { wire: "lower", shape: "LowerTailCoverage" },
+    upper: { wire: "upper", shape: "UpperTailCoverage" },
+    p50Unbiasedness: { wire: "p50_unbiasedness" },
+    crossingRate: { wire: "crossing_rate" },
+  },
+  BandCalibration: {
+    correctionRegime: { wire: "correction_regime" },
+    deltaLo: { wire: "delta_lo" },
+    deltaHi: { wire: "delta_hi" },
+    method: { wire: "method" },
+    miscoverage: { wire: "miscoverage" },
+    targetCoverage: { wire: "target_coverage" },
+    calibrationRows: { wire: "calibration_rows" },
+    rank: { wire: "rank" },
+    window: { wire: "window", shape: "CardWindow" },
+    guarantee: { wire: "guarantee" },
+    coverage: { wire: "coverage", shape: "Coverage" },
+    coverageAbsentReason: { wire: "coverage_absent_reason" },
+  },
+  DayGrainCoverage: {
+    foldId: { wire: "fold_id" },
+    days: { wire: "days" },
+    dayTotalCoverage: { wire: "day_total_coverage" },
+    peakCoverage: { wire: "peak_coverage" },
+    target: { wire: "target" },
+    population: { wire: "population", const: "complete_settled_days" },
+  },
+  EnsembleSummary: {
+    ensembleDraws: { wire: "ensemble_draws" },
+    pitRows: { wire: "pit_rows" },
+    pitDroppedDays: { wire: "pit_dropped_days" },
+    pitColumns: { wire: "pit_columns" },
+    pitWindow: { wire: "pit_window", shape: "CardWindow" },
+    pitDroppedDaysRule: { wire: "pit_dropped_days_rule" },
+    pitMaxKs: { wire: "pit_max_ks" },
+    pitKsTolerance: { wire: "pit_ks_tolerance" },
+    pitUniformWithinTolerance: { wire: "pit_uniform_within_tolerance" },
+    dayGrain: { wire: "day_grain", shape: "DayGrainCoverage" },
+    dayGrainAbsentReason: { wire: "day_grain_absent_reason" },
+  },
+  MetricsRow: {
+    run: { wire: "run" },
+    rung: { wire: "rung" },
+    rungNumber: { wire: "rung_number" },
+    foldId: { wire: "fold_id" },
+    vintageFidelity: { wire: "vintage_fidelity" },
+    rows: { wire: "rows" },
+    prevalence: { wire: "prevalence" },
+    prAuc: { wire: "pr_auc" },
+    brier: { wire: "brier" },
+    ece: { wire: "ece" },
+    mce: { wire: "mce" },
+    topBinGap: { wire: "top_bin_gap" },
+    maePositivesMwh: { wire: "mae_positives_mwh" },
+    pinball10: { wire: "pinball_10" },
+    pinball50: { wire: "pinball_50" },
+    pinball90: { wire: "pinball_90" },
+  },
+  GateDecision: {
+    decision: { wire: "decision" },
+    reason: { wire: "reason" },
+    at: { wire: "at" },
+    bootstrapP: { wire: "bootstrap_p" },
+    comparedAgainst: { wire: "compared_against" },
   },
   OptimizationResult: {
     scenarioHash: { wire: "scenario_hash" },

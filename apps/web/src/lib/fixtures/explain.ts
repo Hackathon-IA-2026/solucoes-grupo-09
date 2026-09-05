@@ -19,7 +19,6 @@ import type {
   AttributedDriver,
   ExplainFixture,
   ObservedReason,
-  ReliabilityPoint,
   SubsystemCode,
   Technology,
 } from "./types";
@@ -169,24 +168,13 @@ const GENERIC_DRIVERS: AttributedDriver[] = [
   },
 ];
 
-/**
- * The reliability curve is a property of the *model*, not of the day, so it is
- * shared across subsystems in the fixture. Deliberately imperfect: the model
- * is over-confident in the top bins, which is what a real curve looks like and
- * what the screen has to be able to show without flinching.
+/*
+ * The reliability curve used to live here. It is a property of the *model* and
+ * not of the day, so it moved to `fixtures/model-card.ts` when
+ * `docs/specs/api-surface.md` §9 gave it its own endpoint: this object is the
+ * per-day payload, and a curve that changes weekly does not belong on a daily
+ * cache key.
  */
-const RELIABILITY: ReliabilityPoint[] = [
-  { binCentre: 0.05, observedFrequency: 0.03, hourCount: 4180 },
-  { binCentre: 0.15, observedFrequency: 0.12, hourCount: 1960 },
-  { binCentre: 0.25, observedFrequency: 0.27, hourCount: 1240 },
-  { binCentre: 0.35, observedFrequency: 0.33, hourCount: 890 },
-  { binCentre: 0.45, observedFrequency: 0.47, hourCount: 704 },
-  { binCentre: 0.55, observedFrequency: 0.52, hourCount: 611 },
-  { binCentre: 0.65, observedFrequency: 0.6, hourCount: 588 },
-  { binCentre: 0.75, observedFrequency: 0.68, hourCount: 542 },
-  { binCentre: 0.85, observedFrequency: 0.77, hourCount: 497 },
-  { binCentre: 0.95, observedFrequency: 0.88, hourCount: 431 },
-];
 
 /**
  * Observed reasons. Note the mix of grains: three conjuntos, whose reason
@@ -267,13 +255,6 @@ export function buildExplain(
     // magnitude they carry between them. The sentence itself is the screen's
     // to compose, per locale — see `ExplainFixture.narration`.
     narrationTopShare: drivers[0].share + drivers[1].share,
-    reliability: RELIABILITY,
-    reliabilitySampleHours: RELIABILITY.reduce((acc, p) => acc + p.hourCount, 0),
-    reliabilityWindowFrom: "2024-04-01",
-    reliabilityWindowTo: "2026-08-27",
-    // The whole reliability window predates ingestion go-live, so it is scored
-    // against ONS's *current* restatement of the past.
-    reliabilityFidelity: "revision_optimistic",
     observedReasons: subsystem === "NE" ? NE_REASONS : GENERIC_REASONS,
     observedReasonsDate: "2026-08-27",
   };

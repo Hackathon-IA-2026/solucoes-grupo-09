@@ -128,6 +128,30 @@ describe("ml-proxy · failure mapping", () => {
     });
   });
 
+  it("carries an admitted code's own details through with it", async () => {
+    // `MODEL_UNAVAILABLE` is required to arrive with `details.lane_state`
+    // (`docs/specs/api-surface.md`, the four "no forecast" states): "nothing
+    // has been trained", "a candidate was refused" and "the volume cannot say"
+    // are three sentences and a screen renders three different things. This
+    // function consumes the upstream body, so a route in front of it has no
+    // second chance at the details — they either travel here or they are gone.
+    reply = () =>
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "MODEL_UNAVAILABLE",
+            details: { lane_state: "present_unpromoted", volume_mounted: true },
+          },
+        }),
+        { status: 503, headers: { "content-type": "application/json" } },
+      );
+    expect(await outcome(endpoint())).toMatchObject({
+      status: 503,
+      code: "MODEL_UNAVAILABLE",
+      details: { lane_state: "present_unpromoted", volume_mounted: true },
+    });
+  });
+
   it("a status this API cannot represent is an upstream failure, not a guess", async () => {
     answers(418);
     expect(await outcome(endpoint())).toMatchObject({
