@@ -1140,6 +1140,87 @@ export const canonicalForecastDay = pgView("canonical_forecast_day", {
            ingested_at desc, data_version desc
 `);
 
+/**
+ * `AsOf(t)` over the national day grain — forecaster ticket 22.
+ *
+ * The `DISTINCT ON` key is the whole business key, and it carries
+ * `threshold_mw` where `canonical_forecast_day`'s does not: a national total
+ * above 5 MW and one above 20 MW are two quantities, not two beliefs about one.
+ * Supersession still happens *within* a key, where a re-publication is a new
+ * `data_version`.
+ *
+ * There is no `subsystem` column and no aggregate here. This view returns the
+ * row the modelling service wrote and nothing reduced from four others; the
+ * `subsystems` array is projected so a reader can check the figure covered the
+ * whole grid rather than trust that it did.
+ */
+export const canonicalForecastNationalDay = pgView("canonical_forecast_national_day", {
+  /** The civil day in `America/Sao_Paulo` being forecast. */
+  targetDate: date({ mode: "string" }).notNull(),
+  originKind: forecastOriginKind().notNull(),
+  gateProfile: forecastGateProfile().notNull(),
+  thresholdMw: doublePrecision().notNull(),
+  forecastProducer: forecastProducer().notNull(),
+  runLabel: text().notNull(),
+  featureSet: text().notNull(),
+  correctionRegime: text().notNull(),
+  /** The four this was summed over. `SIN` is not spellable in this array. */
+  subsystems: subsystemCode("subsystems").array().notNull(),
+  /** Quantiles of the four subsystems' day totals added draw by draw. */
+  dayTotalP10Mwh: doublePrecision().notNull(),
+  dayTotalP50Mwh: doublePrecision().notNull(),
+  dayTotalP90Mwh: doublePrecision().notNull(),
+  /** Peak of the sum, never a sum of peaks. */
+  peakPowerP10Mw: doublePrecision().notNull(),
+  peakPowerP50Mw: doublePrecision().notNull(),
+  peakPowerP90Mw: doublePrecision().notNull(),
+  dayOccurrenceProbability: doublePrecision().notNull(),
+  /** `Σ_s E[Y_s]` — the one national quantity that adds exactly. */
+  expectedMwh: doublePrecision().notNull(),
+  /** `joint_path_ensemble`, projected so a reader checks it rather than assumes. */
+  derivation: text().notNull(),
+  ensembleDraws: integer().notNull(),
+  ensembleSeed: integer().notNull(),
+  ensembleCalibrationDays: integer().notNull(),
+  trainedThrough: date({ mode: "string" }).notNull(),
+  riskBinElevatedFrom: doublePrecision().notNull(),
+  riskBinHighFrom: doublePrecision().notNull(),
+  ...rowVintage,
+}).as(sql`
+  select distinct on (target_date, origin_kind, gate_profile, threshold_mw)
+    target_date,
+    origin_kind,
+    gate_profile,
+    threshold_mw,
+    forecast_producer,
+    run_label,
+    feature_set,
+    correction_regime,
+    subsystems,
+    day_total_p10_mwh,
+    day_total_p50_mwh,
+    day_total_p90_mwh,
+    peak_power_p10_mw,
+    peak_power_p50_mw,
+    peak_power_p90_mw,
+    day_occurrence_probability,
+    expected_mwh,
+    derivation,
+    ensemble_draws,
+    ensemble_seed,
+    ensemble_calibration_days,
+    trained_through,
+    risk_bin_elevated_from,
+    risk_bin_high_from,
+    data_version,
+    published_at,
+    ingested_at
+  from curtailment_forecast_national_day
+  where ingested_at <= canonical_as_of()
+  order by target_date, origin_kind, gate_profile, threshold_mw,
+           ingested_at desc, data_version desc
+`);
+
 // ---------------------------------------------------------------------------
 // The published attribution, as canonical reads — diagnosis ticket 06.
 //

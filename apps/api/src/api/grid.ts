@@ -14,7 +14,7 @@ import type { Database } from "../database/connection.js";
 import { database } from "../database/connection.js";
 import { CodedError } from "../errors.js";
 import { gateAt } from "../forecast/gate.js";
-import type { ForecastDayRow } from "../forecast/reads.js";
+import type { ForecastDayRow, ForecastNationalDayRow } from "../forecast/reads.js";
 import { readGridOutlook } from "../forecast/reads.js";
 import { riskClass } from "../forecast/risk-class.js";
 import {
@@ -97,21 +97,28 @@ function toGridNow(observation: GridNowObservation): GridNow {
  *   is the only additive forecast quantity in the domain.
  * - `risk_class_counts` — a count of the four subsystems per class, which is a
  *   count and not a statistic, so nothing about it needs a joint distribution.
- * - `band: null`, with `band_unavailable_reason: "no_joint_ensemble"`. The
+ * - `band` — **read from the persisted national row**, or `null` with
+ *   `band_unavailable_reason: "no_joint_ensemble"` when there is not one. The
  *   schema makes a null band without a stated reason unrepresentable, so the
  *   absence is a fact the screen renders rather than a blank it interprets.
  *
- * **There is no arithmetic here that could produce a national band.** The one
- * reduction in this file adds expectations, and `p10`/`p50`/`p90` never enter
- * it. `apps/ml`'s `training/national.py` (forecaster ticket 08) *does* compute
- * a legitimate joint band — four day totals added on the same draw, peak-of-sum
- * rather than sum-of-peaks — and measures it at roughly half the width of the
- * componentwise sum. It has no table: `SIN` is not a subsystem, so a national
- * day grain needs its own row grain, and forecaster ticket 22 is the hand-back
- * that persists it. Until a national row exists to read, this route serves the
- * expectation and says why the band is missing. Synthesising one by summing the
- * four subsystems' quantiles is the defect this whole thread exists to remove,
- * and it is not available from this file's data.
+ * **There is still no arithmetic here that could produce a national band.** The
+ * one reduction in this file adds expectations, and `p10`/`p50`/`p90` never
+ * enter it. The band comes off `curtailment_forecast_national_day`, which
+ * `apps/ml`'s `training/national.py` (forecaster ticket 08) computed by adding
+ * four day totals **on the same draw** — peak-of-sum rather than sum-of-peaks —
+ * and which forecaster ticket 22 gave a row grain of its own, because `SIN` is
+ * not a subsystem and a fifth row of the subsystem table is the shape
+ * `docs/domain-model.md`'s vocabulary rule 6 forbids. Measured, that band is
+ * roughly half the width of the componentwise sum, which is what a real joint
+ * distribution buys over an assumption of comonotonicity.
+ *
+ * **The `null` branch stays, and is not dead code.** An artifact trained before
+ * the shared draw index landed publishes no national row, and a day whose four
+ * subsystem rows disagree about the threshold has no single national key to
+ * read. Both are absences with a stated reason. Synthesising a band by summing
+ * the four subsystems' quantiles is the defect this whole thread exists to
+ * remove, and it is not available from this file's data either way.
  *
  * ### Two run labels, because they are two facts
  *
@@ -173,7 +180,11 @@ function sharedOrigin(rows: ForecastDayRow[], targetDate: string) {
  * `hours_p50_nonzero` — stop at this boundary and are caught by a compiler
  * rather than a validator.
  */
-export function toGridOutlook(rows: ForecastDayRow[], now: Date): GridOutlook {
+export function toGridOutlook(
+  rows: ForecastDayRow[],
+  now: Date,
+  national: ForecastNationalDayRow | null = null,
+): GridOutlook {
   const ordered = [...rows].sort(
     (a, b) => SUBSYSTEM_ORDER.indexOf(a.subsystem) - SUBSYSTEM_ORDER.indexOf(b.subsystem),
   );
@@ -237,13 +248,18 @@ export function toGridOutlook(rows: ForecastDayRow[], now: Date): GridOutlook {
     },
     subsystems,
     national: {
+      // Still the *summed expectation*, and still not a mean over the draws:
+      // `E[Y]` adds exactly, so a Monte-Carlo estimate of it would turn a fact
+      // into an estimate. The national row carries the same figure; this one
+      // is read off the four so it cannot disagree with the array above it.
       expectedMwh,
       riskClassCounts: counts,
-      // Not a placeholder and not a rounding of something else: there is no
-      // joint ensemble to take a national quantile from, and the reason travels
-      // with the null so the screen can say which.
-      band: null,
-      bandUnavailableReason: "no_joint_ensemble",
+      // The persisted national row, or an absence with its reason. Both
+      // branches stay: an artifact trained before the shared draw index landed
+      // published no national row, and that is not a zero and not a band this
+      // file could assemble — there is still no arithmetic here that could.
+      band: national === null ? null : { ...national.dayTotalMwh },
+      bandUnavailableReason: national === null ? "no_joint_ensemble" : null,
     },
   };
 }
@@ -334,7 +350,9 @@ export function createGridRoutes(deps: { db: Database | undefined; now?: () => D
           });
         }
 
-        const rows = await readGridOutlook(deps.db, {
+        // One read, one transaction, one `AsOf`: the national row cannot be a
+        // vintage away from the four subsystems it was summed over.
+        const { subsystems: rows, national } = await readGridOutlook(deps.db, {
           targetDate,
           gateProfile,
           asOf: now,
@@ -382,13 +400,26 @@ export function createGridRoutes(deps: { db: Database | undefined; now?: () => D
         }
 
         const origin = sharedOrigin(rows, targetDate);
+        // A national band from one artifact beside four subsystem bands from
+        // another would be read as covering them. It is not a state to average
+        // or to prefer one side of, so the band is dropped back to its stated
+        // absence rather than published under an origin it does not have.
+        const joint =
+          national !== null &&
+          national.artifactId === origin.artifactId &&
+          national.publishedAt.getTime() === origin.publishedAt.getTime()
+            ? national
+            : null;
 
         // `api-surface.md`'s caching table, verbatim: the validator is the
         // provenance — artifact, publication instant, newest version behind the
         // four rows — so a superseding 12Z run changes the ETag by construction
         // rather than by a TTL expiring. The `max-age` never crosses the next
         // gate, which is what makes serving a stale copy for five minutes safe.
-        const maxVersion = rows.reduce((high, row) => Math.max(high, row.dataVersion), 0);
+        const maxVersion = [...rows, ...(joint ? [joint] : [])].reduce(
+          (high, row) => Math.max(high, row.dataVersion),
+          0,
+        );
         const etag = `W/"${origin.artifactId}:${origin.publishedAt.toISOString()}:${maxVersion}"`;
         set.headers["cache-control"] = "public, max-age=300, stale-while-revalidate=3600";
         set.headers.etag = etag;
@@ -397,7 +428,7 @@ export function createGridRoutes(deps: { db: Database | undefined; now?: () => D
           return null;
         }
 
-        return encodeWire("GridOutlook", toGridOutlook(rows, now));
+        return encodeWire("GridOutlook", toGridOutlook(rows, now, joint));
       },
       {
         query: t.Object({
@@ -421,10 +452,12 @@ export function createGridRoutes(deps: { db: Database | undefined; now?: () => D
             "expectation and its scalar split, the forecast origin with the " +
             "weather run beside the artifact version, and a national figure. " +
             "The national figure is the summed expectation — expectations add " +
-            "exactly — plus a count of subsystems per risk class; the national " +
-            "band is null and carries the reason, because a band needs a joint " +
-            "distribution and no published quantity supports one. No hourly " +
-            "detail and no drivers: those are the day-ahead and diagnosis routes.",
+            "exactly — plus a count of subsystems per risk class and the joint " +
+            "band from the persisted national day row, whose quantiles are " +
+            "taken over the four subsystems' paths added draw by draw. Where " +
+            "no national row was published the band is null and carries the " +
+            "reason. No hourly detail and no drivers: those are the day-ahead " +
+            "and diagnosis routes.",
         },
       },
     );

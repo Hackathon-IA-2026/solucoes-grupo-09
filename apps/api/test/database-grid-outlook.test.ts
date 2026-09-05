@@ -310,12 +310,16 @@ suite("/v1/grid/outlook · four subsystems from Postgres (real Postgres)", () =>
     expect([...stored][0]?.rows).toBe(4);
     // And no argument reaches the filter: the read takes three axes and none
     // of them is an origin kind.
-    const rows = await readGridOutlook(db, {
+    const read = await readGridOutlook(db, {
       targetDate: TARGET_DATE,
       gateProfile: "gate_late",
       asOf: new Date("2024-05-14T00:00:00.000Z"),
     });
-    expect(rows.length).toBe(4);
+    expect(read.subsystems.length).toBe(4);
+    // These publications carry no national block — one subsystem each — so
+    // there is nothing at the national grain either, and the absence is a
+    // `null` rather than a band assembled from the four.
+    expect(read.national).toBeNull();
   });
 
   it("refuses a partial publication rather than zeroing the fourth subsystem", async () => {

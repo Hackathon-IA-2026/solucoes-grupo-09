@@ -312,6 +312,35 @@ describe("the publication payload is parsed, never assumed", () => {
     ],
   });
 
+  /** The national block the modelling service emits beside `days`. */
+  const national = (): Record<string, unknown> => ({
+    target_date: "2026-08-29",
+    grain: "national",
+    threshold_mw: 5,
+    day_total: { p10: 220, p50: 340, p90: 470 },
+    peak_power: { p10: 40, p50: 88, p90: 150 },
+    day_occurrence_probability: 0.93,
+    expected_mwh: 310,
+    subsystems: ["N", "NE", "SE", "S"],
+    ensemble_draws: 500,
+    ensemble_seed: 20_260_828,
+    ensemble_calibration_days: 90,
+    derivation: "joint_path_ensemble",
+    correction_regime: "conformal_v1_partial_upper",
+  });
+
+  /** A publication carrying all four day rows, so a national block is legal. */
+  const wholeGrid = (): Record<string, unknown> => {
+    const whole = payload();
+    const [day] = rowsOf(whole.days);
+    whole.days = ["N", "NE", "SE", "S"].map((subsystem) => ({
+      ...(day as Record<string, unknown>),
+      subsystem,
+    }));
+    whole.national = national();
+    return whole;
+  };
+
   it("accepts the modelling service's own shape", () => {
     const parsed = parsePublication(payload());
     expect(parsed.artifactId).toBe("2026-08-28T03:11:07Z");
@@ -355,6 +384,68 @@ describe("the publication payload is parsed, never assumed", () => {
     Object.assign(day ?? {}, { expected_mwh: undefined });
     expect(() => parsePublication(short)).toThrow(/expected_mwh/);
   });
+
+  it("accepts a publication with no national block, and defaults nothing", () => {
+    // A three-subsystem publication has no national figure — a total over
+    // three is a different quantity — and `undefined` is that absence rather
+    // than a zero the route would render as a band.
+    expect(parsePublication(payload()).national).toBeUndefined();
+    const nulled = payload();
+    nulled.national = null;
+    expect(parsePublication(nulled).national).toBeUndefined();
+  });
+
+  it("accepts the national block when the four day rows are there", () => {
+    const parsed = parsePublication(wholeGrid());
+    expect(parsed.national?.dayTotal).toEqual({ p10: 220, p50: 340, p90: 470 });
+    expect(parsed.national?.derivation).toBe("joint_path_ensemble");
+    expect(parsed.national?.subsystems).toEqual(["N", "NE", "SE", "S"]);
+  });
+
+  it("refuses a national figure that was not drawn from the shared index", () => {
+    // The refusal `days` gets for `sum_of_hourly_band`, at the grain above it.
+    // `path_ensemble` is refused too: that names a draw over one subsystem's
+    // whole days, and a national band standing on one is a sum of quantiles
+    // wearing a legitimate derivation's name.
+    for (const derivation of ["sum_of_subsystem_bands", "path_ensemble"]) {
+      const summed = wholeGrid();
+      Object.assign(summed.national as Record<string, unknown>, { derivation });
+      expect(() => parsePublication(summed)).toThrow(/joint_path_ensemble/);
+    }
+  });
+
+  it("refuses a national figure that does not cover the four subsystems", () => {
+    const partial = wholeGrid();
+    Object.assign(partial.national as Record<string, unknown>, {
+      subsystems: ["N", "NE", "SE"],
+    });
+    expect(() => parsePublication(partial)).toThrow(/national/);
+  });
+
+  it("refuses SIN as a member of the national figure's coverage", () => {
+    const sin = wholeGrid();
+    Object.assign(sin.national as Record<string, unknown>, {
+      subsystems: ["SIN", "NE", "SE", "S"],
+    });
+    expect(() => parsePublication(sin)).toThrow(/SIN/);
+  });
+
+  it("refuses a national band that is not monotone", () => {
+    const crossed = wholeGrid();
+    Object.assign(crossed.national as Record<string, unknown>, {
+      day_total: { p10: 470, p50: 340, p90: 220 },
+    });
+    expect(() => parsePublication(crossed)).toThrow(/monotone/);
+  });
+
+  it("refuses a national figure whose components are not in the publication", () => {
+    // The national row and the four subsystem rows are one transaction. A band
+    // summed over four subsystems, three of which the publication carries no
+    // day row for, is a figure whose components are not in the table.
+    const orphan = payload();
+    orphan.national = national();
+    expect(() => parsePublication(orphan)).toThrow(/one transaction/);
+  });
 });
 
 describe("the cross-language vector", () => {
@@ -384,6 +475,35 @@ describe("the cross-language vector", () => {
     expect(parsed.publishedAt.getTime()).toBeLessThan(
       parsed.hours[0]?.validTime.getTime() as number,
     );
+  });
+
+  it("carries a national figure narrower than the four bands added", () => {
+    const parsed = parsePublication(vector);
+    const national = parsed.national;
+    if (national === undefined) {
+      throw new Error("the checked-in vector covers all four subsystems");
+    }
+    expect(national.derivation).toBe("joint_path_ensemble");
+    expect(national.subsystems.sort()).toEqual(["N", "NE", "S", "SE"]);
+    const summed = parsed.days.reduce(
+      (band, day) => ({
+        p10: band.p10 + day.dayTotal.p10,
+        p90: band.p90 + day.dayTotal.p90,
+      }),
+      { p10: 0, p90: 0 },
+    );
+    // Measured on the modelling side's own seeded fit: roughly half the width.
+    expect(national.dayTotal.p10).toBeGreaterThan(summed.p10);
+    expect(national.dayTotal.p90).toBeLessThan(summed.p90);
+    // And the peak is a peak of the sum, so it is below the sum of the peaks.
+    const summedPeaks = parsed.days.reduce((total, day) => total + day.peakPower.p90, 0);
+    expect(national.peakPower.p90).toBeLessThan(summedPeaks);
+    // The expectation is the one national quantity that does add exactly.
+    const summedExpectations = parsed.days.reduce(
+      (total, day) => total + day.expectedMwh,
+      0,
+    );
+    expect(national.expectedMwh).toBeCloseTo(summedExpectations, 6);
   });
 
   it("carries a day figure the hours cannot produce", () => {
@@ -430,9 +550,10 @@ describe("the boundary, asserted structurally", () => {
   it("filters origin_kind = served in the query, not in a branch", () => {
     const reads = SOURCE("forecast/reads.ts");
     const filters = reads.match(/origin_kind = 'served'::forecast_origin_kind/g) ?? [];
-    // Once per read: the day row, the hour rows, the meta listing, and the
-    // four-subsystem outlook read `/v1/grid/outlook` is.
-    expect(filters.length).toBe(4);
+    // Once per read: the day row, the hour rows, the meta listing, and the two
+    // reads `/v1/grid/outlook` is — the four subsystem rows and the national
+    // row beside them.
+    expect(filters.length).toBe(5);
     // No parameter reaches it — a widened filter is what would let a
     // `backfilled_holdout` row out of this route.
     expect(reads).not.toContain("query.originKind");

@@ -51,7 +51,7 @@ fix for this ticket either.
 
 **Blocked by:** 08, 14.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The national day grain has its own table, and `SIN` is not a value of
       `subsystem_code` anywhere in it
@@ -67,3 +67,15 @@ fix for this ticket either.
 - [ ] A test asserts the served national band is strictly narrower than the
       componentwise sum of the four subsystem bands
 - [ ] No route, read or view synthesises a national band by summing quantiles
+
+## Follow-up found here, not fixed here: the drizzle meta snapshots are stale
+
+Pre-existing and unrelated to this ticket's subject. `apps/api/drizzle/meta/` has
+been frozen at 33 tables since `0033`, so a plain `drizzle-kit generate` — without
+`--custom` — silently emits a migration that re-creates every table added since
+`0034`, including this one. Every hand-written migration since then has worked
+around it by copying the snapshot forward unchanged, which is why nothing has
+broken yet.
+
+This deserves its own ticket: resync the snapshots, then confirm a plain
+`generate` against an unchanged schema emits nothing.

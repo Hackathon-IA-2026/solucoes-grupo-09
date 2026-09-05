@@ -1,6 +1,10 @@
 import { sql } from "drizzle-orm";
 import type { Database } from "../database/connection.js";
-import { curtailmentForecastDay, curtailmentForecastHour } from "../database/schema.js";
+import {
+  curtailmentForecastDay,
+  curtailmentForecastHour,
+  curtailmentForecastNationalDay,
+} from "../database/schema.js";
 import { UpstreamError } from "../errors.js";
 import type { SubsystemCode } from "../ingest/normalise.js";
 import { digestValues } from "../ingest/versioned-write.js";
@@ -83,6 +87,39 @@ export interface PublishedDay {
   ensembleCalibrationDays: number;
 }
 
+/**
+ * The one national day of a publication — forecaster ticket 22.
+ *
+ * Beside `days`, never inside it: `SIN` is not a `Subsystem`
+ * (`docs/domain-model.md`, vocabulary rule 6), so the national figure has its
+ * own grain and its own table rather than a fifth row of the subsystem one.
+ *
+ * Optional, and `undefined` is a real state rather than a defaulting bug: a
+ * publication short of a subsystem has no national figure — a total over three
+ * is a different quantity wearing the same name — and so does one produced by
+ * an artifact trained before the shared draw index landed. The route renders
+ * that absence with a stated reason and never as a zero.
+ */
+export interface PublishedNationalDay {
+  targetDate: string;
+  thresholdMw: number;
+  /** Quantiles of the four day totals added draw by draw. Never a sum of bands. */
+  dayTotal: { p10: number; p50: number; p90: number };
+  /** Quantiles of `max_t Σ_s`. Peak of the sum, never a sum of peaks. */
+  peakPower: { p10: number; p50: number; p90: number };
+  /** The share of draws in which some subsystem had some hour above τ. */
+  dayOccurrenceProbability: number;
+  /** `Σ_s E[Y_s]` — the one national quantity that adds exactly. */
+  expectedMwh: number;
+  /** The four this was summed over, in canonical order. */
+  subsystems: SubsystemCode[];
+  /** `joint_path_ensemble`. Refused here if it says anything else. */
+  derivation: string;
+  ensembleDraws: number;
+  ensembleSeed: number;
+  ensembleCalibrationDays: number;
+}
+
 /** One lane's day, as the modelling service handed it over. */
 export interface ForecastPublication {
   lane: string;
@@ -100,6 +137,8 @@ export interface ForecastPublication {
   correctionRegime: string;
   hours: PublishedHour[];
   days: PublishedDay[];
+  /** The national day, when the publication covered all four subsystems. */
+  national?: PublishedNationalDay;
 }
 
 /** What one publication actually did — the shape an operator wants in a log. */
@@ -110,10 +149,23 @@ export interface PublicationWriteResult {
   daysInserted: number;
   daysRevised: number;
   daysUnchanged: number;
+  nationalInserted: number;
+  nationalRevised: number;
+  nationalUnchanged: number;
 }
 
 /** The one derivation a published day figure may claim. */
 export const PATH_ENSEMBLE = "path_ensemble";
+
+/**
+ * The one derivation a published *national* figure may claim.
+ *
+ * Deliberately not `path_ensemble`: that names a draw over one subsystem's
+ * whole days, and this names four of them added on one shared row index of `U`.
+ * A national figure stamped `path_ensemble` would be a national band standing
+ * on a per-subsystem draw, which is the arithmetic this grain exists to remove.
+ */
+export const JOINT_PATH_ENSEMBLE = "joint_path_ensemble";
 
 /** `ForecastOrigin.producer` for a WattSteer curtailment forecast. */
 const PRODUCER = "wattsteer" as const;
@@ -256,6 +308,20 @@ export function parsePublication(payload: unknown): ForecastPublication {
     );
   }
 
+  const national = parseNational(payload.national, targetDate);
+  if (national !== undefined) {
+    const covered = new Set(days.map((day) => day.subsystem));
+    const missing = national.subsystems.filter((code) => !covered.has(code));
+    if (missing.length > 0) {
+      throw new PublicationPayloadError(
+        `the national figure is summed over ${missing.join(", ")}, which this ` +
+          "publication carries no day row for. The national row and the four " +
+          "subsystem rows are one transaction, so a national band whose " +
+          "components are absent is not a state",
+      );
+    }
+  }
+
   return {
     lane,
     featureSet: str(payload, "feature_set", "publication"),
@@ -271,6 +337,84 @@ export function parsePublication(payload: unknown): ForecastPublication {
     correctionRegime: str(payload, "correction_regime", "publication"),
     hours,
     days,
+    ...(national === undefined ? {} : { national }),
+  };
+}
+
+/**
+ * The national block, or its absence.
+ *
+ * `null`/absent is accepted, because it is a real state and not a missing
+ * field: the modelling service emits `national: null` for a publication short
+ * of a subsystem, and an artifact trained before the shared draw index has no
+ * national figure at all. What is refused is a national block whose
+ * `derivation` is not the shared-draw ensemble — the same refusal `days` gets
+ * for anything but `path_ensemble`, and for the same reason: a national band
+ * that was not drawn jointly was arrived at by adding four quantiles, which is
+ * the defect this grain exists to remove.
+ */
+function parseNational(
+  raw: unknown,
+  targetDate: string,
+): PublishedNationalDay | undefined {
+  if (raw === undefined || raw === null) {
+    return undefined;
+  }
+  const where = "national";
+  if (!isRecord(raw)) {
+    throw new PublicationPayloadError(`${where} is not a row`);
+  }
+  const derivation = str(raw, "derivation", where);
+  if (derivation !== JOINT_PATH_ENSEMBLE) {
+    throw new PublicationPayloadError(
+      `${where}: a national figure derived by ${derivation} is not publishable; ` +
+        "the national band is a quantile of the four subsystems' paths added " +
+        `draw by draw under one shared index (${JOINT_PATH_ENSEMBLE}), and never ` +
+        "a sum of the four subsystem bands",
+    );
+  }
+  const subsystems = raw.subsystems;
+  if (!Array.isArray(subsystems)) {
+    throw new PublicationPayloadError(
+      `${where}: no subsystems array, so nothing says the figure covered the ` +
+        "whole grid rather than three of it",
+    );
+  }
+  const covered = subsystems.map((code, index) => {
+    if (typeof code !== "string" || !SUBSYSTEMS.has(code)) {
+      throw new PublicationPayloadError(
+        `${where}.subsystems[${index}]: ${String(code)} is not a subsystem. ` +
+          "`SIN` is not one either — the national figure is a key, never a " +
+          "fifth member of a four-member enum",
+      );
+    }
+    return code as SubsystemCode;
+  });
+  if (new Set(covered).size !== SUBSYSTEMS.size) {
+    throw new PublicationPayloadError(
+      `${where}: the figure names ${covered.join(", ") || "no subsystem"}; a ` +
+        "national total over anything but the four is a different quantity " +
+        "wearing the same name",
+    );
+  }
+  const rowDate = civilDate(raw.target_date, `${where}.target_date`);
+  if (rowDate !== targetDate) {
+    throw new PublicationPayloadError(
+      `a national row for ${rowDate} arrived in a publication of ${targetDate}`,
+    );
+  }
+  return {
+    targetDate: rowDate,
+    thresholdMw: num(raw, "threshold_mw", where),
+    dayTotal: band(raw, "day_total", where),
+    peakPower: band(raw, "peak_power", where),
+    dayOccurrenceProbability: num(raw, "day_occurrence_probability", where),
+    expectedMwh: num(raw, "expected_mwh", where),
+    subsystems: covered,
+    derivation,
+    ensembleDraws: num(raw, "ensemble_draws", where),
+    ensembleSeed: num(raw, "ensemble_seed", where),
+    ensembleCalibrationDays: num(raw, "ensemble_calibration_days", where),
   };
 }
 
@@ -383,6 +527,41 @@ export function dayDigest(publication: ForecastPublication, day: PublishedDay): 
   ]);
 }
 
+/**
+ * Digest of the national row's values.
+ *
+ * The `subsystems` array is a value: a figure over three subsystems and one
+ * over four are different numbers under the same key, and a digest that ignored
+ * the coverage would call the second an unchanged republication of the first.
+ */
+export function nationalDigest(
+  publication: ForecastPublication,
+  national: PublishedNationalDay,
+): string {
+  return digestValues([
+    publication.artifactId,
+    publication.correctionRegime,
+    publication.featureSet,
+    publication.trainedThrough,
+    national.thresholdMw,
+    national.dayTotal.p10,
+    national.dayTotal.p50,
+    national.dayTotal.p90,
+    national.peakPower.p10,
+    national.peakPower.p50,
+    national.peakPower.p90,
+    national.dayOccurrenceProbability,
+    national.expectedMwh,
+    national.subsystems.join(","),
+    national.derivation,
+    national.ensembleDraws,
+    national.ensembleSeed,
+    national.ensembleCalibrationDays,
+    publication.riskBinElevatedFrom,
+    publication.riskBinHighFrom,
+  ]);
+}
+
 interface LatestVersion {
   dataVersion: number;
   valueDigest: string;
@@ -408,6 +587,7 @@ export async function writePublication(
     const scoped = tx as unknown as Database;
     const hourLatest = await latestHourVersions(scoped, publication);
     const dayLatest = await latestDayVersions(scoped, publication);
+    const nationalLatest = await latestNationalVersion(scoped, publication);
 
     const result: PublicationWriteResult = {
       hoursInserted: 0,
@@ -416,6 +596,9 @@ export async function writePublication(
       daysInserted: 0,
       daysRevised: 0,
       daysUnchanged: 0,
+      nationalInserted: 0,
+      nationalRevised: 0,
+      nationalUnchanged: 0,
     };
 
     const hourInserts: (typeof curtailmentForecastHour.$inferInsert)[] = [];
@@ -508,7 +691,52 @@ export async function writePublication(
       });
     }
 
-    // Both, inside one transaction, or neither. A day band without its hours —
+    const nationalInserts: (typeof curtailmentForecastNationalDay.$inferInsert)[] = [];
+    if (publication.national !== undefined) {
+      const national = publication.national;
+      const valueDigest = nationalDigest(publication, national);
+      if (nationalLatest?.valueDigest === valueDigest) {
+        result.nationalUnchanged += 1;
+      } else {
+        if (nationalLatest) {
+          result.nationalRevised += 1;
+        } else {
+          result.nationalInserted += 1;
+        }
+        nationalInserts.push({
+          targetDate: national.targetDate,
+          originKind: publication.originKind,
+          gateProfile: publication.gateProfile,
+          thresholdMw: national.thresholdMw,
+          forecastProducer: PRODUCER,
+          runLabel: publication.artifactId,
+          featureSet: publication.featureSet,
+          correctionRegime: publication.correctionRegime,
+          subsystems: national.subsystems,
+          dayTotalP10Mwh: national.dayTotal.p10,
+          dayTotalP50Mwh: national.dayTotal.p50,
+          dayTotalP90Mwh: national.dayTotal.p90,
+          peakPowerP10Mw: national.peakPower.p10,
+          peakPowerP50Mw: national.peakPower.p50,
+          peakPowerP90Mw: national.peakPower.p90,
+          dayOccurrenceProbability: national.dayOccurrenceProbability,
+          expectedMwh: national.expectedMwh,
+          derivation: national.derivation,
+          ensembleDraws: national.ensembleDraws,
+          ensembleSeed: national.ensembleSeed,
+          ensembleCalibrationDays: national.ensembleCalibrationDays,
+          trainedThrough: publication.trainedThrough,
+          riskBinElevatedFrom: publication.riskBinElevatedFrom,
+          riskBinHighFrom: publication.riskBinHighFrom,
+          dataVersion: (nationalLatest?.dataVersion ?? 0) + 1,
+          publishedAt: publication.publishedAt,
+          ingestedAt,
+          valueDigest,
+        });
+      }
+    }
+
+    // All three, inside one transaction, or none. A day band without its hours —
     // or hours without the day band the route is required to read rather than
     // compute — is exactly the half-written publication the boundary decision
     // promises is not representable.
@@ -522,6 +750,17 @@ export async function writePublication(
       await scoped
         .insert(curtailmentForecastDay)
         .values(dayInserts)
+        .onConflictDoNothing();
+    }
+    // The national row is in the *same* transaction as the four subsystem rows,
+    // which is the whole of forecaster ticket 22's third clause: a national band
+    // that landed without its subsystems — or four subsystems whose national
+    // band did not land — would be a partial publication, and the route would
+    // serve it without being able to tell.
+    if (nationalInserts.length > 0) {
+      await scoped
+        .insert(curtailmentForecastNationalDay)
+        .values(nationalInserts)
         .onConflictDoNothing();
     }
     return result;
@@ -562,6 +801,28 @@ function assertShapedLikeAForecast(publication: ForecastPublication): void {
     }
   }
   const covered = new Set(publication.days.map((day) => day.subsystem));
+  if (publication.national !== undefined) {
+    // The national row goes in with the four subsystem rows or it does not go
+    // in: a national band beside three day rows is a figure whose components
+    // are not in the table it claims to have been summed from.
+    const missing = publication.national.subsystems.filter((code) => !covered.has(code));
+    if (missing.length > 0) {
+      throw new PublicationPayloadError(
+        `${publication.lane}: the national figure is summed over ` +
+          `${missing.join(", ")}, which this publication carries no day row for. ` +
+          "The national row and the four subsystem rows are one transaction, so " +
+          "a national band whose components are absent is not a state",
+      );
+    }
+    if (publication.national.thresholdMw !== publication.thresholdMw) {
+      throw new PublicationPayloadError(
+        `${publication.lane}: the national figure is against ` +
+          `${publication.national.thresholdMw} MW and the publication against ` +
+          `${publication.thresholdMw} MW; a magnitude and the threshold that ` +
+          "produced it travel together",
+      );
+    }
+  }
   for (const hour of publication.hours) {
     if (!covered.has(hour.subsystem)) {
       // The day row is what the route reads its day figures from; hours without
@@ -601,6 +862,39 @@ async function latestHourVersions(
     });
   }
   return latest;
+}
+
+/**
+ * The newest vintage of this publication's national key, or none.
+ *
+ * `threshold_mw` is in the key here and is not in the subsystem grain's: two
+ * thresholds are two national quantities rather than two beliefs about one, so
+ * a sweep appends a second row instead of revising the first.
+ */
+async function latestNationalVersion(
+  db: Database,
+  publication: ForecastPublication,
+): Promise<LatestVersion | undefined> {
+  if (publication.national === undefined) {
+    return undefined;
+  }
+  const rows = await db.execute<{
+    data_version: number;
+    value_digest: string;
+  }>(sql`
+    select data_version, value_digest
+    from curtailment_forecast_national_day
+    where target_date = ${publication.targetDate}::date
+      and origin_kind = ${publication.originKind}::forecast_origin_kind
+      and gate_profile = ${publication.gateProfile}::forecast_gate_profile
+      and threshold_mw = ${publication.national.thresholdMw}::double precision
+    order by data_version desc
+    limit 1
+  `);
+  const [row] = [...rows];
+  return row === undefined
+    ? undefined
+    : { dataVersion: Number(row.data_version), valueDigest: String(row.value_digest) };
 }
 
 async function latestDayVersions(

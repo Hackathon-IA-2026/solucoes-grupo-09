@@ -1057,12 +1057,19 @@ contract.
 
 ### The national readout, and the band that cannot be built
 
-> **Fixed.** Product-fix 01 landed the change this section specifies: the hero
-> now renders `national.expected_mwh` with `band: null` and
-> `band_unavailable_reason: "no_joint_ensemble"`, and the null band is
-> unrepresentable without a stated reason. What follows is kept as the record of
-> what was found and why, and the joint-band upgrade it argues for is still owed
-> by forecaster ticket 08.
+> **Fixed, and then upgraded.** Product-fix 01 landed the change this section
+> specifies: the hero renders `national.expected_mwh`, and a null band is
+> unrepresentable without a stated reason. The joint-band upgrade this section
+> argues for then landed too — forecaster ticket 08 computed it on the shared
+> draw index and forecaster ticket 22 gave it the fifth row grain,
+> `curtailment_forecast_national_day`, that it had nowhere to be written
+> without. So `national.band` is now the persisted joint band with
+> `band_unavailable_reason: null` where a national row exists, and stays `null`
+> with `"no_joint_ensemble"` where one does not — an artifact trained before the
+> shared draw index has none. What follows is kept as the record of what was
+> found and why. The table in it reads as of the finding: a national **band**,
+> **median** and **day-occurrence probability** are all published today, off the
+> joint ensemble and never by adding across subsystems.
 
 The landing hero rendered `NATIONAL_ENERGY = band(2640, 4180, 6320)` MWh over
 four subsystem bands whose P50s summed to 4180. The comment concedes that "nothing
@@ -1627,14 +1634,18 @@ validates against the schema.
   is carried, never stored.
 - **Serialising the path ensemble.** Ticket 009 keeps the 500 paths internal;
   the contract stays P10/P50/P90 plus the day-grain quantiles. The **joint
-  national band** proposed above needs no serialisation — it is a fifth
-  persisted row grain, not an exposed ensemble.
+  national band** proposed above needed no serialisation — it is a fifth
+  persisted row grain, not an exposed ensemble, and it is now
+  `curtailment_forecast_national_day`.
 - **The ML service's public routability.** It stays private. Its `/docs` stays
   closed in production, as built.
 - **API versioning beyond `/v1`.** One version exists. The Scenario's `v: 1` is
   a separate and stricter mechanism and is not this.
-- **A national forecast band today.** `null`, with a reason, until the shared
-  draw index lands in ticket 009.
+- ~~**A national forecast band today.** `null`, with a reason, until the shared
+  draw index lands in ticket 009.~~ **Done.** The shared draw index landed
+  (forecaster 08) and the row grain that stores its output landed with
+  forecaster 22. The `null` branch remains for artifacts that have no national
+  row, which is an absence with a stated reason rather than a placeholder.
 - **Deleting the ML service's `/v1/forecast/day-ahead` stub before the publisher
   exists.** It stays until there is something to replace it with, and the
   gateway route in front of it is documented as provisional.
@@ -1673,7 +1684,9 @@ whole vintage vocabulary exists to survive.
 
 1. **There is no national band and no national median**, so the landing page's
    most prominent number has no engine behind it. The fix is one line in the
-   forecaster's draw loop.
+   forecaster's draw loop. *(Since closed: forecaster 08 made the draw index
+   shared, forecaster 22 gave the result a row grain of its own — `SIN` is not a
+   subsystem, so it could not borrow the subsystem grain's key.)*
 2. **ODbL §4.6 obliges machine-readable access to the plant registry**, and
    nothing in the product provided it. `/v1/plants` exists for a licence and not
    for a screen.

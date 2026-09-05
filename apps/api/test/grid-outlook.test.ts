@@ -6,7 +6,7 @@ import { encodeWire } from "@wattsteer/core/wire";
 import { Elysia } from "elysia";
 import { createGridRoutes, toGridOutlook } from "../src/api/grid.js";
 import { errorHandler } from "../src/api/plugins/errors.js";
-import type { ForecastDayRow } from "../src/forecast/reads.js";
+import type { ForecastDayRow, ForecastNationalDayRow } from "../src/forecast/reads.js";
 
 /**
  * `/v1/grid/outlook`, without a database.
@@ -201,6 +201,105 @@ describe("the national figure survives aggregation", () => {
     expect(shaped.subsystems.map((entry) => entry.subsystem)).not.toContain(
       "SIN" as never,
     );
+  });
+});
+
+/**
+ * The persisted national row for the same day — forecaster ticket 22.
+ *
+ * The numbers are not free-hand: they stand in the relation the shared-draw
+ * construction actually produces. The band is **inside** the componentwise sum
+ * of the four subsystem bands (1720 … 7260) and its P50 is not the sum of the
+ * four medians (3750), because the median of a sum is the sum of the medians
+ * only under comonotonicity. The peak is a peak *of the sum* (410 at P90) and
+ * so is well below the sum of the four peaks (625): the four subsystems' worst
+ * hours fall in different hours.
+ */
+function nationalRow(
+  overrides: Partial<ForecastNationalDayRow> = {},
+): ForecastNationalDayRow {
+  return {
+    targetDate: "2026-08-29",
+    gateProfile: "gate_late",
+    thresholdMw: 5,
+    artifactId: "2026-08-28T03:11:07Z",
+    publishedAt: new Date("2026-08-28T22:00:00.000Z"),
+    ingestedAt: new Date("2026-08-28T22:10:00.000Z"),
+    dataVersion: 1,
+    subsystems: ["N", "NE", "SE", "S"],
+    dayTotalMwh: { p10: 2180, p50: 3410, p90: 5120 },
+    peakPowerMw: { p10: 140, p50: 246, p90: 410 },
+    dayOccurrenceProbability: 0.93,
+    expectedMwh: 4318,
+    derivation: "joint_path_ensemble",
+    ...overrides,
+  };
+}
+
+describe("the national band, once the joint row exists", () => {
+  const shaped = toGridOutlook(rows(), NOW, nationalRow());
+
+  it("publishes the persisted band and drops the stated reason", () => {
+    expect(shaped.national.band).toEqual({ p10: 2180, p50: 3410, p90: 5120 });
+    expect(shaped.national.bandUnavailableReason).toBeNull();
+  });
+
+  it("is strictly narrower than the componentwise sum of the four bands", () => {
+    // The measurable consequence of a joint draw, and the reason this grain
+    // exists. The summed band is the day on which all four subsystems
+    // simultaneously landed at their own ninetieth percentile, which is far
+    // rarer than one in ten — so it is not a 10–90 interval of anything.
+    const summed = shaped.subsystems.reduce(
+      (band, entry) => ({
+        p10: band.p10 + entry.dayEnergyMwh.p10,
+        p90: band.p90 + entry.dayEnergyMwh.p90,
+      }),
+      { p10: 0, p90: 0 },
+    );
+    const national = shaped.national.band;
+    if (national === null) {
+      throw new Error("the national band is the subject of this test");
+    }
+    expect(summed).toEqual({ p10: 1720, p90: 7260 });
+    expect(national.p10).toBeGreaterThan(summed.p10);
+    expect(national.p90).toBeLessThan(summed.p90);
+    expect(national.p90 - national.p10).toBeLessThan(summed.p90 - summed.p10);
+  });
+
+  it("is not the componentwise sum of the four medians either", () => {
+    const sumOfMedians = shaped.subsystems.reduce(
+      (total, entry) => total + entry.dayEnergyMwh.p50,
+      0,
+    );
+    expect(shaped.national.band?.p50).not.toBe(sumOfMedians);
+  });
+
+  it("keeps the expectation exactly additive beside a band that is not", () => {
+    // `E[Y]` adds with no assumption whatever, so it stays the sum of the four
+    // — and it is *not* replaced by the band's centre.
+    expect(shaped.national.expectedMwh).toBe(4318);
+    expect(shaped.national.expectedMwh).not.toBe(shaped.national.band?.p50);
+  });
+
+  it("keeps the absence branch alive for an artifact with no national row", () => {
+    // Not dead code: an artifact trained before the shared draw index landed
+    // publishes no national row, and that is an absence with a reason.
+    const absent = toGridOutlook(rows(), NOW, null);
+    expect(absent.national.band).toBeNull();
+    expect(absent.national.bandUnavailableReason).toBe("no_joint_ensemble");
+  });
+
+  it("still adds no quantile anywhere on the route or the read", () => {
+    for (const module of ["api/grid.ts", "forecast/reads.ts"]) {
+      const source = SOURCE(module);
+      const banned = /(reduce|sum)\s*\([^)]*\b(p10|p50|p90|dayTotalMwh|peakPowerMw)\b/i;
+      expect(banned.test(source)).toBe(false);
+    }
+  });
+
+  it("has no SIN anywhere in the national row it was given", () => {
+    expect(nationalRow().subsystems).not.toContain("SIN" as never);
+    expect(JSON.stringify(shaped)).not.toContain("SIN");
   });
 });
 

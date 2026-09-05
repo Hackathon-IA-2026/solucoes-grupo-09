@@ -108,11 +108,14 @@ from wattsteer_ml.training import (
     CORRECTION_REGIME,
     BundleError,
     DayGrainForecast,
+    ForecastOrigin,
     HourForecast,
     LoadedArtifact,
+    NationalDayGrain,
     day_grain_rows,
     forecast_rows,
     load_artifact,
+    national_day_grain,
     subsystem_day_expectations,
 )
 
@@ -278,6 +281,39 @@ class DayRow:
 
 
 @dataclass(frozen=True)
+class NationalRow:
+    """The one national row of a publication — forecaster ticket 22.
+
+    The counterpart of :class:`DayRow` at the grain above it, and a distinct
+    type rather than a fifth :class:`DayRow` because ``SIN`` is not a
+    ``Subsystem`` (`docs/domain-model.md`, vocabulary rule 6). It travels under
+    its own ``national`` key beside ``days`` and ``hours`` for the same reason
+    the wire puts the national figure under a key rather than in the subsystem
+    array: a fifth member of a four-member enum is the double count the rule
+    makes unrepresentable.
+
+    It **decorates** :class:`~wattsteer_ml.training.national.NationalDayGrain`
+    exactly as :class:`DayRow` decorates
+    :class:`~wattsteer_ml.training.ensemble.DayGrainForecast` — the grain's own
+    :meth:`~wattsteer_ml.training.national.NationalDayGrain.as_row` is already
+    the persistence shape, ``joint_path_ensemble`` derivation and all — and adds
+    only the correction regime, which is a property of the publication rather
+    than of the draw.
+    """
+
+    #: The joint figure exactly as ticket 08 computed it: four day totals added
+    #: draw by draw under one shared plan, peak-of-sum, occurrence over draws.
+    figure: NationalDayGrain
+
+    @property
+    def target_date(self) -> date:
+        return self.figure.target_date
+
+    def as_row(self) -> dict[str, Any]:
+        return {**self.figure.as_row(), "correction_regime": CORRECTION_REGIME}
+
+
+@dataclass(frozen=True)
 class ForecastPublication:
     """One lane, one target date: the rows, and everything that identifies them.
 
@@ -311,6 +347,13 @@ class ForecastPublication:
     risk_bins: dict[str, tuple[float, float]]
     hours: tuple[HourRow, ...]
     days: tuple[DayRow, ...]
+    #: The national day, when this publication covers all four subsystems.
+    #:
+    #: ``None`` and not a zero when it does not: a national total over three
+    #: subsystems is a different quantity wearing the same name, and the
+    #: gateway's ``band_unavailable_reason`` branch is what renders the absence.
+    #: An artifact trained before the shared draw index landed produces one too.
+    national: NationalRow | None = None
 
     @property
     def subsystems(self) -> tuple[Subsystem, ...]:
@@ -343,6 +386,9 @@ class ForecastPublication:
             "subsystems": list(self.subsystems),
             "hours": [hour.as_row() for hour in self.hours],
             "days": [day.as_row() for day in self.days],
+            # Beside `days`, never inside it. `null` is an absence the gateway
+            # publishes with a stated reason, and never a zero.
+            "national": None if self.national is None else self.national.as_row(),
         }
 
 
@@ -395,6 +441,13 @@ def build_publication(
     expectations = subsystem_day_expectations(hours)
     splits = _day_expectation_splits(hours)
     non_zero = _hours_p50_nonzero(hours)
+    # One call, and the national figure is built from *these* objects rather
+    # than from a second one. `day_grain_rows` mints one `DrawPlan` per call and
+    # hands it to every subsystem, and draw `k` is one calendar day nationally
+    # only if the four share that plan — so a second call would produce a
+    # national band over four different days that no persisted subsystem row
+    # was drawn from.
+    ensemble_days = tuple(day_grain_rows(bundle, rows))
     day_rows = tuple(
         DayRow(
             forecast=day,
@@ -403,11 +456,17 @@ def build_publication(
             expected_solar_mwh=splits[(day.target_date, day.subsystem)].solar_mwh,
             hours_p50_nonzero=non_zero[(day.target_date, day.subsystem)],
         )
-        for day in day_grain_rows(bundle, rows)
+        for day in ensemble_days
         # A day the ensemble kept but the expectations did not is not
         # representable — both drop a short day — and this states the rule
         # rather than trusting it.
         if (day.target_date, day.subsystem) in expectations
+    )
+    national = _national_row(
+        ensemble_days,
+        expectations=expectations,
+        artifact_id=loaded.artifact_id,
+        target_date=target_date,
     )
 
     return ForecastPublication(
@@ -422,6 +481,7 @@ def build_publication(
         risk_bins=_risk_bins(bundle),
         hours=hour_rows,
         days=day_rows,
+        national=national,
     )
 
 
@@ -497,6 +557,38 @@ def load_promoted(
             lane_state="unresolvable",
             reason=(f"the promoted artifact {artifact_id} could not be loaded: {error}"),
         ) from error
+
+
+def _national_row(
+    days: Sequence[DayGrainForecast],
+    *,
+    expectations: Mapping[tuple[date, Subsystem], float],
+    artifact_id: str,
+    target_date: date,
+) -> NationalRow | None:
+    """The publication's national row, or ``None`` when there is not one.
+
+    :func:`~wattsteer_ml.training.national.national_day_grain` already drops a
+    day that does not carry all four subsystems, so ``None`` here is exactly
+    "this publication is short of a subsystem" — and it is returned rather than
+    raised because a three-subsystem publication is a real, persistable state:
+    the subsystem rows it does have are still records of what was served. The
+    national band is the thing that does not exist, and the gateway renders that
+    absence with its reason instead of a number.
+
+    A second national figure for a *different* day is a bug and not a state:
+    ``build_publication`` is one lane-day and the rows were checked against
+    ``target_date`` before this is reached.
+    """
+    figures = national_day_grain(
+        days,
+        expectations=expectations,
+        origin=ForecastOrigin.of_artifact(artifact_id),
+    )
+    for figure in figures:
+        if figure.target_date == target_date:
+            return NationalRow(figure=figure)
+    return None
 
 
 def _hour_row(hour: HourForecast, *, valid_time: datetime) -> HourRow:

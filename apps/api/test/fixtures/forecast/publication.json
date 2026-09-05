@@ -1964,5 +1964,39 @@
       "hours_p50_nonzero": 0,
       "correction_regime": "conformal_v1_partial_upper"
     }
-  ]
+  ],
+  "national": {
+    "target_date": "2025-04-08",
+    "grain": "national",
+    "threshold_mw": 5.0,
+    "forecast_origin": {
+      "producer": "wattsteer",
+      "run_label": "2026-08-29T04:00:00Z"
+    },
+    "day_total": {
+      "p10": 823.9301839941235,
+      "p50": 1274.7455240623524,
+      "p90": 1683.5819157731753
+    },
+    "peak_power": {
+      "p10": 200.01760533446236,
+      "p50": 365.181308637594,
+      "p90": 587.7365680797976
+    },
+    "day_occurrence_probability": 1.0,
+    "expected_mwh": 1419.248985782343,
+    "subsystems": [
+      "N",
+      "NE",
+      "SE",
+      "S"
+    ],
+    "ensemble_draws": 500,
+    "ensemble_seed": 20260829,
+    "ensemble_calibration_days": 41,
+    "derivation": "joint_path_ensemble",
+    "derivation_note": "quantiles over the 500 draws of the four subsystems' paths added draw by draw under one shared row index of U. Never a sum of quantiles, and never an ONS national aggregate row",
+    "upper_tail_note": "each subsystem's day total inherits the composed P90's under-corrected upper tail (upper_correction_fraction of delta_hi), and this P90 is a sum of four of them drawn together, so the shortfall accumulates in level rather than cancelling. Reported, not repaired: forecaster ticket 21 owns the decision",
+    "correction_regime": "conformal_v1_partial_upper"
+  }
 }

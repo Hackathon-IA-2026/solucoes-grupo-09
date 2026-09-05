@@ -176,6 +176,9 @@ export async function writeHoldoutBackfill(
     daysInserted: 0,
     daysRevised: 0,
     daysUnchanged: 0,
+    nationalInserted: 0,
+    nationalRevised: 0,
+    nationalUnchanged: 0,
   };
   for (const publication of backfill.publications) {
     // `ingestedAt` is the real instant the backtest's rows were written, and it
@@ -191,6 +194,9 @@ export async function writeHoldoutBackfill(
     result.daysInserted += written.daysInserted;
     result.daysRevised += written.daysRevised;
     result.daysUnchanged += written.daysUnchanged;
+    result.nationalInserted += written.nationalInserted;
+    result.nationalRevised += written.nationalRevised;
+    result.nationalUnchanged += written.nationalUnchanged;
   }
   return result;
 }

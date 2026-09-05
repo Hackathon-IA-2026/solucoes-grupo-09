@@ -45,11 +45,28 @@ renewable energy without a marginal-emissions model.
 An unreplayable date explains which clause it failed, and a pre-F1 day renders the
 observed-only view with its one-sentence reason.
 
-**Blocked by:** 04, 05, 06, 07. **Cross-spec, external: Forecaster 14** must persist the
-**day-grain** ensemble figures (day total P10/P50/P90, peak band, day occurrence)
-alongside the hourly `Forecast` rows. This is the hand-back this spec owes the forecaster
-and, as written, Forecaster 14 persists only the hour-grain fields — without it this
-screen cannot draw a day band without summing quantiles, which both specs forbid.
+**Blocked by:** 04, 05, 06, 07. **The cross-spec blocker below is CLEARED** — see the
+correction after it; nothing external now gates this ticket.
+
+~~**Cross-spec, external: Forecaster 14** must persist the **day-grain** ensemble figures
+(day total P10/P50/P90, peak band, day occurrence) alongside the hourly `Forecast` rows.
+This is the hand-back this spec owes the forecaster and, as written, Forecaster 14
+persists only the hour-grain fields — without it this screen cannot draw a day band
+without summing quantiles, which both specs forbid.~~
+
+**Correction (found while merging forecaster 22).** The claim that "Forecaster 14
+persists only the hour-grain fields" is **false against `main`**. Migration `0034`,
+which is ticket 14, already persists `day_total_p{10,50,90}_mwh`,
+`peak_power_p{10,50,90}_mw` and `day_occurrence_probability` on
+`curtailment_forecast_day`, exposed in TypeScript as
+`ForecastDayRow.dayTotalMwh / peakPowerMw / dayOccurrenceProbability`. The per-subsystem
+day grain this screen needs has been on disk since 14 landed, and needs no translation
+layer.
+
+Forecaster 22 is the **national** day grain (`curtailment_forecast_national_day` /
+`canonical_forecast_national_day`), which this ticket does not ask for. Adopt it only if
+the screen grows a national band; the per-subsystem read is what the acceptance criteria
+below describe.
 
 **Status:** ready-for-agent
 

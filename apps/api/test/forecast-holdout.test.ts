@@ -186,13 +186,13 @@ describe("unservability is a property of the code, not of a caller", () => {
       expect(SOURCE(module)).not.toContain("writeHoldoutBackfill");
       expect(SOURCE(module)).not.toContain("parseHoldoutBackfill");
     }
-    // And the read still filters the discriminator in the SQL, at both grains,
-    // on the meta listing and on the four-subsystem outlook read — the
+    // And the read still filters the discriminator in the SQL, at all three
+    // grains, on the meta listing and on the four-subsystem outlook read — the
     // complementary count lives next door.
     const reads = SOURCE("forecast/reads.ts");
     expect(
       (reads.match(/origin_kind = 'served'::forecast_origin_kind/g) ?? []).length,
-    ).toBe(4);
+    ).toBe(5);
     expect(reads).not.toContain("'backfilled_holdout'::forecast_origin_kind");
   });
 });
