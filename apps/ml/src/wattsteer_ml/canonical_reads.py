@@ -74,8 +74,12 @@ def view_name(read: str) -> str:
 #: reach a column the contract does not offer — and none can reach a filter the
 #: view applies *before* choosing a version, which are axes and not filters.
 FILTERABLE: Mapping[str, frozenset[str]] = {
+    # ``subsystem`` is the entity's electrical subsystem, projected by the
+    # view's ``reporting_entity`` join. It is a filter and not an axis: the
+    # subsystem of an entity does not vary between that entity's versions, so
+    # restricting on it before or after the version pick is the same question.
     "curtailment-by-reporting-entity": frozenset(
-        {"reporting_entity_code", "reporting_entity_kind", "technology"}
+        {"reporting_entity_code", "reporting_entity_kind", "subsystem", "technology"}
     ),
     "curtailment-by-plant": frozenset({"plant_ons_code", "technology"}),
     "system-context": frozenset({"subsystem"}),

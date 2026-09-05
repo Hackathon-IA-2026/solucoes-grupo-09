@@ -1,0 +1,13 @@
+{
+  "name": "06-one-degree-of-longitude-at-the-solar-fleets-latitude",
+  "why": "The same degree east-west at \u221216\u00b0, where it is shortened by the cosine. Paired with the case above, it pins which argument is which: an implementation that swapped latitude for longitude passes one and fails the other.",
+  "from": {
+    "latitude": -16.0,
+    "longitude": -44.0
+  },
+  "to": {
+    "latitude": -16.0,
+    "longitude": -43.0
+  },
+  "expected_km": 106.88746832895214
+}

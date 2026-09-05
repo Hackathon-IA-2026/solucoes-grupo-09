@@ -29,6 +29,7 @@ is, and the generator is committed beside the vectors:
 |---|---|
 | [`scenario-canonical/`](scenario-canonical/README.md) | [`../scripts/build-scenario-vectors.py`](../scripts/build-scenario-vectors.py) — `json.dumps(sort_keys=True)`, `hashlib`, `base64` from the standard library. Where that route could not express the rule (ECMAScript number formatting) the strings were read off a real engine, which is the authority RFC 8785 defers to. |
 | [`gate-instant/`](gate-instant/README.md) | [`../scripts/build-gate-vectors.py`](../scripts/build-gate-vectors.py) — `datetime.combine` and `zoneinfo`, against the IANA database all three sides defer to. |
+| [`great-circle/`](great-circle/README.md) | [`../scripts/build-great-circle-vectors.py`](../scripts/build-great-circle-vectors.py) — Vincenty's formula specialised to a sphere, in `atan2`. Both shipped implementations use the haversine; two formulas that lose precision in different places is what makes agreement evidence. |
 | [`execution-rule/`](execution-rule/README.md) | **None.** The expected values were emitted by the Python implementation, so a bug present in it when the vectors were written would have been pinned rather than caught. See that directory's README; this is the weakest binding here and it is recorded as such. |
 
 ## The directories
@@ -38,9 +39,19 @@ is, and the generator is committed beside the vectors:
 | [`canonical-contract/`](canonical-contract/README.md) | the canonical read manifest, and `VintageFidelity` over two instants | `apps/api/src/contract/` · `apps/ml/src/wattsteer_ml/canonical.py` |
 | [`published-constants/`](published-constants/README.md) | the thresholds, `max_gap_hours`, the R$/MWh assumption, the subsystems, the technology casing, `REFERENCE_FLEET` | `packages/core/src/constants.ts` · `apps/ml/src/wattsteer_ml/constants.py` |
 | [`gate-instant/`](gate-instant/README.md) | `gate_at(target_date, gate_profile)` — the instant every `published_at` is | `packages/core/src/schedule.ts` + `apps/api/src/forecast/gate.ts` · `apps/ml/tests/feature_row_fixtures.py` · `apps/api/drizzle/0016_the_feature_gate.sql` |
+| [`great-circle/`](great-circle/README.md) | the great-circle distance between two coordinates, in km | `apps/api/src/features/capacity-weights.ts` · `great_circle_km` in `apps/api/drizzle/0038_one_great_circle.sql` |
 | [`scenario-canonical/`](scenario-canonical/README.md) | the canonical scenario bytes, the base64url blob and the sha256 | `packages/core/src/scenario.ts` · `apps/ml/src/wattsteer_ml/scenario.py` |
 | [`scenario-validation/`](scenario-validation/README.md) | the eighteen-rule validation table | `packages/core/src/scenario-validation.ts` · `apps/ml/src/wattsteer_ml/scenario_validation.py` · `apps/api/src/api/scenario-gate.ts` |
 | [`execution-rule/`](execution-rule/README.md) | the execution rule, and `avoidability` with its null rule | `apps/ml/src/wattsteer_ml/optimizer/simulator.py` — the one implementation |
+
+**`great-circle/` is the one directory here that binds a duplication rather than
+a definition.** Everywhere else the two sides implement one spec independently;
+there, the two sides are two implementations of one *formula*, kept because
+neither can call the other — TypeScript weights candidate centroid geometry that
+has no database rows yet, SQL weights the frozen set from inside a feature
+function that cannot call TypeScript. Data-platform ticket 18 considered
+collapsing them and did not; that directory's README carries the reasoning, and
+the vectors are what make the decision reviewable instead of merely stated.
 
 Two directories here are **not** parity vectors and follow none of the above:
 [`spec-examples/`](spec-examples/README.md) holds the payloads

@@ -1,0 +1,13 @@
+{
+  "name": "07-across-the-antimeridian",
+  "why": "\u00b1180\u00b0 apart in the longitude column while a few hundred kilometres apart on the globe. An implementation that subtracted the longitudes without letting the trigonometry wrap reports most of the planet.",
+  "from": {
+    "latitude": -9.0,
+    "longitude": 179.5
+  },
+  "to": {
+    "latitude": -9.5,
+    "longitude": -179.5
+  },
+  "expected_km": 123.02792289800921
+}

@@ -152,6 +152,15 @@ export interface CurtailmentReadQuery extends FactReadQuery {
   technology?: Technology;
   /** A `CJU_*` conjunto code or a self-reporting plant's ONS code. */
   reportingEntityCode?: string;
+  /**
+   * The entity's electrical subsystem.
+   *
+   * A filter on a column the view projects from its `reporting_entity` join,
+   * applied outside the version pick like every other caller filter — the
+   * subsystem of an entity is constant across its versions, so inside and
+   * outside are the same question (`docs/contracts/canonical-reads.md`).
+   */
+  subsystem?: SubsystemCode;
 }
 
 async function curtailmentWithin(
@@ -164,10 +173,14 @@ async function curtailmentWithin(
   const entityFilter = query.reportingEntityCode
     ? sql`and reporting_entity_code = ${query.reportingEntityCode}`
     : sql``;
+  const subsystemFilter = query.subsystem
+    ? sql`and subsystem = ${query.subsystem}`
+    : sql``;
 
   const rows = await tx.execute<{
     reporting_entity_code: string;
     reporting_entity_kind: ReportingEntityKind;
+    subsystem: SubsystemCode;
     technology: Technology;
     valid_time: string;
     constrained_off_mwh: number;
@@ -188,6 +201,7 @@ async function curtailmentWithin(
     where ${windowFilter(query)}
       ${technologyFilter}
       ${entityFilter}
+      ${subsystemFilter}
     order by reporting_entity_code, technology, valid_time
   `);
 
@@ -201,6 +215,11 @@ async function curtailmentWithin(
       // plant without a second call, which is the first thing a screen showing
       // a restriction cause has to say.
       reportingEntityKind: row.reporting_entity_kind,
+      // Ticket 18's residual: the view has carried this since
+      // feature-engineering 01 and neither language could see it. The label is
+      // defined at subsystem grain, so a consumer that cannot read it here has
+      // to go back to the registry for the grain of the row it is holding.
+      subsystem: row.subsystem,
       technology: row.technology,
       validTime: new Date(row.valid_time),
       constrainedOffMwh: Number(row.constrained_off_mwh),

@@ -1,0 +1,13 @@
+{
+  "name": "03-two-plants-in-one-open-meteo-grid-cell",
+  "why": "Nine kilometres apart \u2014 inside one Open-Meteo cell at the pinned model's resolution. The spherical law of cosines loses most of its significant figures here, which is why neither implementation uses it.",
+  "from": {
+    "latitude": -5.2,
+    "longitude": -37.4
+  },
+  "to": {
+    "latitude": -5.2,
+    "longitude": -37.4812
+  },
+  "expected_km": 8.991880577142089
+}

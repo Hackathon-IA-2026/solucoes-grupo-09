@@ -1,0 +1,13 @@
+{
+  "name": "08-the-north-pole-to-the-equator",
+  "why": "A quarter of a meridian, where cos(phi) is zero at one end.",
+  "from": {
+    "latitude": 90.0,
+    "longitude": 0.0
+  },
+  "to": {
+    "latitude": 0.0,
+    "longitude": -41.0
+  },
+  "expected_km": 10007.557221017962
+}

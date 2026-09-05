@@ -44,7 +44,7 @@ hard-to-delete fixture rather than an ordinary assertion.
 
 **Blocked by:** 16 (merged), feature-engineering 01 (merged).
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] `subsystem` is either exposed through the contract's types and filters in both languages, or removed from the view with the reason recorded
 - [ ] Per-plant capacity either joins the manifest or carries a written exception at its definition

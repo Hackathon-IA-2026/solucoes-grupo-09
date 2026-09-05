@@ -267,6 +267,13 @@
       "when": 1788620980874,
       "tag": "0037_the_national_day_grain",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1788626574461,
+      "tag": "0038_one_great_circle",
+      "breakpoints": true
     }
   ]
 }
