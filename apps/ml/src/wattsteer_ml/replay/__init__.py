@@ -13,6 +13,10 @@ and this package reads them back and judges them.
   which is what the assertion asserts *against*.
 - :mod:`~wattsteer_ml.replay.reads` — the two queries, over the whole window in
   one transaction.
+- :mod:`~wattsteer_ml.replay.inputs` — the four a *single* replayed day needs,
+  also in one transaction: the pinned band, its day-grain companion, the settled
+  hours and the episodes drawn over them. Reproducibility is a property of the
+  cut, so there is one cut.
 - :mod:`~wattsteer_ml.replay.scoring` — the scoring half: one MILP on the pinned
   D−1 P50, four realisations through the optimizer's *imported* simulator, the
   floor that was promised, and the fenced perfect-foresight bound.

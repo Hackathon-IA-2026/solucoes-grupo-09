@@ -31,6 +31,7 @@
     "ml:typecheck": "cd apps/ml && uv run mypy",
     "ml:test": "cd apps/ml && uv run pytest",
     "ml:test:scale": "cd apps/ml && WATTSTEER_SCALE_TESTS=1 uv run pytest",
+    "ml:test:db": "cd apps/api && DATABASE_URL=postgres://postgres:wattsteer@localhost:5434/wattsteer bun run db:migrate && cd ../ml && WATTSTEER_TEST_DATABASE_URL=postgres://postgres:wattsteer@localhost:5434/wattsteer uv run pytest",
     "ml:sync": "cd apps/ml && uv sync",
     "check": "bun run typecheck && bun run lint && bun run test",
     "check:ml": "bun run ml:lint && bun run ml:typecheck && bun run ml:test",

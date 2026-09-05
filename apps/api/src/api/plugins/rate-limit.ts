@@ -69,15 +69,21 @@ export function isSolvePath(pathname: string): boolean {
 /**
  * Pure: which budget this request spends against, or `null` for unmetered.
  *
- * `/v1/replay/days` is a calendar read and not a solve, so it is called out
- * rather than swept in by the prefix: the shortlist is a cached list of dates
- * and metering it at the solver's rate would throttle a date picker.
+ * `/v1/replay/days` **and every day under it** are calendar reads and not
+ * solves, so they are called out rather than swept in by the prefix: they run
+ * two `group by`s and a card read, the shortlist is a cached list of dates, and
+ * metering either at the solver's rate would throttle a date picker.
+ *
+ * `/v1/replay` and `/v1/replay/observed-only` are solves and are metered as
+ * such — a replay is two MILP solves and five simulator passes, which is *more*
+ * than `/v1/optimize` costs, so if the two tiers ever part company this is the
+ * one that must not be the cheaper.
  */
 export function classifyTier(_method: string, pathname: string): Tier | null {
   if (UNMETERED_PATHS.has(pathname) || pathname.startsWith("/docs")) {
     return null;
   }
-  if (pathname === "/v1/replay/days") {
+  if (pathname === "/v1/replay/days" || pathname.startsWith("/v1/replay/days/")) {
     return "read";
   }
   return isSolvePath(pathname) ? "solve" : "read";
