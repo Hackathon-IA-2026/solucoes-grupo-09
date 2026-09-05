@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { DATA_WINDOW } from "@wattsteer/core";
 import { parseAppParams, technologyParam } from "../src/components/app/params";
 import { en as EN } from "../src/i18n/copy.en";
 import { pt as PT } from "../src/i18n/copy.pt";
@@ -10,8 +11,12 @@ import {
   DEFAULT_BATTERY,
   DEFAULT_LOAD,
   evaluatePlan,
+  FOLDS,
+  FORECAST_ORIGINS,
+  INGESTION_GO_LIVE,
   planDispatch,
   REPLAY_DAYS,
+  RUN_LABELS,
   riskClass,
   roundProbability,
 } from "../src/lib/fixtures";
@@ -212,27 +217,162 @@ describe("mitigation steps", () => {
 });
 
 describe("replay honesty", () => {
-  test("the fixture contains days on both sides of the training cut", () => {
-    expect(REPLAY_DAYS.some((d) => d.inTrainingWindow)).toBe(true);
-    expect(REPLAY_DAYS.some((d) => !d.inTrainingWindow)).toBe(true);
+  test("a day says how it was held out, and carries neither replaced field", () => {
+    // `docs/specs/replay.md` fixes these names and this fixture adopts them.
+    // The pair they replace asked the right question of the wrong artifact —
+    // `date <= MODEL_TRAINED_THROUGH` compares a historical day against the
+    // *serving* model's training cut, and the serving model is never consulted
+    // for a historical day. Asserting their absence is what stops the old pair
+    // reappearing beside the new one as a convenience.
+    for (const day of REPLAY_DAYS) {
+      expect(["served", "fold_holdout"]).toContain(day.provenance);
+      expect(day).not.toHaveProperty("inTrainingWindow");
+      expect(day).not.toHaveProperty("modelTrainedThrough");
+    }
   });
 
-  test("the fixture contains both vintage fidelities", () => {
-    const fidelities = new Set(REPLAY_DAYS.map((d) => d.vintageFidelity));
-    expect(fidelities.has("point_in_time")).toBe(true);
-    expect(fidelities.has("revision_optimistic")).toBe(true);
-  });
-
-  test("in-sample-ness and vintage are two axes and neither implies the other", () => {
-    // They coincide in the wild today, which is precisely the argument for
-    // keeping them apart: a merged badge would be observationally correct now
-    // and wrong the moment a post-go-live quarter is held out. The fixture
-    // therefore carries a day where the two disagree, so the screen has to
-    // render them as two facts rather than one.
-    const disagreeing = REPLAY_DAYS.filter(
-      (d) => (d.vintageFidelity === "point_in_time") !== !d.inTrainingWindow,
+  test("the fixture contains both provenances and both vintage fidelities", () => {
+    expect(new Set(REPLAY_DAYS.map((d) => d.provenance))).toEqual(
+      new Set(["served", "fold_holdout"]),
     );
-    expect(disagreeing.length).toBeGreaterThan(0);
+    expect(new Set(REPLAY_DAYS.map((d) => d.vintageFidelity))).toEqual(
+      new Set(["point_in_time", "revision_optimistic"]),
+    );
+  });
+
+  test("provenance and vintage are two fields, and today they agree", () => {
+    // They coincide, and `docs/specs/replay.md` says so in the same breath as
+    // it refuses to merge them: F6 opens on the date ingestion goes live, so
+    // in v1 every `fold_holdout` day is `revision_optimistic` and every
+    // `served` day is `point_in_time`. The pair `fold_holdout` +
+    // `point_in_time` becomes populated the moment F6 freezes and F7 opens —
+    // at which point a single merged badge would be wrong with no edit having
+    // been made. The agreement is asserted here so that it is a recorded fact
+    // about v1 rather than an assumption a screen quietly built on.
+    for (const day of REPLAY_DAYS) {
+      expect(day.vintageFidelity).toBe(
+        day.provenance === "served" ? "point_in_time" : "revision_optimistic",
+      );
+    }
+  });
+
+  test("a served day names no fold, and that is the contract's own shape", () => {
+    // `held_out_by` is nullable on the wire. A served forecast was published
+    // before the day it describes, which is a stronger statement than being
+    // held out of a fold and needs no fold id to make it.
+    for (const day of REPLAY_DAYS) {
+      expect(day.heldOutBy === null).toBe(day.provenance === "served");
+    }
+  });
+
+  test("the held-out assertion holds: neither window contains the replayed date", () => {
+    // The property `docs/specs/replay.md` re-checks at read time, asserted
+    // here over every day the fixture offers. **Both** windows, because the
+    // calibration window is where the isotonic fit and the two conformal
+    // scalars were fitted: a day inside it has shaped the interval the replay
+    // promises a floor from, which is subtler than the base fit and is the one
+    // a future session is most likely to forget.
+    const held = REPLAY_DAYS.filter((d) => d.heldOutBy !== null);
+    expect(held.length).toBeGreaterThan(0);
+    for (const day of held) {
+      const windows = day.heldOutBy;
+      if (windows === null) {
+        throw new Error("filtered above");
+      }
+      for (const [from, to] of [windows.trainWindow, windows.calibrationWindow]) {
+        expect(day.date >= from && day.date <= to).toBe(false);
+      }
+    }
+  });
+
+  test("the fold windows are the calendar's, not this fixture's", () => {
+    // `apps/ml/src/wattsteer_ml/evaluation/fold_calendar.yaml` is the stored
+    // artifact every fold result is keyed by. Two files that must agree and
+    // are only ever edited by hand do not agree for long, so the agreement is
+    // checked rather than asserted in a comment.
+    const calendar = Bun.YAML.parse(
+      readFileSync(
+        join(
+          import.meta.dir,
+          "..",
+          "..",
+          "ml",
+          "src",
+          "wattsteer_ml",
+          "evaluation",
+          "fold_calendar.yaml",
+        ),
+        "utf8",
+      ),
+    ) as {
+      window_start: string;
+      pinned_folds: {
+        id: string;
+        test_start: string;
+        quarter_end: string;
+        train_end: string;
+        calibration_start: string;
+        calibration_end: string;
+      }[];
+    };
+    for (const fold of FOLDS) {
+      const pinned = calendar.pinned_folds.find((row) => row.id === fold.fold);
+      expect(pinned).toBeDefined();
+      if (pinned === undefined) {
+        throw new Error("asserted above");
+      }
+      expect([fold.testStart, fold.testEnd]).toEqual([
+        pinned.test_start,
+        pinned.quarter_end,
+      ]);
+      expect(fold.trainWindow).toEqual([calendar.window_start, pinned.train_end]);
+      expect(fold.calibrationWindow).toEqual([
+        pinned.calibration_start,
+        pinned.calibration_end,
+      ]);
+    }
+  });
+
+  test("the forecast origin names two artifacts, in two fields", () => {
+    // The defect `docs/specs/api-surface.md` found on the landing hero, which
+    // the app fixtures had in a second form: the WattSteer run label with the
+    // weather run glued onto it as " · weather 12Z". One string cannot be
+    // filtered, compared or superseded on either fact, and a screen reading it
+    // has no way to say which artifact it is naming. `run_label` is now the
+    // WattSteer artifact version and the weather run is its own field.
+    const origins = [
+      ...REPLAY_DAYS.map((d) => d.forecastOrigin),
+      ...RUN_LABELS.map((run) => FORECAST_ORIGINS[run]),
+    ];
+    for (const origin of origins) {
+      expect(origin.producer).toBe("wattsteer");
+      expect(origin.runLabel).not.toContain("weather");
+      expect(origin.weatherRunLabel).toMatch(/^D−1 (00Z|12Z)$/);
+    }
+    // Both 00Z and 12Z are present, so the weather run is a real field with
+    // two values rather than a constant that happens to parse.
+    expect(new Set(RUN_LABELS.map((r) => FORECAST_ORIGINS[r].weatherRunLabel)).size).toBe(
+      2,
+    );
+  });
+
+  test("a held-out day's run label is the artifact that held it out", () => {
+    // `docs/specs/replay.md` writes `forecast_origin.run_label` as the
+    // artifact id. On a `fold_holdout` day that is the *fold's* artifact, and
+    // naming it is what lets a reader check the provenance claim against the
+    // windows printed beside it rather than take it on trust.
+    for (const day of REPLAY_DAYS) {
+      if (day.heldOutBy !== null) {
+        expect(day.forecastOrigin.runLabel).toBe(day.heldOutBy.artifactId);
+      }
+    }
+  });
+
+  test("the fixture's window dates are the published ones", () => {
+    // `/v1/meta` returns both. A fixture that restated them could put the
+    // screen a quarter out of step with the API with nothing failing.
+    expect(INGESTION_GO_LIVE).toBe(DATA_WINDOW.ingestionGoLive);
+    expect(FOLDS[0].testStart).toBe(DATA_WINDOW.firstHoldoutFoldStart);
   });
 
   test("the caveat's extent is the response's, not the screen's", () => {
@@ -319,20 +459,26 @@ describe("URL params", () => {
 
 describe("defects the specs found in this prototype", () => {
   test("the replay day band is joint, never the sum of the hourly bands", () => {
-    // docs/specs/replay.md caught this screen adding 24 hourly P90s. That
-    // assumes every hour lands at its 90th percentile together, which is a far
-    // worse day than a 90th-percentile day.
+    // `docs/specs/replay.md` caught this screen adding 24 hourly P90s, with a
+    // note conceding a joint day total would be narrower. The concession has
+    // expired: `forecast.day_total` is on the contract, drawn from the path
+    // ensemble, and the fixture draws it the same way.
+    //
+    // As on the Overview, the *inequality* is asserted and not its direction.
+    // The P90 sits below the componentwise sum, which is the whole point — 24
+    // hours do not all land at their own 90th percentile together. The P10 can
+    // sit either side of it, because an hourly hurdle puts mass at exactly
+    // zero: a drawn day whose common level runs low turns several episode
+    // hours off entirely, which no componentwise P10 can express. Pinning a
+    // direction there would pin an assumption about the dependence structure
+    // rather than the rule.
     for (const day of REPLAY_DAYS) {
-      const summed = day.forecast.reduce(
-        (acc, h) => ({
-          p10: acc.p10 + h.constrainedOff.p10,
-          p90: acc.p90 + h.constrainedOff.p90,
-        }),
-        { p10: 0, p90: 0 },
-      );
-      const joint = day.forecastDayEnergy;
-      expect(joint.p90).toBeLessThan(summed.p90);
-      expect(joint.p10).toBeGreaterThan(summed.p10);
+      const sum = (key: "p10" | "p50" | "p90") =>
+        Math.round(day.forecast.reduce((acc, h) => acc + h.constrainedOff[key], 0));
+      const joint = day.forecastDayTotal;
+      expect(joint.p90).toBeLessThan(sum("p90"));
+      expect(joint.p50).not.toBe(sum("p50"));
+      expect(joint.p10).not.toBe(sum("p10"));
       expect(joint.p10).toBeLessThanOrEqual(joint.p50);
       expect(joint.p50).toBeLessThanOrEqual(joint.p90);
     }

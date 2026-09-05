@@ -13,12 +13,20 @@ import type { ReactNode } from "react";
 import { Text, View } from "react-native";
 import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
-import type { ForecastOrigin, VintageFidelity } from "@/lib/fixtures";
+import type { ForecastOrigin, ReplayIntegrity, VintageFidelity } from "@/lib/fixtures";
 
 /**
  * Every surface that shows a forecast must name its `ForecastOrigin`. This is
  * that surface, and it also carries the threshold, because every episode and
  * KPI figure on the screen is a function of it.
+ *
+ * It names **two** artifacts. The producer of a curtailment forecast is
+ * WattSteer and `runLabel` is its artifact version; the weather run the
+ * forecast consumed is a different fact about a different artifact, so
+ * `docs/specs/api-surface.md` puts `weather_run_label` beside the origin
+ * rather than making a screen choose which of the two to call "the run". An
+ * origin that is not a WattSteer forecast has no weather run to name, so the
+ * clause is omitted rather than left dangling.
  */
 export function ForecastStamp({
   origin,
@@ -48,11 +56,41 @@ export function ForecastStamp({
           // Brazilian hour, and the `BRT` in the string says which one.
           when: f.dateTime(origin.publishedAt),
         })}
+        {origin.weatherRunLabel === undefined
+          ? ""
+          : fill(copy.app.stamp.weatherRun, { run: origin.weatherRunLabel })}
         {thresholdMw === undefined
           ? ""
           : fill(copy.app.stamp.threshold, { mw: f.number(thresholdMw) })}
       </Text>
     </View>
+  );
+}
+
+/**
+ * `integrity.provenance` — how a replayed day was held out of the model that
+ * forecast it.
+ *
+ * Deliberately **not** a warning tone, and deliberately a sibling of
+ * `VintageBadge` rather than merged into it. `docs/specs/replay.md` refuses to
+ * replay a day no artifact held out, so there is no in-sample case left to
+ * warn about; and the two axes are the model's information set and the data's,
+ * neither derived from the other. They coincide today, which is precisely the
+ * argument for keeping them apart: `fold_holdout` + `point_in_time` becomes
+ * populated the moment F6 freezes, and a merged badge would then be wrong with
+ * no edit having been made.
+ */
+export function ProvenanceBadge({
+  provenance,
+}: {
+  provenance: ReplayIntegrity["provenance"];
+}) {
+  const copy = useCopy();
+  return (
+    <Badge
+      label={copy.app.replay.provenance[provenance]}
+      tone={provenance === "served" ? "accent" : "info"}
+    />
   );
 }
 

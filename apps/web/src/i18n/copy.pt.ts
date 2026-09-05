@@ -457,6 +457,7 @@ export const pt: Copy = {
 
     stamp: {
       published: "{producer} · {run} · publicado {when} BRT",
+      weatherRun: " · rodada meteorológica {run}",
       threshold: " · limiar {mw} MW",
     },
 
@@ -757,13 +758,15 @@ export const pt: Copy = {
       dayLabel: "{date} · {subsystem} {technology}",
       scenarioLabel:
         "bateria de {power} MW / {energy} MWh + {shift} MW de carga flexível",
-      inSample: "DENTRO DA AMOSTRA",
-      outOfSample: "FORA DA AMOSTRA",
       honestyTitle: "O que esta reexecução é, e o que ela não é",
-      inSampleNote:
-        "O modelo em serviço foi treinado com dados até {through}, o que inclui este dia. A previsão D−1 aqui é um ajuste dentro da amostra, então isto é uma reexecução, não um contrafactual: trate a energia recuperada como um limite superior otimista do que o sistema ao vivo teria alcançado.",
-      outOfSampleNote:
-        "Este dia é posterior ao corte de treino do modelo em serviço ({through}), então a previsão D−1 está genuinamente fora da amostra. É o mais próximo de um contrafactual real que esta tela tem.",
+      provenance: {
+        served: "EM SERVIÇO",
+        fold_holdout: "RETIDO NO FOLD",
+      },
+      provenanceServedNote:
+        "A previsão nesta tela é a que a WattSteer de fato publicou, em {published} — antes de o dia que ela descreve ter começado. Nenhuma versão do modelo poderia ter visto o dia, então isto é um contrafactual no sentido estrito, e não uma reconstrução.",
+      provenanceFoldHoldoutNote:
+        "Este dia cai no fold de teste {fold} da validação walk-forward, e a previsão vem do artefato daquele fold ({artifact}) — nunca do modelo que está em serviço hoje. Esse artefato foi treinado em {trainFrom} – {trainTo} e calibrado em {calibrationFrom} – {calibrationTo}; nenhuma das duas janelas contém este dia, e ambas são reconferidas contra o registro do próprio artefato a cada leitura, em vez de aceitas por confiança.",
       revisionOptimisticNote:
         "Este dia é anterior ao início da ingestão ({goLive}). O ONS reescreve o histórico no lugar, sem marcador de versão, então o valor apurado acima é a reapresentação atual do dia feita pelo ONS, não o que foi publicado na época. As safras anteriores são irrecuperáveis e isso nunca poderá ser corrigido retroativamente.",
       pointInTimeNote:

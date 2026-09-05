@@ -18,6 +18,8 @@ import {
   NATIONAL,
   SUBSYSTEMS,
 } from "../src/components/landing/fixtures";
+import { en as EN } from "../src/i18n/copy.en";
+import { pt as PT } from "../src/i18n/copy.pt";
 import { riskClass } from "../src/lib/fixtures";
 
 /**
@@ -146,6 +148,24 @@ describe("landing fixture", () => {
     // is a second fact about a different artifact.
     expect(FORECAST_ORIGIN.producer).toBe("wattsteer");
     expect(FORECAST_ORIGIN.weatherRunLabel).toBe("D−1 12Z");
+    // The WattSteer run label is the artifact version, and it is a different
+    // string from the weather run. If a future edit set them equal the two
+    // fields would have collapsed back into one fact wearing two names.
+    expect(FORECAST_ORIGIN.runLabel).not.toBe(FORECAST_ORIGIN.weatherRunLabel);
+  });
+
+  it("prints both artifacts on the panel, in both locales", () => {
+    // `api-surface.md` puts `weather_run_label` on the outlook response
+    // *beside* the WattSteer origin rather than making the screen choose which
+    // of the two to call "the run". A locale that dropped the weather run — or
+    // that dropped the producer to make room for it — would put the panel back
+    // in the state where one line credits the forecast to the wrong party, and
+    // no type can see that: both are valid strings.
+    for (const value of [EN.readout.originValue, PT.readout.originValue]) {
+      for (const slot of ["{producer}", "{run}", "{published}", "{weatherRun}"]) {
+        expect(value).toContain(slot);
+      }
+    }
   });
 
   it("covers all 24 hours with ordered quantiles", () => {
