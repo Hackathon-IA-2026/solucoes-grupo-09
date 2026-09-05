@@ -36,7 +36,7 @@ on every retrain.
 
 **Blocked by:** 09.
 
-**Status:** ready-for-agent
+**Status:** done (machinery); the run is blocked on archive ingestion — see below
 
 - [ ] Both arms train on the shared fold calendar and are evaluated on identical
       lead-matched test rows
@@ -48,3 +48,26 @@ on every retrain.
       aggregate and recorded
 - [ ] The whole block lands in the card as a named experiment and does not run
       on the weekly retrain
+
+## Why this experiment cannot be run yet
+
+The control arm trains on the stitched Historical Forecast archive. **This repo
+deliberately does not ingest it.** `apps/api/src/ingest/weather/single-runs.ts`
+records the decision and the measurement behind it: the archive is bit-identical
+to `_previous_day0`, the shortest-lead slice of each run, and training on it
+inflates the intervals the product promises — RMSE 4.38 km/h train↔serve on
+`wind_speed_120m` against a field sd of 8.87. The module "cannot address that
+endpoint at all; `run=` is required on every request."
+
+So `A-full-archive` has been a row of the matrix since before this ticket with
+no data source behind it, and the same gap blocks the aggregate correlation,
+one of whose two series is the archive one.
+
+The comparison, the identity assertion, the interval deltas and the correlation
+arithmetic are built and tested. Today's honest output is `UnmeasuredLeadTime`
+carrying a named `ARCHIVE_NOT_INGESTED` reason **written to the card**, because
+a card with no block and a card saying "the control arm has no data source" look
+identical to anyone grepping for the figure.
+
+**The remaining work is an archive-ingestion ticket, not a change here** — and
+it would first have to overturn the measured decision above.
