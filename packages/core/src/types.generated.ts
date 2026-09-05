@@ -1205,6 +1205,72 @@ export interface RegistryPlantRow {
 }
 
 /**
+ * What a day in the pre-F1 training block gets instead of a replay -
+ * `docs/specs/replay.md`, "the observed-only view". Every artifact was fitted
+ * on those days, so no honest counterfactual exists and the day is refused
+ * rather than labelled. The settled profile, the episodes at the threshold in
+ * force, and the perfect-foresight bound, which needs no forecast and
+ * therefore no model. There is no `scored`, no `avoided_energy_mwh` and no
+ * `recovered_floor_mwh`: absent, not zero, because a zero would be a claim
+ * about a plan WattSteer was never asked to build. `additionalProperties:
+ * false` is what makes that absence a refusal rather than a convention.
+ */
+export interface ReplayObservedOnly {
+  targetDate: CivilDate;
+  subsystem: Subsystem;
+  thresholdMw: ThresholdMw;
+  maxGapHours: MaxGapHours;
+  scenarioHash: ScenarioHash;
+  /**
+   * Always `false`. The field exists so that a client reading this object and a
+   * client reading a `Replay` do not have to tell them apart by which keys are
+   * missing.
+   */
+  replayable: false;
+  refusal: ReplayRefusal;
+  /**
+   * Carried on a refused day too: "this day cannot be replayed" and "its actuals
+   * would have been a restatement" are two facts, and the spec keeps them apart
+   * because today they coincide.
+   */
+  vintageFidelity: VintageFidelity;
+  actual: ReplayActual;
+  upperBound: PerfectForesightBound;
+  episodes: CurtailmentEpisode[];
+}
+
+/**
+ * The best any plan could have done knowing the answer - a property of the day
+ * and the fleet. Two numbers and not three: `forecast_value_gap_mwh` is
+ * perfect foresight minus what WattSteer achieved, and on this day WattSteer
+ * achieved nothing because it was never asked, so the gap is absent rather
+ * than zero.
+ */
+export interface PerfectForesightBound {
+  label: "perfect_foresight";
+  recoveredMwh: number;
+  avoidability: Avoidability;
+}
+
+/**
+ * The clause of the replayable predicate that failed, as the typed code a
+ * client renders one sentence from. `REPLAY_DATE_BEFORE_HOLDOUT_WINDOW` is the
+ * only code this view is offered for: the other refusals are a missing read
+ * rather than a decision, and they are answered as a `404` with no screen
+ * behind them.
+ */
+export interface ReplayRefusal {
+  code: "REPLAY_DATE_BEFORE_HOLDOUT_WINDOW";
+  status: 422;
+  /**
+   * Developer prose for a log. The screen renders `t("error." + code)` and never
+   * this.
+   */
+  message: string;
+  details: Record<string, unknown>;
+}
+
+/**
  * `GET /v1/replay?d=&s=&subsystem=` and `POST /v1/replay` -
  * `docs/specs/replay.md`'s contract, re-pathed and never re-shaped. The
  * top-level scalars share their names with `OptimizationResult` and mean
@@ -2040,6 +2106,30 @@ export const WIRE_SHAPES = {
     generatingUnits: { wire: "generating_units" },
     coordinate: { wire: "coordinate", shape: "RegistryCoordinate" },
     locationSource: { wire: "location_source" },
+  },
+  ReplayObservedOnly: {
+    targetDate: { wire: "target_date" },
+    subsystem: { wire: "subsystem" },
+    thresholdMw: { wire: "threshold_mw" },
+    maxGapHours: { wire: "max_gap_hours" },
+    scenarioHash: { wire: "scenario_hash" },
+    replayable: { wire: "replayable" },
+    refusal: { wire: "refusal", shape: "ReplayRefusal" },
+    vintageFidelity: { wire: "vintage_fidelity" },
+    actual: { wire: "actual", shape: "ReplayActual" },
+    upperBound: { wire: "upper_bound", shape: "PerfectForesightBound" },
+    episodes: { wire: "episodes", shape: "CurtailmentEpisode", list: true },
+  },
+  PerfectForesightBound: {
+    label: { wire: "label" },
+    recoveredMwh: { wire: "recovered_mwh" },
+    avoidability: { wire: "avoidability" },
+  },
+  ReplayRefusal: {
+    code: { wire: "code" },
+    status: { wire: "status" },
+    message: { wire: "message" },
+    details: { wire: "details" },
   },
   Replay: {
     targetDate: { wire: "target_date" },

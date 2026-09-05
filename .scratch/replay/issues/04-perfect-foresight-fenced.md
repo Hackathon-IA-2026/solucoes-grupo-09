@@ -30,7 +30,7 @@ property of the day and the fleet, with nothing of WattSteer's to compare it aga
 
 **Blocked by:** 03.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] `upper_bound` carries `label: "perfect_foresight"`, `recovered_mwh`, `avoidability` and `forecast_value_gap_mwh`
 - [ ] A test asserts no headline field can be populated from `upper_bound`
