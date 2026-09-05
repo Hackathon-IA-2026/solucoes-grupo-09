@@ -63,6 +63,29 @@ import {
 export type ReplayCalendarBody = Record<string, unknown>;
 
 /**
+ * The calendar's shared-cache directive — `api-surface.md`'s caching table,
+ * which gives `/v1/replay/days` (and `/v1/backtest`, when there is an aggregate
+ * to serve) `public, max-age=3600` on the ground that both are recomputed
+ * nightly.
+ *
+ * It is an hour and not the replay's ten minutes because the two answer
+ * different questions. A replay is a *number*, and a number's observed half is
+ * read `AsOf(now)` against a record ONS restates in place; a day's *verdict* —
+ * replayable, or refused under which clause — moves only when a fold calendar,
+ * an artifact promotion or a settled-hour count moves, none of which happens
+ * inside an hour. Under-caching it would be a date picker that revalidates on
+ * every keystroke.
+ *
+ * There is no ETag here yet, and the table asks for one:
+ * `W/"<featured-days computation id>"`. The id is replay 07's, and replay 07
+ * has not landed — the calendar this route forwards carries no featured
+ * shortlist to compute an id over. A weak validator invented here would have to
+ * be a hash of the body, which is a revalidation that costs exactly what it
+ * saves. It stays a `max-age` until the id exists.
+ */
+const CALENDAR_CACHE_CONTROL = "public, max-age=3600";
+
+/**
  * Forward one replay read, or throw the failure that says whose fault it was.
  *
  * The body is returned as it arrived. It is already `snake_case` — the wire
@@ -119,7 +142,7 @@ export function createReplayRoutes(endpoint?: MlEndpoint) {
   return new Elysia({ name: "replay" })
     .get(
       "/v1/replay/days",
-      async ({ query }) => {
+      async ({ query, set }) => {
         const params = new URLSearchParams({
           subsystem: query.subsystem,
           lane: query.lane,
@@ -130,7 +153,9 @@ export function createReplayRoutes(endpoint?: MlEndpoint) {
         if (query.to !== undefined) {
           params.set("to", civilDate("to", query.to));
         }
-        return forward("/v1/replay/days", params, endpoint);
+        const body = await forward("/v1/replay/days", params, endpoint);
+        set.headers["cache-control"] = CALENDAR_CACHE_CONTROL;
+        return body;
       },
       {
         query: t.Object({
@@ -159,16 +184,18 @@ export function createReplayRoutes(endpoint?: MlEndpoint) {
     )
     .get(
       "/v1/replay/days/:date",
-      async ({ params, query }) => {
+      async ({ params, query, set }) => {
         const search = new URLSearchParams({
           subsystem: query.subsystem,
           lane: query.lane,
         });
-        return forward(
+        const body = await forward(
           `/v1/replay/days/${civilDate("date", params.date)}`,
           search,
           endpoint,
         );
+        set.headers["cache-control"] = CALENDAR_CACHE_CONTROL;
+        return body;
       },
       {
         params: t.Object({ date: t.String({ description: "The civil day, BRT." }) }),
@@ -394,7 +421,16 @@ export function createReplaySolveRoutes(deps: ReplayDeps) {
         );
         // A shared link is shared-cacheable: the answer is a function of the
         // blob, the pinned origin and the build, none of which is the reader.
-        set.headers["cache-control"] = "public, max-age=300";
+        //
+        // Ten minutes and not the optimizer's five, per `api-surface.md`'s
+        // caching table. The optimizer's window is short because a scenario is
+        // planned against a forecast that supersedes twice a day and a shared
+        // cache must not outlive the next gate; a replay's forecast half is a
+        // pinned historical row that no gate can supersede. What can still move
+        // underneath it is the *observed* half — ONS restates history in place —
+        // so this is a `max-age` and never `immutable`, and the response is
+        // deliberately not frozen against a restatement.
+        set.headers["cache-control"] = "public, max-age=600";
         set.headers["content-type"] = "application/json";
         return body;
       },
@@ -514,3 +550,38 @@ export function createReplaySolveRoutes(deps: ReplayDeps) {
 export const replayRoutes = createReplayRoutes().use(
   createReplaySolveRoutes({ cache: optimizeCache }),
 );
+
+/**
+ * ### `GET /v1/backtest` is the fourth route of this surface and it is not here
+ *
+ * `api-surface.md` lists it at #13 and `replay.md` fixes its contract, and the
+ * reason it is absent is not that it was forgotten: **the aggregate it would
+ * serve does not exist.** Replay 08 owns it, and `docs/domain-model.md` gives
+ * `Backtest` to the aggregate of many Replays consumed by the hot-swap gate —
+ * not to the forecaster's fold evaluation, which is a different noun that
+ * happens to share an English word. Nothing in this repository computes
+ * `days_replayed`, `floor_coverage` or `mean_avoidability` at any grain, and
+ * `apps/ml` exposes no `/v1/backtest` for a proxy to stand in front of.
+ *
+ * Three things were available and two of them are worse than the absence.
+ *
+ * A route forwarding to an upstream path that does not exist would publish an
+ * endpoint in `/docs` that answers `502 OPTIMIZER_NOT_READY` forever, which
+ * tells a client the modelling service is broken when the truth is that the
+ * feature is unbuilt. A route computing the aggregate here would put a second
+ * scoring implementation on the far side of a network hop from the replay path
+ * it is supposed to be an aggregate *of* — the exact drift replay 08's own
+ * acceptance list forbids in the sentence "every metric is produced by running
+ * the ticket 03 replay path per day". Either would also have to choose the
+ * grouping, and the one structural rule this endpoint has — fidelity is a
+ * **group key** and never a filter, so an aggregate cannot average a
+ * `revision_optimistic` row into a `point_in_time` one — is a property of an
+ * aggregation function, not of a query string. Inventing one at the gateway
+ * would put that rule where it cannot be enforced.
+ *
+ * So the surface serves three of the four and says so. `solver-surface.test.ts`
+ * holds the absence in place from both ends: the gateway is asserted to serve no
+ * `/v1/backtest`, and `apps/ml` is asserted to expose none — so the day replay
+ * 08 lands the aggregate, that test fails and names this route as the thing then
+ * owed. An absence that cannot rot into a silence.
+ */

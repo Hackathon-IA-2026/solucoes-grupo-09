@@ -579,8 +579,13 @@ describe("replay · one scenario, two verbs, one set of bytes", () => {
 
   it("a shared link is shared-cacheable and a POST is not", async () => {
     const api = replayRoutes();
+    // Ten minutes, which is `api-surface.md`'s caching table and not the
+    // optimizer's five: the optimizer's window is short because a plan is built
+    // on a band that supersedes twice a day, and a replay's forecast half is a
+    // pinned historical row no gate can supersede. `solver-surface.test.ts`
+    // holds the whole table, this holds the pair.
     expect((await replayGet(api, blob())).headers.get("cache-control")).toBe(
-      "public, max-age=300",
+      "public, max-age=600",
     );
     expect(
       (await replayPost(api, JSON.stringify({ ...scenarioWire() }))).headers.get(

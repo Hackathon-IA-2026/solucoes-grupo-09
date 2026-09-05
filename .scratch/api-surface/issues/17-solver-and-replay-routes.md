@@ -48,7 +48,7 @@ scenario distinguishable from an outage), 02, 04, 05. Cross-spec:
 **flex-optimizer** and **replay** own these contracts and their solve
 implementations; nothing here re-specifies them.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] All four routes are versioned and their contracts are byte-identical to the sibling specs'
 - [ ] The optimize call is synchronous with no job identifier anywhere in the surface

@@ -17,6 +17,40 @@
  * it is not: a fixed window lets 60 requests through across a boundary, and
  * `flex-optimizer.md` asked for a burst, which a window cannot express.
  *
+ * ### What the solve tier actually buys, now that both routes are measured
+ *
+ * The 30/minute is `flex-optimizer.md`'s published number and it was sized
+ * against the optimizer's **3.15 ms**. `apps/ml/tests/test_replay_cost.py`
+ * since measured the other route on this tier: a replay on the published
+ * `REFERENCE_FLEET` is **24.4 ms** — two MILP solves and five simulator passes
+ * rather than one and one, which is **7.7×** the figure the budget was sized
+ * against. So the arithmetic the tier was chosen on is not the arithmetic it is
+ * now doing:
+ *
+ * | at full budget      | per IP, per minute | IPs to saturate one core |
+ * |---------------------|--------------------|--------------------------|
+ * | optimize · 3.15 ms  | 95 ms  (0.16 %)    | ~635                     |
+ * | replay   · 24.4 ms  | 732 ms (1.2 %)     | ~82                      |
+ *
+ * **The number is kept and the reason is written down, rather than quietly
+ * lowered.** Three things hold it up. The tier is a *count*, and 82 distinct
+ * IPs each sustaining the full budget is a botnet rather than a bored user;
+ * `mlTimeoutMs` is 5 s against a worst-case burst of 10 replays ≈ 244 ms, so
+ * the burst allowance has two orders of magnitude of headroom and is not what
+ * fails first; and the number is `flex-optimizer.md`'s published contract,
+ * which `api-surface.md` may re-path and not re-shape — a gateway that halved a
+ * published budget on its own authority would be the second place the budget is
+ * specified. What the measurement does change is the *margin*: the tier is 7.7×
+ * less protective than the sentence that chose it assumed, and
+ * `WATTSTEER_RATE_LIMIT_SOLVE` is the knob, so the operational answer is a
+ * number an operator can turn rather than a constant a reader has to rediscover.
+ *
+ * It also settles which way the tiers split if they ever do. They share one
+ * budget today because they share one solver; the moment they do not, replay is
+ * the dearer of the two by 7.7× and is therefore the one that must get the
+ * **smaller** allowance — the failure to avoid is the cheap route's number
+ * being inherited by the dear one a second time.
+ *
  * The language model is deliberately **not** metered by IP. `diagnosis.md`
  * counts the real volume — 4 subsystems × 2 locales × 2 gates ≈ 16 distinct
  * narrations a day — so an IP budget would protect nothing while doing nothing
@@ -75,9 +109,10 @@ export function isSolvePath(pathname: string): boolean {
  * metering either at the solver's rate would throttle a date picker.
  *
  * `/v1/replay` and `/v1/replay/observed-only` are solves and are metered as
- * such — a replay is two MILP solves and five simulator passes, which is *more*
- * than `/v1/optimize` costs, so if the two tiers ever part company this is the
- * one that must not be the cheaper.
+ * such — a replay is two MILP solves and five simulator passes, **24.4 ms
+ * measured** against the optimizer's 3.15 ms, so if the two tiers ever part
+ * company this is the one that must not be the cheaper. See the module comment
+ * for what that 7.7× does to the budget's margin.
  */
 export function classifyTier(_method: string, pathname: string): Tier | null {
   if (UNMETERED_PATHS.has(pathname) || pathname.startsWith("/docs")) {

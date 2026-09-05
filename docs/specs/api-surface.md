@@ -457,7 +457,7 @@ Four unversioned probes survive unchanged: `GET /`, `/health`, `/ready`,
 | 10 | `POST /v1/optimize` · `GET /v1/optimize?s=` | the MILP | Mitigate |
 | 11 | `GET /v1/replay/days` | replayable calendar + featured shortlist | Time Machine |
 | 12 | `GET /v1/replay?d=&s=` · `POST /v1/replay` | one replay | Time Machine |
-| 13 | `GET /v1/backtest` | the aggregate | Time Machine's footer, ops |
+| 13 | `GET /v1/backtest` | the aggregate — **not served; there is no aggregate yet, see 11–13** | Time Machine's footer, ops |
 | 14 | `GET /v1/plants` | the plant registry, machine-readable | ODbL §4.6 |
 
 **Three things that are deliberately *not* endpoints.**
@@ -841,6 +841,39 @@ days from the published deterministic rule. `/v1/backtest` never averages across
 takes fidelity as a group key and returns one row per value rather than
 accepting it as a filter that could be omitted.
 
+**As built, three of these four are served and `/v1/backtest` is not.** The
+aggregate it would return belongs to replay 08, which has not landed: nothing in
+the repository computes `days_replayed`, `floor_coverage` or
+`mean_avoidability` at any grain, and `apps/ml` exposes no `/v1/backtest` to
+stand in front of. `domain-model.md` gives `Backtest` to the aggregate of many
+Replays consumed by the hot-swap gate — not to the forecaster's fold evaluation,
+which is a different noun wearing the same English word — so there is no second
+thing this route could have been pointed at either.
+
+The route is therefore absent rather than provisional, and the two alternatives
+are both worse. A gateway route forwarding to a path that does not exist would
+publish an endpoint answering `502 OPTIMIZER_NOT_READY` forever, naming a
+healthy service as the broken thing; and a gateway route *computing* the
+aggregate would put a second scoring implementation on the far side of a network
+hop from the replay path it is supposed to aggregate, which replay 08 forbids in
+its own words ("every metric is produced by running the ticket 03 replay path
+per day"). It would also have to choose the grouping, and fidelity-as-group-key
+is a property of an aggregation function rather than of a query string: put at
+the gateway, the one structural rule this endpoint has could not be enforced.
+
+`apps/api/test/solver-surface.test.ts` holds the absence from both ends — the
+gateway serves no `/v1/backtest`, and `apps/ml` exposes none — so the day the
+aggregate lands, that test fails and names this route as the thing then owed.
+
+**Two other gaps on this surface, recorded rather than papered over.** The
+calendar `/v1/replay/days` currently returns a flat list of days and no featured
+shortlist, not the run-length encoding described above: the shortlist is replay
+07's and has not landed, and the encoding is `replay.md`'s contract to shape.
+This spec re-paths and never re-shapes, so neither is fixed here. And the
+calendar's caching row asks for an ETag of `W/"<featured-days computation id>"`,
+which is the same missing id; the route ships with the `max-age` and no
+validator until there is an id to build one from.
+
 #### 14. `GET /v1/plants`
 
 The map's ODbL analysis is unambiguous and no ticket has claimed it: the plant
@@ -1106,6 +1139,22 @@ change" is half right and half a trap.
   `immutable`. **A cache that froze a replay against a restatement would hide
   precisely the thing `revision_optimistic` exists to surface.**
 
+**As built, the replay key has five components and not six.** `obs_data_version`
+is missing, because the replay contract publishes no observed data version to
+put in it: `replay_result` carries the target date, the origin, the fidelity and
+the numbers, and nothing on the wire names the vintage of the observed half.
+The cost is bounded and is worth stating rather than hiding — for up to the
+24 h TTL after ONS rewrites a day, a cached replay of that day answers with the
+numbers from before the rewrite. That is staleness on a *cache* and not a broken
+pin (the answer was true of the record when it was computed, and the response
+names the publication it planned against), but for that window
+`vintage_fidelity` is the only thing telling a reader the ground may have moved.
+Closing it means either the ML service publishing the observed `data_version` on
+a contract `replay.md` declares fixed and this spec may only re-path, or the
+gateway querying Postgres on a route whose whole claim is that it contains
+neither a model nor a read. Both are somebody else's ticket; the gap is recorded
+on `replayKey` in `plugins/result-cache.ts`.
+
 **The diagnosis has two caches and inventing a third is forbidden.** The
 attribution is a row read and caches like any other row. The narration is
 cached under `diagnosis.md`'s exact key —
@@ -1134,6 +1183,27 @@ and neither is protected by counting page views.
 | Unmetered | `/`, `/health`, `/ready`, `/docs` | ∞ | as built |
 | Read | 1–9, 11, 13, 14 | **120 / min / IP** | fixed window; almost every hit is a CDN hit anyway |
 | Solve | `POST`+`GET /v1/optimize`, `/v1/replay` | **30 / min / IP, burst 10** | token bucket, per `flex-optimizer.md` |
+
+**The solve tier's budget was sized against one route's cost and now covers
+two.** `flex-optimizer.md` chose 30/minute against the optimizer's measured
+**3.15 ms**. `apps/ml/tests/test_replay_cost.py` has since measured the other
+route on the tier: a replay on the published `REFERENCE_FLEET` is **24.4 ms** —
+two MILP solves and five simulator passes rather than one and one, **7.7×** the
+figure the budget was chosen against. At full budget that is 732 ms of solver
+time per IP per minute (1.2 % of a core) rather than 95 ms (0.16 %), so one core
+saturates at roughly **82** IPs sustaining the budget instead of roughly 635.
+
+**The published number stands and the margin is what changed.** 82 distinct IPs
+each holding the full budget is a botnet rather than a bored user;
+`mlTimeoutMs` is 5 s against a worst-case burst of 10 replays ≈ 244 ms, so the
+burst allowance is not what fails first; and 30/minute is `flex-optimizer.md`'s
+published contract, which this spec may re-path and not re-shape — a gateway
+lowering a published budget on its own authority would be the second place the
+budget is specified. `WATTSTEER_RATE_LIMIT_SOLVE` is the operator's knob, and
+the arithmetic above is written into `plugins/rate-limit.ts` so the next reader
+does not have to rediscover it. The measurement also settles which way the tiers
+split if they ever do: replay is the dearer by 7.7× and must therefore take the
+*smaller* allowance, not inherit the cheap route's number a second time.
 
 **The language model is not protected by an IP limit, and that is the
 interesting one.** `diagnosis.md` computes the real volume: 4 subsystems ×
