@@ -1,0 +1,1258 @@
+{
+  "generated_by": "apps/api/src/features/model-inputs-artifact.ts",
+  "source": "feature_set_model_inputs(feature_set)",
+  "do_not_edit": "Generated. Do not edit by hand. This file is feature_set_model_inputs(set) serialised, and that function derives its names from pg_attribute on the feature_row composite type. Regenerate with `bun run --cwd apps/api features:snapshot` against a migrated database; database-features.test.ts fails when it is stale. It replaces ordered_features.yaml, which was transcribed by hand and agreed with the implementation rather than with its stated authority.",
+  "feature_row_attributes": 112,
+  "sets": {
+    "dessem_free_v1": [
+      {
+        "input_index": 1,
+        "column_name": "subsystem",
+        "class_label": "identity",
+        "grain": null,
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 2,
+        "column_name": "weather_temperature_2m",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 3,
+        "column_name": "capacity_wind_mw",
+        "class_label": "T",
+        "grain": "day",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 4,
+        "column_name": "capacity_solar_mw",
+        "class_label": "T",
+        "grain": "day",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 5,
+        "column_name": "capacity_wind_added_28d_mw",
+        "class_label": "T",
+        "grain": "day",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 6,
+        "column_name": "capacity_solar_added_28d_mw",
+        "class_label": "T",
+        "grain": "day",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 7,
+        "column_name": "calendar_local_hour",
+        "class_label": "T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 8,
+        "column_name": "calendar_hour_sin",
+        "class_label": "T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 9,
+        "column_name": "calendar_hour_cos",
+        "class_label": "T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 10,
+        "column_name": "calendar_doy_sin",
+        "class_label": "T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 11,
+        "column_name": "calendar_doy_cos",
+        "class_label": "T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 12,
+        "column_name": "calendar_day_of_week",
+        "class_label": "T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 13,
+        "column_name": "calendar_is_weekend",
+        "class_label": "T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 14,
+        "column_name": "calendar_is_holiday_national",
+        "class_label": "T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 15,
+        "column_name": "calendar_holiday_state_share",
+        "class_label": "T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 16,
+        "column_name": "calendar_is_day_before_holiday",
+        "class_label": "T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 17,
+        "column_name": "calendar_is_bridge_day",
+        "class_label": "T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 18,
+        "column_name": "solar_zenith_cos",
+        "class_label": "T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 19,
+        "column_name": "solar_extraterrestrial_ghi",
+        "class_label": "T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 20,
+        "column_name": "observed_actual_lag_hours",
+        "class_label": "K",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 21,
+        "column_name": "observed_constrained_off_lag_168h",
+        "class_label": "K",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 22,
+        "column_name": "observed_constrained_off_wind_lag_168h",
+        "class_label": "K",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 23,
+        "column_name": "observed_constrained_off_solar_lag_168h",
+        "class_label": "K",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 24,
+        "column_name": "observed_constrained_off_lag_48h",
+        "class_label": "K",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 25,
+        "column_name": "observed_constrained_off_same_hour_mean_7d",
+        "class_label": "K",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 26,
+        "column_name": "observed_constrained_off_hours_above_threshold_7d",
+        "class_label": "K",
+        "grain": "day",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 27,
+        "column_name": "observed_constrained_off_total_7d_mwh",
+        "class_label": "K",
+        "grain": "day",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 28,
+        "column_name": "observed_load_lag_168h",
+        "class_label": "K",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 29,
+        "column_name": "observed_wind_generation_lag_168h",
+        "class_label": "K",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 30,
+        "column_name": "observed_solar_generation_lag_168h",
+        "class_label": "K",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 31,
+        "column_name": "observed_wind_capacity_factor_mean_7d",
+        "class_label": "K+T",
+        "grain": "day",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 32,
+        "column_name": "observed_solar_capacity_factor_mean_7d",
+        "class_label": "K+T",
+        "grain": "day",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 33,
+        "column_name": "observed_net_exchange_lag_168h",
+        "class_label": "K",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 34,
+        "column_name": "observed_net_exchange_mean_24h_to_cutoff",
+        "class_label": "K",
+        "grain": "day",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 35,
+        "column_name": "observed_corridor_flow_ne_se_lag_168h",
+        "class_label": "K",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 36,
+        "column_name": "observed_corridor_flow_n_ne_lag_168h",
+        "class_label": "K",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 37,
+        "column_name": "observed_reason_share_ene_7d",
+        "class_label": "K",
+        "grain": "day",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 38,
+        "column_name": "observed_reason_share_cnf_7d",
+        "class_label": "K",
+        "grain": "day",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 39,
+        "column_name": "observed_reason_share_rel_7d",
+        "class_label": "K",
+        "grain": "day",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 40,
+        "column_name": "programmed_load_mwh",
+        "class_label": "P",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 41,
+        "column_name": "programmed_load_ramp_1h",
+        "class_label": "P",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 42,
+        "column_name": "programmed_load_mean_3h",
+        "class_label": "P",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 43,
+        "column_name": "programmed_load_daily_min_mwh",
+        "class_label": "P",
+        "grain": "day",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 44,
+        "column_name": "programmed_load_rank_in_day",
+        "class_label": "P",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 45,
+        "column_name": "weather_wind_speed_100m",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 46,
+        "column_name": "weather_wind_speed_120m",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 47,
+        "column_name": "weather_wind_direction_120m_sin",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 48,
+        "column_name": "weather_wind_direction_120m_cos",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 49,
+        "column_name": "weather_wind_gusts_10m",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 50,
+        "column_name": "weather_surface_pressure",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 51,
+        "column_name": "weather_relative_humidity_2m",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 52,
+        "column_name": "weather_precipitation",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 53,
+        "column_name": "weather_shortwave_radiation",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 54,
+        "column_name": "weather_direct_normal_irradiance",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 55,
+        "column_name": "weather_diffuse_radiation",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 56,
+        "column_name": "weather_cloud_cover",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 57,
+        "column_name": "weather_clearness_index",
+        "class_label": "W+T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 58,
+        "column_name": "weather_wind_power_curve_cf",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 59,
+        "column_name": "weather_expected_wind_mwh",
+        "class_label": "W+T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 60,
+        "column_name": "weather_expected_solar_mwh",
+        "class_label": "W+T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 61,
+        "column_name": "weather_wind_speed_120m_ramp_1h",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 62,
+        "column_name": "weather_shortwave_radiation_ramp_1h",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 63,
+        "column_name": "weather_expected_vre_ramp_1h",
+        "class_label": "W+T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 64,
+        "column_name": "weather_wind_speed_120m_mean_3h",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 65,
+        "column_name": "weather_wind_speed_120m_std_6h",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 66,
+        "column_name": "weather_shortwave_radiation_mean_3h",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 67,
+        "column_name": "weather_run_age_hours",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 68,
+        "column_name": "weather_centroid_coverage",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 69,
+        "column_name": "proxy_residual_load_mwh",
+        "class_label": "P+W+T",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 70,
+        "column_name": "proxy_residual_load_ratio",
+        "class_label": "P+W+T",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 71,
+        "column_name": "proxy_renewable_load_ratio",
+        "class_label": "P+W+T",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 72,
+        "column_name": "proxy_vre_surplus_mwh",
+        "class_label": "P+W+T",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 73,
+        "column_name": "proxy_residual_load_ramp_1h",
+        "class_label": "P+W+T",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 74,
+        "column_name": "proxy_residual_load_min_of_day",
+        "class_label": "P+W+T",
+        "grain": "day",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 75,
+        "column_name": "proxy_residual_load_rank_in_day",
+        "class_label": "P+W+T",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 76,
+        "column_name": "observed_export_utilisation_mean_24h_to_cutoff",
+        "class_label": "K",
+        "grain": "day",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 77,
+        "column_name": "observed_corridor_utilisation_ne_se_max_7d",
+        "class_label": "K",
+        "grain": "day",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 78,
+        "column_name": "observed_constrained_off_same_hour_exceedance_7d",
+        "class_label": "K",
+        "grain": "hour",
+        "available_at_gate_early": true
+      }
+    ],
+    "dessem_augmented_v1": [
+      {
+        "input_index": 1,
+        "column_name": "subsystem",
+        "class_label": "identity",
+        "grain": null,
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 2,
+        "column_name": "weather_temperature_2m",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 3,
+        "column_name": "capacity_wind_mw",
+        "class_label": "T",
+        "grain": "day",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 4,
+        "column_name": "capacity_solar_mw",
+        "class_label": "T",
+        "grain": "day",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 5,
+        "column_name": "capacity_wind_added_28d_mw",
+        "class_label": "T",
+        "grain": "day",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 6,
+        "column_name": "capacity_solar_added_28d_mw",
+        "class_label": "T",
+        "grain": "day",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 7,
+        "column_name": "calendar_local_hour",
+        "class_label": "T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 8,
+        "column_name": "calendar_hour_sin",
+        "class_label": "T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 9,
+        "column_name": "calendar_hour_cos",
+        "class_label": "T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 10,
+        "column_name": "calendar_doy_sin",
+        "class_label": "T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 11,
+        "column_name": "calendar_doy_cos",
+        "class_label": "T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 12,
+        "column_name": "calendar_day_of_week",
+        "class_label": "T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 13,
+        "column_name": "calendar_is_weekend",
+        "class_label": "T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 14,
+        "column_name": "calendar_is_holiday_national",
+        "class_label": "T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 15,
+        "column_name": "calendar_holiday_state_share",
+        "class_label": "T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 16,
+        "column_name": "calendar_is_day_before_holiday",
+        "class_label": "T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 17,
+        "column_name": "calendar_is_bridge_day",
+        "class_label": "T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 18,
+        "column_name": "solar_zenith_cos",
+        "class_label": "T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 19,
+        "column_name": "solar_extraterrestrial_ghi",
+        "class_label": "T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 20,
+        "column_name": "observed_actual_lag_hours",
+        "class_label": "K",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 21,
+        "column_name": "observed_constrained_off_lag_168h",
+        "class_label": "K",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 22,
+        "column_name": "observed_constrained_off_wind_lag_168h",
+        "class_label": "K",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 23,
+        "column_name": "observed_constrained_off_solar_lag_168h",
+        "class_label": "K",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 24,
+        "column_name": "observed_constrained_off_lag_48h",
+        "class_label": "K",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 25,
+        "column_name": "observed_constrained_off_same_hour_mean_7d",
+        "class_label": "K",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 26,
+        "column_name": "observed_constrained_off_hours_above_threshold_7d",
+        "class_label": "K",
+        "grain": "day",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 27,
+        "column_name": "observed_constrained_off_total_7d_mwh",
+        "class_label": "K",
+        "grain": "day",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 28,
+        "column_name": "observed_load_lag_168h",
+        "class_label": "K",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 29,
+        "column_name": "observed_wind_generation_lag_168h",
+        "class_label": "K",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 30,
+        "column_name": "observed_solar_generation_lag_168h",
+        "class_label": "K",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 31,
+        "column_name": "observed_wind_capacity_factor_mean_7d",
+        "class_label": "K+T",
+        "grain": "day",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 32,
+        "column_name": "observed_solar_capacity_factor_mean_7d",
+        "class_label": "K+T",
+        "grain": "day",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 33,
+        "column_name": "observed_net_exchange_lag_168h",
+        "class_label": "K",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 34,
+        "column_name": "observed_net_exchange_mean_24h_to_cutoff",
+        "class_label": "K",
+        "grain": "day",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 35,
+        "column_name": "observed_corridor_flow_ne_se_lag_168h",
+        "class_label": "K",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 36,
+        "column_name": "observed_corridor_flow_n_ne_lag_168h",
+        "class_label": "K",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 37,
+        "column_name": "observed_reason_share_ene_7d",
+        "class_label": "K",
+        "grain": "day",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 38,
+        "column_name": "observed_reason_share_cnf_7d",
+        "class_label": "K",
+        "grain": "day",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 39,
+        "column_name": "observed_reason_share_rel_7d",
+        "class_label": "K",
+        "grain": "day",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 40,
+        "column_name": "programmed_load_mwh",
+        "class_label": "P",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 41,
+        "column_name": "programmed_load_ramp_1h",
+        "class_label": "P",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 42,
+        "column_name": "programmed_load_mean_3h",
+        "class_label": "P",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 43,
+        "column_name": "programmed_load_daily_min_mwh",
+        "class_label": "P",
+        "grain": "day",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 44,
+        "column_name": "programmed_load_rank_in_day",
+        "class_label": "P",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 45,
+        "column_name": "dessem_demand_mwh",
+        "class_label": "D",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 46,
+        "column_name": "dessem_wind_mwh",
+        "class_label": "D",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 47,
+        "column_name": "dessem_solar_mwh",
+        "class_label": "D",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 48,
+        "column_name": "dessem_mmgd_mwh",
+        "class_label": "D",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 49,
+        "column_name": "dessem_hydro_mwh",
+        "class_label": "D",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 50,
+        "column_name": "dessem_thermal_mwh",
+        "class_label": "D",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 51,
+        "column_name": "dessem_pumping_mwh",
+        "class_label": "D",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 52,
+        "column_name": "dessem_residual_load_mwh",
+        "class_label": "D",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 53,
+        "column_name": "dessem_renewable_load_ratio",
+        "class_label": "D",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 54,
+        "column_name": "dessem_vre_surplus_mwh",
+        "class_label": "D",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 55,
+        "column_name": "dessem_inflexible_share",
+        "class_label": "D",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 56,
+        "column_name": "dessem_implied_net_export_mwh",
+        "class_label": "D",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 57,
+        "column_name": "dessem_demand_ramp_1h",
+        "class_label": "D",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 58,
+        "column_name": "dessem_residual_load_ramp_1h",
+        "class_label": "D",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 59,
+        "column_name": "dessem_vre_ramp_1h",
+        "class_label": "D",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 60,
+        "column_name": "dessem_residual_load_min_of_day",
+        "class_label": "D",
+        "grain": "day",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 61,
+        "column_name": "dessem_residual_load_rank_in_day",
+        "class_label": "D",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 62,
+        "column_name": "dessem_wind_capacity_factor",
+        "class_label": "D+T",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 63,
+        "column_name": "dessem_solar_capacity_factor",
+        "class_label": "D+T",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 64,
+        "column_name": "dessem_sin_residual_load_mwh",
+        "class_label": "D",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 65,
+        "column_name": "dessem_absorber_residual_load_mwh",
+        "class_label": "D",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 66,
+        "column_name": "weather_wind_speed_100m",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 67,
+        "column_name": "weather_wind_speed_120m",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 68,
+        "column_name": "weather_wind_direction_120m_sin",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 69,
+        "column_name": "weather_wind_direction_120m_cos",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 70,
+        "column_name": "weather_wind_gusts_10m",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 71,
+        "column_name": "weather_surface_pressure",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 72,
+        "column_name": "weather_relative_humidity_2m",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 73,
+        "column_name": "weather_precipitation",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 74,
+        "column_name": "weather_shortwave_radiation",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 75,
+        "column_name": "weather_direct_normal_irradiance",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 76,
+        "column_name": "weather_diffuse_radiation",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 77,
+        "column_name": "weather_cloud_cover",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 78,
+        "column_name": "weather_clearness_index",
+        "class_label": "W+T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 79,
+        "column_name": "weather_wind_power_curve_cf",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 80,
+        "column_name": "weather_expected_wind_mwh",
+        "class_label": "W+T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 81,
+        "column_name": "weather_expected_solar_mwh",
+        "class_label": "W+T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 82,
+        "column_name": "weather_wind_speed_120m_ramp_1h",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 83,
+        "column_name": "weather_shortwave_radiation_ramp_1h",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 84,
+        "column_name": "weather_expected_vre_ramp_1h",
+        "class_label": "W+T",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 85,
+        "column_name": "weather_wind_speed_120m_mean_3h",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 86,
+        "column_name": "weather_wind_speed_120m_std_6h",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 87,
+        "column_name": "weather_shortwave_radiation_mean_3h",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 88,
+        "column_name": "weather_run_age_hours",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 89,
+        "column_name": "weather_centroid_coverage",
+        "class_label": "W",
+        "grain": "hour",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 90,
+        "column_name": "proxy_residual_load_mwh",
+        "class_label": "P+W+T",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 91,
+        "column_name": "proxy_residual_load_ratio",
+        "class_label": "P+W+T",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 92,
+        "column_name": "proxy_renewable_load_ratio",
+        "class_label": "P+W+T",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 93,
+        "column_name": "proxy_vre_surplus_mwh",
+        "class_label": "P+W+T",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 94,
+        "column_name": "proxy_residual_load_ramp_1h",
+        "class_label": "P+W+T",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 95,
+        "column_name": "proxy_residual_load_min_of_day",
+        "class_label": "P+W+T",
+        "grain": "day",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 96,
+        "column_name": "proxy_residual_load_rank_in_day",
+        "class_label": "P+W+T",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 97,
+        "column_name": "observed_export_utilisation_mean_24h_to_cutoff",
+        "class_label": "K",
+        "grain": "day",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 98,
+        "column_name": "observed_corridor_utilisation_ne_se_max_7d",
+        "class_label": "K",
+        "grain": "day",
+        "available_at_gate_early": true
+      },
+      {
+        "input_index": 99,
+        "column_name": "dessem_export_utilisation",
+        "class_label": "D+K",
+        "grain": "hour",
+        "available_at_gate_early": false
+      },
+      {
+        "input_index": 100,
+        "column_name": "observed_constrained_off_same_hour_exceedance_7d",
+        "class_label": "K",
+        "grain": "hour",
+        "available_at_gate_early": true
+      }
+    ]
+  }
+}

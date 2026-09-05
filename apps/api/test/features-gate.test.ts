@@ -1254,6 +1254,7 @@ describe("the feature/label partition", () => {
       "observed_export_utilisation_mean_24h_to_cutoff",
       "observed_corridor_utilisation_ne_se_max_7d",
       "dessem_export_utilisation",
+      "observed_constrained_off_same_hour_exceedance_7d",
     ]);
   });
 
@@ -1358,13 +1359,34 @@ describe("the feature dictionary, structurally", () => {
     "utf8",
   );
 
-  /** The `column_name` of every seeded entry, in the order the seed writes it. */
+  /**
+   * Every migration that seeds a dictionary entry, in tree order.
+   *
+   * Derived rather than listed, for the reason `featureMigrations()` above is:
+   * `0033` seeded the first 111 and `0036` appends the 112th, and a later block
+   * will append more. A test naming the migrations it reads is a test that
+   * stops covering the ones it does not — which is the shape of mistake this
+   * whole describe block is about.
+   */
+  const DICTIONARY_SEEDS = readdirSync(MIGRATION_DIRECTORY)
+    .filter((name) => name.endsWith(".sql"))
+    .toSorted()
+    .map((name) => readFileSync(join(MIGRATION_DIRECTORY, name), "utf8"))
+    .filter((text) => text.includes("INSERT INTO feature_dictionary_entry ("));
+
+  /** One seed statement's text, from its INSERT to its terminating semicolon. */
+  const seedStatement = (text: string): string => {
+    const start = text.indexOf("INSERT INTO feature_dictionary_entry (");
+    return text.slice(start, text.indexOf(";", start));
+  };
+
+  /** The `column_name` of every seeded entry, in the order the tree writes it. */
   const seededEntries = (): string[] => {
-    const start = DICTIONARY.indexOf("INSERT INTO feature_dictionary_entry (");
-    const end = DICTIONARY.indexOf(";", start);
-    expect(start).toBeGreaterThan(-1);
-    return [...DICTIONARY.slice(start, end).matchAll(/^ {2}\('(\w+)',/gm)].map(
-      (match) => match[1] as string,
+    expect(DICTIONARY_SEEDS.length).toBeGreaterThan(0);
+    return DICTIONARY_SEEDS.flatMap((text) =>
+      [...seedStatement(text).matchAll(/^ {2}\('(\w+)',/gm)].map(
+        (match) => match[1] as string,
+      ),
     );
   };
 
@@ -1404,7 +1426,7 @@ describe("the feature dictionary, structurally", () => {
     // against itself. A ticket that appends an attribute and forgets the entry
     // fails here without a database, and fails again at the function with one.
     expect(seededEntries()).toEqual([...FEATURE_ROW_COLUMNS]);
-    expect(seededEntries()).toHaveLength(111);
+    expect(seededEntries()).toHaveLength(112);
   });
 
   it("refuses the whole answer rather than returning a gap in it", () => {
@@ -1424,7 +1446,7 @@ describe("the feature dictionary, structurally", () => {
     expect(body).toContain("Unclassified is not an option");
   });
 
-  it("writes the prose once, at the column, for all 111 of them", () => {
+  it("writes the prose once, at the column, for all 112 of them", () => {
     // The dictionary reads `col_description`, so a comment is not decoration —
     // it is the description column. Ticket 11 completed the thirty-five that
     // `0016`, `0019` and `0021` declared before the habit set in.
@@ -1483,16 +1505,18 @@ describe("the feature dictionary, structurally", () => {
     // The six trailing booleans of a seed row, in the order the INSERT names
     // them: in_free, in_augmented, available_at_gate_early, is_proxy,
     // justifies_dessem_trade, model_input.
-    const flags = [
-      ...DICTIONARY.matchAll(
-        /^ {2}\('(\w+)',.*?, (true|false), (true|false), (true|false), (true|false), (true|false), (true|false)\)[,;]$/gm,
-      ),
-    ].map((match) => ({
-      column: match[1] as string,
-      inFree: match[2] === "true",
-      availableEarly: match[4] === "true",
-    }));
-    expect(flags).toHaveLength(111);
+    const flags = DICTIONARY_SEEDS.flatMap((text) =>
+      [
+        ...text.matchAll(
+          /^ {2}\('(\w+)',.*?, (true|false), (true|false), (true|false), (true|false), (true|false), (true|false)\)[,;]$/gm,
+        ),
+      ].map((match) => ({
+        column: match[1] as string,
+        inFree: match[2] === "true",
+        availableEarly: match[4] === "true",
+      })),
+    );
+    expect(flags).toHaveLength(112);
 
     const absentEarly = flags
       .filter((entry) => !entry.availableEarly)

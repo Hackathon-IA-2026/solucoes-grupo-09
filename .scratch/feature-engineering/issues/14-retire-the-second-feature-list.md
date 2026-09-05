@@ -37,7 +37,7 @@ column, recorded at the bottom of
 adding it moves `feature_hash` and takes `feature_row` to 112 attributes, so it
 should land before or with this, not after.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] `ordered_features.yaml` is gone and nothing reads it
 - [ ] `driver_groups.py` validates totality against the dictionary, and the

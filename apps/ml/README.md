@@ -89,10 +89,22 @@ upstream that nobody placed matches nothing, and `test_driver_groups.py` fails
 until somebody adds a line — the loader rejects a member containing `*`, so
 there is no spelling of "everything else" available in the file.
 
-`ordered_features.yaml` beside it is the ordered feature list transcribed from
-the feature spec, standing in for the artifact's own list until the feature
-builder lands. `assert_total_partition` already takes the names as an argument,
-so that substitution is one call site.
+`model_inputs.json` beside it is what totality is checked against: the ordered
+model inputs of both feature sets, **generated** by
+`apps/api/src/features/model-inputs-artifact.ts` from
+`feature_set_model_inputs(set)`, which derives its names from `pg_attribute` on
+the `feature_row` composite type. Regenerate it with `bun run --cwd apps/api
+features:snapshot` against a migrated database; the API's gated
+`database-features.test.ts` fails when it is stale.
+
+It replaced `ordered_features.yaml`, a hand transcription of the spec's feature
+table — and the way that file failed is worth keeping: it did not drift. It
+matched `feature_set_model_inputs()` exactly, 77 names and 99, while both were
+one name short of the spec's class-`K` table. A second list only speaks when it
+disagrees, and this one had quietly become a copy of the implementation it was
+there to check. The replacement is not "a list somewhere else" — it is a list
+**no human types a name into**.
+
 ## The attribution — what the eight bars explain, and what they do not
 
 `src/wattsteer_ml/diagnosis/attribution.py` turns one `(subsystem, valid_time)`

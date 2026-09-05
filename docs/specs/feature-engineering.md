@@ -536,19 +536,28 @@ could not be kept for the occurrence head with no column to read. Note it is not
 `observed_constrained_off_hours_above_threshold_7d`, which counts *all* hours
 across seven days rather than the seven observations of one local hour.
 
-> **Still not built, and ticket 11 found it rather than closing it.** The
-> dictionary is derived from `feature_row`, and `feature_row` has **111**
-> attributes — this column is not among them. Ticket 05 shipped twenty of the
-> class-`K` names and not this one; the spec table above says it exists and it
-> does not. Two consequences are live. `apps/ml`'s `evaluation/ladder.py` names
-> `observed_constrained_off_same_hour_exceedance_7d` as `EXCEEDANCE_FEATURE`
-> and cannot read it from a real row, so rung 1's occurrence head is not yet
-> "computed from the feature function". And the hand-transcribed
-> `ordered_features.yaml` omits it too — so that file matches the
-> *implementation* rather than its stated authority, which is exactly the way a
-> second list fails. Adding it is a class-`K` block change and a 112th
-> attribute, which moves `feature_hash`; it belongs in a ticket of its own
-> rather than inside the one that writes the dictionary.
+> **Built by ticket 14, `drizzle/0036_the_same_hour_exceedance.sql`.**
+> `feature_row` has **112** attributes and this is the last of them; the class-`K`
+> block computes it from the seven same-local-hour observations it already
+> aggregates the mean over. It landed in the ticket that retired
+> `apps/ml`'s hand-transcribed `ordered_features.yaml`, and it had to: that file
+> omitted this name too, so it agreed with `feature_set_model_inputs()` exactly
+> — 77 names and 99 — while both disagreed with the table above. Replacing a
+> transcription with a list *derived* from the type is worth nothing while the
+> type is the thing that is wrong, because the derived list would inherit the
+> omission and be more convincing about it. Adding the column moved
+> `feature_hash`, which is the visible event that hash exists for.
+>
+> **The comparison is strict, and this table was corrected rather than the code
+> matched to it.** An earlier draft of the row above wrote "at or above
+> `threshold_mw`". `y_has_curtailment` is `total > threshold_mw`, and so is
+> `observed_constrained_off_hours_above_threshold_7d` — `drizzle/0021` argued
+> for that explicitly, so the >1 / >5 / >10 sweep cannot make a feature and the
+> label disagree about what curtailment is. This column is the occurrence
+> *baseline for that label*: a boundary hour it counted and the label did not is
+> precisely the disagreement `forecaster.md` computes rung 1 from the feature
+> function to prevent, and at `threshold_mw = 0` the two readings are not a
+> rounding apart — `>= 0` is every hour.
 
 **Ramps and centred windows are legal here and nowhere else on the actuals side.**
 A D−1 run publishes all 24 hours of day D at once, so `x[t] − x[t−1]` inside that
@@ -777,7 +786,7 @@ cutoff — an offset that does not clear it yields NULL rather than sliding.
 | `observed_constrained_off_lag_48h` | same local hour, D−2; NULL if cutoff excludes it | **K** | ONS 1, 3 |
 | `observed_constrained_off_same_hour_mean_7d` | mean at the same local hour over the 7 available days ending at the cutoff day | **K** | ONS 1, 3 |
 | `observed_constrained_off_hours_above_threshold_7d` | count over the trailing 7 available days | **K** | ONS 1, 3 |
-| `observed_constrained_off_same_hour_exceedance_7d` | share of the 7 same-local-hour observations at or above `threshold_mw`, in 1/7 steps | **K** | ONS 1, 3 |
+| `observed_constrained_off_same_hour_exceedance_7d` | share of the 7 same-local-hour observations **above** `threshold_mw`, in 1/7 steps | **K** | ONS 1, 3 |
 | `observed_constrained_off_total_7d_mwh` | sum over the trailing 7 available days | **K** | ONS 1, 3 |
 | `observed_load_lag_168h` | `load_mwh`, D−7 same hour | **K** | ONS 5 |
 | `observed_wind_generation_lag_168h` / `observed_solar_generation_lag_168h` | D−7 same hour | **K** | ONS 5 |
@@ -1177,7 +1186,26 @@ worth** — and that trade is a product decision, not a metric.
 >   exactly as sets. That file's own header says the transcription goes away
 >   once the names can come from the builder, and it can: the substitution is
 >   the one call site `load_ordered_features` has. It is left in place here only
->   because `apps/ml` was another agent's tree during this ticket.
+>   because `apps/ml` was another agent's tree during this ticket. **Ticket 14
+>   retired it**, and found that the agreement above was the problem rather than
+>   the reassurance: both lists were one name short of this document's own
+>   class-`K` table. The counts are now 78 and 100 over 112 attributes.
+>
+>   **What replaced it, and why that shape.** A *generated artifact*,
+>   `apps/ml/src/wattsteer_ml/diagnosis/model_inputs.json`, written by
+>   `apps/api/src/features/model-inputs-artifact.ts` from
+>   `feature_set_model_inputs(set)`. `apps/ml` has no database in its default
+>   test path, so the names have to be on disk; the question is only what makes
+>   a file on disk different from the transcription it replaces, and there is
+>   exactly one answer worth having: **no human types a feature name into it.**
+>   A checked-in snapshot with a staleness test is the same artifact with worse
+>   manners — a snapshot generated from nothing is a transcription — so the file
+>   declares its generator and the SQL function it came from, and
+>   `load_model_inputs` refuses one that does not. The live check is a byte
+>   comparison in the API's gated `database-features.test.ts`, which is where a
+>   database exists. `driver_groups.py` reads the artifact and
+>   `assert_total_partition` is unchanged: it always took the names as an
+>   argument, which is what made this a one-call-site substitution.
 > - **The four dictionary facts that are uncomfortable are recorded rather than
 >   tidied.** `available_at_gate_early` is `false` for all five `programmed_*`,
 >   all seven `proxy_*` and all 22 `dessem_*` columns, and the two reasons are

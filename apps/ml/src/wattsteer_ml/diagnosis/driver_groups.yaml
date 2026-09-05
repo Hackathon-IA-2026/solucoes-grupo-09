@@ -36,8 +36,17 @@
 # and typical values the Explain screen may show beside the bar. Every headline
 # is chosen from features present in *both* feature sets, so a `dessem_free_v1`
 # model does not put a NULL on screen; `test_driver_groups.py` asserts that.
+#
+# VERSION HISTORY
+# ---------------
+#   1 — diagnosis ticket 02, the map itself.
+#   2 — feature-engineering ticket 14. One member:
+#       `observed_constrained_off_same_hour_exceedance_7d`, in `recent_history`.
+#       The column existed in the spec and in nothing else; the ticket that
+#       retired the hand-transcribed feature list added it to the row type,
+#       which is what made this map's totality check notice it was missing.
 
-version: 1
+version: 2
 
 groups:
   - code: renewable_resource
@@ -186,6 +195,11 @@ groups:
       - observed_constrained_off_solar_lag_168h
       - observed_constrained_off_lag_48h
       - observed_constrained_off_same_hour_mean_7d
+      # The occurrence twin of the mean above it. Added by feature-engineering
+      # ticket 14, which shipped the column ticket 05 owed — the name the spec's
+      # class-`K` table has always carried and neither this map nor the row type
+      # had. It groups where its twin groups: it is what happened lately.
+      - observed_constrained_off_same_hour_exceedance_7d
       - observed_constrained_off_hours_above_threshold_7d
       - observed_constrained_off_total_7d_mwh
       - observed_reason_share_ene_7d

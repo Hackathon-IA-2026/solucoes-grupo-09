@@ -80,6 +80,15 @@ export {
   servingTargetDate,
 } from "./feature-rows.js";
 export {
+  buildModelInputsArtifact,
+  MODEL_INPUTS_ARTIFACT_PATH,
+  MODEL_INPUTS_GENERATOR,
+  MODEL_INPUTS_SOURCE,
+  type ModelInputArtifactEntry,
+  type ModelInputsArtifact,
+  renderModelInputsArtifact,
+} from "./model-inputs-artifact.js";
+export {
   aggregateSubsystemHour,
   readSubsystemWeatherAsOf,
   type SubsystemWeatherHour,

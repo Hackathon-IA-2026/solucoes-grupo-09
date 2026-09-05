@@ -7,6 +7,7 @@ import { createDatabase } from "../src/database/connection.js";
 import { onsResourceVersion } from "../src/database/schema.js";
 import {
   assertWeatherCompleteness,
+  buildModelInputsArtifact,
   FEATURE_ROW_COLUMNS,
   type FeatureRow,
   featureGrain,
@@ -14,6 +15,7 @@ import {
   isLabelColumn,
   loadCalendar,
   loadCalendarArtifact,
+  MODEL_INPUTS_ARTIFACT_PATH,
   readAbConfigurations,
   readCapacityWeightsAsOf,
   readDroppedFeatures,
@@ -22,6 +24,7 @@ import {
   readFeatureRows,
   readFeatureSetModelInputs,
   readServingRows,
+  renderModelInputsArtifact,
   ServingCompletenessError,
 } from "../src/features/index.js";
 import {
@@ -1795,6 +1798,16 @@ suite("the gate, end to end (real Postgres)", () => {
     expect(Number(noon.observed_constrained_off_total_7d_mwh)).toBe(15);
     // One of those three hours is above the 5 MW threshold.
     expect(Number(noon.observed_constrained_off_hours_above_threshold_7d)).toBe(1);
+    // The occurrence twin of the same-hour mean, over the *same two* same-local-
+    // hour observations rather than over all the hours of the week: 9 is above
+    // the 5 MW threshold and 3 is not. It is a different number from the hours
+    // count beside it, and that difference is the whole reason forecaster.md's
+    // rung 1 needs its own column - the hours count is day grain over 168 hours,
+    // and this is hourly over seven observations of one local hour.
+    expect(Number(noon.observed_constrained_off_same_hour_exceedance_7d)).toBeCloseTo(
+      0.5,
+      10,
+    );
     // The balance series, same hour, seven days back.
     expect(Number(noon.observed_load_lag_168h)).toBe(1000);
     expect(Number(noon.observed_wind_generation_lag_168h)).toBe(70);
@@ -1830,6 +1843,53 @@ suite("the gate, end to end (real Postgres)", () => {
     expect(elsewhere.observed_wind_capacity_factor_mean_7d).toBeNull();
     expect(elsewhere.observed_reason_share_ene_7d).toBeNull();
     expect(Number(elsewhere.observed_corridor_flow_ne_se_lag_168h)).toBe(500);
+  });
+
+  it("counts the same-hour exceedance strictly, as the label does", async () => {
+    // The spec's class-`K` table wrote "at or above `threshold_mw`", and this
+    // column is deliberately not that. `y_has_curtailment` is
+    // `total > threshold_mw`, and so is
+    // `observed_constrained_off_hours_above_threshold_7d` - `drizzle/0021`
+    // argued for the strict comparison explicitly, so the >1 / >5 / >10 sweep
+    // cannot make a feature and the label disagree about what curtailment is.
+    // This column is the occurrence *baseline for that label*, so a boundary
+    // hour it counted and the label did not would be exactly the disagreement
+    // forecaster.md computes rung 1 from the feature function to avoid.
+    //
+    // The two same-local-hour observations behind NE's noon are 9 and 3 MWh, so
+    // a threshold of exactly 3 separates the two readings completely: `> 3` is
+    // one of two, `>= 3` would be two of two. There is no rounding here to hide
+    // behind.
+    const rows = await readServingRows(db, {
+      targetDate: TARGET,
+      ...query,
+      thresholdMw: 3,
+    });
+    const noon = rows.find(
+      (row) =>
+        row.subsystem === "NE" &&
+        new Date(row.valid_time).getTime() === HOUR_CURTAILED.getTime(),
+    );
+    expect(Number(noon?.observed_constrained_off_same_hour_exceedance_7d)).toBeCloseTo(
+      0.5,
+      10,
+    );
+    // And it moves with the threshold rather than being fixed at build time -
+    // the argument reaches this column exactly as it reaches the hours count.
+    const strict = await readServingRows(db, {
+      targetDate: TARGET,
+      ...query,
+      thresholdMw: 10,
+    });
+    expect(
+      Number(
+        strict.find(
+          (row) =>
+            row.subsystem === "NE" &&
+            new Date(row.valid_time).getTime() === HOUR_CURTAILED.getTime(),
+        )?.observed_constrained_off_same_hour_exceedance_7d,
+      ),
+    ).toBe(0);
   });
 
   it("yields NULL for a lag that does not clear the cutoff, and never slides", async () => {
@@ -3067,7 +3127,7 @@ suite("the gate, end to end (real Postgres)", () => {
 
     // Names, order and types all come from `pg_attribute`, so this is the
     // catalogue's own list compared against TypeScript's copy of it.
-    expect(dictionary).toHaveLength(111);
+    expect(dictionary).toHaveLength(112);
     expect(dictionary.map((entry) => entry.column_name)).toEqual([
       ...FEATURE_ROW_COLUMNS,
     ]);
@@ -3154,7 +3214,7 @@ suite("the gate, end to end (real Postgres)", () => {
     expect(failures).toEqual([]);
     // And outside the transaction it answers again, so the refusals were about
     // the edits and not about the dictionary.
-    expect(await readFeatureDictionary(db)).toHaveLength(111);
+    expect(await readFeatureDictionary(db)).toHaveLength(112);
   });
 
   it("binds the TypeScript grain marking to the dictionary's, rather than trusting it", async () => {
@@ -3185,7 +3245,7 @@ suite("the gate, end to end (real Postgres)", () => {
     }
     // Non-vacuous in both directions.
     expect(dictionary.filter((entry) => entry.grain === "day")).toHaveLength(17);
-    expect(dictionary.filter((entry) => entry.role === "feature")).toHaveLength(98);
+    expect(dictionary.filter((entry) => entry.role === "feature")).toHaveLength(99);
   });
 
   it("enumerates the augmented set's twenty-two names, and the four that would justify the trade", async () => {
@@ -3215,8 +3275,8 @@ suite("the gate, end to end (real Postgres)", () => {
     // And the ordered model inputs of the two sets differ by exactly those 22.
     const inputsA = await readFeatureSetModelInputs(db, "dessem_free_v1");
     const inputsB = await readFeatureSetModelInputs(db, "dessem_augmented_v1");
-    expect(inputsA).toHaveLength(77);
-    expect(inputsB).toHaveLength(99);
+    expect(inputsA).toHaveLength(78);
+    expect(inputsB).toHaveLength(100);
     expect(inputsB.map((input) => input.column_name)).toEqual(
       expect.arrayContaining(inputsA.map((input) => input.column_name)),
     );
@@ -3229,6 +3289,52 @@ suite("the gate, end to end (real Postgres)", () => {
     expect(inputsA[0]?.column_name).toBe("subsystem");
     expect(inputsA.some((input) => input.column_name === "gate_at")).toBe(false);
     expect(inputsA.some((input) => input.column_name.startsWith("y_"))).toBe(false);
+  });
+
+  it("keeps the generated model-input artifact in step with the type", async () => {
+    // The staleness check, and the only assertion in this repository that can
+    // say whether `apps/ml` is reading the right feature names.
+    //
+    // `apps/ml`'s driver-group totality check needs the model inputs and the
+    // Python side has no database, so the names travel as a *generated*
+    // artifact — `feature_set_model_inputs(set)` serialised. Generated is the
+    // whole claim: `ordered_features.yaml`, which this replaced, was a hand
+    // transcription that matched `feature_set_model_inputs()` exactly, 77 names
+    // and 99, while both were one name short of the spec's class-`K` table.
+    // Nobody noticed, because a second list is silent while it agrees.
+    //
+    // So this compares **bytes**, against a freshly migrated database. A
+    // regeneration run against a database behind the tree produces a
+    // well-formed artifact for the wrong tree, and that is exactly the failure
+    // a diff of the rendered file catches and a count does not.
+    const expected = renderModelInputsArtifact(
+      buildModelInputsArtifact(
+        {
+          dessem_free_v1: await readFeatureSetModelInputs(db, "dessem_free_v1"),
+          dessem_augmented_v1: await readFeatureSetModelInputs(db, "dessem_augmented_v1"),
+        },
+        (await readFeatureDictionary(db)).length,
+      ),
+    );
+    const onDisk = readFileSync(
+      join(import.meta.dir, "../../..", MODEL_INPUTS_ARTIFACT_PATH),
+      "utf8",
+    );
+    expect({
+      path: MODEL_INPUTS_ARTIFACT_PATH,
+      stale: onDisk !== expected,
+      regenerate: "bun run --cwd apps/api features:snapshot",
+    }).toEqual({
+      path: MODEL_INPUTS_ARTIFACT_PATH,
+      stale: false,
+      regenerate: "bun run --cwd apps/api features:snapshot",
+    });
+
+    // Non-vacuous on the name the second list could not see: it is in the type,
+    // so it is in the artifact, so `apps/ml` must have placed it in a driver
+    // group. The composite type is the authority now, and this is the sentence
+    // that says the chain reaches all the way to Python.
+    expect(onDisk).toContain("observed_constrained_off_same_hour_exceedance_7d");
   });
 
   it("marks the proxies, and the columns the early gate does not have", async () => {
