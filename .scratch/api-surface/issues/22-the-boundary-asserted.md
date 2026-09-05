@@ -28,7 +28,7 @@ the forecast route is gone, and should.
 
 **Blocked by:** 11, 15, 17.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] A structural test names the only two handlers permitted to reach the modelling service, and fails when a third appears
 - [ ] The forecast and diagnosis routes return 200 against a fixture database with the modelling service unconfigured
