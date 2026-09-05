@@ -13,6 +13,9 @@ harnesses, two outputs, two names.
   assertion that makes them a comparison rather than four numbers.
 - :mod:`~wattsteer_ml.evaluation.collapse` — the ticket-011 block: whether a
   P50-planned day has any hour to act in.
+- :mod:`~wattsteer_ml.evaluation.collapse_report` — the same block published per
+  fold segment, counted over the **persisted** held-out bands, and stamped with
+  what produced it so a fixture-derived share cannot be read as the grid's.
 - :mod:`~wattsteer_ml.evaluation.metrics` — the metrics table, and `qloss_mwh`.
 - :mod:`~wattsteer_ml.evaluation.ladder` — the five rungs, on identical folds.
 - :mod:`~wattsteer_ml.evaluation.holdout` — `docs/specs/replay.md`'s one
@@ -35,6 +38,7 @@ from wattsteer_ml.evaluation.collapse import (
     CollapseError,
     HoursPerDay,
     P50Collapse,
+    ServedBand,
     ServedHour,
 )
 from wattsteer_ml.evaluation.folds import (
@@ -103,6 +107,7 @@ __all__ = [
     "RowIdentityError",
     "RowKey",
     "ScoredFold",
+    "ServedBand",
     "ServedHour",
     "WeatherArm",
     "assert_folds_in_order",

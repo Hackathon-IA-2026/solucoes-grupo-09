@@ -55,7 +55,7 @@ import numpy as np
 
 from wattsteer_ml.constants import SUBSYSTEM_CODES, Subsystem
 from wattsteer_ml.evaluation.matrix import HOURS_PER_DAY, RowKey
-from wattsteer_ml.mixture import ComposedForecast
+from wattsteer_ml.mixture import QuantileBand
 
 #: The label the pooled row carries. Not a subsystem code, so a reader of the
 #: table cannot mistake the pooled figure for one of the four.
@@ -70,21 +70,43 @@ class CollapseError(ValueError):
     """The served hours cannot support the figure that was asked for."""
 
 
+class ServedBand(Protocol):
+    """The published hour, narrowed to the two things a collapse is counted from.
+
+    ``p`` and the band, and deliberately nothing else.
+    :class:`~wattsteer_ml.mixture.ComposedForecast` satisfies it, so a freshly
+    composed fold-evaluation hour is measurable; so does a value assembled from a
+    **persisted** ``curtailment_forecast_hour`` row, which carries those same
+    three numbers and cannot carry the
+    :class:`~wattsteer_ml.mixture.HurdleMixture` behind them. Requiring the
+    mixture here would have forced a reader of stored rows to invent one, and an
+    invented mixture is a second opinion about the composition — the one thing
+    this file exists not to hold.
+    """
+
+    @property
+    def band(self) -> QuantileBand: ...
+
+    @property
+    def occurrence_probability(self) -> float: ...
+
+
 class ServedHour(Protocol):
     """One served subsystem-hour: who it is about, and what was published.
 
-    Structural rather than nominal, so both
-    :class:`~wattsteer_ml.training.hurdle.HourForecast` and
-    :class:`~wattsteer_ml.training.conformal.ScoredHour` satisfy it without this
-    module importing either — which is what keeps ``evaluation`` free of an
-    import cycle back through ``training``.
+    Structural rather than nominal, so
+    :class:`~wattsteer_ml.training.hurdle.HourForecast`,
+    :class:`~wattsteer_ml.training.conformal.ScoredHour` and
+    :class:`~wattsteer_ml.evaluation.collapse_report.PublishedHour` all satisfy
+    it without this module importing any of them — which is what keeps
+    ``evaluation`` free of an import cycle back through ``training``.
     """
 
     @property
     def key(self) -> RowKey: ...
 
     @property
-    def forecast(self) -> ComposedForecast: ...
+    def forecast(self) -> ServedBand: ...
 
 
 @dataclass(frozen=True)
@@ -169,7 +191,7 @@ class P50Collapse:
         served = list(hours)
         if not served:
             return None
-        by_day: dict[tuple[date, Subsystem], list[ComposedForecast]] = {}
+        by_day: dict[tuple[date, Subsystem], list[ServedBand]] = {}
         for hour in served:
             by_day.setdefault((hour.key.target_date, hour.key.subsystem), []).append(
                 hour.forecast
