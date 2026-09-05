@@ -40,7 +40,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
@@ -415,4 +415,208 @@ __all__ = [
     "source_version",
     "truncate",
     "truncate_weather",
+]
+
+
+# --- Added by feature-engineering 13 ---------------------------------------
+# A second weather seeder, kept beside `seed_weather_run` rather than merged
+# into it: that one seeds a single run's hours for the canonical-read tests,
+# this one seeds whole forecast days across runs for the aggregate train/serve
+# gap. Same table, different question; one signature cannot answer both
+# without a parameter that means "which test are you".
+
+#: The frozen set every weather fixture writes into. The literal the view
+#: spells, not a parameter: `canonical_capacity_weight` filters on it.
+CENTROID_SET_VERSION = "centroid_set_v1"
+
+#: Backfill stamp. Deliberately *later* than any gate these tests use, because
+#: that is the production shape — 2024 weather ingested in 2026 — and a fixture
+#: that backdated `ingested_at` would hide the very read this harness exists to
+#: exercise.
+BACKFILL_INGESTED_AT = datetime(2026, 1, 1, tzinfo=UTC)
+
+
+async def seed_weather_fleet(
+    conn: asyncpg.Connection[Any],
+    *,
+    subsystem: str = "NE",
+    technology: str = "WIND",
+    points: Sequence[tuple[str, float, float, float]] = (
+        ("W1", -12.5, -41.5, 300.0),
+        ("W2", -5.5, -36.5, 700.0),
+    ),
+) -> None:
+    """A frozen centroid set and one plant sitting exactly on each point.
+
+    Each plant is placed *at* its centroid so the nearest-point assignment in
+    `canonical_capacity_weight` is unambiguous: the weights these tests assert
+    against are then the capacity shares and nothing about the haversine.
+    """
+    version = await source_version(conn)
+    await conn.execute(
+        """
+        insert into centroid_set (
+          version, source, geometry_digest, centroid_count, represented_mw,
+          registry_as_of, fleet_on, freeze_located_mw, freeze_plants,
+          collision_check
+        )
+        select $1, (select min(e::text)::centroid_set_source
+                    from unnest(enum_range(null::centroid_set_source)) e),
+               'harness', $2, $3, $4, $4, $3, $2,
+               (select min(e::text)::centroid_collision_check
+                from unnest(enum_range(null::centroid_collision_check)) e)
+        on conflict (version) do nothing
+        """,
+        CENTROID_SET_VERSION,
+        len(points),
+        float(sum(mw for _, _, _, mw in points)),
+        BACKFILL_INGESTED_AT,
+    )
+    await conn.executemany(
+        """
+        insert into centroid_point (
+          set_version, centroid_id, label, latitude, longitude, technology,
+          represented_mw, origin, municipalities, plants, merged_from,
+          grid_latitude, grid_longitude
+        ) values ($1, $2, $2, $3, $4, $5::technology, $6,
+                  'municipality_centroid', $2, 1, '', $3, $4)
+        on conflict do nothing
+        """,
+        [
+            (CENTROID_SET_VERSION, point, lat, lon, technology, mw)
+            for point, lat, lon, mw in points
+        ],
+    )
+    await conn.executemany(
+        """
+        insert into plant (
+          ceg_core, ceg_raw, ons_plant_code, name, subsystem, state_code,
+          technology, operation_modality, owner_name, operator_name
+        ) values ($1, $1, $1, $1, $2::subsystem_code, 'BA', $3::technology,
+                  'TIPO_I', 'harness', 'harness')
+        on conflict (ceg_core) do nothing
+        """,
+        [(f"PLANT_{point}", subsystem, technology) for point, _, _, _ in points],
+    )
+    await conn.executemany(
+        """
+        insert into generating_unit (
+          plant_ceg_core, equipment_code, unit_number, name, rated_power_mw,
+          commissioned_on, data_version, published_at, published_at_precision,
+          ingested_at, value_digest, source_version_id
+        ) values ($1, $2, '1', $1, $3, $4, 1, $5, 'file', $5, $2, $6)
+        on conflict do nothing
+        """,
+        [
+            (
+                f"PLANT_{point}",
+                f"PLANT_{point}-1",
+                float(mw),
+                datetime(2020, 1, 1, tzinfo=UTC),
+                BACKFILL_INGESTED_AT,
+                version,
+            )
+            for point, _, _, mw in points
+        ],
+    )
+    await conn.executemany(
+        """
+        insert into plant_geo (
+          plant_ceg_core, ceg_raw, siga_name, latitude, longitude,
+          location_source, municipalities_raw, ownership, observed_on,
+          data_version, published_at, published_at_precision, ingested_at,
+          value_digest, source_version_id
+        ) values ($1, $1, $1, $2, $3, 'siga_coordinate', '', '', $4, 1, $4,
+                  'file', $4, $1, $5)
+        on conflict do nothing
+        """,
+        [
+            (f"PLANT_{point}", lat, lon, BACKFILL_INGESTED_AT, version)
+            for point, lat, lon, _ in points
+        ],
+    )
+
+
+async def seed_weather_run_days(
+    conn: asyncpg.Connection[Any],
+    *,
+    run_init: datetime,
+    values: Mapping[str, Mapping[datetime, float]],
+    data_version: int,
+    ingested_at: datetime | None = None,
+) -> None:
+    """One named model run's `wind_speed_120m`, for the hours it forecasts.
+
+    ``run_init`` is written to ``published_at`` because on this table the run
+    initialisation *is* the publication — the check constraint on
+    ``weather_forecast_hour`` enforces it — and that identity is the whole of
+    what makes the 12Z run a newer vintage of the 00Z run's hours.
+
+    ``data_version`` is the caller's, because a later run revising an hour an
+    earlier run already forecast is the ordinary case here and the harness must
+    be able to write the two runs in either order.
+    """
+    cycle = "00Z" if run_init.astimezone(UTC).hour == 0 else "12Z"
+    stamp = ingested_at or BACKFILL_INGESTED_AT
+    request = await conn.fetchval(
+        """
+        insert into weather_run_request (
+          model, run_init, run_cycle, scheduled_run_init, centroid_set_version,
+          centroid_count, variables, forecast_days, request_url, http_status,
+          row_count, content_sha256, byte_size
+        ) values ('ecmwf_ifs', $1, $2::weather_run_cycle, $1, $3, $4,
+                  'wind_speed_120m', 3, 'https://example.invalid/run', 200, $5,
+                  $6, 1)
+        returning id
+        """,
+        run_init,
+        cycle,
+        CENTROID_SET_VERSION,
+        len(values),
+        sum(len(hours) for hours in values.values()),
+        f"harness|{run_init.isoformat()}",
+    )
+    await conn.executemany(
+        """
+        insert into weather_forecast_hour (
+          centroid_id, valid_time, grid_latitude, grid_longitude,
+          grid_elevation_m, run_cycle, run_age_hours, wind_speed120m_kmh,
+          data_version, published_at, published_at_precision, ingested_at,
+          value_digest, source_request_id
+        ) values ($1, $2, 0, 0, 0, $3::weather_run_cycle, 0, $4, $5, $6, 'file',
+                  $7, $8, $9)
+        """,
+        [
+            (
+                centroid,
+                valid_time,
+                cycle,
+                float(value),
+                data_version,
+                run_init,
+                stamp,
+                f"{centroid}|{valid_time.isoformat()}|{data_version}",
+                request,
+            )
+            for centroid, hours in values.items()
+            for valid_time, value in hours.items()
+        ],
+    )
+
+
+__all__ = [
+    "BACKFILL_INGESTED_AT",
+    "CENTROID_SET_VERSION",
+    "MIGRATED_MARKER",
+    "URL_VARIABLE",
+    "database_url",
+    "local_midnight",
+    "reporting_entity",
+    "run",
+    "seed_observed_day",
+    "seed_publication",
+    "seed_weather_fleet",
+    "seed_weather_run",
+    "source_version",
+    "truncate",
 ]
