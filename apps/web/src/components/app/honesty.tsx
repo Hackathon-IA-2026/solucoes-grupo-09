@@ -124,14 +124,44 @@ export function HonestyNote({
   );
 }
 
-/** The standing caveat for anything produced by the browser-side heuristic. */
-export function HeuristicNote() {
+/**
+ * What a solved plan was optimised against: the resolved forecast origin and
+ * the threshold in force.
+ *
+ * A sibling of {@link ForecastStamp} rather than a use of it, because an
+ * `OptimizationResult` names its origin as the **instant the run published**
+ * and not as a whole `ForecastOrigin` — the producer and the run label belong
+ * to the forecast route, and inventing them here would be this screen forming
+ * an opinion about a run it never read.
+ *
+ * It replaces the prototype's heuristic caveat, which said the numbers came
+ * from a greedy pass in the browser. They come from the MILP now, and the
+ * honest label is the one that says which forecast it was pointed at.
+ */
+export function SolveStamp({
+  forecastOrigin,
+  thresholdMw,
+}: {
+  forecastOrigin: string;
+  thresholdMw: number;
+}) {
+  const colors = usePalette();
   const copy = useCopy();
+  const f = useFormat();
   return (
-    <HonestyNote
-      title={copy.app.heuristic.title}
-      tone="neutral"
-      points={[...copy.app.heuristic.points]}
-    />
+    <View
+      style={{
+        flexDirection: "row",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: 8,
+      }}
+    >
+      <ClockIcon size={13} color={colors.inkFaint} />
+      <Text style={{ fontSize: 11, color: colors.inkFaint }}>
+        {fill(copy.app.stamp.optimisedAgainst, { when: f.dateTime(forecastOrigin) })}
+        {fill(copy.app.stamp.threshold, { mw: f.number(thresholdMw) })}
+      </Text>
+    </View>
   );
 }

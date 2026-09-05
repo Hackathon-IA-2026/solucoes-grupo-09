@@ -34,7 +34,7 @@ than as a comment about them.
 
 - **The execution rule.** :func:`~wattsteer_ml.optimizer.simulator.score_band`,
   the same function the live path and Replay call. There is no rule in this
-  file, and `apps/ml/tests/test_one_simulator.py` is the edge that keeps it so.
+  file, and `test/one-execution-rule.test.ts` is the edge that keeps it so.
 - **The envelope map.**
   :meth:`~wattsteer_ml.optimizer.result.PlanningProfile.envelope` is the one
   place a basis becomes a profile, which is what makes "the arms differ in

@@ -419,7 +419,7 @@ def test_the_milp_and_the_simulator_agree_on_every_realisation(realisation: str)
 def test_the_scoring_path_calls_the_optimizers_simulate_and_defines_no_rule() -> None:
     """Seam 3, at the Replay end.
 
-    ``test_one_simulator.py`` asserts there is exactly one implementation of the
+    ``test/one-execution-rule.test.ts`` asserts there is exactly one implementation of the
     execution rule in the repository; this asserts that Replay is a *caller* of
     it. Read off the source, because "we imported it" is a property of the file
     rather than of a fixture — a scoring path that grew its own loop would still

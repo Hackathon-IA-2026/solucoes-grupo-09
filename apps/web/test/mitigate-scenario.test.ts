@@ -5,6 +5,7 @@ import {
   BRL_PER_MWH,
   canonicalScenarioJson,
   ERROR_CODES,
+  encodeScenario,
   REFERENCE_FLEET,
   scenarioHash,
   toBase64Url,
@@ -28,8 +29,6 @@ import { pt } from "../src/i18n/copy.pt";
 import { debounce, type Timers } from "../src/lib/debounce";
 import {
   ASSET_LIMITS,
-  buildForecast,
-  buildMitigationSteps,
   DEFAULT_BATTERY,
   DEFAULT_LOAD,
   PLANNING_BASIS,
@@ -45,17 +44,8 @@ import {
  * checkable without a renderer.
  */
 
-const FORECAST = buildForecast("NE", "12Z");
 const DEFAULT = defaultScenario("NE", "2026-08-29");
 const NOW = new Date("2026-08-28T12:00:00Z");
-
-function planFor(scenario: Scenario) {
-  return buildMitigationSteps({
-    forecast: FORECAST,
-    battery: fixtureBattery(scenarioBattery(scenario)),
-    load: fixtureLoad(scenarioLoad(scenario)),
-  });
-}
 
 function decoded(scenario: Scenario): Scenario {
   const readout = readScenario(writeScenario(scenario), DEFAULT, { now: NOW });
@@ -99,8 +89,13 @@ describe("the scenario is the URL", () => {
     expect(scenarioHash(back)).toBe(scenarioHash(DEFAULT));
   });
 
-  test("and to a byte-identical plan", () => {
-    expect(planFor(decoded(DEFAULT))).toEqual(planFor(DEFAULT));
+  test("and therefore to a byte-identical question for the solver", () => {
+    // The plan used to be recomputed here and compared. It is solved on the
+    // server now, so what a round trip has to preserve is the *request*: the
+    // canonical bytes are what `POST /v1/optimize` answers and what its cache is
+    // keyed on, so identical bytes are identical plans by construction rather
+    // than by a second evaluation agreeing with the first.
+    expect(encodeScenario(decoded(DEFAULT))).toBe(encodeScenario(DEFAULT));
   });
 
   test("an edit round-trips too, and keeps the fields the editors never touch", () => {
@@ -132,8 +127,6 @@ describe("the scenario is the URL", () => {
 });
 
 describe("one plan, one promise", () => {
-  const steps = planFor(DEFAULT);
-
   test("the plan is built against the median, and the basis is not a parameter", () => {
     expect(PLANNING_BASIS).toBe("p50");
   });
@@ -158,78 +151,20 @@ describe("one plan, one promise", () => {
     }
   });
 
-  test("recovered_floor_mwh is the P10-simulated recovery, always", () => {
-    // The contract's identity, asserted on every step rather than on one.
-    for (const step of steps) {
-      expect(step.recoveredFloorMwh).toBe(step.recovered.p10);
-    }
-  });
-
-  test("the floor is a floor: the median and the high realisation sit above it", () => {
-    const full = steps[2];
-    expect(full.recovered.p50).toBeGreaterThanOrEqual(full.recoveredFloorMwh);
-    expect(full.recovered.p90).toBeGreaterThanOrEqual(full.recovered.p50);
-  });
-
-  test("the share avoided is worse at P90 than at P50 — a fixed fleet covers less of a bigger event", () => {
-    const shares = steps[2].avoidability;
-    expect(shares).not.toBeNull();
-    if (shares !== null) {
-      // Keyed by realisation. This is the arithmetic the spec asks to be made
-      // visible: the same absorbed energy over a bigger denominator.
-      expect(shares.p90).toBeLessThan(shares.p50);
-    }
-  });
-
-  test("the three shares are not an ascending interval, and nothing may assume they are", () => {
-    const shares = steps[2].avoidability;
-    expect(shares).not.toBeNull();
-    if (shares !== null) {
-      // The low realisation is below both, for the other reason: a P50-built
-      // plan cannot absorb energy that was never curtailed. A `BandFigure`
-      // over this set would put its median marker outside its own fill, which
-      // is why the screen draws the span and names the three.
-      expect(shares.p10).toBeLessThan(shares.p90);
-      expect(shares.p50).toBeGreaterThan(shares.p10);
-      expect(shares.p50).toBeGreaterThan(shares.p90);
-    }
-  });
-
-  test("the low realisation recovers less, and imports nothing to do it", () => {
-    // The negative case the whole posture rests on. The forecaster is a hurdle
-    // model, so the P10 profile is zero in most hours; a plan built on the
-    // median is then blind in exactly those hours and simply absorbs less.
-    const full = steps[2];
-    expect(full.recoveredFloorMwh).toBeLessThan(full.recovered.p50);
-    for (const hour of full.dispatch) {
-      expect(hour.absorbedMwh).toBeLessThanOrEqual(hour.offeredMwh + 1e-9);
-    }
-  });
-
-  test("avoidability is null — the screen's `—` — where there is nothing to avoid", () => {
-    expect(steps[0].avoidability).toBeNull();
-  });
-
-  test("recovered is not delivered: both consequences are on the step", () => {
-    const full = steps[2];
-    expect(full.storedAtHorizonEndMwh).toBeGreaterThan(0);
-    expect(full.roundTripLossMwh).toBeGreaterThan(0);
-    // Neither is absorbed energy, and neither is subtracted from it: the
-    // absorbed figure is metered at the grid boundary and these two say what
-    // happens to it afterwards.
-    expect(full.recovered.p50).toBeGreaterThan(0);
-  });
-
-  test("the dispatch drawn is the scheduled plan, with a state of charge on it", () => {
-    const full = steps[2];
-    expect(full.dispatch).toHaveLength(FORECAST.hours.length);
-    expect(full.dispatch.some((hour) => hour.stateOfChargeMwh > 0)).toBe(true);
-    for (const hour of full.dispatch) {
-      // A charge and a discharge in the same hour is the LP's venting failure,
-      // and it is what a signed dispatch chart exists to make visible.
-      expect(hour.batteryChargeMw * hour.batteryDischargeMw).toBe(0);
-    }
-  });
+  /**
+   * The plan's own properties — the floor below the median, the three shares
+   * that are not an interval, absorption never above what was offered, no hour
+   * charging and discharging at once — are properties of the **execution rule**
+   * and of the MILP, and they are asserted where those live: `apps/ml`'s
+   * `test_optimizer_simulator.py` and the golden vectors in
+   * `packages/core/fixtures/execution-rule/`. They used to be asserted here
+   * against a second implementation of the rule that ran in the browser;
+   * `docs/specs/api-surface.md` decision 6 deleted it, and re-asserting them
+   * over a fixture written by hand on this side would be a test of the fixture.
+   *
+   * What is still this app's own is the mapping from the answer to the reveal,
+   * and that is `optimization.test.ts`.
+   */
 });
 
 describe("R$ moves the money and nothing else", () => {
@@ -238,15 +173,15 @@ describe("R$ moves the money and nothing else", () => {
     const dear = withBrlPerMwh(DEFAULT, 420);
     expect(scenarioBrlPerMwh(cheap)).toBe(90);
     expect(scenarioBrlPerMwh(dear)).toBe(420);
-    // Same plan, same recovery, same avoidability, same dispatch — the
-    // optimizer is denominated in MWh and the price is a post-solve multiplier.
-    expect(planFor(dear)).toEqual(planFor(cheap));
-  });
-
-  test("only the money moves, and it moves proportionally", () => {
-    const steps = planFor(DEFAULT);
-    const recovered = steps[2].recovered.p50;
-    expect(recovered * 360).toBeCloseTo(recovered * 180 * 2, 6);
+    // The optimizer is denominated in MWh and the price is a post-solve
+    // multiplier, so the two scenarios differ in exactly one field and in
+    // nothing the model reads. Asserted on the document the solver is handed,
+    // which is the only place this app can assert it now.
+    const before = JSON.parse(canonicalScenarioJson(cheap)) as Record<string, unknown>;
+    const after = JSON.parse(canonicalScenarioJson(dear)) as Record<string, unknown>;
+    delete before.economic_assumptions;
+    delete after.economic_assumptions;
+    expect(after).toEqual(before);
   });
 
   test("the default assumption is the one published rate", () => {

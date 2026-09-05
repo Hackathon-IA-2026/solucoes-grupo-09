@@ -5,7 +5,7 @@ important line" in the whole engine: *the simulator that scores a live plan and
 the one that scores a replayed plan are the same function, imported, not
 reimplemented.* A backtest number and a forecast number are comparable because
 of that and because of nothing else — so this module is imported by the live
-path, by Replay and by the backtest, and `apps/ml/tests/test_one_simulator.py`
+path, by Replay and by the backtest, and `test/one-execution-rule.test.ts`
 walks the repository and fails if a second implementation of the rule appears
 anywhere in it, in either language.
 

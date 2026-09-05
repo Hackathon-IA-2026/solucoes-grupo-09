@@ -6,11 +6,7 @@ import { en as EN } from "../src/i18n/copy.en";
 import { pt as PT } from "../src/i18n/copy.pt";
 import {
   buildForecast,
-  buildMitigationSteps,
-  DEFAULT_BATTERY,
   DEFAULT_LOAD,
-  evaluatePlan,
-  planDispatch,
   REPLAY_DAYS,
   riskClass,
   roundProbability,
@@ -132,82 +128,6 @@ describe("risk classification", () => {
   test("probabilities round to the nearest 5 points", () => {
     expect(roundProbability(0.31)).toBe(30);
     expect(roundProbability(0.89)).toBe(90);
-  });
-});
-
-describe("prototype heuristic", () => {
-  const offered = [0, 0, 40, 60, 80, 40, 0, 0, 0, 0, 0, 0];
-
-  test("never imports from the grid", () => {
-    const plan = planDispatch({
-      offeredMwh: offered,
-      battery: DEFAULT_BATTERY,
-      load: DEFAULT_LOAD,
-      thresholdMw: 5,
-    });
-    // The battery is passed: without it the execution rule has no asset to
-    // clip, and the assertion below would hold vacuously.
-    const result = evaluatePlan(plan, offered, 5, DEFAULT_BATTERY);
-    for (const hour of result.dispatch) {
-      expect(hour.absorbedMwh).toBeLessThanOrEqual(hour.offeredMwh + 1e-9);
-      expect(hour.absorbedMwh).toBeGreaterThanOrEqual(0);
-      // The charging leg never exceeds what was actually curtailed.
-      expect(hour.batteryChargeMw).toBeLessThanOrEqual(hour.offeredMwh + 1e-9);
-    }
-  });
-
-  test("the battery never charges and discharges in the same hour", () => {
-    const plan = planDispatch({
-      offeredMwh: offered,
-      battery: DEFAULT_BATTERY,
-      load: null,
-      thresholdMw: 5,
-    });
-    for (let t = 0; t < offered.length; t++) {
-      expect(plan.batteryChargeMw[t] * plan.batteryDischargeMw[t]).toBe(0);
-    }
-  });
-
-  test("avoidability is null, never zero, when there is nothing to avoid", () => {
-    const quiet = offered.map(() => 0);
-    const plan = planDispatch({
-      offeredMwh: quiet,
-      battery: DEFAULT_BATTERY,
-      load: DEFAULT_LOAD,
-      thresholdMw: 5,
-    });
-    expect(evaluatePlan(plan, quiet, 5).avoidability).toBeNull();
-  });
-});
-
-describe("mitigation steps", () => {
-  const steps = buildMitigationSteps({
-    forecast: buildForecast("NE", "12Z"),
-    battery: DEFAULT_BATTERY,
-    load: DEFAULT_LOAD,
-  });
-
-  test("three steps, in reveal order", () => {
-    expect(steps.map((s) => s.key)).toEqual(["no_action", "battery", "battery_and_load"]);
-  });
-
-  test("each step leaves no more curtailment than the previous one", () => {
-    expect(steps[1].remaining.p50).toBeLessThanOrEqual(steps[0].remaining.p50);
-    expect(steps[2].remaining.p50).toBeLessThanOrEqual(steps[1].remaining.p50);
-  });
-
-  test("no action has no avoidability, and the others do", () => {
-    expect(steps[0].avoidability).toBeNull();
-    expect(steps[2].avoidability).not.toBeNull();
-  });
-
-  test("the share avoided is worst on the P90 realisation", () => {
-    const band = steps[2].avoidability;
-    expect(band).not.toBeNull();
-    if (band !== null) {
-      // The band is stored ascending, so p10 is the pessimistic end.
-      expect(band.p10).toBeLessThanOrEqual(band.p50);
-    }
   });
 });
 
@@ -345,31 +265,14 @@ describe("defects the specs found in this prototype", () => {
     expect(DEFAULT_LOAD.maxShiftMw).toBeLessThanOrEqual(baselineMw);
   });
 
-  test("a low realisation never fills the battery on energy it did not receive", () => {
-    // flex-optimizer.md found evaluatePlan clipping absorption but reporting
-    // the PLANNED state of charge, so the chart showed a battery charging on
-    // curtailment that never arrived.
-    const forecast = buildForecast("NE", "12Z");
-    const plan = planDispatch({
-      offeredMwh: forecast.hours.map((h) => h.constrainedOff.p50),
-      battery: DEFAULT_BATTERY,
-      load: DEFAULT_LOAD,
-      thresholdMw: forecast.thresholdMw,
-    });
-    const onNothing = evaluatePlan(
-      plan,
-      forecast.hours.map(() => 0),
-      forecast.thresholdMw,
-      DEFAULT_BATTERY,
-    );
-    const start =
-      DEFAULT_BATTERY.energyCapacityMwh * DEFAULT_BATTERY.initialStateOfCharge;
-    // With nothing curtailed all day, the battery can only ever discharge.
-    for (const hour of onNothing.dispatch) {
-      expect(hour.batteryChargeMw).toBe(0);
-      expect(hour.stateOfChargeMwh).toBeLessThanOrEqual(start + 1e-9);
-    }
-    expect(onNothing.avoidedEnergyMwh).toBe(0);
-    expect(onNothing.avoidability).toBeNull();
-  });
+  /**
+   * The battery that cannot fill on energy it never received used to be
+   * asserted here, against the web app's own `evaluatePlan`. There is one
+   * implementation of the execution rule now and it is Python's, so the
+   * assertion moved to where the rule lives —
+   * `apps/ml/tests/test_optimizer_simulator.py`, and to the golden vectors in
+   * `packages/core/fixtures/execution-rule/`, one of which — `the-day-that-
+   * never-came.json` — is exactly that: a plan built for a median day and
+   * executed against a realisation of nothing at all.
+   */
 });

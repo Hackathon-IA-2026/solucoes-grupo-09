@@ -329,7 +329,7 @@ def test_both_arms_are_scored_by_the_imported_simulator() -> None:
     ``recovered_floor_mwh`` has one definition, on the simulator's `ScoredBand`,
     and this module sums that definition over days rather than holding a second
     one. There is no execution rule in `planning_arms.py`, and
-    `test_one_simulator.py` is the repository-wide edge that keeps it so.
+    `test/one-execution-rule.test.ts` is the repository-wide edge that keeps it so.
     """
     from wattsteer_ml.evaluation import planning_arms
 

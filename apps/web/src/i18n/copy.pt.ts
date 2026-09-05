@@ -458,20 +458,12 @@ export const pt: Copy = {
     stamp: {
       published: "{producer} · {run} · publicado {when} BRT",
       threshold: " · limiar {mw} MW",
+      optimisedAgainst: "Otimizado contra a previsão publicada {when} BRT",
     },
 
     vintage: {
       point_in_time: "PONTO NO TEMPO",
       revision_optimistic: "OTIMISTA POR REVISÃO",
-    },
-
-    heuristic: {
-      title: "Isto é uma heurística de protótipo, não o otimizador",
-      points: [
-        "O Flex Optimizer de produção é um MILP com binários de verdade para a exclusão mútua entre carga e descarga da bateria, resolvido pelo SCIP em poucos milissegundos dentro da requisição. Nada nesta página resolve um MILP.",
-        "A passada gulosa aqui preserva as duas propriedades cuja ausência tornaria os números errados em vez de aproximados: a energia absorvida é o aumento líquido da demanda flexível, e os ativos nunca podem importar da rede.",
-        "Espere que o otimizador real recupere um pouco mais do que esta página mostra, nunca menos.",
-      ],
     },
 
     band: {
@@ -721,6 +713,11 @@ export const pt: Copy = {
         "A um valor assumido de {rate}/MWh, na realização mediana. Isto é um cenário, não um valor de liquidação, e é o único lugar em que R$ aparece. Nenhuma alegação de carbono decorre disso e nenhuma é feita.",
       economicOnlyMoney:
         "Mexa nele e só este número se mexe. O otimizador é denominado em energia, nunca em dinheiro, então nada do que ele recomenda depende de um preço que o WattSteer inventou.",
+      solvingTitle: "Resolvendo",
+      solvingNote:
+        "O Flex Optimizer está montando e resolvendo o MILP para esta frota. Ele responde dentro da requisição — não há job para consultar — então isto deve sumir antes de você terminar de ler.",
+      economicNoPlan:
+        "Sem plano, sem valor. Nada foi despachado nesta etapa, então não há o que precificar.",
       dispatchTitle: "Despacho",
       dispatchSubtitle: "{step} · o plano programado, no envelope de planejamento",
       dispatchScheduled:

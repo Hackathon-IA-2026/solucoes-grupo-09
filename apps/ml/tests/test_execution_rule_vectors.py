@@ -1,20 +1,20 @@
-"""Parity of the execution rule with the TypeScript side.
+"""The execution rule against its golden vectors.
 
-``apps/web/test/execution-rule.test.ts`` reads the **same** directory and
-asserts the **same** ``expected`` values against ``evaluatePlan``. Neither side
-compares against the other — only against the vectors — so a shared
-misunderstanding cannot cancel out. See
-``packages/core/fixtures/execution-rule/README.md``.
+``packages/core/fixtures/execution-rule/`` was a **parity** set: a TypeScript
+port of the rule lived in ``apps/web`` and these files were what proved the two
+identical. ``docs/specs/api-surface.md`` decision 6 deleted the port — a
+proved-identical copy is still a copy, and that one was known wrong — so what
+these vectors pin now is **regression against the one implementation**, which is
+the module this file imports. ``test/one-execution-rule.test.ts`` is the other
+half of the edge: it walks the repository, in both languages, and fails if a
+second implementation appears.
 
-This is the second half of the one-implementation edge that
-``test_one_simulator.py`` carries. That test refuses a third site; this one is
-what makes the second site a *port* rather than a reimplementation: a plan
-scored in the browser and the same plan scored on the server produce the same
-MWh, which is the only reason a Mitigate number and a Time Machine number can be
-put beside each other.
+Every field is recomputed here on every run and asserted against the file, so a
+change to the rule that was not meant to move these numbers fails here. The
+reader globs the directory and refuses an empty one, so adding a vector is
+sufficient.
 
-Both suites fail when the directory holds a case they did not enumerate, so
-adding a vector there is sufficient and neither language can quietly skip one.
+See ``packages/core/fixtures/execution-rule/README.md``.
 """
 
 from __future__ import annotations
@@ -60,11 +60,10 @@ CASES = _cases()
 def test_no_vector_file_is_skipped() -> None:
     """The listing above is flat; this compares it against a recursive walk.
 
-    A vector filed under a subdirectory would be read by neither language, and
-    the reader's ``assert files`` sees an empty directory rather than a file
-    nobody reads. ``apps/web/test/execution-rule.test.ts`` makes the same
-    comparison on its side, so adding a vector is sufficient and neither
-    language can quietly skip one.
+    A vector filed under a subdirectory would be read by nothing, and the
+    reader's ``assert files`` only sees an empty directory — not a file nobody
+    reads. Adding a vector anywhere under here is therefore sufficient, or it
+    fails loudly.
     """
     flat = {path.name for path in FIXTURES.glob("*.json")}
     everywhere = {path.name for path in FIXTURES.rglob("*.json")}
