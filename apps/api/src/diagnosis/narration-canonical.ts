@@ -48,46 +48,110 @@ import { NarrationPayloadError } from "./narration-payload.js";
  */
 
 /**
- * How precisely each number in the document is written down.
+ * How a number is written down, once the digits are decided.
+ *
+ * Three notations, because the client's formatters have three and the
+ * validator's numeric whitelist has to spell a payload value the way a reader
+ * would actually see it:
+ *
+ *  - `plain` — the digits, grouped, with the field's own unit appended.
+ *  - `percent` — a fraction in `[0, 1]` written as a percentage. `decimals`
+ *    stays the precision of the **fraction**, so a whole percentage is two
+ *    decimals and a tenth of a percentage point is three. The `×100` is a
+ *    notation, not a different precision, and keeping the table in one unit is
+ *    what lets a single number be compared against the client's formatter.
+ *  - `hour` — a wall-clock hour on the grid's day, written `13:00`. Zero
+ *    decimals by construction; an hour index is a whole number of hours.
+ */
+export type NarrationDisplayStyle = "plain" | "percent" | "hour";
+
+/** One field's display decision: how many digits, and in which notation. */
+export interface NarrationFieldDisplay {
+  /** Fraction digits, always of the value **as the document carries it**. */
+  decimals: number;
+  /** The notation the product prints those digits in. */
+  style: NarrationDisplayStyle;
+}
+
+/**
+ * How precisely — and in what notation — each number in the document is
+ * written down.
  *
  * The values follow the product's own formatters:
  * energy and power are printed to one decimal, a probability or a share is
  * printed as a whole percentage — two decimals of the fraction — and a feature
  * reading gets two, because a ratio near 1 says nothing at one.
+ *
+ * ### This table is tied to the client's, on decimals rather than membership
+ *
+ * `apps/web/src/i18n/narration.ts` holds the formatter each of these fields is
+ * printed through, and the two tables were originally matched by hand. Neither
+ * is a subset of the other and neither should be — this one prices
+ * `day_energy_p10_mwh`, which no clause carries, and the client formats
+ * `target_date`, which is a string this one is right not to round. So the
+ * relation that actually has to hold is **decimals**: for a field in both
+ * tables, the digits the client displays are the precision this table hashed
+ * at. `test/narration-precision-tie.test.ts` asserts it by invoking each
+ * client formatter and counting the fraction digits it emitted, which is why
+ * `style` is here: a percent formatter multiplies by a hundred and would
+ * otherwise look like two fewer decimals than it is.
+ *
+ * The failure that tie catches is a quiet one. A rename or a decimals change on
+ * one side leaves this table rounding a field nobody displays while a displayed
+ * one goes unrounded, and the narration cache then misses forever at a cost
+ * nobody attributes to a table entry.
  */
-export const NARRATION_DISPLAY_PRECISION: Readonly<Record<string, number>> = {
-  // The parameter that makes an hour curtailed at all.
-  threshold_mw: 1,
+export const NARRATION_DISPLAY: Readonly<Record<string, NarrationFieldDisplay>> = {
+  // The parameter that makes an hour curtailed at all. A whole number of MW by
+  // decision — `docs/domain-model.md` §5 commits to 5 MW at subsystem grain and
+  // 1 MW at reporting-entity grain, and the sweep it defers tries 1 / 5 / 10 —
+  // so it is displayed and hashed as one. It was priced at one decimal here
+  // while the client printed it at zero, which is exactly the disagreement the
+  // tie test now refuses.
+  threshold_mw: { decimals: 0, style: "plain" },
   // Risk.
-  day_occurrence_probability: 2,
-  hours_p50_nonzero: 0,
-  lowest_risk_bin_edge: 2,
+  day_occurrence_probability: { decimals: 2, style: "percent" },
+  hours_p50_nonzero: { decimals: 0, style: "plain" },
+  lowest_risk_bin_edge: { decimals: 2, style: "percent" },
   // Magnitude: energy and power, in the product's own unit.
-  day_expected_mwh: 1,
-  baseline_expected_mwh: 1,
-  day_energy_p10_mwh: 1,
-  day_energy_p50_mwh: 1,
-  day_energy_p90_mwh: 1,
-  peak_power_p50_mw: 1,
-  peak_hour_local: 0,
+  day_expected_mwh: { decimals: 1, style: "plain" },
+  baseline_expected_mwh: { decimals: 1, style: "plain" },
+  day_energy_p10_mwh: { decimals: 1, style: "plain" },
+  day_energy_p50_mwh: { decimals: 1, style: "plain" },
+  day_energy_p90_mwh: { decimals: 1, style: "plain" },
+  peak_power_p50_mw: { decimals: 1, style: "plain" },
+  peak_hour_local: { decimals: 0, style: "hour" },
   // The attribution itself.
-  total_attributed_mwh: 1,
-  sum_abs_attributed_mwh: 1,
-  stderr_mwh: 1,
-  attribution_stderr_mwh: 1,
-  top_two_share: 2,
-  phi_mwh: 1,
-  share: 2,
-  hour_disagreement: 1,
+  total_attributed_mwh: { decimals: 1, style: "plain" },
+  sum_abs_attributed_mwh: { decimals: 1, style: "plain" },
+  stderr_mwh: { decimals: 1, style: "plain" },
+  attribution_stderr_mwh: { decimals: 1, style: "plain" },
+  top_two_share: { decimals: 2, style: "percent" },
+  phi_mwh: { decimals: 1, style: "plain" },
+  share: { decimals: 2, style: "percent" },
+  hour_disagreement: { decimals: 1, style: "plain" },
   // A group's headline reading, whose unit varies and whose interesting
-  // movement is often in the second decimal.
-  observed: 2,
-  typical: 2,
+  // movement is often in the second decimal. The one pair whose *client*
+  // decimals vary — by `unit`, which is a property of the row rather than of
+  // the field — so the tie test asserts a bound and enumerates the units.
+  observed: { decimals: 2, style: "plain" },
+  typical: { decimals: 2, style: "plain" },
   // Facts a rule fired on, and the settled reason mix.
-  weather_run_age_hours: 1,
-  weather_centroid_coverage: 2,
-  top_reason_share: 2,
+  weather_run_age_hours: { decimals: 1, style: "plain" },
+  weather_centroid_coverage: { decimals: 2, style: "percent" },
+  top_reason_share: { decimals: 2, style: "percent" },
 };
+
+/**
+ * The same table, decimals only — what the rounder and the snapshot test read.
+ *
+ * Derived rather than restated: a second literal that agreed today is the
+ * failure this module's own header objects to, one layer smaller.
+ */
+export const NARRATION_DISPLAY_PRECISION: Readonly<Record<string, number>> =
+  Object.fromEntries(
+    Object.entries(NARRATION_DISPLAY).map(([name, display]) => [name, display.decimals]),
+  );
 
 /** The cache key's namespace and version. Bumping it invalidates everything. */
 const CACHE_NAMESPACE = "narration:v1";

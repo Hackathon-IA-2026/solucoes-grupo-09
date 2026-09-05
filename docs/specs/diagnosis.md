@@ -733,6 +733,30 @@ A failure appends the validator's complaint to a second and final attempt. A
 second failure logs the rejected text with its payload hash and falls back to
 the template. **The rejected text is never shown.**
 
+`apps/api/src/diagnosis/narration-validator.ts` is all three gates and the one
+retry. Three things it deliberately does not re-derive:
+
+- The **numbers** are read off `canonicalNarrationJson`'s output — the same
+  bytes the cache key is a hash of, already rounded through the one rounder and
+  the one precision table, which has no default. So "the number is in the
+  payload" means "it is one of the numbers that was hashed", and a field added
+  without a decided precision fails in the digest and in the whitelist together.
+  Both locales' notation is admissible, grouped or not, and a shorter spelling
+  only where it loses nothing: `412.0` may be written `412`, and `1.42` may not
+  be written `1.4`.
+- The **lemmas** go through `packages/core`'s `findLemmaHits`, which is the
+  matcher the build-time scan uses. The advice verbs and certainty adverbs are a
+  second *list*, not a second regex.
+- The **notation** is spelled by `Intl`, which is what the client formats with.
+
+The two tables keyed by field name — the server's precision table and the
+client's formatter table — are tied by `test/narration-precision-tie.test.ts`,
+on **decimals** rather than on membership: neither is a subset of the other and
+neither should be, so the relation asserted is that for a field in both, the
+digits the client displays are the precision the server hashed at. It found one
+disagreement on arrival (`threshold_mw`, priced at one decimal and printed at
+zero).
+
 **The template fallback.** A deterministic sentence assembled from the same
 payload through `t()` keys with interpolation, one key per locale, living in the
 message catalogue. It names the risk class, the day's expected MWh against the
