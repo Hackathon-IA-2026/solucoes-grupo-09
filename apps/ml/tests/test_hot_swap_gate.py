@@ -67,6 +67,7 @@ from wattsteer_ml.evaluation.metrics import (
     SubsystemOccurrence,
     qloss_mwh,
 )
+from wattsteer_ml.evaluation.transformer_benchmark import BENCHMARK_ARM
 from wattsteer_ml.lanes import Lane
 from wattsteer_ml.promotions import PROMOTION_LOG_FILENAME, PromotionLog
 from wattsteer_ml.training import TrainedFold
@@ -468,11 +469,18 @@ def test_an_artifact_marked_invalid_stops_loading(
 
 
 def test_an_estimator_family_off_the_allow_list_refuses() -> None:
-    """The fourth box. The transformer benchmark, refused rather than agreed."""
-    decision = run(candidate(estimator_family="tft"), incumbent())
+    """The fourth box. The transformer benchmark, refused rather than agreed.
+
+    The family under test is
+    :data:`~wattsteer_ml.evaluation.transformer_benchmark.BENCHMARK_ARM` — the
+    benchmark's own constant, imported rather than a literal — so this check and
+    the thing it is meant to check cannot be decoupled by a rename. Forecaster
+    ticket 20's fourth box is this assertion.
+    """
+    decision = run(candidate(estimator_family=BENCHMARK_ARM), incumbent())
     assert not decision.promotes
     assert decision.checks[-1].name == "estimator_allow_list"
-    assert "tft" in decision.reason
+    assert BENCHMARK_ARM in decision.reason
     assert decision.bootstrap is None
 
 
@@ -859,7 +867,7 @@ def test_a_failing_smoke_refuses_after_the_bootstrap_passed() -> None:
 def test_a_refusal_writes_a_card_and_exactly_one_log_line(tmp_path: Path) -> None:
     """The eighth box, first half. A refused candidate stays inspectable."""
     lane_directory(tmp_path)
-    decision = run(candidate(estimator_family="tft"), incumbent())
+    decision = run(candidate(estimator_family=BENCHMARK_ARM), incumbent())
     record_decision(decision, root=tmp_path)
 
     text = (tmp_path / PROMOTION_LOG_FILENAME).read_text(encoding="utf-8")

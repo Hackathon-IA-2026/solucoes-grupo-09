@@ -927,6 +927,17 @@ whose family is not in the served allow-list `{"lightgbm"}`. Changing the
 allow-list is a code change with a review, which is what "we agreed it stays a
 benchmark" should mean six months from now.
 
+**The allow-list is the whole of the enforcement, and that is a consequence of
+the lane.** The benchmark runs at the spec's own profile — `dessem_free_v1`,
+`gate_late`, 5 MW — which is exactly the evening view's lane triple, so unlike
+the threshold sweep it has no lane of its own that nobody serves. It is compared
+against the served model in the served model's lane, because that is the model
+it is a benchmark of. The `transformer_benchmark` block therefore lands on the
+*served* artifact's card, publishes both arms' figures side by side, and carries
+**no ordering, no delta and no preferred arm**: the only act this comparison
+could license is a promotion, and a published Δ would be that argument written
+down.
+
 ### The reason-code model — ruled out of scope, not deferred
 
 IDEA §13's Model C wants `P(ENE) 71% / P(CNF) 24% / P(REL) 5%` on the screen.
@@ -1070,7 +1081,7 @@ refuse the artifact:
 | Calibration | reliability curve points, `reliabilitySampleHours`, `reliabilityWindow`, `reliabilityFidelity`, `ece`, `mce`, `top_bin_gap`, `risk_bins` |
 | Quantiles | `δ_lo`, `δ_hi`, per-fold and per-subsystem coverage, `crossing_rate` |
 | Metrics | the full table above, per fold and per rung, plus the baseline ladder |
-| Experiments | `lead_time_penalty` block, `dessem_delta` block, `threshold_sweep` block |
+| Experiments | `lead_time_penalty` block, `dessem_delta` block, `threshold_sweep` block, `transformer_benchmark` block |
 | Environment | Python, lightgbm, sklearn, numpy versions |
 | Decision | `gate` result block: bootstrap statistic, guardrail values, `decision`, `reason` |
 

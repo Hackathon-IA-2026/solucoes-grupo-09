@@ -42,12 +42,19 @@ harnesses, two outputs, two names.
   per threshold and per fold, the two move-forcing prevalence conditions
   evaluated rather than left to a reader, and the two figures that move with the
   mixture's breakpoint rather than with the model, said so beside them.
+- :mod:`~wattsteer_ml.evaluation.transformer_benchmark` — the TFT benchmark,
+  run once and never promoted: two arms on identical rows through the one
+  composition, each with its training time and an honest explainability note,
+  and no ordering, delta or preferred arm anywhere in the block. The
+  non-promotion is the gate's estimator allow-list rather than a lane nobody
+  serves — the benchmark runs in the evening view's own lane, because that is
+  the model it is a benchmark of.
 - :mod:`~wattsteer_ml.evaluation.serving_lanes` — the two served lanes, the
   morning view and the evening view, gated on one schedule and independently:
   one lane's refusal does not block the other's promotion, and the report
   carries the attribute census that says the two are different experiments.
 
-**The last eight are imported as submodules, not re-exported here.** They read
+**The last nine are imported as submodules, not re-exported here.** They read
 :mod:`wattsteer_ml.training`, which reads this package; re-exporting them would
 close the cycle and make `import wattsteer_ml.evaluation` depend on LightGBM
 being installed. `from wattsteer_ml.evaluation.metrics import MetricsRow` is the
