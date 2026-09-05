@@ -1,0 +1,13 @@
+{
+  "name": "10-the-two-frozen-centroids-that-nearly-collided",
+  "why": "Two points close enough to raise the grid-collision question the centroid generator answers, far enough apart to be two cells.",
+  "from": {
+    "latitude": -9.0,
+    "longitude": -40.0
+  },
+  "to": {
+    "latitude": -8.87,
+    "longitude": -39.91
+  },
+  "expected_km": 17.51264440586426
+}

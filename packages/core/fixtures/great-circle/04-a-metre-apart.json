@@ -1,0 +1,13 @@
+{
+  "name": "04-a-metre-apart",
+  "why": "Sub-kilometre, where cancellation in the cosine term is worst. A distance that came back as zero here would silently collapse two distinct plants onto one nearest-centroid tie.",
+  "from": {
+    "latitude": -9.0,
+    "longitude": -40.0
+  },
+  "to": {
+    "latitude": -9.0,
+    "longitude": -40.00001
+  },
+  "expected_km": 0.0010982608431306163
+}

@@ -1,0 +1,13 @@
+{
+  "name": "05-one-degree-of-latitude-on-the-meridian",
+  "why": "A pure north-south degree: the answer is the radius times one degree in radians and nothing else, so a transposed argument shows up as a different number rather than as a plausible one.",
+  "from": {
+    "latitude": 0.0,
+    "longitude": 0.0
+  },
+  "to": {
+    "latitude": 1.0,
+    "longitude": 0.0
+  },
+  "expected_km": 111.1950802335329
+}

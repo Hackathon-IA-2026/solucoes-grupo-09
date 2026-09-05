@@ -60,6 +60,15 @@ contract rather than hard-coding it.
 | `installed-capacity` | observation | subsystem × technology, at a fleet date | `subsystem`, `technology` | no |
 | `conjunto-membership` | observation | plant, at a fleet date | `plantOnsCode` | no |
 
+Every row of `curtailment-by-reporting-entity` additionally carries the
+reporting entity's `subsystem` and `reportingEntityKind`, both from the
+`reporting_entity` join the view already makes. Neither is derivable from the
+entity code, and the constrained-off label is *defined* at subsystem grain, so
+without them a consumer holding the row has to go back to the registry to learn
+the grain of the thing it is holding. `subsystem` is filterable, in both
+languages: it is a filter and not an axis, because an entity's subsystem does
+not vary between that entity's versions.
+
 Plus one composition:
 
 - `GET /v1/canonical/training-window` — every family above for one window, under

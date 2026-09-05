@@ -104,6 +104,16 @@ async def truncate(conn: asyncpg.Connection[Any]) -> None:
     await conn.execute("truncate table ons_resource_version cascade")
 
 
+async def truncate_weather(conn: asyncpg.Connection[Any]) -> None:
+    """The weather tables, which only :func:`seed_weather_run` writes.
+
+    Separate from :func:`truncate` because the two are used by different
+    suites and a fixture that emptied a table it never writes is a fixture
+    that can break an unrelated one.
+    """
+    await conn.execute("truncate table weather_run_request cascade")
+
+
 async def source_version(conn: asyncpg.Connection[Any]) -> Any:
     """One `OnsResourceVersion`, because every observed row must name its source."""
     return await conn.fetchval(
@@ -321,6 +331,77 @@ async def seed_publication(
     return gate
 
 
+async def seed_weather_run(
+    conn: asyncpg.Connection[Any],
+    *,
+    run_init: datetime,
+    run_cycle: str,
+    values: Sequence[tuple[datetime, float]],
+    centroid_id: str = "NE_WIND_HARNESS",
+    ingested_at: datetime,
+    data_version: int = 1,
+) -> None:
+    """One weather run: a request row and its hours.
+
+    ``ingested_at`` is **required and has no default**, and ``run_init`` is
+    what lands in ``published_at``. Those two being separable is the whole
+    point of this seeder: over a backfill every run in the store shares one
+    ingestion instant, so ``AsOf(gate)`` filters *nothing* and the publication
+    cut is the only thing standing between a late-gate read and a run from its
+    own future. A seeder that derived one from the other could not build the
+    fixture that notices.
+
+    ``values`` carries ``wind_speed120m_kmh`` only — it is enough to tell one
+    run's answer from another's, which is all any assertion here needs.
+    """
+    request_id = await conn.fetchval(
+        """
+        insert into weather_run_request (
+          model, run_init, run_cycle, scheduled_run_init, centroid_set_version,
+          centroid_count, variables, forecast_days, request_url, http_status,
+          row_count, content_sha256, byte_size
+        ) values (
+          'ecmwf_ifs', $1, $2::weather_run_cycle, $1, 'centroid_set_v1',
+          1, 'wind_speed_120m', 2, $3, 200, $4, $5, 1
+        )
+        returning id
+        """,
+        run_init,
+        run_cycle,
+        f"https://example.invalid/weather?run={run_init.isoformat()}",
+        len(values),
+        f"harness-{run_init.isoformat()}-{run_cycle}-{data_version}",
+    )
+    await conn.executemany(
+        """
+        insert into weather_forecast_hour (
+          centroid_id, valid_time, grid_latitude, grid_longitude,
+          grid_elevation_m, run_cycle, run_age_hours, wind_speed120m_kmh,
+          data_version, published_at, published_at_precision, ingested_at,
+          value_digest, source_request_id
+        ) values (
+          $1, $2, -9.5, -40.5, 400, $3::weather_run_cycle, $4, $5,
+          $6, $7, 'row', $8, $9, $10
+        )
+        """,
+        [
+            (
+                centroid_id,
+                valid_time,
+                run_cycle,
+                max(0, int((valid_time - run_init).total_seconds() // 3600)),
+                float(speed),
+                data_version,
+                run_init,
+                ingested_at,
+                f"{centroid_id}|{valid_time.isoformat()}|{speed}|{data_version}",
+                request_id,
+            )
+            for valid_time, speed in values
+        ],
+    )
+
+
 __all__ = [
     "MIGRATED_MARKER",
     "URL_VARIABLE",
@@ -330,6 +411,8 @@ __all__ = [
     "run",
     "seed_observed_day",
     "seed_publication",
+    "seed_weather_run",
     "source_version",
     "truncate",
+    "truncate_weather",
 ]

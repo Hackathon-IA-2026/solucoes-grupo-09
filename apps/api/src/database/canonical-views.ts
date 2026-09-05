@@ -925,10 +925,8 @@ export const canonicalCapacityWeight = pgView("canonical_capacity_weight", {
     cross join lateral (
       select
         c.centroid_id,
-        2 * 6371.0088 * asin(least(1, sqrt(
-          sin(radians(c.latitude - fleet.latitude) / 2) ^ 2
-          + cos(radians(fleet.latitude)) * cos(radians(c.latitude))
-            * sin(radians(c.longitude - fleet.longitude) / 2) ^ 2))) as distance_km
+        great_circle_km(fleet.latitude, fleet.longitude,
+                        c.latitude, c.longitude) as distance_km
       from centroid_point c
       where c.set_version = 'centroid_set_v1'
         and c.technology = fleet.technology

@@ -4,6 +4,7 @@ import { type VintageFidelity, vintageFidelity } from "../contract/vintage.js";
 import {
   canonicalConjuntoMembership,
   canonicalInstalledCapacity,
+  canonicalPlantRegistry,
 } from "../database/canonical-views.js";
 import type { Database } from "../database/connection.js";
 import {
@@ -13,7 +14,6 @@ import {
   plant,
 } from "../database/schema.js";
 import type { SubsystemCode } from "./normalise.js";
-import { toUtcDay } from "./normalise.js";
 import type {
   OperationModality,
   RegistryConjunto,
@@ -53,8 +53,12 @@ import {
  * start.
  */
 
-/** A calendar day, normalised the way both source files write one: UTC midnight. */
-const asDay = (date: Date): string => toUtcDay(date).toISOString();
+/*
+ * The `asDay` helper that used to sit here is gone with the last hand-written
+ * as-of read. Both reads below hand `on` to `withAxes` as a `Date`, and
+ * `canonical_fleet_date()` truncates it to a UTC day in the one place that
+ * truncation is now expressed.
+ */
 
 // ---------------------------------------------------------------------------
 // Dimensions
@@ -355,29 +359,15 @@ export interface InstalledCapacityResult {
   goLiveAt: Date | null;
 }
 
-/**
- * Shared latest-version projection of `generating_unit`.
- *
- * The `DISTINCT ON` runs **before** the interval filter, deliberately: a
- * revision can move a commissioning date, and filtering first would compare the
- * question's date against a superseded answer and then pick a winner among the
- * survivors — which is a different query and quietly a wrong one.
+/*
+ * The latest-version projection of `generating_unit` that used to live here is
+ * gone. Both as-of reads below select from a canonical view, so the rule it
+ * encoded — the `DISTINCT ON` runs *before* the interval filter, because a
+ * revision can move a commissioning date and filtering first would compare the
+ * question's date against a superseded answer — is stated once, in
+ * `canonical_installed_capacity` and `canonical_plant_registry`, rather than
+ * once there and once here.
  */
-const latestUnits = (asOf: Date) => sql`
-  select distinct on (plant_ceg_core, equipment_code)
-    plant_ceg_core, equipment_code, rated_power_mw,
-    commissioned_on, decommissioned_on, data_version, ingested_at, published_at
-  from generating_unit
-  where ingested_at <= ${asOf.toISOString()}::timestamptz
-  order by plant_ceg_core, equipment_code, ingested_at desc, data_version desc
-`;
-
-/** Units live on `[commissioned_on, decommissioned_on)` — closed, then open. */
-const liveOn = (on: Date) => sql`
-  units.commissioned_on <= ${asDay(on)}::timestamptz
-  and (units.decommissioned_on is null
-       or units.decommissioned_on > ${asDay(on)}::timestamptz)
-`;
 
 /**
  * `InstalledCapacityAsOf(scope, technology, t) → MW` — the domain model's
@@ -453,53 +443,67 @@ export interface PlantCapacityRow {
  * The same reconstruction as `readInstalledCapacityAsOf`, one grain finer: this
  * is the vector capacity-weighted weather aggregation weights by, and the
  * reason it must be time-varying rather than fixed.
+ *
+ * **It reads a view, like everything else.** Until ticket 18 this function
+ * carried its own `DISTINCT ON` over `generating_unit` — a third path to the
+ * base tables, surviving ticket 016 only because the *manifest* does not name a
+ * per-plant capacity read. The manifest is the cross-language contract's
+ * vocabulary, not the set of views that exist: `canonical_plant_registry` is
+ * already the plant-grain double as-of this needs, already inner-joins the
+ * capacity reconstruction (so a plant with no unit live on the fleet date is
+ * absent here exactly as it was before), and is already what
+ * `canonical_capacity_weight` is defined over. Reading it makes the SQL and the
+ * TypeScript capacity weightings two callers of one definition rather than two
+ * definitions, which is more than either branch the ticket offered.
+ *
+ * The view projects the plant's location too, which this read deliberately does
+ * not return: `readPlantLocationsAsOf` (`siga-repository.ts`) is still the
+ * coordinate read and still carries its own `plant_geo` fidelity, and folding
+ * the two into one row here would change what a caller is told about vintage.
+ * That is a separate residual and it is *not* closed by this change.
  */
 export async function readPlantCapacityAsOf(
   db: Database,
   query: InstalledCapacityQuery,
 ): Promise<PlantCapacityRow[]> {
   const subsystemFilter = query.subsystem
-    ? sql`and p.subsystem = ${query.subsystem}`
+    ? sql`and subsystem = ${query.subsystem}`
     : sql``;
   const technologyFilter = query.technology
-    ? sql`and p.technology = ${query.technology}`
+    ? sql`and technology = ${query.technology}`
     : sql``;
 
-  const rows = await db.execute<{
-    ceg_core: string;
-    ons_plant_code: string | null;
-    name: string;
-    subsystem: SubsystemCode;
-    technology: Technology;
-    operation_modality: OperationModality;
-    capacity_mw: number;
-    units: number;
-  }>(sql`
-    with units as (${latestUnits(query.asOf)})
-    select p.ceg_core, p.ons_plant_code, p.name, p.subsystem, p.technology,
-           p.operation_modality,
-           sum(units.rated_power_mw) as capacity_mw,
-           count(*)::int as units
-    from units
-    join plant p on p.ceg_core = units.plant_ceg_core
-    where ${liveOn(query.on)}
-      ${subsystemFilter}
-      ${technologyFilter}
-    group by p.ceg_core, p.ons_plant_code, p.name, p.subsystem, p.technology,
-             p.operation_modality
-    order by p.ceg_core
-  `);
+  return withAxes(db, { asOf: query.asOf, fleetDate: query.on }, async (tx) => {
+    const rows = await tx.execute<{
+      ceg_core: string;
+      ons_plant_code: string | null;
+      name: string;
+      subsystem: SubsystemCode;
+      technology: Technology;
+      operation_modality: OperationModality;
+      installed_capacity_mw: number;
+      generating_units: number;
+    }>(sql`
+      select ceg_core, ons_plant_code, name, subsystem, technology,
+             operation_modality, installed_capacity_mw, generating_units
+      from ${canonicalPlantRegistry}
+      where true
+        ${subsystemFilter}
+        ${technologyFilter}
+      order by ceg_core
+    `);
 
-  return [...rows].map((row) => ({
-    cegCore: row.ceg_core,
-    onsPlantCode: row.ons_plant_code,
-    name: row.name,
-    subsystem: row.subsystem,
-    technology: row.technology,
-    operationModality: row.operation_modality,
-    capacityMw: Number(row.capacity_mw),
-    units: row.units,
-  }));
+    return [...rows].map((row) => ({
+      cegCore: row.ceg_core,
+      onsPlantCode: row.ons_plant_code,
+      name: row.name,
+      subsystem: row.subsystem,
+      technology: row.technology,
+      operationModality: row.operation_modality,
+      capacityMw: Number(row.installed_capacity_mw),
+      units: row.generating_units,
+    }));
+  });
 }
 
 export interface ConjuntoMembershipQuery extends RegistryAsOfQuery {

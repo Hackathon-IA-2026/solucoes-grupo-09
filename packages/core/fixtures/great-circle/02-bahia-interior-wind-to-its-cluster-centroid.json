@@ -1,0 +1,13 @@
+{
+  "name": "02-bahia-interior-wind-to-its-cluster-centroid",
+  "why": "The normal case, at the scale the weighting actually runs at: a Bahia interior wind plant and a north-east cluster centroid, a few hundred kilometres apart.",
+  "from": {
+    "latitude": -10.4,
+    "longitude": -42.3
+  },
+  "to": {
+    "latitude": -8.9,
+    "longitude": -40.1
+  },
+  "expected_km": 293.2197624817726
+}

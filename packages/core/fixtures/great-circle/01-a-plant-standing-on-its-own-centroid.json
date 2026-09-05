@@ -1,0 +1,13 @@
+{
+  "name": "01-a-plant-standing-on-its-own-centroid",
+  "why": "A plant exactly on the point it is weighted onto. The haversine's square root is taken of a value that rounds to zero and its arcsine of zero, which is the one input where a formula can return NaN instead of a distance.",
+  "from": {
+    "latitude": -9.5,
+    "longitude": -40.5
+  },
+  "to": {
+    "latitude": -9.5,
+    "longitude": -40.5
+  },
+  "expected_km": 0.0
+}

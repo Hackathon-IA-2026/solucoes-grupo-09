@@ -168,12 +168,14 @@ export const canonicalReads = new Elysia({ name: "canonical-reads" })
         ...factWindow(query),
         technology: query.technology,
         reportingEntityCode: query.reporting_entity_code,
+        subsystem: query.subsystem,
       }),
     {
       query: t.Object({
         ...FACT_QUERY,
         technology: TECHNOLOGY,
         reporting_entity_code: t.Optional(t.String()),
+        subsystem: SUBSYSTEM,
       }),
       detail: {
         summary: "Constrained-off at reporting-entity grain",

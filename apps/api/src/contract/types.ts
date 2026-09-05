@@ -109,6 +109,17 @@ export interface CurtailmentObservation extends RowVintage {
    * version of this contract had no place to do.
    */
   reportingEntityKind: ReportingEntityKind;
+  /**
+   * The entity's electrical subsystem.
+   *
+   * The label is defined at subsystem grain — a constrained-off instruction is
+   * issued against a subsystem's network — so a consumer that has the row but
+   * not the subsystem cannot aggregate it to the grain the product forecasts
+   * at without a second call to the registry. It comes from the same
+   * `reporting_entity` join that supplies `reportingEntityKind`, so it costs
+   * nothing here and it is not a second path to a base table.
+   */
+  subsystem: SubsystemCode;
   technology: Technology;
   /** Start of the hour, UTC. */
   validTime: Date;

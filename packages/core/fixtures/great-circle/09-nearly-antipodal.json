@@ -1,0 +1,13 @@
+{
+  "name": "09-nearly-antipodal",
+  "why": "The far end of the range, where the haversine's arcsine argument approaches one and its clamp is the only thing between the formula and a domain error.",
+  "from": {
+    "latitude": -9.5,
+    "longitude": -40.5
+  },
+  "to": {
+    "latitude": 9.4,
+    "longitude": 139.5
+  },
+  "expected_km": 20003.99493401257
+}

@@ -39,12 +39,39 @@ import {
  * learned by then); `on` is the fleet date (which units existed that day).
  */
 
-/** Mean Earth radius, IUGG. Only used for great-circle distances. */
+/**
+ * Mean Earth radius, IUGG. Only used for great-circle distances.
+ *
+ * Spelled the same in `great_circle_km` (`drizzle/0038_one_great_circle.sql`)
+ * and in `packages/core/scripts/build-great-circle-vectors.py`. A radius is a
+ * choice rather than a derivation, so all three name it and the vector suites
+ * assert the literal.
+ */
 const EARTH_RADIUS_KM = 6371.0088;
 
 const toRadians = (degrees: number): number => (degrees * Math.PI) / 180;
 
-/** Great-circle distance in km. Plants and centroids are hundreds of km apart. */
+/**
+ * Great-circle distance in km. Plants and centroids are hundreds of km apart.
+ *
+ * **There is a second implementation of this formula, in SQL, and it is
+ * deliberate.** `great_circle_km` (`drizzle/0038_one_great_circle.sql`) is what
+ * `canonical_capacity_weight` evaluates, because the feature layer weights the
+ * frozen centroid set from inside a plpgsql function that cannot call
+ * TypeScript. This one exists because `centroid-generator.ts` weights *candidate*
+ * geometry while deciding where the frozen points go — there are no
+ * `centroid_point` rows to read at that moment — so neither side can become the
+ * other's authority.
+ *
+ * The two are bound by `packages/core/fixtures/great-circle/`: golden vectors
+ * whose expected kilometres come from a third formula (Vincenty on a sphere),
+ * asserted by `apps/api/test/great-circle-vectors.test.ts` here and by
+ * `apps/ml/tests/test_great_circle_vectors.py` against a real Postgres there.
+ * Neither suite compares the two implementations against each other, and both
+ * fail if the directory holds a vector they did not enumerate. Data-platform
+ * ticket 18 took that branch explicitly over making one side authoritative; the
+ * directory's README carries the reasoning.
+ */
 export function haversineKm(a: Coordinate, b: Coordinate): number {
   const dLat = toRadians(b.latitude - a.latitude);
   const dLon = toRadians(b.longitude - a.longitude);
