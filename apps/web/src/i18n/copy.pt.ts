@@ -512,6 +512,16 @@ export const pt: Copy = {
     },
 
     drivers: {
+      groups: {
+        renewable_resource: "Recurso renovável",
+        demand_level: "Nível de carga",
+        net_surplus: "Superávit líquido",
+        export_stress: "Estresse de exportação",
+        ramp_shape: "Rampa e formato do dia",
+        calendar_season: "Calendário e estação",
+        recent_history: "Histórico recente",
+        data_conditions: "Condições do pipeline e residual",
+      },
       labels: {
         vre_load_ratio: "Razão renovável / carga",
         export_headroom: "Folga de exportação para SE/CO",
@@ -536,6 +546,50 @@ export const pt: Copy = {
       reading: "observado {observed} · típico {typical}",
       figure: "{driver}: {share} da magnitude atribuída, {direction} o risco",
       note: "As parcelas são da magnitude atribuída para este subsistema-dia, não do curtailment em si. Um driver que aumenta o risco não é causa de nenhum MWh cortado em particular.",
+    },
+
+    /**
+     * A narrativa determinística, uma frase por cláusula.
+     *
+     * Escrita em português, não traduzida do inglês: é a locale padrão do
+     * produto e o leitor é operador de rede brasileiro. Cada `{placeholder}` é
+     * um valor — número, data, hora de relógio ou o rótulo de um grupo em
+     * `drivers.groups` — formatado por `narration.ts` na notação daqui, nunca
+     * outra frase. As unidades vêm do formatador e não estão escritas aqui.
+     *
+     * O modelo elevou ou reduziu a *sua previsão*; nada aqui diz que uma
+     * condição fez algo com a rede. `docs/domain-model.md` §10.
+     */
+    narration: {
+      risk_low:
+        "Para {subsystem_display_name} em {target_date}, o modelo lê o risco de curtailment acima de {threshold_mw} como baixo: {day_occurrence_probability} para ao menos uma hora, com {hours_p50_nonzero} horas de P50 acima de zero.",
+      risk_elevated:
+        "Para {subsystem_display_name} em {target_date}, o modelo lê o risco de curtailment acima de {threshold_mw} como elevado: {day_occurrence_probability} para ao menos uma hora, com {hours_p50_nonzero} horas de P50 acima de zero.",
+      risk_high:
+        "Para {subsystem_display_name} em {target_date}, o modelo lê o risco de curtailment acima de {threshold_mw} como alto: {day_occurrence_probability} para ao menos uma hora, com {hours_p50_nonzero} horas de P50 acima de zero.",
+      magnitude:
+        "Ele espera {day_expected_mwh} no dia inteiro contra um dia típico de {baseline_expected_mwh}, uma diferença de {total_attributed_mwh} que os oito grupos de drivers repartem entre si.",
+      peak: "A maior hora é {peak_hour_local}, com mediana de {peak_power_p50_mw}.",
+      driver_raises:
+        "{code} eleva a previsão do modelo: {phi_mwh}, {share} do movimento atribuído, lendo {observed} contra um típico de {typical}.",
+      driver_lowers:
+        "{code} reduz a previsão do modelo: {phi_mwh}, {share} do movimento atribuído, lendo {observed} contra um típico de {typical}.",
+      top_two_share:
+        "Os dois grupos juntos respondem por {top_two_share} do movimento atribuído.",
+      hour_disagreement:
+        "{code} agiu nos dois sentidos ao longo do dia: suas horas divergem em {hour_disagreement}.",
+      flag_nothing_to_explain:
+        "Uma regra reteve o ranking. A probabilidade de ocorrência do dia, {day_occurrence_probability}, fica abaixo da menor borda das faixas de risco, {lowest_risk_bin_edge}, e {hours_p50_nonzero} horas têm P50 acima de zero.",
+      flag_attribution_is_noise:
+        "Uma regra reteve o ranking. O movimento atribuído, {sum_abs_attributed_mwh}, não supera o próprio erro amostral de fundo, {attribution_stderr_mwh}.",
+      flag_stale_inputs_run_age:
+        "Uma regra sinalizou as entradas: a rodada meteorológica por trás desta previsão tinha {weather_run_age_hours} no fechamento.",
+      flag_stale_inputs_coverage:
+        "Uma regra sinalizou as entradas: apenas {weather_centroid_coverage} dos centroides meteorológicos estavam disponíveis.",
+      flag_stale_inputs_headline:
+        "Uma regra sinalizou as entradas: estes grupos ficaram sem leitura de destaque no momento da resposta — {null_headline_features}.",
+      flag_unmodelled_outage_regime:
+        "Uma regra sinalizou o regime: em {date}, o dia liquidado mais recente, o motivo {top_reason} respondeu por {top_reason_share} da energia constrained-off, e nenhum dado ingerido carrega disponibilidade de transmissão para o modelo ler.",
     },
 
     reliability: {
@@ -586,8 +640,10 @@ export const pt: Copy = {
       narrationSubtitle: "Gerada no idioma solicitado",
       narration:
         "O modelo coloca o curtailment de {technology} em {subsystem} acima do limiar de {mw} MW na maior parte do dia. A maior contribuição isolada é {top} ({observed} contra um típico de {typical}), seguida por {second}. As duas juntas respondem por {share} da magnitude atribuída. A faixa fica larga nas horas de ombro porque o classificador de ocorrência está perto de meio a meio ali — leia a P10 como “pode não ultrapassar o limiar de jeito nenhum”, e não como um número pequeno.",
-      narrationNote:
+      narrationNoteModel:
         "Escrita por um modelo de linguagem a partir da tabela de atribuição abaixo. Ela reapresenta os números; não acrescenta nenhum.",
+      narrationNoteTemplate:
+        "Montada a partir da tabela de atribuição abaixo por um template fixo, sem nenhum modelo de linguagem envolvido. Ela reapresenta os números; não acrescenta nenhum.",
       driversTitle: "Atribuição de drivers",
       driversSubtitle: "SHAP, no grão de subsistema",
       reliabilityTitle: "Confiabilidade",

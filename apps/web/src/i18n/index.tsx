@@ -10,7 +10,7 @@ import {
 import { Platform } from "react-native";
 import { type Copy, en } from "./copy.en";
 import { pt } from "./copy.pt";
-import * as format from "./format";
+import { type Formatters, formattersFor } from "./format";
 import {
   DEFAULT_LOCALE,
   LOCALE_STORAGE_KEY,
@@ -197,55 +197,24 @@ export function useCopy(): Copy {
   return useI18n().copy;
 }
 
+export type { Formatters };
+
 /**
  * The value formatters, bound to the active locale.
  *
  * The `/app` screens render numbers, money and timestamps on every panel, and
  * threading `locale` through each call site is exactly how one of them ends up
- * formatted in the wrong convention. `useFormat()` hands back the same
- * functions from `./format` with the locale already applied, so a component
- * cannot format against a locale it is not rendering in.
+ * formatted in the wrong convention. `useFormat()` hands back `./format`'s
+ * `formattersFor` with the locale already applied, so a component cannot
+ * format against a locale it is not rendering in — and the deterministic
+ * narration, which is not a component, binds the same locale the same way.
  *
  * The two things that do **not** vary are baked in there rather than here:
  * currency is always BRL and every timestamp is `America/Sao_Paulo`.
  */
-export interface Formatters {
-  locale: Locale;
-  number: (value: number, fractionDigits?: number) => string;
-  compact: (value: number) => string;
-  exact: (value: number) => string;
-  percent: (fraction: number, fractionDigits?: number) => string;
-  percentPoints: (points: number, fractionDigits?: number) => string;
-  brl: (value: number, fractionDigits?: number) => string;
-  brlThousands: (value: number) => string;
-  date: (iso: string) => string;
-  dateShort: (iso: string) => string;
-  dateTime: (iso: string) => string;
-  hour: (hourLocal: number) => string;
-}
-
 export function useFormat(): Formatters {
   const { locale } = useI18n();
-  return useMemo<Formatters>(
-    () => ({
-      locale,
-      number: (value, fractionDigits) =>
-        format.formatNumber(locale, value, fractionDigits),
-      compact: (value) => format.formatCompact(locale, value),
-      exact: (value) => format.formatExact(locale, value),
-      percent: (fraction, fractionDigits) =>
-        format.formatPercent(locale, fraction, fractionDigits),
-      percentPoints: (points, fractionDigits) =>
-        format.formatPercentPoints(locale, points, fractionDigits),
-      brl: (value, fractionDigits) => format.formatBrl(locale, value, fractionDigits),
-      brlThousands: (value) => format.formatBrlThousands(locale, value),
-      date: (iso) => format.formatDate(locale, iso),
-      dateShort: (iso) => format.formatDateShort(locale, iso),
-      dateTime: (iso) => format.formatDateTime(locale, iso),
-      hour: format.formatHour,
-    }),
-    [locale],
-  );
+  return useMemo<Formatters>(() => formattersFor(locale), [locale]);
 }
 
 export { GRID_TIME_ZONE, GRID_TIME_ZONE_LABEL } from "./format";

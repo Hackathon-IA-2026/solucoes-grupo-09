@@ -25,6 +25,8 @@
  * institution names ONS, ANEEL, DESSEM, SIGA.
  */
 
+import type { DriverCode, NarrationClauseKey } from "@wattsteer/core/api";
+
 export const en = {
   nav: {
     home: "WattSteer — home",
@@ -583,6 +585,26 @@ export const en = {
 
     /** Driver attribution — SHAP shares, at subsystem grain. */
     drivers: {
+      /**
+       * The eight driver groups the API ranks, keyed by `DriverCode`.
+       *
+       * These are the players in the Shapley game
+       * (`apps/ml/src/wattsteer_ml/diagnosis/driver_groups.yaml`), and the
+       * words for them live here rather than travelling as `label_code`'s
+       * gloss: an English label moving through the data layer is how a
+       * bilingual product goes monolingual again. `other` is deliberately
+       * absent — it is the client's merged remainder and never a group.
+       */
+      groups: {
+        renewable_resource: "Renewable resource",
+        demand_level: "Demand level",
+        net_surplus: "Net surplus",
+        export_stress: "Export stress",
+        ramp_shape: "Intraday ramp and shape",
+        calendar_season: "Calendar and season",
+        recent_history: "Recent history",
+        data_conditions: "Pipeline conditions and residual",
+      } satisfies Record<DriverCode, string>,
       /** Keyed by `Driver.code`; the fixture and the API send the code. */
       labels: {
         vre_load_ratio: "Renewable / load ratio",
@@ -610,6 +632,65 @@ export const en = {
       figure: "{driver}: {share} of attributed magnitude, {direction} risk",
       note: "Shares are of the attributed magnitude for this subsystem-day, not of the curtailment itself. A driver that raises risk is not a cause of any individual curtailed MWh.",
     },
+
+    /**
+     * The deterministic narration, one clause per sentence.
+     *
+     * The Explain panel's paragraph has two possible authors. When a language
+     * model wrote it, it arrives as prose generated in this locale and none of
+     * these strings is used. When a rule withheld it — or the model was down,
+     * or the daily cap was reached — the server sends an ordered list of these
+     * keys with the values their placeholders take, and
+     * `apps/web/src/i18n/narration.ts` assembles the paragraph here. The
+     * template is not a lesser sentence: it states the same facts, at the same
+     * precision, with no hedging the model would not have used.
+     *
+     * Four rules, each of which the shape of these strings enforces:
+     *
+     * 1. **Every placeholder is a value.** A number, a date, a wall-clock hour
+     *    or a driver group's label from `drivers.groups` above. Never another
+     *    sentence, so a whole clause is always what a translator sees.
+     * 2. **Units are appended by the formatter**, not written here: `{share}`
+     *    already carries its `%` and `{phi_mwh}` its `MWh`, in this locale's
+     *    own notation.
+     * 3. **A placeholder is named for the payload field it quotes.** Reading
+     *    `{day_expected_mwh}` tells you which number of the closed document
+     *    this sentence restates, and there is exactly one of it.
+     * 4. **The model raised or lowered a forecast; nothing here says a
+     *    condition did anything to the grid.** `docs/domain-model.md` §10, and
+     *    the build-time boundary scan reads this file.
+     */
+    narration: {
+      risk_low:
+        "For {subsystem_display_name} on {target_date}, the model reads the risk of curtailment above {threshold_mw} as low: {day_occurrence_probability} for at least one hour, with {hours_p50_nonzero} hours whose P50 is above zero.",
+      risk_elevated:
+        "For {subsystem_display_name} on {target_date}, the model reads the risk of curtailment above {threshold_mw} as elevated: {day_occurrence_probability} for at least one hour, with {hours_p50_nonzero} hours whose P50 is above zero.",
+      risk_high:
+        "For {subsystem_display_name} on {target_date}, the model reads the risk of curtailment above {threshold_mw} as high: {day_occurrence_probability} for at least one hour, with {hours_p50_nonzero} hours whose P50 is above zero.",
+      magnitude:
+        "It expects {day_expected_mwh} over the whole day against a typical {baseline_expected_mwh}, a difference of {total_attributed_mwh} that the eight driver groups divide between them.",
+      peak: "The largest hour is {peak_hour_local}, at a median {peak_power_p50_mw}.",
+      driver_raises:
+        "{code} raises the model's forecast: {phi_mwh}, {share} of the attributed movement, reading {observed} against a typical {typical}.",
+      driver_lowers:
+        "{code} lowers the model's forecast: {phi_mwh}, {share} of the attributed movement, reading {observed} against a typical {typical}.",
+      top_two_share:
+        "Those two groups together account for {top_two_share} of the attributed movement.",
+      hour_disagreement:
+        "{code} acted in both directions during the day: its hours disagree by {hour_disagreement}.",
+      flag_nothing_to_explain:
+        "A rule withheld the ranking. The day's occurrence probability of {day_occurrence_probability} sits below the lowest risk bin edge of {lowest_risk_bin_edge}, and {hours_p50_nonzero} hours carry a P50 above zero.",
+      flag_attribution_is_noise:
+        "A rule withheld the ranking. The attributed movement of {sum_abs_attributed_mwh} does not clear its own background-sampling error of {attribution_stderr_mwh}.",
+      flag_stale_inputs_run_age:
+        "A rule flagged the inputs: the weather run behind this forecast was {weather_run_age_hours} old at the gate.",
+      flag_stale_inputs_coverage:
+        "A rule flagged the inputs: only {weather_centroid_coverage} of the weather centroids were available.",
+      flag_stale_inputs_headline:
+        "A rule flagged the inputs: these groups had no headline reading at serve time — {null_headline_features}.",
+      flag_unmodelled_outage_regime:
+        "A rule flagged the regime: on {date}, the most recent settled day, reason {top_reason} took {top_reason_share} of the constrained-off energy, and no ingested dataset carries transmission availability for the model to read.",
+    } satisfies Record<NarrationClauseKey, string>,
 
     /** The reliability (calibration) diagram. */
     reliability: {
@@ -659,8 +740,19 @@ export const en = {
       narrationSubtitle: "Generated in the requested locale",
       narration:
         "The model puts {subsystem} {technology} curtailment above the {mw} MW threshold for most of the day. The largest single contribution is {top} ({observed} against a typical {typical}), followed by {second}. Those two together account for {share} of the attributed magnitude. The band is wide in the shoulder hours because the occurrence classifier is near an even chance there — read the P10 as “it may not clear the threshold at all”, not as a small number.",
-      narrationNote:
+      /**
+       * Two footnotes, because there are two authors.
+       *
+       * The panel used to assert unconditionally that a language model wrote
+       * the paragraph. That is false whenever a rule withheld the model's
+       * narration, whenever the model is down and whenever the daily cap is
+       * reached — and the response says which happened, so the footnote can
+       * simply be true.
+       */
+      narrationNoteModel:
         "Written by a language model from the attribution table below. It restates the numbers; it does not add any.",
+      narrationNoteTemplate:
+        "Assembled from the attribution table below by a fixed template, with no language model involved. It restates the numbers; it does not add any.",
       driversTitle: "Driver attribution",
       driversSubtitle: "SHAP, at subsystem grain",
       reliabilityTitle: "Reliability",

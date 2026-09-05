@@ -7,6 +7,7 @@
  * output while looking like it was explaining the grid.
  */
 
+import type { Narration as NarrationEnvelope } from "@wattsteer/core/api";
 import {
   Badge,
   HashIcon,
@@ -28,7 +29,7 @@ import { BandFigure } from "@/components/charts/band-figure";
 import { DriverBars, formatReading } from "@/components/charts/driver-bars";
 import { ReliabilityCurve } from "@/components/charts/reliability-curve";
 import { RiskCaveat, RiskChip, RiskScale } from "@/components/charts/risk-class";
-import { useCopy, useFormat } from "@/i18n";
+import { type Copy, useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
 import {
   buildExplain,
@@ -111,7 +112,7 @@ export default function ExplainScreen() {
             <Narration explain={explain} thresholdMw={forecast.thresholdMw} />
           </Text>
           <Text style={{ marginTop: space.md, fontSize: 11, color: colors.inkFaint }}>
-            {copy.app.explain.narrationNote}
+            {narrationNote(copy, NARRATION_SOURCE)}
           </Text>
         </Panel>
 
@@ -172,6 +173,26 @@ export default function ExplainScreen() {
       </AppShell>
     </>
   );
+}
+
+/**
+ * Which surface wrote the paragraph on this screen.
+ *
+ * The response carries `narration.source` so the footnote can be true in both
+ * cases — a rule may withhold the model's narration, and the deterministic
+ * template renders instead. This screen is still on fixtures and there is no
+ * model behind a fixture, so the paragraph below genuinely is a template: it
+ * is composed here, from a per-locale string and the fixture's own values.
+ * Naming that rather than asserting a language model wrote it is the whole of
+ * the copy change; the constant becomes `explain.narration.source` the day the
+ * screen reads the endpoint.
+ */
+const NARRATION_SOURCE: NarrationEnvelope["source"] = "template";
+
+function narrationNote(copy: Copy, source: NarrationEnvelope["source"]): string {
+  return source === "model"
+    ? copy.app.explain.narrationNoteModel
+    : copy.app.explain.narrationNoteTemplate;
 }
 
 /**

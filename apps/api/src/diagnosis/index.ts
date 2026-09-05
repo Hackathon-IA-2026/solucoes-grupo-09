@@ -11,7 +11,10 @@
  * key, the numeric whitelist and the snapshot test all read;
  * `narration-gate.ts` reads the fired rules and
  * decides which narration surface may render — the whole of what a `withhold`
- * rule does, and the reason a withheld day never reaches the language model.
+ * rule does, and the reason a withheld day never reaches the language model;
+ * `narration-template.ts` is the surface that renders when the model may not,
+ * and it emits `t()` keys with their values rather than a paragraph, so the
+ * decimal separator stays the reader's.
  * Nothing in here computes an attribution, and
  * nothing in here calls the modelling service — the scheduled `publish-diagnosis`
  * job and the worker's private call into `POST /internal/publish/diagnosis` are
@@ -47,6 +50,11 @@ export {
   observedReasonsFromFlags,
   toNarrationDocument,
 } from "./narration-payload.js";
+export {
+  NarrationTemplateError,
+  narrationClauses,
+  templateNarration,
+} from "./narration-template.js";
 export {
   ATTRIBUTION_TARGET_DAY,
   type AttributionGrain,

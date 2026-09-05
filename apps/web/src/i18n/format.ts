@@ -171,6 +171,53 @@ export function withUnit(value: string, unit: string): string {
 }
 
 /**
+ * Every formatter above, bound to one locale.
+ *
+ * The interface and the factory live here rather than beside `useFormat()`
+ * because two callers now need them and only one of them is a component: the
+ * deterministic narration in `./narration.ts` formats a paragraph's worth of
+ * values and must be testable without mounting a provider. `useFormat()` is a
+ * memoised call to this and adds nothing else, so there is one binding of a
+ * locale to a formatter rather than two that agree today.
+ *
+ * The two things that do **not** vary are baked into the functions above:
+ * currency is always BRL and every timestamp is `America/Sao_Paulo`.
+ */
+export interface Formatters {
+  locale: Locale;
+  number: (value: number, fractionDigits?: number) => string;
+  compact: (value: number) => string;
+  exact: (value: number) => string;
+  percent: (fraction: number, fractionDigits?: number) => string;
+  percentPoints: (points: number, fractionDigits?: number) => string;
+  brl: (value: number, fractionDigits?: number) => string;
+  brlThousands: (value: number) => string;
+  date: (iso: string) => string;
+  dateShort: (iso: string) => string;
+  dateTime: (iso: string) => string;
+  hour: (hourLocal: number) => string;
+}
+
+export function formattersFor(locale: Locale): Formatters {
+  return {
+    locale,
+    number: (value, fractionDigits) => formatNumber(locale, value, fractionDigits),
+    compact: (value) => formatCompact(locale, value),
+    exact: (value) => formatExact(locale, value),
+    percent: (fraction, fractionDigits) =>
+      formatPercent(locale, fraction, fractionDigits),
+    percentPoints: (points, fractionDigits) =>
+      formatPercentPoints(locale, points, fractionDigits),
+    brl: (value, fractionDigits) => formatBrl(locale, value, fractionDigits),
+    brlThousands: (value) => formatBrlThousands(locale, value),
+    date: (iso) => formatDate(locale, iso),
+    dateShort: (iso) => formatDateShort(locale, iso),
+    dateTime: (iso) => formatDateTime(locale, iso),
+    hour: formatHour,
+  };
+}
+
+/**
  * Fill `{name}` placeholders in a dictionary string.
  *
  * The dictionary's standing rule is that no prose is interpolated inside JSX,
