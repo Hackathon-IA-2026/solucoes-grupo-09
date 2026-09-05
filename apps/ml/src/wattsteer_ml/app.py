@@ -17,6 +17,8 @@ Routes:
   GET /v1/replay/days         which days are replayable, and why the others are not
   GET /v1/replay/days/{date}  one day, at the status of the clause that refused it
   POST /internal/replay/featured-days  worker-only; the nightly shortlist
+  GET /v1/backtest            the aggregate of many replays, per fold and fidelity
+  POST /internal/replay/backtest  worker-only; the nightly aggregate
   GET /v1/model/card          the promoted artifact's card, verbatim, off the volume
 
 There is deliberately **no day-ahead read here**. This service carried a
@@ -74,6 +76,8 @@ from .publication import (
     load_promoted,
     resolve_artifact,
 )
+from .replay.backtest import BacktestCache, recompute_backtest
+from .replay.backtest import pending_payload as backtest_pending_payload
 from .replay.calendar import (
     ReplayCalendar,
     ReplayDay,
@@ -1277,4 +1281,148 @@ async def refresh_featured_days(
         )
 
     featured_days_cache.put(computed)
+    return JSONResponse(content=computed.as_payload(now))
+
+
+# --- the Backtest, the aggregate ----------------------------------------------
+#
+# `docs/domain-model.md` gives **`Backtest` to the aggregate of many Replays**,
+# the one the hot-swap gate consumes; the forecaster's harness over the fold
+# calendar is *fold evaluation* and is a different noun that shares an English
+# word. `docs/specs/replay.md`'s endpoint table lists `GET /v1/backtest?fold=…`
+# as the fourth route of this surface, and `wattsteer_ml.replay.backtest` is the
+# aggregate behind it: one replay per day through the same reader and the same
+# scorer `POST /v1/replay` runs, grouped by a `FoldSegment` — a (fold, fidelity)
+# pair — so that a `revision_optimistic` row can never be averaged into a
+# `point_in_time` one and a fold straddling ingestion go-live is two rows.
+#
+# Computed nightly and never on the request path, for the reason the featured
+# days are: a recompute is ~13 s over the currently replayable window and the
+# gateway's ML timeout is five seconds. `POST /internal/replay/backtest` fills
+# the cache; a miss is published as `pending` rather than as an empty table,
+# which would read as "these folds replayed no days".
+
+#: This instance's copy of the nightly aggregate, keyed by (subsystem, lane).
+backtest_cache = BacktestCache()
+
+
+@app.get("/v1/backtest", tags=["replay"])
+async def backtest(
+    fold: Annotated[
+        str,
+        Query(
+            description=(
+                "The fold to report, e.g. F3. One row comes back, or two when "
+                "the fold straddles ingestion go-live — which is a property of "
+                "the fold and not a choice the caller makes."
+            )
+        ),
+    ],
+    subsystem: Annotated[Subsystem, Query(description="ONS subsystem code.")],
+    lane: Annotated[str, Query(description="The artifact lane a replay is pinned to.")],
+) -> JSONResponse:
+    """One fold's Backtest rows, at the grains `replay.md`'s table states.
+
+    `days_replayed` and `floor_coverage` per subsystem; the avoidability
+    distribution, the recovered total, the forecast-value gap and the
+    under-forecast count per row; and `vintage_fidelity` on every row, never
+    averaged across values. No annual figure and no cross-fidelity headline is
+    offered here or anywhere else in the contract: a single number over mixed
+    fidelities is the exact averaging this endpoint exists to prevent.
+    """
+    parsed = _replay_lane(lane)
+    if isinstance(parsed, JSONResponse):
+        return parsed
+    computed = backtest_cache.get(subsystem, parsed)
+    if computed is None:
+        return JSONResponse(
+            content={
+                **backtest_pending_payload(
+                    "the backtest has not been computed on this instance yet; "
+                    "the nightly refresh job computes it"
+                ),
+                "fold": fold,
+            }
+        )
+    rows = computed.rows_of(fold)
+    if not rows:
+        return _refusal(
+            422,
+            "REQUEST_INVALID",
+            f"{fold} is not a fold of this calendar",
+            {
+                "fold": fold,
+                "folds": sorted({row.segment.fold_id for row in computed.rows}),
+            },
+        )
+    payload = computed.as_payload()
+    payload["fold"] = fold
+    payload["rows"] = [row.as_payload() for row in rows]
+    return JSONResponse(content=payload)
+
+
+class RefreshBacktestRequest(BaseModel):
+    """Which subsystem's aggregate, and against which lane."""
+
+    #: ONS subsystem code. One aggregate per subsystem, because floor coverage
+    #: pooled over two subsystems is a share over two different fleets' worth of
+    #: curtailment.
+    subsystem: Subsystem
+    #: The lane directory name. Required and never defaulted, for the reason
+    #: every replay route requires it.
+    lane: str
+
+
+@app.post("/internal/replay/backtest", tags=["replay"])
+async def refresh_backtest(
+    request: Annotated[RefreshBacktestRequest, Body()],
+) -> JSONResponse:
+    """Replay the whole window, aggregate it, and cache the answer. Writes nothing.
+
+    `/internal` for the reason `/internal/replay/featured-days` is: the gateway
+    does not call it, the app cannot reach it, and the job is the only client.
+    Every day is replayed against `REFERENCE_FLEET` by the same reader and the
+    same scorer `POST /v1/replay` runs, so a Backtest number and a replay number
+    are the same kind of number.
+    """
+    parsed = _replay_lane(request.lane)
+    if isinstance(parsed, JSONResponse):
+        return parsed
+    if database is None:
+        return _refusal(
+            503,
+            "DATA_UNAVAILABLE",
+            "this instance has no database configured, and a backtest is an "
+            "aggregate over rows that only Postgres holds",
+        )
+
+    now = datetime.now(tz=UTC)
+    pool = await database.connect()
+    try:
+        async with pool.acquire() as conn:
+            computed = await recompute_backtest(
+                conn,
+                subsystem=request.subsystem,
+                lane=parsed,
+                rules=FOLD_CALENDAR_RULES,
+                # The artifact id the *row* names, as everywhere else here: an
+                # aggregate resolved against the promoted artifact would go
+                # in-sample the first time a retrain reached over a fold.
+                windows_for=lambda artifact_id: read_windows(
+                    settings.artifact_dir, parsed, artifact_id
+                ),
+                as_of=now,
+            )
+    except HoldoutLeakError as leak:
+        # A `500`, and never an aggregate with the leaking day quietly dropped:
+        # the flattering number would then reach the hot-swap gate.
+        logger.error("replay: integrity violation building the backtest — %s", leak)
+        violation = integrity_violation(
+            leak, subsystem=request.subsystem, lane=parsed.directory_name
+        )
+        return _refusal(
+            violation.status, violation.code, violation.message, dict(violation.details)
+        )
+
+    backtest_cache.put(request.subsystem, computed)
     return JSONResponse(content=computed.as_payload(now))
