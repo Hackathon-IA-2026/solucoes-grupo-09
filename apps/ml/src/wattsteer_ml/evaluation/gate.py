@@ -105,6 +105,11 @@ from wattsteer_ml.promotions import (
     PromotionRecord,
     append,
 )
+from wattsteer_ml.replay.floor_guardrail import (
+    FLOOR_COVERAGE_SLACK,
+    FloorCoverageVeto,
+    floor_coverage_guardrail,
+)
 from wattsteer_ml.training.bundle import (
     CONTRACT_FAULT_KEY,
     GATE_BLOCK_KEY,
@@ -272,6 +277,16 @@ class Guardrail:
     have to go and find the number the refusal turned on, and a guardrail whose
     value could not be measured says so in :attr:`detail` rather than reporting a
     ``0.0`` that would read as a measurement.
+
+    **:attr:`applicable` is the third state, and it is not a waiver.** Every
+    guardrail here is either measured and compared, or measured and unmeasurable
+    — and an unmeasurable one *vetoes*, which is why ``passed`` alone was enough
+    until floor coverage arrived. Floor coverage is comparative and there is no
+    incumbent on a cold start, so the comparison does not exist rather than
+    failing: ``docs/specs/replay.md``'s guardrail must be "recorded as not
+    applicable rather than as satisfied", and a ``passed`` of ``True`` would be
+    exactly the second. Only :attr:`vetoes` is read by the decision, so a
+    not-applicable rail can neither block a swap nor claim to have cleared one.
     """
 
     name: str
@@ -279,11 +294,27 @@ class Guardrail:
     detail: str
     value: float | None = None
     bound: str = ""
+    #: ``False`` only when this guardrail had no comparison to make at all.
+    #: :attr:`passed` is then ``False`` too, because nothing passed.
+    applicable: bool = True
+
+    def __post_init__(self) -> None:
+        if not self.applicable and self.passed:
+            raise GateInputError(
+                f"{self.name}: a guardrail that made no comparison cannot have "
+                "passed one; that is the reading it exists to refuse"
+            )
+
+    @property
+    def vetoes(self) -> bool:
+        """The one predicate the decision reads. Not-applicable never vetoes."""
+        return self.applicable and not self.passed
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "guardrail": self.name,
             "passed": self.passed,
+            "applicable": self.applicable,
             "detail": self.detail,
             "value": self.value,
             "bound": self.bound,
@@ -496,6 +527,11 @@ class GateDecision:
     bootstrap: PairedBootstrap | None = None
     guardrails: tuple[Guardrail, ...] = ()
     smoke: ServingSmoke | None = None
+    #: Check 6's floor-coverage guardrail, whole: both coverages, the fold, the
+    #: fidelity and the fleet they were computed against
+    #: (`docs/specs/replay.md`). ``None`` when the decision stopped before check
+    #: 6, which is a check that never ran rather than a comparison that passed.
+    floor_coverage: FloorCoverageVeto | None = None
     #: Set only when check 3 failed. Its presence is what makes :func:`run_gate`
     #: raise, after the refusal has been recorded.
     contract_drift: ContractDrift | None = None
@@ -528,6 +564,9 @@ class GateDecision:
             "guardrails": [rail.as_dict() for rail in self.guardrails],
             "checks": [check.as_dict() for check in self.checks],
             "serving_smoke": None if self.smoke is None else self.smoke.as_dict(),
+            "floor_coverage": (
+                None if self.floor_coverage is None else self.floor_coverage.as_dict()
+            ),
             "compared_against": self.comparator,
             "contract_drift": (
                 None if self.contract_drift is None else self.contract_drift.as_dict()
@@ -908,7 +947,18 @@ def decide(
             bootstrap=bootstrap,
         )
 
-    rails = guardrails(candidate.deciding, comparator.row)
+    floor = floor_coverage_guardrail(
+        candidate_hours=candidate.hours,
+        # Rung 1 plans no fleet and therefore holds no floor; on a cold start
+        # there is nothing to be five points below, and the guardrail says so
+        # rather than passing.
+        incumbent_hours=(comparator.hours if comparator.kind == "incumbent" else None),
+        row_id=candidate.deciding_row_id,
+        fidelity=candidate.segment.fidelity,
+        lane=candidate.lane,
+        at=now,
+    )
+    rails = guardrails(candidate.deciding, comparator.row) + _floor_rails(floor)
     checks.append(_guardrail_check(rails))
     if not checks[-1].passed:
         return _refused(
@@ -919,6 +969,7 @@ def decide(
             live=live_feature_hash,
             bootstrap=bootstrap,
             rails=rails,
+            floor=floor,
         )
 
     checks.append(_smoke_check(smoke))
@@ -932,6 +983,7 @@ def decide(
             bootstrap=bootstrap,
             rails=rails,
             smoke=smoke,
+            floor=floor,
         )
     return GateDecision(
         artifact_id=candidate.artifact_id,
@@ -949,6 +1001,44 @@ def decide(
         bootstrap=bootstrap,
         guardrails=rails,
         smoke=smoke,
+        floor_coverage=floor,
+    )
+
+
+def _floor_rails(floor: FloorCoverageVeto) -> tuple[Guardrail, ...]:
+    """`docs/specs/replay.md`'s comparative guardrail, as rows of check 6.
+
+    One rail per subsystem, never pooled — a floor coverage over two subsystems
+    averages two different fleets' worth of curtailment, which is the rule
+    :class:`~wattsteer_ml.replay.backtest.SubsystemCoverage` already holds — and
+    one not-applicable rail when there was no comparison to make at all.
+
+    Every rail states the incumbent it was measured against and the slack, and
+    **none of them states a bar**: there is no absolute floor-coverage level in
+    this repository, because an hour-wise P10 envelope has no day-level nominal
+    level to compare against.
+    """
+    bound = f"≥ incumbent − {FLOOR_COVERAGE_SLACK}"
+    if not floor.by_subsystem:
+        return (
+            Guardrail(
+                name="floor_coverage",
+                passed=False,
+                applicable=False,
+                detail=floor.detail,
+                bound=bound,
+            ),
+        )
+    return tuple(
+        Guardrail(
+            name=f"floor_coverage[{entry.subsystem}]",
+            passed=entry.verdict == "passed",
+            applicable=entry.verdict != "not_applicable",
+            detail=entry.detail,
+            value=entry.candidate,
+            bound=bound,
+        )
+        for entry in floor.by_subsystem
     )
 
 
@@ -1289,7 +1379,8 @@ def _bootstrap_check(bootstrap: PairedBootstrap) -> GateCheck:
 
 def _guardrail_check(rails: Sequence[Guardrail]) -> GateCheck:
     """Check 6, as a row of the card: which vetoes fired, if any."""
-    failed = [rail for rail in rails if not rail.passed]
+    failed = [rail for rail in rails if rail.vetoes]
+    waived = [rail.name for rail in rails if not rail.applicable]
     return GateCheck(
         name="guardrails",
         passed=not failed,
@@ -1298,7 +1389,7 @@ def _guardrail_check(rails: Sequence[Guardrail]) -> GateCheck:
             if not failed
             else "; ".join(f"{rail.name}: {rail.detail}" for rail in failed)
         ),
-        values={"vetoed": [rail.name for rail in failed]},
+        values={"vetoed": [rail.name for rail in failed], "not_applicable": waived},
     )
 
 
@@ -1333,6 +1424,7 @@ def _refused(
     bootstrap: PairedBootstrap | None = None,
     rails: Sequence[Guardrail] = (),
     smoke: ServingSmoke | None = None,
+    floor: FloorCoverageVeto | None = None,
 ) -> GateDecision:
     """One refusal, built from the check that stopped it."""
     failed = checks[-1]
@@ -1358,6 +1450,7 @@ def _refused(
         bootstrap=bootstrap,
         guardrails=tuple(rails),
         smoke=smoke,
+        floor_coverage=floor,
         contract_drift=drift,
     )
 

@@ -527,9 +527,16 @@ def test_each_guardrail_is_exercised_alone(kwargs: dict[str, Any], expected: str
     assert decision.checks[-1].name == "guardrails"
     assert decision.bootstrap is not None
     assert decision.bootstrap.promotes
-    vetoed = [rail.name for rail in decision.guardrails if not rail.passed]
+    vetoed = [rail.name for rail in decision.guardrails if rail.vetoes]
     assert vetoed == [expected]
     assert expected in decision.reason
+    # Replay 09's floor-coverage rail is *not applicable* on this fixture — two
+    # local hours a day is no complete subsystem-day — and a not-applicable rail
+    # neither vetoes nor claims to have passed anything.
+    floor = [rail for rail in decision.guardrails if rail.name == "floor_coverage"]
+    assert [(rail.applicable, rail.passed, rail.vetoes) for rail in floor] == [
+        (False, False, False)
+    ]
 
 
 def test_every_guardrail_states_the_constant_it_used() -> None:
