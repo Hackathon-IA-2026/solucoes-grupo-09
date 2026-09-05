@@ -13,11 +13,16 @@ and this package reads them back and judges them.
   which is what the assertion asserts *against*.
 - :mod:`~wattsteer_ml.replay.reads` — the two queries, over the whole window in
   one transaction.
+- :mod:`~wattsteer_ml.replay.scoring` — the scoring half: one MILP on the pinned
+  D−1 P50, four realisations through the optimizer's *imported* simulator, the
+  floor that was promised, and the fenced perfect-foresight bound.
+- :mod:`~wattsteer_ml.replay.result` — that, as the published contract.
 
-The scoring half — the MILP, the four simulator passes, the floor — is a later
-ticket. It is not here and this package imports nothing that could do it, which
-is the shape `replay.md` asks for: "the forecast is precomputed; the dispatch is
-computed on demand", and the two halves do not share a module.
+The two halves stay in different modules because `replay.md` splits them at the
+seam that matters: "the forecast is precomputed; the dispatch is computed on
+demand". Nothing in the scoring half loads an artifact, builds a feature row or
+calls a forecast — a replay never runs a model, so changing the fleet re-plans
+and never re-forecasts.
 """
 
 from wattsteer_ml.replay.calendar import (
@@ -46,28 +51,55 @@ from wattsteer_ml.replay.cards import (
     read_windows,
     windows_from_card,
 )
+from wattsteer_ml.replay.result import ReplayEpisode, replay_result
+from wattsteer_ml.replay.scoring import (
+    PERFECT_FORESIGHT,
+    SCORED_ON,
+    ForecastHour,
+    ObservedDay,
+    PerfectForesight,
+    PinnedForecast,
+    PinnedOrigin,
+    ReplayPostureError,
+    ReplayScores,
+    plan_at_the_gate,
+    score_replay,
+)
 
 __all__ = [
     "HOURS_PER_DAY",
+    "PERFECT_FORESIGHT",
     "PROVENANCE_BY_ORIGIN_KIND",
+    "SCORED_ON",
     "VINTAGE_AFFECTS",
     "VINTAGE_EXEMPT",
     "VINTAGE_READS",
     "ArtifactWindows",
     "CardWindowError",
     "DayEvidence",
+    "ForecastHour",
     "HeldOutBy",
+    "ObservedDay",
+    "PerfectForesight",
+    "PinnedForecast",
+    "PinnedOrigin",
     "ReplayCalendar",
     "ReplayDay",
+    "ReplayEpisode",
+    "ReplayPostureError",
     "ReplayRefused",
+    "ReplayScores",
     "assert_held_out",
     "build_calendar",
     "card_path",
     "day_fidelity",
     "integrity_violation",
     "latest_replayable_date",
+    "plan_at_the_gate",
     "read_windows",
     "refusal_counts",
+    "replay_result",
     "resolve_day",
+    "score_replay",
     "windows_from_card",
 ]

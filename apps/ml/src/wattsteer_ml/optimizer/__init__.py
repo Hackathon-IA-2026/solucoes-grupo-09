@@ -56,9 +56,13 @@ from .result import (
     PLANNING_BASIS,
     PlanningProfile,
     ProfileSource,
+    brl_per_mwh,
     build_plan,
+    dispatch_payload,
     no_forecast_yet,
     optimization_result,
+    scored_payload,
+    solver_receipt,
 )
 from .scenario_fleet import fleet_from_scenario
 from .shiftable import Compensation, LoadDispatch
@@ -106,8 +110,10 @@ __all__ = [
     "SolverReport",
     "Versions",
     "available_between",
+    "brl_per_mwh",
     "build_plan",
     "configured_milp_backend",
+    "dispatch_payload",
     "fleet_from_scenario",
     "local_day",
     "no_forecast_yet",
@@ -116,6 +122,8 @@ __all__ = [
     "reference_load",
     "resolve_backend",
     "score_band",
+    "scored_payload",
     "simulate",
     "solve",
+    "solver_receipt",
 ]
