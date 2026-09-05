@@ -31,7 +31,7 @@ formatted in the client's locale, never assembled server-side into a string.
 **Blocked by:** 08. Also **01**, whose banned-vocabulary check scans the message
 catalogues this ticket writes into.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] A complete narration is produced from the payload alone, with no network call
 - [ ] It exists in both locales, with Portuguese as the default

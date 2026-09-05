@@ -538,16 +538,85 @@ export interface RuleFlag {
 }
 
 /**
- * The single settled exception to "codes on the wire, never translated
- * strings": generated prose. `source` says whether the model or the template
- * wrote it, so the panel's footnote stays true when the daily cap is reached.
+ * The narration panel's paragraph, in one of the only two shapes it can arrive
+ * in. The model's arrives as prose - the single settled exception to "codes on
+ * the wire, never translated strings". The template's does **not**: it arrives
+ * as an ordered list of `t()` keys with their interpolation values, because a
+ * template is a fixed string catalogue and a server that filled one in would
+ * be deciding whether a number is written `412,0` or `412.0`. `source` says
+ * which, so the panel's footnote stays true when a rule withheld the model's
+ * or the daily cap was reached.
  */
-export interface Narration {
+export type Narration = NarrationFromModel | NarrationFromTemplate;
+
+/**
+ * Prose, generated in `locale` rather than translated into it, already past
+ * the output validator's three gates.
+ */
+export interface NarrationFromModel {
+  source: "model";
   text: string;
-  source: "model" | "template";
   locale: "pt-BR" | "en-US";
   promptVersion: string;
 }
+
+/**
+ * The deterministic narration, as a plan rather than a paragraph. There is no
+ * `text`: the clauses are `t()` keys the client looks up in its own catalogue
+ * and fills with numbers it formats in its own locale, so decimal comma and
+ * decimal point stay a property of the reader rather than of the server.
+ */
+export interface NarrationFromTemplate {
+  source: "template";
+  /**
+   * In the order they are read. Every fired rule has one; a rule with no clause
+   * is a failure upstream rather than a silent omission here.
+   */
+  clauses: NarrationClause[];
+  locale: "pt-BR" | "en-US";
+  promptVersion: string;
+}
+
+/**
+ * One sentence of the deterministic paragraph: the key of the string, and the
+ * values its `{placeholder}`s are filled with. A placeholder is always a value
+ * - a number, a civil date, or a code the client has a label for - and never
+ * another sentence.
+ */
+export interface NarrationClause {
+  key: NarrationClauseKey;
+  /**
+   * Keyed by the **document field name** the value was read from, so a catalogue
+   * string names the field it quotes. A list of strings is permitted for the
+   * same reason `rule_flag.facts` permits one: `stale_inputs` reports a list of
+   * headline features, and joining it here would be assembling prose on the
+   * server.
+   */
+  values: Record<string, string | number | unknown[]>;
+}
+
+/**
+ * The closed set of sentences the template can say. Closed so that both
+ * message catalogues can be typed against it and a missing Portuguese clause
+ * is a compile error rather than an English sentence in a Portuguese
+ * paragraph.
+ */
+export type NarrationClauseKey =
+  | "risk_low"
+  | "risk_elevated"
+  | "risk_high"
+  | "magnitude"
+  | "peak"
+  | "driver_raises"
+  | "driver_lowers"
+  | "top_two_share"
+  | "hour_disagreement"
+  | "flag_nothing_to_explain"
+  | "flag_attribution_is_noise"
+  | "flag_stale_inputs_run_age"
+  | "flag_stale_inputs_coverage"
+  | "flag_stale_inputs_headline"
+  | "flag_unmodelled_outage_regime";
 
 /**
  * The most recent settled day's dominant restriction reason, as a code. The
@@ -1835,10 +1904,27 @@ export const WIRE_SHAPES = {
     facts: { wire: "facts" },
   },
   Narration: {
+    source: { wire: "source", optional: true },
+    text: { wire: "text", optional: true },
+    locale: { wire: "locale", optional: true },
+    promptVersion: { wire: "prompt_version", optional: true },
+    clauses: { wire: "clauses", shape: "NarrationClause", list: true, optional: true },
+  },
+  NarrationFromModel: {
+    source: { wire: "source", const: "model" },
     text: { wire: "text" },
-    source: { wire: "source" },
     locale: { wire: "locale" },
     promptVersion: { wire: "prompt_version" },
+  },
+  NarrationFromTemplate: {
+    source: { wire: "source", const: "template" },
+    clauses: { wire: "clauses", shape: "NarrationClause", list: true },
+    locale: { wire: "locale" },
+    promptVersion: { wire: "prompt_version" },
+  },
+  NarrationClause: {
+    key: { wire: "key" },
+    values: { wire: "values" },
   },
   ObservedReasonsLatest: {
     date: { wire: "date" },

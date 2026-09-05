@@ -45,3 +45,40 @@ drawn from), 09 (the template that a second failure falls back to).
 - [ ] A first failure produces exactly one retry, with the complaint appended
 - [ ] A second failure falls back to the template, logs the rejected text with the payload hash, and shows the user nothing of it
 - [ ] Every case is fixture-driven with no network calls
+
+---
+
+## A drift risk from ticket 09, for whoever wires the two halves
+
+The narration is split: the server emits `{key, values}` clauses, the client
+formats every value through `Intl`. That split is right — a server-assembled
+`text` has already chosen between `412,0` and `412.0`, so a locale property
+would have become a server one.
+
+But it left **two tables keyed by field name that were matched by hand**:
+`NARRATION_DISPLAY_PRECISION` in `apps/api/src/diagnosis/narration-canonical.ts`
+(which rounds every float *before* hashing, so the cache key is stable under
+recomputation jitter) and the client's formatter table in
+`apps/web/src/i18n/narration.ts`.
+
+I tried to tie them with a subset assertion and **the relation does not hold in
+either direction**, which is worth knowing before someone else tries:
+
+- The server prices the whole document, including `day_energy_p10_mwh`,
+  `day_energy_p50_mwh`, `day_energy_p90_mwh` and `stderr_mwh` — fields no clause
+  currently carries, so the client has no formatter for them and should not.
+- The client formats `subsystem_display_name`, `target_date`, `date` and
+  `top_reason` — strings, which the server is right not to round.
+
+So the meaningful tie is not membership but **decimals**: for a name in both
+tables, the digits the client displays should equal the precision the server
+hashed at. That needs invoking each formatter and counting fraction digits,
+which is complicated by percent formatters (×100) and unit suffixes — real, but
+more than a merge-time addition. The failure it would catch is quiet: a rename
+or a decimals change on one side leaves the server rounding a field nobody
+displays while a displayed one goes unrounded, and the narration cache misses
+forever at a cost nobody attributes to a table entry.
+
+- [ ] The two precision tables are tied by a test on **decimals**, not
+      membership, or merged into one table both sides read
+

@@ -742,10 +742,22 @@ translated string, and that is consistent: a template is a fixed string
 catalogue, which is exactly what `i18n.md` says the API returns everywhere
 except generated prose.
 
+**So `narration` is two shapes, not one with an optional field.** The model's
+carries `text`; the template's carries `clauses` — an ordered list of
+`{ key, values }`, where `key` is one of a closed set of `t()` keys and every
+value is a number or a code, keyed by the payload field it was read from. It
+carries no `text` at all, because a template rendered on the server would have
+already chosen between `412,0` and `412.0`, which is the reader's convention and
+not the server's. `apps/api/src/diagnosis/narration-template.ts` plans the
+paragraph from the closed payload; `apps/web/src/i18n/narration.ts` looks each
+key up in the active catalogue and formats each value through `Intl`. A rule
+that fires with no clause fails there rather than going unsaid, because the
+narration is required to state every `rule_flags` entry.
+
 The response carries `narration.source: "model" | "template"`, so the panel
-footnote can be true in both cases. The screen currently asserts unconditionally
-that the paragraph was written by a language model; that is a copy change and is
-flagged.
+footnote can be true in both cases, and it now is: the screen used to assert
+unconditionally that a language model wrote the paragraph and reads
+`narrationNoteModel` / `narrationNoteTemplate` instead.
 
 **The caching key.**
 
