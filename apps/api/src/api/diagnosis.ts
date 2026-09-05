@@ -14,6 +14,7 @@ import {
   cachedNarration,
   type InFlightResult,
   NARRATION_PROMPT_VERSION,
+  narrationKeyFor,
   observedReasonsFromFlags,
   type PublishedAttributionRow,
   readAttributionDayAhead,
@@ -28,6 +29,7 @@ import {
   narrationLocale as parseLocale,
   targetDate as parseTargetDate,
 } from "./params.js";
+import { applyCachePolicy, CACHE_POLICIES } from "./plugins/cache-policy.js";
 import { dailyCap } from "./plugins/daily-cap.js";
 import { limitStore } from "./plugins/limit-store-handle.js";
 import { createLockedCache } from "./plugins/locked-cache.js";
@@ -288,7 +290,7 @@ export function createDiagnosisRoutes(deps: DiagnosisDeps) {
 
   return new Elysia({ name: "diagnosis" }).get(
     "/v1/diagnosis/day-ahead",
-    async ({ query, set, headers }) => {
+    async ({ query, set, headers, request }) => {
       const now = deps.now?.() ?? new Date();
       refuseTechnology(query as Record<string, unknown>);
       const subsystem = parseSubsystem(query.subsystem);
@@ -338,6 +340,28 @@ export function createDiagnosisRoutes(deps: DiagnosisDeps) {
         locale,
         promptVersion,
       });
+      // The pair, written down, and computed **before** the narration is
+      // fetched. Not a third cache key: nothing is stored under this string —
+      // it is the attribution row's version beside `diagnosis.md`'s narration
+      // key, which is exactly the two identities the response already has.
+      //
+      // `narrationKeyFor` is the same pure function `cachedNarration` keys on,
+      // so asking it first costs a digest and buys the 304 its whole point:
+      // a client holding this version is answered without a cache read, a
+      // lock, a counted call or a model call. Revalidation that re-ran the
+      // narration path would be a 304 that cost what the 200 costs.
+      const narrationKey = narrationKeyFor(payload);
+      set.headers["content-language"] = locale;
+      if (
+        applyCachePolicy({ set, request }, CACHE_POLICIES.diagnosis, [
+          attribution.ingestedAt,
+          attribution.dataVersion,
+          narrationKey,
+        ])
+      ) {
+        return null;
+      }
+
       const narration = await cachedNarration(narrationDeps, {
         payload,
         ruleFlags: attribution.ruleFlags,
@@ -345,16 +369,6 @@ export function createDiagnosisRoutes(deps: DiagnosisDeps) {
         // request's day and not the process clock's.
         now: now.getTime(),
       });
-
-      // The pair, written down. Not a third cache key: nothing is stored under
-      // this string — it is the attribution row's version beside the narration
-      // key, which is exactly the two identities the response already has.
-      set.headers.etag = `W/"${attribution.ingestedAt.toISOString()}-${attribution.dataVersion}-${narration.key}"`;
-      set.headers["cache-control"] = "public, max-age=300";
-      // The only endpoint that generates prose is the only one that varies,
-      // and it varies on one header.
-      set.headers.vary = "Accept-Language";
-      set.headers["content-language"] = locale;
       return encodeWire(
         "DiagnosisDayAhead",
         toDiagnosisDayAhead(

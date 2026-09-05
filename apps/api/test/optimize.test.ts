@@ -414,6 +414,40 @@ describe("optimize · the cache is keyed on provenance", () => {
     ).toBe("opt:v1:sha256:abc:2026-08-28T12:00:00Z:0.1.0");
   });
 
+  it("puts the same three components on the ETag, and 304s the deep link", async () => {
+    // api-surface 20: the shared validator and the private key are the same
+    // statement in two places, invalidated by the same facts. A validator that
+    // drifted from the key would be a 304 served against an entry the key had
+    // already replaced.
+    const api = fresh();
+    const first = await get(api, BLOB);
+    expect(first.headers.get("cache-control")).toBe("public, max-age=300");
+    const etag = first.headers.get("etag") ?? "";
+    expect(etag).toContain(SCENARIO.forecastOrigin as string);
+    expect(etag).toContain(config.optimizerBuild);
+    expect(received).toHaveLength(1);
+
+    // The read/solve distinction paying off: a pinned scenario knows its whole
+    // provenance before anything is solved, so a client holding this version
+    // costs a header comparison rather than a MILP. Neither the solver nor the
+    // cache is reached.
+    const again = await api.handle(
+      new Request(`http://localhost/v1/optimize?s=${encodeURIComponent(BLOB)}`, {
+        headers: { "if-none-match": etag },
+      }),
+    );
+    expect(again.status).toBe(304);
+    expect(await again.text()).toBe("");
+    expect(received).toHaveLength(1);
+  });
+
+  it("gives the POST no validator, because nothing may store it", async () => {
+    const api = fresh();
+    const response = await post(api, BODY);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("etag")).toBeNull();
+  });
+
   it("the gateway's build agrees with the ML service's, with nothing configured", () => {
     // The two are one string in two languages. Read rather than restated: a
     // comment saying "keep these in sync" is how they stop being in sync.

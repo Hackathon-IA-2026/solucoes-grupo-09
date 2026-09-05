@@ -404,6 +404,46 @@ describe("two caches, and no third", () => {
     expect(etag).toContain("2026-08-27T22:11:07.000Z");
     expect(etag).toContain("narration:v1");
   });
+
+  it("revalidates to a 304 without reading, locking or calling anything", async () => {
+    // api-surface 20's first box, on the route where it is worth the most: the
+    // validator is the pair, and `narrationKeyFor` is pure, so the pair is
+    // known *before* the narration path runs. A client holding this version
+    // costs a digest — no cache read, no lock, no counted call, no model call —
+    // where a 304 computed after the narration would have cost what the 200
+    // costs.
+    const app = await harness();
+    const first = await app.handle(`?subsystem=NE&date=${DATE}`);
+    const etag = first.headers.get("etag") ?? "";
+    expect(app.sent).toHaveLength(1);
+    expect(app.store.written).toHaveLength(1);
+
+    const again = await app.handle(`?subsystem=NE&date=${DATE}`, {
+      "if-none-match": etag,
+    });
+    expect(again.status).toBe(304);
+    expect(await again.text()).toBe("");
+    // Nothing was fetched and nothing was stored to answer it.
+    expect(app.sent).toHaveLength(1);
+    expect(app.store.written).toHaveLength(1);
+    // The 304 still carries what a shared cache needs to keep using the entry.
+    expect(again.headers.get("etag")).toBe(etag);
+    expect(again.headers.get("cache-control")).toBe("public, max-age=300");
+    expect(again.headers.get("vary")).toBe("Accept-Language");
+  });
+
+  it("does not 304 a client holding another locale's paragraph", async () => {
+    // The one route with a `Vary`, and the reason it has one: the pair includes
+    // the narration key, which is keyed by locale, so the validator separates
+    // the two languages even before a shared cache reads `Vary`.
+    const app = await harness();
+    const pt = await app.handle(`?subsystem=NE&date=${DATE}&locale=pt-BR`);
+    const en = await app.handle(`?subsystem=NE&date=${DATE}&locale=en-US`, {
+      "if-none-match": pt.headers.get("etag") ?? "",
+    });
+    expect(en.status).toBe(200);
+    expect(en.headers.get("etag")).not.toBe(pt.headers.get("etag"));
+  });
 });
 
 describe("single-flight: the stampede, collapsed", () => {

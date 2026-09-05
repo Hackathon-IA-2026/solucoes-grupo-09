@@ -5,6 +5,12 @@ import { config } from "../config.js";
 import { CodedError, UpstreamError } from "../errors.js";
 import { callMl, type MlEndpoint, mapUpstreamFailure, postMl } from "./ml-proxy.js";
 import { optimizeCache } from "./optimize.js";
+import {
+  applyCachePolicy,
+  CACHE_POLICIES,
+  type CacheContext,
+  etagOf,
+} from "./plugins/cache-policy.js";
 import { OPTIMIZE_TTL_SEC, type ResultCache, replayKey } from "./plugins/result-cache.js";
 import {
   admitScenarioBody,
@@ -63,27 +69,78 @@ import {
 export type ReplayCalendarBody = Record<string, unknown>;
 
 /**
- * The calendar's shared-cache directive — `api-surface.md`'s caching table,
- * which gives `/v1/replay/days` (and `/v1/backtest`, when there is an aggregate
- * to serve) `public, max-age=3600` on the ground that both are recomputed
- * nightly.
+ * The featured-days computation id, off the body that was forwarded.
  *
- * It is an hour and not the replay's ten minutes because the two answer
- * different questions. A replay is a *number*, and a number's observed half is
- * read `AsOf(now)` against a record ONS restates in place; a day's *verdict* —
+ * `api-surface.md`'s caching table asks for `W/"<featured-days computation
+ * id>"` on these routes, and this file used to say the id did not exist yet.
+ * It does: replay 07 landed `wattsteer_ml.replay.shortlist`, and the id is a
+ * **digest over the basis the shortlist was computed from** — the replayable
+ * days, the artifact windows and the realised numbers. A rerun that changes a
+ * single hour of a single day changes it; a rerun that changes nothing does
+ * not. That is a provenance in the strongest sense available on this surface,
+ * and it costs nothing to read: the calendar and the shortlist travel together
+ * in one response by `replay.md`'s own endpoint table, so the validator is a
+ * field of a body the gateway is already holding.
+ *
+ * `null` while the nightly job has not run on the instance being proxied — the
+ * shortlist publishes a stated `pending` rather than an empty list. An absent
+ * id is served with the directive and **no** validator, which is honest: there
+ * is no computation to name, and inventing a hash of the body would be a
+ * revalidation costing exactly what it saves.
+ */
+function featuredComputationId(body: ReplayCalendarBody): string | null {
+  const featured: unknown = body.featured;
+  if (typeof featured !== "object" || featured === null) {
+    return null;
+  }
+  const id: unknown = (featured as { computation_id?: unknown }).computation_id;
+  return typeof id === "string" ? id : null;
+}
+
+/**
+ * The same digest, where a body carries it at the top level.
+ *
+ * `/v1/backtest` is computed by the same nightly construction and publishes its
+ * own `computation_id` — "the same construction the featured days use, and for
+ * the same reason: a rerun writes a new vintage of the same publication, so
+ * `forecast_origin` cannot see it and the realised numbers can."
+ */
+function bodyComputationId(body: ReplayCalendarBody): string | null {
+  const id: unknown = body.computation_id;
+  return typeof id === "string" ? id : null;
+}
+
+/**
+ * The calendar's row of `api-surface.md`'s caching table, applied.
+ *
+ * An hour and not the replay's ten minutes because the two answer different
+ * questions. A replay is a *number*, and a number's observed half is read
+ * `AsOf(now)` against a record ONS restates in place; a day's *verdict* —
  * replayable, or refused under which clause — moves only when a fold calendar,
  * an artifact promotion or a settled-hour count moves, none of which happens
  * inside an hour. Under-caching it would be a date picker that revalidates on
  * every keystroke.
  *
- * There is no ETag here yet, and the table asks for one:
- * `W/"<featured-days computation id>"`. The id is replay 07's, and replay 07
- * has not landed — the calendar this route forwards carries no featured
- * shortlist to compute an id over. A weak validator invented here would have to
- * be a hash of the body, which is a revalidation that costs exactly what it
- * saves. It stays a `max-age` until the id exists.
+ * These are **reads**, and the distinction is not a formality on this path:
+ * `/v1/replay/days` was once metered at the *solver's* rate purely because it
+ * lives under `/v1/replay`, and `rate-limit.ts` now names it out of that tier
+ * by hand. Caching has the same trap and avoids it the same way — the row is
+ * named here rather than inherited from the neighbouring solve.
+ *
+ * The request's own axes ride beside the id because one computation id covers
+ * one (subsystem, lane) shortlist while the calendar around it is cut to a
+ * window: two windows are two responses and must not share a validator.
  */
-const CALENDAR_CACHE_CONTROL = "public, max-age=3600";
+function calendarCache(
+  context: CacheContext,
+  id: string | null,
+  axes: readonly string[],
+): boolean {
+  if (id === null) {
+    return applyCachePolicy(context, CACHE_POLICIES.featuredDays);
+  }
+  return applyCachePolicy(context, CACHE_POLICIES.featuredDays, [id, ...axes]);
+}
 
 /**
  * Forward one replay read, or throw the failure that says whose fault it was.
@@ -142,7 +199,7 @@ export function createReplayRoutes(endpoint?: MlEndpoint) {
   return new Elysia({ name: "replay" })
     .get(
       "/v1/backtest",
-      async ({ query, set }) => {
+      async ({ query, set, request }) => {
         // The fourth route of this surface, and the one api-surface 17 refused
         // to serve while `wattsteer_ml.replay.backtest` did not exist — a proxy
         // in front of nothing answers 502 forever and names a healthy service
@@ -160,7 +217,15 @@ export function createReplayRoutes(endpoint?: MlEndpoint) {
           lane: query.lane,
         });
         const body = await forward("/v1/backtest", params, endpoint);
-        set.headers["cache-control"] = CALENDAR_CACHE_CONTROL;
+        if (
+          calendarCache({ set, request }, bodyComputationId(body), [
+            query.fold,
+            query.subsystem,
+            query.lane,
+          ])
+        ) {
+          return null;
+        }
         return body;
       },
       {
@@ -187,7 +252,7 @@ export function createReplayRoutes(endpoint?: MlEndpoint) {
     )
     .get(
       "/v1/replay/days",
-      async ({ query, set }) => {
+      async ({ query, set, request }) => {
         const params = new URLSearchParams({
           subsystem: query.subsystem,
           lane: query.lane,
@@ -199,7 +264,15 @@ export function createReplayRoutes(endpoint?: MlEndpoint) {
           params.set("to", civilDate("to", query.to));
         }
         const body = await forward("/v1/replay/days", params, endpoint);
-        set.headers["cache-control"] = CALENDAR_CACHE_CONTROL;
+        if (
+          calendarCache(
+            { set, request },
+            featuredComputationId(body),
+            [...params.entries()].flat(),
+          )
+        ) {
+          return null;
+        }
         return body;
       },
       {
@@ -229,7 +302,7 @@ export function createReplayRoutes(endpoint?: MlEndpoint) {
     )
     .get(
       "/v1/replay/days/:date",
-      async ({ params, query, set }) => {
+      async ({ params, query, set, request }) => {
         const search = new URLSearchParams({
           subsystem: query.subsystem,
           lane: query.lane,
@@ -239,7 +312,13 @@ export function createReplayRoutes(endpoint?: MlEndpoint) {
           search,
           endpoint,
         );
-        set.headers["cache-control"] = CALENDAR_CACHE_CONTROL;
+        // The directive and no validator: one day's verdict is answered off the
+        // calendar and carries no shortlist, so there is no computation id on
+        // this body to name. Inventing one from the payload would be a hash of
+        // the answer — a revalidation costing exactly what it saves — and the
+        // id this route wants is `/v1/replay/days`'s, which this route does not
+        // receive. It is a gap in the ML contract and not in the policy.
+        applyCachePolicy({ set, request }, CACHE_POLICIES.featuredDays);
         return body;
       },
       {
@@ -383,7 +462,11 @@ export function createReplaySolveRoutes(deps: ReplayDeps) {
    * numbers under the next one's name, and that is precisely the silent
    * re-meaning of a shared link this ticket exists to prevent.
    */
-  const answer = async (path: string, decoded: DecodedScenario, lane: string) => {
+  const answer = async (
+    path: string,
+    decoded: DecodedScenario,
+    lane: string,
+  ): Promise<{ body: string; origin: string | null }> => {
     const pinnedInstant = decoded.scenario.forecastOrigin ?? null;
     const targetDate = decoded.scenario.targetDate;
 
@@ -402,9 +485,10 @@ export function createReplaySolveRoutes(deps: ReplayDeps) {
 
     if (pinnedInstant !== null) {
       for (const kind of ["served", "backfilled_holdout"]) {
-        const hit = await deps.cache.get(keysFor(`${kind}@${pinnedInstant}`));
+        const origin = `${kind}@${pinnedInstant}`;
+        const hit = await deps.cache.get(keysFor(origin));
         if (hit !== null) {
-          return hit;
+          return { body: hit, origin };
         }
       }
     }
@@ -430,8 +514,24 @@ export function createReplaySolveRoutes(deps: ReplayDeps) {
           "not caching. Set WATTSTEER_OPTIMIZER_BUILD to match the ML service.",
       );
     }
-    return body;
+    return { body, origin: resolved?.origin ?? null };
   };
+
+  /**
+   * The provenance a replayed day has, as an ETag.
+   *
+   * The Redis key's components, so the shared validator and the private key are
+   * invalidated by the same facts. What is **not** in either is the observed
+   * `data_version`, which `api-surface.md`'s table asks for and the replay
+   * contract does not publish — the gap `plugins/result-cache.ts` records on
+   * `replayKey`, and it is the same gap here for the same reason. Until the ML
+   * service names the vintage of the observed half, an ONS restatement is
+   * waited out by the ten-minute window rather than evicted by the key, and
+   * `vintage_fidelity` on the payload is what tells a reader the ground may
+   * have moved.
+   */
+  const validator = (decoded: DecodedScenario, origin: string): string =>
+    etagOf([decoded.hash, decoded.scenario.targetDate, origin, build]);
 
   /**
    * The deep link's visible date, checked against the blob it links to.
@@ -458,12 +558,9 @@ export function createReplaySolveRoutes(deps: ReplayDeps) {
   return new Elysia({ name: "replay-solve" })
     .get(
       "/v1/replay",
-      async ({ query, set }) => {
-        const body = await answer(
-          "/v1/replay",
-          sameDay(query.d, admitScenarioParam(query.s, gate())),
-          query.lane,
-        );
+      async ({ query, set, request }) => {
+        const decoded = sameDay(query.d, admitScenarioParam(query.s, gate()));
+        const answered = await answer("/v1/replay", decoded, query.lane);
         // A shared link is shared-cacheable: the answer is a function of the
         // blob, the pinned origin and the build, none of which is the reader.
         //
@@ -475,9 +572,17 @@ export function createReplaySolveRoutes(deps: ReplayDeps) {
         // underneath it is the *observed* half — ONS restates history in place —
         // so this is a `max-age` and never `immutable`, and the response is
         // deliberately not frozen against a restatement.
-        set.headers["cache-control"] = "public, max-age=600";
+        applyCachePolicy({ set, request }, CACHE_POLICIES.replay);
+        // A body carrying no origin gets no validator, for the reason
+        // `result-cache.ts` refuses to remember one: an entry whose provenance
+        // is unknown cannot be invalidated by the thing that supersedes it, and
+        // a validator over an unknown provenance would collide two answers that
+        // are not the same answer.
+        if (answered.origin !== null) {
+          set.headers.etag = validator(decoded, answered.origin);
+        }
         set.headers["content-type"] = "application/json";
-        return body;
+        return answered.body;
       },
       {
         query: t.Object({
@@ -507,7 +612,7 @@ export function createReplaySolveRoutes(deps: ReplayDeps) {
     )
     .post(
       "/v1/replay",
-      async ({ body, query, set }) => {
+      async ({ body, query, set, request }) => {
         const decoded = admitScenarioBody(body as string, gate());
         const answered = await answer(
           "/v1/replay",
@@ -515,10 +620,11 @@ export function createReplaySolveRoutes(deps: ReplayDeps) {
           query.lane,
         );
         // Not shared-cacheable; Redis does that work behind the gateway, where
-        // the key can carry the provenance a URL cannot.
-        set.headers["cache-control"] = "no-store";
+        // the key can carry the provenance a URL cannot. No validator: a
+        // response nobody may store has nothing to revalidate.
+        applyCachePolicy({ set, request }, CACHE_POLICIES.solveBody);
         set.headers["content-type"] = "application/json";
-        return answered;
+        return answered.body;
       },
       {
         // Taken as text for the reason `/v1/optimize` takes it as text: the hash
@@ -549,15 +655,15 @@ export function createReplaySolveRoutes(deps: ReplayDeps) {
     )
     .post(
       "/v1/replay/observed-only",
-      async ({ body, query, set }) => {
+      async ({ body, query, set, request }) => {
         const answered = await answer(
           "/v1/replay/observed-only",
           admitScenarioBody(body as string, gate()),
           query.lane,
         );
-        set.headers["cache-control"] = "no-store";
+        applyCachePolicy({ set, request }, CACHE_POLICIES.solveBody);
         set.headers["content-type"] = "application/json";
-        return answered;
+        return answered.body;
       },
       {
         parse: "text",

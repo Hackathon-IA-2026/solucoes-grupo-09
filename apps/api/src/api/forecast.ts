@@ -13,6 +13,7 @@ import {
   gateProfile as parseGateProfile,
   targetDate as parseTargetDate,
 } from "./params.js";
+import { applyCachePolicy, CACHE_POLICIES } from "./plugins/cache-policy.js";
 
 /**
  * `GET /v1/forecast/day-ahead?subsystem=&target_date=&gate_profile=`.
@@ -172,7 +173,7 @@ export function createForecastRoutes(deps: {
 }) {
   return new Elysia({ name: "forecast" }).get(
     "/v1/forecast/day-ahead",
-    async ({ query, set }) => {
+    async ({ query, set, request }) => {
       const now = deps.now?.() ?? new Date();
       const subsystem = parseSubsystem(query.subsystem);
       const gateProfile = parseGateProfile(query.gate_profile);
@@ -230,12 +231,27 @@ export function createForecastRoutes(deps: {
         );
       }
 
-      // A publication is immutable once written — a re-publication is a new
-      // vintage of a new key, never an edit — so the validator is the row's own
-      // ingestion instant and its version. `max-age` is short because the *next*
-      // gate can supersede this answer, not because this one decays.
-      set.headers.etag = `W/"${published.day.ingestedAt.toISOString()}-${published.day.dataVersion}"`;
-      set.headers["cache-control"] = "public, max-age=300";
+      // `api-surface.md`'s caching table, through the one place it lives: the
+      // validator is the artifact, the publication instant and the row's
+      // version, so a superseding `gate_late` run changes it **by
+      // construction** — a different artifact published at a different instant
+      // — while a re-ingest that writes no new `data_version` leaves it alone.
+      //
+      // It used to be the row's ingestion instant and its version, which is a
+      // provenance of the *write* rather than of the publication: correct on a
+      // surface where a publication is only ever written once, and a validator
+      // that no longer says which artifact answered. `plugins/cache-policy.ts`
+      // is where the row is now read from, so this route and
+      // `/v1/grid/outlook` cannot drift apart again.
+      if (
+        applyCachePolicy({ set, request }, CACHE_POLICIES.forecast, [
+          published.day.artifactId,
+          published.day.publishedAt,
+          published.day.dataVersion,
+        ])
+      ) {
+        return null;
+      }
       return encodeWire("ForecastDayAhead", toForecastDayAhead(published, now));
     },
     {

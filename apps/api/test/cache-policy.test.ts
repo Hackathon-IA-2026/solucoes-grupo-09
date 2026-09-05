@@ -1,0 +1,424 @@
+import { describe, expect, it } from "bun:test";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import {
+  decodeScenarioBody,
+  decodeScenarioParam,
+  encodeScenario,
+  type Scenario,
+} from "@wattsteer/core/scenario";
+import {
+  ALL_CACHE_POLICIES,
+  applyCachePolicy,
+  CACHE_POLICIES,
+  type CacheContext,
+  etagOf,
+} from "../src/api/plugins/cache-policy.js";
+import { optimizeKey, replayKey } from "../src/api/plugins/result-cache.js";
+
+/**
+ * The caching policy — **a cache key is a provenance, never a duration.**
+ *
+ * `docs/specs/api-surface.md`'s caching table is twelve rows and one rule, and
+ * the rule is the part a test can hold. Three kinds of claim live here:
+ *
+ * 1. **The table.** Each row's directive is the spec's, and no row is
+ *    `immutable` — the thing that would freeze a response against an ONS
+ *    restatement.
+ * 2. **The mechanism.** `etagOf` renders a provenance and `applyCachePolicy`
+ *    turns a matching one into a 304 that still carries its validator.
+ * 3. **The grep-level assertions the ticket asks for**, which are the only
+ *    kind that can say something about *every* response rather than about the
+ *    twelve someone remembered to test. They read the route sources: nothing
+ *    outside `cache-policy.ts` writes a `Cache-Control`, so a grep over that
+ *    one file is a grep over the surface; and no validator anywhere is built
+ *    from a clock or a TTL, which is the duration-as-a-key this ticket exists
+ *    to prevent.
+ *
+ * The route-level pairings — which row each route names, and which provenance
+ * it hands over — are asserted where the route is: `grid-outlook.test.ts`,
+ * `forecast-day-ahead.test.ts`, `replay-days.test.ts`, `optimize.test.ts` and
+ * the `database-*` suites that have real rows to supersede.
+ */
+
+const API_DIR = join(import.meta.dir, "..", "src", "api");
+
+/** The route modules — the files that answer a request and set its headers. */
+const ROUTE_FILES: readonly string[] = readdirSync(API_DIR)
+  .filter((name) => name.endsWith(".ts"))
+  .sort();
+
+const sourceOf = (file: string): string => readFileSync(join(API_DIR, file), "utf8");
+
+/**
+ * A module with its comments stripped.
+ *
+ * Every claim below is about what a module *does*, and these modules argue
+ * their own case in prose that necessarily quotes the thing they refuse to do:
+ * `cache-policy.ts` explains at length why nothing carries `immutable`, and a
+ * `toContain` over the whole file would read the argument and call it the
+ * defect.
+ *
+ * **Line comments go first, and the order is not a style choice.** Stripping
+ * block comments first is what `forecast-day-ahead.test.ts` does, and on these
+ * files it deletes the code: `grid.ts` names a wildcard path inside a `//`
+ * comment, and the slash-star in it opens a block comment that runs to the
+ * next comment terminator a hundred lines later. A source scan that quietly
+ * matched nothing would pass every assertion below while proving nothing at
+ * all, which is why the call-site census below is its own test.
+ */
+const codeOf = (source: string): string =>
+  source
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("//"))
+    .join("\n")
+    .replace(/\/\*[\s\S]*?\*\//g, "");
+
+/** A `set`/`request` pair a policy can be applied to, with no framework in it. */
+function context(ifNoneMatch?: string): CacheContext & {
+  set: { headers: Record<string, string | number | undefined>; status?: number | string };
+} {
+  const headers = new Headers();
+  if (ifNoneMatch !== undefined) {
+    headers.set("if-none-match", ifNoneMatch);
+  }
+  return { set: { headers: {} }, request: { headers } };
+}
+
+// --- the table ---------------------------------------------------------------
+
+describe("the caching table is the spec's, row for row", () => {
+  it("gives each surface the directive api-surface.md gives it", () => {
+    expect(CACHE_POLICIES.meta.directive).toBe("no-store");
+    expect(CACHE_POLICIES.forecast.directive).toBe(
+      "public, max-age=300, stale-while-revalidate=3600",
+    );
+    expect(CACHE_POLICIES.now.directive).toBe("public, max-age=60");
+    expect(CACHE_POLICIES.observedSettled.directive).toBe(
+      "public, max-age=3600, stale-while-revalidate=86400",
+    );
+    expect(CACHE_POLICIES.observedTail.directive).toBe("public, max-age=300");
+    expect(CACHE_POLICIES.diagnosis.directive).toBe("public, max-age=300");
+    expect(CACHE_POLICIES.modelCard.directive).toBe("public, max-age=3600");
+    expect(CACHE_POLICIES.solveShared.directive).toBe("public, max-age=300");
+    expect(CACHE_POLICIES.solveBody.directive).toBe("no-store");
+    expect(CACHE_POLICIES.replay.directive).toBe("public, max-age=600");
+    expect(CACHE_POLICIES.featuredDays.directive).toBe("public, max-age=3600");
+    expect(CACHE_POLICIES.registry.directive).toBe("public, max-age=86400");
+  });
+
+  it("varies on Accept-Language on the one route that generates prose, and nowhere else", () => {
+    // Story: there are no accounts, no cookies and no Authorization header, so
+    // every GET is shared-cacheable and a `Vary` anywhere else would fragment a
+    // shared cache for nothing.
+    const varying = ALL_CACHE_POLICIES.filter((policy) => policy.vary !== undefined);
+    expect(varying.map((policy) => policy.name)).toEqual(["diagnosis"]);
+    expect(CACHE_POLICIES.diagnosis.vary).toBe("Accept-Language");
+  });
+
+  it("gives the replay's date picker the read's row and not the solve's", () => {
+    // The trap `rate-limit.ts` had to be told about by hand: `/v1/replay/days`
+    // is a calendar read that happens to live under a solve's path. Caching has
+    // the same trap, and an hour against the replay's ten minutes is what says
+    // the two were decided separately.
+    expect(CACHE_POLICIES.featuredDays.directive).not.toBe(
+      CACHE_POLICIES.replay.directive,
+    );
+    expect(CACHE_POLICIES.solveBody.directive).toBe("no-store");
+  });
+});
+
+// --- the grep-level assertion the ticket asks for ----------------------------
+
+describe("no response on this surface carries `immutable`", () => {
+  it("holds of every row of the table", () => {
+    for (const policy of ALL_CACHE_POLICIES) {
+      expect(policy.directive).not.toContain("immutable");
+    }
+  });
+
+  it("holds of every `Cache-Control` in the source, because there is one place they are built", () => {
+    // The assertion that is worth having: not "the twelve policies are clean"
+    // but "there is nothing else to check". A route assembling its own
+    // directive would be a directive this suite cannot see, so the boundary is
+    // what makes the grep above total.
+    const offenders = ROUTE_FILES.filter((file) =>
+      /["'`]cache-control["'`]\s*\]?\s*=/i.test(codeOf(sourceOf(file))),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it("finds the word nowhere in a directive the policy module builds", () => {
+    // ONS restates a whole year in place, under the same filenames, with no
+    // version marker. A response frozen against that would hide precisely what
+    // `revision_optimistic` exists to surface, so the word is absent from the
+    // code of the one module that could emit it — comments, which argue the
+    // case at length, are stripped first.
+    const policy = codeOf(sourceOf(join("plugins", "cache-policy.ts")));
+    expect(policy).not.toContain("immutable");
+  });
+});
+
+describe("no validator is built from a clock or a duration", () => {
+  /** Every `etagOf([...])` argument list in the route sources. */
+  const etagArguments = (): { file: string; text: string }[] => {
+    const found: { file: string; text: string }[] = [];
+    for (const file of ROUTE_FILES) {
+      const code = codeOf(sourceOf(file));
+      for (const match of code.matchAll(/etagOf\(\s*\[([\s\S]*?)\]/g)) {
+        found.push({ file, text: match[1] ?? "" });
+      }
+      // `applyCachePolicy(ctx, POLICY, [ … ])` — the same provenance, one call
+      // deeper. The third argument is the one this is about.
+      for (const match of code.matchAll(
+        /applyCachePolicy\([\s\S]*?,[\s\S]*?,\s*\[([\s\S]*?)\]\s*\)/g,
+      )) {
+        found.push({ file, text: match[1] ?? "" });
+      }
+    }
+    return found;
+  };
+
+  it("finds a provenance call site in every route that has one", () => {
+    // A regex that matched nothing would pass the next two tests vacuously,
+    // and one that matched only some of the routes would pass them for the
+    // routes it happened to see. Named, so a route that stops building a
+    // validator is a failure here rather than a silence.
+    const files = new Set(etagArguments().map((entry) => entry.file));
+    expect([...files].sort()).toEqual([
+      "curtailment.ts",
+      "diagnosis.ts",
+      "forecast.ts",
+      "grid.ts",
+      "model-card.ts",
+      "optimize.ts",
+      "plants.ts",
+      "replay.ts",
+    ]);
+  });
+
+  it("never hands `etagOf` the request's own clock", () => {
+    // `published_at` and `ingested_at` are facts about the record and belong in
+    // a validator. `Date.now()` is a fact about the request: a validator
+    // carrying it changes on every request, which is a cache that can never hit
+    // wearing an ETag. `/v1/plants` shipped with exactly that on its
+    // empty-registry path and it is fixed; this is what keeps it fixed.
+    for (const { file, text } of etagArguments()) {
+      expect({ file, text }).toMatchObject({ text: expect.not.stringContaining("now(") });
+      expect({ file, text }).toMatchObject({
+        text: expect.not.stringContaining("Date.now"),
+      });
+      expect({ file, text }).toMatchObject({
+        text: expect.not.stringContaining("new Date("),
+      });
+    }
+  });
+
+  it("never hands `etagOf` a TTL or a max-age", () => {
+    for (const { file, text } of etagArguments()) {
+      for (const duration of ["TTL", "MAX_AGE", "_SEC", "max-age", "maxAge"]) {
+        expect({ file, text }).toMatchObject({
+          text: expect.not.stringContaining(duration),
+        });
+      }
+    }
+  });
+});
+
+// --- the mechanism -----------------------------------------------------------
+
+describe("etagOf renders a provenance and nothing else", () => {
+  it("is weak, colon-joined, and renders instants as ISO to the millisecond", () => {
+    // Weak on every route, deliberately: these responses embed a computed
+    // `as_of` and a lag, so two responses of one publication are the same
+    // *version* of the same fact without being byte-identical, and weak
+    // comparison is the only one that says that.
+    expect(
+      etagOf(["2026-08-28T03:11:07Z", new Date("2026-08-28T22:00:00.000Z"), 3]),
+    ).toBe('W/"2026-08-28T03:11:07Z:2026-08-28T22:00:00.000Z:3"');
+  });
+
+  it("refuses a validator over nothing", () => {
+    // A validator every response matches turns revalidation into a 304 on a
+    // body that changed, which is worse than having no validator at all.
+    expect(() => etagOf([])).toThrow(/not a validator/);
+  });
+
+  it("separates a changed component from an unchanged one", () => {
+    const base = ["artifact", new Date("2026-08-28T22:00:00.000Z"), 1] as const;
+    expect(etagOf(base)).toBe(etagOf([...base]));
+    expect(etagOf(["artifact", new Date("2026-08-28T22:00:00.000Z"), 2])).not.toBe(
+      etagOf(base),
+    );
+  });
+});
+
+describe("applyCachePolicy revalidates rather than re-answering", () => {
+  it("sets the directive and the validator, and lets the body be built", () => {
+    const ctx = context();
+    expect(applyCachePolicy(ctx, CACHE_POLICIES.now, [new Date(0)])).toBe(false);
+    expect(ctx.set.headers["cache-control"]).toBe("public, max-age=60");
+    expect(ctx.set.headers.etag).toBe('W/"1970-01-01T00:00:00.000Z"');
+    expect(ctx.set.status).toBeUndefined();
+  });
+
+  it("answers 304 when the client already holds this version", () => {
+    const etag = etagOf(["artifact", 4]);
+    const ctx = context(etag);
+    expect(applyCachePolicy(ctx, CACHE_POLICIES.modelCard, ["artifact", 4])).toBe(true);
+    expect(ctx.set.status).toBe(304);
+    // A 304 with no ETag is a revalidation the client cannot repeat, and one
+    // with no Cache-Control resets the freshness window it exists to extend.
+    expect(ctx.set.headers.etag).toBe(etag);
+    expect(ctx.set.headers["cache-control"]).toBe("public, max-age=3600");
+  });
+
+  it("does not 304 a client holding a different version", () => {
+    const ctx = context(etagOf(["artifact", 3]));
+    expect(applyCachePolicy(ctx, CACHE_POLICIES.modelCard, ["artifact", 4])).toBe(false);
+    expect(ctx.set.status).toBeUndefined();
+  });
+
+  it("carries `Vary` onto the 304 as well as the 200", () => {
+    const etag = etagOf(["row", 1, "narration:v1:x"]);
+    const ctx = context(etag);
+    expect(
+      applyCachePolicy(ctx, CACHE_POLICIES.diagnosis, ["row", 1, "narration:v1:x"]),
+    ).toBe(true);
+    expect(ctx.set.headers.vary).toBe("Accept-Language");
+  });
+
+  it("sets no validator where the spec says there is nothing to store", () => {
+    // `/v1/meta` and the POST solves. An ETag on a `no-store` response would be
+    // a validator for a version nobody may keep.
+    const ctx = context('W/"anything"');
+    expect(applyCachePolicy(ctx, CACHE_POLICIES.meta)).toBe(false);
+    expect(ctx.set.headers["cache-control"]).toBe("no-store");
+    expect(ctx.set.headers.etag).toBeUndefined();
+  });
+});
+
+// --- the Redis keys, which are the same rule one layer down ------------------
+
+describe("the solve keys are provenances", () => {
+  const parts = {
+    scenarioHash: "sha256:abc",
+    forecastOrigin: "2026-08-28T12:00:00Z",
+    optimizerBuild: "milp-v3",
+  };
+
+  it("changes when the origin changes, so a 12Z run is never served an 00Z plan", () => {
+    expect(optimizeKey({ ...parts, forecastOrigin: "2026-08-28T00:00:00Z" })).not.toBe(
+      optimizeKey(parts),
+    );
+  });
+
+  it("changes when the optimizer build changes, which no TTL is short enough to catch", () => {
+    expect(optimizeKey({ ...parts, optimizerBuild: "milp-v4" })).not.toBe(
+      optimizeKey(parts),
+    );
+  });
+
+  it("carries no duration at all", () => {
+    // The whole rule, at the level of the string: nothing in the key is a
+    // number of seconds, an expiry, or an instant the request happened at.
+    expect(optimizeKey(parts)).toBe("opt:v1:sha256:abc:2026-08-28T12:00:00Z:milp-v3");
+  });
+});
+
+describe("the replay key changes on the four things it can see", () => {
+  const parts = {
+    scenarioHash: "sha256:abc",
+    targetDate: "2025-03-14",
+    forecastOrigin: "served@2025-03-13T22:00:00Z",
+    optimizerBuild: "milp-v3",
+  };
+
+  it("separates a record from the reconstruction that shares its instant", () => {
+    // `replay.md` seam 6: a `backfilled_holdout` row's `published_at` *equals*
+    // `gate_at(target_date, gate_profile)`, so an instant-only key would serve
+    // one under the other's name. The kind is the discriminator.
+    expect(
+      replayKey({ ...parts, forecastOrigin: "backfilled_holdout@2025-03-13T22:00:00Z" }),
+    ).not.toBe(replayKey(parts));
+  });
+
+  it("separates two days and two builds", () => {
+    expect(replayKey({ ...parts, targetDate: "2025-03-15" })).not.toBe(replayKey(parts));
+    expect(replayKey({ ...parts, optimizerBuild: "milp-v4" })).not.toBe(replayKey(parts));
+  });
+
+  it("still cannot see the observed data version, and this is where that is recorded", () => {
+    // `api-surface.md`'s table writes this key with a sixth component,
+    // `<obs_data_version>`, and it is absent because the replay contract
+    // publishes no observed data version to put in it: `replay_result` carries
+    // the target date, the origin, the fidelity and the numbers, and nothing on
+    // the wire names the vintage of the observed half.
+    //
+    // The cost is bounded and stated rather than hidden: for up to the 24 h TTL
+    // after ONS rewrites a day, a cached replay of that day answers with the
+    // numbers from before the rewrite. That is staleness on a *cache*, not a
+    // broken pin — but it is the one box on ticket 20 that cannot be ticked
+    // here. Closing it needs the ML service to publish the observed
+    // `data_version` on a contract `replay.md` declares fixed, or the gateway
+    // to query Postgres on a route whose whole claim is that it contains
+    // neither a model nor a read. This assertion fails the day either lands,
+    // which is when someone should come back and read the paragraph above.
+    expect(replayKey(parts).split(":").length).toBe(
+      "replay:v1:sha256:abc:2025-03-14:served@2025-03-13T22:00:00Z:milp-v3".split(":")
+        .length,
+    );
+    expect(replayKey(parts)).not.toContain("obs_data_version");
+  });
+});
+
+describe("a scenario re-encoded differently hits the same key", () => {
+  const SCENARIO: Scenario = {
+    v: 1,
+    subsystem: "NE",
+    targetDate: "2026-08-29",
+    forecastOrigin: "2026-08-28T12:00:00Z",
+    assets: [
+      {
+        assetType: "battery",
+        label: "Battery",
+        subsystem: "NE",
+        maxPowerMw: 100,
+        energyCapacityMwh: 300,
+        roundTripEfficiency: 0.92,
+        initialStateOfCharge: 0.2,
+      },
+    ],
+    economicAssumptions: { brlPerMwh: 180 },
+  };
+
+  /** The same scenario as a client would type it: trailing zeros, keys reordered. */
+  const SPELLED = `{
+    "economic_assumptions": { "brl_per_mwh": 180.0 },
+    "assets": [ { "initial_state_of_charge": 0.20, "asset_type": "battery",
+      "round_trip_efficiency": 0.920, "subsystem": "NE", "label": "Battery",
+      "energy_capacity_mwh": 300.0, "max_power_mw": 100 } ],
+    "forecast_origin": "2026-08-28T12:00:00Z",
+    "target_date": "2026-08-29",
+    "subsystem": "NE",
+    "v": 1
+  }`;
+
+  it("keys `0.920` and `0.92` identically, on both the optimize and the replay key", () => {
+    // The hash is over the canonical bytes, so two spellings of one scenario
+    // share an entry and "a cache that silently never hits" is not a failure
+    // mode this surface has. Both keys are checked, because both are built from
+    // that hash and a drift in either would be a cache miss nobody can see.
+    const link = decodeScenarioParam(encodeScenario(SCENARIO));
+    const typed = decodeScenarioBody(SPELLED);
+    expect(typed.hash).toBe(link.hash);
+
+    const rest = { forecastOrigin: "2026-08-28T12:00:00Z", optimizerBuild: "milp-v3" };
+    expect(optimizeKey({ scenarioHash: typed.hash, ...rest })).toBe(
+      optimizeKey({ scenarioHash: link.hash, ...rest }),
+    );
+    expect(
+      replayKey({ scenarioHash: typed.hash, targetDate: "2026-08-29", ...rest }),
+    ).toBe(replayKey({ scenarioHash: link.hash, targetDate: "2026-08-29", ...rest }));
+  });
+});

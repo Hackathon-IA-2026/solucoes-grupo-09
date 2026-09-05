@@ -593,6 +593,26 @@ describe("replay · one scenario, two verbs, one set of bytes", () => {
       ),
     ).toBe("no-store");
   });
+
+  it("puts the replay key's components on the deep link's ETag, and none on the POST", async () => {
+    // api-surface 20: the shared validator and the private Redis key are the
+    // same statement in two places. Four components — and **not** the observed
+    // `data_version` the table asks for as a fifth, because `replay_result`
+    // publishes none; that gap is recorded on `replayKey` and asserted in
+    // `cache-policy.test.ts`, and until it closes an ONS restatement is waited
+    // out by the ten-minute window rather than evicted by the key.
+    const api = replayRoutes();
+    const response = await replayGet(api, blob());
+    const etag = response.headers.get("etag") ?? "";
+    expect(etag).toContain(PAST_DATE);
+    expect(etag).toContain(config.optimizerBuild);
+    // `<origin_kind>@<published_at>` and never the instant alone: a record and
+    // the reconstruction that shares its publication instant must not collide.
+    expect(etag).toContain("@");
+
+    const posted = await replayPost(api, JSON.stringify(scenarioWire()));
+    expect(posted.headers.get("etag")).toBeNull();
+  });
 });
 
 function scenarioWire(): Record<string, unknown> {

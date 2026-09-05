@@ -236,3 +236,102 @@ describe("replay · where the assertion lives", () => {
     expect(source).not.toContain("load_promoted");
   });
 });
+
+/**
+ * The calendar's row of `api-surface.md`'s caching table — api-surface 20.
+ *
+ * The table asks for `W/"<featured-days computation id>"` on these routes, and
+ * `replay.ts` used to record that the id did not exist yet. Replay 07 landed it:
+ * the shortlist travels *on* the calendar by `replay.md`'s own endpoint table,
+ * so the validator is a field of a body the gateway is already holding, and it
+ * is a digest over the basis rather than over the answer — a rerun that changes
+ * one hour of one day moves it, and a rerun that changes nothing does not.
+ */
+describe("replay · the calendar caches on the shortlist's computation id", () => {
+  const CALENDAR_BODY = (computationId: string | null) => ({
+    subsystem: "NE",
+    lane: "dessem_free_v1__gate_late__thr5",
+    counts: { days: 0, replayable: 0, refused: {} },
+    days: [],
+    featured:
+      computationId === null
+        ? { state: "pending", computation_id: null, days: [] }
+        : { state: "ready", computation_id: computationId, days: [] },
+  });
+
+  const answer = (body: unknown) => {
+    reply = () =>
+      new Response(JSON.stringify(body), {
+        headers: { "content-type": "application/json" },
+      });
+  };
+
+  const ask = (path: string, headers: Record<string, string> = {}) =>
+    app.handle(new Request(`http://local${path}`, { headers }));
+
+  it("puts the computation id on the ETag beside the request's own axes", async () => {
+    answer(CALENDAR_BODY("sha256:deadbeef"));
+    const response = await ask(CALENDAR);
+    expect(response.headers.get("cache-control")).toBe("public, max-age=3600");
+    const etag = response.headers.get("etag") ?? "";
+    expect(etag).toContain("sha256:deadbeef");
+    // One computation id covers one (subsystem, lane) shortlist while the
+    // calendar around it is cut to a window: two windows are two responses and
+    // must not share a validator.
+    expect(etag).toContain("NE");
+  });
+
+  it("revalidates to a 304 against it", async () => {
+    answer(CALENDAR_BODY("sha256:deadbeef"));
+    const etag = (await ask(CALENDAR)).headers.get("etag") ?? "";
+    const again = await ask(CALENDAR, { "if-none-match": etag });
+    expect(again.status).toBe(304);
+    expect(again.headers.get("cache-control")).toBe("public, max-age=3600");
+  });
+
+  it("moves the validator when the nightly recompute moves the basis", async () => {
+    answer(CALENDAR_BODY("sha256:deadbeef"));
+    const before = (await ask(CALENDAR)).headers.get("etag");
+    answer(CALENDAR_BODY("sha256:cafe"));
+    expect((await ask(CALENDAR)).headers.get("etag")).not.toBe(before);
+  });
+
+  it("serves a pending shortlist with the directive and no validator", async () => {
+    // There is no computation to name, and inventing a hash of the body would
+    // be a revalidation costing exactly what it saves.
+    answer(CALENDAR_BODY(null));
+    const response = await ask(CALENDAR);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("public, max-age=3600");
+    expect(response.headers.get("etag")).toBeNull();
+  });
+
+  it("gives one day the read's directive and never the solve's", async () => {
+    // `/v1/replay/days/<date>` was once metered at the *solver's* rate purely
+    // because it lives under `/v1/replay`. It is a date picker, and caching has
+    // the same trap: an hour, not the replay's ten minutes.
+    answer({ date: "2025-11-12", replayable: true });
+    const response = await ask(ONE_DAY);
+    expect(response.headers.get("cache-control")).toBe("public, max-age=3600");
+    // No validator: one day's verdict carries no shortlist, so there is no
+    // computation id on this body to name. A gap in the ML contract, recorded
+    // rather than papered over with a hash of the answer.
+    expect(response.headers.get("etag")).toBeNull();
+  });
+
+  it("caches the backtest on its own computation id, which is the same digest", async () => {
+    answer({
+      state: "ready",
+      computation_id: "sha256:aggregate",
+      computed_at: "2026-08-28T06:00:00Z",
+      rows: [],
+    });
+    const response = await app.handle(
+      new Request(
+        "http://local/v1/backtest?fold=F3&subsystem=NE&lane=dessem_free_v1__gate_late__thr5",
+      ),
+    );
+    expect(response.headers.get("cache-control")).toBe("public, max-age=3600");
+    expect(response.headers.get("etag")).toContain("sha256:aggregate");
+  });
+});
