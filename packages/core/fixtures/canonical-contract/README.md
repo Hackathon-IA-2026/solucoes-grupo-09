@@ -43,7 +43,11 @@ quietly skip one.
 `summary` is deliberately **not** pinned. It is documentation, it will be
 reworded, and pinning prose would make the parity suite fail for a typo fix.
 
-## The sibling directory
+## The sibling directories
+
+[`../README.md`](../README.md) is the index: every directory here, the value it
+pins, the sides that read it, and — where one exists — the third route the
+expected values were reached by.
 
 [`../published-constants/`](../published-constants/README.md) applies the same
 harness to the numbers and enums both languages quote — the two curtailment
@@ -51,3 +55,8 @@ thresholds, `max_gap_hours`, the R$/MWh scenario assumption, the four
 subsystems with their ONS display names, the technology casing and the
 published `REFERENCE_FLEET`. Same four properties, same "each side against
 `expected`" rule; a different family of values, so a different directory.
+
+The nearest relative is [`../gate-instant/`](../gate-instant/README.md), which
+applies the same harness to `gate_at(target_date, gate_profile)` — the instant
+every `published_at` in this system *is*, and the value that decides whether a
+`VintageFidelity` here is being read against a publication that happened.

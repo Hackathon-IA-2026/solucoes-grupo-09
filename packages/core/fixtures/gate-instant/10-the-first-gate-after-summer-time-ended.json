@@ -1,0 +1,10 @@
+{
+  "name": "the first gate after summer time ended",
+  "why": "17 February 2019 at 19:00 is UTC-03:00 — one calendar day after the vector above and one hour further from UTC. Brazil has not observed summer time since, and this pair is what keeps the code from assuming it never will again.",
+  "target_date": "2019-02-18",
+  "gate_profile": "gate_late",
+  "expected_local_date": "2019-02-17",
+  "expected_local_time": "19:00",
+  "expected_utc_offset_minutes": -180,
+  "expected_gate_at": "2019-02-17T22:00:00.000Z"
+}

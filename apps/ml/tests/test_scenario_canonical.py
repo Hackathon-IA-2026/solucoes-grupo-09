@@ -114,6 +114,20 @@ def test_repr_is_not_the_rule() -> None:
     assert canonical_json(1e-06) == "0.000001"
 
 
+def test_a_trailing_zero_in_a_vector_fails() -> None:
+    """The test of the test, in the spelling api-surface ticket 21 names.
+
+    ``packages/core/test/scenario-canonical.test.ts`` asserts the same pair, and
+    the acceptance criterion is that a deliberately broken vector fails on
+    *both* sides. ``0.92`` against ``0.920`` is the spec's own worked example:
+    two spellings of one number that hash differently are a Redis key that never
+    hits and a ``scenario_hash`` that cannot reproduce anything.
+    """
+    broken = json.loads('{"round_trip_efficiency":0.92}')
+    assert canonical_json(broken) != '{"round_trip_efficiency":0.920}'
+    assert canonical_json(broken) == '{"round_trip_efficiency":0.92}'
+
+
 def test_a_non_finite_number_has_no_canonical_form() -> None:
     for value in (float("nan"), float("inf"), float("-inf")):
         with pytest.raises(ScenarioTransportError):

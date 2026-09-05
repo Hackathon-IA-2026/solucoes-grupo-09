@@ -1,0 +1,10 @@
+{
+  "name": "the late gate for tomorrow",
+  "why": "The primary gate and the ordinary case: D-1 19:00 BRT is 22:00Z, and it is the instant `/v1/meta` turns into \"tomorrow's view publishes at 19:00 BRT\".",
+  "target_date": "2026-08-29",
+  "gate_profile": "gate_late",
+  "expected_local_date": "2026-08-28",
+  "expected_local_time": "19:00",
+  "expected_utc_offset_minutes": -180,
+  "expected_gate_at": "2026-08-28T22:00:00.000Z"
+}

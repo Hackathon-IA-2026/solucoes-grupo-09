@@ -1,0 +1,10 @@
+{
+  "name": "the early gate for the same day",
+  "why": "Two gates per target date, ten hours apart. A profile read as a label rather than an hour would return the same instant twice, and the 00Z lane would silently claim the 12Z run's inputs.",
+  "target_date": "2026-08-29",
+  "gate_profile": "gate_early",
+  "expected_local_date": "2026-08-28",
+  "expected_local_time": "09:00",
+  "expected_utc_offset_minutes": -180,
+  "expected_gate_at": "2026-08-28T12:00:00.000Z"
+}

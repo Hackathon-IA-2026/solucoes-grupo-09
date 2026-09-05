@@ -60,6 +60,21 @@ interface Vector {
   gateway_field?: string;
 }
 
+interface Admission {
+  file: string;
+  name: string;
+  now: string;
+  scenario: Record<string, JsonValue>;
+  /**
+   * The documented asymmetry, as data. One admission the *table* accepts is a
+   * scenario no gateway can receive: twenty minimal batteries encode past the
+   * transport's 4 096-byte cap, so the byte cap refuses the request before the
+   * table is consulted. Stated on the vector rather than as a filename in this
+   * file, so the exception travels with the case it belongs to.
+   */
+  gateway_refuses?: ErrorCode;
+}
+
 const REFUSALS: Vector[] = readdirSync(join(FIXTURES, "refusals"))
   .filter((file) => file.endsWith(".json"))
   .sort()
@@ -67,6 +82,17 @@ const REFUSALS: Vector[] = readdirSync(join(FIXTURES, "refusals"))
     file,
     ...(JSON.parse(readFileSync(join(FIXTURES, "refusals", file), "utf8")) as Omit<
       Vector,
+      "file"
+    >),
+  }));
+
+const ADMISSIONS: Admission[] = readdirSync(join(FIXTURES, "admissions"))
+  .filter((file) => file.endsWith(".json"))
+  .sort()
+  .map((file) => ({
+    file,
+    ...(JSON.parse(readFileSync(join(FIXTURES, "admissions", file), "utf8")) as Omit<
+      Admission,
       "file"
     >),
   }));
@@ -132,23 +158,75 @@ describe("a scenario rejected at the gateway never reaches the ml service", () =
     });
   }
 
-  test("a valid scenario does reach it — so the guard above is not vacuous", async () => {
-    // The test of the test. If the gate refused everything, every assertion
-    // above would pass and the endpoint would be a 422 machine.
-    const reached: string[] = [];
-    const app = optimizeApp(reached, new Date("2026-08-28T12:00:00Z"));
-    const valid = JSON.parse(
-      readFileSync(join(FIXTURES, "admissions", "01-the-reference-fleet.json"), "utf8"),
-    ) as { scenario: Record<string, JsonValue> };
-    const { status } = await post(app, valid.scenario);
-
-    expect(reached).toHaveLength(1);
-    expect(reached[0]).toMatch(/^sha256:[0-9a-f]{64}$/);
-    // The ML service is genuinely unreachable in this test, so the request ends
-    // as an upstream failure rather than a validation one — which is exactly
-    // the distinction the envelope has to keep: `502` is not the caller's fault.
-    expect(status).toBeGreaterThanOrEqual(500);
+  test("hold no file this suite did not enumerate", () => {
+    // The third side of the same claim `packages/core/test/
+    // scenario-validation.test.ts` and `apps/ml/tests/
+    // test_scenario_validation.py` each make about this directory. Without it,
+    // a vector added for the two in-process suites would silently never be put
+    // through an HTTP envelope, which is the only thing this suite can see.
+    const consumed = new Set([
+      ...REFUSALS.map((vector) => `refusals/${vector.file}`),
+      ...ADMISSIONS.map((vector) => `admissions/${vector.file}`),
+    ]);
+    const onDisk = new Set(
+      ["refusals", "admissions"].flatMap((sub) =>
+        readdirSync(join(FIXTURES, sub))
+          .filter((file) => file.endsWith(".json"))
+          .map((file) => `${sub}/${file}`),
+      ),
+    );
+    expect([...onDisk].sort()).toEqual([...consumed].sort());
   });
+
+  test("the admissions are not empty either, so the guard is not vacuous", () => {
+    expect(ADMISSIONS.length).toBeGreaterThan(0);
+    // At least one admission must be one the gateway can actually carry, or
+    // "a valid scenario does reach the ml service" would be asserted about
+    // nothing at all.
+    expect(ADMISSIONS.some((vector) => vector.gateway_refuses === undefined)).toBe(true);
+  });
+
+  for (const vector of ADMISSIONS.filter(
+    (entry) => entry.gateway_refuses === undefined,
+  )) {
+    test(`${vector.file}: ${vector.name} does reach it`, async () => {
+      // The test of the test. If the gate refused everything, every refusal
+      // assertion above would pass and the endpoint would be a 422 machine.
+      // Every admission is run, not one: half the value of a refusal suite is
+      // the boundary from the other side, and a cap read as `>=` rather than
+      // `>` refuses a legal fleet that no refusal vector can see.
+      const reached: string[] = [];
+      const app = optimizeApp(reached, new Date(vector.now));
+      const { status } = await post(app, vector.scenario);
+
+      expect(reached).toHaveLength(1);
+      expect(reached[0]).toMatch(/^sha256:[0-9a-f]{64}$/);
+      // The ML service is genuinely unreachable in this test, so the request
+      // ends as an upstream failure rather than a validation one — which is
+      // exactly the distinction the envelope has to keep: `502` is not the
+      // caller's fault.
+      expect(status).toBeGreaterThanOrEqual(500);
+    });
+  }
+});
+
+describe("the admission the table accepts and the transport cannot carry", () => {
+  // The deliberate asymmetry, asserted rather than assumed. See
+  // `packages/core/fixtures/scenario-validation/README.md` §"Deliberate
+  // asymmetries" 2, and `gateway_refuses_why` on the vector itself.
+  for (const vector of ADMISSIONS.filter(
+    (entry) => entry.gateway_refuses !== undefined,
+  )) {
+    test(`${vector.file}: ${vector.gateway_refuses} before the table is consulted`, async () => {
+      const reached: string[] = [];
+      const app = optimizeApp(reached, new Date(vector.now));
+      const { status, envelope } = await post(app, vector.scenario);
+
+      expect(envelope.error.code).toBe(vector.gateway_refuses);
+      expect(status).toBe(ERROR_STATUS[vector.gateway_refuses as ErrorCode]);
+      expect(reached).toEqual([]);
+    });
+  }
 });
 
 describe("the refusal a client actually receives", () => {

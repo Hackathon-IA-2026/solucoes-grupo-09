@@ -1,0 +1,10 @@
+{
+  "name": "the first date the window covers",
+  "why": "`DATA_WINDOW_OPENS_ON`. Its gate falls in the *previous month*, which is where an implementation that clamped the gate into the target date's own month would first be visible.",
+  "target_date": "2024-04-01",
+  "gate_profile": "gate_late",
+  "expected_local_date": "2024-03-31",
+  "expected_local_time": "19:00",
+  "expected_utc_offset_minutes": -180,
+  "expected_gate_at": "2024-03-31T22:00:00.000Z"
+}

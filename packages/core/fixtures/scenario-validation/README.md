@@ -78,6 +78,15 @@ be exercised until 07 lands is the condition itself.
    a property of the model, and a future variant with shorter fields would move
    which one bites first.
 
+   The same asymmetry runs the other way through `admissions/06`, which the
+   table admits and no gateway can receive. That is carried as data rather than
+   as a filename in a test: the vector holds `gateway_refuses` and
+   `gateway_refuses_why`, the two in-process suites ignore both fields and
+   assert the table's answer, and `apps/api/test/scenario-gate.test.ts` asserts
+   that code instead of a reach. Every *other* admission is put through the
+   gateway and must reach the ML service — a cap read as `>=` rather than `>`
+   refuses a legal fleet, and no refusal vector can see that.
+
 3. **A structurally malformed request is `REQUEST_INVALID`, not a table code.**
    A missing `max_power_mw` is not a claim about a battery that the table can
    answer — it is a request that never described one. Telling a caller their

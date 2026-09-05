@@ -1,0 +1,10 @@
+{
+  "name": "the last gate under summer time",
+  "why": "16 February 2019 at 19:00 is still UTC-02:00; the clocks went back at midnight on the 17th.",
+  "target_date": "2019-02-17",
+  "gate_profile": "gate_late",
+  "expected_local_date": "2019-02-16",
+  "expected_local_time": "19:00",
+  "expected_utc_offset_minutes": -120,
+  "expected_gate_at": "2019-02-16T21:00:00.000Z"
+}

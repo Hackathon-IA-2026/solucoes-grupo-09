@@ -40,7 +40,7 @@ should absorb these four.
 definition are **flex-optimizer**'s; the gate function is
 **feature-engineering**'s. This ticket binds them, it does not define them.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Four vector directories exist, one per value, as input/expected JSON
 - [ ] Both test runners enumerate each directory and assert their own implementation against the expected value, never against each other

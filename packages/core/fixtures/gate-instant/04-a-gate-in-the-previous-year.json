@@ -1,0 +1,10 @@
+{
+  "name": "a gate in the previous year",
+  "why": "New Year's Day is decided on New Year's Eve. D-1 arithmetic done on the day number alone crosses neither the month nor the year.",
+  "target_date": "2026-01-01",
+  "gate_profile": "gate_late",
+  "expected_local_date": "2025-12-31",
+  "expected_local_time": "19:00",
+  "expected_utc_offset_minutes": -180,
+  "expected_gate_at": "2025-12-31T22:00:00.000Z"
+}

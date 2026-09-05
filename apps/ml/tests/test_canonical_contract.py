@@ -54,6 +54,21 @@ def _cases(subdirectory: str) -> list[tuple[str, dict[str, Any]]]:
 MANIFEST: dict[str, Any] = json.loads((FIXTURES / "manifest.json").read_text())
 
 
+def test_no_vector_file_is_skipped() -> None:
+    """The half that stops a vector added for TypeScript being ignored here.
+
+    The directory's ``README.md`` has claimed this since the directory was
+    created and the check was not written: the reader's ``assert files`` sees an
+    empty directory, not a file nobody reads. A set difference rather than a
+    count, so a rename is a failure and not a coincidence.
+    """
+    consumed = {"manifest.json"}
+    for subdirectory in ("vintage-fidelity", "combine-fidelity"):
+        consumed.update(f"{subdirectory}/{name}" for name, _ in _cases(subdirectory))
+    on_disk = {str(path.relative_to(FIXTURES)) for path in FIXTURES.rglob("*.json")}
+    assert on_disk == consumed
+
+
 def test_base_path_matches_the_vector() -> None:
     assert MANIFEST["base_path"] == CANONICAL_BASE_PATH
 
