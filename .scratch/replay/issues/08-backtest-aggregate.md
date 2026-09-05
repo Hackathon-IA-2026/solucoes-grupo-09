@@ -37,7 +37,7 @@ scope: a single headline over mixed fidelities is the exact averaging this forbi
 **Blocked by:** 03, 05; **Flex-optimizer 03** (`REFERENCE_FLEET`). **Cross-spec,
 external: Forecaster 03** (the fold calendar as data, and the straddling-fold split).
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] `GET /v1/backtest?fold=…` returns the table above at the stated grains
 - [ ] Every metric is produced by running the ticket 03 replay path per day — no second scoring implementation exists

@@ -298,35 +298,54 @@ describe("solver surface · four routes, three served, and one absence that is a
   });
 
   /**
-   * **The fourth route, and why it is a 404 rather than a 502.**
+   * **The fourth route, now served — and this test is the record of why it was
+   * not.**
    *
-   * `/v1/backtest` serves an aggregate of many Replays — `domain-model.md`
-   * gives `Backtest` that noun, and not the forecaster's fold evaluation — and
-   * replay 08 owns it. It has not landed: nothing in this repository computes
-   * `days_replayed` or `floor_coverage`, and `apps/ml` exposes no
-   * `/v1/backtest`. A gateway route in front of that would publish an endpoint
-   * that answers "the modelling service is unavailable" forever, which names
-   * the wrong thing as broken.
+   * `/v1/backtest` serves an aggregate of many Replays: `domain-model.md` gives
+   * `Backtest` that noun, and not the forecaster's fold evaluation. When this
+   * surface landed, replay 08 had not, and a gateway route in front of nothing
+   * would have published an endpoint answering "the modelling service is
+   * unavailable" forever — naming the wrong thing as broken. So the route was
+   * absent and **both halves of the absence were pinned**, deliberately
+   * arranged to fail the moment `apps/ml` grew the aggregate and to name this
+   * route as owed.
    *
-   * So the route is absent, and both halves of the absence are pinned. The day
-   * the aggregate exists, the second assertion fails and says what is owed.
+   * It did exactly that. Replay 08 landed `wattsteer_ml.replay.backtest`, both
+   * assertions fired, and the route was added. What is asserted now is the
+   * shape the absence argued for: the gateway **forwards** and does not
+   * aggregate, because computing the table here would be a second scoring
+   * implementation a network hop from the replay path it aggregates, and would
+   * have to express fidelity-as-group-key in a query string — the one place
+   * that rule cannot be enforced.
    */
-  it("does not serve /v1/backtest, because there is no aggregate to serve", async () => {
-    expect(served.some((route) => route.includes("/v1/backtest"))).toBe(false);
-    const answer = await verdict(await hit(app, "/v1/backtest?fold=F1"));
-    // A 404 that says no route matched, not a 502 blaming a service that is
-    // innocent: the feature is unbuilt, which is a different sentence.
-    expect(answer.status).toBe(404);
-    expect(answer.code).toBe("ROUTE_NOT_FOUND");
-  });
-
-  it("fails the moment the modelling service grows the aggregate", () => {
+  it("serves /v1/backtest now that there is an aggregate to serve", () => {
+    expect(served.some((route) => route.includes("/v1/backtest"))).toBe(true);
     const ml = readFileSync(
       join(REPO, "apps", "ml", "src", "wattsteer_ml", "app.py"),
       "utf8",
     );
-    expect(ml).not.toContain('"/v1/backtest"');
-    expect(ml).not.toContain("'/v1/backtest'");
+    // The half that made the absence honest: the aggregate really is upstream.
+    expect(ml).toContain("/v1/backtest");
+  });
+
+  it("forwards the aggregate rather than computing it", () => {
+    const body = code(join(SOURCE, "api", "replay.ts"));
+    // No grouping, no averaging, no fidelity literal: a gateway that knew how
+    // to pool rows would be the second implementation the absence argued
+    // against, and a fidelity value in a query string is a filter the rule
+    // forbids.
+    for (const forbidden of [
+      "floor_coverage",
+      "days_replayed",
+      "point_in_time",
+      "revision_optimistic",
+      "reduce(",
+    ]) {
+      expect({ forbidden, present: body.includes(forbidden) }).toEqual({
+        forbidden,
+        present: false,
+      });
+    }
   });
 });
 

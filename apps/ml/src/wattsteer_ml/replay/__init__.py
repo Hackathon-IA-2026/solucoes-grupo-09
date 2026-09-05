@@ -33,6 +33,13 @@ and this package reads them back and judges them.
   reader and the same scorer the endpoint uses, digested into a
   ``computation_id`` that moves when a rerun restates a day and cached for the
   night.
+- :mod:`~wattsteer_ml.replay.backtest` — the aggregate `docs/domain-model.md`
+  gives the noun ``Backtest`` to: many replays, run by the *same* reader and
+  scorer as one replay and grouped by a ``FoldSegment``, so a
+  ``revision_optimistic`` row cannot be averaged into a ``point_in_time`` one
+  and a fold straddling ingestion go-live is reported as two rows. The
+  forecaster's harness over the fold calendar is *fold evaluation* and lives in
+  :mod:`wattsteer_ml.evaluation`; the two share an English word and nothing else.
 - :mod:`~wattsteer_ml.replay.result` — that, as the published contract, and the
   observed-only contract a pre-F1 day gets instead: the day, its episodes and
   the bound, with no recovery number anywhere on it.
@@ -44,6 +51,20 @@ calls a forecast — a replay never runs a model, so changing the fleet re-plans
 and never re-forecasts.
 """
 
+from wattsteer_ml.replay.backtest import (
+    Backtest,
+    BacktestCache,
+    BacktestDay,
+    BacktestError,
+    BacktestMetrics,
+    BacktestRow,
+    Distribution,
+    SubsystemCoverage,
+    aggregate_backtest,
+    recompute_backtest,
+    replay_window,
+    segment_for,
+)
 from wattsteer_ml.replay.calendar import (
     HOURS_PER_DAY,
     PROVENANCE_BY_ORIGIN_KIND,
@@ -112,9 +133,16 @@ __all__ = [
     "VINTAGE_EXEMPT",
     "VINTAGE_READS",
     "ArtifactWindows",
+    "Backtest",
+    "BacktestCache",
+    "BacktestDay",
+    "BacktestError",
+    "BacktestMetrics",
+    "BacktestRow",
     "CardWindowError",
     "DayEvidence",
     "DayVintages",
+    "Distribution",
     "ForecastHour",
     "HeldOutBy",
     "ObservedDay",
@@ -130,6 +158,8 @@ __all__ = [
     "ReplayRefused",
     "ReplayScores",
     "RevisionPremium",
+    "SubsystemCoverage",
+    "aggregate_backtest",
     "assert_held_out",
     "build_calendar",
     "card_path",
@@ -140,12 +170,15 @@ __all__ = [
     "plan_at_the_gate",
     "published_premium",
     "read_windows",
+    "recompute_backtest",
     "refusal_counts",
     "replay_result",
+    "replay_window",
     "resolve_day",
     "revision_premium",
     "same_profile",
     "score_observed_only",
     "score_replay",
+    "segment_for",
     "windows_from_card",
 ]

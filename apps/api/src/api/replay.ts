@@ -141,6 +141,51 @@ const LANE_DESCRIPTION =
 export function createReplayRoutes(endpoint?: MlEndpoint) {
   return new Elysia({ name: "replay" })
     .get(
+      "/v1/backtest",
+      async ({ query, set }) => {
+        // The fourth route of this surface, and the one api-surface 17 refused
+        // to serve while `wattsteer_ml.replay.backtest` did not exist — a proxy
+        // in front of nothing answers 502 forever and names a healthy service
+        // as broken. Replay 08 landed the aggregate, so the proxy is now honest,
+        // and the test that pinned the absence named this route as owed.
+        //
+        // It forwards rather than aggregates, for the reason that ticket gave:
+        // computing the table here would be a second scoring implementation a
+        // network hop from the replay path it aggregates, and would have to
+        // express fidelity-as-group-key in a query string — the one place that
+        // rule cannot be enforced.
+        const params = new URLSearchParams({
+          fold: query.fold,
+          subsystem: query.subsystem,
+          lane: query.lane,
+        });
+        const body = await forward("/v1/backtest", params, endpoint);
+        set.headers["cache-control"] = CALENDAR_CACHE_CONTROL;
+        return body;
+      },
+      {
+        query: t.Object({
+          fold: t.String({
+            description:
+              "The fold to report. One row comes back, or two when the fold " +
+              "straddles ingestion go-live — a property of the fold rather " +
+              "than a choice the caller makes.",
+          }),
+          subsystem: t.Union([
+            t.Literal("N"),
+            t.Literal("NE"),
+            t.Literal("S"),
+            t.Literal("SE"),
+          ]),
+          lane: t.String({ description: LANE_DESCRIPTION }),
+        }),
+        detail: {
+          tags: ["replay"],
+          summary: "The Backtest: many replays, aggregated per fold and vintage",
+        },
+      },
+    )
+    .get(
       "/v1/replay/days",
       async ({ query, set }) => {
         const params = new URLSearchParams({
