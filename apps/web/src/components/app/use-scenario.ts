@@ -18,6 +18,7 @@
  *     edit, so the link is shareable before anything is touched.
  */
 
+import type { TargetDateRule } from "@wattsteer/core";
 import type { Scenario } from "@wattsteer/core/api";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -30,6 +31,7 @@ import {
   SCENARIO_PARAM,
   type ScenarioReadout,
   withSubsystem,
+  withTargetDate,
   writeScenario,
 } from "./scenario";
 
@@ -50,16 +52,54 @@ function first(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
+/**
+ * What differs between the two screens that carry a scenario.
+ *
+ * Both defaults are Mitigate's, because Mitigate is the screen a `Scenario` was
+ * designed for and the Time Machine is the one that reads the same document
+ * with a different question in mind.
+ */
+export interface ScenarioOptions {
+  /**
+   * The `target_date` clause to validate under.
+   *
+   * `docs/specs/replay.md` seam 10 states the parity claim and its one
+   * exception in the same breath — *"scenario validation parity with
+   * `/v1/optimize` **minus its date clause**"* — because the two endpoints
+   * cannot agree there: a 2024-06 target is a perfectly good planning date and
+   * is refused by a replay as pre-F1, and tomorrow is a planning date and is
+   * not a day that has happened. So the rule is a parameter, and it is
+   * `@wattsteer/core`'s own — the same function the gateway runs, never a
+   * second spelling of it on this side.
+   */
+  targetDate?: TargetDateRule;
+  /**
+   * Rewrite the blob when the selection's day moves.
+   *
+   * Off by default. On Mitigate the day is the day being planned and it does
+   * not move; on the Time Machine it *is* the selection, so a reader picking
+   * another day must not be left looking at a link that still names the
+   * previous one — the same reasoning that already makes the subsystem follow
+   * the selection bar.
+   */
+  followTargetDate?: boolean;
+}
+
 export function useScenario(
   subsystem: SubsystemCode,
   targetDate: string,
+  options: ScenarioOptions = {},
 ): ScenarioBinding {
+  const { targetDate: targetDateRule, followTargetDate = false } = options;
   const raw = first(useLocalSearchParams()[SCENARIO_PARAM]);
   const fallback = useMemo(
     () => defaultScenario(subsystem, targetDate),
     [subsystem, targetDate],
   );
-  const readout = useMemo(() => readScenario(raw, fallback), [raw, fallback]);
+  const readout = useMemo(
+    () => readScenario(raw, fallback, { targetDate: targetDateRule }),
+    [raw, fallback, targetDateRule],
+  );
 
   const [draft, setDraft] = useState<Scenario | null>(null);
   const [writeRefusal, setWriteRefusal] = useState<ScenarioReadout | null>(null);
@@ -120,8 +160,12 @@ export function useScenario(
     }
     if (readout.ok && readout.scenario.subsystem !== subsystem) {
       write(withSubsystem(readout.scenario, subsystem));
+      return;
     }
-  }, [raw, readout, subsystem, fallback, write]);
+    if (followTargetDate && readout.ok && readout.scenario.targetDate !== targetDate) {
+      write(withTargetDate(readout.scenario, targetDate));
+    }
+  }, [raw, readout, subsystem, targetDate, followTargetDate, fallback, write]);
 
   const reset = useCallback(() => {
     debounced.cancel();

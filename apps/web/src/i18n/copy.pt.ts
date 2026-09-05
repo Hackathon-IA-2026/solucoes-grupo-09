@@ -752,9 +752,7 @@ export const pt: Copy = {
       metaTitle: "Máquina do tempo — WattSteer",
       title: "E se o WattSteer estivesse rodando?",
       lede: "Um dia passado, reexecutado contra a safra de previsão disponível em D−1 e avaliado contra o que o ONS apurou.",
-      dayLabel: "{date} · {subsystem} {technology}",
-      scenarioLabel:
-        "bateria de {power} MW / {energy} MWh + {shift} MW de carga flexível",
+      dayLabel: "{date} · {subsystem}",
       honestyTitle: "O que esta reexecução é, e o que ela não é",
       provenance: {
         served: "EM SERVIÇO",
@@ -786,21 +784,89 @@ export const pt: Copy = {
         "A energia recuperada é o que este despacho alcança sob este cenário contra esta safra de previsão. É uma propriedade do cenário, não do dia, e mudar qualquer parâmetro de ativo muda o resultado.",
       claimsNote:
         "MWh recuperados e % evitado são as únicas alegações feitas. Nenhuma economia de carbono decorre de energia renovável recuperada sem um modelo de emissões marginais, e nenhuma é oferecida.",
+
+      headlineRecovered: "Energia que a frota teria recuperado",
+      scoredOnObserved: "Avaliado sobre o dia apurado, não sobre a previsão",
+      headlineSentence:
+        "{recovered} MWh dos {actual} MWh que o ONS apurou, absorvidos pela frota abaixo sob a regra de execução: no dia, um ativo aceita o valor programado ou o valor que está de fato sendo cortado, o que for menor.",
+      floorLabel: "Piso prometido em D−1",
+      floorMetLabel: "Piso alcançado",
+      floorMet: "Sim",
+      floorMissed: "Não",
+      floorMarginLabel: "Margem sobre o piso",
+      floorNote:
+        "O piso é a recuperação simulada na P10 — o que foi prometido antes de o dia acontecer. Alcançá-lo é uma alegação empírica que o produto confere dia a dia, nunca um teorema: um dia apurado não é obrigado a ficar acima da envoltória P10 em todas as horas.",
+
+      headlineAvoided: "Curtailment evitado",
+      avoidabilityNote:
+        "Energia recuperada sobre o dia apurado inteiro. Um dia que veio maior do que o previsto rende uma fração menor, porque a frota é fixa e o denominador não é.",
+      avoidabilityUndefined:
+        "Indefinido, e mostrado como travessão em vez de 0 %. Nenhuma hora deste dia chegou a {mw} MW, então não havia curtailment a evitar — o que é uma afirmação diferente de um plano que não evitou nada.",
+      headlineCurtailed: "Energia renovável cortada",
+      denominatorNote:
+        "O dia local inteiro, e o denominador de toda fração desta tela. Nunca o total do episódio: uma porcentagem cujo denominador se move com o limiar melhoraria apenas por o episódio ter sido desenhado mais apertado.",
+
+      compareTitle: "O dia, de três formas",
+      compareSubtitle: "Apurado vs previsto vs o que teria sobrado",
       rowActual: "Cortado — apurado pelo ONS",
       rowActualNote: "{hours} horas contíguas acima de {mw} MW, pico de {peak} MW.",
       rowForecast: "O que a rodada D−1 disse",
       rowForecastNote:
         "P10–P90 sombreada, P50 sólida. Um total conjunto do dia, nunca a soma dos quantis horários.",
-      rowRecovered: "Com o cenário despachado",
-      compareSubtitle: "Apurado vs previsto vs recuperado",
-      headlineCurtailed: "Energia renovável cortada",
-      headlineRecovered: "Potencialmente recuperada",
-      headlineAvoided: "Curtailment evitado",
+      rowRemaining: "Restante depois da frota",
+      rowRemainingNote:
+        "O que o dia apurado ainda continha depois de a frota ter aceitado o que o plano programou e o que a hora de fato ofereceu.",
+
       hourlyTitle: "Hora a hora",
       hourlySubtitle: "O que foi previsto, e o que aconteceu",
       settledActual: "Apurado pelo ONS",
+
+      planVsExecutedTitle: "O plano, e o que ele teria feito",
+      planVsExecutedSubtitle: "Programado contra executado — duas séries, nunca uma",
+      planVsExecutedFigure:
+        "Gráfico horário: o curtailment apurado em barras, com a absorção programada e a executada como duas linhas",
+      seriesActual: "Apurado pelo ONS",
+      seriesScheduled: "Programado em D−1",
+      seriesExecuted: "Executado no dia",
+      planVsExecutedNote:
+        "Onde a linha executada fica abaixo da programada, a previsão veio alta e a energia programada nunca esteve lá para ser aceita. Onde as barras ficam acima das duas, a previsão veio baixa: curtailment real que o plano nunca pediu, deixado de lado de propósito — aceitá-lo seria uma reotimização contra informação que o plano não tinha, e valorizaria justamente os dias em que a previsão mais errou.",
+
+      foresightLabel: "O melhor que qualquer plano teria feito sabendo a resposta",
+      foresightRecovered: "Recuperado com previsão perfeita",
+      foresightAvoidability: "Fração do dia",
+      foresightGap: "Quanto a previsão custou",
+      foresightNote:
+        "Retrospecto, e rotulado como tal: este plano foi construído sobre o próprio dia apurado, o que nenhuma previsão pode ser. É um limite superior e nunca uma alegação de recuperação, e a diferença ao lado é o único uso honesto dele — quanto uma previsão melhor teria valido neste dia, para esta frota.",
+
+      episodesTitle: "Episódios",
+      episodesSubtitle: "Uma visão de leitura do dia, carregando os próprios parâmetros",
+      episodeRow:
+        "{from} → {to} · {hours} h · {mwh} MWh · pico {peak} MW · limiar {mw} MW · tolerância de intervalo {gap} h",
       episodeNote:
-        "Um episódio é uma visão de leitura das horas de curtailment, nunca uma linha armazenada — ele carrega o limiar de {mw} MW e a tolerância de intervalo de 0 hora que o produziram, e um limiar diferente produziria um episódio diferente a partir dos mesmos dados.",
+        "Um episódio é uma visão de leitura das horas de curtailment, nunca uma linha armazenada. Cada um acima carrega o limiar e a tolerância de intervalo de {gap} hora que o produziram, porque uma duração sem carimbo não pode ser comparada com outra — um limiar diferente produziria episódios diferentes a partir dos mesmos dados.",
+
+      batteryTitle: "Bateria",
+      loadTitle: "Carga flexível",
+      fleetSubtitle: "A frota contra a qual este dia é avaliado",
+      fleetReset: "Voltar à frota de referência",
+      fleetNote:
+        "Mexer em qualquer um destes replaneja o dia e o reavalia contra o que aconteceu. Não é capaz de reprever: a previsão é uma linha histórica fixada e nada neste caminho de requisição carrega um modelo, que é a propriedade que faz disto uma reexecução e não uma simulação.",
+
+      replayingTitle: "Reexecutando",
+      replayingNote:
+        "Uma otimização e cinco passagens de avaliação contra o dia apurado. Nada é desenhado até que todas tenham respondido — uma tela pela metade seria números de duas frotas diferentes lado a lado.",
+
+      observedOnlyTitle:
+        "Este dia não pode ser reexecutado, e esta é a cláusula que ele reprovou",
+      observedOnlyNote:
+        "O que é oferecido no lugar é o próprio dia: o perfil apurado, seus episódios e o limite abaixo, que não precisa de previsão e portanto não precisa de modelo. Não há valor recuperado nem fração evitada — não zero, ausente, pois a WattSteer nunca foi solicitada a planejar este dia.",
+
+      refusalTitle: "Nenhuma reexecução para esse pedido",
+      refusalNote:
+        "Nada é desenhado no lugar. Um número com uma ressalva em cima é um número que acaba citado sem a ressalva, e é exatamente por isso que esta tela recusa em vez de rotular.",
+      refusalReset: "Voltar à frota de referência",
+      shareNote:
+        "A frota vive na barra de endereços, então este link é o estado inteiro — inclusive o dia e os ativos contra os quais ele foi avaliado.",
     },
   },
 };

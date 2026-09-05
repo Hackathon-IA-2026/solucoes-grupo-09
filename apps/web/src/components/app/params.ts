@@ -83,9 +83,9 @@ export function parseAppParams(
     run: RUN_LABELS.includes(run as RunLabel) ? (run as RunLabel) : "12Z",
     date: TARGET_DATE,
     episode:
-      episode !== undefined && REPLAY_DAYS.some((d) => d.episode.id === episode)
+      episode !== undefined && REPLAY_DAYS.some((day) => day.id === episode)
         ? episode
-        : REPLAY_DAYS[0].episode.id,
+        : REPLAY_DAYS[0].id,
   };
 }
 

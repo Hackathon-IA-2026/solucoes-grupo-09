@@ -275,8 +275,13 @@ export function buildForecast(
   // Expectations add — exactly, and across grains. This is the one reduction
   // from the hours the day figures are allowed, and it is allowed precisely
   // because it is not a quantile.
-  const windMwh = Math.round(hours.reduce((acc, h) => acc + h.split.windMwh, 0));
-  const solarMwh = Math.round(hours.reduce((acc, h) => acc + h.split.solarMwh, 0));
+  // `?? 0` for the type and never for the data: `split` is optional on the
+  // hour shape because a *replayed* day's forecast hours carry none, and every
+  // hour built above carries one.
+  const windMwh = Math.round(hours.reduce((acc, h) => acc + (h.split?.windMwh ?? 0), 0));
+  const solarMwh = Math.round(
+    hours.reduce((acc, h) => acc + (h.split?.solarMwh ?? 0), 0),
+  );
 
   return {
     subsystem,

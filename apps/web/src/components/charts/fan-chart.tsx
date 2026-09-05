@@ -397,14 +397,22 @@ function HourReadout({
         label={copy.app.fan.exceedance}
         value={f.percent(hour.occurrenceProbability)}
       />
-      {/* The split, at the hour grain: two scalars, no fourth quantile. */}
-      <Readout
-        label={copy.app.split.title}
-        value={fill(copy.app.fan.splitReadout, {
-          wind: f.compact(hour.split.windMwh),
-          solar: f.compact(hour.split.solarMwh),
-        })}
-      />
+      {/*
+        The split, at the hour grain: two scalars, no fourth quantile — and
+        omitted entirely where the payload carries none. A replayed day's
+        forecast hours have no technology division on the contract, and filling
+        the row with a ratio this chart invented would publish a number no model
+        produced.
+      */}
+      {hour.split === undefined ? null : (
+        <Readout
+          label={copy.app.split.title}
+          value={fill(copy.app.fan.splitReadout, {
+            wind: f.compact(hour.split.windMwh),
+            solar: f.compact(hour.split.solarMwh),
+          })}
+        />
+      )}
       {observedMwh === undefined ? null : (
         <Readout label={observedLabel} value={f.compact(observedMwh)} />
       )}

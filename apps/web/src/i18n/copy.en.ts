@@ -936,8 +936,7 @@ export const en = {
       metaTitle: "Time Machine — WattSteer",
       title: "What if WattSteer had been running?",
       lede: "A past day, replayed against the forecast vintage available at D−1 and scored against what ONS settled.",
-      dayLabel: "{date} · {subsystem} {technology}",
-      scenarioLabel: "{power} MW / {energy} MWh battery + {shift} MW flexible load",
+      dayLabel: "{date} · {subsystem}",
       honestyTitle: "What this replay is, and what it is not",
       // `integrity.provenance` — a statement, not a warning. There is no
       // IN-SAMPLE label here because there is no in-sample day: a day no
@@ -981,21 +980,92 @@ export const en = {
         "Recovered energy is what this dispatch achieves under this scenario against this forecast vintage. It is a property of the scenario, not of the day, and changing any asset parameter changes it.",
       claimsNote:
         "MWh recovered and % avoided are the only claims made. No carbon saving is derivable from recovered renewable energy without a marginal-emissions model, and none is offered.",
+
+      // The one headline. Absorbed, recovered and avoided are one quantity with
+      // three names, and three boxes would imply three facts.
+      headlineRecovered: "Energy the fleet would have recovered",
+      scoredOnObserved: "Scored on the settled day, not on the forecast",
+      headlineSentence:
+        "{recovered} MWh of the {actual} MWh ONS settled, absorbed by the fleet below under the execution rule: on the day an asset takes the scheduled amount or the amount actually being cut, whichever is smaller.",
+      floorLabel: "Floor promised at D−1",
+      floorMetLabel: "Floor cleared",
+      floorMet: "Yes",
+      floorMissed: "No",
+      floorMarginLabel: "Margin over the floor",
+      floorNote:
+        "The floor is the P10-simulated recovery — what was promised before the day happened. Clearing it is an empirical claim the product checks per day, never a theorem: an observed day is not obliged to sit above the P10 envelope in every hour.",
+
+      headlineAvoided: "Curtailment avoided",
+      avoidabilityNote:
+        "Recovered energy over the whole settled day. A day that came in larger than forecast earns a smaller share, because the fleet is fixed and the denominator is not.",
+      avoidabilityUndefined:
+        "Undefined, and shown as a dash rather than as 0 %. No hour of this day reached {mw} MW, so there was no curtailment to avoid — which is a different statement from a plan that avoided none of it.",
+      headlineCurtailed: "Renewable energy curtailed",
+      denominatorNote:
+        "The whole local day, and the denominator of every share on this screen. Never the episode total: a percentage whose denominator moves with the threshold would improve simply for having drawn the episode more tightly.",
+
+      compareTitle: "The day, three ways",
+      compareSubtitle: "Settled vs forecast vs what would have been left",
       rowActual: "Curtailed — settled by ONS",
       rowActualNote: "{hours} contiguous hours above {mw} MW, peak {peak} MW.",
       rowForecast: "What the D−1 run said",
       rowForecastNote:
         "P10–P90 shaded, P50 solid. A joint day total, never the sum of the hourly quantiles.",
-      rowRecovered: "With the scenario dispatched",
-      compareSubtitle: "Actual vs forecast vs recovered",
-      headlineCurtailed: "Renewable energy curtailed",
-      headlineRecovered: "Potentially recovered",
-      headlineAvoided: "Curtailment avoided",
+      rowRemaining: "Left after the fleet",
+      rowRemainingNote:
+        "What the settled day still contained once the fleet had taken what the plan scheduled and the hour actually offered.",
+
       hourlyTitle: "Hour by hour",
       hourlySubtitle: "What was forecast, and what happened",
       settledActual: "Settled actual",
+
+      planVsExecutedTitle: "The plan, and what it would have done",
+      planVsExecutedSubtitle: "Scheduled against executed — two series, never one",
+      planVsExecutedFigure:
+        "Hourly chart: settled curtailment as bars, with the scheduled and the executed absorption as two lines",
+      seriesActual: "Settled by ONS",
+      seriesScheduled: "Scheduled at D−1",
+      seriesExecuted: "Executed on the day",
+      planVsExecutedNote:
+        "Where the executed line sits below the scheduled one, the forecast ran high and the scheduled energy was never there to take. Where the bars sit above both, the forecast ran low: real curtailment the plan never asked for, left alone on purpose — taking it would be a re-optimisation against information the plan did not have, and it would flatter exactly the days the forecast got most wrong.",
+
+      // The upper bound, fenced. The label is the spec's own words and is not
+      // compressed into something shorter: "potential" would read as a target.
+      foresightLabel: "The best any plan could have done knowing the answer",
+      foresightRecovered: "Recovered with perfect foresight",
+      foresightAvoidability: "Share of the day",
+      foresightGap: "What the forecast cost",
+      foresightNote:
+        "Hindsight, and labelled as one: this plan was built on the settled day itself, which no forecast can be. It is an upper bound and never a recovery claim, and the gap beside it is the only honest use of it — what a better forecast would have been worth on this day, for this fleet.",
+
+      episodesTitle: "Episodes",
+      episodesSubtitle: "A read-time view of the day, carrying its own parameters",
+      episodeRow:
+        "{from} → {to} · {hours} h · {mwh} MWh · peak {peak} MW · threshold {mw} MW · gap tolerance {gap} h",
       episodeNote:
-        "An episode is a read-time view of curtailment hours, never a stored row — it carries the {mw} MW threshold and the 0-hour gap tolerance that produced it, and a different threshold would produce a different episode from the same data.",
+        "An episode is a read-time view of curtailment hours, never a stored row. Every one above carries the threshold and the {gap}-hour gap tolerance that produced it, because an unstamped duration cannot be compared with another one — a different threshold would produce different episodes from the same data.",
+
+      batteryTitle: "Battery",
+      loadTitle: "Flexible load",
+      fleetSubtitle: "The fleet this day is scored against",
+      fleetReset: "Back to the reference fleet",
+      fleetNote:
+        "Moving any of these re-plans the day and re-scores it against what happened. It cannot re-forecast: the forecast is a pinned historical row and nothing in this request path loads a model, which is the property that makes this a replay rather than a simulation.",
+
+      replayingTitle: "Replaying",
+      replayingNote:
+        "One solve and five scoring passes against the settled day. Nothing is drawn until all of them have answered — a half-filled screen would be numbers from two different fleets side by side.",
+
+      observedOnlyTitle: "This day cannot be replayed, and here is the clause it failed",
+      observedOnlyNote:
+        "What is offered instead is the day itself: the settled profile, its episodes and the bound below, which needs no forecast and therefore no model. There is no recovered figure and no share avoided — not zero, absent, because WattSteer was never asked to plan this day.",
+
+      refusalTitle: "No replay for that request",
+      refusalNote:
+        "Nothing is drawn in its place. A number with a caveat over it is a number that gets quoted without the caveat, which is the whole reason this screen refuses rather than labels.",
+      refusalReset: "Back to the reference fleet",
+      shareNote:
+        "The fleet lives in the address bar, so this link is the whole state — including the day and the assets it was scored against.",
     },
   },
 } as const;
