@@ -4,6 +4,7 @@ import {
   asErrorStatus,
   BusyError,
   type ErrorCode,
+  type ErrorDetails,
   isErrorCode,
   ProxiedError,
   UpstreamError,
@@ -93,26 +94,43 @@ const configuredEndpoint = (): MlEndpoint => ({
  * that is unreadable is not itself an error — it just means the failure has no
  * code and is mapped on its status alone.
  */
-async function upstreamCode(response: Response): Promise<string | null> {
+async function upstreamCode(
+  response: Response,
+): Promise<{ code: string | null; details?: ErrorDetails }> {
   let body: unknown;
   try {
     body = await response.json();
   } catch {
-    return null;
+    return { code: null };
   }
   if (typeof body !== "object" || body === null) {
-    return null;
+    return { code: null };
   }
   const record = body as Record<string, unknown>;
   for (const candidate of [record.error, record.detail, record]) {
     if (typeof candidate === "object" && candidate !== null) {
-      const code = (candidate as Record<string, unknown>).code;
-      if (typeof code === "string") {
-        return code;
+      const failure = candidate as Record<string, unknown>;
+      if (typeof failure.code === "string") {
+        // The upstream `details` travel with the code they belong to. A
+        // `MODEL_UNAVAILABLE` is required to carry `details.lane_state`
+        // (`docs/specs/api-surface.md`, the four "no forecast" states), and
+        // "nothing has been trained", "a candidate was refused" and "the
+        // volume cannot say" are three sentences a screen renders three ways.
+        // Dropping them here would flatten all three into one 503 — the exact
+        // collapse the code table exists to prevent — and the route in front
+        // has no second chance at the body, which this function consumed.
+        return {
+          code: failure.code,
+          ...(typeof failure.details === "object" &&
+          failure.details !== null &&
+          !Array.isArray(failure.details)
+            ? { details: failure.details as ErrorDetails }
+            : {}),
+        };
       }
     }
   }
-  return null;
+  return { code: null };
 }
 
 /**
@@ -125,7 +143,7 @@ async function upstreamCode(response: Response): Promise<string | null> {
  * on its status.
  */
 export async function mapUpstreamFailure(response: Response): Promise<AppError> {
-  const raw = await upstreamCode(response);
+  const { code: raw, details: upstreamDetails } = await upstreamCode(response);
   const code: ErrorCode | null = isErrorCode(raw) ? raw : null;
   const status = asErrorStatus(response.status);
   const details = {
@@ -138,6 +156,7 @@ export async function mapUpstreamFailure(response: Response): Promise<AppError> 
       status,
       code,
       `The ML service answered ${code} (HTTP ${response.status})`,
+      upstreamDetails === undefined ? undefined : { details: upstreamDetails },
     );
   }
 

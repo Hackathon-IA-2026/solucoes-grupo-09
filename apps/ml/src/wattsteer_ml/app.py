@@ -16,6 +16,7 @@ Routes:
   POST /v1/optimize           the MILP and the simulator, inside one request
   GET /v1/replay/days         which days are replayable, and why the others are not
   GET /v1/replay/days/{date}  one day, at the status of the clause that refused it
+  GET /v1/model/card          the promoted artifact's card, verbatim, off the volume
 
 There is deliberately **no day-ahead read here**. This service carried a
 `GET /v1/forecast/day-ahead` stub for the gateway to proxy — a typed shape with
@@ -41,6 +42,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from . import __version__, artifacts
+from .artifacts import CARD_SUFFIX
 from .config import settings
 from .constants import Subsystem
 from .database import database
@@ -68,6 +70,7 @@ from .publication import (
     PublicationRefusedError,
     build_publication,
     load_promoted,
+    resolve_artifact,
 )
 from .replay.calendar import (
     ReplayCalendar,
@@ -79,6 +82,7 @@ from .replay.cards import read_windows
 from .replay.reads import read_calendar_evidence
 from .scenario import ScenarioTransportError, decode_scenario_body
 from .scenario_validation import ScenarioValidationError, validate_scenario
+from .training import CORRECTION_REGIME, contract_fault, read_card
 
 #: A canonical **view** Drizzle creates. `/ready` uses it to tell "migrations
 #: have not run" apart from "there is no database".
@@ -719,4 +723,124 @@ async def replay_day(
         day.refusal.code,
         day.refusal.message,
         dict(day.refusal.details),
+    )
+
+
+# --- the model card -----------------------------------------------------------
+#
+# `docs/specs/api-surface.md` §9: `GET /v1/model/card` is the Explain screen's
+# second call, and it is separate from the diagnosis on the forecaster's own
+# grounds — the reliability curve is a property of the *model*, not of a day.
+#
+# It is here for the reason `/v1/replay/days` is here and `/v1/forecast/day-ahead`
+# is not: **the card is a file on this service's volume**, and the gateway has no
+# volume. What the gateway owns is the public surface — the product-facing
+# subset, the ETag, the cache directive and the error envelope. What this route
+# owes it is the document, whole, plus the one fact the document does not carry
+# about itself: which correction regime produced the band it describes.
+#
+# It reads the card and **does not load the bundle**. `load_promoted` would
+# joblib-load six boosters to answer a metadata question; `resolve_artifact` plus
+# `read_card` answers it off one file read, and is the same pair
+# `wattsteer_ml.replay.cards` already uses to assert the held-out property.
+# The one check that comes with the bundle load and is kept anyway is
+# `contract_fault`: an artifact marked invalid on its own card is one this lane
+# may not serve, and publishing its numbers as a serving model's would describe
+# a model nothing is allowed to run.
+
+
+@app.get("/v1/model/card", tags=["model"])
+def model_card(
+    lane: Annotated[
+        str,
+        Query(
+            description=(
+                "The artifact lane, e.g. dessem_free_v1__gate_late__thr5. "
+                "Required and never defaulted: a card is a property of one "
+                "lane's promoted artifact, and nothing here picks a lane."
+            )
+        ),
+    ],
+) -> JSONResponse:
+    """The promoted artifact's card, verbatim, or the refusal that says why not.
+
+    Three refusals, and none of them is a card with empty groups:
+
+    - a lane name that is not one — `REQUEST_INVALID`, 422;
+    - nothing promoted, or a volume that cannot say — `MODEL_UNAVAILABLE`, 503,
+      carrying the lane state and the mount beside it, exactly as
+      `/internal/publish/forecast` does, because "the volume did not mount" and
+      "nobody has trained this lane" are two different repairs;
+    - a card marked invalid by the hot-swap gate's contract check, or one that
+      cannot be read at all — `MODEL_UNAVAILABLE`, 503, `unresolvable`. A card
+      the loader would refuse is not a serving model's card.
+    """
+    try:
+        parsed = Lane.parse(lane)
+    except LaneNameError as error:
+        return _refusal(422, "REQUEST_INVALID", str(error))
+
+    try:
+        artifact_id = resolve_artifact(parsed)
+    except PublicationRefusedError as refusal:
+        return _refusal(
+            503,
+            "MODEL_UNAVAILABLE",
+            refusal.reason,
+            {
+                "lane": parsed.directory_name,
+                "lane_state": refusal.lane_state,
+                "volume_mounted": refusal.volume_mounted,
+            },
+        )
+
+    card_path = (
+        settings.artifact_dir / parsed.directory_name / f"{artifact_id}{CARD_SUFFIX}"
+    )
+    try:
+        card = read_card(card_path)
+    # `BundleError` is the missing or non-object card; a `JSONDecodeError` is a
+    # truncated one, and both are `ValueError`. `OSError` is a volume that went
+    # away between the promotion log and this read. All three are the same
+    # answer — the lane cannot say what it is serving — and none of them is a
+    # partially parsed card.
+    except (ValueError, OSError) as error:
+        return _refusal(
+            503,
+            "MODEL_UNAVAILABLE",
+            str(error),
+            {
+                "lane": parsed.directory_name,
+                "lane_state": "unresolvable",
+                "volume_mounted": True,
+            },
+        )
+
+    fault = contract_fault(card)
+    if fault is not None:
+        return _refusal(
+            503,
+            "MODEL_UNAVAILABLE",
+            f"{artifact_id} is marked invalid on its own card: {fault}",
+            {
+                "lane": parsed.directory_name,
+                "lane_state": "unresolvable",
+                "volume_mounted": True,
+                "contract_fault": fault,
+            },
+        )
+
+    return JSONResponse(
+        content={
+            "lane": parsed.directory_name,
+            "artifact_id": artifact_id,
+            # The card describes the correction; it does not name the rule that
+            # applied it. `correction_regime` is stamped on every published
+            # forecast row, and it belongs beside the card's own
+            # `upper_correction_realised` — the pair is what makes a short
+            # `coverage_p90` legible as under-*application* rather than as a bad
+            # fit. Read from the constant, never retyped.
+            "correction_regime": CORRECTION_REGIME,
+            "card": card,
+        }
     )

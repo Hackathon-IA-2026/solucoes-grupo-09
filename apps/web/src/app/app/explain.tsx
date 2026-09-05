@@ -33,6 +33,7 @@ import { fill } from "@/i18n/format";
 import {
   buildExplain,
   buildForecast,
+  buildModelCard,
   type ExplainFixture,
   type ObservedReason,
   subsystemMeta,
@@ -45,6 +46,13 @@ export default function ExplainScreen() {
   const params = useAppParams();
   const forecast = buildForecast(params.subsystem, params.run);
   const explain = buildExplain(params.subsystem, params.technology);
+  // Two reads, not one. The attribution is a property of the day and the
+  // reliability curve is a property of the model, so `api-surface.md` §9 puts
+  // them behind `/v1/diagnosis/day-ahead` and `/v1/model/card?lane=` — the
+  // second keyed by lane and never by subsystem or date. The screen asks the
+  // same two questions of the fixtures, so that wiring it to the two endpoints
+  // is a change of source and not a change of shape.
+  const card = buildModelCard();
   const meta = subsystemMeta(params.subsystem);
 
   return (
@@ -132,16 +140,16 @@ export default function ExplainScreen() {
               icon={<PieChartIcon size={18} color={colors.inkMuted} />}
               title={copy.app.explain.reliabilityTitle}
               subtitle={copy.app.explain.reliabilitySubtitle}
-              right={<VintageBadge fidelity={explain.reliabilityFidelity} />}
+              right={<VintageBadge fidelity={card.reliabilityFidelity} />}
             />
             <View style={{ marginTop: space.lg }}>
-              <ReliabilityCurve points={explain.reliability} />
+              <ReliabilityCurve points={card.reliability} />
             </View>
             <Text style={{ marginTop: space.md, fontSize: 11, color: colors.inkFaint }}>
               {fill(copy.app.explain.reliabilityNote, {
-                hours: f.exact(explain.reliabilitySampleHours),
-                from: f.date(explain.reliabilityWindowFrom),
-                to: f.date(explain.reliabilityWindowTo),
+                hours: f.exact(card.reliabilitySampleHours),
+                from: f.date(card.reliabilityWindowFrom),
+                to: f.date(card.reliabilityWindowTo),
               })}
             </Text>
           </Panel>

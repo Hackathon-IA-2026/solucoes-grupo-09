@@ -1,0 +1,588 @@
+{
+  "identity": {
+    "artifact_id": "2026-08-29T04:00:00Z",
+    "created_at": "2026-09-05T00:53:04Z",
+    "estimator_family": "lightgbm",
+    "model_config_version": "lgbm_conservative_v1",
+    "git_sha_ml": null,
+    "git_sha_api": null
+  },
+  "lane": {
+    "feature_set": "dessem_free_v1",
+    "feature_set_version": null,
+    "gate_profile": "gate_late",
+    "threshold_mw": 5.0,
+    "subsystems": [
+      "N",
+      "NE",
+      "SE",
+      "S"
+    ],
+    "directory": "dessem_free_v1__gate_late__thr5"
+  },
+  "contract": {
+    "feature_hash": "sha256:c51dfe01e837002bef3d7eb9a2d3afe7a9867394368dcaa4aea9bcd5d63534dd",
+    "feature_names": [
+      "subsystem",
+      "weather_temperature_2m",
+      "capacity_wind_mw",
+      "capacity_solar_mw",
+      "capacity_wind_added_28d_mw",
+      "capacity_solar_added_28d_mw",
+      "calendar_local_hour",
+      "calendar_hour_sin",
+      "calendar_hour_cos",
+      "calendar_doy_sin",
+      "calendar_doy_cos",
+      "calendar_day_of_week",
+      "calendar_is_weekend",
+      "calendar_is_holiday_national",
+      "calendar_holiday_state_share",
+      "calendar_is_day_before_holiday",
+      "calendar_is_bridge_day",
+      "solar_zenith_cos",
+      "solar_extraterrestrial_ghi"
+    ],
+    "feature_dtypes": {
+      "subsystem": "categorical",
+      "weather_temperature_2m": "numeric",
+      "capacity_wind_mw": "numeric",
+      "capacity_solar_mw": "numeric",
+      "capacity_wind_added_28d_mw": "numeric",
+      "capacity_solar_added_28d_mw": "numeric",
+      "calendar_local_hour": "numeric",
+      "calendar_hour_sin": "numeric",
+      "calendar_hour_cos": "numeric",
+      "calendar_doy_sin": "numeric",
+      "calendar_doy_cos": "numeric",
+      "calendar_day_of_week": "numeric",
+      "calendar_is_weekend": "boolean",
+      "calendar_is_holiday_national": "boolean",
+      "calendar_holiday_state_share": "numeric",
+      "calendar_is_day_before_holiday": "boolean",
+      "calendar_is_bridge_day": "boolean",
+      "solar_zenith_cos": "numeric",
+      "solar_extraterrestrial_ghi": "numeric"
+    },
+    "categorical_levels": {
+      "subsystem": [
+        "N",
+        "NE",
+        "SE",
+        "S"
+      ]
+    },
+    "unpopulated_features": []
+  },
+  "fold": {
+    "fold_id": "F1",
+    "fold_hash": "sha256:72c52ded2eb7c3dfd8d21767e8070c9f382b9807c7954c3aab82aaf6d60541b8",
+    "rules_digest": "c8d615f68184e0907a352316336c0512bf21e8eb5ae3ff08912687500812e214"
+  },
+  "data": {
+    "training_window": {
+      "start": "2024-12-02",
+      "end": "2025-03-31"
+    },
+    "base_fit_window": {
+      "start": "2024-12-02",
+      "end": "2024-12-31"
+    },
+    "calibration_window": {
+      "start": "2025-01-01",
+      "end": "2025-03-31"
+    },
+    "test_window": {
+      "start": "2025-04-01",
+      "end": "2025-04-07"
+    },
+    "base_fit_rows": 2880,
+    "base_fit_labelled_rows": 2840,
+    "base_fit_positive_rows": 300,
+    "base_fit_sub_threshold_rows": 2540,
+    "calibration_rows": 8640,
+    "calibration_labelled_rows": 8553,
+    "calibration_positive_rows": 955,
+    "test_rows": 672,
+    "vintage_fidelity": {
+      "point_in_time": 12192
+    }
+  },
+  "model_config": {
+    "model_config_version": "lgbm_conservative_v1",
+    "estimator_family": "lightgbm",
+    "num_boost_round": 800,
+    "learning_rate": 0.05,
+    "num_leaves": 63,
+    "min_data_in_leaf": 100,
+    "feature_fraction": 0.9,
+    "bagging_fraction": 0.9,
+    "bagging_freq": 1,
+    "early_stopping_rounds": 50,
+    "seed": 20260828
+  },
+  "calibration": {
+    "method": "isotonic",
+    "knots": 4384,
+    "clip_lo": 5.8459020226820995e-05,
+    "clip_hi": 0.9999415409797732,
+    "clip_basis": "calibration_labelled_rows",
+    "calibration_labelled_rows": 8553,
+    "reliability": [
+      {
+        "bin_lower": 0.0,
+        "bin_upper": 0.1,
+        "bin_centre": 0.05,
+        "mean_predicted": 0.01991850692354019,
+        "observed_frequency": 0.01926550270921132,
+        "hour_count": 8305,
+        "merged": false
+      },
+      {
+        "bin_lower": 0.1,
+        "bin_upper": 0.2,
+        "bin_centre": 0.15000000000000002,
+        "mean_predicted": 0.14537206632653052,
+        "observed_frequency": 0.125,
+        "hour_count": 1568,
+        "merged": false
+      },
+      {
+        "bin_lower": 0.2,
+        "bin_upper": 0.3,
+        "bin_centre": 0.25,
+        "mean_predicted": 0.24797894211576815,
+        "observed_frequency": 0.24750499001996007,
+        "hour_count": 1002,
+        "merged": false
+      },
+      {
+        "bin_lower": 0.3,
+        "bin_upper": 0.4,
+        "bin_centre": 0.35,
+        "mean_predicted": 0.3484814070351762,
+        "observed_frequency": 0.3555276381909548,
+        "hour_count": 796,
+        "merged": false
+      },
+      {
+        "bin_lower": 0.4,
+        "bin_upper": 0.5,
+        "bin_centre": 0.45,
+        "mean_predicted": 0.44657064220183507,
+        "observed_frequency": 0.42048929663608564,
+        "hour_count": 654,
+        "merged": false
+      },
+      {
+        "bin_lower": 0.5,
+        "bin_upper": 0.6,
+        "bin_centre": 0.55,
+        "mean_predicted": 0.5482463327370299,
+        "observed_frequency": 0.554561717352415,
+        "hour_count": 559,
+        "merged": false
+      },
+      {
+        "bin_lower": 0.6,
+        "bin_upper": 0.7,
+        "bin_centre": 0.6499999999999999,
+        "mean_predicted": 0.6481928846153842,
+        "observed_frequency": 0.6519230769230769,
+        "hour_count": 520,
+        "merged": false
+      },
+      {
+        "bin_lower": 0.7,
+        "bin_upper": 0.8,
+        "bin_centre": 0.75,
+        "mean_predicted": 0.7457094650205761,
+        "observed_frequency": 0.7489711934156379,
+        "hour_count": 486,
+        "merged": false
+      },
+      {
+        "bin_lower": 0.8,
+        "bin_upper": 0.9,
+        "bin_centre": 0.8500000000000001,
+        "mean_predicted": 0.8502694174757276,
+        "observed_frequency": 0.8567961165048543,
+        "hour_count": 412,
+        "merged": false
+      },
+      {
+        "bin_lower": 0.9,
+        "bin_upper": 1.0,
+        "bin_centre": 0.95,
+        "mean_predicted": 0.947507512953368,
+        "observed_frequency": 0.9559585492227979,
+        "hour_count": 386,
+        "merged": false
+      }
+    ],
+    "reliability_merges": [],
+    "reliability_sample_hours": 14688,
+    "reliability_window": {
+      "start": "2024-07-01",
+      "end": "2024-11-30"
+    },
+    "reliability_fidelity": "revision_optimistic",
+    "reliability_folds": [
+      "P1",
+      "P2"
+    ],
+    "reliability_excluded_calibration_hours": 5664,
+    "ece": 0.005005024509804014,
+    "mce": 0.026081345565749425,
+    "top_bin_gap": -0.00845103626942989,
+    "risk_bins": {
+      "low": [
+        0.0,
+        0.05
+      ],
+      "elevated": [
+        0.05,
+        0.3
+      ],
+      "high": [
+        0.3,
+        1.0
+      ]
+    },
+    "risk_bins_changed": false,
+    "risk_bins_reason": "first derivation: 170 of 171 candidate splits satisfy (a) and (b), and these are the most nearly equal in hour count",
+    "risk_bins_incumbent": null,
+    "risk_bins_hour_counts": {
+      "low": 7001,
+      "elevated": 3874,
+      "high": 3813
+    },
+    "risk_bins_observed_frequency": {
+      "low": 0.008284530781316954,
+      "elevated": 0.14093959731543623,
+      "high": 0.6013637555730396
+    },
+    "risk_bins_mean_predicted": {
+      "low": 0.010103385230681331,
+      "elevated": 0.1474206763035622,
+      "high": 0.6009551796485707
+    },
+    "risk_bins_rule": "(a) |mean predicted \u2212 observed| \u2264 0.05 in every class; (b) adjacent classes' observed frequencies differ by more than the sum of their 95% binomial CI half-widths; edges on a 0.05 grid, most nearly equal in hour count"
+  },
+  "quantiles": {
+    "delta_lo": -21.61271373276672,
+    "delta_hi": 144.44574685111186,
+    "conformal_method": "one_sided_split_cqr",
+    "conformal_miscoverage": 0.1,
+    "conformal_target_coverage": 0.9,
+    "conformal_calibration_rows": 955,
+    "conformal_rank": 861,
+    "conformal_window": {
+      "start": "2025-01-01",
+      "end": "2025-03-31"
+    },
+    "conformal_guarantee": "approximate: split conformal assumes exchangeability between the calibration window and the test period, and a time series with a growing fleet and a seasonal cycle is not exchangeable. Empirical fold coverage is the check; delta_lo growing across folds is the drift signal.",
+    "coverage_fold": "F1",
+    "coverage_population": "curtailed_hours",
+    "coverage_rows": 77,
+    "coverage_p10": 1.0,
+    "coverage_p90": 0.5064935064935064,
+    "coverage_target": 0.9,
+    "coverage_guardrail": [
+      0.85,
+      0.97
+    ],
+    "coverage_guardrail_satisfied": false,
+    "upper_correction_realised": 0.231706229833438,
+    "upper_correction_note": "the mean share of delta_hi that reached the composed P90. The correction is applied to the 0.90 knot of Q_pos and composition reads Q_pos at u = 1 - 0.1/p, which is below that knot for every p < 1. A value well below 1.0 means coverage_p90 is short of nominal through under-application, not through a bad fit.",
+    "p50_unbiasedness": 0.0,
+    "crossing_rate": 0.0,
+    "coverage_by_subsystem": [
+      {
+        "label": "N",
+        "rows": 4,
+        "coverage_p10": 1.0,
+        "coverage_p90": 0.0
+      },
+      {
+        "label": "NE",
+        "rows": 45,
+        "coverage_p10": 1.0,
+        "coverage_p90": 0.8
+      },
+      {
+        "label": "SE",
+        "rows": 9,
+        "coverage_p10": 1.0,
+        "coverage_p90": 0.0
+      },
+      {
+        "label": "S",
+        "rows": 19,
+        "coverage_p10": 1.0,
+        "coverage_p90": 0.15789473684210525
+      }
+    ],
+    "coverage_by_local_hour": [
+      {
+        "label": "00",
+        "rows": 1,
+        "coverage_p10": 1.0,
+        "coverage_p90": 0.0
+      },
+      {
+        "label": "01",
+        "rows": 5,
+        "coverage_p10": 1.0,
+        "coverage_p90": 0.8
+      },
+      {
+        "label": "02",
+        "rows": 6,
+        "coverage_p10": 1.0,
+        "coverage_p90": 0.8333333333333334
+      },
+      {
+        "label": "03",
+        "rows": 5,
+        "coverage_p10": 1.0,
+        "coverage_p90": 0.8
+      },
+      {
+        "label": "04",
+        "rows": 4,
+        "coverage_p10": 1.0,
+        "coverage_p90": 0.25
+      },
+      {
+        "label": "05",
+        "rows": 6,
+        "coverage_p10": 1.0,
+        "coverage_p90": 0.3333333333333333
+      },
+      {
+        "label": "07",
+        "rows": 1,
+        "coverage_p10": 1.0,
+        "coverage_p90": 1.0
+      },
+      {
+        "label": "08",
+        "rows": 2,
+        "coverage_p10": 1.0,
+        "coverage_p90": 1.0
+      },
+      {
+        "label": "09",
+        "rows": 4,
+        "coverage_p10": 1.0,
+        "coverage_p90": 0.25
+      },
+      {
+        "label": "11",
+        "rows": 6,
+        "coverage_p10": 1.0,
+        "coverage_p90": 0.5
+      },
+      {
+        "label": "12",
+        "rows": 5,
+        "coverage_p10": 1.0,
+        "coverage_p90": 1.0
+      },
+      {
+        "label": "13",
+        "rows": 7,
+        "coverage_p10": 1.0,
+        "coverage_p90": 0.5714285714285714
+      },
+      {
+        "label": "14",
+        "rows": 9,
+        "coverage_p10": 1.0,
+        "coverage_p90": 0.4444444444444444
+      },
+      {
+        "label": "15",
+        "rows": 3,
+        "coverage_p10": 1.0,
+        "coverage_p90": 0.6666666666666666
+      },
+      {
+        "label": "16",
+        "rows": 1,
+        "coverage_p10": 1.0,
+        "coverage_p90": 0.0
+      },
+      {
+        "label": "17",
+        "rows": 5,
+        "coverage_p10": 1.0,
+        "coverage_p90": 0.2
+      },
+      {
+        "label": "18",
+        "rows": 3,
+        "coverage_p10": 1.0,
+        "coverage_p90": 0.0
+      },
+      {
+        "label": "19",
+        "rows": 1,
+        "coverage_p10": 1.0,
+        "coverage_p90": 0.0
+      },
+      {
+        "label": "20",
+        "rows": 2,
+        "coverage_p10": 1.0,
+        "coverage_p90": 0.0
+      },
+      {
+        "label": "21",
+        "rows": 1,
+        "coverage_p10": 1.0,
+        "coverage_p90": 0.0
+      }
+    ],
+    "coverage_conditional_use": "reported, never corrected: the correction is one scalar per tail per artifact and no number in coverage_by_subsystem or coverage_by_local_hour is an input to it"
+  },
+  "ensemble": {
+    "pit_rows": 41,
+    "pit_columns": 96,
+    "pit_dropped_days": 49,
+    "pit_seed": 20260829,
+    "pit_window": {
+      "start": "2025-01-01",
+      "end": "2025-03-31"
+    },
+    "pit_max_ks": 0.24166298398577948,
+    "pit_ks_tolerance": 0.3172524509425357,
+    "pit_ks_level": 0.05,
+    "pit_ks_note": "the largest per-column two-sided KS distance from U(0, 1), against a band corrected for the 96 columns it is the maximum of. Above it, the marginals are miscalibrated and every day-grain number drawn from this matrix is meaningless",
+    "pit_uniform_within_tolerance": true,
+    "pit_dropped_days_rule": "a calibration day missing any of the 96 subsystem-hours is dropped whole; nothing is imputed, because a row with a hole in it is not a coherent day",
+    "ensemble_draws": 500,
+    "ensemble_note": "day-grain figures are quantiles of whole-row draws of U. Nothing sums a band, and the drawn row index is shared across the four subsystems, so a national day total is a property of these same draws rather than of a copula",
+    "day_grain_fold": "F1",
+    "day_grain_days": 20,
+    "day_total_coverage": 0.85,
+    "peak_coverage": 0.75,
+    "day_grain_coverage_target": 0.8,
+    "day_grain_coverage_population": "complete_settled_days",
+    "day_grain_coverage_note": "the ensemble inverts the same Q_pos the hour band does, whose 0.90 knot receives delta_hi only in the proportion upper_correction_fraction states. A day total is a sum over 24 such hours, so a shortfall here concentrated above the band is that under-correction at day grain and is reported, not repaired"
+  },
+  "sub_threshold_means": {
+    "N": [
+      2.1897947526813386,
+      2.8249280429335726,
+      2.4454721585249657,
+      2.266458365186339,
+      2.581928681803237,
+      2.7597290374951458,
+      2.9297101634626466,
+      2.742827767929064,
+      2.5378018566282554,
+      2.552105575297755,
+      2.608616186570298,
+      2.6990275858976336,
+      2.5083695254483755,
+      2.5936775044571574,
+      2.2643011592750706,
+      2.2549528814413575,
+      2.516183645123182,
+      2.4560920278829443,
+      2.0730087685312553,
+      2.0621231823856476,
+      2.41223960176001,
+      2.324492690780294,
+      2.075972917781141,
+      2.637747058580541
+    ],
+    "NE": [
+      2.5194603882331736,
+      2.3407020088314723,
+      2.731271452199824,
+      2.8729479524924013,
+      2.0705882398978037,
+      2.551689849052021,
+      2.3313971561402993,
+      2.790118959621459,
+      2.493753840754748,
+      2.0916827349300213,
+      2.7900779886665923,
+      2.018088867164742,
+      2.850603674631599,
+      2.458156790409997,
+      2.567567816506561,
+      2.3723443733898653,
+      2.789692189522891,
+      2.513649710110512,
+      2.3918961018040106,
+      2.67791689841322,
+      2.361798101684527,
+      2.293863428914791,
+      2.1295948318947873,
+      2.9834067755718006
+    ],
+    "SE": [
+      2.349222728790027,
+      2.4010033238297583,
+      2.767225819331869,
+      2.568753357326574,
+      2.7396065659850484,
+      1.97290765517311,
+      2.812010269815954,
+      3.181053337366286,
+      2.330355045215641,
+      2.2689445919594196,
+      2.4700923817314404,
+      2.527658665994105,
+      2.6999223907284096,
+      2.3951743103354106,
+      2.3523364189700535,
+      2.351112572803591,
+      2.6267615774524278,
+      2.6267538407426145,
+      2.6727392291862446,
+      2.2871733251010946,
+      2.8545035190480075,
+      2.6138219518936663,
+      2.684627249479845,
+      2.375924880509694
+    ],
+    "S": [
+      2.7032843779434583,
+      3.0690033826523746,
+      2.2699841106023255,
+      2.595280895290248,
+      2.3598241823780244,
+      2.650873971920964,
+      1.8837925243129274,
+      2.6967055119287435,
+      2.2952447106129092,
+      2.6121478263024502,
+      2.68682601191451,
+      2.770287735683456,
+      2.8582537051732237,
+      2.33899734639501,
+      2.3383377218213717,
+      2.159979625192722,
+      2.6023619988196267,
+      2.73723863052606,
+      2.51856108990646,
+      2.340079617434444,
+      2.8599598729250144,
+      2.5554305848929504,
+      2.1849716790681613,
+      2.2652389055661817
+    ]
+  },
+  "environment": {
+    "python": "3.12.13",
+    "lightgbm": "4.7.0",
+    "numpy": "2.5.2",
+    "joblib": "1.5.3",
+    "scipy": "1.18.1"
+  }
+}
