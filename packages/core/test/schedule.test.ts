@@ -15,6 +15,12 @@ import { DATA_WINDOW, GATES, localWallClock, nextPublication } from "../src/sche
  * gate_profile)` in `apps/api/drizzle/0016_the_feature_gate.sql`, where it has
  * to live so that no caller can pass a cutoff in. Two spellings of one schedule
  * is the drift this file is here to catch.
+ *
+ * What it catches is the *text*: that the migration branches on the same
+ * integers this table names. That is not the same claim as "both resolve the
+ * same instant" — a zone read as a fixed `-03:00` passes every assertion here.
+ * The instant is pinned as data in `packages/core/fixtures/gate-instant/` and
+ * asserted by `gate-instant.test.ts` beside the Python and SQL spellings.
  */
 
 const GATE_SQL = join(

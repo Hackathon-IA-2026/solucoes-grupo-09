@@ -1,0 +1,10 @@
+{
+  "name": "the morning the clocks went forward",
+  "why": "Brazil sprang forward at midnight on 4 November 2018, so this gate — 09:00 that same morning — is already UTC-02:00. The transition is between the two gates of one target date's neighbourhood, which is the case a per-day offset lookup gets wrong.",
+  "target_date": "2018-11-05",
+  "gate_profile": "gate_early",
+  "expected_local_date": "2018-11-04",
+  "expected_local_time": "09:00",
+  "expected_utc_offset_minutes": -120,
+  "expected_gate_at": "2018-11-04T11:00:00.000Z"
+}

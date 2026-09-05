@@ -48,6 +48,37 @@ _CAPACITY: dict[Subsystem, tuple[float, float]] = {
 #: How often a subsystem's hours go above τ at all, before the hourly shape.
 _INTENSITY: dict[Subsystem, float] = {"N": 0.05, "NE": 0.55, "SE": 0.12, "S": 0.20}
 
+#: The gate table, transcribed. ``gate_early`` is D-1 09:00 BRT on the 00Z run;
+#: ``gate_late`` is D-1 19:00 BRT on the 12Z run.
+GATE_HOURS: dict[str, int] = {"gate_early": 9, "gate_late": 19}
+
+
+def gate_at(target_date: date, gate_profile: str = GATE_PROFILE) -> datetime:
+    """``gate_at(target_date, gate_profile)``, on the Python side.
+
+    The authority is ``gate_at(...)`` in
+    ``apps/api/drizzle/0016_the_feature_gate.sql``, which is where every real
+    row's column comes from — ``wattsteer_ml`` itself deliberately holds no
+    spelling of this rule and reads the column off the rows instead. But a
+    *fixture* has to mint one, and a fixture whose gate disagreed with the
+    database would train and evaluate the whole ML suite against an instant the
+    product never publishes at.
+
+    So it is bound: ``packages/core/fixtures/gate-instant/`` holds the vectors
+    and ``test_gate_instant_vectors.py`` asserts this function against them,
+    beside the TypeScript spelling and — under a real Postgres — the SQL one.
+    """
+    hour = GATE_HOURS.get(gate_profile)
+    if hour is None:
+        # Raised rather than defaulted, for the same reason the SQL raises
+        # 22023: a gate invented for a profile that does not exist would stamp
+        # a publication instant on rows that claim to be a different lane's.
+        raise ValueError(f"unknown gate profile {gate_profile!r}")
+    local = datetime.combine(
+        target_date - timedelta(days=1), time(hour=hour), tzinfo=BRASILIA
+    )
+    return local.astimezone(UTC)
+
 
 def feature_rows(
     *,
@@ -104,9 +135,7 @@ def _row(
     valid_time = (
         datetime.combine(target_date, time(), tzinfo=BRASILIA) + timedelta(hours=hour)
     ).astimezone(UTC)
-    gate_at = datetime.combine(
-        target_date - timedelta(days=1), time(hour=19), tzinfo=BRASILIA
-    ).astimezone(UTC)
+    gate = gate_at(target_date, GATE_PROFILE)
     wind_mw, solar_mw = _CAPACITY[subsystem]
     doy = target_date.timetuple().tm_yday
     zenith_cos = max(0.0, math.cos((hour - 12) * math.pi / 14))
@@ -128,7 +157,7 @@ def _row(
         "valid_time": valid_time,
         "target_date": target_date,
         "gate_profile": GATE_PROFILE,
-        "gate_at": gate_at,
+        "gate_at": gate,
         "feature_set": FEATURE_SET,
         "threshold_mw": threshold_mw,
         "vintage_fidelity": "point_in_time",

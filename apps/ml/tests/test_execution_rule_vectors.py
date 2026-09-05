@@ -57,6 +57,20 @@ def _cases() -> list[tuple[str, dict[str, Any]]]:
 CASES = _cases()
 
 
+def test_no_vector_file_is_skipped() -> None:
+    """The listing above is flat; this compares it against a recursive walk.
+
+    A vector filed under a subdirectory would be read by neither language, and
+    the reader's ``assert files`` sees an empty directory rather than a file
+    nobody reads. ``apps/web/test/execution-rule.test.ts`` makes the same
+    comparison on its side, so adding a vector is sufficient and neither
+    language can quietly skip one.
+    """
+    flat = {path.name for path in FIXTURES.glob("*.json")}
+    everywhere = {path.name for path in FIXTURES.rglob("*.json")}
+    assert everywhere == flat
+
+
 def run(vector: dict[str, Any]) -> ScoredRealisation:
     """Execute one vector through the one implementation."""
     spec = vector["battery"]

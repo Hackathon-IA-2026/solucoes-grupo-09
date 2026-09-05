@@ -76,6 +76,21 @@ function vectors(): Vector[] {
   );
 }
 
+test("no vector file is skipped", () => {
+  // The listing above is flat, so this compares it against a *recursive* walk:
+  // a vector filed under a subdirectory would be read by neither language, and
+  // the non-emptiness guard cannot see one. `apps/ml/tests/
+  // test_execution_rule_vectors.py` makes the same comparison on its side, so
+  // adding a vector here is sufficient and neither language can skip one.
+  const flat = readdirSync(FIXTURES)
+    .filter((name) => name.endsWith(".json"))
+    .sort();
+  const everywhere = readdirSync(FIXTURES, { recursive: true, encoding: "utf8" })
+    .filter((entry) => entry.endsWith(".json"))
+    .sort();
+  expect(everywhere).toEqual(flat);
+});
+
 function run(vector: Vector) {
   const battery: BatteryAsset = {
     assetType: "battery",

@@ -1,0 +1,10 @@
+{
+  "name": "a gate on a leap day",
+  "why": "1 March 2024 is decided on 29 February. The only calendar case where subtracting a day is not subtracting 86 400 000 from a hand-built date.",
+  "target_date": "2024-03-01",
+  "gate_profile": "gate_early",
+  "expected_local_date": "2024-02-29",
+  "expected_local_time": "09:00",
+  "expected_utc_offset_minutes": -180,
+  "expected_gate_at": "2024-02-29T12:00:00.000Z"
+}

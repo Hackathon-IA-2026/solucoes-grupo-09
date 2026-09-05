@@ -55,6 +55,26 @@ const manifest = JSON.parse(
   readFileSync(join(FIXTURES, "manifest.json"), "utf8"),
 ) as ManifestFixture;
 
+describe("the directory holds no file this suite did not enumerate", () => {
+  test("every vector is consumed by one of the blocks below", () => {
+    // The half that stops a vector added for the Python side being ignored
+    // here. `README.md` has claimed this since the directory was created and
+    // the check was not written; a non-emptiness guard cannot see a vector
+    // nobody reads. A set difference rather than a count, so a rename fails.
+    const consumed = new Set([
+      "manifest.json",
+      ...cases<unknown>("vintage-fidelity").map(({ file }) => `vintage-fidelity/${file}`),
+      ...cases<unknown>("combine-fidelity").map(({ file }) => `combine-fidelity/${file}`),
+    ]);
+    const onDisk = new Set([
+      ...readdirSync(FIXTURES, { recursive: true, encoding: "utf8" }).filter((entry) =>
+        entry.endsWith(".json"),
+      ),
+    ]);
+    expect([...onDisk].sort()).toEqual([...consumed].sort());
+  });
+});
+
 describe("the canonical read manifest matches the shared vector", () => {
   test("the base path is the one both languages build URLs from", () => {
     expect(CANONICAL_BASE_PATH).toBe(manifest.base_path);

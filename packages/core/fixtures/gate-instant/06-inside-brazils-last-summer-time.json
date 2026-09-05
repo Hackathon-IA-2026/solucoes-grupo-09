@@ -1,0 +1,10 @@
+{
+  "name": "inside Brazil's last summer time",
+  "why": "Brazil observed summer time until February 2019, so BRT was UTC-02:00 here and the gate is 21:00Z rather than 22:00Z. The data window contains no transition; an implementation that subtracts a fixed three hours is nevertheless wrong, and this is the vector that says so.",
+  "target_date": "2019-01-15",
+  "gate_profile": "gate_late",
+  "expected_local_date": "2019-01-14",
+  "expected_local_time": "19:00",
+  "expected_utc_offset_minutes": -120,
+  "expected_gate_at": "2019-01-14T21:00:00.000Z"
+}

@@ -1,0 +1,10 @@
+{
+  "name": "the evening before the clocks went forward",
+  "why": "The last gate at UTC-03:00 before the 2018 transition. Paired with the next vector: two consecutive target dates whose gates are thirteen hours apart, not fourteen.",
+  "target_date": "2018-11-04",
+  "gate_profile": "gate_late",
+  "expected_local_date": "2018-11-03",
+  "expected_local_time": "19:00",
+  "expected_utc_offset_minutes": -180,
+  "expected_gate_at": "2018-11-03T22:00:00.000Z"
+}
