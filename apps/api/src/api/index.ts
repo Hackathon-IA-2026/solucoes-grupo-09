@@ -180,6 +180,9 @@ if (import.meta.main) {
       "   • GET /v1/replay/days   — which days are replayable, and why the rest are not",
     );
     console.log(
+      "   • POST/GET /v1/replay   — one past day replayed at its pinned origin",
+    );
+    console.log(
       "   • GET /v1/model/card    — the reliability curve and the band's coverage, per tail",
     );
     console.log("🔒 Security:");

@@ -83,6 +83,32 @@ export const REPLAY_KEY_PREFIX = "replay:v1";
  * The **optimizer build** is in it because a formulation change must not serve
  * yesterday's plan under today's code — a stale answer no TTL is short enough
  * to prevent.
+ *
+ * ### The component that is missing, and what it costs
+ *
+ * `api-surface.md`'s caching table writes this key with a **sixth** component —
+ * `…:<obs_data_version>` — and it is not here, because the replay contract
+ * carries no observed data version to put in it. `replay_result` publishes the
+ * target date, the origin, the fidelity and the numbers; nothing on the wire
+ * names the vintage of the *observed* half.
+ *
+ * That component is not decoration. A replay's forecast half is pinned and
+ * cannot move; its observed half is read `AsOf(now)` against a record ONS
+ * restates in place, and the point of the sixth component is that a restatement
+ * evicts the entries it invalidates rather than waiting them out. Without it,
+ * the eviction is the TTL: for up to 24 h after ONS rewrites a day, a cached
+ * replay of that day answers with the numbers from before the rewrite. That is
+ * a bounded staleness on a *cache* and not a broken pin — the answer was true
+ * of the record when it was computed, and the response names the publication it
+ * planned against — but for that day `vintage_fidelity` is the only thing
+ * telling a reader the ground may have moved underneath the observed half.
+ *
+ * It is left open rather than papered over. The two ways to close it are the ML
+ * service publishing the observed `data_version` on the replay payload, which
+ * is a change to a contract `replay.md` declares fixed and `api-surface.md` may
+ * only re-path; or the gateway reading it out of Postgres, which would put a
+ * query on a route whose whole claim is that it contains neither a model nor a
+ * read. Neither belongs to the ticket that re-paths these four routes.
  */
 export function replayKey(parts: {
   scenarioHash: string;
