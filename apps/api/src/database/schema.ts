@@ -2715,6 +2715,154 @@ export const curtailmentForecastDay = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// The national day grain — forecaster ticket 22.
+//
+// The second half of the hand-back api-surface ticket 13 was blocked on.
+// `apps/ml`'s `training/national.py` (ticket 08) adds the four subsystems' day
+// totals **on the same draw**, takes peak-of-sum rather than sum-of-peaks and
+// counts occurrence over draws; measured, the band comes out at roughly half
+// the width of the componentwise sum. Until this table it had nowhere to be
+// written, so `/v1/grid/outlook` served `band: null` with a stated reason.
+// ---------------------------------------------------------------------------
+
+/**
+ * One national day: the joint band, its probability, and what it was drawn over.
+ *
+ * **Its own table, because `SIN` is not a subsystem.** `docs/domain-model.md`'s
+ * vocabulary rule 6 makes a national aggregate unrepresentable as a fifth
+ * member of a four-member enum, so there is no `subsystem` column here and no
+ * value of `subsystem_code` anywhere in the row that could be read as one. The
+ * four this figure was summed over are carried as an *array* — a statement
+ * about coverage, checked to be exactly the four — which is a different fact
+ * from a row's identity and cannot be joined to as one.
+ *
+ * **Keyed on the threshold, unlike the subsystem grain.** The ticket's key is
+ * `(target_date, gate_profile, origin_kind, threshold_mw)`: a national total is
+ * a count of MWh above τ across four subsystems, and two thresholds are two
+ * different quantities rather than two vintages of one. `curtailment_forecast_day`
+ * leaves `threshold_mw` out of its key and would revise across a sweep; here a
+ * sweep writes a second row, and the read filters on the threshold its four
+ * subsystem rows share.
+ *
+ * **`derivation` is `joint_path_ensemble`, not `path_ensemble`.** They are two
+ * different constructions — one draws whole days of one subsystem, the other
+ * adds four subsystems on one shared row index of `U` — and a reader of the
+ * database has to be able to tell a national figure drawn from the shared index
+ * from one an earlier code path summed. The check constraint makes the second
+ * unwritable.
+ */
+export const curtailmentForecastNationalDay = pgTable(
+  "curtailment_forecast_national_day",
+  {
+    /** The civil day in `America/Sao_Paulo` being forecast. */
+    targetDate: date({ mode: "string" }).notNull(),
+    originKind: forecastOriginKind().notNull(),
+    gateProfile: forecastGateProfile().notNull(),
+    /** In the key: two thresholds are two quantities, not two vintages of one. */
+    thresholdMw: doublePrecision().notNull(),
+
+    ...forecastOriginColumns(),
+
+    /**
+     * The four subsystems this was summed over, in canonical order.
+     *
+     * `subsystem_code[]` rather than `text[]`, so `SIN` is not even spellable
+     * here. Checked to be exactly the four: a national total over three is a
+     * different quantity wearing the same name.
+     */
+    subsystems: subsystemCode("subsystems").array().notNull(),
+
+    /**
+     * Quantiles of `Σ_s Σ_t y*_{s,k,t}` over the 500 draws — four realisable
+     * days added, then a quantile taken. Never a sum of four bands.
+     */
+    dayTotalP10Mwh: doublePrecision("day_total_p10_mwh").notNull(),
+    dayTotalP50Mwh: doublePrecision("day_total_p50_mwh").notNull(),
+    dayTotalP90Mwh: doublePrecision("day_total_p90_mwh").notNull(),
+    /**
+     * Quantiles of `max_t Σ_s y*_{s,k,t}`, in MW. Peak *of the sum*: the four
+     * subsystems' peaks generally fall in different hours, so a sum of peaks is
+     * a day no draw ever took.
+     */
+    peakPowerP10Mw: doublePrecision("peak_power_p10_mw").notNull(),
+    peakPowerP50Mw: doublePrecision("peak_power_p50_mw").notNull(),
+    peakPowerP90Mw: doublePrecision("peak_power_p90_mw").notNull(),
+    /**
+     * The share of draws in which *some* subsystem had *some* hour above τ.
+     * **Not** `1 − Π_s (1 − p_s)`, which assumes the four are independent, and
+     * not the summed national hour against one subsystem's threshold either.
+     */
+    dayOccurrenceProbability: doublePrecision().notNull(),
+    /**
+     * `Σ_s E[Y_s]`. Expectations add **exactly**, with no assumption about
+     * dependence, so this is the one national number that was always
+     * publishable — and it is stored rather than re-summed so the row is a
+     * record of what was served rather than an input to a later reduction.
+     */
+    expectedMwh: doublePrecision().notNull(),
+
+    /** `joint_path_ensemble`, and checked below. */
+    derivation: text().notNull(),
+    /** The plan all four subsystems drew under — the reason draw `k` is one day. */
+    ensembleDraws: integer().notNull(),
+    ensembleSeed: integer().notNull(),
+    ensembleCalibrationDays: integer().notNull(),
+
+    trainedThrough: date({ mode: "string" }).notNull(),
+    riskBinElevatedFrom: doublePrecision().notNull(),
+    riskBinHighFrom: doublePrecision().notNull(),
+
+    ...forecastVintageColumns(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.targetDate, t.originKind, t.gateProfile, t.thresholdMw, t.dataVersion],
+    }),
+    index("curtailment_forecast_national_day_as_of").on(t.targetDate, t.ingestedAt),
+    check(
+      "curtailment_forecast_national_day_is_a_forecast",
+      sql`${t.publishedAt} < (${t.targetDate}::timestamp at time zone 'America/Sao_Paulo')`,
+    ),
+    check(
+      "curtailment_forecast_national_day_total_monotone",
+      sql`${t.dayTotalP10Mwh} <= ${t.dayTotalP50Mwh} and ${t.dayTotalP50Mwh} <= ${t.dayTotalP90Mwh}`,
+    ),
+    check(
+      "curtailment_forecast_national_day_peak_monotone",
+      sql`${t.peakPowerP10Mw} <= ${t.peakPowerP50Mw} and ${t.peakPowerP50Mw} <= ${t.peakPowerP90Mw}`,
+    ),
+    check(
+      "curtailment_forecast_national_day_probability",
+      sql`${t.dayOccurrenceProbability} between 0 and 1`,
+    ),
+    // The joint construction, as a property of the database. `path_ensemble` is
+    // the *subsystem* derivation and is refused here on purpose: a row that
+    // claimed it would be a national figure standing on a per-subsystem draw.
+    check(
+      "curtailment_forecast_national_day_from_the_joint_ensemble",
+      sql`${t.derivation} = 'joint_path_ensemble'`,
+    ),
+    // Exactly the four, and therefore never three summed under the same name.
+    check(
+      "curtailment_forecast_national_day_covers_the_four",
+      sql`array_length(${t.subsystems}, 1) = 4 and ${t.subsystems} @> array['N','NE','SE','S']::subsystem_code[]`,
+    ),
+    check(
+      "curtailment_forecast_national_day_drew_something",
+      sql`${t.ensembleDraws} > 0`,
+    ),
+    check(
+      "curtailment_forecast_national_day_threshold_positive",
+      sql`${t.thresholdMw} > 0`,
+    ),
+    check(
+      "curtailment_forecast_national_day_risk_edges_ordered",
+      sql`0 < ${t.riskBinElevatedFrom} and ${t.riskBinElevatedFrom} < ${t.riskBinHighFrom} and ${t.riskBinHighFrom} < 1`,
+    ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // The published attribution — diagnosis ticket 06.
 //
 // `docs/specs/diagnosis.md`, "Persistence, so Replay can read it": every

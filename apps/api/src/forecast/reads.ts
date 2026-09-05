@@ -5,6 +5,7 @@ import type { VintageFidelity } from "../contract/vintage.js";
 import {
   canonicalForecastDay,
   canonicalForecastHour,
+  canonicalForecastNationalDay,
 } from "../database/canonical-views.js";
 import type { Database } from "../database/connection.js";
 import type { SubsystemCode } from "../ingest/normalise.js";
@@ -93,6 +94,35 @@ export interface ForecastDayRow {
   derivation: string;
   riskBinElevatedFrom: number;
   riskBinHighFrom: number;
+}
+
+/**
+ * The national day, read back — forecaster ticket 22.
+ *
+ * A separate row type rather than a fifth `ForecastDayRow` because `SIN` is not
+ * a subsystem: there is no `subsystem` field to fill and nothing here can be
+ * put in the four-member array. `subsystems` is the coverage the figure was
+ * summed over, read back so the caller can check it rather than assume it.
+ */
+export interface ForecastNationalDayRow {
+  targetDate: string;
+  gateProfile: ForecastGateProfile;
+  thresholdMw: number;
+  artifactId: string;
+  publishedAt: Date;
+  ingestedAt: Date;
+  dataVersion: number;
+  /** The four this was summed over, in the order they were written. */
+  subsystems: SubsystemCode[];
+  /** Quantiles of the four day totals added draw by draw. */
+  dayTotalMwh: ForecastBand;
+  /** Peak of the sum. */
+  peakPowerMw: ForecastBand;
+  dayOccurrenceProbability: number;
+  /** `Σ_s E[Y_s]` as it was persisted — not re-summed here. */
+  expectedMwh: number;
+  /** `joint_path_ensemble`, read back rather than assumed. */
+  derivation: string;
 }
 
 /** A day and its hours, as one answer. */
@@ -283,6 +313,41 @@ export async function readForecastDayAhead(
   });
 }
 
+/**
+ * What `/v1/grid/outlook` reads: the four subsystem rows and the national one.
+ *
+ * One return value and one transaction, so the national band is read **at the
+ * same `AsOf` as the four subsystem rows** by construction rather than by two
+ * callers agreeing to pass the same instant. A national figure a vintage apart
+ * from the subsystems it was summed over would be a band whose components are
+ * not the ones beside it on the screen.
+ */
+export interface GridOutlookRows {
+  subsystems: ForecastDayRow[];
+  /** `null` when no national row exists at this cut. Never a synthesised band. */
+  national: ForecastNationalDayRow | null;
+}
+
+interface NationalRecord {
+  [column: string]: unknown;
+  gate_profile: string;
+  threshold_mw: number;
+  run_label: string;
+  published_at: string;
+  ingested_at: string;
+  data_version: number;
+  subsystems: string[];
+  day_total_p10_mwh: number;
+  day_total_p50_mwh: number;
+  day_total_p90_mwh: number;
+  peak_power_p10_mw: number;
+  peak_power_p50_mw: number;
+  peak_power_p90_mw: number;
+  day_occurrence_probability: number;
+  expected_mwh: number;
+  derivation: string;
+}
+
 /** The two axes `/v1/grid/outlook` reads on: one day, one gate, one vintage. */
 export interface OutlookQuery {
   /** The civil day in `America/Sao_Paulo`, `YYYY-MM-DD`. */
@@ -317,7 +382,7 @@ export interface OutlookQuery {
 export async function readGridOutlook(
   db: Database,
   query: OutlookQuery,
-): Promise<ForecastDayRow[]> {
+): Promise<GridOutlookRows> {
   return readOnly(db, async (tx) => {
     // The vintage axis on the transaction, never in the predicate — the same
     // rule the day-ahead read follows, and for the same reason.
@@ -332,10 +397,71 @@ export async function readGridOutlook(
       order by subsystem
     `);
 
-    return [...rows].map((row) =>
+    const subsystems = [...rows].map((row) =>
       toDayRow(row, row.subsystem as SubsystemCode, query.targetDate),
     );
+
+    // The one threshold the four rows share. The national grain is keyed on it
+    // — a total above 5 MW and one above 20 MW are two quantities — and the
+    // route refuses rows that disagree about it anyway, so a set of more than
+    // one here is answered with no national row rather than with a guess.
+    const thresholds = new Set(subsystems.map((row) => row.thresholdMw));
+    const [thresholdMw] = [...thresholds];
+    if (thresholds.size !== 1 || thresholdMw === undefined) {
+      return { subsystems, national: null };
+    }
+
+    const nationalRows = await tx.execute<NationalRecord>(sql`
+      select *
+      from ${canonicalForecastNationalDay}
+      where target_date = ${query.targetDate}::date
+        and gate_profile = ${query.gateProfile}::forecast_gate_profile
+        and origin_kind = 'served'::forecast_origin_kind
+        and threshold_mw = ${thresholdMw}::double precision
+    `);
+    const [national] = [...nationalRows];
+
+    return {
+      subsystems,
+      // `null` and not a synthesised band: an artifact trained before the
+      // shared draw index landed published no national row, and that is an
+      // absence with a stated reason rather than a zero — or, worse, a band
+      // this function could have assembled by adding four quantiles.
+      national: national === undefined ? null : toNationalRow(national, query.targetDate),
+    };
   });
+}
+
+/**
+ * One national row, mapped. No arithmetic — the join happened in the ensemble.
+ */
+function toNationalRow(
+  record: NationalRecord,
+  targetDate: string,
+): ForecastNationalDayRow {
+  return {
+    targetDate,
+    gateProfile: record.gate_profile as ForecastGateProfile,
+    thresholdMw: asNumber(record.threshold_mw),
+    artifactId: record.run_label,
+    publishedAt: new Date(record.published_at),
+    ingestedAt: new Date(record.ingested_at),
+    dataVersion: asNumber(record.data_version),
+    subsystems: [...record.subsystems] as SubsystemCode[],
+    dayTotalMwh: {
+      p10: asNumber(record.day_total_p10_mwh),
+      p50: asNumber(record.day_total_p50_mwh),
+      p90: asNumber(record.day_total_p90_mwh),
+    },
+    peakPowerMw: {
+      p10: asNumber(record.peak_power_p10_mw),
+      p50: asNumber(record.peak_power_p50_mw),
+      p90: asNumber(record.peak_power_p90_mw),
+    },
+    dayOccurrenceProbability: asNumber(record.day_occurrence_probability),
+    expectedMwh: asNumber(record.expected_mwh),
+    derivation: record.derivation,
+  };
 }
 
 /** One published origin, as `/v1/meta`'s `forecast.latest_published` lists it. */

@@ -42,6 +42,7 @@ from feature_row_fixtures import FEATURE_SET, GATE_PROFILE, THRESHOLD_MW, featur
 from wattsteer_ml import publication
 from wattsteer_ml.app import app
 from wattsteer_ml.config import settings
+from wattsteer_ml.constants import SUBSYSTEM_CODES
 from wattsteer_ml.evaluation import HOURS_PER_DAY
 from wattsteer_ml.lanes import Lane
 from wattsteer_ml.promotions import PROMOTION_LOG_FILENAME, PromotionRecord, append
@@ -57,6 +58,7 @@ from wattsteer_ml.publication import (
 )
 from wattsteer_ml.training import (
     CORRECTION_REGIME,
+    NATIONAL_DERIVATION,
     LoadedArtifact,
     ModelCard,
     TrainedFold,
@@ -369,6 +371,85 @@ def test_the_peak_is_a_band_and_the_day_probability_is_not_one_minus_a_product(
         assert 0.0 <= row["day_occurrence_probability"] <= 1.0
 
 
+def test_the_publication_carries_a_national_row_beside_days_and_hours(
+    published: ForecastPublication,
+) -> None:
+    """Forecaster ticket 22's half of the seam: the figure now has somewhere to go.
+
+    ``NationalDayGrain.as_row()`` had no destination — ticket 14 said so — and
+    the payload carried no key to put it under. It travels beside ``days`` and
+    never inside it, because ``SIN`` is not a ``Subsystem`` and a fifth member
+    of a four-member array is the double count `docs/domain-model.md` makes
+    unrepresentable.
+    """
+    assert published.national is not None
+    row = published.national.as_row()
+    payload = published.as_payload()
+    assert payload["national"] == row
+    assert row["derivation"] == NATIONAL_DERIVATION
+    assert row["grain"] == "national"
+    assert row["target_date"] == published.target_date.isoformat()
+    assert row["correction_regime"] == CORRECTION_REGIME
+    assert sorted(row["subsystems"]) == sorted(SUBSYSTEM_CODES)
+    assert "SIN" not in row["subsystems"]
+    # No subsystem key of any kind: the grain has no identity a join could
+    # mistake for one of the four.
+    assert "subsystem" not in row
+
+
+def test_the_national_band_is_narrower_than_the_four_bands_added(
+    published: ForecastPublication,
+) -> None:
+    """The measurable consequence of a joint draw, on the shared fit itself.
+
+    The componentwise sum is the day on which all four subsystems
+    simultaneously landed at their own ninetieth percentile, which is far rarer
+    than one in ten — so it is not a 10-90 interval of anything. The joint band
+    is, and it comes out materially narrower rather than merely different.
+    """
+    assert published.national is not None
+    national = published.national.as_row()
+    summed_low = math.fsum(day.as_row()["day_total"]["p10"] for day in published.days)
+    summed_high = math.fsum(day.as_row()["day_total"]["p90"] for day in published.days)
+    assert national["day_total"]["p10"] > summed_low
+    assert national["day_total"]["p90"] < summed_high
+    assert (
+        national["day_total"]["p90"] - national["day_total"]["p10"]
+        < summed_high - summed_low
+    )
+    # The peak is a peak of the sum: the four subsystems' worst hours generally
+    # fall in different hours, so a sum of peaks is a day no draw ever took.
+    summed_peaks = math.fsum(day.as_row()["peak_power"]["p90"] for day in published.days)
+    assert national["peak_power"]["p90"] < summed_peaks
+    # And the one national quantity that does add, adds exactly.
+    assert national["expected_mwh"] == pytest.approx(
+        math.fsum(day.expected_mwh for day in published.days)
+    )
+
+
+def test_a_publication_short_of_a_subsystem_carries_no_national_row(
+    serving_rows: Sequence[dict[str, Any]], loaded: LoadedArtifact, target_day: date
+) -> None:
+    """``None`` and never a total over three wearing the four's name.
+
+    An absence rather than a refusal: the subsystem rows a three-subsystem
+    publication does have are still records of what was served. It is the
+    national band that does not exist, and the gateway renders that with a
+    stated reason instead of a number.
+    """
+    partial = [row for row in serving_rows if row["subsystem"] != "S"]
+    published = build_publication(
+        partial,
+        lane=LANE,
+        loaded=loaded,
+        target_date=target_day,
+        origin_kind=SERVED_ORIGIN_KIND,
+    )
+    assert len(published.days) == 3
+    assert published.national is None
+    assert published.as_payload()["national"] is None
+
+
 def test_no_line_of_the_publication_module_sums_a_quantile() -> None:
     """A grep-level guard, in the manner of the national band's own suite.
 
@@ -516,3 +597,5 @@ def test_the_checked_in_vector_is_still_the_shape_this_module_emits(
     assert set(payload["hours"][0]) == set(vector["hours"][0])
     assert set(payload["days"][0]) == set(vector["days"][0])
     assert set(payload["days"][0]["day_total"]) == {"p10", "p50", "p90"}
+    assert set(payload["national"]) == set(vector["national"])
+    assert set(payload["national"]["day_total"]) == {"p10", "p50", "p90"}

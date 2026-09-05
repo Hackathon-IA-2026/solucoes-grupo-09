@@ -823,8 +823,10 @@ export interface NationalNow {
  * first paint both make. Four subsystems, one target date, no hourly detail
  * and no drivers. The national figure is an expectation and a count of
  * subsystems per risk class, because expectations add exactly and quantiles do
- * not: `national.band` is `null` with `band_unavailable_reason` until the path
- * ensemble shares its draw index across subsystems.
+ * not - plus a joint band read from the persisted national day row, whose
+ * quantiles are taken over the four subsystems' paths added draw by draw under
+ * one shared index. Where no national row was published, `national.band` is
+ * `null` and carries `band_unavailable_reason`.
  */
 export interface GridOutlook {
   targetDate: CivilDate;
@@ -871,9 +873,11 @@ export interface SubsystemOutlook {
 /**
  * The one place a national number exists, with its derivation named. `SIN` is
  * not a subsystem (vocabulary rule 6), so the national figure lives under this
- * key rather than as a fifth row. The band is `null` and says why: the median
- * of a sum is not the sum of the medians, and the four subsystems' curtailment
- * is not comonotone.
+ * key rather than as a fifth row. The band is a quantile of the four
+ * subsystems' day totals added on the same draw, and never a sum of four
+ * bands: the median of a sum is not the sum of the medians, and the four
+ * subsystems' curtailment is not comonotone. Where no such row exists the band
+ * is `null` and says why.
  */
 export interface NationalOutlook {
   /**
@@ -883,9 +887,11 @@ export interface NationalOutlook {
   expectedMwh: number;
   riskClassCounts: NationalOutlookRiskClassCounts;
   /**
-   * `null` until the path ensemble shares one drawn day-row index across the
-   * four subsystems. A national band needs a joint distribution and no published
-   * quantity supports one today.
+   * The persisted joint band - quantiles over the draws of the four subsystems'
+   * day totals added under one shared draw index. `null`, with a stated reason,
+   * when no national row was published for this day: an artifact trained before
+   * the shared draw index landed has none. Never assembled by adding the four
+   * subsystem bands.
    */
   band: Band | null;
   bandUnavailableReason: BandUnavailableReason | null;
