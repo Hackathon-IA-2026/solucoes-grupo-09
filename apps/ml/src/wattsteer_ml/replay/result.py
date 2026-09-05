@@ -30,6 +30,14 @@ enters it: what ``threshold_mw`` does is gate whether ``avoidability`` is define
 at all, and choose which hours are drawn as episodes. Move it and the episodes
 move; the percentage does not.
 
+**A day with no forecast gets a different object, not a hollowed-out one.**
+:func:`observed_only_result` publishes the pre-F1 view: the settled profile, the
+episodes, the perfect-foresight bound and the typed refusal that says why.
+``scored``, ``avoided_energy_mwh`` and ``recovered_floor_mwh`` are absent rather
+than zero, and they are absent structurally — that function takes an
+:class:`~wattsteer_ml.replay.scoring.ObservedOnlyView`, which holds no plan, no
+scored realisation and no floor for them to be read from.
+
 **Episodes are carried, not computed.** A `CurtailmentEpisode` is a read-time
 view over the settled hours and Postgres already draws it
 (``canonical_curtailment_episodes``); re-deriving the run-detection here would
@@ -45,7 +53,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from wattsteer_ml.constants import MAX_GAP_HOURS
@@ -62,7 +70,12 @@ from wattsteer_ml.replay.calendar import (
     VINTAGE_AFFECTS,
     VINTAGE_EXEMPT,
 )
-from wattsteer_ml.replay.scoring import SCORED_ON, ReplayPostureError, ReplayScores
+from wattsteer_ml.replay.scoring import (
+    SCORED_ON,
+    ObservedOnlyView,
+    ReplayPostureError,
+    ReplayScores,
+)
 
 
 @dataclass(frozen=True)
@@ -115,8 +128,12 @@ def replay_result(
     day = scores.day
     forecast = scores.forecast
     observed = scores.observed_scoring
-    _check_the_scenario_is_the_day(wire, scores)
-    _check_the_episodes_were_drawn_here(episodes, scores, max_gap_hours)
+    _check_the_scenario_is_the_day(
+        wire, target_date=day.target_date, subsystem=forecast.subsystem
+    )
+    _check_the_episodes_were_drawn_here(
+        episodes, threshold_mw=scores.threshold_mw, max_gap_hours=max_gap_hours
+    )
     rate = brl_per_mwh(wire)
     return {
         "target_date": day.target_date.isoformat(),
@@ -165,6 +182,64 @@ def replay_result(
         },
         "episodes": [episode.as_payload() for episode in episodes],
         "solver": solver_receipt(scores.plan),
+    }
+
+
+def observed_only_result(
+    wire: dict[str, Any],
+    scenario_hash: str,
+    view: ObservedOnlyView,
+    *,
+    episodes: Sequence[ReplayEpisode] = (),
+    max_gap_hours: int = MAX_GAP_HOURS,
+) -> dict[str, Any]:
+    """The published contract for a day no honest forecast exists for.
+
+    The settled profile, the episodes at the threshold in force, the
+    perfect-foresight bound — and the refusal that says why, as a typed code the
+    screen renders one sentence from rather than a message this service wrote.
+
+    **What is not here is the point.** ``scored``, ``avoided_energy_mwh`` and
+    ``recovered_floor_mwh`` are *absent*, not zero: a zero would be a claim
+    about a plan, and on this day WattSteer made none. That absence is
+    structural in the same way the headline's fence is —
+    :class:`~wattsteer_ml.replay.scoring.ObservedOnlyView` holds no plan, no
+    scored realisation and no floor, and :func:`_headline` is not reachable from
+    here because there is no ``ScoredRealisation`` to hand it. There is no
+    ``dispatch`` and no ``solver`` receipt either: the bound's plan is a
+    hindsight solve and publishing its schedule would be publishing a plan
+    WattSteer could not have built.
+    """
+    day = view.day
+    # Unreachable: `ObservedOnlyView` refuses a day without one. Narrowed rather
+    # than asserted so that the type checker reads the same guarantee.
+    if day.refusal is None:  # pragma: no cover
+        raise ReplayPostureError("an observed-only day carries the refusal that says why")
+    _check_the_scenario_is_the_day(
+        wire, target_date=day.target_date, subsystem=view.observed.subsystem
+    )
+    _check_the_episodes_were_drawn_here(
+        episodes, threshold_mw=view.threshold_mw, max_gap_hours=max_gap_hours
+    )
+    return {
+        "target_date": day.target_date.isoformat(),
+        "subsystem": view.observed.subsystem,
+        "threshold_mw": view.threshold_mw,
+        "max_gap_hours": max_gap_hours,
+        "scenario_hash": scenario_hash,
+        # `false`, and the refusal beside it: the boundary is legible rather
+        # than arbitrary, and the client renders `t("error." + code)`.
+        "replayable": False,
+        "refusal": day.refusal.as_payload(),
+        # The vintage verdict travels on a refused day too. "This day cannot be
+        # replayed" and "its actuals would have been a restatement" are two
+        # facts, and `replay.md` keeps them apart.
+        "vintage_fidelity": day.vintage_fidelity,
+        "actual": view.observed.as_payload(),
+        # A property of the day and the fleet, with nothing of WattSteer's
+        # beside it to compare against — so no `forecast_value_gap_mwh`.
+        "upper_bound": view.upper_bound.as_payload(),
+        "episodes": [episode.as_payload() for episode in episodes],
     }
 
 
@@ -217,7 +292,9 @@ def _integrity(scores: ReplayScores) -> dict[str, Any]:
     }
 
 
-def _check_the_scenario_is_the_day(wire: dict[str, Any], scores: ReplayScores) -> None:
+def _check_the_scenario_is_the_day(
+    wire: dict[str, Any], *, target_date: date, subsystem: str
+) -> None:
     """The fleet was planned for the day being replayed, on its subsystem.
 
     The plan came out of the live builder, which reads ``target_date`` off the
@@ -226,37 +303,34 @@ def _check_the_scenario_is_the_day(wire: dict[str, Any], scores: ReplayScores) -
     different daylight-saving shape — and the mismatch would show up as a
     plausible number rather than an error.
     """
-    target_date = str(wire.get("target_date", ""))
-    if target_date != scores.day.target_date.isoformat():
+    planned = str(wire.get("target_date", ""))
+    if planned != target_date.isoformat():
         raise ReplayPostureError(
-            f"the scenario plans {target_date or '(no date)'} and the replay is "
-            f"of {scores.day.target_date.isoformat()}"
+            f"the scenario plans {planned or '(no date)'} and the replay is "
+            f"of {target_date.isoformat()}"
         )
-    subsystem = wire.get("subsystem")
-    if subsystem != scores.forecast.subsystem:
+    planned_subsystem = wire.get("subsystem")
+    if planned_subsystem != subsystem:
         raise ReplayPostureError(
-            f"the scenario is {subsystem!r} and the replayed forecast is "
-            f"{scores.forecast.subsystem!r}"
+            f"the scenario is {planned_subsystem!r} and the replayed day is {subsystem!r}"
         )
 
 
 def _check_the_episodes_were_drawn_here(
-    episodes: Sequence[ReplayEpisode], scores: ReplayScores, max_gap_hours: int
+    episodes: Sequence[ReplayEpisode], *, threshold_mw: float, max_gap_hours: int
 ) -> None:
     """Every episode carries the parameters the result carries. Refused if not."""
     for episode in episodes:
-        if (
-            episode.threshold_mw != scores.threshold_mw
-            or episode.max_gap_hours != max_gap_hours
-        ):
+        if episode.threshold_mw != threshold_mw or episode.max_gap_hours != max_gap_hours:
             raise ReplayPostureError(
                 f"an episode drawn at threshold {episode.threshold_mw} MW / gap "
                 f"{episode.max_gap_hours} h cannot be rendered beside a replay at "
-                f"{scores.threshold_mw} MW / {max_gap_hours} h"
+                f"{threshold_mw} MW / {max_gap_hours} h"
             )
 
 
 __all__ = [
     "ReplayEpisode",
+    "observed_only_result",
     "replay_result",
 ]

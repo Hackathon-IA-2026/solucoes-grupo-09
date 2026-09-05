@@ -10,9 +10,12 @@ The spec's own note on what makes a good test here is the shape of the file:
 
 So the sections are: the worked example, reproduced number for number; the two
 directions of forecast error, which are not symmetric and are the ticket's real
-content; the postures a replay is *structurally* unable to take; and the
-identity of the code — that the scoring path calls the optimizer's `simulate`
-and that no model is loaded anywhere in the request path.
+content; perfect foresight, which is a labelled upper bound and never a recovery
+claim; the observed-only view a pre-F1 day gets, whose content is as much what
+is *absent* from it as what is on it; the postures a replay is *structurally*
+unable to take; and the identity of the code — that the scoring path calls the
+optimizer's `simulate` and that no model is loaded anywhere in the request
+path.
 
 **Why ``η`` is not 1 here.** The spec's worked table sets ``ηc = ηd = 1`` "only
 so the table can be checked by eye", and scenario validation refuses an
@@ -28,12 +31,13 @@ from __future__ import annotations
 import ast
 import inspect
 import json
+import random
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, ValidationError
 from referencing import Registry, Resource
 
 from wattsteer_ml.constants import MAX_GAP_HOURS
@@ -42,6 +46,8 @@ from wattsteer_ml.evaluation.holdout import HoldoutLeakError
 from wattsteer_ml.lanes import Lane
 from wattsteer_ml.mixture import QuantileBand
 from wattsteer_ml.optimizer import (
+    TOLERANCE_MWH,
+    DispatchPlan,
     PlanningProfile,
     build_plan,
     score_band,
@@ -63,14 +69,21 @@ from wattsteer_ml.replay.calendar import (
     resolve_day,
 )
 from wattsteer_ml.replay.cards import ArtifactWindows
-from wattsteer_ml.replay.result import ReplayEpisode, replay_result
+from wattsteer_ml.replay.result import (
+    ReplayEpisode,
+    observed_only_result,
+    replay_result,
+)
 from wattsteer_ml.replay.scoring import (
     ForecastHour,
     ObservedDay,
+    ObservedOnlyView,
+    PerfectForesight,
     PinnedForecast,
     PinnedOrigin,
     ReplayPostureError,
     ReplayScores,
+    score_observed_only,
     score_replay,
 )
 from wattsteer_ml.scenario import decode_scenario_body
@@ -652,6 +665,91 @@ def test_the_gap_opens_where_the_fleet_is_energy_limited() -> None:
     )
 
 
+def tie_breaking_tolerance(plan: DispatchPlan) -> float:
+    """The objective's throughput tie-breaker, ``Σ_b δ_b · throughput_b``.
+
+    The magnitude `replay.md` argues for and does not give. It is derived rather
+    than chosen: the executed dispatch of the P50 plan is itself a feasible
+    schedule of the perfect-foresight problem, so the two solves can differ in
+    the *wrong* direction only by the term that breaks ties between schedules
+    that recover the same energy. A constant here would be a number nobody
+    decided on, and one that stopped being true the moment the penalty moved.
+    """
+    return TOLERANCE_MWH + sum(
+        penalty * dispatch.throughput_mwh
+        for penalty, dispatch in zip(
+            plan.throughput_penalties, plan.batteries, strict=True
+        )
+    )
+
+
+def test_perfect_foresight_dominates_on_random_scenarios_and_realisations() -> None:
+    """Seam 5: `scored_pf.recovered_mwh ≥ recovered_mwh`, within that tolerance.
+
+    A violation means the plan and the simulator disagree — the one bug this
+    whole architecture is arranged to surface — so the fleets are deliberately
+    drawn small enough to be energy-limited much of the time, which is where the
+    two solves actually differ. `score_replay` raises `OptimizerBugError` on a
+    violation, so this asserts twice over: that it did not, and that the
+    published gap is non-negative to the same tolerance.
+    """
+    rng = random.Random(20260904)  # noqa: S311 — a fixture, not a security decision
+    for _ in range(24):
+        hours = rng.sample(range(HOURS_PER_DAY), rng.randint(1, 6))
+        p50 = [0.0] * HOURS_PER_DAY
+        p10 = [0.0] * HOURS_PER_DAY
+        observed = [0.0] * HOURS_PER_DAY
+        for hour in hours:
+            p50[hour] = round(rng.uniform(0.0, 200.0), 2)
+            p10[hour] = round(p50[hour] * rng.uniform(0.0, 0.6), 2)
+            observed[hour] = round(rng.uniform(0.0, 200.0), 2)
+        scores = replay(
+            observed=tuple(observed),
+            p50=tuple(p50),
+            p10=tuple(p10),
+            wire=scenario(
+                max_power_mw=round(rng.uniform(10.0, 120.0), 1),
+                energy_capacity_mwh=round(rng.uniform(20.0, 500.0), 1),
+            ),
+        )
+        tolerance = tie_breaking_tolerance(scores.plan)
+        assert scores.upper_bound.recovered_mwh >= (
+            scores.observed_scoring.recovered_mwh - tolerance
+        )
+        assert scores.upper_bound.forecast_value_gap_mwh >= -tolerance
+
+
+def test_the_gap_is_zero_unconstrained_and_opens_when_the_energy_is_capped() -> None:
+    """The spec's own pair, on one battery capped two ways.
+
+    "Perfect foresight on this toy recovers 160 as well: an energy-unconstrained
+    fleet with hourly power to spare gains nothing from knowing the answer. The
+    gap opens exactly when the fleet is energy-limited — cap the same battery at
+    140 MWh usable and the P50 plan recovers 120 while perfect foresight
+    recovers 140, a `forecast_value_gap_mwh` of 20."
+
+    That is the honest shape of the claim, and it is the reason the gap is
+    published as its own number rather than folded into anything: better
+    forecasting is worth something only where the fleet has to choose which
+    hours to spend itself on.
+    """
+    observed = day_profile(WORKED_OBSERVED)
+    unconstrained = replay(observed=observed, wire=scenario(energy_capacity_mwh=400))
+    capped = replay(observed=observed, wire=scenario(energy_capacity_mwh=140))
+
+    assert unconstrained.observed_scoring.recovered_mwh == pytest.approx(160.0)
+    assert unconstrained.upper_bound.recovered_mwh == pytest.approx(160.0)
+    assert unconstrained.upper_bound.forecast_value_gap_mwh == pytest.approx(0.0)
+
+    # The same day, the same battery, one constraint added. `120.7` rather than
+    # the spec's `120` because η is not 1 here — see the module docstring — and
+    # the *gap* is the spec's 20 either way, because the same loss applies to
+    # both solves.
+    assert capped.observed_scoring.recovered_mwh < 160.0
+    assert capped.upper_bound.recovered_mwh > capped.observed_scoring.recovered_mwh
+    assert capped.upper_bound.forecast_value_gap_mwh == pytest.approx(20.0, abs=0.5)
+
+
 # --- the postures a replay cannot take ----------------------------------------
 
 
@@ -825,3 +923,213 @@ def test_the_scenario_must_describe_the_day_being_replayed() -> None:
     elsewhere = scenario(target_date=date(2025, 11, 13))
     with pytest.raises(ReplayPostureError, match="the scenario plans"):
         replay_result(elsewhere, decode_scenario_body(elsewhere).hash, scores)
+
+
+# --- the observed-only day, before the first fold -----------------------------
+
+#: A day in the pre-F1 training block. Every artifact was fitted on it, so no
+#: honest counterfactual exists and `replay.md` refuses it rather than labelling
+#: it — the observed-only view is what it gets instead.
+PRE_F1_DAY = date(2024, 8, 14)
+
+
+def pre_f1_day(target_date: date = PRE_F1_DAY) -> ReplayDay:
+    """A refused `ReplayDay` from the calendar's own predicate, never hand-built."""
+    return resolve_day(
+        DayEvidence(target_date=target_date, observed_hours=HOURS_PER_DAY),
+        subsystem=SUBSYSTEM,
+        lane=LANE.directory_name,
+        rules=FOLD_CALENDAR_RULES,
+        latest=date(2026, 9, 3),
+        windows=None,
+        sources=(),
+    )
+
+
+def observed_only(
+    *,
+    observed: tuple[float, ...] = day_profile(WORKED_OBSERVED),
+    day: ReplayDay | None = None,
+    threshold_mw: float = THRESHOLD_MW,
+) -> ObservedOnlyView:
+    return score_observed_only(
+        scenario(target_date=PRE_F1_DAY),
+        day=pre_f1_day() if day is None else day,
+        observed=observed_day(observed, target_date=PRE_F1_DAY),
+        threshold_mw=threshold_mw,
+    )
+
+
+def observed_only_published(
+    view: ObservedOnlyView | None = None,
+    *,
+    episodes: tuple[ReplayEpisode, ...] = (),
+) -> dict[str, Any]:
+    body = scenario(target_date=PRE_F1_DAY)
+    validate_scenario(body, NOW)
+    return observed_only_result(
+        body,
+        decode_scenario_body(body).hash,
+        observed_only() if view is None else view,
+        episodes=episodes,
+    )
+
+
+def test_an_observed_only_day_has_the_day_the_episodes_and_the_bound() -> None:
+    """The whole offer for a pre-F1 day, and it validates against its own schema.
+
+    The settled profile, the episodes at the threshold in force, the bound —
+    and the typed code that says why there is nothing else, which is the one
+    sentence the screen renders.
+    """
+    episode = ReplayEpisode(
+        started_at=datetime(2024, 8, 14, 13, tzinfo=UTC),
+        ended_at=datetime(2024, 8, 14, 16, tzinfo=UTC),
+        duration_hours=3,
+        total_mwh=240.0,
+        peak_mw=160.0,
+        threshold_mw=THRESHOLD_MW,
+        max_gap_hours=MAX_GAP_HOURS,
+    )
+    body = observed_only_published(episodes=(episode,))
+
+    schema = json.loads(
+        (SCHEMA_DIR / "replay-observed-only.schema.json").read_text(encoding="utf-8")
+    )
+    Draft202012Validator(schema, registry=registry()).validate(body)
+
+    assert body["target_date"] == PRE_F1_DAY.isoformat()
+    assert body["replayable"] is False
+    assert body["refusal"]["code"] == "REPLAY_DATE_BEFORE_HOLDOUT_WINDOW"
+    assert body["refusal"]["details"]["observed_only"] is True
+    # The observed profile, whole, and its episodes at the threshold in force.
+    assert body["actual"]["hours"] == list(day_profile(WORKED_OBSERVED))
+    assert body["actual"]["total_mwh"] == pytest.approx(240.0)
+    assert body["threshold_mw"] == THRESHOLD_MW
+    assert body["episodes"][0]["threshold_mw"] == THRESHOLD_MW
+    assert body["upper_bound"]["label"] == "perfect_foresight"
+    assert body["upper_bound"]["recovered_mwh"] > 0.0
+
+
+def test_a_pre_f1_day_carries_no_wattsteer_number_at_all() -> None:
+    """`scored`, `avoided_energy_mwh`, `recovered_floor_mwh`: absent, not zero.
+
+    A zero would be a claim — "WattSteer recovered nothing" — about a day
+    WattSteer was never asked to plan. The absence is structural: an
+    `ObservedOnlyView` holds no plan, no `ScoredRealisation` and no floor, so
+    there is nothing on it these keys could be read from, and the schema is
+    closed so a future edit that invented one would fail validation.
+    """
+    body = observed_only_published()
+    for absent in (
+        "scored",
+        "avoided_energy_mwh",
+        "recovered_floor_mwh",
+        "floor_met",
+        "floor_margin_mwh",
+        "avoidability",
+        "baseline_curtailment_mwh",
+        "optimized_curtailment_mwh",
+        "dispatch",
+        "executed",
+        "forecast",
+        "forecast_origin",
+        "integrity",
+        "planning_basis",
+        "scored_on",
+    ):
+        assert absent not in body, f"{absent} is absent on an observed-only day"
+
+    # The schema is closed, so smuggling one in is a refusal rather than a
+    # convention somebody remembered.
+    schema = json.loads(
+        (SCHEMA_DIR / "replay-observed-only.schema.json").read_text(encoding="utf-8")
+    )
+    validator = Draft202012Validator(schema, registry=registry())
+    with pytest.raises(ValidationError):
+        validator.validate({**body, "avoided_energy_mwh": 0.0})
+
+
+def test_the_bound_on_an_observed_only_day_has_nothing_to_compare_against() -> None:
+    """No `forecast_value_gap_mwh`: there was no forecast, so there is no gap.
+
+    "The forecast cost nothing" and "there was no forecast" are different
+    sentences, and only the second is true here — so the two cases are two types
+    rather than one type with a nullable field.
+    """
+    view = observed_only()
+    assert not isinstance(view.upper_bound, PerfectForesight)
+    assert not hasattr(view.upper_bound, "forecast_value_gap_mwh")
+    assert "forecast_value_gap_mwh" not in view.upper_bound.as_payload()
+
+    # And a hand-built view carrying the three-scalar shape is refused, because
+    # `PerfectForesight` is a subclass and the type alone would let it through.
+    with pytest.raises(ReplayPostureError, match="no gap to publish"):
+        ObservedOnlyView(
+            day=pre_f1_day(),
+            observed=observed_day(day_profile(WORKED_OBSERVED), target_date=PRE_F1_DAY),
+            threshold_mw=THRESHOLD_MW,
+            upper_bound=PerfectForesight(
+                recovered_mwh=160.0, avoidability=0.5, forecast_value_gap_mwh=0.0
+            ),
+        )
+
+
+def test_the_observed_only_view_is_offered_for_the_pre_f1_block_and_nothing_else() -> (
+    None
+):
+    """A replayable day has numbers; a missing read is a 404, not a screen."""
+    with pytest.raises(ReplayPostureError, match="not an observed-only day"):
+        observed_only(day=replayable_day())
+
+    incomplete = ReplayDay(
+        target_date=PRE_F1_DAY,
+        provenance=None,
+        vintage_fidelity="revision_optimistic",
+        held_out_by=None,
+        refusal=ReplayRefused(
+            code="REPLAY_OBSERVATION_INCOMPLETE", status=404, message="23 of 24 hours"
+        ),
+    )
+    with pytest.raises(ReplayPostureError, match="not an observed-only day"):
+        observed_only(day=incomplete)
+
+
+def test_an_episode_from_another_threshold_cannot_be_rendered_here_either() -> None:
+    """Rule 8 holds on the day with no numbers, for the same reason."""
+    elsewhere = ReplayEpisode(
+        started_at=datetime(2024, 8, 14, 13, tzinfo=UTC),
+        ended_at=datetime(2024, 8, 14, 16, tzinfo=UTC),
+        duration_hours=3,
+        total_mwh=240.0,
+        peak_mw=160.0,
+        threshold_mw=50.0,
+        max_gap_hours=MAX_GAP_HOURS,
+    )
+    with pytest.raises(ReplayPostureError, match="cannot be rendered beside"):
+        observed_only_published(episodes=(elsewhere,))
+
+
+def test_the_observed_only_bound_is_the_day_itself_planned_against() -> None:
+    """It is `optimize(curt = a, S)` and not a solve on some other profile.
+
+    The same fleet, the same day: the bound published beside a pre-F1 day is
+    numerically what a hindsight solve on that day produces, which is what makes
+    "a property of the day and the fleet" a checkable sentence.
+    """
+    observed = day_profile(WORKED_OBSERVED)
+    view = observed_only(observed=observed)
+    plan = build_plan(
+        scenario(target_date=PRE_F1_DAY),
+        PlanningProfile(
+            forecast_origin=GATE,
+            vintage_fidelity="revision_optimistic",
+            p10_mwh=observed,
+            p50_mwh=observed,
+            p90_mwh=observed,
+            threshold_mw=THRESHOLD_MW,
+        ),
+    )
+    scored = simulate(plan, observed, threshold_mw=THRESHOLD_MW)
+    assert view.upper_bound.recovered_mwh == pytest.approx(scored.recovered_mwh)
+    assert view.upper_bound.avoidability == pytest.approx(scored.avoidability)

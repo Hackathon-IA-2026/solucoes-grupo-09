@@ -55,6 +55,17 @@ the plan did not have; it is hindsight, and the one place it is permitted is
 :func:`_hindsight_plan`, whose output can only leave this module as
 ``upper_bound``.
 
+## The day with no counterfactual
+
+A day in the pre-F1 training block has no honest forecast and therefore no plan
+and no recovery number, and `replay.md` refuses it rather than labelling it.
+:func:`score_observed_only` is what those days get instead:
+:class:`ObservedOnlyView` — the settled profile and the perfect-foresight bound,
+which needs no forecast and therefore no model. It holds no plan, no
+:class:`~wattsteer_ml.optimizer.simulator.ScoredRealisation` and no floor, so
+the three figures `replay.md` requires to be **absent** rather than zero are
+absent because there is nothing on the object to read them from.
+
 **The floor is simulated against P10**, which the conformal ``δ_lo`` correction
 reaches in full at every ``p`` — so ``recovered_floor_mwh``, the figure the
 product quotes in prose, is the sound half of the band. Ticket 21's caveat
@@ -65,8 +76,8 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date, datetime
-from typing import Any, Literal
+from datetime import date, datetime, timedelta
+from typing import Any, Literal, overload
 
 from wattsteer_ml.evaluation.vintage import earliest_valid_instant
 from wattsteer_ml.mixture import QuantileBand
@@ -94,6 +105,10 @@ from wattsteer_ml.replay.cards import ArtifactWindows
 #: an `OptimizationResult` are evaluated on the planning envelope: same names,
 #: different realisation, and without this field the two results are a trap.
 SCORED_ON: Literal["observed"] = "observed"
+
+#: One civil day. Only used to name the instant a day is fully settled, which
+#: is the origin a hindsight solve is honestly dated to.
+_ONE_DAY = timedelta(days=1)
 
 #: The label the upper bound is rendered under, in the spec's own words: "the
 #: best any plan could have done knowing the answer".
@@ -288,29 +303,52 @@ class ObservedDay:
 
 
 @dataclass(frozen=True)
-class PerfectForesight:
-    """The upper bound, fenced: three numbers and no dispatch.
+class PerfectForesightBound:
+    """The bound on its own: what the day and the fleet allowed, and no more.
 
     `replay.md` requires perfect foresight to live under ``upper_bound``, never
     in ``avoided_energy_mwh`` and never in ``scored``. The fence is this type's
     *shape*: :func:`_hindsight_plan` is the only thing that ever holds the plan
-    solved against the observed day, and what it returns is these three scalars.
+    solved against the observed day, and what it returns is these scalars.
     Nothing downstream can populate a headline field from a plan it cannot
     reach, which is a stronger statement than a test asserting that it does not.
+
+    Two numbers rather than three, because this is the shape an **observed-only**
+    day gets: no forecast exists for it, so WattSteer made no plan, so there is
+    nothing to subtract and the gap is *unrepresentable* rather than null. The
+    day that does have a plan gets :class:`PerfectForesight`, which is this plus
+    the one arithmetic use a hindsight number honestly has.
     """
 
     recovered_mwh: float
     avoidability: float | None
-    #: What better forecasting was worth on this day: perfect foresight minus
-    #: what the plan actually achieved. The only honest use of a hindsight
-    #: number.
-    forecast_value_gap_mwh: float
 
     def as_payload(self) -> dict[str, object]:
         return {
             "label": PERFECT_FORESIGHT,
             "recovered_mwh": self.recovered_mwh,
             "avoidability": self.avoidability,
+        }
+
+
+@dataclass(frozen=True)
+class PerfectForesight(PerfectForesightBound):
+    """The bound, beside the day WattSteer's plan actually achieved.
+
+    The gap is the only honest use of a hindsight number and it answers a real
+    question: what is a better forecast worth? Its shape is the honest one — on
+    a fleet with power to spare and no energy limit it is zero, because knowing
+    the answer buys nothing. It opens exactly where the fleet is energy-limited
+    and the plan has to choose which hours to spend itself on.
+    """
+
+    #: What better forecasting was worth on this day: perfect foresight minus
+    #: what the plan actually achieved.
+    forecast_value_gap_mwh: float
+
+    def as_payload(self) -> dict[str, object]:
+        return {
+            **super().as_payload(),
             "forecast_value_gap_mwh": self.forecast_value_gap_mwh,
         }
 
@@ -474,6 +512,83 @@ class ReplayScores:
         return self.observed_scoring.recovered_mwh - self.recovered_floor_mwh
 
 
+@dataclass(frozen=True)
+class ObservedOnlyView:
+    """A pre-F1 day: what happened, and the bound. Nothing of WattSteer's.
+
+    Every artifact was fitted on the days before F1's test period, so no honest
+    counterfactual exists for them and `replay.md` refuses rather than labels:
+    "the ticket's third option is deliberately rejected for this case". What is
+    offered instead is this — the settled profile, the episodes at the threshold
+    in force, and the perfect-foresight bound, which needs no forecast and
+    therefore no model.
+
+    **The absences are the type, not a convention.** There is no plan here, no
+    :class:`~wattsteer_ml.optimizer.simulator.ScoredRealisation` and no floor:
+    ``scored``, ``avoided_energy_mwh`` and ``recovered_floor_mwh`` are absent
+    from what :func:`~wattsteer_ml.replay.result.observed_only_result` publishes
+    because there is no field on this object they could be read from. A zero
+    would be a claim — "WattSteer recovered nothing" — about a day WattSteer was
+    never asked to plan.
+
+    :meth:`__post_init__` polices a hand-built one exactly as hard as one
+    :func:`score_observed_only` produced: the day must be refused *for this
+    reason*, the halves must describe one day, and the bound must carry no gap.
+    """
+
+    day: ReplayDay
+    observed: ObservedDay
+    threshold_mw: float
+    #: Two scalars, and deliberately not three. See :meth:`_check_the_bound_has
+    #: _nothing_to_compare_against`.
+    upper_bound: PerfectForesightBound
+
+    def __post_init__(self) -> None:
+        self._check_the_day_is_observed_only()
+        self._check_the_halves_describe_one_day()
+        self._check_the_bound_has_nothing_to_compare_against()
+
+    def _check_the_day_is_observed_only(self) -> None:
+        """This view is for the pre-F1 block, and for nothing else.
+
+        The other three refusals are not days with an observed-only view behind
+        them: a date out of range has no settled day, and a day whose forecast
+        rows or settled hours are missing is a *gap*, not a decision. Rendering
+        any of them through this view would answer a `404` with a screen.
+        """
+        refusal = self.day.refusal
+        if refusal is None or refusal.details.get("observed_only") is not True:
+            raise ReplayPostureError(
+                f"{self.day.target_date.isoformat()} is not an observed-only "
+                "day: the observed-only view is what the pre-F1 block gets, and "
+                "a replayable day or a missing read is a different answer"
+            )
+
+    def _check_the_halves_describe_one_day(self) -> None:
+        if self.observed.target_date != self.day.target_date:
+            raise ReplayPostureError(
+                f"the observed day is {self.observed.target_date.isoformat()} "
+                f"and the view is of {self.day.target_date.isoformat()}"
+            )
+
+    def _check_the_bound_has_nothing_to_compare_against(self) -> None:
+        """No ``forecast_value_gap_mwh`` here — absent, and not a zero.
+
+        The gap is perfect foresight *minus what WattSteer achieved*, and on
+        this day WattSteer achieved nothing because it was never asked. A zero
+        would read as "the forecast cost nothing", which is a claim about a
+        forecast that does not exist. :class:`PerfectForesight` is a subclass of
+        the bound, so the type alone would let one through; this is the line
+        that keeps the absence absent.
+        """
+        if isinstance(self.upper_bound, PerfectForesight):
+            raise ReplayPostureError(
+                f"{self.day.target_date.isoformat()}: an observed-only day has "
+                "no WattSteer number beside the bound, so there is no gap to "
+                "publish — the bound is a property of the day and the fleet"
+            )
+
+
 def plan_at_the_gate(wire: dict[str, Any], forecast: PinnedForecast) -> DispatchPlan:
     """One MILP, the live builder, on the pinned P50. The only plan on screen.
 
@@ -520,7 +635,48 @@ def score_replay(
         plan=plan,
         band=band,
         observed_scoring=observed_scoring,
-        upper_bound=_hindsight_plan(wire, forecast, observed, achieved=observed_scoring),
+        upper_bound=_hindsight_plan(
+            wire,
+            _planning_profile(forecast, observed.hours),
+            observed,
+            threshold_mw=threshold_mw,
+            achieved=observed_scoring,
+        ),
+    )
+
+
+def score_observed_only(
+    wire: dict[str, Any],
+    *,
+    day: ReplayDay,
+    observed: ObservedDay,
+    threshold_mw: float,
+) -> ObservedOnlyView:
+    """A pre-F1 day: the day itself, and the bound. No plan of WattSteer's.
+
+    The bound needs no forecast and therefore no model, which is exactly why it
+    is the one number a day with no honest counterfactual can still carry — and
+    why it is presented here as a property of the day and the fleet rather than
+    as an achievement. ``threshold_mw`` is the threshold in force, and it does
+    the same job it does on a replay: it gates whether ``avoidability`` is
+    defined and chooses which hours are drawn as episodes, and it never enters
+    a denominator.
+
+    Raises :class:`ReplayPostureError` if the day is replayable, or is refused
+    for one of the three reasons that are a missing read rather than a decision:
+    those are a `404` or a `422`, not a screen.
+    """
+    return ObservedOnlyView(
+        day=day,
+        observed=observed,
+        threshold_mw=threshold_mw,
+        upper_bound=_hindsight_plan(
+            wire,
+            _bound_profile(observed, threshold_mw=threshold_mw),
+            observed,
+            threshold_mw=threshold_mw,
+            achieved=None,
+        ),
     )
 
 
@@ -530,9 +686,10 @@ def _planning_profile(
     """A :class:`PlanningProfile` for the builder, with ``p50`` named explicitly.
 
     ``envelope`` is a parameter of this private helper and of nothing public:
-    :func:`plan_at_the_gate` passes the pinned P50 and :func:`_hindsight_plan`
-    passes the observed day, and those are the only two callers there will ever
-    be — a third would be a planning basis nobody decided on.
+    :func:`plan_at_the_gate` passes the pinned P50 and :func:`score_replay`
+    passes the observed day to the hindsight solve, and those are the only two
+    callers there will ever be — a third would be a planning basis nobody
+    decided on.
     """
     return PlanningProfile(
         forecast_origin=forecast.origin.published_at,
@@ -548,19 +705,78 @@ def _planning_profile(
     )
 
 
+def _bound_profile(observed: ObservedDay, *, threshold_mw: float) -> PlanningProfile:
+    """The profile of a day nobody forecast: the day itself, three times over.
+
+    A bound on an observed-only day has no band behind it — there are no pinned
+    rows, which is the whole reason the day is not replayable — so the three
+    envelopes are the settled profile and the bound is scored on the same array
+    it was planned on.
+
+    ``forecast_origin`` is a magnitude `replay.md` does not supply for this case,
+    and it is derived rather than invented: local midnight *ending* the day, the
+    earliest instant at which ``a`` is fully settled and therefore the earliest
+    one at which this solve could have been performed at all. Dating it to the
+    day's own start would be the one thing this object must never imply — that
+    somebody knew.
+    """
+    profile = tuple(float(value) for value in observed.hours)
+    return PlanningProfile(
+        forecast_origin=earliest_valid_instant(observed.target_date + _ONE_DAY),
+        # Pre-F1 days are `revision_optimistic` and the calendar says so on the
+        # day itself; this field is never read by the builder, and naming the
+        # pessimistic value keeps a never-consulted field from being flattering.
+        vintage_fidelity="revision_optimistic",
+        p10_mwh=profile,
+        p50_mwh=profile,
+        p90_mwh=profile,
+        threshold_mw=threshold_mw,
+    )
+
+
+@overload
 def _hindsight_plan(
     wire: dict[str, Any],
-    forecast: PinnedForecast,
+    profile: PlanningProfile,
     observed: ObservedDay,
     *,
+    threshold_mw: float,
     achieved: ScoredRealisation,
-) -> PerfectForesight:
+) -> PerfectForesight: ...
+
+
+@overload
+def _hindsight_plan(
+    wire: dict[str, Any],
+    profile: PlanningProfile,
+    observed: ObservedDay,
+    *,
+    threshold_mw: float,
+    achieved: None,
+) -> PerfectForesightBound: ...
+
+
+def _hindsight_plan(
+    wire: dict[str, Any],
+    profile: PlanningProfile,
+    observed: ObservedDay,
+    *,
+    threshold_mw: float,
+    achieved: ScoredRealisation | None,
+) -> PerfectForesightBound:
     """The one place the day itself is allowed to be planned against.
 
     ``plan_pf = optimize(curt = a, S)``, scored on ``a``: the best any plan
     could have done knowing the answer. It is a *bound*, never a claim about
     WattSteer, and the fence is that the plan never leaves this function — what
-    comes back is :class:`PerfectForesight`'s three scalars.
+    comes back is two scalars, or three where there is a WattSteer number to
+    subtract.
+
+    ``achieved`` is that number, and it is `None` on an observed-only day: no
+    forecast exists, so no plan was built, so no gap is defined. The two cases
+    return two different types rather than one type with a nullable field,
+    because "the forecast cost nothing" and "there was no forecast" are
+    different sentences and only one of them is true here.
 
     ``scored_pf.recovered_mwh ≥ recovered_mwh`` is asserted here rather than
     downstream because this is where the tolerance is computable. The executed
@@ -570,8 +786,18 @@ def _hindsight_plan(
     larger than that means the plan and the simulator disagree, which is the one
     bug this architecture is arranged to surface.
     """
-    plan = build_plan(wire, _planning_profile(forecast, observed.hours))
-    scored = simulate(plan, observed.hours, threshold_mw=forecast.threshold_mw)
+    if not _same_profile(profile.p50_mwh, observed.hours):
+        raise ReplayPostureError(
+            f"{observed.target_date.isoformat()}: a perfect-foresight bound is "
+            "the day itself, planned against — a solve on any other profile is "
+            "not a bound on this day"
+        )
+    plan = build_plan(wire, profile)
+    scored = simulate(plan, observed.hours, threshold_mw=threshold_mw)
+    if achieved is None:
+        return PerfectForesightBound(
+            recovered_mwh=scored.recovered_mwh, avoidability=scored.avoidability
+        )
     tie_breaker = TOLERANCE_MWH + sum(
         penalty * dispatch.throughput_mwh
         for penalty, dispatch in zip(
@@ -603,11 +829,14 @@ __all__ = [
     "SCORED_ON",
     "ForecastHour",
     "ObservedDay",
+    "ObservedOnlyView",
     "PerfectForesight",
+    "PerfectForesightBound",
     "PinnedForecast",
     "PinnedOrigin",
     "ReplayPostureError",
     "ReplayScores",
     "plan_at_the_gate",
+    "score_observed_only",
     "score_replay",
 ]

@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wattsteer.com/schema/replay-observed-only.schema.json",
+  "title": "ReplayObservedOnly",
+  "description": "What a day in the pre-F1 training block gets instead of a replay - `docs/specs/replay.md`, \"the observed-only view\". Every artifact was fitted on those days, so no honest counterfactual exists and the day is refused rather than labelled. The settled profile, the episodes at the threshold in force, and the perfect-foresight bound, which needs no forecast and therefore no model. There is no `scored`, no `avoided_energy_mwh` and no `recovered_floor_mwh`: absent, not zero, because a zero would be a claim about a plan WattSteer was never asked to build. `additionalProperties: false` is what makes that absence a refusal rather than a convention.",
+  "type": "object",
+  "properties": {
+    "target_date": {
+      "$ref": "common.schema.json#/$defs/civil_date"
+    },
+    "subsystem": {
+      "$ref": "common.schema.json#/$defs/subsystem"
+    },
+    "threshold_mw": {
+      "$ref": "common.schema.json#/$defs/threshold_mw"
+    },
+    "max_gap_hours": {
+      "$ref": "common.schema.json#/$defs/max_gap_hours"
+    },
+    "scenario_hash": {
+      "$ref": "common.schema.json#/$defs/scenario_hash"
+    },
+    "replayable": {
+      "description": "Always `false`. The field exists so that a client reading this object and a client reading a `Replay` do not have to tell them apart by which keys are missing.",
+      "type": "boolean",
+      "const": false
+    },
+    "refusal": {
+      "$ref": "#/$defs/refusal"
+    },
+    "vintage_fidelity": {
+      "$ref": "common.schema.json#/$defs/vintage_fidelity",
+      "description": "Carried on a refused day too: \"this day cannot be replayed\" and \"its actuals would have been a restatement\" are two facts, and the spec keeps them apart because today they coincide."
+    },
+    "actual": {
+      "$ref": "replay.schema.json#/$defs/actual"
+    },
+    "upper_bound": {
+      "$ref": "#/$defs/upper_bound"
+    },
+    "episodes": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/episode"
+      }
+    }
+  },
+  "required": [
+    "target_date",
+    "subsystem",
+    "threshold_mw",
+    "max_gap_hours",
+    "scenario_hash",
+    "replayable",
+    "refusal",
+    "vintage_fidelity",
+    "actual",
+    "upper_bound",
+    "episodes"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "upper_bound": {
+      "title": "PerfectForesightBound",
+      "description": "The best any plan could have done knowing the answer - a property of the day and the fleet. Two numbers and not three: `forecast_value_gap_mwh` is perfect foresight minus what WattSteer achieved, and on this day WattSteer achieved nothing because it was never asked, so the gap is absent rather than zero.",
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "enum": ["perfect_foresight"]
+        },
+        "recovered_mwh": {
+          "type": "number",
+          "minimum": 0
+        },
+        "avoidability": {
+          "$ref": "common.schema.json#/$defs/avoidability"
+        }
+      },
+      "required": ["label", "recovered_mwh", "avoidability"],
+      "additionalProperties": false
+    },
+    "refusal": {
+      "title": "ReplayRefusal",
+      "description": "The clause of the replayable predicate that failed, as the typed code a client renders one sentence from. `REPLAY_DATE_BEFORE_HOLDOUT_WINDOW` is the only code this view is offered for: the other refusals are a missing read rather than a decision, and they are answered as a `404` with no screen behind them.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": ["REPLAY_DATE_BEFORE_HOLDOUT_WINDOW"]
+        },
+        "status": {
+          "type": "integer",
+          "enum": [422]
+        },
+        "message": {
+          "description": "Developer prose for a log. The screen renders `t(\"error.\" + code)` and never this.",
+          "type": "string"
+        },
+        "details": {
+          "type": "object"
+        }
+      },
+      "required": ["code", "status", "message", "details"],
+      "additionalProperties": false
+    }
+  }
+}

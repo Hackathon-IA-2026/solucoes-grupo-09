@@ -16,7 +16,9 @@ and this package reads them back and judges them.
 - :mod:`~wattsteer_ml.replay.scoring` — the scoring half: one MILP on the pinned
   D−1 P50, four realisations through the optimizer's *imported* simulator, the
   floor that was promised, and the fenced perfect-foresight bound.
-- :mod:`~wattsteer_ml.replay.result` — that, as the published contract.
+- :mod:`~wattsteer_ml.replay.result` — that, as the published contract, and the
+  observed-only contract a pre-F1 day gets instead: the day, its episodes and
+  the bound, with no recovery number anywhere on it.
 
 The two halves stay in different modules because `replay.md` splits them at the
 seam that matters: "the forecast is precomputed; the dispatch is computed on
@@ -51,18 +53,25 @@ from wattsteer_ml.replay.cards import (
     read_windows,
     windows_from_card,
 )
-from wattsteer_ml.replay.result import ReplayEpisode, replay_result
+from wattsteer_ml.replay.result import (
+    ReplayEpisode,
+    observed_only_result,
+    replay_result,
+)
 from wattsteer_ml.replay.scoring import (
     PERFECT_FORESIGHT,
     SCORED_ON,
     ForecastHour,
     ObservedDay,
+    ObservedOnlyView,
     PerfectForesight,
+    PerfectForesightBound,
     PinnedForecast,
     PinnedOrigin,
     ReplayPostureError,
     ReplayScores,
     plan_at_the_gate,
+    score_observed_only,
     score_replay,
 )
 
@@ -80,7 +89,9 @@ __all__ = [
     "ForecastHour",
     "HeldOutBy",
     "ObservedDay",
+    "ObservedOnlyView",
     "PerfectForesight",
+    "PerfectForesightBound",
     "PinnedForecast",
     "PinnedOrigin",
     "ReplayCalendar",
@@ -95,11 +106,13 @@ __all__ = [
     "day_fidelity",
     "integrity_violation",
     "latest_replayable_date",
+    "observed_only_result",
     "plan_at_the_gate",
     "read_windows",
     "refusal_counts",
     "replay_result",
     "resolve_day",
+    "score_observed_only",
     "score_replay",
     "windows_from_card",
 ]

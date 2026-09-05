@@ -277,6 +277,7 @@ describe("rule 8 — threshold_mw is on every object it applies to", () => {
     ["diagnosis.schema.json", "the diagnosis"],
     ["optimization-result.schema.json", "every optimization result"],
     ["replay.schema.json", "every replay"],
+    ["replay-observed-only.schema.json", "the observed-only view of a pre-F1 day"],
   ];
 
   for (const [file, what] of REQUIRED_ON) {
@@ -313,6 +314,7 @@ describe("rule 9 — vintage_fidelity is on every object carrying a metric", () 
     "diagnosis.schema.json",
     "optimization-result.schema.json",
     "replay.schema.json",
+    "replay-observed-only.schema.json",
   ];
 
   for (const file of REQUIRED_ON) {
