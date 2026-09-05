@@ -25,7 +25,7 @@ not a member of the path ensemble and is not a realisable day.
 **Blocked by:** 09. **External blocker:** the optimizer's simulator and its
 execution rule, owned by the flex-optimizer work.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Both arms are built on the same days, from the same served artifact, with
       the same fixed published reference fleet
