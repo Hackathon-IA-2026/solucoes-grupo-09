@@ -24,7 +24,7 @@ rather than a convention.
 
 **Blocked by:** 02, 09.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Three sweeps run on identical folds and rows, differing only in the
       threshold passed to the feature function

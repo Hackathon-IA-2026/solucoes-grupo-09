@@ -37,12 +37,17 @@ harnesses, two outputs, two names.
   interval metrics and not only `qloss_mwh` — which is where the research
   predicted the harm — plus the archive-on-archive column that sizes the leak.
   Run once per fold calendar, never on the weekly retrain.
+- :mod:`~wattsteer_ml.evaluation.threshold_sweep` — the 1 / 5 / 10 MW sweep,
+  three arms on identical rows, published rather than acted on: the six figures
+  per threshold and per fold, the two move-forcing prevalence conditions
+  evaluated rather than left to a reader, and the two figures that move with the
+  mixture's breakpoint rather than with the model, said so beside them.
 - :mod:`~wattsteer_ml.evaluation.serving_lanes` — the two served lanes, the
   morning view and the evening view, gated on one schedule and independently:
   one lane's refusal does not block the other's promotion, and the report
   carries the attribute census that says the two are different experiments.
 
-**The last seven are imported as submodules, not re-exported here.** They read
+**The last eight are imported as submodules, not re-exported here.** They read
 :mod:`wattsteer_ml.training`, which reads this package; re-exporting them would
 close the cycle and make `import wattsteer_ml.evaluation` depend on LightGBM
 being installed. `from wattsteer_ml.evaluation.metrics import MetricsRow` is the
