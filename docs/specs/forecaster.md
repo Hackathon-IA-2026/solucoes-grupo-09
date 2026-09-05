@@ -827,6 +827,18 @@ claim about the size of the gap should be revised downward, and this becomes a
 standing model-health metric rather than a one-off. It is cheap: two series, one
 correlation, no training.
 
+**Both experiments now have an answer about whether they can be run at all**,
+and the answers differ. The correlation is built and runnable —
+`apps/ml/src/wattsteer_ml/weather_reads.py` reads both aggregates out of the
+stored weather versions and the real weight vector, recovering the archive
+series as the shortest-lead slice, one publication cut per valid hour. The A/B
+itself is **not** runnable, and for a reason stronger than "the archive is not
+ingested": the archive is twenty-four publication cuts inside one target day,
+the gate writes one, and `feature_rows` accepts no instant at all, so no setting
+of the axes yields an archive-built feature row. The block therefore carries an
+`UnmeasuredLeadTime` with the reason named, and the correlation beside it. See
+`feature-engineering.md` §Seam 7, which owns both.
+
 ### The DESSEM A/B — the trade, framed for one sitting
 
 The feature spec establishes the three-run design and the fairness rule. This

@@ -1375,9 +1375,84 @@ both are feature-level questions, and both were left open by the research:
    Recompute on the real centroids and publish the number. If `r > 0.95`, the
    size of the claim in the map's Notes should be revised downward.
 
-**Acceptance gate.** Default `bun test` passes with no network. Seams 1–5 pass
-against real Postgres under the existing env-var gating. Seam 6 passes on its
-schedule. Both sets build over their full windows, and the row counts match the
+**One of the two can be run here, and one cannot. That asymmetry is the finding,
+and it is not the one the ticket expected.**
+
+**Experiment 2 is built and runnable**, in
+`apps/ml/src/wattsteer_ml/weather_reads.py`, against real weather rows and the
+real weight view. It needs
+no archive ingestion, because it needs no feature row and no training run — two
+series and a correlation. The archive series is recovered from the runs this
+repository already holds, on the strength of a measurement this repository
+already recorded: `ingest/weather/single-runs.ts` says the stitched Historical
+Forecast archive is **bit-identical to `_previous_day0`, the shortest-lead slice
+of each run**, and `weather-job.ts` writes all three forecast days of every 00Z
+and 12Z run, so for any valid hour that slice is on disk as the version
+published by the newest run at or before it. Reading it is one axis:
+
+  * **lead-matched (served)** — `published_at_or_before = gate_at(D, profile)`.
+    One publication cut for the whole target day, which is what the gate *is*.
+  * **archive (train)** — `published_at_or_before = valid_time`, moved hour by
+    hour. That per-hour cut is the stitch.
+
+The reconstruction is asserted, never assumed: ECMWF IFS publishes at 00Z and
+12Z over this window, so a genuine day-0 hour is 0–11 h from its run, and an
+hour whose newest available run is older than twelve is a hole in the run
+archive rather than an archive-equivalent reading. Those hours are **dropped and
+counted**, because treating one as a day-0 slice quietly turns the control arm
+into a second lead-matched arm and drives `r` toward 1. The figure reaches a
+card only through `AggregateCorrelation.measured`, stamped
+`correlation_source = weather_forecast_hour`.
+
+**Experiment 1 cannot be run here, and the reason is stronger than "the archive
+is not ingested".** Forecaster 16 recorded that reason and it stands, but the
+archive-equivalence above means the *weather* for the control arm is in fact
+recoverable. What is not recoverable is the control arm's **feature rows**. The
+archive is a stitch of twenty-four different publication cuts inside one target
+day; `feature_apply_gate` writes **one** instant for the whole day, and
+`feature_rows` accepts no instant at all. There is therefore no setting of the
+axes that yields an archive-built feature row — not a missing ingestion but a
+missing *shape*. Building one would mean either a second weather read axis
+inside the feature spine, which is the train/serve skew this spec exists to make
+unwritable, or a parallel feature builder, which is a second definition of the
+vector. Neither is worth the experiment. The A/B stays
+`UnmeasuredLeadTime` carrying `ARCHIVE_NOT_INGESTED`, written to the card rather
+than omitted, and the correlation is carried beside it on the same block.
+
+**A defect found while establishing that, recorded rather than fixed.**
+`0016_the_feature_gate.sql` says of the feature-side `as_of` that "over the
+backfill window every row was ingested at go-live, so it filters nothing". It
+filters **everything**. `ingested_at` is the backfill instant — `versioned-write.ts`
+stamps `new Date()` — the gate is a D−1 instant one to two years earlier, and
+`ingested_at <= canonical_as_of()` is then false for every row. Measured on a
+migrated database with weather ingested in 2026:
+`feature_weather_block('2024-04-10', 'gate_late')` returns **zero rows** — not
+even the coverage-0 spine rows the same migration promises, because
+`canonical_capacity_weight` is read under the same axis and is empty too. Every
+historical feature row is therefore weatherless, which is a defect in the gate
+spine and not in this experiment. It is pinned as the behaviour it is by
+`apps/ml/tests/test_aggregate_train_serve_gap.py`, so the day it is fixed that
+test fails and names the sentence to delete. It is also why `weather_reads.py`
+writes `as_of` itself instead of calling `feature_apply_gate`: the gate instant
+still comes from `gate_at(...)` and the local day from
+`feature_local_day_hours(...)`, and the only axis written differently is the one
+that is broken — set to the training-time instant on **both** arms, so neither
+arm can see rows the other cannot.
+
+**Where the number lands.** On the model card, under `lead_time_penalty`
+→ `aggregate_correlation`, through `record_lead_time_penalty`. The block already
+states the verdict in prose — whether the aggregate cleared `r > 0.95` and
+therefore whether the claimed gap should be revised downward — so the revision
+is carried by the published figure rather than by a number restated in this
+document. **No number is written into this spec, `forecaster.md` or the map**,
+deliberately: a figure copied out of a card is a figure that can be right on the
+card and stale everywhere else, and the claim this experiment might revise is
+one whose overstatement was the thing worth avoiding.
+
+**Acceptance gate.** Default `bun test` passes with no network. Seams 1–5 and
+seam 7's measurable half pass against real Postgres under the existing env-var
+gating — `apps/ml/tests/test_aggregate_train_serve_gap.py`, on
+`WATTSTEER_TEST_DATABASE_URL`. Seam 6 passes on its schedule. Both sets build over their full windows, and the row counts match the
 arithmetic above.
 
 ## Out of Scope
