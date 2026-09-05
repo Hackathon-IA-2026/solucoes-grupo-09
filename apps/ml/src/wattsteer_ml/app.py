@@ -34,6 +34,7 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Annotated, Any, Literal, cast
 
@@ -74,14 +75,27 @@ from .publication import (
 )
 from .replay.calendar import (
     ReplayCalendar,
+    ReplayDay,
     build_calendar,
     integrity_violation,
     latest_replayable_date,
+    resolve_day,
 )
-from .replay.cards import read_windows
+from .replay.cards import ArtifactWindows, read_windows
+from .replay.inputs import ReplayInputs, ReplayInputSource, replay_input_source
 from .replay.reads import read_calendar_evidence
-from .scenario import ScenarioTransportError, decode_scenario_body
-from .scenario_validation import ScenarioValidationError, validate_scenario
+from .replay.result import observed_only_result, replay_result
+from .replay.scoring import score_observed_only, score_replay
+from .scenario import (
+    DecodedScenario,
+    ScenarioTransportError,
+    decode_scenario_body,
+)
+from .scenario_validation import (
+    ScenarioValidationError,
+    replay_target_date,
+    validate_scenario,
+)
 from .training import CORRECTION_REGIME, contract_fault, read_card
 
 #: A canonical **view** Drizzle creates. `/ready` uses it to tell "migrations
@@ -498,6 +512,25 @@ _SOLVER_FAILURES: dict[str, tuple[int, str]] = {
 }
 
 
+def _solver_failure(bug: OptimizerBugError, scenario_hash: str) -> JSONResponse:
+    """The solver's failure, mapped once for every route that runs a solve.
+
+    A function rather than a block inside `/v1/optimize` because a replay runs
+    the *same* MILP through the *same* builder, and two mappings of one table
+    would eventually disagree about which of these is a `503` — at which point
+    the same failure would be a retryable degradation on one screen and a bug
+    report on the other.
+    """
+    status = bug.status if isinstance(bug, SolverNotOptimalError) else None
+    # The scenario hash, never the scenario: `label` is attacker-controlled, and
+    # the hash is what makes the run reproducible from a bug report.
+    logger.error("solve: %s for scenario %s", status or type(bug).__name__, scenario_hash)
+    mapped = _SOLVER_FAILURES.get(status) if status is not None else None
+    if mapped is not None:
+        return _refusal(mapped[0], mapped[1], str(bug))
+    return _refusal(500, "SOLVER_BUG", str(bug), {"scenario_hash": scenario_hash})
+
+
 @app.post("/v1/optimize", tags=["optimizer"])
 def optimize(
     scenario: Annotated[dict[str, Any], Body()],
@@ -530,18 +563,7 @@ def optimize(
     try:
         body = optimization_result(wire, decoded.hash, profile)
     except OptimizerBugError as bug:
-        status = bug.status if isinstance(bug, SolverNotOptimalError) else None
-        # The scenario hash, never the scenario: `label` is attacker-controlled,
-        # and the hash is what makes the run reproducible from a bug report.
-        logger.error(
-            "optimize: %s for scenario %s",
-            status or type(bug).__name__,
-            decoded.hash,
-        )
-        mapped = _SOLVER_FAILURES.get(status) if status is not None else None
-        if mapped is not None:
-            return _refusal(mapped[0], mapped[1], str(bug))
-        return _refusal(500, "SOLVER_BUG", str(bug), {"scenario_hash": decoded.hash})
+        return _solver_failure(bug, decoded.hash)
 
     return JSONResponse(
         content=body,
@@ -844,3 +866,283 @@ def model_card(
             "card": card,
         }
     )
+
+
+# --- one replay ----------------------------------------------------------------
+#
+# `docs/specs/replay.md`, "The endpoint": a replay answers **inside one HTTP
+# request**, over exactly the same scenario transport as Mitigate. A `Replay` is
+# a `Scenario` with a past `target_date`, so there is no second blob format, no
+# job id and nothing to poll for — and the gateway's `GET ?d=&s=` and `POST`
+# forms both arrive here as one `POST`, on the identical canonical bytes.
+#
+# **No model is in this path.** No joblib load, no feature build, no forecast
+# call: `read_replay_inputs` is a lookup of rows replay 01 persisted. What runs
+# is two MILP solves — the plan at the gate and the fenced perfect-foresight
+# bound — and five simulator passes, which is why the handler below is a `def`
+# and not an `async def`, exactly as `/v1/optimize` is: FastAPI runs a sync
+# handler on the threadpool, so the solve cannot stall the event loop.
+#
+# **The lane is required and never defaulted**, for the reason `/v1/replay/days`
+# requires it: post-go-live a day has one candidate forecast per served lane and
+# no rule yet says which one a replay is *of*. A default here would answer a
+# question nobody has asked, inside a query string.
+
+
+def replay_inputs_source() -> ReplayInputSource | None:
+    """The reader this deployment answers replays with, or nothing.
+
+    A dependency rather than a module-level constant so a test can inject rows
+    without a Postgres, and `None` with no database configured — an instance
+    that cannot reach the rows has no replay, and saying so is the only answer
+    that is not invented.
+    """
+    if database is None:
+        return None
+    return replay_input_source(database)
+
+
+def _replay_scenario(scenario: dict[str, Any]) -> DecodedScenario | JSONResponse:
+    """The scenario, decoded and validated — the whole table minus its date clause.
+
+    `replay.md` seam 10 states the parity claim and its one exception in the
+    same breath, because the two endpoints cannot agree about the date and an
+    implementation that made them agree would be wrong about one of them. Every
+    other rule is the identical function call `/v1/optimize` makes, so a blob
+    refused by one is refused by the other with the same code.
+    """
+    try:
+        decoded = decode_scenario_body(scenario)
+        validate_scenario(
+            decoded.scenario, datetime.now(tz=UTC), target_date=replay_target_date
+        )
+    except (ScenarioTransportError, ScenarioValidationError) as refusal:
+        return _refused_scenario(refusal)
+    return decoded
+
+
+@dataclass(frozen=True)
+class _ResolvedReplay:
+    """A decoded scenario, the day's evidence and the verdict on it."""
+
+    decoded: DecodedScenario
+    lane: Lane
+    day: ReplayDay
+    windows: ArtifactWindows | None
+    inputs: ReplayInputs
+
+
+def _resolve_replay(
+    scenario: dict[str, Any], lane: str, read: ReplayInputSource | None
+) -> _ResolvedReplay | JSONResponse:
+    """Everything both replay routes do before they differ.
+
+    Decode, validate, parse the lane, read the day at one vintage cut, and judge
+    it against the replayable predicate — the *same* predicate `/v1/replay/days`
+    publishes, called rather than restated, so a day the calendar calls
+    replayable is a day this route can answer and a day it refuses is refused
+    here with the same code.
+    """
+    parsed_lane = _replay_lane(lane)
+    if isinstance(parsed_lane, JSONResponse):
+        return parsed_lane
+    decoded = _replay_scenario(scenario)
+    if isinstance(decoded, JSONResponse):
+        return decoded
+    if read is None:
+        return _refusal(
+            503,
+            "DATA_UNAVAILABLE",
+            "this instance has no database configured, and a replay is a pure "
+            "function of rows that only Postgres holds",
+        )
+
+    wire = decoded.scenario
+    subsystem = str(wire["subsystem"])
+    target_date = date.fromisoformat(str(wire["target_date"]))
+    origin = wire.get("forecast_origin")
+    inputs = read(
+        subsystem=subsystem,
+        target_date=target_date,
+        lane=parsed_lane,
+        forecast_origin=origin if isinstance(origin, str) else None,
+    )
+
+    artifact_id = inputs.evidence.artifact_id
+    windows = (
+        None
+        if artifact_id is None
+        else read_windows(settings.artifact_dir, parsed_lane, artifact_id)
+    )
+    try:
+        day = resolve_day(
+            inputs.evidence,
+            subsystem=subsystem,
+            lane=parsed_lane.directory_name,
+            rules=FOLD_CALENDAR_RULES,
+            latest=latest_replayable_date(datetime.now(tz=UTC)),
+            windows=windows,
+            sources=inputs.sources,
+        )
+    except HoldoutLeakError as leak:
+        # A `500`, and never a badge over a number. The artifact that lied is in
+        # the message, because an operator with only the date has no way to find
+        # the card.
+        logger.error("replay: integrity violation — %s", leak)
+        violation = integrity_violation(
+            leak, subsystem=subsystem, lane=parsed_lane.directory_name
+        )
+        return _refusal(
+            violation.status, violation.code, violation.message, dict(violation.details)
+        )
+    return _ResolvedReplay(
+        decoded=decoded, lane=parsed_lane, day=day, windows=windows, inputs=inputs
+    )
+
+
+#: The lane, spelled once for both replay routes' OpenAPI.
+_REPLAY_LANE_QUERY = Query(
+    description=(
+        "The artifact lane the replay is pinned to, e.g. "
+        "dessem_free_v1__gate_late__thr5. Required and never defaulted."
+    )
+)
+
+
+@app.post("/v1/replay", tags=["replay"])
+def replay(
+    scenario: Annotated[dict[str, Any], Body()],
+    lane: Annotated[str, _REPLAY_LANE_QUERY],
+    read: Annotated[ReplayInputSource | None, Depends(replay_inputs_source)],
+) -> JSONResponse:
+    """One replayed day: planned at the gate, scored on what happened.
+
+    Gateway-only, like `/v1/optimize`: `apps/api` validates, meters the solve
+    tier, checks the cache and proxies. This service re-decodes and re-validates
+    anyway — it trusts nothing it did not validate itself, and a hash it did not
+    compute is a hash it cannot stand behind.
+
+    Every refusal is the typed code of the clause that failed, at that clause's
+    own status, and never a computed answer with a caveat over it. A pre-F1 day
+    is refused with `REPLAY_DATE_BEFORE_HOLDOUT_WINDOW`; what those days get
+    instead is `POST /v1/replay/observed-only`, which carries no WattSteer
+    number at all.
+    """
+    resolved = _resolve_replay(scenario, lane, read)
+    if isinstance(resolved, JSONResponse):
+        return resolved
+    day, inputs = resolved.day, resolved.inputs
+    if day.refusal is not None:
+        return _refusal(
+            day.refusal.status,
+            day.refusal.code,
+            day.refusal.message,
+            dict(day.refusal.details),
+        )
+
+    # Unreachable through the predicate — a replayable day has a resolved
+    # artifact and twenty-four settled hours — but reachable through a
+    # disagreement between the two counts, and a disagreement is an absence
+    # rather than a number to publish.
+    if resolved.windows is None or inputs.forecast is None:
+        return _refusal(
+            404,
+            "REPLAY_FORECAST_UNAVAILABLE",
+            f"no complete pinned publication answers {day.target_date.isoformat()}",
+        )
+    if inputs.observed is None:
+        return _refusal(
+            404,
+            "REPLAY_OBSERVATION_INCOMPLETE",
+            f"the settled hours of {day.target_date.isoformat()} do not form a "
+            "whole local day, which is the denominator of every figure here",
+        )
+
+    wire = resolved.decoded.scenario
+    try:
+        scores = score_replay(
+            wire,
+            day=day,
+            windows=resolved.windows,
+            forecast=inputs.forecast,
+            observed=inputs.observed,
+        )
+        body = replay_result(
+            wire, resolved.decoded.hash, scores, episodes=list(inputs.episodes)
+        )
+    except HoldoutLeakError as leak:
+        logger.error("replay: integrity violation — %s", leak)
+        violation = integrity_violation(
+            leak, subsystem=inputs.forecast.subsystem, lane=resolved.lane.directory_name
+        )
+        return _refusal(violation.status, violation.code, violation.message)
+    except OptimizerBugError as bug:
+        return _solver_failure(bug, resolved.decoded.hash)
+
+    return JSONResponse(
+        content=body,
+        # The build that actually solved, so the gateway's cache key cannot name
+        # a formulation that did not produce the plan it is storing.
+        headers={"x-optimizer-build": OPTIMIZER_BUILD},
+    )
+
+
+@app.post("/v1/replay/observed-only", tags=["replay"])
+def replay_observed_only(
+    scenario: Annotated[dict[str, Any], Body()],
+    lane: Annotated[str, _REPLAY_LANE_QUERY],
+    read: Annotated[ReplayInputSource | None, Depends(replay_inputs_source)],
+) -> JSONResponse:
+    """A pre-F1 day: what happened, and the bound. Nothing of WattSteer's.
+
+    Every artifact was fitted on the days before F1's test period, so no honest
+    counterfactual exists for them and `replay.md` refuses rather than labels.
+    This is the view it offers instead, and it is a **separate route** rather
+    than a mode of the one above for exactly that reason: `/v1/replay` answers
+    "what would WattSteer have done", and on these days the honest answer is a
+    422 rather than a screen with `scored`, `avoided_energy_mwh` and
+    `recovered_floor_mwh` zeroed. Here those three are *absent*, and absent
+    structurally — `ObservedOnlyView` holds no plan, no scored realisation and
+    no floor for them to be read from.
+
+    Refused with the day's own code for any day that is not pre-F1: a date out
+    of range has no settled day, and a missing forecast or an unsettled day is a
+    gap rather than a decision. None of them is a screen.
+    """
+    resolved = _resolve_replay(scenario, lane, read)
+    if isinstance(resolved, JSONResponse):
+        return resolved
+    day, inputs = resolved.day, resolved.inputs
+    refusal = day.refusal
+    if refusal is None:
+        return _refusal(
+            422,
+            "REQUEST_INVALID",
+            f"{day.target_date.isoformat()} is replayable against an artifact "
+            "that did not see it, so the observed-only view is not what it "
+            "gets; ask /v1/replay",
+        )
+    if refusal.details.get("observed_only") is not True:
+        return _refusal(
+            refusal.status, refusal.code, refusal.message, dict(refusal.details)
+        )
+    if inputs.observed is None:
+        return _refusal(
+            404,
+            "REPLAY_OBSERVATION_INCOMPLETE",
+            f"the settled hours of {day.target_date.isoformat()} do not form a "
+            "whole local day",
+        )
+
+    wire = resolved.decoded.scenario
+    try:
+        view = score_observed_only(
+            wire, day=day, observed=inputs.observed, threshold_mw=inputs.threshold_mw
+        )
+        body = observed_only_result(
+            wire, resolved.decoded.hash, view, episodes=list(inputs.episodes)
+        )
+    except OptimizerBugError as bug:
+        return _solver_failure(bug, resolved.decoded.hash)
+
+    return JSONResponse(content=body, headers={"x-optimizer-build": OPTIMIZER_BUILD})

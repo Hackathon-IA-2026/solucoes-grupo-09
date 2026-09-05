@@ -1,6 +1,16 @@
+import { type DecodedScenario, SCENARIO_PARAM } from "@wattsteer/core/scenario";
+import { replayTargetDate } from "@wattsteer/core/scenario-validation";
 import { Elysia, t } from "elysia";
+import { config } from "../config.js";
 import { CodedError, UpstreamError } from "../errors.js";
-import { callMl, type MlEndpoint, mapUpstreamFailure } from "./ml-proxy.js";
+import { callMl, type MlEndpoint, mapUpstreamFailure, postMl } from "./ml-proxy.js";
+import { optimizeCache } from "./optimize.js";
+import { OPTIMIZE_TTL_SEC, type ResultCache, replayKey } from "./plugins/result-cache.js";
+import {
+  admitScenarioBody,
+  admitScenarioParam,
+  type GateOptions,
+} from "./scenario-gate.js";
 
 /**
  * The replayable calendar — which past days can be replayed honestly, and why
@@ -180,9 +190,327 @@ export function createReplayRoutes(endpoint?: MlEndpoint) {
 }
 
 /**
- * The gateway's instance, mounted in `index.ts`. The factory above stays
- * exported so a test can point the same routes at a stub upstream — the failure
- * mapping is half of what this module is for, and it is unreachable from a
- * module-level constant.
+ * `GET /v1/replay?d=&s=` and `POST /v1/replay` — **one HTTP request, no job id.**
+ *
+ * `docs/specs/replay.md`, "The endpoint": a replay is a `Scenario` with a past
+ * `target_date`, so inventing a second transport would be inventing a second
+ * scenario format. The blob is the optimizer's byte-for-byte — the same
+ * canonical JCS encoding, the same `v: 1`, the same 4096-byte cap, the same
+ * validation table, the same per-IP solve tier and the same failure posture —
+ * and the two verbs meet in `scenario-gate.ts` exactly as `/v1/optimize`'s do,
+ * so nothing downstream can tell a deep link from an app request.
+ *
+ * **Validation parity, minus the date clause.** The gate runs the same eighteen
+ * rules; the one substitution is `replayTargetDate`, which checks the shape and
+ * stops. That exception is the spec's own, and it is not a shortcut: the two
+ * endpoints *cannot* agree about the date, because a 2024-06 target is a
+ * perfectly good planning date (the window opens 2024-04) and is refused by a
+ * replay as pre-F1. Every replay date verdict therefore comes from the
+ * replayable predicate in `apps/ml`, which is the module that reads the fold
+ * calendar; teaching this gateway where the holdout window opens would put a
+ * second implementation of that predicate on the far side of a network hop.
+ *
+ * **`d` is required on the deep link and is checked, not used.** The scenario
+ * already carries the day — it is a `Scenario` with a past `target_date` — so
+ * `d` is redundant by construction. It is in the contract because a shared
+ * replay URL should be legible to the human pasting it, and it is *checked*
+ * against the blob because a URL whose visible date disagrees with the date it
+ * actually replays is the one way this contract could lie to a reader.
+ *
+ * **What is not here.** No pre-F1 knowledge, no fold calendar, no artifact
+ * cards, and no forecast: the request path contains no joblib load, no feature
+ * build and no day-ahead call, which is `replay.md` story 37 and the reason a
+ * replay is cheap enough to answer inline at all.
+ *
+ * **What the pin can and cannot promise.** It names a *publication* — the key
+ * carries `<origin_kind>@<published_at>` — so a shared link is never answered
+ * from a different publication, and a retrain of the serving artifact cannot
+ * touch it at all, because a replay never consults the promoted artifact. It
+ * does **not** name a backtest *run*: a `backfilled_holdout` row's
+ * `published_at` is `gate_at(target_date, gate_profile)` by construction, so a
+ * rerun of one day publishes at the same instant and appends a new vintage of
+ * the same publication. `apps/ml/tests/test_database_replay_reads.py` asserts
+ * that as the fact it is; closing it needs a pin that can name the run, which
+ * is a change to the shared scenario transport rather than to this route.
  */
-export const replayRoutes = createReplayRoutes();
+
+/** How long an identical replay may be reused. The optimizer's TTL, per spec. */
+export const REPLAY_TTL_SEC = OPTIMIZE_TTL_SEC;
+
+/** The dependencies, injected so every branch is reachable without a network. */
+export interface ReplayDeps {
+  /** Where replayed days are remembered. Losing it costs one replay. */
+  cache: ResultCache;
+  /** Which ML service, and how long it may take. Defaults to the configured one. */
+  endpoint?: MlEndpoint;
+  /**
+   * The build the cache keys on. The ML service stamps the build that actually
+   * solved as `x-optimizer-build`; when the two disagree the answer is served
+   * and *not* stored, because a key naming the wrong build is how a formulation
+   * change quietly keeps serving yesterday's plans.
+   */
+  optimizerBuild?: string;
+  /** The instant the date rules are read on. */
+  now?: () => Date;
+}
+
+/**
+ * The origin component of the key, read off the answer.
+ *
+ * `<origin_kind>@<published_at>` and never the instant alone: a
+ * `backfilled_holdout` row's `published_at` equals `gate_at(target_date,
+ * gate_profile)` exactly, so on a day WattSteer both served and later
+ * reconstructed, the record and the reconstruction share a publication instant.
+ * The kind is what keeps them apart everywhere else in this system and it is
+ * what keeps them apart here.
+ *
+ * `null` when the body carries no origin at all, and a body with no origin is
+ * not cached: an entry whose provenance is unknown is an entry that cannot be
+ * invalidated by the thing that supersedes it.
+ */
+function resolvedReplayOrigin(body: string): { origin: string; date: string } | null {
+  try {
+    const parsed = JSON.parse(body) as {
+      forecast_origin?: { origin_kind?: unknown; published_at?: unknown };
+      target_date?: unknown;
+    };
+    const origin = parsed.forecast_origin;
+    if (
+      typeof parsed.target_date !== "string" ||
+      typeof origin?.origin_kind !== "string" ||
+      typeof origin.published_at !== "string"
+    ) {
+      return null;
+    }
+    return {
+      origin: `${origin.origin_kind}@${origin.published_at}`,
+      date: parsed.target_date,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function createReplaySolveRoutes(deps: ReplayDeps) {
+  const build = deps.optimizerBuild ?? config.optimizerBuild;
+  const gate = (): GateOptions => ({
+    targetDate: replayTargetDate,
+    ...(deps.now ? { now: deps.now() } : {}),
+  });
+
+  /**
+   * Answer one replay — from the cache when the key is fully known, and from
+   * the solver otherwise.
+   *
+   * A scenario that pins its `forecast_origin` has a complete key *before* the
+   * call and can be served from the cache; one that does not cannot, because
+   * the origin in the key is the **resolved** one and resolving it is a read of
+   * the forecast table this gateway does not do. So an unpinned request always
+   * recomputes and warms the pinned key — which is the honest failure. The
+   * other, a `latest` sentinel in the key, would serve one backtest vintage's
+   * numbers under the next one's name, and that is precisely the silent
+   * re-meaning of a shared link this ticket exists to prevent.
+   */
+  const answer = async (path: string, decoded: DecodedScenario, lane: string) => {
+    const pinnedInstant = decoded.scenario.forecastOrigin ?? null;
+    const targetDate = decoded.scenario.targetDate;
+
+    // A pinned instant still resolves to one of two kinds — a record outranks a
+    // reconstruction — so the key cannot be built from the pin alone. It is
+    // built from the *answer*, and a pinned request is looked up under both
+    // spellings: at most one of them can exist, because at most one publication
+    // answered.
+    const keysFor = (origin: string) =>
+      replayKey({
+        scenarioHash: decoded.hash,
+        targetDate,
+        forecastOrigin: origin,
+        optimizerBuild: build,
+      });
+
+    if (pinnedInstant !== null) {
+      for (const kind of ["served", "backfilled_holdout"]) {
+        const hit = await deps.cache.get(keysFor(`${kind}@${pinnedInstant}`));
+        if (hit !== null) {
+          return hit;
+        }
+      }
+    }
+
+    const query = new URLSearchParams({ lane });
+    const response = await postMl(
+      `${path}?${query.toString()}`,
+      decoded.bytes,
+      deps.endpoint,
+    );
+    const body = await response.text();
+
+    const solvedBy = response.headers.get("x-optimizer-build");
+    const resolved = resolvedReplayOrigin(body);
+    if (resolved !== null && (solvedBy === null || solvedBy === build)) {
+      await deps.cache.set(keysFor(resolved.origin), body, REPLAY_TTL_SEC);
+    } else if (solvedBy !== null && solvedBy !== build) {
+      // Serve it, refuse to remember it, and say why. A build the gateway does
+      // not know about is a deploy skew, and the safe failure is a cache that
+      // stops working rather than one that starts lying.
+      console.warn(
+        `replay: solved by build ${solvedBy} but the gateway keys on ${build}; ` +
+          "not caching. Set WATTSTEER_OPTIMIZER_BUILD to match the ML service.",
+      );
+    }
+    return body;
+  };
+
+  /**
+   * The deep link's visible date, checked against the blob it links to.
+   *
+   * A statement about the request, so `BAD_INPUT` — not
+   * `REPLAY_DATE_OUT_OF_RANGE`, which is a statement about the window and would
+   * tell a caller their date is outside a range when the problem is that they
+   * sent two of them.
+   */
+  const sameDay = (d: string, decoded: DecodedScenario): DecodedScenario => {
+    if (civilDate("d", d) !== decoded.scenario.targetDate) {
+      throw new CodedError(
+        "BAD_INPUT",
+        `d is ${d} and the scenario replays ${decoded.scenario.targetDate}; a ` +
+          "replay link whose visible date is not the day it replays is not a link " +
+          "anyone can read",
+      );
+    }
+    return decoded;
+  };
+
+  const LANE = t.String({ description: LANE_DESCRIPTION });
+
+  return new Elysia({ name: "replay-solve" })
+    .get(
+      "/v1/replay",
+      async ({ query, set }) => {
+        const body = await answer(
+          "/v1/replay",
+          sameDay(query.d, admitScenarioParam(query.s, gate())),
+          query.lane,
+        );
+        // A shared link is shared-cacheable: the answer is a function of the
+        // blob, the pinned origin and the build, none of which is the reader.
+        set.headers["cache-control"] = "public, max-age=300";
+        set.headers["content-type"] = "application/json";
+        return body;
+      },
+      {
+        query: t.Object({
+          d: t.String({
+            description:
+              "The civil day being replayed, YYYY-MM-DD. Redundant with the " +
+              "scenario's own target_date and checked against it: a link whose " +
+              "visible date is not the day it replays cannot be read.",
+          }),
+          [SCENARIO_PARAM]: t.String({
+            description:
+              "The scenario, base64url of its canonical UTF-8 bytes, capped at " +
+              "4096 bytes. The same bytes a POST carries in its body, and the " +
+              "same bytes /v1/optimize takes.",
+          }),
+          lane: LANE,
+        }),
+        detail: {
+          summary: "Replay a past day (deep link)",
+          description:
+            "One MILP on the pinned D−1 P50, five simulator passes and the " +
+            "fenced perfect-foresight bound, answered inside one request. The " +
+            "response echoes the **pinned** forecast_origin, which is what makes " +
+            "the link reproducible after a retrain.",
+        },
+      },
+    )
+    .post(
+      "/v1/replay",
+      async ({ body, query, set }) => {
+        const decoded = admitScenarioBody(body as string, gate());
+        const answered = await answer(
+          "/v1/replay",
+          query.d === undefined ? decoded : sameDay(query.d, decoded),
+          query.lane,
+        );
+        // Not shared-cacheable; Redis does that work behind the gateway, where
+        // the key can carry the provenance a URL cannot.
+        set.headers["cache-control"] = "no-store";
+        set.headers["content-type"] = "application/json";
+        return answered;
+      },
+      {
+        // Taken as text for the reason `/v1/optimize` takes it as text: the hash
+        // the answer is stamped with is over the bytes that arrived, and a body
+        // Elysia has already parsed is one this route would have to
+        // re-serialise before it could canonicalise it.
+        parse: "text",
+        query: t.Object({
+          lane: LANE,
+          d: t.Optional(
+            t.String({
+              description:
+                "Optional here, and checked when present. The body already " +
+                "carries the day; this is for a caller that wants the two " +
+                "asserted equal.",
+            }),
+          ),
+        }),
+        body: t.String({ description: "The Scenario object, as JSON." }),
+        detail: {
+          summary: "Replay a past day",
+          description:
+            "The same replay as the GET, over the identical canonical bytes. No " +
+            "job id and no polling: the request path contains no model — the " +
+            "forecast is a pinned row, and what runs is the MILP and the simulator.",
+        },
+      },
+    )
+    .post(
+      "/v1/replay/observed-only",
+      async ({ body, query, set }) => {
+        const answered = await answer(
+          "/v1/replay/observed-only",
+          admitScenarioBody(body as string, gate()),
+          query.lane,
+        );
+        set.headers["cache-control"] = "no-store";
+        set.headers["content-type"] = "application/json";
+        return answered;
+      },
+      {
+        parse: "text",
+        query: t.Object({ lane: LANE }),
+        body: t.String({ description: "The Scenario object, as JSON." }),
+        detail: {
+          summary: "A pre-F1 day: what happened, and the bound",
+          description:
+            "The view a day with no honest counterfactual gets instead of a " +
+            "replay: the settled profile, its episodes and the perfect-foresight " +
+            "bound, which needs no forecast and therefore no model. `scored`, " +
+            "`avoided_energy_mwh` and `recovered_floor_mwh` are **absent**, not " +
+            "zero — WattSteer made no plan for these days. Any day that is not " +
+            "pre-F1 is refused with its own code.",
+        },
+      },
+    );
+}
+
+/**
+ * The gateway's instance, mounted in `index.ts` — the calendar routes and the
+ * solve routes as one plugin, so `/v1/replay*` arrives at the gateway from one
+ * place.
+ *
+ * **The cache is the optimizer's instance, under a different key prefix.** One
+ * Redis, one connection, one shutdown — `replay:v1:…` and `opt:v1:…` cannot
+ * collide, and a second client to the same server would be a second thing to
+ * close and a second thing to get the timeout right on.
+ *
+ * The factories above stay exported so a test can point the same routes at a
+ * stub upstream and an in-memory cache: the failure mapping and the key are
+ * most of what this module is for, and neither is reachable from a module-level
+ * constant.
+ */
+export const replayRoutes = createReplayRoutes().use(
+  createReplaySolveRoutes({ cache: optimizeCache }),
+);

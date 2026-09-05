@@ -37,6 +37,7 @@ meaning to.
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from datetime import date, datetime, timedelta
 from typing import Any, Final, NoReturn
 from zoneinfo import ZoneInfo
@@ -416,7 +417,15 @@ def latest_target_date(now: datetime) -> date:
     return _local_today(now) + timedelta(days=1)
 
 
-def _check_target_date(raw: Any, now: datetime) -> None:
+def _check_target_date_shape(raw: Any) -> date:
+    """``target_date`` is a civil date, spelled the schema's one way.
+
+    The half of the date clause that is a statement about the *bytes* rather
+    than about the window, so it is shared by every rule below: a
+    ``target_date`` that is not a date is ``REQUEST_INVALID`` on any endpoint,
+    and no endpoint can disagree about that without disagreeing about the
+    transport.
+    """
     if not isinstance(raw, str):
         _refuse("REQUEST_INVALID", "target_date must be YYYY-MM-DD", "target_date")
     try:
@@ -424,13 +433,23 @@ def _check_target_date(raw: Any, now: datetime) -> None:
         # well: the wire form is the schema's ``civil_date`` and nothing else.
         if len(raw) != 10:
             raise ValueError(raw)
-        target = date.fromisoformat(raw)
+        return date.fromisoformat(raw)
     except ValueError:
         _refuse(
             "REQUEST_INVALID",
             f"target_date {raw!r} is not a calendar date",
             "target_date",
         )
+
+
+def planning_target_date(raw: Any, now: datetime) -> None:
+    """``/v1/optimize``'s clause: inside the data window, and not past tomorrow.
+
+    The published rule, and the default, because planning is what a `Scenario`
+    is for and a replay is the one endpoint that reads the same document with a
+    different question in mind.
+    """
+    target = _check_target_date_shape(raw)
     latest = latest_target_date(now)
     if target < DATA_WINDOW_OPENS_ON or target > latest:
         _refuse(
@@ -439,6 +458,30 @@ def _check_target_date(raw: Any, now: datetime) -> None:
             f"[{DATA_WINDOW_OPENS_ON.isoformat()}, {latest.isoformat()}]",
             "target_date",
         )
+
+
+def replay_target_date(raw: Any, _now: datetime) -> None:
+    """``/v1/replay``'s clause: the shape, and then somebody else's judgement.
+
+    `docs/specs/replay.md` seam 10 states the parity claim and states its one
+    exception in the same breath — "scenario validation parity with
+    ``/v1/optimize`` **minus its date clause**" — because the two endpoints
+    cannot agree there and an implementation that made them agree would be
+    wrong on one of them. A 2024-06 target is a perfectly good planning date
+    (the data window opens 2024-04) and is refused by a replay as pre-F1;
+    yesterday is replayable and is a planning date too; tomorrow is a planning
+    date and is not a day that has happened.
+
+    So this rule checks the *shape* and stops. The window verdicts belong to
+    :mod:`wattsteer_ml.replay.calendar`, which owns the predicate, reads the
+    fold calendar for where the holdout window opens, and answers with a code
+    that says which clause failed — ``REPLAY_DATE_OUT_OF_RANGE`` and
+    ``REPLAY_DATE_BEFORE_HOLDOUT_WINDOW`` are two different sentences, and
+    ``TARGET_DATE_OUT_OF_RANGE`` is neither of them. Restating any of that here
+    would be a second implementation of the replayable predicate, in the module
+    whose whole job is that both languages agree about one table.
+    """
+    _check_target_date_shape(raw)
 
 
 def _check_economic_assumptions(raw: Any) -> None:
@@ -463,7 +506,21 @@ def _check_economic_assumptions(raw: Any) -> None:
         )
 
 
-def validate_scenario(wire: Any, now: datetime) -> None:
+#: The one clause of the table an endpoint is allowed to substitute.
+#:
+#: Everything else — the version, the subsystem, the asset cap, every magnitude
+#: and every physical bound — is identical at ``/v1/optimize`` and
+#: ``/v1/replay``, because it is the same solver behind the same public surface
+#: and a blob accepted by one and refused by the other would make a shared link
+#: mean two things. The date is the exception `replay.md` names, and it is a
+#: parameter here so that the exception is one argument wide and visible in
+#: every caller rather than a branch inside the table.
+TargetDateRule = Callable[[Any, datetime], None]
+
+
+def validate_scenario(
+    wire: Any, now: datetime, *, target_date: TargetDateRule = planning_target_date
+) -> None:
     """Refuse a scenario that is not one, or return.
 
     Takes the wire form — ``snake_case``, as :func:`~wattsteer_ml.scenario.
@@ -474,6 +531,10 @@ def validate_scenario(wire: Any, now: datetime) -> None:
 
     Returns nothing. There is no repaired scenario to hand back, which is this
     module's whole posture expressed in a signature.
+
+    ``target_date`` is the one clause an endpoint may substitute — see
+    :data:`TargetDateRule`. It defaults to :func:`planning_target_date`, so a
+    caller that does not name it gets ``/v1/optimize``'s table exactly.
     """
     if not isinstance(wire, dict):
         _refuse("BAD_INPUT", "a scenario is a JSON object")
@@ -494,7 +555,7 @@ def validate_scenario(wire: Any, now: datetime) -> None:
             "subsystem",
         )
 
-    _check_target_date(wire.get("target_date"), now)
+    target_date(wire.get("target_date"), now)
 
     assets = wire.get("assets")
     if not isinstance(assets, list) or not assets:

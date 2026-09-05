@@ -39,7 +39,7 @@ origin they may legitimately move and the response shows why.
 (the shared validation table), **Flex-optimizer 06** (rate limit, cache discipline,
 failure posture).
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] All three routes answer inside one request, with no job id and no ML-service forecast call in the path
 - [ ] Scenario validation parity with `/v1/optimize`: the same blob is accepted or rejected identically by both, asserted by a test that feeds one corpus to both endpoints

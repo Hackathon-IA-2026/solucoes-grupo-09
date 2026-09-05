@@ -5,7 +5,10 @@ import {
   decodeScenarioParam,
   type JsonValue,
 } from "@wattsteer/core/scenario";
-import { validateScenarioWire } from "@wattsteer/core/scenario-validation";
+import {
+  type TargetDateRule,
+  validateScenarioWire,
+} from "@wattsteer/core/scenario-validation";
 import { CodedError } from "../errors.js";
 
 /**
@@ -46,6 +49,22 @@ export interface GateOptions {
    * boundary rather than the day it ran; a route omits it and gets the clock.
    */
   now?: Date;
+  /**
+   * Which date clause to run — the **one** rule an endpoint may substitute.
+   *
+   * `/v1/optimize` omits it and gets the published planning window;
+   * `/v1/replay` passes `replayTargetDate`, which checks the shape and leaves
+   * the window to the replayable predicate in `apps/ml`. `docs/specs/replay.md`
+   * seam 10 states the parity claim and this exception in the same breath,
+   * because the two endpoints cannot agree here and an implementation that made
+   * them agree would be wrong about one of them: a 2024-06 target is a good
+   * planning date and is refused by a replay as pre-F1.
+   *
+   * Nothing else in the table is parameterised, and that is the parity: the
+   * same eighteen rules run for both, so a blob refused by one is refused by
+   * the other with the same code.
+   */
+  targetDate?: TargetDateRule;
 }
 
 /**
@@ -84,6 +103,7 @@ function admit(decode: () => DecodedScenario, options: GateOptions): DecodedScen
     // was hashed.
     validateScenarioWire(JSON.parse(decoded.canonical) as JsonValue, {
       ...(options.now ? { now: options.now } : {}),
+      ...(options.targetDate ? { targetDate: options.targetDate } : {}),
     });
     return decoded;
   } catch (error) {

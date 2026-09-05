@@ -197,6 +197,19 @@ function variantKeys(assetType: string): Set<string> | undefined {
 
 // --- the checks --------------------------------------------------------------
 
+/**
+ * The one clause of the table an endpoint is allowed to substitute.
+ *
+ * Everything else — the version, the subsystem, the asset cap, every magnitude
+ * and every physical bound — is identical at `/v1/optimize` and `/v1/replay`,
+ * because it is the same solver behind the same public surface and a blob
+ * accepted by one and refused by the other would make a shared link mean two
+ * things. The date is the exception `docs/specs/replay.md` names, and it is a
+ * parameter so the exception is one argument wide and visible in every caller
+ * rather than a branch hidden inside the table.
+ */
+export type TargetDateRule = (raw: JsonValue | undefined, now: Date) => void;
+
 /** What a validation run is told about the world outside the scenario. */
 export interface ValidationOptions {
   /**
@@ -205,6 +218,11 @@ export interface ValidationOptions {
    * than the day the suite happened to run.
    */
   now?: Date;
+  /**
+   * Which date clause to run. Defaults to `planningTargetDate`, so a caller
+   * that does not name one gets `/v1/optimize`'s table exactly.
+   */
+  targetDate?: TargetDateRule;
 }
 
 function refuse(code: ErrorCode, message: string, details?: ErrorDetails): never {
@@ -534,7 +552,7 @@ export function validateScenarioWire(
     );
   }
 
-  checkTargetDate(wire.target_date, options.now ?? new Date());
+  (options.targetDate ?? planningTargetDate)(wire.target_date, options.now ?? new Date());
 
   const assets = wire.assets;
   if (!Array.isArray(assets) || assets.length === 0) {
@@ -559,7 +577,14 @@ export function validateScenarioWire(
   checkEconomicAssumptions(wire.economic_assumptions);
 }
 
-function checkTargetDate(raw: JsonValue | undefined, now: Date): void {
+/**
+ * The half of the date clause that is a statement about the *bytes*.
+ *
+ * Shared by every rule below: a `target_date` that is not a date is
+ * `REQUEST_INVALID` on any endpoint, and no endpoint can disagree about that
+ * without disagreeing about the transport.
+ */
+function checkTargetDateShape(raw: JsonValue | undefined): asserts raw is string {
   if (typeof raw !== "string" || !CIVIL_DATE.test(raw)) {
     refuse("REQUEST_INVALID", `target_date must be YYYY-MM-DD`, {
       field: "target_date",
@@ -573,6 +598,17 @@ function checkTargetDate(raw: JsonValue | undefined, now: Date): void {
       field: "target_date",
     });
   }
+}
+
+/**
+ * `/v1/optimize`'s clause: inside the data window, and not past tomorrow.
+ *
+ * The published rule, and the default, because planning is what a `Scenario` is
+ * for and a replay is the one endpoint that reads the same document with a
+ * different question in mind.
+ */
+export const planningTargetDate: TargetDateRule = (raw, now) => {
+  checkTargetDateShape(raw);
   const latest = latestTargetDate(now);
   if (raw < DATA_WINDOW_OPENS_ON || raw > latest) {
     refuse(
@@ -581,7 +617,30 @@ function checkTargetDate(raw: JsonValue | undefined, now: Date): void {
       { field: "target_date" },
     );
   }
-}
+};
+
+/**
+ * `/v1/replay`'s clause: the shape, and then somebody else's judgement.
+ *
+ * `docs/specs/replay.md` seam 10 states the parity claim and its one exception
+ * in the same breath — "scenario validation parity with `/v1/optimize` **minus
+ * its date clause**" — because the two endpoints cannot agree there and an
+ * implementation that made them agree would be wrong about one of them. A
+ * 2024-06 target is a perfectly good planning date (the data window opens
+ * 2024-04) and is refused by a replay as pre-F1; tomorrow is a planning date
+ * and is not a day that has happened.
+ *
+ * So this rule checks the shape and stops. Every window verdict belongs to the
+ * replayable predicate in `apps/ml`, which reads the fold calendar for where
+ * the holdout window opens and answers with the code of the clause that failed
+ * — `REPLAY_DATE_BEFORE_HOLDOUT_WINDOW` and `REPLAY_DATE_OUT_OF_RANGE` are two
+ * different sentences and `TARGET_DATE_OUT_OF_RANGE` is neither. Restating any
+ * of it here would put a second implementation of that predicate on the far
+ * side of a network hop from the fold calendar it is a function of.
+ */
+export const replayTargetDate: TargetDateRule = (raw) => {
+  checkTargetDateShape(raw);
+};
 
 function checkEconomicAssumptions(raw: JsonValue | undefined): void {
   if (raw === undefined) {

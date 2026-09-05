@@ -55,6 +55,50 @@ export function optimizeKey(parts: {
   ].join(":");
 }
 
+/** The replay key's prefix, versioned for the same reason the optimizer's is. */
+export const REPLAY_KEY_PREFIX = "replay:v1";
+
+/**
+ * Build the replay key — `docs/specs/replay.md`, "Cache", verbatim:
+ *
+ * ```
+ * replay:v1:<sha256(canonical scenario)>:<target_date>:<forecast_origin>:<optimizer_build>
+ * ```
+ *
+ * Four components, and the two that differ from the optimizer's are the two
+ * that make a shared replay link honest.
+ *
+ * The **target date** is in the key even though the scenario hash already
+ * covers it, because it is what a human reading `redis-cli --scan` needs in
+ * order to evict one day, and the spec puts it there.
+ *
+ * The **forecast origin** is `<origin_kind>@<published_at>` and not the instant
+ * alone. A `backfilled_holdout` row's `published_at` *equals*
+ * `gate_at(target_date, gate_profile)` exactly — that is `replay.md` seam 6 —
+ * so on a day WattSteer both served and later reconstructed, the record and the
+ * reconstruction share a publication instant and an instant-only key would
+ * serve one under the other's name. The kind is the discriminator that keeps
+ * them apart everywhere else in this system, and it is the discriminator here.
+ *
+ * The **optimizer build** is in it because a formulation change must not serve
+ * yesterday's plan under today's code — a stale answer no TTL is short enough
+ * to prevent.
+ */
+export function replayKey(parts: {
+  scenarioHash: string;
+  targetDate: string;
+  forecastOrigin: string;
+  optimizerBuild: string;
+}): string {
+  return [
+    REPLAY_KEY_PREFIX,
+    parts.scenarioHash,
+    parts.targetDate,
+    parts.forecastOrigin,
+    parts.optimizerBuild,
+  ].join(":");
+}
+
 /** Somewhere a solved plan can be put and later found, or not. */
 export interface ResultCache {
   /** The stored response text, or `null` for a miss — including any failure. */
