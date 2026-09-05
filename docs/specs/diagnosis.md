@@ -563,7 +563,15 @@ the narration system prompt. Banned, case-insensitive, both locales:
 ```
 causal, causality, causal ai, root cause, caused by, causes the,
 because the grid, why it happened, driver of the event,
-causa, causal, causou, causado por, causa raiz, porque ocorreu
+causa, causal, causou, causado por, causada por, causa raiz, porque ocorreu
+
+> **`causada por` is listed beside `causado por` and is not a duplicate.**
+> `restrição` is feminine, so "a restrição foi *causada* por…" is the natural
+> sentence and the masculine agreement is the unusual one — and the matcher is
+> word-boundary anchored, so one does not cover the other. Diagnosis 10 hit it
+> while writing a fixture, which is the only reason it was noticed: the
+> build-time scan had nothing to catch, because no catalogue string happened to
+> use the feminine form.
 ```
 
 Exceptions live in `apps/web/src/lib/copy/causality-allowlist.ts`, one entry per
@@ -732,6 +740,30 @@ authority):
 A failure appends the validator's complaint to a second and final attempt. A
 second failure logs the rejected text with its payload hash and falls back to
 the template. **The rejected text is never shown.**
+
+`apps/api/src/diagnosis/narration-validator.ts` is all three gates and the one
+retry. Three things it deliberately does not re-derive:
+
+- The **numbers** are read off `canonicalNarrationJson`'s output — the same
+  bytes the cache key is a hash of, already rounded through the one rounder and
+  the one precision table, which has no default. So "the number is in the
+  payload" means "it is one of the numbers that was hashed", and a field added
+  without a decided precision fails in the digest and in the whitelist together.
+  Both locales' notation is admissible, grouped or not, and a shorter spelling
+  only where it loses nothing: `412.0` may be written `412`, and `1.42` may not
+  be written `1.4`.
+- The **lemmas** go through `packages/core`'s `findLemmaHits`, which is the
+  matcher the build-time scan uses. The advice verbs and certainty adverbs are a
+  second *list*, not a second regex.
+- The **notation** is spelled by `Intl`, which is what the client formats with.
+
+The two tables keyed by field name — the server's precision table and the
+client's formatter table — are tied by `test/narration-precision-tie.test.ts`,
+on **decimals** rather than on membership: neither is a subset of the other and
+neither should be, so the relation asserted is that for a field in both, the
+digits the client displays are the precision the server hashed at. It found one
+disagreement on arrival (`threshold_mw`, priced at one decimal and printed at
+zero).
 
 **The template fallback.** A deterministic sentence assembled from the same
 payload through `t()` keys with interpolation, one key per locale, living in the

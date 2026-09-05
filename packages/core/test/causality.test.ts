@@ -33,6 +33,7 @@ describe("the banned lemma set", () => {
       "causa",
       "causou",
       "causado por",
+      "causada por",
       "causa raiz",
       "porque ocorreu",
     ]);

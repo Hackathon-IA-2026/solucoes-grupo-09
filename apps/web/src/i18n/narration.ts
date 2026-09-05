@@ -172,18 +172,40 @@ export function renderNarrationClause(
   copy: Copy,
   f: Formatters,
 ): string {
-  const context: Context = { copy, f, clause };
   const values: Record<string, string> = {};
   for (const [name, value] of Object.entries(clause.values)) {
-    const formatter = FORMATTERS[name];
-    if (formatter === undefined) {
-      throw new Error(
-        `narration clause ${clause.key} carries ${name}, which has no formatter; a value written without one would print the server's decimal separator`,
-      );
-    }
-    values[name] = formatter(value, context);
+    values[name] = formatNarrationValue(name, value, clause, copy, f);
   }
   return fill(copy.app.narration[clause.key], values);
+}
+
+/**
+ * One value, written the way this catalogue writes it.
+ *
+ * Exported because the tie between this table and
+ * `apps/api/src/diagnosis/narration-canonical.ts`'s precision table is asserted
+ * on **decimals** rather than on membership — neither table is a subset of the
+ * other and neither should be — and counting the fraction digits a field is
+ * printed at means invoking the formatter that prints it.
+ * `test/narration-precision-tie.test.ts` is the caller.
+ *
+ * `clause` is passed whole because a reading cannot be written without its
+ * `unit`, which is a property of the row rather than of the field.
+ */
+export function formatNarrationValue(
+  name: string,
+  value: string | number | unknown[],
+  clause: NarrationClause,
+  copy: Copy,
+  f: Formatters,
+): string {
+  const formatter = FORMATTERS[name];
+  if (formatter === undefined) {
+    throw new Error(
+      `narration clause ${clause.key} carries ${name}, which has no formatter; a value written without one would print the server's decimal separator`,
+    );
+  }
+  return formatter(value, { copy, f, clause });
 }
 
 /** The whole deterministic paragraph, one clause per sentence. */

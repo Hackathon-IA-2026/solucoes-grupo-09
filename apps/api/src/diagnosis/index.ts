@@ -14,7 +14,9 @@
  * rule does, and the reason a withheld day never reaches the language model;
  * `narration-template.ts` is the surface that renders when the model may not,
  * and it emits `t()` keys with their values rather than a paragraph, so the
- * decimal separator stays the reader's.
+ * decimal separator stays the reader's; `narration-validator.ts` is the three
+ * mechanical gates every *generated* paragraph passes before anyone sees it,
+ * and the one retry and fall-back-to-template that a failure buys.
  * Nothing in here computes an attribution, and
  * nothing in here calls the modelling service — the scheduled `publish-diagnosis`
  * job and the worker's private call into `POST /internal/publish/diagnosis` are
@@ -24,8 +26,11 @@
 
 export {
   canonicalNarrationJson,
+  NARRATION_DISPLAY,
   NARRATION_DISPLAY_PRECISION,
   type NarrationCacheKeyParts,
+  type NarrationDisplayStyle,
+  type NarrationFieldDisplay,
   narrationCacheKey,
   narrationPayloadDigest,
 } from "./narration-canonical.js";
@@ -55,6 +60,20 @@ export {
   narrationClauses,
   templateNarration,
 } from "./narration-template.js";
+export {
+  type NarrationAttempt,
+  type NarrationFinding,
+  type NarrationFindingCode,
+  type NarrationGate,
+  narrationComplaint,
+  narrationNumericWhitelist,
+  type RejectedNarration,
+  type ValidatedNarration,
+  type ValidatedNarrationSources,
+  validatedNarration,
+  validateNarration,
+  writtenLocale,
+} from "./narration-validator.js";
 export {
   ATTRIBUTION_TARGET_DAY,
   type AttributionGrain,

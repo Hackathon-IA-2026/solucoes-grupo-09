@@ -683,11 +683,14 @@ Two automated enforcers, one lexicon:
 | | Where | What |
 |---|---|---|
 | Build time | `test/causality-boundary.test.ts` | Scans `apps/web/src`, `packages/ui/src`, both message catalogues and the narration system prompt for the banned lemma set. Exceptions are enumerated in `apps/web/src/lib/copy/causality-allowlist.ts`, one per occurrence, each with its location and its reason, and an entry whose string has since been edited away fails the check. |
-| Run time | the narration output validator's lexical gate | Rejects the same lemmas in generated prose, in both locales, before it reaches a user. A sentence written per request is never seen by a copy review. |
+| Run time | the narration output validator's lexical gate, `apps/api/src/diagnosis/narration-validator.ts` | Rejects the same lemmas in generated prose, in both locales, before it reaches a user. A sentence written per request is never seen by a copy review. |
 
 Both read `CAUSALITY_BANNED_LEMMAS` and `findCausalityHits` from
 `packages/core/src/causality.ts`, so there is one list and one matcher rather
-than two that drift. [`specs/diagnosis.md`](specs/diagnosis.md) owns the
+than two that drift. The validator's other two lists — advice verbs and
+certainty adverbs, which are a different rule in the same notation — go through
+the same `findLemmaHits`, so a second forbidden vocabulary is a second list and
+never a second regex. [`specs/diagnosis.md`](specs/diagnosis.md) owns the
 enforcers' detail; this section owns the rule.
 
 The permitted uses are the disclaimers that use the word in order to *deny* the

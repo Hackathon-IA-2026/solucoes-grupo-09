@@ -34,7 +34,7 @@ false claim, not a boring true one — but it is a stated limit, not an oversigh
 **Blocked by:** 01 (the banned-lemma set), 08 (the payload the whitelist is
 drawn from), 09 (the template that a second failure falls back to).
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] A narration stating a number correctly derived from the payload but absent from it is rejected
 - [ ] A narration stating a payload number in the other locale's formatting passes

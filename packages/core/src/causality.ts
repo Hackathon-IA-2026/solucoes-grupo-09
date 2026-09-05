@@ -57,6 +57,13 @@ export const CAUSALITY_BANNED_LEMMAS = [
   "causa",
   "causou",
   "causado por",
+  // The feminine agreement, and not a nicety: `restrição` and `curtailment`'s
+  // Portuguese renderings are feminine, so "a restrição foi **causada** por…"
+  // is the *natural* sentence and the masculine one is the unusual case. The
+  // matcher is word-boundary anchored, so the masculine entry does not cover
+  // it. Found by diagnosis 10 while writing a fixture, which is the only
+  // reason anybody noticed.
+  "causada por",
   "causa raiz",
   "porque ocorreu",
 ] as const;
@@ -64,13 +71,19 @@ export const CAUSALITY_BANNED_LEMMAS = [
 export type CausalityLemma = (typeof CAUSALITY_BANNED_LEMMAS)[number];
 
 /** One occurrence of one lemma in one piece of text. */
-export interface CausalityHit {
-  /** The lemma from `CAUSALITY_BANNED_LEMMAS` that matched. */
-  lemma: CausalityLemma;
+export interface LemmaHit {
+  /** The lemma that matched, as it is written in the list. */
+  lemma: string;
   /** The text as it was actually written, casing and spacing preserved. */
   text: string;
   /** Character offset of the match within the searched text. */
   index: number;
+}
+
+/** One occurrence of one *banned* lemma. `lemma` is narrowed to the set. */
+export interface CausalityHit extends LemmaHit {
+  /** The lemma from `CAUSALITY_BANNED_LEMMAS` that matched. */
+  lemma: CausalityLemma;
 }
 
 /**
@@ -106,26 +119,62 @@ function pattern(lemma: string): RegExp {
   return new RegExp(`${BEFORE}${body}${AFTER}`, "giu");
 }
 
-const PATTERNS: readonly (readonly [CausalityLemma, RegExp])[] =
-  CAUSALITY_BANNED_LEMMAS.map((lemma) => [lemma, pattern(lemma)] as const);
+/**
+ * Compiled once per lemma, whichever list asked for it.
+ *
+ * The §26 set is not the only list a runtime gate reads: the narration output
+ * validator also refuses advice verbs (`should`, `deve`) and certainty adverbs
+ * (`certainly`, `certamente`), which are a different rule written in the same
+ * notation — a lemma, matched on accent-aware word boundaries, in either
+ * locale. Those lists live with the rule that owns them; this cache is what
+ * stops each of them from arriving with a regex of its own.
+ */
+const PATTERNS = new Map<string, RegExp>();
+
+function patternFor(lemma: string): RegExp {
+  const cached = PATTERNS.get(lemma);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const compiled = pattern(lemma);
+  PATTERNS.set(lemma, compiled);
+  return compiled;
+}
 
 /**
- * Every banned-lemma occurrence in `text`, in the order they appear.
+ * Every occurrence of any lemma in `lemmas`, in the order they appear.
  *
- * Case-insensitive, accent-aware, and overlapping: `causa raiz` reports both
- * `causa` and `causa raiz`, because an allowlist entry that permits one of
- * those two readings should not silently permit the other.
+ * The one matcher. Case-insensitive, accent-aware, boundary-anchored and
+ * overlapping: `causa raiz` reports both `causa` and `causa raiz`, because a
+ * caller that permits one of those two readings should not silently permit the
+ * other.
+ *
+ * Exported so that a second list of forbidden words — the narration
+ * validator's advice verbs and certainty adverbs — is a second *list* rather
+ * than a second matcher. Two regexes for one idea, one written at build time
+ * and one at run time, is how a sentence that could not survive copy review
+ * ships anyway because it was generated after the review.
  */
-export function findCausalityHits(text: string): CausalityHit[] {
-  const hits: CausalityHit[] = [];
-  for (const [lemma, regex] of PATTERNS) {
-    // A fresh `lastIndex` per call: the patterns are module-level and global.
+export function findLemmaHits(text: string, lemmas: readonly string[]): LemmaHit[] {
+  const hits: LemmaHit[] = [];
+  for (const lemma of lemmas) {
+    const regex = patternFor(lemma);
+    // A fresh `lastIndex` per call: the patterns are cached and global.
     regex.lastIndex = 0;
     for (const match of text.matchAll(regex)) {
       hits.push({ lemma, text: match[0], index: match.index ?? 0 });
     }
   }
   return hits.sort((a, b) => a.index - b.index || a.lemma.length - b.lemma.length);
+}
+
+/**
+ * Every banned-lemma occurrence in `text`, in the order they appear.
+ *
+ * The §26 list, through the shared matcher. Both enforcers call this one.
+ */
+export function findCausalityHits(text: string): CausalityHit[] {
+  return findLemmaHits(text, CAUSALITY_BANNED_LEMMAS) as CausalityHit[];
 }
 
 /** Does this text cross the boundary at all? The runtime validator's question. */
