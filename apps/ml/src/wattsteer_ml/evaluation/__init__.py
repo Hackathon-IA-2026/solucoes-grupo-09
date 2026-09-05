@@ -17,6 +17,11 @@ harnesses, two outputs, two names.
   fold segment, counted over the **persisted** held-out bands, and stamped with
   what produced it so a fixture-derived share cannot be read as the grid's.
 - :mod:`~wattsteer_ml.evaluation.metrics` — the metrics table, and `qloss_mwh`.
+- :mod:`~wattsteer_ml.evaluation.planning_arms` — the second planning arm: a
+  plan against P50 and a plan against `E[Y]`, built on the same days from the
+  same artifact with the same published fleet, scored by the optimizer's one
+  simulator, and both arms' `recovered_floor_mwh` published side by side. v1
+  still serves the P50 plan.
 - :mod:`~wattsteer_ml.evaluation.ladder` — the five rungs, on identical folds.
 - :mod:`~wattsteer_ml.evaluation.holdout` — `docs/specs/replay.md`'s one
   storage requirement: the out-of-fold forecasts, kept rather than
@@ -25,7 +30,7 @@ harnesses, two outputs, two names.
   bootstrap that decides, the constants that only veto, and the one line
   appended either way.
 
-**The last four are imported as submodules, not re-exported here.** They read
+**The last five are imported as submodules, not re-exported here.** They read
 :mod:`wattsteer_ml.training`, which reads this package; re-exporting them would
 close the cycle and make `import wattsteer_ml.evaluation` depend on LightGBM
 being installed. `from wattsteer_ml.evaluation.metrics import MetricsRow` is the
