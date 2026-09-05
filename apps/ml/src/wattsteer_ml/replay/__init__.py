@@ -24,6 +24,15 @@ and this package reads them back and judges them.
   own currency: one plan, two vintages of the same day's actuals, and the mean
   difference in recovered MWh. `null` until ONS has restated days WattSteer
   holds both vintages of, and never a zero standing in for that.
+- :mod:`~wattsteer_ml.replay.featured` — which days the screen opens on, as a
+  published deterministic rule rather than as anybody's taste: eight days, one
+  of which is mandatorily the day WattSteer's recovery fell furthest below the
+  floor it promised at D−1. Pure, like the calendar.
+- :mod:`~wattsteer_ml.replay.shortlist` — that rule run against the data: every
+  replayable day replayed against the published ``REFERENCE_FLEET`` by the same
+  reader and the same scorer the endpoint uses, digested into a
+  ``computation_id`` that moves when a rerun restates a day and cached for the
+  night.
 - :mod:`~wattsteer_ml.replay.result` — that, as the published contract, and the
   observed-only contract a pre-F1 day gets instead: the day, its episodes and
   the bound, with no recovery number anywhere on it.

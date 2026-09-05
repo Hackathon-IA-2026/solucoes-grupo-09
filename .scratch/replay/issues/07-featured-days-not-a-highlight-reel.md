@@ -31,7 +31,7 @@ is deterministic given the data.
 constant — the list is not reproducible if the fleet it is computed against is
 restated per surface).
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] `GET /v1/replay/days` returns the calendar and the eight featured days together
 - [ ] The query is deterministic given the data, and re-running it changes nothing

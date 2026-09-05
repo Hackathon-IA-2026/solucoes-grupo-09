@@ -16,6 +16,7 @@ Routes:
   POST /v1/optimize           the MILP and the simulator, inside one request
   GET /v1/replay/days         which days are replayable, and why the others are not
   GET /v1/replay/days/{date}  one day, at the status of the clause that refused it
+  POST /internal/replay/featured-days  worker-only; the nightly shortlist
   GET /v1/model/card          the promoted artifact's card, verbatim, off the volume
 
 There is deliberately **no day-ahead read here**. This service carried a
@@ -82,10 +83,16 @@ from .replay.calendar import (
     resolve_day,
 )
 from .replay.cards import ArtifactWindows, read_windows
+from .replay.featured import FeaturedRuleError
 from .replay.inputs import ReplayInputs, ReplayInputSource, replay_input_source
 from .replay.reads import read_calendar_evidence
 from .replay.result import observed_only_result, replay_result
 from .replay.scoring import score_observed_only, score_replay
+from .replay.shortlist import (
+    FeaturedDaysCache,
+    pending_payload,
+    recompute_featured_days,
+)
 from .scenario import (
     DecodedScenario,
     ScenarioTransportError,
@@ -713,7 +720,12 @@ async def replay_days(
     calendar = await _replay_calendar(subsystem, parsed, window_from, window_to)
     if isinstance(calendar, JSONResponse):
         return calendar
-    return JSONResponse(content=calendar.as_payload())
+    # The calendar and the shortlist travel together, per `replay.md`'s endpoint
+    # table: opening the Time Machine is one request, and a second round trip
+    # for the featured days would let a client render the calendar without them.
+    payload = calendar.as_payload()
+    payload["featured"] = _featured_payload(subsystem, parsed)
+    return JSONResponse(content=payload)
 
 
 @app.get("/v1/replay/days/{target_date}", tags=["replay"])
@@ -1146,3 +1158,123 @@ def replay_observed_only(
         return _solver_failure(bug, resolved.decoded.hash)
 
     return JSONResponse(content=body, headers={"x-optimizer-build": OPTIMIZER_BUILD})
+
+
+# --- the featured days ---------------------------------------------------------
+#
+# `docs/specs/replay.md`, "The shortlist is a query, not a list": the Time
+# Machine opens on eight days chosen by a published deterministic rule, one of
+# which is — mandatorily — a day WattSteer got wrong. The rule lives in
+# `wattsteer_ml.replay.featured` and travels *on the response*, so the sentence
+# the screen renders and the sentence that ran are one string.
+#
+# **The list is computed nightly and never on the request path.** A recompute
+# replays every replayable day against the published `REFERENCE_FLEET` — 24.4 ms
+# each, measured, ~13 s over the 521 days currently replayable — and the
+# gateway's ML timeout is five seconds. So `GET /v1/replay/days` serves the
+# cache, `POST /internal/replay/featured-days` fills it, and a miss is published
+# as `pending` with the rule still attached rather than as an empty list that
+# would read as "the rule found nothing interesting".
+#
+# The cache is process-local because this service is read-only against Postgres
+# and a shortlist is derived rather than recorded: it is evictable at any time
+# with no user-visible loss beyond a recompute, which is the optimizer's own
+# standard for what may be cached.
+
+#: This instance's copy of the nightly answer, keyed by (subsystem, lane).
+featured_days_cache = FeaturedDaysCache()
+
+
+def _featured_payload(subsystem: str, lane: Lane) -> dict[str, object]:
+    """The shortlist as the calendar publishes it, or a stated absence."""
+    computed = featured_days_cache.get(subsystem, lane)
+    if computed is None:
+        return pending_payload(
+            "the featured-days rule has not been run on this instance yet; "
+            "the nightly refresh-featured-days job computes it"
+        )
+    return computed.as_payload()
+
+
+class RefreshFeaturedDaysRequest(BaseModel):
+    """Which subsystem's shortlist, and against which lane."""
+
+    #: ONS subsystem code. One shortlist per subsystem: the days that were
+    #: interesting in the Northeast are not the days that were interesting in
+    #: the South, and a national list would be a fifth subsystem.
+    subsystem: Subsystem
+    #: The lane directory name. Required and never defaulted, for the reason
+    #: both replay routes require it: a post-go-live day has one candidate
+    #: forecast per served lane and no rule yet says which one a replay is of.
+    lane: str
+
+
+@app.post("/internal/replay/featured-days", tags=["replay"])
+async def refresh_featured_days(
+    request: Annotated[RefreshFeaturedDaysRequest, Body()],
+) -> JSONResponse:
+    """Run the featured-days rule and cache the answer. Writes nothing.
+
+    What `api-surface.md`'s `refresh-featured-days` job (`30 3 * * *`) calls.
+    It is `/internal` for the reason `/internal/publish/forecast` is: the
+    gateway does not call it, the app cannot reach it, and the worker is the
+    only client. The body it hands back is the same block `GET /v1/replay/days`
+    publishes under `featured`, so the job can log the `computation_id` — which
+    is also the weak ETag that spec puts on the calendar — and keep nothing.
+
+    Every day of the window is replayed against `REFERENCE_FLEET` by the same
+    reader and the same scorer `POST /v1/replay` runs, so a featured day's floor
+    margin is the number the replay screen shows for that day rather than a
+    second derivation of it.
+    """
+    parsed = _replay_lane(request.lane)
+    if isinstance(parsed, JSONResponse):
+        return parsed
+    if database is None:
+        return _refusal(
+            503,
+            "DATA_UNAVAILABLE",
+            "this instance has no database configured, and the featured days "
+            "are a query over rows that only Postgres holds",
+        )
+
+    now = datetime.now(tz=UTC)
+    pool = await database.connect()
+    try:
+        async with pool.acquire() as conn:
+            computed = await recompute_featured_days(
+                conn,
+                subsystem=request.subsystem,
+                lane=parsed,
+                rules=FOLD_CALENDAR_RULES,
+                # The artifact id the *row* names, exactly as the calendar does.
+                # `artifacts.current` is not reachable from here either: a
+                # shortlist resolved against the promoted artifact would go
+                # in-sample the first time a retrain extended its window over a
+                # featured day.
+                windows_for=lambda artifact_id: read_windows(
+                    settings.artifact_dir, parsed, artifact_id
+                ),
+                as_of=now,
+            )
+    except HoldoutLeakError as leak:
+        # A `500`, and never a shortlist with the leaking day quietly dropped:
+        # a list that silently skipped days would be selectable on outcome by
+        # anyone who could arrange for a card to look wrong.
+        logger.error("replay: integrity violation building the shortlist — %s", leak)
+        violation = integrity_violation(
+            leak, subsystem=request.subsystem, lane=parsed.directory_name
+        )
+        return _refusal(
+            violation.status, violation.code, violation.message, dict(violation.details)
+        )
+    except FeaturedRuleError as empty:
+        return _refusal(
+            404,
+            "REPLAY_FORECAST_UNAVAILABLE",
+            str(empty),
+            {"subsystem": request.subsystem, "lane": parsed.directory_name},
+        )
+
+    featured_days_cache.put(computed)
+    return JSONResponse(content=computed.as_payload(now))
