@@ -646,6 +646,10 @@ export const pt: Copy = {
         "Escrita por um modelo de linguagem a partir da tabela de atribuição abaixo. Ela reapresenta os números; não acrescenta nenhum.",
       narrationNoteTemplate:
         "Montada a partir da tabela de atribuição abaixo por um template fixo, sem nenhum modelo de linguagem envolvido. Ela reapresenta os números; não acrescenta nenhum.",
+      narrationWithheld:
+        "Uma regra de domínio retirou a narrativa gerada para este dia: {codes}. A atribuição abaixo segue intacta — todos os oito grupos de drivers, cada um com o seu número.",
+      narrationSourceModel: "Fonte: modelo de linguagem",
+      narrationSourceTemplate: "Fonte: template fixo",
       driversTitle: "Atribuição de drivers",
       driversSubtitle: "SHAP, no grão de subsistema",
       reliabilityTitle: "Confiabilidade",

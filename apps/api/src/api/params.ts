@@ -1,9 +1,10 @@
+import { resolveLocale, type SupportedLocale } from "@wattsteer/core/errors";
 import {
   DATA_WINDOW_OPENS_ON,
   latestTargetDate,
 } from "@wattsteer/core/scenario-validation";
 import { GATES } from "@wattsteer/core/schedule";
-import { BadInputError, CodedError } from "../errors.js";
+import { BadInputError, CodedError, requireLocale } from "../errors.js";
 import type { ForecastGateProfile } from "../forecast/publication.js";
 import { localDayInterval, ONS_TIME_ZONE, parseCalendarDate } from "../ingest/time.js";
 
@@ -213,4 +214,72 @@ export function targetDate(raw: string | undefined, now: Date): string {
     );
   }
   return value;
+}
+
+/**
+ * The locale the prose is generated in — the one axis one endpoint varies on.
+ *
+ * `/v1/diagnosis/day-ahead` is the only route that returns generated prose, so
+ * it is the only route that has a locale at all, and it negotiates one in the
+ * order a caller would expect: an explicit `locale=` first, the browser's
+ * `Accept-Language` next, Portuguese last. Portuguese is the **default** and
+ * not the fallback — `docs/specs/i18n.md` — so a request that names nothing
+ * gets `pt-BR` rather than an English paragraph.
+ *
+ * **Matched on the primary subtag**, through `requireLocale`: `pt-PT` and
+ * `en-GB` are answered rather than refused, and only a third language is a
+ * `LOCALE_UNSUPPORTED`. An explicit `locale=es` is refused; an
+ * `Accept-Language` listing `es` is not, because a header is a preference
+ * ranking and the caller asked for whatever we have.
+ */
+export function narrationLocale(
+  raw: string | undefined,
+  acceptLanguage: string | undefined,
+): SupportedLocale {
+  if (raw !== undefined && raw !== "") {
+    return requireLocale(raw);
+  }
+  return fromAcceptLanguage(acceptLanguage) ?? DEFAULT_LOCALE;
+}
+
+/** Portuguese, per `docs/specs/i18n.md`: the default, not the fallback. */
+export const DEFAULT_LOCALE: SupportedLocale = "pt-BR";
+
+/**
+ * The highest-ranked supported language in an `Accept-Language` header.
+ *
+ * Ranked by `q`, which is what the header *is* — reading only the first entry
+ * would answer `en` to `Accept-Language: en;q=0.2, pt-BR;q=0.9`, which names
+ * Portuguese as the preference. An unparseable `q` is treated as absent rather
+ * than as a refusal: a malformed header is not a reason to answer 422 on a
+ * route whose locale has a default.
+ */
+function fromAcceptLanguage(header: string | undefined): SupportedLocale | null {
+  if (header === undefined || header.trim() === "") {
+    return null;
+  }
+  const ranked = header
+    .split(",")
+    .map((entry, index) => {
+      const [tag, ...parameters] = entry.split(";").map((part) => part.trim());
+      const quality = parameters
+        .map((parameter) => /^q=(.+)$/i.exec(parameter))
+        .find((match) => match !== null);
+      const parsed = quality === undefined ? Number.NaN : Number(quality[1]);
+      return {
+        tag: tag ?? "",
+        q: Number.isFinite(parsed) ? parsed : 1,
+        // The header's own order breaks a tie between equal qualities.
+        index,
+      };
+    })
+    .filter((entry) => entry.tag !== "" && entry.q > 0)
+    .sort((left, right) => right.q - left.q || left.index - right.index);
+  for (const entry of ranked) {
+    const resolved = resolveLocale(entry.tag);
+    if (resolved !== null) {
+      return resolved;
+    }
+  }
+  return null;
 }

@@ -2,6 +2,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test"
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
+import { Elysia } from "elysia";
+import { createDiagnosisRoutes } from "../src/api/diagnosis.js";
+import { dailyCap } from "../src/api/plugins/daily-cap.js";
+import { errorHandler } from "../src/api/plugins/errors.js";
+import { memoryStore } from "../src/api/plugins/limit-store.js";
+import { memoryLockedCache } from "../src/api/plugins/locked-cache.js";
 import { createDatabase } from "../src/database/connection.js";
 import {
   type AttributionPublication,
@@ -9,12 +15,14 @@ import {
   writeAttributionPublication,
 } from "../src/diagnosis/publication.js";
 import { groupingHasChanged, readAttributionDayAhead } from "../src/diagnosis/reads.js";
+import { parsePublication, writePublication } from "../src/forecast/publication.js";
 import {
   ARTIFACT,
   type AttributionPayloadOptions,
   attributionPayload,
   GATE_LATE,
   GROUP_HASH,
+  REGIME,
   TARGET_DATE,
 } from "./support/attribution-payload.js";
 
@@ -424,5 +432,212 @@ suite("the published attribution · persistence and AsOf (real Postgres)", () =>
       "recent_history",
       "data_conditions",
     ]);
+  });
+});
+
+/**
+ * The route over the two stored rows — api-surface ticket 15's first line.
+ *
+ * `.scratch/api-surface/issues/15-diagnosis-endpoint.md`: *"The route returns a
+ * 200 with the modelling service's URL unset, resolving the attribution from
+ * Postgres alone."* `diagnosis-day-ahead.test.ts` proves the shaping and the
+ * single-flight against injected rows; what only this file can prove is that
+ * the rows a publication wrote come back **through the route**, with no
+ * modelling service configured and none reachable.
+ *
+ * The language model is stood in for by a call that throws. That is not a
+ * weaker test, it is the honest one: this suite's subject is the attribution
+ * half, and the paragraph is the other half's. An outage renders the template,
+ * which is a 200 with the drivers untouched — so what is asserted here is that
+ * the eight bars survive a day on which nothing else worked.
+ */
+const forecastFor = (): Record<string, unknown> => {
+  // The local day starts at 03:00Z while Brazil observes no summer time.
+  const hours = Array.from({ length: 24 }, (_value, hour) => ({
+    subsystem: "NE",
+    valid_time: new Date(Date.UTC(2024, 4, 7, 3 + hour)).toISOString(),
+    target_date: TARGET_DATE,
+    local_hour: hour,
+    threshold_mw: 5,
+    occurrence_probability: hour === 14 ? 0.72 : 0.08,
+    p10_mwh: 0,
+    p50_mwh: hour === 14 ? 40 : 0,
+    p90_mwh: hour === 14 ? 120 : 10,
+    // Whole numbers, so the day's expectation is 412 exactly and the
+    // attribution's `day_expected_mwh` and this one are one publication rather
+    // than two numbers that nearly agree.
+    expected_mwh: hour === 14 ? 366 : 2,
+    p50_wind_mwh: hour === 14 ? 32 : 0,
+    p50_solar_mwh: hour === 14 ? 8 : 0,
+    expected_wind_mwh: hour === 14 ? 300 : 1,
+    expected_solar_mwh: hour === 14 ? 66 : 1,
+    crossed: false,
+    derivation: "hurdle_mixture",
+    correction_regime: REGIME,
+  }));
+  return {
+    lane: "dessem_free_v1__gate_late__thr5",
+    feature_set: "dessem_free_v1",
+    threshold_mw: 5,
+    target_date: TARGET_DATE,
+    correction_regime: REGIME,
+    forecast_origin: {
+      producer: "wattsteer",
+      run_label: ARTIFACT,
+      published_at: GATE_LATE,
+      origin_kind: "served",
+      gate_profile: "gate_late",
+    },
+    artifact: {
+      artifact_id: ARTIFACT,
+      feature_set: "dessem_free_v1",
+      trained_through: "2024-03-31",
+    },
+    risk_bins: { low: [0, 0.25], elevated: [0.25, 0.6], high: [0.6, 1] },
+    hours,
+    days: [
+      {
+        subsystem: "NE",
+        target_date: TARGET_DATE,
+        threshold_mw: 5,
+        day_total: { p10: 12, p50: 260, p90: 300 },
+        peak_power: { p10: 4, p50: 96, p90: 180 },
+        day_occurrence_probability: 0.89,
+        expected_mwh: 412,
+        expected_wind_mwh: 323,
+        expected_solar_mwh: 89,
+        hours_p50_nonzero: 1,
+        derivation: "path_ensemble",
+        ensemble_draws: 500,
+        ensemble_seed: 20_260_828,
+        ensemble_calibration_days: 90,
+        correction_regime: REGIME,
+      },
+    ],
+  };
+};
+
+suite("/v1/diagnosis/day-ahead · over the stored rows (real Postgres)", () => {
+  const handle = createDatabase(URL as string, 5);
+  const { db } = handle;
+  const NOW = new Date("2024-05-06T23:00:00.000Z");
+  const ASK_AT = new Date("2024-05-07T02:00:00.000Z");
+  let priorMlUrl: string | undefined;
+
+  const truncate = async () => {
+    await db.execute(sql`truncate table diagnosis_attribution_driver`);
+    await db.execute(sql`truncate table diagnosis_attribution cascade`);
+    await db.execute(sql`truncate table curtailment_forecast_hour`);
+    await db.execute(sql`truncate table curtailment_forecast_day`);
+  };
+
+  beforeAll(async () => {
+    priorMlUrl = process.env.WATTSTEER_ML_URL;
+    delete process.env.WATTSTEER_ML_URL;
+    await truncate();
+  });
+  beforeEach(truncate);
+  afterAll(async () => {
+    await truncate();
+    await handle.close();
+    if (priorMlUrl === undefined) {
+      delete process.env.WATTSTEER_ML_URL;
+    } else {
+      process.env.WATTSTEER_ML_URL = priorMlUrl;
+    }
+  });
+
+  const ask = (query: string): Promise<Response> =>
+    new Elysia()
+      .use(errorHandler)
+      .use(
+        createDiagnosisRoutes({
+          db,
+          now: () => ASK_AT,
+          narration: {
+            store: memoryLockedCache(),
+            cap: dailyCap({ name: "narration", limit: 200, store: memoryStore() }),
+            messages: {
+              create: async () => {
+                throw new Error("no model is reachable from this suite");
+              },
+            },
+          },
+        }),
+      )
+      .handle(new Request(`http://localhost/v1/diagnosis/day-ahead${query}`));
+
+  it("answers 200 from Postgres with the modelling service's URL unset", async () => {
+    expect(process.env.WATTSTEER_ML_URL).toBeUndefined();
+    await writePublication(db, parsePublication(forecastFor()), { ingestedAt: NOW });
+    await writeAttributionPublication(db, publication(), { ingestedAt: NOW });
+
+    const response = await ask(`?subsystem=NE&date=${TARGET_DATE}`);
+    expect(response.status).toBe(200);
+    const wire = (await response.json()) as {
+      subsystem: string;
+      target_date: string;
+      vintage_fidelity: string;
+      forecast_origin: { origin_kind: string; gate_profile: string };
+      attribution: {
+        day_expected_mwh: number;
+        drivers: { code: string; share: number }[];
+        peak_hour_drivers: unknown[];
+      };
+      withheld_by: string[];
+      narration: { source: string; locale: string };
+    };
+    expect(wire.subsystem).toBe("NE");
+    expect(wire.target_date).toBe(TARGET_DATE);
+    expect(wire.vintage_fidelity).toBe("point_in_time");
+    expect(wire.forecast_origin.origin_kind).toBe("served");
+    expect(wire.attribution.day_expected_mwh).toBe(412);
+    // All eight, ranked, exactly as they were stored: the display cut is the
+    // client's and this route has no branch that could apply it.
+    expect(wire.attribution.drivers).toHaveLength(8);
+    expect(wire.attribution.drivers[0]?.code).toBe("net_surplus");
+    expect(wire.attribution.peak_hour_drivers).toHaveLength(8);
+    expect(wire.withheld_by).toEqual([]);
+    // The model was unreachable, so the deterministic surface rendered — and
+    // the response says so rather than pretending otherwise.
+    expect(wire.narration.source).toBe("template");
+    expect(wire.narration.locale).toBe("pt-BR");
+    expect(response.headers.get("vary")).toBe("Accept-Language");
+  });
+
+  it("answers the distinct code when the forecast exists and the attribution does not", async () => {
+    await writePublication(db, parsePublication(forecastFor()), { ingestedAt: NOW });
+    const response = await ask(`?subsystem=NE&date=${TARGET_DATE}`);
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({
+      error: { code: "DIAGNOSIS_UNAVAILABLE" },
+    });
+  });
+
+  it("carries a withheld day's drivers untouched, as a 200", async () => {
+    await writePublication(db, parsePublication(forecastFor()), { ingestedAt: NOW });
+    await writeAttributionPublication(
+      db,
+      publication({
+        ruleFlags: [
+          {
+            code: "attribution_is_noise",
+            action: "withhold",
+            facts: { sum_abs_attributed_mwh: 289.5, attribution_stderr_mwh: 4.1 },
+          },
+        ],
+      }),
+      { ingestedAt: NOW },
+    );
+    const response = await ask(`?subsystem=NE&date=${TARGET_DATE}`);
+    expect(response.status).toBe(200);
+    const wire = (await response.json()) as {
+      withheld_by: string[];
+      attribution: { drivers: unknown[] };
+      narration: { source: string };
+    };
+    expect(wire.withheld_by).toEqual(["attribution_is_noise"]);
+    expect(wire.attribution.drivers).toHaveLength(8);
+    expect(wire.narration.source).toBe("template");
   });
 });

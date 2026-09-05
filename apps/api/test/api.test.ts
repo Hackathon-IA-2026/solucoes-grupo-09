@@ -202,4 +202,26 @@ describe("api · the day-ahead read is versioned and served from Postgres", () =
     expect(res.status).toBe(503);
     expect(await res.json()).toMatchObject({ error: { code: "DATA_UNAVAILABLE" } });
   });
+
+  it("mounts the diagnosis beside it, on the same terms", async () => {
+    // The Explain screen's read is the other half of the boundary decision: an
+    // attribution is a stored row, so with the modelling service absent the
+    // only thing this route can be missing is persistence.
+    const spec = (await (await hit("/docs/json")).json()) as {
+      paths: Record<string, unknown>;
+    };
+    expect(spec.paths["/v1/diagnosis/day-ahead"]).toBeDefined();
+    const res = await hit("/v1/diagnosis/day-ahead?subsystem=NE");
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ error: { code: "DATA_UNAVAILABLE" } });
+  });
+
+  it("refuses a technology parameter on the diagnosis rather than ignoring it", async () => {
+    // Refused before persistence is even consulted: there is one attribution
+    // per subsystem-day, so the question cannot be answered rather than
+    // answered with numbers that are not about it.
+    const res = await hit("/v1/diagnosis/day-ahead?subsystem=NE&technology=wind");
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: { code: "BAD_INPUT" } });
+  });
 });
