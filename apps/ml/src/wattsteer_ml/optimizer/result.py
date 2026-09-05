@@ -26,6 +26,7 @@ which is the one thing this project has ruled out everywhere else.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Literal, Protocol
@@ -34,9 +35,9 @@ from .. import __version__
 from ..constants import BRL_PER_MWH, SUBSYSTEM_THRESHOLD_MW
 from ..scenario_validation import forecast_unavailable
 from .horizon import local_day
-from .milp import DispatchPlan, solve
+from .milp import DispatchPlan, HourlyDispatch, solve
 from .scenario_fleet import fleet_from_scenario
-from .simulator import ScoredRealisation, score_band
+from .simulator import ExecutedHour, ScoredRealisation, score_band
 
 #: The build a plan was produced under, travelling on the response as a header
 #: rather than as a field — the published contract is closed, and this is a
@@ -104,7 +105,7 @@ def no_forecast_yet(
     raise forecast_unavailable(subsystem, target_date.isoformat(), forecast_origin)
 
 
-def _scored(realisation: ScoredRealisation) -> dict[str, Any]:
+def scored_payload(realisation: ScoredRealisation) -> dict[str, Any]:
     """One realisation's four scalars, in the published `ScoredRealisation`."""
     return {
         "baseline_mwh": realisation.baseline_mwh,
@@ -114,12 +115,18 @@ def _scored(realisation: ScoredRealisation) -> dict[str, Any]:
     }
 
 
-def _dispatch(plan: DispatchPlan) -> list[dict[str, float]]:
-    """The **scheduled** plan on the planning envelope, hour by hour.
+def dispatch_payload(
+    hours: Sequence[HourlyDispatch] | Sequence[ExecutedHour],
+) -> list[dict[str, float]]:
+    """A dispatch series, hour by hour, in the contract's `DispatchHour` shape.
 
-    Scheduled, not executed: what the fleet does on the day follows the
-    execution rule, and the per-realisation numbers under ``scored`` are the
-    ones that were simulated. The screen labels the two apart and so does this.
+    Called with a plan's hours it is the **scheduled** dispatch on the planning
+    envelope; called with a scored realisation's hours it is what the execution
+    rule actually did. Replay publishes both, as ``dispatch`` and ``executed``,
+    and they are two series precisely because drawing one is what makes
+    "planned against P50" get read as "assumed P50 came true". One function for
+    both, because a screen that overlaid two differently-shaped series would be
+    comparing them wrongly.
     """
     return [
         {
@@ -132,11 +139,11 @@ def _dispatch(plan: DispatchPlan) -> list[dict[str, float]]:
             "load_shift_down_mw": hour.load_shift_down_mw,
             "absorbed_mwh": hour.absorbed_mwh,
         }
-        for hour in plan.hours
+        for hour in hours
     ]
 
 
-def _solver(plan: DispatchPlan) -> dict[str, Any]:
+def solver_receipt(plan: DispatchPlan) -> dict[str, Any]:
     """The receipt: what solved it, how long it took, and under which library.
 
     The versions are read from the running process rather than hard-coded, so
@@ -157,7 +164,7 @@ def _solver(plan: DispatchPlan) -> dict[str, Any]:
     return receipt
 
 
-def _brl_per_mwh(wire: dict[str, Any]) -> float:
+def brl_per_mwh(wire: dict[str, Any]) -> float:
     """The display multiplier, which never enters the model.
 
     R$ appears exactly once, after the solve, on ``avoided_energy_mwh``. A user
@@ -228,19 +235,19 @@ def optimization_result(
         # floor and the P10 column cannot drift apart.
         "recovered_floor_mwh": band.recovered_floor_mwh,
         "scored": {
-            "p10": _scored(band.p10),
-            "p50": _scored(band.p50),
-            "p90": _scored(band.p90),
+            "p10": scored_payload(band.p10),
+            "p50": scored_payload(band.p50),
+            "p90": scored_payload(band.p90),
         },
-        "dispatch": _dispatch(plan),
+        "dispatch": dispatch_payload(plan.hours),
         # Because "recovered" is not "delivered": some of the absorbed energy is
         # still inside the fleet when the horizon ends, and some of it did not
         # survive the round trip.
         "stored_at_horizon_end_mwh": planned.stored_at_horizon_end_mwh,
         "round_trip_loss_mwh": planned.round_trip_loss_mwh,
         "economic_scenario": {
-            "brl_per_mwh": _brl_per_mwh(wire),
-            "brl": planned.recovered_mwh * _brl_per_mwh(wire),
+            "brl_per_mwh": brl_per_mwh(wire),
+            "brl": planned.recovered_mwh * brl_per_mwh(wire),
         },
-        "solver": _solver(plan),
+        "solver": solver_receipt(plan),
     }

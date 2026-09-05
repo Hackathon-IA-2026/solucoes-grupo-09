@@ -66,7 +66,7 @@ makes a backtest number and a forecast number the same kind of number), **Flex-o
 07** (the P50-plan / P10-promise path this replays). **Cross-spec, external:
 Forecaster 14** (persisted hour-wise `Forecast` rows, read through `AsOf(published_at)`).
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] A structural test asserts Replay's scoring path calls the optimizer package's `simulate`, and that exactly **one** implementation of the execution rule exists in the repository — a grep/AST-level check, in the default test path, because a second copy is the failure no unit test sees
 - [ ] *Under-forecast* fixture (`a = 2·f50`): absorption is unchanged from the `f50` scoring, the entire excess lands in `remaining_mwh`, `actual_mwh` is the observed total, and avoidability falls by roughly half

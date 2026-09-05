@@ -52,6 +52,8 @@ from wattsteer_ml.publication import (
 from wattsteer_ml.replay import calendar as calendar_module
 from wattsteer_ml.replay import cards as cards_module
 from wattsteer_ml.replay import reads as reads_module
+from wattsteer_ml.replay import result as result_module
+from wattsteer_ml.replay import scoring as scoring_module
 from wattsteer_ml.replay.calendar import (
     HOURS_PER_DAY,
     DayEvidence,
@@ -550,7 +552,13 @@ def test_the_replay_package_writes_down_no_date_at_all() -> None:
     """
     import ast
 
-    for module in (calendar_module, cards_module, reads_module):
+    for module in (
+        calendar_module,
+        cards_module,
+        reads_module,
+        scoring_module,
+        result_module,
+    ):
         tree = ast.parse(inspect.getsource(module))
         for node in ast.walk(tree):
             if isinstance(node, ast.Constant) and isinstance(node.value, str):
