@@ -1093,11 +1093,27 @@ refuse the artifact:
      floor rather than as the objective).
 7. **Serving smoke, on the real vector.** The candidate produces a complete
    24-hour band for every subsystem for *tomorrow*, from the live feature
-   function: no NaN, `P10 ≤ P50 ≤ P90` in every hour, the ensemble's day total
-   inside `[Σ P10, Σ P90]`, and no feature whose serve-time NULL rate exceeds
+   function: no NaN, `P10 ≤ P50 ≤ P90` in every hour, a finite and ordered day
+   total and peak for every subsystem, and no feature whose serve-time NULL rate exceeds
    its training NULL rate by more than 5 percentage points. This is the check
    that catches an upstream dataset having gone quiet, which no historical
    metric can see.
+
+   > **This clause used to require the day total inside `[Σ P10, Σ P90]`, and
+   > that is not an invariant of this mixture.** The composed P90 is exactly
+   > zero wherever `p ≤ 0.10`, so a quiet subsystem has `Σ P90 = 0` while its
+   > day total does not. Measured on the shared fixture fold with a real
+   > trained bundle: `N` gives `Σ P90 = 0` against a day P90 of 212.6, and `SE`
+   > likewise, while `NE` and `S` do satisfy the containment. A gate enforcing
+   > it would refuse every candidate. Three tickets found this independently —
+   > forecaster 07 from the ensemble, api-surface 08 from the fixtures, and
+   > forecaster 13 from the gate — which is what a genuine property of the
+   > model looks like rather than a bug. Note also that computing the bound at
+   > all trips seam 2's grep-level invariant, which fails the build on any line
+   > that adds a band's quantile to anything: the containment cannot be checked
+   > without writing the arithmetic the spec forbids elsewhere. The replacement
+   > catches what this clause was for — a draw that failed — without asserting
+   > something false.
 8. **Record the decision either way.** One line appended to `promotions.jsonl`:
    `{artifact_id, lane, decision: "promote"|"refuse", reason, bootstrap_p,
    guardrails, at}`. The card is written regardless, so a refused candidate is

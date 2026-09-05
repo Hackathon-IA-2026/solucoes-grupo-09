@@ -46,7 +46,7 @@ The checks, in order; all must pass:
 
 **Blocked by:** 02, 09.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] A candidate byte-identical to the incumbent does not promote
 - [ ] A candidate strictly better on every test day promotes

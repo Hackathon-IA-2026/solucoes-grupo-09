@@ -88,6 +88,18 @@ from wattsteer_ml.training.hyperparameters import ESTIMATOR_FAMILY, ModelConfig
 #: Hours in the local target day. `μ_sub` is 4 subsystems × this many hours.
 HOURS_PER_DAY = 24
 
+#: The card group the hot-swap gate writes its decision into
+#: (`docs/specs/forecaster.md`, the card's Decision group). Spelt here rather
+#: than in :mod:`wattsteer_ml.evaluation.gate` because :func:`load_artifact` has
+#: to read it, and the gate reads this module: one name, in the module both
+#: sides can import without a cycle.
+GATE_BLOCK_KEY = "gate"
+
+#: The key inside :data:`GATE_BLOCK_KEY` that marks an artifact as invalid
+#: because the feature contract moved out from under it. Written by the gate's
+#: third check, read by :func:`load_artifact`.
+CONTRACT_FAULT_KEY = "contract_fault"
+
 #: The six estimators, in the order the card lists them. Named here so the
 #: loader's completeness check and the card's inventory cannot drift apart.
 ESTIMATOR_FIELDS: tuple[str, ...] = (
@@ -470,6 +482,60 @@ def save_artifact(
     return bundle_path, card_path
 
 
+def read_card(path: Path) -> dict[str, Any]:
+    """One card, parsed, or a refusal naming the file.
+
+    The one reader, so that the loader and the hot-swap gate — which appends its
+    Decision group to a card already on the volume — cannot disagree about what
+    a card is. A card that is not a JSON object is not a partially valid card.
+    """
+    if not path.is_file():
+        raise BundleError(
+            f"no model card at {path}; the card is written regardless of the "
+            "gate's decision, so its absence means the write did not complete"
+        )
+    parsed = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(parsed, dict):
+        raise BundleError(f"{path} does not hold a model card")
+    card: dict[str, Any] = parsed
+    return card
+
+
+def write_card(path: Path, card: Mapping[str, Any]) -> None:
+    """Rewrite a card in place, in the spelling :meth:`ModelCard.to_json` uses.
+
+    The gate's Decision group arrives after the card has been written — training
+    writes the card, the gate then decides about it — so the card is edited
+    rather than composed a second time. Same indent, same key order, same
+    trailing newline, so a rewritten card diffs against its predecessor by the
+    group that was added and nothing else.
+    """
+    path.write_text(
+        json.dumps(dict(card), indent=2, sort_keys=False) + "\n", encoding="utf-8"
+    )
+
+
+def contract_fault(card: Mapping[str, Any]) -> str | None:
+    """Why this artifact was marked invalid, or ``None`` when it was not.
+
+    Set by the hot-swap gate's third check when the live ``feature_rows``
+    definition stops producing the hash the artifact was fitted against. The
+    incumbent is then invalid rather than stale — every number it would serve was
+    measured in a feature space the database no longer produces — and
+    `docs/specs/forecaster.md` requires that it not be "left quietly serving a
+    changed contract". The promotion log cannot say so: it holds ``promote`` and
+    ``refuse``, and neither revokes an earlier promotion, while a rollback needs
+    an earlier artifact to name and after a contract change there is none. So the
+    mark lives on the card, where :func:`load_artifact` refuses it — nothing is
+    deleted and no log line is rewritten.
+    """
+    block = card.get(GATE_BLOCK_KEY)
+    if not isinstance(block, dict):
+        return None
+    fault = block.get(CONTRACT_FAULT_KEY)
+    return fault if isinstance(fault, str) and fault.strip() else None
+
+
 def load_artifact(*, root: Path, lane: Lane, artifact_id: str) -> LoadedArtifact:
     """Load a bundle and its card, or refuse — never a partial mixture."""
     directory = root / lane.directory_name
@@ -484,9 +550,12 @@ def load_artifact(*, root: Path, lane: Lane, artifact_id: str) -> LoadedArtifact
             "write did not complete"
         )
     bundle = _validated(joblib.load(bundle_path))
-    card = json.loads(card_path.read_text(encoding="utf-8"))
-    if not isinstance(card, dict):
-        raise BundleError(f"{card_path} does not hold a model card")
+    card = read_card(card_path)
+    fault = contract_fault(card)
+    if fault is not None:
+        raise ContractMismatchError(
+            f"{artifact_id} is marked invalid on its own card and will not load: {fault}"
+        )
     card_hash = card.get("contract", {}).get("feature_hash")
     if card_hash != bundle.contract.feature_hash:
         raise ContractMismatchError(
