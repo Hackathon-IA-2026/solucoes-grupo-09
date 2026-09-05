@@ -574,11 +574,13 @@ export const en = {
     /** The dispatch and state-of-charge chart. */
     dispatch: {
       figure:
-        "Hourly dispatch: curtailment offered, energy absorbed, and battery state of charge",
+        "Hourly dispatch: curtailment offered, what each asset is scheduled to do, and the battery's state of charge",
       offered: "Curtailment offered (MWh)",
-      absorbed: "Absorbed (MWh)",
+      batteryCharge: "Battery charging (MW)",
+      loadShiftUp: "Load shifted into the hour (MW)",
       soc: "Battery SOC (MWh, right axis)",
       discharge: "Discharge (below the line)",
+      loadShiftDown: "Load shifted out of the hour (below the line)",
     },
 
     /** Driver attribution — SHAP shares, at subsystem grain. */
@@ -682,15 +684,43 @@ export const en = {
       metaTitle: "Mitigate — WattSteer",
       title: "What can we do?",
       lede: "{subsystem}, {date}. Storage and flexible demand sized against the day-ahead forecast.",
-      basisTitle: "Plan against",
-      basisMedian: "the median forecast (P50)",
-      basisConservative: "a conservative forecast (P10)",
-      basisMedianPill: "P50 median",
-      basisConservativePill: "P10 conservative",
-      basisMedianBody:
-        "The plan is optimal if the median comes true. If the day comes in below P50 the assets will have committed to charging from energy that was never curtailed — the P10 column below is what that costs.",
-      basisConservativeBody:
-        "The plan is feasible against a pessimistic realisation, so the recovered energy is a floor rather than a median. It systematically under-uses the fleet, which is the direction of error worth preferring.",
+      // --- flex-optimizer 08: the posture, stated rather than offered -------
+      //
+      // The basis toggle used to sit here. `docs/specs/flex-optimizer.md` calls
+      // it "the right question asked in the wrong place": the screen was
+      // refusing to hide a modelling choice, but the choice was a defect in the
+      // framing rather than a preference. What replaces it is the execution
+      // rule, without which "planned against P50" gets read as "assumes P50
+      // comes true".
+      postureTitle: "One plan, one promise",
+      postureSubtitle: "Planned against the median · promised on the low edge",
+      postureRule:
+        "On the day, each asset charges the scheduled amount or the amount actually being curtailed, whichever is smaller — and discharges the scheduled amount or what its state of charge permits, whichever is smaller. The assets absorb what is actually curtailed and never more.",
+      postureWhy:
+        "So planning against the median is not the same as assuming the median comes true. If the day comes in small the assets simply absorb less, the figure below falls, and nothing is imported from the grid. That is why the plan can be optimistic while the number quoted stays conservative — and why you are not asked to pick a quantile in order to get an answer.",
+      floorTitle: "The floor",
+      floorLabel: "Energy recovered on the low edge",
+      floorSentence:
+        "This plan recovers {floor} MWh if every hour lands at the low edge of its forecast band. That is the number to quote to someone else.",
+      floorMedian: "On the median realisation",
+      floorHigh: "On the high realisation",
+      floorBesideNote:
+        "Shown beside the floor and not in front of it: a conservative promise should not hide the upside, and the upside is not the promise.",
+      notJointTitle: "What the floor does not say",
+      notJointBody:
+        "An hour-wise P10 profile is not a 90 % confidence statement about the day. The plan is feasible against each hour's own low edge; the joint probability that all 24 hours land at or above theirs is neither 90 %, nor computed, nor claimed. Quantiles do not add.",
+      deliveredTitle: "Recovered is not delivered",
+      deliveredSubtitle: "On the planning envelope",
+      storedLabel: "Still stored when the horizon ends",
+      lossLabel: "Lost to the round trip",
+      deliveredNote:
+        "Absorbed energy is metered at the grid boundary: it is renewable energy that would have been spilled and instead flowed into an asset. What the asset later delivers is smaller by the round-trip loss, with some of it still inside the battery at midnight — there is no terminal state-of-charge target, because requiring one would penalise absorption on the day being planned in order to serve a day this horizon does not cover.",
+      refusalTitle: "This scenario was refused",
+      refusalNote:
+        "The same table the gateway applies before it builds a model, running here on the link you arrived with. Nothing was corrected: a repaired input produces a plan for a fleet you did not describe, and nothing on the screen would say so.",
+      refusalReset: "Start again from the reference fleet",
+      shareNote:
+        "The address bar is the scenario. Copy the link and the recipient sees this fleet, this day and this assumed price — there is no account, nothing is saved, and the back button and a bookmark work the way they look like they should.",
       steps: {
         no_action: "No action",
         battery: "+ Battery",
@@ -701,24 +731,27 @@ export const en = {
       remaining: "MWh remaining",
       baselineStep: "The day as forecast, with nothing dispatched.",
       stepDelta: "−{delta} MWh vs the previous step (P50)",
-      recovered: "Energy recovered",
-      recoveredNote:
-        "One plan, scored against all three realisations of the forecast. The interval is the forecast's, not the optimizer's.",
       avoided: "Curtailment avoided",
+      realisationLow: "On the low realisation",
+      realisationMedian: "On the median realisation",
+      realisationHigh: "On the high realisation",
       avoidedNote:
-        "Inverted on purpose: the share avoided is lowest on the P90 realisation, because a fixed fleet covers less of a bigger event.",
+        "The share falls as the event grows: a fixed fleet covers less of a bigger day, so the high realisation sits below the median. The low realisation sits below both for a different reason — a plan cannot absorb energy that was never curtailed, so on a small day the assets simply do less. Three shares, not an interval, and the track spans them with the median marked.",
       avoidedUndefined:
-        "Undefined, not zero: with no assets there is nothing to divide by. A zero here would read as nothing could be avoided.",
+        "Undefined, not zero. A day with nothing above the threshold has nothing to divide by, and a zero here would read as nothing could be avoided rather than there was nothing to avoid.",
       economicTitle: "Economic scenario (labelled)",
+      economicRate: "Assumed value",
       economicNote:
-        "At an assumed {rate}/MWh, on the P50 realisation. This is a scenario, not a settlement value, and it is the only place R$ appears. No carbon claim is derivable from any of this and none is made.",
+        "At an assumed {rate}/MWh, on the median realisation. This is a scenario, not a settlement value, and it is the only place R$ appears. No carbon claim is derivable from any of this and none is made.",
+      economicOnlyMoney:
+        "Move it and only this figure moves. The optimizer is denominated in energy, never in money, so nothing it recommends is a function of a price WattSteer invented.",
       dispatchTitle: "Dispatch",
-      dispatchSubtitle: "{step} · scored on the P50 realisation",
+      dispatchSubtitle: "{step} · the scheduled plan, on the planning envelope",
+      dispatchScheduled:
+        "This is what the assets are scheduled to do against the median forecast, with the battery's state of charge drawn alongside it. On the day the execution rule above clips both legs, so the realised trajectory is this one or lower — never higher.",
       batteryTitle: "Battery",
       loadTitle: "Flexible load",
       assetSubtitle: "Scenario input, not an inventory",
-      includeBattery: "Include battery",
-      includeLoad: "Include load",
       reset: "Reset to {power} MW / {energy} MWh + {shift} MW",
       footnote:
         "ONS publishes no flexibility-asset registry, so every parameter above is your assumption. Mitigate is a what-if tool, not an inventory — the scenario is encoded in the URL rather than saved, so a link is the whole of sharing it.",
@@ -734,6 +767,7 @@ export const en = {
       initialSoc: "Initial state of charge",
       batteryNote:
         "{hours}-hour duration. Efficiency splits into a charge and a discharge leg (√RTE each); the loss enters the state-of-charge balance asymmetrically.",
+      loadConnection: "Connection limit (MW)",
       loadShift: "Shiftable power (MW)",
       loadWindow: "Shift window (h)",
       loadDailyEnergy: "Daily energy (MWh)",

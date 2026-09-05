@@ -181,7 +181,6 @@ describe("mitigation steps", () => {
     forecast: buildForecast("NE", "12Z"),
     battery: DEFAULT_BATTERY,
     load: DEFAULT_LOAD,
-    basis: "p50",
   });
 
   test("three steps, in reveal order", () => {
