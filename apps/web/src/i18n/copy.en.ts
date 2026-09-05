@@ -797,6 +797,29 @@ export const en = {
         "Written by a language model from the attribution table below. It restates the numbers; it does not add any.",
       narrationNoteTemplate:
         "Assembled from the attribution table below by a fixed template, with no language model involved. It restates the numbers; it does not add any.",
+      /**
+       * The withheld state, which is a successful answer and not an error.
+       *
+       * A `withhold` rule suppresses the *generated* paragraph and nothing
+       * else: the response is a 200 whose ranking is untouched, and
+       * `withheld_by` names the rules. So the panel says which rule spoke and
+       * then keeps showing every driver group — an empty state here would
+       * discard numbers the server deliberately kept.
+       */
+      narrationWithheld:
+        "A domain rule withheld the generated narration for this day: {codes}. The attribution below is unchanged — all eight driver groups, each with its own number.",
+      /**
+       * The footnote's own label for where the paragraph came from.
+       *
+       * `narration.source` is the only field that says whether a language model
+       * or the fixed template wrote what is on screen, and it is the same field
+       * whether a rule withheld the model's paragraph, the model was
+       * unreachable, or the day's global call budget was spent. Two short
+       * labels rather than one sentence, so the footnote can name the source
+       * beside the longer note without repeating it.
+       */
+      narrationSourceModel: "Source: language model",
+      narrationSourceTemplate: "Source: fixed template",
       driversTitle: "Driver attribution",
       driversSubtitle: "SHAP, at subsystem grain",
       reliabilityTitle: "Reliability",

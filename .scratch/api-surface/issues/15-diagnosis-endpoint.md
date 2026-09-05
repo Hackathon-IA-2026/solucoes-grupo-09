@@ -54,15 +54,25 @@ withheld state), **diagnosis 09** (the template) and **diagnosis 11** (the
 generated narration whose key this endpoint caches). It can be built against fixtures for the attribution half
 as soon as diagnosis 06 fixes the row shape.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The route returns a 200 with the modelling service's URL unset, resolving the attribution from Postgres alone
-- [ ] All eight groups are returned ranked; the display rule is applied client-side and only there
-- [ ] There is no technology parameter, and a request carrying one is refused rather than ignored
-- [ ] A withheld diagnosis is a 200 with no drivers, the withholding codes, and a template narration
-- [ ] The endpoint sets the language variation header and no other
-- [ ] The narration cache key is the diagnosis spec's, unchanged; no third cache key exists over the composed response
-- [ ] A hundred concurrent misses on one cold narration key produce exactly one language-model call, asserted on the client being invoked once
-- [ ] Beyond the daily cap, the response is a 200 whose narration source says template
-- [ ] A missing attribution row where a forecast exists produces the distinct diagnosis-unavailable code, not a generic not-found
-- [ ] New copy exists in both locales and passes the hardcoded-string guard
+- [x] The route returns a 200 with the modelling service's URL unset, resolving the attribution from Postgres alone
+- [x] All eight groups are returned ranked; the display rule is applied client-side and only there
+- [x] There is no technology parameter, and a request carrying one is refused rather than ignored
+- [x] A withheld diagnosis is a 200 with the **drivers untouched**, the withholding codes, and a template narration
+- [x] The endpoint sets the language variation header and no other
+- [x] The narration cache key is the diagnosis spec's, unchanged; no third cache key exists over the composed response
+- [x] A hundred concurrent misses on one cold narration key produce exactly one language-model call, asserted on the client being invoked once
+- [x] Beyond the daily cap, the response is a 200 whose narration source says template
+- [x] A missing attribution row where a forecast exists produces the distinct diagnosis-unavailable code, not a generic not-found
+- [x] New copy exists in both locales and passes the hardcoded-string guard
+
+**One acceptance line was reworded, not reinterpreted.** The fourth read "a 200
+with **no drivers**", which is the sentence `api-surface.md` itself has since
+retracted: emptying the ranking is a `withhold` rule changing the attribution,
+which `docs/specs/diagnosis.md`'s rule table forbids of every action. The
+corrected contract — the one in the spec body, in `diagnosis.schema.json` (which
+requires exactly eight drivers, with no branch for a withheld day) and in
+`apps/api/src/diagnosis/narration-gate.ts` — is a 200 carrying the drivers
+untouched, `withheld_by` naming the rules, and a template paragraph in place of
+the model's. That is what is built and what the tests assert.

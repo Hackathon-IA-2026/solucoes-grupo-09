@@ -30,6 +30,22 @@
  */
 
 export {
+  type CachedNarration,
+  type CachedNarrationDeps,
+  type CachedNarrationRequest,
+  cachedNarration,
+  type InFlightResult,
+  NARRATION_LOCK_POLL_MS,
+  NARRATION_LOCK_TTL_MS,
+  NARRATION_LOCK_WAIT_MS,
+  NARRATION_TEMPLATE_TTL_SEC,
+  NARRATION_TTL_SEC,
+  type NarrationOrigin,
+  type NarrationStore,
+  narrationKeyFor,
+  narrationLockKey,
+} from "./narration-cache.js";
+export {
   canonicalNarrationJson,
   NARRATION_DISPLAY,
   NARRATION_DISPLAY_PRECISION,

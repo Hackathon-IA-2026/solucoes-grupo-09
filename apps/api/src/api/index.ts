@@ -6,6 +6,7 @@ import { config } from "../config.js";
 import { database } from "../database/connection.js";
 import { canonicalReads } from "./canonical.js";
 import { curtailmentRoutes } from "./curtailment.js";
+import { diagnosisRoutes } from "./diagnosis.js";
 import { forecastRoutes } from "./forecast.js";
 import { gridRoutes } from "./grid.js";
 import { ingestHealth } from "./ingest-health.js";
@@ -20,7 +21,7 @@ import {
   solveBodyLimit,
 } from "./plugins/body-limit.js";
 import { errorHandler } from "./plugins/errors.js";
-import { createLimitStore } from "./plugins/limit-store.js";
+import { limitStore } from "./plugins/limit-store-handle.js";
 import { rateLimit, tiersFrom } from "./plugins/rate-limit.js";
 import { requestContext } from "./plugins/request-context.js";
 import { securityHeaders } from "./plugins/security.js";
@@ -33,8 +34,12 @@ const isProd = config.isProd;
  * replicas share one budget, and the per-process map otherwise. The boot log
  * says which, because "the published budget is the real budget" is not
  * something an operator should have to infer.
+ *
+ * Held in `./plugins/limit-store-handle.ts` and re-exported here: the narration
+ * route spends the daily cap against the same counter, and it cannot import the
+ * module that mounts it.
  */
-export const limitStore = createLimitStore(config.redisUrl);
+export { limitStore };
 
 /**
  * Readiness: when a database is configured it must answer before we accept
@@ -136,6 +141,7 @@ export const app = new Elysia()
   .use(optimizeRoutes)
   .use(replayRoutes)
   .use(modelCardRoutes)
+  .use(diagnosisRoutes)
   .use(metaRoutes);
 
 // Opt-in BullMQ dashboard at /jobs (requires Redis). Protect it in production.
@@ -170,6 +176,9 @@ if (import.meta.main) {
       "   • GET /v1/curtailment/{hours,episodes,reasons} — the observed record",
     );
     console.log("   • GET /v1/forecast/day-ahead — the published band, from Postgres");
+    console.log(
+      "   • GET /v1/diagnosis/day-ahead — the eight driver groups and one paragraph",
+    );
     console.log(
       "   • GET /v1/plants       — the plant registry (ODbL §4.6), JSON or CSV",
     );
