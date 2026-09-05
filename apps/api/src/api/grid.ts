@@ -16,7 +16,7 @@ import { CodedError } from "../errors.js";
 import { gateAt } from "../forecast/gate.js";
 import type { ForecastDayRow } from "../forecast/reads.js";
 import { readGridOutlook } from "../forecast/reads.js";
-import { riskClass } from "./forecast.js";
+import { riskClass } from "../forecast/risk-class.js";
 import {
   instant,
   gateProfile as parseGateProfile,

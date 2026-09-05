@@ -1,4 +1,4 @@
-import type { ForecastDayAhead, RiskClass } from "@wattsteer/core/api";
+import type { ForecastDayAhead } from "@wattsteer/core/api";
 import { SUBSYSTEMS, subsystemMeta } from "@wattsteer/core/constants";
 import { encodeWire } from "@wattsteer/core/wire";
 import { Elysia, t } from "elysia";
@@ -7,6 +7,7 @@ import { database } from "../database/connection.js";
 import { CodedError } from "../errors.js";
 import { gateAt } from "../forecast/gate.js";
 import { type PublishedForecast, readForecastDayAhead } from "../forecast/reads.js";
+import { riskClass } from "../forecast/risk-class.js";
 import type { SubsystemCode } from "../ingest/normalise.js";
 import {
   gateProfile as parseGateProfile,
@@ -98,26 +99,6 @@ function parseSubsystem(raw: string): SubsystemCode {
     );
   }
   return raw as SubsystemCode;
-}
-
-/**
- * The named class, read off the published edges.
- *
- * The edges travel on the response beside the class, so a reader can check the
- * class rather than take it: `risk_bins` is an artifact's published output, not
- * a styling constant, and this is the one place the comparison is made.
- * `/v1/grid/outlook` classifies its four subsystems with this same function, so
- * the hero and the detail view cannot put a subsystem in two different classes.
- */
-export function riskClass(
-  probability: number,
-  elevatedFrom: number,
-  highFrom: number,
-): RiskClass {
-  if (probability >= highFrom) {
-    return "high";
-  }
-  return probability >= elevatedFrom ? "elevated" : "low";
 }
 
 /**

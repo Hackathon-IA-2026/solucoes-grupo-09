@@ -361,13 +361,36 @@ residual load → 3, high NE export → 4, solar ramp → 5, Sunday → 6.
   invalidates every cached narration. The retrain never touches it.
 
 **`observed` and `typical`, and what a group can honestly show.** A group has no
-single value, so each group **declares a headline feature** in the YAML. The
-payload carries that feature's value on the target date at the group's
-peak-`|φ|` hour, and the median of the same feature over the matched background
-for that hour, plus a `unit` code. At retrain the card records whether the
-declared headline is in fact the largest mean-`|φ|` member on the newest fold;
-a mismatch is a **card warning, never an automatic relabel** — a driver whose
-subtitle changes weekly is worse than one that is second-best.
+single value, so each group **declares a headline feature** in the YAML, and the
+payload carries two numbers and a `unit` code for it. At retrain the card
+records whether the declared headline is in fact the largest mean-`|φ|` member
+on the newest fold; a mismatch is a **card warning, never an automatic
+relabel** — a driver whose subtitle changes weekly is worse than one that is
+second-best.
+
+**The reading is taken at the grain of the bar it sits beside**, which is the
+one thing an earlier draft of this paragraph got wrong: it specified the
+group's peak-`|φ|` hour for both grains. So, settled:
+
+| Grain | `observed` | `typical` |
+|---|---|---|
+| `day` | the headline feature's **mean over the day's 24 rows** | its **mean over the 24 matched background cells**, the same 24 local hours |
+| `peak_hour` | that hour's own value | the mean over that one `(subsystem, local_hour)` cell |
+
+A day bar is `Φ_j = Σ_t φ_{j,t}`, the whole day's contribution. Quoting one
+hour's reading beside it would put a single-hour figure under a 24-hour number
+on the same row — the reconciliation problem this spec refuses everywhere else,
+and the reason the peak hour is *returned beside* the day rather than instead of
+it. The peak-hour rows already carry the hour-grain reading, so nothing is lost
+by the day's being the day's.
+
+The day's `typical` is exactly the sample `v(∅)` was averaged over, read one
+column at a time, which is what makes the pair comparable rather than merely
+adjacent. The cells all hold the same number of rows, so the mean over the
+pooled rows and the mean of the cell means are the same number and there is no
+weighting decision hidden in it. The mean rather than the median: `v(∅)` is a
+mean, and a `typical` that was a median would be a different reference from the
+baseline the bar is measured against.
 
 **Display, and the only place a sign can still be lost.** The API returns all
 eight groups, ranked by `|share|`. The screen renders groups with
@@ -487,6 +510,12 @@ constant that does not already exist as data:
 | `stale_inputs` | `annotate` | `weather_run_age_hours > 0`, or `weather_centroid_coverage < 1`, or any displayed group's headline feature is NULL at serve time | Feature values |
 | `unmodelled_outage_regime` | `annotate` | On the most recent settled day for this subsystem, `REL` accounts for the largest share of constrained-off MWh | Observed `RestrictionCause`, already ingested |
 
+A rule's `facts` are the values it fired on, keyed by name, and one of them is
+a **list of strings**: `stale_inputs` names every displayed group whose headline
+feature was NULL at serve time. The wire contract carries the list rather than a
+joined string, for the reason everything else here is a code — a server that
+flattened it would be assembling prose.
+
 `unmodelled_outage_regime` is the sharpest honest rule available today and it
 exists because `forecaster.md` already ruled the reason-code model out on the
 ground that **no ingested dataset carries transmission availability**. When
@@ -541,6 +570,25 @@ Exceptions live in `apps/web/src/lib/copy/causality-allowlist.ts`, one entry per
 permitted occurrence, each carrying the string, its location and a reason. The
 only expected entries are the disclaimers that *use* the word to deny the claim
 — the driver-bars footnote is one.
+
+**The hardcoded-copy guard reaches the server too.** `test/i18n-hardcoded-copy.test.ts`
+scoped itself honestly to `apps/web/src/app/**` and `apps/web/src/components/**`,
+and the API-surface ticket graph recorded the gap that left: *"copy assembled in
+a library module would evade it, which is a live risk for the template
+narration"*. The narration **is** assembled server-side, so the guard now also
+scans `apps/api/src/**` by the same file-name rule the boundary scan uses —
+anything named for the narration — with one distinction it turns on: a string
+handed to `throw new …Error(…)` or to an error class's `super(…)` is a
+**diagnostic, not copy**. That is true rather than convenient — the error
+envelope's only branchable field is a code and the client renders
+`copy.error[code]`, never the message — and everything else in those modules has
+to come out of the dictionaries.
+
+The payload itself is guarded twice over, at run time: the document it hands the
+renderer may carry **no string with a space in it** except
+`subsystem_display_name`, which is compared against `SUBSYSTEMS[].onsDisplayName`
+rather than merely permitted. A preformatted `"310 MW left"` cannot reach a
+renderer, in either locale.
 
 **Enforcer 2 — a runtime validator on every generated narration.** The lexical
 half of the output validator (below) rejects the same lemma set. A narration
@@ -707,7 +755,20 @@ narration:v1:{prompt_version}:{model_id}:{locale}:{sha256(canonical(input_json))
 
 - `canonical()` sorts keys and rounds every float to its field's display
   precision **before** hashing, so a 1e-12 jitter in a re-computed `φ` does not
-  miss the cache.
+  miss the cache. Sorting is RFC 8785 (JCS) through `packages/core`'s existing
+  `canonicalJson` — the scenario hash's serialiser, already mirrored in
+  `apps/ml` and pinned by shared golden vectors — rather than a second sorter
+  written next to the first.
+- **The precision table is keyed by field *name*, and has no default.** By name
+  because one quantity appears in more than one place — `sum_abs_attributed_mwh`
+  sits both on the attribution and inside `attribution_is_noise`'s facts — and
+  rounding the two differently would offer the renderer two spellings of one
+  number, which the numeric whitelist would then have to accept. A numeric field
+  with no entry is a **failure**, not a default: a field arriving with no
+  decided precision is exactly the accidental addition that silently invalidates
+  every cached narration, and the moment to notice it is the one where somebody
+  has to write down how it is printed. `apps/api/src/diagnosis/narration-canonical.ts`
+  holds the table.
 - The payload already contains `forecast_origin.run_label` (which contains the
   `artifact_id`), so a retrain, a promotion, a superseding 12Z run, or a changed
   `driver_group_version` all invalidate the key by construction. Nothing else

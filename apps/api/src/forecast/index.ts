@@ -53,3 +53,4 @@ export {
   readLatestPublished,
   SERVED,
 } from "./reads.js";
+export { riskClass } from "./risk-class.js";

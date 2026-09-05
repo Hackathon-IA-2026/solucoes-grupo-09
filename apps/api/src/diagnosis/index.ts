@@ -5,7 +5,11 @@
  * Three modules and one direction of flow. `publication.ts` parses what the
  * modelling service computed and appends it in one transaction; `reads.ts`
  * reads it back through the canonical `AsOf` views for
- * `/v1/diagnosis/day-ahead`; `narration-gate.ts` reads the fired rules and
+ * `/v1/diagnosis/day-ahead`; `narration-payload.ts` assembles the one closed
+ * JSON document every narration surface is allowed to see and
+ * `narration-canonical.ts` gives that document the canonical form the cache
+ * key, the numeric whitelist and the snapshot test all read;
+ * `narration-gate.ts` reads the fired rules and
  * decides which narration surface may render — the whole of what a `withhold`
  * rule does, and the reason a withheld day never reaches the language model.
  * Nothing in here computes an attribution, and
@@ -16,6 +20,13 @@
  */
 
 export {
+  canonicalNarrationJson,
+  NARRATION_DISPLAY_PRECISION,
+  type NarrationCacheKeyParts,
+  narrationCacheKey,
+  narrationPayloadDigest,
+} from "./narration-canonical.js";
+export {
   type NarrationDecision,
   type NarrationRenderers,
   type NarrationSource,
@@ -23,6 +34,19 @@ export {
   type RenderedNarration,
   renderNarration,
 } from "./narration-gate.js";
+export {
+  buildNarrationPayload,
+  DEFAULT_NARRATION_LOCALE,
+  NARRATION_LOCALES,
+  NARRATION_SCHEMA_VERSION,
+  type NarrationLocale,
+  NarrationPayloadError,
+  type NarrationPayloadSources,
+  narrationDocument,
+  notableNarrationGroups,
+  observedReasonsFromFlags,
+  toNarrationDocument,
+} from "./narration-payload.js";
 export {
   ATTRIBUTION_TARGET_DAY,
   type AttributionGrain,

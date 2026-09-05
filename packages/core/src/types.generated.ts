@@ -484,8 +484,17 @@ export interface Driver {
    * The feature name whose reading is quoted beside the group.
    */
   headlineFeature: string;
-  observed: number | string;
-  typical: number | string;
+  /**
+   * The headline feature's reading, as a number. Never a preformatted string
+   * like "310 MW left": a preformatted value is a translated string by another
+   * name, and the client formats this one through `Intl` against `unit`.
+   */
+  observed: number;
+  /**
+   * The same feature over the matched background, as a number, on the same terms
+   * as `observed`.
+   */
+  typical: number;
   unit: UnitCode;
   hourDisagreement: number;
   demoted: boolean;
@@ -519,7 +528,13 @@ export interface DiagnosisAttribution {
 export interface RuleFlag {
   code: string;
   severity: "annotate" | "demote" | "withhold";
-  facts: Record<string, string | number | boolean | null>;
+  /**
+   * The values the rule fired on, keyed by name. A list of strings is permitted
+   * because one shipping rule reports one - `stale_inputs` names every headline
+   * feature that was NULL at serve time - and flattening it into one string here
+   * would be assembling prose on the server.
+   */
+  facts: Record<string, string | number | boolean | null | unknown[]>;
 }
 
 /**
