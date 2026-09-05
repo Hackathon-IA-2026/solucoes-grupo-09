@@ -321,6 +321,23 @@ _Charting-session decisions (made during grilling, before any ticket existed):_
 - **Model lifecycle** — the Python service retrains weekly from Postgres,
   writes artifact + metrics to a Railway volume, and hot-swaps only if the
   backtest gate passes.
+- **The gate carries no invented constant** *(closes "Backtest gate
+  thresholds", which sat under "Not yet specified" because a bar cannot be set
+  before the first honest numbers exist — which is an argument against an
+  **absolute** bar and not against a gate)*. The **decision** is
+  `docs/specs/forecaster.md`'s paired block bootstrap against the incumbent:
+  decidable on day one and impossible to tune into passing, because the thing it
+  is measured against is the thing currently being served. **Floor coverage**
+  joins it as `docs/specs/replay.md`'s comparative guardrail — a candidate is
+  vetoed if its floor coverage on the shared newest fold, against the published
+  `REFERENCE_FLEET`, is more than five percentage points below the incumbent's —
+  and **no absolute floor-coverage bar is set anywhere**, because an hour-wise
+  P10 envelope has no day-level nominal level to compare against. Both are
+  placed where a wrong constant blocks a swap rather than choosing one. The
+  −5 points is judgement and is still **unvalidated against data**: the check
+  `replay.md` asks for — that it is not so tight nothing ever promotes — needs
+  the first two `point_in_time` folds, which do not exist until two quarters
+  after ingestion go-live.
 - **IA** — marketing landing (driven by real grid data, not a scrape input)
   plus an `/app` section carrying Grid Overview, Explain, Mitigate, Time
   Machine as routes.
@@ -339,8 +356,6 @@ _Charting-session decisions (made during grilling, before any ticket existed):_
 - **Diagnosis domain rules.** IDEA.md §25 wants SHAP *plus* domain rules, never
   the model alone. Which rules, and how they arbitrate against SHAP when they
   disagree, can't be written until real driver rankings exist.
-- **Backtest gate thresholds.** The weekly retrain hot-swaps only if the model
-  passes — but the bar can't be set before the first honest baseline numbers.
 - **Chart component inventory.** The template ships timeline-chart, heatmap,
   breakdown, stat-cards. Which survive, which need replacing, and what new
   grid-native charts are needed (SOC profile, dispatch stack, reliability

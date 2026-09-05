@@ -515,7 +515,7 @@ class ReplayScores:
         envelope in every hour. It is an empirical claim the product checks,
         which is why floor **coverage** over many days is the metric.
         """
-        return self.observed_scoring.recovered_mwh >= self.recovered_floor_mwh
+        return floor_was_met(band=self.band, observed=self.observed_scoring)
 
     @property
     def floor_margin_mwh(self) -> float:
@@ -653,6 +653,27 @@ def score_replay(
             achieved=observed_scoring,
         ),
     )
+
+
+def floor_was_met(*, band: ScoredBand, observed: ScoredRealisation) -> bool:
+    """Did the day that happened clear the promise the plan made at D−1.
+
+    **The one definition of the event floor coverage counts.**
+    :attr:`ReplayScores.floor_met` is this function and the hot-swap gate's
+    floor-coverage guardrail
+    (:mod:`wattsteer_ml.replay.floor_guardrail`) is this function, so a
+    Backtest's ``floor_coverage`` and the guardrail's count the same thing. A
+    second expression of it is how the aggregate starts to drift from the number
+    it aggregates, which is the failure
+    :mod:`wattsteer_ml.replay.backtest` is arranged around.
+
+    Both arguments come out of
+    :mod:`wattsteer_ml.optimizer.simulator`: the promise is
+    :attr:`~wattsteer_ml.optimizer.simulator.ScoredBand.recovered_floor_mwh`,
+    the P10-simulated recovery, and what happened is the same plan executed
+    against the settled day. Neither is recomputed here.
+    """
+    return observed.recovered_mwh >= band.recovered_floor_mwh
 
 
 def score_observed_only(
