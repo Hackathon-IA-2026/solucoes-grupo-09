@@ -382,6 +382,31 @@ suite("the published forecast · persistence and AsOf (real Postgres)", () => {
     expect(early?.day.publishedAt.toISOString()).toBe(GATE_EARLY);
   });
 
+  it("replays the vintage that was current at the pinned instant", async () => {
+    // Forecaster 19: the evening view supersedes the morning one as a newer
+    // vintage of the same valid hours, and a replay pinned between the two
+    // publications must see the morning one — the only one that existed then.
+    // The `asOf` axis is on `ingested_at`, so this is the bitemporal read doing
+    // its job rather than a rule anybody wrote for two lanes.
+    await writePublication(db, publication({ gateProfile: "gate_early", scale: 3 }), {
+      ingestedAt: new Date("2024-04-04T12:10:00.000Z"),
+    });
+    await writePublication(db, publication(), {
+      ingestedAt: new Date("2024-04-04T22:10:00.000Z"),
+    });
+
+    const midday = new Date("2024-04-04T15:00:00.000Z");
+    expect(await read({ gateProfile: "gate_late", asOf: midday })).toBeNull();
+    const thenEarly = await read({ gateProfile: "gate_early", asOf: midday });
+    expect(thenEarly?.day.publishedAt.toISOString()).toBe(GATE_EARLY);
+    expect(thenEarly?.day.dayTotalMwh.p50).toBe(782.25);
+
+    // And afterwards both are still readable: superseding appended a row, it
+    // did not overwrite one.
+    expect((await read({ gateProfile: "gate_early" }))?.day.dayTotalMwh.p50).toBe(782.25);
+    expect((await read())?.day.dayTotalMwh.p50).toBe(260.75);
+  });
+
   it("lists the publication on the meta reader, with its subsystems", async () => {
     await writePublication(db, publication(), { ingestedAt: NOW });
     const published = await readLatestPublished(db, { asOf: NOW });

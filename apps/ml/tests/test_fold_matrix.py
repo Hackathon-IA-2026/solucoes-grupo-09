@@ -49,16 +49,53 @@ TODAY = date(2026, 8, 29)
 # --- the matrix ---------------------------------------------------------------
 
 
-def test_the_matrix_is_the_four_arms_the_spec_names() -> None:
+def test_the_matrix_is_the_arms_the_spec_names_plus_the_morning_view() -> None:
+    """Four arms of the two A/Bs, and forecaster 19's second serving lane.
+
+    ``A-full-early`` is the row the two-lane recommendation costs — "a second row
+    in the evaluation matrix" — and it is last because it is the newest, not
+    because it is an afterthought.
+    """
     assert [run.name for run in MATRIX_RUNS] == [
         "A-full",
         "A-common",
         "B-common",
         "A-full-archive",
+        "A-full-early",
     ]
     assert MATRIX_RUN_BY_NAME["B-common"].feature_set == "dessem_augmented_v1"
     assert MATRIX_RUN_BY_NAME["A-full-archive"].weather_arm == "archive"
     assert {run.weather_arm for run in MATRIX_RUNS} == {"lead_matched", "archive"}
+
+
+def test_only_the_morning_arm_is_read_at_the_early_gate() -> None:
+    """Every other arm is `gate_late`, which is where both A/Bs are decided."""
+    assert {run.name for run in MATRIX_RUNS if run.gate_profile == "gate_early"} == {
+        "A-full-early"
+    }
+    assert MATRIX_RUN_BY_NAME["A-full-early"].feature_set == (
+        MATRIX_RUN_BY_NAME["A-full"].feature_set
+    )
+    assert MATRIX_RUN_BY_NAME["A-full-early"].window_start == (
+        MATRIX_RUN_BY_NAME["A-full"].window_start
+    )
+    assert MATRIX_RUN_BY_NAME["A-full-early"].weather_arm == (
+        MATRIX_RUN_BY_NAME["A-full"].weather_arm
+    )
+
+
+def test_the_morning_arm_carries_what_its_gate_withheld() -> None:
+    """The same set A, the same window, twelve fewer model inputs.
+
+    Which is the whole reason this arm is not a worse-tuned `A-full`: whatever
+    prints the two arms' losses can print this beside them.
+    """
+    early = MATRIX_RUN_BY_NAME["A-full-early"].vector
+    late = MATRIX_RUN_BY_NAME["A-full"].vector
+    assert late.withheld == ()
+    assert len(early.withheld) == 12
+    assert early.input_count == late.input_count
+    assert len(early.admitted) == len(late.admitted) - 12
 
 
 def test_a_common_window_is_shared_so_the_handicap_is_not_charged_to_dessem() -> None:
@@ -76,7 +113,14 @@ def test_a_common_window_is_shared_so_the_handicap_is_not_charged_to_dessem() ->
 def test_a_run_carries_no_view_of_what_it_is_scored_on() -> None:
     """No field for a fold, a test period or a date range — only a window."""
     fields = {field.name for field in dataclasses.fields(MATRIX_RUNS[0])}
-    assert fields == {"name", "feature_set", "window_start", "weather_arm", "isolates"}
+    assert fields == {
+        "name",
+        "feature_set",
+        "window_start",
+        "weather_arm",
+        "isolates",
+        "gate_profile",
+    }
 
 
 def test_the_dessem_verdict_rests_on_two_test_quarters() -> None:
