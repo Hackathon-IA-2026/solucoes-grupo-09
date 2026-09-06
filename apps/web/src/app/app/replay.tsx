@@ -274,14 +274,26 @@ export default function TimeMachineScreen() {
     return frame(null, <Refusal code={state.code} onReset={scenarioState.reset} />);
   }
 
-  // In flight. An absence, not a skeleton of numbers that are not there yet.
+  // In flight. An absence, not a skeleton of numbers that are not there yet —
+  // and an absence with its reason on it.
+  //
+  // This is the state a `web:export` build freezes on. `web.output` is
+  // `static`, so every route is prerendered, and this screen's first render is
+  // this note: replay 10 moved the Time Machine off fixtures and onto
+  // `GET /v1/replay` because filling these boxes from a fixture would have
+  // meant scoring a plan in the browser, which `test/one-execution-rule.test.ts`
+  // forbids. That trade is not reopened here — the second point says what the
+  // screen is waiting for and what it takes to see it, which is the courtesy
+  // `band_unavailable_reason` and `UnmeasuredLeadTime` already extend on the
+  // data side. A dead screen with no explanation is a bug report the reader
+  // has to write themselves.
   if (state.status === "replaying") {
     return frame(
       null,
       <HonestyNote
         title={copy.app.replay.replayingTitle}
         tone="neutral"
-        points={[copy.app.replay.replayingNote]}
+        points={[copy.app.replay.replayingNote, copy.app.replay.replayingLive]}
       />,
     );
   }

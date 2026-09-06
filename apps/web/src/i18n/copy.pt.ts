@@ -696,10 +696,10 @@ export const pt: Copy = {
         battery_and_load: "+ Carga flexível",
       },
       reveal: "Revelar",
-      hidden: "Oculto — revele na ordem para ver a variação do passo.",
+      hidden: "Oculto — revele na ordem para ver o que o passo recupera.",
       remaining: "MWh restantes",
       baselineStep: "O dia como previsto, sem nada despachado.",
-      stepDelta: "−{delta} MWh em relação ao passo anterior (P50)",
+      stepRecovered: "{recovered} MWh recuperados na realização P50",
       avoided: "Curtailment evitado",
       realisationLow: "Na realização baixa",
       realisationMedian: "Na realização mediana",
@@ -855,6 +855,8 @@ export const pt: Copy = {
       replayingTitle: "Reexecutando",
       replayingNote:
         "Uma otimização e cinco passagens de avaliação contra o dia apurado. Nada é desenhado até que todas tenham respondido — uma tela pela metade seria números de duas frotas diferentes lado a lado.",
+      replayingLive:
+        "Esta tela lê uma API ao vivo e não pode ser pré-renderizada. O GET /v1/replay replaneja o dia e o avalia com o único simulador, que não roda no navegador — então uma exportação estática traz esta nota e nenhum número, e permanece nela. Para ver um dia reexecutado, aponte a build para um gateway em execução com EXPO_PUBLIC_API_URL, ou suba um localmente com bun run api e recarregue. Visão da rede e Explicar não precisam de nenhum dos dois.",
 
       observedOnlyTitle:
         "Este dia não pode ser reexecutado, e esta é a cláusula que ele reprovou",
