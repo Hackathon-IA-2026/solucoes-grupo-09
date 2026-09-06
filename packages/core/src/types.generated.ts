@@ -1273,6 +1273,24 @@ export type CorrectionReach = "full" | "partial";
  */
 export interface LowerTailCoverage {
   coverageP10: Probability;
+  /**
+   * The scored hours whose composed P10 is a **positive number** - the rows on
+   * which this edge states a bound at all. `coverage_p10` is counted over every
+   * curtailed hour of the fold, and on an hour where `p <= 0.90` the served
+   * floor is exactly 0 MWh, so `y >= P10` holds for free and the row enters the
+   * numerator without ever having tested the floor. A `stated_rows` of 0 beside
+   * a `coverage_p10` of 1.0 is therefore arithmetic over an edge that is zero
+   * everywhere and not a floor that held, which is the reading forecaster ticket
+   * 24 found in the wild.
+   */
+  statedRows: number;
+  /**
+   * `coverage_p10` counted over `stated_rows` alone, or **null** where there are
+   * none. Null and never 1.0: a fold on which the floor was never a bound has no
+   * lower coverage, and a perfect score printed in that slot is exactly how the
+   * vacuous figure came to be read as evidence.
+   */
+  coverageP10WhereStated: Probability | null;
   correctionApplied: CorrectionReach;
   /**
    * The product figure simulated against this half of the band.
@@ -1300,6 +1318,25 @@ export interface LowerTailCoverage {
  */
 export interface UpperTailCoverage {
   coverageP90: Probability;
+  /**
+   * The scored hours whose composed P90 is a **positive number**. Its lower
+   * twin's mirror image, with the sign flipped: where the P90 is on the point
+   * mass, `y <= P90` is false with certainty for exactly the reason `y >= P10`
+   * is true for free, so the row enters `coverage_p90`'s denominator as a
+   * guaranteed failure. `upper_correction_realised` is this count over `rows`;
+   * the count is published beside the share because a denominator a reader can
+   * see is what makes the marginal readable.
+   */
+  statedRows: number;
+  /**
+   * `coverage_p90` counted over `stated_rows` alone, or **null** where there are
+   * none. This is the figure the **conformal correction's width** is answerable
+   * for. The marginal is this times `upper_correction_realised`, exactly, and
+   * only the second factor is a fact about the classifier: a short marginal
+   * beside a nominal figure here is the point mass, not a band too narrow at the
+   * top.
+   */
+  coverageP90WhereStated: Probability | null;
   correctionApplied: CorrectionReach;
   /**
    * The mean share of `delta_hi` that actually reached the composed P90 over the
@@ -1343,6 +1380,23 @@ export interface Coverage {
    */
   guardrail: Probability[];
   guardrailSatisfied: boolean;
+  /**
+   * Whether this fold's served band **may be described as a 90% band** over its
+   * curtailed hours. False unless both marginals sit inside `guardrail` and both
+   * tails state a bound on at least one row. It is `false` on a band whose upper
+   * marginal falls short *and* on one whose `coverage_p10` is a vacuous 1.0, and
+   * a client that renders a coverage claim without reading it has a bug.
+   */
+  nominalClaim: boolean;
+  /**
+   * The card's own sentence about `nominal_claim`, verbatim, assembled from this
+   * fold's numbers. Where the claim is withheld it opens with the refusal,
+   * carries the decomposition that says which factor is short, and ends with the
+   * named unmeasured reason - because a fixture's marginal is not a measurement
+   * of anything and must never be read as one. Auditor prose in the same status
+   * as an error `message`: never rendered to a user.
+   */
+  claimNote: string;
   lower: LowerTailCoverage;
   upper: UpperTailCoverage;
   /**
@@ -2645,11 +2699,15 @@ export const WIRE_SHAPES = {
   },
   LowerTailCoverage: {
     coverageP10: { wire: "coverage_p10" },
+    statedRows: { wire: "stated_rows" },
+    coverageP10WhereStated: { wire: "coverage_p10_where_stated" },
     correctionApplied: { wire: "correction_applied" },
     quotedAs: { wire: "quoted_as", const: "recovered_floor_mwh" },
   },
   UpperTailCoverage: {
     coverageP90: { wire: "coverage_p90" },
+    statedRows: { wire: "stated_rows" },
+    coverageP90WhereStated: { wire: "coverage_p90_where_stated" },
     correctionApplied: { wire: "correction_applied" },
     upperCorrectionRealised: { wire: "upper_correction_realised" },
     upperCorrectionNote: { wire: "upper_correction_note" },
@@ -2661,6 +2719,8 @@ export const WIRE_SHAPES = {
     target: { wire: "target" },
     guardrail: { wire: "guardrail" },
     guardrailSatisfied: { wire: "guardrail_satisfied" },
+    nominalClaim: { wire: "nominal_claim" },
+    claimNote: { wire: "claim_note" },
     lower: { wire: "lower", shape: "LowerTailCoverage" },
     upper: { wire: "upper", shape: "UpperTailCoverage" },
     p50Unbiasedness: { wire: "p50_unbiasedness" },

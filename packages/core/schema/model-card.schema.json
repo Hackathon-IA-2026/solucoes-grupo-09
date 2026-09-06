@@ -241,6 +241,18 @@
       "type": "object",
       "properties": {
         "coverage_p10": { "$ref": "common.schema.json#/$defs/probability" },
+        "stated_rows": {
+          "description": "The scored hours whose composed P10 is a **positive number** - the rows on which this edge states a bound at all. `coverage_p10` is counted over every curtailed hour of the fold, and on an hour where `p <= 0.90` the served floor is exactly 0 MWh, so `y >= P10` holds for free and the row enters the numerator without ever having tested the floor. A `stated_rows` of 0 beside a `coverage_p10` of 1.0 is therefore arithmetic over an edge that is zero everywhere and not a floor that held, which is the reading forecaster ticket 24 found in the wild.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "coverage_p10_where_stated": {
+          "description": "`coverage_p10` counted over `stated_rows` alone, or **null** where there are none. Null and never 1.0: a fold on which the floor was never a bound has no lower coverage, and a perfect score printed in that slot is exactly how the vacuous figure came to be read as evidence.",
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/probability" },
+            { "type": "null" }
+          ]
+        },
         "correction_applied": { "$ref": "#/$defs/correction_reach" },
         "quoted_as": {
           "description": "The product figure simulated against this half of the band. `recovered_floor_mwh` is the number the prose quotes, and it is a floor because it is simulated against P10 - so the exactness of *this* tail is the thing that sentence rests on.",
@@ -248,7 +260,13 @@
           "const": "recovered_floor_mwh"
         }
       },
-      "required": ["coverage_p10", "correction_applied", "quoted_as"],
+      "required": [
+        "coverage_p10",
+        "stated_rows",
+        "coverage_p10_where_stated",
+        "correction_applied",
+        "quoted_as"
+      ],
       "additionalProperties": false
     },
     "upper_tail_coverage": {
@@ -257,6 +275,18 @@
       "type": "object",
       "properties": {
         "coverage_p90": { "$ref": "common.schema.json#/$defs/probability" },
+        "stated_rows": {
+          "description": "The scored hours whose composed P90 is a **positive number**. Its lower twin's mirror image, with the sign flipped: where the P90 is on the point mass, `y <= P90` is false with certainty for exactly the reason `y >= P10` is true for free, so the row enters `coverage_p90`'s denominator as a guaranteed failure. `upper_correction_realised` is this count over `rows`; the count is published beside the share because a denominator a reader can see is what makes the marginal readable.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "coverage_p90_where_stated": {
+          "description": "`coverage_p90` counted over `stated_rows` alone, or **null** where there are none. This is the figure the **conformal correction's width** is answerable for. The marginal is this times `upper_correction_realised`, exactly, and only the second factor is a fact about the classifier: a short marginal beside a nominal figure here is the point mass, not a band too narrow at the top.",
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/probability" },
+            { "type": "null" }
+          ]
+        },
         "correction_applied": { "$ref": "#/$defs/correction_reach" },
         "upper_correction_realised": {
           "description": "The mean share of `delta_hi` that actually reached the composed P90 over the scored hours. `1.0` is the correction applied in full everywhere. Below it, read against `correction_regime`: under `conformal_v1_partial_upper` it is `delta_hi` lost in the interpolant, and under `conformal_v2_full_upper` it is the share of scored hours the classifier placed on the mixture's point mass at zero, where the P90 is structurally zero and bounds `coverage_p90` from above.",
@@ -270,6 +300,8 @@
       },
       "required": [
         "coverage_p90",
+        "stated_rows",
+        "coverage_p90_where_stated",
         "correction_applied",
         "upper_correction_realised",
         "upper_correction_note"
@@ -293,6 +325,15 @@
           "items": { "$ref": "common.schema.json#/$defs/probability" }
         },
         "guardrail_satisfied": { "type": "boolean" },
+        "nominal_claim": {
+          "description": "Whether this fold's served band **may be described as a 90% band** over its curtailed hours. False unless both marginals sit inside `guardrail` and both tails state a bound on at least one row. It is `false` on a band whose upper marginal falls short *and* on one whose `coverage_p10` is a vacuous 1.0, and a client that renders a coverage claim without reading it has a bug.",
+          "type": "boolean"
+        },
+        "claim_note": {
+          "description": "The card's own sentence about `nominal_claim`, verbatim, assembled from this fold's numbers. Where the claim is withheld it opens with the refusal, carries the decomposition that says which factor is short, and ends with the named unmeasured reason - because a fixture's marginal is not a measurement of anything and must never be read as one. Auditor prose in the same status as an error `message`: never rendered to a user.",
+          "type": "string",
+          "minLength": 1
+        },
         "lower": { "$ref": "#/$defs/lower_tail_coverage" },
         "upper": { "$ref": "#/$defs/upper_tail_coverage" },
         "p50_unbiasedness": {
@@ -311,6 +352,8 @@
         "target",
         "guardrail",
         "guardrail_satisfied",
+        "nominal_claim",
+        "claim_note",
         "lower",
         "upper",
         "p50_unbiasedness",

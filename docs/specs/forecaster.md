@@ -507,6 +507,45 @@ structurally zero for every `p ≤ 0.90` and the upper for every `p ≤ 0.10`, a
 edge is a positive number at all. It bounds `coverage_p90` from above, and a
 `coverage_p90` short of nominal is read against it.
 
+**And the two marginals disagree about what a zero edge means, which is the
+whole of why they look so different.** They are counted over the same rows. A
+scored hour has `y > τ > 0`, so where the mixture puts an edge on its point mass
+`y ≥ P10` holds for free and `y ≤ P90` fails with certainty: the identical
+structural zero is a free pass in one numerator and a guaranteed failure in the
+other. A `coverage_p10` of exactly 1.0 is therefore not a floor that held — on a
+fold where no scored hour has `p > 0.90` it is arithmetic over an edge that is
+0 MWh on every row — and a marginal `coverage_p90` short of nominal is not, on
+its own, evidence that one global `δ_hi` cannot cover a heteroscedastic upper
+tail.
+
+So each figure is published **with the rows on which its edge is a bound at
+all**: `coverage_stated_rows_p10` and `coverage_stated_rows_p90`, and the two
+`coverage_*_where_stated` figures over those rows alone — **absent, never 1.0**,
+where there are none. The upper marginal factorises exactly,
+
+```
+coverage_p90 = upper_correction_realised × coverage_p90_where_stated
+```
+
+because a row whose P90 is zero can never be covered. The first factor is a fact
+about the **classifier**; only the second is a fact about the conformal
+correction's **width**. A short marginal beside a nominal `where_stated` is the
+point mass and the spec's already-recorded answer — a better classifier, not a
+wider band; a short `where_stated` is the correction, and is the thing per-tail
+conditional conformal would be for.
+
+**`coverage_nominal_claim` — the band is never printed as a 90% statement while
+it is not one.** The card and the wire carry a boolean and a `claim_note`, both
+derived from the fold's numbers and neither settable by a caller. The claim
+holds only when both marginals sit inside the coverage guardrail *and* each tail
+states a bound on at least one row; a coverage of 1.0 over no stated row is
+arithmetic and not a guarantee. A withheld claim carries the decomposition and a
+named unmeasured reason, because every fold this repository can score is
+fabricated: the decomposition can say where a short marginal comes from without
+claiming the share it comes from survives outside a fixture, and that
+measurement needs a fold sweep against a migrated database with an ingested
+window.
+
 **The interval has two independent honesty components**, and separating them is
 what makes a failure diagnosable: `p` is calibrated by isotonic and checked by
 the reliability curve; `Q_pos` is corrected by conformal and checked by

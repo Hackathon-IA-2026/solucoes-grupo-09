@@ -177,6 +177,44 @@ describe("model card · the correction caveat survives to the wire", () => {
     expect(upper.upper_correction_note).toContain("point mass");
   });
 
+  it("publishes the rows each tail's coverage is actually a statement over", async () => {
+    serves();
+    const { band } = await wire(await card());
+    const { lower, upper } = band.coverage;
+
+    // Forecaster ticket 24. The two coverages are counted over the *same* rows
+    // — every curtailed hour of the fold — and disagree about what a zero edge
+    // means: at `p <= 0.10` both served edges are 0 MWh, `y >= P10` holds for
+    // free and `y <= P90` fails with certainty. So a marginal is only readable
+    // beside the count of rows on which its edge was a bound at all.
+    expect(lower.stated_rows).toBe(0);
+    expect(upper.stated_rows).toBe(50);
+
+    // Null and never 1.0: no row stated a floor, so the floor has no coverage.
+    // This is the whole of why `coverage_p10 = 1.0` says nothing about it.
+    expect(lower.coverage_p10_where_stated).toBeNull();
+
+    // And where the upper edge *is* a bound, it covers nominally. The marginal
+    // is that width times the reach, exactly, because a row whose P90 is zero
+    // can never be covered.
+    expect(upper.coverage_p90_where_stated).toBeCloseTo(0.92, 4);
+    expect(
+      upper.upper_correction_realised * (upper.coverage_p90_where_stated ?? 0),
+    ).toBeCloseTo(upper.coverage_p90, 6);
+  });
+
+  it("refuses to let the band be read as a 90% statement while it is not one", async () => {
+    serves();
+    const { band } = await wire(await card());
+
+    expect(band.coverage.nominal_claim).toBe(false);
+    expect(band.coverage.claim_note).toContain("NOT a 90% band");
+    // The named unmeasured reason travels with the refusal, so nobody reads the
+    // fixture's decimal as a measurement of the Brazilian grid.
+    expect(band.coverage.claim_note).toContain("has not been measured");
+    expect(band.coverage.claim_note).not.toContain("no data source");
+  });
+
   it("still reads a card written under the regime that was retired", async () => {
     // The old rows are in the database and are not re-stamped: they carry a
     // narrower statement about the hours they were served for, and this route

@@ -84,6 +84,29 @@ import { applyCachePolicy, CACHE_POLICIES } from "./plugins/cache-policy.js";
  * the table below: the old regime is a real, narrower statement about the hours
  * it was served for, and this route has to keep being able to read it honestly.
  *
+ * ### And the denominator each coverage is actually over — forecaster 24
+ *
+ * `coverage_p10` and `coverage_p90` are counted over the **same** rows, every
+ * curtailed hour of the fold, and disagree about what a zero edge means. At
+ * `p ≤ 0.10` the mixture puts *both* served edges on its point mass, and the
+ * hour is scored, so `y > τ > 0`: `y ≥ P10` holds for free and `y ≤ P90` fails
+ * with certainty. The identical structural zero is a free pass in one numerator
+ * and a guaranteed failure in the other, which is how a `coverage_p10` of
+ * exactly 1.0 came to be read as a floor that held when it was arithmetic over
+ * an edge that is 0 MWh everywhere.
+ *
+ * So each tail block carries `stated_rows` — the scored hours on which its edge
+ * is a positive number — and `coverage_*_where_stated`, the coverage over those
+ * rows alone, **null** where there are none. The marginal upper coverage is
+ * `upper_correction_realised × coverage_p90_where_stated`, exactly; only the
+ * first factor is a fact about the classifier, and only the second is one about
+ * the conformal correction's width.
+ *
+ * `nominal_claim` and `claim_note` are the verdict on top of that, forwarded
+ * and never derived here: the forecaster owns whether its band may be called a
+ * 90% band, and a gateway recomputing it from two decimals would be a second
+ * opinion on the one question this response exists to settle.
+ *
  * The reach is resolved from {@link CORRECTION_REACH}, a published table, and a
  * regime with no entry is a **refusal** rather than a guess. Defaulting an
  * unknown regime to `full` would publish a tail as exact on the strength of not
@@ -189,6 +212,21 @@ function str(source: Record<string, unknown>, key: string): string {
     });
   }
   return value;
+}
+
+/**
+ * `number | null`, where the null is a **statement** and not a missing key.
+ *
+ * `coverage_p10_where_stated` is null on a fold where the composed P10 was
+ * never a positive number, and that null is the finding: there was no row on
+ * which the floor was a bound, so it has no coverage. Coercing it to a number
+ * here — to 1.0 above all, which is what the marginal reads — would restore
+ * exactly the figure forecaster ticket 24 found being mistaken for a tail that
+ * held. A non-number that is not null is a card this API cannot read, and
+ * `num` refuses it.
+ */
+function nullableNum(source: Record<string, unknown>, key: string): number | null {
+  return source[key] === null ? null : num(source, key);
 }
 
 /** `string | null`, where the null is a fact and a missing key is not. */
@@ -298,8 +336,16 @@ function toCoverage(quantiles: Record<string, unknown>, regime: string): Coverag
       ? guardrail.filter((one): one is number => typeof one === "number")
       : [],
     guardrailSatisfied: quantiles.coverage_guardrail_satisfied === true,
+    // Read from the card and never derived here. The forecaster owns whether
+    // its band may be called a 90% band, and a gateway that recomputed the
+    // verdict from two decimals would be a second opinion on the one question
+    // this response exists to answer without ambiguity.
+    nominalClaim: quantiles.coverage_nominal_claim === true,
+    claimNote: str(quantiles, "coverage_claim_note"),
     lower: {
       coverageP10: num(quantiles, "coverage_p10"),
+      statedRows: num(quantiles, "coverage_stated_rows_p10"),
+      coverageP10WhereStated: nullableNum(quantiles, "coverage_p10_where_stated"),
       correctionApplied: reach.lower,
       // The one product figure that rests on this tail, named on the response
       // rather than left to prose: `recovered_floor_mwh` is simulated against
@@ -309,6 +355,8 @@ function toCoverage(quantiles: Record<string, unknown>, regime: string): Coverag
     },
     upper: {
       coverageP90: num(quantiles, "coverage_p90"),
+      statedRows: num(quantiles, "coverage_stated_rows_p90"),
+      coverageP90WhereStated: nullableNum(quantiles, "coverage_p90_where_stated"),
       correctionApplied: reach.upper,
       upperCorrectionRealised: num(quantiles, "upper_correction_realised"),
       upperCorrectionNote: str(quantiles, "upper_correction_note"),

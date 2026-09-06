@@ -63,6 +63,41 @@ curtailment the model denies. The same structure puts the P10 at zero for every
 one remaining, structural asymmetry as numbers, and
 :attr:`CoverageReport.upper_correction_realised` publishes the upper one.
 
+**What the two coverages are each counted over — forecaster ticket 24.** Both
+are counted over the *same* rows: every curtailed hour of the fold. What they
+disagree about is what a **zero edge** means. At ``p <= 0.10`` the mixture puts
+both served edges on the point mass, and the hour is scored, so ``y > tau > 0``:
+``y >= P10`` holds for free and ``y <= P90`` fails with certainty. One
+structural zero, two opposite verdicts, neither of them a fact about a tail's
+width. That is why ``coverage_p10 = 1.0`` was read as a floor that held when the
+served floor was 0 MWh on every row — and why a marginal ``coverage_p90`` short
+of nominal is not, on its own, evidence that one global ``delta_hi`` cannot
+cover a heteroscedastic upper tail.
+
+:class:`CoverageReport` therefore publishes the denominator beside each figure:
+:attr:`~CoverageReport.lower_stated_rows` and
+:attr:`~CoverageReport.upper_stated_rows` are the scored hours on which each
+edge is a positive number, and the two ``*_where_stated`` figures are the
+coverage over those rows alone, ``None`` where there are none. The marginal
+upper coverage factorises exactly —
+
+    ``coverage_p90 = upper_correction_realised x coverage_p90_where_stated``
+
+— because a row whose P90 is zero can never be covered. Only the first factor is
+a fact about the classifier and only the second is one about this module's
+correction, and separating them is what makes either diagnosable.
+
+**The band is never printed as a 90% statement while it is not one.**
+:attr:`CoverageReport.nominal_claim` is that verdict and
+:attr:`CoverageReport.claim_note` is the sentence, both derived and neither
+settable, carried onto the card and the wire. The claim needs both marginals
+inside :data:`COVERAGE_GUARDRAIL` *and* at least one stated row per tail: a
+coverage of 1.0 over no stated row is arithmetic, not a guarantee.
+:data:`MARGINAL_COVERAGE_NOT_RUN_YET` travels with every withheld claim, because
+no fold this repository can score is made of real rows, and the decomposition
+can say where a short marginal comes from without saying whether the share it
+comes from survives outside a fixture.
+
 **This still does not add a second path to a band.** Forecaster ticket 01 made
 the mixture inversion the only composition and it still is. This module produces
 a :class:`~wattsteer_ml.mixture.TailShift` — two floats and an interpolation
@@ -138,6 +173,42 @@ TARGET_COVERAGE = 1.0 - NOMINAL_MISCOVERAGE
 #: here because this module is where coverage is measured; the veto itself is
 #: forecaster ticket 13's and nothing in this file refuses anything.
 COVERAGE_GUARDRAIL: tuple[float, float] = (0.85, 0.97)
+
+#: The sentence :attr:`CoverageReport.claim_note` opens with when both marginal
+#: coverages reach nominal over the fold's curtailed hours. The only wording
+#: under which the served interval may be described as a 90% band.
+NINETY_PERCENT_BAND = (
+    "This fold's served band is a 90% band over its curtailed hours: each edge "
+    "is a positive number on every scored row and each covers at least its "
+    "nominal share of them, one tail at a time."
+)
+
+#: The sentence :attr:`CoverageReport.claim_note` opens with otherwise. It is
+#: **a refusal, not a caveat**: a marginal coverage short of nominal, or a tail
+#: with no row on which its edge is a bound at all, means the interval is not
+#: the thing the label ``P10-P90`` invites a reader to assume, and the card and
+#: the wire say so before they say anything else.
+NOT_A_NINETY_PERCENT_BAND = (
+    "This fold's served band is NOT a 90% band over its curtailed hours and "
+    "must not be described as one."
+)
+
+#: Ticket 18's shape and deliberately not ticket 16's. The decomposition below
+#: says *where* a short marginal ``coverage_p90`` comes from; it cannot say
+#: whether the share it comes from is a property of the served classifier,
+#: because every fold this repository can score is fabricated. The arms exist
+#: and the data exists -- the fold calendar, the feature function and the
+#: settled labels are all here -- so the comparison is unmade rather than made
+#: and found uninteresting.
+MARGINAL_COVERAGE_NOT_RUN_YET = (
+    "Whether a marginal coverage short of nominal survives outside a fixture "
+    "has not been measured. It is not a finding that the served band "
+    "under-covers on the grid and not a data source that is missing: the fold "
+    "calendar, feature_rows and the settled labels are all present, and what "
+    "this needs is a fold sweep against a migrated database with an ingested "
+    "window. Every coverage figure in this repository's fixtures is arithmetic "
+    "over invented rows and describes nothing about Brazil."
+)
 
 #: Which correction regime a served number was produced under — a **stored
 #: string**, stamped on every persisted forecast row by
@@ -296,6 +367,34 @@ class ScoredHour:
     def covered_upper(self) -> bool:
         """Whether the label is at or below P90 — what ``coverage_p90`` counts."""
         return self.observed_mwh <= self.forecast.band.p90
+
+    @property
+    def states_lower_bound(self) -> bool:
+        """Whether this hour's P10 is a positive number, and so says anything.
+
+        Where it is not, the mixture has put the served 0.10 quantile on the
+        point mass at zero, and ``covered_lower`` is true for free: the hour is
+        scored, so ``y > tau > 0``, and ``y >= 0`` needs no fit to hold. Counting
+        such a row in ``coverage_p10``'s numerator is correct -- the served floor
+        really is 0 MWh and the label really is above it -- and reading the
+        result as a statement about the floor's width is not.
+        """
+        return not in_point_mass(
+            SERVED_QUANTILES[0], self.forecast.occurrence_probability
+        )
+
+    @property
+    def states_upper_bound(self) -> bool:
+        """Its twin, for the P90 -- and the same structure with the sign flipped.
+
+        Where the P90 is on the point mass, ``covered_upper`` is false with
+        certainty for exactly the reason its counterpart is true for free. One
+        structural zero, two opposite verdicts, neither of them about the
+        conformal correction's width.
+        """
+        return not in_point_mass(
+            SERVED_QUANTILES[2], self.forecast.occurrence_probability
+        )
 
     @property
     def below_median(self) -> bool:
@@ -533,6 +632,29 @@ class CoverageReport:
     #: everywhere; anything below it is the knot-correction attenuation, stated
     #: as a number rather than left for a reader to derive from ``p``.
     upper_correction_realised: float
+    #: The scored hours whose composed **P10 is a positive number** -- the rows
+    #: on which the lower edge states a bound at all. Zero on a fold where the
+    #: classifier put every curtailed hour at ``p <= 0.90``, and a
+    #: ``coverage_p10`` of 1.0 beside a zero here is arithmetic over an edge
+    #: that is 0 MWh everywhere, not a floor that held.
+    lower_stated_rows: int
+    #: Its twin: the scored hours whose composed **P90 is a positive number**.
+    #: ``upper_correction_realised`` is this count over :attr:`rows`, and the
+    #: count is published beside the share because a denominator a reader can
+    #: see is the whole of what forecaster 24 asked for.
+    upper_stated_rows: int
+    #: ``coverage_p10`` counted over :attr:`lower_stated_rows` alone, or
+    #: ``None`` where there are none. **Absent rather than 1.0**: a fold on
+    #: which the floor was never a bound has no lower coverage, and printing a
+    #: perfect score there is how ``coverage_p10 = 1.0`` came to read as
+    #: evidence about a tail it says nothing about.
+    coverage_p10_where_stated: float | None
+    #: ``coverage_p90`` counted over :attr:`upper_stated_rows` alone, or
+    #: ``None``. This is the figure the conformal correction's **width** is
+    #: answerable for; the marginal is that width times
+    #: :attr:`upper_correction_realised`, and only the second factor is a fact
+    #: about the classifier.
+    coverage_p90_where_stated: float | None
     #: Share of scored hours below P50. Target 0.50 — the guardrail that stands
     #: in for the correction the median deliberately does not get.
     p50_unbiasedness: float
@@ -549,6 +671,26 @@ class CoverageReport:
                 f"{self.fold_id}: coverage over no curtailed hour is not a "
                 "measurement; a fold with none is reported as absent, not as 0.0"
             )
+        for tail, stated, where in (
+            ("p10", self.lower_stated_rows, self.coverage_p10_where_stated),
+            ("p90", self.upper_stated_rows, self.coverage_p90_where_stated),
+        ):
+            if not 0 <= stated <= self.rows:
+                raise ConformalError(
+                    f"{self.fold_id}: {stated} rows state a {tail} bound out of "
+                    f"{self.rows} scored; the stated rows are a subset"
+                )
+            # The invariant forecaster 24 exists to protect: a coverage figure
+            # and the denominator it was counted over travel together or not at
+            # all. A number beside a zero denominator is the vacuous 1.0 that
+            # started this, and `None` beside a positive one is a figure a
+            # caller declined to count.
+            if (stated == 0) is not (where is None):
+                raise ConformalError(
+                    f"{self.fold_id}: coverage_{tail}_where_stated is "
+                    f"{where!r} over {stated} stated rows; a tail that states "
+                    "no bound has no coverage, and one that does has a number"
+                )
 
     @property
     def guardrail_satisfied(self) -> bool:
@@ -561,6 +703,66 @@ class CoverageReport:
         low, high = COVERAGE_GUARDRAIL
         return all(
             low <= value <= high for value in (self.coverage_p10, self.coverage_p90)
+        )
+
+    @property
+    def nominal_claim(self) -> bool:
+        """Whether this fold's served band may be described as a 90% band.
+
+        Two conditions, both necessary, and neither of them new arithmetic.
+
+        **The marginals sit inside** :data:`COVERAGE_GUARDRAIL` --
+        :attr:`guardrail_satisfied`, the window the hot-swap gate already
+        vetoes outside. A hard ``>= 0.90`` would be the wrong test and not a
+        stricter one: conformal makes empirical coverage *equal* nominal rather
+        than exceed it, so an honest 90% band lands either side of 0.90 by
+        sampling noise, and a claim that flipped on the noise would say nothing.
+        The window is the repository's already-published statement of where a
+        coverage figure has to be, so nothing is invented here.
+
+        **And each edge is a bound on at least one row.** A ``coverage_p10`` of
+        1.0 over no stated row is arithmetic over an edge that is 0 MWh
+        everywhere; it sits inside no window worth passing, and forecaster 24's
+        finding is that it was being read as a tail that held.
+
+        It is a property and not a stored field so that no caller can publish a
+        band as 90% by handing this class a boolean. The card and the wire read
+        it; nothing writes it.
+        """
+        return (
+            self.guardrail_satisfied
+            and self.lower_stated_rows > 0
+            and self.upper_stated_rows > 0
+        )
+
+    @property
+    def claim_note(self) -> str:
+        """What the band may be called, and -- when it may not -- why not.
+
+        Assembled from this fold's own numbers rather than stored, so it cannot
+        go stale against them, and it opens with the verdict because that is the
+        field a reader reaches first. Where the claim is withheld it carries the
+        decomposition that says which factor is short, and
+        :data:`MARGINAL_COVERAGE_NOT_RUN_YET`, because "this fixture's marginal
+        is 0.66" is not a measurement of anything and must never be read as one.
+        """
+        if self.nominal_claim:
+            return NINETY_PERCENT_BAND
+        return " ".join(
+            (
+                NOT_A_NINETY_PERCENT_BAND,
+                f"Over {self.rows} curtailed hours: coverage_p10 "
+                f"{self.coverage_p10:.4f} on {self.lower_stated_rows} rows whose "
+                f"P10 is a positive number, coverage_p90 {self.coverage_p90:.4f} "
+                f"on {self.upper_stated_rows} rows whose P90 is. Where the edge "
+                "is a bound at all the figures are "
+                f"{_stated(self.coverage_p10_where_stated)} and "
+                f"{_stated(self.coverage_p90_where_stated)}; the rest is the "
+                "mixture's point mass at zero, which is free coverage below and "
+                "certain failure above and is not the conformal correction's "
+                "width in either direction.",
+                MARGINAL_COVERAGE_NOT_RUN_YET,
+            )
         )
 
     @classmethod
@@ -577,6 +779,8 @@ class CoverageReport:
                 f"{fold_id}: no scored hour is above τ, so there is no interval "
                 "whose coverage could fail; this is a statement about the fold"
             )
+        lower_stated = [one for one in scored if one.states_lower_bound]
+        upper_stated = [one for one in scored if one.states_upper_bound]
         by_subsystem = [
             _cell(code, [one for one in scored if one.key.subsystem == code])
             for code in SUBSYSTEM_CODES
@@ -598,6 +802,18 @@ class CoverageReport:
                 for hour in scored
             )
             / len(scored),
+            lower_stated_rows=len(lower_stated),
+            upper_stated_rows=len(upper_stated),
+            coverage_p10_where_stated=(
+                _share(lower_stated, lambda hour: hour.covered_lower)
+                if lower_stated
+                else None
+            ),
+            coverage_p90_where_stated=(
+                _share(upper_stated, lambda hour: hour.covered_upper)
+                if upper_stated
+                else None
+            ),
             p50_unbiasedness=_share(scored, lambda hour: hour.below_median),
             crossing_rate=crossing_rate(hour.forecast for hour in scored),
             by_subsystem=tuple(cell for cell in by_subsystem if cell is not None),
@@ -615,6 +831,12 @@ class CoverageReport:
             "coverage_guardrail": list(COVERAGE_GUARDRAIL),
             "coverage_guardrail_satisfied": self.guardrail_satisfied,
             "upper_correction_realised": self.upper_correction_realised,
+            "coverage_stated_rows_p10": self.lower_stated_rows,
+            "coverage_stated_rows_p90": self.upper_stated_rows,
+            "coverage_p10_where_stated": self.coverage_p10_where_stated,
+            "coverage_p90_where_stated": self.coverage_p90_where_stated,
+            "coverage_nominal_claim": self.nominal_claim,
+            "coverage_claim_note": self.claim_note,
             "upper_correction_note": (
                 "the mean share of delta_hi that reached the composed P90. The "
                 "correction is a shift in q applied to the composed quantile, so "
@@ -772,6 +994,16 @@ def _order_statistic(values: Sequence[float], rank: int, name: str) -> float:
 
 def _share(hours: Sequence[ScoredHour], predicate: Callable[[ScoredHour], bool]) -> float:
     return sum(1 for hour in hours if predicate(hour)) / len(hours)
+
+
+def _stated(value: float | None) -> str:
+    """A conditional coverage for the note, or the word for its absence.
+
+    ``"absent"`` and never ``"1.0000"``: a tail with no stated row has no
+    coverage, and forecaster 24's finding is that a number printed in that slot
+    is read as a tail that held.
+    """
+    return "absent" if value is None else f"{value:.4f}"
 
 
 def _cell(label: str, hours: Sequence[ScoredHour]) -> CoverageCell | None:

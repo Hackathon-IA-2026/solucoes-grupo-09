@@ -74,7 +74,12 @@ split into a `lower` and an `upper` object because the two tails have different
 statuses — the conformal lower correction reaches the served band in full at
 every occurrence probability and the upper one does not — so `coverage_p90`
 sits in the same object as the `upper_correction_realised` that makes it
-readable, and the schema requires them together. And `metrics` is
+readable, and the schema requires them together. Forecaster 24 added the rest of
+what makes it readable to the same objects: `stated_rows` and
+`coverage_*_where_stated`, because the two marginals are counted over the same
+rows and disagree about what a zero edge means — free coverage below, certain
+failure above — and `nominal_claim` with its `claim_note` on the block above,
+so the band can never be rendered as a 90% statement while it is not one. And `metrics` is
 `null` with a required `metrics_absent_reason` rather than `[]`, because an
 empty table reads as "measured as nothing" and the truth is "not measured yet".
 
