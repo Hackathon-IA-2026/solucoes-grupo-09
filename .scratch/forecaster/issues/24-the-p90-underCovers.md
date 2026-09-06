@@ -122,3 +122,61 @@ beside them.
 `feature_hash` did **not** move: `sha256:510b86c6…` before and after on the
 shared fixture fold. Nothing here touches the feature function, the contract,
 `compose`, `TailShift` or `ConformalCorrection.fit`.
+
+## Result: the fit is fine. The metric was unreadable, and one half of it was vacuous.
+
+No change to the fit, the composition, `TailShift` or `ConformalCorrection.fit`.
+Only what is published changed — because nothing was wrong with the band.
+
+**`coverage_p10 = 1.0` was vacuous.** Of 79 scored hours on the live fit, **zero**
+have a positive P10. The 1.0 was 79 evaluations of `y ≥ 0`. It was never evidence
+that the floor is perfect, and this ticket's suspicion that a round number might
+mean a wrong denominator was right about the smell and wrong about the cause: the
+row set is the same for both tails. What differs is what the **structural zero**
+does to each numerator. A scored hour has `y > τ > 0`, so:
+
+* `p ≤ 0.90` → `P10 = 0` → `y ≥ P10` is **true for free**
+* `p ≤ 0.10` → `P90 = 0` → `y ≤ P90` is **false with certainty**
+
+The same zero forecaster 21 established as correct is a free pass in one
+numerator and a guaranteed failure in the other.
+
+**The upper band covers at nominal wherever it is a band.**
+
+| | live fit | card fixture |
+|---|---|---|
+| scored rows | 79 | 77 |
+| rows with a positive P10 | **0** | 0 |
+| rows with a positive P90 | 58 | 50 |
+| `coverage_p10` | 1.0 | 1.0 |
+| `coverage_p90` | 0.6582 | 0.5974 |
+| **coverage where the P90 is a bound** | **0.8966** | **0.9200** |
+
+And the decomposition is exact, verified to the last bit on the fixture:
+`0.6493506493506493 × 0.92 = 0.5974025974025974`. A zero-P90 row can never be
+covered, so `coverage_p90 = upper_correction_realised × coverage_p90_where_stated`
+identically. The first factor is the classifier's point-mass share; the second is
+what `δ_hi` is answerable for.
+
+**So this ticket's leading suspicion is not supported.** Conditional coverage
+across `p` deciles is flat (0.89 / 0.86 / 1.00 / 1.00 / 0.80), so there is no
+heteroscedastic upper tail defeating one global scalar. The spec's already
+recorded answer stands: **a better classifier, not a wider band.**
+
+## What is published now
+
+Both figures travel with the denominator that makes them readable —
+`stated_rows` and `coverage_*_where_stated` per tail, the latter `None` and never
+`1.0` where a tail states no bound — and `nominal_claim` requires both marginals
+inside the published guardrail *and* at least one stated row per tail. On this
+fold it is **false**, and `claim_note` says the band "is NOT a 90% band over its
+curtailed hours and must not be described as one".
+
+The guardrail rather than a hard `≥ 0.90` because conformal makes coverage
+*equal* nominal, so a hard threshold flips on sampling noise — verified against an
+honest synthetic band landing at 0.891 / 0.884.
+
+Whether the marginal survives outside a fixture is not measurable in any
+environment here, and is recorded as `MARGINAL_COVERAGE_NOT_RUN_YET` — forecaster
+18's "unrun" register, explicitly not forecaster 16's "no data source" — with a
+test that refuses any fixture figure inside it.
