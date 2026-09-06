@@ -21,7 +21,7 @@ without weather.
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] `feature_weather_block` returns weather for a historical target date whose
       rows were backfilled after the gate instant

@@ -211,6 +211,33 @@ const ALLOWED_RELATIONS = new Set([
   "pg_type",
 ]);
 
+/**
+ * The four read axes, and the whole of what a "writer" is.
+ *
+ * Named here because two tests filter on them and because ticket 15 made the
+ * distinction load-bearing: `wattsteer.feature_ingestion_history_from` is a
+ * transaction-local **memo** for a view that is nine unindexed `min()` scans,
+ * not a cut anybody reads a row through, and a guard that counted `set_config`
+ * calls could not tell the two apart.
+ */
+const AXES = [
+  "wattsteer.as_of",
+  "wattsteer.fleet_date",
+  "wattsteer.published_at_or_before",
+  "wattsteer.weather_run_cycle",
+];
+
+/**
+ * Whether a function *writes* an axis, as opposed to naming one.
+ *
+ * `COMMENT ON FUNCTION` text is part of a segment and is not stripped —
+ * literals are only blanked out of `CODE`, and these two tests assert against
+ * `SQL` — so `feature_as_of`, whose comment explains which axis it feeds,
+ * would otherwise count as a writer of it.
+ */
+const writesAxis = (body: string, axis: string): boolean =>
+  body.includes(`set_config('${axis}'`);
+
 const functionSegments = (): Map<string, string> => {
   const segments = new Map<string, string>();
   const headers = [...SQL.matchAll(/CREATE OR REPLACE FUNCTION\s+(\w+)/g)];
@@ -256,8 +283,17 @@ describe("the gate, structurally", () => {
     // A block that could be handed an instant is a block that could be handed
     // the wrong one. `feature_apply_gate` takes a target date and a profile;
     // `feature_apply_label_vintage` takes nothing at all.
+    //
+    // The filter is on the **axes** rather than on `set_config`. Ticket 15
+    // added a transaction-local memo — `wattsteer.feature_ingestion_history_from`,
+    // the instant by which every canonical read had begun — cached because the
+    // view behind it is nine unindexed `min()` scans and it is asked once per
+    // block per target date. A memo is not a cut. Counting `set_config` calls
+    // would have made this test refuse it while saying nothing about the
+    // property it exists to hold, which is that the four axes are written in
+    // four places and every one of them derives its own instant.
     const writers = [...functionSegments()]
-      .filter(([, body]) => body.includes("set_config"))
+      .filter(([, body]) => AXES.some((axis) => writesAxis(body, axis)))
       .map(([name]) => name);
 
     expect(writers.toSorted()).toEqual([
@@ -292,16 +328,11 @@ describe("the gate, structurally", () => {
     // axes it cared about would inherit the previous block's gate — an answer
     // wrong in a way no test of that block alone could see.
     for (const [name, body] of functionSegments()) {
-      if (!body.includes("set_config")) {
+      if (!AXES.some((axis) => writesAxis(body, axis))) {
         continue;
       }
-      for (const axis of [
-        "wattsteer.as_of",
-        "wattsteer.fleet_date",
-        "wattsteer.published_at_or_before",
-        "wattsteer.weather_run_cycle",
-      ]) {
-        expect({ name, axis, written: body.includes(axis) }).toEqual({
+      for (const axis of AXES) {
+        expect({ name, axis, written: writesAxis(body, axis) }).toEqual({
           name,
           axis,
           written: true,

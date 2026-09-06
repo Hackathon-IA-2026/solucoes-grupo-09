@@ -60,9 +60,21 @@ BullMQ.
 The schema lives in `src/database/schema.ts` and `src/database/canonical-views.ts`.
 Everything under `drizzle/` is **applied history**: once a migration has landed on
 `main` its SQL is never edited — not to fix it, not to reformat it, not to correct
-a comment — because `drizzle-kit migrate` records a hash of each file and an edit
-makes an already-migrated database unmigratable. A mistake in a landed migration
-is corrected by a new migration. `db:push` is never used against anything that
+a comment. A mistake in a landed migration is corrected by a new migration.
+
+The reason is *not* that an edit breaks migration, and it is worth being exact
+because an earlier draft of this file said it was. `drizzle.__drizzle_migrations`
+does have a `hash` column, but the hash is only **recorded**; `drizzle-kit
+migrate` decides what is outstanding from `created_at` and never compares stored
+hashes against the files. Measured: a database migrated with the original
+`0016_the_feature_gate.sql`, then pointed at a tree where that file's *prose* had
+changed, applied only the new `0039` and reported success.
+
+So an edit is operationally inert — and still forbidden, for the honest reason:
+the file is the record of what was run, and editing it makes the repository lie
+about what a deployed database contains. The one exception on `main` is a prose
+retraction inside `0016`, which changes no DDL and points at the migration that
+superseded its claim; it is called out in the file itself. `db:push` is never used against anything that
 matters; the `db:*` scripts that count are `db:generate` and `db:migrate`.
 
 `drizzle/meta/` is different. It is **generated metadata**, not history: it is

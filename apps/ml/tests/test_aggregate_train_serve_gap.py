@@ -20,9 +20,12 @@ What is asserted, in the order it matters:
    finding.
 2. **The backfill shape does not empty the read.** Every weather row here is
    ingested in 2026 against a 2024 gate, which is the production shape, and it
-   is the shape under which ``feature_apply_gate``'s ``as_of`` returns nothing
-   at all — see this file's last test, which pins that as the measured fact it
-   is.
+   is the shape under which ``feature_apply_gate``'s ``as_of`` used to return
+   nothing at all. This file pinned that defect as the measured fact it was
+   until ticket 15 fixed it in
+   `apps/api/drizzle/0039_the_gate_over_a_backfill.sql`; the last four tests are
+   now the evidence of the repair and of the two properties it had to keep — the
+   publication cut, and a feature entry point that accepts no instant.
 3. **The aggregate is the feature's aggregate.** Capacity-weighted over the real
    frozen centroids through ``canonical_capacity_weight``, refusing an hour a
    centroid did not report rather than renormalising it — a weighted mean over
@@ -362,23 +365,27 @@ def test_the_variable_cannot_drift_off_the_per_point_figure() -> None:
         )
 
 
-def test_the_gate_as_of_empties_the_weather_block_over_a_backfill() -> None:
-    """The finding this ticket recorded, pinned as a measurement.
+def test_the_backfill_window_no_longer_empties_the_weather_block() -> None:
+    """The defect this file used to pin, now the evidence that it is fixed.
 
-    `0016_the_feature_gate.sql` says of ``as_of`` that "over the backfill window
-    every row was ingested at go-live, so it filters nothing". It filters
-    *everything*: ``ingested_at`` is the backfill instant, the gate is a D−1
-    instant two years earlier, and ``ingested_at <= canonical_as_of()`` is then
-    false for every row. So ``feature_weather_block`` returns **no rows at all**
-    for a historical target date — not the coverage-0 spine rows its own comment
-    promises.
+    Until `0039_the_gate_over_a_backfill.sql` this test asserted ``rows == []``,
+    and said so on purpose: `0016_the_feature_gate.sql` claimed of ``as_of``
+    that "over the backfill window every row was ingested at go-live, so it
+    filters nothing", and it filtered *everything* — ``ingested_at`` is the
+    backfill instant, the gate is a D−1 instant two years earlier, and
+    ``ingested_at <= canonical_as_of()`` is then false for every row. Every
+    historical feature row was weatherless.
 
-    This test does not assert the desired behaviour, because fixing it is a
-    migration against the gate spine and belongs to the ticket that owns that
-    spine. It asserts the *actual* behaviour, so that the day someone fixes it
-    this test fails and points at the sentence to delete. It is also why
-    :mod:`~wattsteer_ml.weather_reads` writes ``as_of`` itself rather than
-    calling ``feature_apply_gate``.
+    The fixture is the production shape and always was: the weather is ingested
+    in 2026 (:data:`BACKFILL_INGESTED_AT`) against a 2024 gate. So this is the
+    ticket's own measurement, run the other way round — the same call that
+    returned zero rows returns the fleet's weather.
+
+    What repaired it is on the *ingestion* axis alone: `feature_as_of` suspends
+    the ingestion cut for a gate that precedes WattSteer's ingestion history,
+    because over that window ``ingested_at`` is the loader's clock rather than a
+    record of what had been learned. The publication cut is untouched, which is
+    the next test.
     """
 
     async def work(conn: asyncpg.Connection[Any]) -> Any:
@@ -387,8 +394,131 @@ def test_the_gate_as_of_empties_the_weather_block_over_a_backfill() -> None:
             "select * from feature_weather_block($1::date, 'gate_late')", DAY
         )
         gate = await conn.fetchval("select gate_at($1::date, 'gate_late')", DAY)
-        return rows, gate
+        horizon = await conn.fetchval("select feature_ingestion_history_from()")
+        return rows, gate, horizon
 
-    rows, gate = run(work)
+    rows, gate, horizon = run(work)
+    # Non-vacuous: this really is the backfill shape the defect needed — every
+    # row ingested long after the gate it is being read at.
     assert gate < BACKFILL_INGESTED_AT
-    assert rows == []
+    assert gate < horizon
+
+    day = [row for row in rows if row["valid_time"] in HOURS]
+    assert len(day) == 24, "one row per hour of the local day, for the one scope"
+    assert all(row["subsystem"] == SUBSYSTEM for row in day)
+    # And they carry weather rather than being a spine of holes.
+    assert all(row["weather_wind_speed_120m"] is not None for row in day)
+    assert all(row["weather_centroid_coverage"] == pytest.approx(1.0) for row in day)
+
+
+def test_the_publication_cut_survives_the_repair() -> None:
+    """A ``gate_late`` feature still cannot read a run published after its gate.
+
+    That cut was itself a defect fixed earlier in this spec —
+    `canonical_weather_forecast` carried none, so a late-gate feature read the
+    D 00Z run three hours in its own future — and the repair above must not have
+    bought the weather back by relaxing it. The fixture holds the D 00Z and
+    D 12Z runs, which are the newest version of every hour of the day and were
+    ingested at the same instant as the D−1 12Z run, so an ingestion cut alone
+    cannot tell them apart. Only ``published_at <= gate`` can.
+
+    The assertion is on the value rather than on a row count, because a block
+    reading the wrong run returns exactly as many rows as one reading the right
+    one: the runs are levelled 30 / 60 / 90 km/h apart so the arm a number came
+    from is readable off the number.
+    """
+
+    async def work(conn: asyncpg.Connection[Any]) -> Any:
+        await _seed(conn)
+        post_gate = await conn.fetchval(
+            """
+            select count(*) from weather_forecast_hour
+            where published_at > gate_at($1::date, 'gate_late')
+            """,
+            DAY,
+        )
+        rows = await conn.fetch(
+            "select * from feature_weather_block($1::date, 'gate_late')", DAY
+        )
+        return post_gate, rows
+
+    post_gate, rows = run(work)
+    # Non-vacuous: runs from the gate's own future really were there to be read.
+    assert post_gate > 0
+
+    by_hour = {row["valid_time"]: row for row in rows}
+    for hour in HOURS:
+        assert by_hour[hour]["weather_wind_speed_120m"] == pytest.approx(
+            _expected(D_MINUS_1_12Z, hour)
+        ), "the block must read the newest run published at or before the gate"
+
+
+def test_a_fleet_with_no_readable_run_yields_coverage_zero_and_not_silence() -> None:
+    """Coverage 0 and "the axis filtered everything" must not look the same.
+
+    `0029` promises a spine row per subsystem-hour *before* the weather is
+    joined, so that a subsystem-hour no centroid reported arrives as coverage 0
+    rather than as an absent row. Under the defect there was no spine at all,
+    because `canonical_capacity_weight` was read under the same emptied axis and
+    the block had no fleet to build one from — so a weatherless day and a
+    filtered-out day were the same answer.
+
+    Here the fleet is seeded and the only runs are published *after* the gate,
+    so the publication cut legitimately removes every reading. The day still has
+    its rows, and they say coverage 0.
+    """
+
+    async def work(conn: asyncpg.Connection[Any]) -> Any:
+        await _seed(conn, runs=(D_00Z, D_PLUS_1_00Z))
+        return await conn.fetch(
+            "select * from feature_weather_block($1::date, 'gate_late')", DAY
+        )
+
+    rows = run(work)
+    day = [row for row in rows if row["valid_time"] in HOURS]
+    assert len(day) == 24
+    assert all(row["weather_centroid_coverage"] == pytest.approx(0.0) for row in day)
+    assert all(row["weather_wind_speed_120m"] is None for row in day)
+
+
+def test_the_feature_entry_point_still_accepts_no_instant() -> None:
+    """The property that makes train/serve skew unwritable, asked of the server.
+
+    `features-gate.test.ts` asserts this against the migration text, which is
+    the copy that catches a parameter being *written*. This one asks the
+    catalogue, which is the copy that catches one being written somewhere the
+    text scan does not read — and it is the same question ticket 15 had to be
+    able to answer "no" to while repairing the axis: the fix could have been
+    bought for one ``as_of`` argument, and an argument is exactly the door this
+    spine has none of.
+
+    ``feature_as_of`` is in the same assertion because it is the function ticket
+    15 added, and a new derivation of the vintage is precisely where an instant
+    would next be tempting to accept.
+    """
+
+    async def work(conn: asyncpg.Connection[Any]) -> Any:
+        return await conn.fetch(
+            """
+            select p.proname, pg_get_function_arguments(p.oid) as arguments
+            from pg_proc p
+            join pg_namespace n on n.oid = p.pronamespace
+            where n.nspname = 'public'
+              and p.proname in (
+                'feature_rows', 'feature_as_of', 'feature_apply_gate',
+                'feature_apply_gate_for_fleet_offset', 'actuals_cutoff'
+              )
+            """
+        )
+
+    rows = run(work)
+    signatures = {row["proname"]: row["arguments"] for row in rows}
+    assert signatures["feature_rows"] == (
+        "target_from date, target_to date, gate_profile text, feature_set text, "
+        "threshold_mw double precision"
+    )
+    # Not one of them takes an instant, and every one of them derives the gate
+    # from a target date instead.
+    for name, arguments in signatures.items():
+        assert "timestamp" not in arguments, name
+        assert "target_date date" in arguments or name == "feature_rows", name
