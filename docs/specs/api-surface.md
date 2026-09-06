@@ -1537,7 +1537,8 @@ their own implementation against `expected`. A test on each side fails if a file
 in the directory has no case covering it, so adding a vector is sufficient and
 neither language can quietly skip one.
 
-**Five values are now computed in two languages**, and each gets a vector file:
+**Four values are now computed in two languages**, and each gets a vector file
+(a fifth was a candidate and is not one — see below):
 
 | Value | TypeScript | Python | Why it will drift |
 |---|---|---|---|
@@ -1545,19 +1546,24 @@ neither language can quietly skip one.
 | canonical scenario JSON + sha256 | web builds the URL, gateway builds the cache key | ML re-derives it to validate | Float formatting. `0.92` vs `0.920` is a different hash and a cache that silently never hits |
 | the 18 scenario validation rules | gateway, "before a model is built" | ML, "trusts nothing it did not validate itself" | Two hand-written tables of eighteen rules |
 | `avoidability` and its null rule | web renders "—" | ML computes it | The null-vs-zero rule is one line and it is the product's most quoted percentage |
-| **the simulator / execution rule** | `apps/web/src/lib/fixtures/optimize.ts` `evaluatePlan` | `apps/ml`, the authority | See below |
 
-**The simulator is not a parity case. It is a deletion.** `replay.md` seam 3
-requires a structural test that **exactly one implementation of the execution
-rule exists in the repository**. There are currently two — the prototype's
-`evaluatePlan`, and the one `flex-optimizer.md` specifies for `apps/ml` — and
-`flex-optimizer.md` separately records that the prototype's version is *wrong*
-(it clips absorption but not state of charge, so on a low realisation it reports
-a battery filled with energy it never received). Keeping them in parity would be
-maintaining a known-broken second copy. **The web's `evaluatePlan` and
-`planDispatch` are deleted when Mitigate stops using fixtures and calls
-`/v1/optimize`**, and the structural test that counts implementations is what
-keeps them deleted.
+**The simulator was not a parity case. It was a deletion — and the deletion has
+landed.** `replay.md` seam 3 requires a structural test that **exactly one
+implementation of the execution rule exists in the repository**. When this
+section was written there were two — the prototype's `evaluatePlan` in
+`apps/web/src/lib/fixtures/optimize.ts`, and the one `flex-optimizer.md`
+specifies for `apps/ml` — and `flex-optimizer.md` separately records that the
+prototype's version was *wrong* (it clipped absorption but not state of charge,
+so on a low realisation it reported a battery filled with energy it never
+received). Keeping them in parity would have been maintaining a known-broken
+second copy. Decision 6 below withdrew the parity argument: **the web's
+`evaluatePlan` and `planDispatch` were deleted when Mitigate stopped using
+fixtures and started calling `/v1/optimize`**. The rule now has one
+implementation, `apps/ml/src/wattsteer_ml/optimizer/simulator.py`;
+`test/one-execution-rule.test.ts` counts implementations across the whole
+repository and is what keeps it that way. `packages/core/fixtures/execution-rule/`
+survives as a **regression** set recomputed by
+`apps/ml/tests/test_execution_rule_vectors.py`, not as a parity set.
 
 ## Testing Decisions
 
@@ -1616,8 +1622,9 @@ zero) must fail on both sides, which is the test of the test.
 
 **Seam 8 — exactly one execution rule.** The structural count from `replay.md`
 seam 3, run in the default path, asserted against the whole repository including
-`apps/web`. It fails today, and it should — that is the deletion this spec asks
-for.
+`apps/web`. It failed when this spec was written, and it should have — that was
+the deletion this spec asked for. The deletion has since landed and the count now
+passes, in `test/one-execution-rule.test.ts`.
 
 **Seam 9 — the error contract, exhaustively.** One case per code, each asserting
 the envelope shape, the status, and that `code` is a member of the closed enum.

@@ -1040,18 +1040,28 @@ vintage travelling with the number. Two additions:
    absolute bar, in the same constant-free shape as the forecaster's hot-swap
    gate. The map's "backtest gate threshold" item can be struck.
 
-**The one hand-back this spec owes ticket 009.** Forecaster story 35 persists
-served forecasts at hour grain. Replay needs two more things and neither is
-free:
+**The one hand-back this spec owed ticket 009 — both halves have since
+landed.** Forecaster story 35 persists served forecasts at hour grain. Replay
+needed two more things and neither was free:
 
 - **Day-grain ensemble quantiles persisted** (day total P10/P50/P90, peak band,
   day occurrence). Without them the screen cannot draw a day band without
   summing quantiles, which both specs forbid. Adding them is a few columns on a
-  companion row, not a contract change.
+  companion row, not a contract change. *Landed* in migration
+  `0034_the_published_forecast.sql` as `curtailment_forecast_day`
+  (`day_total_p10/p50/p90_mwh`, `peak_power_p10/p50/p90_mw`,
+  `day_occurrence_probability`).
 - **Out-of-fold predictions persisted from the backtest**, with
   `origin_kind = 'backfilled_holdout'`. The backtest computes them already.
+  *Landed* with forecaster 23 — the holdout writer,
+  `apps/ml/src/wattsteer_ml/holdout_backfill.py` and the gateway's
+  `apps/api/src/forecast/backfill.ts` — writing rows under the
+  `forecast_origin_kind` value the same migration introduced.
 
-Both are small; both are load-bearing; neither exists today.
+Both were small; both were load-bearing; both now exist. The record is kept
+because the *shape* of the hand-back is what the screens depend on: a day band
+read from a companion row rather than summed, and a fold day answered from a
+persisted holdout rather than an in-sample fit.
 
 **Contradictions with the prototype that must be resolved in code, not
 smoothed over.** Four, and they are all in the same two files:
