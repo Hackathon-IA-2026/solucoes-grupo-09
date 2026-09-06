@@ -1,14 +1,16 @@
 """Feature rows carrying the two columns the mandatory 7-day baseline reads.
 
-**These are fixtures, not data**, and they stand in for a part of the feature
-function that does not exist yet. `feature_row_fixtures.py` mirrors the migration
-tree as it stands after `0019_calendar_and_astronomy.sql`; the lagged-actuals
-block landed in `0021_lagged_actuals_behind_the_cutoff.sql` and brought
-``observed_constrained_off_same_hour_mean_7d`` with it, and
+**These are fixtures, not data.** They compute rung 1's two columns from the
+fixture's own labels rather than reading them off
+`feature_row_fixtures.py`'s rows. Both columns are real:
+``observed_constrained_off_same_hour_mean_7d`` came with the lagged-actuals
+block in `0021_lagged_actuals_behind_the_cutoff.sql`, and
 ``observed_constrained_off_same_hour_exceedance_7d`` — which
 `docs/specs/feature-engineering.md` specifies and rung 1's *occurrence* head
-needs — **is still owed**. See the follow-up at the bottom of
-`.scratch/feature-engineering/issues/05-lagged-actuals-behind-the-cutoff.md`.
+needs — landed in `0036_the_same_hour_exceedance.sql`. This module stood in for
+the second before it existed, and it stays because the ladder tests need the two
+columns to agree *with these rows' labels*, which a plausible synthetic value
+does not.
 
 So this module computes both from the fixture's own labels, over the same frame
 the migration uses — the seven available days at the same local hour, ending at

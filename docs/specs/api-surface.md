@@ -61,10 +61,17 @@ head, and the landing hero stamps a curtailment forecast with
 "nothing in the UI sums two bands" a test. The landing page's hero then sums
 four subsystem P50s into a national P50 and calls the rest non-additive. Medians
 do not add either — the median of a sum is not the sum of the medians — and the
-forecaster's path ensemble is drawn per subsystem, so **there is no national
-band and no national median that any published quantity supports**. This is a
-product surface with no engine behind it, and it is the largest gap between what
-the screens render and what the specs can produce.
+forecaster's path ensemble was drawn per subsystem, so at the time of writing
+**there was no national band and no national median that any published quantity
+supported**. That was a product surface with no engine behind it, and the
+largest gap between what the screens rendered and what the specs could produce.
+*(Since closed. Forecaster 08 shared the ensemble's draw index across
+subsystems, making the national day total a quantity of the joint draw rather
+than an assumption about four marginals, and forecaster 22 gave it a row grain
+of its own — `curtailment_forecast_national_day`, migration `0037`. The hero
+reads that row. The rest of this section is the argument that got it built, and
+the `null`-with-a-reason branch it specifies is still live for the days and
+artifacts that have no such row.)*
 
 **4. The public, unauthenticated, account-free posture makes caching and rate
 limiting harder than usual, not easier.** There is no `Authorization` header to
@@ -457,7 +464,7 @@ Four unversioned probes survive unchanged: `GET /`, `/health`, `/ready`,
 | 10 | `POST /v1/optimize` · `GET /v1/optimize?s=` | the MILP | Mitigate |
 | 11 | `GET /v1/replay/days` | replayable calendar + featured shortlist | Time Machine |
 | 12 | `GET /v1/replay?d=&s=` · `POST /v1/replay` | one replay | Time Machine |
-| 13 | `GET /v1/backtest` | the aggregate — **not served; there is no aggregate yet, see 11–13** | Time Machine's footer, ops |
+| 13 | `GET /v1/backtest` | the aggregate, forwarded — **served since replay 08 landed it; see 11–13 for why it was absent first** | Time Machine's footer, ops |
 | 14 | `GET /v1/plants` | the plant registry, machine-readable | ODbL §4.6 |
 
 **Three things that are deliberately *not* endpoints.**
@@ -841,18 +848,19 @@ days from the published deterministic rule. `/v1/backtest` never averages across
 takes fidelity as a group key and returns one row per value rather than
 accepting it as a filter that could be omitted.
 
-**As built, three of these four are served and `/v1/backtest` is not.** The
-aggregate it would return belongs to replay 08, which has not landed: nothing in
-the repository computes `days_replayed`, `floor_coverage` or
-`mean_avoidability` at any grain, and `apps/ml` exposes no `/v1/backtest` to
-stand in front of. `domain-model.md` gives `Backtest` to the aggregate of many
-Replays consumed by the hot-swap gate — not to the forecaster's fold evaluation,
-which is a different noun wearing the same English word — so there is no second
-thing this route could have been pointed at either.
+**As built, all four are served — but `/v1/backtest` was not, and the argument
+for that absence is what shaped it.** The aggregate it returns belonged to
+replay 08, which had not landed when this surface was written: nothing in the
+repository computed `days_replayed`, `floor_coverage` or `mean_avoidability` at
+any grain, and `apps/ml` exposed no `/v1/backtest` to stand in front of.
+`domain-model.md` gives `Backtest` to the aggregate of many Replays consumed by
+the hot-swap gate — not to the forecaster's fold evaluation, which is a
+different noun wearing the same English word — so there was no second thing this
+route could have been pointed at either.
 
-The route is therefore absent rather than provisional, and the two alternatives
-are both worse. A gateway route forwarding to a path that does not exist would
-publish an endpoint answering `502 OPTIMIZER_NOT_READY` forever, naming a
+The route was therefore absent rather than provisional, and two of the three
+options were worse. A gateway route forwarding to a path that does not exist
+would publish an endpoint answering `502 OPTIMIZER_NOT_READY` forever, naming a
 healthy service as the broken thing; and a gateway route *computing* the
 aggregate would put a second scoring implementation on the far side of a network
 hop from the replay path it is supposed to aggregate, which replay 08 forbids in
@@ -861,9 +869,13 @@ per day"). It would also have to choose the grouping, and fidelity-as-group-key
 is a property of an aggregation function rather than of a query string: put at
 the gateway, the one structural rule this endpoint has could not be enforced.
 
-`apps/api/test/solver-surface.test.ts` holds the absence from both ends — the
-gateway serves no `/v1/backtest`, and `apps/ml` exposes none — so the day the
-aggregate lands, that test fails and names this route as the thing then owed.
+`apps/api/test/solver-surface.test.ts` held the absence from both ends — the
+gateway serving no `/v1/backtest`, and `apps/ml` exposing none — so that the day
+the aggregate landed, that test would fail and name this route as the thing then
+owed. It did. Replay 08 shipped `wattsteer_ml.replay.backtest` and the
+`GET /v1/backtest` it exposes; the gateway now serves the route as the third
+option always required — a **forward**, with no grouping, averaging or fidelity
+literal of its own, asserted as such in the same file.
 
 **One gap on this surface, recorded rather than papered over.** The calendar
 `/v1/replay/days` returns a flat list of days rather than the run-length
@@ -1119,8 +1131,14 @@ national day total quantiles = quantiles over k of  Σ_s Σ_t Q_Y(u_{k,t} | x_{s
 
 is a legitimate joint band computed from 500 draws with **no new model, no
 copula, and no new parameter**. It costs one line in the draw loop (share the
-index) and one more persisted row grain (`national`). Until that lands,
-`national.band` is `null` and says why.
+index) and one more persisted row grain (`national`).
+
+Both landed — forecaster 08 the shared index, forecaster 22 the row grain, as
+`curtailment_forecast_national_day` in migration `0037` — so `national.band` is
+read from that row. It is still `null`-with-a-stated-reason wherever the row is
+absent: an artifact trained before the shared index published none, and a day
+whose four subsystem rows disagree about the threshold has no single national
+key to read. Neither case is ever filled by summing.
 
 > **This is the one place where the API surface changes what a screen can
 > promise, and it is the largest product consequence in this spec.**
@@ -1792,17 +1810,20 @@ whole vintage vocabulary exists to survive.
 1. **The forecast is precomputed by the worker and the public API never calls
    the ML service for one.** This is the spec's central decision. It deletes the
    `ml-proxy` forecast route, adds two scheduled publication jobs and two tables
-   (`curtailment_forecast_hour`, `curtailment_forecast_day`, neither of which
-   exists in `apps/api/src/database/schema.ts` today), and makes the ML service
-   a dependency of *tomorrow's* forecast rather than of *every page view*. The
+   (`curtailment_forecast_hour` and `curtailment_forecast_day`, neither of which
+   existed in `apps/api/src/database/schema.ts` when this was written; migration
+   `0034_the_published_forecast.sql` created both), and makes the ML service a
+   dependency of *tomorrow's* forecast rather than of *every page view*. The
    alternative — keep the per-request path — is simpler today and gives up the
    degradation table.
-2. **There is no national forecast band, and the landing hero's headline
-   changes.** `national.band` is `null` with a stated reason until ticket 009
-   shares the ensemble's draw index across subsystems. Until then the hero
-   headline is an expectation, not a band. This is the largest product
-   consequence in this spec and it is a correction to the most visible number in
-   the product.
+2. **There was no national forecast band, and the landing hero's headline
+   changed.** `national.band` was `null` with a stated reason until ticket 009
+   shared the ensemble's draw index across subsystems, and until then the hero
+   headline was an expectation rather than a band. This was the largest product
+   consequence in this spec and a correction to the most visible number in the
+   product. *(Since closed by forecaster 08 and forecaster 22; the band is read
+   from `curtailment_forecast_national_day`, and the stated-reason `null` branch
+   survives for the days that have no such row.)*
 3. **`GET /v1/plants` exists to satisfy ODbL §4.6**, not because a screen asked
    for it. If the legal reading in the map is wrong, this endpoint should go; if
    it is right, this endpoint is not optional and the bilingual §4.3 notice
