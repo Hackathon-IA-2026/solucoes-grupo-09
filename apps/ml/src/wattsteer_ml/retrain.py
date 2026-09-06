@@ -115,6 +115,7 @@ from wattsteer_ml.evaluation import (
     Fold,
     FoldBlocks,
     FoldCalendar,
+    FoldCalendarError,
     FoldSegment,
     materialize_fold_calendar,
     stamp_fidelity,
@@ -311,6 +312,7 @@ async def read_lane_inputs(
     lane: Lane,
     *,
     as_of: datetime,
+    fold_id: str | None = None,
 ) -> LaneInputs:
     """One query for the whole window, then slice it per fold.
 
@@ -318,6 +320,20 @@ async def read_lane_inputs(
     fold's base fit starts at the same window start — and reading the window
     once is both faster and the only way the folds are guaranteed to have been
     read at the same instant, which a reproducible run needs.
+
+    Args:
+        fold_id: which fold to score. ``None`` — the weekly retrain's case — is
+            the live edge, because "the weekly retrain always scores against
+            F6". Naming one instead is forecaster ticket 23's case: the days
+            that are `fold_holdout` are the days of the **frozen** quarters, and
+            nothing else in the repository can read a frozen fold's window.
+
+    The pool built from the result is the folds *before* the one being scored
+    and never ``calendar.frozen_folds``. For the live edge those are the same
+    tuple, which is why the distinction could stay implicit until now; pointed
+    at F2 they are not, and the difference is a leak — F3's test rows are in
+    F2's future, so a reliability curve fitted on them would be fitted on days
+    the artifact is about to be measured on.
     """
     run = LANE_RUNS.get(lane.gate_profile)
     if run is None:
@@ -327,13 +343,19 @@ async def read_lane_inputs(
         )
     arm = MATRIX_RUN_BY_NAME[run]
     calendar = materialize_fold_calendar(as_of.date())
-    fold = calendar.live_edge
-    if fold is None:
-        raise RetrainError(
-            f"{as_of.date().isoformat()} is the first day of a quarter: the last "
-            "fold has frozen and the next has not opened, so there is no live edge "
-            "to score against. The next run has one."
-        )
+    if fold_id is None:
+        fold = calendar.live_edge
+        if fold is None:
+            raise RetrainError(
+                f"{as_of.date().isoformat()} is the first day of a quarter: the last "
+                "fold has frozen and the next has not opened, so there is no live edge "
+                "to score against. The next run has one."
+            )
+    else:
+        try:
+            fold = calendar.fold(fold_id)
+        except FoldCalendarError as unknown:
+            raise RetrainError(str(unknown)) from unknown
     go_live = await read_go_live(conn, "canonical_forecast_hour")
     blocks = fold.blocks_for(arm.window_start)
     rows = await read_feature_rows(
@@ -355,7 +377,12 @@ async def read_lane_inputs(
     by_fold: dict[str, tuple[Mapping[str, Any], ...]] = {
         fold.id: _between(rows, blocks.base_fit_start, blocks.test_end)
     }
-    for earlier in calendar.frozen_folds:
+    for earlier in calendar.folds:
+        if earlier.index >= fold.index:
+            # Only the folds this one is walked forward *from*. Never itself,
+            # and never a later one: an expanding-origin calibration that
+            # reached forward would be fitted on the days it is about to score.
+            continue
         try:
             earlier_blocks = earlier.blocks_for(arm.window_start)
         except ValueError:

@@ -21,6 +21,7 @@ Routes:
   POST /internal/replay/backtest  worker-only; the nightly aggregate
   GET /v1/model/card          the promoted artifact's card, verbatim, off the volume
   POST /internal/retrain      worker-only; the weekly retrain, in a child process
+  POST /internal/backfill/holdout  worker-only; one fold's out-of-fold forecasts
 
 There is deliberately **no day-ahead read here**. This service carried a
 `GET /v1/forecast/day-ahead` stub for the gateway to proxy — a typed shape with
@@ -634,6 +635,113 @@ async def retrain(request: Annotated[RetrainRequestBody, Body()]) -> JSONRespons
             "RETRAIN_FAILED",
             "the retrain process exited cleanly and printed no report",
             {"run_id": request.run_id},
+        )
+    return JSONResponse(report)
+
+
+#: Which folds are being backfilled by *this* instance, for the same reason
+#: :data:`_RETRAINING` exists: two passes over one fold would race each other
+#: over one artifact id, and that id is now the fold's rather than a clock's, so
+#: the collision is certain rather than unlikely.
+_BACKFILLING: set[str] = set()
+
+
+class HoldoutBackfillRequestBody(BaseModel):
+    """One fold's out-of-fold forecasts, reconstructed and handed over."""
+
+    #: ``F1``, ``F2``, … Absent means the newest frozen fold — the one most
+    #: likely to hold days no run has reconstructed yet. Never the live edge:
+    #: that is the weekly retrain's fold, and the product served those days.
+    fold_id: str | None = None
+
+
+@app.post("/internal/backfill/holdout", tags=["replay"])
+async def backfill_holdout(
+    request: Annotated[HoldoutBackfillRequestBody, Body()],
+) -> JSONResponse:
+    """Score one fold in a child interpreter and return its held-out days.
+
+    `docs/specs/replay.md`'s one storage requirement, as a route. It returns the
+    rows and **writes nothing**: this service is read-only against Postgres, so
+    the gateway's worker appends them — the same direction
+    ``/internal/publish/forecast`` already goes, through the same parser.
+
+    ``/internal`` for the reason the retrain is: nothing a user does reaches it,
+    and a multi-minute LightGBM fit on this event loop would stall every read
+    this instance is also serving. The child process is what keeps that true.
+
+    Three refusals, and none of them is a half-run backfill:
+
+    - the same fold already in flight here — ``HOLDOUT_BACKFILL_IN_PROGRESS``,
+      409, checked before the database because it is a fact about this instance;
+    - no database — ``DATA_UNAVAILABLE``, 503;
+    - a child that failed — ``HOLDOUT_BACKFILL_FAILED``, 500, carrying its exit
+      code and the tail of its stderr. A run that reconstructed no lane at all
+      is a failed run; a run whose second lane failed is not, and comes back 200
+      with that lane named in ``failures``.
+    """
+    key = request.fold_id or ""
+    if key in _BACKFILLING:
+        return _refusal(
+            409,
+            "HOLDOUT_BACKFILL_IN_PROGRESS",
+            f"{request.fold_id or 'the newest frozen fold'} is already being "
+            "backfilled by this instance; a second pass would race the first "
+            "over one artifact id",
+            {"fold_id": request.fold_id},
+        )
+    if settings.database_url is None:
+        return _refusal(
+            503,
+            "DATA_UNAVAILABLE",
+            "this instance has no database configured, and a fold's held-out "
+            "forecasts are a function of feature rows that only Postgres holds",
+        )
+    argv = [
+        sys.executable,
+        "-m",
+        "wattsteer_ml.holdout_backfill",
+        "--root",
+        str(settings.artifact_dir),
+    ]
+    if request.fold_id is not None:
+        argv += ["--fold", request.fold_id]
+    _BACKFILLING.add(key)
+    try:
+        child = await asyncio.create_subprocess_exec(
+            *argv,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            # A fold is ninety days of four subsystems' hours. The default pipe
+            # limit is 64 KiB and the payload is megabytes, so the reader is
+            # sized for the answer rather than for a typical one.
+            limit=64 * 1024 * 1024,
+        )
+        out, err = await child.communicate()
+    finally:
+        _BACKFILLING.discard(key)
+    if child.returncode != 0:
+        logger.error(
+            "holdout backfill %s exited %s: %s", key or "latest", child.returncode, err
+        )
+        return _refusal(
+            500,
+            "HOLDOUT_BACKFILL_FAILED",
+            f"the holdout backfill process exited {child.returncode}",
+            {
+                "fold_id": request.fold_id,
+                "stderr": err.decode("utf-8", "replace")[-2_000:],
+            },
+        )
+    try:
+        report = json.loads(out.decode("utf-8"))
+    except ValueError:
+        logger.error("holdout backfill %s printed no report", key or "latest")
+        return _refusal(
+            500,
+            "HOLDOUT_BACKFILL_FAILED",
+            "the holdout backfill process exited cleanly and printed no report",
+            {"fold_id": request.fold_id},
         )
     return JSONResponse(report)
 
