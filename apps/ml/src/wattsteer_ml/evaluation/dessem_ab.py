@@ -120,7 +120,10 @@ twenty-two ``dessem_*`` columns of ``feature_dessem_block``
 its coverage start of 2025-05-23 — which is exactly ``A-common``'s and
 ``B-common``'s window start. There is no missing data source here and therefore
 no named unmeasured reason of ticket 16's kind: :data:`NOT_RUN_YET` says the A/B
-has not been run, not that it cannot be.
+has not been run, not that it cannot be. Ticket 16's own block has since split
+along the same line — its A/B still cannot be run, for want of a feature *shape*
+rather than an ingestion, while the correlation beside it borrows the
+distinction this constant drew.
 
 What the arms need beyond this module is what the sweep's arms need — a
 database, the fold calendar and LightGBM — which is why :data:`DessemScorer` is
@@ -1003,9 +1006,9 @@ def unmeasured_until_run(*, lane: Lane, at: datetime) -> UnmeasuredDessemDelta:
     A named constructor rather than a caller-supplied string, so two cards in
     this state are comparable as two states rather than as two phrasings — the
     discipline :mod:`~wattsteer_ml.evaluation.lead_time`'s
-    ``unmeasured_for_want_of_an_archive`` applies to the state *it* names.
-    **The two states are different**: that one says a data source does not
-    exist, this one says a sweep has not been run.
+    ``unmeasured_for_want_of_archive_features`` applies to the state *it* names.
+    **The two states are different**: that one says an arm has no expressible
+    shape, this one says a sweep has not been run.
     """
     return UnmeasuredDessemDelta(lane=lane, at=at, reason=NOT_RUN_YET)
 
