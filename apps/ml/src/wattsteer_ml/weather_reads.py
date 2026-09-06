@@ -51,20 +51,23 @@ upstream, by
 
 ## Why the axes are written here and not by ``feature_apply_gate``
 
-``feature_apply_gate`` sets ``as_of`` **and** ``published_at_or_before`` to the
-gate. Its own migration says of the first that "over the backfill window every
-row was ingested at go-live, so it filters nothing" — and over a backfilled
-window it filters *everything*: ``ingested_at`` is the backfill instant, the
-gate is a D−1 instant two years earlier, and ``ingested_at <= canonical_as_of()``
-is then false for every row. Measured on a migrated database:
-``feature_weather_block('2024-04-10', 'gate_late')`` returns zero rows when the
-weather was ingested in 2026. That is recorded in the spec under Seam 7; it is a
-finding about the gate rather than about this measurement, and it is **not**
-worked around here by a private definition of the gate. The gate instant still
-comes from ``gate_at(...)`` and the local day still comes from
-``feature_local_day_hours(...)`` — the two SQL functions that define them — and
-the only thing written differently is ``as_of``, which is the training-time
-instant on both arms so that neither arm can see rows the other cannot.
+Because the archive arm moves ``published_at_or_before`` **hour by hour**, and
+``feature_apply_gate`` writes one instant for a whole target day. No setting of
+the axes it offers expresses a stitch of twenty-four publication cuts — which is
+the same missing *shape* that keeps experiment 1 unrunnable, one level down. So
+the axes are written here, and nothing about the gate is redefined while doing
+it: the gate instant still comes from ``gate_at(...)`` and the local day still
+comes from ``feature_local_day_hours(...)``, the two SQL functions that define
+them. ``as_of`` is the training-time instant on both arms, so neither arm can
+see rows the other cannot.
+
+This section used to give a different reason, and it was a defect rather than a
+design. ``feature_apply_gate`` set ``as_of`` to the gate, and over the backfill
+window ``ingested_at <= canonical_as_of()`` was false for every row, so
+``feature_weather_block('2024-04-10', 'gate_late')`` returned nothing at all
+against weather ingested in 2026. `drizzle/0039_the_gate_over_a_backfill.sql`
+fixed that on the ingestion axis. The per-hour cut above is what remains, and it
+was always the real reason this module holds its own reads.
 
 ## What this module does not do
 

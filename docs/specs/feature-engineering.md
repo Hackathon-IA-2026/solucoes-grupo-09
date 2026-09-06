@@ -315,10 +315,15 @@ notice**. That cost belongs in the comparison and was not previously recorded.
 This is the decision most likely to be got wrong by a later session, because
 `AsOf(t)` looks like it already solves it.
 
-`AsOf(gate)` filters on `ingested_at` — *when WattSteer learned a value*. For
-the backfill window every row was ingested at go-live, so `AsOf(gate)` for a 2024
-target date returns everything and filters nothing. For a **Forecast** table that
-is still fine: a weather row carries the run initialisation as `published_at` and
+`AsOf(gate)` filters on `ingested_at` — *when WattSteer learned a value*. Over
+the backfill window it has nothing to say: `ingested_at` is the instant the
+backfill ran, so for a 2024 target date `ingested_at ≤ gate` is false for every
+row and the read comes back **empty** rather than unfiltered. This paragraph
+said the opposite — "returns everything and filters nothing" — until ticket 15
+measured it; the note at the end of this section is what it cost. For a
+**Forecast** table the axis costs nothing either way, because a forecast's
+point-in-time claim never rested on it: a weather row carries the run
+initialisation as `published_at` and
 a DESSEM row carries the file creation, so `published_at ≤ gate` is a genuine
 point-in-time filter even in backfill. For an **Observation** table it is not
 fine at all — the balanço row for 2024-06-10 14:00 has a `published_at` derived
@@ -332,6 +337,25 @@ So:
 - **Observation-sourced features** are cut on
   `valid_time ≤ actuals_cutoff(gate, dataset)`, and their D−1 availability is
   *enforced*, not observed.
+- **The ingestion axis binds only where WattSteer has an ingestion history.**
+  Neither bullet above needs it, and over the backfill window it is not a weaker
+  filter but a total one. `feature_as_of(D, profile)` is therefore the gate
+  where `gate ≥ feature_ingestion_history_from()` — the latest go-live across
+  the canonical reads — and **no cut at all** before it.
+
+> **Fixed in ticket 15**, in `drizzle/0039_the_gate_over_a_backfill.sql`, which
+> carries the reasoning. The third bullet is the whole of the change and it is
+> on the ingestion axis alone: the publication cut is untouched, `feature_rows`
+> still accepts no instant, and `feature_as_of` derives the gate from the target
+> date exactly as `feature_apply_gate` and `actuals_cutoff` do. The horizon is
+> the *latest* go-live because one session axis cannot carry a different floor
+> per source, and that looseness is stamped rather than hidden: `feature_rows`
+> now reports `revision_optimistic` for any row whose gate precedes the horizon,
+> so `vintage_fidelity = point_in_time` means, exactly, *this row was built
+> under `as_of = gate`, unrelaxed*. **`feature_hash` moved**: the conjunct sits
+> inside `feature_rows`, which the lane's hash covers, precisely so that an
+> artifact trained on weatherless rows cannot go on serving against rows that
+> now carry weather. Both lanes owe a retrain.
 
 > **Corrected while implementing ticket 01.** The canonical weather view carried
 > no publication cut at all — ticket 016 put the gate on the day-ahead balance
@@ -1419,25 +1443,33 @@ vector. Neither is worth the experiment. The A/B stays
 `UnmeasuredLeadTime` carrying `ARCHIVE_NOT_INGESTED`, written to the card rather
 than omitted, and the correlation is carried beside it on the same block.
 
-**A defect found while establishing that, recorded rather than fixed.**
-`0016_the_feature_gate.sql` says of the feature-side `as_of` that "over the
+**A defect found while establishing that, and fixed in ticket 15.**
+`0016_the_feature_gate.sql` said of the feature-side `as_of` that "over the
 backfill window every row was ingested at go-live, so it filters nothing". It
-filters **everything**. `ingested_at` is the backfill instant — `versioned-write.ts`
+filtered **everything**. `ingested_at` is the backfill instant — `versioned-write.ts`
 stamps `new Date()` — the gate is a D−1 instant one to two years earlier, and
-`ingested_at <= canonical_as_of()` is then false for every row. Measured on a
+`ingested_at <= canonical_as_of()` was then false for every row. Measured on a
 migrated database with weather ingested in 2026:
-`feature_weather_block('2024-04-10', 'gate_late')` returns **zero rows** — not
+`feature_weather_block('2024-04-10', 'gate_late')` returned **zero rows** — not
 even the coverage-0 spine rows the same migration promises, because
-`canonical_capacity_weight` is read under the same axis and is empty too. Every
-historical feature row is therefore weatherless, which is a defect in the gate
-spine and not in this experiment. It is pinned as the behaviour it is by
-`apps/ml/tests/test_aggregate_train_serve_gap.py`, so the day it is fixed that
-test fails and names the sentence to delete. It is also why `weather_reads.py`
-writes `as_of` itself instead of calling `feature_apply_gate`: the gate instant
-still comes from `gate_at(...)` and the local day from
-`feature_local_day_hours(...)`, and the only axis written differently is the one
-that is broken — set to the training-time instant on **both** arms, so neither
-arm can see rows the other cannot.
+`canonical_capacity_weight` was read under the same axis and was empty too. Every
+historical feature row was therefore weatherless, which was a defect in the gate
+spine and not in this experiment. `0039_the_gate_over_a_backfill.sql` repairs it
+on the ingestion axis alone — see §*Where the cut actually falls* — and the same
+call now returns the fleet's weather. The test that pinned the broken behaviour
+in `apps/ml/tests/test_aggregate_train_serve_gap.py` is the evidence that it is
+fixed, beside two invariants the repair had to keep: `feature_rows` still takes
+no instant, and a `gate_late` block still refuses a run published after its own
+gate.
+
+`weather_reads.py` still writes `as_of` itself, and the reason is now the right
+one rather than the defect. The archive arm moves `published_at_or_before`
+**hour by hour**, and `feature_apply_gate` writes one instant for a whole target
+day; no setting of the axes it offers can express a stitch of twenty-four cuts,
+which is the same missing shape that keeps experiment 1 unrunnable. The gate
+instant still comes from `gate_at(...)` and the local day from
+`feature_local_day_hours(...)`, and `as_of` is the training-time instant on
+**both** arms so neither arm can see rows the other cannot.
 
 **Where the number lands.** On the model card, under `lead_time_penalty`
 → `aggregate_correlation`, through `record_lead_time_penalty`. The block already

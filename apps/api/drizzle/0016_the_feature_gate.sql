@@ -181,13 +181,24 @@ $$;
 -- written, only imagined.
 --
 -- `as_of` and `published_at_or_before` are both the gate, and they are not the
--- same filter. `as_of` cuts on `ingested_at` — what WattSteer had learned — and
--- over the backfill window every row was ingested at go-live, so it filters
--- nothing. `published_at_or_before` cuts on when the *source* asserted the
--- value, which is what makes a forecast's D−1 availability genuine even in
--- backfill. Forecasts are cut on publication; observations would have to be cut
--- on `valid_time` against a publication lag, which is ticket 05's business and
--- has no feature here yet.
+-- same filter. `as_of` cuts on `ingested_at` — what WattSteer had learned.
+-- `published_at_or_before` cuts on when the *source* asserted the value, which
+-- is what makes a forecast's D−1 availability genuine even in backfill.
+-- Forecasts are cut on publication; observations would have to be cut on
+-- `valid_time` against a publication lag, which is ticket 05's business and has
+-- no feature here yet.
+--
+-- **A sentence used to stand here and it was false.** It said of `as_of` that
+-- "over the backfill window every row was ingested at go-live, so it filters
+-- nothing". It filtered *everything*: `ingested_at` is the instant the backfill
+-- ran, the gate is a D−1 instant one to two years earlier, and
+-- `feature_weather_block('2024-04-10', 'gate_late')` therefore returned zero
+-- rows against a database with 2026-ingested weather. Every historical feature
+-- row was weatherless. `0039_the_gate_over_a_backfill.sql` replaces the axis
+-- this function writes with `feature_as_of(target_date, gate_profile)` and
+-- carries the reasoning; it is the current definition of `feature_apply_gate`
+-- and the paragraph above is the only part of this one that still holds. This
+-- retraction is the sole edit ever made to this file and it changes no DDL.
 --
 -- The fleet date is the target date: `InstalledCapacityAsOf` is a double as-of,
 -- and its valid-time argument is the day being described while its vintage is

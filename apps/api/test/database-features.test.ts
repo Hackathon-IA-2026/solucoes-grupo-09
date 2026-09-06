@@ -1641,6 +1641,79 @@ suite("the gate, end to end (real Postgres)", () => {
     }
   });
 
+  it("never stamps point_in_time on a row built under a relaxed ingestion cut", async () => {
+    // Ticket 15's invariant, and the thing that keeps its repair honest.
+    //
+    // Over the backfill window `feature_as_of` suspends the ingestion cut
+    // entirely — `ingested_at` there is the loader's clock, and cutting on it
+    // returned zero rows rather than fewer ones. The relaxation is bounded by
+    // `feature_ingestion_history_from()`, the latest go-live across the
+    // canonical reads, and it is deliberately loose in one band: a gate between
+    // the first source's go-live and the last one's relaxes the cut for sources
+    // that were already live.
+    //
+    // So the stamp carries it. `point_in_time` means, exactly, that this row
+    // was built under `as_of = gate` with nothing relaxed — which is asserted
+    // here as the equality it is, against the two functions themselves, rather
+    // than trusted to stay true as more sources are onboarded.
+    for (const targetDate of [TARGET, BEFORE_GO_LIVE, AFTER_GO_LIVE]) {
+      const [axes] = [
+        ...(await db.execute<{ as_of: string; gate: string }>(sql`
+          select feature_as_of(${targetDate}::date, 'gate_late')::text as as_of,
+                 gate_at(${targetDate}::date, 'gate_late')::text as gate
+        `)),
+      ];
+      const unrelaxed = axes?.as_of === axes?.gate;
+      const rows = await rowsForDay(targetDate);
+      expect(rows.length).toBeGreaterThan(0);
+      for (const row of rows) {
+        if (row.vintage_fidelity === "point_in_time") {
+          expect({ targetDate, unrelaxed }).toEqual({ targetDate, unrelaxed: true });
+        }
+      }
+    }
+
+    // Non-vacuous in both directions: the fixture really does straddle the
+    // horizon, so this is not three passes of the same regime.
+    const [regimes] = [
+      ...(await db.execute<{ relaxed: boolean; strict: boolean }>(sql`
+        select feature_as_of(${BEFORE_GO_LIVE}::date, 'gate_late')
+                 <> gate_at(${BEFORE_GO_LIVE}::date, 'gate_late') as relaxed,
+               feature_as_of(${AFTER_GO_LIVE}::date, 'gate_late')
+                 = gate_at(${AFTER_GO_LIVE}::date, 'gate_late') as strict
+      `)),
+    ];
+    expect(regimes).toEqual({ relaxed: true, strict: true });
+  });
+
+  it("leaves nothing behind, memo included, when it hands the axes back", async () => {
+    // `feature_ingestion_history_from()` memoises its answer in a
+    // transaction-local setting, because the view behind it is nine unindexed
+    // `min()` scans and it is asked once per block per target date. The memo is
+    // not a read axis and no view consults it — but "a feature build leaves
+    // nothing behind" is a better sentence without an exception in it, so
+    // `feature_release_axes` clears it too.
+    let leftover: string | null | undefined;
+    try {
+      await db.transaction(async (tx) => {
+        const scoped = tx as unknown as Database;
+        await readServingRows(scoped, { targetDate: TARGET, ...query });
+        const left = await scoped.execute<{ memo: string | null }>(
+          sql`select nullif(
+                current_setting('wattsteer.feature_ingestion_history_from', true), ''
+              ) as memo`,
+        );
+        leftover = [...left][0]?.memo;
+        tx.rollback();
+      });
+    } catch (error) {
+      if (!(error instanceof Error && /rollback/i.test(error.message))) {
+        throw error;
+      }
+    }
+    expect(leftover).toBeNull();
+  });
+
   it("counts the registry's go-live in the fidelity stamp, not just the hourly sources", async () => {
     // The capacity caveat, made a property. Over the backfill window a registry
     // snapshot is today's record of the past, so a row whose capacity had to be
