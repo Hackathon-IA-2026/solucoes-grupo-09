@@ -23,7 +23,7 @@ whether that applies here before reaching for it.
 
 **Blocked by:** api-surface 20 (merged).
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] All four routes carry a directive chosen for a stated reason
 - [ ] `/ready` and `/health` cannot be served stale from a shared cache
