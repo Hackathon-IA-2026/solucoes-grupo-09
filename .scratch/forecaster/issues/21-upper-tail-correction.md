@@ -99,3 +99,49 @@ unchanged.
       `coverage_p90`. Its meaning changed and its note says so: it is now the
       share of scored hours whose P90 is positive at all, and it bounds
       `coverage_p90` from above.
+
+## Decision: fix it. Do not ship the footnote.
+
+Taken on the measurement, not on preference. Mean realised `δ_hi` was 0.25 with
+**49% of rows receiving exactly zero correction**. An under-corrected P90 is a
+band too narrow at the top — it tells an operator the worst case is milder than
+it is, and this product exists so operators size storage against that band. The
+error therefore ran in the unsafe direction, and a note on the model card does
+not stop the under-sizing. A narrower band is also the *flattering* direction,
+and refusing flattering numbers is the one habit this codebase has kept
+throughout.
+
+**Both proposed routes were wrong, and the third is better than either.** The
+ticket assumed the shift had to move to a `p`-dependent point inside `Q_pos`,
+making it a `p`-parameterised callable — the blast radius that stopped ticket 06.
+I proposed applying it after composition instead. That is right in outline and
+**unsound in its naive form**, which the implementer checked rather than
+accepted: the ensemble asks `Q_Y` for 500×24 arbitrary `q`, and its stated
+invariant is that its marginals *are* the served marginals — so shifting only at
+`q = 0.10` and `0.90` moves the band while the day figures keep drawing from the
+uncorrected distribution, and the hour band and the day band then disagree about
+the same hour.
+
+What rescues it: define `δ` at **every** `q` and carry it on the mixture. A
+`TailShift` — `−δ_lo` at 0.10, `0` at 0.50, `+δ_hi` at 0.90, linear between, held
+flat outside, the same interpolate-and-hold rule `MagnitudeQuantiles` already
+uses — added inside the positive branch of `HurdleMixture.quantile`. `Q_pos`
+stays an ordinary value; the ensemble still inverts one object.
+
+**The structural zero is kept deliberately.** `Q_Y(q) = 0` for `q ≤ 1 − p`, so at
+`p ≤ 0.10` a zero P90 is the model asserting at least a 90% chance of no
+curtailment. Correcting it upward would invent curtailment the mixture denies.
+This is why `upper_correction_realised` lands at 0.65 rather than 1.0 — the
+remaining shortfall is the rows where zero is the right answer.
+
+**Measured, on the reference fold:** realised `δ_hi` 0.2317 → 0.6494;
+`coverage_p90` 0.5065 → 0.5974; `day_total_coverage` 0.85 → 0.90. `delta_lo`,
+`delta_hi`, `coverage_p10`, `crossing_rate` and **`feature_hash` bit-identical**
+— no retrain is owed. Ensemble cost +5% on a whole draw (7.43 → 7.79 ms).
+
+**What is still open, and is a different problem.** `coverage_p90` of 0.60 is far
+from nominal 0.90. This ticket was about the correction failing to *reach* the
+band, and it now reaches it in full wherever the band is positive. That the band
+still under-covers on this fold is a question about the **fit**, not about the
+application, and it deserves its own ticket rather than being counted as closed
+here.
