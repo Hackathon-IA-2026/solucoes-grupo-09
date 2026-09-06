@@ -1440,8 +1440,20 @@ missing *shape*. Building one would mean either a second weather read axis
 inside the feature spine, which is the train/serve skew this spec exists to make
 unwritable, or a parallel feature builder, which is a second definition of the
 vector. Neither is worth the experiment. The A/B stays
-`UnmeasuredLeadTime` carrying `ARCHIVE_NOT_INGESTED`, written to the card rather
-than omitted, and the correlation is carried beside it on the same block.
+`UnmeasuredLeadTime`, written to the card rather than omitted, and the reason it
+carries names that missing shape: `ARCHIVE_FEATURES_HAVE_NO_SHAPE`, which
+replaced forecaster 16's `ARCHIVE_NOT_INGESTED` once this experiment showed the
+archive *weather* was recoverable and only the archive *feature row* was not.
+
+**The block therefore says two things, because two different things are true.**
+The correlation is carried beside the A/B on the same block, in
+`UnmeasuredLeadTime.correlation` — the field forecaster 16 already put there for
+this case — and when it is absent the block says `CORRELATION_NOT_RUN_YET`
+rather than the A/B's reason. That half is measurable in principle and unrun in
+fact: computing it needs an ingested weather window on a migrated database,
+which the offline card writer does not have, so `aggregate_correlation` is `null`
+on every card this repository writes today and the sentence beside it says why —
+"unrun", in forecaster 18's sense, never "no data source" in forecaster 16's.
 
 **A defect found while establishing that, and fixed in ticket 15.**
 `0016_the_feature_gate.sql` said of the feature-side `as_of` that "over the

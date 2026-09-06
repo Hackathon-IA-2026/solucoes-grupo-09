@@ -36,11 +36,12 @@ from wattsteer_ml.constants import SUBSYSTEM_CODES
 from wattsteer_ml.evaluation.collapse_report import FIXTURE_SOURCE, UNMEASURED_SOURCE
 from wattsteer_ml.evaluation.folds import Fold, materialize_fold_calendar
 from wattsteer_ml.evaluation.lead_time import (
-    ARCHIVE_NOT_INGESTED,
+    ARCHIVE_FEATURES_HAVE_NO_SHAPE,
     CADENCE,
     COLUMN_DEFINITIONS,
     COLUMNS,
     CONTROL_COLUMN,
+    CORRELATION_NOT_RUN_YET,
     CORRELATION_VARIABLE,
     EXPERIMENT_FEATURE_SET,
     EXPERIMENT_GATE_PROFILE,
@@ -64,7 +65,7 @@ from wattsteer_ml.evaluation.lead_time import (
     carry_forward,
     pearson_r,
     record_lead_time_penalty,
-    unmeasured_for_want_of_an_archive,
+    unmeasured_for_want_of_archive_features,
 )
 from wattsteer_ml.evaluation.matrix import (
     MATRIX_RUN_BY_NAME,
@@ -647,7 +648,7 @@ def test_the_block_lands_on_the_card_under_the_spec_s_key(tmp_path: Path) -> Non
 
 
 def test_an_unrun_experiment_is_written_too(tmp_path: Path) -> None:
-    """A missing block and 'the control arm has no data source' look alike.
+    """A missing block and a named absence look alike.
 
     They must not: only one of them is true of this repository, and the reason
     is a named constant so two cards compare as two states rather than two
@@ -656,15 +657,52 @@ def test_an_unrun_experiment_is_written_too(tmp_path: Path) -> None:
     lane_dir = tmp_path / LANE.directory_name
     lane_dir.mkdir(parents=True)
     (lane_dir / f"{ARTIFACT_ID}.card.json").write_text("{}", encoding="utf-8")
-    absent = unmeasured_for_want_of_an_archive(lane=LANE, as_of=AS_OF)
+    absent = unmeasured_for_want_of_archive_features(lane=LANE, as_of=AS_OF)
     written = record_lead_time_penalty(absent, root=tmp_path, artifact_id=ARTIFACT_ID)
     block = json.loads(written.read_text(encoding="utf-8"))[LEAD_TIME_BLOCK_KEY]
     assert block["measured"] is False
     assert block["lead_time_source"] == UNMEASURED_SOURCE
-    assert block["reason"] == ARCHIVE_NOT_INGESTED
+    assert block["reason"] == ARCHIVE_FEATURES_HAVE_NO_SHAPE
     assert "not a finding of no harm" in block["reads"]
     assert block["aggregate_correlation"] is None
     assert absent.is_measurement is False
+
+
+def test_the_ab_reason_names_the_missing_shape_and_not_an_ingestion() -> None:
+    """Feature engineering 13 recovered the archive series; the ingestion is
+    no longer what is missing, so the sentence may not say it is.
+
+    What has no shape is the *feature row*: the archive is twenty-four
+    publication cuts inside one target day, ``feature_apply_gate`` writes one
+    instant for the whole day and ``feature_rows`` accepts no instant at all.
+    A reason naming an ingestion would send a reader to an ingestion ticket
+    that would not fix this.
+    """
+    reason = unmeasured_for_want_of_archive_features(lane=LANE, as_of=AS_OF).card_block()[
+        LEAD_TIME_BLOCK_KEY
+    ]["reason"]
+    assert "What is missing is a shape." in reason
+    assert "feature_rows` accepts no instant at all" in reason
+    assert "does not ingest it" not in reason
+    assert "is not stored here" not in reason
+
+
+def test_an_absent_correlation_does_not_borrow_the_ab_reason() -> None:
+    """Two absences that mean different things must read differently.
+
+    The A/B cannot be run here. The correlation can — both its series are
+    readable — and has merely not been. Forecaster 18 chose ``NOT_RUN_YET``
+    for exactly this distinction, and the block keeps it: the half that says
+    "unrunnable" and the half that says "unrun" are separate fields.
+    """
+    block = unmeasured_for_want_of_archive_features(lane=LANE, as_of=AS_OF).card_block()[
+        LEAD_TIME_BLOCK_KEY
+    ]
+    assert block["aggregate_correlation"] is None
+    assert block["aggregate_correlation_reason"] == CORRELATION_NOT_RUN_YET
+    assert block["aggregate_correlation_reason"] != block["reason"]
+    assert "unrun rather than unrunnable" in block["aggregate_correlation_reason"]
+    assert "not a missing data source" in block["aggregate_correlation_reason"]
 
 
 def test_the_correlation_travels_even_when_the_ab_could_not_run() -> None:
@@ -672,13 +710,22 @@ def test_the_correlation_travels_even_when_the_ab_could_not_run() -> None:
     invented = AggregateCorrelation.fixture(
         scope="NE/wind", set_version="centroid_set_v1", points=60, aggregate_r=0.97
     )
-    absent = unmeasured_for_want_of_an_archive(
+    absent = unmeasured_for_want_of_archive_features(
         lane=LANE, as_of=AS_OF, correlation=invented
     )
     block = absent.card_block()[LEAD_TIME_BLOCK_KEY]
     assert block["measured"] is False
     assert block["aggregate_correlation"]["aggregate_r"] == pytest.approx(0.97)
     assert block["aggregate_correlation"]["measured"] is False
+    # A correlation that is present has no reason to be absent for.
+    assert block["aggregate_correlation_reason"] is None
+
+
+def test_a_measured_report_without_a_correlation_says_which_half_is_absent() -> None:
+    """The same distinction on the measured block, not only the unmeasured one."""
+    block = report().card_block()[LEAD_TIME_BLOCK_KEY]
+    assert block["aggregate_correlation"] is None
+    assert block["aggregate_correlation_reason"] == CORRELATION_NOT_RUN_YET
 
 
 def test_a_revision_optimistic_only_block_carries_its_caveat() -> None:

@@ -73,31 +73,51 @@ spatially correlated but not perfectly. Aggregating will raise ``r``. Above
 becomes a standing model-health metric rather than a one-off.
 
 It runs here because it needs the centroids, and it needs no training at all:
-two series, one correlation. :func:`capacity_weighted_aggregate` does the
+two series, one correlation — and both of them are readable, by
+:func:`~wattsteer_ml.weather_reads.measure_aggregate_correlation`, which builds
+the archive series as the shortest-lead slice and hands the pair to
+:meth:`AggregateCorrelation.measured`. So this half is measurable in principle
+and merely unrun where no ingested weather window exists.
+:func:`capacity_weighted_aggregate` does the
 weighting and **does not compute the weights** — they are
 ``canonical_capacity_weight``'s, and a second implementation of a weight vector
 is a thing that drifts away from the one the features are actually built with.
 :class:`CapacityWeights` refuses a vector that does not sum to one, which is the
 only property of that view this module is entitled to assume.
 
-## What is not here, and why
+## What is not here, and why — and the two different reasons
 
-**There is no Postgres reader for the archive arm, because there is no archive
-in Postgres.** `apps/api/src/database/schema.ts` says so in
-``weather_forecast_hour``'s own docstring — "The stitched Historical Forecast
-archive is not stored here and is not what this table holds" — and
-`ingest/weather/single-runs.ts` is the decision that put it out of scope: the
-archive is bit-identical to ``_previous_day0``, the shortest-lead slice of each
-run, and ingesting it was rejected rather than deferred. So the control arm's
-*training* features cannot be materialised by anything in this repository today,
-and until an archive ingestion exists this block's honest value is
-:class:`UnmeasuredLeadTime` carrying :data:`ARCHIVE_NOT_INGESTED`.
+**The A/B is unrun because the control arm's features have no expressible
+shape.** This is not the reason this module first gave. It said "there is no
+archive in Postgres", on the strength of
+`apps/api/src/database/schema.ts` — ``weather_forecast_hour``'s own docstring,
+"The stitched Historical Forecast archive is not stored here and is not what
+this table holds" — and of `ingest/weather/single-runs.ts`, which put the
+ingestion out of scope. That is still true of the *table*, and it is no longer
+the operative reason, because the same decision records why: the archive is
+bit-identical to ``_previous_day0``, the shortest-lead slice of each run, and
+every run is stored whole. :mod:`~wattsteer_ml.weather_reads` recovers the
+archive **series** from exactly that, so the weather is not what is missing.
 
-That is written to the card rather than omitted, for the reason
+What is missing is a *shape*. The archive is twenty-four publication cuts inside
+one target day; ``feature_apply_gate`` writes one instant for the whole day and
+``feature_rows`` accepts no instant at all, so no setting of the axes yields an
+archive-built feature row, and widening the gate seam to provide one is the
+train/serve skew `docs/specs/feature-engineering.md` exists to make unwritable.
+So this block's honest value today is :class:`UnmeasuredLeadTime` carrying
+:data:`ARCHIVE_FEATURES_HAVE_NO_SHAPE`.
+
+**The correlation beside it is a different absence, and says so.** It needs no
+feature row and no training run, and both its series are readable today, so
+:data:`CORRELATION_NOT_RUN_YET` says "unrun", never "no data source" — the
+distinction :mod:`~wattsteer_ml.evaluation.dessem_ab` drew when it refused to
+borrow this module's sentence for a state it did not share.
+
+All of it is written to the card rather than omitted, for the reason
 :func:`~wattsteer_ml.evaluation.planning_arms.record_planning_arms` writes its
-unmeasured sibling: a card with no lead-time block and a card saying "the
-control arm has no data source" look identical to anybody grepping for the
-figure, and only one of them is true.
+unmeasured sibling: a card with no lead-time block and a card naming what is
+absent look identical to anybody grepping for the figure, and only one of them
+is true.
 
 **It does not run on the weekly retrain.** Nothing in
 :mod:`~wattsteer_ml.evaluation.serving_lanes` or
@@ -869,8 +889,8 @@ class LeadTimeReport:
     provenance: LeadTimeProvenance
     penalties: tuple[LeadTimePenalty, ...]
     #: The second experiment. ``None`` when it was not run — it needs no
-    #: training and is cheap, but it needs two weather series and one of them
-    #: does not exist in this repository yet.
+    #: training and is cheap, and both its series are readable, so its absence
+    #: is :data:`CORRELATION_NOT_RUN_YET` and never the A/B's own reason.
     correlation: AggregateCorrelation | None = None
 
     def __post_init__(self) -> None:
@@ -929,6 +949,9 @@ class LeadTimeReport:
         block["aggregate_correlation"] = (
             None if self.correlation is None else self.correlation.card_fields()
         )
+        block["aggregate_correlation_reason"] = (
+            CORRELATION_NOT_RUN_YET if self.correlation is None else None
+        )
         if "point_in_time" not in self.fidelities:
             block["vintage_caveat"] = _REVISION_OPTIMISTIC_ONLY
         return {LEAD_TIME_BLOCK_KEY: block}
@@ -939,17 +962,24 @@ class UnmeasuredLeadTime:
     """No columns, and the sentence saying why — the shape of an absent A/B.
 
     This is the value the repository produces **today**, and
-    :data:`ARCHIVE_NOT_INGESTED` is why: the control arm trains on the stitched
-    Historical Forecast archive, and `apps/api/src/database/schema.ts` says in
-    ``weather_forecast_hour``'s own docstring that the archive is not stored
-    there and is not what the table holds.
+    :data:`ARCHIVE_FEATURES_HAVE_NO_SHAPE` is why: the control arm trains on the
+    stitched Historical Forecast archive, and while
+    :mod:`~wattsteer_ml.weather_reads` recovers that archive as a *series*, no
+    setting of the feature axes turns twenty-four publication cuts inside one
+    target day into a feature row.
 
     Three equal columns would say training on the archive costs nothing, and
     three zeroed ones would say the model forecasts nothing. Both are readings
-    of an absent data source, and neither is a thing anybody may decide on. So
-    this value has no field that could be mistaken for a figure — except
-    :attr:`correlation`, which is a different measurement with a source of its
-    own and is carried when it was possible to make.
+    of an absent arm, and neither is a thing anybody may decide on. So this
+    value has no field that could be mistaken for a figure — except
+    :attr:`correlation`, which is a **different experiment** with a source of
+    its own and is carried when it was made.
+
+    That field is the only home the correlation needs and no new one is added
+    beside it: it was put here for exactly this case, back when the case was
+    hypothetical. What it did not have was a sentence for its own absence, and
+    :data:`CORRELATION_NOT_RUN_YET` is that sentence — the block therefore says
+    two things, because two different absences are being reported.
     """
 
     lane: Lane
@@ -976,11 +1006,14 @@ class UnmeasuredLeadTime:
                 "aggregate_correlation": (
                     None if self.correlation is None else self.correlation.card_fields()
                 ),
+                "aggregate_correlation_reason": (
+                    CORRELATION_NOT_RUN_YET if self.correlation is None else None
+                ),
             }
         }
 
 
-def unmeasured_for_want_of_an_archive(
+def unmeasured_for_want_of_archive_features(
     *, lane: Lane, as_of: datetime, correlation: AggregateCorrelation | None = None
 ) -> UnmeasuredLeadTime:
     """The A/B that cannot be run, named as the one thing that is missing.
@@ -988,11 +1021,17 @@ def unmeasured_for_want_of_an_archive(
     A named constructor rather than a caller-supplied reason string, so the
     sentence on every card is the same sentence and a reader comparing two cards
     is comparing two states rather than two phrasings.
+
+    **Features, not an archive.** The archive weather is recoverable and
+    :mod:`~wattsteer_ml.weather_reads` recovers it; what has no shape is the
+    feature row built from it. Pass ``correlation`` when the second experiment
+    *was* run — the block then reports one absence and one measurement instead
+    of one sentence covering both.
     """
     return UnmeasuredLeadTime(
         lane=lane,
         as_of=as_of,
-        reason=ARCHIVE_NOT_INGESTED,
+        reason=ARCHIVE_FEATURES_HAVE_NO_SHAPE,
         correlation=correlation,
     )
 
@@ -1068,17 +1107,44 @@ def _required_correction(entry: ArmColumn, field: str) -> float:
     return float(value)
 
 
-#: Why the block is unmeasured today, in one sentence, on every card.
-ARCHIVE_NOT_INGESTED = (
+#: Why **the A/B** is unmeasured today, in one sentence, on every card. It
+#: replaced an earlier sentence that named a missing ingestion, which
+#: :mod:`~wattsteer_ml.weather_reads` made the wrong sentence for this half:
+#: the archive series is recoverable and the archive *feature row* is not.
+ARCHIVE_FEATURES_HAVE_NO_SHAPE = (
     "The control arm trains on the stitched Historical Forecast archive, and "
-    "this repository does not ingest it: `weather_forecast_hour` holds named "
-    "model runs only and its own docstring says the archive 'is not stored here "
-    "and is not what this table holds', while `ingest/weather/single-runs.ts` "
-    "records the decision that put it out of scope. So the control arm's "
-    "training features cannot be materialised, and the A/B is unrun rather than "
-    "run and found uninteresting. The comparison, the row-identity assertion and "
-    "the interval deltas are built and tested; what is missing is one data "
-    "source, and adding it is an ingestion ticket rather than a change here."
+    "this repository cannot build a feature row from it. Not for want of the "
+    "weather: `wattsteer_ml.weather_reads` recovers the archive series out of "
+    "the runs already stored, because the stitch is bit-identical to the "
+    "shortest-lead slice of each run and every run is stored whole. What is "
+    "missing is a shape. The archive is twenty-four publication cuts inside one "
+    "target day; `feature_apply_gate` writes one instant for a whole target day "
+    "and `feature_rows` accepts no instant at all, so no setting of the axes "
+    "yields an archive-built feature row. Providing one would mean a second "
+    "weather read axis inside the feature spine — the train/serve skew the "
+    "feature spec exists to make unwritable — or a parallel feature builder, "
+    "which is a second definition of the vector. So the A/B is unrun rather "
+    "than run and found uninteresting: the comparison, the row-identity "
+    "assertion and the interval deltas are built and tested, and what is "
+    "missing is a shape no ingestion ticket would supply."
+)
+
+#: Why **the aggregate correlation** is absent when it is absent, which is a
+#: different thing and must not read like the sentence above. The discipline is
+#: :data:`~wattsteer_ml.evaluation.dessem_ab.NOT_RUN_YET`'s, and it is borrowed
+#: rather than restated: that block chose its own words precisely so it would
+#: not read as this module's "no data source", and this half is now in its
+#: position rather than in the A/B's.
+CORRELATION_NOT_RUN_YET = (
+    "The aggregate correlation was not computed for this card. This is not a "
+    "missing data source and not a finding that aggregation leaves r where the "
+    "per-point figure put it: both series are readable — "
+    "`wattsteer_ml.weather_reads` builds the archive arm as the shortest-lead "
+    "slice and the served arm at the gate, out of stored weather versions and "
+    "the published capacity weights — so this half is unrun rather than "
+    "unrunnable. What it needs is an ingested weather window on a migrated "
+    "database, which the offline card writer does not have, and a figure "
+    "produced without one would be a fixture rather than a measurement."
 )
 
 #: When the interval harm showed up where the research said it would.
@@ -1123,9 +1189,12 @@ _NOT_A_READING = (
 
 #: And when there were no columns at all.
 _NOTHING_YET = (
-    "The experiment did not run. This is not a finding of no harm and not a tie "
-    "between the arms: one of the two training feature sources does not exist "
-    "here, so the comparison is unmade rather than made and found uninteresting."
+    "The A/B did not run. This is not a finding of no harm and not a tie "
+    "between the arms: the control arm's training features have no expressible "
+    "shape here, so the comparison is unmade rather than made and found "
+    "uninteresting. It says nothing about the aggregate correlation beside it, "
+    "which is a second experiment with a source of its own — read "
+    "aggregate_correlation, and aggregate_correlation_reason when it is absent."
 )
 
 #: On a block whose every segment predates ingestion go-live.
@@ -1153,11 +1222,12 @@ _R_DOES_NOT_REVISE = (
 
 
 __all__ = [
-    "ARCHIVE_NOT_INGESTED",
+    "ARCHIVE_FEATURES_HAVE_NO_SHAPE",
     "CADENCE",
     "COLUMNS",
     "COLUMN_DEFINITIONS",
     "CONTROL_COLUMN",
+    "CORRELATION_NOT_RUN_YET",
     "CORRELATION_VARIABLE",
     "EXPERIMENT_FEATURE_SET",
     "EXPERIMENT_GATE_PROFILE",
@@ -1185,5 +1255,5 @@ __all__ = [
     "carry_forward",
     "pearson_r",
     "record_lead_time_penalty",
-    "unmeasured_for_want_of_an_archive",
+    "unmeasured_for_want_of_archive_features",
 ]

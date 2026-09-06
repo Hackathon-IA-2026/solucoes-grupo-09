@@ -64,7 +64,7 @@ from wattsteer_ml.evaluation.lead_time import (
     AggregateCorrelation,
     CapacityWeights,
     LeadTimeError,
-    unmeasured_for_want_of_an_archive,
+    unmeasured_for_want_of_archive_features,
 )
 from wattsteer_ml.lanes import Lane
 from wattsteer_ml.weather_reads import (
@@ -332,13 +332,16 @@ def test_the_measurement_lands_on_the_unmeasured_lead_time_block() -> None:
 
     correlation = run(work).correlation()
     lane = Lane(feature_set="dessem_free_v1", gate_profile="gate_late", threshold_mw=5)
-    block = unmeasured_for_want_of_an_archive(
+    block = unmeasured_for_want_of_archive_features(
         lane=lane, as_of=AS_OF, correlation=correlation
     ).card_block()["lead_time_penalty"]
 
     assert block["measured"] is False
-    assert "does not ingest it" in block["reason"]
+    # The A/B's half: a missing shape, not a missing ingestion.
+    assert "What is missing is a shape." in block["reason"]
+    # The correlation's half: measured, so it carries no absence sentence.
     assert block["aggregate_correlation"]["measured"] is True
+    assert block["aggregate_correlation_reason"] is None
     source = block["aggregate_correlation"]["correlation_source"]
     assert source == WEATHER_SERIES_SOURCE
 

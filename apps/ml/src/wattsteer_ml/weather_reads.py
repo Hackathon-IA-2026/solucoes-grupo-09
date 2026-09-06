@@ -19,10 +19,10 @@ one place that needs a database to exercise.
 
 The A/B's *other* experiment — train twice — needs archive-built **features**,
 which this repository cannot materialise; see
-:data:`~wattsteer_ml.evaluation.lead_time.ARCHIVE_NOT_INGESTED` and the note at
-the end of this docstring. The correlation is a different shape of question and
-is answerable today, because it needs no feature row and no training run — two
-series and a correlation.
+:data:`~wattsteer_ml.evaluation.lead_time.ARCHIVE_FEATURES_HAVE_NO_SHAPE` and
+the note at the end of this docstring. The correlation is a different shape of
+question and is answerable today, because it needs no feature row and no
+training run — two series and a correlation.
 
 `apps/api/src/ingest/weather/single-runs.ts` records the measurement that makes
 it answerable: **the stitched Historical Forecast archive is bit-identical to**
@@ -82,17 +82,20 @@ block:
 
     correlation = await measure_aggregate_correlation(conn, ...)
     record_lead_time_penalty(
-        unmeasured_for_want_of_an_archive(
+        unmeasured_for_want_of_archive_features(
             lane=lane, as_of=as_of, correlation=correlation
         ),
         root=root,
         artifact_id=artifact_id,
     )
 
-That is the honest shape of today's card: experiment 1 unrun with the reason
-named, experiment 2 measured beside it. A card with no block and a card saying
-"the control arm has no data source" look identical to anyone grepping for the
-figure, and only one of them is true.
+That is the honest shape of today's card: experiment 1 unrun because its feature
+rows have no expressible shape, experiment 2 measured beside it. Omit the
+``correlation`` argument and the block does not fall silent either — it carries
+:data:`~wattsteer_ml.evaluation.lead_time.CORRELATION_NOT_RUN_YET`, which says
+"unrun" where the A/B's own reason says "unrunnable", because a caller without a
+migrated database is in a different position from the A/B and the card must not
+flatten the two into one sentence.
 """
 
 from __future__ import annotations

@@ -122,7 +122,7 @@ paper over:
 So the value this repository can produce today is
 :class:`UnmeasuredTransformerBenchmark` carrying :data:`NO_TFT_IMPLEMENTATION`,
 **written to the card** for the reason
-:func:`~wattsteer_ml.evaluation.lead_time.unmeasured_for_want_of_an_archive`
+:func:`~wattsteer_ml.evaluation.lead_time.unmeasured_for_want_of_archive_features`
 writes its sibling: a card with no benchmark block and a card saying "this arm
 has no data source" look identical to anybody grepping for the figure, and only
 one of them is true. Two fabricated arms and a flattering decimal would look
