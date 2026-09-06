@@ -360,6 +360,54 @@ describe("contract · routing", () => {
     expect(body.reads[0]?.carries_restriction_cause).toBe(true);
   });
 
+  it("lets the manifest be cached, keyed on the manifest and not on a clock", async () => {
+    // The manifest is a constant of the deployment — no database, no `as_of`,
+    // an answer that changes when the code changes and at no other time. It
+    // gets a shared `max-age` and a content validator, and deliberately *not*
+    // the `no-store` its nine siblings under the same path prefix carry:
+    // sharing a path is not a caching argument. See `cache-policy.ts`.
+    const url = `http://localhost${CANONICAL_BASE_PATH}`;
+    const response = await app.handle(new Request(url));
+    expect(response.headers.get("cache-control")).toBe("public, max-age=3600");
+
+    const etag = response.headers.get("etag");
+    // Weak, like every validator on this surface, and stable across requests —
+    // a validator built from the request's own clock would differ here, which
+    // is the `/v1/plants` defect and the reason this assertion is two calls.
+    expect(etag).toMatch(/^W\/"[0-9a-f]{16}"$/);
+    expect((await app.handle(new Request(url))).headers.get("etag")).toBe(etag);
+
+    const revalidated = await app.handle(
+      new Request(url, { headers: { "if-none-match": etag as string } }),
+    );
+    expect(revalidated.status).toBe(304);
+    // A 304 with no `Cache-Control` resets the window it exists to extend.
+    expect(revalidated.headers.get("cache-control")).toBe("public, max-age=3600");
+  });
+
+  it("stores nothing for a read, and offers no validator to store it under", async () => {
+    // The reads are the other half of the ticket, and the opposite decision
+    // from the manifest: an `as_of` at or after the wall clock — the ordinary
+    // call from `apps/ml` — names an answer that grows under a fixed URL, and
+    // there is no validator to catch it, so a heuristically cached copy is a
+    // point-in-time answer served at the wrong point in time. `no-store` on
+    // every path, applied in `serve` before the read runs rather than after it
+    // succeeds, which is why it is here on the unconfigured 503 too.
+    //
+    // What this cannot show, because no suite configures the module-level
+    // handle: the 200. That path is closed by a type rather than by a test —
+    // `serve` takes the response as its first parameter and applies the row
+    // itself, so a tenth read cannot be added without one.
+    const response = await app.handle(
+      new Request(
+        `http://localhost${canonicalReadPath("system-context")}` +
+          "?as_of=2026-03-05T00:00:00Z&from=2026-03-01T00:00:00Z&to=2026-03-02T00:00:00Z",
+      ),
+    );
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("etag")).toBeNull();
+  });
+
   it("refuses a read with no as_of rather than defaulting to now", async () => {
     const response = await app.handle(
       new Request(

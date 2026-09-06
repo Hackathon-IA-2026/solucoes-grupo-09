@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { SUBSYSTEM_CODES } from "@wattsteer/core/constants";
 import { TECHNOLOGIES } from "@wattsteer/core/domain";
 import { Elysia, t } from "elysia";
@@ -20,6 +21,11 @@ import type { Database } from "../database/connection.js";
 import { database } from "../database/connection.js";
 import { BadInputError, BusyError } from "../errors.js";
 import { instant, optionalInstant } from "./params.js";
+import {
+  applyCachePolicy,
+  CACHE_POLICIES,
+  type CacheContext,
+} from "./plugins/cache-policy.js";
 
 /**
  * `GET /v1/canonical/*` — the canonical read contract, over HTTP.
@@ -44,6 +50,11 @@ import { instant, optionalInstant } from "./params.js";
  * - **Nothing here writes.** The reads run inside a `READ ONLY` transaction and
  *   the router exposes no verb but `GET`, so the modelling side holds no
  *   migration rights and no write path, by construction rather than by policy.
+ * - **Nothing here is stored by a cache**, added later and for the same reason
+ *   as the second bullet: an `as_of` naming the present is a question whose
+ *   answer grows, so a copy of it reused under its own URL is a point-in-time
+ *   answer served at the wrong point in time. The manifest is the exception and
+ *   says so. `plugins/cache-policy.ts` holds both arguments.
  */
 
 /** The window, validated once so every read gets the same treatment. */
@@ -79,12 +90,22 @@ const requireDatabase = (): Database => {
  * `factWindow` parses and rejects — **before** this function asks for a
  * database. Passing the handle in as the first argument instead would evaluate
  * it first, and a request with a malformed `as_of` would come back as
- * "persistence is not configured" rather than as the 400 it is.
+ * "persistence is not configured" rather than as the 400 it is. The `context`
+ * first argument is not that handle: it is the response being written to, and
+ * `requireDatabase()` is still called inside this function and not at the call
+ * site.
  */
 async function serve<TArgs, TResult>(
+  context: CacheContext,
   read: (db: Database, args: TArgs) => Promise<TResult>,
   args: TArgs,
 ): Promise<unknown> {
+  // `CACHE_POLICIES.canonical`, once, for all nine reads — the argument is in
+  // the table and stating it nine times here is the transcription
+  // `cache-policy.ts` exists to stop. No provenance, because there is none to
+  // give: see that row. Applied before the read rather than after so that it is
+  // not something a future early return can step over.
+  applyCachePolicy(context, CACHE_POLICIES.canonical);
   return toWire(await read(requireDatabase(), args));
 }
 
@@ -140,16 +161,52 @@ const idList = (raw?: string): string[] | undefined =>
         .map((id) => id.trim())
         .filter((id) => id.length > 0);
 
+/**
+ * The manifest, built once — it is a constant of the deployment.
+ *
+ * Not rebuilt per request, because it cannot differ per request: `toWire` over
+ * `CANONICAL_READS` is a pure function of the code. Building it once is what
+ * lets the validator below be a fact about the build.
+ */
+const MANIFEST = {
+  base_path: CANONICAL_BASE_PATH,
+  reads: CANONICAL_READS.map((spec) => ({
+    ...(toWire(spec) as Record<string, unknown>),
+    path: canonicalReadPath(spec.name),
+  })),
+};
+
+/**
+ * The manifest's validator: a digest of the bytes this process will serve.
+ *
+ * A content provenance, the same kind as the scenario hash — and the only kind
+ * available here, since a manifest has no `published_at` and no `data_version`.
+ * Computed at module load, so it is a property of the build and never of the
+ * request; a deploy that adds, removes or re-describes a read moves it by
+ * construction, and nothing else can move it at all.
+ */
+const MANIFEST_VERSION = createHash("sha256")
+  .update(JSON.stringify(MANIFEST))
+  .digest("hex")
+  .slice(0, 16);
+
 export const canonicalReads = new Elysia({ name: "canonical-reads" })
   .get(
     CANONICAL_BASE_PATH,
-    () => ({
-      base_path: CANONICAL_BASE_PATH,
-      reads: CANONICAL_READS.map((spec) => ({
-        ...(toWire(spec) as Record<string, unknown>),
-        path: canonicalReadPath(spec.name),
-      })),
-    }),
+    ({ set, request }) => {
+      // The one read here that is not a read: no database, no `as_of`, and an
+      // answer that changes only when the code does. It gets the manifest row
+      // rather than the reads' `no-store`, because sharing a path prefix is not
+      // a caching argument.
+      if (
+        applyCachePolicy({ set, request }, CACHE_POLICIES.canonicalManifest, [
+          MANIFEST_VERSION,
+        ])
+      ) {
+        return null;
+      }
+      return MANIFEST;
+    },
     {
       detail: {
         summary: "The canonical read manifest",
@@ -163,8 +220,8 @@ export const canonicalReads = new Elysia({ name: "canonical-reads" })
   )
   .get(
     canonicalReadPath("curtailment-by-reporting-entity"),
-    async ({ query }) =>
-      serve(readCurtailment, {
+    async ({ query, set, request }) =>
+      serve({ set, request }, readCurtailment, {
         ...factWindow(query),
         technology: query.technology,
         reportingEntityCode: query.reporting_entity_code,
@@ -187,8 +244,8 @@ export const canonicalReads = new Elysia({ name: "canonical-reads" })
   )
   .get(
     canonicalReadPath("curtailment-by-plant"),
-    async ({ query }) =>
-      serve(readPlantMeasurements, {
+    async ({ query, set, request }) =>
+      serve({ set, request }, readPlantMeasurements, {
         ...factWindow(query),
         technology: query.technology,
         plantOnsCode: query.plant_ons_code,
@@ -209,8 +266,8 @@ export const canonicalReads = new Elysia({ name: "canonical-reads" })
   )
   .get(
     canonicalReadPath("system-context"),
-    async ({ query }) =>
-      serve(readSystemContext, {
+    async ({ query, set, request }) =>
+      serve({ set, request }, readSystemContext, {
         ...factWindow(query),
         subsystem: query.subsystem,
       }),
@@ -221,8 +278,8 @@ export const canonicalReads = new Elysia({ name: "canonical-reads" })
   )
   .get(
     canonicalReadPath("system-exchange"),
-    async ({ query }) =>
-      serve(readSystemExchange, {
+    async ({ query, set, request }) =>
+      serve({ set, request }, readSystemExchange, {
         ...factWindow(query),
         subsystem: query.subsystem,
       }),
@@ -233,8 +290,8 @@ export const canonicalReads = new Elysia({ name: "canonical-reads" })
   )
   .get(
     canonicalReadPath("day-ahead-balance"),
-    async ({ query }) =>
-      serve(readDayAheadBalance, {
+    async ({ query, set, request }) =>
+      serve({ set, request }, readDayAheadBalance, {
         ...factWindow(query),
         subsystem: query.subsystem,
         publishedAtOrBefore: optionalInstant(
@@ -264,8 +321,8 @@ export const canonicalReads = new Elysia({ name: "canonical-reads" })
   )
   .get(
     canonicalReadPath("weather-forecast"),
-    async ({ query }) =>
-      serve(readWeatherForecast, {
+    async ({ query, set, request }) =>
+      serve({ set, request }, readWeatherForecast, {
         ...factWindow(query),
         centroidIds: idList(query.centroid_ids),
         runCycle: query.run_cycle,
@@ -288,8 +345,8 @@ export const canonicalReads = new Elysia({ name: "canonical-reads" })
   )
   .get(
     canonicalReadPath("installed-capacity"),
-    async ({ query }) =>
-      serve(readInstalledCapacity, {
+    async ({ query, set, request }) =>
+      serve({ set, request }, readInstalledCapacity, {
         asOf: instant("as_of", query.as_of),
         on: instant("on", query.on),
         subsystem: query.subsystem,
@@ -311,8 +368,8 @@ export const canonicalReads = new Elysia({ name: "canonical-reads" })
   )
   .get(
     canonicalReadPath("conjunto-membership"),
-    async ({ query }) =>
-      serve(readConjuntoMembership, {
+    async ({ query, set, request }) =>
+      serve({ set, request }, readConjuntoMembership, {
         asOf: instant("as_of", query.as_of),
         on: instant("on", query.on),
         conjuntoCode: query.conjunto_code,
@@ -334,8 +391,8 @@ export const canonicalReads = new Elysia({ name: "canonical-reads" })
   )
   .get(
     `${CANONICAL_BASE_PATH}/training-window`,
-    async ({ query }) =>
-      serve(readTrainingWindow, {
+    async ({ query, set, request }) =>
+      serve({ set, request }, readTrainingWindow, {
         ...factWindow(query),
         subsystem: query.subsystem,
         technology: query.technology,

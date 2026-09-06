@@ -162,6 +162,22 @@ suite("source coverage · SIGA and weather are watched (real Postgres)", () => {
     expect(named).toContain("weather");
   });
 
+  it("stores nothing, so a monitor is never told the outage is over by a cache", async () => {
+    // The endpoint shipped with no `Cache-Control` at all, which is not "no
+    // caching policy" — it is a policy an intermediary invents (heuristic
+    // freshness). A heuristically cached 200 from here is a monitor being shown
+    // an answer from before the outage, which is the silence this whole suite
+    // is about, with a cache producing it.
+    //
+    // Asserted on a real response rather than on the table, and on the 503 in
+    // particular: that status is set by the handler on its own body and never
+    // reaches `errors.ts`, so the error row's `refuseToCache` is not what is
+    // covering it here.
+    const response = await route.handle(new Request("http://localhost/ingest/health"));
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("etag")).toBeNull();
+  });
+
   it("goes 503 while neither source has ever produced a fact", async () => {
     // Never ingested is stale, not unknown — a source that has produced nothing
     // is exactly as useless as one that stopped.

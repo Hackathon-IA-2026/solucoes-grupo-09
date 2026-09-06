@@ -20,8 +20,9 @@ import { optimizeKey, replayKey } from "../src/api/plugins/result-cache.js";
 /**
  * The caching policy — **a cache key is a provenance, never a duration.**
  *
- * `docs/specs/api-surface.md`'s caching table is twelve rows and one rule, and
- * the rule is the part a test can hold. Three kinds of claim live here:
+ * `docs/specs/api-surface.md`'s caching table is one rule and fifteen rows —
+ * the spec's twelve, the error row, and the two reads that spec recorded as a
+ * hole it was leaving open — and the rule is the part a test can hold. Three kinds of claim live here:
  *
  * 1. **The table.** Each row's directive is the spec's, and no row is
  *    `immutable` — the thing that would freeze a response against an ONS
@@ -123,6 +124,27 @@ describe("the caching table is the spec's, row for row", () => {
     expect(CACHE_POLICIES.replay.directive).toBe("public, max-age=600");
     expect(CACHE_POLICIES.featuredDays.directive).toBe("public, max-age=3600");
     expect(CACHE_POLICIES.registry.directive).toBe("public, max-age=86400");
+    expect(CACHE_POLICIES.canonical.directive).toBe("no-store");
+    expect(CACHE_POLICIES.canonicalManifest.directive).toBe("public, max-age=3600");
+    expect(CACHE_POLICIES.ingestHealth.directive).toBe("no-store");
+  });
+
+  it("closes the two rows the spec recorded as a hole, and not by copying one directive", () => {
+    // `api-surface.md`'s Caching section used to end with "`/v1/canonical/*`
+    // and `/ingest/health` ship with no `Cache-Control` and are therefore
+    // subject to a shared cache's heuristic freshness". A route with no
+    // directive is not a route with no caching policy — it is a route whose
+    // policy an intermediary invents. Both now name a row.
+    //
+    // The part worth asserting is that they were decided separately: the
+    // manifest under `/v1/canonical` is a build constant and *is* cacheable,
+    // and giving it the reads' `no-store` because it shares their path prefix
+    // would be the `/v1/replay/days` mistake a third time.
+    expect(CACHE_POLICIES.canonicalManifest.directive).not.toBe(
+      CACHE_POLICIES.canonical.directive,
+    );
+    expect(CACHE_POLICIES.canonical.directive).toBe(CACHE_POLICIES.meta.directive);
+    expect(CACHE_POLICIES.ingestHealth.directive).toBe(CACHE_POLICIES.meta.directive);
   });
 
   it("varies on Accept-Language on the one route that generates prose, and nowhere else", () => {
@@ -206,6 +228,7 @@ describe("no validator is built from a clock or a duration", () => {
     // validator is a failure here rather than a silence.
     const files = new Set(etagArguments().map((entry) => entry.file));
     expect([...files].sort()).toEqual([
+      "canonical.ts",
       "curtailment.ts",
       "diagnosis.ts",
       "forecast.ts",

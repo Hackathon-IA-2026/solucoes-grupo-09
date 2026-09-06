@@ -1146,6 +1146,9 @@ key built from those has no manual invalidation path to forget to call.
 | `/v1/replay` | `public, max-age=600` | Redis `replay:v1:<scenario_hash>:<date>:<origin>:<optimizer_build>:<obs_data_version>` | See below |
 | `/v1/replay/days`, `/v1/backtest` | `public, max-age=3600` | `W/"<featured-days computation id>"` | Recomputed nightly |
 | `/v1/plants` | `public, max-age=86400` | `W/"<registry snapshot ingested_at>"` | Daily SIGA/ONS snapshot |
+| `/v1/canonical/<read>` | `no-store` | — | An as-of answer with no validator; see below |
+| `/v1/canonical` (the manifest) | `public, max-age=3600` | `W/"<manifest digest>"` | A build constant, and the only cacheable thing under that path |
+| `/ingest/health` | `no-store` | — | It is what you read to discover something is broken |
 
 **The ticket's premise, corrected.** "Forecasts change daily, replays never
 change" is half right and half a trap.
@@ -1227,12 +1230,64 @@ default and the whole defect is that an explicit `max-age` overrides that
 default. So the error envelope clears the validator and says `no-store`, once,
 where every error already passes — `plugins/errors.ts`, first statement.
 
-**Two reads are outside the table and stay outside it.** `/v1/canonical/*` and
-`/ingest/health` are the modelling side's contract reads and an operations view;
-neither is a row above, so neither is given a directive here on this ticket's
-authority. They ship with no `Cache-Control` and are therefore subject to a
-shared cache's heuristic freshness, which is a real hole and the next caching
-ticket's to close — most likely as `no-store`, for `/v1/meta`'s reason.
+**The two reads that were outside the table are in it now, and not under one
+directive.** `/v1/canonical/*` and `/ingest/health` shipped with no
+`Cache-Control` at all — which is not "no caching policy" but a policy an
+intermediary invents, since a response with no directive and no validator is
+subject to *heuristic freshness*. This section had guessed they would both land
+as `no-store` "for `/v1/meta`'s reason". Two of the three routes did, but only
+one of them for that reason, and the third is the opposite call.
+
+- **`/v1/canonical/<read>` — `no-store`, and the reason is vintage, not
+  brokenness.** A canonical read is parameterised by an `as_of`, and the answer
+  is every row whose `ingested_at` is at or before it. The fact tables are
+  append-only, so an `as_of` safely in the past names a *fixed* set of rows and
+  would be perfectly cacheable — but the ordinary call is not that call. The
+  modelling side asks what is known *now*, which is an `as_of` at or after the
+  wall clock, and under a fixed URL that answer grows with every ingest that
+  lands. A heuristically cached copy of it is a point-in-time answer served at
+  the wrong point in time, and the `vintage` receipt inside the body still names
+  the `as_of` that was asked — so the staleness is invisible at exactly the
+  layer built to make vintage visible. `canonical_as_of()` **raises** rather
+  than defaulting to `now()` so that a wrong-vintage answer is never served
+  silently; an intermediary inventing a lifetime is the one remaining path that
+  reintroduces it. The route cannot tell the two cases apart without comparing
+  `as_of` to a clock, which is this section's rule broken one level up.
+
+  Not `no-cache` with a validator, which would be the cheaper honest answer,
+  because there is no validator to build: the identity of one of these responses
+  is a *set* of rows rather than a version (`max(data_version)` does not move
+  when a new business key arrives at version 1), the composed `training-window`
+  read has seven contributing sources, and an answer with no rows has no
+  provenance at all — which is the shape of the `/v1/plants` defect, where the
+  empty path reached for `new Date()` because there was nothing else to key on.
+  A `no-cache` carrying no validator is a `no-store` that leaves a copy on disk.
+  Nothing is given up: this surface's consumer is `apps/ml`, in-cluster and
+  behind no CDN, and the reads it repeats it repeats under a different `as_of`.
+
+- **`GET /v1/canonical` — the manifest — is cacheable, and giving it the reads'
+  directive because it shares their path prefix would be the `/v1/replay/days`
+  mistake a third time.** It touches no database, takes no `as_of`, and is a
+  constant of the deployment. Its key is a digest over the manifest the process
+  will serve — a content provenance, the same kind as the scenario hash,
+  computed once at module load and therefore a fact about the build rather than
+  about the request. A deploy that adds a read moves it by construction; nothing
+  else can move it at all.
+
+- **`/ingest/health` — `no-store`, and this one *is* `/v1/meta`'s reason.** It
+  answers "has a source stopped moving", and 503 when one has. A cached 200
+  served during an outage is a monitor being told everything is fine — the
+  silence the endpoint exists to break, with a cache doing the silencing. It
+  needs its own row rather than the error row's even though it can answer 503:
+  that status is set by the handler on its own body and never passes through
+  `errors.ts`, so `refuseToCache` never sees it, and the 200 is the dangerous
+  one anyway.
+
+**Still outside the table:** `/`, `/health`, `/ready` and `/docs` — the
+unmetered tier. `/ready` has `/ingest/health`'s argument almost verbatim (it
+reports whether the database is reachable and answers 503 when it is not) and is
+the next one worth closing; the other three are a static banner, a liveness
+constant and Scalar's own document.
 
 ### Rate limiting
 
