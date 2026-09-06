@@ -29,7 +29,17 @@ is a read. The cheap reading of a route's identity has been wrong here before.
 
 **Blocked by:** api-surface 20 (merged).
 
-**Status:** ready-for-agent
+**Decided.** The observed vintage is published and it goes on the **validator**,
+not on the Redis key. A Redis lookup key has to be computable *before* the call
+that produces an answer and the observed vintage is knowable only *from* the
+answer, so a fifth key component would be one nothing could ever look up; an
+ETag is built from the answer and can carry it. `replay_result` now publishes
+`actual.data_version`, `/v1/replay`'s ETag is five components, the Redis key is
+four and the spec's table says four. What remains is a duration and is written
+down as one: a Redis entry stored before an ONS restatement survives it for at
+most the 24 h TTL, under a ten-minute shared window.
+
+**Status:** done
 
 - [ ] The key's components and the spec's claim about them agree
 - [ ] Seam 11 asserts something true

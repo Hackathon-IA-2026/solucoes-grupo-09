@@ -10,7 +10,12 @@ import {
   CACHE_POLICIES,
   type CacheContext,
 } from "./plugins/cache-policy.js";
-import { OPTIMIZE_TTL_SEC, type ResultCache, replayKey } from "./plugins/result-cache.js";
+import {
+  NO_OBSERVED_DATA_VERSION,
+  OPTIMIZE_TTL_SEC,
+  type ResultCache,
+  replayKey,
+} from "./plugins/result-cache.js";
 import {
   admitScenarioBody,
   admitScenarioParam,
@@ -405,7 +410,8 @@ export interface ReplayDeps {
 }
 
 /**
- * The origin component of the key, read off the answer.
+ * The provenance of a replayed day, read off the answer: which publication it
+ * planned against, and which vintage of the record it was scored on.
  *
  * `<origin_kind>@<published_at>` and never the instant alone: a
  * `backfilled_holdout` row's `published_at` equals `gate_at(target_date,
@@ -414,15 +420,26 @@ export interface ReplayDeps {
  * The kind is what keeps them apart everywhere else in this system and it is
  * what keeps them apart here.
  *
- * `null` when the body carries no origin at all, and a body with no origin is
- * not cached: an entry whose provenance is unknown is an entry that cannot be
- * invalidated by the thing that supersedes it.
+ * `observedDataVersion` is `actual.data_version` — the greatest `data_version`
+ * among the settled rows the replay was scored against, which `replay_result`
+ * publishes precisely so this layer can see it. It is `null` when the answer
+ * names none, and an answer that names none gets no validator, for the same
+ * reason a body with no origin gets none: a validator over a provenance with a
+ * hole in it collides two answers that are not the same answer, and the hole
+ * here is the half of a replay that can still move.
+ *
+ * `origin` is `null` when the body carries no origin at all, and a body with no
+ * origin is not cached either: an entry whose provenance is unknown is an entry
+ * that cannot be invalidated by the thing that supersedes it.
  */
-function resolvedReplayOrigin(body: string): { origin: string; date: string } | null {
+function resolvedReplayProvenance(
+  body: string,
+): { origin: string; date: string; observedDataVersion: string | null } | null {
   try {
     const parsed = JSON.parse(body) as {
       forecast_origin?: { origin_kind?: unknown; published_at?: unknown };
       target_date?: unknown;
+      actual?: { data_version?: unknown };
     };
     const origin = parsed.forecast_origin;
     if (
@@ -432,9 +449,16 @@ function resolvedReplayOrigin(body: string): { origin: string; date: string } | 
     ) {
       return null;
     }
+    const observed = parsed.actual?.data_version;
     return {
       origin: `${origin.origin_kind}@${origin.published_at}`,
       date: parsed.target_date,
+      // `"none"` is the ML service's word for "no rows to read a version off",
+      // and it is not a vintage — it is treated as the absence it is.
+      observedDataVersion:
+        typeof observed === "string" && observed !== NO_OBSERVED_DATA_VERSION
+          ? observed
+          : null,
     };
   } catch {
     return null;
@@ -465,7 +489,11 @@ export function createReplaySolveRoutes(deps: ReplayDeps) {
     path: string,
     decoded: DecodedScenario,
     lane: string,
-  ): Promise<{ body: string; origin: string | null }> => {
+  ): Promise<{
+    body: string;
+    origin: string | null;
+    observedDataVersion: string | null;
+  }> => {
     const pinnedInstant = decoded.scenario.forecastOrigin ?? null;
     const targetDate = decoded.scenario.targetDate;
 
@@ -487,7 +515,17 @@ export function createReplaySolveRoutes(deps: ReplayDeps) {
         const origin = `${kind}@${pinnedInstant}`;
         const hit = await deps.cache.get(keysFor(origin));
         if (hit !== null) {
-          return { body: hit, origin };
+          // The stored body carries its own observed vintage, so the validator
+          // built over a hit names the record the *cached* answer was scored
+          // on and never the record as it is now. That is the honest reading:
+          // this response is that vintage, and a reader revalidating after the
+          // entry expires gets a different ETag and a 200.
+          return {
+            body: hit,
+            origin,
+            observedDataVersion:
+              resolvedReplayProvenance(hit)?.observedDataVersion ?? null,
+          };
         }
       }
     }
@@ -501,7 +539,7 @@ export function createReplaySolveRoutes(deps: ReplayDeps) {
     const body = await response.text();
 
     const solvedBy = response.headers.get("x-optimizer-build");
-    const resolved = resolvedReplayOrigin(body);
+    const resolved = resolvedReplayProvenance(body);
     if (resolved !== null && (solvedBy === null || solvedBy === build)) {
       await deps.cache.set(keysFor(resolved.origin), body, REPLAY_TTL_SEC);
     } else if (solvedBy !== null && solvedBy !== build) {
@@ -513,21 +551,34 @@ export function createReplaySolveRoutes(deps: ReplayDeps) {
           "not caching. Set WATTSTEER_OPTIMIZER_BUILD to match the ML service.",
       );
     }
-    return { body, origin: resolved?.origin ?? null };
+    return {
+      body,
+      origin: resolved?.origin ?? null,
+      observedDataVersion: resolved?.observedDataVersion ?? null,
+    };
   };
 
   /**
-   * The provenance a replayed day has, as an ETag.
+   * The provenance a replayed day has, as an ETag — **five components, one
+   * more than the Redis key, and that asymmetry is the point.**
    *
-   * The Redis key's components, so the shared validator and the private key are
-   * invalidated by the same facts. What is **not** in either is the observed
-   * `data_version`, which `api-surface.md`'s table asks for and the replay
-   * contract does not publish — the gap `plugins/result-cache.ts` records on
-   * `replayKey`, and it is the same gap here for the same reason. Until the ML
-   * service names the vintage of the observed half, an ONS restatement is
-   * waited out by the ten-minute window rather than evicted by the key, and
-   * `vintage_fidelity` on the payload is what tells a reader the ground may
-   * have moved.
+   * The Redis key's four are here: the scenario hash, the target date, the
+   * resolved origin and the optimizer build. The fifth is the observed
+   * `data_version` `replay_result` now publishes, and it can be here precisely
+   * because a validator is built *from the answer* while a Redis lookup key has
+   * to be built *before the call that produces one* — the gateway holds a pin,
+   * not a vintage, and it reads no rows. `api-surface.md`, "Caching", carries
+   * that argument in full.
+   *
+   * What the fifth component buys is not a hit rate, it is a correction. A
+   * replay's forecast half is pinned and cannot move; its observed half is read
+   * `AsOf(now)` against a record ONS restates in place. A validator over the
+   * four alone does not move when ONS rewrites the day, so a client that keeps
+   * revalidating keeps being told 304 against numbers that changed — a stale
+   * answer with no expiry, which is the failure mode the error row exists to
+   * stop one path over. With the observed vintage in it, the validator moves
+   * when the record moves, and `vintage_fidelity` on the payload goes back to
+   * being a caveat rather than the only warning.
    *
    * Returns `true` when the client already holds this replay, in which case the
    * status is 304 and there is no body to write.
@@ -536,12 +587,14 @@ export function createReplaySolveRoutes(deps: ReplayDeps) {
     context: CacheContext,
     decoded: DecodedScenario,
     origin: string,
+    observedDataVersion: string,
   ): boolean =>
     applyCachePolicy(context, CACHE_POLICIES.replay, [
       decoded.hash,
       decoded.scenario.targetDate,
       origin,
       build,
+      observedDataVersion,
     ]);
 
   /**
@@ -583,23 +636,31 @@ export function createReplaySolveRoutes(deps: ReplayDeps) {
         // underneath it is the *observed* half — ONS restates history in place —
         // so this is a `max-age` and never `immutable`, and the response is
         // deliberately not frozen against a restatement.
-        // A body carrying no origin gets no validator, for the reason
-        // `result-cache.ts` refuses to remember one: an entry whose provenance
-        // is unknown cannot be invalidated by the thing that supersedes it, and
-        // a validator over an unknown provenance would collide two answers that
-        // are not the same answer.
+        // A body carrying no origin — or no observed `data_version` — gets no
+        // validator, for the reason `result-cache.ts` refuses to remember an
+        // entry whose provenance is unknown: a validator over a provenance with
+        // a hole in it would collide two answers that are not the same answer.
+        // Both halves have to be named, because the whole point of the fifth
+        // component is the half a pin cannot freeze.
         //
         // The pin resolves to one of two origin kinds and only the answer says
         // which, so unlike `/v1/optimize` this route cannot revalidate before
         // it computes. The 304 is still served: it costs the replay it could
         // not avoid and saves a payload carrying 24 dispatch hours, an episode
         // list and a perfect-foresight bound.
-        if (answered.origin === null) {
+        if (answered.origin === null || answered.observedDataVersion === null) {
           applyCachePolicy({ set, request }, CACHE_POLICIES.replay);
           set.headers["content-type"] = "application/json";
           return answered.body;
         }
-        if (revalidate({ set, request }, decoded, answered.origin)) {
+        if (
+          revalidate(
+            { set, request },
+            decoded,
+            answered.origin,
+            answered.observedDataVersion,
+          )
+        ) {
           return null;
         }
         set.headers["content-type"] = "application/json";

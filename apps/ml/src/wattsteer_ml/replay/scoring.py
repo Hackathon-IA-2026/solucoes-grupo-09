@@ -114,6 +114,14 @@ _ONE_DAY = timedelta(days=1)
 #: best any plan could have done knowing the answer".
 PERFECT_FORESIGHT: Literal["perfect_foresight"] = "perfect_foresight"
 
+#: What :attr:`ObservedDay.data_version` says when there are no rows to read a
+#: version off. Spelled rather than defaulted to ``"0"``, which would assert a
+#: vintage that never existed — the same word and the same argument as
+#: `apps/api`'s ``NO_DATA_VERSION``. The replay predicate refuses a day whose
+#: twenty-four hours are not all settled, so it cannot reach a published
+#: contract; it exists so that the field is total.
+NO_OBSERVED_DATA_VERSION = "none"
+
 
 class ReplayPostureError(ValueError):
     """A replay that would have graded its own homework, refused.
@@ -276,11 +284,28 @@ class ObservedDay:
     denominator that is a different quantity wearing the same name, which is
     why the calendar refuses it with ``REPLAY_OBSERVATION_INCOMPLETE`` long
     before anything here is asked to score it.
+
+    **``data_version`` is the vintage of this half, and it is not decoration.**
+    A replay's forecast half is pinned and cannot move; this half is read
+    ``AsOf(now)`` against a record ONS restates in place — a whole year rewritten
+    under the same filenames. The version is the greatest ``data_version`` among
+    the rows the read returned, which is exactly the quantity
+    `api-surface.md`'s `/v1/curtailment/*` row already validates on, and it
+    travels out on the published contract so that a reader downstream can tell
+    two replays of one day computed either side of a restatement apart. It is a
+    provenance and never a duration: it moves when the record moves and at no
+    other time.
+
+    Required rather than defaulted, for the reason `cache-policy.ts` gives about
+    a validator with a hole in it: an absent vintage is a claim about the record
+    that every vintage satisfies. A caller with no rows to read it off says so
+    with :data:`NO_OBSERVED_DATA_VERSION`.
     """
 
     subsystem: str
     target_date: date
     hours: tuple[float, ...]
+    data_version: str
 
     def __post_init__(self) -> None:
         if len(self.hours) != HOURS_PER_DAY:
@@ -309,6 +334,7 @@ class ObservedDay:
             "total_mwh": self.total_mwh,
             "peak_mw": self.peak_mw,
             "hours": list(self.hours),
+            "data_version": self.data_version,
         }
 
 
@@ -869,6 +895,7 @@ def same_profile(left: Sequence[float], right: Sequence[float]) -> bool:
 
 
 __all__ = [
+    "NO_OBSERVED_DATA_VERSION",
     "PERFECT_FORESIGHT",
     "SCORED_ON",
     "ForecastHour",

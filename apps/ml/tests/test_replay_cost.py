@@ -183,7 +183,10 @@ def _one_replay() -> None:
         windows=WINDOWS,
         forecast=_pinned(),
         observed=ObservedDay(
-            subsystem=SUBSYSTEM, target_date=HELD_OUT_DAY, hours=OBSERVED
+            subsystem=SUBSYSTEM,
+            target_date=HELD_OUT_DAY,
+            hours=OBSERVED,
+            data_version="1",
         ),
     )
     replay_result(wire, "sha256:" + "0" * 64, scores)

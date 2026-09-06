@@ -87,6 +87,7 @@ from wattsteer_ml.replay.reads import (
 )
 from wattsteer_ml.replay.result import ReplayEpisode
 from wattsteer_ml.replay.scoring import (
+    NO_OBSERVED_DATA_VERSION,
     ForecastHour,
     ObservedDay,
     PinnedForecast,
@@ -169,7 +170,8 @@ where subsystem = $1::subsystem_code
   and published_at = $7::timestamptz
 """
 
-#: ``a[t]`` — the settled day, at subsystem grain, by local hour.
+#: ``a[t]`` — the settled day, at subsystem grain, by local hour, and its
+#: vintage.
 #:
 #: ``sum`` over the reporting entities of the subsystem, grouped by the hour: the
 #: view is at reporting-entity grain and a subsystem's curtailment in an hour is
@@ -177,10 +179,19 @@ where subsystem = $1::subsystem_code
 #: is computed the same way ``target_date`` was written — the
 #: ``America/Sao_Paulo`` civil day — so hour ``t`` here is hour ``t`` of the
 #: forecast rows.
+#:
+#: ``max(data_version)`` is selected beside the sum because this half of a
+#: replay is the half that can still move: ONS restates history in place and the
+#: view resolves ``AsOf`` rather than freezing a vintage, so without the version
+#: the read returns numbers that name no record. It is the same quantity
+#: `api-surface.md`'s `/v1/curtailment/*` row validates on, asked here at day
+#: grain — one aggregate over rows already being scanned, and not a second
+#: query.
 OBSERVED_DAY_SQL = """
 select
   extract(hour from (valid_time at time zone 'America/Sao_Paulo'))::int as local_hour,
-  sum(constrained_off_mwh)::double precision as constrained_off_mwh
+  sum(constrained_off_mwh)::double precision as constrained_off_mwh,
+  max(data_version)::bigint as data_version
 from canonical_curtailment_by_reporting_entity
 where subsystem = $1::subsystem_code
   and (valid_time at time zone 'America/Sao_Paulo')::date = $2::date
@@ -334,10 +345,18 @@ def _observed(
     by_hour = {int(row["local_hour"]): float(row["constrained_off_mwh"]) for row in rows}
     if sorted(by_hour) != list(range(HOURS_PER_DAY)):
         return None
+    versions = [
+        int(row["data_version"]) for row in rows if row["data_version"] is not None
+    ]
     return ObservedDay(
         subsystem=subsystem,
         target_date=target_date,
         hours=tuple(by_hour[hour] for hour in range(HOURS_PER_DAY)),
+        # The greatest version among the rows that answered, as a string, so a
+        # restatement of any hour of the day moves the day's vintage. `max` and
+        # not the first row's: ONS rewrites hours, not days, and a day whose
+        # 14:00 was restated is a day that moved.
+        data_version=str(max(versions)) if versions else NO_OBSERVED_DATA_VERSION,
     )
 
 

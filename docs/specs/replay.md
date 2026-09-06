@@ -499,6 +499,16 @@ key because a later backtest run supersedes the `backfilled_holdout` rows;
 `optimizer_build` is in the key because a formulation change must not serve
 yesterday's plan under today's code.
 
+**Four components, and the observed vintage is deliberately not a fifth.** The
+gateway builds this key *before* it calls, holding a scenario, a pin and a
+build, and it reads no rows — so a component knowable only from the answer could
+never decide which entry to look up. The observed `data_version` therefore
+travels on the result (`actual.data_version`, above) and lands on the gateway's
+**ETag**, which is built from the answer and can carry it. What that leaves is a
+duration and is named as one: an entry stored before an ONS restatement is
+served after it for at most this TTL, 24 h. `api-surface.md`, "Caching", carries
+the decision in full; api-surface 24 is where it was made.
+
 **Nothing about a replay is persisted as a result.** A `Replay` remains a read
 mode and not a table, per the domain model. What is persisted is the forecast
 rows, which were going to be persisted anyway.
@@ -743,7 +753,14 @@ existing.
     "gate_profile": "gate_late"
   },
 
-  "actual":   { "total_mwh": 612.0, "peak_mw": 138.0, "hours": [ /* 24 × mwh */ ] },
+  // `data_version` is the vintage of the observed half — the greatest among the
+  // settled rows this day was read from. The forecast half is pinned and cannot
+  // move; this half is read AsOf(now) against a record ONS restates in place,
+  // so without it two replays of one day either side of a restatement are
+  // indistinguishable on the wire — and the gateway's ETag could not tell them
+  // apart either. See `api-surface.md`, "Caching".
+  "actual":   { "total_mwh": 612.0, "peak_mw": 138.0, "data_version": "7",
+                "hours": [ /* 24 × mwh */ ] },
   "forecast": {
     "hours": [ /* 24 × { p10, p50, p90, expected_mwh, occurrence_probability } */ ],
     "day_total": { "p10": 402.0, "p50": 548.0, "p90": 731.0 },   // path ensemble, NOT a sum

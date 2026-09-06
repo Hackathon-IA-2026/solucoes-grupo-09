@@ -497,26 +497,33 @@ describe("the replay key changes on the four things it can see", () => {
     expect(replayKey({ ...parts, optimizerBuild: "milp-v4" })).not.toBe(replayKey(parts));
   });
 
-  it("still cannot see the observed data version, and this is where that is recorded", () => {
-    // `api-surface.md`'s table writes this key with a sixth component,
-    // `<obs_data_version>`, and it is absent because the replay contract
-    // publishes no observed data version to put in it: `replay_result` carries
-    // the target date, the origin, the fidelity and the numbers, and nothing on
-    // the wire names the vintage of the observed half.
+  it("is four components, and the fifth one lives on the validator instead", () => {
+    // api-surface 24, decided. The caching table used to write this key with a
+    // fifth component — `<obs_data_version>` — and the argument for it was
+    // right: a replay's observed half is read `AsOf(now)` against a record ONS
+    // restates in place, so a restatement ought to evict rather than be waited
+    // out. It cannot live *here*, and the reason is structural rather than
+    // effort: **a Redis lookup key has to be computable before the call that
+    // produces an answer, and the observed vintage is knowable only from the
+    // answer.** `replay.ts` does its `get`s holding a scenario, a pin and a
+    // build, and it reads no rows; an entry keyed on a vintage the lookup
+    // cannot spell is an entry nothing can ever hit.
     //
-    // The cost is bounded and stated rather than hidden: for up to the 24 h TTL
-    // after ONS rewrites a day, a cached replay of that day answers with the
-    // numbers from before the rewrite. That is staleness on a *cache*, not a
-    // broken pin — but it is the one box on ticket 20 that cannot be ticked
-    // here. Closing it needs the ML service to publish the observed
-    // `data_version` on a contract `replay.md` declares fixed, or the gateway
-    // to query Postgres on a route whose whole claim is that it contains
-    // neither a model nor a read. This assertion fails the day either lands,
-    // which is when someone should come back and read the paragraph above.
+    // So the version is published — `replay_result` carries
+    // `actual.data_version` — and it goes on the **ETag**, which is built from
+    // the answer and can therefore carry it. `replay-endpoint.test.ts` asserts
+    // that validator, including that it moves when ONS restates the day.
+    //
+    // What remains is written down rather than implied: a Redis entry stored
+    // before a restatement is served after it for as long as the entry lives,
+    // which is `REPLAY_TTL_SEC` — 24 hours — and no longer, because this cache
+    // has no other eviction. Shortening that TTL is not the fix and is not
+    // offered: it would answer a provenance question with a duration.
+    //
     // The whole key, spelled out. Not a length and not a `not.toContain` of a
     // field name the builder could never emit — both of those pass under any
     // reordering or substitution, which is to say they cannot fail. This can:
-    // the day a fifth component lands, it fails here, and whoever reads the
+    // the day a fifth component lands here, it fails, and whoever reads the
     // paragraph above is the person who put it there.
     expect(replayKey(parts)).toBe(
       "replay:v1:sha256:abc:2025-03-14:served@2025-03-13T22:00:00Z:milp-v3",

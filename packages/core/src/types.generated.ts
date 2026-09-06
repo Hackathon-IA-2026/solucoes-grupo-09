@@ -1918,6 +1918,18 @@ export interface ReplayActual {
   totalMwh: number;
   peakMw: number;
   hours: number[];
+  /**
+   * The vintage of the observed half - the greatest `data_version` among the
+   * settled rows this day was read from, as a string, or `"none"` when there
+   * were none. The forecast half of a replay is pinned and cannot move; this
+   * half is read `AsOf(now)` against a record ONS restates in place, so without
+   * this field two replays of one day computed either side of a restatement are
+   * indistinguishable on the wire. It is the quantity `/v1/curtailment/*`
+   * already validates on, and it is what puts the observed vintage into
+   * `/v1/replay`'s ETag. A provenance and never a duration: it moves when the
+   * record moves and at no other time.
+   */
+  dataVersion: string;
 }
 
 export interface ReplayForecast {
@@ -2914,6 +2926,7 @@ export const WIRE_SHAPES = {
     totalMwh: { wire: "total_mwh" },
     peakMw: { wire: "peak_mw" },
     hours: { wire: "hours" },
+    dataVersion: { wire: "data_version" },
   },
   ReplayForecast: {
     hours: { wire: "hours", shape: "ReplayForecastHour", list: true },

@@ -187,9 +187,16 @@ def pinned(
 
 
 def observed_day(
-    hours: tuple[float, ...], target_date: date = HELD_OUT_DAY
+    hours: tuple[float, ...],
+    target_date: date = HELD_OUT_DAY,
+    data_version: str = "7",
 ) -> ObservedDay:
-    return ObservedDay(subsystem=SUBSYSTEM, target_date=target_date, hours=hours)
+    return ObservedDay(
+        subsystem=SUBSYSTEM,
+        target_date=target_date,
+        hours=hours,
+        data_version=data_version,
+    )
 
 
 def replayable_day(
@@ -569,6 +576,28 @@ def test_the_result_names_its_posture_its_realisation_and_its_promise() -> None:
     assert body["integrity"]["model_saw_this_day"] is False
     assert body["integrity"]["revision_premium_recovered_mwh"] is None
     assert body["forecast_origin"]["origin_kind"] == BACKFILLED_HOLDOUT_ORIGIN_KIND
+
+
+def test_the_observed_half_names_its_own_vintage() -> None:
+    """`actual.data_version` — the provenance of the half that can still move.
+
+    A replay's forecast half is pinned and cannot move; its observed half is
+    read ``AsOf(now)`` against a record ONS restates in place. Until this field
+    existed the contract said nothing at all about the vintage of that half, so
+    two replays of one day computed either side of a restatement were
+    indistinguishable on the wire — and `apps/api` built a validator that could
+    not tell them apart either, which is a 304 served against a record that had
+    moved. The greatest ``data_version`` among the observed rows, exactly the
+    quantity `api-surface.md`'s `/v1/curtailment/*` row already validates on.
+    """
+    body = published()
+    assert body["actual"]["data_version"] == "7"
+
+
+def test_the_observed_only_view_names_its_vintage_too() -> None:
+    """A pre-F1 day publishes no plan, and still says which record it read."""
+    body = observed_only_published()
+    assert body["actual"]["data_version"] == "7"
 
 
 def test_the_day_band_is_not_a_sum_of_the_hourly_band() -> None:

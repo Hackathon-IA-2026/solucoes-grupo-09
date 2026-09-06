@@ -317,7 +317,12 @@ def plan_for(profile: tuple[float, ...] = PLANNED) -> Any:
 
 
 def observed(hours: tuple[float, ...]) -> ObservedDay:
-    return ObservedDay(subsystem=SUBSYSTEM, target_date=HELD_OUT_DAY, hours=hours)
+    return ObservedDay(
+        subsystem=SUBSYSTEM,
+        target_date=HELD_OUT_DAY,
+        hours=hours,
+        data_version="1",
+    )
 
 
 def vintages(
@@ -382,11 +387,13 @@ def test_the_mean_is_over_the_days_and_the_population_travels_with_it() -> None:
             subsystem=SUBSYSTEM,
             target_date=HELD_OUT_DAY + timedelta(days=1),
             hours=LATEST_VINTAGE,
+            data_version="1",
         ),
         latest=ObservedDay(
             subsystem=SUBSYSTEM,
             target_date=HELD_OUT_DAY + timedelta(days=1),
             hours=LATEST_VINTAGE,
+            data_version="2",
         ),
         as_ingested_at=quiet.as_ingested_at,
         latest_at=quiet.latest_at,

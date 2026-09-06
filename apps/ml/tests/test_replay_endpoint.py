@@ -202,7 +202,12 @@ def inputs(
         ),
         forecast=pinned(target_date) if with_forecast else None,
         observed=(
-            ObservedDay(subsystem=SUBSYSTEM, target_date=target_date, hours=OBSERVED)
+            ObservedDay(
+                subsystem=SUBSYSTEM,
+                target_date=target_date,
+                hours=OBSERVED,
+                data_version="3",
+            )
             if with_observed
             else None
         ),
@@ -473,7 +478,9 @@ def test_the_observed_only_view_carries_no_wattsteer_number(volume: Path) -> Non
     given = ReplayInputs(
         evidence=DayEvidence(target_date=day, observed_hours=HOURS_PER_DAY),
         forecast=None,
-        observed=ObservedDay(subsystem=SUBSYSTEM, target_date=day, hours=OBSERVED),
+        observed=ObservedDay(
+            subsystem=SUBSYSTEM, target_date=day, hours=OBSERVED, data_version="3"
+        ),
         episodes=(),
         sources=(),
         threshold_mw=THRESHOLD_MW,

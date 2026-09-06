@@ -1161,7 +1161,7 @@ key built from those has no manual invalidation path to forget to call.
 | `/v1/model/card` | `public, max-age=3600` | `W/"<artifact_id>"` | Changes only on promotion |
 | `/v1/optimize` (`GET ?s=`) | `public, max-age=300` | Redis `opt:v1:<scenario_hash>:<origin>:<optimizer_build>`, TTL 24 h | `flex-optimizer.md`, verbatim |
 | `/v1/optimize` (`POST`) | `no-store` | the same Redis key | A POST is not shared-cacheable; Redis does the work |
-| `/v1/replay` | `public, max-age=600` | Redis `replay:v1:<scenario_hash>:<date>:<origin>:<optimizer_build>:<obs_data_version>` | See below |
+| `/v1/replay` | `public, max-age=600` | Redis `replay:v1:<scenario_hash>:<date>:<origin>:<optimizer_build>`; ETag `W/"<scenario_hash>:<date>:<origin>:<optimizer_build>:<obs_data_version>"` | The one row where the key and the validator are **not** the same list — see below |
 | `/v1/replay/days`, `/v1/backtest` | `public, max-age=3600` | `W/"<featured-days computation id>"` | Recomputed nightly |
 | `/v1/plants` | `public, max-age=86400` | `W/"<registry snapshot ingested_at>"` | Daily SIGA/ONS snapshot |
 | `/v1/canonical/<read>` | `no-store` | — | An as-of answer with no validator; see below |
@@ -1186,29 +1186,59 @@ change" is half right and half a trap.
   retrain — that is a statement about the *forecast* half. The observed half is
   read `AsOf(now)`, and ONS restates history in place: the map records all of
   2025 rewritten in 2026 under the same filenames. So the observed
-  `data_version` is in the Redis key, and no replay response carries
+  `data_version` is on the replay's validator, and no replay response carries
   `immutable`. **A cache that froze a replay against a restatement would hide
   precisely the thing `revision_optimistic` exists to surface.**
 
-**As built, the replay key has four components and not five** — the scenario
-hash, the target date, the origin and the optimizer build, after the
-`replay:v1` prefix; `plugins/result-cache.ts` counts them the same way.
-`obs_data_version` is missing, because the replay contract publishes no observed
-data version to put in it: `replay_result` carries the target date, the origin,
-the fidelity and the numbers, and nothing on the wire names the vintage of the
-observed half.
+**The replay key is four components and its validator is five, and that
+asymmetry is the decision this section used to leave open.** Ticket 20 recorded
+that the table asked for a fifth key component, `<obs_data_version>`, that the
+contract published nothing to fill it with, and that seam 11 tested for it
+anyway. Ticket 24 decided it, and not by dropping the requirement:
 
-The cost is bounded and is worth stating rather than hiding — for up to the 24 h
-TTL after ONS rewrites a day, a cached replay of that day answers with the
-numbers from before the rewrite. That is staleness on a *cache* and not a broken
-pin (the answer was true of the record when it was computed, and the response
-names the publication it planned against), but for that window
-`vintage_fidelity` is the only thing telling a reader the ground may have moved.
-Closing it means either the ML service publishing the observed `data_version` on
-a contract `replay.md` declares fixed and this spec may only re-path, or the
-gateway querying Postgres on a route whose whole claim is that it contains
-neither a model nor a read. Both are somebody else's ticket; the gap is recorded
-on `replayKey` in `plugins/result-cache.ts`.
+- **A Redis lookup key must be computable *before* the call that produces an
+  answer. The observed vintage is knowable only *from* the answer.** The replay
+  route's pinned fast path does its `get` holding a scenario blob, a pinned
+  instant and an optimizer build, and this gateway reads no rows — resolving a
+  vintage would be a query on a route whose whole claim is that it contains
+  neither a model nor a read. An entry keyed on a component the lookup cannot
+  spell is an entry nothing can ever hit, so the observed version cannot be in
+  the Redis key. Four components: the scenario hash, the target date, the
+  resolved origin and the optimizer build. `plugins/result-cache.ts` counts them
+  the same way and carries the argument.
+- **An ETag is built from the answer, so it can carry it — and it must.** The ML
+  service now publishes `actual.data_version` on `replay_result`: the greatest
+  `data_version` among the settled rows the replay was scored against, the same
+  quantity the `/v1/curtailment/*` row above already validates on. It is the
+  fifth component of `/v1/replay`'s validator. This closes a hole that was
+  sharper than the one the table was worried about: a validator blind to the
+  observed half **never moves when ONS rewrites the day**, so a client that
+  keeps revalidating keeps being answered 304 against numbers that changed —
+  stale with no expiry, on the one route whose subject is what actually
+  happened. The validator now moves when the record moves.
+
+This is the metering precedent read the right way round. `/v1/replay/days/<date>`
+was metered at the solve rate because the cheap reading of its identity was the
+path it sat under; the cheap reading here would have been "the key and the ETag
+are the same list, so whatever the key cannot hold the ETag does not get". They
+are not the same list, because they are computed at two different moments, and
+the honest identity of the *answer* is the longer one.
+
+**The cost that remains, stated rather than implied.** A Redis entry stored
+before a restatement is served after it for as long as the entry lives, and its
+only eviction is its TTL: **24 hours**, `REPLAY_TTL_SEC`, the optimizer's. Below
+that, a shared cache may hold a copy for the row's `max-age=600` — **ten
+minutes** — and its next revalidation now sees the moved validator rather than a
+304. So the staleness window a reader can observe is at most **24 hours of one
+day's replay computed against the pre-restatement record, plus that ten-minute
+shared window**, and inside it the answer is true of the record when it was
+computed, names the publication it planned against, *and* names the vintage it
+was scored on. `vintage_fidelity` is no longer the only thing telling a reader
+the ground may have moved.
+
+Shortening the TTL is not the fix and is not offered: a cache key is a
+provenance, never a duration, and answering a provenance question with a shorter
+duration is the move this section exists to forbid.
 
 **The diagnosis has two caches and inventing a third is forbidden.** The
 attribution is a row read and caches like any other row. The narration is
@@ -1788,13 +1818,26 @@ so `cache-policy.ts` is the only file it has to read. The same scan reads every
 provenance call site and fails on a clock or a TTL inside one, which is the
 rule stated positively.
 
-**One line of this seam cannot be asserted, and it is not a test that is
-missing.** "A replay's Redis key changes when the observed `data_version`
-changes and not otherwise" needs a component the key does not have: the replay
-contract publishes no observed data version, per the "As built" paragraph in
-Caching above. The absence is pinned by a test that names what would close it
-and fails the day either route opens, which is the strongest form available —
-an assertion that the gap is still the gap.
+**The line this seam could not assert, now split into the two true ones.** It
+used to demand "a replay's Redis key changes when the observed `data_version`
+changes and not otherwise", of a key that had no such component, and it is
+ticket 24 that decided which half of that was wrong. Both halves are asserted
+now, and neither is an assertion that a gap is still a gap:
+
+- **The Redis key is four components, exactly** — the whole string, spelled out,
+  in `cache-policy.test.ts`, so a fifth landing there fails beside the paragraph
+  saying why one cannot. The observed vintage is not among them because a lookup
+  key is built before the call and the vintage is known only from the answer.
+- **The replay's ETag is five, and the fifth is the observed `data_version`** —
+  `replay-endpoint.test.ts` asserts the exact validator, and asserts that an
+  answer scored against a restated day produces a *different* one, so a client
+  holding the pre-restatement copy is answered 200 and not 304. An answer that
+  names no observed vintage gets no validator at all, which is the same posture
+  a body with no origin already got.
+
+What is left over is a duration and is written down as one, in Caching above: a
+Redis entry stored before a restatement survives it for at most the 24 h TTL,
+under a shared window of ten minutes.
 
 **Seam 12 — rate limiting.** The three tiers have three budgets; the solve tier
 is a token bucket that permits a burst of 10 then throttles; `clientKey` ignores

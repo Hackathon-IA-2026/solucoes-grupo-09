@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from "bun:test";
 import type { Scenario } from "@wattsteer/core";
-import { encodeScenario } from "@wattsteer/core/scenario";
+import { decodeScenarioParam, encodeScenario } from "@wattsteer/core/scenario";
 import { latestTargetDate } from "@wattsteer/core/scenario-validation";
 import type { Server } from "bun";
 import { Elysia } from "elysia";
@@ -84,6 +84,10 @@ function replayed(overrides: Record<string, unknown> = {}): string {
       origin_kind: "backfilled_holdout",
       gate_profile: "gate_late",
     },
+    // The vintage of the observed half — the half a pin cannot freeze, because
+    // ONS restates history in place. It is what makes the deep link's validator
+    // a complete provenance rather than one that ignores half the answer.
+    actual: { total_mwh: 900.4, peak_mw: 110.0, data_version: "7" },
     avoided_energy_mwh: 151.8,
     recovered_floor_mwh: 84.1,
     floor_met: true,
@@ -594,24 +598,63 @@ describe("replay · one scenario, two verbs, one set of bytes", () => {
     ).toBe("no-store");
   });
 
-  it("puts the replay key's components on the deep link's ETag, and none on the POST", async () => {
-    // api-surface 20: the shared validator and the private Redis key are the
-    // same statement in two places. Four components — and **not** the observed
-    // `data_version` the table asks for as a fifth, because `replay_result`
-    // publishes none; that gap is recorded on `replayKey` and asserted in
-    // `cache-policy.test.ts`, and until it closes an ONS restatement is waited
-    // out by the ten-minute window rather than evicted by the key.
+  it("puts the whole provenance on the deep link's ETag, and none on the POST", async () => {
+    // api-surface 24: **five** components, and the fifth is the observed
+    // `data_version` the ML service now publishes. The Redis key has four —
+    // the gateway must build that one *before* it calls, and the observed
+    // vintage is knowable only from the answer — but a validator is built from
+    // the answer, so this is where the observed half's provenance belongs and
+    // it is complete here.
     const api = replayRoutes();
     const response = await replayGet(api, blob());
     const etag = response.headers.get("etag") ?? "";
-    expect(etag).toContain(PAST_DATE);
-    expect(etag).toContain(config.optimizerBuild);
+    expect(etag).toBe(
+      `W/"${decodeScenarioParam(blob()).hash}:${PAST_DATE}:` +
+        `backfilled_holdout@2025-06-14T13:00:00Z:${config.optimizerBuild}:7"`,
+    );
     // `<origin_kind>@<published_at>` and never the instant alone: a record and
     // the reconstruction that shares its publication instant must not collide.
     expect(etag).toContain("@");
 
     const posted = await replayPost(api, JSON.stringify(scenarioWire()));
     expect(posted.headers.get("etag")).toBeNull();
+  });
+
+  it("moves the validator when ONS restates the day underneath the replay", async () => {
+    // The hole this closed. The forecast half is pinned and the scenario, the
+    // date and the build are unchanged, so before the observed vintage was on
+    // the validator a restatement produced the *same* ETag — and a client
+    // holding the pre-restatement numbers revalidated to a 304 forever, never
+    // seeing the record move. Now the validator moves with the record.
+    const api = replayRoutes();
+    const before = (await replayGet(api, blob())).headers.get("etag") ?? "";
+
+    solves(
+      replayed({ actual: { total_mwh: 1210.9, peak_mw: 140.0, data_version: "8" } }),
+    );
+    const after = (await replayGet(api, blob())).headers.get("etag") ?? "";
+    expect(after).not.toBe(before);
+
+    const stale = await api.handle(
+      new Request(
+        `http://localhost/v1/replay?d=${PAST_DATE}&lane=${encodeURIComponent(LANE)}` +
+          `&s=${encodeURIComponent(blob())}`,
+        { headers: { "if-none-match": before } },
+      ),
+    );
+    expect(stale.status).toBe(200);
+  });
+
+  it("gives an answer that names no observed vintage no validator at all", async () => {
+    // The same posture the missing origin gets, for the same reason: a
+    // validator over a provenance with a hole in it collides two answers that
+    // are not the same answer, and the hole here is the half that moves.
+    const api = replayRoutes();
+    solves(replayed({ actual: { total_mwh: 900.4, peak_mw: 110.0 } }));
+    const response = await replayGet(api, blob());
+    expect(response.status).toBe(200);
+    expect(response.headers.get("etag")).toBeNull();
+    expect(response.headers.get("cache-control")).toBe("public, max-age=600");
   });
 
   it("revalidates the deep link to a 304 once the origin is known", async () => {
