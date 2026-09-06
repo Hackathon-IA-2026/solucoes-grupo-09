@@ -1265,9 +1265,11 @@ export interface Reliability {
 export type CorrectionReach = "full" | "partial";
 
 /**
- * The half of the band that carries no correction caveat. `delta_lo` reaches
- * the composed P10 in full at every occurrence probability, which is why
- * `correction_applied` is `full` here and `partial` above.
+ * The half of the band the product quotes. `delta_lo` reaches the composed P10
+ * in full at every occurrence probability whose P10 is a positive number, and
+ * did so under both correction regimes: `recovered_floor_mwh` is simulated
+ * against this tail and forecaster ticket 21 moved the other one without
+ * moving this.
  */
 export interface LowerTailCoverage {
   coverageP10: Probability;
@@ -1282,22 +1284,31 @@ export interface LowerTailCoverage {
 }
 
 /**
- * The half of the band that does carry the caveat, with the caveat attached
- * rather than beside it. `coverage_p90` is **not readable without**
- * `upper_correction_realised`: the correction is applied to the 0.90 knot of
- * `Q_pos` and composition reads `Q_pos` below that knot for every `p < 1`,
- * reaching none of it at `p <= 0.20`. A P90 whose partial correction is
- * invisible is worse than one that says so, so the schema makes the three
- * fields required together.
+ * The band's upper half, with the fact that makes it readable attached rather
+ * than beside it. `coverage_p90` is **not readable without**
+ * `upper_correction_realised`, and what that number means is set by
+ * `correction_regime`. Under `conformal_v1_partial_upper` the correction was
+ * applied to the 0.90 knot of `Q_pos`, which composition reads below for every
+ * `p < 1` and not at all at `p <= 0.20`, so a short `coverage_p90` was
+ * under-application. Under `conformal_v2_full_upper` the correction is a shift
+ * in `q` on the composed quantile and arrives whole, so the realised share
+ * reports instead how many scored hours have a positive P90 at all - at `p <=
+ * 0.10` the served P90 is exactly zero because the mixture is stating at least
+ * a 90% chance of no curtailment. Either way a P90 published without it
+ * invites a conclusion about the fit that belongs elsewhere, so the schema
+ * makes the three fields required together.
  */
 export interface UpperTailCoverage {
   coverageP90: Probability;
   correctionApplied: CorrectionReach;
   /**
    * The mean share of `delta_hi` that actually reached the composed P90 over the
-   * scored hours. `1.0` would be the correction applied in full everywhere; well
-   * below it says a short `coverage_p90` is under-*application* and not a bad
-   * fit.
+   * scored hours. `1.0` is the correction applied in full everywhere. Below it,
+   * read against `correction_regime`: under `conformal_v1_partial_upper` it is
+   * `delta_hi` lost in the interpolant, and under `conformal_v2_full_upper` it
+   * is the share of scored hours the classifier placed on the mixture's point
+   * mass at zero, where the P90 is structurally zero and bounds `coverage_p90`
+   * from above.
    */
   upperCorrectionRealised: Probability;
   /**
@@ -1310,13 +1321,16 @@ export interface UpperTailCoverage {
 
 /**
  * Empirical coverage of the fold's test period, **split by tail**. The two
- * halves are separate objects and not two numbers side by side, because they
- * have different statuses: the lower correction reaches the served band in
- * full at every `p` and the upper one does not, and a reader comparing
- * `coverage_p10` against `coverage_p90` without that fact draws the wrong
- * conclusion about the fit. The population is the fold's curtailed hours -
- * over *every* hour the lower statement is trivially true, because the
- * composed P10 is zero wherever `p <= 0.90`.
+ * halves are separate objects and not two numbers side by side, because
+ * whether they are the same kind of statement depends on `correction_regime`:
+ * under `conformal_v1_partial_upper` the lower correction reached the served
+ * band in full and the upper one arrived in part, and a reader comparing the
+ * two without that fact drew the wrong conclusion about the fit. Under
+ * `conformal_v2_full_upper` both reach it in full and the comparison is
+ * direct. The split stays because the regime is data and the reader still has
+ * to be told which one they are looking at. The population is the fold's
+ * curtailed hours - over *every* hour the lower statement is trivially true,
+ * because the composed P10 is zero wherever `p <= 0.90`.
  */
 export interface Coverage {
   foldId: string;
@@ -1354,9 +1368,11 @@ export interface BandCalibration {
    * The **name of the rule** that produced the served band, stamped identically
    * on every published forecast row. It is on this response because a number is
    * only interpretable against the rule that made it:
-   * `conformal_v1_partial_upper` says in its own name that the upper correction
-   * reaches the served band only in part, and the `band.coverage.upper` block
-   * says by how much.
+   * `conformal_v1_partial_upper` applied the correction to the knots of `Q_pos`
+   * and reached the served P90 only in part, `conformal_v2_full_upper` applies
+   * it to the composed quantile and reaches it whole, and
+   * `band.coverage.upper.correction_applied` resolves which from a published
+   * table rather than from the name.
    */
   correctionRegime: string;
   deltaLo: number;

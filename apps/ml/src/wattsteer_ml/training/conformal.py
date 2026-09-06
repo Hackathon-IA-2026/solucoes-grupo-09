@@ -7,9 +7,9 @@ guarantee and a constant width that is wrong everywhere for a distribution that
 is a point mass at zero most hours. So **the boosters supply the shape and
 conformal supplies a scalar per tail**::
 
-    E_lo,i = q̂^0.10(x_i) − y_i        E_hi,i = y_i − q̂^0.90(x_i)
+    E_lo,i = Q_Y(0.10 | x_i) − y_i    E_hi,i = y_i − Q_Y(0.90 | x_i)
     δ_lo = δ_hi = the ⌈(n+1)(1 − 0.10)⌉-th smallest of the respective E
-    Q_pos^0.10 ← q̂^0.10 − δ_lo        Q_pos^0.90 ← q̂^0.90 + δ_hi
+    Q_Y(q | x) ← Q_Y(q | x) − δ_lo·w_lo(q) + δ_hi·w_hi(q)   for q > 1 − p(x)
 
 **Two scalars, never one.** A symmetric correction lets a badly-fitted upper
 tail spend the budget the lower tail needs, and the lower tail is the one the
@@ -25,35 +25,54 @@ is handed ``Sequence[float]`` twice and never sees a
 :class:`~wattsteer_ml.evaluation.RowKey`, so it has nothing to condition on.
 :mod:`tests.test_conformal_quantiles` asserts that against this file's source.
 
-**This does not add a second path to a band.** Forecaster ticket 01 made the
-mixture inversion the only composition and it still is. The correction is
-applied to ``Q_pos`` — :meth:`ConformalCorrection.apply` maps one
-:class:`~wattsteer_ml.mixture.MagnitudeQuantiles` to another — and the corrected
-knots then go into :func:`wattsteer_ml.mixture.compose` like any other. Nothing
-here constructs a :class:`~wattsteer_ml.mixture.QuantileBand`, adds a scalar to
-a composed quantile, or knows what ``p`` is.
+**Where the correction is applied, and why it moved.** ``w_lo`` and ``w_hi``
+above are :class:`~wattsteer_ml.mixture.TailShift`: the two scalars written as a
+shift in the mixture's own ``q``, piecewise-linear through ``−δ_lo`` at 0.10,
+``0`` at 0.50 and ``+δ_hi`` at 0.90 and flat outside, added inside the positive
+branch of :meth:`~wattsteer_ml.mixture.HurdleMixture.quantile`.
 
-**What that costs, exactly, and it is not symmetric.** The residuals are
-measured on the *composed* band, and the correction is applied to the knots
-``Q_pos`` interpolates. Composition asks ``Q_pos`` for ``u = (q − (1 − p)) / p``:
+Until forecaster ticket 21 the correction was applied to the *knots* of
+``Q_pos`` instead, and that under-applied it. Composition asks ``Q_pos`` for
+``u = (q − (1 − p)) / p``; ``u_lo ≤ 0.10`` for every ``p``, so the lower tail
+arrived in full, but ``u_hi = 1 − 0.1/p`` is below the 0.90 knot for every
+``p < 1`` and at or below the *median* knot once ``p ≤ 0.20``. Ticket 06
+measured the consequence on its own fixture: the mean realised share of
+``δ_hi`` was **0.25**, and **49% of rows received exactly none of it**. A P90
+short of what its own residuals asked for is a band too narrow at the top —
+the flattering direction, and the unsafe one, because the product exists so an
+operator can size storage against that edge. It is fixed rather than footnoted.
 
-- **The lower tail is corrected exactly, for every ``p``.** ``u_lo ≤ 0.10``
-  holds for every ``p ≤ 1``, and
-  :class:`~wattsteer_ml.mixture.MagnitudeQuantiles` holds flat below its first
-  knot, so the composed P10 moves by exactly ``δ_lo`` whenever it is in the
-  positive branch at all. The tail the product promises is the one that gets the
-  full correction.
-- **The upper tail is corrected in full only as ``p → 1``.** ``u_hi = 1 − 0.1/p``
-  is below the 0.90 knot for every ``p < 1``, so the composed P90 moves by
-  ``δ_hi`` scaled by :func:`upper_correction_fraction` — zero at ``p ≤ 0.20``,
-  where the composed P90 sits at or below the *median* knot and no shift of the
-  0.90 knot can reach it. ``coverage_p90`` is therefore expected to fall short
-  of ``coverage_p10``, and it is measured rather than assumed.
+**Both tails are now exact wherever the served quantile is in the positive
+branch**, and that is the whole of the change:
 
-The alternative — shifting the composed quantile itself — would make both tails
-exact and would be a second way to build a band, which is the one thing ticket
-01 bought. The asymmetry is the price of that, it is stated here, and
-:class:`CoverageReport` is where it shows up as a number.
+- ``Q_Y(0.10)`` moves by exactly ``δ_lo`` whenever ``p > 0.90``, which is what
+  it did before — bit for bit, because the old path read the flat region below
+  the 0.10 knot and this one adds the same scalar to the same value. The floor
+  the product promises did not move.
+- ``Q_Y(0.90)`` moves by exactly ``δ_hi`` whenever ``p > 0.10``.
+  :func:`upper_correction_fraction` is ``1.0`` there and ``coverage_p90`` now
+  means what ``coverage_p10`` means.
+
+**The structural zero is preserved, deliberately.** ``Q_Y(q) = 0`` for every
+``q ≤ 1 − p``, so at ``p ≤ 0.10`` the served P90 is exactly zero and stays so.
+That is not a shortfall to be corrected: the mixture is stating there is at
+least a 90% chance of no curtailment, and lifting the P90 there would invent
+curtailment the model denies. The same structure puts the P10 at zero for every
+``p ≤ 0.90``, where ``δ_lo`` is equally inert.
+:func:`upper_correction_fraction` and :func:`lower_correction_fraction` are that
+one remaining, structural asymmetry as numbers, and
+:attr:`CoverageReport.upper_correction_realised` publishes the upper one.
+
+**This still does not add a second path to a band.** Forecaster ticket 01 made
+the mixture inversion the only composition and it still is. This module produces
+a :class:`~wattsteer_ml.mixture.TailShift` — two floats and an interpolation
+rule, no ``p``, no band — and :func:`wattsteer_ml.mixture.compose` is the one
+place it is ever applied. Nothing here constructs a
+:class:`~wattsteer_ml.mixture.QuantileBand`, calls ``compose``, or adds a scalar
+to a composed quantile. Ticket 07's ensemble inverts one object, exactly as it
+did: the shift lives on the mixture the ensemble already held, so the corrected
+marginals *are* the served marginals and the hour band and the day band cannot
+disagree about hour 14.
 
 **Exchangeability is violated and is not pretended otherwise.** The calibration
 window is the 90 days immediately preceding the test period, which is the best
@@ -83,7 +102,8 @@ correction on one window, and is the cost the spec accepted when it declined
 cross-conformal.
 
 **The median gets no correction.** A median has no interval to cover.
-:meth:`ConformalCorrection.apply` copies the 0.50 knot through untouched, and
+:class:`~wattsteer_ml.mixture.TailShift` is zero at ``q = 0.50`` by
+construction, so ``Q_Y(0.50)`` comes through untouched, and
 ``p50_unbiasedness`` — the share of observations below P50, target 0.50 — is
 reported beside the two coverages as the guardrail on it instead.
 """
@@ -99,11 +119,11 @@ from typing import Any
 from wattsteer_ml.constants import SUBSYSTEM_CODES
 from wattsteer_ml.evaluation import HOURS_PER_DAY, RowKey
 from wattsteer_ml.mixture import (
-    FITTED_ALPHAS,
     SERVED_QUANTILES,
     ComposedForecast,
-    MagnitudeQuantiles,
+    TailShift,
     crossing_rate,
+    in_point_mass,
 )
 
 #: ``α`` — the nominal miscoverage of each tail. One tail at a time, so the
@@ -123,22 +143,26 @@ COVERAGE_GUARDRAIL: tuple[float, float] = (0.85, 0.97)
 #: string**, stamped on every persisted forecast row by
 #: :mod:`wattsteer_ml.publication`.
 #:
-#: The band this module produces is the one forecaster ticket 21 is open about:
-#: the lower tail receives ``δ_lo`` in full, the upper receives ``δ_hi`` scaled
-#: by :func:`upper_correction_fraction` — zero below ``p = 0.20`` — and that
-#: shortfall compounds at day grain and again nationally. Whatever ticket 21
-#: decides, the rows written *before* the decision inherit the old band, and a
-#: reader of the database has to be able to tell them apart from rows written
-#: after: one is re-servable at its own origin, the other is a different
-#: statement about the same hour. A stored regime is what makes that a query.
-#:
 #: **It is bumped when the composed band's correction changes, and never
 #: otherwise.** A retrain under the same rule produces a new ``artifact_id`` and
 #: the same regime; a change to how ``δ_hi`` reaches the composed P90 produces
 #: a new regime, whatever the artifact ids say. So the value names the rule and
-#: not the release: ``v1`` is one-sided split conformal on ``Q_pos`` with the
-#: upper knot's shift reaching the composed P90 only in proportion.
-CORRECTION_REGIME = "conformal_v1_partial_upper"
+#: not the release.
+#:
+#: ``conformal_v1_partial_upper`` was one-sided split conformal applied to the
+#: **knots** of ``Q_pos``, under which the composed P90 received ``δ_hi`` only
+#: in the proportion :func:`upper_correction_fraction` then described — a
+#: quarter of it on average and none of it below ``p = 0.20``. Forecaster
+#: ticket 21 moved the correction onto the composed quantile, where its
+#: residuals were measured, and both tails are now exact wherever the served
+#: quantile is in the positive branch. ``v2`` names that rule.
+#:
+#: Rows written under ``v1`` are still in the database and are **not**
+#: re-stamped: they carry a different, narrower statement about the same hour,
+#: one that is re-servable at its own origin, and a reader has to be able to
+#: tell the two apart with a query rather than a changelog. That is the whole
+#: job of this column.
+CORRECTION_REGIME = "conformal_v2_full_upper"
 
 #: Guard against ``⌈9.0000000000000002⌉ = 10``. ``(n + 1)(1 − α)`` is an exact
 #: integer at the ``n`` where the rank first becomes attainable, and binary
@@ -171,35 +195,62 @@ def conformal_rank(rows: int, miscoverage: float = NOMINAL_MISCOVERAGE) -> int:
     return math.ceil((rows + 1) * (1.0 - miscoverage) - _RANK_TOLERANCE)
 
 
-def upper_correction_fraction(occurrence_probability: float) -> float:
-    """How much of ``δ_hi`` an hour's composed P90 actually receives.
+def _served_correction_fraction(occurrence_probability: float, served: float) -> float:
+    """``1.0`` where ``Q_Y(served)`` is in the positive branch, ``0.0`` where not.
 
-    ``1.0`` at ``p = 1`` and ``0.0`` at ``p ≤ 0.20``, because ``u_hi = 1 − 0.1/p``
-    walks down the interpolant as ``p`` falls and the 0.90 knot's shift reaches
-    the composed P90 only in proportion. Written down as a function rather than
-    left as an inference so that the module docstring's claim about the upper
-    tail is a thing a test can check and a reader can evaluate at a number.
-
-    The lower tail has no such function: its fraction is ``1.0`` for every
-    ``p``, which is the whole asymmetry.
+    The one shape both published fractions have, since forecaster ticket 21 put
+    the shift on the composed quantile: a served quantile either sits in the
+    positive branch, where it receives its tail's whole ``δ``, or it sits on the
+    point mass at zero, where it receives none — and there is nothing in
+    between, because the interpolant that used to attenuate the upper tail is no
+    longer on the path.
     """
     if not math.isfinite(occurrence_probability) or not (
         0.0 <= occurrence_probability <= 1.0
     ):
         raise ConformalError(f"{occurrence_probability!r} is not a probability")
-    upper = SERVED_QUANTILES[2]
-    if occurrence_probability <= 1.0 - upper:
-        # The composed P90 is in the sub-threshold branch: it is zero, and no
-        # shift of any knot moves it. The interval cannot cover a curtailed hour
-        # here at all, which is a statement about ``p``, not about ``δ_hi``.
-        return 0.0
-    u = (upper - (1.0 - occurrence_probability)) / occurrence_probability
-    median_knot, upper_knot = FITTED_ALPHAS[1], FITTED_ALPHAS[2]
-    if u <= median_knot:
-        return 0.0
-    if u >= upper_knot:
-        return 1.0
-    return (u - median_knot) / (upper_knot - median_knot)
+    return 0.0 if in_point_mass(served, occurrence_probability) else 1.0
+
+
+def upper_correction_fraction(occurrence_probability: float) -> float:
+    """How much of ``δ_hi`` an hour's composed P90 actually receives.
+
+    ``1.0`` for every ``p > 0.10`` — the correction is added to the composed
+    quantile, so it arrives whole — and ``0.0`` at ``p ≤ 0.10``, where
+    ``Q_Y(0.90) = 0`` because ``0.90 ≤ 1 − p``.
+
+    **The zero is structure, not shortfall.** At ``p ≤ 0.10`` the mixture is
+    saying there is at least a 90% chance of no curtailment in this hour, so the
+    honest P90 is zero; adding ``δ_hi`` there would invent curtailment the model
+    denies, and would do it in the 90% of hours where the model is most
+    confident nothing happens. What the number *does* say is that a curtailed
+    hour at such a ``p`` cannot be covered by the upper statement at all, which
+    is a fact about the classifier and bounds ``coverage_p90`` from above. That
+    is why it is published: :attr:`CoverageReport.upper_correction_realised` is
+    its mean over the scored hours.
+
+    Before ticket 21 this function returned a proportion strictly between the
+    ends — the share of ``δ_hi`` that survived being applied to the 0.90 knot
+    and read back at ``u_hi = 1 − 0.1/p``. It no longer does, and that is the
+    fix.
+    """
+    return _served_correction_fraction(occurrence_probability, SERVED_QUANTILES[2])
+
+
+def lower_correction_fraction(occurrence_probability: float) -> float:
+    """How much of ``δ_lo`` an hour's composed P10 actually receives.
+
+    :func:`upper_correction_fraction`'s twin, and the reason the pair is worth
+    having: ``1.0`` for every ``p > 0.90`` and ``0.0`` below it, where
+    ``Q_Y(0.10) = 0``. The floor has always behaved this way — the knot
+    correction reached it in full too — so this function states a property that
+    did not change, beside one that did, in the same vocabulary.
+
+    The remaining asymmetry between the tails is entirely this: the lower
+    statement goes inert at ``p ≤ 0.90`` and the upper only at ``p ≤ 0.10``. It
+    belongs to the mixture's point mass, not to the correction.
+    """
+    return _served_correction_fraction(occurrence_probability, SERVED_QUANTILES[0])
 
 
 @dataclass(frozen=True)
@@ -367,29 +418,24 @@ class ConformalCorrection:
             window_end=window[1],
         )
 
-    def apply(self, quantiles: MagnitudeQuantiles) -> MagnitudeQuantiles:
-        """``Q_pos`` with both tails corrected and the median left alone.
+    def shift(self) -> TailShift:
+        """The two scalars as a shift in ``q`` — the whole of how they are applied.
 
-        The whole of how a correction reaches a served number. The result is a
-        :class:`~wattsteer_ml.mixture.MagnitudeQuantiles` — the same type the
-        boosters produce — so the corrected knots enter
-        :func:`wattsteer_ml.mixture.compose` by the one door that already
-        existed, and the path ensemble will invert the same function the hour
-        band came from.
+        The result is a :class:`~wattsteer_ml.mixture.TailShift`, which
+        :func:`wattsteer_ml.mixture.compose` hands to the mixture and the
+        mixture adds inside its positive branch. There is no other route from
+        these numbers to a served interval, and this method contains no
+        arithmetic beyond naming which scalar belongs to which tail — the
+        interpolation rule, the median's zero and the flat ends are the shift's
+        own, stated once where the composition can see them.
 
-        Both corrected knots are floored at zero because MWh are non-negative
-        and ``MagnitudeQuantiles`` refuses a negative knot. The floor *into*
-        ``F_pos``'s support — strictly above ``τ`` — stays the mixture's
-        business, as it is for the uncorrected knots.
+        No floor at zero here. The old knot correction needed one because
+        ``MagnitudeQuantiles`` refuses a negative knot; a shift is a signed
+        displacement of a quantile and the floor that matters is the mixture's
+        own — into ``F_pos``'s support, strictly above ``τ`` — applied after the
+        shift, exactly as it was applied after the corrected knot before.
         """
-        low, mid, high = quantiles.values
-        return MagnitudeQuantiles(
-            values=(
-                max(0.0, low - self.delta_lo),
-                mid,
-                max(0.0, high + self.delta_hi),
-            )
-        )
+        return TailShift(lower_mwh=self.delta_lo, upper_mwh=self.delta_hi)
 
     def card_fields(self) -> dict[str, Any]:
         return {
@@ -459,17 +505,23 @@ class CoverageReport:
       ``coverage_p10`` is then trivially 1.0 on those hours and ``δ_lo`` is
       inert. The floor the product prints really is 0 MWh there, and this report
       says so rather than dressing it up.
-    - Where ``p < 1`` the composed P90 receives only
-      :func:`upper_correction_fraction` of ``δ_hi``.
-      :attr:`upper_correction_realised` is that fraction averaged over the
-      scored hours, published beside ``coverage_p90`` so the two are read
-      together: a low realised fraction says a ``coverage_p90`` short of nominal
-      is under-*application*, not a bad fit. Below ``p = 0.20`` the composed P90
-      is read off the segment between the 0.10 and 0.50 knots and so moves with
-      ``δ_lo`` instead — the *fit* of the two tails stays independent, which is
-      what the spec asks for, but the composed upper quantile at a low ``p`` is
-      a function of the lower correction, and that is the interpolant rather
-      than a leak between the two rankings.
+    - Where ``p ≤ 0.10`` the composed P90 is **zero** for the same reason, and a
+      curtailed hour there cannot be covered by the upper statement at all.
+      :attr:`upper_correction_realised` — the mean of
+      :func:`upper_correction_fraction` over the scored hours — is that share
+      published beside ``coverage_p90``, and it bounds it from above. It is
+      ``1.0`` wherever the P90 is a positive number, because since forecaster
+      ticket 21 the correction is added to the composed quantile and arrives
+      whole; a value below ``1.0`` now says how many scored hours the classifier
+      put in the point mass, not how much of ``δ_hi`` evaporated in an
+      interpolant.
+
+    **``coverage_p90`` and ``coverage_p10`` are the same kind of statement.**
+    Both count a fold's curtailed hours against a served edge that has received
+    its tail's whole ``δ`` wherever that edge is a positive number. Before
+    ticket 21 they were not comparable — the upper edge carried a quarter of its
+    correction on average — and a reader had to discount ``coverage_p90`` by a
+    number in another field. They no longer have to.
     """
 
     fold_id: str
@@ -565,10 +617,14 @@ class CoverageReport:
             "upper_correction_realised": self.upper_correction_realised,
             "upper_correction_note": (
                 "the mean share of delta_hi that reached the composed P90. The "
-                "correction is applied to the 0.90 knot of Q_pos and composition "
-                "reads Q_pos at u = 1 - 0.1/p, which is below that knot for every "
-                "p < 1. A value well below 1.0 means coverage_p90 is short of "
-                "nominal through under-application, not through a bad fit."
+                "correction is a shift in q applied to the composed quantile, so "
+                "it arrives whole wherever the P90 is positive: this is 1.0 for "
+                "every hour with p > 0.10, and 0.0 for the rest, where Q_Y(0.90) "
+                "is exactly zero because 0.90 <= 1 - p and the mixture is stating "
+                "at least a 90% chance of no curtailment. A value below 1.0 is "
+                "therefore the share of scored hours the classifier put in the "
+                "point mass, and it bounds coverage_p90 from above; it is no "
+                "longer an under-application of delta_hi."
             ),
             "p50_unbiasedness": self.p50_unbiasedness,
             "crossing_rate": self.crossing_rate,

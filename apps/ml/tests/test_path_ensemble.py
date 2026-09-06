@@ -54,6 +54,7 @@ from wattsteer_ml.mixture import (
     SERVED_QUANTILES,
     HurdleMixture,
     MagnitudeQuantiles,
+    TailShift,
 )
 from wattsteer_ml.training import (
     ENSEMBLE_DRAWS,
@@ -360,6 +361,64 @@ def test_the_ensembles_own_marginals_reproduce_the_composed_hour_band() -> None:
                 f"hour {hour}'s ensemble {q:.2f} is {drawn}, outside "
                 f"[{low}, {high}] — wider than the resample can explain"
             )
+
+
+def test_the_ensemble_inverts_the_corrected_mixture_and_not_a_second_one() -> None:
+    """Forecaster ticket 21's soundness condition, and why the shift lives here.
+
+    The conformal residuals are measured on the composed band, so the honest
+    place to apply them is the composed quantile. The reason that is not simply
+    "add ``δ_hi`` to the served P90" is this test: the served band is not the
+    only thing that inverts the mixture. This ensemble asks
+    :meth:`~wattsteer_ml.mixture.HurdleMixture.quantile` for 500 × 24 draws of
+    ``q``, at values that have nothing to do with 0.10 and 0.90, and ticket 07's
+    own invariant is that its marginals **are** the served marginals — the hour
+    band and the day band cannot disagree about hour 14.
+
+    A correction applied at the two served probabilities alone would break that:
+    the band would move and the ensemble would keep drawing from the
+    uncorrected distribution. So the shift is defined at every ``q`` and carried
+    on the mixture, which is why the ensemble still inverts one object and this
+    test is the same test as its neighbour above with a correction on.
+    """
+    rows = 400
+    matrix = a_uniform_grid(rows)
+    shift = TailShift(lower_mwh=3.0, upper_mwh=25.0)
+    mixtures = [
+        replace(a_mixture(p=0.7 + 0.02 * (hour % 5)), tail_shift=shift)
+        for hour in range(HOURS_PER_DAY)
+    ]
+    ensemble = PathEnsemble.draw(
+        mixtures=mixtures,
+        matrix=matrix,
+        subsystem="SE",
+        plan=DrawPlan.seeded(rows=rows, seed=3),
+    )
+    moved = 0
+    for hour, mixture in enumerate(mixtures):
+        band = ensemble.hour_band(hour)
+        uncorrected = replace(mixture, tail_shift=TailShift.none())
+        for q, drawn in zip(
+            SERVED_QUANTILES, (band.p10, band.p50, band.p90), strict=True
+        ):
+            error = 4.0 * math.sqrt(q * (1.0 - q) / ENSEMBLE_DRAWS) + 1.0 / rows
+            low = mixture.quantile(max(0.0, q - error))
+            high = mixture.quantile(min(1.0, q + error))
+            assert low <= drawn <= high, (
+                f"hour {hour}'s ensemble {q:.2f} is {drawn}, outside "
+                f"[{low}, {high}] — the ensemble is drawing from a distribution "
+                "the served band was not composed from"
+            )
+            if not (
+                uncorrected.quantile(max(0.0, q - error))
+                <= drawn
+                <= uncorrected.quantile(min(1.0, q + error))
+            ):
+                moved += 1
+    assert moved > 0, (
+        "the corrected and uncorrected marginals are indistinguishable here, so "
+        "this test would pass against an ensemble that ignored the shift"
+    )
 
 
 # --- Seam 2: quantiles do not add ---------------------------------------------

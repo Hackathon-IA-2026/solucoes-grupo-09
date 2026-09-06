@@ -12,10 +12,17 @@ the mixture CDF**. With ``F_sub`` supported on ``[0, τ]`` and ``F_pos`` on
 
     F_Y(y | x) = (1 − p) · F_sub(y | x) + p · F_pos(y | x)
 
-    Q_Y(q | x) =  0                                    if q ≤ 1 − p(x)
-                  Q_pos( (q − (1 − p(x))) / p(x) )     if q >  1 − p(x)
+    Q_Y(q | x) =  0                                          if q ≤ 1 − p(x)
+                  Q_pos( (q − (1 − p(x))) / p(x) ) + δ(q)     if q >  1 − p(x)
 
     E[Y | x] = p(x) · Ê[Y | Y > τ, x] + (1 − p(x)) · μ_sub(subsystem, hour)
+
+``δ(q)`` is :class:`TailShift`, the conformal correction. It is added *inside*
+the positive branch and at the mixture's own ``q`` because that is the quantity
+its residuals were measured on — forecaster ticket 21. It is zero at ``q = 0.50``
+(a median has no interval to cover), it never reaches the ``q ≤ 1 − p`` branch,
+and it is the whole of what "conformalised" means to anything downstream of
+here.
 
 Training, serving, backtesting and Replay all import :func:`compose`, so four
 callers cannot hold four mixtures. Nothing here knows about LightGBM, features
@@ -55,7 +62,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import pairwise
 
 #: The three quantiles the product publishes, in order. The composition itself
@@ -75,6 +82,24 @@ FITTED_ALPHAS: tuple[float, float, float] = (0.10, 0.50, 0.90)
 #: produce; anything callable will do, which is what lets the composition be
 #: tested on fixtures with no model in the room.
 PositiveQuantileFn = Callable[[float], float]
+
+
+def in_point_mass(q: float, occurrence_probability: float) -> bool:
+    """Whether ``Q_Y(q)`` is the mixture's point at zero rather than a magnitude.
+
+    ``q ≤ 1 − p`` — the branch :meth:`HurdleMixture.quantile` takes, exported so
+    that anything reasoning *about* the served band takes the same one. That
+    matters more than it looks: ``1 − p`` is computed in binary, and at
+    ``p = 0.10`` the comparison ``0.90 ≤ 1 − 0.10`` is true while the algebraically
+    identical ``0.10 ≤ 1 − 0.90`` is false. A caller that rewrote the inequality
+    would disagree with the composition about the P90 of exactly the hours where
+    the structural zero begins.
+    :func:`~wattsteer_ml.training.conformal.upper_correction_fraction` is such a
+    caller, and it calls this.
+    """
+    _check_probability("q", q)
+    _check_probability("occurrence_probability", occurrence_probability)
+    return q <= 1.0 - occurrence_probability
 
 
 def _check_probability(name: str, value: float) -> None:
@@ -140,6 +165,109 @@ class MagnitudeQuantiles:
                 weight = (u - alphas[lo]) / span
                 return values[lo] + weight * (values[hi] - values[lo])
         raise AssertionError("unreachable: u is bracketed by the fitted alphas")
+
+
+@dataclass(frozen=True)
+class TailShift:
+    """The conformal correction, expressed on the quantity it was measured on.
+
+    ``δ_lo`` and ``δ_hi`` are ranked from residuals of the **composed** band —
+    ``E_lo = Q_Y(0.10) − y``, ``E_hi = y − Q_Y(0.90)`` — so the quantity they
+    are a statement about is ``Q_Y``, not the knots of ``Q_pos``. This class is
+    that statement written down as a shift in the mixture's own probability
+    ``q``, and :meth:`HurdleMixture.quantile` adds it inside the positive
+    branch.
+
+    **Why not shift the knots.** Composition reads ``Q_pos`` at
+    ``u = (q − (1 − p)) / p``. For the lower tail ``u_lo ≤ 0.10`` always and
+    :class:`MagnitudeQuantiles` is flat below its first knot, so a shift of the
+    0.10 knot arrives in full. For the upper tail ``u_hi = 1 − 0.1/p`` is
+    *below* the 0.90 knot for every ``p < 1`` and at or below the 0.50 knot once
+    ``p ≤ 0.20``, so a shift of the 0.90 knot arrived attenuated or not at all —
+    on forecaster ticket 06's fixture, a quarter of it on average and none of it
+    for 49% of rows. A P90 corrected by a quarter of what the residuals asked
+    for is a band too *narrow* at the top, which is the flattering direction and
+    the unsafe one: it tells an operator the worst case is milder than it is,
+    and storage sized against it is undersized. Forecaster ticket 21 is the
+    decision to fix that rather than footnote it.
+
+    **Why not add ``δ`` to the two served quantiles after composition.** That is
+    where the residuals live, but the served band is not the only thing that
+    inverts the mixture: ticket 07's ensemble asks
+    :meth:`HurdleMixture.quantile` for 500 × 24 draws of ``q``, and ticket 07's
+    own invariant is that the ensemble's marginals *are* the served marginals.
+    A shift applied only at ``q = 0.10`` and ``q = 0.90`` would leave the
+    ensemble drawing from the uncorrected distribution, and the hour band and
+    the day band would disagree about hour 14. So the shift is defined at every
+    ``q``, carried on the mixture, and the ensemble inverts one object exactly as
+    before.
+
+    **The shape between the two ends is the same rule ``Q_pos`` already uses.**
+    Three points are known — ``−δ_lo`` at ``q = 0.10``, ``0`` at ``q = 0.50``
+    because a median has no interval to cover, ``+δ_hi`` at ``q = 0.90`` — so
+    the shift interpolates linearly between them and is **held flat outside
+    them**, for the reason :class:`MagnitudeQuantiles` is: nothing was fitted
+    past the outermost knot and a line drawn beyond it is invented. Flat is also
+    what the old knot correction did to the same region, so the extreme tail's
+    behaviour is unchanged.
+
+    **What this does not do.** It does not touch the structural zero. ``Q_Y(q)``
+    is ``0`` for every ``q ≤ 1 − p`` and the shift is added only in the positive
+    branch, so at ``p ≤ 0.10`` the served P90 stays exactly zero — which is the
+    right answer, not a shortfall: the mixture is saying there is at least a 90%
+    chance of no curtailment, and lifting it would invent curtailment the model
+    denies. The same holds at the floor: at ``p ≤ 0.90`` the served P10 is zero
+    and ``δ_lo`` is inert there, exactly as it was before.
+
+    It also does not make the correction conditional. Two scalars per artifact,
+    global, fitted independently per tail; this class holds the two and knows
+    nothing about ``p``, an hour or a subsystem.
+    """
+
+    #: ``δ_lo`` — MWh **subtracted** at ``q = 0.10``. Negative when the boosters
+    #: over-covered, in which case the correction narrows the band and is
+    #: allowed to: conformal makes coverage *equal* nominal, not at least it.
+    lower_mwh: float
+    #: ``δ_hi`` — MWh **added** at ``q = 0.90``.
+    upper_mwh: float
+
+    def __post_init__(self) -> None:
+        for name in ("lower_mwh", "upper_mwh"):
+            value = getattr(self, name)
+            if not math.isfinite(value):
+                raise ValueError(f"{name} is {value!r}, which is not MWh")
+
+    @classmethod
+    def none(cls) -> TailShift:
+        """The neutral shift — an uncorrected composition, named rather than ``None``.
+
+        Every band the baseline ladder composes, and every fixture built before a
+        correction exists, goes through the same arithmetic as a corrected one;
+        the difference is two zeros rather than a branch.
+        """
+        return cls(lower_mwh=0.0, upper_mwh=0.0)
+
+    @property
+    def is_neutral(self) -> bool:
+        """Whether this shift moves nothing. One predicate, for the card."""
+        return self.lower_mwh == 0.0 and self.upper_mwh == 0.0
+
+    def __call__(self, q: float) -> float:
+        """The MWh to add to ``Q_pos((q − (1 − p))/p)`` at this ``q``."""
+        _check_probability("q", q)
+        knots = SERVED_QUANTILES
+        values = (-self.lower_mwh, 0.0, self.upper_mwh)
+        if q <= knots[0]:
+            return values[0]
+        if q >= knots[-1]:
+            return values[-1]
+        for lo in range(len(knots) - 1):
+            hi = lo + 1
+            if q <= knots[hi]:
+                span = knots[hi] - knots[lo]
+                weight = (q - knots[lo]) / span
+                return values[lo] + weight * (values[hi] - values[lo])
+        raise AssertionError("unreachable: q is bracketed by the served quantiles")
 
 
 @dataclass(frozen=True)
@@ -230,6 +358,11 @@ class HurdleMixture:
     sub_threshold_mean_mwh: float
     #: ``threshold_mw`` in force. ``τ = threshold_mw × 1 h``.
     threshold_mw: float
+    #: The conformal correction, on the quantity it was measured on. Defaults to
+    #: :meth:`TailShift.none` so an uncorrected composition — the baseline
+    #: ladder's rungs, a fixture built before any calibration window existed —
+    #: is the same arithmetic with two zeros in it rather than a second path.
+    tail_shift: TailShift = field(default_factory=TailShift.none)
 
     def __post_init__(self) -> None:
         _check_probability("occurrence_probability", self.occurrence_probability)
@@ -280,14 +413,19 @@ class HurdleMixture:
         """
         _check_probability("q", q)
         p = self.occurrence_probability
-        sub_threshold_mass = 1.0 - p
-        if q <= sub_threshold_mass:
+        if in_point_mass(q, p):
             return 0.0
-        u = (q - sub_threshold_mass) / p
+        u = (q - (1.0 - p)) / p
         # Floating point can push u a hair past 1 at q = 1; the quantile
         # function is only defined on [0, 1].
         u = min(1.0, max(0.0, u))
-        return _into_positive_support(self.positive_quantiles(u), self.threshold_mwh)
+        # The conformal shift is added *here*, inside the positive branch and at
+        # the mixture's own q, because that is the quantity its residuals were
+        # measured on. Inside the branch, so the structural zero above survives
+        # untouched; at every q rather than at the two served ones, so the path
+        # ensemble inverts the corrected distribution and not a second one.
+        shifted = self.positive_quantiles(u) + self.tail_shift(q)
+        return _into_positive_support(shifted, self.threshold_mwh)
 
 
 @dataclass(frozen=True)
@@ -325,6 +463,7 @@ def compose(
     positive_mean_mwh: float,
     sub_threshold_mean_mwh: float,
     threshold_mw: float,
+    tail_shift: TailShift | None = None,
     wind_share: float | None = None,
 ) -> ComposedForecast:
     """Compose one hour's band and expectation from the hurdle's two estimators.
@@ -343,6 +482,10 @@ def compose(
             booster — not the median booster.
         sub_threshold_mean_mwh: ``μ_sub(subsystem, local_hour)``.
         threshold_mw: the ``curtailment_threshold_mw`` in force.
+        tail_shift: the conformal correction as a shift in ``q``. ``None`` — the
+            default — composes an uncorrected band, which is what the baseline
+            ladder's rungs and the pre-conformal fixtures want; it is not a
+            silent zero, because :class:`TailShift` refuses to be anything else.
         wind_share: ``ŝ(x) ∈ [0, 1]``. Applied to the P50 and the expectation
             only; there is no such thing as a per-technology band.
 
@@ -355,6 +498,7 @@ def compose(
         positive_mean_mwh=positive_mean_mwh,
         sub_threshold_mean_mwh=sub_threshold_mean_mwh,
         threshold_mw=threshold_mw,
+        tail_shift=TailShift.none() if tail_shift is None else tail_shift,
     )
     composed = [mixture.quantile(q) for q in SERVED_QUANTILES]
     band = QuantileBand.sorted_from(composed)

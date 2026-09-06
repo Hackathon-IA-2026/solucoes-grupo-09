@@ -59,18 +59,30 @@ import { applyCachePolicy, CACHE_POLICIES } from "./plugins/cache-policy.js";
  * ### The one thing this module derives, and why it may refuse instead
  *
  * `correction_applied`. The card measures the correction; it does not name the
- * rule that applied it, and the rule is what makes a number readable.
- * `correction_regime = conformal_v1_partial_upper` says the lower correction
- * reaches the served band in full at every occurrence probability and the upper
- * one does not: `δ_hi` is added to the 0.90 knot of `Q_pos`, composition reads
- * `Q_pos` at `u = 1 − 0.1/p` which is below that knot for every `p < 1`, and at
- * `p ≤ 0.20` reaches none of it at all. So a `coverage_p90` well short of
- * nominal beside a `coverage_p10` of 1.0 is **not** the fit failing on one side;
- * it is the correction arriving in part. The pair that says so —
- * `upper_correction_realised` and the card's own note — travels inside the
- * `upper` block, where the schema makes the three fields required together,
- * because a P90 whose partial correction is invisible is worse than one that
- * says so.
+ * rule that applied it, and the rule is what makes a number readable. Under
+ * `correction_regime = conformal_v1_partial_upper` the lower correction reached
+ * the served band in full at every occurrence probability and the upper one did
+ * not: `δ_hi` was added to the 0.90 knot of `Q_pos`, composition reads `Q_pos`
+ * at `u = 1 − 0.1/p` which is below that knot for every `p < 1`, and at
+ * `p ≤ 0.20` it reached none of it at all. A `coverage_p90` well short of
+ * nominal beside a `coverage_p10` of 1.0 was then **not** the fit failing on one
+ * side; it was the correction arriving in part.
+ *
+ * Under `conformal_v2_full_upper` — forecaster ticket 21 — both tails are
+ * `full`: the correction is a shift in `q` applied to the composed quantile, so
+ * `δ_hi` arrives whole wherever the served P90 is a positive number, and
+ * `coverage_p90` means what `coverage_p10` means. `upper_correction_realised` is
+ * still published and still required beside `coverage_p90`, but it now reports
+ * the share of scored hours whose P90 is positive at all — at `p ≤ 0.10` the
+ * mixture puts `Q_Y(0.90)` on its point mass at zero, which is the model saying
+ * there is at least a 90% chance of no curtailment and is the right answer, not
+ * a shortfall. The pair travels inside the `upper` block, where the schema makes
+ * the three fields required together, because a P90 read without it invites a
+ * conclusion about the fit that belongs to the classifier.
+ *
+ * Rows and cards written under `v1` are not re-stamped and both entries stay in
+ * the table below: the old regime is a real, narrower statement about the hours
+ * it was served for, and this route has to keep being able to read it honestly.
  *
  * The reach is resolved from {@link CORRECTION_REACH}, a published table, and a
  * regime with no entry is a **refusal** rather than a guess. Defaulting an
@@ -103,6 +115,10 @@ export const CORRECTION_REACH: Record<
   // at every `p`; the upper reaches the composed P90 only in the proportion
   // `upper_correction_fraction(p)` states, and none of it at `p ≤ 0.20`.
   conformal_v1_partial_upper: { lower: "full", upper: "partial" },
+  // Forecaster ticket 21 moved the correction from the knots of `Q_pos` onto the
+  // composed quantile, where its residuals were measured. Both tails now reach
+  // the served band in full wherever that edge is a positive number.
+  conformal_v2_full_upper: { lower: "full", upper: "full" },
 };
 
 function reachOf(regime: string): {

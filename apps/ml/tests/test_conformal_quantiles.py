@@ -52,7 +52,14 @@ import pytest
 
 from wattsteer_ml.constants import SUBSYSTEM_CODES
 from wattsteer_ml.evaluation import Fold, FoldBlocks, RowKey
-from wattsteer_ml.mixture import MagnitudeQuantiles, QuantileBand, compose
+from wattsteer_ml.mixture import (
+    SERVED_QUANTILES,
+    MagnitudeQuantiles,
+    QuantileBand,
+    TailShift,
+    compose,
+    in_point_mass,
+)
 from wattsteer_ml.training import (
     COVERAGE_GUARDRAIL,
     NOMINAL_MISCOVERAGE,
@@ -68,6 +75,7 @@ from wattsteer_ml.training import (
     conformalise,
     forecast_rows,
     load_artifact,
+    lower_correction_fraction,
     minimum_calibration_rows,
     residuals,
     save_artifact,
@@ -171,10 +179,10 @@ def _draw(
 def _recomposed(
     hours: list[ScoredHour], correction: ConformalCorrection
 ) -> list[ScoredHour]:
-    """The same rows, composed again with the correction applied to ``Q_pos``.
+    """The same rows, composed again with the correction's shift on the mixture.
 
     Through :func:`wattsteer_ml.mixture.compose` and the correction's own
-    :meth:`~wattsteer_ml.training.conformal.ConformalCorrection.apply`, because
+    :meth:`~wattsteer_ml.training.conformal.ConformalCorrection.shift`, because
     a test that added ``δ`` to a band by hand would be testing arithmetic this
     codebase deliberately does not contain.
     """
@@ -187,7 +195,8 @@ def _recomposed(
                 key=hour.key,
                 forecast=compose(
                     occurrence_probability=mixture.occurrence_probability,
-                    positive_quantiles=correction.apply(mixture.positive_quantiles),
+                    positive_quantiles=mixture.positive_quantiles,
+                    tail_shift=correction.shift(),
                     positive_mean_mwh=mixture.positive_mean_mwh,
                     sub_threshold_mean_mwh=mixture.sub_threshold_mean_mwh,
                     threshold_mw=mixture.threshold_mw,
@@ -196,6 +205,33 @@ def _recomposed(
             )
         )
     return corrected
+
+
+def _v1_knot_correction(
+    quantiles: MagnitudeQuantiles, correction: ConformalCorrection
+) -> MagnitudeQuantiles:
+    """``conformal_v1_partial_upper``, reconstructed here and nowhere else.
+
+    The regime forecaster ticket 21 replaced: ``δ`` applied to the *knots* of
+    ``Q_pos``, floored at zero because ``MagnitudeQuantiles`` refuses a negative
+    one. It is kept in this file — not in ``training/conformal.py``, which must
+    have exactly one way of applying a correction — so that two claims can be
+    *measured* rather than asserted from prose:
+
+    - the realised share of ``δ_hi`` under v1 reproduces the table ticket 21
+      opens with, so the "before" column is this repository's own arithmetic and
+      not a remembered number; and
+    - the served **P10** is bit-identical under v1 and v2, which is what "the
+      lower tail did not move" has to mean.
+    """
+    low, mid, high = quantiles.values
+    return MagnitudeQuantiles(
+        values=(
+            max(0.0, low - correction.delta_lo),
+            mid,
+            max(0.0, high + correction.delta_hi),
+        )
+    )
 
 
 def _window() -> tuple[date, date]:
@@ -234,27 +270,20 @@ def test_conformalised_coverage_reaches_nominal_on_exchangeable_data() -> None:
     )
 
 
-def test_at_a_low_occurrence_probability_delta_hi_is_inert_and_it_is_published() -> None:
-    """The stated cost, at its worst, pinned rather than left to be discovered.
+def test_at_a_low_occurrence_probability_the_upper_tail_reaches_nominal() -> None:
+    """What forecaster ticket 21 changed, at the ``p`` where v1 did nothing.
 
-    At ``p ≤ 0.20`` the composed P90 sits at or below the *median* knot, so a
-    shift of the 0.90 knot cannot reach it at all: ``δ_hi`` is fitted, stored,
-    published — and inert. Coverage there is whatever the boosters happened to
-    give, which is the situation the whole ticket exists to end, and it ends
-    only for hours the classifier is confident about.
+    At ``p = 0.15`` the composed P90 is a positive number — ``0.90 > 1 − p`` —
+    but under ``conformal_v1_partial_upper`` it sat at or below the *median*
+    knot, so a shift of the 0.90 knot could not reach it and ``δ_hi`` was
+    fitted, stored, published and inert. ``p ≤ 0.20`` is not an edge case; it is
+    most hours on most days.
 
-    The correction is not wrong; the *application point* is the limit. Ticket 01
-    bought one composition and this is the price. The card publishes
-    ``upper_correction_realised`` so nobody has to derive it, and this test is
-    what makes a future change to the application point confront the number.
-
-    **The band does still move here, and not by ``δ_hi``.** At this ``p`` the
-    composed P90 is read off the segment between the *0.10* and *0.50* knots, so
-    it inherits ``δ_lo``. The fit stays independent — perturbing upper residuals
-    cannot move ``δ_lo``, which is the acceptance criterion and is tested next
-    door — but the composed P90 at a low ``p`` is a function of the lower
-    correction. That is the interpolant, it is measurable, and it is stated
-    rather than left to surprise someone.
+    The shift is now applied to the composed quantile, so the upper statement
+    here reaches nominal like any other, and the fraction that says so is
+    ``1.0``. This test is the reason the ticket was decided as a fix rather than
+    as a footnote: a P90 short of its own residuals is a band too narrow at the
+    top, and an operator sizing storage against it under-sizes.
     """
     rng = _rng(4242)
     calibration = _draw(
@@ -267,19 +296,22 @@ def test_at_a_low_occurrence_probability_delta_hi_is_inert_and_it_is_published()
     assert correction.delta_hi > 0.0, "the residuals asked for a correction"
 
     raw = CoverageReport.of(evaluation, fold_id="synthetic-low-p-raw")
+    assert raw.coverage_p90 < TARGET_COVERAGE - COVERAGE_TOLERANCE
+
     corrected = CoverageReport.of(
         _recomposed(evaluation, correction), fold_id="synthetic-low-p"
     )
-    assert corrected.upper_correction_realised == 0.0
+    assert corrected.upper_correction_realised == pytest.approx(1.0)
     assert corrected.upper_correction_realised == upper_correction_fraction(0.15)
-    assert corrected.coverage_p90 < TARGET_COVERAGE - COVERAGE_TOLERANCE, (
-        "δ_hi did not reach the composed P90, so the upper statement is still "
-        "whatever the boosters happened to give"
+    assert abs(corrected.coverage_p90 - TARGET_COVERAGE) <= COVERAGE_TOLERANCE, (
+        "δ_hi now reaches the composed P90 in full, so the upper statement is "
+        "the coverage statement and not whatever the boosters happened to give"
     )
-    # What movement there is came through the interpolant from δ_lo, which is
-    # the sentence in this test's docstring, measured.
-    assert corrected.coverage_p90 != raw.coverage_p90
-    assert correction.delta_lo < 0.0
+    # The floor at this p is structurally zero — 0.10 <= 1 - 0.15 — so the lower
+    # statement is trivially satisfied and delta_lo is inert. That has not
+    # changed and is not something this ticket set out to change.
+    assert corrected.coverage_p10 == 1.0
+    assert lower_correction_fraction(0.15) == 0.0
 
 
 def test_conformal_narrows_a_band_that_was_too_wide() -> None:
@@ -308,34 +340,69 @@ def test_conformal_narrows_a_band_that_was_too_wide() -> None:
     assert abs(corrected.coverage_p90 - TARGET_COVERAGE) <= COVERAGE_TOLERANCE
 
 
-def test_the_lower_tail_is_corrected_exactly_at_every_occurrence_probability() -> None:
-    """``u_lo ≤ 0.10`` for every ``p``, so the composed P10 moves by exactly δ_lo.
+#: The knots every application-point test in this file composes from. Wide
+#: enough apart that the interpolant has room to attenuate a shift, and far
+#: enough above ``τ`` that the mixture's floor into ``F_pos``'s support never
+#: bites and so never flatters the measurement.
+_KNOTS = MagnitudeQuantiles.from_boosters(q10=60.0, q50=90.0, q90=140.0)
 
-    The property the module docstring claims and the reason the asymmetry it
-    also claims is acceptable: the tail the product promises in prose is the one
-    the knot correction reaches in full.
-    """
-    correction = ConformalCorrection(
-        delta_lo=7.5,
-        delta_hi=3.0,
+#: The ``p`` grid the realised-fraction table is measured on. Its first five
+#: rows are the ones forecaster ticket 21 tabulates; ``0.15`` is the band the
+#: ticket collapses into "0.20 and below" and where the fix does its work; the
+#: last three are at and below the mixture's own breakpoint, where zero is the
+#: right answer.
+_PROBABILITY_GRID = (1.00, 0.90, 0.50, 0.30, 0.20, 0.15, 0.10, 0.05)
+
+
+def _composed_p90(
+    quantiles: MagnitudeQuantiles,
+    *,
+    probability: float,
+    tail_shift: TailShift | None = None,
+) -> float:
+    """One hour's served P90, composed the only way this codebase composes."""
+    return compose(
+        occurrence_probability=probability,
+        positive_quantiles=quantiles,
+        tail_shift=tail_shift,
+        positive_mean_mwh=95.0,
+        sub_threshold_mean_mwh=1.0,
+        threshold_mw=THRESHOLD_MW,
+    ).band.p90
+
+
+def _correction(*, delta_lo: float, delta_hi: float) -> ConformalCorrection:
+    return ConformalCorrection(
+        delta_lo=delta_lo,
+        delta_hi=delta_hi,
         calibration_rows=100,
         rank=conformal_rank(100),
         miscoverage=NOMINAL_MISCOVERAGE,
         window_start=_window()[0],
         window_end=_window()[1],
     )
-    quantiles = MagnitudeQuantiles.from_boosters(q10=60.0, q50=90.0, q90=140.0)
+
+
+def test_the_lower_tail_is_corrected_exactly_at_every_occurrence_probability() -> None:
+    """``Q_Y(0.10)`` moves by exactly ``δ_lo`` wherever it is a positive number.
+
+    The property the module docstring claims, and the tail the product promises
+    in prose. It held under ``conformal_v1_partial_upper`` and it holds now —
+    the next test is the one that proves the two agree to the bit.
+    """
+    correction = _correction(delta_lo=7.5, delta_hi=3.0)
     for probability in (0.91, 0.95, 0.99, 1.0):
         before = compose(
             occurrence_probability=probability,
-            positive_quantiles=quantiles,
+            positive_quantiles=_KNOTS,
             positive_mean_mwh=95.0,
             sub_threshold_mean_mwh=1.0,
             threshold_mw=THRESHOLD_MW,
         )
         after = compose(
             occurrence_probability=probability,
-            positive_quantiles=correction.apply(quantiles),
+            positive_quantiles=_KNOTS,
+            tail_shift=correction.shift(),
             positive_mean_mwh=95.0,
             sub_threshold_mean_mwh=1.0,
             threshold_mw=THRESHOLD_MW,
@@ -343,54 +410,136 @@ def test_the_lower_tail_is_corrected_exactly_at_every_occurrence_probability() -
         assert before.band.p10 - after.band.p10 == pytest.approx(
             correction.delta_lo, abs=1e-9
         )
+        assert lower_correction_fraction(probability) == 1.0
 
 
-def test_the_upper_tail_is_attenuated_below_p_equals_one_and_says_so() -> None:
-    """The cost of correcting knots rather than composed quantiles, pinned.
+def test_moving_the_correction_did_not_move_the_floor() -> None:
+    """The served P10 is **bit-identical** under v1 and v2, at every ``p``.
 
-    Composition asks ``Q_pos`` for ``u_hi = 1 − 0.1/p``, which is below the 0.90
-    knot for every ``p < 1``, so the composed P90 receives only part of
-    ``δ_hi``. This is a known and stated limitation, not a bug, and the fraction
-    is a published function so a reader can evaluate it rather than infer it.
+    Forecaster ticket 21's hard constraint. The floor is the number the product
+    quotes, the optimizer plans against and `docs/specs/flex-optimizer.md`
+    builds a promise on; a fix to the ceiling that shifted it by a rounding
+    error would be a regression dressed as an improvement.
 
-    The alternative would be to add ``δ_hi`` to the composed quantile, which is
-    a second path to a band and is the one thing forecaster ticket 01 bought.
+    It is exact rather than approximate for a reason that is worth stating: for
+    ``p > 0.90`` composition reads ``Q_pos`` at ``u_lo = 1 − 0.9/p ≤ 0.10``,
+    where the interpolant is flat and returns the 0.10 knot itself. v1 shifted
+    that knot; v2 adds the same scalar to the same value after reading it. The
+    two are the same float operations in the other order, and the zero-floor v1
+    applied to the knot is subsumed by the floor into ``F_pos``'s support that
+    both apply afterwards. Below ``p = 0.90`` both are the structural zero.
+
+    ``δ_hi`` is deliberately large here: the claim is that *the upper tail's
+    correction cannot reach the lower edge*, which is the same independence
+    ``fit`` guarantees, asserted on the served number rather than on the fit.
     """
-    assert upper_correction_fraction(1.0) == pytest.approx(1.0)
-    assert upper_correction_fraction(0.20) == 0.0
-    assert upper_correction_fraction(0.10) == 0.0
-    assert 0.0 < upper_correction_fraction(0.5) < 1.0
-    assert upper_correction_fraction(0.95) > upper_correction_fraction(0.5)
+    correction = _correction(delta_lo=7.5, delta_hi=40.0)
+    for probability in (*_PROBABILITY_GRID, 0.95, 0.99, 0.91, 0.9001):
+        v1 = compose(
+            occurrence_probability=probability,
+            positive_quantiles=_v1_knot_correction(_KNOTS, correction),
+            positive_mean_mwh=95.0,
+            sub_threshold_mean_mwh=1.0,
+            threshold_mw=THRESHOLD_MW,
+        ).band.p10
+        v2 = compose(
+            occurrence_probability=probability,
+            positive_quantiles=_KNOTS,
+            tail_shift=correction.shift(),
+            positive_mean_mwh=95.0,
+            sub_threshold_mean_mwh=1.0,
+            threshold_mw=THRESHOLD_MW,
+        ).band.p10
+        assert v2 == v1, f"the floor moved at p = {probability}"
+        if in_point_mass(SERVED_QUANTILES[0], probability):
+            assert v2 == 0.0
 
-    correction = ConformalCorrection(
-        delta_lo=0.0,
-        delta_hi=20.0,
-        calibration_rows=100,
-        rank=conformal_rank(100),
-        miscoverage=NOMINAL_MISCOVERAGE,
-        window_start=_window()[0],
-        window_end=_window()[1],
-    )
-    quantiles = MagnitudeQuantiles.from_boosters(q10=60.0, q50=90.0, q90=140.0)
-    for probability in (0.35, 0.5, 0.8, 1.0):
-        before = compose(
+
+def test_the_realised_share_of_delta_hi_is_one_wherever_the_p90_is_positive() -> None:
+    """The table forecaster ticket 21 opens with, and the table it closes with.
+
+    Both columns are measured here from this repository's own composition, so
+    the "before" is not a remembered number and the "after" is not a claim.
+
+    ======  ==========  ==========
+    ``p``   v1 (knots)  v2 (composed)
+    ======  ==========  ==========
+    1.00    1.000       1.000
+    0.90    0.972       1.000
+    0.50    0.750       1.000
+    0.30    0.417       1.000
+    0.20    0.000       1.000
+    0.15    0.000       1.000
+    0.10    0.000       0.000
+    0.05    0.000       0.000
+    ======  ==========  ==========
+
+    The last two rows are the ones that must stay zero. There ``0.90 ≤ 1 − p``,
+    so ``Q_Y(0.90)`` is the mixture's point mass and the served P90 is exactly
+    zero — the model saying there is at least a 90% chance of no curtailment.
+    Correcting *that* upward would invent curtailment the mixture denies, and it
+    would do it in the hours the classifier is most confident about. The defect
+    ticket 21 fixed was the positive edge, not the structural zero, and the two
+    are distinguished here rather than in prose.
+
+    ``δ_lo`` is zero so the measurement is of ``δ_hi`` alone: under v1 the
+    composed P90 at a low ``p`` is read off the segment between the 0.10 and
+    0.50 knots and would otherwise inherit the lower correction, which is the
+    interpolant and not the quantity being tabulated.
+    """
+    correction = _correction(delta_lo=0.0, delta_hi=20.0)
+    expected_v1 = {
+        1.00: 1.0,
+        0.90: 0.9722222222222223,
+        0.50: 0.75,
+        0.30: 0.41666666666666663,
+        0.20: 0.0,
+        0.15: 0.0,
+        0.10: 0.0,
+        0.05: 0.0,
+    }
+    for probability in _PROBABILITY_GRID:
+        uncorrected = _composed_p90(_KNOTS, probability=probability)
+        v1 = _composed_p90(
+            _v1_knot_correction(_KNOTS, correction), probability=probability
+        )
+        v2 = _composed_p90(_KNOTS, probability=probability, tail_shift=correction.shift())
+        assert (v1 - uncorrected) / correction.delta_hi == pytest.approx(
+            expected_v1[probability], abs=1e-9
+        ), f"the v1 column of the ticket's table does not reproduce at {probability}"
+        realised = (v2 - uncorrected) / correction.delta_hi
+        assert realised == pytest.approx(
+            upper_correction_fraction(probability), abs=1e-12
+        )
+        assert realised == pytest.approx(
+            0.0 if in_point_mass(SERVED_QUANTILES[2], probability) else 1.0, abs=1e-12
+        )
+
+
+def test_the_structural_zero_survives_a_correction_that_dwarfs_the_band() -> None:
+    """``Q_Y(q) = 0`` for ``q ≤ 1 − p``, and no shift is ever added to it.
+
+    The half of the "0% at low ``p``" that was always **correct** and had to
+    stay: at ``p ≤ 0.10`` the served P90 is zero because nine hours in ten are
+    expected to be quiet, and at ``p ≤ 0.90`` the served P10 is zero for the
+    same reason. The shift is added inside the positive branch, so it cannot
+    reach either — asserted with a ``δ`` two orders of magnitude larger than the
+    band, which is the only way to tell "preserved" apart from "too small to
+    see".
+    """
+    shift = TailShift(lower_mwh=-5_000.0, upper_mwh=5_000.0)
+    for probability in (0.0, 0.001, 0.05, 0.10):
+        assert _composed_p90(_KNOTS, probability=probability, tail_shift=shift) == 0.0
+    for probability in (0.0, 0.05, 0.50, 0.85):
+        band = compose(
             occurrence_probability=probability,
-            positive_quantiles=quantiles,
+            positive_quantiles=_KNOTS,
+            tail_shift=shift,
             positive_mean_mwh=95.0,
             sub_threshold_mean_mwh=1.0,
             threshold_mw=THRESHOLD_MW,
-        )
-        after = compose(
-            occurrence_probability=probability,
-            positive_quantiles=correction.apply(quantiles),
-            positive_mean_mwh=95.0,
-            sub_threshold_mean_mwh=1.0,
-            threshold_mw=THRESHOLD_MW,
-        )
-        moved = after.band.p90 - before.band.p90
-        assert moved == pytest.approx(
-            correction.delta_hi * upper_correction_fraction(probability), abs=1e-9
-        )
+        ).band
+        assert band.p10 == 0.0
 
 
 # --- The two tails are independent -------------------------------------------
@@ -492,26 +641,38 @@ def _without_docstring(source: str) -> str:
 # --- The median is not corrected ---------------------------------------------
 
 
-def test_the_median_knot_comes_through_untouched() -> None:
+def test_the_median_comes_through_untouched() -> None:
     """A median has no interval to cover, so it gets no correction.
+
+    Under ``conformal_v1_partial_upper`` this was a property of
+    ``ConformalCorrection.apply``, which copied the 0.50 knot through. It is now
+    a property of the shift itself: :class:`~wattsteer_ml.mixture.TailShift` is
+    zero at ``q = 0.50``, so the served P50 is the uncorrected composition at
+    every ``p``, and the two ``δ`` reach the shape of the correction on either
+    side of it without ever meeting at the middle.
 
     Its guardrail is ``p50_unbiasedness`` — the share of observations below P50,
     target 0.50 — and that is reported instead.
     """
-    correction = ConformalCorrection(
-        delta_lo=11.0,
-        delta_hi=23.0,
-        calibration_rows=40,
-        rank=conformal_rank(40),
-        miscoverage=NOMINAL_MISCOVERAGE,
-        window_start=_window()[0],
-        window_end=_window()[1],
-    )
-    quantiles = MagnitudeQuantiles.from_boosters(q10=60.0, q50=90.0, q90=140.0)
-    corrected = correction.apply(quantiles)
-    assert corrected.values[1] == quantiles.values[1]
-    assert corrected.values[0] == 49.0
-    assert corrected.values[2] == 163.0
+    correction = _correction(delta_lo=11.0, delta_hi=23.0)
+    shift = correction.shift()
+    assert shift(SERVED_QUANTILES[1]) == 0.0
+    assert shift(SERVED_QUANTILES[0]) == -11.0
+    assert shift(SERVED_QUANTILES[2]) == 23.0
+    # Flat outside the served quantiles, for the reason MagnitudeQuantiles is:
+    # nothing was fitted past them and a line drawn beyond one is invented.
+    assert shift(0.0) == shift(0.05) == -11.0
+    assert shift(0.95) == shift(1.0) == 23.0
+
+    for probability in (0.3, 0.51, 0.75, 1.0):
+        kwargs: dict[str, Any] = {
+            "occurrence_probability": probability,
+            "positive_quantiles": _KNOTS,
+            "positive_mean_mwh": 95.0,
+            "sub_threshold_mean_mwh": 1.0,
+            "threshold_mw": THRESHOLD_MW,
+        }
+        assert compose(**kwargs, tail_shift=shift).band.p50 == compose(**kwargs).band.p50
 
 
 def test_p50_unbiasedness_finds_a_correct_median_and_a_wrong_one() -> None:

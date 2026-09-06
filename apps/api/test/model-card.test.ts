@@ -20,9 +20,16 @@ import { errorHandler } from "../src/api/plugins/errors.js";
  * The fixture is a **real card**, written by `train_fold` and copied out of the
  * ML test suite rather than typed here. That matters for two of the assertions
  * below: `pit_dropped_days = 49` against `pit_rows = 41`, and a `coverage_p90`
- * of 0.51 beside a `coverage_p10` of 1.0 with `upper_correction_realised` at
- * 0.23 — those numbers are what the model actually produced, and a hand-written
+ * of 0.60 beside a `coverage_p10` of 1.0 with `upper_correction_realised` at
+ * 0.65 — those numbers are what the model actually produced, and a hand-written
  * fixture would have made them whatever this test wanted them to be.
+ *
+ * The card was regenerated under `conformal_v2_full_upper` (forecaster ticket
+ * 21). On the same fold and the same fit — `delta_lo` and `delta_hi` are
+ * unchanged to the bit — `upper_correction_realised` went 0.23 → 0.65 and
+ * `coverage_p90` 0.51 → 0.60. What remains of the gap to 1.0 is structural and
+ * not correctable: 35% of the fold's curtailed hours have `p <= 0.10`, where
+ * `Q_Y(0.90)` is the mixture's point mass at zero.
  *
  * The modelling service is stood up for real on a loopback port, as
  * `replay-days.test.ts` and `ml-proxy.test.ts` do it: the thing under test is
@@ -35,7 +42,15 @@ const CARD = JSON.parse(
 
 const LANE = "dessem_free_v1__gate_late__thr5";
 const ARTIFACT = "2026-08-29T04:00:00Z";
-const REGIME = "conformal_v1_partial_upper";
+const REGIME = "conformal_v2_full_upper";
+
+/**
+ * The regime this fixture's card was *not* produced under. Rows and cards
+ * written before forecaster ticket 21 are still readable and still say
+ * something true about the hours they were served for, so the table has an
+ * entry for it and this file has a test that reads one.
+ */
+const RETIRED_REGIME = "conformal_v1_partial_upper";
 
 const envelope = (card: unknown = CARD, regime = REGIME) => ({
   lane: LANE,
@@ -152,11 +167,26 @@ describe("model card · the correction caveat survives to the wire", () => {
     expect(lower.correction_applied).toBe("full");
     expect(lower.quoted_as).toBe("recovered_floor_mwh");
 
-    // The upper tail: short of nominal, and *unreadable without* the reason.
-    expect(upper.coverage_p90).toBeCloseTo(0.5065, 4);
-    expect(upper.correction_applied).toBe("partial");
-    expect(upper.upper_correction_realised).toBeCloseTo(0.2317, 4);
-    expect(upper.upper_correction_note).toContain("under-application");
+    // The upper tail: now the same kind of statement as the lower one — the
+    // correction reaches the composed P90 in full wherever that edge is a
+    // positive number — and still *unreadable without* the fraction, which now
+    // says how many scored hours had a positive P90 at all.
+    expect(upper.coverage_p90).toBeCloseTo(0.5974, 4);
+    expect(upper.correction_applied).toBe("full");
+    expect(upper.upper_correction_realised).toBeCloseTo(0.6494, 4);
+    expect(upper.upper_correction_note).toContain("point mass");
+  });
+
+  it("still reads a card written under the regime that was retired", async () => {
+    // The old rows are in the database and are not re-stamped: they carry a
+    // narrower statement about the hours they were served for, and this route
+    // has to keep saying which one it is looking at rather than flattening the
+    // two into one claim.
+    serves(envelope(CARD, RETIRED_REGIME));
+    const { band } = await wire(await card());
+    expect(band.correction_regime).toBe(RETIRED_REGIME);
+    expect(band.coverage.lower.correction_applied).toBe("full");
+    expect(band.coverage.upper.correction_applied).toBe("partial");
   });
 
   it("cannot publish a P90 without the fraction that explains it", async () => {

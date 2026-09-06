@@ -80,13 +80,14 @@ rather than in a branch. :func:`build_publication` has **no default** for it.
 
 **Every row is stamped with its correction regime.**
 :data:`~wattsteer_ml.training.conformal.CORRECTION_REGIME` names the rule that
-produced the band, not the release that shipped it. Forecaster ticket 21 is open
-on the upper tail — the composed P90 receives only
-:func:`~wattsteer_ml.training.conformal.upper_correction_fraction` of ``δ_hi``,
-and the shortfall compounds at day grain and again nationally — and whatever it
-decides, the rows written before the decision inherit today's band. A stored
-regime is the difference between a row that can be re-served at its own origin
-and one that quietly means something else than a row written next to it.
+produced the band, not the release that shipped it. Forecaster ticket 21 moved
+the correction from the knots of ``Q_pos`` onto the composed quantile and bumped
+the regime to ``conformal_v2_full_upper``; the rows written before it are **not**
+re-stamped and still carry the narrower band ``conformal_v1_partial_upper``
+produced, whose composed P90 received only part of ``δ_hi`` and whose shortfall
+compounded at day grain and again nationally. A stored regime is the difference
+between a row that can be re-served at its own origin and one that quietly means
+something else than a row written next to it.
 """
 
 from __future__ import annotations

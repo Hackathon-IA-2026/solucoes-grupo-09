@@ -1126,9 +1126,11 @@ def model_card(
             # The card describes the correction; it does not name the rule that
             # applied it. `correction_regime` is stamped on every published
             # forecast row, and it belongs beside the card's own
-            # `upper_correction_realised` — the pair is what makes a short
-            # `coverage_p90` legible as under-*application* rather than as a bad
-            # fit. Read from the constant, never retyped.
+            # `upper_correction_realised` — the pair is what tells a reader
+            # whether a short `coverage_p90` is under-*application* (the retired
+            # `conformal_v1_partial_upper`) or the mixture's structural zero
+            # (`conformal_v2_full_upper`). Read from the constant, never
+            # retyped.
             "correction_regime": CORRECTION_REGIME,
             "card": card,
         }
