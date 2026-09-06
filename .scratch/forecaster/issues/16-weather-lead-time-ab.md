@@ -71,3 +71,29 @@ identical to anyone grepping for the figure.
 
 **The remaining work is an archive-ingestion ticket, not a change here** — and
 it would first have to overturn the measured decision above.
+
+## Decision: the archive is not ingested, and will not be
+
+Recorded so this stops being re-litigated by each ticket that trips over it.
+
+`apps/api/src/ingest/weather/single-runs.ts` refuses the stitched Historical
+Forecast archive on a **measurement**, not a preference: the archive is
+bit-identical to `_previous_day0`, the shortest-lead slice of each run, and
+training on it inflates the intervals the product promises — RMSE 4.38 km/h
+train↔serve on `wind_speed_120m` against a field sd of 8.87. The module cannot
+address that endpoint at all; `run=` is required on every request.
+
+**The decision is to keep that refusal.** Ingesting the archive would buy one
+control arm and cost the honesty of every published band, because a model fit on
+systematically easier weather produces intervals that are too narrow on the
+weather it is actually served. Too-narrow intervals under-state risk, which is
+the unsafe direction for a product operators size storage against. A control arm
+is not worth that.
+
+What this does *not* block, and what changed after this ticket: the **aggregate
+correlation** never needed the archive to be ingested. Feature-engineering 13
+showed the archive weather series is recoverable from data already held — the two
+arms are one axis apart, `published_at_or_before = gate_at(...)` against
+`published_at_or_before = valid_time` — so that half is measurable and is being
+wired up. Only the *training* arm stays unrunnable, and for a different reason:
+a missing shape, not a missing ingestion.
