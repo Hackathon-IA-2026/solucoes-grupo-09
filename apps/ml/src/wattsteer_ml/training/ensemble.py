@@ -70,14 +70,15 @@ outermost fitted alpha is an invented tail), so the mixture's CDF reaches 1 at
 a finite ceiling. An observation above that ceiling is indistinguishable, to
 the model, from one sitting on it: :func:`randomised_pit` clamps such an
 observation to the ceiling and spreads its ``u`` over the ceiling's own jump.
-That is the correct treatment of an atom, and it is **also** where forecaster
-ticket 21's under-corrected upper tail becomes visible — if the ceiling is too
-low, too many observations land on it, ``u`` piles up near 1, and
-:meth:`PitMatrix.max_ks_statistic` sees a column that is not uniform. The KS
-check is therefore the detector for that limitation rather than a formality.
-What it cannot do is repair it: step 3 maps ``u`` back through the same ``Q_Y``
-whose ceiling is too low, so a day total — a sum over 24 such hours — inherits
-the shortfall in its upper quantiles, and :class:`DayGrainCoverage` is where
+That is the correct treatment of an atom, and it is **also** where a ceiling
+that is too low becomes visible — too many observations land on it, ``u`` piles
+up near 1, and :meth:`PitMatrix.max_ks_statistic` sees a column that is not
+uniform. It is how forecaster ticket 21's under-corrected upper tail was
+detectable before it was fixed, and it stays the detector for the next such
+limitation rather than a formality. What it cannot do is repair one: step 3 maps
+``u`` back through the same ``Q_Y`` the ceiling belongs to, so a day total — a
+sum over 24 such hours — inherits any shortfall in its upper quantiles, and
+:class:`DayGrainCoverage` is where
 that shows up as a number.
 
 **No copula is fitted, so no copula parameter is invented,** and day-level
@@ -653,14 +654,19 @@ class DayGrainCoverage:
     statements at 90% each; these count days inside ``[P10, P90]``, which is the
     two-sided interval those two tails bracket.
 
-    **What it is expected to show, given what it inherits.** The composed P90 of
-    an hour receives only :func:`~wattsteer_ml.training.conformal.
-    upper_correction_fraction` of ``δ_hi``, so the ensemble draws from marginals
-    whose upper tails are under-corrected, and a day total is a sum over
-    twenty-four of them. ``day_total_coverage`` short of 0.80 with the misses
-    concentrated above the band is that limitation arriving at day grain, not a
-    fault in the resample; it is measured here rather than corrected, because
-    forecaster ticket 21 owns the decision.
+    **What it inherits, and what it no longer does.** Until forecaster ticket 21
+    the composed P90 of an hour received only part of ``δ_hi``, so the ensemble
+    drew from marginals whose upper tails were under-corrected and a day total
+    was a sum over twenty-four of them; a ``day_total_coverage`` short of 0.80
+    with the misses concentrated above the band was that limitation arriving at
+    day grain rather than a fault in the resample. The correction is now applied
+    to the composed quantile, the ensemble inverts the corrected mixture — the
+    same one object, since the shift lives on it — and a shortfall here is
+    either the fit or the resample again.
+
+    What still arrives from the mixture is the structural zero: an hour with
+    ``p ≤ 0.10`` contributes zero to every draw's ceiling, and no correction is
+    owed there.
     """
 
     fold_id: str
@@ -722,11 +728,12 @@ class DayGrainCoverage:
             "day_grain_coverage_target": SERVED_QUANTILES[2] - SERVED_QUANTILES[0],
             "day_grain_coverage_population": "complete_settled_days",
             "day_grain_coverage_note": (
-                "the ensemble inverts the same Q_pos the hour band does, whose "
-                "0.90 knot receives delta_hi only in the proportion "
-                "upper_correction_fraction states. A day total is a sum over 24 "
-                "such hours, so a shortfall here concentrated above the band is "
-                "that under-correction at day grain and is reported, not repaired"
+                "the ensemble inverts the same mixture the hour band is composed "
+                "from, conformal shift included, so a day total is a sum over 24 "
+                "fully corrected marginals (correction regime "
+                "conformal_v2_full_upper). A shortfall here concentrated above "
+                "the band is the fit or the resample, not an under-applied "
+                "delta_hi"
             ),
         }
 

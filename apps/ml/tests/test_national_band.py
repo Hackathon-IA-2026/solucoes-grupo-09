@@ -44,6 +44,7 @@ from wattsteer_ml.constants import SUBSYSTEM_CODES, Subsystem
 from wattsteer_ml.evaluation import HOURS_PER_DAY
 from wattsteer_ml.mixture import HurdleMixture, MagnitudeQuantiles
 from wattsteer_ml.training import (
+    CORRECTION_REGIME,
     ENSEMBLE_DRAWS,
     MIN_ENSEMBLE_DAYS,
     PIT_COLUMNS,
@@ -462,7 +463,13 @@ def test_the_national_row_says_how_it_was_derived(
     assert set(row["day_total"]) == {"p10", "p50", "p90"}
     assert row["ensemble_draws"] == ENSEMBLE_DRAWS
     assert row["expected_mwh"] == national.expected_mwh
-    assert "ticket 21" in row["upper_tail_note"]
+    # The note names the regime the row was drawn under and the one limit that
+    # is still inherited from the hour band — an hour whose `p <= 0.10` puts a
+    # structural zero into every draw's ceiling. Before forecaster ticket 21 it
+    # named an under-applied `delta_hi` instead, and a reader of the database
+    # has to be able to tell the two statements apart from the row itself.
+    assert CORRECTION_REGIME in row["upper_tail_note"]
+    assert "point mass" in row["upper_tail_note"]
 
 
 def test_the_dropped_day_rule_is_the_national_sample(

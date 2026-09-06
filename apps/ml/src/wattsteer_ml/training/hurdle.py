@@ -666,6 +666,14 @@ def compose_estimates(
     :class:`~wattsteer_ml.mixture.MagnitudeQuantiles` refuses a negative knot.
     The floor **into** ``F_pos``'s support is the mixture's own and is applied
     there.
+
+    ``correction`` arrives as a
+    :class:`~wattsteer_ml.mixture.TailShift` rather than as corrected knots
+    (forecaster ticket 21). The knots handed to the mixture are the boosters'
+    own, unmodified; the conformal shift is added by the mixture at the
+    composed ``q``, which is the quantity the residuals were measured on. Every
+    rung of the baseline ladder passes ``None`` and composes the same
+    arithmetic with a neutral shift.
     """
     floor = 0.0
     forecasts: list[HourForecast] = []
@@ -680,9 +688,8 @@ def compose_estimates(
                 key=key,
                 forecast=compose(
                     occurrence_probability=estimate.occurrence_probability,
-                    positive_quantiles=(
-                        quantiles if correction is None else correction.apply(quantiles)
-                    ),
+                    positive_quantiles=quantiles,
+                    tail_shift=None if correction is None else correction.shift(),
                     positive_mean_mwh=max(floor, estimate.positive_mean_mwh),
                     sub_threshold_mean_mwh=sub_threshold_means.mean_for(
                         key.subsystem, key.local_hour

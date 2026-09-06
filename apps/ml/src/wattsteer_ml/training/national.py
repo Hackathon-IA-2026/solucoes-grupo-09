@@ -63,19 +63,22 @@ overstated the day's — and it is not a comparison of the summed national hour
 against ``τ``, which would be four subsystems' worth of MWh measured against one
 subsystem's threshold.
 
-**What forecaster ticket 21 means here, stated rather than repaired.** The
-composed P90 of an hour receives only
-:func:`~wattsteer_ml.training.conformal.upper_correction_fraction` of ``δ_hi``,
-so every subsystem day total inherits an under-corrected upper tail, and the
-national P90 is a sum of four of them drawn together. The shortfall therefore
-**accumulates in level rather than cancelling**: it is not four independent
-errors averaging out, because each subsystem's ceiling is too low in the same
-direction on the same draw. It does not widen the *relative* error — the
-national band is a sum of four biased-low upper quantiles, so it is low by
-roughly the sum of the four shortfalls — and it is at day grain, where ticket 07
-already recorded that the correction bites twice. Ticket 21 owns that decision;
-this module measures and reports, and :class:`NationalDayGrain` carries the note
-onto the row so a reader of the database sees it beside the number.
+**What forecaster ticket 21 changed here.** Under
+``conformal_v1_partial_upper`` the composed P90 of an hour received only part of
+``δ_hi``, so every subsystem day total inherited an under-corrected upper tail
+and the national P90 — a sum of four of them drawn together — was low by roughly
+the sum of the four shortfalls. It **accumulated in level rather than
+cancelling**, because each subsystem's ceiling was too low in the same direction
+on the same draw, and it did so at day grain, where ticket 07 recorded that the
+correction bites twice. That is exactly why the ticket was decided as a fix: an
+error that compounds toward a *narrower* national band under-states the worst
+case an operator sizes storage against.
+
+The correction now reaches each hour's composed P90 in full, so nothing is
+inherited here to accumulate. What the national P90 still inherits is the
+mixture's structural zero: an hour with ``p ≤ 0.10`` contributes a zero to every
+draw's ceiling, which is the model denying curtailment rather than a correction
+falling short. :class:`NationalDayGrain` carries that onto the row.
 """
 
 from __future__ import annotations
@@ -233,11 +236,13 @@ class NationalDayGrain:
                 "quantiles, and never an ONS national aggregate row"
             ),
             "upper_tail_note": (
-                "each subsystem's day total inherits the composed P90's "
-                "under-corrected upper tail (upper_correction_fraction of "
-                "delta_hi), and this P90 is a sum of four of them drawn together, "
-                "so the shortfall accumulates in level rather than cancelling. "
-                "Reported, not repaired: forecaster ticket 21 owns the decision"
+                "each subsystem's day total inherits its hours' composed P90s, "
+                "which receive delta_hi in full wherever they are positive "
+                "(correction regime conformal_v2_full_upper). What they do not "
+                "cover is an hour with p <= 0.10, whose P90 is the mixture's "
+                "point mass at zero; those contribute a zero to every draw's "
+                "ceiling here, and that is the model denying curtailment rather "
+                "than a correction falling short"
             ),
         }
 

@@ -90,9 +90,16 @@ multiplied. They are composed by **inverting the mixture CDF**, which is one
 line of arithmetic and settles the hour-grain band exactly:
 
 ```
-Q_Y(q | x) =  0                                  if q ≤ 1 − p(x)
-              Q_pos( (q − (1 − p(x))) / p(x) )   otherwise
+Q_Y(q | x) =  0                                          if q ≤ 1 − p(x)
+              Q_pos( (q − (1 − p(x))) / p(x) ) + δ(q)    otherwise
 ```
+
+`δ(q)` is the conformal correction, and it is written here rather than bolted on
+later because it is part of the served quantile function: see "Quantiles —
+quantile regression, conformalised" for what it is and why it is applied at `q`
+and not to `Q_pos`'s knots. It is zero at `q = 0.50` and never reaches the
+`q ≤ 1 − p` branch, so everything the next paragraphs say about the structural
+zeros holds with or without it.
 
 **`Q_pos` is flat outside the fitted knots, not extrapolated.** The composition
 asks for `Q_pos((q − (1 − p))/p)`, which equals `q` only when `p = 1`, so it
@@ -290,8 +297,8 @@ F_Y(y | x) = (1 − p) · F_sub(y | x) + p · F_pos(y | x)
 with `F_sub` supported on `[0, τ]` and `F_pos` on `(τ, ∞)`. Inverting:
 
 ```
-Q_Y(q | x) =  0                                        if q ≤ 1 − p(x)
-              Q_pos( (q − (1 − p(x))) / p(x) | x )     if q >  1 − p(x)
+Q_Y(q | x) =  0                                                if q ≤ 1 − p(x)
+              Q_pos( (q − (1 − p(x))) / p(x) | x ) + δ(q)      if q >  1 − p(x)
 ```
 
 and the expectation, which is *not* a quantile and is published separately:
@@ -415,12 +422,53 @@ the coverage honest.
 contain positive rows `i` with observed `y_i`. Define, on the *composed* band:
 
 ```
-E_lo,i = q̂^0.10(x_i) − y_i        (positive when the interval was too high)
-E_hi,i = y_i − q̂^0.90(x_i)
+E_lo,i = Q_Y(0.10 | x_i) − y_i    (positive when the interval was too high)
+E_hi,i = y_i − Q_Y(0.90 | x_i)
 δ_lo   = the ⌈(n+1)(1 − 0.10)⌉-th smallest value of E_lo
 δ_hi   = the ⌈(n+1)(1 − 0.10)⌉-th smallest value of E_hi
-Q_pos^0.10 ← q̂^0.10 − δ_lo        Q_pos^0.90 ← q̂^0.90 + δ_hi
 ```
+
+**The correction is applied to the quantity it was measured on.** The residuals
+are differences of the *composed* band, so `δ` is a shift of `Q_Y`, not of
+`Q_pos`. It is applied inside the positive branch, as a piecewise-linear
+function of the mixture's own `q` — the same interpolate-between-knots,
+hold-flat-outside rule `Q_pos` uses, over the three points where something is
+known:
+
+```
+δ(0.10) = −δ_lo        δ(0.50) = 0        δ(0.90) = +δ_hi
+δ(q)      linear between them, flat below 0.10 and above 0.90
+Q_Y(q | x) ← Q_Y(q | x) + δ(q)        for q > 1 − p(x); unchanged at q ≤ 1 − p(x)
+```
+
+`δ(0.50) = 0` is the median getting no correction, made structural rather than
+remembered. The exclusion of the `q ≤ 1 − p` branch is what keeps the point mass
+at zero intact: at `p ≤ 0.10` the served P90 *is* zero and correcting it upward
+would invent curtailment the mixture denies.
+
+**This is a correction of the served band, not a second way to build one.** The
+shift is carried on the mixture, so the path ensemble — which inverts `Q_Y` at
+500 × 24 arbitrary `q` per day — inverts the corrected distribution, and the
+ensemble's marginals stay the served marginals. There is still exactly one
+composition. Applying `δ` to the two published quantiles *after* composition
+would be simpler and would break that: the band would move and the ensemble
+would keep drawing from the uncorrected marginals, so the hour band and the day
+band would disagree about hour 14.
+
+**Why not the knots** — the first implementation applied `δ` to `Q_pos`'s knots
+(`Q_pos^0.10 ← q̂^0.10 − δ_lo`, `Q_pos^0.90 ← q̂^0.90 + δ_hi`) and that
+under-applied the upper tail. Composition reads `Q_pos` at
+`u = (q − (1 − p))/p`; `u_lo ≤ 0.10` for every `p`, where the interpolant is
+flat, so the lower tail arrived in full — but `u_hi = 1 − 0.1/p` is below the
+0.90 knot for every `p < 1` and at or below the 0.50 knot once `p ≤ 0.20`. The
+composed P90 received 0.97 of `δ_hi` at `p = 0.9`, 0.75 at `p = 0.5`, 0.42 at
+`p = 0.3` and **none of it at `p ≤ 0.20`** — a mean realised share of 0.25 on the
+reference fold, with 49% of rows getting nothing. That is a P90 too *low*, which
+is the flattering direction and the unsafe one for a product whose reason to
+exist is letting an operator size storage against the top of the band. The
+regime is stamped on every published row (`correction_regime`), so the two rules
+are one `group by` apart: `conformal_v1_partial_upper` is the knot correction and
+`conformal_v2_full_upper` is the one above.
 
 Symmetric CQR would let a badly-fitted upper tail spend the correction budget
 that the lower tail needs, and the lower tail is the one the product promises.
@@ -449,6 +497,15 @@ guarantee is treated as **approximate**, with empirical fold coverage as the
 real check and a guardrail on it. A conformal correction that needs to be large
 is itself a signal: `δ_lo` and `δ_hi` are published per fold, and a `δ_lo` that
 grows across folds means the boosters' intervals are drifting narrow.
+
+**Both `coverage_p10` and `coverage_p90` are now the same kind of statement**,
+which they were not under the knot correction: each counts the fold's curtailed
+hours against a served edge that received its tail's whole `δ`. What remains
+asymmetric belongs to the mixture and not to the correction — the lower edge is
+structurally zero for every `p ≤ 0.90` and the upper for every `p ≤ 0.10`, and
+`upper_correction_realised` publishes the share of scored hours where the upper
+edge is a positive number at all. It bounds `coverage_p90` from above, and a
+`coverage_p90` short of nominal is read against it.
 
 **The interval has two independent honesty components**, and separating them is
 what makes a failure diagnosable: `p` is calibrated by isotonic and checked by
@@ -1195,8 +1252,11 @@ one layer down.
 `Q_Y(q) = 0` for every `q ≤ 1 − p` and only then; `Q_Y` is non-decreasing in `q`;
 `Q_Y(q) > τ` whenever `q > 1 − p`; `E[Y] ≥ Q_Y(0.5)` for every `p < 0.5`;
 `E[Y] = p·Ê[Y|Y>τ] + (1−p)·μ_sub` exactly. Boundary cases: `p = 0` (band is all
-zeros, expectation is `μ_sub`), `p = 1` (band is `Q_pos` unchanged), and the
-clipped endpoints isotonic can produce.
+zeros, expectation is `μ_sub`), `p = 1` (band is `Q_pos` shifted by `δ` and
+nothing else), and the clipped endpoints isotonic can produce. With a `δ` two
+orders of magnitude larger than the band, the `q ≤ 1 − p` branch still returns
+exactly zero — the correction is applied inside the positive branch and cannot
+reach the point mass.
 
 **Seam 2 — quantiles do not add.** On a fixture where every hour's band is
 known and the ensemble is seeded: assert the day-total P90 is strictly less than
@@ -1217,7 +1277,13 @@ exchangeable data with a known conditional distribution, fit deliberately
 mis-scaled quantile regressors, and assert the conformalised interval's
 empirical coverage reaches nominal ± ε while the uncorrected one does not.
 Assert the two tail corrections are computed independently (perturbing only the
-upper tail's residuals leaves `δ_lo` unchanged).
+upper tail's residuals leaves `δ_lo` unchanged). Assert the **application point**
+too, since that is where the first implementation was wrong: the served P10 and
+P90 each move by exactly their own `δ` at every `p` whose edge is positive, and
+by nothing where it is not. The knot correction is reconstructed in the test file
+so its realised-share table is measured rather than remembered, and so that
+"the floor did not move" is asserted as bit equality between the two rules
+rather than as prose.
 
 **Seam 5 — calibration.** Isotonic fitted on synthetic over-confident
 probabilities reduces ECE and preserves monotonicity; output never equals 0 or
@@ -1332,6 +1398,12 @@ rung.
   to want it.
 - **Per-hour or per-subsystem conditional conformal correction.** Reported,
   never applied; the calibration window cannot support 24 or 96 scalars.
+- **Correcting the served P90 where `p ≤ 0.10`.** The band is zero there because
+  `0.90 ≤ 1 − p`, and that is the model stating at least a 90% chance of no
+  curtailment. Lifting it would manufacture curtailment in exactly the hours the
+  classifier is most confident about. The share of scored hours in that state is
+  published (`upper_correction_realised`) and bounds `coverage_p90`; the answer
+  to a low value is a better classifier, not a wider band.
 - **Cross-conformal / jackknife+ calibration.** Recorded as the upgrade that
   would recover the 90 held-out days at the cost of K trainings.
 - **Recency-weighted training samples.** A decay constant is another invented

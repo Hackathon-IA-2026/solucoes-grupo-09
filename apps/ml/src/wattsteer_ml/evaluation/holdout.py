@@ -70,10 +70,11 @@ pinned to the older ``AsOf`` still reconstructs the older numbers.
 :data:`~wattsteer_ml.training.conformal.CORRECTION_REGIME` is stamped by
 :meth:`~wattsteer_ml.publication.HourRow.as_row` and
 :meth:`~wattsteer_ml.publication.DayRow.as_row`, which is the same method the
-served path calls. Forecaster ticket 21 is open on the upper tail; whatever it
-decides, rows written under today's rule are one ``group by`` away from rows
-written under tomorrow's — and a holdout row records its regime by the same
-mechanism a served one does rather than by a second one that could forget.
+served path calls. Forecaster ticket 21 changed how ``δ_hi`` reaches the
+composed P90 and bumped the regime with it; rows written under the old rule are
+one ``group by`` away from rows written under the new one — and a holdout row
+records its regime by the same mechanism a served one does rather than by a
+second one that could forget.
 """
 
 from __future__ import annotations
