@@ -923,3 +923,169 @@ def test_the_coverage_report_names_the_fold_it_is_true_of(
     assert all(0 <= int(cell.label) < 24 for cell in coverage.by_local_hour)
     assert sum(cell.rows for cell in coverage.by_subsystem) == coverage.rows
     assert sum(cell.rows for cell in coverage.by_local_hour) == coverage.rows
+
+
+# --- Forecaster 24: which rows each coverage is over, and what it may be called
+
+
+def test_the_point_mass_row_is_free_coverage_below_and_certain_failure_above() -> None:
+    """One row, two coverages, opposite verdicts — and neither is about the fit.
+
+    At ``p ≤ 0.10`` the mixture puts **both** served edges on the point mass:
+    ``Q_Y(0.10) = Q_Y(0.90) = 0`` because both are at or below ``1 − p``. The
+    row is scored, so ``y > τ > 0``, and therefore ``y ≥ P10`` is true for free
+    while ``y ≤ P90`` is false with certainty. The same structural zero that
+    ticket 21 established as correct is a **free pass** in ``coverage_p10``'s
+    numerator and an **automatic failure** in ``coverage_p90``'s.
+
+    That is the whole of the two figures' disagreement, and it is not a
+    disagreement about which rows they are counted over: both are counted over
+    every curtailed hour of the fold. It is a disagreement about what a zero
+    edge means, and it is why ``coverage_p10 = 1.0`` beside a short
+    ``coverage_p90`` says nothing about either tail's width.
+    """
+    quiet = _draw(_rng(24), 1, lower_scale=1.0, upper_scale=1.0, occurrence=0.05)[0]
+    assert quiet.forecast.band.p10 == 0.0
+    assert quiet.forecast.band.p90 == 0.0
+    assert quiet.observed_mwh > quiet.forecast.mixture.threshold_mwh > 0.0
+    assert quiet.covered_lower is True
+    assert quiet.covered_upper is False
+    assert lower_correction_fraction(quiet.forecast.occurrence_probability) == 0.0
+    assert upper_correction_fraction(quiet.forecast.occurrence_probability) == 0.0
+
+
+def test_each_coverage_publishes_the_rows_on_which_its_edge_is_a_statement() -> None:
+    """The denominator question, answered on the report rather than by a reader.
+
+    A fold of nothing but point-mass hours produces ``coverage_p10 = 1.0`` and
+    ``coverage_p90 = 0.0`` over the same 400 rows. Both are arithmetic about an
+    edge that is zero, and the report says so: no row states either bound, so
+    both ``*_where_stated`` figures are ``None`` — **absent, never 1.0** — and
+    the two stated-row counts are zero.
+    """
+    quiet = _draw(_rng(240), 400, lower_scale=1.0, upper_scale=1.0, occurrence=0.05)
+    report = CoverageReport.of(quiet, fold_id="synthetic-all-point-mass")
+
+    assert report.rows == 400
+    assert report.coverage_p10 == 1.0
+    assert report.coverage_p90 == 0.0
+    assert report.lower_stated_rows == 0
+    assert report.upper_stated_rows == 0
+    assert report.coverage_p10_where_stated is None
+    assert report.coverage_p90_where_stated is None
+    assert report.nominal_claim is False
+
+
+def test_a_short_marginal_upper_coverage_decomposes_into_reach_times_width() -> None:
+    """Where the upper edge is a bound at all, it is a *nominal* bound.
+
+    The rows are exchangeable and the two regressors are correctly scaled, so
+    conformal has almost nothing to undo; what varies is ``p``. Mixing hours the
+    classifier put on the point mass into hours it did not drags the marginal
+    ``coverage_p90`` down without touching the width of a single interval, and
+    the report separates the two: the marginal is the product of the share of
+    rows that state an upper bound and the coverage among those rows.
+
+    This is the arithmetic that makes ``coverage_p90`` readable. A marginal
+    short of nominal is a claim about the **classifier's** point mass unless
+    ``coverage_p90_where_stated`` is short too, and only the second is a claim
+    about the conformal correction's width.
+    """
+    rng = _rng(2400)
+    stated = _draw(rng, 2000, lower_scale=1.0, upper_scale=1.0, occurrence=1.0)
+    quiet = _draw(rng, 1000, lower_scale=1.0, upper_scale=1.0, occurrence=0.05)
+    correction = conformalise(stated, window=_window())
+    hours = _recomposed(stated, correction) + _recomposed(quiet, correction)
+    report = CoverageReport.of(hours, fold_id="synthetic-mixed-p")
+
+    assert report.upper_stated_rows == 2000
+    assert report.coverage_p90 < TARGET_COVERAGE - 4 * COVERAGE_TOLERANCE
+    where_stated = report.coverage_p90_where_stated
+    assert where_stated is not None
+    assert abs(where_stated - TARGET_COVERAGE) <= COVERAGE_TOLERANCE
+    # The identity: the marginal is the reach times the width, exactly, because
+    # a row whose P90 is zero can never be covered.
+    assert report.coverage_p90 == pytest.approx(
+        report.upper_correction_realised * where_stated
+    )
+    assert report.upper_correction_realised == pytest.approx(
+        report.upper_stated_rows / report.rows
+    )
+    # And the band still may not be called a 90% band, because the marginal is
+    # the statement a reader makes about the fold.
+    assert report.nominal_claim is False
+
+
+def test_a_band_that_covers_nominally_on_both_marginals_may_say_so() -> None:
+    """The claim has to be able to hold, or the flag is decoration.
+
+    ``p = 1`` everywhere, so every row states both bounds and the two marginals
+    are the two conditional figures. Conformal brings each to nominal — *equal*
+    to it, either side by sampling noise, which is why the claim is tested
+    against the published guardrail window and not against a hard ``>= 0.90``
+    — and the report says the band is a 90% band, which is exactly the sentence
+    it must withhold on any fold where a marginal falls outside.
+    """
+    rng = _rng(2401)
+    calibration = _draw(rng, SYNTHETIC_ROWS, lower_scale=1.45, upper_scale=0.65)
+    evaluation = _draw(rng, SYNTHETIC_ROWS, lower_scale=1.45, upper_scale=0.65)
+    correction = conformalise(calibration, window=_window())
+    report = CoverageReport.of(
+        _recomposed(evaluation, correction), fold_id="synthetic-nominal"
+    )
+
+    assert report.lower_stated_rows == report.upper_stated_rows == report.rows
+    assert report.coverage_p10_where_stated == report.coverage_p10
+    assert report.coverage_p90_where_stated == report.coverage_p90
+    assert report.nominal_claim is True
+    assert report.claim_note.startswith(conformal_module.NINETY_PERCENT_BAND)
+
+
+def test_the_card_refuses_to_call_a_short_band_a_ninety_percent_band(
+    trained: TrainedFold,
+) -> None:
+    """On the shared fit, and in the field a reader of the card reaches first.
+
+    The fixture fold's *values* mean nothing — seven days of invented rows — but
+    the shape does: a marginal short of nominal has to reach the card as a
+    refusal to describe the band as a 90% one, with the decomposition beside it
+    and the named unmeasured reason attached, rather than as a decimal a reader
+    is left to interpret.
+    """
+    card = json.loads(trained.card.to_json())
+    quantiles = card["quantiles"]
+    coverage = trained.card.coverage
+    assert coverage is not None
+
+    assert quantiles["coverage_nominal_claim"] is coverage.nominal_claim
+    assert quantiles["coverage_stated_rows_p10"] == coverage.lower_stated_rows
+    assert quantiles["coverage_stated_rows_p90"] == coverage.upper_stated_rows
+    assert quantiles["coverage_p10_where_stated"] == coverage.coverage_p10_where_stated
+    assert quantiles["coverage_p90_where_stated"] == coverage.coverage_p90_where_stated
+    assert quantiles["coverage_claim_note"] == coverage.claim_note
+
+    # The fixture's classifier leaves curtailed hours on the point mass, so the
+    # marginal upper coverage is short and the claim is withheld.
+    assert coverage.coverage_p90 < TARGET_COVERAGE
+    assert coverage.nominal_claim is False
+    assert conformal_module.NOT_A_NINETY_PERCENT_BAND in coverage.claim_note
+    assert conformal_module.MARGINAL_COVERAGE_NOT_RUN_YET in coverage.claim_note
+
+
+def test_the_unmeasured_reason_says_unrun_and_never_no_data_source() -> None:
+    """Forecaster 18's shape, not forecaster 16's — the distinction is the point.
+
+    The rows behind a marginal ``coverage_p90`` exist and are ingested: the fold
+    calendar, the feature function and the settled labels are all here. What has
+    not been done is scoring the folds against a migrated database, so the
+    honest absence is "not run yet" and not "there is no data source". A reason
+    that said the latter would license the reader to treat the fixture's decimal
+    as the best available number, which is the failure this register exists to
+    prevent.
+    """
+    reason = conformal_module.MARGINAL_COVERAGE_NOT_RUN_YET
+    assert "not been" in reason or "not run" in reason
+    assert "no data source" not in reason
+    assert "fixture" in reason
+    for banned in ("0.5974", "0.6494", "0.60"):
+        assert banned not in reason, "a register entry may not carry a fixture figure"
