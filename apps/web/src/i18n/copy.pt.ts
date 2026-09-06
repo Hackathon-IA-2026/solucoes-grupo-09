@@ -717,6 +717,8 @@ export const pt: Copy = {
       solvingTitle: "Resolvendo",
       solvingNote:
         "O Flex Optimizer está montando e resolvendo o MILP para esta frota. Ele responde dentro da requisição — não há job para consultar — então isto deve sumir antes de você terminar de ler.",
+      solvingLive:
+        "Esta tela lê uma API ao vivo e não pode ser pré-renderizada. O POST /v1/optimize monta e resolve o MILP, que não roda no navegador — então uma exportação estática traz esta nota e nenhum plano, e permanece nela. Para dimensionar uma frota, aponte a build para um gateway em execução com EXPO_PUBLIC_API_URL, ou suba um localmente com bun run api e recarregue. Visão da rede e Explicar não precisam de nenhum dos dois.",
       economicNoPlan:
         "Sem plano, sem valor. Nada foi despachado nesta etapa, então não há o que precificar.",
       dispatchTitle: "Despacho",

@@ -30,7 +30,7 @@ reintroduce a fixture-scored plan, and do not weaken `one-execution-rule`.
 
 **Blocked by:** None — api-surface 09 and replay 10 are merged.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The mitigate figure is either the contract's own per-step number or gone
 - [ ] If the guard is extended, the full-repo scan still yields only intended hits

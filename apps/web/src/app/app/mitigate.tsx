@@ -176,7 +176,7 @@ export default function MitigateScreen() {
           <HonestyNote
             title={copy.app.mitigate.solvingTitle}
             tone="neutral"
-            points={[copy.app.mitigate.solvingNote]}
+            points={[copy.app.mitigate.solvingNote, copy.app.mitigate.solvingLive]}
           />
         </AppShell>
       </>

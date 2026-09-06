@@ -900,6 +900,8 @@ export const en = {
       solvingTitle: "Solving",
       solvingNote:
         "The Flex Optimizer is building and solving the MILP for this fleet. It answers inside the request — there is no job to poll for — so this should be gone before you finish reading it.",
+      solvingLive:
+        "This screen reads a live API and cannot be prerendered. POST /v1/optimize builds and solves the MILP, which does not run in a browser — so a static export ships this note and no plan, and stays on it. To size a fleet, point the build at a running gateway with EXPO_PUBLIC_API_URL, or start one locally with bun run api and reload. Grid Overview and Explain need neither.",
       economicNoPlan:
         "No plan, no figure. Nothing was dispatched in this step, so there is nothing to price.",
       dispatchTitle: "Dispatch",
