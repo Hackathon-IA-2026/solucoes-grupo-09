@@ -59,6 +59,19 @@ export function optimizeKey(parts: {
 export const REPLAY_KEY_PREFIX = "replay:v1";
 
 /**
+ * What the ML service publishes as `actual.data_version` when the day it read
+ * had no settled rows to take a version from.
+ *
+ * Spelled rather than defaulted to `0`, which would assert a vintage that never
+ * existed — the same word and the same argument as `NO_DATA_VERSION` in
+ * `contract/curtailment-observed.ts`, and as `NO_OBSERVED_DATA_VERSION` on the
+ * Python side. `/v1/replay` refuses a day whose twenty-four hours are not all
+ * settled, so a successful replay never carries it; `../replay.ts` treats it as
+ * the absence it is and builds no validator over it.
+ */
+export const NO_OBSERVED_DATA_VERSION = "none";
+
+/**
  * Build the replay key — `docs/specs/replay.md`, "Cache", verbatim:
  *
  * ```
@@ -84,31 +97,48 @@ export const REPLAY_KEY_PREFIX = "replay:v1";
  * yesterday's plan under today's code — a stale answer no TTL is short enough
  * to prevent.
  *
- * ### The component that is missing, and what it costs
+ * ### The fifth component the caching table used to ask for, and where it went
  *
- * `api-surface.md`'s caching table writes this key with a **sixth** component —
- * `…:<obs_data_version>` — and it is not here, because the replay contract
- * carries no observed data version to put in it. `replay_result` publishes the
- * target date, the origin, the fidelity and the numbers; nothing on the wire
- * names the vintage of the *observed* half.
+ * `api-surface.md`'s caching table wrote this key with a fifth component —
+ * `…:<obs_data_version>` — on the argument that a replay's observed half is
+ * read `AsOf(now)` against a record ONS restates in place, so a restatement
+ * should evict the entries it invalidates rather than be waited out. The
+ * argument is right. The component cannot live *here*, and api-surface 24
+ * decided it on that ground rather than on effort:
  *
- * That component is not decoration. A replay's forecast half is pinned and
- * cannot move; its observed half is read `AsOf(now)` against a record ONS
- * restates in place, and the point of the sixth component is that a restatement
- * evicts the entries it invalidates rather than waiting them out. Without it,
- * the eviction is the TTL: for up to 24 h after ONS rewrites a day, a cached
- * replay of that day answers with the numbers from before the rewrite. That is
- * a bounded staleness on a *cache* and not a broken pin — the answer was true
- * of the record when it was computed, and the response names the publication it
- * planned against — but for that day `vintage_fidelity` is the only thing
- * telling a reader the ground may have moved underneath the observed half.
+ * **A Redis lookup key must be computable before the call that produces an
+ * answer; the observed vintage is knowable only from the answer.** The pinned
+ * fast path above does its `get`s before it posts to the ML service, holding a
+ * scenario, a pinned instant and a build — and this gateway reads no rows. A
+ * component it could only learn from the answer cannot decide which entry to
+ * look up, and an entry keyed on a vintage nobody can spell is an entry nobody
+ * can ever hit. So the key is four components and the spec's table now says
+ * four.
  *
- * It is left open rather than papered over. The two ways to close it are the ML
- * service publishing the observed `data_version` on the replay payload, which
- * is a change to a contract `replay.md` declares fixed and `api-surface.md` may
- * only re-path; or the gateway reading it out of Postgres, which would put a
- * query on a route whose whole claim is that it contains neither a model nor a
- * read. Neither belongs to the ticket that re-paths these four routes.
+ * **The version is published, and it goes on the validator instead.**
+ * `replay_result` carries `actual.data_version` — the greatest `data_version`
+ * among the settled rows the replay was scored on — and `../replay.ts` puts it
+ * on the deep link's ETag as a fifth component, which it can, because an ETag
+ * is built from the answer. That closes the sharper half of the hole: a
+ * validator blind to the observed half never moves when ONS rewrites the day,
+ * so a client that keeps revalidating keeps being told 304 against numbers that
+ * changed — stale with no expiry. It now moves when the record moves.
+ *
+ * **What remains, stated rather than hidden.** A Redis entry stored before a
+ * restatement is still served after it, for as long as the entry lives:
+ * `REPLAY_TTL_SEC`, 24 hours, and no longer — this cache has no other eviction
+ * and no manual one. Downstream of that, a shared cache may hold a copy for
+ * `max-age=600`, ten minutes, and its next revalidation now sees the moved
+ * validator. So the worst case a reader can observe is **24 hours of a
+ * pre-restatement replay of one day, plus the ten-minute shared window**, and
+ * during it the answer is true of the record when it was computed, names the
+ * publication it planned against, and now names the vintage it was scored on as
+ * well. `vintage_fidelity` is no longer the only thing saying the ground may
+ * have moved.
+ *
+ * Shortening the TTL is not the fix and is not offered: that would be answering
+ * a provenance question with a duration, which is the one thing this key is
+ * not allowed to do.
  */
 export function replayKey(parts: {
   scenarioHash: string;

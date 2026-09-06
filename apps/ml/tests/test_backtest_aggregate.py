@@ -173,7 +173,10 @@ def replayed(
         windows=WINDOWS,
         forecast=pinned(target_date, profile(p50)),
         observed=ObservedDay(
-            subsystem=SUBSYSTEM, target_date=target_date, hours=profile(observed)
+            subsystem=SUBSYSTEM,
+            target_date=target_date,
+            hours=profile(observed),
+            data_version="1",
         ),
     )
 

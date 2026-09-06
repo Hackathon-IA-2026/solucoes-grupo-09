@@ -171,9 +171,13 @@
           "minItems": 24,
           "maxItems": 24,
           "items": { "type": "number", "minimum": 0 }
+        },
+        "data_version": {
+          "type": "string",
+          "description": "The vintage of the observed half - the greatest `data_version` among the settled rows this day was read from, as a string, or `\"none\"` when there were none. The forecast half of a replay is pinned and cannot move; this half is read `AsOf(now)` against a record ONS restates in place, so without this field two replays of one day computed either side of a restatement are indistinguishable on the wire. It is the quantity `/v1/curtailment/*` already validates on, and it is what puts the observed vintage into `/v1/replay`'s ETag. A provenance and never a duration: it moves when the record moves and at no other time."
         }
       },
-      "required": ["total_mwh", "peak_mw", "hours"],
+      "required": ["total_mwh", "peak_mw", "hours", "data_version"],
       "additionalProperties": false
     },
     "forecast": {

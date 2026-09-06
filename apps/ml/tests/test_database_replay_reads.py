@@ -284,6 +284,43 @@ def test_a_second_backtest_run_supersedes_and_a_published_at_pin_cannot_stop_it(
     run(work)
 
 
+def test_the_observed_half_carries_the_vintage_a_restatement_moves() -> None:
+    """`ObservedDay.data_version` — the greatest version among the day's rows.
+
+    The forecast half of a replay is pinned and cannot move. The observed half
+    is read ``AsOf(now)`` against a record ONS rewrites in place, and until this
+    read carried the version, nothing downstream — not the published contract,
+    not `apps/api`'s validator — could tell a replay computed before a
+    restatement from one computed after it. It is the same quantity
+    `api-surface.md`'s `/v1/curtailment/*` row validates on: `max(data_version)`
+    over the rows the read returned.
+    """
+
+    async def work(conn: asyncpg.Connection[Any]) -> None:
+        await _seed_one_replayable_day(conn)
+        before = await _read(conn)
+        assert before.observed is not None
+        assert before.observed.data_version == "1"
+
+        # ONS restates the day in place: the same hours, new numbers, appended
+        # as `data_version` 2 rather than overwriting.
+        await seed_observed_day(
+            conn,
+            day=DAY,
+            hours=tuple(value * 1.5 for value in OBSERVED),
+            ingested_at=datetime(2026, 3, 1, tzinfo=UTC),
+            data_version=2,
+        )
+        after = await _read(conn)
+        assert after.observed is not None
+        assert after.observed.hours != before.observed.hours
+        # The numbers moved and so did the vintage. A cache or a validator built
+        # on this cannot serve the first day's numbers under the second's name.
+        assert after.observed.data_version == "2"
+
+    run(work)
+
+
 def test_a_pin_that_resolves_nothing_is_an_absence_and_never_a_fallback() -> None:
     """The one repair this module must never make.
 
