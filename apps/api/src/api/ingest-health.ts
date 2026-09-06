@@ -7,6 +7,7 @@ import {
   type PayloadArchive,
   readIngestionHealth,
 } from "../ingest/index.js";
+import { applyCachePolicy, CACHE_POLICIES } from "./plugins/cache-policy.js";
 
 /**
  * `GET /ingest/health` — the per-source view.
@@ -25,6 +26,15 @@ import {
  * 503 can be asserted end-to-end against a real database, rather than only the
  * view underneath it. A rule that lives in a handler and is only ever tested
  * one layer down is a rule nothing checks.
+ *
+ * **It is `no-store`, and that is the same argument.** A response with no
+ * `Cache-Control` is subject to an intermediary's heuristic freshness, and a
+ * heuristically cached 200 from this route is a monitor being told everything
+ * is fine by a copy of an answer from before the outage — silence again, with
+ * a cache producing it. Its 503 does not save it either: that status is set on
+ * the handler's own body and never passes through `errors.ts`, so the error
+ * row's `refuseToCache` never sees it. The row is `CACHE_POLICIES.ingestHealth`
+ * and the argument is written there.
  */
 
 /** The archive is read-only here: the API never writes custody. */
@@ -43,7 +53,10 @@ export function createIngestHealthRoute(deps: {
 }) {
   return new Elysia().get(
     "/ingest/health",
-    async ({ set }) => {
+    async ({ set, request }) => {
+      // Before the branches, so that every answer this route can give — the
+      // healthy 200, the stale 503 and the unconfigured 503 — carries it.
+      applyCachePolicy({ set, request }, CACHE_POLICIES.ingestHealth);
       if (!deps.db) {
         set.status = 503;
         return { error: "Persistence is not configured" };

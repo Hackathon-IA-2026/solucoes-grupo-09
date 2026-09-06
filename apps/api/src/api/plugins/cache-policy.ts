@@ -3,7 +3,9 @@
  * duration.**
  *
  * `docs/specs/api-surface.md`, "Caching", is a table of twelve rows and one
- * rule, and until this module existed it was twelve copies of that rule: each
+ * rule — fifteen now, with the error row and the two reads that spec recorded
+ * as a hole it was leaving open — and until this module existed it was twelve
+ * copies of that rule: each
  * route assembled its own directive string and its own validator, and the only
  * thing keeping them agreeing was that they had been written on the same
  * afternoon. Two of them had already drifted — `/v1/forecast/day-ahead` carried
@@ -48,14 +50,22 @@
  * its neighbour's. A read gets a shared `max-age` and a validator; a `POST`
  * solve gets `no-store` and does its remembering in Redis behind the gateway,
  * where the key can carry a provenance a URL cannot.
+ *
+ * `/v1/canonical` is the same trap a third time, and it is why the manifest and
+ * the reads under it are two rows: a static discovery document and a bitemporal
+ * read share a path prefix and share nothing else.
  */
 
 /**
  * The one directive that stores nothing.
  *
- * `/v1/meta` and the two `POST` solves. `/v1/meta` is what you read to discover
- * something is broken, so a cache in front of it would be a cache in front of
- * the truth; a `POST` is not shared-cacheable at all.
+ * `/v1/meta`, the `POST` solves, the canonical reads and `/ingest/health`, and
+ * for three different arguments rather than one. `/v1/meta` and
+ * `/ingest/health` are what you read to discover something is broken, so a
+ * cache in front of either is a cache in front of the truth; a `POST` is not
+ * shared-cacheable at all; a canonical read is an as-of answer with no
+ * validator, so a stored copy can only ever be the right rows for the wrong
+ * instant. Each row below states its own; none of them inherits.
  */
 const NO_STORE = "no-store";
 
@@ -211,6 +221,91 @@ export const CACHE_POLICIES = {
 
   /** `/v1/plants`. Key: the registry snapshot's `ingested_at`. Daily SIGA/ONS. */
   registry: { name: "registry", directive: shared(maxAge(ONE_DAY_SEC)) },
+
+  /**
+   * **`/v1/canonical/<read>` — the nine bitemporal reads. `no-store`.**
+   *
+   * The row this table was missing, and the only one whose argument is about
+   * time rather than about versions. Not `/v1/meta`'s reason — that one is
+   * "a cache in front of the thing you read to discover something is broken" —
+   * but the vintage one, which is sharper.
+   *
+   * A canonical read is parameterised by an `as_of` instant, and the answer is
+   * every row whose `ingested_at` is at or before it. The tables are
+   * append-only, so an `as_of` safely in the past names a fixed set of rows and
+   * would be perfectly cacheable. **The ordinary call is not that call.** The
+   * modelling side asks "what do we know now", which is an `as_of` at or after
+   * the wall clock, and under a fixed URL that answer *grows* — every ingest
+   * that lands adds rows that satisfy the same cut. A heuristically-cached copy
+   * of that URL is a point-in-time answer served at the wrong point in time,
+   * and the `vintage` receipt travelling inside the body still names the
+   * `as_of` that was asked, so the staleness is invisible at exactly the layer
+   * built to make vintage visible. `canonical_as_of()` **raises** rather than
+   * defaulting to `now()` precisely so that a wrong-vintage answer is never
+   * served silently; an intermediary inventing a freshness lifetime is the one
+   * remaining path that reintroduces it.
+   *
+   * And the route cannot tell the two cases apart without comparing `as_of` to
+   * a clock — which is the duration-as-a-key this module exists to forbid,
+   * one level up.
+   *
+   * **Why not `no-cache` with a validator**, which would be the cheaper honest
+   * answer: there is no validator to build. The identity of one of these
+   * responses is a *set* of rows rather than a version — `max(data_version)`
+   * does not move when a new business key arrives at version 1 — the composed
+   * `training-window` read has seven contributing sources, and an answer with
+   * no rows has no provenance at all. That last case is not hypothetical: it is
+   * the shape of the `/v1/plants` defect, where the empty path reached for
+   * `new Date()` because there was nothing else to key on. A `no-cache`
+   * carrying no validator is a `no-store` that leaves a copy on disk, so the
+   * honest directive is not to leave the copy.
+   *
+   * Nothing is given up. This surface's consumer is `apps/ml`, in-cluster and
+   * behind no CDN; the reads it repeats it repeats under a different `as_of`,
+   * which is a different key anyway.
+   */
+  canonical: { name: "canonical", directive: NO_STORE },
+
+  /**
+   * **`GET /v1/canonical` — the read manifest. Cacheable, and the reason to
+   * give it its own row rather than let it inherit its path's.**
+   *
+   * `/v1/replay/days` had to be told it was a read and not a solve because it
+   * lived under a solve's path; this is the same trap mirrored. The manifest
+   * touches no database, takes no `as_of` and is a constant of the deployment:
+   * the grain, business key and fact kind of each read, which change when the
+   * code changes and at no other time. Giving it `no-store` because its
+   * siblings have it would be copying `/v1/meta`'s reason to a route it does
+   * not apply to.
+   *
+   * Key: a digest over the manifest the process will serve — a content
+   * provenance, the same kind as a scenario hash, computed once at module load
+   * and therefore a fact about the build rather than about the request. A
+   * deploy that adds a read changes it by construction; nothing else can.
+   */
+  canonicalManifest: {
+    name: "canonical-manifest",
+    directive: shared(maxAge(ONE_HOUR_SEC)),
+  },
+
+  /**
+   * **`GET /ingest/health` — the operations view. `no-store`, and this one *is*
+   * `/v1/meta`'s reason.**
+   *
+   * It answers "has a source stopped moving", and it answers 503 when one has.
+   * A cached 200 served while ingestion is down is not stale data, it is a
+   * monitor that has been told everything is fine — which is the silence this
+   * endpoint exists to break, with a cache as the thing doing the silencing.
+   * Its whole value is being current, so a stored copy has no legitimate reuse
+   * and there is nothing to revalidate against.
+   *
+   * It needs its own directive rather than the `error` row's even though it can
+   * answer 503: that 503 is a *successful* report of an unhealthy system, a
+   * status the handler sets on its own body, and it never passes through
+   * `errors.ts` — so `refuseToCache` never sees it. The 200 is the dangerous
+   * one anyway.
+   */
+  ingestHealth: { name: "ingest-health", directive: NO_STORE },
 
   /**
    * **Any error, on any route** — applied by `./errors.ts`, not by a handler.
