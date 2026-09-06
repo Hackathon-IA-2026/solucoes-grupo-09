@@ -53,26 +53,28 @@ calibrated>` and :attr:`MetricsRow.conformalised
 <wattsteer_ml.evaluation.metrics.MetricsRow.conformalised>` say which rungs had
 them, per row, so no reader has to know this paragraph exists.
 
-**Rung 1's occurrence head, and the column that is not there.** The spec gives
-rung 1 two columns, one per head of the hurdle, and requires both to be
+**Rung 1's occurrence head, and the column it insists on by name.** The spec
+gives rung 1 two columns, one per head of the hurdle, and requires both to be
 "computed *from the feature function*, so it and the model cannot disagree about
 what the last seven days means". The magnitude head reads
 ``observed_constrained_off_same_hour_mean_7d``, which
 `apps/api/drizzle/0021_lagged_actuals_behind_the_cutoff.sql` built. The
 occurrence head needs ``observed_constrained_off_same_hour_exceedance_7d`` — the
 share of the seven same-local-hour observations at or above ``threshold_mw`` —
-which `docs/specs/feature-engineering.md` adds and **which the feature function
-does not yet emit**; the follow-up note is at the bottom of
-`.scratch/feature-engineering/issues/05-lagged-actuals-behind-the-cutoff.md`.
+which `docs/specs/feature-engineering.md` adds and which
+`apps/api/drizzle/0036_the_same_hour_exceedance.sql` made the 112th attribute of
+``feature_row``. When this module was written the feature function did not emit
+it, and rung 1 was built and tested but could not run against the live one.
 
-This module therefore reads that column **by name** and
-:class:`MissingBaselineFeatureError` refuses when a contract does not carry it. It
-does **not** substitute ``observed_constrained_off_hours_above_threshold_7d``,
-which counts all hours across seven days rather than the seven observations of
-one local hour, and would make rung 1 a different baseline wearing rung 1's
-name. Until the column lands, rung 1 is built and tested and cannot be run
-against the live feature function — which is a fact about the migration tree,
-and is the shape of failure a silent substitution would have hidden.
+That is no longer the tree's state, and the refusal stays anyway. This module
+reads the column **by name** and :class:`MissingBaselineFeatureError` refuses
+when a contract does not carry it — which now means a contract built against a
+feature function older than `0036`, exactly the artifact a hot-swap gate must
+not silently score. It does **not** substitute
+``observed_constrained_off_hours_above_threshold_7d``, which counts all hours
+across seven days rather than the seven observations of one local hour, and
+would make rung 1 a different baseline wearing rung 1's name — the shape of
+failure a silent substitution would have hidden.
 """
 
 from __future__ import annotations
@@ -116,7 +118,8 @@ from wattsteer_ml.training.hurdle import (
 from wattsteer_ml.training.hyperparameters import MODEL_CONFIG_V1, ModelConfig
 
 #: Rung 1's **occurrence** head. `docs/specs/feature-engineering.md` specifies
-#: it; the feature function does not yet emit it. See the module docstring.
+#: it and migration 0036 emits it. See the module docstring for why the refusal
+#: below outlived the absence that motivated it.
 EXCEEDANCE_FEATURE = "observed_constrained_off_same_hour_exceedance_7d"
 
 #: Rung 1's **magnitude** head. Built by migration 0021.
@@ -450,9 +453,10 @@ class SameHourSevenDayRung:
                 f"{missing!r} from the feature function and the contract does "
                 f"not carry {'them' if len(missing) > 1 else 'it'}. "
                 f"{EXCEEDANCE_FEATURE!r} is specified in "
-                "docs/specs/feature-engineering.md and is not implemented — see "
-                "the follow-up at the bottom of .scratch/feature-engineering/"
-                "issues/05-lagged-actuals-behind-the-cutoff.md. It is not "
+                "docs/specs/feature-engineering.md and landed in "
+                "apps/api/drizzle/0036_the_same_hour_exceedance.sql, so a "
+                "contract without it was built against a feature function "
+                "older than that migration. It is not "
                 f"{NOT_THE_EXCEEDANCE_FEATURE!r}, which counts all hours across "
                 "seven days rather than the seven observations of one local "
                 "hour, and substituting it would publish a different baseline "

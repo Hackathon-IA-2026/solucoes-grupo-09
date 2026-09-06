@@ -853,12 +853,16 @@ for each hour t:
     soc                += ηc·executed_charge − executed_discharge/ηd
 ```
 
-Two things the prototype's `evaluatePlan` does not yet do, and must:
+Two things the prototype's `evaluatePlan` did not do, and had to:
 **recompute the state of charge from the executed dispatch** rather than
-carrying the planned SOC (today it clips absorption but not SOC, so on a small
-day the reported battery fills up on energy it never received), and **clip
+carrying the planned SOC (it clipped absorption but not SOC, so on a small day
+the reported battery filled up on energy it never received), and **clip
 discharge to the available SOC**, which is what makes the trajectory physical on
-a realisation the plan was not built for.
+a realisation the plan was not built for. Both are in
+`apps/ml/src/wattsteer_ml/optimizer/simulator.py` — the two lines above are its
+own — and the prototype is gone rather than corrected: `api-surface.md` decision
+6 deleted `evaluatePlan` outright, so there is one implementation of this rule
+and `test/one-execution-rule.test.ts` counts it.
 
 The simulator has a monotonicity property that the floor promise rests on and
 that a property test asserts: **if realisation `r ≥ P10` pointwise, then
@@ -1057,8 +1061,9 @@ about the execution rule goes in.
    all measured against must not be one rounding away from a `422`. Taking the
    energy from one repair and the shift from the other leaves it at 71 % of the
    cap.
-6. **The prototype's `evaluatePlan` clips absorption but not state of charge**,
-   so on a realisation below the planning basis it reports a battery filling up
-   on energy it never received. The simulator specified here fixes it; the
-   prototype should be corrected in the same change, since the two are supposed
-   to be the same function.
+6. **The prototype's `evaluatePlan` clipped absorption but not state of charge**,
+   so on a realisation below the planning basis it reported a battery filling up
+   on energy it never received. The simulator specified here fixes it. The
+   resolution was not a correction but a deletion: since the two were supposed
+   to be the same function, `api-surface.md` decision 6 removed the second copy
+   and pointed Mitigate at `/v1/optimize`.

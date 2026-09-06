@@ -94,8 +94,22 @@ def test_an_all_null_column_is_named_rather_than_dropped() -> None:
     """
     blanked = [dict(row, weather_temperature_2m=None) for row in ROWS]
     contract = contract_of(blanked, FUNCTION_DEFINITION)
-    assert contract.unpopulated == ("weather_temperature_2m",)
+    assert "weather_temperature_2m" in contract.unpopulated
     assert "weather_temperature_2m" in contract.feature_names
+
+
+def test_the_lanes_absent_block_is_unpopulated_rather_than_missing() -> None:
+    """The unblanked case, and the one a real ``dessem_free_v1`` row shows.
+
+    ``0025_dessem_and_the_feature_set.sql`` makes the class-D block return no
+    rows for this set, so its twenty-two attributes arrive NULL at every hour.
+    They are still in the hash — the SQL emits them — and the contract's job is
+    to say "named, empty" rather than to quietly narrow the vector.
+    """
+    contract = contract_of(ROWS, FUNCTION_DEFINITION)
+    dessem = tuple(name for name in contract.feature_names if name.startswith("dessem_"))
+    assert dessem, "the fixture builds no dessem_* columns at all"
+    assert set(dessem) <= set(contract.unpopulated)
 
 
 def test_the_subsystem_levels_are_the_closed_enum() -> None:

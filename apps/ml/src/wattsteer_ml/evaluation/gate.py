@@ -990,16 +990,17 @@ def cold_start_baseline(
 
     Raises :class:`~wattsteer_ml.evaluation.ladder.MissingBaselineFeatureError`
     when the contract does not carry
-    ``observed_constrained_off_same_hour_exceedance_7d``, which is the state of
-    the live feature function today: `docs/specs/feature-engineering.md`
-    specifies the column and the migration tree does not emit it. **That is the
-    honest cold start.** The gate does not fall back to comparing against
-    nothing, and rung 1 does not substitute
-    ``observed_constrained_off_hours_above_threshold_7d`` — which counts all
-    hours over seven days instead of the seven observations of one local hour,
-    and would publish a different baseline under rung 1's name. So an empty lane
-    promotes nothing until that column lands, and the reason is a named exception
-    rather than a model that quietly cleared a bar nobody set.
+    ``observed_constrained_off_same_hour_exceedance_7d``. That was the state of
+    the live feature function when this was written; migration
+    `0036_the_same_hour_exceedance.sql` has since added the column, so the
+    refusal now names a contract built against an *older* feature function
+    rather than the tree as a whole. **Either way it is the honest cold start.**
+    The gate does not fall back to comparing against nothing, and rung 1 does not
+    substitute ``observed_constrained_off_hours_above_threshold_7d`` — which
+    counts all hours over seven days instead of the seven observations of one
+    local hour, and would publish a different baseline under rung 1's name. So a
+    lane whose contract predates the column promotes nothing, and the reason is a
+    named exception rather than a model that quietly cleared a bar nobody set.
     """
     fitted = SameHourSevenDayRung().fit(fold_rows)
     settled = [

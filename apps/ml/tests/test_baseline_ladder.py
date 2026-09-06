@@ -254,12 +254,15 @@ def test_rung_one_reads_the_feature_functions_two_columns(
 def test_rung_one_refuses_when_the_exceedance_column_is_absent(
     ladder_rows: list[dict[str, Any]], fold: Fold, blocks: FoldBlocks
 ) -> None:
-    """The state of the live feature function today, and it is a refusal.
+    """A contract older than the column, and it is a refusal.
 
     `docs/specs/feature-engineering.md` specifies
-    ``observed_constrained_off_same_hour_exceedance_7d`` and the migration tree
-    does not emit it yet. The mandatory baseline says so instead of quietly
-    substituting a neighbouring column, and the message names the follow-up.
+    ``observed_constrained_off_same_hour_exceedance_7d`` and
+    `0036_the_same_hour_exceedance.sql` emits it — so a contract without it was
+    built against an earlier feature function, which is exactly the artifact
+    that must not be scored as though it were current. The mandatory baseline
+    says so instead of quietly substituting a neighbouring column, and the
+    message names the migration that settles it.
     """
     stripped = FoldRows.of(
         without_exceedance(ladder_rows),
@@ -271,7 +274,7 @@ def test_rung_one_refuses_when_the_exceedance_column_is_absent(
         SameHourSevenDayRung().fit(stripped)
     message = str(raised.value)
     assert EXCEEDANCE_COLUMN in message
-    assert "05-lagged-actuals-behind-the-cutoff.md" in message
+    assert "0036_the_same_hour_exceedance.sql" in message
     assert NOT_THE_EXCEEDANCE_FEATURE in message
 
 

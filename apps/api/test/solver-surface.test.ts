@@ -27,7 +27,8 @@ import type { ErrorEnvelope } from "../src/errors.js";
  * per request — `/v1/optimize`, `/v1/replay`, `/v1/replay/days` and
  * `/v1/backtest` — and each of them arrived here from a different ticket:
  * flex-optimizer 06 brought the optimizer, replay 02 the calendar, replay 06
- * the replay and its pin. Each is well tested *in itself*;
+ * the replay and its pin, replay 08 the backtest aggregate this surface then
+ * grew a forward for. Each is well tested *in itself*;
  * `optimize.test.ts`, `replay-days.test.ts` and `replay-endpoint.test.ts` are
  * where the transports, the refusal tables and the pin live and this file does
  * not repeat them.
@@ -49,9 +50,11 @@ import type { ErrorEnvelope } from "../src/errors.js";
  *   claims that are about what a client receives — the 503 posture, the cache
  *   directives, and the replay that completes with nothing promoted.
  *
- * The fourth route is absent and its absence is asserted from both ends. See
- * "the fourth route" below, and the block comment at the foot of
- * `src/api/replay.ts` for why it is not a proxy in front of nothing.
+ * The fourth route, `/v1/backtest`, was absent when this file was written and
+ * its absence was asserted from both ends. Replay 08 landed the aggregate, the
+ * absence assertions fired as designed, and the route is now served — as a
+ * forward, not an aggregation. See "the fourth route" below, and the block
+ * comment at the foot of `src/api/replay.ts` for the argument that shaped it.
  */
 
 // --- the modelling service, as a recording loopback --------------------------

@@ -374,8 +374,11 @@ gigabytes, which does not belong in the row store. Retention: raw payloads are
 kept indefinitely for any resource state that produced a written revision, and
 90 days for states that produced none. The fingerprint row is never deleted —
 it is small, and it is the only record that a file existed in a given state.
-The archive writer itself is not built by the tracer; `archive_uri` is nullable
-so that landing it later is an insert, not a migration.
+The archive writer itself was not built by the tracer; `archive_uri` was
+nullable so that landing it later would be an insert rather than a migration.
+It has since landed — `apps/api/src/ingest/archive.ts`, written through
+`apps/api/src/ingest/custody.ts` — and `payload_custody.archive_uri` is now
+`not null`.
 
 **Where the bytes live: a Railway bucket, not a volume — settled, with the
 reasoning.** The spec deferred the choice; it is made here.

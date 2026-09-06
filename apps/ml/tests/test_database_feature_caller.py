@@ -176,18 +176,43 @@ def test_every_column_the_python_fixture_builds_is_a_real_one() -> None:
     )
 
 
+def test_the_fixture_builds_every_column_the_database_returns() -> None:
+    """The other direction, which is the one that rots quietly.
+
+    "Every fixture column is real" was satisfiable by a fixture that had fallen
+    an entire feature block behind: this file's first version passed against a
+    fixture stuck at ``0019`` while the composite type had grown to 112
+    attributes, and three separate tickets flagged it without owning it.
+
+    A *missing* column is the worse failure of the two. An invented one blows up
+    at the first real query; an absent one leaves the trainer fitting a narrower
+    vector than production serves, silently and with a green suite — and
+    ``FeatureContract`` takes its ordered names from the row it is handed, so
+    the ``feature_hash`` the fixtures imply would not be the hash the live
+    function produces.
+    """
+    projected = _projected_columns()
+    fixture = list(feature_rows(first=FIRST, last=FIRST)[0])
+    missing = [name for name in projected if name not in fixture]
+    assert not missing, (
+        f"feature_rows returns {missing}, which feature_row_fixtures does not "
+        f"build; the fixture has fallen behind a migration"
+    )
+
+
 def test_the_fixture_builds_its_columns_in_the_databases_order() -> None:
-    """A set is not enough: the order is hashed into a lane's identity.
+    """Names *and* order, exactly: the order is hashed into a lane's identity.
 
     ``docs/specs/forecaster.md`` makes ``feature_hash`` a digest over the
     *ordered* feature names, and ``test_feature_contract.py`` asserts the
     fixture's order is "the database's order" without having a database to
     check it against. This is the half that does.
+
+    Equality rather than "is a subsequence", and that is the whole point:
+    ``ALTER TYPE feature_row ADD ATTRIBUTE`` appends, so the merge order of the
+    migrations is the attribute order and no plausible order is the order. A
+    fixture that grouped the weather block tidily together would satisfy a set
+    comparison, satisfy a subsequence comparison for as long as it stayed
+    behind, and still describe a different vector.
     """
-    projected = _projected_columns()
-    fixture = list(feature_rows(first=FIRST, last=FIRST)[0])
-    positions = [projected.index(name) for name in fixture]
-    assert positions == sorted(positions), (
-        "feature_row_fixtures' keys are out of the database's order; "
-        "a lane's feature_hash would be computed over a different sequence"
-    )
+    assert list(feature_rows(first=FIRST, last=FIRST)[0]) == _projected_columns()

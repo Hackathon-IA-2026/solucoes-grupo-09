@@ -724,18 +724,22 @@ export const replayRoutes = createReplayRoutes().use(
 );
 
 /**
- * ### `GET /v1/backtest` is the fourth route of this surface and it is not here
+ * ### `GET /v1/backtest` is the fourth route of this surface, and why it once
+ * was not
  *
- * `api-surface.md` lists it at #13 and `replay.md` fixes its contract, and the
- * reason it is absent is not that it was forgotten: **the aggregate it would
- * serve does not exist.** Replay 08 owns it, and `docs/domain-model.md` gives
- * `Backtest` to the aggregate of many Replays consumed by the hot-swap gate —
- * not to the forecaster's fold evaluation, which is a different noun that
- * happens to share an English word. Nothing in this repository computes
- * `days_replayed`, `floor_coverage` or `mean_avoidability` at any grain, and
- * `apps/ml` exposes no `/v1/backtest` for a proxy to stand in front of.
+ * `api-surface.md` lists it at #13 and `replay.md` fixes its contract. It is
+ * served above — but for a while it deliberately was not, and the argument is
+ * kept because it is the reason the route *forwards* rather than aggregates.
  *
- * Three things were available and two of them are worse than the absence.
+ * When api-surface 17 built this surface, **the aggregate it would serve did
+ * not exist.** Replay 08 owned it, and `docs/domain-model.md` gives `Backtest`
+ * to the aggregate of many Replays consumed by the hot-swap gate — not to the
+ * forecaster's fold evaluation, which is a different noun that happens to share
+ * an English word. Nothing in the repository then computed `days_replayed`,
+ * `floor_coverage` or `mean_avoidability` at any grain, and `apps/ml` exposed
+ * no `/v1/backtest` for a proxy to stand in front of.
+ *
+ * Three things were available and two of them were worse than the absence.
  *
  * A route forwarding to an upstream path that does not exist would publish an
  * endpoint in `/docs` that answers `502 OPTIMIZER_NOT_READY` forever, which
@@ -751,9 +755,16 @@ export const replayRoutes = createReplayRoutes().use(
  * aggregation function, not of a query string. Inventing one at the gateway
  * would put that rule where it cannot be enforced.
  *
- * So the surface serves three of the four and says so. `solver-surface.test.ts`
- * holds the absence in place from both ends: the gateway is asserted to serve no
- * `/v1/backtest`, and `apps/ml` is asserted to expose none — so the day replay
- * 08 lands the aggregate, that test fails and names this route as the thing then
- * owed. An absence that cannot rot into a silence.
+ * So the surface served three of the four and said so, and
+ * `solver-surface.test.ts` held the absence in place from both ends: the
+ * gateway asserted to serve no `/v1/backtest`, and `apps/ml` asserted to expose
+ * none — arranged so that the day replay 08 landed the aggregate, that test
+ * would fail and name this route as the thing then owed. An absence that could
+ * not rot into a silence.
+ *
+ * It did exactly that. Replay 08 landed `wattsteer_ml.replay.backtest`, both
+ * assertions fired, and the route above was added — as a **forward**, which is
+ * the shape the third option always had. `solver-surface.test.ts` now asserts
+ * the route is served, that the aggregate really is upstream, and that this
+ * module contains no grouping, averaging or fidelity literal.
  */

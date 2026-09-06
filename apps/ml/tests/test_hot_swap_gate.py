@@ -625,13 +625,15 @@ def test_the_cold_start_baseline_is_rung_one_of_the_ladder(
 def test_a_cold_start_cannot_run_against_the_live_feature_function(
     fold: Fold, blocks: FoldBlocks
 ) -> None:
-    """``observed_constrained_off_same_hour_exceedance_7d`` is not in ``feature_row``.
+    """A contract without ``observed_constrained_off_same_hour_exceedance_7d``.
 
-    So on the migration tree as it stands, a lane with no incumbent has no bar to
-    clear and **promotes nothing**: rung 1 raises rather than substituting
+    That was the whole migration tree once; since
+    `0036_the_same_hour_exceedance.sql` it is an artifact built against an older
+    feature function. Either way a lane with no incumbent has no bar to clear and
+    **promotes nothing**: rung 1 raises rather than substituting
     ``observed_constrained_off_hours_above_threshold_7d``, which counts all hours
     over seven days instead of the seven observations of one local hour. That is
-    the honest cold start, and it is a fact about the feature function rather
+    the honest cold start, and it is a fact about the contract in hand rather
     than about the gate.
     """
     rows = without_exceedance(
