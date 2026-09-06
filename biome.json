@@ -3,7 +3,7 @@
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!reference", "!apps/api/test/fixtures"]
+    "includes": ["**", "!reference", "!apps/api/test/fixtures", "!apps/api/drizzle/meta"]
   },
   "formatter": {
     "enabled": true,
