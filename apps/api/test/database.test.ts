@@ -63,7 +63,7 @@ suite("bitemporal store · as-of reads (real Postgres)", () => {
   let sourceVersionId = "";
 
   beforeAll(async () => {
-    // Schema is applied by `bun run db:push` (see the `test:db` script).
+    // Schema is applied by `bun run db:migrate` (see the `test:db` script).
     // Append-only tables accumulate, so the suite starts from a clean slate.
     await db.execute(sql`truncate table subsystem_energy_balance_hour`);
     await db.execute(sql`truncate table ons_resource_version cascade`);

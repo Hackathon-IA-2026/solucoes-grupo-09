@@ -55,6 +55,56 @@ development: with no `DATABASE_URL` persistence is disabled and `/ready`
 reports ready; with no `REDIS_URL` jobs run on the in-process runner instead of
 BullMQ.
 
+## Schema and migrations
+
+The schema lives in `src/database/schema.ts` and `src/database/canonical-views.ts`.
+Everything under `drizzle/` is **applied history**: once a migration has landed on
+`main` its SQL is never edited — not to fix it, not to reformat it, not to correct
+a comment — because `drizzle-kit migrate` records a hash of each file and an edit
+makes an already-migrated database unmigratable. A mistake in a landed migration
+is corrected by a new migration. `db:push` is never used against anything that
+matters; the `db:*` scripts that count are `db:generate` and `db:migrate`.
+
+`drizzle/meta/` is different. It is **generated metadata**, not history: it is
+drizzle-kit's model of what the schema looks like after each migration, and it is
+the only thing `db:generate` diffs against. It must therefore be regenerated,
+never hand-copied.
+
+That distinction is the one this repo got wrong once. Because most migrations
+here are hand-written — drizzle-kit emits tables and views, not the function and
+composite-type DDL the feature and canonical layers need — the habit grew of
+writing the SQL by hand and copying the previous snapshot forward with a fresh
+`id`/`prevId`. Six migrations later the snapshots still described the schema as
+it stood at `0033`, and a plain `db:generate` offered to re-create five tables
+that already existed. Nothing failed, because nothing had asked. The snapshots
+were correct about every column on every table that existed at `0033`, so a spot
+check for a recent column said they were fine.
+
+### Adding a migration
+
+1. Change the schema files.
+2. Run `bun run db:generate` — **plain, not `--custom`**. Drizzle writes the SQL
+   it can express and, more importantly, a *correct* `meta/NNNN_snapshot.json`.
+3. Hand-edit the emitted `.sql` to add what drizzle-kit cannot emit: `CREATE
+   FUNCTION`, composite types, `CREATE OR REPLACE VIEW`, data backfills. Edit the
+   SQL freely — it has not landed yet. **Never edit the snapshot.**
+4. If the change is *only* DDL drizzle-kit cannot see, step 2 emits nothing. Use
+   `bunx drizzle-kit generate --custom --name <name>` for an empty stub; the
+   snapshot it copies forward is correct exactly because nothing drizzle-visible
+   changed.
+5. `bun run test` — `test/drizzle-snapshot.test.ts` regenerates against a
+   throwaway copy of `drizzle/` and fails if the head snapshot has drifted. That
+   test is the guard; do not silence it by editing a snapshot.
+
+### Formatting
+
+`drizzle/meta/` is excluded from Biome in `biome.json`. Commit exactly the bytes
+drizzle-kit writes — two-space JSON, and no trailing newline on `_journal.json`
+or on the snapshots. Reformatting them is harmless to Postgres but it means the
+committed metadata is no longer byte-identical to generated metadata, which is
+how a real drift hides inside formatting churn. The rule is mechanical: after
+`db:generate`, `git diff` shows the schema change and nothing else.
+
 ## Testing
 
 ```bash
