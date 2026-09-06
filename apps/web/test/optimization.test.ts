@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { OptimizationResult, Scenario } from "@wattsteer/core/api";
 import { defaultScenario, scenarioLoad } from "../src/components/app/scenario";
+import { en as EN } from "../src/i18n/copy.en";
+import { pt as PT } from "../src/i18n/copy.pt";
 import { mitigationSteps, SOLVED_STEPS, stepScenario } from "../src/lib/optimization";
 
 /**
@@ -230,5 +232,55 @@ describe("the screen computes nothing", () => {
       expect(screen).not.toContain(token);
     }
     expect(screen).toContain("useOptimization");
+  });
+
+  /**
+   * The step card's figure, and the arithmetic it stopped doing.
+   *
+   * It used to print `previous.remaining.p50 - step.remaining.p50` and call it
+   * the energy the step recovers. The median of a difference is not the
+   * difference of the medians — the same error `test/no-summed-bands.test.ts`
+   * catches one operation over, and that guard now matches this shape too. The
+   * honest number did not have to be invented: the solver scores every step
+   * against the same three envelopes and reports `scored.p50.recovered_mwh`,
+   * so the card reads the contract's own per-step recovery instead.
+   */
+  test("the step card reads the contract's per-step recovery, not a delta of two steps", () => {
+    const screen = readFileSync(
+      join(import.meta.dir, "..", "src", "app", "app", "mitigate.tsx"),
+      "utf8",
+    ).replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, (match) => match.replace(/[^\n]/g, " "));
+    expect(screen).toContain("step.recovered.p50");
+    // The delta, in every spelling it could return in: the subtraction itself,
+    // the prop that carried the other step, and the copy key that named it.
+    expect(screen).not.toContain("previous");
+    expect(screen).not.toContain("remaining.p50 -");
+    expect(screen).not.toContain("stepDelta");
+  });
+
+  test("the card's sentence is a per-step recovery in both locales", () => {
+    for (const catalogue of [EN.app.mitigate, PT.app.mitigate]) {
+      const sentence: string = catalogue.stepRecovered;
+      expect(sentence).toContain("{recovered}");
+      // The realisation it is read off is on the sentence: an unlabelled
+      // figure cannot be compared with the one on the next card.
+      expect(sentence).toContain("P50");
+      // "vs the previous step" was the claim the arithmetic could not support.
+      expect(sentence).not.toContain("{delta}");
+    }
+    expect(EN.app.mitigate.stepRecovered).not.toBe(PT.app.mitigate.stepRecovered);
+    // The old key is gone from both dictionaries rather than left orphaned.
+    expect("stepDelta" in EN.app.mitigate).toBe(false);
+    expect("stepDelta" in PT.app.mitigate).toBe(false);
+  });
+
+  test("the per-step recovery is a field on the answer and nothing is combined to make it", () => {
+    const steps = mitigationSteps({
+      battery: result({ scored: { ...result().scored } }),
+      battery_and_load: result(),
+    });
+    // Read straight off `scored`, per realisation, with no cross-step term.
+    expect(steps[1].recovered.p50).toBe(300);
+    expect(steps[0].recovered.p50).toBe(0);
   });
 });

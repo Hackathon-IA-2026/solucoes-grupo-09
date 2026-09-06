@@ -40,13 +40,28 @@ import { join, relative } from "node:path";
  *  A. two quantile reads added together — `a.p50 + b.p50`;
  *  B. a `reduce` that accumulates a quantile read — the Σ-over-hours shape;
  *  C. a `+=` whose right-hand side reads a quantile — the same shape as a loop.
+ *  D. **the same quantile of two different objects subtracted** —
+ *     `previous.remaining.p50 - step.remaining.p50`.
  *
- * A *difference* of two quantiles is not matched. The ticket's invariant is
- * about summing bands into a band, and `apps/web/src/app/app/mitigate.tsx`
- * subtracts one step's P50 from the previous step's to print a delta between
- * two scenarios of the same day — a scalar for display, not a constructed
- * band. It is left to a ticket that owns that screen rather than silently
- * widened into scope here.
+ * ### Why D, and why it is drawn exactly there
+ *
+ * D was out of scope when this guard was written, and the comment that stood
+ * here named the one occurrence and left it to a ticket that owned the screen.
+ * That ticket came: `apps/web/src/app/app/mitigate.tsx` printed
+ * `previous.remaining.p50 - step.remaining.p50` to a reader as *the energy a
+ * step recovers*, and the median of a difference is not the difference of the
+ * medians — the same error as A, one operation over. The figure is gone (the
+ * screen now reads the solver's own per-step `scored.p50.recovered_mwh`), and
+ * the shape is now matched so it cannot come back.
+ *
+ * **D is keyed on the two reads being the same member**, `p50` against `p50`,
+ * because that is what a cross-object delta looks like. Subtracting one member
+ * from a different one is not the offence at all: `band.p90 - band.p10` is the
+ * **width** of one band, which is geometry a chart is entitled to compute and
+ * which `packages/core`'s own `spread` helper does.
+ * A guard that flagged it would be accusing a chart of publishing a figure —
+ * this repo has caught over-broad guards doing exactly that twice — and a
+ * guard that cries wolf is one somebody deletes.
  */
 
 const ROOT = join(import.meta.dir, "..");
@@ -139,6 +154,14 @@ function summedBands(file: string, source: string): Hit[] {
     record(m.index, m[0]);
   }
 
+  // D. `a.p50 - b.p50` — the *same* member on both sides of a `-`. The
+  // backreference is the whole point: it matches a delta between two objects
+  // and not `band.p90 - band.p10`, which is one band's width.
+  const difference = /\.p(10|50|90)\b[^;\n]{0,80}?-[^;\n]{0,80}?\.p\1\b/g;
+  for (let m = difference.exec(code); m !== null; m = difference.exec(code)) {
+    record(m.index, m[0]);
+  }
+
   return hits;
 }
 
@@ -157,7 +180,12 @@ describe("no web code path sums two bands componentwise", () => {
     expect(caught("const band = { p50: a.p50 + b.p50 };")).toBeGreaterThan(0);
     expect(caught("hours.reduce((acc, h) => acc + h.constrainedOff.p90, 0);")).toBe(1);
     expect(caught("for (const h of hours) { total += h.constrainedOff.p10; }")).toBe(1);
-    // And it has to leave the two legitimate shapes alone.
+    expect(caught("const d = previous.remaining.p50 - step.remaining.p50;")).toBe(1);
+    // And it has to leave the legitimate shapes alone. `p90 - p10` is one
+    // band's width — geometry, not a published figure — and a chart computing
+    // it is not implementing business logic.
+    expect(caught("const width = band.p90 - band.p10;")).toBe(0);
+    expect(caught("const top = upper(band) - band.p50;")).toBe(0);
     expect(caught("hours.reduce((acc, h) => acc + h.expectedMwh, 0);")).toBe(0);
     expect(
       caught("points.reduce((best, p, i) => (p.p50 > points[best].p50 ? i : best), 0);"),

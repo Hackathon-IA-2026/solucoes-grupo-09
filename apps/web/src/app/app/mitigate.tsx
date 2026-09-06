@@ -388,7 +388,6 @@ export default function MitigateScreen() {
             <StepCard
               key={step.key}
               step={step}
-              previous={index > 0 ? steps[index - 1] : null}
               domainMax={domainMax}
               revealed={index <= revealed}
               onReveal={() => setRevealed(index)}
@@ -625,16 +624,33 @@ function Refusal({ code, onReset }: { code: keyof Copy["error"]; onReset: () => 
   );
 }
 
+/**
+ * One step of the reveal: what is left, and what this step recovered.
+ *
+ * **The second figure used to be a delta between two cards** —
+ * `previous.remaining.p50 - step.remaining.p50`, printed to a reader as the
+ * energy this step recovers. It is the error `test/no-summed-bands.test.ts`
+ * exists for, one operation over: the median of a difference is not the
+ * difference of the medians, and no arrangement of two published bands
+ * produces the marginal quantity that sentence claimed. The guard now matches
+ * the shape (case D) so it cannot return by a different spelling.
+ *
+ * Nothing had to be invented to replace it. Every step is a solve of its own,
+ * and the solver scores each one against the same three envelopes and reports
+ * `scored.p50.recovered_mwh` — the energy the step's own plan absorbs on the
+ * P50 realisation. That is a field on the answer, read here and not combined
+ * with anything, and the sentence names the realisation it belongs to so two
+ * cards can be compared without a reader inferring a difference the model
+ * never scored.
+ */
 function StepCard({
   step,
-  previous,
   domainMax,
   revealed,
   isActive,
   onReveal,
 }: {
   step: MitigationStep;
-  previous: MitigationStep | null;
   domainMax: number;
   revealed: boolean;
   isActive: boolean;
@@ -643,7 +659,6 @@ function StepCard({
   const colors = usePalette();
   const copy = useCopy();
   const f = useFormat();
-  const delta = previous === null ? null : previous.remaining.p50 - step.remaining.p50;
 
   return (
     <View
@@ -703,13 +718,15 @@ function StepCard({
           >
             {`P10 ${f.compact(step.remaining.p10)} · P90 ${f.compact(step.remaining.p90)}`}
           </Text>
-          {delta === null ? (
+          {step.key === "no_action" ? (
             <Text style={{ fontSize: 12, color: colors.inkFaint }}>
               {copy.app.mitigate.baselineStep}
             </Text>
           ) : (
             <Text style={{ fontSize: 12, color: colors.accent, fontWeight: "700" }}>
-              {fill(copy.app.mitigate.stepDelta, { delta: f.compact(delta) })}
+              {fill(copy.app.mitigate.stepRecovered, {
+                recovered: f.compact(step.recovered.p50),
+              })}
             </Text>
           )}
         </>

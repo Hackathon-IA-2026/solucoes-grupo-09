@@ -879,10 +879,10 @@ export const en = {
         battery_and_load: "+ Flexible load",
       },
       reveal: "Reveal",
-      hidden: "Hidden — reveal it in order to see the step change.",
+      hidden: "Hidden — reveal it in order to see what the step recovers.",
       remaining: "MWh remaining",
       baselineStep: "The day as forecast, with nothing dispatched.",
-      stepDelta: "−{delta} MWh vs the previous step (P50)",
+      stepRecovered: "{recovered} MWh recovered on the P50 realisation",
       avoided: "Curtailment avoided",
       realisationLow: "On the low realisation",
       realisationMedian: "On the median realisation",
@@ -1055,6 +1055,8 @@ export const en = {
       replayingTitle: "Replaying",
       replayingNote:
         "One solve and five scoring passes against the settled day. Nothing is drawn until all of them have answered — a half-filled screen would be numbers from two different fleets side by side.",
+      replayingLive:
+        "This screen reads a live API and cannot be prerendered. GET /v1/replay re-plans the day and scores it with the one simulator, which does not run in a browser — so a static export ships this note and no figures, and stays on it. To see a replayed day, point the build at a running gateway with EXPO_PUBLIC_API_URL, or start one locally with bun run api and reload. Grid Overview and Explain need neither.",
 
       observedOnlyTitle: "This day cannot be replayed, and here is the clause it failed",
       observedOnlyNote:

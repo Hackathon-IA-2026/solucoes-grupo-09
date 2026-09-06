@@ -395,3 +395,65 @@ describe("every refusal renders in both locales from a typed code", () => {
     expect(screen).not.toContain("refusal.message");
   });
 });
+
+/**
+ * The absence a static export ships, and the reason it now carries.
+ *
+ * `web.output` is `static`, so `bun run web:export` prerenders every route.
+ * This screen's first render is `replaying` — it reads `GET /v1/replay`, and
+ * the plan behind those boxes is scored by the one simulator, which is not in
+ * a browser and is not going to be: replay 10 moved the screen off fixtures
+ * for exactly that reason and `test/one-execution-rule.test.ts` keeps it
+ * there. So the exported HTML is the "Replaying" note and nothing else, and a
+ * reader who opens it with no gateway behind it has no way to tell a dead
+ * screen from a slow one.
+ *
+ * The absence therefore states its own reason, which is the courtesy the data
+ * side already extends with `band_unavailable_reason` and `UnmeasuredLeadTime`:
+ * an absence with a reason is an answer, and an absence without one is a bug
+ * report the reader has to write themselves.
+ */
+describe("the absence names the live API it is waiting for", () => {
+  test("the replaying note carries the reason, in both locales", () => {
+    for (const catalogue of [EN.app.replay, PT.app.replay]) {
+      const sentence: string = catalogue.replayingLive;
+      expect(sentence.length).toBeGreaterThan(40);
+      // The endpoint, so the reader knows what is missing rather than that
+      // "something" is.
+      expect(sentence).toContain("/v1/replay");
+      // And what it takes to see it: the build-time origin, and the command
+      // that puts something at the other end of it.
+      expect(sentence).toContain("EXPO_PUBLIC_API_URL");
+      expect(sentence).toContain("bun run api");
+    }
+    // Translated, not copied.
+    expect(EN.app.replay.replayingLive).not.toBe(PT.app.replay.replayingLive);
+  });
+
+  test("the screen renders it beside the note it explains", () => {
+    const screen = code(SCREEN);
+    expect(screen).toContain("copy.app.replay.replayingLive");
+    // In the `replaying` branch — the state the export freezes on — and not
+    // somewhere a reader of the exported build would never reach.
+    const branch = screen.slice(screen.indexOf('state.status === "replaying"'));
+    expect(branch.indexOf("copy.app.replay.replayingLive")).toBeGreaterThan(-1);
+    expect(branch.indexOf("copy.app.replay.replayingLive")).toBeLessThan(
+      branch.indexOf('state.status === "observedOnly"'),
+    );
+  });
+
+  test("no fixture-scored plan came back with it", () => {
+    const screen = code(SCREEN);
+    // The absence is explained, never filled. A fixture behind these boxes
+    // would be a second execution rule in a browser.
+    for (const token of [
+      "evaluatePlan",
+      "planDispatch",
+      "buildReplayDay",
+      "replayFixture",
+    ]) {
+      expect(screen).not.toContain(token);
+    }
+    expect(screen).toContain("useReplay");
+  });
+});
