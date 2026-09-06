@@ -7,6 +7,7 @@ import { RETRAIN_JOB_ID, RETRAIN_PATTERN, RETRAIN_TIME_ZONE } from "./jobs/retra
 import {
   createWorkerDispatch,
   forecastPublicationSchedules,
+  holdoutBackfillScheduleForQueue,
   retrainScheduleForQueue,
   type WorkerTask,
   type WorkerTaskResult,
@@ -134,6 +135,26 @@ if (config.refreshSchedules) {
     console.warn(
       "⚠️  retrain: WATTSTEER_ML_URL is unset — no lane will be retrained or " +
         "gated, and whatever is promoted today goes on serving indefinitely.",
+    );
+  }
+  // The holdout backfill: Fridays at 03:40 UTC, half an hour behind the
+  // retrain, `docs/specs/replay.md`'s one storage requirement. The retrain is
+  // what mints the fold artifacts; this is what stops their out-of-fold
+  // predictions being thrown away.
+  //
+  // Its own `if` for the reason the retrain has one: without it the Time
+  // Machine keeps refusing `REPLAY_FORECAST_UNAVAILABLE` on the walk-forward
+  // test days, which is a *product* absence rather than a stale model, and an
+  // operator should be told that in its own sentence.
+  if (config.mlUrl) {
+    for (const schedule of holdoutBackfillScheduleForQueue()) {
+      await runner.schedule(schedule);
+    }
+  } else {
+    console.warn(
+      "⚠️  holdout backfill: WATTSTEER_ML_URL is unset — no fold's out-of-fold " +
+        "forecasts will be persisted, and /v1/replay will refuse every " +
+        "walk-forward test day with REPLAY_FORECAST_UNAVAILABLE.",
     );
   }
 }

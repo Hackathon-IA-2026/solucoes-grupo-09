@@ -605,12 +605,12 @@ describe("the ml boundary detector is calibrated", () => {
       served.filter((path) => path.startsWith(PRIVATE_PREFIX)).length,
     ).toBeGreaterThan(0);
     // And the prefix discriminates: inside `apps/api`, the only modules that
-    // spell it are the two the *worker* runs — `forecast/publish.ts` and
-    // `jobs/retrain.ts`, which are the precomputation this whole boundary
-    // exists to move the model into, and which the gateway's request graph
-    // cannot reach. That is what makes the prefix a signal rather than a
-    // coincidence: it already separates the two sides correctly, with no
-    // exception list.
+    // spell it are the three the *worker* runs — `forecast/publish.ts`,
+    // `jobs/retrain.ts` and `jobs/holdout-backfill.ts`, which are the
+    // precomputation this whole boundary exists to move the model into, and
+    // which the gateway's request graph cannot reach. That is what makes the
+    // prefix a signal rather than a coincidence: it already separates the two
+    // sides correctly, with no exception list.
     const spelling = [...MODULES.keys()]
       .filter((id) =>
         [...code(MODULES.get(id) as string).matchAll(/["'`]([^"'`]*)["'`]/g)].some(
@@ -618,7 +618,11 @@ describe("the ml boundary detector is calibrated", () => {
         ),
       )
       .sort();
-    expect(spelling).toEqual(["forecast/publish.ts", "jobs/retrain.ts"]);
+    expect(spelling).toEqual([
+      "forecast/publish.ts",
+      "jobs/holdout-backfill.ts",
+      "jobs/retrain.ts",
+    ]);
     expect(spelling.filter((id) => requestGraph(MODULES).has(id))).toEqual([]);
   });
 

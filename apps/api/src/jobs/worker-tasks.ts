@@ -5,6 +5,13 @@ import {
   type QueueTaskResult,
 } from "../ingest/index.js";
 import {
+  createHoldoutBackfiller,
+  type HoldoutBackfillerDeps,
+  type HoldoutBackfillJobResult,
+  type HoldoutBackfillPayload,
+  holdoutBackfillSchedules,
+} from "./holdout-backfill.js";
+import {
   createForecastPublisher,
   type ForecastPublicationResult,
   type ForecastPublisherDeps,
@@ -42,13 +49,15 @@ import type { Execute, JobSchedule } from "./types.js";
 export type WorkerTask =
   | QueueTask
   | { kind: "publish_forecast"; payload: PublishForecastPayload }
-  | { kind: "retrain"; payload: RetrainPayload };
+  | { kind: "retrain"; payload: RetrainPayload }
+  | { kind: "holdout_backfill"; payload: HoldoutBackfillPayload };
 
 /** What a worker task produced. */
 export type WorkerTaskResult =
   | QueueTaskResult
   | { kind: "publish_forecast"; result: ForecastPublicationResult }
-  | { kind: "retrain"; result: RetrainResult };
+  | { kind: "retrain"; result: RetrainResult }
+  | { kind: "holdout_backfill"; result: HoldoutBackfillJobResult };
 
 export interface WorkerDispatcherDeps extends IngestDispatcherDeps {
   /**
@@ -63,6 +72,13 @@ export interface WorkerDispatcherDeps extends IngestDispatcherDeps {
    * and the system clock.
    */
   retrain?: RetrainerDeps;
+  /**
+   * Where the modelling service is, the clock the backfill stamps a run's one
+   * `ingested_at` from, and — for a test — the writer. `db` comes from the
+   * dispatcher's own, because a backfill that wrote to a second database would
+   * be a second gateway.
+   */
+  holdoutBackfill?: Omit<HoldoutBackfillerDeps, "db">;
 }
 
 /** Build the single handler `worker.ts` registers on the queue. */
@@ -72,6 +88,7 @@ export function createWorkerDispatch(
   const ingest = createIngestDispatcher(deps);
   const publish = createForecastPublisher({ db: deps.db, ...deps.publication });
   const retrain = createRetrainer(deps.retrain);
+  const backfill = createHoldoutBackfiller({ db: deps.db, ...deps.holdoutBackfill });
 
   return async (task, report) => {
     if (task.kind === "publish_forecast") {
@@ -79,6 +96,12 @@ export function createWorkerDispatch(
     }
     if (task.kind === "retrain") {
       return { kind: "retrain", result: await retrain(task.payload, report) };
+    }
+    if (task.kind === "holdout_backfill") {
+      return {
+        kind: "holdout_backfill",
+        result: await backfill(task.payload, report),
+      };
     }
     return ingest(task, report);
   };
@@ -110,4 +133,20 @@ export function forecastPublicationSchedules(): JobSchedule<WorkerTask>[] {
  */
 export function retrainScheduleForQueue(): JobSchedule<WorkerTask>[] {
   return retrainSchedules<WorkerTask>((payload) => ({ kind: "retrain", payload }));
+}
+
+/**
+ * The one repeatable holdout backfill, typed for this queue.
+ *
+ * Beside the retrain's, and registered separately for the same reason the
+ * retrain's is registered separately from the publications': the publications
+ * need a modelling service to *ask*, the retrain needs one to *run in*, and
+ * this one needs both that and a database to write into. The worker says so
+ * about each of them on its own.
+ */
+export function holdoutBackfillScheduleForQueue(): JobSchedule<WorkerTask>[] {
+  return holdoutBackfillSchedules<WorkerTask>((payload) => ({
+    kind: "holdout_backfill",
+    payload,
+  }));
 }
