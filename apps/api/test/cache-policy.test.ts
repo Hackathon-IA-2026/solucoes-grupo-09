@@ -20,9 +20,13 @@ import { optimizeKey, replayKey } from "../src/api/plugins/result-cache.js";
 /**
  * The caching policy — **a cache key is a provenance, never a duration.**
  *
- * `docs/specs/api-surface.md`'s caching table is one rule and fifteen rows —
- * the spec's twelve, the error row, and the two reads that spec recorded as a
- * hole it was leaving open — and the rule is the part a test can hold. Three kinds of claim live here:
+ * `docs/specs/api-surface.md`'s caching table is one rule and one row per
+ * surface, and the rule is the part a test can hold. **The number of rows is
+ * not written down here**: it has drifted three times — the table grew the
+ * error row, then the two reads that spec recorded as a hole, then the
+ * unmetered tier, and the prose in this file and in `cache-policy.ts` each
+ * claimed a stale number afterwards. It is derived instead, against the spec's
+ * own table, below. Three kinds of claim live here:
  *
  * 1. **The table.** Each row's directive is the spec's, and no row is
  *    `immutable` — the thing that would freeze a response against an ONS
@@ -44,6 +48,17 @@ import { optimizeKey, replayKey } from "../src/api/plugins/result-cache.js";
  */
 
 const API_DIR = join(import.meta.dir, "..", "src", "api");
+
+/** `docs/specs/api-surface.md`, from `apps/api/test` — the table this is one half of. */
+const SPEC_PATH = join(
+  import.meta.dir,
+  "..",
+  "..",
+  "..",
+  "docs",
+  "specs",
+  "api-surface.md",
+);
 
 /**
  * Every module under `src/api`, plugins included, as paths relative to it.
@@ -127,6 +142,38 @@ describe("the caching table is the spec's, row for row", () => {
     expect(CACHE_POLICIES.canonical.directive).toBe("no-store");
     expect(CACHE_POLICIES.canonicalManifest.directive).toBe("public, max-age=3600");
     expect(CACHE_POLICIES.ingestHealth.directive).toBe("no-store");
+    expect(CACHE_POLICIES.serviceBanner.directive).toBe("public, max-age=3600");
+    expect(CACHE_POLICIES.liveness.directive).toBe("no-store");
+    expect(CACHE_POLICIES.readiness.directive).toBe("no-store");
+    expect(CACHE_POLICIES.docs.directive).toBe("public, max-age=300");
+  });
+
+  it("closes the unmetered tier on four arguments rather than on one path prefix", () => {
+    // `/`, `/health`, `/ready` and `/docs` were the last four routes shipping
+    // with no `Cache-Control` — which is not "no caching policy" but a policy
+    // an intermediary invents. They are four rows and not one, because a tier
+    // is a rate-limiting fact and never a caching argument.
+    //
+    // The two probes may not be served stale by anyone: `/ready` for
+    // `/ingest/health`'s reason exactly (a cached 200 during a database outage
+    // is a monitor being told everything is fine), `/health` for a reason of
+    // its own (its body is a constant, so the only information it carries is
+    // that *this process* answered — which a stored copy cannot carry).
+    expect(CACHE_POLICIES.readiness.directive).toBe(
+      CACHE_POLICIES.ingestHealth.directive,
+    );
+    expect(CACHE_POLICIES.liveness.directive).toBe("no-store");
+
+    // The two static-ish routes may, and they did not land on one window
+    // either: the banner has a build digest to revalidate against and can
+    // therefore afford an hour, `/docs` has none and so its window is the whole
+    // guarantee and is short.
+    expect(CACHE_POLICIES.serviceBanner.directive).not.toBe(
+      CACHE_POLICIES.liveness.directive,
+    );
+    expect(CACHE_POLICIES.docs.directive).not.toBe(
+      CACHE_POLICIES.serviceBanner.directive,
+    );
   });
 
   it("closes the two rows the spec recorded as a hole, and not by copying one directive", () => {
@@ -165,6 +212,44 @@ describe("the caching table is the spec's, row for row", () => {
       CACHE_POLICIES.replay.directive,
     );
     expect(CACHE_POLICIES.solveBody.directive).toBe("no-store");
+  });
+});
+
+describe("the table's size is derived from the spec's, never restated", () => {
+  /**
+   * The rows of `api-surface.md`'s caching table — the `| … |` lines of the
+   * "### Caching" section, minus its header and its separator.
+   */
+  const specRows = (): readonly string[] => {
+    const spec = readFileSync(SPEC_PATH, "utf8");
+    const section = spec.slice(spec.indexOf("\n### Caching\n"));
+    const body = section.slice(0, section.indexOf("\n### ", 1));
+    return body
+      .split("\n")
+      .filter((line) => line.startsWith("| `"))
+      .map((line) => line.slice(1, line.indexOf("|", 1)).trim());
+  };
+
+  it("has one row per surface in the spec, plus the error row the spec argues in prose", () => {
+    // The count has drifted three times, always the same way: a row was added
+    // and a sentence somewhere still said how many there used to be. So no
+    // sentence says how many there are — this does, out of the two artefacts
+    // that would have disagreed. The error row is the one policy with no line
+    // in the table, because it is not a surface: it applies to every route,
+    // from `errors.ts`, and the spec argues it in the paragraph below the
+    // table instead.
+    expect(specRows().length).toBeGreaterThan(0);
+    expect(ALL_CACHE_POLICIES.length).toBe(specRows().length + 1);
+  });
+
+  it("gives the unmetered tier a line in that table and not a footnote under it", () => {
+    // The section used to end with "Still outside the table: `/`, `/health`,
+    // `/ready` and `/docs`". A route argued about in prose under a table is a
+    // route the table does not govern.
+    const surfaces = specRows().join(" ");
+    for (const path of ["`/`", "`/health`", "`/ready`", "`/docs`"]) {
+      expect(surfaces).toContain(path);
+    }
   });
 });
 
@@ -233,6 +318,9 @@ describe("no validator is built from a clock or a duration", () => {
       "diagnosis.ts",
       "forecast.ts",
       "grid.ts",
+      // `index.ts` is on this list because the service banner is a build
+      // constant with a digest, the same shape as the canonical manifest.
+      "index.ts",
       "model-card.ts",
       "optimize.ts",
       "plants.ts",

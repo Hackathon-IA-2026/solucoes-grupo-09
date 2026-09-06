@@ -2,13 +2,16 @@
  * The caching table, in one place — **a cache key is a provenance, never a
  * duration.**
  *
- * `docs/specs/api-surface.md`, "Caching", is a table of twelve rows and one
- * rule — fifteen now, with the error row and the two reads that spec recorded
- * as a hole it was leaving open — and until this module existed it was twelve
- * copies of that rule: each
+ * `docs/specs/api-surface.md`, "Caching", is one rule and one row per surface,
+ * and until this module existed it was one copy of that rule per route: each
  * route assembled its own directive string and its own validator, and the only
  * thing keeping them agreeing was that they had been written on the same
- * afternoon. Two of them had already drifted — `/v1/forecast/day-ahead` carried
+ * afternoon. **How many rows there are is deliberately not written down in this
+ * comment.** It has drifted three times — the error row, then the two reads the
+ * spec had recorded as a hole, then the unmetered tier — and each time a
+ * sentence here and a sentence in `cache-policy.test.ts` were left claiming the
+ * old number. The count is derived instead, in that test, against the spec's
+ * own table. Two of them had already drifted — `/v1/forecast/day-ahead` carried
  * a validator built from the row's ingestion instant rather than from the
  * artifact and the publication, and no `stale-while-revalidate` at all — which
  * is exactly the drift a table transcribed twelve times produces.
@@ -59,13 +62,15 @@
 /**
  * The one directive that stores nothing.
  *
- * `/v1/meta`, the `POST` solves, the canonical reads and `/ingest/health`, and
- * for three different arguments rather than one. `/v1/meta` and
- * `/ingest/health` are what you read to discover something is broken, so a
- * cache in front of either is a cache in front of the truth; a `POST` is not
- * shared-cacheable at all; a canonical read is an as-of answer with no
- * validator, so a stored copy can only ever be the right rows for the wrong
- * instant. Each row below states its own; none of them inherits.
+ * `/v1/meta`, the `POST` solves, the canonical reads, `/ingest/health`, and
+ * the two probes — and for five different arguments rather than one.
+ * `/v1/meta`, `/ingest/health` and `/ready` are what you read to discover
+ * something is broken, so a cache in front of any of them is a cache in front
+ * of the truth; a `POST` is not shared-cacheable at all; a canonical read is an
+ * as-of answer with no validator, so a stored copy can only ever be the right
+ * rows for the wrong instant; and `/health` answers a constant, so the only
+ * thing its response carries is *who* answered it, which a stored copy cannot
+ * carry. Each row below states its own; none of them inherits.
  */
 const NO_STORE = "no-store";
 
@@ -306,6 +311,79 @@ export const CACHE_POLICIES = {
    * one anyway.
    */
   ingestHealth: { name: "ingest-health", directive: NO_STORE },
+
+  /**
+   * **`GET /` — the service banner. Cacheable, with a build digest.**
+   *
+   * The name, the version and a pointer at `/docs`: a constant of the
+   * deployment that touches no database, takes no parameter and changes only
+   * when the code does. Its validator is a digest over the bytes the process
+   * will serve — a content provenance, the canonical manifest's kind and the
+   * only kind available, since a banner has no `published_at` and no
+   * `data_version`. It lands on the manifest's directive by the same argument
+   * rather than by sharing anything with it; the hour is affordable *because*
+   * there is a validator, so a deploy is one 304-or-200 away rather than an
+   * hour of a wrong version string.
+   */
+  serviceBanner: { name: "service-banner", directive: shared(maxAge(ONE_HOUR_SEC)) },
+
+  /**
+   * **`GET /health` — liveness. `no-store`, and not `/ready`'s reason.**
+   *
+   * The trap here is the opposite of the canonical reads': this response's body
+   * is a *constant*, which is what makes it look like the most cacheable thing
+   * on the surface. It is the least. The information in a liveness answer is
+   * not its body but the fact that **this process** produced it, now; a stored
+   * copy answers on behalf of a process that may since have died, turning "is
+   * this instance alive" into "was an instance alive recently" — which is the
+   * one question a liveness probe is not asking.
+   *
+   * That is also why there is nothing to revalidate against. A validator here
+   * could only be built over the constant, so it would match forever, and a
+   * probe whose 304 is unconditional is a probe that has stopped probing.
+   */
+  liveness: { name: "liveness", directive: NO_STORE },
+
+  /**
+   * **`GET /ready` — readiness. `no-store`, and this one *is*
+   * `/ingest/health`'s reason.**
+   *
+   * It reports whether the database is reachable and answers 503 when it is
+   * not. A cached 200 served during that outage is a monitor being told
+   * everything is fine, with the cache doing the silencing — and a readiness
+   * probe is the last endpoint on the surface that should be allowed a lifetime
+   * it did not choose, because everything downstream of it (a load balancer
+   * adding the instance back, an operator believing a rollout finished) acts on
+   * the answer.
+   *
+   * Its 503 does not save it, for the same reason `/ingest/health`'s does not:
+   * the status is set by the handler on its own body and never passes through
+   * `./errors.ts`, so `refuseToCache` never sees it. The 200 is the dangerous
+   * one anyway.
+   */
+  readiness: { name: "readiness", directive: NO_STORE },
+
+  /**
+   * **`/docs` and `/docs/json` — Scalar's own document. A short window, and the
+   * one row on this table whose duration is the whole guarantee.**
+   *
+   * A deploy is the only thing that can change it, so it is a build constant
+   * like the banner and the manifest — but unlike them this gateway holds no
+   * digest of it: the UI shell belongs to the Swagger plugin and the OpenAPI
+   * document is assembled from the route table when it is asked for. Inventing
+   * a validator anyway is the tempting error and the worse one: the obvious
+   * candidate is the API version string, which does not move between deploys of
+   * different code, and a validator that fails to move when the document does
+   * turns every revalidation into a 304 on a document that changed. That is
+   * strictly worse than no validator, so there is none.
+   *
+   * Which is why the window is short rather than the banner's hour. With no
+   * validator the `max-age` is not a revalidation hint, it is the entire
+   * freshness promise, and the cost of being wrong is bounded and self-healing:
+   * five minutes of a stale route list in front of a developer, on the one
+   * route on this surface that makes no claim about the grid.
+   */
+  docs: { name: "docs", directive: shared(maxAge(FIVE_MINUTES_SEC)) },
 
   /**
    * **Any error, on any route** — applied by `./errors.ts`, not by a handler.

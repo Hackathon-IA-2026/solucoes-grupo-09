@@ -1167,6 +1167,10 @@ key built from those has no manual invalidation path to forget to call.
 | `/v1/canonical/<read>` | `no-store` | — | An as-of answer with no validator; see below |
 | `/v1/canonical` (the manifest) | `public, max-age=3600` | `W/"<manifest digest>"` | A build constant, and the only cacheable thing under that path |
 | `/ingest/health` | `no-store` | — | It is what you read to discover something is broken |
+| `/` (the banner) | `public, max-age=3600` | `W/"<banner digest>"` | A build constant with a digest; the hour is affordable because there is a validator |
+| `/health` | `no-store` | — | A liveness answer's information is *who* answered, which a stored copy cannot carry |
+| `/ready` | `no-store` | — | It answers 503 when the database is unreachable; a cached 200 is the outage silenced |
+| `/docs`, `/docs/json` | `public, max-age=300` | — | A build constant this gateway holds no digest of, so the window is the whole guarantee and is short |
 
 **The ticket's premise, corrected.** "Forecasts change daily, replays never
 change" is half right and half a trap.
@@ -1232,11 +1236,15 @@ duration-as-a-key this section exists to forbid, and it was on the one path
 nobody looks at. Both are fixed, and the boundary is what keeps them fixed: no
 route assembles a `Cache-Control` of its own, so a grep over that one module is
 a grep over every response — which is what makes the "nothing carries
-`immutable`" assertion total rather than a sample of twelve.
+`immutable`" assertion total rather than a sample of the routes someone
+remembered to check. How many rows the table has is written down in neither
+`cache-policy.ts` nor its test — it has drifted three times, and each time a
+sentence was left claiming the previous number — so the test derives it from
+the table above instead.
 `cache-policy.test.ts` also reads every provenance call site and fails on a
 clock or a TTL inside one.
 
-**The table needs a thirteenth row the ticket did not ask for: an error.** A
+**The table needs a row the ticket did not ask for, and it is not a surface: an error.** A
 route that revalidates *before* it does its work — `/v1/optimize` 304-checks a
 pinned scenario before calling the solver, because the cheapest solve is the one
 a validator answers — has already written a success directive and a success ETag
@@ -1301,11 +1309,70 @@ one of them for that reason, and the third is the opposite call.
   `errors.ts`, so `refuseToCache` never sees it, and the 200 is the dangerous
   one anyway.
 
-**Still outside the table:** `/`, `/health`, `/ready` and `/docs` — the
-unmetered tier. `/ready` has `/ingest/health`'s argument almost verbatim (it
-reports whether the database is reachable and answers 503 when it is not) and is
-the next one worth closing; the other three are a static banner, a liveness
-constant and Scalar's own document.
+**The unmetered tier is in the table now, as four rows and not as a tier.**
+`/`, `/health`, `/ready` and `/docs` also shipped with no `Cache-Control`, and
+the temptation was to close them together because they share a rate-limiting
+tier. A tier is a statement about cost; it has never been a caching argument,
+and these four split two-and-two on the only question that matters here —
+whether a stored copy of the answer can still be true.
+
+- **`/ready` — `no-store`, and this is `/ingest/health`'s argument verbatim.**
+  It reports whether the database is reachable and answers 503 when it is not.
+  A cached 200 served during that outage is a monitor being told everything is
+  fine, with the cache doing the silencing — and a readiness probe is the last
+  endpoint on the surface that should be allowed a lifetime it did not choose,
+  because everything downstream acts on the answer: a load balancer adding the
+  instance back, an operator believing a rollout finished. Its 503 does not
+  save it either, for `/ingest/health`'s reason exactly — the status is set by
+  the handler on its own body and never passes through `errors.ts`, so
+  `refuseToCache` never sees this route, and the 200 is the dangerous one.
+
+- **`/health` — `no-store`, and *not* `/ready`'s reason.** This is the canonical
+  reads' trap inverted. A liveness answer is a constant body, which is what
+  makes it look like the most cacheable thing on the surface; it is the least.
+  The information in the response is not the body but the fact that **this
+  process** produced it, now. A stored copy answers on behalf of a process that
+  may since have died, turning "is this instance alive" into "was an instance
+  alive recently" — the one question a liveness probe is not asking. It is also
+  why `no-cache` with a validator is unavailable here for a second time and a
+  different reason than the canonical reads': a validator could only be built
+  over the constant, so it would match forever, and a probe whose 304 is
+  unconditional has stopped probing.
+
+- **`/` — the banner — is cacheable, with a validator, for the manifest's
+  reason.** The name, the version and a pointer at `/docs`: no database, no
+  parameter, and an answer that changes only when the code does. Its key is a
+  digest over the bytes the process will serve, computed at module load — a
+  content provenance, the same kind as the manifest's and the scenario hash's,
+  and the only kind available since a banner has no `published_at` and no
+  `data_version`. It lands on the manifest's directive by the same argument
+  rather than by sharing anything with it, and the hour is affordable
+  *because* there is a validator: a deploy is one revalidation away, not an
+  hour of a wrong version string.
+
+- **`/docs` — a short `max-age` and, deliberately, no validator.** It is a build
+  constant too, but this gateway holds no digest of it: the UI shell belongs to
+  the Swagger plugin and the OpenAPI document is assembled from the route table
+  when it is asked for. Building a validator anyway is the tempting error and
+  the worse one — the obvious candidate is the API version string, which does
+  not move between deploys of different code, and a validator that fails to move
+  when the document does turns every revalidation into a 304 on a document that
+  changed. That is strictly worse than none, so there is none. Which is exactly
+  why the window is five minutes and not the banner's hour: with no validator
+  the `max-age` is not a revalidation hint, it is the whole freshness promise,
+  and it is sized to the cost of being wrong — a stale route list in front of a
+  developer for five minutes after a deploy, on the one route on this surface
+  that makes no claim about the grid. **This is the only row whose duration
+  carries any weight, and the rule survives it:** a duration is admissible here
+  precisely because there is no provenance to key on, and never as a substitute
+  for one that exists.
+
+  Both routes are covered — `/docs` and `/docs/json` — because the shell is
+  useless without the document, and a document with no directive is the half an
+  intermediary would still be free to invent a lifetime for. Neither route has a
+  handler of ours to name the row in, since the plugin owns them both, so the
+  directive is applied in an `onRequest` keyed on the same `/docs` prefix
+  `cspFor` already keys.
 
 ### Rate limiting
 

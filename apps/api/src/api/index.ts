@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { cors } from "@elysiajs/cors";
 import { serverTiming } from "@elysiajs/server-timing";
 import { swagger } from "@elysiajs/swagger";
@@ -20,6 +21,7 @@ import {
   SOLVE_MAX_BODY_BYTES,
   solveBodyLimit,
 } from "./plugins/body-limit.js";
+import { applyCachePolicy, CACHE_POLICIES } from "./plugins/cache-policy.js";
 import { errorHandler } from "./plugins/errors.js";
 import { limitStore } from "./plugins/limit-store-handle.js";
 import { rateLimit, tiersFrom } from "./plugins/rate-limit.js";
@@ -40,6 +42,29 @@ const isProd = config.isProd;
  * module that mounts it.
  */
 export { limitStore };
+
+/**
+ * The service banner — a constant of the deployment, built once.
+ *
+ * Once rather than per request because it cannot differ per request, which is
+ * what lets the validator below be a fact about the build.
+ */
+const BANNER = { name: "wattsteer", version: "0.1.0", docs: "/docs" };
+
+/**
+ * The banner's validator: a digest of the bytes this process will serve.
+ *
+ * `canonical.ts`'s `MANIFEST_VERSION`, for the same reason and by the same
+ * construction — a banner has no `published_at` and no `data_version`, so a
+ * content provenance is the only kind available, and computing it at module
+ * load is what keeps it a fact about the build rather than about the request.
+ * A deploy that changes the name, the version or the docs path moves it; the
+ * rule this repo enforces is that nothing else may.
+ */
+const BANNER_VERSION = createHash("sha256")
+  .update(JSON.stringify(BANNER))
+  .digest("hex")
+  .slice(0, 16);
 
 /**
  * Readiness: when a database is configured it must answer before we accept
@@ -93,6 +118,16 @@ export const app = new Elysia()
   )
   .use(serverTiming())
   .use(errorHandler)
+  // `/docs` and `/docs/json` name their row here rather than in a handler,
+  // because the Swagger plugin owns both routes and there is no handler of ours
+  // to put it in. `onRequest` for the same reason `securityHeaders` uses it:
+  // it runs before routing, so the directive is on the UI shell and on the
+  // OpenAPI document alike, and `cspFor` already keys the same prefix.
+  .onRequest(({ request, set }) => {
+    if (new URL(request.url).pathname.startsWith("/docs")) {
+      applyCachePolicy({ set, request }, CACHE_POLICIES.docs);
+    }
+  })
   .use(
     swagger({
       path: "/docs",
@@ -115,15 +150,40 @@ export const app = new Elysia()
       },
     }),
   )
-  .get("/", () => ({ name: "wattsteer", version: "0.1.0", docs: "/docs" }), {
-    detail: { summary: "API info" },
-  })
-  .get("/health", () => ({ status: "ok" as const }), {
-    detail: { summary: "Liveness" },
-  })
+  // The unmetered tier's four routes, and four caching rows rather than one.
+  // Being on a tier is a rate-limiting fact; it has never been a caching
+  // argument, and `plugins/cache-policy.ts` states each of the four separately.
+  .get(
+    "/",
+    ({ set, request }) => {
+      // A build constant with a digest over the bytes it serves, so a reader
+      // holding this deployment's banner gets a 304 rather than a copy of it.
+      if (
+        applyCachePolicy({ set, request }, CACHE_POLICIES.serviceBanner, [BANNER_VERSION])
+      ) {
+        return null;
+      }
+      return BANNER;
+    },
+    { detail: { summary: "API info" } },
+  )
+  .get(
+    "/health",
+    ({ set, request }) => {
+      // `no-store`, and the constant body is the reason rather than an excuse:
+      // the only thing this response carries is that *this* process answered.
+      applyCachePolicy({ set, request }, CACHE_POLICIES.liveness);
+      return { status: "ok" as const };
+    },
+    { detail: { summary: "Liveness" } },
+  )
   .get(
     "/ready",
-    async ({ set }) => {
+    async ({ set, request }) => {
+      // Before the branch, so the 200 and the 503 both carry it. `/ready`'s
+      // 503 is set here on its own body and never passes through `errors.ts`,
+      // so the error row's `refuseToCache` never sees this route.
+      applyCachePolicy({ set, request }, CACHE_POLICIES.readiness);
       const isReady = await ready();
       if (!isReady) {
         set.status = 503;

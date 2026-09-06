@@ -41,6 +41,75 @@ describe("api · typed routes (Eden Treaty)", () => {
   });
 });
 
+describe("api · the unmetered tier carries a directive it chose", () => {
+  // `/`, `/health`, `/ready` and `/docs` shipped with no `Cache-Control` at
+  // all, which leaves an intermediary free to invent a freshness lifetime by
+  // heuristic. Each now names a row of `plugins/cache-policy.ts`, and the four
+  // rows are four arguments — the assertions below are what stops a fifth
+  // route inheriting one of them for being on the same tier.
+  const hit = (path: string, headers?: Record<string, string>) =>
+    app.handle(new Request(`http://localhost${path}`, { headers }));
+
+  it("refuses to let a shared cache answer for the readiness probe", async () => {
+    // `/ingest/health`'s argument verbatim: `/ready` reports whether the
+    // database is reachable and answers 503 when it is not, so a cached 200 is
+    // a monitor being told everything is fine with the cache doing the
+    // silencing. And that 503 is set by the handler on its own body, so it
+    // never reaches `errors.ts` and `refuseToCache` never sees it.
+    const res = await hit("/ready");
+    expect([200, 503]).toContain(res.status);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("etag")).toBeNull();
+  });
+
+  it("refuses to let a shared cache answer for the liveness probe", async () => {
+    // A different argument, not `/ready`'s. `/health` always answers the same
+    // constant body, which is exactly what makes it look cacheable: the only
+    // information in the response is that *this* process produced it, and a
+    // stored copy turns "is this instance alive" into "was one alive recently".
+    const res = await hit("/health");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("etag")).toBeNull();
+  });
+
+  it("lets the banner be cached, and revalidates it against the build", async () => {
+    // The opposite call, on the opposite kind of route: the banner is a
+    // constant of the deployment with a digest over the bytes it will serve —
+    // a content provenance, the canonical manifest's kind — so it is
+    // shared-cacheable and correctness does not depend on the window.
+    const res = await hit("/");
+    expect(res.headers.get("cache-control")).toBe("public, max-age=3600");
+    const etag = res.headers.get("etag");
+    expect(etag).toMatch(/^W\//);
+
+    const revalidated = await hit("/", { "if-none-match": etag as string });
+    expect(revalidated.status).toBe(304);
+    // A 304 with no validator cannot be repeated; one with no directive resets
+    // the window it exists to extend.
+    expect(revalidated.headers.get("etag")).toBe(etag);
+    expect(revalidated.headers.get("cache-control")).toBe("public, max-age=3600");
+  });
+
+  it("gives /docs a short window precisely because it has no validator", async () => {
+    // Scalar's own document is a build constant too, but this gateway holds no
+    // digest of it: the UI shell belongs to the plugin and the OpenAPI document
+    // is assembled from the route table at request time. So the window is the
+    // whole guarantee rather than a revalidation hint, and it is short for that
+    // reason — five minutes of a stale route list after a deploy, self-healing.
+    const res = await hit("/docs");
+    expect(res.headers.get("cache-control")).toBe("public, max-age=300");
+    expect(res.headers.get("etag")).toBeNull();
+  });
+
+  it("covers the OpenAPI document and not only the UI shell", async () => {
+    // The shell is useless without it, and a document with no directive is the
+    // half an intermediary would still be free to invent a lifetime for.
+    const res = await hit("/docs/json");
+    expect(res.headers.get("cache-control")).toBe("public, max-age=300");
+  });
+});
+
 describe("api · error mapping (global handler)", () => {
   const errApp = new Elysia()
     .use(errorHandler)
