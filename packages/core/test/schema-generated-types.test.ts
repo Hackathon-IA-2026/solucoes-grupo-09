@@ -40,10 +40,16 @@ describe("the checked-in generated types are current", () => {
     // A guard on the guard. A generator that silently skipped a file would
     // leave the assertion above passing and half the contract untyped.
     const missing: string[] = [];
-    for (const file of readdirSync(join(import.meta.dir, "..", "schema"))) {
-      if (!file.endsWith(".schema.json")) {
-        continue;
-      }
+    const schemaFiles = readdirSync(join(import.meta.dir, "..", "schema")).filter(
+      (file) => file.endsWith(".schema.json"),
+    );
+    // The listing has to have found the schemas, or "nothing was skipped" is a
+    // statement about nothing. Measured: narrowing the suffix to one no file
+    // carries left all 5 tests in this file green — which is the very defect
+    // this test calls itself a guard against, one level up.
+    expect(schemaFiles.length).toBeGreaterThan(5);
+    expect(schemaFiles).toContain("common.schema.json");
+    for (const file of schemaFiles) {
       const schema = readSchemas().get(file) as {
         title?: string;
         type?: string;

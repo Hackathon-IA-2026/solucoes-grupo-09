@@ -39,8 +39,10 @@ const read = (file: string): string => readFileSync(join(SRC, file), "utf8");
  */
 const code = (file: string): string =>
   read(file)
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/\/\/.*$/gm, "");
+    // Line comments FIRST — see `stripsLineCommentsFirst` below for why the
+    // reverse order silently deletes real code from this scan's own input.
+    .replace(/\/\/.*$/gm, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "");
 
 describe("contract · the vocabulary is the domain's, not the source's", () => {
   it("exposes the five families the modelling side needs", () => {
@@ -229,14 +231,37 @@ describe("contract · the reads are a thin caller over the canonical views", () 
             ? [join(dir, entry.name)]
             : [],
       );
-    const implementing = walk(root).filter((file) =>
-      /\?\s*"point_in_time"/.test(
-        readFileSync(file, "utf8").replace(/\/\*[\s\S]*?\*\//g, ""),
-      ),
+    // Line comments FIRST, then block comments. This stripper removed block
+    // comments only, and this walk reads `api/grid.ts` and `api/plants.ts`,
+    // whose `//` comments at lines 280 and 261 contain a `/*`: the block it
+    // opened there ran to the next `*/`, deleting 144 and 69 non-blank lines
+    // from this scan's own input. A second implementation of the vintage rule
+    // placed in either of those spans was invisible here.
+    const scanned = walk(root);
+    const strip = (source: string): string =>
+      source.replace(/^[ \t]*\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+    const implementing = scanned.filter((file) =>
+      /\?\s*"point_in_time"/.test(strip(readFileSync(file, "utf8"))),
     );
     expect(implementing.map((file) => file.replace(`${root}/`, ""))).toEqual([
       "contract/vintage.ts",
     ]);
+
+    // The walk found the app, and read the two modules the old order truncated.
+    // Without this, an empty walk would report the rule as implemented nowhere,
+    // which fails only because the expectation above names a survivor — and a
+    // walk that reached everything *except* those two would not fail at all.
+    expect(scanned.length).toBeGreaterThan(50);
+    const nonBlank = (text: string): number =>
+      text.split("\n").filter((line) => line.trim() !== "").length;
+    for (const name of ["api/grid.ts", "api/plants.ts"]) {
+      const raw = readFileSync(join(root, name), "utf8");
+      expect(scanned).toContain(join(root, name));
+      // A live control: the orders genuinely disagree on these two files.
+      expect(nonBlank(strip(raw))).toBeGreaterThan(
+        nonBlank(raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "")),
+      );
+    }
   });
 
   it("reaches no write path", () => {

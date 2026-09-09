@@ -41,7 +41,7 @@ short list of guards that needed nothing is a better outcome than a wide diff.**
 
 **Blocked by:** None.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The standing guards and asserted metrics are inventoried, with how each was
       found (do not rely on a hand-written list; discover them)

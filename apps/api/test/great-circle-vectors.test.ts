@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { haversineKm } from "../src/features/capacity-weights.js";
 
 /**
@@ -58,14 +58,39 @@ interface Vector {
  * exact moment it stopped being checked. This is also what makes adding a
  * vector sufficient — neither language can skip one it was not told about.
  */
-const VECTORS: Vector[] = readdirSync(FIXTURES)
+const FILES: readonly string[] = readdirSync(FIXTURES)
   .filter((file) => file.endsWith(".json"))
-  .sort()
-  .map((file) => JSON.parse(readFileSync(join(FIXTURES, file), "utf-8")) as Vector);
+  .sort();
+
+const VECTORS: Vector[] = FILES.map(
+  (file) => JSON.parse(readFileSync(join(FIXTURES, file), "utf-8")) as Vector,
+);
 
 describe("the great-circle distance, against the shared vectors", () => {
   it("has vectors to assert", () => {
     expect(VECTORS.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it("skips no vector file, wherever in the directory it is filed", () => {
+    // The listing above is flat; this compares it against a *recursive* walk.
+    //
+    // `README.md` claimed both suites "fail when the directory holds a file
+    // they did not enumerate", and until now neither did: a vector filed under
+    // a subdirectory was read by nobody, and the count assertion above only
+    // sees an empty directory, never a file nobody reads. Measured: a copy of
+    // `04-a-metre-apart.json` with `expected_km` set to 999999, filed under
+    // `regression/`, left both this suite and
+    // `apps/ml/tests/test_great_circle_vectors.py` entirely green.
+    //
+    // Adding a vector anywhere under here is therefore sufficient, or it fails
+    // loudly — which is the property that makes the README true. The siblings
+    // `../gate-instant/` and `../canonical-contract/` have carried this check
+    // all along; this is the one that did not.
+    const everywhere = readdirSync(FIXTURES, { recursive: true, encoding: "utf8" })
+      .filter((entry) => entry.endsWith(".json"))
+      .map((entry) => entry.split(sep).join("/"))
+      .sort();
+    expect(everywhere).toEqual([...FILES]);
   });
 
   for (const vector of VECTORS) {

@@ -135,4 +135,68 @@ describe("repo hygiene", () => {
 
     expect(offenders).toEqual([]);
   });
+
+  it("walked the repository, so the clean result above means something", () => {
+    // `toEqual([])` over a walk is the shape that reads green when the walk
+    // finds nothing. Measured: making the file filter reject everything left
+    // this file's single assertion passing, and the strip would have been
+    // reported complete at the moment it stopped reading any of the repo.
+    //
+    // Named trees rather than a bare count, because the exemption mechanism is
+    // prefix-based and the failure to design for is one exemption swallowing a
+    // parent: `EXEMPT` holds `docs/specs`, and an entry of `docs` — or of the
+    // empty string — would silently retire the whole documentation tree while
+    // still passing a count.
+    const files = walk(ROOT).map((file) => relative(ROOT, file));
+    expect(files.length).toBeGreaterThan(100);
+    for (const file of ["README.md", join("apps", "api", "README.md")]) {
+      expect(files).toContain(file);
+    }
+    for (const tree of [
+      join("apps", "api", "src"),
+      join("apps", "web", "src"),
+      join("packages", "core", "src"),
+      join("docs"),
+    ]) {
+      expect({
+        tree,
+        reached: files.some((file) => file.startsWith(tree + sep)),
+      }).toEqual({ tree, reached: true });
+    }
+    // And the exemptions still exempt exactly what they name: `docs/specs` is
+    // out, `docs` at large is in.
+    expect(files.some((file) => file.startsWith(join("docs", "specs") + sep))).toBe(
+      false,
+    );
+  });
+
+  it("can fail: every forbidden token is caught, in any casing", () => {
+    // The pattern itself had no control. It is assembled from `FORBIDDEN` with
+    // `join("|")`, so a stray token — an empty string, an unescaped `.` — would
+    // either match everything or nothing, and a `[]` result cannot tell the two
+    // apart. Held as strings rather than as a planted file because this file is
+    // the one path `EXEMPT` excuses, so a real fixture here would be skipped.
+    const pattern = new RegExp(FORBIDDEN.join("|"), "i");
+    for (const token of FORBIDDEN) {
+      expect({ token, caught: pattern.test(`a line mentioning ${token} here`) }).toEqual({
+        token,
+        caught: true,
+      });
+      // Casing, which is the whole reason the `i` flag is there.
+      expect(pattern.test(token.toUpperCase())).toBe(true);
+    }
+    // And it is not a pattern that matches anything at all. The domain this
+    // repository *is* about must pass, or the guard would be unusable and the
+    // honest response to it failing would be to delete it.
+    for (const innocent of [
+      "curtailment intelligence for the Brazilian grid",
+      "the ONS publication window",
+      "constrained-off energy by reporting entity",
+    ]) {
+      expect({ innocent, caught: pattern.test(innocent) }).toEqual({
+        innocent,
+        caught: false,
+      });
+    }
+  });
 });

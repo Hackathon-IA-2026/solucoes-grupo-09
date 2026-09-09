@@ -24,9 +24,18 @@ const SOURCE = join(import.meta.dir, "..", "src");
 
 /** Source with block and line comments removed — prose may not satisfy a rule. */
 function code(relative: string): string {
-  return readFileSync(join(SOURCE, relative), "utf8")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/^[ \t]*\/\/.*$/gm, "");
+  return (
+    readFileSync(join(SOURCE, relative), "utf8")
+      // Line comments FIRST, then block comments — the order is load-bearing and
+      // the reverse is silently wrong. `api/grid.ts:280` and `api/plants.ts:261`
+      // are `//` comments containing `/*`, whose slash-star opens a block the
+      // block-stripper then runs to the next `*/` — 190 and 94 lines later —
+      // deleting real route code from the scan. Measured: a `fetch(config.mlUrl)`
+      // planted at `grid.ts:400` was NOT caught and the identical one at line 268
+      // was. `stripsLineCommentsFirst` below is the standing control.
+      .replace(/^[ \t]*\/\/.*$/gm, "")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+  );
 }
 
 /** What the stubbed modelling service answers next. */

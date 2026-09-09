@@ -103,8 +103,10 @@ describe("error copy · the developer message is never rendered", () => {
     for (const root of SCOPE) {
       for (const file of walk(join(ROOT, root))) {
         const source = readFileSync(file, "utf8")
-          .replace(/\/\*[\s\S]*?\*\//g, "")
-          .replace(/^[ \t]*\/\/.*$/gm, "");
+          // Line comments FIRST: the reverse order lets a `//` comment
+          // containing a `/*` open a block that eats the rest of the file.
+          .replace(/^[ \t]*\/\/.*$/gm, "")
+          .replace(/\/\*[\s\S]*?\*\//g, "");
         source.split("\n").forEach((line, i) => {
           if (FORBIDDEN.some((pattern) => pattern.test(line))) {
             offenders.push(`${relative(ROOT, file)}:${i + 1}: ${line.trim()}`);

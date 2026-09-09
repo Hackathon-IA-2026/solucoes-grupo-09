@@ -58,6 +58,15 @@ describe("the web bundle can resolve @wattsteer/core", () => {
     const files = readdirSync(CORE_SRC).filter(
       (name) => name.endsWith(".ts") && name !== "index.ts",
     );
+    // The listing has to have found the package, or `orphans` is `[]` because
+    // there was nothing to be an orphan. Measured: narrowing the suffix to one
+    // no file carries left all three tests in this file green. The two names
+    // are the modules the exclusions below mention by hand, so a listing that
+    // stopped reaching them would retire those exclusions silently too.
+    expect(files.length).toBeGreaterThan(10);
+    for (const name of ["types.generated.ts", "schema.ts"]) {
+      expect(files).toContain(name);
+    }
     const barrel = readFileSync(join(CORE_SRC, "index.ts"), "utf8");
     const sources = files.map((name) => readFileSync(join(CORE_SRC, name), "utf8"));
     const orphans = files
