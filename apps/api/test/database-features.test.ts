@@ -1686,6 +1686,184 @@ suite("the gate, end to end (real Postgres)", () => {
     expect(regimes).toEqual({ relaxed: true, strict: true });
   });
 
+  /**
+   * The seven canonical reads `feature_rows` stamps, in the order its
+   * weakest-link `CASE` names them.
+   *
+   * `canonical_read_go_live` publishes **nine**, and the other two are absent
+   * here because no feature block reads them. `curtailment-by-plant` feeds
+   * `canonical_curtailment_by_plant`, which no feature composes; the labels
+   * come from the reporting-entity read instead. `conjunto-membership` feeds
+   * `canonical_conjunto_membership`, which no feature composes either — the
+   * capacity weights reach the registry through `canonical_plant_registry`,
+   * and that view reads `generating_unit` and `plant_geo`, not conjuntos.
+   * Which is also where the residual this ticket measured and left standing
+   * lives: see the third test below.
+   */
+  const STAMPED_READS = [
+    "weather-forecast",
+    "curtailment-by-reporting-entity",
+    "installed-capacity",
+    "system-context",
+    "system-exchange",
+    "programmed-load",
+    "day-ahead-balance",
+  ] as const;
+
+  it("gates every hour of the day it gates from before it, at both profiles", async () => {
+    // Ticket 16's load-bearing lemma, and the only thing about it that could
+    // ever stop being true.
+    //
+    // Both gate profiles are D−1 wall-clock hours — 09:00 and 19:00 BRT — and
+    // the earliest hour they gate is 00:00 BRT on D. So the gate precedes every
+    // `valid_time` in the row spine it decides, by five hours at the closest.
+    // That is why `gate >= X` implies `valid_time >= X` for any X, which is
+    // what collapses the per-source floor into the horizon the tree already
+    // has; the test below measures the collapse and this one measures its
+    // premise.
+    //
+    // Sixteen DST-free years of it, because if Brazil reinstates summer time or
+    // a profile is ever moved past midnight the premise is what breaks first.
+    const [gaps] = [
+      ...(await db.execute<{
+        rows_checked: number;
+        min_gap: string;
+        violations: number;
+      }>(sql`
+        select count(*)::int as rows_checked,
+               min(h.valid_time - gate_at(d.target_date, p.gate_profile))::text as min_gap,
+               count(*) filter (
+                 where h.valid_time <= gate_at(d.target_date, p.gate_profile)
+               )::int as violations
+        from (
+          select generate_series('2020-01-01'::date, '2035-12-31'::date, interval '1 day')::date
+                 as target_date
+        ) d
+        cross join (select unnest(array['gate_early', 'gate_late']) as gate_profile) p
+        cross join lateral feature_local_day_hours(d.target_date) as h(valid_time)
+      `)),
+    ];
+    expect(gaps?.rows_checked).toBe(280_512);
+    expect(gaps?.violations).toBe(0);
+    expect(gaps?.min_gap).toBe("05:00:00");
+  });
+
+  it("stamps every row exactly as a per-source ingestion floor would", async () => {
+    // **Ticket 16's measurement, as a property.** The ticket asks how many rows
+    // now read `revision_optimistic` that a floor per source rather than per
+    // deployment would make `point_in_time`. The answer is none, and this is
+    // why rather than a count that happened to come out zero.
+    //
+    // `feature_as_of` relaxes the ingestion cut for a gate before
+    // `feature_ingestion_history_from()`, the **latest** go-live across the
+    // canonical reads, and `0039` recorded the cost: in the band between the
+    // first go-live and the last, a source that was already ingesting gets its
+    // cut relaxed when it need not be. True — and it moves no stamp. A
+    // per-source floor would stamp `point_in_time` exactly when every read the
+    // row uses was live at the gate, `gate >= go_live(s)` for all s, which is
+    // `gate >= max(go_live)`; and by the lemma above that already implies the
+    // seven `valid_time >= go_live(s)` conjuncts the stamp is made of. The two
+    // rules are the same predicate written twice.
+    //
+    // So this asserts the *shipped* stamp against the per-source predicate,
+    // computed from `canonical_read_go_live` rather than restated, over the
+    // fixture's three target dates — which straddle the horizon, so both
+    // answers occur.
+    const goLive = new Map(
+      [
+        ...(await db.execute<{ read: string; go_live_at: string | null }>(
+          sql`select read, go_live_at::text from canonical_read_go_live`,
+        )),
+      ].map((row) => [row.read, row.go_live_at]),
+    );
+    for (const read of STAMPED_READS) {
+      expect({ read, present: goLive.has(read) }).toEqual({ read, present: true });
+    }
+
+    const seen = new Set<boolean>();
+    for (const targetDate of [BEFORE_GO_LIVE, TARGET, AFTER_GO_LIVE]) {
+      const [gate] = [
+        ...(await db.execute<{ gate: string }>(
+          sql`select gate_at(${targetDate}::date, 'gate_late')::text as gate`,
+        )),
+      ];
+      const gateAt = new Date(gate?.gate as string).getTime();
+      // The floor a source can honestly carry: it was live at the gate, and it
+      // has a go-live at all. A read that has ingested nothing keeps the
+      // `revision_optimistic` answer `feature_vintage_fidelity` already gives.
+      const perSourceFloor = STAMPED_READS.every((read) => {
+        const at = goLive.get(read);
+        return at !== null && at !== undefined && new Date(at).getTime() <= gateAt;
+      });
+      seen.add(perSourceFloor);
+
+      const rows = await rowsForDay(targetDate);
+      expect(rows.length).toBeGreaterThan(0);
+      for (const row of rows) {
+        expect({ targetDate, stamp: row.vintage_fidelity }).toEqual({
+          targetDate,
+          stamp: perSourceFloor ? "point_in_time" : "revision_optimistic",
+        });
+      }
+    }
+    // Non-vacuous: the fixture really does straddle the floor.
+    expect([...seen].sort()).toEqual([false, true]);
+  });
+
+  it("carries the horizon over reads no feature block reads, and stays strict there", async () => {
+    // The one band where the two rules genuinely part company, measured and
+    // left standing on purpose.
+    //
+    // `feature_ingestion_history_from()` is the latest go-live across all
+    // **nine** rows of `canonical_read_go_live`, and two of them —
+    // `curtailment-by-plant` and `conjunto-membership` — are read by no feature
+    // block. Onboard one of those last and every target date between the last
+    // stamped read's go-live and that one is stamped `revision_optimistic`
+    // although every source the row reads was live at its gate: 11,904 rows
+    // over 62 target dates in the measurement's scenario C.
+    //
+    // It is not narrowed to the seven, and the reason is that the horizon is
+    // also the only cover for the reads that have **no** go-live row at all.
+    // `canonical_plant_registry` — which stands behind every weather feature
+    // through `canonical_capacity_weight` — reads `plant_geo` under
+    // `canonical_as_of()`, and `plant_geo` is in no row of that view. Narrowing
+    // the horizon to the seven stamped reads would make the stamp claim more
+    // than the data supports. Failing closed is `0012`'s posture, and this
+    // pins it rather than arguing it.
+    let stamped: string | undefined;
+    try {
+      await db.transaction(async (tx) => {
+        const scoped = tx as unknown as Database;
+        await scoped.execute(sql`
+          insert into conjunto
+            (ons_conjunto_code, name, subsystem, state_code, source_type_code)
+          values ('FE16_CONJ', 'fe16', 'NE', 'BA', 'EOL')
+        `);
+        await scoped.execute(sql`
+          insert into conjunto_membership
+            (plant_ons_code, conjunto_code, member_from, data_version, published_at,
+             published_at_precision, ingested_at, value_digest, source_version_id)
+          values ('FE16_PLANT', 'FE16_CONJ', '2026-01-01T00:00:00.000Z', 1,
+                  '2026-01-01T00:00:00.000Z', 'row', '2027-01-01T00:00:00.000Z', 'd',
+                  ${curtailmentVersionId}::uuid)
+        `);
+        const rows = await readFeatureRows(scoped, {
+          targetFrom: AFTER_GO_LIVE,
+          targetTo: AFTER_GO_LIVE,
+          ...query,
+        });
+        stamped = rows[0]?.vintage_fidelity;
+        tx.rollback();
+      });
+    } catch (error) {
+      if (!(error instanceof Error && /rollback/i.test(error.message))) {
+        throw error;
+      }
+    }
+    // Without that row the same day is `point_in_time` — the test above says so.
+    expect(stamped).toBe("revision_optimistic");
+  });
+
   it("leaves nothing behind, memo included, when it hands the axes back", async () => {
     // `feature_ingestion_history_from()` memoises its answer in a
     // transaction-local setting, because the view behind it is nine unindexed
