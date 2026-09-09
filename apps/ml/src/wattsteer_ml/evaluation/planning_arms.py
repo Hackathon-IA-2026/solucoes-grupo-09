@@ -94,6 +94,7 @@ import asyncpg
 from wattsteer_ml.artifacts import CARD_SUFFIX
 from wattsteer_ml.canonical import VintageFidelity
 from wattsteer_ml.canonical_reads import ReadAxes, apply_axes
+from wattsteer_ml.caveated import CaveatedFigure
 from wattsteer_ml.constants import REFERENCE_FLEET, SUBSYSTEM_CODES, Subsystem
 from wattsteer_ml.declined import DeclinedFigure
 from wattsteer_ml.evaluation.collapse_report import (
@@ -1111,23 +1112,40 @@ _READS = (
 
 #: And what it says when they did not. Deliberately blunt, and deliberately in
 #: the same field, so a reader who reaches the numbers has already read this.
-_NOT_A_READING = (
+_NOT_A_READING = CaveatedFigure(
     "THESE FLOORS ARE NOT A MEASUREMENT OF THE GRID. The bands both arms were "
     "built on were fabricated, so every MWh here is a solver's arithmetic over "
     "invented curtailment. Only a block whose arm_source is "
     f"{HOLDOUT_HOURS_SOURCE!r} says anything about what a fleet on the "
     "Brazilian system would have recovered, and no posture decision may be "
-    "taken on this one."
+    "taken on this one.",
+    figure=(
+        "recovered_floor_mwh for both planning arms, and the difference between them"
+    ),
+    misreading=(
+        "that a reference fleet on the Brazilian system would have "
+        "recovered this much floor under either posture"
+    ),
+    surface="the model card's `planning_arm_comparison` block, `reads`",
 )
 
 #: On a block whose every segment predates ingestion go-live.
-_REVISION_OPTIMISTIC_ONLY = (
+_REVISION_OPTIMISTIC_ONLY = CaveatedFigure(
     "Every fold segment here is revision_optimistic: no reported segment's test "
     "period begins after ingestion go-live. Both arms were built against bands "
     "whose labels have since been revised, and the difference between two arms "
     "is more sensitive to the classifier's operating region than either arm is "
     "on its own, so this block may not carry the posture decision until a "
-    "point_in_time segment exists."
+    "point_in_time segment exists.",
+    figure=(
+        "both planning arms' recovered_floor_mwh and their difference, on a "
+        "block none of whose fold segments begins after ingestion go-live"
+    ),
+    misreading=(
+        "that the posture comparison was made against the labels the "
+        "product will be judged on"
+    ),
+    surface="the model card's `planning_arm_comparison` block, `vintage_caveat`",
 )
 
 #: And when there were no bands at all.

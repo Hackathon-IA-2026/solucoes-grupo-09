@@ -933,6 +933,7 @@ export interface Meta {
    */
   referenceFleet: MetaReferenceFleet;
   declines: MetaDeclines;
+  caveats: MetaCaveats;
   /**
    * Data rather than copy, because the ODbL/CC-BY notice is bilingual and a
    * bilingual notice assembled from translated strings around untranslated
@@ -1022,6 +1023,115 @@ export interface DeclinedFigure {
   /**
    * Why `kind` is `unresolvable`, naming the value that was reported. Absent for
    * every kind this build recognises.
+   */
+  fault?: string;
+}
+
+/**
+ * Every figure this deployment publishes *with* a caveat that changes what it
+ * means - the mirror of `declines`, and the sharper of the two. An absent
+ * figure cannot mislead anybody: a reader who wanted it is told why it is not
+ * there. A present figure carrying a caveat nobody reads is a number that will
+ * be quoted, and `coverage_p10 = 1.0` is the case that proves it - real
+ * arithmetic, computed over zero rows on which the served floor was a positive
+ * number, read for months as evidence that the floor was perfect. Nobody was
+ * lying; the caveat was simply not attached to the number. **Assembled, never
+ * hand-written**, on `declines`' mechanism and for a stronger reason: a caveat
+ * list rots faster than an absence list, because a caveat attaches to a number
+ * people actively use. A caveat sentence *is* its census entry - a `str`
+ * subclass declared beside the code that publishes it, which
+ * `apps/ml/src/wattsteer_ml/caveated.py` walks the package for - so nothing
+ * about where a consumer meets one has moved and adding one edits no list.
+ * **Collected here and attached there, and the two are not alternatives.**
+ * Every one of these sentences is also published in the block that carries the
+ * figure, because a caveat on this endpoint does nothing for the code path
+ * that reads `share_p50_zero`; this half is for a reviewer, who cannot read
+ * every card block to discover which of a build's numbers do not mean what
+ * they say. It is **not** a third `kind` on `declines`: `unrunnable` and
+ * `unrun` are two answers to one question - does this figure exist? - and
+ * every row here answers yes to it, so filing one under a heading whose whole
+ * contract is absence would tell a reviewer `coverage_p10` was withheld when
+ * the defect is precisely that it is not.
+ */
+export interface MetaCaveats {
+  /**
+   * In `(declared_in, name)` order, so two deployments are diffable. Sorted on
+   * the pair and not on the name alone because the name is deliberately not
+   * unique: six blocks declare a `_NOT_A_READING`, each naming its own figures,
+   * and renaming them apart so that a bare string could be an identity would
+   * invent six distinctions where there is one recurring defect.
+   */
+  figures: CaveatedFigure[];
+  /**
+   * Why this list may be **short**, or `null` when it is whole. Every row is the
+   * modelling service's: the gateway publishes no figure of its own to caveat,
+   * which is why this block has no gateway half where `declines` has one, and
+   * `no_joint_ensemble` is a figure the gateway *withholds* rather than states.
+   * So an unreachable modelling service costs the whole census and says so - the
+   * code the gateway's edge produced (`OPTIMIZER_UNAVAILABLE`,
+   * `OPTIMIZER_TIMEOUT`, `OPTIMIZER_NOT_CONFIGURED`), or
+   * `MODEL_CAVEATS_NOT_REPORTED` for a modelling service that answered without
+   * this block at all - which is an older build, and not a build every one of
+   * whose published numbers means what it says.
+   */
+  incompleteReason: string | null;
+}
+
+/**
+ * One published figure that does not mean what its name says, and the five
+ * things a reader needs in order to stop quoting it wrongly: which figure, the
+ * sentence that corrects it, what it reads as without that sentence, where the
+ * two are met together, and where the caveat is declared. Every field is prose
+ * - a list of numbers that mean something other than what they say is the last
+ * surface that could afford to carry one.
+ */
+export interface CaveatedFigure {
+  /**
+   * The caveat constant's identifier, or the subscript it is published under
+   * (`COMPARABILITY["pr_auc"]`) - a grep target, so this census is a way into
+   * the code rather than a restatement of it. **Not unique**, and not meant to
+   * be: with `declared_in` it is the identity of a row.
+   */
+  name: string;
+  /**
+   * Where the caveat is declared, as a repository path.
+   */
+  declaredIn: string;
+  /**
+   * Which published number this changes the meaning of, as a noun phrase,
+   * including the condition it holds under where the caveat is conditional -
+   * `coverage_p10, on a fold where coverage_stated_rows_p10 is zero`.
+   */
+  figure: string;
+  /**
+   * The sentence the block already carries, verbatim. Not re-worded on the way
+   * out and not relocated: several of these are load-bearing where they stand -
+   * `NOT_A_NINETY_PERCENT_BAND` says a band must not be described as a 90% band,
+   * `COMPARABILITY` is what stops five of six sweep figures being read across
+   * the arms, and the `_NOT_A_READING` prose is what a reader of a fabricated
+   * block meets first.
+   */
+  caveat: string;
+  /**
+   * **The sentence this caveat exists to make false**: what the number reads as
+   * if a reader takes the name and the value and nothing else. Required at
+   * declaration, and it is the forced choice of this census the way `kind` is
+   * forced for a declined figure - an author who cannot write down what the
+   * figure would be quoted as has not decided whether it is misleading, and the
+   * caveat they wrote is decoration.
+   */
+  misreading: string;
+  /**
+   * The block, field or response where a consumer meets the figure and this
+   * sentence *together*. Never `GET /v1/meta` itself: this census collects, and
+   * every entry is attached where its figure is published as well.
+   */
+  surface: string;
+  /**
+   * Why a field on this row could not be resolved, naming what was reported.
+   * Absent for a row that arrived whole. The row is reported as it arrived
+   * rather than dropped: a census that shed what it could not read would be
+   * shorter than the truth, which is the one direction it may never be wrong in.
    */
   fault?: string;
 }
@@ -2726,6 +2836,7 @@ export const WIRE_SHAPES = {
     data: { wire: "data", shape: "MetaData" },
     referenceFleet: { wire: "reference_fleet", shape: "MetaReferenceFleet" },
     declines: { wire: "declines", shape: "MetaDeclines" },
+    caveats: { wire: "caveats", shape: "MetaCaveats" },
     attribution: { wire: "attribution", shape: "SourceAttribution", map: true },
   },
   MetaDeclines: {
@@ -2738,6 +2849,19 @@ export const WIRE_SHAPES = {
     figure: { wire: "figure" },
     kind: { wire: "kind" },
     reason: { wire: "reason" },
+    surface: { wire: "surface" },
+    fault: { wire: "fault", optional: true },
+  },
+  MetaCaveats: {
+    figures: { wire: "figures", shape: "CaveatedFigure", list: true },
+    incompleteReason: { wire: "incomplete_reason" },
+  },
+  CaveatedFigure: {
+    name: { wire: "name" },
+    declaredIn: { wire: "declared_in" },
+    figure: { wire: "figure" },
+    caveat: { wire: "caveat" },
+    misreading: { wire: "misreading" },
     surface: { wire: "surface" },
     fault: { wire: "fault", optional: true },
   },

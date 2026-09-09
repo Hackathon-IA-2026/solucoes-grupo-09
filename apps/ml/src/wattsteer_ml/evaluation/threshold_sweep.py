@@ -108,6 +108,7 @@ from typing import Any, Literal
 
 from wattsteer_ml.artifacts import CARD_SUFFIX
 from wattsteer_ml.canonical import VintageFidelity
+from wattsteer_ml.caveated import CaveatedFigure
 from wattsteer_ml.constants import SUBSYSTEM_THRESHOLD_MW
 from wattsteer_ml.declined import DeclinedFigure
 from wattsteer_ml.evaluation.collapse import CollapseBlock
@@ -171,22 +172,57 @@ FOLD_EVALUATION_SOURCE = "fold_evaluation"
 #: Per figure, in one line: whether it survives a change of threshold. Published
 #: in the block, because three numbers under one heading are read as a trend by
 #: anybody who is not holding the mixture in their head.
+#:
+#: **Five of the six values are** :class:`~wattsteer_ml.caveated.CaveatedFigure`
+#: **and one is not**, and the one is the whole point of the map. A
+#: :class:`str` subclass, so this is still the ``dict[str, str]`` that
+#: ``dict(COMPARABILITY)`` copies into the block and ``json.dumps`` writes:
+#: nothing about where a reader meets these sentences has moved. What the five
+#: acquire is a census entry, so that
+#: :func:`~wattsteer_ml.caveated.caveated_figures` finds them where they are
+#: published rather than from a roll somebody has to maintain.
+#:
+#: ``qloss_mwh`` stays a plain string because "comparable" is the *absence* of a
+#: caveat. Filing it in a census of figures that do not mean what they say would
+#: say the opposite of what it says, and this map's contribution is precisely
+#: that exactly one figure survives the sweep.
 COMPARABILITY: dict[str, str] = {
-    "prevalence": (
+    "prevalence": CaveatedFigure(
         "definitional — the prevalence is what the threshold sets, and it is the "
         "quantity the two move-forcing conditions are evaluated against. It is "
-        "not a measurement of the model."
+        "not a measurement of the model.",
+        figure="prevalence, per sweep arm",
+        misreading="that this arm's prevalence is something the model achieved",
+        surface=(
+            "the model card's `threshold_sweep` block, "
+            "`comparability.prevalence`, beside every arm's `prevalence`"
+        ),
     ),
-    "positives_per_local_hour": (
+    "positives_per_local_hour": CaveatedFigure(
         "definitional, and the reason the pooled prevalence is not the whole "
         "answer: a positive class concentrated in the solar hours is denser "
-        "where a classifier has to rank than the pooled figure suggests."
+        "where a classifier has to rank than the pooled figure suggests.",
+        figure="positives_per_local_hour, per sweep arm",
+        misreading=(
+            "that the pooled prevalence beside it is the whole of the class "
+            "balance a classifier on this arm faces"
+        ),
+        surface=(
+            "the model card's `threshold_sweep` block, "
+            "`comparability.positives_per_local_hour`"
+        ),
     ),
-    "pr_auc": (
+    "pr_auc": CaveatedFigure(
         "not comparable across thresholds without its floor. PR-AUC's baseline "
         "is the prevalence, and the prevalence is exactly what the sweep moves; "
         "each arm's own prevalence is published beside it and the two are read "
-        "together or not at all."
+        "together or not at all.",
+        figure="pr_auc, read across the sweep's three threshold arms",
+        misreading=("that the arm with the higher PR-AUC ranks curtailment better"),
+        surface=(
+            "the model card's `threshold_sweep` block, `comparability.pr_auc`, "
+            "beside every arm's `pr_auc` and its own `prevalence`"
+        ),
     ),
     "qloss_mwh": (
         "comparable. Its target is the observed MWh, which does not move with "
@@ -194,18 +230,38 @@ COMPARABILITY: dict[str, str] = {
         "measured. It is the one figure here that may be read across the arms "
         "as a difference in quality."
     ),
-    "coverage_p10": (
+    "coverage_p10": CaveatedFigure(
         "not comparable across thresholds. It is measured over curtailed hours, "
         "and which hours those are is precisely what the threshold changes, so "
         "three arms are three populations. curtailed_hours is the denominator "
-        "and travels with it."
+        "and travels with it.",
+        figure="coverage_p10, read across the sweep's three threshold arms",
+        misreading=(
+            "that the three figures are a trend in how well the served floor "
+            "holds as the threshold moves"
+        ),
+        surface=(
+            "the model card's `threshold_sweep` block, "
+            "`comparability.coverage_p10`, beside every arm's "
+            "`mixture_regime.curtailed_hours`"
+        ),
     ),
-    "share_p50_zero": (
+    "share_p50_zero": CaveatedFigure(
         "not comparable across thresholds, and not a model-quality figure at "
         "all. Q_Y(q) = 0 for q <= 1 - p, so it is share_p50_forced_zero "
         "restated: lowering the threshold raises p, which moves hours across "
         "the mixture's breakpoint and lowers this share with no change in the "
-        "model. The identity is checked, not asserted."
+        "model. The identity is checked, not asserted.",
+        figure="share_p50_zero, read across the sweep's three threshold arms",
+        misreading=(
+            "that a lower threshold left the optimizer more hours to act in "
+            "because the model got better at finding them"
+        ),
+        surface=(
+            "the model card's `threshold_sweep` block, "
+            "`comparability.share_p50_zero`, beside every arm's "
+            "`mixture_regime.share_p50_forced_zero`"
+        ),
     ),
 }
 
@@ -930,16 +986,22 @@ _READS = (
 )
 
 #: And what it says when they did not.
-_NOT_A_READING = (
+_NOT_A_READING = CaveatedFigure(
     "THESE FIGURES ARE NOT A MEASUREMENT OF THE GRID. The hours the three arms "
     "were scored over were fabricated, so every prevalence, PR-AUC and coverage "
     "here is arithmetic over invented labels. Only a block whose sweep_source is "
     f"{FOLD_EVALUATION_SOURCE!r} says anything about the Brazilian system, and "
-    "no threshold decision may be taken on this one."
+    "no threshold decision may be taken on this one.",
+    figure=(
+        "every prevalence, PR-AUC, qloss and coverage figure across the "
+        "sweep's three threshold arms"
+    ),
+    misreading="that 1, 5 and 10 MW score this way on the Brazilian system",
+    surface="the model card's `threshold_sweep` block, `reads`",
 )
 
 #: The caveat that keeps two of the six figures from being read as findings.
-_MIXTURE_CAVEAT = (
+_MIXTURE_CAVEAT = CaveatedFigure(
     "Two of the six figures move with the threshold for reasons that have "
     "nothing to do with model quality. Q_Y(q) = 0 for every q <= 1 - p, so the "
     "composed P50 is zero exactly where 0.50 <= 1 - p and the composed P10 "
@@ -950,7 +1012,15 @@ _MIXTURE_CAVEAT = (
     "from p. The two are checked to be equal. coverage_p10 carries the hazard "
     "from the other side — it is measured over curtailed hours, and which hours "
     "those are is what the threshold changes, so its denominator "
-    "(mixture_regime.curtailed_hours) travels with it."
+    "(mixture_regime.curtailed_hours) travels with it.",
+    figure=(
+        "share_p50_zero and coverage_p10, read across the sweep's three threshold arms"
+    ),
+    misreading="that a lower threshold made the model better on both of them",
+    surface=(
+        "the model card's `threshold_sweep` block, `mixture_caveat`, beside "
+        "`comparability`"
+    ),
 )
 
 #: And when there were no arms at all.

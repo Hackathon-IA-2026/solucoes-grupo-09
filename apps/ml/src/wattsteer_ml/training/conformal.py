@@ -151,6 +151,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
+from wattsteer_ml.caveated import CaveatedFigure
 from wattsteer_ml.constants import SUBSYSTEM_CODES
 from wattsteer_ml.declined import DeclinedFigure
 from wattsteer_ml.evaluation import HOURS_PER_DAY, RowKey
@@ -189,9 +190,101 @@ NINETY_PERCENT_BAND = (
 #: with no row on which its edge is a bound at all, means the interval is not
 #: the thing the label ``P10-P90`` invites a reader to assume, and the card and
 #: the wire say so before they say anything else.
-NOT_A_NINETY_PERCENT_BAND = (
+NOT_A_NINETY_PERCENT_BAND = CaveatedFigure(
     "This fold's served band is NOT a 90% band over its curtailed hours and "
-    "must not be described as one."
+    "must not be described as one.",
+    figure=(
+        "the served band a card prints as `P10`-`P90`, on a fold where the "
+        "claim is withheld"
+    ),
+    misreading=(
+        "that a band whose columns are labelled P10 and P90 covers 90% of the "
+        "hours it is printed for"
+    ),
+    surface=(
+        "`GET /v1/model/card`, `band.coverage.claim_note` — the opening "
+        "sentence, before any figure, and `band.coverage.nominal_claim` as the "
+        "same verdict in one field a caller can branch on"
+    ),
+)
+
+#: Why a marginal ``coverage_p90`` is not the conformal correction's width.
+#: **The sentence is byte-for-byte the one ``upper_correction_note`` has always
+#: carried** — it is lifted out of the card dictionary into a constant so that
+#: the census can find it, and the card still publishes it under the same key.
+UPPER_CORRECTION_BOUNDS_COVERAGE_P90 = CaveatedFigure(
+    "the mean share of delta_hi that reached the composed P90. The "
+    "correction is a shift in q applied to the composed quantile, so "
+    "it arrives whole wherever the P90 is positive: this is 1.0 for "
+    "every hour with p > 0.10, and 0.0 for the rest, where Q_Y(0.90) "
+    "is exactly zero because 0.90 <= 1 - p and the mixture is stating "
+    "at least a 90% chance of no curtailment. A value below 1.0 is "
+    "therefore the share of scored hours the classifier put in the "
+    "point mass, and it bounds coverage_p90 from above; it is no "
+    "longer an under-application of delta_hi.",
+    figure=(
+        "coverage_p90, the marginal, on a fold where "
+        "`upper_correction_realised` is below 1.0"
+    ),
+    misreading=(
+        "that a marginal coverage_p90 short of nominal is the conformal "
+        "correction's width falling short"
+    ),
+    surface=(
+        "`GET /v1/model/card`, `band.coverage.upper_correction_note`, beside "
+        "`upper_correction_realised` and `coverage_p90`"
+    ),
+)
+
+#: The figure this ticket exists for. ``coverage_p10 = 1.0`` is real
+#: arithmetic; forecaster 24 found it had been computed over **zero** rows on
+#: which the served floor was a positive number — 79 evaluations of ``y >= 0``
+#: — and read for months as evidence that the floor was perfect. Nobody was
+#: lying. The caveat simply was not attached to the number, and
+#: :attr:`CoverageReport.coverage_p10_where_stated` going ``None`` is an
+#: absence a reader has to notice rather than a sentence they have to read.
+COVERAGE_P10_OVER_NO_STATED_ROW = CaveatedFigure(
+    "coverage_p10 is 1.0 here and it is not a floor that held. No scored hour "
+    "on this fold has a composed P10 that is a positive number: the classifier "
+    "put every curtailed hour at p <= 0.90, where the mixture serves the point "
+    "mass and the floor the product prints is 0 MWh. Every one of these "
+    "evaluations is therefore y >= 0 on an hour known to be above tau, which "
+    "is true by construction and could not have come out any other way. There "
+    "is no lower coverage on this fold, which is why "
+    "coverage_p10_where_stated is absent rather than 1.0, and no statement "
+    "about the lower tail's width may be read off this figure in either "
+    "direction.",
+    figure="coverage_p10, on a fold where `coverage_stated_rows_p10` is zero",
+    misreading="that the served floor held on every curtailed hour of this fold",
+    surface=(
+        "`GET /v1/model/card`, `band.coverage.coverage_p10_caveat`, published "
+        "in the same block as `coverage_p10` and only where the lower edge "
+        "states no bound at all"
+    ),
+)
+
+#: Its twin, and deliberately not the same sentence. A structural zero is free
+#: coverage below and certain failure above, so the two vacuous cases are
+#: opposite verdicts and rounding them into one "the tail states no bound"
+#: caveat would lose exactly the distinction forecaster 24 published the two
+#: denominators to create.
+COVERAGE_P90_OVER_NO_STATED_ROW = CaveatedFigure(
+    "coverage_p90 is 0.0 here and it is not a ceiling that failed. No scored "
+    "hour on this fold has a composed P90 that is a positive number: the "
+    "classifier put every curtailed hour at p <= 0.10, where 0.90 <= 1 - p and "
+    "the mixture is stating at least a 90% chance of no curtailment, so the "
+    "served ceiling is exactly zero and a curtailed hour cannot be covered by "
+    "it at all. Every one of these evaluations is y <= 0 on an hour known to be "
+    "above tau, which is false by construction. The conformal correction's "
+    "width is not what produced this figure, and delta_hi is inert on every row "
+    "behind it.",
+    figure="coverage_p90, on a fold where `coverage_stated_rows_p90` is zero",
+    misreading=("that one global delta_hi failed to cover this fold's upper tail"),
+    surface=(
+        "`GET /v1/model/card`, `band.coverage.coverage_p90_caveat`, published "
+        "in the same block as `coverage_p90` and only where the upper edge "
+        "states no bound at all"
+    ),
 )
 
 #: Ticket 18's shape and deliberately not ticket 16's. The decomposition below
@@ -825,7 +918,22 @@ class CoverageReport:
         )
 
     def card_fields(self) -> dict[str, Any]:
-        return {
+        """The block, and the caveat on either coverage that is vacuous.
+
+        **The caveat is attached, not collected.** ``coverage_p10`` and
+        ``coverage_p90`` are read by the hot-swap gate's guardrail, by the card
+        and by whoever quotes the card, and none of those consumers is going to
+        fetch ``/v1/meta`` to discover that the figure in their hand was
+        counted over no row that could falsify it. So the sentence is published
+        in the same dictionary as the number, under a key beside it, and only
+        on the fold where it is true — a caveat that is always present is a
+        caveat that is never read.
+
+        :func:`~wattsteer_ml.caveated.caveated_figures` collects the same two
+        objects for a reviewer, which is the other half and not a substitute:
+        see :mod:`wattsteer_ml.caveated`.
+        """
+        fields: dict[str, Any] = {
             "coverage_fold": self.fold_id,
             "coverage_population": "curtailed_hours",
             "coverage_rows": self.rows,
@@ -841,17 +949,7 @@ class CoverageReport:
             "coverage_p90_where_stated": self.coverage_p90_where_stated,
             "coverage_nominal_claim": self.nominal_claim,
             "coverage_claim_note": self.claim_note,
-            "upper_correction_note": (
-                "the mean share of delta_hi that reached the composed P90. The "
-                "correction is a shift in q applied to the composed quantile, so "
-                "it arrives whole wherever the P90 is positive: this is 1.0 for "
-                "every hour with p > 0.10, and 0.0 for the rest, where Q_Y(0.90) "
-                "is exactly zero because 0.90 <= 1 - p and the mixture is stating "
-                "at least a 90% chance of no curtailment. A value below 1.0 is "
-                "therefore the share of scored hours the classifier put in the "
-                "point mass, and it bounds coverage_p90 from above; it is no "
-                "longer an under-application of delta_hi."
-            ),
+            "upper_correction_note": UPPER_CORRECTION_BOUNDS_COVERAGE_P90,
             "p50_unbiasedness": self.p50_unbiasedness,
             "crossing_rate": self.crossing_rate,
             "coverage_by_subsystem": [cell.as_card_entry() for cell in self.by_subsystem],
@@ -864,6 +962,11 @@ class CoverageReport:
                 "coverage_by_local_hour is an input to it"
             ),
         }
+        if self.lower_stated_rows == 0:
+            fields["coverage_p10_caveat"] = COVERAGE_P10_OVER_NO_STATED_ROW
+        if self.upper_stated_rows == 0:
+            fields["coverage_p90_caveat"] = COVERAGE_P90_OVER_NO_STATED_ROW
+        return fields
 
 
 @dataclass(frozen=True)

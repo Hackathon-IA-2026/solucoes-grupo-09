@@ -146,6 +146,7 @@ from wattsteer_ml.admissibility import (
 )
 from wattsteer_ml.artifacts import CARD_SUFFIX
 from wattsteer_ml.canonical import VintageFidelity
+from wattsteer_ml.caveated import CaveatedFigure
 from wattsteer_ml.constants import SUBSYSTEM_THRESHOLD_MW
 from wattsteer_ml.declined import DeclinedFigure
 from wattsteer_ml.evaluation.collapse_report import FIXTURE_SOURCE, UNMEASURED_SOURCE
@@ -1141,16 +1142,25 @@ _READS = (
 )
 
 #: And when they did not. Blunt, and in the field a reader reaches first.
-_NOT_A_READING = (
+_NOT_A_READING = CaveatedFigure(
     "THESE FLOORS ARE NOT A MEASUREMENT OF THE GRID. The hours the three arms "
     "were scored over were fabricated, so every MWh here is a solver's "
     "arithmetic over invented curtailment. Only a block whose dessem_source is "
     f"{FOLD_EVALUATION_SOURCE!r} says anything about what an evening "
-    "publication would buy, and no DESSEM decision may be taken on this one."
+    "publication would buy, and no DESSEM decision may be taken on this one.",
+    figure=(
+        "recovered_floor_mwh for all three DESSEM A/B arms, and the two "
+        "contrasts between them"
+    ),
+    misreading=(
+        "that an evening DESSEM-conditioned publication would buy the "
+        "reference fleet this much floor"
+    ),
+    surface="the model card's `dessem_delta` block, `reads`",
 )
 
 #: The caveat that keeps the headline figure from being read as model quality.
-_MIXTURE_CAVEAT = (
+_MIXTURE_CAVEAT = CaveatedFigure(
     "The floor is the P10 envelope, and Q_Y(q) = 0 for every q <= 1 - p. So the "
     "composed P10 is zero exactly where 0.10 <= 1 - p — wherever p <= 0.90 — "
     "and an arm whose classifier is more confident recovers floor in hours "
@@ -1160,7 +1170,13 @@ _MIXTURE_CAVEAT = (
     "through the composition's own comparison rather than from the prose's "
     "p <= 0.90, because the two are the same statement in real arithmetic and "
     "not in floating point. A delta read without it is a delta read as though "
-    "it were all magnitude."
+    "it were all magnitude.",
+    figure="the floor advantage between two DESSEM A/B arms, in MWh",
+    misreading="that the arm with the larger floor has the better magnitude head",
+    surface=(
+        "the model card's `dessem_delta` block, `mixture_caveat`, beside "
+        "every arm's `mixture_regime.share_p10_forced_zero`"
+    ),
 )
 
 #: The sample size, stated rather than footnoted — the spec is explicit that

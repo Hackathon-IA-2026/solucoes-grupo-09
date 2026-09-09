@@ -38,7 +38,7 @@ exclusive.
 
 **Blocked by:** forecaster 25 (merged).
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The caveated figures are found by rule, and the rule is stated
 - [ ] Each carries what the caveat changes about the figure's meaning, in prose

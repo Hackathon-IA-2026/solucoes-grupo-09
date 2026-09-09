@@ -198,8 +198,15 @@ def _raise(name: str) -> None:
     raise ImportError(f"{name} could not be imported while taking the census")
 
 
-def _modules() -> Iterator[ModuleType]:
-    """This package and every module under it, imported."""
+def package_modules() -> Iterator[ModuleType]:
+    """This package and every module under it, imported.
+
+    Public because :mod:`wattsteer_ml.caveated` — the mirror census, of figures
+    that *are* published and mean something other than what their name says —
+    walks the same package. Two censuses, one walk: one place imports
+    ``pkgutil`` and one definition says what "this package" is, so the two
+    cannot come to disagree about which modules exist.
+    """
     package = importlib.import_module("wattsteer_ml")
     yield package
     for found in pkgutil.walk_packages(
@@ -210,7 +217,8 @@ def _modules() -> Iterator[ModuleType]:
         yield importlib.import_module(found.name)
 
 
-def _is_package(module: ModuleType) -> bool:
+def is_package(module: ModuleType) -> bool:
+    """Whether a module is a package, so a re-export loses to a declaration."""
     return hasattr(module, "__path__")
 
 
@@ -224,8 +232,8 @@ def declined_figures() -> tuple[dict[str, Any], ...]:
     so the census is byte-stable across processes.
     """
     found: dict[int, tuple[bool, str, str, DeclinedFigure]] = {}
-    for module in _modules():
-        origin = (_is_package(module), module.__name__)
+    for module in package_modules():
+        origin = (is_package(module), module.__name__)
         for name, value in list(vars(module).items()):
             if not isinstance(value, DeclinedFigure):
                 continue

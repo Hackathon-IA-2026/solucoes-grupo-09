@@ -72,9 +72,37 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from wattsteer_ml.caveated import CaveatedFigure
 from wattsteer_ml.features import GateProfile
 from wattsteer_ml.lanes import Lane
 from wattsteer_ml.model_inputs import MODEL_INPUTS, ModelInput, ModelInputs
+
+#: Why a feature set's two gate profiles do not have comparable scores.
+#:
+#: Found by the rule in :mod:`wattsteer_ml.caveated` rather than named by the
+#: ticket, which is the point of having a rule: the morning and the evening
+#: view are two experiments, so a *difference* between their scores is a
+#: difference in what each was allowed to see. The sentence is the one this
+#: block has always published, verbatim, and the feature set is filled in
+#: through :meth:`~wattsteer_ml.caveated.CaveatedFigure.filled` because it
+#: appears nowhere else in the block.
+CROSS_GATE_DIFFERENCE_IS_NOT_QUALITY = CaveatedFigure(
+    "The morning and the evening view are two experiments, not one "
+    "model published twice. The evening view supersedes the morning "
+    "one as a newer vintage of the same valid hours; a difference in "
+    "{feature_set}'s scores across the two gates is a "
+    "difference in what the model was allowed to see, and is not a "
+    "statement about either model's quality.",
+    figure=(
+        "any score compared between one feature set's `gate_early` and "
+        "`gate_late` artifacts — qloss_mwh, pr_auc, coverage, all of them"
+    ),
+    misreading=("that the gate profile with the better score is the better model"),
+    surface=(
+        "the model card's `lane.experiment` block, `note`, beside the `early` "
+        "and `late` halves it is a statement about"
+    ),
+)
 
 #: The gate profile at which every model input of a set is admissible. Named
 #: rather than spelled ``!= "gate_early"``: the dictionary answers exactly one
@@ -360,13 +388,8 @@ class LaneContrast:
             "late": self.late.card_fields(),
             "withheld_from_early": list(self.withheld_from_early),
             "same_experiment": self.same_experiment,
-            "note": (
-                "The morning and the evening view are two experiments, not one "
-                "model published twice. The evening view supersedes the morning "
-                "one as a newer vintage of the same valid hours; a difference in "
-                f"{self.early.feature_set}'s scores across the two gates is a "
-                "difference in what the model was allowed to see, and is not a "
-                "statement about either model's quality."
+            "note": CROSS_GATE_DIFFERENCE_IS_NOT_QUALITY.filled(
+                feature_set=self.early.feature_set
             ),
         }
 

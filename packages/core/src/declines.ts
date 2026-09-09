@@ -73,6 +73,17 @@ import type { ModelCard } from "./types.generated.js";
  * it is the gateway refusing to guess between these two for a `kind` a newer
  * modelling service reported and this build does not recognise. See
  * `apps/api/src/api/meta.ts`, which takes the same position on a lane state.
+ *
+ * **Forecaster 28 asked for a third member and did not get one.** The census of
+ * figures that *are* published and mean something other than what their name
+ * says - the `_NOT_A_READING` family, `coverage_p10` over no stated row,
+ * `share_p50_zero` - is neither `unrunnable` nor `unrun`, and a bucket for it
+ * here would have been the easy answer. These two are two answers to *one*
+ * question, does this figure exist, and every caveated figure answers yes to
+ * it; filing one here would tell a reviewer that `coverage_p10` was withheld
+ * when the whole defect is that it is not. So it is a second block on
+ * `/v1/meta`, `caveats`, assembled the same way and served beside this one.
+ * `apps/ml/src/wattsteer_ml/caveated.py` carries the argument in full.
  */
 export const DECLINE_KINDS = ["unrunnable", "unrun"] as const;
 

@@ -1,6 +1,8 @@
 import type {
+  CaveatedFigure,
   DeclinedFigure,
   Meta,
+  MetaCaveats,
   MetaDeclines,
   MetaForecastStateLatestPublishedItem,
   MetaFreshness,
@@ -179,6 +181,7 @@ interface MlMeta {
     lanes?: unknown;
   };
   declines?: unknown;
+  caveats?: unknown;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -340,6 +343,89 @@ function toDeclines(model: {
 }
 
 /**
+ * One published caveat, forwarded — and forwarded rather than shaped, exactly
+ * as {@link toDeclinedFigure} forwards an absence.
+ *
+ * Every field keeps the modelling service's own spelling, and here that matters
+ * more than it does for an absence: several of these sentences are the thing a
+ * consumer has always met. `NOT_A_NINETY_PERCENT_BAND` says a band "must not be
+ * described as" a 90% band; `COMPARABILITY` is what stops five of the sweep's
+ * six figures being read across its arms. A re-wording on the way out would be
+ * a softening of a caveat that already reaches somebody, so nothing here
+ * touches the prose.
+ *
+ * **There is no `kind` to resolve, because this census has none.** That is the
+ * one structural difference from {@link toDeclinedFigure} and it is deliberate:
+ * `unrunnable` and `unrun` are two answers to *does this figure exist*, and
+ * every row here answers yes. See `packages/core/src/declines.ts` and
+ * `apps/ml/src/wattsteer_ml/caveated.py`, which take the same position from
+ * both ends.
+ */
+function toCaveatedFigure(raw: unknown): CaveatedFigure {
+  const record = isRecord(raw) ? raw : {};
+  const faults: string[] = [];
+  const field = (key: string): string => {
+    const value = text(record[key]);
+    if (value === undefined) {
+      faults.push(`no ${key}`);
+      return NOT_REPORTED;
+    }
+    return value;
+  };
+  return {
+    name: field("name"),
+    declaredIn: field("declared_in"),
+    figure: field("figure"),
+    caveat: field("caveat"),
+    misreading: field("misreading"),
+    surface: field("surface"),
+    ...(faults.length === 0
+      ? {}
+      : {
+          fault:
+            "The modelling service reported this caveat with " +
+            `${faults.join(", ")}, so what it corrects could not be resolved ` +
+            "here. It is reported as it arrived rather than dropped: a census " +
+            "that shed the rows it could not read would be shorter than the " +
+            "truth, and on this census the missing row is a number somebody " +
+            "is still quoting.",
+        }),
+  };
+}
+
+/**
+ * The caveats census, which is wholly the modelling service's.
+ *
+ * `declines` merges two halves because one named absence — `no_joint_ensemble`
+ * — is the gateway's own: this service publishes `national.band = null` off a
+ * `packages/core` schema enum that `apps/ml` never spells. There is no
+ * equivalent half here, and its absence is an argument rather than an
+ * oversight: a caveat qualifies a figure that *is* published, and every figure
+ * on this gateway's wire is either the modelling service's own or an aggregate
+ * over Postgres rows whose name is its definition. `no_joint_ensemble`
+ * withholds rather than states, which is why it belongs to the other census
+ * and not to this one.
+ *
+ * Sorted by `(declared_in, name)`, which is the modelling service's own order
+ * and is re-applied here so that the sort is this endpoint's guarantee rather
+ * than a property of what arrived. The name alone is not the key: six blocks
+ * declare a `_NOT_A_READING`, and each is a statement about its own figures.
+ */
+function toCaveats(model: {
+  caveats: CaveatedFigure[];
+  caveatsIncompleteReason: string | null;
+}): MetaCaveats {
+  return {
+    figures: [...model.caveats].sort(
+      (one, other) =>
+        one.declaredIn.localeCompare(other.declaredIn) ||
+        one.name.localeCompare(other.name),
+    ),
+    incompleteReason: model.caveatsIncompleteReason,
+  };
+}
+
+/**
  * The `model` block, from the modelling service or from its absence.
  *
  * Never throws. The one call this endpoint makes across the boundary is wrapped
@@ -350,6 +436,8 @@ async function readModel(endpoint?: MlEndpoint): Promise<{
   model: MetaModel;
   figures: DeclinedFigure[];
   incompleteReason: string | null;
+  caveats: CaveatedFigure[];
+  caveatsIncompleteReason: string | null;
 }> {
   let body: unknown;
   try {
@@ -375,6 +463,12 @@ async function readModel(endpoint?: MlEndpoint): Promise<{
       model: { reachable: false, unreachableReason: code, lanes: [], volume: null },
       figures: [],
       incompleteReason: code,
+      // The same code again, and for the same reason: with the service
+      // unreachable *both* censuses are unknown, and the caveats census is the
+      // one where a silently empty answer reads as "every number this build
+      // publishes means what it says".
+      caveats: [],
+      caveatsIncompleteReason: code,
     };
   }
 
@@ -388,6 +482,10 @@ async function readModel(endpoint?: MlEndpoint): Promise<{
   // absence of the key is reported rather than read as an empty set. An empty
   // array, by contrast, is a statement and is taken as one.
   const declared = Array.isArray(meta.declines) ? meta.declines : undefined;
+  // Same reasoning as `declared`, one census over: a modelling service that
+  // answered without the block is an older build, not a build with nothing to
+  // caveat, and the two are identical on the wire.
+  const caveated = Array.isArray(meta.caveats) ? meta.caveats : undefined;
   return {
     model: {
       reachable: true,
@@ -400,6 +498,8 @@ async function readModel(endpoint?: MlEndpoint): Promise<{
     },
     figures: declared === undefined ? [] : declared.map(toDeclinedFigure),
     incompleteReason: declared === undefined ? "MODEL_DECLINES_NOT_REPORTED" : null,
+    caveats: caveated === undefined ? [] : caveated.map(toCaveatedFigure),
+    caveatsIncompleteReason: caveated === undefined ? "MODEL_CAVEATS_NOT_REPORTED" : null,
   };
 }
 
@@ -456,6 +556,7 @@ export function toMeta(parts: {
   environment: string;
   model: MetaModel;
   declines: MetaDeclines;
+  caveats: MetaCaveats;
   freshness: MetaFreshness[];
   latestPublished?: MetaForecastStateLatestPublishedItem[];
 }): Meta {
@@ -501,6 +602,11 @@ export function toMeta(parts: {
     // the declared reasons on both sides of the boundary. See the note above
     // on why it is on this endpoint and not on the model card.
     declines: parts.declines,
+    // And what it *will* tell a caller that does not mean what its name says.
+    // Beside `declines` and not inside it: an absent figure cannot mislead
+    // anybody, a present one carrying a caveat nobody reads is a number that
+    // will be quoted, and the two are different questions about a build.
+    caveats: parts.caveats,
     referenceFleet: {
       battery: { ...REFERENCE_FLEET.battery },
       shiftableLoad: { ...REFERENCE_FLEET.shiftableLoad },
@@ -550,6 +656,7 @@ export function createMetaRoutes(deps: {
           environment: deps.environment ?? config.nodeEnv,
           model: service.model,
           declines: toDeclines(service),
+          caveats: toCaveats(service),
           freshness: freshness.map(toFreshness),
           latestPublished: published.map((origin) => toPublished(origin, now)),
         }),
@@ -562,8 +669,10 @@ export function createMetaRoutes(deps: {
           "The window bounds, the published defaults, the gate table, the model " +
           "lanes and the artifact volume, the forecast publication state, " +
           "per-source ingestion freshness, the reference fleet and the source " +
-          "attribution, and the census of every figure this deployment " +
-          "declines to state with the reason for each. Degrades rather than " +
+          "attribution, the census of every figure this deployment " +
+          "declines to state with the reason for each, and the census of every " +
+          "figure it does state that does not mean what its name says. " +
+          "Degrades rather than " +
           "fails: with the modelling service " +
           "unreachable this is still a 200 and only the model block says so. " +
           "`no-store` — a cached answer to 'what is broken' is worse than none.",

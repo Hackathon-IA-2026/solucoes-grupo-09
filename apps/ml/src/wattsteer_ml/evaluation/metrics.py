@@ -70,7 +70,10 @@ from typing import Any
 
 from wattsteer_ml.canonical import VintageFidelity
 from wattsteer_ml.constants import SUBSYSTEM_CODES, Subsystem
-from wattsteer_ml.evaluation.collapse import CollapseBlock
+from wattsteer_ml.evaluation.collapse import (
+    SHARE_P50_ZERO_IS_NOT_MODEL_QUALITY,
+    CollapseBlock,
+)
 from wattsteer_ml.evaluation.vintage import (
     FoldSegment,
     MixedFidelityError,
@@ -540,6 +543,14 @@ class MetricsRow:
                 None if self.day_grain is None else self.day_grain.peak_coverage
             ),
             "share_p50_zero": self.share_p50_zero,
+            # Attached, and only where there is a figure to qualify. `None`
+            # here is an absence and answers to `collapse`; a number is the
+            # mixture's breakpoint restated and answers to forecaster 17.
+            "share_p50_zero_caveat": (
+                None
+                if self.share_p50_zero is None
+                else SHARE_P50_ZERO_IS_NOT_MODEL_QUALITY
+            ),
         }
         entry.update(self.at_fixed.as_card_entry("0.5"))
         entry.update(self.at_best.as_card_entry("best"))

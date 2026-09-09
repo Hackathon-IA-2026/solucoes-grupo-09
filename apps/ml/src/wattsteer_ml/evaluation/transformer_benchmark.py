@@ -145,6 +145,7 @@ from typing import Any
 
 from wattsteer_ml.artifacts import CARD_SUFFIX
 from wattsteer_ml.canonical import VintageFidelity
+from wattsteer_ml.caveated import CaveatedFigure
 from wattsteer_ml.declined import DeclinedFigure
 from wattsteer_ml.evaluation.collapse import CollapseBlock
 from wattsteer_ml.evaluation.collapse_report import FIXTURE_SOURCE, UNMEASURED_SOURCE
@@ -880,12 +881,19 @@ _READS = (
 )
 
 #: And what it says when they did not.
-_NOT_A_READING = (
+_NOT_A_READING = CaveatedFigure(
     "THESE FIGURES ARE NOT A MEASUREMENT OF THE GRID. The hours both arms were "
     "scored over were fabricated, so every qloss, PR-AUC and coverage here is "
     "arithmetic over invented labels. Only a block whose benchmark_source is "
     f"{FOLD_EVALUATION_SOURCE!r} says anything about how a transformer compares "
-    "to the served model on the Brazilian system."
+    "to the served model on the Brazilian system.",
+    figure=(
+        "the transformer benchmark's qloss, PR-AUC and coverage figures, for both arms"
+    ),
+    misreading=(
+        "that a transformer compares to the served model this way on the Brazilian system"
+    ),
+    surface="the model card's `transformer_benchmark` block, `reads`",
 )
 
 #: The composition sentence, which is the ticket's second box in prose.

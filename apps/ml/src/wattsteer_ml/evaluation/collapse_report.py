@@ -87,6 +87,7 @@ import asyncpg
 from wattsteer_ml.artifacts import CARD_SUFFIX
 from wattsteer_ml.canonical import VintageFidelity
 from wattsteer_ml.canonical_reads import ReadAxes, apply_axes
+from wattsteer_ml.caveated import CaveatedFigure
 from wattsteer_ml.constants import SUBSYSTEM_CODES, Subsystem
 from wattsteer_ml.declined import DeclinedFigure
 from wattsteer_ml.evaluation.collapse import CollapseBlock
@@ -595,24 +596,39 @@ _READS = (
 
 #: And what it says when they did not. Deliberately blunt, and deliberately in
 #: the same field, so a reader who reaches the numbers has already read this.
-_NOT_A_READING = (
+_NOT_A_READING = CaveatedFigure(
     "THESE FIGURES ARE NOT A MEASUREMENT OF THE GRID. The bands they were "
     "counted over were fabricated, so every share here is arithmetic over "
     "invented probabilities. Only a block whose collapse_source is "
     f"{HOLDOUT_HOURS_SOURCE!r} says anything about the Brazilian system, and "
-    "ticket 011 must not read this one."
+    "ticket 011 must not read this one.",
+    figure="the P50-collapse shares, share_of_days_with_no_non_zero_p50_hour included",
+    misreading=(
+        "that a P50-planned dispatch has no hour to act in this often on "
+        "the Brazilian system"
+    ),
+    surface="the model card's `p50_collapse_report` block, `reads`",
 )
 
 #: On a block whose every segment predates ingestion go-live. The figures are
 #: real; what they are figures *about* is a label vintage the product will never
 #: see again, and `docs/specs/forecaster.md` requires that the caveat travel with
 #: the number rather than be recoverable by whoever remembers the calendar.
-_REVISION_OPTIMISTIC_ONLY = (
+_REVISION_OPTIMISTIC_ONLY = CaveatedFigure(
     "Every fold segment here is revision_optimistic: no reported segment's test "
     "period begins after ingestion go-live. The occurrence classifier's "
     "operating region — which is what these shares measure — was fitted and "
     "scored against labels that have since been revised, so this block may not "
-    "carry the posture decision on its own until a point_in_time segment exists."
+    "carry the posture decision on its own until a point_in_time segment exists.",
+    figure=(
+        "the P50-collapse shares, on a block none of whose fold segments "
+        "begins after ingestion go-live"
+    ),
+    misreading=(
+        "that the classifier operating region these shares measure is the "
+        "one the product will serve from"
+    ),
+    surface="the model card's `p50_collapse_report` block, `vintage_caveat`",
 )
 
 #: And when there were no bands at all.
