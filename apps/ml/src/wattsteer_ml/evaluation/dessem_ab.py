@@ -962,7 +962,7 @@ class DessemDeltaReport:
                     row.segment.row_id: row.delta(contrast.name) for row in self.rows
                 },
                 "verdict": None if verdict is None else verdict.as_card_entry(),
-                "no_verdict_reason": None if verdict is not None else _NO_DECIDING_FOLD,
+                "no_verdict_reason": None if verdict is not None else NO_DECIDING_FOLD,
             }
         return {DESSEM_DELTA_BLOCK_KEY: block}
 
@@ -998,7 +998,7 @@ class UnmeasuredDessemDelta:
                 "at": self.at.isoformat(),
                 "reason": self.reason,
                 "decides": _DECIDES_NOTHING,
-                "reads": _NOTHING_YET,
+                "reads": DESSEM_ARMS_NOT_SCORED,
                 "sample_size": _SAMPLE_SIZE,
             }
         }
@@ -1188,19 +1188,30 @@ _OPERATOR_NOTICE = (
     "this is a question about the evening view alone."
 )
 
-#: When no fold could carry a verdict.
-_NO_DECIDING_FOLD = (
+#: When no fold could carry a verdict. ``unrun`` and not ``unrunnable``: the
+#: folds are reported and the runs exist, and a fold reaches decision grade once
+#: its base fit reaches ``min_base_fit_days`` — which is history arriving, not a
+#: shape that cannot be built. Forecaster 18's position, applied to the field it
+#: has of its own.
+NO_DECIDING_FOLD = DeclinedFigure(
     "No reported fold is decision-grade for all three runs, so no verdict was "
     "taken. This is not a floor advantage of zero: the folds here are reported "
     "because a fold whose base fit is short of min_base_fit_days is still "
-    "evidence, and it is excluded from the verdict rather than from the block."
+    "evidence, and it is excluded from the verdict rather than from the block.",
+    figure="the verdict on one contrast — the sign of its recovered-floor advantage",
+    kind="unrun",
+    surface="the model card's `dessem_delta` block, `contrasts[].no_verdict_reason`",
 )
 
-#: And when there were no arms at all.
-_NOTHING_YET = (
+#: And when there were no arms at all — the ``reads`` companion of
+#: :data:`NOT_RUN_YET`, in its kind for its reasons.
+DESSEM_ARMS_NOT_SCORED = DeclinedFigure(
     "The A/B has not been run. This is not a floor advantage of zero and not a "
     "tie between the arms: the three runs have not been scored, so the "
-    "comparison is unmade rather than made and found uninteresting."
+    "comparison is unmade rather than made and found uninteresting.",
+    figure="the three DESSEM arms' recovered floor, and the deltas between them",
+    kind="unrun",
+    surface="the model card's `dessem_delta` block, `reads`",
 )
 
 
@@ -1213,12 +1224,14 @@ __all__ = [
     "COMMON_CONTROL_RUN",
     "CONTRASTS",
     "CONTRAST_BY_NAME",
+    "DESSEM_ARMS_NOT_SCORED",
     "DESSEM_CONTRAST",
     "DESSEM_DELTA_BLOCK_KEY",
     "DESSEM_RUN",
     "FULL_HISTORY_RUN",
     "HISTORY_CONTRAST",
     "NOT_RUN_YET",
+    "NO_DECIDING_FOLD",
     "AbArms",
     "Contrast",
     "ContrastName",

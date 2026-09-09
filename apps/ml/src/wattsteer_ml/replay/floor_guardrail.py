@@ -155,6 +155,59 @@ COLD_START_DETAIL = DeclinedFigure(
 )
 
 
+#: When the deciding segment has no complete subsystem-day on **either** side.
+#: Anonymous until forecaster 27: it was a sentence returned from a private
+#: helper, which no rule could find and no reviewer could grep for.
+#:
+#: ``unrunnable``, with :data:`COLD_START_DETAIL` and for the same reason: the
+#: two coverages are shares over one row set, so a segment with no complete day
+#: has none for anybody. Re-running the guardrail over the same segment produces
+#: the same absence, which is what makes it "cannot" rather than "not yet".
+NEITHER_SIDE_HAS_A_COMPLETE_DAY = DeclinedFigure(
+    "neither side has a complete subsystem-day on the deciding fold, so there "
+    "is no floor coverage to compare; both sides are scored on one row set, so "
+    "the absence is symmetric",
+    figure="both artifacts' floor coverage on the deciding fold, and the comparison",
+    kind="unrunnable",
+    surface="the gate decision's `floor_coverage` block, `detail`",
+)
+
+#: When the candidate has no complete subsystem-day. Distinct from the sentence
+#: above because it is reached from the other branch, and the reader of a
+#: refused card is entitled to know which of the two states produced it.
+CANDIDATE_HAS_NO_COMPLETE_DAY = DeclinedFigure(
+    "the candidate has no complete subsystem-day on the deciding fold, and "
+    "neither has the incumbent: they are scored on one row set",
+    figure="the candidate's floor coverage on the deciding fold",
+    kind="unrunnable",
+    surface="the gate decision's `floor_coverage` block, `detail`",
+)
+
+#: Per subsystem: the incumbent has no complete day here, so there is no floor
+#: to be five points below. ``not_applicable`` rather than ``passed``, which is
+#: the distinction :data:`Verdict` acquired for exactly this reason.
+INCUMBENT_SUBSYSTEM_HAS_NO_FLOOR = DeclinedFigure(
+    "the incumbent has no complete day in this subsystem, so there is no floor "
+    "coverage to fall below",
+    figure="the incumbent's floor coverage in one subsystem of the deciding fold",
+    kind="unrunnable",
+    surface="the gate decision's `floor_coverage` block, `by_subsystem[].detail`",
+)
+
+#: And the mirror, which **vetoes**: a subsystem the incumbent has and the
+#: candidate does not. The absence is the candidate's coverage; the veto is what
+#: is done about it, because "not shown" and "shown to be fine" are different
+#: sentences. Composed into the detail rather than replacing it — the two
+#: incumbent figures stay on the sentence, and this census carries no number.
+CANDIDATE_SUBSYSTEM_NOT_MEASURED = DeclinedFigure(
+    "the candidate has no complete day in this subsystem, so a guardrail "
+    "cannot pass on a measurement that was not taken",
+    figure="the candidate's floor coverage in one subsystem of the deciding fold",
+    kind="unrunnable",
+    surface="the gate decision's `floor_coverage` block, `by_subsystem[].detail`",
+)
+
+
 class FloorCoverageError(ValueError):
     """Two coverages that are not a comparison, or a day that is not a day."""
 
@@ -588,17 +641,10 @@ def _absence_detail(
     *, candidate: FloorCoverage | None, incumbent: FloorCoverage | None
 ) -> str:
     if incumbent is None and candidate is None:
-        return (
-            "neither side has a complete subsystem-day on the deciding fold, so "
-            "there is no floor coverage to compare; both sides are scored on one "
-            "row set, so the absence is symmetric"
-        )
+        return NEITHER_SIDE_HAS_A_COMPLETE_DAY
     if incumbent is None:
         return COLD_START_DETAIL
-    return (
-        "the candidate has no complete subsystem-day on the deciding fold, and "
-        "neither has the incumbent: they are scored on one row set"
-    )
+    return CANDIDATE_HAS_NO_COMPLETE_DAY
 
 
 def _subsystem_veto(
@@ -610,10 +656,7 @@ def _subsystem_veto(
         return SubsystemVeto(
             subsystem=subsystem,
             verdict="not_applicable",
-            detail=(
-                "the incumbent has no complete day in this subsystem, so there is "
-                "no floor coverage to fall below"
-            ),
+            detail=INCUMBENT_SUBSYSTEM_HAS_NO_FLOOR,
             candidate=None if ours is None else ours.coverage,
         )
     if ours is None:
@@ -621,9 +664,8 @@ def _subsystem_veto(
             subsystem=subsystem,
             verdict="vetoed",
             detail=(
-                f"the incumbent covers {theirs.coverage:.1%} of "
-                f"{theirs.days} days here and the candidate has no complete day; "
-                "a guardrail cannot pass on a measurement that was not taken"
+                f"the incumbent covers {theirs.coverage:.1%} of {theirs.days} "
+                f"days here and {CANDIDATE_SUBSYSTEM_NOT_MEASURED}"
             ),
             incumbent=theirs.coverage,
         )

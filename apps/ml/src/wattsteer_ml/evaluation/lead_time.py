@@ -196,6 +196,16 @@ SERVED_COLUMN: LeadTimeColumn = "lead_matched"
 CONTROL_COLUMN: LeadTimeColumn = "archive_to_lead"
 
 #: Trained and evaluated on the archive. Not achievable, reported anyway.
+#:
+#: **Not a** :class:`~wattsteer_ml.declined.DeclinedFigure`, and forecaster 27's
+#: one report rather than a rename. This column withholds nothing: it publishes
+#: a full metrics row on purpose, because the gap between it and
+#: :data:`CONTROL_COLUMN` is the size of the leak in the product's own metric.
+#: What it carries is a caveat on a *present* number — ``achievable=False`` and
+#: a label reading NOT ACHIEVABLE — which is neither ``unrunnable`` nor
+#: ``unrun``, and is forecaster 28's subject. It could not have been forced into
+#: one either way: its value is the identity ``archive_to_archive``, keyed on by
+#: :data:`COLUMN_DEFINITIONS` as a ``Literal``, not a reason sentence.
 NOT_ACHIEVABLE_COLUMN: LeadTimeColumn = "archive_to_archive"
 
 #: In the order the spec's table lists them, so two cards diff cleanly.
@@ -1002,7 +1012,7 @@ class UnmeasuredLeadTime:
                 "lane": self.lane.directory_name,
                 "as_of": self.as_of.isoformat(),
                 "reason": self.reason,
-                "reads": _NOTHING_YET,
+                "reads": LEAD_TIME_COLUMNS_NOT_SCORED,
                 "not_achievable_column": NOT_ACHIEVABLE_COLUMN,
                 "aggregate_correlation": (
                     None if self.correlation is None else self.correlation.card_fields()
@@ -1199,13 +1209,25 @@ _NOT_A_READING = (
 )
 
 #: And when there were no columns at all.
-_NOTHING_YET = (
+#: What the block's ``reads`` field says when there are no columns to read —
+#: the ``reads`` companion of :data:`ARCHIVE_FEATURES_HAVE_NO_SHAPE` and, like
+#: it, ``unrunnable``: the sentence names the missing shape rather than a sweep
+#: nobody has run, so rounding it to "not yet" would contradict the field beside
+#: it. Named for forecaster 27, which found it invisible to the census that
+#: exists to show it.
+LEAD_TIME_COLUMNS_NOT_SCORED = DeclinedFigure(
     "The A/B did not run. This is not a finding of no harm and not a tie "
     "between the arms: the control arm's training features have no expressible "
     "shape here, so the comparison is unmade rather than made and found "
     "uninteresting. It says nothing about the aggregate correlation beside it, "
     "which is a second experiment with a source of its own — read "
-    "aggregate_correlation, and aggregate_correlation_reason when it is absent."
+    "aggregate_correlation, and aggregate_correlation_reason when it is absent.",
+    figure=(
+        "the three lead-time columns' metrics rows, and the harm and leak "
+        "deltas between them"
+    ),
+    kind="unrunnable",
+    surface="the model card's `lead_time_penalty` block, `reads`",
 )
 
 #: On a block whose every segment predates ingestion go-live.
@@ -1244,6 +1266,7 @@ __all__ = [
     "EXPERIMENT_GATE_PROFILE",
     "FOLD_EVALUATION_SOURCE",
     "LEAD_TIME_BLOCK_KEY",
+    "LEAD_TIME_COLUMNS_NOT_SCORED",
     "NOT_ACHIEVABLE_COLUMN",
     "PER_POINT_R",
     "REVISION_THRESHOLD",

@@ -3,20 +3,24 @@ import {
   BAND_UNAVAILABLE_DECLINES,
   DECLINE_KINDS,
   GATEWAY_DECLINED_FIGURES,
+  MODEL_CARD_DECLINES,
 } from "../src/declines.js";
 import { readSchemas } from "../src/schema.js";
 import type { DeclinedFigure as WireDeclinedFigure } from "../src/types.generated.js";
+import { WIRE_SHAPES } from "../src/types.generated.js";
 
 /**
  * The gateway's half of the census of figures WattSteer declines to state.
  *
  * Forecaster 25 asks for one surface listing every named absence, **assembled
- * and never transcribed**. Seven of the eight are declared in `apps/ml` and
- * assembled by walking that package; `wattsteer_ml/declined.py` and
- * `apps/ml/tests/test_declined_figures.py` hold that half. The eighth is
- * `band_unavailable_reason`, which this repository's *gateway* produces — the
- * modelling service publishes `Publication.national = None` and never spells
- * the identity — so it is declared here, beside the schema enum that owns it.
+ * and never transcribed**. Most of them are declared in `apps/ml` and assembled
+ * by walking that package; `wattsteer_ml/declined.py` and
+ * `apps/ml/tests/test_declined_figures.py` hold that half. Two belong to the
+ * gateway itself: `band_unavailable_reason`, which the modelling service never
+ * spells because it publishes `Publication.national = None`, and — since
+ * forecaster 27 — `metrics_absent_reason`, which `model-card.ts` mints out of
+ * the absence of a card group and forwards from nothing. Both are declared
+ * here, each beside the closed set that keys it.
  *
  * **What makes this half derived rather than a list.** The table is a
  * `Record<BandUnavailableReason, …>`, and `BandUnavailableReason` is the
@@ -57,8 +61,14 @@ describe("the gateway's declined figures are the schema's enum, both ways", () =
     );
   });
 
-  it("publishes the table's values and never a second list beside it", () => {
-    expect(GATEWAY_DECLINED_FIGURES).toEqual(Object.values(BAND_UNAVAILABLE_DECLINES));
+  it("publishes the table's values, and no name that is not one of them", () => {
+    // Forecaster 27 added a second table beside this one, so the assertion that
+    // this half is *only* its tables' values now lives in the block at the
+    // bottom of this file. What is asserted here is the half that keeps this
+    // table honest: every band member reaches the published set.
+    for (const entry of Object.values(BAND_UNAVAILABLE_DECLINES)) {
+      expect(GATEWAY_DECLINED_FIGURES).toContain(entry);
+    }
   });
 });
 
@@ -117,5 +127,83 @@ describe("the hand-written entry and the generated wire shape are one shape", ()
       const wire: WireDeclinedFigure = entry;
       expect(wire.name).toBe(entry.name);
     }
+  });
+});
+
+/**
+ * The second gateway-minted absence, and why it is minted here at all.
+ *
+ * Forecaster 27 found `metrics_absent_reason` inline in
+ * `apps/api/src/api/model-card.ts` — a sentence authored in TypeScript, which
+ * the Python walk can never discover. The ticket offers two ways out and this
+ * is the second: the gateway half gains it the way `band_unavailable_reason`
+ * was gained, as a **typed table where a missing entry is a compile error**.
+ *
+ * Moving it to `apps/ml` was the alternative and it was rejected, because it
+ * cannot remove the TypeScript sentence — only duplicate it. The reason exists
+ * precisely when the card carries *no* Metrics group, and no card on any volume
+ * carries a `metrics_absent_reason` field to forward. A modelling service that
+ * started writing one would still leave every card written before it needing a
+ * sentence from here, so the move would produce two spellings of one fact,
+ * which is the failure `declines.ts` opens by naming.
+ *
+ * What makes this table derived rather than a list: its key type is
+ * `Extract<keyof ModelCard, `${string}AbsentReason`>` — read off the
+ * generated response type. A `*_absent_reason` added to the top level of
+ * `model-card.schema.json` therefore breaks the build here until it has an
+ * entry. The assertion below is the runtime half of that claim, against the
+ * schema file, for the same reason the enum check above is: a regenerated type
+ * and a hand-edited schema can be one commit apart.
+ */
+const mintedReasonKeys = (): readonly string[] =>
+  Object.entries(WIRE_SHAPES.ModelCard)
+    .filter(([, field]) => field.wire.endsWith("_absent_reason"))
+    .map(([key]) => key);
+
+const mintedReasonWireFields = (): readonly string[] => {
+  const card = readSchemas().get("model-card.schema.json");
+  const properties = (card as { properties?: Record<string, unknown> } | undefined)
+    ?.properties;
+  return Object.keys(properties ?? {}).filter((name) => name.endsWith("_absent_reason"));
+};
+
+describe("the reasons this gateway mints for the model card", () => {
+  it("finds the response's own absent-reason fields at all", () => {
+    // The guard on the guard, as above.
+    expect(mintedReasonKeys().length).toBeGreaterThan(0);
+  });
+
+  it("has one entry per field, and no entry without a field", () => {
+    expect(Object.keys(MODEL_CARD_DECLINES).sort()).toEqual(
+      [...mintedReasonKeys()].sort(),
+    );
+  });
+
+  it("agrees with the schema file about how many there are", () => {
+    // The generated type is what the compiler checks the table against, and the
+    // schema is what the type is generated from — one commit apart is possible,
+    // so the two are reconciled here. Counted rather than name-matched: the
+    // wire spelling and the app spelling differ by a casing convention, and
+    // `one-translator.test.ts` allows exactly one module to convert between
+    // them. That module is not this test.
+    expect(mintedReasonWireFields().length).toBe(mintedReasonKeys().length);
+  });
+
+  it("calls the missing metrics table unrun, because nobody has measured it", () => {
+    // Not `unrunnable`. The Metrics group is forecaster ticket 09's and the
+    // ladder it holds is built and tested; what is missing is a card written
+    // after it landed. That is forecaster 18's distinction exactly, and the
+    // sentence says so in its own words.
+    expect(MODEL_CARD_DECLINES.metricsAbsentReason.kind).toBe("unrun");
+    expect(MODEL_CARD_DECLINES.metricsAbsentReason.surface).toContain(
+      "metrics_absent_reason",
+    );
+  });
+
+  it("publishes both tables and never a third list beside them", () => {
+    expect(GATEWAY_DECLINED_FIGURES).toEqual([
+      ...Object.values(BAND_UNAVAILABLE_DECLINES),
+      ...Object.values(MODEL_CARD_DECLINES),
+    ]);
   });
 });

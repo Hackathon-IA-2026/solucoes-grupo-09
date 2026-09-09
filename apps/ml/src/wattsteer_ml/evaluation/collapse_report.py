@@ -88,6 +88,7 @@ from wattsteer_ml.artifacts import CARD_SUFFIX
 from wattsteer_ml.canonical import VintageFidelity
 from wattsteer_ml.canonical_reads import ReadAxes, apply_axes
 from wattsteer_ml.constants import SUBSYSTEM_CODES, Subsystem
+from wattsteer_ml.declined import DeclinedFigure
 from wattsteer_ml.evaluation.collapse import CollapseBlock
 from wattsteer_ml.evaluation.matrix import RowKey
 from wattsteer_ml.evaluation.vintage import FoldSegment, assert_no_averaged_rows
@@ -429,7 +430,7 @@ class UnmeasuredCollapse:
                 "lane": self.lane.directory_name,
                 "as_of": self.as_of.isoformat(),
                 "reason": self.reason,
-                "reads": _NOTHING_YET,
+                "reads": NO_HELDOUT_BAND_TO_COUNT,
             }
         }
 
@@ -615,8 +616,14 @@ _REVISION_OPTIMISTIC_ONLY = (
 )
 
 #: And when there were no bands at all.
-_NOTHING_YET = (
+#: What the block's ``reads`` field says when the query found no held-out band.
+#: ``unrun``, for :data:`planning_arms.NO_HELDOUT_BAND_FOR_ARMS`'s reasons: the
+#: bands arrive, and until they do nobody has counted.
+NO_HELDOUT_BAND_TO_COUNT = DeclinedFigure(
     "The measurement ran and found nothing to count. This is not a share of "
     "zero: no held-out band exists for this lane yet, so the posture question "
-    "is unanswered rather than answered favourably."
+    "is unanswered rather than answered favourably.",
+    figure="the P50 collapse share — how often the planned posture is all zeroes",
+    kind="unrun",
+    surface="the model card's `p50_collapse_report` block, `reads`",
 )

@@ -9,6 +9,7 @@ import type {
   Reliability,
   ReliabilityPoint,
 } from "@wattsteer/core/api";
+import { MODEL_CARD_DECLINES } from "@wattsteer/core/declines";
 import { encodeWire } from "@wattsteer/core/wire";
 import { Elysia, t } from "elysia";
 import { UpstreamError } from "../errors.js";
@@ -571,12 +572,12 @@ export function toModelCard(envelope: CardEnvelope): ModelCard {
     band: toBand(quantiles, envelope.correction_regime),
     ensemble: toEnsemble(ensemble),
     metrics,
+    // Minted here and forwarded from nothing, so the sentence is declared
+    // beside the other gateway-authored absences rather than written inline:
+    // a reason the Python walk cannot see is a reason no reviewer reading
+    // `/v1/meta` can find, which is the whole of forecaster 27's defect.
     metricsAbsentReason:
-      metrics === null
-        ? "the artifact card carries no metrics group; the headline metrics " +
-          "table and the baseline-ladder deltas are written by the forecaster " +
-          "and this card predates them"
-        : null,
+      metrics === null ? MODEL_CARD_DECLINES.metricsAbsentReason.reason : null,
     decision: toDecision(card),
     cardUrl: `/v1/model/card/raw?lane=${encodeURIComponent(envelope.lane)}`,
   };

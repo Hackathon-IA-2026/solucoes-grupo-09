@@ -92,6 +92,7 @@ from wattsteer_ml.artifacts import CONTRACT_FAULT_KEY as CONTRACT_FAULT_KEY
 from wattsteer_ml.artifacts import GATE_BLOCK_KEY as GATE_BLOCK_KEY
 from wattsteer_ml.artifacts import contract_fault as contract_fault
 from wattsteer_ml.constants import SUBSYSTEM_CODES, Subsystem
+from wattsteer_ml.declined import DeclinedFigure
 from wattsteer_ml.evaluation import Fold, FoldBlocks
 from wattsteer_ml.lanes import Lane, format_instant, is_artifact_id
 from wattsteer_ml.training.calibration import Calibration, IsotonicCalibrator
@@ -112,6 +113,40 @@ ESTIMATOR_FIELDS: tuple[str, ...] = (
     "magnitude_p90",
     "magnitude_mean",
     "wind_share",
+)
+
+
+#: Why ``quantiles.coverage`` is ``null`` on a card whose fold had no curtailed
+#: hour to cover. It was an inline sentence in :meth:`ModelCard.to_dict` — a
+#: reason with no name, which no rule and no grep could find — and forecaster 27
+#: named it. ``unrunnable`` and not ``unrun``: a fold is a fixed window of rows,
+#: so a rerun of *this* fold cannot produce a curtailed hour that is not in it.
+#: The precedent is :data:`~wattsteer_ml.replay.floor_guardrail.COLD_START_DETAIL`,
+#: which forecaster 25 read a structural absence that way for the same reason.
+NO_CURTAILED_HOUR_TO_COVER = DeclinedFigure(
+    "this fold's test period held no curtailed hour, so there is no interval "
+    "whose coverage could fail",
+    figure=(
+        "this fold's interval coverage — the share of curtailed hours inside "
+        "the P10-P90 band"
+    ),
+    kind="unrunnable",
+    surface="the artifact card's `quantiles` group, `coverage_absent_reason`",
+)
+
+#: And why ``ensemble.day_grain_coverage`` is ``null``. The same shape and the
+#: same kind, on the other of the two anonymous sentences: the population is
+#: complete settled days, and a fold holding none of them holds none of them.
+NO_SETTLED_DAY_TO_SCORE = DeclinedFigure(
+    "this fold's test period held no day whose twenty-four hours are all "
+    "settled, so there is no observed day total for a day band to be scored "
+    "against",
+    figure=(
+        "this fold's day-grain coverage — the share of complete settled days "
+        "inside the day band"
+    ),
+    kind="unrunnable",
+    surface="the artifact card's `ensemble` group, `day_grain_absent_reason`",
 )
 
 
@@ -404,10 +439,7 @@ class ModelCard:
                     if self.coverage is not None
                     else {
                         "coverage": None,
-                        "coverage_absent_reason": (
-                            "this fold's test period held no curtailed hour, so "
-                            "there is no interval whose coverage could fail"
-                        ),
+                        "coverage_absent_reason": NO_CURTAILED_HOUR_TO_COVER,
                     }
                 ),
             },
@@ -418,12 +450,7 @@ class ModelCard:
                     if self.day_grain is not None
                     else {
                         "day_grain_coverage": None,
-                        "day_grain_absent_reason": (
-                            "this fold's test period held no day whose "
-                            "twenty-four hours are all settled, so there is no "
-                            "observed day total for a day band to be scored "
-                            "against"
-                        ),
+                        "day_grain_absent_reason": NO_SETTLED_DAY_TO_SCORE,
                     }
                 ),
             },

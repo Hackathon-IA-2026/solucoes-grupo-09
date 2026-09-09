@@ -95,6 +95,7 @@ from wattsteer_ml.artifacts import CARD_SUFFIX
 from wattsteer_ml.canonical import VintageFidelity
 from wattsteer_ml.canonical_reads import ReadAxes, apply_axes
 from wattsteer_ml.constants import REFERENCE_FLEET, SUBSYSTEM_CODES, Subsystem
+from wattsteer_ml.declined import DeclinedFigure
 from wattsteer_ml.evaluation.collapse_report import (
     FIXTURE_SOURCE,
     HOLDOUT_HOURS_SOURCE,
@@ -917,7 +918,7 @@ class UnmeasuredPlanningArms:
                 "as_of": self.as_of.isoformat(),
                 "reason": self.reason,
                 "serves": _V1_SERVES_P50,
-                "reads": _NOTHING_YET,
+                "reads": NO_HELDOUT_BAND_FOR_ARMS,
             }
         }
 
@@ -1130,11 +1131,18 @@ _REVISION_OPTIMISTIC_ONLY = (
 )
 
 #: And when there were no bands at all.
-_NOTHING_YET = (
+#: What the block's ``reads`` field says when the query found no held-out band.
+#: ``unrun`` rather than ``unrunnable``: the query ran and the bands arrive with
+#: the holdout writer's next pass — "yet" is the operative word, and it is
+#: forecaster 18's.
+NO_HELDOUT_BAND_FOR_ARMS = DeclinedFigure(
     "The measurement ran and found nothing to build an arm on. This is not a "
     "floor of zero and not a tie between the arms: no held-out band exists for "
     "this lane yet, so the comparison is unmade rather than made and found "
-    "uninteresting."
+    "uninteresting.",
+    figure="the two planning arms' promised floor, and the difference between them",
+    kind="unrun",
+    surface="the model card's `planning_arm_comparison` block, `reads`",
 )
 
 
@@ -1142,6 +1150,7 @@ __all__ = [
     "ARMS",
     "ARM_HOURS_SQL",
     "MEASUREMENT_BASIS",
+    "NO_HELDOUT_BAND_FOR_ARMS",
     "PLANNING_ARMS_BLOCK_KEY",
     "PUBLISHED_FLEET",
     "SHIPPED_BASIS",
