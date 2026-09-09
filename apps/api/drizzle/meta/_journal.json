@@ -281,6 +281,13 @@
       "when": 1788667062222,
       "tag": "0039_the_gate_over_a_backfill",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1788989709745,
+      "tag": "0040_every_read_has_a_go_live",
+      "breakpoints": true
     }
   ]
 }

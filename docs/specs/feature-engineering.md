@@ -341,7 +341,8 @@ So:
   Neither bullet above needs it, and over the backfill window it is not a weaker
   filter but a total one. `feature_as_of(D, profile)` is therefore the gate
   where `gate ≥ feature_ingestion_history_from()` — the latest go-live across
-  the canonical reads — and **no cut at all** before it.
+  **the sources a feature row reads**, discovered from the catalogue — and **no
+  cut at all** before it.
 
 > **Fixed in ticket 15**, in `drizzle/0039_the_gate_over_a_backfill.sql`, which
 > carries the reasoning. The third bullet is the whole of the change and it is
@@ -397,6 +398,63 @@ So:
 > data supports. `database-features.test.ts` pins all three findings: the gap,
 > the equivalence against the per-source predicate computed from
 > `canonical_read_go_live`, and the nine-read band.
+
+> **Narrowed in data-platform 20**, `drizzle/0040_every_read_has_a_go_live.sql`,
+> which is the ticket 16 filed. `canonical_read_go_live`'s row set is now
+> derived from the catalogue rather than written out, so `plant_geo` — and any
+> source added after this sentence — has a go-live row; the stamp's seven named
+> lookups became one weakest link over `feature_read_go_live()`; and the horizon
+> is `feature_ingestion_history_from()` over `feature_source_go_live()`, the
+> **eight** sources the feature blocks read, rather than over every canonical
+> read.
+>
+> **The measurement, over the same 210,432 rows per scenario ticket 16 used**
+> (1,096 target dates × both profiles × 96 rows), both predicates computed with
+> the server's own `gate_at`, `feature_local_day_hours` and
+> `feature_vintage_fidelity`:
+>
+> | go-live scenario | `revision_optimistic` before | → `point_in_time` | → `revision_optimistic` |
+> | --- | --- | --- | --- |
+> | A — all sources in one sweep | 140,544 | 0 | 0 |
+> | B — staggered, a source a feature reads last | 169,536 | 0 | 0 |
+> | C — staggered, `conjunto-membership` two months later | 181,440 | **11,904** | 0 |
+> | D — one sweep, `conjunto-membership` six hours behind | 140,544 | 0 | 0 |
+> | E — one sweep, `plant_geo` two months later | 140,544 | 0 | **11,328** |
+> | F — `plant_geo` has ingested nothing | 140,544 | 0 | **69,888** |
+>
+> Scenario C is ticket 16's band, and the number is ticket 16's number: the
+> **11,904 rows over 62 target dates** it measured as stamped
+> `revision_optimistic` although every source they read was live at their gate
+> now read `point_in_time`. The count is `96 × 2 × the target dates whose gate
+> falls in the band`, which is why D moves nothing: a source six *hours* behind
+> opens a band no gate falls in, and both profiles are D−1 wall-clock hours.
+>
+> **E and F are the correction, and they are the more important half.** They are
+> the rows the missing go-live row was letting claim `point_in_time` against a
+> registry location cut that was not live at their gate — 11,328 of them for a
+> two-month onboarding gap, and 69,888 (every row that had claimed it) where
+> SIGA has ingested nothing at all. Narrowing the horizon without first making
+> the set complete would have kept those claims and dropped the cover: that is
+> the trade ticket 16 declined, and it is why this one is a data-platform ticket
+> and not a feature one.
+>
+> **Nothing else moved.** `feature_rows` still accepts no instant of any kind,
+> `published_at_or_before` is still the gate unconditionally, and the
+> weakest-link stamp still binds at the last go-live among the sources a row
+> actually reads — over a set that is complete rather than seven eighths of one.
+> **`feature_hash` moved**: the seven lookups inside `feature_rows` became one,
+> so `pg_get_functiondef` changed while all 112 attributes stayed in place. The
+> tree was already carrying `0039`'s retrain debt; every artifact that owed a
+> retrain for `0039` still owes exactly one.
+>
+> Two properties in `database-features.test.ts` carry the parts that could
+> silently rot. `reads no vintaged table it has no go-live for` snapshots
+> `pg_stat_get_xact_numscans` across a real build and asserts that every
+> vintaged table the build scanned is in the derived set — and that it scans
+> neither `plant_detail_hour` nor `conjunto_membership`, which is what makes
+> dropping them from the horizon sound rather than convenient. `counts
+> plant_geo's go-live in the fidelity stamp` moves the location cut past the gate
+> and asserts the stamp degrades, which before `0040` it did not.
 
 > **Corrected while implementing ticket 01.** The canonical weather view carried
 > no publication cut at all — ticket 016 put the gate on the day-ahead balance

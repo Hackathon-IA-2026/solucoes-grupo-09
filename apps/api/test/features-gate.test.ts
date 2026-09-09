@@ -209,6 +209,28 @@ const ALLOWED_RELATIONS = new Set([
   // would be a very different event, and there is none.
   "pg_attribute",
   "pg_type",
+  // Data-platform 20's catalogue walk, and the second — and last — reason this
+  // list has catalogue relations in it. `canonical_read_source()` derives which
+  // base table each canonical read reads under an ingestion axis from
+  // `pg_depend` over each view's `pg_rewrite` rule, and
+  // `feature_source_go_live()` narrows that to the views the `feature_%`
+  // functions' own source names, which is what `pg_proc` is for. Both live in a
+  // migration that also creates feature functions, so this scan sees them.
+  //
+  // They are allowed for the same reason `pg_attribute` and `pg_type` are: the
+  // set of reads is *derived* rather than listed, and a rule that finds the
+  // reads has to be able to look. A feature **value** read out of `pg_catalog`
+  // would be a very different event, and there is still none: every relation
+  // below is read to answer "which tables exist and who reads them", never
+  // "what did that table say".
+  "pg_class",
+  "pg_depend",
+  "pg_proc",
+  "pg_rewrite",
+  // The CTEs of that walk.
+  "canonical_view",
+  "edge",
+  "reach",
 ]);
 
 /**
@@ -216,9 +238,9 @@ const ALLOWED_RELATIONS = new Set([
  *
  * Named here because two tests filter on them and because ticket 15 made the
  * distinction load-bearing: `wattsteer.feature_ingestion_history_from` is a
- * transaction-local **memo** for a view that is nine unindexed `min()` scans,
- * not a cut anybody reads a row through, and a guard that counted `set_config`
- * calls could not tell the two apart.
+ * transaction-local **memo** for a catalogue walk and an unindexed `min()` per
+ * source, not a cut anybody reads a row through, and a guard that counted
+ * `set_config` calls could not tell the two apart.
  */
 const AXES = [
   "wattsteer.as_of",
@@ -286,9 +308,10 @@ describe("the gate, structurally", () => {
     //
     // The filter is on the **axes** rather than on `set_config`. Ticket 15
     // added a transaction-local memo — `wattsteer.feature_ingestion_history_from`,
-    // the instant by which every canonical read had begun — cached because the
-    // view behind it is nine unindexed `min()` scans and it is asked once per
-    // block per target date. A memo is not a cut. Counting `set_config` calls
+    // the instant by which every source the feature layer reads had begun —
+    // cached because the set behind it is a catalogue walk and an unindexed
+    // `min()` per source, and it is asked once per block per target date. A
+    // memo is not a cut. Counting `set_config` calls
     // would have made this test refuse it while saying nothing about the
     // property it exists to hold, which is that the four axes are written in
     // four places and every one of them derives its own instant.
