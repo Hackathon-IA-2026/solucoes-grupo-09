@@ -357,6 +357,47 @@ So:
 > artifact trained on weatherless rows cannot go on serving against rows that
 > now carry weather. Both lanes owe a retrain.
 
+> **Measured and closed without a change in ticket 16.** The looseness the note
+> above records — a source already live during the onboarding band getting its
+> cut relaxed when it need not be — is real on the read and moves **no stamp**,
+> and the reason is arithmetic rather than luck. Both gate profiles are D−1
+> wall-clock hours, so the gate precedes every `valid_time` in the spine it
+> decides by at least five hours (measured over sixteen DST-free years and both
+> profiles: 280,512 hours, minimum gap 05:00, no exceptions). A per-source floor
+> would stamp `point_in_time` exactly when `gate ≥ go_live(s)` for every read
+> `s` the row uses — that is `gate ≥ max(go_live)`, which by the gap above
+> already implies the seven `valid_time ≥ go_live(s)` conjuncts the stamp is
+> made of. **The two rules are the same predicate written twice**, so the count
+> the ticket asked for is **zero rows**: measured across six go-live scenarios
+> over 210,432 rows each (1,096 target dates × both profiles × 96 rows), zero
+> rows move in every scenario where the last canonical read to go live is one
+> the row stamps. The read-level optimism is real and does not surface — a
+> restatement ingested a week after the gate does come back inside the band
+> (measured: 31.5 °C where WattSteer held 20.0 °C at the gate) — but every such
+> row is already stamped `revision_optimistic`, so nothing claims to be
+> point-in-time that is not. Building seven per-source axes across
+> `contract/scope.ts` and every canonical view, for a stamp no consumer would
+> see move, costs more than the optimism is worth. **`feature_hash` did not
+> move**: no DDL changed, so ticket 16 adds nothing to `0039`'s retrain debt.
+>
+> One band does part the two rules, and it is the opposite defect.
+> `feature_ingestion_history_from()` maxes over all **nine** rows of
+> `canonical_read_go_live`, two of which — `curtailment-by-plant` and
+> `conjunto-membership` — no feature block reads. Onboard one of *those* last
+> and every target date in between is stamped `revision_optimistic` although
+> every source the row reads was live at its gate (measured: 11,904 rows over
+> 62 target dates for a two-month gap). It is left standing, because the wide
+> horizon is also the only cover for the reads that have **no** go-live row at
+> all: `canonical_plant_registry`, which stands behind every weather feature
+> through `canonical_capacity_weight`, reads `plant_geo` under
+> `canonical_as_of()`, and `plant_geo` appears in no row of that view. So the
+> ticket's premise — "`canonical_read_go_live` already holds the per-source
+> instants" — does not hold for every source a feature reads, and narrowing the
+> horizon to the seven stamped reads would make the stamp claim more than the
+> data supports. `database-features.test.ts` pins all three findings: the gap,
+> the equivalence against the per-source predicate computed from
+> `canonical_read_go_live`, and the nine-read band.
+
 > **Corrected while implementing ticket 01.** The canonical weather view carried
 > no publication cut at all — ticket 016 put the gate on the day-ahead balance
 > and left it off the weather read, because within a target day the newer run
