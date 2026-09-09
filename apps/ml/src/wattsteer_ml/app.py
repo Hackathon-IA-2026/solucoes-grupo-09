@@ -55,6 +55,7 @@ from .artifacts import CARD_SUFFIX
 from .config import settings
 from .constants import Subsystem
 from .database import database
+from .declined import DeclineKind, declined_figures
 from .evaluation.folds import FOLD_CALENDAR_RULES
 from .evaluation.holdout import HoldoutLeakError
 from .features import FeatureSet, GateProfile, read_serving_rows, serving_target_date
@@ -256,6 +257,35 @@ class ArtifactState(BaseModel):
     unrecognised: list[str]
 
 
+class DeclinedFigureReport(BaseModel):
+    """One figure this build declines to state, and why.
+
+    Six fields, all prose, and that is not an accident of what was available:
+    this is a census of withheld *measurements*, so it is the last surface that
+    could afford to carry a number a reader might take for one.
+
+    `kind` is `unrunnable` or `unrun`, and the two are two on purpose —
+    forecaster 16 says a thing cannot be built, forecaster 18 chose its
+    constant precisely so that it would not read like that. Collapsing them
+    into one "unavailable" bucket would delete the information those tickets
+    were written to create, so the field is required and never defaulted.
+    """
+
+    #: The constant's own identifier — a grep target, so the census is a way
+    #: into the code rather than a restatement of it.
+    name: str
+    #: Where the reason is declared, as a repository path.
+    declared_in: str
+    #: Which figure is withheld, as a noun phrase.
+    figure: str
+    #: `unrunnable` — it cannot be produced. `unrun` — nobody has produced it.
+    kind: DeclineKind
+    #: The sentence the card already carries, verbatim.
+    reason: str
+    #: The card block, wire field or response a caller meets the absence on.
+    surface: str
+
+
 class Meta(BaseModel):
     """Everything needed to diagnose a misconfigured instance in one request."""
 
@@ -267,6 +297,14 @@ class Meta(BaseModel):
     #: `default_transaction_read_only = on`. Drizzle owns migrations.
     database_access: Literal["read-only"]
     artifacts: ArtifactState
+    #: Every figure this build declines to state, assembled by walking the
+    #: package rather than listed — see :mod:`wattsteer_ml.declined`. Reported
+    #: here, beside the lanes, because it is a property of the *code that
+    #: answered* rather than of what is on the volume: an unmounted volume
+    #: empties `artifacts.lanes` and changes nothing about what this service
+    #: refuses to publish. The gateway merges it with its own half onto
+    #: `GET /v1/meta`, which is the one request that asks what a deployment is.
+    declines: list[DeclinedFigureReport]
 
 
 @app.get("/", response_model=Identity, tags=["meta"])
@@ -319,6 +357,12 @@ def meta() -> Meta:
         environment=settings.env,
         database_configured=database is not None,
         database_access="read-only",
+        # Taken per request rather than at import. The walk imports every
+        # module in the package, and this module is one of them: taking the
+        # census while `app.py` is still executing would read a half-built
+        # namespace and report fewer absences than there are, which is the one
+        # direction this surface may never be wrong in.
+        declines=[DeclinedFigureReport(**entry) for entry in declined_figures()],
         artifacts=ArtifactState(
             path=str(store.path),
             mounted=store.mounted,

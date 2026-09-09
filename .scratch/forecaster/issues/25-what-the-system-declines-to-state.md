@@ -34,7 +34,7 @@ and already the place a caller asks what the deployment is.
 
 **Blocked by:** None — every reason above is merged.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The set is derived, and adding a new named reason requires editing no list
 - [ ] A test fails if a reason exists that the surface cannot render

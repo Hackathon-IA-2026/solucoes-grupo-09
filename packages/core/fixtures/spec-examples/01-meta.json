@@ -84,6 +84,35 @@
       "daily_energy_mwh": 1700
     }
   },
+  "declines": {
+    "figures": [
+      {
+        "name": "NO_TFT_IMPLEMENTATION",
+        "declared_in": "apps/ml/src/wattsteer_ml/evaluation/transformer_benchmark.py",
+        "figure": "the transformer benchmark's two arms",
+        "kind": "unrunnable",
+        "reason": "The benchmark has not been run, and cannot be run in this repository today, for two independent reasons. There is no TFT implementation in the dependency set, and no environment here has ingested data, so the served arm has no training rows either.",
+        "surface": "the model card's `transformer_benchmark` block, `reason`"
+      },
+      {
+        "name": "NOT_RUN_YET",
+        "declared_in": "apps/ml/src/wattsteer_ml/evaluation/dessem_ab.py",
+        "figure": "the DESSEM A/B's three arms, and the floor advantage between them",
+        "kind": "unrun",
+        "reason": "The three runs have not been scored. This is not a floor advantage of zero and not a finding that DESSEM's features are worth nothing: the arms exist and their data exists, so this comparison is unmade rather than made and found uninteresting.",
+        "surface": "the model card's `dessem_delta` block, `reason`"
+      },
+      {
+        "name": "no_joint_ensemble",
+        "declared_in": "packages/core/src/declines.ts",
+        "figure": "the national day band - a P10, P50 and P90 over all four subsystems",
+        "kind": "unrunnable",
+        "reason": "A quantile of a sum is not the sum of the quantiles, and neither is a median: four subsystems' curtailment is not comonotone, so a national band can only be read off draws that were taken jointly. Where none was published the band is withheld and never filled by adding the four.",
+        "surface": "`GET /v1/grid/outlook`, `national.band_unavailable_reason`"
+      }
+    ],
+    "incomplete_reason": null
+  },
   "attribution": {
     "ons": {
       "name": "ONS Dados Abertos",

@@ -10,6 +10,7 @@
     ".": "./src/index.ts",
     "./errors": "./src/errors.ts",
     "./constants": "./src/constants.ts",
+    "./declines": "./src/declines.ts",
     "./domain": "./src/domain.ts",
     "./driver-display": "./src/driver-display.ts",
     "./api": "./src/types.generated.ts",

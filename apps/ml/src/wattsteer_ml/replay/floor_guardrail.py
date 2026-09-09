@@ -106,6 +106,7 @@ from typing import Any, Literal, Protocol
 
 from wattsteer_ml.canonical import VintageFidelity
 from wattsteer_ml.constants import SUBSYSTEM_CODES, Subsystem
+from wattsteer_ml.declined import DeclinedFigure
 from wattsteer_ml.evaluation.collapse_report import FIXTURE_SOURCE, UNMEASURED_SOURCE
 from wattsteer_ml.evaluation.matrix import HOURS_PER_DAY
 from wattsteer_ml.evaluation.planning_arms import (
@@ -144,10 +145,13 @@ Verdict = Literal["passed", "vetoed", "not_applicable"]
 #: What the card says when this lane has promoted nothing. Its own sentence,
 #: because "there was no comparison" is the one reading `docs/specs/replay.md`
 #: insists must not be written down as "the candidate cleared the bar".
-COLD_START_DETAIL = (
+COLD_START_DETAIL = DeclinedFigure(
     "there is no incumbent to be below — this lane has promoted nothing, and a "
     "rung-1 baseline plans no fleet and therefore holds no floor. The guardrail "
-    "is recorded as not applicable rather than satisfied"
+    "is recorded as not applicable rather than satisfied",
+    figure="the floor-coverage guardrail's comparison against an incumbent",
+    kind="unrunnable",
+    surface="the gate decision's `floor_coverage` block, `detail`",
 )
 
 

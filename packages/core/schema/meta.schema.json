@@ -62,6 +62,7 @@
       "required": ["battery", "shiftable_load"],
       "additionalProperties": false
     },
+    "declines": { "$ref": "#/$defs/declines" },
     "attribution": {
       "description": "Data rather than copy, because the ODbL/CC-BY notice is bilingual and a bilingual notice assembled from translated strings around untranslated licence identifiers is exactly the shape `docs/specs/i18n.md` asks for. The keys are source identifiers and are *data*, so they travel untouched; the values are a named shape and their fields are renamed like any other object's, which is what puts `derivative_database` on the wire under that name.",
       "type": "object",
@@ -80,10 +81,67 @@
     "forecast",
     "data",
     "reference_fleet",
+    "declines",
     "attribution"
   ],
   "additionalProperties": false,
   "$defs": {
+    "declines": {
+      "title": "MetaDeclines",
+      "description": "Every figure this deployment declines to state, and why - one place answering the question that was previously only answerable by reading cards, blocks and wire fields. **Assembled, never hand-written**: the modelling service's half is taken by walking its own package for declared reason constants (`apps/ml/src/wattsteer_ml/declined.py`), the gateway's half is keyed by the schema enum that owns it (`packages/core/src/declines.ts`), and adding a named reason to either requires editing no list. It is a property of the *code that answered* rather than of what is on the volume, which is why an unmounted volume empties `model.lanes` and changes nothing here.",
+      "type": "object",
+      "properties": {
+        "figures": {
+          "description": "In `name` order, so two deployments are diffable.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/declined_figure" }
+        },
+        "incomplete_reason": {
+          "description": "Why this list may be **short**, or `null` when it is whole. A census of what a system refuses to claim is the last place that could afford to imply a completeness it does not have, so an unreachable modelling service is stated here rather than silently costing the caller its half: the code the gateway's edge produced (`OPTIMIZER_UNAVAILABLE`, `OPTIMIZER_TIMEOUT`, `OPTIMIZER_NOT_CONFIGURED`), or `MODEL_DECLINES_NOT_REPORTED` for a modelling service that answered without this block at all - which is an older build, and not a build with nothing to declare.",
+          "type": ["string", "null"]
+        }
+      },
+      "required": ["figures", "incomplete_reason"],
+      "additionalProperties": false
+    },
+    "declined_figure": {
+      "title": "DeclinedFigure",
+      "description": "One figure that is not published, and the four things a reader needs to act on it: which figure, why, whether it *cannot* be produced or merely has not been, and where they would have met it. Every field is prose - there is no number anywhere on this surface, because a census of withheld measurements is the last place that could carry a figure a reader might take for one.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The reason constant's identifier, or the wire identity where the absence is one - a grep target, so this census is a way into the code rather than a restatement of it.",
+          "type": "string"
+        },
+        "declared_in": {
+          "description": "Where the reason is declared, as a repository path.",
+          "type": "string"
+        },
+        "figure": {
+          "description": "Which number is not stated, as a noun phrase. A reason sentence explains an absence; it does not name the thing absent, and a census whose rows do not name the quantity is a census of prose.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "`unrunnable` - the figure cannot be produced here. `unrun` - it can be, and nobody has. The two are two on purpose and must not be collapsed: forecaster 16's `ARCHIVE_FEATURES_HAVE_NO_SHAPE` says a thing cannot be built, and forecaster 18 chose `NOT_RUN_YET` precisely so that it would not read like that. `unresolvable` is not a third kind - it is this gateway refusing to guess between the two for a value a newer modelling service reported and this build does not recognise, exactly as it refuses to round an unknown lane state down to `no_artifact`.",
+          "type": "string",
+          "enum": ["unrunnable", "unrun", "unresolvable"]
+        },
+        "reason": {
+          "description": "The sentence the card already carries, verbatim. Not re-worded on the way out: the forecaster owns the vocabulary of its own absences, and a rename here is where two vocabularies start.",
+          "type": "string"
+        },
+        "surface": {
+          "description": "The response, card block or field a caller actually meets this absence on.",
+          "type": "string"
+        },
+        "fault": {
+          "description": "Why `kind` is `unresolvable`, naming the value that was reported. Absent for every kind this build recognises.",
+          "type": "string"
+        }
+      },
+      "required": ["name", "declared_in", "figure", "kind", "reason", "surface"],
+      "additionalProperties": false
+    },
     "gate": {
       "title": "MetaGate",
       "type": "object",

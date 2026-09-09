@@ -145,6 +145,7 @@ from typing import Any
 
 from wattsteer_ml.artifacts import CARD_SUFFIX
 from wattsteer_ml.canonical import VintageFidelity
+from wattsteer_ml.declined import DeclinedFigure
 from wattsteer_ml.evaluation.collapse import CollapseBlock
 from wattsteer_ml.evaluation.collapse_report import FIXTURE_SOURCE, UNMEASURED_SOURCE
 from wattsteer_ml.evaluation.gate import ESTIMATOR_ALLOW_LIST
@@ -212,7 +213,7 @@ FOLD_EVALUATION_SOURCE = "fold_evaluation"
 #: caller's phrasing. It names both blockers, because fixing either one alone
 #: leaves the benchmark unrunnable and a reason that named one would read as a
 #: smaller gap than it is.
-NO_TFT_IMPLEMENTATION = (
+NO_TFT_IMPLEMENTATION = DeclinedFigure(
     "The benchmark has not been run, and cannot be run in this repository "
     "today, for two independent reasons. There is no TFT implementation in the "
     "dependency set — apps/ml/pyproject.toml carries LightGBM, scikit-learn and "
@@ -223,7 +224,39 @@ NO_TFT_IMPLEMENTATION = (
     "either: the read path returns the full spine against an empty database and "
     "no real fit, bootstrap or promotion has ever been observed. Two arms built "
     "anyway would be arithmetic over invented labels, and a flattering decimal "
-    "is indistinguishable from the honest comparison this block is for."
+    "is indistinguishable from the honest comparison this block is for.",
+    figure="the transformer benchmark's two arms",
+    kind="unrunnable",
+    surface="the model card's `transformer_benchmark` block, `reason`",
+)
+
+#: Why an arm's :class:`TrainingCost` is absent, given a name at last.
+#:
+#: The module docstring has argued this since the block was written — a
+#: benchmark's training time is a *measurement*, and a number reasoned from the
+#: shape of the work would be an estimate wearing a measurement's name — but it
+#: argued it in prose, so the ``"training_cost": None`` on the wire was the one
+#: absence in this file that reached a reader unnamed. Forecaster 25's census
+#: reads declared constants, and an absence nothing declares is an absence
+#: nobody can find.
+#:
+#: ``unrunnable`` rather than ``unrun``: this is not a run somebody has yet to
+#: get to. There is no arm to time, for the two independent reasons
+#: :data:`NO_TFT_IMPLEMENTATION` names, and a wall clock over a fit that never
+#: happened is not a figure that exists.
+NO_TRAINING_COST_MEASURED = DeclinedFigure(
+    "No training time and no peak memory are recorded for this arm. A "
+    "benchmark's training cost is a measurement and there was no fit to "
+    "measure: a runtime reasoned from the shape of the work would be an "
+    "estimate wearing a measurement's name, and a benchmark that estimated "
+    "one arm's cost while measuring the other's would be comparing two "
+    "different kinds of number.",
+    figure="the transformer benchmark's per-arm training time and peak memory",
+    kind="unrunnable",
+    surface=(
+        "the model card's `transformer_benchmark` block, an arm's "
+        "`training_cost_absent_reason`"
+    ),
 )
 
 #: The ``explainability`` column, filled in honestly, per arm. A published
@@ -425,6 +458,14 @@ class BenchmarkFigures:
             "share_p50_zero": self.share_p50_zero,
             "mixture_regime": self.regime.as_card_entry(),
             "training_cost": None if self.cost is None else self.cost.as_card_entry(),
+            # Named rather than left as a bare `null`. `aggregate_correlation`
+            # and `aggregate_correlation_reason` are the shape this follows: an
+            # absent figure and the sentence for its absence travel together,
+            # because a `null` on its own is read as a zero by the next person
+            # to grep for the column.
+            "training_cost_absent_reason": (
+                None if self.cost is not None else NO_TRAINING_COST_MEASURED
+            ),
             "explainability": self.explainability,
         }
 
@@ -878,6 +919,7 @@ __all__ = [
     "EXPLAINABILITY",
     "FOLD_EVALUATION_SOURCE",
     "NO_TFT_IMPLEMENTATION",
+    "NO_TRAINING_COST_MEASURED",
     "SERVED_ARM",
     "TRANSFORMER_BENCHMARK_BLOCK_KEY",
     "ArmRun",
