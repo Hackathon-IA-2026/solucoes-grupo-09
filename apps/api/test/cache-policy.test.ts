@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import {
   decodeScenarioBody,
   decodeScenarioParam,
@@ -254,6 +254,26 @@ describe("the table's size is derived from the spec's, never restated", () => {
 });
 
 // --- the grep-level assertion the ticket asks for ----------------------------
+
+describe("the listing this file greps is the whole of `src/api`", () => {
+  it("descended into `plugins/`, where the one policy module lives", () => {
+    // The doc comment above calls the recursion "the whole point": a top-level
+    // scan leaves `src/api/plugins/` unread, and the claim that a grep over
+    // `cache-policy.ts` is a grep over every response is only true if nothing
+    // *else* can write the header. Nothing asserted it. Measured: dropping
+    // `recursive: true` from the listing left all 29 assertions in this file
+    // green, so the property the comment argues for was governed by nobody.
+    //
+    // Emptiness alone was caught, but only incidentally — by a positive
+    // expectation four boxes down. Narrowing is the failure that was silent.
+    expect(ROUTE_FILES.length).toBeGreaterThan(5);
+    expect(ROUTE_FILES).toContain(POLICY_MODULE);
+    expect(ROUTE_FILES.some((file) => file.includes(sep))).toBe(true);
+    // And the top level, so a listing that returned only the subtree is caught
+    // in the other direction too.
+    expect(ROUTE_FILES).toContain("grid.ts");
+  });
+});
 
 describe("no response on this surface carries `immutable`", () => {
   it("holds of every row of the table", () => {

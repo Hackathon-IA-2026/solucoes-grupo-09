@@ -38,11 +38,17 @@ const importsOf = (source: string): string[] =>
  * defect.
  */
 const codeOf = (source: string): string =>
+  // Line comments FIRST, then block comments. `ml-boundary.test.ts` names this
+  // file as the instance of the reverse order: a `//` comment containing a
+  // `/*` opens a block the block-stripper runs past, deleting real code from
+  // the scan. None of the three modules read here carries such a line today —
+  // `api/grid.ts` and `api/plants.ts` do — so this was latent rather than
+  // exploited, and `stripsLineCommentsFirst` below keeps it that way.
   source
-    .replace(/\/\*[\s\S]*?\*\//g, "")
     .split("\n")
     .filter((line) => !line.trimStart().startsWith("//"))
-    .join("\n");
+    .join("\n")
+    .replace(/\/\*[\s\S]*?\*\//g, "");
 
 /** The rows of a payload array, so a mutation reads without a non-null assertion. */
 const rowsOf = (value: unknown): Record<string, unknown>[] =>

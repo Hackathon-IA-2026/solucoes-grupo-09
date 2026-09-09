@@ -486,6 +486,36 @@ describe("i18n hygiene", () => {
     expect(scanned.length).toBeGreaterThan(20);
   });
 
+  it("strips line comments before block comments, whatever the tree holds", () => {
+    // `strip` takes line comments first, and the comment there explains why.
+    // The claim was made by inspection and could not be shown exploitable
+    // *here*, so it is settled rather than left open: the only two files in
+    // this repository carrying a `//` comment that contains a `/*` are
+    // `apps/api/src/api/grid.ts` and `apps/api/src/api/plants.ts`, and neither
+    // is under `apps/web/src/app` or `apps/web/src/components`, nor does either
+    // name match `SERVER_SCOPE`'s `/narration/i`. So the ordering here is
+    // correct and was never load-bearing — on today's tree.
+    //
+    // Which is exactly why it is asserted on a probe rather than on a file: the
+    // property is about the stripper, and it must keep holding on the day a
+    // screen or a narration module grows such a line. `grid-now.test.ts` and
+    // `plants.test.ts` carry the live version of this control, where the two
+    // orders really do disagree on the real input.
+    const probe = [
+      "// the wildcard `/v1/canonical/*` is the modelling surface",
+      'const label = "Expected curtailed energy, whole day";',
+      "/* a real block comment, which must still go */",
+      'const gone = "prose in a block";',
+    ].join("\n");
+    const stripped = strip(probe);
+    expect(stripped).toContain("Expected curtailed energy, whole day");
+    expect(stripped).not.toContain("modelling surface");
+    expect(stripped).not.toContain("a real block comment");
+    // And the offender in the surviving line is still found, so the ordering is
+    // asserted through the detector rather than only through the stripper.
+    expect(findOffenders("probe.tsx", probe)).toHaveLength(1);
+  });
+
   it("still catches a leak, and still lets the domain vocabulary through", () => {
     // The check has to fail on the thing it exists for. If a future refactor
     // of the heuristic stops matching, this is what says so.

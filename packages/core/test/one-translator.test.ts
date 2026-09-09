@@ -117,6 +117,32 @@ describe("exactly one module translates between the wire and the app", () => {
     expect(source).toContain("decodeWire");
     expect(source).toContain("encodeWire");
   });
+
+  test("the walk read the repository, so the empty offender list means something", () => {
+    // The other half of the same worry, and the one that was missing: the test
+    // above pins that `wire.ts` still translates, but nothing pinned that the
+    // *scan* still reads anything. Measured: narrowing the extension filter to
+    // a suffix no file carries left all 21 tests in this file green, with the
+    // offender list empty because there was nothing to look at.
+    const files = sourceFiles(ROOT).map((file) => relative(ROOT, file));
+    expect(files.length).toBeGreaterThan(200);
+    // The sanctioned module has to be among what was read, or the exemption
+    // above is excusing a file the walk never reaches.
+    for (const path of SANCTIONED) {
+      expect(files.map((file) => file.split(sep).join("/"))).toContain(path);
+    }
+    // And the three trees a second translator would most likely appear in.
+    for (const tree of [
+      join("apps", "web", "src"),
+      join("apps", "api", "src"),
+      join("packages", "core", "src"),
+    ]) {
+      expect({
+        tree,
+        reached: files.some((file) => file.startsWith(tree + sep)),
+      }).toEqual({ tree, reached: true });
+    }
+  });
 });
 
 describe("the generated table is the schema's field names, spelled the one way", () => {

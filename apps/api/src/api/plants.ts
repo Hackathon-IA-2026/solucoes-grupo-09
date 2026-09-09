@@ -342,8 +342,9 @@ export function createPlantRoutes(deps: { db: Database | undefined }) {
         description:
           "One row per plant: the ONS code, the version-stripped CEG, the name, " +
           "the subsystem, the state, the technology, the operation modality, the " +
-          "municipality, ownership, and the installed capacity as of the fleet " +
-          "date. Coordinates are optional and an absent one is null, never a " +
+          "municipality, the owner and operator names, and the installed capacity " +
+          "as of the fleet date. Coordinates are optional and an absent one is " +
+          "null, never a " +
           "zero pair. JSON or CSV. This endpoint exists to discharge ODbL §4.6, " +
           "which obliges machine-readable access to a Derivative Database; the " +
           "licence notice and the source attribution are on the payload itself.",

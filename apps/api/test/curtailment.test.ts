@@ -25,9 +25,17 @@ const SOURCE = join(import.meta.dir, "..", "src");
 
 /** Source with block and line comments removed — prose may not satisfy a rule. */
 function code(relative: string): string {
-  return readFileSync(join(SOURCE, relative), "utf8")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/^[ \t]*\/\/.*$/gm, "");
+  return (
+    readFileSync(join(SOURCE, relative), "utf8")
+      // Line comments FIRST, then block comments. The reverse order is silently
+      // wrong where a `//` comment contains a `/*` — `api/grid.ts:280` and
+      // `api/plants.ts:261` are the two real instances, and `grid-now.test.ts`
+      // carries the control. Neither module read here has such a line today, so
+      // the two orders agree on them; this is the correct order regardless, and
+      // costs nothing.
+      .replace(/^[ \t]*\/\/.*$/gm, "")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+  );
 }
 
 const ROUTE = code("api/curtailment.ts");

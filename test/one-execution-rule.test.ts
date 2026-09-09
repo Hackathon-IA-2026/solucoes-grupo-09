@@ -249,9 +249,60 @@ export function scoreReplay(schedule, observedMwh, cell) {
 }
 `;
 
+/**
+ * The same copy again, with the round-trip factor **written as a bare decimal**
+ * rather than named. This is the escape that actually happened: with the
+ * constant named `one_way_eta` the detector caught it, and with a literal
+ * `0.92` in its place the file matched nothing in the efficiency list, spoke
+ * six of seven concepts, and read green.
+ *
+ * {@link SCALED_LEG} is the signal that closes it, and this is the control that
+ * keeps the signal honest. Without this entry, deleting `SCALED_LEG` breaks
+ * nothing in this file — measured — which is api-surface 22's defect exactly:
+ * a control at an address the check never reaches, satisfying "not detected" no
+ * matter what the detector does.
+ */
+const PYTHON_CONTROL_UNNAMED_FACTOR = `
+def score_replay(schedule, observed_mwh, cell):
+    level = cell.opening_mwh
+    recovered = 0.0
+    for hour, curtailed in enumerate(observed_mwh):
+        room = cell.ceiling_mwh - level
+        charged = min(schedule.charge_mw[hour], room / 0.92, curtailed)
+        drawn = min(schedule.discharge_mw[hour], (level - cell.floor_mwh) * 0.92)
+        level += 0.92 * charged - drawn / 0.92
+        recovered += max(0.0, min(charged - drawn, curtailed))
+    return recovered
+`;
+
 const POSITIVE_CONTROLS: readonly [string, string, string][] = [
   ["python", "py", PYTHON_CONTROL],
   ["typescript", "ts", TYPESCRIPT_CONTROL],
+  ["python with the round-trip factor unnamed", "py", PYTHON_CONTROL_UNNAMED_FACTOR],
+];
+
+/**
+ * The other end of {@link SCALED_LEG}, and the reason it is line-scoped.
+ *
+ * An unscoped decimal signal supplies "efficiency" to **28** files in this
+ * repository, `components/charts/dispatch-chart.tsx`,
+ * `components/charts/plan-vs-executed.tsx` and
+ * `components/landing/fan-chart.tsx` among them, on bar widths and tick
+ * positions. Line-scoped it supplies it to two, neither of which speaks the
+ * other six concepts. This repo has twice caught an over-broad guard accusing a
+ * chart of implementing business logic, and a guard that cries wolf is a guard
+ * somebody deletes — so the narrowness is asserted here rather than argued in a
+ * comment. Measured: replacing `SCALED_LEG` with a bare decimal pattern breaks
+ * nothing else in this file.
+ */
+const CHART_ARITHMETIC: readonly [string, string, string][] = [
+  ["a bar width", "tsx", "const width = slot * 0.62;"],
+  ["a tick position", "tsx", "const y = height - value * 0.8;"],
+  [
+    "a chart that also draws a state of charge",
+    "tsx",
+    "const barWidth = slot * 0.62;\nconst socY = plot(point.soc);",
+  ],
 ];
 
 /**
@@ -440,6 +491,27 @@ describe("the detector is calibrated", () => {
       // Tightening the detector until a real failure goes away breaks this
       // first, and the next author deletes the guard rather than argue with it.
       expect(implementsTheRule(suffix, source)).toBe(false);
+    });
+  }
+
+  test("a round-trip factor written as a bare decimal is still an efficiency", () => {
+    // The signal, asserted at the signal rather than only through a verdict:
+    // the concept has to come from `SCALED_LEG` and not from a name, or the
+    // control above would pass for the wrong reason.
+    const code = codeOf("py", PYTHON_CONTROL_UNNAMED_FACTOR);
+    expect(CONCEPTS.find((each) => each.name === "efficiency")?.pattern.test(code)).toBe(
+      false,
+    );
+    expect(conceptsIn(code)).toContain("efficiency");
+  });
+
+  for (const [name, suffix, source] of CHART_ARITHMETIC) {
+    test(`${name} is not an efficiency`, () => {
+      // Widening `SCALED_LEG` past a leg's own line breaks these first. The
+      // third case is the one that matters: a decimal *and* a state of charge
+      // in the same file, on different lines, which an unscoped signal cannot
+      // tell from the rule.
+      expect(conceptsIn(codeOf(suffix, source))).not.toContain("efficiency");
     });
   }
 

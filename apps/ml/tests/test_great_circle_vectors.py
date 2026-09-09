@@ -63,6 +63,26 @@ VECTORS = _vectors()
 IDS = [name for name, _ in VECTORS]
 
 
+def test_no_vector_file_is_skipped() -> None:
+    """The listing above is flat; this compares it against a recursive walk.
+
+    ``README.md`` claimed both suites "fail when the directory holds a file they
+    did not enumerate", and until now neither did: a vector filed under a
+    subdirectory was read by nobody, and ``_vectors``'s own ``assert files``
+    only sees an empty directory — never a file nobody reads. Measured: a copy
+    of ``04-a-metre-apart.json`` with ``expected_km`` set to 999999, filed under
+    ``regression/``, left this suite and
+    ``apps/api/test/great-circle-vectors.test.ts`` entirely green.
+
+    Adding a vector anywhere under here is therefore sufficient, or it fails
+    loudly. The siblings ``gate-instant`` and ``canonical-contract`` have
+    carried this check all along; this is the one that did not.
+    """
+    consumed = {name for name, _ in VECTORS}
+    on_disk = {str(path.relative_to(FIXTURES)) for path in FIXTURES.rglob("*.json")}
+    assert on_disk == consumed
+
+
 @pytest.mark.parametrize(("name", "vector"), VECTORS, ids=IDS)
 def test_the_sql_reaches_the_vector(name: str, vector: dict[str, Any]) -> None:
     """``great_circle_km`` against the third-way expected value."""

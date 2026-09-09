@@ -185,16 +185,21 @@ describe("nothing in a request path reads the schema directory", () => {
     // typecheck, pass `bun test`, and die in the container on first request —
     // a failure mode with no local reproduction, which is the worst kind.
     const src = join(import.meta.dir, "..", "src");
-    const offenders: string[] = [];
-    for (const file of readdirSync(src)) {
-      if (!file.endsWith(".ts") || file === "schema.ts") {
-        continue;
-      }
-      if (/from\s+["']\.\/schema\.js["']/.test(readFileSync(join(src, file), "utf8"))) {
-        offenders.push(file);
-      }
-    }
+    const listing = readdirSync(src).filter(
+      (file) => file.endsWith(".ts") && file !== "schema.ts",
+    );
+    const offenders = listing.filter((file) =>
+      /from\s+["']\.\/schema\.js["']/.test(readFileSync(join(src, file), "utf8")),
+    );
     expect(offenders).toEqual([]);
+    // The listing has to have found the package, or the empty result above is
+    // a statement about nothing. Measured: narrowing the suffix to one no file
+    // carries left all 11 tests in this file green — and this check's whole
+    // subject is a failure with no local reproduction, so it is the last one
+    // that should be reporting clean for want of input.
+    expect(listing.length).toBeGreaterThan(10);
+    expect(listing).toContain("index.ts");
+    expect(listing).toContain("wire.ts");
   });
 
   test("the package index does not re-export it either", () => {

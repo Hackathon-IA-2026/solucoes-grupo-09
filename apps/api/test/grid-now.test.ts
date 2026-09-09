@@ -22,15 +22,45 @@ const SOURCE = join(import.meta.dir, "..", "src");
 
 /** Source with block and line comments removed — prose may not satisfy a rule. */
 function code(relative: string): string {
-  return readFileSync(join(SOURCE, relative), "utf8")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/^[ \t]*\/\/.*$/gm, "");
+  return (
+    readFileSync(join(SOURCE, relative), "utf8")
+      // Line comments FIRST, then block comments — the order is load-bearing and
+      // the reverse is silently wrong. `api/grid.ts:280` and `api/plants.ts:261`
+      // are `//` comments that contain a `/*`; a block-first stripper opens a
+      // block there and runs to the next `*/`, deleting 144 and 69 non-blank
+      // lines of route code from this scan's own input — half of `grid.ts`.
+      // Measured: a `fetch(config.mlUrl)` planted at `grid.ts:405` was NOT caught
+      // in that order, and the identical one at line 268 was.
+      // `theStripperKeepsTheCode` below is the standing control.
+      .replace(/^[ \t]*\/\/.*$/gm, "")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+  );
 }
 
 const ROUTE = code("api/grid.ts");
 const READ = code("contract/grid-now.ts");
 
 describe("grid/now · the boundary, structurally", () => {
+  it("strips line comments first, so the scan is not truncated", () => {
+    // The control for the ordering above, and it is a live one rather than a
+    // tautology: `api/grid.ts` is a file on which the two orders genuinely
+    // disagree, which the first assertion states. If it ever stops disagreeing
+    // the control has gone quiet and says so, rather than passing for the
+    // wrong reason.
+    const raw = readFileSync(join(SOURCE, "api/grid.ts"), "utf8");
+    const lineFirst = raw
+      .replace(/^[ \t]*\/\/.*$/gm, "")
+      .replace(/\/\*[\s\S]*?\*\//g, "");
+    const blockFirst = raw
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^[ \t]*\/\/.*$/gm, "");
+    const nonBlank = (text: string): number =>
+      text.split("\n").filter((line) => line.trim() !== "").length;
+
+    expect(nonBlank(lineFirst)).toBeGreaterThan(nonBlank(blockFirst));
+    expect(nonBlank(ROUTE)).toBe(nonBlank(lineFirst));
+  });
+
   it("reaches the modelling service nowhere", () => {
     for (const source of [ROUTE, READ]) {
       expect(source).not.toContain("ml-proxy");

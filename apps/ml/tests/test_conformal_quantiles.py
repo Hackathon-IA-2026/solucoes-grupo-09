@@ -976,6 +976,79 @@ def test_each_coverage_publishes_the_rows_on_which_its_edge_is_a_statement() -> 
     assert report.nominal_claim is False
 
 
+def _report_fields(**overrides: object) -> dict[str, object]:
+    """A well-formed ``CoverageReport`` keyword set, for mutating one field of."""
+    fields: dict[str, object] = {
+        "fold_id": "synthetic-invariant-probe",
+        "rows": 400,
+        "coverage_p10": 0.90,
+        "coverage_p90": 0.90,
+        "upper_correction_realised": 1.0,
+        "lower_stated_rows": 400,
+        "upper_stated_rows": 400,
+        "coverage_p10_where_stated": 0.90,
+        "coverage_p90_where_stated": 0.90,
+        "p50_unbiasedness": 0.50,
+        "crossing_rate": 0.0,
+        "by_subsystem": (),
+        "by_local_hour": (),
+    }
+    fields.update(overrides)
+    return fields
+
+
+def test_the_report_refuses_a_coverage_figure_its_denominator_contradicts() -> None:
+    """``__post_init__``'s refusals, exercised — they were not.
+
+    This class is the fix for the defect forecaster 24 found: ``coverage_p10 =
+    1.0`` over **zero** rows that state a lower bound, 79 evaluations of ``y >=
+    0``, published for months as evidence the floor was perfect. The invariant
+    that makes that unrepresentable is right here in ``__post_init__``, and
+    until now no test constructed a report that violated it. Measured: deleting
+    either refusal left all 1583 tests in this suite passing, which is the same
+    shape of defect one level up — a guard nobody had watched fail.
+
+    Both directions, because a one-sided check is how the original came back:
+    a number beside a zero denominator is the vacuous ``1.0``, and ``None``
+    beside a positive one is a figure a caller declined to count.
+    """
+    # The original defect, in the form it was published in.
+    with pytest.raises(ConformalError, match="coverage_p10_where_stated"):
+        CoverageReport(
+            **_report_fields(lower_stated_rows=0, coverage_p10_where_stated=1.0)  # type: ignore[arg-type]
+        )
+
+    # Its mirror on the other tail.
+    with pytest.raises(ConformalError, match="coverage_p90_where_stated"):
+        CoverageReport(
+            **_report_fields(upper_stated_rows=0, coverage_p90_where_stated=1.0)  # type: ignore[arg-type]
+        )
+
+    # And the opposite omission: a tail that does state a bound, with no figure.
+    with pytest.raises(ConformalError, match="coverage_p10_where_stated"):
+        CoverageReport(**_report_fields(coverage_p10_where_stated=None))  # type: ignore[arg-type]
+
+    # Stated rows cannot exceed the population they are a subset of.
+    with pytest.raises(ConformalError, match="the stated rows are a subset"):
+        CoverageReport(**_report_fields(lower_stated_rows=401))  # type: ignore[arg-type]
+
+    # And coverage over no curtailed hour is not a measurement at all.
+    with pytest.raises(ConformalError, match="is not a"):
+        CoverageReport(
+            **_report_fields(
+                rows=0,
+                lower_stated_rows=0,
+                upper_stated_rows=0,
+                coverage_p10_where_stated=None,
+                coverage_p90_where_stated=None,
+            )  # type: ignore[arg-type]
+        )
+
+    # The control for the controls: the unmutated keyword set is admissible, so
+    # none of the five above passes because the fixture was malformed.
+    assert CoverageReport(**_report_fields()).rows == 400  # type: ignore[arg-type]
+
+
 def test_a_short_marginal_upper_coverage_decomposes_into_reach_times_width() -> None:
     """Where the upper edge is a bound at all, it is a *nominal* bound.
 

@@ -238,9 +238,13 @@ const REPO = join(import.meta.dir, "..", "..", "..");
 
 /** Source with block and line comments removed — prose may not satisfy a rule. */
 function code(absolute: string): string {
-  return readFileSync(absolute, "utf8")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/^[ \t]*\/\/.*$/gm, "");
+  return (
+    readFileSync(absolute, "utf8")
+      // Line comments FIRST, then block comments — see the control in
+      // "has route modules to scan, and reads each of them whole" below.
+      .replace(/^[ \t]*\/\/.*$/gm, "")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+  );
 }
 
 /**
@@ -424,6 +428,44 @@ describe("solver surface · one request, and no job noun on either route", () =>
 describe("solver surface · the boundary, and who may cross it", () => {
   const SOLVER_CALLERS = ["optimize.ts", "replay.ts"];
   const BOUNDARY_CROSSERS = ["meta.ts", "model-card.ts", "optimize.ts", "replay.ts"];
+
+  it("has route modules to scan, and reads each of them whole", () => {
+    // Two ways this box passed while governing less than it claimed.
+    //
+    // The set: `ROUTE_MODULES` is a `readdirSync`, and every assertion below is
+    // a `filter` compared against an exact list or a `not.toContain` loop. An
+    // empty listing satisfies the loop, and the two `toEqual`s catch it only
+    // because their expected lists happen to be non-empty — luck, not a guard.
+    // It is asserted here instead.
+    //
+    // The reading: `code()` used to strip block comments before line comments.
+    // `api/grid.ts:280` and `api/plants.ts:261` are `//` comments containing a
+    // `/*`, so that order opened a block and ran to the next `*/`, deleting
+    // 144 and 69 non-blank lines of route code from this scan's own input.
+    // Measured: a `fetch(config.mlUrl)` planted at `grid.ts:405` left this box
+    // entirely green, while the identical one at line 268 failed three
+    // assertions across two files.
+    expect(ROUTE_MODULES.length).toBeGreaterThan(5);
+    for (const name of [
+      ...SOLVER_CALLERS,
+      ...BOUNDARY_CROSSERS,
+      "grid.ts",
+      "plants.ts",
+    ]) {
+      expect(ROUTE_MODULES).toContain(name);
+    }
+
+    const nonBlank = (text: string): number =>
+      text.split("\n").filter((line) => line.trim() !== "").length;
+    for (const name of ["grid.ts", "plants.ts"]) {
+      const blockFirst = readFileSync(join(SOURCE, "api", name), "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^[ \t]*\/\/.*$/gm, "");
+      // A live control: these two are modules on which the two orders really do
+      // disagree, so a reversal cannot pass here for want of a trigger.
+      expect(nonBlank(routeSource(name))).toBeGreaterThan(nonBlank(blockFirst));
+    }
+  });
 
   it("only the optimizer and the replay may reach the solver", () => {
     const callers = ROUTE_MODULES.filter((name) => routeSource(name).includes("postMl"));

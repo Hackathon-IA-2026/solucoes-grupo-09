@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 
 /**
  * Quantiles do not add, and no web code path may add them.
@@ -171,6 +171,40 @@ describe("no web code path sums two bands componentwise", () => {
       summedBands(relative(ROOT, path), readFileSync(path, "utf8")),
     );
     expect(hits.map((h) => `${h.file}:${h.line} — ${h.text}`)).toEqual([]);
+  });
+
+  it("actually walked the app, so the empty result above means something", () => {
+    // The assertion above is `toEqual([])` over a walk, which is the shape that
+    // reads green when the walk finds nothing. Measured: narrowing the
+    // extension filter to a suffix no file carries left both tests in this file
+    // passing — the guard would have reported the whole app clean at the moment
+    // it stopped reading any of it. Narrowing `SCOPE` to one subdirectory did
+    // the same.
+    //
+    // Named surfaces rather than a bare count, because a walk narrowing to a
+    // subtree is likelier than a walk vanishing: the two screens below are the
+    // ones actually caught summing bands (`docs/specs/replay.md` built a day
+    // band from 24 hourly quantiles; `mitigate.tsx` printed a difference of two
+    // medians), and `components/` is where the arithmetic is most tempting.
+    const files = sourceFiles(join(ROOT, SCOPE)).map((path) => relative(ROOT, path));
+    expect(files.length).toBeGreaterThan(20);
+    for (const surface of [
+      join("apps", "web", "src", "app", "app", "replay.tsx"),
+      join("apps", "web", "src", "app", "app", "mitigate.tsx"),
+    ]) {
+      expect(files).toContain(surface);
+    }
+    expect(
+      files.some((path) =>
+        path.startsWith(join("apps", "web", "src", "components") + sep),
+      ),
+    ).toBe(true);
+    // And the members the rule is keyed on really do occur in what was read, or
+    // the scan is looking for a vocabulary this app has stopped using.
+    const scanned = files
+      .map((path) => readFileSync(join(ROOT, path), "utf8"))
+      .join("\n");
+    expect(QUANTILE.test(scanned)).toBe(true);
   });
 
   it("recognises the shapes it exists to catch", () => {
