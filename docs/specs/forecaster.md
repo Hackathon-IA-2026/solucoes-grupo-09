@@ -1380,6 +1380,32 @@ why it is a recorded decision rather than an absent file.
 there deliberately: it is not an absence, so it never reaches a
 `MODEL_UNAVAILABLE` envelope.
 
+**Serviceability is a fifth fact, not a fifth state.** `promoted` says what the
+promotion log decided; it does not say the artifact will load. Check 3 marks an
+incumbent's card invalid when the live `feature_rows` stops producing the hash
+it was fitted against, and the loader then refuses it — so a lane can be
+`promoted` and serve nothing, which is exactly what
+`0039_the_gate_over_a_backfill.sql` did to both serving lanes by repairing the
+feature gate's `as_of` *inside* `feature_rows` and moving `feature_hash` on
+purpose. The states stay four, because a migration revokes no log line and
+`LANE_STATES` is a shared vocabulary; the debt is reported beside them, by
+`artifacts.LaneView` and on both `/v1/meta` endpoints, as `usable`,
+`retrain_owed`, `contract_fault`, `card_error` and one `unusable_reason`
+sentence.
+
+`retrain_owed` is true in **one** situation — the promoted artifact is bound to
+a departed contract — and never for the other ways a lane can be unserviceable.
+Nothing trained, nothing promoted and a damaged volume are answered by training,
+by waiting and by a repair, and calling those a retrain debt would make the
+phrase mean "not serving". A promoted card that will not parse is therefore
+`card_error` and not `contract_fault`: it makes the lane unusable, but the
+volume cannot say from there whether the contract also moved, and inventing the
+answer either way is the guess the promotion log exists to prevent. In particular a run of `freshness_and_coverage`
+refusals is the gate working (see seam 11's paragraph on check 4's floor), so
+`unusable_reason` says so in as many words during the two thirds of a quarter
+when it is expected: a sentence that read as an alarm for eight weeks out of
+twelve would train an operator to ignore the one that is not.
+
 **Seam 11 — live, scheduled.** The weekly retrain runs end to end against real
 Postgres, produces a card, reaches a decision, and appends exactly one line.
 Wall-clock and peak memory are recorded so a retrain that starts to outgrow the

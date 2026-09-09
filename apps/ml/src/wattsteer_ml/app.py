@@ -221,6 +221,27 @@ class LaneReport(BaseModel):
     #: to keep off the wire.
     newest: str | None
     fault: str | None
+    #: Whether this lane can answer a forecast right now — promoted *and*
+    #: loadable. `promoted` alone was not enough: an artifact marked invalid by
+    #: the gate's contract check is refused by the loader, so a lane reporting
+    #: `state: promoted` was reporting something nothing may run.
+    usable: bool
+    #: True when the artifact this lane is promoted to serve is bound to a
+    #: `feature_hash` the live `feature_rows` no longer produces. `0039` put
+    #: both serving lanes here at once, and this is the field that says so
+    #: without an operator having to trigger a promotion attempt to find out.
+    retrain_owed: bool
+    #: The gate's own prose for why the promoted artifact will not load.
+    contract_fault: str | None
+    #: Why the promoted artifact's card could not be read, when it could not.
+    #: Apart from `contract_fault` because the repair is different: this one is
+    #: the volume's, and while it is set nothing can say whether a retrain is
+    #: also owed.
+    card_error: str | None
+    #: One sentence saying why this lane has no usable artifact — `None` when it
+    #: has one. It distinguishes a retrain debt from the expected weeks of
+    #: `freshness_and_coverage` refusals, which are the gate working.
+    unusable_reason: str | None
 
 
 class ArtifactState(BaseModel):
@@ -314,6 +335,11 @@ def meta() -> Meta:
                     promoted=view.promoted,
                     newest=view.newest,
                     fault=view.fault,
+                    usable=view.usable,
+                    retrain_owed=view.retrain_owed,
+                    contract_fault=view.contract_fault,
+                    card_error=view.card_error,
+                    unusable_reason=view.unusable_reason,
                 )
                 for view in store.lanes
             ],

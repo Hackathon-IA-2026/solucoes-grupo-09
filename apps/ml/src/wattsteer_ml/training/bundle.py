@@ -79,6 +79,18 @@ from lightgbm import Booster
 
 from wattsteer_ml.admissibility import lane_vector
 from wattsteer_ml.artifacts import ARTIFACT_SUFFIX, CARD_SUFFIX
+
+# Re-exported explicitly (`X as X`, which is what `no_implicit_reexport` asks
+# for) rather than merely imported: the card's Decision group, the key inside it
+# that marks an artifact invalid, and the reader of that key live in
+# `wattsteer_ml.artifacts` — the module that owns the volume and the card's
+# filename, and the one module the gate, this loader and `/v1/meta` can all
+# import without a cycle. They are re-exported here because every caller in the
+# repository already spells them in this namespace, and moving the definition
+# should not move the import.
+from wattsteer_ml.artifacts import CONTRACT_FAULT_KEY as CONTRACT_FAULT_KEY
+from wattsteer_ml.artifacts import GATE_BLOCK_KEY as GATE_BLOCK_KEY
+from wattsteer_ml.artifacts import contract_fault as contract_fault
 from wattsteer_ml.constants import SUBSYSTEM_CODES, Subsystem
 from wattsteer_ml.evaluation import Fold, FoldBlocks
 from wattsteer_ml.lanes import Lane, format_instant, is_artifact_id
@@ -90,18 +102,6 @@ from wattsteer_ml.training.hyperparameters import ESTIMATOR_FAMILY, ModelConfig
 
 #: Hours in the local target day. `μ_sub` is 4 subsystems × this many hours.
 HOURS_PER_DAY = 24
-
-#: The card group the hot-swap gate writes its decision into
-#: (`docs/specs/forecaster.md`, the card's Decision group). Spelt here rather
-#: than in :mod:`wattsteer_ml.evaluation.gate` because :func:`load_artifact` has
-#: to read it, and the gate reads this module: one name, in the module both
-#: sides can import without a cycle.
-GATE_BLOCK_KEY = "gate"
-
-#: The key inside :data:`GATE_BLOCK_KEY` that marks an artifact as invalid
-#: because the feature contract moved out from under it. Written by the gate's
-#: third check, read by :func:`load_artifact`.
-CONTRACT_FAULT_KEY = "contract_fault"
 
 #: The six estimators, in the order the card lists them. Named here so the
 #: loader's completeness check and the card's inventory cannot drift apart.
@@ -555,27 +555,6 @@ def _atomically(path: Path, write: Callable[[Path], Any]) -> None:
     except BaseException:
         temporary.unlink(missing_ok=True)
         raise
-
-
-def contract_fault(card: Mapping[str, Any]) -> str | None:
-    """Why this artifact was marked invalid, or ``None`` when it was not.
-
-    Set by the hot-swap gate's third check when the live ``feature_rows``
-    definition stops producing the hash the artifact was fitted against. The
-    incumbent is then invalid rather than stale — every number it would serve was
-    measured in a feature space the database no longer produces — and
-    `docs/specs/forecaster.md` requires that it not be "left quietly serving a
-    changed contract". The promotion log cannot say so: it holds ``promote`` and
-    ``refuse``, and neither revokes an earlier promotion, while a rollback needs
-    an earlier artifact to name and after a contract change there is none. So the
-    mark lives on the card, where :func:`load_artifact` refuses it — nothing is
-    deleted and no log line is rewritten.
-    """
-    block = card.get(GATE_BLOCK_KEY)
-    if not isinstance(block, dict):
-        return None
-    fault = block.get(CONTRACT_FAULT_KEY)
-    return fault if isinstance(fault, str) and fault.strip() else None
 
 
 def load_artifact(*, root: Path, lane: Lane, artifact_id: str) -> LoadedArtifact:

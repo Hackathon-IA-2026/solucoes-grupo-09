@@ -43,6 +43,7 @@ from wattsteer_ml.evaluation.gate import (
     Comparator,
     ContractDriftError,
     GateCandidate,
+    GateDecision,
     GateError,
     GateInputError,
     Guardrail,
@@ -341,7 +342,7 @@ def run(
     live: str = LIVE_HASH,
     smoke: ServingSmoke | None = None,
     draws: int = 200,
-) -> Any:
+) -> GateDecision:
     return decide(
         candidate_,
         comparator,

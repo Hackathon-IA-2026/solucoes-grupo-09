@@ -43,7 +43,10 @@ import { applyCachePolicy, CACHE_POLICIES } from "./plugins/cache-policy.js";
  *   do not look alike" is a requirement and a re-wording is where two
  *   vocabularies start. The volume is reported *beside* them for the same
  *   reason: an unmounted volume is a fact about the mount, not a lane with
- *   nothing in it.
+ *   nothing in it. **`usable` and `retrain_owed` travel with them**: a lane can
+ *   be `promoted` and still serve nothing, when the artifact the promotion log
+ *   names has been marked invalid against a feature contract that moved under
+ *   it, and that is the one unserviceable state a human has to act on.
  * - **The gate table as data.** The Overview's "tomorrow's view publishes at
  *   19:00 BRT" sentence is built from `gates` and `next_publication_at`, so no
  *   screen hardcodes a publication time and no screen keeps saying one after
@@ -117,6 +120,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** A field the modelling service reports as prose, or nothing at all. */
+function prose(raw: Record<string, unknown>, key: string): string | undefined {
+  const value = raw[key];
+  return typeof value === "string" && value !== "" ? value : undefined;
+}
+
 /**
  * One lane, translated into this endpoint's vocabulary.
  *
@@ -127,6 +136,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * A state this gateway does not recognise becomes `unresolvable` carrying the
  * value it saw, never one of the three. A newer modelling service that grows a
  * fourth state must not have it silently rounded down to "nothing trained".
+ *
+ * **`usable` and `retrain_owed` are forwarded, not derived.** `state:
+ * "promoted"` does not mean the lane can answer: an artifact the hot-swap
+ * gate's contract check marked invalid is refused by the loader, which is the
+ * state `0039_the_gate_over_a_backfill.sql` put both serving lanes into by
+ * moving `feature_hash` on purpose. Only the modelling service can read the
+ * card that says so, so this endpoint carries its answer rather than inferring
+ * one from the state — and **omits the fields when they are absent**, because
+ * an older modelling service that cannot say is not one reporting `false`.
  */
 function toLane(raw: unknown): MetaLane | null {
   if (!isRecord(raw) || typeof raw.lane !== "string") {
@@ -135,16 +153,26 @@ function toLane(raw: unknown): MetaLane | null {
   const reported = typeof raw.state === "string" ? raw.state : "";
   const known = LANE_STATES.has(reported);
   const fault =
-    typeof raw.fault === "string" && raw.fault !== ""
-      ? raw.fault
-      : known
-        ? undefined
-        : `The modelling service reported an unrecognised lane state "${reported}"`;
+    prose(raw, "fault") ??
+    (known
+      ? undefined
+      : `The modelling service reported an unrecognised lane state "${reported}"`);
+  const usable = typeof raw.usable === "boolean" ? raw.usable : undefined;
+  const retrainOwed =
+    typeof raw.retrain_owed === "boolean" ? raw.retrain_owed : undefined;
+  const contractFault = prose(raw, "contract_fault");
+  const cardError = prose(raw, "card_error");
+  const unusableReason = prose(raw, "unusable_reason");
   return {
     lane: raw.lane,
     state: known ? (reported as MetaLane["state"]) : "unresolvable",
     artifactId: typeof raw.promoted === "string" ? raw.promoted : null,
     ...(fault === undefined ? {} : { fault }),
+    ...(usable === undefined ? {} : { usable }),
+    ...(retrainOwed === undefined ? {} : { retrainOwed }),
+    ...(contractFault === undefined ? {} : { contractFault }),
+    ...(cardError === undefined ? {} : { cardError }),
+    ...(unusableReason === undefined ? {} : { unusableReason }),
   };
 }
 
