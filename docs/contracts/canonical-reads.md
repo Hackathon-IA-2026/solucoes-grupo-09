@@ -179,9 +179,53 @@ Each read is one view, named from its manifest name by one rule —
 `curtailment-by-plant` → `canonical_curtailment_by_plant`. The rule is applied
 in both languages (`view_name` in Python, the same transform asserted in
 `apps/api/test/contract.test.ts`) rather than tabulated, so a renamed view cannot
-leave a stale entry behind that still parses. There is a ninth view,
+leave a stale entry behind that still parses. There is one more view,
 `canonical_read_go_live`, which is not a read: it is the go-live instant per
 read, and it is the only input the fidelity rule takes from the database.
+
+### `canonical_read_go_live` is derived from the catalogue
+
+It was a `union all` with one arm per read, kept in step by hand — and it fell
+out of step. `canonical_plant_registry` reads `plant_geo` under
+`canonical_as_of()`, and `plant_geo` was in no arm, so the one source standing
+behind every weather feature (through `canonical_capacity_weight`) had no
+go-live at all. Data-platform ticket 20 and migration `0040` replaced the list
+with a rule: `canonical_read_source()` walks each `canonical_*` view's
+dependencies through `pg_depend`, transitively through the views it reads, down
+to the base tables carrying an `ingested_at` column, and the view is one
+aggregate over that.
+
+What follows from the rule, and did not from the list:
+
+- **A read added tomorrow has a go-live row.** Nothing to remember. The pin is
+  `apps/api/test/database-read-go-live.test.ts`, which creates a canonical view
+  over a new table inside a rolled-back transaction and asserts the row appears
+  — and which derives the same closure a second way, through
+  `information_schema.view_table_usage`, so a mistake in the walk cannot be
+  repeated identically by its own test.
+- **A read with two vintaged sources has one go-live, the later of them**, or
+  none at all if either source has ingested nothing. That is the weakest-link
+  rule above, applied where reads compose rather than only where answers do.
+  `plant-registry` is the first such read: `generating_unit` and `plant_geo`.
+- **A read with no ingestion axis behind it has no row**, rather than a NULL
+  one. `canonical_solar_centroid` reads the frozen centroid geometry and
+  `canonical_subsystem_state` reads `plant`; neither carries an `ingested_at`,
+  and NULL here means *this source has ingested nothing*, which of a table with
+  no ingestion axis is a different and false statement.
+
+Every value the nine hand-written rows carried is unchanged — the eight
+single-source reads by construction, and `installed-capacity` because
+`canonical_installed_capacity`'s other table, `plant`, has no `ingested_at`.
+Seven rows are new: `plant-registry`, `capacity-weight`,
+`diagnosis-attribution`, `diagnosis-driver`, `forecast-hour`, `forecast-day`,
+`forecast-national-day`. Reads not published under `/v1/canonical` appear here,
+which was already true of `programmed-load`: a go-live row a feature can read is
+strictly better than a feature reaching into a fact table for a
+`min(ingested_at)`.
+
+Consumers ask by read name and are unaffected. `canonical_read_go_live` does not
+appear in its own output, and not because it is excluded by name: its body reads
+two functions and no relation, so the catalogue records no source behind it.
 
 A view cannot take an argument, so the axes travel as session settings and the
 view reads them back through the functions in `drizzle/0012_canonical_read_axes.sql`:

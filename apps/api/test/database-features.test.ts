@@ -1687,28 +1687,77 @@ suite("the gate, end to end (real Postgres)", () => {
   });
 
   /**
-   * The seven canonical reads `feature_rows` stamps, in the order its
-   * weakest-link `CASE` names them.
+   * The vintaged sources a feature row reads — **asked, not listed.**
    *
-   * `canonical_read_go_live` publishes **nine**, and the other two are absent
-   * here because no feature block reads them. `curtailment-by-plant` feeds
-   * `canonical_curtailment_by_plant`, which no feature composes; the labels
-   * come from the reporting-entity read instead. `conjunto-membership` feeds
-   * `canonical_conjunto_membership`, which no feature composes either — the
-   * capacity weights reach the registry through `canonical_plant_registry`,
-   * and that view reads `generating_unit` and `plant_geo`, not conjuntos.
-   * Which is also where the residual this ticket measured and left standing
-   * lives: see the third test below.
+   * `feature_rows` named seven canonical reads one at a time until
+   * data-platform 20, and the list was one short: `canonical_plant_registry`
+   * reads `plant_geo` under `canonical_as_of()` and stands behind every weather
+   * feature through `canonical_capacity_weight`, and `plant_geo` was in no row
+   * of `canonical_read_go_live` at all. So the stamp is now the weakest link
+   * over `feature_source_go_live()`, and this suite reads the same function
+   * rather than restating the list it replaced.
+   *
+   * Two reads are still absent from it, and that absence is the narrowing:
+   * `curtailment-by-plant` feeds `canonical_curtailment_by_plant`, which no
+   * feature composes — the labels come from the reporting-entity read — and
+   * `conjunto-membership` feeds `canonical_conjunto_membership`, which no
+   * feature composes either. The last test in this group measures that, out of
+   * a real build's scan counters, rather than trusting it.
    */
-  const STAMPED_READS = [
-    "weather-forecast",
-    "curtailment-by-reporting-entity",
-    "installed-capacity",
-    "system-context",
-    "system-exchange",
-    "programmed-load",
-    "day-ahead-balance",
-  ] as const;
+  const featureSources = async (
+    scope: Database = db,
+  ): Promise<Map<string, string | null>> =>
+    new Map(
+      [
+        ...(await scope.execute<{ source_table: string; go_live_at: string | null }>(
+          sql`select source_table, go_live_at::text from feature_source_go_live()`,
+        )),
+      ].map((row) => [row.source_table, row.go_live_at]),
+    );
+
+  /**
+   * The vintaged tables a piece of SQL actually scans, from Postgres' own
+   * per-transaction scan counters.
+   *
+   * The derivation `feature_source_go_live()` performs is a scan of the feature
+   * functions' source text, because a plpgsql body records no catalogue
+   * dependency on the views it reads. A missed source would be the unsafe
+   * direction — a row claiming `point_in_time` against a source that was not
+   * live — so it is measured here instead of reasoned about: whatever the build
+   * touches, the counters know.
+   */
+  const vintagedTablesScannedBy = async (
+    scope: Database,
+    statement: ReturnType<typeof sql>,
+  ): Promise<string[]> => {
+    // A **delta**, because the counters are pending session statistics and a
+    // rolled-back transaction on the same pooled connection leaves its own
+    // scans in them. Measured as a difference, the only scans left are the
+    // statement's own.
+    const counters = async (): Promise<Map<string, number>> =>
+      new Map(
+        [
+          ...(await scope.execute<{ relname: string; scans: number }>(sql`
+            select c.relname, pg_stat_get_xact_numscans(c.oid)::int as scans
+            from pg_class c
+            where c.relkind = 'r'
+              and c.relnamespace = 'public'::regnamespace
+              and exists (
+                select 1 from pg_attribute a
+                where a.attrelid = c.oid and a.attname = 'ingested_at'
+                  and a.attnum > 0 and not a.attisdropped
+              )
+          `)),
+        ].map((row) => [row.relname, row.scans]),
+      );
+    const before = await counters();
+    await scope.execute(statement);
+    const after = await counters();
+    return [...after.entries()]
+      .filter(([table, scans]) => scans > (before.get(table) ?? 0))
+      .map(([table]) => table)
+      .sort();
+  };
 
   it("gates every hour of the day it gates from before it, at both profiles", async () => {
     // Ticket 16's load-bearing lemma, and the only thing about it that could
@@ -1766,19 +1815,13 @@ suite("the gate, end to end (real Postgres)", () => {
     // rules are the same predicate written twice.
     //
     // So this asserts the *shipped* stamp against the per-source predicate,
-    // computed from `canonical_read_go_live` rather than restated, over the
+    // computed from `feature_source_go_live()` rather than restated, over the
     // fixture's three target dates — which straddle the horizon, so both
     // answers occur.
-    const goLive = new Map(
-      [
-        ...(await db.execute<{ read: string; go_live_at: string | null }>(
-          sql`select read, go_live_at::text from canonical_read_go_live`,
-        )),
-      ].map((row) => [row.read, row.go_live_at]),
-    );
-    for (const read of STAMPED_READS) {
-      expect({ read, present: goLive.has(read) }).toEqual({ read, present: true });
-    }
+    const goLive = await featureSources();
+    // Non-vacuous, and the one source data-platform 20 added: the predicate
+    // below is over eight tables, not the seven `feature_rows` used to name.
+    expect([...goLive.keys()].sort()).toContain("plant_geo");
 
     const seen = new Set<boolean>();
     for (const targetDate of [BEFORE_GO_LIVE, TARGET, AFTER_GO_LIVE]) {
@@ -1789,12 +1832,11 @@ suite("the gate, end to end (real Postgres)", () => {
       ];
       const gateAt = new Date(gate?.gate as string).getTime();
       // The floor a source can honestly carry: it was live at the gate, and it
-      // has a go-live at all. A read that has ingested nothing keeps the
+      // has a go-live at all. A source that has ingested nothing keeps the
       // `revision_optimistic` answer `feature_vintage_fidelity` already gives.
-      const perSourceFloor = STAMPED_READS.every((read) => {
-        const at = goLive.get(read);
-        return at !== null && at !== undefined && new Date(at).getTime() <= gateAt;
-      });
+      const perSourceFloor = [...goLive.values()].every(
+        (at) => at !== null && at !== undefined && new Date(at).getTime() <= gateAt,
+      );
       seen.add(perSourceFloor);
 
       const rows = await rowsForDay(targetDate);
@@ -1810,27 +1852,25 @@ suite("the gate, end to end (real Postgres)", () => {
     expect([...seen].sort()).toEqual([false, true]);
   });
 
-  it("carries the horizon over reads no feature block reads, and stays strict there", async () => {
-    // The one band where the two rules genuinely part company, measured and
-    // left standing on purpose.
+  it("no longer carries the horizon over reads no feature block reads", async () => {
+    // The band where the two rules parted company, closed by data-platform 20.
     //
-    // `feature_ingestion_history_from()` is the latest go-live across all
-    // **nine** rows of `canonical_read_go_live`, and two of them —
+    // `feature_ingestion_history_from()` was the latest go-live across all
+    // **nine** rows of `canonical_read_go_live`, two of which —
     // `curtailment-by-plant` and `conjunto-membership` — are read by no feature
-    // block. Onboard one of those last and every target date between the last
-    // stamped read's go-live and that one is stamped `revision_optimistic`
-    // although every source the row reads was live at its gate: 11,904 rows
-    // over 62 target dates in the measurement's scenario C.
+    // block. Onboarding one of *those* last stamped `revision_optimistic` on
+    // every target date in between although every source the row reads was live
+    // at its gate: feature-engineering 16 measured 11,904 rows over 62 target
+    // dates in its scenario C, and left the wide horizon standing anyway,
+    // because it was the only cover for `plant_geo` — which had no go-live row
+    // at all.
     //
-    // It is not narrowed to the seven, and the reason is that the horizon is
-    // also the only cover for the reads that have **no** go-live row at all.
-    // `canonical_plant_registry` — which stands behind every weather feature
-    // through `canonical_capacity_weight` — reads `plant_geo` under
-    // `canonical_as_of()`, and `plant_geo` is in no row of that view. Narrowing
-    // the horizon to the seven stamped reads would make the stamp claim more
-    // than the data supports. Failing closed is `0012`'s posture, and this
-    // pins it rather than arguing it.
+    // With the go-live set derived, the horizon is over the sources a feature
+    // row reads. This is the same fixture with the same late
+    // `conjunto-membership` go-live, asserting the opposite answer: the row is
+    // point-in-time, because nothing it reads was ingested after its gate.
     let stamped: string | undefined;
+    let horizonMoved: boolean | undefined;
     try {
       await db.transaction(async (tx) => {
         const scoped = tx as unknown as Database;
@@ -1847,6 +1887,15 @@ suite("the gate, end to end (real Postgres)", () => {
                   '2026-01-01T00:00:00.000Z', 'row', '2027-01-01T00:00:00.000Z', 'd',
                   ${curtailmentVersionId}::uuid)
         `);
+        // Non-vacuous in the way that matters: that row really is a later
+        // go-live than the horizon, so the nine-read rule would have moved.
+        const [reach] = [
+          ...(await scoped.execute<{ moved: boolean }>(sql`
+            select (select max(go_live_at) from canonical_read_go_live)
+                     > feature_ingestion_history_from() as moved
+          `)),
+        ];
+        horizonMoved = reach?.moved;
         const rows = await readFeatureRows(scoped, {
           targetFrom: AFTER_GO_LIVE,
           targetTo: AFTER_GO_LIVE,
@@ -1860,14 +1909,114 @@ suite("the gate, end to end (real Postgres)", () => {
         throw error;
       }
     }
-    // Without that row the same day is `point_in_time` — the test above says so.
+    expect(horizonMoved).toBe(true);
+    // `revision_optimistic` before `0040`, on this same fixture.
+    expect(stamped).toBe("point_in_time");
+  });
+
+  it("counts plant_geo's go-live in the fidelity stamp, the source that had no row", async () => {
+    // The ticket's own finding, as the property it should always have been.
+    //
+    // `canonical_plant_registry` reads `plant_geo` under `canonical_as_of()`
+    // and `canonical_capacity_weight` reads the registry, so the location cut
+    // stands behind **every weather feature** — the weights are read from it.
+    // Before `0040` it was in no row of `canonical_read_go_live`, so moving it
+    // past the gate changed the weather and left the stamp saying
+    // `point_in_time`. Everything else is held still, exactly as the
+    // `generating_unit` test above holds everything but the registry still.
+    let stamped: string | undefined;
+    let derived: string | null | undefined;
+    try {
+      await db.transaction(async (tx) => {
+        const scoped = tx as unknown as Database;
+        await scoped.execute(
+          sql`update plant_geo set ingested_at = '2026-09-15T00:00:00.000Z'`,
+        );
+        derived = (await featureSources(scoped)).get("plant_geo");
+        const rows = await readFeatureRows(scoped, {
+          targetFrom: AFTER_GO_LIVE,
+          targetTo: AFTER_GO_LIVE,
+          ...query,
+        });
+        stamped = rows[0]?.vintage_fidelity;
+        tx.rollback();
+      });
+    } catch (error) {
+      if (!(error instanceof Error && /rollback/i.test(error.message))) {
+        throw error;
+      }
+    }
+    expect(new Date(derived as string).toISOString()).toBe("2026-09-15T00:00:00.000Z");
     expect(stamped).toBe("revision_optimistic");
+  });
+
+  it("reads no vintaged table it has no go-live for, measured on the scan counters", async () => {
+    // The guard on the one derivation the catalogue cannot perform, and the
+    // acceptance criterion as a measurement: **whatever the build reads, it has
+    // a go-live for.**
+    //
+    // `feature_source_go_live()` finds the feature layer's sources by matching
+    // canonical view names against the `feature_%` functions' own source,
+    // because a plpgsql body records no dependency on the views it reads. A
+    // false positive there is safe — a wider set is a later horizon and an
+    // earlier weakest link. A miss is not, so it is not argued: Postgres'
+    // per-transaction scan counters say which tables were actually touched.
+    //
+    // The whole build is measured, and the two reads the narrowed horizon
+    // dropped are asserted *absent* from the scan — which is what makes
+    // dropping them sound rather than convenient.
+    let touched: string[] = [];
+    let derived: string[] = [];
+    let blockTouched: string[] = [];
+    try {
+      await db.transaction(async (tx) => {
+        const scoped = tx as unknown as Database;
+        derived = [...(await featureSources(scoped)).keys()].sort();
+        blockTouched = await vintagedTablesScannedBy(
+          scoped,
+          sql`select count(*) from feature_weather_block(${TARGET}::date, 'gate_late')`,
+        );
+        tx.rollback();
+      });
+    } catch (error) {
+      if (!(error instanceof Error && /rollback/i.test(error.message))) {
+        throw error;
+      }
+    }
+    try {
+      await db.transaction(async (tx) => {
+        const scoped = tx as unknown as Database;
+        touched = await vintagedTablesScannedBy(
+          scoped,
+          sql`select count(*) from feature_rows(${TARGET}::date, ${TARGET}::date,
+                'gate_late', 'dessem_augmented_v1', 1.0)`,
+        );
+        tx.rollback();
+      });
+    } catch (error) {
+      if (!(error instanceof Error && /rollback/i.test(error.message))) {
+        throw error;
+      }
+    }
+    // Every vintaged table the build scanned has a go-live in the derived set.
+    expect(touched.filter((table) => !derived.includes(table))).toEqual([]);
+    expect(touched.length).toBeGreaterThan(0);
+    // The class-`W` block on its own reaches the registry's location cut
+    // through the capacity weights, and that is the path that had no go-live
+    // row. Measured, rather than read off the SQL.
+    expect(blockTouched).toContain("plant_geo");
+    expect(blockTouched.filter((table) => !derived.includes(table))).toEqual([]);
+    // And the two reads the horizon stopped carrying really are unread: a build
+    // that scanned either of them would make the narrowing unsound.
+    expect(touched).not.toContain("plant_detail_hour");
+    expect(touched).not.toContain("conjunto_membership");
   });
 
   it("leaves nothing behind, memo included, when it hands the axes back", async () => {
     // `feature_ingestion_history_from()` memoises its answer in a
-    // transaction-local setting, because the view behind it is nine unindexed
-    // `min()` scans and it is asked once per block per target date. The memo is
+    // transaction-local setting, because the set behind it is a catalogue walk
+    // and an unindexed `min()` per source, and it is asked once per block per
+    // target date. The memo is
     // not a read axis and no view consults it — but "a feature build leaves
     // nothing behind" is a better sentence without an exception in it, so
     // `feature_release_axes` clears it too.

@@ -594,41 +594,66 @@ export const canonicalConjuntoMembership = pgView("canonical_conjunto_membership
  * This is the one view without an axis, and therefore the one a caller may
  * query without setting anything. It exists so that the fidelity rule has the
  * same input in both languages while remaining a pure function in each.
+ *
+ * **The row set is derived, not listed** — data-platform ticket 20, migration
+ * `0040`. It was a nine-arm `union all` written out by hand, and the ninth arm
+ * arrived a migration after the eighth: the reads and the rows had to be kept
+ * in step by whoever remembered. They were not.
+ * `canonical_plant_registry` reads `plant_geo` under `canonical_as_of()` and
+ * stands behind every weather feature through `canonical_capacity_weight`, and
+ * `plant_geo` appeared in no arm at all — which is what kept
+ * feature-engineering 16 from narrowing the feature horizon to the sources a
+ * feature row actually reads.
+ *
+ * So a rule replaced the list. `canonical_read_source()` walks the catalogue —
+ * every `canonical_*` view, transitively through the views it reads, down to
+ * the base tables carrying an `ingested_at` column — and this view is one
+ * aggregate over it. Three consequences are the point:
+ *
+ * - A tenth read added tomorrow **arrives with a go-live row**. Nothing to
+ *   remember, and `database-read-go-live.test.ts` creates a read that did not
+ *   exist when it was written and asserts the row appears.
+ * - A read with **two** vintaged sources gets one go-live, and it is the
+ *   _later_ of them — `docs/contracts/canonical-reads.md`'s weakest-link rule,
+ *   which no arm of the union was shaped to express. `plant-registry` is the
+ *   first such read: `generating_unit` and `plant_geo`. NULL if either has
+ *   ingested nothing, because then no honest instant exists.
+ * - A read whose sources carry **no** ingestion axis has no row rather than a
+ *   NULL one. `canonical_solar_centroid` reads the frozen geometry and
+ *   `canonical_subsystem_state` reads `plant`; neither has an `ingested_at`,
+ *   and a NULL here would say "this source has ingested nothing", which is a
+ *   different and false statement.
+ *
+ * Its own row set no longer contains itself, and that falls out of the rule
+ * rather than being excluded by name: the body below reads two functions and no
+ * relation, so the catalogue records no table this view depends on.
+ *
+ * The names are still the manifest's, by the transform the rest of the contract
+ * applies in reverse — `canonical_curtailment_by_plant` →
+ * `curtailment-by-plant`. Reads with no `/v1/canonical` entry appear too, which
+ * was already true of `programmed-load` before the rule: the ONS day-ahead
+ * programme feeds `dessem_free_v1`'s spine and the feature function needs its
+ * go-live, and a row here is strictly better than a feature reaching into
+ * `programmed_load_half_hour` for a `min(ingested_at)` — the one thing a
+ * feature may never do. Publishing those reads is an api-surface ticket; these
+ * rows are what it will find waiting.
  */
 export const canonicalReadGoLive = pgView("canonical_read_go_live", {
-  /**
-   * A `CanonicalReadName` — the manifest's name, not a table's.
-   *
-   * With one deliberate exception. `programmed-load` names a canonical *view*
-   * that no `/v1/canonical` read is published for: the ONS day-ahead programme
-   * feeds `dessem_free_v1`'s spine and nothing else yet, and the feature
-   * function needs its go-live for the fidelity stamp. Putting the row here is
-   * strictly better than the alternative, which is a feature reaching into
-   * `programmed_load_half_hour` for a `min(ingested_at)` — the one thing a
-   * feature may never do. Publishing the read itself is an api-surface ticket,
-   * and this row is what it will find waiting.
-   */
+  /** A `CanonicalReadName` — the manifest's name, not a table's. */
   read: text().notNull(),
   goLiveAt: timestamp({ withTimezone: true }),
 }).as(sql`
-  select 'curtailment-by-reporting-entity' as read,
-         min(ingested_at) as go_live_at from curtailment_report_hour
-  union all
-  select 'curtailment-by-plant', min(ingested_at) from plant_detail_hour
-  union all
-  select 'system-context', min(ingested_at) from subsystem_energy_balance_hour
-  union all
-  select 'system-exchange', min(ingested_at) from subsystem_exchange_hour
-  union all
-  select 'day-ahead-balance', min(ingested_at) from dessem_balance_half_hour
-  union all
-  select 'programmed-load', min(ingested_at) from programmed_load_half_hour
-  union all
-  select 'weather-forecast', min(ingested_at) from weather_forecast_hour
-  union all
-  select 'installed-capacity', min(ingested_at) from generating_unit
-  union all
-  select 'conjunto-membership', min(ingested_at) from conjunto_membership
+  select
+    s.read,
+    case
+      when count(*) filter (where g.go_live_at is null) > 0 then null
+      else max(g.go_live_at)
+    end as go_live_at
+  from (select distinct read, source_table from canonical_read_source()) s
+  cross join lateral (
+    select canonical_source_go_live(s.source_table) as go_live_at
+  ) g
+  group by s.read
 `);
 
 /**
