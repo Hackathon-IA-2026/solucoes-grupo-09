@@ -146,8 +146,25 @@ import { applyCachePolicy, CACHE_POLICIES } from "./plugins/cache-policy.js";
 const SERVICE = "wattsteer-api";
 const VERSION = "0.1.0";
 
-/** The lane states the modelling service is allowed to report. */
-const LANE_STATES = new Set([
+/**
+ * The lane **conditions** the modelling service is allowed to report.
+ *
+ * Four, and named `LANE_CONDITIONS` rather than `LANE_STATES` because
+ * `@wattsteer/core/errors` exports a `LANE_STATES` with **three** — the
+ * error-envelope vocabulary, which excludes `promoted` on purpose. This module
+ * once spelt its local four-member set with that same identifier, which left
+ * `LANE_STATES.has(reported)` reading, to anyone who followed the name to its
+ * other definition, like a gateway that reports every healthy lane as
+ * unrecognised. It never did; the name was the defect.
+ *
+ * The two vocabularies answer different questions and legitimately differ about
+ * one lane at one moment: a contract-faulted lane is `promoted` here (the
+ * promote line exists; `usable`, `retrain_owed` and `contract_fault` beside it
+ * say it cannot serve) and `unresolvable` in a `/v1/model/card` 503. This
+ * endpoint mirrors the *condition* vocabulary, because that is the question an
+ * operator reading `/v1/meta` is asking.
+ */
+const LANE_CONDITIONS = new Set([
   "no_artifact",
   "present_unpromoted",
   "promoted",
@@ -181,9 +198,10 @@ function prose(raw: Record<string, unknown>, key: string): string | undefined {
  * the artifact this lane is allowed to serve — and `null` is a fact rather than
  * an absence of information: nothing has been promoted here.
  *
- * A state this gateway does not recognise becomes `unresolvable` carrying the
- * value it saw, never one of the three. A newer modelling service that grows a
- * fourth state must not have it silently rounded down to "nothing trained".
+ * A condition this gateway does not recognise becomes `unresolvable` carrying
+ * the value it saw, never one of the other three. A newer modelling service
+ * that grows a fifth condition must not have it silently rounded down to
+ * "nothing trained".
  *
  * **`usable` and `retrain_owed` are forwarded, not derived.** `state:
  * "promoted"` does not mean the lane can answer: an artifact the hot-swap
@@ -199,7 +217,7 @@ function toLane(raw: unknown): MetaLane | null {
     return null;
   }
   const reported = typeof raw.state === "string" ? raw.state : "";
-  const known = LANE_STATES.has(reported);
+  const known = LANE_CONDITIONS.has(reported);
   const fault =
     prose(raw, "fault") ??
     (known

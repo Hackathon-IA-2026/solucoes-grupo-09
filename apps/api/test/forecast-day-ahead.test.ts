@@ -693,7 +693,10 @@ describe("the four absence states stay four different sentences", () => {
     // The pointer is in the message a client renders, not only in a comment.
     expect(route).toContain("/v1/meta");
     // And `/v1/meta` really does carry the lane states, so the pointer resolves.
-    expect(codeOf(SOURCE("api/meta.ts"))).toContain("LANE_STATES");
+    // The four-member *condition* vocabulary, which is the one `/v1/meta`
+    // answers in. `@wattsteer/core/errors`'s three-member `LANE_STATES` is the
+    // error envelope's, and this route answers no `MODEL_UNAVAILABLE` at all.
+    expect(codeOf(SOURCE("api/meta.ts"))).toContain("LANE_CONDITIONS");
   });
 
   it("never zero-fills: no refusal carries a band, and none is a spinner", async () => {

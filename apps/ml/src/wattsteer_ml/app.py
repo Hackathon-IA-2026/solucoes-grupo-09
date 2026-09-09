@@ -209,10 +209,16 @@ class LaneReport(BaseModel):
     gate_profile: str
     threshold_mw: float
     #: `no_artifact` | `present_unpromoted` | `promoted` | `unresolvable`.
-    #: The gateway forwards the first three as `details.lane_state` on a
-    #: `MODEL_UNAVAILABLE`, which is how "no promoted artifact" reaches a screen
-    #: as its own sentence rather than as a spinner.
-    state: artifacts.LaneState
+    #:
+    #: The **condition** vocabulary, four members, and not the three-member
+    #: error-envelope one the gateway puts in `details.lane_state` — that is
+    #: `packages/core`'s `LANE_STATES`, which excludes `promoted` because a lane
+    #: with something to serve produces no refusal. The two can disagree about
+    #: one lane without either being wrong: a contract-faulted lane is
+    #: `promoted` here (with `usable: false` and `retrain_owed: true` beside it)
+    #: and `unresolvable` in a `/v1/model/card` 503. Reading this field as the
+    #: envelope's is the misreading the names now exist to prevent.
+    state: artifacts.LaneCondition
     artifact_count: int
     #: The artifact this lane serves. `None` is a decision — nothing has been
     #: promoted — not a missing file.
@@ -1133,6 +1139,18 @@ def model_card(
     - a card marked invalid by the hot-swap gate's contract check, or one that
       cannot be read at all — `MODEL_UNAVAILABLE`, 503, `unresolvable`. A card
       the loader would refuse is not a serving model's card.
+
+    **`unresolvable` on those last two is the envelope vocabulary's least-wrong
+    word and not a claim about the promotion log.** `packages/core`'s
+    `LANE_STATES` has three members and neither of the other two is true here:
+    the lane has an artifact and it has a promote line. So the word says what it
+    says everywhere — the lane will not say what it may serve — and `details`
+    carries the discriminator that names which repair: `contract_fault` for the
+    gate's mark (retrain), `card_error` for a card that will not parse (the
+    volume). This is also why `/v1/meta` answers `promoted` for the same lane at
+    the same moment: that field is the four-member *condition* vocabulary
+    answering "what is this lane?", and the promote line really does exist. Two
+    questions, two answers, both true — see `artifacts.py`'s module docstring.
     """
     try:
         parsed = Lane.parse(lane)
@@ -1163,6 +1181,17 @@ def model_card(
     # away between the promotion log and this read. All three are the same
     # answer — the lane cannot say what it is serving — and none of them is a
     # partially parsed card.
+    #
+    # `card_error` rides along because `lane_state: "unresolvable"` alone was
+    # ambiguous on the wire. Without it this refusal is byte-identical to the
+    # one a corrupt promotion log produces above — same code, same state, same
+    # `volume_mounted: true` — and the two have different repairs: that one is
+    # "the decision log is damaged", this one is "the log is fine and the card
+    # behind a good promote line will not parse". A client branching on
+    # `lane_state` would render the first sentence for the second situation, and
+    # `message` is developer prose a client may not read. The contract-fault
+    # branch below already names itself with `contract_fault`; this is the same
+    # courtesy, and it is the field name `/v1/meta` uses for the same fact.
     except (ValueError, OSError) as error:
         return _refusal(
             503,
@@ -1172,6 +1201,7 @@ def model_card(
                 "lane": parsed.directory_name,
                 "lane_state": "unresolvable",
                 "volume_mounted": True,
+                "card_error": str(error),
             },
         )
 

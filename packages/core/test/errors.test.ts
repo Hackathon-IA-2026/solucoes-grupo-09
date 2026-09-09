@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
 import {
   asErrorStatus,
   ERROR_CODES,
@@ -77,6 +78,26 @@ describe("the four 'no forecast' states", () => {
     // with a promoted artifact has something to serve and never reaches this
     // envelope. These three are all reasons a request found nothing.
     expect(LANE_STATES).not.toContain("promoted");
+  });
+
+  it("says, where it is defined, that it is not the only `lane_state`", () => {
+    // The defect this vocabulary carried was legibility, not membership.
+    // `/v1/meta` reports a four-member *condition* vocabulary under the same
+    // field name and legitimately disagrees with a `/v1/model/card` 503 about
+    // one lane at one moment, and nothing here said so — leaving a reader
+    // comparing two endpoints to conclude one of them is broken. The prose is
+    // the fix, so it is asserted rather than trusted to survive an edit.
+    const source = readFileSync(new URL("../src/errors.ts", import.meta.url), "utf-8");
+    const doc = source.slice(0, source.indexOf("export const LANE_STATES"));
+    const comment = doc.slice(doc.lastIndexOf("/**"));
+    // Which vocabulary this is, and where the other one lives.
+    expect(comment).toContain("error-envelope vocabulary");
+    expect(comment).toContain("LaneCondition");
+    expect(comment).toContain("artifacts.py");
+    // And that `unresolvable` never travels without the key naming the repair,
+    // since four conditions produce it and they are fixed four ways.
+    expect(comment).toContain("contract_fault");
+    expect(comment).toContain("card_error");
   });
 });
 

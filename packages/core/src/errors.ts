@@ -266,17 +266,55 @@ export type NoForecastState = (typeof NO_FORECAST_STATES)[number]["state"];
  * `details.lane_state` on a `MODEL_UNAVAILABLE`: which of the forecaster's lane
  * states holds when there is nothing to serve.
  *
- * The forecaster has four (`apps/ml/src/wattsteer_ml/artifacts.py`). `promoted`
- * is absent here because it is not an absence — a lane with a promoted artifact
- * has something to serve and never reaches this envelope. The other three are
- * all reasons a request found nothing, and each is a different sentence:
- * nothing on the volume, bundles present but none promoted (including the case
- * where the log holds only refusals, whose reasons are readable), and a log
- * that cannot be read at all. Collapsing the last into either of the first two
- * would be guessing which of them holds while the volume is saying it cannot
- * tell us — which is the failure the promotion log exists to prevent.
+ * **This is the error-envelope vocabulary, and it is not the only `lane_state`
+ * in the codebase.** There are three, they answer three different questions,
+ * and the answers differ for one lane at one moment without either being
+ * wrong — so a reader comparing two endpoints has to know which is which:
+ *
+ * | Where | Question | Values |
+ * | --- | --- | --- |
+ * | `details.lane_state` on a `MODEL_UNAVAILABLE` (**here**) | why did a request find nothing to serve? | these three |
+ * | `model.lanes[].state` on `/v1/meta` — `LaneCondition` in `apps/ml/src/wattsteer_ml/artifacts.py` | what condition is this lane in? | these three plus `promoted` |
+ * | `lane_state` on a `GET /v1/model/card` **200** body | — | always `promoted`, a constant and not a discriminator |
+ *
+ * A contract-faulted lane is the worked example, and the one that reads like a
+ * contradiction until you know the above: `/v1/meta` reports it `promoted`
+ * (with `usable: false`, `retrain_owed: true`, `contract_fault`) because the
+ * promotion line exists and a migration revokes no line, while
+ * `/v1/model/card` answers 503 `unresolvable` because there is no servable
+ * card behind that line. Two questions, two answers, both true.
+ *
+ * `promoted` is absent from *this* vocabulary because it is not an absence — a
+ * lane with a promoted artifact has something to serve and never reaches this
+ * envelope. The other three are all reasons a request found nothing:
+ *
+ * - `no_artifact` — nothing on the volume.
+ * - `present_unpromoted` — bundles present but none promoted, including the
+ *   case where the log holds only refusals, whose reasons are readable.
+ * - `unresolvable` — **the lane will not say what it may serve, whichever way
+ *   it declines to.** Collapsing it into either of the first two would be
+ *   guessing which of them holds while the volume is saying it cannot tell us,
+ *   which is the failure the promotion log exists to prevent. Four conditions
+ *   produce it and they have four different repairs, so it is *always* joined
+ *   in `details` by the key that names which: a promotion log that cannot be
+ *   read and a `promote` line naming an artifact that is not on the volume
+ *   arrive with `volume_mounted`; a promoted card the gate marked invalid
+ *   arrives with `contract_fault` (repair: retrain); a promoted card that will
+ *   not parse arrives with `card_error` (repair: the volume). A client that
+ *   branched on `lane_state` alone would render one repair for all four.
+ *
+ * Adding a fourth member here is a spec change, not a field: `api-surface.md`
+ * requires four distinguishable "no forecast" sentences and this is the
+ * vocabulary that makes one of them sayable.
  */
 export const LANE_STATES = ["no_artifact", "present_unpromoted", "unresolvable"] as const;
+
+/**
+ * One of the three envelope states — never `promoted`.
+ *
+ * Named for the envelope it appears in, so the inspection vocabulary's
+ * `LaneCondition` and this cannot be mistaken for one another.
+ */
 export type LaneState = (typeof LANE_STATES)[number];
 
 /**
