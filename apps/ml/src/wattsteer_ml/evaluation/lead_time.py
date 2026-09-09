@@ -140,6 +140,7 @@ from typing import Any, Literal
 
 from wattsteer_ml.artifacts import CARD_SUFFIX
 from wattsteer_ml.canonical import VintageFidelity
+from wattsteer_ml.caveated import CaveatedFigure
 from wattsteer_ml.declined import DeclinedFigure
 from wattsteer_ml.evaluation.collapse_report import (
     FIXTURE_SOURCE,
@@ -1189,13 +1190,25 @@ _READS = (
 
 #: And what it says when they did not. Same field, so a reader who reaches the
 #: numbers has already read this.
-_NOT_A_READING = (
+_NOT_A_READING = CaveatedFigure(
     "THESE DELTAS ARE NOT A MEASUREMENT OF THE GRID. The columns were built from "
     "fabricated metrics rows, so every coverage and MWh figure here is "
     "arithmetic over invented forecasts. Only a block whose lead_time_source is "
     f"{FOLD_EVALUATION_SOURCE!r} says anything about what training on the "
     "weather archive would cost, and no weather decision may be taken on this "
-    "one."
+    "one.",
+    figure=(
+        "the lead-time A/B's three interval deltas and its delta qloss_mwh, "
+        "on a block whose columns were built from fabricated metrics rows"
+    ),
+    misreading=(
+        "that training on the stitched weather archive costs the served "
+        "interval this much on the Brazilian grid"
+    ),
+    surface=(
+        "the model card's `lead_time_penalty` block, `reads` -- the field a "
+        "reader meets before the folds"
+    ),
 )
 
 #: And when there were no columns at all.
@@ -1209,11 +1222,20 @@ _NOTHING_YET = (
 )
 
 #: On a block whose every segment predates ingestion go-live.
-_REVISION_OPTIMISTIC_ONLY = (
+_REVISION_OPTIMISTIC_ONLY = CaveatedFigure(
     "Every fold segment here is revision_optimistic: no reported segment's test "
     "period begins after ingestion go-live. All three columns were scored "
     "against labels that have since been revised, so this block may not carry "
-    "the weather decision until a point_in_time segment exists."
+    "the weather decision until a point_in_time segment exists.",
+    figure=(
+        "every coverage and MWh figure in the lead-time A/B, on a block "
+        "none of whose fold segments begins after ingestion go-live"
+    ),
+    misreading=(
+        "that the three columns were scored against the labels the product "
+        "will be judged on"
+    ),
+    surface="the model card's `lead_time_penalty` block, `vintage_caveat`",
 )
 
 #: When the aggregate cleared the research's own falsifier.

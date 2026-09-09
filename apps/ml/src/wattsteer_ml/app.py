@@ -52,6 +52,7 @@ from pydantic import BaseModel
 
 from . import __version__, artifacts
 from .artifacts import CARD_SUFFIX
+from .caveated import caveated_figures
 from .config import settings
 from .constants import Subsystem
 from .database import database
@@ -286,6 +287,39 @@ class DeclinedFigureReport(BaseModel):
     surface: str
 
 
+class CaveatedFigureReport(BaseModel):
+    """One figure this build publishes that does not mean what its name says.
+
+    The mirror of :class:`DeclinedFigureReport`, and a **separate block rather
+    than a third `kind`** on that one. ``unrunnable`` and ``unrun`` are two
+    answers to one question — does this figure exist? — and every one of these
+    answers *yes* to it. Filing ``coverage_p10`` under `declines` would tell a
+    reviewer it was withheld, when the whole defect is that it is not.
+
+    Six fields, all prose, for the same reason the census of absences is all
+    prose: a list of numbers that mean something other than what they say is
+    the last surface that could afford to carry one.
+    """
+
+    #: The constant's own identifier, or the subscript it is published under —
+    #: a grep target, so the census is a way into the code. It is **not unique**
+    #: and is not meant to be: six blocks declare a ``_NOT_A_READING``, because
+    #: six blocks are each arithmetic over their own fabricated inputs.
+    name: str
+    #: Where the caveat is declared, as a repository path. With `name`, the
+    #: identity of a row.
+    declared_in: str
+    #: Which published figure this changes the meaning of, as a noun phrase.
+    figure: str
+    #: The sentence the block already carries, verbatim.
+    caveat: str
+    #: What the figure reads as without that sentence. False, and published.
+    misreading: str
+    #: The block, field or response where the figure and the caveat are met
+    #: together — because every one of these is attached as well as collected.
+    surface: str
+
+
 class Meta(BaseModel):
     """Everything needed to diagnose a misconfigured instance in one request."""
 
@@ -305,6 +339,15 @@ class Meta(BaseModel):
     #: refuses to publish. The gateway merges it with its own half onto
     #: `GET /v1/meta`, which is the one request that asks what a deployment is.
     declines: list[DeclinedFigureReport]
+    #: Every figure this build publishes *with* a caveat that changes what it
+    #: means, assembled by walking the package — see
+    #: :mod:`wattsteer_ml.caveated`. Beside `declines` and not inside it: an
+    #: absent figure cannot mislead anybody, and a present one carrying a
+    #: caveat nobody reads is a number that will be quoted. This half of the
+    #: pair is for a reviewer; every one of these sentences is *also* published
+    #: in the block that carries the figure, because a caveat on this endpoint
+    #: does nothing for the code path that reads `share_p50_zero`.
+    caveats: list[CaveatedFigureReport]
 
 
 @app.get("/", response_model=Identity, tags=["meta"])
@@ -363,6 +406,9 @@ def meta() -> Meta:
         # namespace and report fewer absences than there are, which is the one
         # direction this surface may never be wrong in.
         declines=[DeclinedFigureReport(**entry) for entry in declined_figures()],
+        # Per request, on the same reasoning as `declines` above: the walk
+        # imports every module in the package and this one is among them.
+        caveats=[CaveatedFigureReport(**entry) for entry in caveated_figures()],
         artifacts=ArtifactState(
             path=str(store.path),
             mounted=store.mounted,

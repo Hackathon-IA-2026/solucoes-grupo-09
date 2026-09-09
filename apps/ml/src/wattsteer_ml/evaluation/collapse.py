@@ -53,6 +53,7 @@ from typing import Any, Protocol
 
 import numpy as np
 
+from wattsteer_ml.caveated import CaveatedFigure
 from wattsteer_ml.constants import SUBSYSTEM_CODES, Subsystem
 from wattsteer_ml.evaluation.matrix import HOURS_PER_DAY, RowKey
 from wattsteer_ml.mixture import QuantileBand
@@ -64,6 +65,38 @@ POOLED_LABEL = "fold"
 #: ``p ≥ 0.50`` and ``p ≥ 0.90`` — the two thresholds the published names spell.
 P50_THRESHOLD = 0.50
 P90_THRESHOLD = 0.90
+
+#: What ``share_of_hours_with_p50_zero`` — the metrics table's
+#: ``share_p50_zero`` — is not, published in the same dictionary as the number.
+#:
+#: Forecaster 17 established that this share has no model-quality content: it is
+#: ``1 - P(p > 0.50)`` by construction, because ``Q_Y(q) = 0`` for every
+#: ``q <= 1 - p``. It is published anyway, and should be: it is exactly the
+#: figure the optimizer's posture question turns on, which is what this whole
+#: module was built for. That is also why the caveat is **attached rather than
+#: only collected** — the consumer here is a code path holding a metrics row,
+#: and a census on ``/v1/meta`` does nothing at all for it.
+SHARE_P50_ZERO_IS_NOT_MODEL_QUALITY = CaveatedFigure(
+    "This share is the mixture's breakpoint restated and carries no "
+    "information about how good the model is. Q_Y(q) = 0 for every q <= 1 - p, "
+    "so an hour's P50 is zero exactly where p <= 0.50 and the share is "
+    "1 - P(p > 0.50) by construction — an identity, not a measurement. It "
+    "moves whenever anything moves p: a recalibrated classifier, a different "
+    "prevalence, a different subsystem threshold. Read it as what it is, which "
+    "is how many hours a P50-planned dispatch has to act in, and never as "
+    "evidence that a model, a lane or a threshold is better than another.",
+    figure="share_p50_zero, and share_of_hours_with_p50_zero which is the same figure",
+    misreading=(
+        "that a lower share is a better model, because the model found more "
+        "hours worth acting in"
+    ),
+    surface=(
+        "the model card's `p50_collapse` entries, `share_of_hours_with_p50_zero_caveat`, "
+        "and every metrics row's `share_p50_zero_caveat` — published in the "
+        "same dictionary as the figure, because the consumer is the optimizer's "
+        "posture question and not a reviewer reading `/v1/meta`"
+    ),
+)
 
 
 class CollapseError(ValueError):
@@ -237,6 +270,7 @@ class P50Collapse:
             "hours_per_day_p_ge_50": self.hours_per_day_p_ge_50.as_card_entry(),
             "hours_per_day_p_ge_90": self.hours_per_day_p_ge_90.as_card_entry(),
             "share_of_hours_with_p50_zero": self.share_of_hours_with_p50_zero,
+            "share_of_hours_with_p50_zero_caveat": (SHARE_P50_ZERO_IS_NOT_MODEL_QUALITY),
             "share_with_p10_zero": self.share_with_p10_zero,
             "share_of_days_with_no_non_zero_p50_hour": (
                 self.share_of_days_with_no_non_zero_p50_hour

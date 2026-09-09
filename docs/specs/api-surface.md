@@ -540,6 +540,13 @@ correct.
     "incomplete_reason": null   // or the code that says why the list is short
   },
 
+  "caveats": {
+    // The mirror: every figure this deployment *does* state that does not mean
+    // what its name says. Assembled the same way, and never hand-written.
+    "figures": [ /* … one row per declared caveat, in (declared_in, name) order … */ ],
+    "incomplete_reason": null   // or the code that says why the list is short
+  },
+
   "attribution": {
     "ons":  { "name": "ONS Dados Abertos", "licence": "CC-BY-4.0", "url": "…" },
     "aneel_siga": { "name": "ANEEL SIGA", "licence": "ODbL-1.0", "url": "…",
@@ -647,6 +654,55 @@ an *individual* absence keep rendering it in context and in both locales, which
 is where a reader of the product needs it. This census is for a reviewer
 deciding whether to trust the system, and it is on the endpoint a reviewer
 reads.
+
+**`caveats` — the mirror, and the sharper half of the pair.** Forecaster 28's.
+An *absent* figure cannot mislead anybody: a reader who wanted it is told why it
+is not there. A figure that is published with a caveat nobody reads is a number
+that will be quoted, and `coverage_p10 = 1.0` is the case that proves it — real
+arithmetic, computed over **zero** rows on which the served floor was a positive
+number, and read for months as evidence that the floor was perfect. Nobody was
+lying; the caveat simply was not attached to the number.
+
+- **Found by rule, not by list.** Write the sentence a reader takes away from
+  the published pair — *name* is *value*. The figure is caveated when that
+  sentence is false, or is true of something other than what the name denotes,
+  and only a sentence published beside it makes it true. That excludes three
+  neighbours of a figure on purpose: a **definition** (`_READS`) leaves the
+  sentence true, an **absence** (`_NOTHING_YET`) has no value to misread and
+  belongs to `declines`, and a statement about **authority**
+  (`_DECIDES_NOTHING`) or **precision** (`_SAMPLE_SIZE`) leaves it true and
+  merely weak. What is left arrives along three axes: the inputs are not the
+  thing (the `_NOT_A_READING` family), the support is not the thing
+  (`coverage_p10` over no stated row, `share_p50_zero`), or the population or
+  parameter is not the one the name carries (`COMPARABILITY`,
+  `_REVISION_OPTIMISTIC_ONLY`, `nominal_claim`).
+- **Collected here *and* attached there.** Every one of these sentences is also
+  published in the block that carries the figure, and the two are not
+  alternatives: `share_p50_zero` is read by the optimizer's posture question,
+  and a caveat on this endpoint does nothing at all for a code path holding a
+  metrics row. Attachment is what makes a caveat unmissable to a consumer;
+  collection is what makes it auditable for a reviewer, who cannot read every
+  card block to discover which of a build's numbers do not mean what they say.
+  They are the same objects, so there is nothing to keep in step.
+- **Not a third `kind` on `declines`.** `unrunnable` and `unrun` are two answers
+  to one question — does this figure exist? — and every row here answers *yes*
+  to it. A reviewer who found `coverage_p10` under a heading whose whole
+  contract is absence would conclude it was withheld, when the defect is
+  precisely that it is not. `apps/ml`'s `DECLINE_KINDS` still has two members
+  and its test still asserts exactly two.
+- **`misreading` is the field that makes this work.** Every row carries the
+  sentence the caveat exists to make *false* — what the number reads as with the
+  name and the value and nothing else — and it is required at declaration. An
+  author who cannot write that down has not decided whether the figure is
+  misleading, and the caveat they wrote is decoration.
+- **No gateway half, and that is an argument.** `declines` merges two because
+  `no_joint_ensemble` is this gateway's own named absence. A caveat qualifies a
+  figure that *is* published, and every figure on this wire is either the
+  modelling service's or an aggregate over Postgres rows whose name is its
+  definition; `no_joint_ensemble` withholds rather than states. So the whole
+  census is the modelling service's, and an unreachable one costs all of it and
+  says so through `incomplete_reason`.
+- **Not a product surface**, for `declines`' reasons exactly.
 
 **This route is the third and last crossing to the ML service**, against Seam 1
 below, which names only the optimizer and the replay solve. The crossing is

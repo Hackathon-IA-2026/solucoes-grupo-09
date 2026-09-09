@@ -90,6 +90,7 @@ function mlMeta(overrides: {
   mounted?: boolean;
   writable?: boolean;
   declines?: unknown[];
+  caveats?: unknown[];
 }) {
   reply = () =>
     new Response(
@@ -112,6 +113,10 @@ function mlMeta(overrides: {
         // Its contents are asserted in `declined-figures.test.ts`; what it is
         // doing here is keeping this stub the shape of the real reply.
         declines: overrides.declines ?? [],
+        // Forecaster 28's mirror, from `wattsteer_ml/caveated.py`: the
+        // figures this build *does* state that do not mean what their
+        // names say. Same reason for being here — the stub keeps the shape.
+        caveats: overrides.caveats ?? [],
       }),
       { headers: { "content-type": "application/json" } },
     );
@@ -142,6 +147,7 @@ describe("meta · one request says what this deployment can do", () => {
     // five round trips.
     expect(Object.keys(body).sort()).toEqual([
       "attribution",
+      "caveats",
       "data",
       "declines",
       "defaults",

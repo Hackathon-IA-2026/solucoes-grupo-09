@@ -139,6 +139,20 @@ def test_unrunnable_and_unrun_are_two_sentences_and_stay_two() -> None:
     A refactor that collapsed the two into one "unavailable" bucket would pass
     every other assertion in this file. This one is what it would have to
     delete.
+
+    **And forecaster 28 was the test of it.** This assertion was written to
+    force the conversation rather than let it be sidestepped, and the
+    conversation happened: the ``_NOT_A_READING`` family is neither unrunnable
+    nor unrun, and a third member was the obvious way to file it. It was
+    refused, and the argument is in :mod:`wattsteer_ml.caveated` — these two
+    are two answers to *one* question, does this figure exist, and every
+    caveated figure answers yes to it. A third kind would have answered "no,
+    and also yes", and it would have put a *published* number under a heading
+    whose whole contract is absence, where a reviewer would read
+    ``coverage_p10`` as withheld when the defect is precisely that it is not.
+    So the count below is still two, and
+    ``test_caveated_figures.py::test_a_caveat_is_not_a_decline_and_the_two_censuses_stay_apart``
+    is the other end of the same decision.
     """
     kinds = {name: entry["kind"] for name, entry in by_name().items()}
     assert kinds["ARCHIVE_FEATURES_HAVE_NO_SHAPE"] == "unrunnable"
@@ -259,3 +273,30 @@ def test_the_route_reports_the_census_even_with_no_volume_and_no_database() -> N
         body = client.get("/v1/meta").json()
     assert body["artifacts"]["count"] == 0
     assert len(body["declines"]) >= 7
+
+
+def test_the_caveat_census_is_a_second_census_and_not_more_of_this_one() -> None:
+    """The two are disjoint, structurally, from this side as well.
+
+    A figure cannot be both withheld and published, so no row may appear on
+    both surfaces. Asserted here as well as in ``test_caveated_figures.py``
+    because a later refactor that merged the two assemblers would have to
+    delete an assertion in each file rather than one.
+    """
+    from wattsteer_ml.caveated import CaveatedFigure, caveated_figures
+
+    declines = {(entry["declared_in"], entry["name"]) for entry in declined_figures()}
+    caveats = {(entry["declared_in"], entry["name"]) for entry in caveated_figures()}
+    assert declines
+    assert caveats
+    assert declines.isdisjoint(caveats)
+    for reason in (
+        ARCHIVE_FEATURES_HAVE_NO_SHAPE,
+        CORRELATION_NOT_RUN_YET,
+        MARGINAL_COVERAGE_NOT_RUN_YET,
+        NO_TFT_IMPLEMENTATION,
+        NOT_RUN_YET,
+        COLD_START_DETAIL,
+        NO_TRAINING_COST_MEASURED,
+    ):
+        assert not isinstance(reason, CaveatedFigure)

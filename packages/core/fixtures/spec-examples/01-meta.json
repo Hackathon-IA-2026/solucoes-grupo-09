@@ -113,6 +113,35 @@
     ],
     "incomplete_reason": null
   },
+  "caveats": {
+    "figures": [
+      {
+        "name": "COMPARABILITY[\"pr_auc\"]",
+        "declared_in": "apps/ml/src/wattsteer_ml/evaluation/threshold_sweep.py",
+        "figure": "pr_auc, read across the sweep's three threshold arms",
+        "caveat": "not comparable across thresholds without its floor. PR-AUC's baseline is the prevalence, and the prevalence is exactly what the sweep moves; each arm's own prevalence is published beside it and the two are read together or not at all.",
+        "misreading": "that the arm with the higher PR-AUC ranks curtailment better",
+        "surface": "the model card's `threshold_sweep` block, `comparability.pr_auc`"
+      },
+      {
+        "name": "COVERAGE_P10_OVER_NO_STATED_ROW",
+        "declared_in": "apps/ml/src/wattsteer_ml/training/conformal.py",
+        "figure": "coverage_p10, on a fold where `coverage_stated_rows_p10` is zero",
+        "caveat": "coverage_p10 is 1.0 here and it is not a floor that held. No scored hour on this fold has a composed P10 that is a positive number, so every one of these evaluations is y >= 0 on an hour known to be above tau.",
+        "misreading": "that the served floor held on every curtailed hour of this fold",
+        "surface": "`GET /v1/model/card`, `band.coverage.coverage_p10_caveat`"
+      },
+      {
+        "name": "_NOT_A_READING",
+        "declared_in": "apps/ml/src/wattsteer_ml/evaluation/lead_time.py",
+        "figure": "the lead-time A/B's three interval deltas and its delta qloss_mwh",
+        "caveat": "THESE DELTAS ARE NOT A MEASUREMENT OF THE GRID. The columns were built from fabricated metrics rows, so every coverage and MWh figure here is arithmetic over invented forecasts.",
+        "misreading": "that training on the stitched weather archive costs the served interval this much on the Brazilian grid",
+        "surface": "the model card's `lead_time_penalty` block, `reads`"
+      }
+    ],
+    "incomplete_reason": null
+  },
   "attribution": {
     "ons": {
       "name": "ONS Dados Abertos",
