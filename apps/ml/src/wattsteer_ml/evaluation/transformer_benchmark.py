@@ -720,7 +720,7 @@ class UnmeasuredTransformerBenchmark:
                 "at": self.at.isoformat(),
                 "reason": self.reason,
                 "decides": _DECIDES_NOTHING,
-                "reads": _NOTHING_YET,
+                "reads": BENCHMARK_ARMS_NOT_SCORED,
             }
         }
 
@@ -900,18 +900,24 @@ _ONE_COMPOSITION = (
 )
 
 #: And when there were no arms at all.
-_NOTHING_YET = (
+#: The ``reads`` companion of :data:`NO_TFT_IMPLEMENTATION`, and ``unrunnable``
+#: with it: what is missing is an implementation, not a sweep.
+BENCHMARK_ARMS_NOT_SCORED = DeclinedFigure(
     "The benchmark did not run. This is not a finding that the transformer ties "
     "with the served model and not a finding that it loses: the comparison is "
     "unmade rather than made and found uninteresting. No training time is "
     "recorded here either — the runtime of a run that did not happen is a "
-    "measurement that does not exist, not a number to reason out."
+    "measurement that does not exist, not a number to reason out.",
+    figure="the two benchmark arms' metrics, and the deltas between them",
+    kind="unrunnable",
+    surface="the model card's `transformer_benchmark` block, `reads`",
 )
 
 
 __all__ = [
     "ARMS",
     "BENCHMARK_ARM",
+    "BENCHMARK_ARMS_NOT_SCORED",
     "BENCHMARK_FEATURE_SET",
     "BENCHMARK_GATE_PROFILE",
     "BENCHMARK_LANE",

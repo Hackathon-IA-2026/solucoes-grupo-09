@@ -262,6 +262,19 @@ describe("the two kinds stay two, and an unknown third is neither", () => {
 // --- the gateway's own half --------------------------------------------------
 
 describe("the gateway's own declined figure is on it too", () => {
+  it("carries the reason this gateway mints for the model card", async () => {
+    // Forecaster 27's judgement call, from the outside: `metrics_absent_reason`
+    // is authored in TypeScript, so no walk of the Python package could ever
+    // reach it. It is on the census because the gateway half gained a typed
+    // table for it, not because anybody listed it.
+    mlMeta([]);
+    const { figures } = await declines(reachable());
+    const metrics = figures.find((one) => one.name === "metrics_absent_reason");
+    expect(metrics?.kind).toBe("unrun");
+    expect(metrics?.declared_in).toBe("packages/core/src/declines.ts");
+    expect(metrics?.surface).toContain("/v1/model/card");
+  });
+
   it("carries the national band's absence, which the modelling service never spells", async () => {
     mlMeta([]);
     const { figures } = await declines(reachable());
@@ -277,11 +290,18 @@ describe("the gateway's own declined figure is on it too", () => {
     // One order over both halves, and it carries no argument about which half
     // matters more: `no_joint_ensemble` sorts between the two rather than being
     // appended after them.
-    expect(figures.map((one) => one.name)).toEqual([
-      "AAA_FIRST",
-      "no_joint_ensemble",
-      "ZZZ_LAST",
-    ]);
+    // Derived from the gateway's own tables rather than transcribed: forecaster
+    // 27 added a second entry to this half and a hand-written expectation is
+    // exactly the thing that would have gone stale.
+    const gateway = GATEWAY_DECLINED_FIGURES.map((one) => one.name);
+    expect(figures.map((one) => one.name)).toEqual(
+      ["AAA_FIRST", ...gateway, "ZZZ_LAST"].sort((one, other) =>
+        one.localeCompare(other),
+      ),
+    );
+    for (const name of gateway) {
+      expect(figures.map((one) => one.name)).toContain(name);
+    }
   });
 });
 
@@ -302,7 +322,11 @@ describe("a short census says that it is short", () => {
     // to prevent.
     const { figures, incompleteReason } = await declines();
     expect(incompleteReason).toBe("OPTIMIZER_NOT_CONFIGURED");
-    expect(figures.map((one) => one.name)).toEqual(["no_joint_ensemble"]);
+    expect(figures.map((one) => one.name)).toEqual(
+      GATEWAY_DECLINED_FIGURES.map((one) => one.name).sort((one, other) =>
+        one.localeCompare(other),
+      ),
+    );
   });
 
   it("distinguishes a service with nothing to declare from one that did not say", async () => {

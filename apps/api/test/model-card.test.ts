@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { GATEWAY_DECLINED_FIGURES, MODEL_CARD_DECLINES } from "@wattsteer/core/declines";
 import { validate } from "@wattsteer/core/schema";
 import type { Server } from "bun";
 import { Elysia } from "elysia";
@@ -288,6 +289,13 @@ describe("model card · what the published band actually rests on", () => {
     const body = await wire(await card());
     expect(body.metrics).toBeNull();
     expect(body.metrics_absent_reason).toContain("no metrics group");
+    // And it is the sentence on `/v1/meta`'s census, not a second spelling of
+    // it. Forecaster 27: this reason is minted here rather than forwarded, so
+    // a reviewer can only find it if the one it finds is the one shipped.
+    expect(body.metrics_absent_reason).toBe(
+      MODEL_CARD_DECLINES.metricsAbsentReason.reason,
+    );
+    expect(GATEWAY_DECLINED_FIGURES).toContain(MODEL_CARD_DECLINES.metricsAbsentReason);
   });
 });
 

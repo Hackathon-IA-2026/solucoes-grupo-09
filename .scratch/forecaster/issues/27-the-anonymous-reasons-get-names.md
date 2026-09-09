@@ -35,7 +35,7 @@ typed table where a missing entry is a compile error.
 
 **Blocked by:** forecaster 25 (merged).
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Every absence listed above is either named and on the census, or has a
       stated reason for staying private

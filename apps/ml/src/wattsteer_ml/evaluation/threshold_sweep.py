@@ -109,6 +109,7 @@ from typing import Any, Literal
 from wattsteer_ml.artifacts import CARD_SUFFIX
 from wattsteer_ml.canonical import VintageFidelity
 from wattsteer_ml.constants import SUBSYSTEM_THRESHOLD_MW
+from wattsteer_ml.declined import DeclinedFigure
 from wattsteer_ml.evaluation.collapse import CollapseBlock
 from wattsteer_ml.evaluation.collapse_report import FIXTURE_SOURCE, UNMEASURED_SOURCE
 from wattsteer_ml.evaluation.matrix import (
@@ -810,7 +811,7 @@ class UnmeasuredThresholdSweep:
                 "at": self.at.isoformat(),
                 "reason": self.reason,
                 "decides": _DECIDES_NOTHING,
-                "reads": _NOTHING_YET,
+                "reads": SWEEP_ARMS_NOT_SCORED,
             }
         }
 
@@ -953,11 +954,17 @@ _MIXTURE_CAVEAT = (
 )
 
 #: And when there were no arms at all.
-_NOTHING_YET = (
+#: What the block's ``reads`` field says when there are no arms to read.
+#: ``unrun``: the arms "do not exist yet" is forecaster 18's sentence, and
+#: nothing about a threshold sweep cannot be built.
+SWEEP_ARMS_NOT_SCORED = DeclinedFigure(
     "The sweep has not been run. This is not a prevalence of zero and not a "
     "finding that the thresholds are indistinguishable: the three arms do not "
     "exist yet, so the comparison is unmade rather than made and found "
-    "uninteresting."
+    "uninteresting.",
+    figure="the three swept thresholds' prevalence and metrics, and their comparison",
+    kind="unrun",
+    surface="the model card's `threshold_sweep` block, `reads`",
 )
 
 
@@ -967,6 +974,7 @@ __all__ = [
     "FOLD_EVALUATION_SOURCE",
     "PREVALENCE_CEILING",
     "PREVALENCE_FLOOR",
+    "SWEEP_ARMS_NOT_SCORED",
     "SWEEP_FEATURE_SET",
     "SWEEP_GATE_PROFILE",
     "SWEEP_LANES",

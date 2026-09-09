@@ -1,4 +1,5 @@
 import type { BandUnavailableReason } from "./domain.js";
+import type { ModelCard } from "./types.generated.js";
 
 /**
  * The figures this gateway declines to state, and why.
@@ -10,17 +11,23 @@ import type { BandUnavailableReason } from "./domain.js";
  * constant there *is* its own census entry, so declaring one is the whole of
  * the work.
  *
- * This module is the other half, and it exists because one of the eight named
- * absences is not the modelling service's. `band_unavailable_reason` is
+ * This module is the other half, and it exists because two of the named
+ * absences are not the modelling service's. `band_unavailable_reason` is
  * produced by `apps/api/src/api/grid.ts`: the modelling service publishes
  * `Publication.national = None` and never spells the identity, which is a
- * `packages/core` schema enum. Declaring it here rather than in Python keeps it
- * where it is produced, and keeps one fact from acquiring two spellings.
+ * `packages/core` schema enum. `metrics_absent_reason` is minted by
+ * `apps/api/src/api/model-card.ts` out of the *absence* of a card group, and
+ * forwarded from nothing at all — forecaster 27's judgement call, argued at
+ * {@link MODEL_CARD_DECLINES}. Declaring both here rather than in Python keeps
+ * them where they are produced, and keeps one fact from acquiring two
+ * spellings.
  *
  * ### What makes this derived rather than a list
  *
- * {@link BAND_UNAVAILABLE_DECLINES} is a `Record` keyed by
- * {@link BandUnavailableReason}, which is the schema's enum. A second member
+ * Each table here is a `Record` keyed by a closed set the schema owns:
+ * {@link BAND_UNAVAILABLE_DECLINES} by {@link BandUnavailableReason}, the
+ * schema's enum, and {@link MODEL_CARD_DECLINES} by the generated response
+ * type's own `…AbsentReason` fields. A second member
  * added to `common.schema.json#/$defs/band_unavailable_reason` is therefore a
  * **compile error here** until it has an entry — the mechanism
  * `copy.band.noBand` already uses so that a null band cannot render without the
@@ -119,7 +126,64 @@ export const BAND_UNAVAILABLE_DECLINES: Record<BandUnavailableReason, DeclinedFi
   },
 };
 
-/** The table's entries, and never a second list beside it. */
-export const GATEWAY_DECLINED_FIGURES: readonly DeclinedFigure[] = Object.values(
-  BAND_UNAVAILABLE_DECLINES,
-);
+/**
+ * Every field of `GET /v1/model/card` whose reason sentence this gateway
+ * **mints** rather than forwards.
+ *
+ * `metrics_absent_reason` is the second absence that is not the modelling
+ * service's, and forecaster 27's judgement call. A reason authored in
+ * TypeScript cannot be found by a Python walk, so it is either moved to where
+ * the withholding happens or gained here the way `band_unavailable_reason` was.
+ * It is gained here, because moving it could not remove the TypeScript
+ * sentence — only duplicate it. The reason exists exactly when a card
+ * carries no Metrics group at all, and no card on any volume carries a
+ * `metrics_absent_reason` to forward; a modelling service that began writing
+ * one would still leave every earlier card needing a sentence from this
+ * module. Two spellings of one fact is the failure this file opens by naming.
+ *
+ * ### What makes this derived rather than a list
+ *
+ * The key type is read off the **generated** response type: every top-level
+ * `…AbsentReason` field of {@link ModelCard}. A `*_absent_reason` added to the
+ * top level of `model-card.schema.json` is therefore a compile error here until
+ * it has an entry — `BAND_UNAVAILABLE_DECLINES`' mechanism, keyed on the other
+ * closed set the schema owns. `test/declines.test.ts` asserts the same thing at
+ * runtime against the schema file, because a regenerated type and a
+ * hand-edited schema can be one commit apart.
+ *
+ * The two nested ones — `band.coverage_absent_reason` and
+ * `ensemble.day_grain_absent_reason` — are deliberately *not* here. They are
+ * the modelling service's, named in `wattsteer_ml/training/bundle.py` as
+ * `NO_CURTAILED_HOUR_TO_COVER` and `NO_SETTLED_DAY_TO_SCORE`, and they reach
+ * this response by being forwarded off the card. `model-card.ts` keeps a
+ * shortened fallback for a card that predates the field; that is a default for
+ * an old document, not a figure this gateway declines to state.
+ */
+export type GatewayMintedCardDecline = Extract<keyof ModelCard, `${string}AbsentReason`>;
+
+/** Keyed by the response's own fields, so a new one cannot be added without one. */
+export const MODEL_CARD_DECLINES: Record<GatewayMintedCardDecline, DeclinedFigure> = {
+  metricsAbsentReason: {
+    name: "metrics_absent_reason",
+    declaredIn: "packages/core/src/declines.ts",
+    figure:
+      "the headline metrics table — one row per fold and per rung of the " +
+      "baseline ladder, and the deltas against the ladder",
+    // Unrun, not unrunnable, and forecaster 18's distinction is the whole of
+    // the choice. The ladder and the metrics table are built and tested; the
+    // Metrics group is forecaster ticket 09's and a card written before it
+    // landed has no such group. Nothing here cannot be produced.
+    kind: "unrun",
+    reason:
+      "the artifact card carries no metrics group; the headline metrics " +
+      "table and the baseline-ladder deltas are written by the forecaster " +
+      "and this card predates them",
+    surface: "`GET /v1/model/card`, `metrics_absent_reason`",
+  },
+};
+
+/** The tables' entries, and never a further list beside them. */
+export const GATEWAY_DECLINED_FIGURES: readonly DeclinedFigure[] = [
+  ...Object.values(BAND_UNAVAILABLE_DECLINES),
+  ...Object.values(MODEL_CARD_DECLINES),
+];

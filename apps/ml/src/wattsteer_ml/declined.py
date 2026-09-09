@@ -42,6 +42,23 @@ holds, and ``json.dumps`` still writes the sentence. The census is additional
 information on a value that already existed, which is the only shape of change
 that could be made to seven constants at once without touching what reads them.
 
+Forecaster 27 then made it to thirteen more, which is the property being
+relied on rather than argued about: the six ``reads`` sentences on the unmeasured
+experiment blocks, ``no_verdict_reason``, the two absent-reason sentences on the
+artifact card and the four floor-coverage ``detail``s were all *anonymous* —
+private constants, or inline strings with no name at all — and all of them are
+read by ``==``, by ``in`` or through :func:`json.dumps`.
+``apps/ml/tests/test_declined_figures.py`` renders each of those surfaces and
+compares it the way its own reader does, because "a ``str`` subclass is a
+``str``" is one ``isinstance`` and not a claim about thirteen call sites.
+
+**The underscore was the defect.** :func:`declined_figures` would have collected
+a ``_``-prefixed constant perfectly well; what could not see it was the source
+scan the test reconciles the walk against, which recognises only a declaration
+written in this repository's convention. That disagreement is why an invisible
+reason is now a failing test rather than a shorter surface, and it is why naming
+is the work: a reason with no name cannot be found by any rule.
+
 ## Two kinds, and they are two on purpose
 
 :data:`DECLINE_KINDS` has two members and must keep having two.
@@ -55,13 +72,29 @@ choosing, and cannot be added nameless.
 
 ## What is *not* here
 
-The eighth named absence is ``band_unavailable_reason: "no_joint_ensemble"``,
-and it is not declared here because it is not produced here. This service
-publishes ``Publication.national = None``; the identity is a ``packages/core``
-schema enum and the sentence is the gateway's, so it is declared beside the
-enum in ``packages/core/src/declines.ts`` and merged onto ``GET /v1/meta``
-there. Spelling it in both languages is what a golden vector is for, and it
-would still be two spellings of one fact.
+Two absences are the **gateway's**, and neither is declared here because
+neither is produced here. ``band_unavailable_reason: "no_joint_ensemble"`` is
+one: this service publishes ``Publication.national = None``, the identity is a
+``packages/core`` schema enum and the sentence is the gateway's.
+``metrics_absent_reason`` is the other, and forecaster 27's judgement call —
+``apps/api/src/api/model-card.ts`` mints it out of the *absence* of a card
+group and forwards nothing, and a card that carried the field to forward does
+not exist on any volume, so moving the sentence here could only ever duplicate
+it. Both are declared beside the closed set that keys them in
+``packages/core/src/declines.ts`` and merged onto ``GET /v1/meta`` there.
+Spelling either in both languages is what a golden vector is for, and it would
+still be two spellings of one fact.
+
+``NOT_ACHIEVABLE_COLUMN`` is not here either, and it is the one forecaster 27
+was asked to report rather than force. It is identity-shaped like
+``no_joint_ensemble``, but it withholds nothing: ``archive_to_archive``
+publishes a full metrics row on purpose, because the gap between it and the
+control *is* the size of the leak in the product's own metric. What it carries
+is a **caveat on a present number** — ``achievable=False``, and a label reading
+NOT ACHIEVABLE — which is the ``_NOT_A_READING`` family forecaster 25 kept out
+of this census, and forecaster 28's subject. A ``kind`` for it would have had
+to mean "published, and must not be read as achievable", which is neither of
+the two.
 
 Nor is there a figure anywhere on this surface. A census of withheld
 measurements is the last place that could afford to carry a number a reader
