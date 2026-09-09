@@ -34,7 +34,7 @@ first scheduled retrain from needing a human.
 
 **Blocked by:** None — `0039` and forecaster 15 are merged.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] An artifact bound to the pre-`0039` `feature_hash` is refused by the real
       gate, and the refusal names the mismatch

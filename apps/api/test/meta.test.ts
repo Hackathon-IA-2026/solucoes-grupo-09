@@ -295,6 +295,116 @@ describe("meta · the model block, and it is the only one that can go missing", 
     expect(lane?.fault).toBe("promotion log line 3 is truncated");
   });
 
+  it("says a promoted lane owes a retrain rather than reporting it as serving", async () => {
+    // Forecaster 26. `0039_the_gate_over_a_backfill.sql` repaired the feature
+    // gate's `as_of` inside `feature_rows`, which moved `feature_hash` on
+    // purpose — so every artifact fitted before it is bound to a vector the
+    // database no longer produces, and the hot-swap gate marks it invalid. The
+    // promotion log still names it: a migration revokes no line. So the lane is
+    // `promoted` and serves nothing, and this is the field that says so without
+    // an operator having to trigger a promotion attempt to find out.
+    mlMeta({
+      lanes: [
+        {
+          lane: "dessem_free_v1__gate_late__thr5",
+          state: "promoted",
+          promoted: "2026-08-28T03:11:07Z",
+          usable: false,
+          retrain_owed: true,
+          contract_fault: "the live feature_rows definition hashes to sha256:04228af2",
+          unusable_reason: "2026-08-28T03:11:07Z is marked invalid; a retrain is owed.",
+        },
+      ],
+    });
+    const { body } = await meta(reachable());
+    const lane = (
+      (body.model as Record<string, unknown>).lanes as Record<string, unknown>[]
+    )[0];
+    expect(lane?.state).toBe("promoted");
+    expect(lane?.usable).toBe(false);
+    expect(lane?.retrain_owed).toBe(true);
+    expect(String(lane?.contract_fault)).toContain("feature_rows");
+    expect(String(lane?.unusable_reason)).toContain("retrain");
+    // The two are mutually exclusive: a card that would not parse states no
+    // contract fault, so a lane reporting one must not report the other.
+    expect(lane).not.toHaveProperty("card_error");
+  });
+
+  it("keeps an unreadable card apart from a moved feature contract", async () => {
+    // Both make the lane unusable and the repairs are different — one is a
+    // retrain, the other is the volume — so `retrain_owed` stays false and the
+    // sentence says the question cannot be answered from here.
+    mlMeta({
+      lanes: [
+        {
+          lane: "dessem_free_v1__gate_late__thr5",
+          state: "promoted",
+          promoted: "2026-08-28T03:11:07Z",
+          usable: false,
+          retrain_owed: false,
+          contract_fault: null,
+          card_error: "the promoted artifact's card cannot be read.",
+          unusable_reason: "the volume must be repaired before anything can serve.",
+        },
+      ],
+    });
+    const { body } = await meta(reachable());
+    const lane = (
+      (body.model as Record<string, unknown>).lanes as Record<string, unknown>[]
+    )[0];
+    expect(lane?.usable).toBe(false);
+    expect(lane?.retrain_owed).toBe(false);
+    expect(String(lane?.card_error)).toContain("cannot be read");
+    expect(lane).not.toHaveProperty("contract_fault");
+  });
+
+  it("does not report a debt for a lane the forecaster says is serving", async () => {
+    // The control. Without it the assertion above is compatible with a
+    // gateway that reports `retrain_owed` for every lane it sees.
+    mlMeta({
+      lanes: [
+        {
+          lane: "dessem_free_v1__gate_late__thr5",
+          state: "promoted",
+          promoted: "2026-08-28T03:11:07Z",
+          usable: true,
+          retrain_owed: false,
+          contract_fault: null,
+          unusable_reason: null,
+        },
+      ],
+    });
+    const { body } = await meta(reachable());
+    const lane = (
+      (body.model as Record<string, unknown>).lanes as Record<string, unknown>[]
+    )[0];
+    expect(lane?.usable).toBe(true);
+    expect(lane?.retrain_owed).toBe(false);
+    expect(lane).not.toHaveProperty("contract_fault");
+    expect(lane).not.toHaveProperty("unusable_reason");
+  });
+
+  it("omits the serviceability fields when the forecaster does not report them", async () => {
+    // Absent is not `false`. A modelling service too old to answer the question
+    // must not be rendered as one answering "this lane cannot serve" — that is
+    // the same rounding-down this endpoint refuses for the lane states.
+    mlMeta({
+      lanes: [
+        {
+          lane: "dessem_free_v1__gate_late__thr5",
+          state: "promoted",
+          promoted: "2026-08-28T03:11:07Z",
+        },
+      ],
+    });
+    const { body } = await meta(reachable());
+    const lane = (
+      (body.model as Record<string, unknown>).lanes as Record<string, unknown>[]
+    )[0];
+    expect(lane).not.toHaveProperty("usable");
+    expect(lane).not.toHaveProperty("retrain_owed");
+  });
+
   it("refuses to round an unrecognised state down to one of the three", async () => {
     mlMeta({ lanes: [{ lane: "a__gate_late__thr5", state: "retired", promoted: null }] });
     const { body } = await meta(reachable());

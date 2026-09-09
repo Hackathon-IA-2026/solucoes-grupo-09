@@ -65,10 +65,12 @@ to the newest file.
 
 from __future__ import annotations
 
+import json
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from .config import settings
 from .lanes import Lane, is_artifact_id
@@ -85,6 +87,52 @@ ARTIFACT_SUFFIX = ".joblib"
 #: Suffix of the model card that travels beside every bundle, promoted or not —
 #: "the card is written regardless, so a refused candidate is inspectable".
 CARD_SUFFIX = ".card.json"
+
+#: The card group the hot-swap gate writes its decision into
+#: (`docs/specs/forecaster.md`, the card's Decision group). Spelt in this module
+#: — the one that owns the volume and the card's filename — because three
+#: importers need it and none of them may import the others: the gate writes it,
+#: :func:`~wattsteer_ml.training.bundle.load_artifact` refuses on it, and
+#: :func:`inspect` reports it. `wattsteer_ml.training.bundle` re-exports both
+#: names, so the spelling every caller already uses is unchanged.
+GATE_BLOCK_KEY = "gate"
+
+#: The key inside :data:`GATE_BLOCK_KEY` that marks an artifact as invalid
+#: because the feature contract moved out from under it. Written by the gate's
+#: third check, read by the loader, and reported by :func:`inspect`.
+CONTRACT_FAULT_KEY = "contract_fault"
+
+#: The gate check whose refusals are a property of the fold calendar rather than
+#: of the candidate. `docs/specs/forecaster.md`: check 4's sixty-test-day floor
+#: and the quarterly live edge mean promotion is only possible in roughly the
+#: last third of each quarter, so runs of these are the gate working. Named here
+#: because :attr:`LaneView.unusable_reason` has to say so — a sentence that read
+#: as an alarm for eight weeks of every quarter would train an operator to
+#: ignore the one that is not.
+CALENDAR_BOUND_CHECK = "freshness_and_coverage"
+
+
+def contract_fault(card: Mapping[str, Any]) -> str | None:
+    """Why this artifact was marked invalid, or ``None`` when it was not.
+
+    Set by the hot-swap gate's third check when the live ``feature_rows``
+    definition stops producing the hash the artifact was fitted against. The
+    incumbent is then invalid rather than stale — every number it would serve was
+    measured in a feature space the database no longer produces — and
+    `docs/specs/forecaster.md` requires that it not be "left quietly serving a
+    changed contract". The promotion log cannot say so: it holds ``promote`` and
+    ``refuse``, and neither revokes an earlier promotion, while a rollback needs
+    an earlier artifact to name and after a contract change there is none. So the
+    mark lives on the card, where
+    :func:`~wattsteer_ml.training.bundle.load_artifact` refuses it — nothing is
+    deleted and no log line is rewritten.
+    """
+    block = card.get(GATE_BLOCK_KEY)
+    if not isinstance(block, dict):
+        return None
+    fault = block.get(CONTRACT_FAULT_KEY)
+    return fault if isinstance(fault, str) and fault.strip() else None
+
 
 #: What one lane can be, reported by `/v1/meta` and consumed by the gateway as
 #: `details.lane_state`. The first three are the spec's three; see the module
@@ -127,6 +175,31 @@ class LaneView:
     #: serving volume is worth a look, and *counted as nothing* rather than
     #: as a candidate.
     ignored: tuple[str, ...] = ()
+    #: Why the **promoted** artifact will not load, when it will not: the mark
+    #: the gate's third check writes on a card whose `feature_hash` the live
+    #: `feature_rows` no longer produces. ``None`` when the promoted artifact is
+    #: sound, and always ``None`` when nothing is promoted — the debt is a fact
+    #: about an artifact, and a lane with none owes nothing to a moved contract.
+    #:
+    #: Reported *beside* :attr:`promoted` rather than folded into
+    #: :attr:`state`, for two reasons. The promotion log is the authority for
+    #: which artifact a lane may serve and a migration revokes no line, so
+    #: ``promoted`` stays true; and `docs/specs/forecaster.md`'s four states are
+    #: the vocabulary `packages/core`'s `LANE_STATES` mirrors, where a fifth
+    #: would be a spec change rather than a field.
+    contract_fault: str | None = None
+    #: Why the promoted artifact's card could not be read, when it could not.
+    #: Held apart from :attr:`contract_fault` on purpose: a truncated card means
+    #: the volume *cannot say* whether the contract still holds, and the safe
+    #: reading of that on a serving volume is that the lane is not usable — but
+    #: it is not a retrain debt, because the repair is to the volume and not to
+    #: the model. Collapsing the two would make :attr:`retrain_owed` mean "not
+    #: serving", which is the one thing it must not mean.
+    card_error: str | None = None
+    #: The newest decision's reason, when the newest decision was a refusal.
+    #: Carried so :attr:`unusable_reason` can name *which* check declined —
+    #: "the gate promoted none of them" is not something an operator can act on.
+    newest_refusal: str | None = None
 
     def __post_init__(self) -> None:
         if self.promoted is not None and self.fault is not None:
@@ -139,6 +212,21 @@ class LaneView:
                 f"lane {self.lane} promotes {self.promoted!r}, which is not on the "
                 "volume; that is a fault, not a served artifact"
             )
+        for name, value in (
+            ("a contract fault", self.contract_fault),
+            ("a card error", self.card_error),
+        ):
+            if value is not None and self.promoted is None:
+                raise ValueError(
+                    f"lane {self.lane} carries {name} ({value}) and promotes "
+                    "nothing; both are facts about the artifact this lane serves, "
+                    "and a lane with none owes no retrain"
+                )
+        if self.contract_fault is not None and self.card_error is not None:
+            raise ValueError(
+                f"lane {self.lane} cannot both have read the promoted card and "
+                "failed to; a card that would not parse states no contract fault"
+            )
 
     @property
     def state(self) -> LaneState:
@@ -148,6 +236,89 @@ class LaneView:
         if self.promoted is not None:
             return "promoted"
         return "present_unpromoted" if self.artifacts else "no_artifact"
+
+    @property
+    def retrain_owed(self) -> bool:
+        """Whether this lane needs a retrain before it can serve anything.
+
+        True in exactly one situation, and it is the one `0039` created: the
+        artifact the promotion log names is marked invalid against the live
+        feature contract. Every other way a lane can be unserviceable — nothing
+        trained, nothing promoted, a damaged log — is answered by training,
+        waiting or repairing the volume, and calling those a retrain debt would
+        make the word mean "not serving".
+        """
+        return self.contract_fault is not None
+
+    @property
+    def usable(self) -> bool:
+        """Whether this lane can answer a forecast right now.
+
+        Promoted *and* loadable. The second conjunct is the one `/v1/meta` was
+        missing: an artifact marked invalid on its own card is refused by
+        :func:`~wattsteer_ml.training.bundle.load_artifact`, so a lane reporting
+        `promoted` alone was reporting something that could not serve. A card
+        that would not parse is refused by the same loader and counts here too —
+        without counting as a retrain debt.
+        """
+        return (
+            self.state == "promoted"
+            and self.contract_fault is None
+            and self.card_error is None
+        )
+
+    @property
+    def unusable_reason(self) -> str | None:
+        """One sentence saying why this lane has no usable artifact.
+
+        ``None`` when it has one. Otherwise prose for a human, because every
+        value it takes is a different repair — and one of them, a run of
+        :data:`CALENDAR_BOUND_CHECK` refusals, is not a repair at all but the
+        gate working through the first two thirds of a quarter. That case says
+        so in as many words: the sentence has to be readable during the weeks it
+        is expected without making the weeks it is not look the same.
+        """
+        if self.usable:
+            return None
+        if self.contract_fault is not None:
+            return (
+                f"{self.promoted} is the artifact this lane is promoted to serve "
+                f"and it is marked invalid on its own card: {self.contract_fault}. "
+                "Nothing in this lane can serve until a candidate is trained "
+                "against the live feature contract and clears the gate; a retrain "
+                "is owed."
+            )
+        if self.card_error is not None:
+            return (
+                f"{self.card_error} The artifact this lane is promoted to serve "
+                f"is {self.promoted}, and the loader refuses a card it cannot "
+                "read — so the lane serves nothing until the volume is repaired. "
+                "Whether a retrain is also owed cannot be said from here."
+            )
+        if self.fault is not None:
+            return self.fault
+        if not self.artifacts:
+            return (
+                "nothing has ever been trained in this lane; there is no bundle "
+                "on the volume and no decision about one"
+            )
+        refusal = (
+            f" The newest decision refused: {self.newest_refusal}."
+            if self.newest_refusal
+            else ""
+        )
+        expected = (
+            " A run of these is the gate working rather than a fault: check 4's "
+            "sixty-test-day floor and the quarterly live edge mean a candidate "
+            "can only be promoted in roughly the last third of each quarter, so "
+            "refusals before then are expected."
+            if self.newest_refusal and CALENDAR_BOUND_CHECK in self.newest_refusal
+            else ""
+        )
+        return (
+            f"{len(self.artifacts)} artifact(s) are on the volume and the gate "
+            f"has promoted none of them.{refusal}{expected}"
+        )
 
     @property
     def newest(self) -> str | None:
@@ -278,7 +449,7 @@ def inspect() -> ArtifactStore:
             lanes.setdefault(lane, ((), ()))
 
     views = tuple(
-        _resolve(lane, artifacts, ignored, log=log, log_error=log_error)
+        _resolve(lane, artifacts, ignored, root=path, log=log, log_error=log_error)
         for lane, (artifacts, ignored) in sorted(
             lanes.items(), key=lambda item: item[0].directory_name
         )
@@ -328,6 +499,7 @@ def _resolve(
     artifacts: tuple[str, ...],
     ignored: tuple[str, ...],
     *,
+    root: Path,
     log: PromotionLog | None,
     log_error: str | None,
 ) -> LaneView:
@@ -353,9 +525,61 @@ def _resolve(
             ),
             ignored=ignored,
         )
+    serviceability = (
+        _Serviceability()
+        if promoted is None
+        else _serviceability(root / lane.directory_name / f"{promoted}{CARD_SUFFIX}")
+    )
     return LaneView(
         lane=lane,
         artifacts=artifacts,
         promoted=promoted,
         ignored=ignored,
+        contract_fault=serviceability.contract_fault,
+        card_error=serviceability.card_error,
+        newest_refusal=_newest_refusal(log, lane),
     )
+
+
+@dataclass(frozen=True)
+class _Serviceability:
+    """What the promoted artifact's card says about itself, or why it cannot."""
+
+    contract_fault: str | None = None
+    card_error: str | None = None
+
+
+def _serviceability(path: Path) -> _Serviceability:
+    """Read the promoted artifact's card and answer both questions. Never raises.
+
+    One small file read per lane, and it is the read that turns "this lane is
+    promoted" into "this lane can serve". The two answers are kept apart because
+    they need different repairs: a contract fault is a retrain, an unreadable
+    card is a volume. Neither is silence — the loader refuses both, so a view
+    that called either lane usable would be describing something nothing may
+    run.
+    """
+    try:
+        parsed = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        return _Serviceability(
+            card_error=(
+                f"the promoted artifact's card at {path} cannot be read ({error})."
+            )
+        )
+    if not isinstance(parsed, dict):
+        return _Serviceability(card_error=f"{path} does not hold a model card.")
+    return _Serviceability(contract_fault=contract_fault(parsed))
+
+
+def _newest_refusal(log: PromotionLog, lane: Lane) -> str | None:
+    """The reason on this lane's newest decision, when that decision refused.
+
+    Newest rather than newest-refusal: a lane whose last decision promoted has
+    nothing outstanding to report, and quoting an older refusal beside a live
+    artifact would describe a state the lane has already left.
+    """
+    decisions = log.for_lane(lane)
+    if not decisions or decisions[-1].promotes:
+        return None
+    return decisions[-1].reason

@@ -972,6 +972,46 @@ export interface MetaLane {
    * for every other state.
    */
   fault?: string;
+  /**
+   * Whether this lane can answer a forecast right now - promoted *and* loadable.
+   * `state: "promoted"` alone is not enough: an artifact the hot-swap gate
+   * marked invalid against the live feature contract is refused by the loader,
+   * so a lane can be promoted and still serve nothing. Absent when the modelling
+   * service is too old to report it, which is not the same as `false`.
+   */
+  usable?: boolean;
+  /**
+   * True when the artifact this lane is promoted to serve is bound to a
+   * `feature_hash` the live `feature_rows` no longer produces.
+   * `0039_the_gate_over_a_backfill.sql` put both serving lanes here at once by
+   * repairing the feature gate's `as_of` inside `feature_rows`, which moved the
+   * hash on purpose. It is the one unserviceable state that needs a retrain
+   * rather than time, a first training run or a repaired volume - and the one an
+   * operator has to be told about without triggering a promotion attempt to find
+   * out.
+   */
+  retrainOwed?: boolean;
+  /**
+   * The gate's own prose for why the promoted artifact will not load. Present
+   * exactly when `retrain_owed` is true.
+   */
+  contractFault?: string;
+  /**
+   * Why the promoted artifact's card could not be read, when it could not. Kept
+   * apart from `contract_fault` because the repair is the volume's rather than
+   * the model's, and while it is set nothing can say whether a retrain is also
+   * owed - so `retrain_owed` is false, not unknown-as-true.
+   */
+  cardError?: string;
+  /**
+   * One sentence saying why this lane has no usable artifact, or absent when it
+   * has one. It distinguishes a retrain debt from the weeks of
+   * `freshness_and_coverage` refusals that are the gate working: check 4's
+   * sixty-test-day floor and the quarterly live edge mean a candidate can only
+   * be promoted in roughly the last third of each quarter, and this sentence
+   * says so during those weeks rather than reading as an alarm.
+   */
+  unusableReason?: string;
   artifactId?: string | null;
   trainedThrough?: CivilDate | null;
   vintageFidelity?: VintageFidelity;
@@ -2598,6 +2638,11 @@ export const WIRE_SHAPES = {
     lane: { wire: "lane" },
     state: { wire: "state" },
     fault: { wire: "fault", optional: true },
+    usable: { wire: "usable", optional: true },
+    retrainOwed: { wire: "retrain_owed", optional: true },
+    contractFault: { wire: "contract_fault", optional: true },
+    cardError: { wire: "card_error", optional: true },
+    unusableReason: { wire: "unusable_reason", optional: true },
     artifactId: { wire: "artifact_id", optional: true },
     trainedThrough: { wire: "trained_through", optional: true },
     vintageFidelity: { wire: "vintage_fidelity", optional: true },
