@@ -512,10 +512,8 @@ correct.
   "model": {
     "reachable": true,
     "lanes": [ { "lane": "dessem_free_v1__gate_late__thr5",
-                 "state": "promoted",              // no_artifact | present_unpromoted | promoted
-                 "artifact_id": "…/2026-08-28T03:11:07Z",
-                 "trained_through": "2026-06-30",
-                 "vintage_fidelity": "point_in_time" } ],
+                 "state": "promoted",              // no_artifact | present_unpromoted | promoted | unresolvable
+                 "artifact_id": "…/2026-08-28T03:11:07Z" } ],
     "volume": { "mounted": true, "writable": true }
   },
 
@@ -559,7 +557,22 @@ translated strings around untranslated licence identifiers is exactly the shape
 "a stale forecast and an unmounted volume do not look alike", and the volume
 state is reported separately for the same reason.
 
-**Four things the built endpoint carries that this block does not show**, each
+**`model.lanes[].state` is the *condition* vocabulary, and it is not the error
+envelope's.** `packages/core`'s `LANE_STATES` has three members and excludes
+`promoted`, because a lane with something to serve produces no
+`MODEL_UNAVAILABLE`; this block's `state` has four. The two therefore answer
+differently about one lane at one moment, and neither is wrong: a lane whose
+promoted artifact the hot-swap gate marked contract-faulted is `promoted` here —
+the promotion line exists and a migration revokes no line — and `unresolvable`
+in a `/v1/model/card` 503, where the envelope's three words offer nothing truer.
+The endpoint says the rest in **fields rather than by bending the word**:
+`usable`, `retrain_owed`, `contract_fault`, `card_error` and `unusable_reason`
+are what make `promoted` readable there instead of misleading. Both definitions
+name the other, in `packages/core/src/errors.ts` and in
+`apps/ml/src/wattsteer_ml/artifacts.py`, and `LaneCondition` is what the
+four-member one is called so that the two are not one name with two meanings.
+
+**Five things the built endpoint carries that this block does not show**, each
 because the alternative was a claim the gateway cannot support:
 
 - **`state` has a fourth value, `unresolvable`.** It is not a fourth state so
@@ -583,6 +596,23 @@ because the alternative was a claim the gateway cannot support:
   free-form object. The one translator renames only what the generated table
   knows about, so an unnamed block would travel in whatever casing the gateway
   happened to build it in.
+- **The lane's serviceability fields** — `usable`, `retrain_owed`,
+  `contract_fault`, `card_error`, `unusable_reason` — forwarded from the
+  modelling service and never derived here, because only that process can read
+  the card that says so, and **omitted** rather than defaulted to `false` when
+  an older service cannot say.
+
+**And two fields this block once showed and the endpoint does not carry.**
+`trained_through` and `vintage_fidelity` were declared on the lane and filled by
+nothing. They are properties of the *promoted artifact*, not of the lane's
+decision, and `GET /v1/model/card` already serves both for the artifact
+`artifact_id` names — `windows.training` and `windows.rows_by_vintage_fidelity`.
+Restating them here would give one artifact's training window two homes that can
+disagree, which is the failure mode this section has just spent a paragraph on.
+`vintage_fidelity` could not have been restated honestly in any case: vocabulary
+rule 9 forbids averaging across fidelity, and a training window straddling
+`ingestion_go_live` has both — which is why the card counts rows *per* fidelity
+rather than naming one.
 
 **`declines` — the one place that lists every figure this system will not
 state.** Forecaster 25's, and the argument for it being on *this* endpoint

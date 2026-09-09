@@ -178,6 +178,72 @@ def test_an_unreadable_card_refuses_rather_than_returning_a_partial_one(
     assert response.json()["error"]["details"]["lane_state"] == "unresolvable"
 
 
+def test_the_two_unresolvable_refusals_are_told_apart_in_details(
+    promoted: Path, trained: TrainedFold
+) -> None:
+    """`unresolvable` alone would name one repair for two situations.
+
+    The envelope vocabulary has three words and neither of the other two is
+    true of a lane whose promote line is sound: it has an artifact and a
+    decision about it. So this refusal and the one a corrupt promotion log
+    produces share a word, and without a discriminator they are byte-identical
+    on the wire — same code, same state, same `volume_mounted: true` — while
+    "the decision log is damaged" and "the log is fine and the card behind a
+    good promote line will not parse" are repairs to different things. `message`
+    is developer prose a client may not render, so the discriminator has to be
+    in `details`.
+    """
+    path = promoted / LANE.directory_name / f"{trained.card.artifact_id}{CARD_SUFFIX}"
+    path.write_text("half a document", encoding="utf-8")
+    unreadable = client.get(CARD).json()["error"]["details"]
+
+    log = promoted / PROMOTION_LOG_FILENAME
+    log.write_text("{not json\n", encoding="utf-8")
+    damaged_log = client.get(CARD).json()["error"]["details"]
+
+    # One word, because there is no other true one available.
+    assert unreadable["lane_state"] == damaged_log["lane_state"] == "unresolvable"
+    assert unreadable["volume_mounted"] is damaged_log["volume_mounted"] is True
+    # And two different `details`, which is what a client can branch on.
+    assert unreadable["card_error"]
+    assert "card_error" not in damaged_log
+    assert "contract_fault" not in unreadable
+
+
+def test_the_card_503_and_meta_answer_differently_about_one_lane(
+    promoted: Path, trained: TrainedFold
+) -> None:
+    """The reported contradiction, asserted as the intended behaviour.
+
+    A contract-faulted lane: `/v1/model/card` answers 503 `unresolvable` in the
+    error-envelope vocabulary, and `/v1/meta` answers `promoted` in the
+    condition vocabulary. Both are true — the promote line exists and a
+    migration revokes no line, and there is no servable card behind it — and
+    `/v1/meta` says the second half in fields rather than by bending the word.
+    """
+    path = promoted / LANE.directory_name / f"{trained.card.artifact_id}{CARD_SUFFIX}"
+    write_card(
+        path,
+        {
+            **read_card(path),
+            GATE_BLOCK_KEY: {CONTRACT_FAULT_KEY: "feature_rows moved under it"},
+        },
+    )
+
+    envelope = client.get(CARD).json()["error"]["details"]
+    assert envelope["lane_state"] == "unresolvable"
+    assert envelope["contract_fault"]
+
+    lanes = client.get("/v1/meta").json()["artifacts"]["lanes"]
+    lane = next(one for one in lanes if one["lane"] == LANE.directory_name)
+    assert lane["state"] == "promoted"
+    # The serviceability facts that make `promoted` readable rather than a lie.
+    assert lane["usable"] is False
+    assert lane["retrain_owed"] is True
+    assert lane["contract_fault"]
+    assert lane["unusable_reason"]
+
+
 def test_a_lane_name_that_is_not_one_is_a_422_and_not_a_503(promoted: Path) -> None:
     """A malformed request is a statement about the request.
 

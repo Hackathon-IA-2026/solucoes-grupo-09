@@ -37,7 +37,7 @@ the schema makes and the code breaks.
 
 **Blocked by:** forecaster 26 (merged).
 
-**Status:** ready-for-agent
+**Status:** done — two vocabularies, not a divergence; the shared name was the defect
 
 - [ ] Whether the two answers are a divergence or two vocabularies is settled
       with both definitions quoted

@@ -30,6 +30,11 @@ log. There are exactly four answers and three of them are refusals:
   on the volume. The lane cannot say what it may serve, so this module says so
   rather than guessing between the other three.
 
+Three and not four: ``promoted`` is a condition `/v1/meta` reports and never a
+refusal, so it is absent from the vocabulary these carry
+(:data:`~wattsteer_ml.artifacts.EnvelopeLaneState`, mirroring `packages/core`'s
+`LANE_STATES`) rather than merely unreachable within it.
+
 Each arrives as a :class:`PublicationRefusedError` carrying the ``lane_state`` the
 gateway puts in ``details.lane_state`` on its ``MODEL_UNAVAILABLE``. None of
 them is an empty band: `docs/specs/forecaster.md`'s standing rule is that the
@@ -99,7 +104,7 @@ from datetime import date, datetime
 from typing import Any, Literal
 
 from wattsteer_ml import artifacts
-from wattsteer_ml.artifacts import LaneState
+from wattsteer_ml.artifacts import EnvelopeLaneState
 from wattsteer_ml.constants import SUBSYSTEM_CODES, Subsystem
 from wattsteer_ml.evaluation import HOURS_PER_DAY, RowKey
 from wattsteer_ml.lanes import Lane
@@ -164,7 +169,14 @@ class PublicationRefusedError(Exception):
     """
 
     lane: Lane
-    lane_state: LaneState
+    #: The **error-envelope** word, three members, mirroring
+    #: `packages/core`'s `LANE_STATES` — never the four-member
+    #: :data:`~wattsteer_ml.artifacts.LaneCondition` `/v1/meta` reports.
+    #: `promoted` is not among them and cannot be: a lane with something to
+    #: serve does not produce a refusal, and the type is what says so.
+    #: :attr:`~wattsteer_ml.artifacts.LaneView.absence_state` is the one
+    #: crossing from a condition to this, and it raises on `promoted`.
+    lane_state: EnvelopeLaneState
     reason: str
     #: Whether the artifact directory is a directory at all.
     #:
@@ -502,7 +514,7 @@ def resolve_artifact(lane: Lane, *, store: artifacts.ArtifactStore | None = None
         # and is not enough on its own. The mount is reported beside it.
         raise PublicationRefusedError(
             lane=lane,
-            lane_state=view.state,
+            lane_state=view.absence_state,
             volume_mounted=False,
             reason=(
                 f"the artifact directory {inspected.path} is not mounted, so no "
@@ -525,7 +537,7 @@ def resolve_artifact(lane: Lane, *, store: artifacts.ArtifactStore | None = None
     if promoted is None:
         raise PublicationRefusedError(
             lane=lane,
-            lane_state=view.state,
+            lane_state=view.absence_state,
             volume_mounted=True,
             reason=(
                 "no artifact has been promoted in this lane"

@@ -274,11 +274,23 @@ next to the line that undid it.
 | `promoted` | an artifact is named by a `promote` line and is on disk |
 | `unresolvable` | the log is damaged, or promotes an artifact that is not there |
 
-The first three are the three states `docs/specs/forecaster.md` requires, and
-they are what lets the gateway answer `MODEL_UNAVAILABLE` with a `lane_state`
-rather than collapsing "no promoted artifact" into a spinner. The fourth is the
-refusal to guess between them: `current()` raises rather than falling back to
-the newest file, while `/v1/meta` still answers so an operator can see why.
+The first three are the three states `docs/specs/forecaster.md` requires. The
+fourth is the refusal to guess between them: `current()` raises rather than
+falling back to the newest file, while `/v1/meta` still answers so an operator
+can see why.
+
+**That table is `LaneCondition`, and it is not the vocabulary an error envelope
+carries.** `packages/core`'s `LANE_STATES` has *three* members — the two
+absences plus `unresolvable` — and excludes `promoted`, because a lane with
+something to serve produces no `MODEL_UNAVAILABLE`. So the two answer
+differently about one lane at one moment without either being wrong: a lane
+whose promoted artifact the gate marked contract-faulted is `promoted` in this
+table and `unresolvable` in a `/v1/model/card` 503. `/v1/meta` says the rest in
+fields — `usable`, `retrain_owed`, `contract_fault`, `card_error`,
+`unusable_reason` — rather than by bending the word, and the 503's `details`
+carry the same discriminators. `LaneView.absence_state` is the single crossing
+between the two vocabularies and raises on `promoted`; see `artifacts.py`'s
+module docstring, and `tests/test_lane_vocabularies.py` for the parity.
 
 ### Training the hurdle
 

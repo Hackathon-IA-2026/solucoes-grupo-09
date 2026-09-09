@@ -61,6 +61,18 @@ is not on the volume. In either case the lane cannot say what it is allowed to
 serve, so :func:`current` raises and `/v1/meta` reports the fault in prose —
 because the one thing this module must never do when it cannot tell is fall back
 to the newest file.
+
+**Two vocabularies, not one, and the distinction is load-bearing.** What this
+module reports is a lane's *condition* (:data:`LaneCondition`, four members,
+`/v1/meta`'s ``lanes[].state``). What an error envelope carries is the reason a
+request found *nothing* (:data:`EnvelopeLaneState`, three members, mirroring
+`packages/core`'s `LANE_STATES`, on ``details.lane_state``). They can answer
+differently about one lane at one moment without either being wrong — a
+contract-faulted lane is ``promoted`` here and `unresolvable` in a
+`/v1/model/card` 503 — because they answer different questions.
+:attr:`LaneView.absence_state` is the single crossing between them, and it
+raises rather than inventing an envelope word for a lane that has something to
+serve.
 """
 
 from __future__ import annotations
@@ -134,13 +146,46 @@ def contract_fault(card: Mapping[str, Any]) -> str | None:
     return fault if isinstance(fault, str) and fault.strip() else None
 
 
-#: What one lane can be, reported by `/v1/meta` and consumed by the gateway as
-#: `details.lane_state`. The first three are the spec's three; see the module
-#: docstring for why there is a fourth.
-LaneState = Literal[
+#: What condition one lane is in, reported by `/v1/meta` as `lanes[].state`.
+#: The first three are the spec's three; see the module docstring for why there
+#: is a fourth.
+#:
+#: **This is the inspection vocabulary, and it is deliberately not the
+#: error-envelope one.** `packages/core`'s `LANE_STATES` has three members and
+#: excludes `promoted` because that state is not an absence and never reaches a
+#: `MODEL_UNAVAILABLE`. The two answer different questions — "what condition is
+#: this lane in?" against "why did a request find nothing to serve?" — and for
+#: one lane at one moment they can differ without either being wrong: a
+#: contract-faulted lane is ``promoted`` here (the promotion line exists; a
+#: migration revokes no line) and `unresolvable` in a `/v1/model/card` 503
+#: (there is no servable card behind that line).
+#:
+#: It is named ``LaneCondition`` rather than ``LaneState`` for exactly that
+#: reason. Both vocabularies once exported the name ``LaneState``, one with
+#: three members and one with four, which is how a reader ends up believing one
+#: of them is a bug. :data:`EnvelopeLaneState` below is the three, mirrored
+#: here so the two are visible side by side and so the type checker can keep
+#: ``promoted`` out of an error envelope.
+LaneCondition = Literal[
     "no_artifact",
     "present_unpromoted",
     "promoted",
+    "unresolvable",
+]
+
+#: `details.lane_state` on a `MODEL_UNAVAILABLE` — `packages/core`'s
+#: `LANE_STATES`, mirrored, and asserted equal to it by
+#: ``tests/test_lane_vocabularies.py``.
+#:
+#: Not an alias of :data:`LaneCondition` minus a member, because it is a
+#: different vocabulary and not a subset by accident: `promoted` is absent
+#: because a lane with something to serve does not produce this envelope, and
+#: growing a member here is a spec change. Every refusal that crosses the
+#: boundary is typed with *this*, so the invariant `LANE_STATES` states in prose
+#: is one mypy checks rather than one a reviewer has to.
+EnvelopeLaneState = Literal[
+    "no_artifact",
+    "present_unpromoted",
     "unresolvable",
 ]
 
@@ -184,9 +229,10 @@ class LaneView:
     #: Reported *beside* :attr:`promoted` rather than folded into
     #: :attr:`state`, for two reasons. The promotion log is the authority for
     #: which artifact a lane may serve and a migration revokes no line, so
-    #: ``promoted`` stays true; and `docs/specs/forecaster.md`'s four states are
-    #: the vocabulary `packages/core`'s `LANE_STATES` mirrors, where a fifth
-    #: would be a spec change rather than a field.
+    #: ``promoted`` stays true; and `docs/specs/forecaster.md`'s states are a
+    #: fixed vocabulary in both languages — a fifth condition here, or a fourth
+    #: in `packages/core`'s `LANE_STATES`, would be a spec change rather than a
+    #: field.
     contract_fault: str | None = None
     #: Why the promoted artifact's card could not be read, when it could not.
     #: Held apart from :attr:`contract_fault` on purpose: a truncated card means
@@ -229,13 +275,39 @@ class LaneView:
             )
 
     @property
-    def state(self) -> LaneState:
-        """Which of the states this lane is in — derived, never stored."""
+    def state(self) -> LaneCondition:
+        """Which condition this lane is in — derived, never stored.
+
+        The **inspection** answer, in the four-member vocabulary. What a lane
+        *is*, which is not the same question as why a request found nothing —
+        see :attr:`absence_state` for that one.
+        """
         if self.fault is not None:
             return "unresolvable"
         if self.promoted is not None:
             return "promoted"
         return "present_unpromoted" if self.artifacts else "no_artifact"
+
+    @property
+    def absence_state(self) -> EnvelopeLaneState:
+        """This lane's word in the **error-envelope** vocabulary.
+
+        The one crossing from :data:`LaneCondition` to
+        :data:`EnvelopeLaneState`, so the narrowing happens once and mypy can
+        see it. Raises when the lane is ``promoted``: that is not an absence,
+        the envelope vocabulary has no word for it, and a caller asking this of
+        a lane with something to serve has a bug rather than a state to report.
+        Reaching for `unresolvable` there instead would put "the volume cannot
+        say what it serves" on the wire about a lane that just said so.
+        """
+        condition = self.state
+        if condition == "promoted":
+            raise ValueError(
+                f"lane {self.lane} promotes {self.promoted!r}, so it has something "
+                "to serve and no error envelope describes it; `promoted` is not "
+                "one of the three states a MODEL_UNAVAILABLE may carry"
+            )
+        return condition
 
     @property
     def retrain_owed(self) -> bool:

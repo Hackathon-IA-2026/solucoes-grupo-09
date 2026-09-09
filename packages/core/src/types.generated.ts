@@ -1034,8 +1034,27 @@ export interface MetaGate {
 }
 
 /**
- * `state` reproduces the forecaster's three artifact states verbatim, because
- * a stale forecast and an unmounted volume must not look alike.
+ * `state` reproduces the forecaster's artifact states verbatim, because a
+ * stale forecast and an unmounted volume must not look alike. **It is the
+ * four-member *condition* vocabulary and not the error envelope's three** -
+ * `@wattsteer/core/errors`'s `LANE_STATES` excludes `promoted` on purpose,
+ * since a lane with something to serve produces no `MODEL_UNAVAILABLE`. The
+ * two legitimately disagree about one lane at one moment: a contract-faulted
+ * lane is `promoted` here, with `usable: false`, `retrain_owed: true` and
+ * `contract_fault` beside it, and `unresolvable` in a `/v1/model/card` 503.
+ * Serviceability is what this block answers with, and it answers with fields
+ * rather than by bending the state word. It describes the lane's *decision and
+ * serviceability*, never the promoted artifact's contents. `trained_through`
+ * and `vintage_fidelity` were declared here and filled by nothing; they are
+ * card facts, and `GET /v1/model/card` serves both for the artifact
+ * `artifact_id` names - `windows.training` and
+ * `windows.rows_by_vintage_fidelity`. Restating them here would have given one
+ * artifact's training window two homes that can disagree, which is the defect
+ * this schema was already carrying in the shape of two `lane_state`
+ * vocabularies. `vintage_fidelity` could not have been restated honestly in
+ * any case: a training window straddling ingestion go-live has both
+ * fidelities, which is why the card counts rows *per* fidelity instead of
+ * naming one.
  */
 export interface MetaLane {
   lane: string;
@@ -1095,8 +1114,6 @@ export interface MetaLane {
    */
   unusableReason?: string;
   artifactId?: string | null;
-  trainedThrough?: CivilDate | null;
-  vintageFidelity?: VintageFidelity;
 }
 
 export interface MetaModel {
@@ -2740,8 +2757,6 @@ export const WIRE_SHAPES = {
     cardError: { wire: "card_error", optional: true },
     unusableReason: { wire: "unusable_reason", optional: true },
     artifactId: { wire: "artifact_id", optional: true },
-    trainedThrough: { wire: "trained_through", optional: true },
-    vintageFidelity: { wire: "vintage_fidelity", optional: true },
   },
   MetaModel: {
     reachable: { wire: "reachable" },
