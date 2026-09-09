@@ -152,6 +152,7 @@ from datetime import date
 from typing import Any
 
 from wattsteer_ml.constants import SUBSYSTEM_CODES
+from wattsteer_ml.declined import DeclinedFigure
 from wattsteer_ml.evaluation import HOURS_PER_DAY, RowKey
 from wattsteer_ml.mixture import (
     SERVED_QUANTILES,
@@ -200,14 +201,17 @@ NOT_A_NINETY_PERCENT_BAND = (
 #: and the data exists -- the fold calendar, the feature function and the
 #: settled labels are all here -- so the comparison is unmade rather than made
 #: and found uninteresting.
-MARGINAL_COVERAGE_NOT_RUN_YET = (
+MARGINAL_COVERAGE_NOT_RUN_YET = DeclinedFigure(
     "Whether a marginal coverage short of nominal survives outside a fixture "
     "has not been measured. It is not a finding that the served band "
     "under-covers on the grid and not a data source that is missing: the fold "
     "calendar, feature_rows and the settled labels are all present, and what "
     "this needs is a fold sweep against a migrated database with an ingested "
     "window. Every coverage figure in this repository's fixtures is arithmetic "
-    "over invented rows and describes nothing about Brazil."
+    "over invented rows and describes nothing about Brazil.",
+    figure=("whether the served band's marginal coverage survives outside a fixture"),
+    kind="unrun",
+    surface="`GET /v1/model/card`, `band.coverage.claim_note`",
 )
 
 #: Which correction regime a served number was produced under — a **stored

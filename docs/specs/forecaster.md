@@ -1200,6 +1200,32 @@ refuse the artifact:
 | Environment | Python, lightgbm, sklearn, numpy versions |
 | Decision | `gate` result block: bootstrap statistic, guardrail values, `decision`, `reason` |
 
+**Every figure the card declines to state is a declared constant, and the
+census of them is assembled rather than listed.** The card carries named
+absences as well as numbers — `ARCHIVE_FEATURES_HAVE_NO_SHAPE` on the
+lead-time block, `CORRELATION_NOT_RUN_YET` beside it, `NOT_RUN_YET` on the
+DESSEM block, `NO_TFT_IMPLEMENTATION` and `NO_TRAINING_COST_MEASURED` on the
+transformer benchmark, `MARGINAL_COVERAGE_NOT_RUN_YET` in the band's claim note,
+and the floor guardrail's `not_applicable` on the decision — because a card with
+no block and a card naming what is absent look identical to anybody grepping for
+the figure, and only one of them is true.
+
+Each of those constants is a `DeclinedFigure` (`wattsteer_ml/declined.py`): a
+`str`, so every card field and comparison that already reads one is unchanged,
+carrying three things the sentence alone could not say — which figure is
+withheld, where a caller meets it, and whether it is **`unrunnable`** or merely
+**`unrun`**. That distinction is load-bearing and this spec's own history is
+why: forecaster 16 says an arm cannot be built, forecaster 18 chose its constant
+precisely so that it would not read like that, and forecaster 24 followed 18.
+
+`GET /v1/meta` publishes the census, taken by walking this package for declared
+constants rather than from a list — so a reason added anywhere under
+`wattsteer_ml` appears on the surface with nothing else edited, and
+`apps/ml/tests/test_declined_figures.py` reconciles the walk against a source
+scan so that a constant it cannot see is a failure rather than a silent
+omission. See `docs/specs/api-surface.md` §1 for why the census is on `/v1/meta`
+and not on the card it mostly describes.
+
 **The hot-swap gate — the checks, in order. All must pass.**
 
 1. **Lane identity.** Candidate's `(feature_set, gate_profile, threshold_mw)`

@@ -140,6 +140,7 @@ from typing import Any, Literal
 
 from wattsteer_ml.artifacts import CARD_SUFFIX
 from wattsteer_ml.canonical import VintageFidelity
+from wattsteer_ml.declined import DeclinedFigure
 from wattsteer_ml.evaluation.collapse_report import (
     FIXTURE_SOURCE,
     UNMEASURED_SOURCE,
@@ -1111,7 +1112,7 @@ def _required_correction(entry: ArmColumn, field: str) -> float:
 #: replaced an earlier sentence that named a missing ingestion, which
 #: :mod:`~wattsteer_ml.weather_reads` made the wrong sentence for this half:
 #: the archive series is recoverable and the archive *feature row* is not.
-ARCHIVE_FEATURES_HAVE_NO_SHAPE = (
+ARCHIVE_FEATURES_HAVE_NO_SHAPE = DeclinedFigure(
     "The control arm trains on the stitched Historical Forecast archive, and "
     "this repository cannot build a feature row from it. Not for want of the "
     "weather: `wattsteer_ml.weather_reads` recovers the archive series out of "
@@ -1126,7 +1127,12 @@ ARCHIVE_FEATURES_HAVE_NO_SHAPE = (
     "which is a second definition of the vector. So the A/B is unrun rather "
     "than run and found uninteresting: the comparison, the row-identity "
     "assertion and the interval deltas are built and tested, and what is "
-    "missing is a shape no ingestion ticket would supply."
+    "missing is a shape no ingestion ticket would supply.",
+    figure=(
+        "the weather lead-time A/B's control arm, and the three interval deltas over it"
+    ),
+    kind="unrunnable",
+    surface="the model card's `lead_time_penalty` block, `reason`",
 )
 
 #: Why **the aggregate correlation** is absent when it is absent, which is a
@@ -1135,7 +1141,7 @@ ARCHIVE_FEATURES_HAVE_NO_SHAPE = (
 #: rather than restated: that block chose its own words precisely so it would
 #: not read as this module's "no data source", and this half is now in its
 #: position rather than in the A/B's.
-CORRELATION_NOT_RUN_YET = (
+CORRELATION_NOT_RUN_YET = DeclinedFigure(
     "The aggregate correlation was not computed for this card. This is not a "
     "missing data source and not a finding that aggregation leaves r where the "
     "per-point figure put it: both series are readable — "
@@ -1144,7 +1150,12 @@ CORRELATION_NOT_RUN_YET = (
     "the published capacity weights — so this half is unrun rather than "
     "unrunnable. What it needs is an ingested weather window on a migrated "
     "database, which the offline card writer does not have, and a figure "
-    "produced without one would be a fixture rather than a measurement."
+    "produced without one would be a fixture rather than a measurement.",
+    figure="the aggregate train/serve weather correlation",
+    kind="unrun",
+    surface=(
+        "the model card's `lead_time_penalty` block, `aggregate_correlation_reason`"
+    ),
 )
 
 #: When the interval harm showed up where the research said it would.

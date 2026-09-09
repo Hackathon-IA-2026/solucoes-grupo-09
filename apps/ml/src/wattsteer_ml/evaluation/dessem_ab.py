@@ -147,6 +147,7 @@ from wattsteer_ml.admissibility import (
 from wattsteer_ml.artifacts import CARD_SUFFIX
 from wattsteer_ml.canonical import VintageFidelity
 from wattsteer_ml.constants import SUBSYSTEM_THRESHOLD_MW
+from wattsteer_ml.declined import DeclinedFigure
 from wattsteer_ml.evaluation.collapse_report import FIXTURE_SOURCE, UNMEASURED_SOURCE
 from wattsteer_ml.evaluation.folds import FoldCalendar
 from wattsteer_ml.evaluation.gate import (
@@ -315,14 +316,17 @@ CONTRAST_BY_NAME: dict[ContrastName, Contrast] = {
 #: :attr:`UnmeasuredDessemDelta.reason` — and deliberately **not** ticket 16's
 #: shape. The lead-time A/B has no data source for its control arm and says so;
 #: this one has one for every arm, so the only honest absence is "not run yet".
-NOT_RUN_YET = (
+NOT_RUN_YET = DeclinedFigure(
     "The three runs have not been scored. This is not a floor advantage of zero "
     "and not a finding that DESSEM's features are worth nothing: the arms exist "
     "and their data exists — the twenty-two dessem_* columns are populated by "
     "feature_dessem_block from ONS's balanco_dessem_detalhe, ingested from its "
     "coverage start of 2025-05-23, which is B-common's window start — so this "
     "comparison is unmade rather than made and found uninteresting. What it "
-    "needs is a fold sweep against a migrated database, not a data source."
+    "needs is a fold sweep against a migrated database, not a data source.",
+    figure="the DESSEM A/B's three arms, and the floor advantage between them",
+    kind="unrun",
+    surface="the model card's `dessem_delta` block, `reason`",
 )
 
 

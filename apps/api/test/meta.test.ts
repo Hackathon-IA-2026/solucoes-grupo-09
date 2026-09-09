@@ -76,7 +76,12 @@ async function meta(ml?: MlEndpoint): Promise<{
 }
 
 /** The modelling service's own `/v1/meta`, as `apps/ml/src/wattsteer_ml/app.py` writes it. */
-function mlMeta(overrides: { lanes?: unknown[]; mounted?: boolean; writable?: boolean }) {
+function mlMeta(overrides: {
+  lanes?: unknown[];
+  mounted?: boolean;
+  writable?: boolean;
+  declines?: unknown[];
+}) {
   reply = () =>
     new Response(
       JSON.stringify({
@@ -94,6 +99,10 @@ function mlMeta(overrides: { lanes?: unknown[]; mounted?: boolean; writable?: bo
           promotion_log: { path: "/data/models/promotions.jsonl", decisions: 1 },
           unrecognised: [],
         },
+        // Forecaster 25's census, as `wattsteer_ml/declined.py` assembles it.
+        // Its contents are asserted in `declined-figures.test.ts`; what it is
+        // doing here is keeping this stub the shape of the real reply.
+        declines: overrides.declines ?? [],
       }),
       { headers: { "content-type": "application/json" } },
     );
@@ -116,12 +125,16 @@ describe("meta · one request says what this deployment can do", () => {
     const result = validate("meta.schema.json", body);
     expect(result.valid ? "" : explain(result)).toBe("");
 
-    // The eight blocks the ticket asks for, in one request. Named rather than
-    // counted: a client reads all of them before first paint, which is the
-    // argument for one document rather than five round trips.
+    // Every block the ticket asks for, in one request. Named rather than
+    // counted — a count here is a number that goes stale the next time the
+    // document grows, and it has: `declines` is forecaster 25's census of the
+    // figures this deployment will not state. A client reads all of them
+    // before first paint, which is the argument for one document rather than
+    // five round trips.
     expect(Object.keys(body).sort()).toEqual([
       "attribution",
       "data",
+      "declines",
       "defaults",
       "environment",
       "forecast",

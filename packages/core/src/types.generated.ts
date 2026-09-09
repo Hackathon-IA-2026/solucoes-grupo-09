@@ -932,6 +932,7 @@ export interface Meta {
    * happened to build it in.
    */
   referenceFleet: MetaReferenceFleet;
+  declines: MetaDeclines;
   /**
    * Data rather than copy, because the ODbL/CC-BY notice is bilingual and a
    * bilingual notice assembled from translated strings around untranslated
@@ -942,6 +943,87 @@ export interface Meta {
    * name.
    */
   attribution: Record<string, SourceAttribution>;
+}
+
+/**
+ * Every figure this deployment declines to state, and why - one place
+ * answering the question that was previously only answerable by reading cards,
+ * blocks and wire fields. **Assembled, never hand-written**: the modelling
+ * service's half is taken by walking its own package for declared reason
+ * constants (`apps/ml/src/wattsteer_ml/declined.py`), the gateway's half is
+ * keyed by the schema enum that owns it (`packages/core/src/declines.ts`), and
+ * adding a named reason to either requires editing no list. It is a property
+ * of the *code that answered* rather than of what is on the volume, which is
+ * why an unmounted volume empties `model.lanes` and changes nothing here.
+ */
+export interface MetaDeclines {
+  /**
+   * In `name` order, so two deployments are diffable.
+   */
+  figures: DeclinedFigure[];
+  /**
+   * Why this list may be **short**, or `null` when it is whole. A census of what
+   * a system refuses to claim is the last place that could afford to imply a
+   * completeness it does not have, so an unreachable modelling service is stated
+   * here rather than silently costing the caller its half: the code the
+   * gateway's edge produced (`OPTIMIZER_UNAVAILABLE`, `OPTIMIZER_TIMEOUT`,
+   * `OPTIMIZER_NOT_CONFIGURED`), or `MODEL_DECLINES_NOT_REPORTED` for a
+   * modelling service that answered without this block at all - which is an
+   * older build, and not a build with nothing to declare.
+   */
+  incompleteReason: string | null;
+}
+
+/**
+ * One figure that is not published, and the four things a reader needs to act
+ * on it: which figure, why, whether it *cannot* be produced or merely has not
+ * been, and where they would have met it. Every field is prose - there is no
+ * number anywhere on this surface, because a census of withheld measurements
+ * is the last place that could carry a figure a reader might take for one.
+ */
+export interface DeclinedFigure {
+  /**
+   * The reason constant's identifier, or the wire identity where the absence is
+   * one - a grep target, so this census is a way into the code rather than a
+   * restatement of it.
+   */
+  name: string;
+  /**
+   * Where the reason is declared, as a repository path.
+   */
+  declaredIn: string;
+  /**
+   * Which number is not stated, as a noun phrase. A reason sentence explains an
+   * absence; it does not name the thing absent, and a census whose rows do not
+   * name the quantity is a census of prose.
+   */
+  figure: string;
+  /**
+   * `unrunnable` - the figure cannot be produced here. `unrun` - it can be, and
+   * nobody has. The two are two on purpose and must not be collapsed: forecaster
+   * 16's `ARCHIVE_FEATURES_HAVE_NO_SHAPE` says a thing cannot be built, and
+   * forecaster 18 chose `NOT_RUN_YET` precisely so that it would not read like
+   * that. `unresolvable` is not a third kind - it is this gateway refusing to
+   * guess between the two for a value a newer modelling service reported and
+   * this build does not recognise, exactly as it refuses to round an unknown
+   * lane state down to `no_artifact`.
+   */
+  kind: "unrunnable" | "unrun" | "unresolvable";
+  /**
+   * The sentence the card already carries, verbatim. Not re-worded on the way
+   * out: the forecaster owns the vocabulary of its own absences, and a rename
+   * here is where two vocabularies start.
+   */
+  reason: string;
+  /**
+   * The response, card block or field a caller actually meets this absence on.
+   */
+  surface: string;
+  /**
+   * Why `kind` is `unresolvable`, naming the value that was reported. Absent for
+   * every kind this build recognises.
+   */
+  fault?: string;
 }
 
 export interface MetaGate {
@@ -2586,7 +2668,21 @@ export const WIRE_SHAPES = {
     forecast: { wire: "forecast", shape: "MetaForecastState" },
     data: { wire: "data", shape: "MetaData" },
     referenceFleet: { wire: "reference_fleet", shape: "MetaReferenceFleet" },
+    declines: { wire: "declines", shape: "MetaDeclines" },
     attribution: { wire: "attribution", shape: "SourceAttribution", map: true },
+  },
+  MetaDeclines: {
+    figures: { wire: "figures", shape: "DeclinedFigure", list: true },
+    incompleteReason: { wire: "incomplete_reason" },
+  },
+  DeclinedFigure: {
+    name: { wire: "name" },
+    declaredIn: { wire: "declared_in" },
+    figure: { wire: "figure" },
+    kind: { wire: "kind" },
+    reason: { wire: "reason" },
+    surface: { wire: "surface" },
+    fault: { wire: "fault", optional: true },
   },
   MetaGate: {
     profile: { wire: "profile" },

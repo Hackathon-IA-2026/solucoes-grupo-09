@@ -533,6 +533,13 @@ correct.
 
   "reference_fleet": { /* REFERENCE_FLEET, echoed */ },
 
+  "declines": {
+    // Every figure this deployment will not state, and why. Assembled from the
+    // declared reasons on both sides of the boundary, never hand-written.
+    "figures": [ /* … one row per named absence, in `name` order … */ ],
+    "incomplete_reason": null   // or the code that says why the list is short
+  },
+
   "attribution": {
     "ons":  { "name": "ONS Dados Abertos", "licence": "CC-BY-4.0", "url": "…" },
     "aneel_siga": { "name": "ANEEL SIGA", "licence": "ODbL-1.0", "url": "…",
@@ -576,6 +583,70 @@ because the alternative was a claim the gateway cannot support:
   free-form object. The one translator renames only what the generated table
   knows about, so an unnamed block would travel in whatever casing the gateway
   happened to build it in.
+
+**`declines` — the one place that lists every figure this system will not
+state.** Forecaster 25's, and the argument for it being on *this* endpoint
+rather than on the model card is the argument for the endpoint itself. The
+discipline of refusing to publish a number rather than fabricating one has held
+throughout, and it produced a growing set of *named* absences —
+`ARCHIVE_FEATURES_HAVE_NO_SHAPE`, `NOT_RUN_YET`, `CORRELATION_NOT_RUN_YET`,
+`MARGINAL_COVERAGE_NOT_RUN_YET`, `NO_TFT_IMPLEMENTATION`,
+`NO_TRAINING_COST_MEASURED`, the floor guardrail's `not_applicable` and this
+spec's own `no_joint_ensemble`. Each is honest where it stands; collectively
+they were scattered across cards, blocks and wire fields, and the value of
+refusing to fabricate is only realised if the refusals are findable.
+
+- **Not the model card.** A card is a property of one lane's *promoted*
+  artifact: it requires a `lane`, it refuses with `MODEL_UNAVAILABLE` when
+  nothing is promoted, and the caching table gives it an hour against the
+  artifact id. All three are wrong for this set — most of it is not
+  lane-scoped, none of it changes on promotion, and a reviewer would be refused
+  the list in exactly the deployment where knowing what is *not* claimed
+  matters most.
+- **Not its own read.** A new row in the caching table and a second copy of
+  this endpoint's degradation machinery, to answer in one request the question
+  this endpoint already exists to answer.
+- **Here**, therefore, under the row `/v1/meta` already has: `no-store`, so it
+  cannot be served stale across the deploy that changed it.
+
+**It is assembled and never transcribed**, because a hand-maintained roll goes
+stale the first time somebody adds a reason — the failure this repository has
+already had with row counts and with "does not exist yet" comments. The
+modelling service walks its own package for declared reason constants
+(`apps/ml/src/wattsteer_ml/declined.py`, where a reason constant *is* its census
+entry), the gateway's own entry is keyed by
+`common.schema.json#/$defs/band_unavailable_reason` so a second member is a
+compile error rather than a silent omission, and
+`apps/api/test/declined-figures.test.ts` scans `apps/ml`'s source and requires
+every declaration it finds to arrive on the response.
+
+**Each row says whether the figure is `unrunnable` or merely `unrun`, and the
+two may not be collapsed.** `ARCHIVE_FEATURES_HAVE_NO_SHAPE` says a thing
+cannot be built; forecaster 18 chose `NOT_RUN_YET` precisely so that it would
+not read like that, and forecaster 24 followed 18. A shared "unavailable" bucket
+would delete the information three tickets were written to create, so a `kind`
+this gateway does not recognise becomes `unresolvable` with a `fault` naming
+what was reported — the same refusal `model.lanes[].state` already makes — and
+never one of the two.
+
+**And `incomplete_reason` says when the list is short.** With the modelling
+service unreachable its half is unknown, and a one-row census with no note would
+read as a deployment that withholds one figure. A census of what a system
+refuses to claim is the last surface that could afford to imply a completeness
+it does not have. Nothing on it is a number, for the same reason: every field is
+prose, so there is nothing here a reader could mistake for a measurement.
+
+**Not a product surface, and that is a decision rather than an omission.** These
+sentences are authored beside the code that withholds the figure, in one
+language, in the register of a correction regime and a PIT matrix. A bilingual
+screen over them would need one copy key per member in two dictionaries — a
+hand-maintained list keyed to a set that is assembled precisely so nobody has to
+maintain one, and `docs/specs/i18n.md`'s compile-time key parity would make
+adding a reason in `apps/ml` a build break in `apps/web`. The screens that meet
+an *individual* absence keep rendering it in context and in both locales, which
+is where a reader of the product needs it. This census is for a reviewer
+deciding whether to trust the system, and it is on the endpoint a reviewer
+reads.
 
 **This route is the third and last crossing to the ML service**, against Seam 1
 below, which names only the optimizer and the replay solve. The crossing is
