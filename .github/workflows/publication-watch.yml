@@ -1,0 +1,52 @@
+# Publication watch — did the forecast publication actually happen?
+#
+# Scheduled, never triggered by a push or a pull request, for the same reason as
+# `live-conformance.yml` and `publication-lag-conformance.yml`: a failure here
+# does not mean a commit broke something, it means the world diverged from what
+# the system promised — a gate instant passed and no origin appeared behind it.
+# `docs/specs/api-surface.md` § "Where this spec is weakest" (1) names this as
+# the one product-visible failure with no alarm; this is the alarm.
+#
+# See `apps/api/src/forecast/publication-watch.ts` for the margin and the three
+# verdicts, and `apps/api/test/publication-watch.test.ts` for the suite.
+name: publication-watch
+
+on:
+  schedule:
+    # Each gate plus the margin, and nothing here is a restated hour: both
+    # crons are *derived* from `GATES` and `PUBLICATION_GRACE_MS` by
+    # `publication-watch.test.ts` § "the schedule", which reads this file and
+    # fails if the two disagree. Move a gate or the margin and this file has to
+    # move with it. Five wrongly-stated gate intervals is enough.
+    #
+    # 14:00 UTC = 11:00 BRT — gate_early (D−1 09:00 BRT) plus two hours.
+    - cron: "0 14 * * *"
+    # 00:00 UTC = 21:00 BRT — gate_late (D−1 19:00 BRT) plus two hours.
+    - cron: "0 0 * * *"
+  # So a human can ask on demand after a deploy, or after re-running a
+  # publication by hand.
+  workflow_dispatch:
+
+# Never on push. The default `bun test` path must stay offline, and a missing
+# publication must never be able to fail a commit — the commit is not what
+# broke.
+permissions:
+  contents: read
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Assert the last gate whose margin has elapsed has an origin behind it
+        env:
+          # The deployment's own Postgres, read-only. Absent, the run reports
+          # SOURCE UNREACHABLE rather than passing: a watch that cannot see the
+          # database has not measured that the publication happened.
+          WATTSTEER_WATCH_DATABASE_URL: ${{ secrets.WATTSTEER_WATCH_DATABASE_URL }}
+        run: bun run test:publication-watch

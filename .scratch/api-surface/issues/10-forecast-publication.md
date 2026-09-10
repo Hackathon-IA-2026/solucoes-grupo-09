@@ -59,12 +59,23 @@ automatic recovery beyond the retry, and the only monitoring is the meta endpoin
 and the response's age. A real alert on a publication instant passing without a
 new origin is the obvious follow-up and is not specified here.
 
+> **Superseded.** The follow-up is built — `publication-watch`, a scheduled job
+> in the idiom the repo already had three of. It does not replace the retry and
+> it recovers nothing; it *asks*, twice a day at each gate plus two hours,
+> whether the origin the gate promised is there, and its failing run is the
+> alarm. See “The missed publication now raises something” below. The automatic
+> recovery beyond the retry is still nothing, which is correct: a catch-up cron
+> would be a second producer of the same publication.
+
 **Blocked by:** cross-spec, **forecaster** — the artifact, the composition, the
 path ensemble and the private publish route on the modelling service are its
 work, and none of it is re-specified here. Also **data-platform 16** (in flight),
 because the modelling service reads the canonical SQL views to build features.
 
-**Status:** done (**four boxes open** — see “What is still open, and why”)
+**Status:** done (**three boxes open** — see “What is still open, and why”)
+
+The count was four; the missed-publication alarm is now built, so it is three.
+A grep for `- [ ]` in this file returns three, which is what the count is.
 
 The previous revision of this line also said “two boxes open”, and it was
 wrong twice over: a grep found **six** unticked, because the count was written
@@ -175,7 +186,7 @@ actually waiting on:
 |---|---|---|
 | the diagnosis publication runs on completion | yes | the trigger and the write, not the table. The stated reason - "`diagnosis_attribution` does not exist" - was **stale** |
 | end to end against the real modelling service | yes | a promoted artifact. Still true, and now measured rather than assumed |
-| an unpublished publication raises something a human sees | yes | an alerting surface this product does not have. Deliberately deferred by the ticket, and left deferred |
+| an unpublished publication raises something a human sees | yes | nothing, as it turned out. "An alerting surface this product does not have" was **half stale**: the product has none, but the *repo* has had one since `live-conformance.yml` — a scheduled job whose failing run is the alarm. Closed below |
 | `published_at == gate_at(...)` as a table constraint | yes | nothing, any more. The stated reason - "`drizzle/` was held by another agent this cycle" - was **stale** |
 | a publish path that skips the rules fails | yes | nothing. A design decision, not a dependency |
 | `recent_reasons` from a real read | yes | nothing. The stated blocker - "`curtailment-by-reporting-entity` is not filterable by subsystem" - was **half stale**: true of the canonical *view*, false of the dimension underneath it |
@@ -353,7 +364,9 @@ fifteen. On the `apps/ml` side, the rule is shown firing from
 
 ## What is still open, and why
 
-**Two boxes, and neither is a judgement call.**
+**Two boxes, and neither is a judgement call.** (Written when there were two
+of these; the missed-publication alarm below was the third and is now closed.
+The two here are unchanged.)
 
 **1. The end-to-end job against the *real* modelling service.** Real Postgres:
 done, and it is how everything above was verified - Postgres 17 in Docker,
@@ -382,12 +395,18 @@ schedule, the day resolution, the gate check, the transaction, the idempotence,
 the refusal handling, the reads - is exercised against real Postgres with the
 modelling service as a stub over a real socket.
 
-**2. An unpublished publication raising something a human sees.** Untouched, and
+~~**2. An unpublished publication raising something a human sees.** Untouched, and
 still deliberately so. The spec carries the weakness by name and the mechanism
 it needs - an alert on a publication instant passing with no new origin - has no
 surface in this product to be raised on. `/v1/meta` and
 `forecast_origin.age_hours` still make it *visible* and nothing makes it
-*noticed*.
+*noticed*.~~
+
+**Closed.** The recorded reason was that the mechanism "has no surface in this
+product to be raised on", and that is true and was the wrong place to look: the
+surface is not in the product, it is in `.github/workflows/`, where three
+scheduled jobs already exist for exactly this class of question. See “The
+missed publication now raises something”.
 
 **And one sub-box this pass added rather than closed:** `apps/ml` serves no
 `POST /internal/publish/diagnosis`. Probed directly: **404**. The worker's half
@@ -620,8 +639,10 @@ cover the case feature-engineering 12 measured: ONS's evening publication landin
 at 19:00:25–19:08 BRT, and a staleness that projects to ~43.7 h against a
 configured 40 h lag. That falls through to "the previous origin keeps serving at
 its real age, visible in `/v1/meta`" — which is what the spec specifies, and
-which the spec also flags as **un-alerted**. Nothing pages when a publication
-silently stops happening.
+which the spec also flags as **un-alerted**. ~~Nothing pages when a publication
+silently stops happening.~~ **Something does now** — `publication-watch`, below.
+The retry budget is still what it was; what changed is that its exhaustion
+stops being silent two hours later.
 
 No catch-up cron was added on purpose: `writePublication` is idempotent by
 digest, so a redelivery or a hand-run after the files land writes nothing if the
@@ -636,12 +657,198 @@ another agent this cycle.~~ **Closed** — `0041`. The reason it was open no
 longer applied, and the constraint found one mis-stamped row in the existing
 test suite on the way in.
 
-- [ ] A publication that has not happened by some stated margin past its gate
+- [x] A publication that has not happened by some stated margin past its gate
       raises something a human sees, rather than only aging out in `/v1/meta`
+      — `publication-watch`: `apps/api/src/forecast/publication-watch.ts`,
+      `apps/api/test/publication-watch.test.ts`,
+      `.github/workflows/publication-watch.yml`. The margin is two hours and it
+      is bounded rather than asserted; the alarm is a failing scheduled run;
+      and an empty database says "never published" rather than "late". Shown
+      firing on a genuinely late publication and staying quiet on a healthy
+      one, both against real Postgres. See "The missed publication now raises
+      something"
 - [x] `published_at == gate_at(target_date, gate_profile)` is a table constraint,
       not a publisher-side check
       — `drizzle/0041_the_gate_as_a_table_constraint.sql`, on all four tables that
       carry the three columns
+
+---
+
+## The missed publication now raises something
+
+`docs/specs/api-surface.md` ranks this first among the places it is weakest: if
+both gates fail the product serves yesterday's forecast with an honest age,
+"and nobody is paged, because there is no paging". Every previous pass on this
+ticket recorded the box as open with the same reason — *there is no alerting
+surface in this product*.
+
+**That reason was half stale, and the stale half is the important one.** The
+*product* has no alerting surface, and it should not get one for this: a page,
+a webhook or a notification channel is a whole subsystem, and `api-surface.md`
+section "Out of scope" has already ruled out push-shaped mechanisms on this
+spec. But the **repo** has had an alerting surface since `live-conformance.yml`:
+a scheduled workflow whose failing run *is* the alarm. There are three of them —
+`live-conformance.yml`, `narration-live.yml`, `publication-lag-conformance.yml`
+— each `schedule` + `workflow_dispatch`, each carrying an explicit "Never on
+push", each existing to answer a question about the **world** rather than about
+a commit. A missed publication is precisely that shape of question: nothing
+broke in the code that ran; reality diverged from what the system promised.
+
+So this is the fourth one, and it invents nothing:
+`.github/workflows/publication-watch.yml` runs `bun run test:publication-watch`
+against the deployment's own Postgres and reports through the same `Claim` /
+`assertClaim` / `measuring` / `publish` vocabulary out of
+`test/support/conformance.ts` that the other two gated suites share.
+
+### The margin: two hours, bounded rather than asserted
+
+`PUBLICATION_GRACE_MS`, stated once in
+`apps/api/src/forecast/publication-watch.ts`. It is **not** derived from
+anything, because there is nothing to derive it from — it is the answer to "how
+long would you let a publication be missing before you want to be told". What
+*is* derived is the pair of bounds that keep it honest, and both are computed by
+the test rather than written down:
+
+- **Above the whole automatic-recovery window.** Nothing recovers a publication
+  after the queue gives up, and the window is computable end to end: the job's
+  offset past its gate (`FORECAST_PUBLICATIONS`' crons measured against
+  `GATES`, = 10 min), `config.jobAttempts` attempts each bounded by
+  `PUBLISH_TIMEOUT_MS`, and the exponential `config.jobBackoffMs` waits between
+  them. **Measured at 16.25 min.** Below that bound the alarm would be
+  reporting a job that is still allowed to be running.
+- **Below the shortest interval between two consecutive gates**, computed off
+  `GATES` — **10 h**. At or above it, a missed *early* publication would be
+  masked by the late one that supersedes it, which is the exact failure this
+  exists to catch: the day quietly served by an older vintage.
+
+Two hours is an order of magnitude above the first and a fifth of the way to
+the second. Move a gate hour, a cron, `jobAttempts` or the publish timeout and
+the bound that stops holding fails a test — which is the point of computing
+them. Verified by reintroduction: `11 h` fails the second bound (and four other
+cases), `5 min` fails the first.
+
+**Not one gate hour is restated anywhere in this work.** The watch knows a
+profile and a date and asks `gateAt(targetDate, profile)`, which is
+`forecast/gate.ts` — the same call the publisher makes and the same function
+`drizzle/0041`'s CHECK calls in SQL. The module says why: `gate.ts` already
+records that the two hours are spelled three times and that a fourth is worth
+avoiding, and this repo has already found five places where a gate interval was
+stated wrongly.
+
+**The workflow's two crons are the one place a literal hour was unavoidable** —
+YAML cannot call a function — so they are held against the derivation rather
+than trusted. `publication-watch.test.ts` section "the schedule" computes each
+cron from `GATES` plus the margin, reads
+`.github/workflows/publication-watch.yml`, and asserts the sets are equal. It
+also computes each cron in January *and* July and requires them to agree, so
+Brazil reinstating summer time fails a test instead of quietly moving the watch
+an hour off its gate. Non-vacuity: changing one cron from `0 14` to `0 15`
+fails that test — 11 pass, 1 fail.
+
+### Three verdicts, because two would have been switched off in a week
+
+The database has **zero ingested rows today**. A two-state alarm — "the last
+gate has an origin, or it does not" — would therefore fire continuously from
+now until the first artifact is promoted, and an alarm that always fires is an
+alarm someone disables. So the census is read *beside* the origins, in one
+read-only transaction at one `as_of` so the two halves cannot describe
+different instants of the table:
+
+| Verdict | When | What the run does |
+|---|---|---|
+| `never_published` | no `served` day row exists anywhere, at any gate, for any date | **passes**, printing `NOT YET LIVE` with the gate it is waiting for. "We have never had data" is a true and *different* sentence from "we stopped having data" |
+| `late` | the deployment has published before, and the most recent gate whose margin has elapsed has no origin | **fails** — this is the alarm |
+| `published` | that gate has an origin stamped at exactly the gate instant | passes, printing the numbers |
+
+The discriminator is the table's own census and deliberately **not** a
+configured go-live date: a date is maintained by hand, and the day it is wrong
+is the day the alarm is either silent or screaming.
+
+Three further decisions:
+
+- **The match is on the (target date, gate profile) pair, not the date.** The
+  early publication for tomorrow existing does not satisfy the late gate; a
+  watch keyed on the date alone would report the day as covered by a vintage
+  ten hours older than the one owed. Asserted as its own case.
+- **The match requires `published_at == gateAt(...)`.** After `0041` a
+  mis-stamped row is unrepresentable, so this is not a second enforcement of
+  that constraint — it is what makes "we found the right row" different from
+  "we found a row".
+- **A read whose two halves disagree draws no verdict at all.** A census of
+  zero beside a non-empty origin list is a broken read, and it throws rather
+  than resolving to `never_published` — that resolution is the one way an empty
+  answer could pass as a healthy one, and it would be the alarm's own off
+  switch. Asserted.
+
+**Missing configuration is not silence either.** With no
+`WATTSTEER_WATCH_DATABASE_URL` the run reports `SOURCE UNREACHABLE — the
+deployment's Postgres` and fails, because a watch that did not look is not a
+watch that saw nothing wrong. Measured.
+
+### Proved firing, proved quiet, proved non-empty
+
+Postgres 17 in Docker on **5436** (5434 was held by another agent's backfill),
+all migrations applied. The alarm was run end to end through the workflow's own
+command, `bun run test:publication-watch`, against that database in three
+states, each seeded by writing a real publication through `writePublication`
+with `published_at` supplied by `gateAt` — so the fixture passes `0041`'s CHECK
+rather than working around it:
+
+| State of the database | Verdict | The run |
+|---|---|---|
+| empty | `never_published` | **passes**, 13 pass · 0 fail, printing `NOT YET LIVE`, `served rows: 0` |
+| one publication, for the *previous* day's late gate only | `late` | **fails** — `ASSUMPTION EXPIRED`, naming the gate, `3.7 h past the margin`, the older vintage that is being served and its age, and the four reads that render it |
+| one publication, at the due gate | `published` | **passes**, printing the gate instant and the subsystem it covers |
+
+The middle row is the whole point: the alarm can be made to fire on a genuinely
+late publication, and the third row is why the first two mean something — the
+same guard, unchanged, goes quiet when the publication is there.
+
+**The inputs are asserted non-empty, three times.** In the real-Postgres
+section, every verdict is drawn only after `readPublicationWatch`'s two halves
+are asserted directly: the empty case asserts `servedDayRows === 0` **and**
+`origins === []` before concluding "never published", so that conclusion is a
+measurement rather than a query that failed; the quiet case asserts
+`servedDayRows === 1` and one origin *before* the `published` verdict; and the
+firing case asserts the same two before the `late` verdict, so "late" is a
+verdict that matched nothing among rows that came back rather than a query that
+returned nothing. The schedule test asserts the workflow file has as many crons
+as there are gates before comparing them, and the recovery-window bound is
+asserted to exceed the attempts' own timeouts before the margin is compared to
+it — so neither is cleared by a zero.
+
+### Verification, with numbers
+
+| Suite | Result |
+|---|---|
+| `bun run check` (typecheck · biome · every JS suite) | **clean, exit 0** — 528 files linted; 145 hygiene · 471 core · 1249 api · 189 web pass, **0 fail** |
+| `apps/api` with `WATTSTEER_TEST_DATABASE_URL` (5436) | **1664 pass · 49 skip · 0 fail · 88 files** (was 1643 · 47 · 0 · 87) |
+| `test/publication-watch.test.ts` alone, offline | 12 pass · 5 skip · 0 fail |
+| the same, with real Postgres | 15 pass · 1 skip · 0 fail |
+| the same, as the workflow runs it | see the three-state table above |
+
+Reintroduced against, rather than only written:
+
+- workflow cron `0 14` changed to `0 15`: **1 fail** (the schedule test), 11 pass.
+- `PUBLICATION_GRACE_MS` at 11 h: **5 fail** (the gate-interval bound, the
+  due-gate identity, the firing case, the same-day-other-gate case, the
+  schedule), 7 pass.
+- `PUBLICATION_GRACE_MS` at 5 min: **3 fail** (the recovery-window bound, the
+  firing case, the schedule), 9 pass.
+- restored: 12 pass · 0 fail.
+
+### What this does not do
+
+It does not recover anything, and no catch-up cron was added — that reasoning
+is unchanged and is above: `writePublication` is idempotent by digest, so a
+hand-run after the files land is free, and a *scheduled* catch-up would be a
+second producer of one quantity. It does not notify anyone outside GitHub's own
+failed-workflow notifications, which is the same reach the other three
+scheduled suites have and is the honest ceiling of this idiom. And it watches
+the **forecast** publication only: the chained `publish_diagnosis` has its own
+way of having failed and `/v1/diagnosis/day-ahead` reports its absence as its
+own, so a watch over it is a separate question and not this box.
+
 
 ---
 
