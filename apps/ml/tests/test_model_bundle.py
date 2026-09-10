@@ -28,6 +28,7 @@ from wattsteer_ml.promotions import PROMOTION_LOG_FILENAME, PromotionRecord, app
 from wattsteer_ml.training import (
     ARTIFACT_SOURCE,
     BACKGROUND_SEED,
+    BUNDLE_COMPRESSION,
     BundleError,
     ContractMismatchError,
     PartialBundleError,
@@ -347,6 +348,50 @@ def test_a_reloaded_bundle_carries_the_same_sample_bit_for_bit(
     assert restored.cells.keys() == original.cells.keys()
     for cell_key, cell in original.cells.items():
         assert restored.cells[cell_key].keys == cell.keys
+        assert restored.cells[cell_key].matrix.tobytes() == cell.matrix.tobytes()
+
+
+def test_the_written_artifact_is_compressed_and_the_sample_survives_it(
+    trained: TrainedFold, volume: Path, tmp_path: Path
+) -> None:
+    """Forecaster 32's decision, at the seam that carries it.
+
+    The frozen sample is the largest thing in the bundle and none of it is
+    droppable — 128 rows per cell is `docs/specs/diagnosis.md`'s number, and the
+    eight driver groups are a total partition of the contract, so every column
+    of every background row is read at some coalition. So the artifact is
+    compressed instead, and this test states the two halves of that being
+    allowed:
+
+    - the file on the volume really is a ``zlib`` stream and really is smaller
+      than the float64 payload it carries, so deleting ``compress=`` from
+      :func:`save_artifact` fails here rather than quietly costing 9 MB a
+      retrain;
+    - the sample comes back **bit-identical and still float64**, cell by cell on
+      ``tobytes()`` with no tolerance, so this stayed a decision about bytes and
+      never became one about what "typical" means.
+
+    The size comparison is against a raw dump of the same bundle rather than a
+    literal, because a literal would be a measurement of this fixture's fold.
+    """
+    bundle_path, _ = written(trained, volume)
+    raw = tmp_path / "uncompressed.joblib"
+    joblib.dump(trained.bundle, raw, compress=0)
+
+    assert BUNDLE_COMPRESSION == ("zlib", 3)
+    # zlib streams start 0x78; an uncompressed joblib starts with pickle's own
+    # protocol marker, 0x80. The byte is what ties the constant to the file.
+    assert bundle_path.read_bytes()[:1] == b"\x78"
+    assert raw.read_bytes()[:1] == b"\x80"
+    assert bundle_path.stat().st_size < raw.stat().st_size
+    assert bundle_path.stat().st_size < trained.bundle.background.matrix_bytes
+
+    restored = load_artifact(
+        root=volume, lane=trained.bundle.lane, artifact_id=trained.card.artifact_id
+    ).bundle.background
+    assert restored.cells.keys() == trained.bundle.background.cells.keys()
+    for cell_key, cell in trained.bundle.background.cells.items():
+        assert restored.cells[cell_key].matrix.dtype == cell.matrix.dtype == "float64"
         assert restored.cells[cell_key].matrix.tobytes() == cell.matrix.tobytes()
 
 
