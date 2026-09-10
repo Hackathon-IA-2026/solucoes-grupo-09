@@ -1,4 +1,14 @@
-# Publication watch — did the forecast publication actually happen?
+# Publication watch — did the publications actually happen?
+#
+# Two questions behind one schedule since `api-10-diagnosis-watch`: the forecast
+# publication at each gate, and the **chained** diagnosis publication a finished
+# forecast publication submits. The chained half needs no cron of its own and no
+# second margin — its due time is measured from the forecast publication's own
+# commit instant, and `publication-watch.test.ts` § "the chain" computes that the
+# whole chain (the forecast job's offset and retries, then the diagnosis job's)
+# fits inside the margin these crons already wait. If it stopped fitting, every
+# scheduled run would report `not_yet_due` and the alarm could never fire, so
+# that bound is a test rather than a paragraph.
 #
 # Scheduled, never triggered by a push or a pull request, for the same reason as
 # `live-conformance.yml` and `publication-lag-conformance.yml`: a failure here
@@ -7,8 +17,11 @@
 # `docs/specs/api-surface.md` § "Where this spec is weakest" (1) names this as
 # the one product-visible failure with no alarm; this is the alarm.
 #
-# See `apps/api/src/forecast/publication-watch.ts` for the margin and the three
-# verdicts, and `apps/api/test/publication-watch.test.ts` for the suite.
+# See `apps/api/src/forecast/publication-watch.ts` for the margin, the forecast
+# half's three verdicts and the chained half's six — the extra ones being a
+# refusal `apps/ml` declared, which is not a missed publication, and a gate whose
+# forecast never published, which is the other half's alarm and not this one's.
+# `apps/api/test/publication-watch.test.ts` is the suite.
 name: publication-watch
 
 on:
@@ -43,7 +56,7 @@ jobs:
         with:
           bun-version: latest
       - run: bun install --frozen-lockfile
-      - name: Assert the last gate whose margin has elapsed has an origin behind it
+      - name: Assert the last elapsed gate has an origin, and an explanation behind it
         env:
           # The deployment's own Postgres, read-only. Absent, the run reports
           # SOURCE UNREACHABLE rather than passing: a watch that cannot see the

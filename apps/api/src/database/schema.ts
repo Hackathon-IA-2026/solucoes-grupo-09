@@ -3409,3 +3409,112 @@ export const diagnosisAttributionDriver = pgTable(
     ),
   ],
 );
+
+/**
+ * One diagnosis publication that the system **declared** it would not make.
+ *
+ * The gap this closes:
+ * `.scratch/api-surface/issues/10-forecast-publication.md`'s publication watch
+ * asks whether a *forecast* publication happened, and its own "What this does
+ * not do" recorded that the chained `publish_diagnosis` is not watched.
+ * Watching it needs one fact Postgres did not hold. An absent attribution has
+ * two completely different causes:
+ *
+ * 1. the chained task never ran, ran and crashed, or was never queued — the
+ *    forecast published and nobody was told its explanation did not; and
+ * 2. `apps/ml` was asked and **refused**, with a typed condition out of
+ *    `wattsteer_ml.diagnosis.publish.REFUSAL_CONDITIONS` — no matched
+ *    background, no base-fit window, a contract that disagrees with the driver
+ *    groups, or a day whose feature rows are not a whole civil day.
+ *
+ * The second is the system working. It is a retrain- or a YAML-shaped problem
+ * and, until this table, it was a `console.warn` in a worker log — so a watch
+ * over the chain had no way to tell it from the first and would have alarmed
+ * every day a lane was legitimately unexplainable. An alarm that fires on
+ * correct behaviour is the alarm's own off switch, which is the same reasoning
+ * `never_published` exists for one grain over.
+ *
+ * **A row here is a statement, not a diagnosis.** Nothing reads it to answer a
+ * product question: `/v1/diagnosis/day-ahead` still reports an absent
+ * attribution as its own absence, because a reader asking "what did we say"
+ * must not be handed the reason we said nothing as though it were an
+ * explanation. The one reader is `forecast/publication-watch.ts`.
+ *
+ * **Keyed by the lane-day, not append-only.** One `(target_date, gate_profile,
+ * lane)` has one current answer: the most recent time that chain was asked and
+ * refused. A retry that refuses again is the same refusal observed again, not a
+ * second one, so it upserts and `observed_at` moves. The history is the worker
+ * log's; what a watch needs is whether *this* chain — the one behind the
+ * forecast rows now serving — was refused, and `observed_at` against those
+ * rows' `ingested_at` is what answers that.
+ *
+ * **`expected_published_at` is the gate**, under the same constraint the four
+ * published tables carry since `0041`: the instant the attribution *would* have
+ * been stamped with. It makes a refusal and the forecast publication it stands
+ * beside structurally unable to disagree about which publication was refused,
+ * and it is a call to `gate_at` rather than a fifth spelling of the gate hour.
+ */
+export const diagnosisPublicationRefusal = pgTable(
+  "diagnosis_publication_refusal",
+  {
+    /** The civil day in `America/Sao_Paulo` that has no explanation. */
+    targetDate: date({ mode: "string" }).notNull(),
+    gateProfile: forecastGateProfile().notNull(),
+    /** The lane directory name — `dessem_free_v1__gate_late__thr5`. */
+    lane: text().notNull(),
+    /**
+     * `gate_at(target_date, gate_profile)` — the instant the attribution this
+     * refusal stands in place of would have carried.
+     */
+    expectedPublishedAt: timestamp({ withTimezone: true }).notNull(),
+    /**
+     * The condition, out of `apps/ml`'s own closed tuple.
+     *
+     * `text` with a CHECK rather than a Postgres enum, because the authority is
+     * a Python tuple: `REFUSAL_CONDITIONS` in
+     * `wattsteer_ml/diagnosis/publish.py`. The CHECK is the closed half, and
+     * `test/publication-watch.test.ts` parses that tuple out of the Python
+     * source and fails if the two lists stop agreeing — which is how a fifth
+     * condition arrives as a failing test on the day it ships rather than as a
+     * refusal nothing could record.
+     *
+     * `null_headline_feature` is deliberately **not** admitted. It was a
+     * refusal and stopped being one this wave: a NULL headline feature is now a
+     * stated absence on the driver row and the ranking publishes anyway. A row
+     * arriving here with that condition would mean `apps/ml` had gone back to
+     * refusing whole days over a subtitle.
+     */
+    condition: text().notNull(),
+    /** `apps/ml`'s own prose. Logs and operators, never rendered. */
+    reason: text().notNull(),
+    /**
+     * When the refusal was observed — the worker's clock at the failed attempt.
+     *
+     * Not an `ingested_at`: nothing here is a vintage of an observed quantity
+     * and no canonical view reads this table. It is the instant that lets a
+     * refusal be placed against the forecast publication it followed.
+     */
+    observedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({
+      name: "diagnosis_publication_refusal_pk",
+      columns: [t.targetDate, t.gateProfile, t.lane],
+    }),
+    index("diagnosis_publication_refusal_observed").on(t.observedAt),
+    // The closed condition vocabulary: the four `apps/ml` distinguishes, and
+    // not the fifth it stopped distinguishing.
+    check(
+      "diagnosis_publication_refusal_condition",
+      sql`${t.condition} in ('no_base_fit_window', 'no_matched_background', 'contract_and_groups_disagree', 'incomplete_day')`,
+    ),
+    // A refusal that says nothing is a row an operator cannot act on.
+    check("diagnosis_publication_refusal_reason_given", sql`length(${t.reason}) > 0`),
+    publishedAtIsTheGate(
+      "diagnosis_publication_refusal_expected_at_is_the_gate",
+      t.expectedPublishedAt,
+      t.targetDate,
+      t.gateProfile,
+    ),
+  ],
+);
