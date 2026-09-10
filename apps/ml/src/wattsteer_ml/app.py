@@ -13,6 +13,7 @@ Routes:
   GET /ready                  readiness — database reachable, read-only, migrated
   GET /v1/meta                what this instance can actually do right now
   POST /internal/publish/forecast  worker-only; returns rows, writes nothing
+  POST /internal/publish/diagnosis worker-only; the attribution of that day
   POST /v1/optimize           the MILP and the simulator, inside one request
   GET /v1/replay/days         which days are replayable, and why the others are not
   GET /v1/replay/days/{date}  one day, at the status of the clause that refused it
@@ -57,9 +58,23 @@ from .config import settings
 from .constants import Subsystem
 from .database import database
 from .declined import DeclineKind, declined_figures
+from .diagnosis.publication import AttributionPublication, AttributionPublicationError
+from .diagnosis.publish import (
+    DiagnosisPublicationRefusedError,
+    base_fit_window,
+    build_diagnosis_publication,
+)
+from .diagnosis.rule_context import RuleContextError, reason_mixes_from_payload
 from .evaluation.folds import FOLD_CALENDAR_RULES
 from .evaluation.holdout import HoldoutLeakError
-from .features import FeatureSet, GateProfile, read_serving_rows, serving_target_date
+from .features import (
+    FeatureRowsQuery,
+    FeatureSet,
+    GateProfile,
+    read_feature_rows,
+    read_serving_rows,
+    serving_target_date,
+)
 from .forecast_reads import served_profile_source
 from .lanes import Lane, LaneNameError, is_artifact_id
 from .optimizer import (
@@ -81,6 +96,7 @@ from .publication import (
     PublicationRefusedError,
     build_publication,
     load_promoted,
+    publication_instant,
     resolve_artifact,
 )
 from .replay.backtest import BacktestCache, recompute_backtest
@@ -565,6 +581,202 @@ async def publish_forecast(
         # is wrong, and rounding that to "your request was bad" would send an
         # operator to the wrong place.
         logger.error("publish: %s", error)
+        return _refusal(500, "INTERNAL", str(error))
+
+    return JSONResponse(content=publication.as_payload())
+
+
+# --- the attribution publication route ----------------------------------------
+#
+# `docs/specs/api-surface.md`'s publication table, third row: `publish-diagnosis`
+# runs **on completion of each forecast publication** and writes the attribution
+# table. Same direction as the forecast's — worker -> ml, computed here, written
+# by the caller — and the same shape of refusal, because the gateway's proxy
+# admits the *code* and a screen renders three lane states three ways.
+#
+# Until this route existed the chain had nowhere to go, and a probe got FastAPI's
+# own `{"detail": "Not Found"}` — a 404 that `ml-proxy` maps to
+# `UPSTREAM_REJECTED` and that reads like a misconfigured base URL rather than a
+# missing capability. Every refusal below is a code in `packages/core`'s closed
+# enum instead.
+
+
+class PublishDiagnosisRequest(BaseModel):
+    """Which lane, which day of it, and the one observation a rule reads.
+
+    `apps/api/src/diagnosis/publish.ts` is the only caller and it always
+    supplies all three, `recent_reasons` as `{}` when nothing was readable.
+    """
+
+    #: The lane directory name — `dessem_free_v1__gate_late__thr5`.
+    lane: str
+    #: The civil day being explained. Defaults to tomorrow, which is what the
+    #: chained job publishes; a caller that wants another day says so.
+    target_date: date | None = None
+    #: `{"NE": {"settled_date": "2026-03-02", "shares": {"REL": 0.62, …}}}` —
+    #: the most recent settled day's reported reason mix per subsystem, read by
+    #: the worker at `actuals_cutoff` and travelling on the request so that one
+    #: quantity has one producer. **Not typed here beyond `object`**: the shape
+    #: is validated by `reason_mixes_from_payload`, which *refuses* a malformed
+    #: block rather than dropping it, because a dropped mix is
+    #: indistinguishable from an absent day and would turn a bug into a rule
+    #: that quietly stops firing. A Pydantic model with optional fields would do
+    #: the dropping.
+    recent_reasons: object | None = None
+
+
+@app.post("/internal/publish/diagnosis", tags=["diagnosis"])
+async def publish_diagnosis(
+    request: Annotated[PublishDiagnosisRequest, Body()],
+) -> JSONResponse:
+    """Attribute one lane's published day and hand the rows back. Writes nothing.
+
+    Refuses rather than invents, and the taxonomy is the forecast route's plus
+    one:
+
+    - a lane name that is not one — `REQUEST_INVALID`, 422;
+    - no promoted artifact — `MODEL_UNAVAILABLE`, 503, with the lane state and
+      the mount beside it;
+    - no database — `DATA_UNAVAILABLE`, 503;
+    - no feature rows for the day — `FORECAST_UNAVAILABLE`, 404: there is no
+      published forecast to explain, and the repair is the forecast's;
+    - **no definition of "typical"** — `DIAGNOSIS_UNAVAILABLE`, 404, carrying
+      `details.condition`. The forecast is fine and its attribution is not, and
+      that is exactly the code `packages/core` reserves for it. The conditions
+      are :data:`~wattsteer_ml.diagnosis.publish.REFUSAL_CONDITIONS`, and the
+      one that fires today when a lane's base-fit window is short is
+      `no_matched_background`: the artifact carries no frozen background sample
+      (see `.scratch/forecaster/issues/30-*`), so the sample is drawn here from
+      the artifact's own base-fit rows, and a window that cannot supply 128 rows
+      for every `(subsystem, local_hour)` cell produces a refusal rather than a
+      thinner "typical" that nothing downstream would report.
+
+    None of them is an invented explanation, and none of them is a 404 with no
+    code in it.
+    """
+    try:
+        lane = Lane.parse(request.lane)
+    except LaneNameError as error:
+        return _refusal(422, "REQUEST_INVALID", str(error))
+
+    # Before the artifact, because a malformed block is the caller's fault and a
+    # 503 about the volume would send an operator to the wrong service.
+    try:
+        recent_reasons = reason_mixes_from_payload(request.recent_reasons)
+    except RuleContextError as error:
+        return _refusal(422, "REQUEST_INVALID", str(error))
+
+    try:
+        loaded = load_promoted(lane, root=settings.artifact_dir)
+    except PublicationRefusedError as refusal:
+        return _refusal(
+            503,
+            "MODEL_UNAVAILABLE",
+            refusal.reason,
+            {
+                "lane": lane.directory_name,
+                "lane_state": refusal.lane_state,
+                "volume_mounted": refusal.volume_mounted,
+            },
+        )
+
+    if database is None:
+        return _refusal(
+            503,
+            "DATA_UNAVAILABLE",
+            "this instance has no database configured, and an attribution is a "
+            "function of feature rows that only Postgres holds",
+        )
+
+    target_date = request.target_date or serving_target_date(datetime.now(tz=UTC))
+
+    # The base-fit window is the artifact's own, off its card. Resolved *before*
+    # the day's rows are read, because a lane that cannot say what "typical"
+    # means has no attribution however good today's inputs are, and finding that
+    # out after two reads would cost the reads.
+    try:
+        window_start, window_end = base_fit_window(loaded)
+    except DiagnosisPublicationRefusedError as refusal:
+        return _refusal(
+            404,
+            "DIAGNOSIS_UNAVAILABLE",
+            refusal.reason,
+            {
+                "lane": lane.directory_name,
+                "target_date": target_date.isoformat(),
+                "condition": refusal.condition,
+            },
+        )
+
+    gate_profile = cast(GateProfile, lane.gate_profile)
+    feature_set = cast(FeatureSet, lane.feature_set)
+    pool = await database.connect()
+    async with pool.acquire() as conn:
+        rows = await read_serving_rows(
+            conn,
+            target_date=target_date,
+            gate_profile=gate_profile,
+            feature_set=feature_set,
+            threshold_mw=lane.threshold_mw,
+        )
+        if not rows:
+            return _refusal(
+                404,
+                "FORECAST_UNAVAILABLE",
+                f"the feature function returned no row for "
+                f"{target_date.isoformat()} in {lane.directory_name}; there is "
+                "no published day to explain",
+                {"lane": lane.directory_name, "target_date": target_date.isoformat()},
+            )
+        # One connection for both reads, and the base-fit read second: the day's
+        # 96 rows are the cheap one and they decide whether the ~17,000-row
+        # window read is worth doing at all.
+        base_fit_rows = await read_feature_rows(
+            conn,
+            FeatureRowsQuery(
+                target_from=window_start,
+                target_to=window_end,
+                gate_profile=gate_profile,
+                feature_set=feature_set,
+                threshold_mw=lane.threshold_mw,
+            ),
+        )
+
+    try:
+        publication: AttributionPublication = build_diagnosis_publication(
+            rows,
+            base_fit_rows,
+            lane=lane,
+            loaded=loaded,
+            target_date=target_date,
+            # The gate the *database* resolved for these rows, read off them by
+            # the same function the forecast publication uses. The attribution
+            # is published with the forecast it explains, so the two carry one
+            # instant and neither computes it.
+            published_at=publication_instant(rows, target_date=target_date),
+            recent_reasons=recent_reasons,
+        )
+    except DiagnosisPublicationRefusedError as refusal:
+        logger.warning("publish-diagnosis: %s", refusal.reason)
+        return _refusal(
+            404,
+            "DIAGNOSIS_UNAVAILABLE",
+            refusal.reason,
+            {
+                "lane": lane.directory_name,
+                "target_date": target_date.isoformat(),
+                "condition": refusal.condition,
+                "base_fit_window": {
+                    "start": window_start.isoformat(),
+                    "end": window_end.isoformat(),
+                },
+            },
+        )
+    except (PublicationError, AttributionPublicationError) as error:
+        # A 500 for the same reason the forecast route's is: the caller asked
+        # for a well-formed thing and the rows it was built from are the
+        # database's own.
+        logger.error("publish-diagnosis: %s", error)
         return _refusal(500, "INTERNAL", str(error))
 
     return JSONResponse(content=publication.as_payload())
