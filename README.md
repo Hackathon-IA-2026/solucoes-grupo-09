@@ -72,12 +72,12 @@ are standing in.
 
 Asking by hand is not a guard, so the merge is gated:
 
-- **`.githooks/`** holds `pre-merge-commit` and `pre-commit`, both of which run
-  the same check against the *incoming* head — not `HEAD`, because merging a
-  current branch into a local `main` that has drifted is harmless and a gate
-  that fires on the harmless case gets switched off. `pre-commit` is inert
-  except when a merge is in progress, which is the path git takes when the merge
-  conflicted and `pre-merge-commit` never ran.
+- **`.githooks/`** holds `pre-merge-commit` and `pre-commit`, both of which ask
+  one question: **will the commit this merge writes contain `origin/main`?**
+  That holds when the destination already carries the tip, and also when an
+  incoming head does; a stale incoming head is printed as a note and allowed.
+  `pre-commit` is inert except when a merge is in progress, which is the path
+  git takes when the merge conflicted and `pre-merge-commit` never ran.
 - **`core.hooksPath`** points git at that tracked directory, because
   `.git/hooks` is not committed and a hook written there enforces nothing for
   the next clone and nothing for anyone else.
@@ -108,14 +108,36 @@ recorded here rather than smoothed over:
   work was landing on was a local development branch nine commits *ahead* of
   `origin/main`. So the guard answered `ok` for a base that was nine commits
   behind the real tip — correctly, by its own contract, and uselessly. The
-  contract, not the enforcement, is the weak part: **this gate would not have
-  caught that incident.** The candidate fix is for the merge gate to also
-  require the incoming head to contain the branch it is being merged *into*,
-  which needs no remote and no configuration because git already knows the
-  target. It is not done here because it is a stricter property than the one
-  898c6b1 specified, and it would serialise parallel merges behind a rebase
-  each — a workflow decision, not a code one. Whoever owns the integration
-  branch should make it deliberately.
+  contract, not the enforcement, was the weak part: **the gate as first written
+  would not have caught that incident**, and the standing answer is the rule at
+  the top of this section — keep `main` and `origin/main` at the tip work is
+  actually landing on, so that "contains `origin/main`" means what it says. That
+  is now the workflow: every landed merge is pushed and `main` is
+  fast-forwarded, so `origin/main` is the real tip rather than a ref nine
+  commits behind it.
+
+### The contract was corrected once, and the old one is recorded here
+
+The first version asked whether the **incoming branch** contained
+`origin/main`. It was replaced the same day, for two reasons:
+
+1. **It refused the ordinary case.** Checked against this repository's own
+   history, it rejected two of the first three merges it was pointed at —
+   `Merge forecaster 27` and `Merge data-platform 20` — because `main` moved
+   between cutting the branch and merging it. It also refused its own merge,
+   which is how it was found. A gate that fires on the ordinary case is a gate
+   that gets switched off.
+2. **It was wrong about the risk.** Git's three-way merge does not drop the
+   work an old branch never saw; the merge base is the common ancestor and both
+   sides survive. What a stale branch actually costs is *semantic* — code
+   written against an API that has since moved — and by merge time that is
+   already paid. The check for that is `bun run preflight` when work **starts**,
+   which still reads `HEAD` and still refuses.
+
+So the merge gate now guards the property a merge can still protect: the result
+is current. The staleness that a merge cannot fix is reported as a note, where
+a reader can act on it, rather than as a refusal nobody can satisfy without a
+rebase they did not need.
 
 ### The tradeoffs this accepts, in plain terms
 

@@ -20,7 +20,10 @@ import {
 import {
   type BaseFacts,
   evaluateBase,
+  evaluateMerge,
   explain,
+  explainMerge,
+  type MergeFacts,
   nameRef,
 } from "../scripts/preflight-base";
 
@@ -163,9 +166,10 @@ describe("preflight: every verdict explains itself", () => {
     expect(message).toContain("git rebase origin/main");
   });
 
-  it("names the ref it read, because the merge gate does not read HEAD", () => {
-    // A refusal fired from the merge hook that said "HEAD" would send the
-    // reader to rebase the wrong branch. The ref is presentational only — it is
+  it("names the ref it read, so a refusal points at the right branch", () => {
+    // `evaluateBase` is asked about refs other than HEAD — `bun run preflight
+    // <ref>` does it — and a refusal that always said "HEAD" would send the
+    // reader to rebase the wrong branch. The ref is presentational only: it is
     // not one of the five facts and does not reach `evaluateBase`.
     const facts = onTip({ headSha: OLDER, mergeBaseSha: OLDER, behind: 7 });
     const verdict = evaluateBase(facts);
@@ -205,6 +209,102 @@ const REPO = join(import.meta.dir, "..");
 
 /** The hooks git will actually look for, and what each is for. */
 const HOOKS = ["pre-merge-commit", "pre-commit", "base-gate.sh"] as const;
+
+describe("preflight: the merge result, which is what the gate decides", () => {
+  const head = (sha: string, mergeBaseSha: string, behind = 0) => ({
+    sha,
+    mergeBaseSha,
+    behind,
+  });
+  const merging = (overrides: Partial<MergeFacts> = {}): MergeFacts => ({
+    fetched: true,
+    originMainSha: TIP,
+    destinationSha: TIP,
+    destinationMergeBaseSha: TIP,
+    heads: [head(AHEAD, TIP)],
+    ...overrides,
+  });
+
+  it("allows a stale incoming head when the destination carries the tip", () => {
+    // The correction. The result contains origin/main because the destination
+    // does, and git keeps both sides — so this is allowed and merely noted.
+    const facts = merging({ heads: [head(OLDER, OLDER, 2)] });
+    expect(evaluateMerge(facts)).toEqual({
+      ok: true,
+      reason: "result-contains-origin-main",
+      staleHeads: [OLDER],
+    });
+    expect(explainMerge(facts, evaluateMerge(facts))).toContain(
+      "was cut 2 commit(s) behind",
+    );
+  });
+
+  it("allows a stale destination when an incoming head carries the tip", () => {
+    // The mirror image, and the case the old contract got right by accident:
+    // merging a current branch into a drifted local main is fine.
+    const facts = merging({ destinationSha: OLDER, destinationMergeBaseSha: OLDER });
+    expect(evaluateMerge(facts)).toEqual({
+      ok: true,
+      reason: "result-contains-origin-main",
+      staleHeads: [],
+    });
+  });
+
+  it("refuses only when no side carries the tip", () => {
+    const facts = merging({
+      destinationSha: OLDER,
+      destinationMergeBaseSha: OLDER,
+      heads: [head(OLDER, OLDER, 2)],
+    });
+    expect(evaluateMerge(facts)).toEqual({ ok: false, reason: "result-behind-tip" });
+    expect(explainMerge(facts, evaluateMerge(facts))).toContain(
+      "this merge would not contain origin/main",
+    );
+  });
+
+  it("decides an octopus merge whole: one current head is enough, and the rest are noted", () => {
+    const facts = merging({
+      destinationSha: OLDER,
+      destinationMergeBaseSha: OLDER,
+      heads: [head(OLDER, OLDER, 2), head(AHEAD, TIP)],
+    });
+    expect(evaluateMerge(facts)).toEqual({
+      ok: true,
+      reason: "result-contains-origin-main",
+      staleHeads: [OLDER],
+    });
+  });
+
+  it("can fail: it is not satisfied by having read nothing", () => {
+    // The vacuity trap, in its sharpest form for this function. With no heads,
+    // "every incoming head carries the tip" is vacuously true and a naive
+    // implementation returns its healthiest verdict having learned nothing.
+    expect(evaluateMerge(merging({ heads: [] }))).toEqual({
+      ok: false,
+      reason: "unreadable-ref",
+    });
+    // An unreadable sha anywhere in the merge is a refusal, not a comparison
+    // of empty strings.
+    expect(evaluateMerge(merging({ heads: [head("", "")] }))).toEqual({
+      ok: false,
+      reason: "unreadable-ref",
+    });
+    expect(evaluateMerge(merging({ destinationSha: "" }))).toEqual({
+      ok: false,
+      reason: "unreadable-ref",
+    });
+    expect(evaluateMerge(merging({ originMainSha: "" }))).toEqual({
+      ok: false,
+      reason: "unreadable-ref",
+    });
+    // And an unreachable remote stays a refusal even when everything else is
+    // perfect, because origin/main could not be trusted.
+    expect(evaluateMerge(merging({ fetched: false }))).toEqual({
+      ok: false,
+      reason: "fetch-failed",
+    });
+  });
+});
 
 describe("preflight: the gate's wiring is committed, not per-machine", () => {
   it("ships the hooks in a tracked directory rather than in .git/hooks", () => {
@@ -539,7 +639,7 @@ describe("preflight: an unreachable origin is a refusal, not a stale comparison"
   });
 });
 
-describe("preflight: the merge gate refuses a stale merge", () => {
+describe("preflight: the merge gate keeps the merge result current", () => {
   let world: World;
 
   beforeAll(() => {
@@ -558,39 +658,39 @@ describe("preflight: the merge gate refuses a stale merge", () => {
     expect(installHooks(world.work)).toEqual({ action: "already-configured" });
   });
 
-  it("refuses to merge a branch cut behind the tip, and leaves HEAD where it was", () => {
+  it("allows a stale branch into a current destination, and says it was stale", () => {
+    // The case the first contract got wrong. Merging a ticket cut behind the
+    // tip into an up-to-date branch yields a commit that contains the tip, and
+    // git's three-way merge keeps the work the ticket never saw. Refusing this
+    // rejected two of the first three merges in this repository's own history.
     git(world.work, ["checkout", "-q", "main"]);
     const before = git(world.work, ["rev-parse", "HEAD"]);
 
     const merge = run(world.work, "git", ["merge", "--no-ff", "--no-edit", "stale"]);
-    expect(merge.status).not.toBe(0);
-    expect(merge.output).toContain("REFUSED");
-    // Named by object name, and it is the *incoming* head that gets named —
-    // the gate found it in `GITHEAD_*` because `MERGE_HEAD` is not written yet
-    // on this path. If this ever reports `main`'s sha the gate is reading HEAD.
-    const short = world.staleTip.slice(0, 7);
+    expect({ status: merge.status, refused: merge.output.includes("REFUSED") }).toEqual({
+      status: 0,
+      refused: false,
+    });
+    // Allowed, but not silently: a branch developed against an older tree can
+    // still be semantically stale, and that is worth printing.
     expect(merge.output).toContain(
-      `base guard: checking the commit being merged (${short})`,
+      `note: ${world.staleTip.slice(0, 7)} was cut 2 commit(s) behind`,
     );
-    expect(merge.output).toContain(`${short} is 2 commit(s) behind origin/main`);
-    expect(merge.output).toContain("git rebase origin/main");
-    expect(git(world.work, ["rev-parse", "HEAD"])).toBe(before);
+    expect(git(world.work, ["rev-parse", "HEAD"])).not.toBe(before);
 
-    git(world.work, ["merge", "--abort"]);
+    git(world.work, ["reset", "--hard", "-q", before]);
   });
 
-  it("allows the same merge from a branch that contains the tip", () => {
-    // The other half. A gate that refuses everything is not a gate, it is an
-    // outage, and it would be reverted before it ever caught anything.
+  it("allows a merge from a branch that contains the tip, with no note", () => {
     git(world.work, ["checkout", "-q", "main"]);
     const before = git(world.work, ["rev-parse", "HEAD"]);
 
     const merge = run(world.work, "git", ["merge", "--no-ff", "--no-edit", "current"]);
-    expect({ status: merge.status, output: merge.output }).toEqual({
+    expect({ status: merge.status, refused: merge.output.includes("REFUSED") }).toEqual({
       status: 0,
-      output: merge.output,
+      refused: false,
     });
-    expect(merge.output).not.toContain("REFUSED");
+    expect(merge.output).not.toContain("note:");
 
     const after = git(world.work, ["rev-parse", "HEAD"]);
     expect(after).not.toBe(before);
@@ -599,30 +699,41 @@ describe("preflight: the merge gate refuses a stale merge", () => {
     expect(
       git(world.work, ["rev-list", "--parents", "-n", "1", "HEAD"]).split(" "),
     ).toHaveLength(3);
+    git(world.work, ["reset", "--hard", "-q", before]);
+  });
+
+  it("refuses when neither side carries the tip, which is the real hazard", () => {
+    // The destination is behind and so is the incoming branch, so the commit
+    // this merge would write does not contain `origin/main` at all. That is
+    // the case worth refusing: the result itself is stale, not merely its
+    // ingredients.
+    git(world.work, ["checkout", "-q", "-B", "behind-dest", world.base]);
+    const before = git(world.work, ["rev-parse", "HEAD"]);
+
+    const merge = run(world.work, "git", ["merge", "--no-ff", "--no-edit", "stale"]);
+    expect(merge.status).not.toBe(0);
+    expect(merge.output).toContain("REFUSED");
+    expect(merge.output).toContain("this merge would not contain origin/main");
+    expect(merge.output).toContain("git pull --ff-only");
+    expect(git(world.work, ["rev-parse", "HEAD"])).toBe(before);
+
+    run(world.work, "git", ["merge", "--abort"]);
+    git(world.work, ["checkout", "-q", "main"]);
   });
 
   it("gates the conflicted merge too, which git finishes through git commit", () => {
     // `pre-merge-commit` never runs when the merge stops on a conflict. Without
     // the `pre-commit` half, the ungated path would be the merges most likely
     // to be carrying a surprise, since a base far enough behind to matter is a
-    // base likely to conflict.
-    git(world.work, ["checkout", "-q", "main"]);
-    git(world.work, ["checkout", "-q", "-b", "stale-conflicting", world.base]);
-    commit(
-      world.work,
-      "README.md",
-      "ticket's idea of one\n",
-      "stale ticket edits README",
-    );
-    git(world.work, ["checkout", "-q", "main"]);
-    commit(world.work, "README.md", "main's idea of one\n", "main edits README");
+    // base likely to conflict. Both sides here are behind the tip, so the
+    // result would be stale and the gate must refuse.
+    git(world.work, ["checkout", "-q", "-B", "behind-a", world.base]);
+    commit(world.work, "README.md", "a's idea of one\n", "behind-a edits README");
+    git(world.work, ["checkout", "-q", "-B", "behind-b", world.base]);
+    commit(world.work, "README.md", "b's idea of one\n", "behind-b edits README");
+    git(world.work, ["checkout", "-q", "behind-a"]);
 
-    const merge = run(world.work, "git", [
-      "merge",
-      "--no-ff",
-      "--no-edit",
-      "stale-conflicting",
-    ]);
+    const merge = run(world.work, "git", ["merge", "--no-ff", "--no-edit", "behind-b"]);
     expect(merge.status).not.toBe(0);
     expect(merge.output).toContain("CONFLICT");
 
@@ -635,17 +746,18 @@ describe("preflight: the merge gate refuses a stale merge", () => {
     expect(landed.output).toContain("REFUSED");
     expect(git(world.work, ["rev-parse", "HEAD"])).toBe(before);
 
-    git(world.work, ["merge", "--abort"]);
+    run(world.work, "git", ["merge", "--abort"]);
+    git(world.work, ["checkout", "-q", "main"]);
   });
 
-  it("can fail: without the gate installed, the stale merge lands", () => {
+  it("can fail: without the gate installed, the stale-result merge lands", () => {
     // The non-vacuity proof for this whole suite. Every refusal above is a
     // non-zero exit from `git merge`, and git has plenty of reasons of its own
     // to exit non-zero — so show the identical merge succeeding with
     // `core.hooksPath` unset. If this test ever fails, the refusals above were
     // measuring something other than the gate.
     git(world.work, ["config", "--unset", "core.hooksPath"]);
-    git(world.work, ["checkout", "-q", "main"]);
+    git(world.work, ["checkout", "-q", "-B", "behind-dest-2", world.base]);
     const before = git(world.work, ["rev-parse", "HEAD"]);
 
     const merge = run(world.work, "git", ["merge", "--no-ff", "--no-edit", "stale"]);

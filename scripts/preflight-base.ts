@@ -163,9 +163,11 @@ function git(args: string[]): string {
  */
 const FETCH_TIMEOUT_MS = 20_000;
 
-/** Reads the five facts about `ref` from the repository this script runs in. */
-export function readBaseFacts(ref = "HEAD"): BaseFacts {
-  let fetched = true;
+/**
+ * One bounded, never-prompting fetch. Shared by both entry points so that the
+ * hardening above cannot be true of one and false of the other.
+ */
+function fetchOrigin(): boolean {
   try {
     execFileSync("git", ["fetch", "origin", "main", "--quiet"], {
       stdio: "ignore",
@@ -175,9 +177,15 @@ export function readBaseFacts(ref = "HEAD"): BaseFacts {
       // fired from a git hook has no terminal to appear on.
       env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_ASKPASS: "true" },
     });
+    return true;
   } catch {
-    fetched = false;
+    return false;
   }
+}
+
+/** Reads the five facts about `ref` from the repository this script runs in. */
+export function readBaseFacts(ref = "HEAD"): BaseFacts {
+  const fetched = fetchOrigin();
 
   const behind = Number.parseInt(git(["rev-list", "--count", `${ref}..origin/main`]), 10);
 
@@ -190,10 +198,185 @@ export function readBaseFacts(ref = "HEAD"): BaseFacts {
   };
 }
 
+/**
+ * The facts a merge decision rests on.
+ *
+ * `destination` is the branch being merged *into* — `HEAD`. `heads` are the
+ * commits coming in, one per parent so an octopus merge is decided whole.
+ */
+export interface MergeFacts {
+  fetched: boolean;
+  originMainSha: string;
+  destinationSha: string;
+  /** `git merge-base HEAD origin/main` */
+  destinationMergeBaseSha: string;
+  heads: readonly {
+    sha: string;
+    /** `git merge-base <head> origin/main` */
+    mergeBaseSha: string;
+    behind: number;
+  }[];
+}
+
+export type MergeVerdict =
+  | {
+      ok: true;
+      reason: "result-contains-origin-main";
+      /** Heads cut behind the tip. Advisory: reported, never fatal. */
+      staleHeads: readonly string[];
+    }
+  | { ok: false; reason: "fetch-failed" | "unreadable-ref" | "result-behind-tip" };
+
+/**
+ * Whether the commit this merge is about to write will contain `origin/main`.
+ *
+ * **This replaces an earlier contract, and the reason is worth keeping.** The
+ * first version of the gate asked whether the *incoming* branch contained
+ * `origin/main`, on the reasoning that a ticket cut behind the tip is the
+ * hazard. Measured against this repository's own history, that rule refused
+ * two of the first three merges it was tried on — `Merge forecaster 27` and
+ * `Merge data-platform 20` — because `main` had moved between cutting the
+ * branch and merging it. That is the ordinary shape of every topic-branch
+ * merge here, and a gate that fires on the ordinary case is a gate that gets
+ * switched off. It also refused its own merge.
+ *
+ * The rule was wrong about the risk, not only about the frequency. Git's
+ * three-way merge does not drop the work an old branch never saw; the merge
+ * base is the common ancestor and both sides survive. What a stale branch
+ * actually costs is *semantic*: code written against an API that has since
+ * moved. By merge time that damage is done, and the check that catches it is
+ * `bun run preflight` at the moment work starts — which is why that entry
+ * point still reads `HEAD` and still refuses.
+ *
+ * So the merge gate guards the property a merge can still protect: the result
+ * is current. That holds when the destination already contains `origin/main`,
+ * and also when an incoming head does. A stale incoming head is reported and
+ * allowed.
+ */
+export function evaluateMerge(facts: MergeFacts): MergeVerdict {
+  if (!facts.fetched) {
+    return { ok: false, reason: "fetch-failed" };
+  }
+
+  // Non-vacuity, and the shape that matters most here: a gate asked about *no*
+  // heads has read nothing, and "none of them is stale" is trivially true of an
+  // empty list. An empty head list is a refusal, not a clean bill of health.
+  if (facts.heads.length === 0) {
+    return { ok: false, reason: "unreadable-ref" };
+  }
+
+  const names = [
+    facts.originMainSha,
+    facts.destinationSha,
+    facts.destinationMergeBaseSha,
+    ...facts.heads.flatMap((head) => [head.sha, head.mergeBaseSha]),
+  ];
+  for (const sha of names) {
+    if (!OBJECT_NAME.test(sha)) {
+      return { ok: false, reason: "unreadable-ref" };
+    }
+  }
+
+  const carries = (mergeBaseSha: string) => mergeBaseSha === facts.originMainSha;
+  const staleHeads = facts.heads.filter((head) => !carries(head.mergeBaseSha));
+
+  if (
+    !carries(facts.destinationMergeBaseSha) &&
+    staleHeads.length === facts.heads.length
+  ) {
+    return { ok: false, reason: "result-behind-tip" };
+  }
+
+  return {
+    ok: true,
+    reason: "result-contains-origin-main",
+    staleHeads: staleHeads.map((head) => head.sha),
+  };
+}
+
+/** How a merge verdict is explained to whoever is doing the merge. */
+export function explainMerge(facts: MergeFacts, verdict: MergeVerdict): string {
+  switch (verdict.reason) {
+    case "result-contains-origin-main": {
+      const lines = [
+        `base guard: the merge result contains origin/main (${facts.originMainSha.slice(0, 7)}) — ok`,
+      ];
+      for (const sha of verdict.staleHeads) {
+        const head = facts.heads.find((candidate) => candidate.sha === sha);
+        lines.push(
+          `  note: ${sha.slice(0, 7)} was cut ${head?.behind ?? "?"} commit(s) behind origin/main.`,
+          "  Allowed — the result is current. Worth knowing, because a branch",
+          "  developed against an older tree can still be semantically stale.",
+        );
+      }
+      return lines.join("\n");
+    }
+    case "fetch-failed":
+      return [
+        "REFUSED: could not fetch origin, so origin/main could not be trusted.",
+        "Fix the remote and re-run. The guard does not compare against a stale ref.",
+      ].join("\n");
+    case "unreadable-ref":
+      return [
+        "REFUSED: could not read the commits this merge is made of.",
+        `  HEAD         ${facts.destinationSha || "(unreadable)"}`,
+        `  origin/main  ${facts.originMainSha || "(unreadable)"}`,
+        `  incoming     ${facts.heads.length === 0 ? "(none found)" : facts.heads.map((h) => h.sha || "(unreadable)").join(", ")}`,
+        "",
+        "Not knowing what is being merged is not a reason to allow it.",
+      ].join("\n");
+    case "result-behind-tip":
+      return [
+        "REFUSED: this merge would not contain origin/main.",
+        `  HEAD         ${facts.destinationSha.slice(0, 7)}`,
+        `  origin/main  ${facts.originMainSha.slice(0, 7)}`,
+        "",
+        "Neither the branch you are on nor anything being merged carries the",
+        "tip, so the result would be behind it. Update first:",
+        "  git pull --ff-only    (or: git rebase origin/main)",
+      ].join("\n");
+    default:
+      return "REFUSED: unrecognised verdict";
+  }
+}
+
+/** Reads the merge facts for `heads` being merged into `HEAD`. */
+export function readMergeFacts(heads: readonly string[]): MergeFacts {
+  const fetched = fetchOrigin();
+  return {
+    fetched,
+    originMainSha: git(["rev-parse", "origin/main"]),
+    destinationSha: git(["rev-parse", "HEAD"]),
+    destinationMergeBaseSha: git(["merge-base", "HEAD", "origin/main"]),
+    heads: heads.map((sha) => {
+      const behind = Number.parseInt(
+        git(["rev-list", "--count", `${sha}..origin/main`]),
+        10,
+      );
+      return {
+        sha: git(["rev-parse", sha]),
+        mergeBaseSha: git(["merge-base", sha, "origin/main"]),
+        behind: Number.isNaN(behind) ? -1 : behind,
+      };
+    }),
+  };
+}
+
 if (import.meta.main) {
-  // Argument, not an env var, so the merge hook's call reads as the question it
-  // is asking. Defaults to HEAD: `bun run preflight` is unchanged.
-  const ref = process.argv[2] ?? "HEAD";
+  const [mode, ...rest] = process.argv.slice(2);
+  if (mode === "--merge") {
+    // The merge gate's question: will the commit about to be written contain
+    // origin/main? Heads are passed as object names because git has not
+    // written MERGE_HEAD yet when `pre-merge-commit` runs.
+    const facts = readMergeFacts(rest);
+    const verdict = evaluateMerge(facts);
+    console.log(explainMerge(facts, verdict));
+    process.exit(verdict.ok ? 0 : 1);
+  }
+  // Argument, not an env var, so the call reads as the question it is asking.
+  // Defaults to HEAD: `bun run preflight` is unchanged, and still asks the
+  // question that matters at the start of work.
+  const ref = mode ?? "HEAD";
   const facts = readBaseFacts(ref);
   const verdict = evaluateBase(facts);
   console.log(explain(facts, verdict, ref));
