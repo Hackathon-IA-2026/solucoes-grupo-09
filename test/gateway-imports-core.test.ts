@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { SUBSYSTEM_CODES } from "@wattsteer/core/constants";
+import { SUBSYSTEM_DISPLAY_ORDER } from "@wattsteer/core/constants";
 import { TECHNOLOGIES } from "@wattsteer/core/domain";
 
 /**
@@ -32,19 +32,26 @@ const API_SRC = join(ROOT, "apps/api/src");
  * The restatements that are allowed, each with the reason it is not a drift
  * risk. Keyed by path so a *new* one in the same file is still caught.
  *
- * Both entries are literal because something other than TypeScript reads them:
- * `drizzle-kit` compares the `pgEnum` values against the migration snapshot, so
- * deriving them from `SUBSYSTEM_CODES` would reorder `S`/`SE` and generate a
- * spurious enum migration; and `SUBSYSTEM_ORDER` is the interchange
- * orientation basis, anchored to `SubsystemCode`'s *declaration* order, which
- * is not `SUBSYSTEMS`' north-to-south display order — swapping one for the
- * other would silently reverse which end of a link is stated first.
+ * **api-surface 28 removed the interesting one.** Both entries used to be here
+ * because they needed the vocabulary in the `SubsystemCode` union's declaration
+ * order, `N, NE, S, SE`, while the only published array was
+ * `SUBSYSTEM_DISPLAY_ORDER`'s north-to-south `N, NE, SE, S`. That order now has
+ * a name of its own — `SUBSYSTEM_DECLARATION_ORDER` in
+ * `@wattsteer/core/domain` — so both the `subsystem_code` `pgEnum` and
+ * `interchange.ts`'s `SUBSYSTEM_ORDER` read it instead of spelling it out, and
+ * `test/subsystem-order.test.ts` pins it to the union, to the `CREATE TYPE`
+ * that created the Postgres enum, and to who may import it.
+ *
+ * What is left is the **`technology`** `pgEnum` alone. `TECHNOLOGIES` is typed
+ * `readonly Technology[]` and `pgEnum` wants a `[T, ...T[]]` tuple; narrowing
+ * `TECHNOLOGIES` to a tuple to suit the schema breaks `.includes()` at its
+ * other call sites. A two-member vocabulary whose single order already matches
+ * its migration has no conflation hazard to fix, so this stays literal rather
+ * than being paid for with a type change elsewhere.
  */
 const ALLOWED: Readonly<Record<string, string>> = {
   "database/schema.ts":
-    "the Postgres enums; drizzle-kit diffs these values against the migration snapshot",
-  "ingest/ons/interchange.ts":
-    "SUBSYSTEM_ORDER is declaration order, not SUBSYSTEMS' display order",
+    "the technology pgEnum only; TECHNOLOGIES is not a tuple and pgEnum needs one. The subsystem_code enum is derived from SUBSYSTEM_DECLARATION_ORDER and pinned by test/subsystem-order.test.ts",
 };
 
 /** Every `.ts` file under `apps/api/src`, as repo-relative-ish paths. */
@@ -107,6 +114,22 @@ describe("the gateway imports the vocabulary rather than restating it", () => {
     expect(restatements('const T = ["SOLAR", "WIND"];')).not.toEqual([]);
     expect(restatements('type S = "N" | "NE" | "S" | "SE";')).not.toEqual([]);
     expect(restatements('new Set(["N", "NE", "S", "SE"])')).not.toEqual([]);
+    // The exact line api-surface 10 wrote into `jobs/diagnosis-publication.ts`
+    // on 2026-09-09, in declaration order, by an agent that did not know there
+    // were two orders. `c8e0063` substituted the published constant after this
+    // guard caught it on the merge; it is kept here as the regression case.
+    expect(
+      restatements(
+        'const SUBSYSTEMS: readonly SubsystemCode[] = ["N", "NE", "S", "SE"];',
+      ),
+    ).not.toEqual([]);
+    // And the same line in the *other* order, which is the shape a reader who
+    // copied the display order would produce.
+    expect(
+      restatements(
+        'const SUBSYSTEMS: readonly SubsystemCode[] = ["N", "NE", "SE", "S"];',
+      ),
+    ).not.toEqual([]);
     // And does not fire on a *use* of a published value.
     expect(restatements('row.technology === "WIND" ? a : b')).toEqual([]);
     expect(restatements('if (code === "SE") return null;')).toEqual([]);
@@ -117,8 +140,8 @@ describe("the gateway imports the vocabulary rather than restating it", () => {
   it("reads the four codes and the two technologies through the package", () => {
     // The import at the top of this file is the assertion; these pin the
     // contents so a silent emptying of either export is caught here too.
-    expect([...SUBSYSTEM_CODES].sort()).toEqual(["N", "NE", "S", "SE"]);
-    expect(SUBSYSTEM_CODES).not.toContain("SIN");
+    expect([...SUBSYSTEM_DISPLAY_ORDER].sort()).toEqual(["N", "NE", "S", "SE"]);
+    expect(SUBSYSTEM_DISPLAY_ORDER).not.toContain("SIN");
     expect([...TECHNOLOGIES]).toEqual(["WIND", "SOLAR"]);
   });
 
@@ -132,6 +155,22 @@ describe("the gateway imports the vocabulary rather than restating it", () => {
     const normalise = readFileSync(join(API_SRC, "ingest/normalise.ts"), "utf8");
     expect(normalise).toContain('from "@wattsteer/core/domain"');
     expect(normalise).toContain('from "@wattsteer/core/constants"');
+  });
+
+  it("and so do the two that used to be allowed to restate it", () => {
+    // api-surface 28. Both now read `SUBSYSTEM_DECLARATION_ORDER`; only the
+    // technology enum in `schema.ts` is still spelled out, which is why that
+    // one path keeps its allow-list entry.
+    const schema = readFileSync(join(API_SRC, "database/schema.ts"), "utf8");
+    expect(schema).toContain(
+      'pgEnum("subsystem_code", [...SUBSYSTEM_DECLARATION_ORDER])',
+    );
+    // …and not a literal list of codes in its place.
+    expect(schema).not.toMatch(/pgEnum\("subsystem_code",\s*\[\s*"/);
+    const interchange = readFileSync(join(API_SRC, "ingest/ons/interchange.ts"), "utf8");
+    expect(interchange).toContain(
+      "const SUBSYSTEM_ORDER: readonly SubsystemCode[] = SUBSYSTEM_DECLARATION_ORDER;",
+    );
   });
 });
 

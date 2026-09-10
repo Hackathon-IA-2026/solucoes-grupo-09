@@ -7,7 +7,7 @@
  * can quietly implement its own dialect of "canonical".
  */
 
-import { SUBSYSTEM_CODES as PUBLISHED_SUBSYSTEM_CODES } from "@wattsteer/core/constants";
+import { SUBSYSTEM_DISPLAY_ORDER } from "@wattsteer/core/constants";
 import type { SubsystemCode } from "@wattsteer/core/domain";
 
 /**
@@ -28,7 +28,7 @@ export type { SubsystemCode };
  * A fifth entry in `SUBSYSTEMS` would be accepted here without this file being
  * edited, which is the point: the enum is closed in one place.
  */
-const SUBSYSTEM_CODES = new Set<string>(PUBLISHED_SUBSYSTEM_CODES);
+const SUBSYSTEM_MEMBERS = new Set<string>(SUBSYSTEM_DISPLAY_ORDER);
 
 /** ONS's national aggregate row. Never a subsystem — filtered at the boundary. */
 export const AGGREGATE_SUBSYSTEM_CODE = "SIN";
@@ -63,7 +63,7 @@ export function resolveSubsystem(raw: string): SubsystemResolution {
   if (code === AGGREGATE_SUBSYSTEM_CODE) {
     return { kind: "aggregate" };
   }
-  if (SUBSYSTEM_CODES.has(code)) {
+  if (SUBSYSTEM_MEMBERS.has(code)) {
     return { kind: "subsystem", code: code as SubsystemCode };
   }
   return { kind: "unknown", raw };

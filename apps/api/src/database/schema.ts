@@ -1,3 +1,4 @@
+import { SUBSYSTEM_DECLARATION_ORDER } from "@wattsteer/core/domain";
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
@@ -44,8 +45,22 @@ import {
  * makes double-counting impossible rather than merely discouraged. The carga
  * REST API's `SECO` is likewise absent — it is a transport detail owned by that
  * one HTTP client.
+ *
+ * **Declaration order, and it has to be.** `drizzle-kit generate` diffs these
+ * values against the migration snapshot, and the Postgres type was created
+ * `('N', 'NE', 'S', 'SE')` by `drizzle/0000_hot_dakota_north.sql`. Spelling it
+ * in `SUBSYSTEM_DISPLAY_ORDER`'s north-to-south order emits a spurious enum
+ * migration — a schema change to satisfy a refactor. Measured: it produced a
+ * fresh `0043_*.sql` and reddened `test/drizzle-snapshot.test.ts`, which
+ * generates against the committed metadata and requires drizzle-kit to find
+ * nothing to do. The repo-root `test/subsystem-order.test.ts` pins these values
+ * against the `CREATE TYPE` in `drizzle/0000_hot_dakota_north.sql` as well, so
+ * the two halves fail independently.
+ *
+ * The spread is because `pgEnum` wants a mutable `[T, ...T[]]` tuple; the
+ * values are byte-identical to the literal this replaced.
  */
-export const subsystemCode = pgEnum("subsystem_code", ["N", "NE", "S", "SE"]);
+export const subsystemCode = pgEnum("subsystem_code", [...SUBSYSTEM_DECLARATION_ORDER]);
 
 /**
  * How coarse the row's `published_at` is. ONS stamps almost nothing per row, so

@@ -1,4 +1,4 @@
-import { SUBSYSTEM_CODES } from "@wattsteer/core/constants";
+import { SUBSYSTEM_DISPLAY_ORDER } from "@wattsteer/core/constants";
 import type { MlEndpoint } from "../api/ml-proxy.js";
 import type { Database } from "../database/connection.js";
 import { type PublishDiagnosisResult, publishDiagnosis } from "../diagnosis/publish.js";
@@ -86,13 +86,21 @@ export interface DiagnosisPublisherDeps {
  *
  * Read from the published vocabulary rather than restated: this file was the
  * one restatement api-surface 03's guard caught after the fact, and it was
- * spelled in the enum's declaration order while `SUBSYSTEM_CODES` is in display
- * order. The difference is immaterial *here* — `readReasons` returns a keyed
- * record, so nothing downstream sees this order — which is exactly why it must
- * not be a second list: a copy that happens not to matter is still a copy that
- * drifts.
+ * spelled out as a literal array in the *declaration* order by an agent that
+ * had no idea the vocabulary carried two. (Not quoted here: the scanner in
+ * `test/gateway-imports-core.test.ts` reads comments too, and rightly — a
+ * scanner that stripped them would be the vacuous-guard defect api-surface 25
+ * catalogued.) The difference was immaterial *here*
+ * (`readReasons` returns a keyed record, so nothing downstream sees this order)
+ * and that near-miss is what api-surface 28 was written about: both orders now
+ * have names that say what they are for, and `test/subsystem-order.test.ts`
+ * keeps the orientation basis out of files like this one.
+ *
+ * The display order is the right one here for the same reason it is right
+ * almost everywhere: nothing outside TypeScript has committed to an order this
+ * loop has to answer to.
  */
-const SUBSYSTEMS: readonly SubsystemCode[] = SUBSYSTEM_CODES;
+const SUBSYSTEMS: readonly SubsystemCode[] = SUBSYSTEM_DISPLAY_ORDER;
 
 /**
  * Why a diagnosis publication did not happen, in the operator's vocabulary.

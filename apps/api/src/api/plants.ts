@@ -3,7 +3,7 @@ import {
   ODBL_ALTERATIONS_AT,
   ODBL_LICENCE_URL,
   SOURCE_ATTRIBUTION,
-  SUBSYSTEM_CODES,
+  SUBSYSTEM_DISPLAY_ORDER,
 } from "@wattsteer/core/constants";
 import { TECHNOLOGIES, type Technology } from "@wattsteer/core/domain";
 import { encodeWire } from "@wattsteer/core/wire";
@@ -87,7 +87,7 @@ const literalUnion = <T extends string>(values: readonly T[]) => {
   return t.Union([first, ...rest]);
 };
 
-const SUBSYSTEM = t.Optional(literalUnion(SUBSYSTEM_CODES));
+const SUBSYSTEM = t.Optional(literalUnion(SUBSYSTEM_DISPLAY_ORDER));
 /** Uppercase, case-sensitively: `technology=wind` is a 422, not a synonym. */
 const TECHNOLOGY = t.Optional(literalUnion(TECHNOLOGIES));
 const FORMAT = t.Optional(literalUnion(["json", "csv"] as const));

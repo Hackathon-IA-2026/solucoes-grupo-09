@@ -31,7 +31,7 @@ import {
   REPLAY_DAYS,
   RUN_LABELS,
   type RunLabel,
-  SUBSYSTEM_CODES,
+  SUBSYSTEM_DISPLAY_ORDER,
   type SubsystemCode,
   TARGET_DATE,
   type Technology,
@@ -76,7 +76,7 @@ export function parseAppParams(
   const run = first(raw.run);
   const episode = first(raw.episode);
   return {
-    subsystem: SUBSYSTEM_CODES.includes(subsystem as SubsystemCode)
+    subsystem: SUBSYSTEM_DISPLAY_ORDER.includes(subsystem as SubsystemCode)
       ? (subsystem as SubsystemCode)
       : "NE",
     technology: TECHNOLOGY_PARAM[technology ?? ""] ?? "WIND",

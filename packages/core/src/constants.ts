@@ -44,6 +44,12 @@ export interface SubsystemMeta {
  * a different order; a table in prose is not an ordering commitment, and a chip
  * row silently reshuffling is a user-visible change with no reason behind it.
  *
+ * **It is not the only order.** `SUBSYSTEM_DECLARATION_ORDER` in `./domain.ts`
+ * is `N, NE, S, SE` and is what the Postgres enum and the interchange link
+ * orientation are anchored to. Anything derived from this list is derived from
+ * the *display* order; see that constant for the two behaviours that break if
+ * the two are confused, and `test/subsystem-order.test.ts` for the guards.
+ *
  * The display names are untranslated on purpose: they are ONS's own strings,
  * they appear verbatim in ONS's files, and translating "SUDESTE/CENTRO-OESTE"
  * would make a subsystem unsearchable against the source it came from.
@@ -55,8 +61,24 @@ export const SUBSYSTEMS: readonly SubsystemMeta[] = [
   { code: "S", onsDisplayName: "SUL", short: "S" },
 ];
 
-/** The four codes, in the same order. */
-export const SUBSYSTEM_CODES: readonly SubsystemCode[] = SUBSYSTEMS.map((s) => s.code);
+/**
+ * The four codes in the product's **display** order, `N, NE, SE, S`.
+ *
+ * Named for the order rather than called `SUBSYSTEM_CODES`, because there are
+ * two orders and the unqualified name hid that. The other is
+ * `SUBSYSTEM_DECLARATION_ORDER` in `./domain.ts` — `N, NE, S, SE`, the order
+ * the Postgres enum was created in and the basis the interchange adapter
+ * orients links against. Reach for that one, never this one, when something
+ * outside TypeScript has already committed to an order; its doc comment says
+ * which behaviours those are and what swapping them costs.
+ *
+ * This is the right one for everything else: rendering the four, validating a
+ * `subsystem` parameter, building a wire union, iterating to fetch per
+ * subsystem.
+ */
+export const SUBSYSTEM_DISPLAY_ORDER: readonly SubsystemCode[] = SUBSYSTEMS.map(
+  (s) => s.code,
+);
 
 /** The names for one subsystem. Total, because the enum is closed. */
 export function subsystemMeta(code: SubsystemCode): SubsystemMeta {

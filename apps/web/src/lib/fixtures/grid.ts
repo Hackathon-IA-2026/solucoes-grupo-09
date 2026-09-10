@@ -12,7 +12,7 @@
  */
 
 import {
-  SUBSYSTEM_CODES,
+  SUBSYSTEM_DISPLAY_ORDER,
   SUBSYSTEM_THRESHOLD_MW,
   weatherRunLabel,
 } from "@wattsteer/core";
@@ -40,7 +40,7 @@ import type {
  * are defined in `@wattsteer/core` so a fixture cannot drift from the API.
  */
 export {
-  SUBSYSTEM_CODES,
+  SUBSYSTEM_DISPLAY_ORDER,
   SUBSYSTEM_THRESHOLD_MW,
   SUBSYSTEMS,
   subsystemMeta,
@@ -173,7 +173,7 @@ function fleetMagnitude(shape: FleetShape, hourLocal: number, noise: number): nu
 }
 
 function seedFor(subsystem: SubsystemCode, run: RunLabel): number {
-  const s = SUBSYSTEM_CODES.indexOf(subsystem) + 1;
+  const s = SUBSYSTEM_DISPLAY_ORDER.indexOf(subsystem) + 1;
   const r = run === "00Z" ? 1 : 2;
   return s * 17 + r;
 }
@@ -298,7 +298,7 @@ export function buildForecast(
 }
 
 export function buildAllForecasts(run: RunLabel): SubsystemDayForecast[] {
-  return SUBSYSTEM_CODES.map((code) => buildForecast(code, run));
+  return SUBSYSTEM_DISPLAY_ORDER.map((code) => buildForecast(code, run));
 }
 
 /**

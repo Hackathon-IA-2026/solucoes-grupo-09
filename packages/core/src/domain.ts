@@ -37,6 +37,43 @@
 export type SubsystemCode = "N" | "NE" | "S" | "SE";
 
 /**
+ * The four codes in **declaration order** — the order of the union above.
+ *
+ * **This is not the order anything is displayed in.** The vocabulary carries two
+ * orders and two behaviours depend on different ones, so both are named:
+ *
+ *  - `SUBSYSTEM_DISPLAY_ORDER` (`packages/core/src/constants.ts`) is
+ *    `N, NE, SE, S` — north to south, what the screens render and
+ *    `GET /v1/meta` reports.
+ *  - **this one** is `N, NE, S, SE`, and it is what you need when something
+ *    outside TypeScript already committed to an order:
+ *
+ *      1. the `subsystem_code` Postgres enum, created in this order by
+ *         `apps/api/drizzle/0000_hot_dakota_north.sql` and therefore compared
+ *         against it by every `drizzle-kit generate` since. Spelling the
+ *         `pgEnum` in display order emits a spurious enum migration — measured,
+ *         not feared.
+ *      2. the interchange **link orientation basis**
+ *         (`apps/api/src/ingest/ons/interchange.ts`): a subsystem exchange row
+ *         is stated from the earlier member of this list to the later one, and
+ *         the direction of the flow is the *sign*. `S` precedes `SE` here and
+ *         follows it in display order, so the wrong order silently reverses
+ *         every `S`↔`SE` link ever ingested.
+ *
+ * It is a literal because TypeScript gives a union no runtime order, so the
+ * declaration above cannot be mapped over. That makes this the one place the
+ * order is written down twice — the type and this array — and
+ * `test/subsystem-order.test.ts` parses the union out of this very file and
+ * requires the two to agree, so they cannot drift.
+ */
+export const SUBSYSTEM_DECLARATION_ORDER = [
+  "N",
+  "NE",
+  "S",
+  "SE",
+] as const satisfies readonly SubsystemCode[];
+
+/**
  * `Technology` — the two variable renewable fleets.
  *
  * **The serialized form is uppercase, everywhere, including the `technology`
