@@ -12,6 +12,8 @@
  * ones a screen would show.
  */
 
+import { EVALUABLE_RULE_CODES } from "../../src/diagnosis/publication.js";
+
 /** A day far from any other suite's fixtures, so a repeated run cannot collide. */
 export const TARGET_DATE = "2024-05-07";
 /** `gate_at('2024-05-07', 'gate_late')` — D−1 19:00 Brasília. */
@@ -71,6 +73,13 @@ const HEADLINE: Record<string, { feature: string; unit: string }> = {
 };
 
 export interface AttributionPayloadOptions {
+  /**
+   * The roll call of evaluated rules. Defaults to all four shipping codes.
+   *
+   * Overridable so the roll-call refusals can be exercised on the same
+   * document every other assertion in these suites is made against.
+   */
+  rulesEvaluated?: unknown[];
   gateProfile?: "gate_early" | "gate_late";
   originKind?: "served" | "backfilled_holdout";
   publishedAt?: string;
@@ -175,6 +184,12 @@ export function attributionPayload(
         background_rows: 128,
         coalitions: 256,
         rule_flags: options.ruleFlags ?? [],
+        // The roll call defaults to the four shipping rules, not to `[]`, and
+        // the difference is the point: `[]` is the payload of a publish path
+        // that never ran the rules, which the writer refuses. Every test that
+        // passes no `ruleFlags` is asserting "the rules ran and were quiet",
+        // which is a different document from "nobody asked them".
+        rules_evaluated: options.rulesEvaluated ?? [...EVALUABLE_RULE_CODES],
         groups: dayGroups,
         peak_hour_groups: peakGroups,
       },

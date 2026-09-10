@@ -288,6 +288,20 @@
       "when": 1788989709745,
       "tag": "0040_every_read_has_a_go_live",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1789003990005,
+      "tag": "0041_the_gate_as_a_table_constraint",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1789004838403,
+      "tag": "0042_the_roll_call_of_the_rules",
+      "breakpoints": true
     }
   ]
 }

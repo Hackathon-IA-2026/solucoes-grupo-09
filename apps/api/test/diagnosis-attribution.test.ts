@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
   attributionDigest,
   DRIVER_GROUP_CODES,
+  EVALUABLE_RULE_CODES,
   parseAttributionPublication,
 } from "../src/diagnosis/index.js";
 import { groupingHasChanged } from "../src/diagnosis/reads.js";
@@ -261,5 +262,119 @@ describe("the published attribution · what the writer refuses", () => {
   it("recognises a stored attribution whose grouping has since moved", () => {
     expect(groupingHasChanged({ driverGroupHash: GROUP_HASH }, GROUP_HASH)).toBe(false);
     expect(groupingHasChanged({ driverGroupHash: GROUP_HASH }, "sha256:beef")).toBe(true);
+  });
+});
+
+/**
+ * The rules provably **ran** — `.scratch/api-surface/issues/10-forecast-publication.md`,
+ * "A third thing this ticket will own".
+ *
+ * The valve is enforced four ways inside `apply_rules` and not one of them says
+ * the rules were called. `rule_flags: []` is the ordinary shape of a quiet day
+ * and *also* the shape of a publish path that skipped them entirely, so a job
+ * assembled an attribution row and never ran the rules wrote a valid,
+ * empty-flagged row and no test noticed.
+ *
+ * Every assertion below is paired with its non-vacuity: the quiet day is
+ * accepted first, so each refusal is a refusal of the skipped path rather than
+ * of every empty flag list.
+ */
+describe("the published attribution · the rules ran", () => {
+  it("accepts a quiet day, which is the case that must keep working", () => {
+    // The whole reason the hole existed: nothing firing is normal. If this
+    // stopped parsing, the fix below would have broken the product to close a
+    // hole in it.
+    const parsed = parseAttributionPublication(attributionPayload());
+    const [attribution] = parsed.attributions;
+    expect(attribution?.ruleFlags).toEqual([]);
+    expect(attribution?.governingRuleAction).toBeNull();
+    // And it says which rules were quiet, which is what makes it a reading of
+    // evidence rather than an absence of it.
+    expect(attribution?.rulesEvaluated).toEqual([...EVALUABLE_RULE_CODES]);
+  });
+
+  it("refuses a publication that names no evaluated rules", () => {
+    // The skipped publish path, as the one-field diff it is.
+    for (const rollCall of [[], undefined]) {
+      const skipped = attributionPayload({
+        mutate: (payload) => {
+          attributionOf(payload).rules_evaluated = rollCall;
+        },
+      });
+      expect(() => parseAttributionPublication(skipped)).toThrow(
+        /names no evaluated rules/,
+      );
+    }
+  });
+
+  it("refuses a roll call of names that are not rules", () => {
+    // Otherwise "names at least one evaluated rule" is satisfiable with any
+    // string, and the hole reopens one invented word later.
+    const invented = attributionPayload({ rulesEvaluated: ["ran_the_rules_honestly"] });
+    expect(() => parseAttributionPublication(invented)).toThrow(/is not a rule/);
+  });
+
+  it("refuses a fired rule that is not in the roll call", () => {
+    // Flags from one run beside a roll call from another.
+    const mismatched = attributionPayload({
+      ruleFlags: [{ code: "stale_inputs", action: "annotate", facts: {} }],
+      rulesEvaluated: ["nothing_to_explain"],
+    });
+    expect(() => parseAttributionPublication(mismatched)).toThrow(/not in the roll call/);
+    // Non-vacuity: the same flag with an honest roll call parses.
+    const honest = parseAttributionPublication(
+      attributionPayload({
+        ruleFlags: [{ code: "stale_inputs", action: "annotate", facts: {} }],
+      }),
+    );
+    expect(honest.attributions[0]?.governingRuleAction).toBe("annotate");
+  });
+
+  it("refuses a roll call that names a rule twice", () => {
+    const doubled = attributionPayload({
+      rulesEvaluated: ["stale_inputs", "stale_inputs"],
+    });
+    expect(() => parseAttributionPublication(doubled)).toThrow(/appears twice/);
+  });
+
+  it("digests the roll call, so re-explaining under a new rule set is a vintage", () => {
+    // A fifth rule that fires on nothing still changes what the row means: it
+    // was looked at by five rules rather than four. A digest blind to the roll
+    // call would decline to record the re-publication.
+    const base = parseAttributionPublication(attributionPayload());
+    const fewer = parseAttributionPublication(
+      attributionPayload({ rulesEvaluated: ["nothing_to_explain", "stale_inputs"] }),
+    );
+    const digest = (one: typeof base) =>
+      attributionDigest(one, one.attributions[0] as never);
+    expect(digest(fewer)).not.toBe(digest(base));
+  });
+
+  it("names the same four rules apps/ml ships", () => {
+    /**
+     * The cross-language half, the way `declined-figures.test.ts` and
+     * `caveated-figures.test.ts` hold their own lists: the codes are parsed out
+     * of `apps/ml`'s source rather than restated, so a fifth rule shipped
+     * upstream fails here on the day it lands instead of arriving as an
+     * unrecognised name in a stored roll call.
+     */
+    const source = readFileSync(
+      join(
+        import.meta.dir,
+        "..",
+        "..",
+        "ml",
+        "src",
+        "wattsteer_ml",
+        "diagnosis",
+        "rules.py",
+      ),
+      "utf8",
+    );
+    const declared = source.slice(source.indexOf("SHIPPING_RULES: tuple[Rule, ...] = ("));
+    const codes = [...declared.matchAll(/\bcode="([a-z_]+)"/g)].map((match) => match[1]);
+    // Non-vacuous: the scan found rules at all, and found the whole table.
+    expect(codes.length).toBe(EVALUABLE_RULE_CODES.length);
+    expect(codes.sort()).toEqual([...EVALUABLE_RULE_CODES].sort());
   });
 });

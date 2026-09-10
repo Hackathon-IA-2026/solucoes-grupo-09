@@ -90,7 +90,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 from wattsteer_ml.diagnosis.driver_groups import DRIVER_GROUP_CODES, GroupCode
 from wattsteer_ml.diagnosis.publication import (
@@ -192,11 +192,47 @@ class RuleOutcome:
     #: The codes of the rules that withheld, in declared order. The API
     #: publishes this as ``withheld_by`` beside untouched drivers.
     withheld_by: tuple[str, ...]
+    #: Every rule code the engine **evaluated**, in declared order — not only
+    #: the ones that fired.
+    #:
+    #: This is the field that turns "the rules ran and nothing fired" into a
+    #: statement rather than an absence. ``flags=()`` alone cannot say it: it is
+    #: also what a publish path that never called :func:`apply_rules` would
+    #: produce, and `.scratch/api-surface/issues/10-forecast-publication.md`
+    #: named that exact indistinguishability as the one place the one-way valve
+    #: was still a convention. A row now carries the roll call, so the two cases
+    #: are different values and the empty one is refused all the way down —
+    #: here, in :class:`~wattsteer_ml.diagnosis.publication.AttributionRow`, at
+    #: the gateway's parse, and by a NOT NULL column with a cardinality check.
+    #:
+    #: It is a list of **codes**, which is the only thing it could be: a count
+    #: would not say *which*, and a boolean would be a claim with no evidence
+    #: on it.
+    evaluated: tuple[str, ...]
 
     @property
     def narration_source(self) -> NarrationSource:
         """Which surface may render — the whole of what ``withhold`` does."""
         return "template" if self.governing_action == "withhold" else "model"
+
+    def for_row(self) -> dict[str, Any]:
+        """The rule fields of a published attribution row, as keyword arguments.
+
+        ``AttributionRow(attribution=…, readings=…, **outcome.for_row())`` is
+        the whole of the ordinary path, which is the point: the one-line call
+        supplies the roll call, and a publish path that wanted an empty-flagged
+        row would have to spell out a lie rather than accept a default.
+
+        Returns a plain mapping and never names a publication type, so this
+        module still cannot reach a published number —
+        ``tests/test_domain_rules.py``'s AST walk over this file is what holds
+        that, and it is unchanged.
+        """
+        return {
+            "rule_flags": self.flags,
+            "rules_evaluated": self.evaluated,
+            "demoted": self.demoted,
+        }
 
 
 def _facts(rule: Rule, found: Mapping[str, Fact]) -> Mapping[str, Fact]:
@@ -242,6 +278,17 @@ def apply_rules(context: RuleContext, rules: Sequence[Rule] | None = None) -> Ru
             narration could not state, or demotes a group that does not exist.
     """
     declared = SHIPPING_RULES if rules is None else tuple(rules)
+    if not declared:
+        # `rules=()` would return an outcome that is indistinguishable from one
+        # nothing was evaluated for, which is precisely the state the roll call
+        # exists to make unrepresentable. A caller that wants no rules to fire
+        # passes rules that do not fire, not no rules.
+        raise RuleError(
+            "a rule set with no rules in it evaluates nothing; an outcome with "
+            "an empty roll call cannot be told apart from a publish path that "
+            "never ran the rules at all, and that is the one state a published "
+            "attribution may not carry"
+        )
     seen: set[str] = set()
     for rule in declared:
         if rule.code in seen:
@@ -273,6 +320,11 @@ def apply_rules(context: RuleContext, rules: Sequence[Rule] | None = None) -> Ru
         demoted=frozenset(demoted),
         governing_action=governing,
         withheld_by=tuple(withheld_by),
+        # The roll call, in declared order, whatever fired. `declared` is
+        # non-empty by construction — `SHIPPING_RULES` is four rules and an
+        # explicitly empty `rules` argument is refused below — so a published
+        # row can never carry an empty one from this function.
+        evaluated=tuple(rule.code for rule in declared),
     )
 
 

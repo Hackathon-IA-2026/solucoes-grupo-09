@@ -22,11 +22,20 @@
  * `narration-client.ts` assembles the call itself — no tools, one user turn, a
  * one-field output schema — and composes the gate, the validator and the
  * template into the one decision the endpoint asks for.
- * Nothing in here computes an attribution, and
- * nothing in here calls the modelling service — the scheduled `publish-diagnosis`
- * job and the worker's private call into `POST /internal/publish/diagnosis` are
- * `docs/specs/api-surface.md` ticket 10's, and this is the unit of work they
- * will run.
+ * Nothing in here computes an attribution.
+ *
+ * **And nothing this barrel exports calls the modelling service.** Two modules
+ * in this directory do — `publish.ts`, which asks
+ * `POST /internal/publish/diagnosis` for a day's attributions, and
+ * `reason-mix.ts`, which reads the input one of its rules needs — and neither is
+ * re-exported here on purpose. `src/api/diagnosis.ts` imports this barrel, so a
+ * re-export would put `ml-proxy` and the private publication route on the
+ * gateway's import graph, and "the public API never calls the modelling service
+ * for an attribution" would stop being a property of the dependency graph. It is
+ * the same reason `jobs/index.ts` does not re-export `jobs/publication.ts`; the
+ * worker imports the two modules directly, and
+ * `test/diagnosis-publication-job.test.ts` asserts the graph rather than the
+ * habit.
  */
 
 export {
@@ -127,6 +136,7 @@ export {
   type AttributionWriteResult,
   attributionDigest,
   DRIVER_GROUP_CODES,
+  EVALUABLE_RULE_CODES,
   EXPLAINS_CODE,
   type FiredRule,
   type PublishedAttribution,

@@ -40,6 +40,12 @@
       "background_rows": 8,
       "coalitions": 256,
       "rule_flags": [],
+      "rules_evaluated": [
+        "nothing_to_explain",
+        "attribution_is_noise",
+        "stale_inputs",
+        "unmodelled_outage_regime"
+      ],
       "governing_rule_action": null,
       "groups": [
         {

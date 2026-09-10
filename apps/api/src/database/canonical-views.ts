@@ -1311,6 +1311,11 @@ export const canonicalDiagnosisAttribution = pgView("canonical_diagnosis_attribu
   coalitions: integer().notNull(),
   /** Every rule that fired, with the inputs that fired it. */
   ruleFlags: jsonb().notNull(),
+  /**
+   * Every rule the engine evaluated, fired or not — so `rule_flags: []` reads
+   * as "four rules looked and none fired" rather than as "nobody asked".
+   */
+  rulesEvaluated: text().array().notNull(),
   /** The strictest action any of them took, or null when none fired. */
   governingRuleAction: diagnosisRuleAction(),
   ...rowVintage,
@@ -1348,6 +1353,7 @@ export const canonicalDiagnosisAttribution = pgView("canonical_diagnosis_attribu
     background_rows,
     coalitions,
     rule_flags,
+    rules_evaluated,
     governing_rule_action,
     data_version,
     published_at,

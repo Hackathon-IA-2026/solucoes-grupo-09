@@ -8,6 +8,7 @@ import { toForecastDayAhead } from "../src/api/forecast.js";
 import { createDatabase, type Database } from "../src/database/connection.js";
 import { gateAt } from "../src/forecast/gate.js";
 import type { ForecastGateProfile } from "../src/forecast/publication.js";
+import { parsePublication, writePublication } from "../src/forecast/publication.js";
 import { readForecastDayAhead, readLatestPublished } from "../src/forecast/reads.js";
 import { createBullMqRunner } from "../src/jobs/bullmq.js";
 import {
@@ -369,6 +370,11 @@ suite("the publication job end to end (real Postgres)", () => {
   const clear = async () => {
     await db.execute(sql`truncate table curtailment_forecast_hour`);
     await db.execute(sql`truncate table curtailment_forecast_day`);
+    // The national grain too. Without it a second write of the same fixture
+    // reports `nationalUnchanged` — the digest matched a row the previous test
+    // left behind — and any assertion about what this publication inserted
+    // reads a leftover instead.
+    await db.execute(sql`truncate table curtailment_forecast_national_day`);
   };
 
   beforeEach(clear);
@@ -506,5 +512,125 @@ suite("the publication job end to end (real Postgres)", () => {
     const wire = toForecastDayAhead(back, later);
     expect(wire.forecastOrigin.ageHours).toBe(24.3);
     expect(wire.forecastOrigin.originKind).toBe("served");
+  });
+
+  /**
+   * The gate equality as a **table** constraint —
+   * `drizzle/0041_the_gate_as_a_table_constraint.sql`.
+   *
+   * Ticket 10 shipped the equality as a publisher-side check and said so: the
+   * job computes `gate_at` on this side and `publishForecast` refuses a payload
+   * stamped with anything else *before* its first insert. Every test above is
+   * about that path. These three are about the other paths — a repair script, a
+   * second writer, a `writePublication` call with no `expectPublishedAt` — for
+   * which the publisher's check does not exist at all.
+   *
+   * Each one is written so that it cannot pass vacuously:
+   *
+   * - the happy-path row is inserted first and asserted to have *landed*, so
+   *   the refusal below is a refusal of a row the table would otherwise take;
+   * - the defect is reintroduced as the one-field diff that produces it —
+   *   19:30 BRT where the late gate is 19:00 — and the assertion is on the
+   *   constraint's own name, so a refusal for any other reason fails;
+   * - and the catalogue check *derives* the tables it covers from
+   *   `information_schema` rather than listing them. A fifth table carrying the
+   *   three columns fails this test on the day it is added rather than the day
+   *   somebody notices its rows are mis-stamped.
+   */
+  describe("published_at = gate_at(target_date, gate_profile), on the table", () => {
+    /** `writePublication` with no `expectPublishedAt` — the publisher's check off. */
+    const writeWithInstant = (publishedAt: string) => {
+      const payload = JSON.parse(FIXTURE) as {
+        forecast_origin: { published_at: string };
+      };
+      payload.forecast_origin.published_at = publishedAt;
+      return writePublication(db, parsePublication(payload), { ingestedAt: TEN_PAST });
+    };
+
+    it("takes the row whose instant is the gate", async () => {
+      // The non-vacuity half. Without it the refusal below could be a refusal
+      // of anything — a missing column, an absent table, a parse error.
+      const written = await writeWithInstant(GATE_LATE.toISOString());
+      expect(written.hoursInserted).toBe(96);
+      expect(written.daysInserted).toBe(4);
+      expect(written.nationalInserted).toBe(1);
+      const stamps = await db.execute<{ instants: number }>(sql`
+        select count(distinct published_at)::int as instants
+        from curtailment_forecast_hour
+      `);
+      expect([...stamps][0]?.instants).toBe(1);
+    });
+
+    it("refuses the row whose instant is not, naming the constraint", async () => {
+      // Thirty minutes past the gate: a plausible "when the job actually ran"
+      // stamp, and the exact defect the boundary decision rules out — a row
+      // asserting a publication that did not happen at that instant.
+      // Drizzle wraps the driver's error, so the constraint name — the thing
+      // that makes this a refusal *by the gate constraint* rather than by
+      // anything else — is on the cause.
+      const refusal = await writeWithInstant("2025-04-07T22:30:00.000Z").then(
+        () => undefined,
+        (error: unknown) => (error as { cause?: { constraint_name?: string } }).cause,
+      );
+      expect(refusal?.constraint_name).toBe(
+        "curtailment_forecast_hour_published_at_is_the_gate",
+      );
+      // The refusal is the transaction's, so nothing of the publication landed
+      // — not the hours, not the days, and not the national row.
+      const counted = await db.execute<{ hours: number; days: number; nat: number }>(sql`
+        select
+          (select count(*)::int from curtailment_forecast_hour) as hours,
+          (select count(*)::int from curtailment_forecast_day) as days,
+          (select count(*)::int from curtailment_forecast_national_day) as nat
+      `);
+      expect([...counted][0]).toEqual({ hours: 0, days: 0, nat: 0 });
+    });
+
+    it("covers every table that carries the three columns", async () => {
+      // Derived, not listed: the claim is about the schema rather than about
+      // four names somebody remembered to type.
+      const rows = await db.execute<{
+        table_name: string;
+        definition: string | null;
+      }>(sql`
+        with carriers as (
+          select c.table_name
+          from information_schema.columns c
+          join pg_class rel
+            on rel.relname = c.table_name and rel.relkind = 'r'
+          join pg_namespace ns
+            on ns.oid = rel.relnamespace and ns.nspname = 'public'
+          where c.table_schema = 'public'
+            and c.column_name in ('published_at', 'target_date', 'gate_profile')
+          group by c.table_name, rel.oid
+          having count(distinct c.column_name) = 3
+        )
+        select
+          carriers.table_name,
+          (
+            select pg_get_constraintdef(con.oid)
+            from pg_constraint con
+            where con.conrelid =
+                    ('public.' || quote_ident(carriers.table_name))::regclass
+              and con.contype = 'c'
+              and con.conname = carriers.table_name || '_published_at_is_the_gate'
+          ) as definition
+        from carriers
+        order by carriers.table_name
+      `);
+      const carriers = [...rows];
+      expect(carriers.map((row) => row.table_name)).toEqual([
+        "curtailment_forecast_day",
+        "curtailment_forecast_hour",
+        "curtailment_forecast_national_day",
+        "diagnosis_attribution",
+      ]);
+      for (const carrier of carriers) {
+        // Present, and a *call* to `gate_at` rather than a fourth spelling of
+        // the gate hour inlined into a CHECK.
+        expect(carrier.definition).toContain("gate_at");
+        expect(carrier.definition).toContain("published_at");
+      }
+    });
   });
 });

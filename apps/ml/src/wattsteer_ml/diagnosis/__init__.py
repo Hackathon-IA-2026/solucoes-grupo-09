@@ -105,6 +105,7 @@ from wattsteer_ml.diagnosis.rule_context import (
     RuleContextError,
     build_rule_context,
     context_field_names,
+    reason_mixes_from_payload,
 )
 from wattsteer_ml.diagnosis.rules import (
     REOPENING_TRIGGER,
@@ -198,5 +199,6 @@ __all__ = [
     "headline_readings",
     "load_driver_group_map",
     "load_model_inputs",
+    "reason_mixes_from_payload",
     "resample_hour",
 ]

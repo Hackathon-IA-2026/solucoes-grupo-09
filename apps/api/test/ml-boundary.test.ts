@@ -605,12 +605,20 @@ describe("the ml boundary detector is calibrated", () => {
       served.filter((path) => path.startsWith(PRIVATE_PREFIX)).length,
     ).toBeGreaterThan(0);
     // And the prefix discriminates: inside `apps/api`, the only modules that
-    // spell it are the three the *worker* runs — `forecast/publish.ts`,
-    // `jobs/retrain.ts` and `jobs/holdout-backfill.ts`, which are the
-    // precomputation this whole boundary exists to move the model into, and
-    // which the gateway's request graph cannot reach. That is what makes the
-    // prefix a signal rather than a coincidence: it already separates the two
-    // sides correctly, with no exception list.
+    // spell it are the four the *worker* runs — `forecast/publish.ts`,
+    // `diagnosis/publish.ts`, `jobs/retrain.ts` and
+    // `jobs/holdout-backfill.ts`, which are the precomputation this whole
+    // boundary exists to move the model into, and which the gateway's request
+    // graph cannot reach. That is what makes the prefix a signal rather than a
+    // coincidence: it already separates the two sides correctly, with no
+    // exception list.
+    //
+    // `diagnosis/publish.ts` joined the list with api-surface 10's diagnosis
+    // chain, and it is the case that makes the last assertion worth having:
+    // `src/api/diagnosis.ts` imports the `src/diagnosis/` barrel, so a
+    // re-export of the publish path through that barrel would have put
+    // `/internal/publish/diagnosis` on the request graph. The barrel does not
+    // re-export it, and this is one of the two tests that says so.
     const spelling = [...MODULES.keys()]
       .filter((id) =>
         [...code(MODULES.get(id) as string).matchAll(/["'`]([^"'`]*)["'`]/g)].some(
@@ -619,6 +627,7 @@ describe("the ml boundary detector is calibrated", () => {
       )
       .sort();
     expect(spelling).toEqual([
+      "diagnosis/publish.ts",
       "forecast/publish.ts",
       "jobs/holdout-backfill.ts",
       "jobs/retrain.ts",

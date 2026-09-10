@@ -34,7 +34,13 @@ import { digestValues } from "../ingest/versioned-write.js";
  *    write path: a rule may `annotate`, `demote` or `withhold`, and **no rule
  *    may change a number or delete a driver**. `withhold` acts on the
  *    narration; it never reaches these rows.
- * 4. **Shares are over all eight groups.** Checked here against `Σ_k |Φ_k|`,
+ * 4. **The rules provably ran.** A published row carries the roll call of the
+ *    rules the engine evaluated beside the list of the ones that fired, and
+ *    `parseRulesEvaluated` refuses a payload that names none. `rule_flags: []`
+ *    is the ordinary shape of a quiet day *and* the shape of a publish path
+ *    that skipped `apply_rules` entirely, so the two were indistinguishable
+ *    and the valve was a convention at the one point it mattered.
+ * 5. **Shares are over all eight groups.** Checked here against `Σ_k |Φ_k|`,
  *    because a share taken over the displayed rows is circular — the display
  *    cut is applied to the share itself — and a wrong denominator is
  *    invisible in storage.
@@ -63,6 +69,30 @@ export const DRIVER_GROUP_CODES = [
   "recent_history",
   "data_conditions",
 ] as const;
+
+/**
+ * The rules the engine may evaluate. A closed set, and the roll call's alphabet.
+ *
+ * `wattsteer_ml.diagnosis.rules.SHIPPING_RULE_CODES`, verbatim.
+ * `test/diagnosis-attribution.test.ts` parses `apps/ml`'s `SHIPPING_RULES`
+ * out of its source and asserts these are the same four, the way
+ * `declined-figures.test.ts` and `caveated-figures.test.ts` already hold their
+ * own cross-language lists — so a fifth rule shipped upstream fails a test here
+ * rather than arriving as an unrecognised code in a stored roll call.
+ *
+ * It exists because the roll call has to be *checkable*. A payload could
+ * otherwise satisfy "names at least one evaluated rule" with any string it
+ * liked, which would put the skipped publish path one invented word away from
+ * being writable again.
+ */
+export const EVALUABLE_RULE_CODES = [
+  "nothing_to_explain",
+  "attribution_is_noise",
+  "stale_inputs",
+  "unmodelled_outage_regime",
+] as const;
+
+const RULE_CODES: ReadonlySet<string> = new Set(EVALUABLE_RULE_CODES);
 
 /** The two rankings one publication carries. */
 export type AttributionGrain = "day" | "peak_hour";
@@ -144,6 +174,13 @@ export interface PublishedAttribution {
   backgroundRows: number;
   coalitions: number;
   ruleFlags: FiredRule[];
+  /**
+   * The roll call: every rule the engine evaluated, fired or not.
+   *
+   * Never empty. See {@link parseRulesEvaluated} for why an absence here is a
+   * refusal rather than a default.
+   */
+  rulesEvaluated: string[];
   /** The strictest action any fired rule took; `null` when none fired. */
   governingRuleAction: RuleAction | null;
   /** Sixteen: the day's eight and the peak hour's eight. */
@@ -321,6 +358,11 @@ function parseAttribution(
     ...parseDrivers(raw.peak_hour_groups, `${where}.peak_hour_groups`, "peak_hour"),
   ];
   const ruleFlags = parseRuleFlags(raw.rule_flags, `${where}.rule_flags`);
+  const rulesEvaluated = parseRulesEvaluated(
+    raw.rules_evaluated,
+    ruleFlags,
+    `${where}.rules_evaluated`,
+  );
 
   const attribution: PublishedAttribution = {
     subsystem: subsystem as SubsystemCode,
@@ -346,6 +388,7 @@ function parseAttribution(
     backgroundRows: num(raw, "background_rows", where),
     coalitions: num(raw, "coalitions", where),
     ruleFlags,
+    rulesEvaluated,
     governingRuleAction: strictestAction(ruleFlags),
     drivers,
   };
@@ -459,9 +502,11 @@ function hourDisagreementAbsent(raw: Record<string, unknown>, where: string): nu
  * claimed a fourth action would be claiming a power the valve does not grant.
  */
 function parseRuleFlags(raw: unknown, where: string): FiredRule[] {
-  if (raw === undefined) {
-    return [];
-  }
+  // Not defaulted to `[]`. An absent `rule_flags` used to become an empty one
+  // here, which made the payload of a publish path that never ran the rules
+  // identical to the payload of a quiet day — api-surface 10's third box. The
+  // roll call beside it is the positive evidence; this is the other half, and
+  // together they mean the skipped path cannot produce a parsable payload.
   if (!Array.isArray(raw)) {
     throw new AttributionPayloadError(`${where} is not a list of fired rules`);
   }
@@ -487,6 +532,72 @@ function parseRuleFlags(raw: unknown, where: string): FiredRule[] {
       facts: (facts ?? {}) as Record<string, unknown>,
     };
   });
+}
+
+/**
+ * The roll call, checked against the closed set of rules and against the flags.
+ *
+ * **This is the write path's answer to "were the rules run at all".** Every
+ * other guarantee about the valve is a guarantee about what a rule may *do*:
+ * `apply_rules` never hands a rule a number, a rule cannot return one, an AST
+ * walk holds it to that, and the payload is compared byte-for-byte before and
+ * after. None of them says the rules were called, and `rule_flags: []` — the
+ * ordinary shape of a quiet day — is exactly what a publish path that skipped
+ * them produces. So a publication says which rules looked at the day, and:
+ *
+ * - **an absence is a refusal.** No default, because the default *is* the
+ *   defect: it is what the skipped path was silently getting.
+ * - **the codes must be real rules.** Otherwise "names at least one evaluated
+ *   rule" is satisfiable with any string, and the hole reopens one invented
+ *   word later.
+ * - **every fired rule must appear in it.** The flags and the roll call are two
+ *   halves of one record; a flag list from one run beside a roll call from
+ *   another is not a record of anything.
+ *
+ * All three are checked again by the table — `diagnosis_attribution_the_rules_ran`
+ * and `diagnosis_attribution_flags_were_evaluated` — because this is the parse
+ * of the one writer that exists today and the constraint is the guarantee.
+ */
+function parseRulesEvaluated(
+  raw: unknown,
+  flags: readonly FiredRule[],
+  where: string,
+): string[] {
+  if (!Array.isArray(raw) || raw.length === 0) {
+    throw new AttributionPayloadError(
+      `${where} names no evaluated rules. An attribution is published with the ` +
+        "roll call of the rules that ran, because an empty rule_flags cannot " +
+        "otherwise be told apart from a publish path that never ran them",
+    );
+  }
+  const codes: string[] = [];
+  for (const [index, entry] of raw.entries()) {
+    if (typeof entry !== "string" || !RULE_CODES.has(entry)) {
+      throw new AttributionPayloadError(
+        `${where}[${index}]: ${String(entry)} is not a rule. The evaluable ` +
+          `rules are ${EVALUABLE_RULE_CODES.join(", ")}, and a roll call of ` +
+          "invented names would be no evidence that anything ran",
+      );
+    }
+    if (codes.includes(entry)) {
+      throw new AttributionPayloadError(
+        `${where}: ${entry} appears twice; a fired rule is traced by its code ` +
+          "and two of them make the trace ambiguous",
+      );
+    }
+    codes.push(entry);
+  }
+  const unevaluated = flags
+    .map((flag) => flag.code)
+    .filter((code) => !codes.includes(code));
+  if (unevaluated.length > 0) {
+    throw new AttributionPayloadError(
+      `${where}: ${unevaluated.join(", ")} fired and is not in the roll call. ` +
+        "The flags and the roll call are two halves of one record, and a rule " +
+        "cannot have fired without having been evaluated",
+    );
+  }
+  return codes;
 }
 
 /** `withhold` > `demote` > `annotate`, so two rules cannot both have the last word. */
@@ -594,6 +705,10 @@ export function attributionDigest(
     attribution.coalitions,
     attribution.governingRuleAction,
     JSON.stringify(attribution.ruleFlags),
+    // The roll call is a value, not a vintage. Re-explaining the same day under
+    // a fifth rule is a different explanation of it even when nothing fired,
+    // and a digest that ignored the roll call would decline to record that.
+    JSON.stringify(attribution.rulesEvaluated),
     ...attribution.drivers
       .slice()
       .sort((left, right) =>
@@ -700,6 +815,7 @@ export async function writeAttributionPublication(
         backgroundRows: attribution.backgroundRows,
         coalitions: attribution.coalitions,
         ruleFlags: attribution.ruleFlags,
+        rulesEvaluated: attribution.rulesEvaluated,
         governingRuleAction: attribution.governingRuleAction,
         dataVersion,
         publishedAt: publication.publishedAt,

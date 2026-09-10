@@ -5,6 +5,13 @@ import {
   type QueueTaskResult,
 } from "../ingest/index.js";
 import {
+  createDiagnosisPublisher,
+  type DiagnosisPublicationResult,
+  type DiagnosisPublisherDeps,
+  diagnosisFollowOn,
+  type PublishDiagnosisPayload,
+} from "./diagnosis-publication.js";
+import {
   createHoldoutBackfiller,
   type HoldoutBackfillerDeps,
   type HoldoutBackfillJobResult,
@@ -49,6 +56,7 @@ import type { Execute, JobSchedule } from "./types.js";
 export type WorkerTask =
   | QueueTask
   | { kind: "publish_forecast"; payload: PublishForecastPayload }
+  | { kind: "publish_diagnosis"; payload: PublishDiagnosisPayload }
   | { kind: "retrain"; payload: RetrainPayload }
   | { kind: "holdout_backfill"; payload: HoldoutBackfillPayload };
 
@@ -56,6 +64,7 @@ export type WorkerTask =
 export type WorkerTaskResult =
   | QueueTaskResult
   | { kind: "publish_forecast"; result: ForecastPublicationResult }
+  | { kind: "publish_diagnosis"; result: DiagnosisPublicationResult }
   | { kind: "retrain"; result: RetrainResult }
   | { kind: "holdout_backfill"; result: HoldoutBackfillJobResult };
 
@@ -66,6 +75,30 @@ export interface WorkerDispatcherDeps extends IngestDispatcherDeps {
    * publication timeout and the system clock.
    */
   publication?: Omit<ForecastPublisherDeps, "db">;
+  /**
+   * Where the modelling service is, and the clock, for the attribution half.
+   * Its own field rather than a reuse of `publication`'s: the two call
+   * different routes with different budgets, and a test that wanted to stub one
+   * and not the other could not say so through one setting.
+   */
+  diagnosis?: Omit<DiagnosisPublisherDeps, "db">;
+  /**
+   * How this dispatcher puts a follow-on task back on the queue.
+   *
+   * `docs/specs/api-surface.md` gives `publish-diagnosis` the trigger "on
+   * completion of each" forecast publication — the one row of the job table
+   * that is not a cron pattern. So the completion has to be able to enqueue,
+   * and the dispatcher cannot reach the runner directly: the runner is
+   * built *from* the dispatcher, so holding one would be a cycle.
+   * `worker.ts` closes the loop by passing a thunk over the runner it is about
+   * to build.
+   *
+   * Absent means the chain is off, which is what every test of the ingest
+   * dispatcher and every in-process runner gets: a forecast publication still
+   * publishes, and nothing is submitted. Said rather than defaulted, so a
+   * deployment with no chain is a visible choice.
+   */
+  submit?: (task: WorkerTask) => Promise<unknown>;
   /**
    * Where the modelling service is, and the clock the retrain reads its run id
    * from. Both optional: the defaults are `config.mlUrl` at the retrain timeout
@@ -87,12 +120,18 @@ export function createWorkerDispatch(
 ): Execute<WorkerTask, WorkerTaskResult> {
   const ingest = createIngestDispatcher(deps);
   const publish = createForecastPublisher({ db: deps.db, ...deps.publication });
+  const explain = createDiagnosisPublisher({ db: deps.db, ...deps.diagnosis });
   const retrain = createRetrainer(deps.retrain);
   const backfill = createHoldoutBackfiller({ db: deps.db, ...deps.holdoutBackfill });
 
   return async (task, report) => {
     if (task.kind === "publish_forecast") {
-      return { kind: "publish_forecast", result: await publish(task.payload, report) };
+      const result = await publish(task.payload, report);
+      await chainDiagnosis(deps, task.payload.lane, result);
+      return { kind: "publish_forecast", result };
+    }
+    if (task.kind === "publish_diagnosis") {
+      return { kind: "publish_diagnosis", result: await explain(task.payload, report) };
     }
     if (task.kind === "retrain") {
       return { kind: "retrain", result: await retrain(task.payload, report) };
@@ -105,6 +144,57 @@ export function createWorkerDispatch(
     }
     return ingest(task, report);
   };
+}
+
+/**
+ * Submit the diagnosis publication for a forecast publication that finished.
+ *
+ * **On completion, and after the return value is in hand** — so the day the
+ * attribution explains is the day the forecast publication actually wrote,
+ * read off its result rather than resolved from a clock a second time. A
+ * follow-on that recomputed "tomorrow in Brasília" a few seconds after
+ * midnight would explain the wrong day.
+ *
+ * **On `unchanged` as well as on `published`.** A forecast publication that
+ * wrote nothing is a re-run whose numbers matched; it says nothing about
+ * whether the *attribution* exists, and the attribution has its own digest, its
+ * own vintage and its own way of having failed last time. The submission is
+ * cheap and `writeAttributionPublication` is idempotent, so the cost of
+ * chaining unconditionally is one modelling call and the cost of not doing so
+ * is a day that never gets its explanation because the forecast half had
+ * already succeeded.
+ *
+ * **A failed submission does not fail the forecast publication.** The rows are
+ * written and the transaction is committed by the time this runs; throwing here
+ * would mark a publication that succeeded as failed and hand the whole job back
+ * for a retry that would rewrite nothing. So the failure is loud and the job
+ * still reports what it did. What is lost is one day's explanation, which
+ * `/v1/diagnosis/day-ahead` reports as its own absence, and which a
+ * hand-submitted task repairs.
+ */
+async function chainDiagnosis(
+  deps: WorkerDispatcherDeps,
+  lane: string,
+  result: ForecastPublicationResult,
+): Promise<void> {
+  if (deps.submit === undefined) {
+    return;
+  }
+  const payload = diagnosisFollowOn({
+    gateProfile: result.gateProfile,
+    lane,
+    targetDate: result.targetDate,
+  });
+  try {
+    await deps.submit({ kind: "publish_diagnosis", payload });
+  } catch (error) {
+    console.warn(
+      `⚠️  publish-forecast:${result.gateProfile} ${result.targetDate} published ` +
+        "and the diagnosis publication could not be queued after it, so this " +
+        "day will have a forecast and no explanation beside it: " +
+        `${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 /**

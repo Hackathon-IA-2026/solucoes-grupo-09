@@ -11,6 +11,7 @@ import { memoryLockedCache } from "../src/api/plugins/locked-cache.js";
 import { createDatabase } from "../src/database/connection.js";
 import {
   type AttributionPublication,
+  EVALUABLE_RULE_CODES,
   parseAttributionPublication,
   writeAttributionPublication,
 } from "../src/diagnosis/publication.js";
@@ -380,6 +381,83 @@ suite("the published attribution · persistence and AsOf (real Postgres)", () =>
     await expect(
       writeAttributionPublication(db, anonymous, { ingestedAt: NOW }),
     ).rejects.toThrow();
+  });
+
+  it("refuses a stored attribution that names no evaluated rules", async () => {
+    // `.scratch/api-surface/issues/10-forecast-publication.md`'s third box, at
+    // the layer that is the guarantee rather than the diagnosis. Set past the
+    // parser — which refuses the same thing — so what is measured here is the
+    // table's own answer to a second writer that never ran the rules.
+    //
+    // Non-vacuity first: the same publication with its roll call intact lands.
+    const quiet = publication();
+    const landed = await writeAttributionPublication(db, quiet, { ingestedAt: NOW });
+    expect(landed.attributionsInserted).toBe(1);
+    const stored = await db.execute<{ roll: string[]; flags: unknown }>(sql`
+      select rules_evaluated as roll, rule_flags as flags from diagnosis_attribution
+    `);
+    // A quiet day: four rules looked, none fired. Two different facts, and now
+    // two different columns.
+    expect([...stored][0]?.roll).toEqual([...EVALUABLE_RULE_CODES]);
+    expect([...stored][0]?.flags).toEqual([]);
+
+    const skipped = publication({ subsystem: "S" });
+    const [attribution] = skipped.attributions;
+    if (attribution === undefined) {
+      throw new Error("the fixture published nothing");
+    }
+    attribution.rulesEvaluated = [];
+    const refusal = await writeAttributionPublication(db, skipped, {
+      ingestedAt: NOW,
+    }).then(
+      () => undefined,
+      (error: unknown) => (error as { cause?: { constraint_name?: string } }).cause,
+    );
+    expect(refusal?.constraint_name).toBe("diagnosis_attribution_the_rules_ran");
+  });
+
+  it("refuses a stored attribution whose flags were never evaluated", async () => {
+    // The other half of the record. A flag list from one run beside a roll call
+    // from another is a record of nothing, and the constraint says so through
+    // `rule_flags_were_evaluated` — a function because a CHECK may not hold the
+    // subquery this test needs.
+    const mismatched = publication({
+      ruleFlags: [
+        {
+          code: "stale_inputs",
+          action: "annotate",
+          facts: { weather_run_age_hours: 12 },
+        },
+      ],
+    });
+    const [attribution] = mismatched.attributions;
+    if (attribution === undefined) {
+      throw new Error("the fixture published nothing");
+    }
+    attribution.rulesEvaluated = ["nothing_to_explain"];
+    const refusal = await writeAttributionPublication(db, mismatched, {
+      ingestedAt: NOW,
+    }).then(
+      () => undefined,
+      (error: unknown) => (error as { cause?: { constraint_name?: string } }).cause,
+    );
+    expect(refusal?.constraint_name).toBe("diagnosis_attribution_flags_were_evaluated");
+    // Non-vacuity: the same flag with an honest roll call lands.
+    const honest = await writeAttributionPublication(
+      db,
+      publication({
+        subsystem: "N",
+        ruleFlags: [
+          {
+            code: "stale_inputs",
+            action: "annotate",
+            facts: { weather_run_age_hours: 12 },
+          },
+        ],
+      }),
+      { ingestedAt: NOW },
+    );
+    expect(honest.attributionsInserted).toBe(1);
   });
 
   it("stores a payload the modelling service actually emitted", async () => {
