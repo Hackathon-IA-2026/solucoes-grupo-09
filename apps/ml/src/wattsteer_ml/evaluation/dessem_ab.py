@@ -128,12 +128,27 @@ distinction this constant drew.
 What the arms need beyond this module is what the sweep's arms need — a
 database, the fold calendar and LightGBM — which is why :data:`DessemScorer` is
 a parameter and not an import.
+
+**Corrected by the first run against an ingested database**, because the
+paragraph above is right about DESSEM and was wrong about everything else the
+arms read. Two findings, recorded in ticket 18's "The run":
+
+- DESSEM's files begin 2025-05-23 and only a *minority* of them load — 364 of
+  475 reference days in that environment — so the common arms' window is a
+  series with holes rather than a window.
+- **Weather is the source that was missing**, over exactly the folds that
+  decide: no weather value at all in the decision-grade test periods there. So
+  an arm can be fitted and scored and still not be the arm the matrix defines,
+  and :data:`NOT_RUN_YET` — which says the arms' data exists and the sweep has
+  not been run — is not the sentence for that state. The floors are real
+  measurements of a weather-blind pair, and the caveat belongs beside them
+  rather than in place of them.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -859,6 +874,18 @@ class DessemDeltaReport:
     #: refreshed, which is what :data:`CADENCE` requires.
     fold_calendar_rules_hash: str
     min_base_fit_days: int
+    #: The fold segments that were **not** scored, by row id, each naming the
+    #: arm that refused and the reason it gave. Empty when every reportable
+    #: segment carried all three arms.
+    #:
+    #: On the block for the same reason a non-decision-grade fold is on it: a
+    #: verdict over the folds that worked, published beside no statement about
+    #: the folds that did not, is the acceptance box satisfied by hiding a row.
+    #: The first run against an ingested database needed it — the full-history
+    #: arm's calibration is refused on two of the three reportable folds there,
+    #: and a card carrying F6's verdict alone would have read as a card whose
+    #: sample was F6 by the calendar's arithmetic rather than by a refusal.
+    not_scored: Mapping[str, Mapping[str, str]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.rows:
@@ -881,6 +908,7 @@ class DessemDeltaReport:
         *,
         calendar: FoldCalendar,
         provenance: DessemProvenance,
+        not_scored: Mapping[str, Mapping[str, str]] | None = None,
     ) -> DessemDeltaReport:
         return cls(
             provenance=provenance,
@@ -890,6 +918,7 @@ class DessemDeltaReport:
             ),
             fold_calendar_rules_hash=calendar.rules.rules_hash,
             min_base_fit_days=calendar.rules.min_base_fit_days,
+            not_scored=dict(not_scored or {}),
         )
 
     @property
@@ -961,6 +990,10 @@ class DessemDeltaReport:
                 },
                 "vintage_fidelities": list(self.fidelities),
                 "folds": [row.card_entry() for row in self.rows],
+                "folds_not_scored": {
+                    row_id: dict(reasons)
+                    for row_id, reasons in sorted(self.not_scored.items())
+                },
                 "contrasts": {},
             },
             self.provenance.card_fields(),
@@ -1097,6 +1130,7 @@ def run_dessem_ab(
     segments: Sequence[FoldSegment],
     calendar: FoldCalendar,
     provenance: DessemProvenance,
+    not_scored: Mapping[str, Mapping[str, str]] | None = None,
 ) -> DessemDeltaReport:
     """Score every run on every segment, in one loop, and publish the result.
 
@@ -1125,6 +1159,7 @@ def run_dessem_ab(
         ),
         calendar=calendar,
         provenance=provenance,
+        not_scored=not_scored,
     )
 
 

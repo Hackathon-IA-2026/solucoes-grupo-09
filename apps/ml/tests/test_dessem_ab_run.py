@@ -50,7 +50,7 @@ from wattsteer_ml.dessem_ab_run import (
     DessemAbRunError,
     reportable_folds,
 )
-from wattsteer_ml.evaluation import materialize_fold_calendar
+from wattsteer_ml.evaluation import materialize_fold_calendar, stamp_fidelity
 from wattsteer_ml.evaluation.dessem_ab import (
     AB_GATE_PROFILE,
     AB_LANES,
@@ -59,7 +59,7 @@ from wattsteer_ml.evaluation.dessem_ab import (
     NOT_RUN_YET,
 )
 from wattsteer_ml.evaluation.matrix import MATRIX_RUN_BY_NAME
-from wattsteer_ml.lanes import Lane
+from wattsteer_ml.lanes import Lane, is_artifact_id
 
 #: The A/B is quarterly and this is the quarter it was first run in. A fixed
 #: instant, because a calendar materialised from ``now()`` would make every
@@ -228,6 +228,28 @@ def test_the_two_free_arms_share_one_lane_and_the_augmented_one_does_not() -> No
     assert len(AB_LANES) == 2
 
 
+def test_the_id_an_arm_is_fitted_under_is_one_a_card_accepts(tmp_path: Path) -> None:
+    """The defect that had kept every arm unfitted, as one assertion.
+
+    ``train_fold`` composes a :class:`~wattsteer_ml.training.bundle.ModelCard`,
+    and a card's id is the stem of a bundle — ``is_artifact_id``, an ISO-8601
+    UTC instant. The driver passed ``dessem-ab-<arm>-<fold>``, so every arm whose
+    calibration succeeded died on ``BundleError`` instead of being scored. It was
+    invisible for a whole ticket because it is reached only after a real fit on
+    real rows, and because the *first* arm of the first fold refuses on the
+    ingested database for a data reason and the driver stops there.
+
+    Asserted against ``is_artifact_id`` — the rule the card checks — rather than
+    against a literal, so a change to the rule moves this test with it.
+    """
+    arms = driver.DatabaseArms(request=request(tmp_path))
+
+    assert is_artifact_id(arms.arm_artifact_id)
+    # And it is the run's instant, so twelve unsaved fits share one id rather
+    # than minting twelve nothing will ever look up.
+    assert arms.arm_artifact_id == ARTIFACT_ID
+
+
 # --- what an absent database gets you -----------------------------------------
 
 
@@ -260,6 +282,48 @@ def test_an_unreachable_database_is_not_run_yet_and_never_a_floor(
         assert block["reason"] == NOT_RUN_YET
         assert "contrasts" not in block
         assert block["runs"] == ["A-full", "A-common", "B-common"]
+
+
+def test_a_fold_one_arm_refuses_is_excluded_and_named_rather_than_ending_the_run(
+    tmp_path: Path,
+) -> None:
+    """The third case the driver had no shape for, and the row it must not hide.
+
+    Not an empty database and not a complete one: one arm that cannot be fitted
+    on *some* folds. Measured on the first ingested database — ``A-full``'s pool
+    admits no publishable three-class risk split on two of the three reportable
+    folds while the third carries every arm — and a driver that aborted on the
+    first refusal would have thrown away a decision-grade quarter over a quarter
+    that decides nothing.
+
+    So the refusal is per segment, and it is *returned* rather than dropped: a
+    sample narrowed silently is the acceptance box satisfied by hiding a row.
+    The stub here refuses one arm on one segment and returns nothing for the
+    rest, which is all :func:`_scoreable_segments` reads — it asks whether an
+    arm can be scored, not what it scored.
+    """
+    calendar = materialize_fold_calendar(AS_OF.date())
+    segments = tuple(
+        segment
+        for fold in reportable_folds(calendar)
+        for segment in stamp_fidelity(fold, None)
+    )
+    refused_on = segments[0].row_id
+
+    def stub(run: Any, segment: Any) -> tuple[()]:
+        if segment.row_id == refused_on and run.name == AB_RUNS[0].name:
+            raise driver.NoArmDataError("this arm has no floor on this fold")
+        return ()
+
+    scoreable, refused = driver._scoreable_segments(stub, segments)
+
+    assert [segment.row_id for segment in scoreable] == [
+        segment.row_id for segment in segments[1:]
+    ]
+    assert list(refused) == [refused_on]
+    # The arm that refused, and its own sentence — not a boolean.
+    assert refused[refused_on][AB_RUNS[0].name].startswith("NoArmDataError:")
+    assert set(refused[refused_on]) == {AB_RUNS[0].name}
 
 
 def test_no_card_is_minted_where_none_exists(tmp_path: Path) -> None:

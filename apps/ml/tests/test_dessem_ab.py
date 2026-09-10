@@ -357,6 +357,35 @@ def test_the_delta_is_the_difference_of_two_floors() -> None:
     assert row.delta(DESSEM_CONTRAST) > 0.0
 
 
+def test_a_fold_that_was_not_scored_is_named_on_the_block() -> None:
+    """A verdict beside no statement of what was excluded hides a row.
+
+    The first run against an ingested database scored one of three reportable
+    folds, because one arm's calibration was refused on the other two. A block
+    carrying that fold's verdict alone would read as a sample the *calendar*
+    produced. So the refusals travel on the block, keyed by row id and naming
+    the arm and its reason, beside ``folds`` rather than folded into it.
+    """
+    calendar = materialize_fold_calendar(TODAY)
+    one = segment()
+    built = DessemDeltaReport.of(
+        ((one, arms(first=one.test_start, days=one.test_days)),),
+        calendar=calendar,
+        provenance=DessemProvenance.fixture(),
+        not_scored={"F4": {"A-full": "RiskBinsUndeterminedError: no split of this pool"}},
+    )
+
+    block = built.card_block()[DESSEM_DELTA_BLOCK_KEY]
+
+    assert [entry["row_id"] for entry in block["folds"]] == [one.row_id]
+    assert block["folds_not_scored"] == {
+        "F4": {"A-full": "RiskBinsUndeterminedError: no split of this pool"}
+    }
+    # And the default is empty rather than absent, so a reader who greps the key
+    # on a complete run finds it saying nothing was excluded.
+    assert report().card_block()[DESSEM_DELTA_BLOCK_KEY]["folds_not_scored"] == {}
+
+
 def test_the_reference_fleet_is_stamped_on_the_comparison() -> None:
     block = report().card_block()[DESSEM_DELTA_BLOCK_KEY]
     assert block["reference_fleet"]["fleet_hash"] == PUBLISHED_FLEET.fleet_hash

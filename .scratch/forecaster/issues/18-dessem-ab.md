@@ -34,18 +34,22 @@ window lengthens.
 
 **Blocked by:** 09, 11 (the simulator path and the reference fleet).
 
-**Status:** done (machinery, the verdict and now the runner); the three runs
-are **one command away and still unrun** — the database in this environment is
-migrated and empty, and no ONS history has been ingested into it. See "The run
-was attempted" below for exactly what is missing.
+**Status:** done, and **run** — the three arms were scored against
+data-platform 21's ingested history and the ruling is **do not ship DESSEM**.
+`B-common − A-common = −5,845.5 MWh` of promised floor over **70 target days**
+on F6, `P(treatment better) = 0.001` under the gate's paired block bootstrap
+against a bar of 0.9. The verdict rests on **one** decision-grade fold rather
+than two, because `A-full` cannot be fitted on this database at all in F4 or F5
+— and every arm is weather-blind over the decision-grade test periods, which is
+recorded beside the figures rather than around them. See "The run" below.
 
 - [ ] All three runs are scored on identical test rows on the shared calendar
 - [x] Decision-grade folds are computed from the 180-day base-fit rule, not
       hardcoded, and non-decision-grade folds are reported but excluded from the
       verdict
-- [ ] `Δ recovered_floor_mwh` is reported for both contrasts, with the reference
+- [x] `Δ recovered_floor_mwh` is reported for both contrasts, with the reference
       fleet stamped
-- [ ] The verdict is evaluated by the same paired block bootstrap the gate uses,
+- [x] The verdict is evaluated by the same paired block bootstrap the gate uses,
       and the sample size in target days is printed beside it
 - [ ] The block lands in the card and is re-runnable each quarter without a code
       change
@@ -63,6 +67,20 @@ is nothing to measure. Box 5 is half done and is left unticked: the writer
 lands a real block on a real card through one command (today that block is the
 `NOT_RUN_YET` one) and the quarterly derivation is asserted, but the block the
 box means is the measured one.
+
+**Which boxes moved on the run, and why the other two did not.** Boxes 3 and 4
+are now measured and ticked: both contrasts are published with the reference
+fleet's hash on them, and the verdict is `FloorBootstrap` over the gate's own
+`resample_day_blocks` at its draws and its seed, with the sample size in target
+days printed in the verdict's own sentence. **Box 1 stays open**, and it is the
+one the run failed rather than passed: three arms were scored on identical rows
+— asserted by digest and pairwise against the labels — on **one** of the three
+reportable folds, because `A-full`'s calibration is refused on the other two.
+The discipline held everywhere it was exercised; the completeness the box asks
+for did not. **Box 5 stays open** too: the quarterly derivation is asserted and
+the command is one command, but neither A/B lane has a promoted artifact on this
+database — the served evening lane's own arm *is* `A-full` — so there is no card
+for the block to be an edit of, and `record_dessem_delta` mints none.
 
 ## What was built
 
@@ -205,8 +223,11 @@ takes `WEATHER_HISTORY_SLICE_DAYS = 90` per history pass over a bounded archive
 starting 2024-03-15, so the window above is roughly ten monthly passes, and the
 transport's own measurement is 20 locations × 12 variables ≈ 84 KB / 10.5 s per
 call. That is hours of ingestion at best and is a data-platform run, not a
-change here. **It is the only thing standing between this ticket and its other
-four boxes.**
+change here. **It was believed to be the only thing standing between this ticket
+and the rest of its boxes.** It was not: the ONS half of the backfill was enough
+to score two of the three arms and to take the ruling, and what the weather half
+turned out to cost is not a box but the *meaning* of the floors — see "The run"
+below.
 
 ### One thing found on the way, in another lane
 
@@ -239,3 +260,264 @@ lane owns `0041`.
 Also corrected: `matrix.py`'s docstring still said `dessem_augmented_v1` "has no
 columns of its own yet", which stopped being true at migration 0025 and is
 exactly the claim this ticket turns on.
+
+---
+
+# The run
+
+The three arms were finally scored. Data-platform 21 backfilled the shared wave
+database (`fc18-pg`, port 5434, 43 migrations) and this is what came out of it.
+Everything below is measured; the arms that could not be scored are named rather
+than filled in, and every figure carries the sample behind it.
+
+## It was not scored against the shared database, and that is deliberate
+
+The shared database **was being written while this ran**.
+`weather_forecast_hour` went 667,757 rows over 275 local dates at 20:14 Z, to
+826,939 over 341 at 20:32 Z, to 829,637 over 342 at 20:33 Z, with
+`max(ingested_at)` twenty-three seconds before the query: data-platform 21's
+weather pass is still walking forward through the window an hour of quota at a
+time.
+
+That is not a nuisance, it is a correctness problem for *this* ticket, and it is
+worth stating because nothing in the code would have caught it.
+`feature_as_of(target_date, gate_profile)` returns `'infinity'` — **no ingestion
+cut** — whenever the gate precedes `feature_ingestion_history_from()`, which is
+every target day of this window. So a feature row carries every source row
+ingested up to the instant of the query. `DatabaseArms._read` opens one
+connection per `(arm, fold)`, so three arms read minutes apart read three
+different databases — and `assert_identical_test_rows` compares row **keys**, so
+it would have passed with the three arms holding different weather. An A/B
+against a database under concurrent ingestion is not reproducible, and its arms
+are not one dataset.
+
+So the arms were scored against a **pinned copy**: `pg_dump -Fc` taken
+2026-09-10T20:34–20:36 Z and restored into this session's own container on port
+5435. `fc18-pg` was read and never written; nothing here ran `ml:test:db`. The
+pinned copy holds `curtailment_report_hour` 4,765,728; `dessem_balance_half_hour`
+69,888 over 364 local dates; `weather_forecast_hour` 829,637 over 342;
+`verified_load_half_hour` 171,072; `programmed_load_half_hour` 171,076;
+`subsystem_energy_balance_hour` 94,272; `subsystem_exchange_hour` 94,272;
+`plant` 1,621; `generating_unit` 3,385; `centroid_point` **2**; 43 migrations.
+
+## What was scoreable, established before anything was scored
+
+| block | days | DESSEM days | weather days |
+|---|---|---|---|
+| F4 base (common) 2025-05-23..2025-10-02 | 133 | 114 | 75 |
+| F4 calibration 2025-10-03..2025-12-31 | 90 | 38 | 31 |
+| F4 test 2026-01-01..2026-03-31 | 90 | 61 | 24 |
+| F5 base (common) 2025-05-23..2025-12-31 | 223 | 152 | 106 |
+| F5 calibration 2026-01-01..2026-03-31 | 90 | 61 | 24 |
+| **F5 test 2026-04-01..2026-06-30** | 91 | 86 | **0** |
+| F6 base (common) 2025-05-23..2026-04-01 | 314 | 214 | 130 |
+| **F6 calibration 2026-04-02..2026-06-30** | 90 | 85 | **0** |
+| **F6 test 2026-07-01..2026-09-08** | 70 | 64 | **1** |
+
+The label and the day-ahead programme cover every block completely.
+`feature_rows` returns 8,736 rows for F5's test period, all 8,736 labelled, and
+**0 of 8,736 carry a weather value** — at `dessem_free_v1` and
+`dessem_augmented_v1` alike. Prevalence at 5 MW, measured: F1 test 0.3601, F2
+0.4392, F3 0.4190, F4 0.2714, F5 0.3629, F6 0.4763.
+
+**So the decision-grade folds — the only ones a verdict may rest on — have no
+weather in their test periods at all.** All three arms are
+`weather_arm = "lead_matched"` and the weather block is twenty-odd of the model
+inputs, so what was scored is not the arm the matrix defines. The arms are
+equally blind, so the *pairing* is intact and the contrast is still a contrast;
+what is not available is the claim that these floors are the floors the product
+would see. It is stated here, in the Status line, and beside the figures, and it
+is the first thing to re-check when the weather backfill finishes.
+
+Two things stand behind every weather feature and belong beside that count:
+`centroid_point` holds **2** rows — the harness `centroid_set_v1` data-platform
+21 found frozen in this database, which is immutable by design — so
+`canonical_capacity_weight` answers over two clusters instead of nineteen, and
+`weather_centroid_coverage` is 0 on these rows.
+
+## `A-full` cannot be fitted on this database, and that is a measurement
+
+Every arm was attempted on every reportable fold. `A-full` refused on F4 and F5,
+before any floor existed, from `derive_risk_bins`:
+
+    RiskBinsUndeterminedError: no split of this pool on the 0.05 grid satisfies
+    both (a) and (b)
+
+with its own pool's arithmetic each time — on F4 "(a) low predicts 0.284 against
+an observed 0.344, a gap of 0.060 above 0.05; (b) elevated and high observe
+0.977 and 0.978, 0.001 apart against a combined 95% half-width of 0.062"; on F5
+"0.284 against 0.340 … 0.981 and 0.991, 0.009 apart". Two pools, two different
+failures, one conclusion: on this data the full-history arm's occurrence
+classifier admits **no three-class risk split** that is both calibrated within
+0.05 and separated beyond its own confidence intervals, and `train_fold` refuses
+the artifact rather than publishing edges nobody measured. Reproduced
+identically against the live database and the pinned copy.
+
+That refusal is correct and it is not this ticket's to relax. `risk_bins` is a
+published product surface — `nothing_to_explain` withholds narration below the
+lowest edge — and loosening a refusal in order to obtain a floor figure is the
+one trade this repository exists to refuse.
+
+`A-full` **did** fit on F6, the newest fold and the one with the longest history
+behind it, so F6 carries all three arms and is the only fold that does. Worth
+recording: the same refusal is the *served* evening lane's, because `LANE_RUNS`
+maps `gate_late` to `A-full` — which is why neither A/B lane has a promoted
+artifact on this database, and therefore why the measured block has no card to
+be an edit of.
+
+## The figures
+
+One three-arm segment, F6, `revision_optimistic` (this database has no
+`canonical_forecast_hour` go-live, so nothing splits a fold), 6,720 rows, 280
+complete subsystem-days over 70 target days, none excluded. Base fits: `A-full`
+731 days, `A-common` 314, `B-common` 314 — decision-grade for all three against
+the calendar's 180. Reference fleet
+`sha256:119036fb1f9d198a48f3c8839f0e7a74483cad19f01dba6a9a7a2d48db295228`,
+planning basis `p50`, calendar rules
+`sha256:c8d615f68184e0907a352316336c0512bf21e8eb5ae3ff08912687500812e214`.
+
+| arm | recovered_floor_mwh | floor_baseline_mwh | qloss_mwh | share_p10_forced_zero |
+|---|---|---|---|---|
+| `A-full` | 32,533.6 | 2,108,945.2 | 315.2 | 0.7836 |
+| `A-common` | 39,416.2 | 2,865,920.4 | 323.6 | 0.7366 |
+| `B-common` | 33,570.7 | 2,617,250.9 | 303.2 | 0.7899 |
+
+- **`dessem_contribution` = B-common − A-common = −5,845.5 MWh** over **70
+  target days** (280 subsystem-days). `P(treatment better) = 0.001` at 2,000
+  draws, seed 20260913, against the bar of 0.9. **Not met.**
+- **`history_price` = A-full − A-common = −6,882.7 MWh** over the same 70 target
+  days. `P = 0.000`. **Not met** — on this database the full-history arm is
+  *worse* than the fifteen-month one, which is consistent with the calibration
+  trouble that refused it on the two older folds, and is exactly why this
+  contrast is published rather than assumed.
+
+**Read `share_p10_forced_zero` before the floor.** The mixture caveat the block
+carries is doing real work here: `B-common` forces the composed P10 to zero in
+79.0% of hours against `A-common`'s 73.7%, so much of its floor deficit is its
+classifier being *less* confident rather than its magnitude head being worse —
+and its `qloss_mwh` is the **best** of the three (303.2 against 323.6). The two
+currencies disagree, which is precisely the situation the spec refuses to settle
+in pinball loss.
+
+### The ruling's contrast on the wider sample, as an explicit partial
+
+The module refuses a two-arm A/B by design, and rightly: `A-common` is what
+keeps the short-window handicap off DESSEM's account and `A-full` is what prices
+the window. But the *ruling* names only `B-common` against `A-common`, and both
+of those fit on every reportable fold. So the same contrast was computed over
+the wider sample through the module's own types — `RunFloor.of`, the
+row-identity digest, `assert_paired_hours`, `FloorBootstrap.of` — and it is
+recorded here as a partial rather than on the card, because the card's block is
+the three-arm one:
+
+| fold | decision-grade | Δ recovered_floor_mwh | P(B better) | target days |
+|---|---|---|---|---|
+| F4 | no (133 base-fit days) | −2,948.5 | 0.134 | 90 |
+| F5 | yes (223) | **+1,500.1** | 0.744 | 91 |
+| F6 | yes (314) | −5,845.5 | 0.001 | 70 |
+| **F5 + F6 pooled** | — | **−4,345.5** | **0.059** | **161** |
+
+161 target days, 644 subsystem-days: 111.7 MWh of floor per subsystem-day for
+`B-common` against 118.5 for `A-common`. F5 is the one fold where DESSEM is
+ahead, and it does not clear the bar either. The two samples agree on the sign
+and on the verdict, which is the useful thing about having both.
+
+## The ruling
+
+**Do not ship DESSEM.** The first conjunct fails on both samples — the block's
+own verdict (F6, 70 target days, P = 0.001) and the wider two-arm partial
+(F5+F6, 161 target days, P = 0.059) — against a bar of 0.9, with a negative
+delta in each. The second conjunct, that the product accepts a D−1 19:00 BRT
+publication for the DESSEM-conditioned view, was therefore never reached; it has
+no field here and this block cannot record it.
+
+So the spec's fallback applies as written: the `dessem_*` features stay a
+**monitored candidate, re-run each quarter as the window lengthens**, and the
+served evening view stays the free-feature run. Two things would make the next
+run worth more than this one, and both are somebody else's ticket rather than a
+reason to discount this one: the weather backfill finishing, so the arms are the
+arms the matrix defines; and `A-full` becoming fittable, without which the
+verdict rests on one quarter and `history_price` cannot be read on the wider
+sample.
+
+## Two defects the run found in this ticket's own work
+
+**1. Every arm was unfittable, and the empty-database run stopped one step short
+of finding out.** `DatabaseArms.fit` passed
+`artifact_id=f"dessem-ab-{run.name}-{fold_id}"` to `train_fold`, which composes a
+`ModelCard`, whose `__post_init__` refuses any id that is not an ISO-8601 UTC
+instant. So **every arm whose calibration succeeded died on `BundleError`** —
+which is not one of `DATA_FAILURES` and would have propagated as the fault it
+was. What hid it is the loop's order: the first arm of the first fold is
+`A-full`, and on this database `A-full` refuses for a data reason before the id
+is ever reached. The tests around the driver never reached it either — they drive
+the seam with a fixture scorer, and only a real fit composes a card. Now
+`DatabaseArms.arm_artifact_id`: the run's own instant, shared by all twelve
+unsaved fits, with the `(arm, fold)` identity left where it already lives. A test
+asserts it against `is_artifact_id` rather than against a literal.
+
+**2. One refusing arm-fold took the whole A/B with it.** With the id fixed, the
+run still produced `NOT_RUN_YET`, because `A-full`'s refusal on F4 aborted every
+fold — including F6, which was complete and decision-grade. That is
+data-platform 21's DESSEM-ingestor finding in another shape: one bad day took the
+whole task with it. `_scoreable_segments` now isolates `DATA_FAILURES` per
+segment, and **every refusal is carried** — in
+`DessemAbRunReport.segments_refused` and on the block as `folds_not_scored` —
+because a verdict published beside no statement of what was excluded is the
+acceptance box satisfied by hiding a row. A database that cannot answer at all
+still ends the run, unchanged.
+
+`gate.py` was not touched. Its own tests pass unchanged (39), and the full ML
+suite is 1,756 passed / 93 skipped against a baseline of 1,753 / 93 — the three
+new tests are the artifact id, the per-segment isolation, and
+`folds_not_scored` on the block.
+
+## What this ticket said that turned out to be wrong
+
+1. **"The window the three arms need is 2024-04-01 → 2026-09-08, 891 days, of
+   which the two common arms need 2025-05-23 onward."** The days exist; the
+   DESSEM series over them does not. 475 reference days lie between 2025-05-23
+   and 2026-09-09 and this database holds **364**, each with a full 48 patamares
+   over four subsystems, with 111 absent. Data-platform 21's forced per-day
+   census puts the loadable count at 370 — 68 files re-published after the day
+   they forecast, 34 short civil days, 3 with solar in the local night — so the
+   database is six days short even of its own census. The common arms' window is
+   not a window but a series with holes in it: 152 of 223 days in F5's base fit,
+   214 of 314 in F6's, 86 of 91 and 64 of 70 in the two decision-grade test
+   periods.
+2. **"There is no missing data source here and therefore no named unmeasured
+   reason of ticket 16's kind."** True of DESSEM and false of weather. Weather is
+   a source this environment does not have where it matters: 0 of 91 days in
+   F5's test period, 0 of 90 in F6's calibration window, 1 of 70 in F6's test
+   period. `NOT_RUN_YET` was the right sentence for an empty database and is not
+   the right sentence for this one, and the honest reason here is neither of the
+   two the module has.
+3. **"The three runs are one command away."** They were two commands and a code
+   fix away, twice over — see the two defects above. The ticket could not have
+   known, because the arm that refuses first refuses for a data reason.
+4. **"So the verdict rests on two test quarters, roughly 150 target days."** The
+   arithmetic is 161 (F5's 91 plus F6's 70 at this `as_of`), and what the verdict
+   actually rests on is **70** — one quarter — because `A-full` is unfittable in
+   the other. The sample is smaller than the ticket's own worst case, and the
+   ticket was right that it is the single largest reason the answer might be
+   wrong.
+5. **The spec's `P ≥ 0.9` on F5–F6 is unreachable on this database as things
+   stand**, and the fold ids in the spec's ruling are stale in a second way now:
+   not merely because F7 opens, but because a named fold can turn out to be
+   unfittable for one arm. The derived arithmetic is still right; the ids were
+   never the authority.
+
+## How to re-run it
+
+    docker run -d --name fc18-snap -p 5435:5432 -e POSTGRES_PASSWORD=wattsteer \
+      -e POSTGRES_DB=wattsteer postgres:17-alpine
+    docker exec fc18-pg pg_dump -U postgres -Fc --no-owner wattsteer > snap.dump
+    docker exec -i fc18-snap pg_restore -U postgres -d wattsteer --no-owner < snap.dump
+    cd apps/ml && uv run python -m wattsteer_ml.dessem_ab_run \
+      --database-url postgres://postgres:wattsteer@localhost:5435/wattsteer \
+      --root <artifact volume> --as-of 2026-09-09T00:00:00Z
+
+The pinning is the point and not a detail: run it against a database being
+ingested and the three arms are three datasets. It costs about an hour of wall
+clock, nearly all of it in `feature_rows` — the `A-full` window measures 4m43s
+per read.

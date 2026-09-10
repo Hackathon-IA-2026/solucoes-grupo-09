@@ -71,6 +71,23 @@ scoreable but not decision-grade is *reported and excluded from the verdict*,
 which is the acceptance box, and it would be no use to anybody if this driver
 had already dropped it.
 
+## A fold an arm refuses is a row of the report, not the end of the run
+
+The first run against an ingested database found the third case this module had
+not had a shape for: not an empty database and not a complete one, but a
+database on which *one arm* cannot be fitted on *some* folds. ``A-full``'s pool
+admitted no publishable three-class risk split on two of the three reportable
+folds, while the third — the newest, and decision-grade for all three arms —
+carried every arm. A run that aborted on the first refusal would have thrown a
+decision-grade quarter away over a quarter that decides nothing.
+
+So :func:`_scoreable_segments` isolates :data:`DATA_FAILURES` per segment, and
+every refusal is carried — in :attr:`DessemAbRunReport.segments_refused` and on
+the block as ``folds_not_scored`` — because a verdict published beside no
+statement of what was excluded is the acceptance box satisfied by hiding a row.
+A database that cannot answer at all is still not a per-fold matter and still
+ends the run.
+
 ## What an empty or half-ingested database gets you
 
 ``NOT_RUN_YET``, on the card, naming the failure. The exceptions caught are the
@@ -97,7 +114,7 @@ import argparse
 import asyncio
 import json
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -123,6 +140,7 @@ from wattsteer_ml.evaluation.dessem_ab import (
     DESSEM_DELTA_BLOCK_KEY,
     DessemDeltaReport,
     DessemProvenance,
+    DessemScorer,
     UnmeasuredDessemDelta,
     record_dessem_delta,
     run_dessem_ab,
@@ -276,6 +294,30 @@ class DatabaseArms:
             )
         return scored_hours(forecast_rows(fit.bundle, rows), rows)
 
+    @property
+    def arm_artifact_id(self) -> str:
+        """The id every arm's fit carries, and the reason it is not descriptive.
+
+        An id for the card the fit carries with it, never a path: none of these
+        arms is saved, and the id therefore identifies nothing on the volume.
+        What it must still be is an **artifact id**:
+        :class:`~wattsteer_ml.training.bundle.ModelCard` refuses any stem that
+        is not an ISO-8601 UTC instant, and a descriptive
+        ``dessem-ab-<arm>-<fold>`` — which this driver passed until the arms
+        were first run against an ingested database — raised
+        :class:`~wattsteer_ml.training.bundle.BundleError` for *every* arm whose
+        calibration succeeded. ``BundleError`` is not one of
+        :data:`DATA_FAILURES`, so it propagated as the fault it was; what hid it
+        for a whole ticket is that the first arm of the first fold refuses on
+        this database for a data reason, and the driver stops there.
+
+        So it is the run's own instant, shared by all twelve fits. The
+        ``(arm, fold)`` identity the descriptive id was reaching for is carried
+        by :attr:`fits` and by every row of the block, which are read rather
+        than parsed out of a filename.
+        """
+        return format_instant(self.request.as_of)
+
     def fit(self, run: MatrixRun, fold_id: str) -> ArmFit:
         key = (run.name, fold_id)
         cached = self._fits.get(key)
@@ -294,9 +336,7 @@ class DatabaseArms:
             function_definition=inputs.function_definition,
             pool=build_pool(inputs),
             created_at=self.request.as_of,
-            # An id for the card the fit carries with it, and never a path: this
-            # arm is not saved. See the module docstring.
-            artifact_id=f"dessem-ab-{run.name}-{fold_id}",
+            artifact_id=self.arm_artifact_id,
         )
         fit = ArmFit(
             inputs=inputs,
@@ -339,6 +379,52 @@ async def _go_live(database_url: str) -> datetime | None:
         await conn.close()
 
 
+def _scoreable_segments(
+    scorer: DessemScorer, segments: Sequence[FoldSegment]
+) -> tuple[tuple[FoldSegment, ...], dict[str, dict[str, str]]]:
+    """The segments carrying all three arms, and why the others do not.
+
+    **Why the failure is isolated per segment rather than taken for the run.**
+    The comparison is one row set per fold and three arms over it, so a segment
+    an arm cannot be fitted on is not a comparison and never becomes one. What
+    it is *not* is a reason to abandon the folds that do carry all three: the
+    first run against an ingested database refused ``A-full`` on two of the
+    three reportable folds — no three-class risk split of its pool is both
+    calibrated and separated, which is a fact about that arm on that data — and
+    the third fold, the newest and the one with the longest common base fit, was
+    complete. Aborting there would have thrown away a decision-grade quarter for
+    a refusal in a quarter that decides nothing, which is data-platform 21's
+    finding about the DESSEM ingestor in another shape: one bad day took the
+    whole task with it.
+
+    **What isolation must not become** is a quiet sample. Every refusal is
+    returned, carried in :attr:`DessemAbRunReport.segments_refused` *and* on the
+    block as ``folds_not_scored``, because a verdict published over the folds
+    that worked, beside no statement about the folds that did not, is the
+    acceptance box satisfied by hiding a row. Nothing here decides that a
+    refused fold does not matter; it decides only that the refusal is a row of
+    the report rather than the end of it.
+
+    Only :data:`DATA_FAILURES` are isolated. A database that cannot answer at
+    all is not a per-fold matter and still ends the run, which is why
+    ``asyncpg.PostgresError`` is caught by the caller and not here.
+    """
+    scoreable: list[FoldSegment] = []
+    refused: dict[str, dict[str, str]] = {}
+    for segment in segments:
+        reasons: dict[str, str] = {}
+        for run in AB_RUNS:
+            try:
+                scorer(run, segment)
+            except DATA_FAILURES as absent:
+                reasons[run.name] = f"{type(absent).__name__}: {absent}"
+        if reasons:
+            refused[segment.row_id] = reasons
+        else:
+            scoreable.append(segment)
+    return tuple(scoreable), refused
+
+
 #: The failures that mean *the data is not there*, as against the failures that
 #: mean the code is wrong. The retrain's own set — an empty base-fit block, a
 #: risk-class edge the pool cannot determine, a window the feature function
@@ -365,6 +451,11 @@ class DessemAbRunReport:
     not_run: str | None
     cards: tuple[str, ...]
     cards_absent: tuple[str, ...]
+    #: The reportable segments no comparison could be made on, by row id, each
+    #: naming the arm that refused and its reason. Beside ``fold_ids`` rather
+    #: than subtracted from it, so the difference between the folds the calendar
+    #: opened and the folds the verdict rests on is visible in the report.
+    segments_refused: Mapping[str, Mapping[str, str]] = field(default_factory=dict)
 
     @property
     def is_measurement(self) -> bool:
@@ -375,6 +466,10 @@ class DessemAbRunReport:
             "as_of": format_instant(self.as_of),
             "folds_reportable": list(self.fold_ids),
             "segments": list(self.segment_ids),
+            "segments_refused": {
+                row_id: dict(reasons)
+                for row_id, reasons in sorted(self.segments_refused.items())
+            },
             "arms_fitted": list(self.fitted),
             "measured": self.is_measurement,
             "not_run": self.not_run,
@@ -414,16 +509,27 @@ def run_dessem_ab_from_database(request: DessemAbRequest) -> DessemAbRunReport:
     measured: DessemDeltaReport | None = None
     not_run: str | None = None
     segments: tuple[FoldSegment, ...] = ()
+    refused: dict[str, dict[str, str]] = {}
     try:
         go_live = asyncio.run(_go_live(request.database_url))
         segments = tuple(
             segment for fold in folds for segment in stamp_fidelity(fold, go_live)
         )
+        scoreable, refused = _scoreable_segments(scorer, segments)
+        if not scoreable:
+            raise NoArmDataError(
+                "no reportable fold carries all three arms: "
+                + "; ".join(
+                    f"{row_id} ({', '.join(sorted(reasons))})"
+                    for row_id, reasons in sorted(refused.items())
+                )
+            )
         measured = run_dessem_ab(
             scorer,
-            segments=segments,
+            segments=scoreable,
             calendar=calendar,
             provenance=DessemProvenance.measured(at=request.as_of),
+            not_scored=refused,
         )
     except (*DATA_FAILURES, asyncpg.PostgresError, OSError) as absent:
         # The database cannot support the comparison. NOT_RUN_YET, with the
@@ -459,6 +565,9 @@ def run_dessem_ab_from_database(request: DessemAbRequest) -> DessemAbRunReport:
         not_run=not_run,
         cards=tuple(cards),
         cards_absent=tuple(absent_cards),
+        segments_refused={
+            row_id: dict(reasons) for row_id, reasons in sorted(refused.items())
+        },
     )
 
 
