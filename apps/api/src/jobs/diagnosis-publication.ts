@@ -1,3 +1,4 @@
+import { SUBSYSTEM_CODES } from "@wattsteer/core/constants";
 import type { MlEndpoint } from "../api/ml-proxy.js";
 import type { Database } from "../database/connection.js";
 import { type PublishDiagnosisResult, publishDiagnosis } from "../diagnosis/publish.js";
@@ -80,8 +81,18 @@ export interface DiagnosisPublisherDeps {
   now?: () => Date;
 }
 
-/** The four subsystems a reason mix is read for. `SIN` is not one of them. */
-const SUBSYSTEMS: readonly SubsystemCode[] = ["N", "NE", "S", "SE"];
+/**
+ * The four subsystems a reason mix is read for. `SIN` is not one of them.
+ *
+ * Read from the published vocabulary rather than restated: this file was the
+ * one restatement api-surface 03's guard caught after the fact, and it was
+ * spelled in the enum's declaration order while `SUBSYSTEM_CODES` is in display
+ * order. The difference is immaterial *here* — `readReasons` returns a keyed
+ * record, so nothing downstream sees this order — which is exactly why it must
+ * not be a second list: a copy that happens not to matter is still a copy that
+ * drifts.
+ */
+const SUBSYSTEMS: readonly SubsystemCode[] = SUBSYSTEM_CODES;
 
 /**
  * Why a diagnosis publication did not happen, in the operator's vocabulary.
