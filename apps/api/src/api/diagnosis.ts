@@ -96,15 +96,15 @@ const HOUR_MS = 3_600_000;
 /** The counter the daily cap spends against. Named so two caps never share one. */
 const NARRATION_BUDGET = "narration";
 
-const SUBSYSTEM_CODES: ReadonlySet<string> = new Set(
+const SUBSYSTEM_MEMBERS: ReadonlySet<string> = new Set(
   SUBSYSTEMS.map((entry) => entry.code),
 );
 
 function parseSubsystem(raw: string): SubsystemCode {
-  if (!SUBSYSTEM_CODES.has(raw)) {
+  if (!SUBSYSTEM_MEMBERS.has(raw)) {
     throw new CodedError(
       "SUBSYSTEM_UNKNOWN",
-      `"${raw}" is not one of the four subsystems (${[...SUBSYSTEM_CODES].join(", ")})`,
+      `"${raw}" is not one of the four subsystems (${[...SUBSYSTEM_MEMBERS].join(", ")})`,
       { details: { subsystem: raw } },
     );
   }

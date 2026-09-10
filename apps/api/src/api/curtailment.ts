@@ -8,7 +8,7 @@ import type {
 } from "@wattsteer/core/api";
 import {
   MAX_GAP_HOURS,
-  SUBSYSTEM_CODES,
+  SUBSYSTEM_DISPLAY_ORDER,
   SUBSYSTEM_THRESHOLD_MW,
 } from "@wattsteer/core/constants";
 import { TECHNOLOGIES, type Technology } from "@wattsteer/core/domain";
@@ -108,7 +108,7 @@ const literalUnion = <T extends string>(values: readonly T[]) => {
   return t.Union([first, ...rest]);
 };
 
-const SUBSYSTEM = literalUnion(SUBSYSTEM_CODES);
+const SUBSYSTEM = literalUnion(SUBSYSTEM_DISPLAY_ORDER);
 /** Uppercase, case-sensitively: `technology=wind` is a 422, not a synonym. */
 const TECHNOLOGY = t.Optional(literalUnion(TECHNOLOGIES));
 

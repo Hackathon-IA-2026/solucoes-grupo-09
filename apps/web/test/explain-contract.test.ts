@@ -29,7 +29,7 @@ import {
   mergedDirection,
 } from "../src/lib/driver-rows";
 import type { DriverCode } from "../src/lib/fixtures";
-import { buildExplain, SUBSYSTEM_CODES } from "../src/lib/fixtures";
+import { buildExplain, SUBSYSTEM_DISPLAY_ORDER } from "../src/lib/fixtures";
 
 /**
  * The eight, written out rather than derived.
@@ -49,7 +49,9 @@ const GROUPS: readonly DriverCode[] = [
   "data_conditions",
 ];
 
-const EVERY_RESPONSE = SUBSYSTEM_CODES.map((subsystem) => buildExplain(subsystem));
+const EVERY_RESPONSE = SUBSYSTEM_DISPLAY_ORDER.map((subsystem) =>
+  buildExplain(subsystem),
+);
 
 describe("the eight groups are the driver code set", () => {
   test("every response returns all eight, ranked, and nothing else", () => {

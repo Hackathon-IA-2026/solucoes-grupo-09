@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { SUBSYSTEM_CODES } from "@wattsteer/core/constants";
+import { SUBSYSTEM_DISPLAY_ORDER } from "@wattsteer/core/constants";
 import { TECHNOLOGIES } from "@wattsteer/core/domain";
 import { Elysia, t } from "elysia";
 import {
@@ -148,7 +148,7 @@ const literalUnion = <T extends string>(values: readonly T[]) => {
   return t.Union([first, ...rest]);
 };
 
-const SUBSYSTEM = t.Optional(literalUnion(SUBSYSTEM_CODES));
+const SUBSYSTEM = t.Optional(literalUnion(SUBSYSTEM_DISPLAY_ORDER));
 /** Uppercase, case-sensitively: `technology=wind` is a 422, not a synonym. */
 const TECHNOLOGY = t.Optional(literalUnion(TECHNOLOGIES));
 

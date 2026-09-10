@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { SUBSYSTEM_CODES } from "../src/constants.js";
+import { SUBSYSTEM_DISPLAY_ORDER } from "../src/constants.js";
 import type {
   DisplayDriverCode,
   Band as DomainBand,
@@ -74,7 +74,7 @@ describe("the wire's nouns and the domain's nouns are the same nouns", () => {
     expect(backAgain).toBe("NE");
     // @ts-expect-error — `SIN` is ONS's national aggregate, not a fifth member.
     const national: WireSubsystem = "SIN";
-    expect(SUBSYSTEM_CODES).not.toContain(national as SubsystemCode);
+    expect(SUBSYSTEM_DISPLAY_ORDER).not.toContain(national as SubsystemCode);
   });
 
   test("a wire Technology is a domain Technology, uppercase on both sides", () => {
@@ -166,7 +166,9 @@ describe("the schema, the constants module and the published vector agree", () =
     // `constants.ts` (which the gateway and the web app read) and the vector
     // (which is how the Python constants module is pinned). Two agreeing and
     // one drifting is the failure this asserts away.
-    expect([...(defs.subsystem?.enum ?? [])].sort()).toEqual([...SUBSYSTEM_CODES].sort());
+    expect([...(defs.subsystem?.enum ?? [])].sort()).toEqual(
+      [...SUBSYSTEM_DISPLAY_ORDER].sort(),
+    );
     expect([...(defs.subsystem?.enum ?? [])].sort()).toEqual(
       vector.subsystems.map((entry) => entry.code).sort(),
     );

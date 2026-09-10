@@ -1,4 +1,4 @@
-import { SUBSYSTEM_CODES } from "@wattsteer/core/constants";
+import { SUBSYSTEM_DISPLAY_ORDER } from "@wattsteer/core/constants";
 import { sql } from "drizzle-orm";
 import type { Database } from "../database/connection.js";
 import {
@@ -171,7 +171,7 @@ export const JOINT_PATH_ENSEMBLE = "joint_path_ensemble";
 /** `ForecastOrigin.producer` for a WattSteer curtailment forecast. */
 const PRODUCER = "wattsteer" as const;
 
-const SUBSYSTEMS: ReadonlySet<string> = new Set(SUBSYSTEM_CODES);
+const SUBSYSTEMS: ReadonlySet<string> = new Set(SUBSYSTEM_DISPLAY_ORDER);
 const GATE_PROFILES: ReadonlySet<string> = new Set(["gate_early", "gate_late"]);
 const ORIGIN_KINDS: ReadonlySet<string> = new Set(["served", "backfilled_holdout"]);
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { join } from "node:path";
+import { SUBSYSTEM_DECLARATION_ORDER } from "@wattsteer/core/domain";
 import {
   fingerprintFromHeaders,
   readResources,
@@ -158,8 +159,10 @@ describe("intercambio-nacional · 2026, after the column was added", () => {
     expect(parsed.reorientedRows).toBeGreaterThan(0);
 
     // Every stored link is canonically oriented — the property the database
-    // check constraint also enforces.
-    const order = ["N", "NE", "S", "SE"];
+    // check constraint also enforces. The basis is read from the published
+    // constant rather than typed out again: a test that restates the order it
+    // is checking cannot catch the order changing.
+    const order: readonly string[] = SUBSYSTEM_DECLARATION_ORDER;
     expect(
       parsed.rows.every(
         (row) => order.indexOf(row.fromSubsystem) < order.indexOf(row.toSubsystem),
@@ -177,6 +180,81 @@ describe("intercambio-nacional · 2026, after the column was added", () => {
     expect([...links(newer.rows)].sort()).toEqual(["NE→SE", "N→NE", "N→SE", "S→SE"]);
     expect([...links(older.rows)].every((link) => links(newer.rows).has(link))).toBe(
       true,
+    );
+  });
+});
+
+describe("intercambio-nacional · the orientation basis is declaration order", () => {
+  // This is the one link the two published orders disagree about, and the
+  // reason `SUBSYSTEM_ORDER` may not be `SUBSYSTEM_DISPLAY_ORDER`.
+  //
+  // Declaration order is `N, NE, S, SE`, so `S` precedes `SE` and the canonical
+  // row is `S→SE`. Display order is `N, NE, SE, S`, so `SE` would precede `S`
+  // and every one of these rows would be stated `SE→S` with its sign flipped —
+  // in a column where the sign *is* the direction of the flow. Nothing else in
+  // the suite distinguishes the two orders on a single row, so it is asserted
+  // here directly rather than left to the four-link set assertion above.
+  const header =
+    "din_instante;id_subsistema_origem;nom_subsistema_origem;" +
+    "id_subsistema_destino;nom_subsistema_destino;val_intercambiomwmed";
+
+  it("puts S before SE, which display order does not", () => {
+    expect([...SUBSYSTEM_DECLARATION_ORDER]).toEqual(["N", "NE", "S", "SE"]);
+    expect(SUBSYSTEM_DECLARATION_ORDER.indexOf("S")).toBeLessThan(
+      SUBSYSTEM_DECLARATION_ORDER.indexOf("SE"),
+    );
+    // The basis is not empty and is the whole enum, so the ranking below is
+    // total rather than a pair of -1s comparing equal.
+    expect(SUBSYSTEM_DECLARATION_ORDER).toHaveLength(4);
+  });
+
+  it("states an S→SE row as published, and negates nothing", () => {
+    const parsed = parseInterchangeCsv(
+      `${header}\n2026-03-01 00:00:00;S;SUL;SE; SUDESTE;250.5\n`,
+    );
+    expect(parsed.rejected).toEqual([]);
+    expect(parsed.reorientedRows).toBe(0);
+    expect(parsed.rows[0]).toEqual({
+      fromSubsystem: "S",
+      toSubsystem: "SE",
+      validTime: new Date("2026-03-01T03:00:00.000Z"),
+      verifiedExchangeMwh: 250.5,
+      programmedExchangeMwh: null,
+    });
+  });
+
+  it("flips an SE→S row into S→SE and carries the direction in the sign", () => {
+    const parsed = parseInterchangeCsv(
+      `${header}\n2026-03-01 00:00:00;SE; SUDESTE;S;SUL;250.5\n`,
+    );
+    expect(parsed.rejected).toEqual([]);
+    expect(parsed.reorientedRows).toBe(1);
+    expect(parsed.rows[0]).toEqual({
+      fromSubsystem: "S",
+      toSubsystem: "SE",
+      validTime: new Date("2026-03-01T03:00:00.000Z"),
+      verifiedExchangeMwh: -250.5,
+      programmedExchangeMwh: null,
+    });
+  });
+
+  it("reads the same physical flow out of both spellings", () => {
+    // The property that makes the normalisation lossless: the two rows above
+    // describe opposite flows of the same magnitude, and after normalisation
+    // they are one link with opposite signs. Under display order both would
+    // still be one link — `SE→S` — with both signs inverted, which is why
+    // "the links agree" is not on its own enough to pin the basis.
+    const asPublished = parseInterchangeCsv(
+      `${header}\n2026-03-01 00:00:00;S;SUL;SE; SUDESTE;250.5\n`,
+    ).rows[0];
+    const flipped = parseInterchangeCsv(
+      `${header}\n2026-03-01 00:00:00;SE; SUDESTE;S;SUL;250.5\n`,
+    ).rows[0];
+    expect(asPublished?.fromSubsystem).toBe(flipped?.fromSubsystem);
+    expect(asPublished?.toSubsystem).toBe(flipped?.toSubsystem);
+    expect(asPublished?.fromSubsystem).toBe("S");
+    expect(asPublished?.verifiedExchangeMwh).toBe(
+      -(flipped?.verifiedExchangeMwh ?? Number.NaN),
     );
   });
 });

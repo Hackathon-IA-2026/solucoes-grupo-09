@@ -1,3 +1,4 @@
+import { SUBSYSTEM_DECLARATION_ORDER } from "@wattsteer/core/domain";
 import { UpstreamError } from "../../errors.js";
 import { parseDelimited, toRecord } from "../csv.js";
 import type { SubsystemCode } from "../normalise.js";
@@ -77,8 +78,16 @@ const INTERVAL_MINUTES = 60;
  * The canonical orientation basis: a link is stated from the earlier member of
  * this list to the later one. It is `SubsystemCode`'s own declaration order, so
  * the convention is anchored to the domain enum rather than to an alphabet.
+ *
+ * **Read from the published constant, and it must be the declaration one.** The
+ * vocabulary carries two orders. `SUBSYSTEM_DISPLAY_ORDER` is `N, NE, SE, S`,
+ * which puts `SE` before `S`; this basis has `S` before `SE`. Swapping them
+ * reverses the stated orientation of every `S`–`SE` row, and since the
+ * direction of a flow is carried in the *sign*, that silently negates a
+ * production column. `apps/api/test/ons-interchange.test.ts` asserts the
+ * `S`↔`SE` case directly for exactly this reason.
  */
-const SUBSYSTEM_ORDER: readonly SubsystemCode[] = ["N", "NE", "S", "SE"];
+const SUBSYSTEM_ORDER: readonly SubsystemCode[] = SUBSYSTEM_DECLARATION_ORDER;
 
 /** Columns every vintage of this file has carried since 2000. */
 const REQUIRED_COLUMNS = [

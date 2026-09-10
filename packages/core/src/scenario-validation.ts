@@ -53,7 +53,7 @@
  */
 
 import { ApiError } from "./client.js";
-import { SUBSYSTEM_CODES } from "./constants.js";
+import { SUBSYSTEM_DISPLAY_ORDER } from "./constants.js";
 import { type ErrorCode, type ErrorDetails, statusForCode } from "./errors.js";
 import { type JsonValue, SCENARIO_VERSION } from "./scenario.js";
 import { WIRE_SHAPES } from "./types.generated.js";
@@ -543,11 +543,11 @@ export function validateScenarioWire(
   const subsystem = wire.subsystem;
   if (
     typeof subsystem !== "string" ||
-    !(SUBSYSTEM_CODES as readonly string[]).includes(subsystem)
+    !(SUBSYSTEM_DISPLAY_ORDER as readonly string[]).includes(subsystem)
   ) {
     refuse(
       "SUBSYSTEM_UNKNOWN",
-      `subsystem is ${JSON.stringify(subsystem) ?? "absent"}; the four are ${SUBSYSTEM_CODES.join(", ")}`,
+      `subsystem is ${JSON.stringify(subsystem) ?? "absent"}; the four are ${SUBSYSTEM_DISPLAY_ORDER.join(", ")}`,
       { field: "subsystem" },
     );
   }
