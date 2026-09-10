@@ -1,0 +1,6 @@
+#!/bin/sh
+#
+# The clean-merge path. `git merge` runs this hook after resolving the trees and
+# before writing the merge commit, and a non-zero exit aborts the merge.
+set -eu
+. "$(dirname "$0")/base-gate.sh"

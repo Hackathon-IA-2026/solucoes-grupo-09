@@ -1,0 +1,21 @@
+#!/bin/sh
+#
+# The conflicted-merge path, and *only* that path.
+#
+# `pre-merge-commit` does not run when the merge stops on a conflict: the merge
+# leaves `MERGE_HEAD` in place and the user finishes it with `git commit`, which
+# runs this hook instead. Without this file the gate would be missing from
+# exactly the merges most likely to be carrying a surprise, since a base far
+# enough behind to matter is a base likely to conflict.
+#
+# So this is the same single gate reached by git's other door, not a second
+# mechanism. On an ordinary commit it does nothing at all: no fetch, no network,
+# no delay. `bun run check` and every commit during a ticket stay offline.
+
+set -eu
+
+if ! git rev-parse --verify --quiet MERGE_HEAD >/dev/null; then
+  exit 0
+fi
+
+. "$(dirname "$0")/base-gate.sh"
