@@ -138,8 +138,37 @@ export const onsResourceVersion = pgTable(
     /** Where the retained raw payload lives, when it has been archived. */
     archiveUri: text(),
     firstSeenAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-    /** When the bytes were downloaded; null for a HEAD-only probe. */
+    /**
+     * When the bytes were downloaded; null for a HEAD-only probe.
+     *
+     * **Custody, not completion.** This says WattSteer holds the bytes — it is
+     * stamped before the parse, beside the archive write, deliberately. It does
+     * NOT say the payload was ingested; `ingested_at` says that.
+     */
     fetchedAt: timestamp({ withTimezone: true }),
+    /**
+     * When these bytes were parsed and written. Null until a parse landed.
+     *
+     * The column that closes data-platform 21's first finding. "We have the
+     * bytes" and "we stored what they said" were one fact, so a parse that
+     * threw left the resource looking done: the next sweep skipped it, the task
+     * reported `inserted: 0` and exited 0, forever. The skip gate reads this
+     * column now, and a thrown parse leaves it null and therefore retryable.
+     */
+    ingestedAt: timestamp({ withTimezone: true }),
+    /**
+     * When these exact bytes were refused as unusable, and why.
+     *
+     * A refusal is deterministic in the bytes — a 26-patamar civil day is 26
+     * patamares on every re-parse — so it is recorded rather than retried, and
+     * the record is what keeps a legitimately-refused day out of a hot loop
+     * while a *thrown* parse (null here and null in `ingested_at`) is retried.
+     * The reason is a `PayloadRefusal` from `errors.ts`; the detail is the
+     * refusing adapter's own sentence.
+     */
+    refusedAt: timestamp({ withTimezone: true }),
+    refusalReason: text(),
+    refusalDetail: text(),
   },
   (t) => [
     // The idempotency anchor: re-probing an unchanged file finds this row and

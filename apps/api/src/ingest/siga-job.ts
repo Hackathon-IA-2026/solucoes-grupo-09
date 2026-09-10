@@ -229,6 +229,7 @@ export function createSigaIngestor(
       unlocatedPlants,
       withdrawnPlants: withdrawn.length,
     });
+    await extract.markIngested();
     report({ done: SIGA_STEPS, total: SIGA_STEPS });
 
     return {

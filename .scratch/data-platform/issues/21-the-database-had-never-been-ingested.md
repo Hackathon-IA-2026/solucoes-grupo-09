@@ -102,6 +102,10 @@ stored this" from "we downloaded this and threw it away", and the second case
 reads as done. Any census of what actually loaded has to pass `force: true`;
 the census below does.
 
+**Owned by data-platform 22**, which fixes it: `ingested_at` and
+`refused_at` split the one mark into the two facts it was carrying, and a
+thrown parse is retried while a refused day costs one `HEAD`.
+
 The consequence for the record: forecaster 18 read `DESSEM_COVERAGE_START` and
 concluded the DESSEM arms could be run from 2025-05-23. The **files** exist from
 2025-05-23; the adapter loads only a minority of them, and the reason is not

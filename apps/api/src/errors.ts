@@ -108,6 +108,73 @@ export class UpstreamError extends AppError {
   }
 }
 
+/**
+ * The refusal kinds an adapter may raise about a payload's *content*.
+ *
+ * Each names a defect that is a property of the bytes, not of the run: the
+ * same bytes parsed again will be refused again, identically. That is what
+ * makes a refusal recordable against a fingerprint rather than retried.
+ */
+export const PAYLOAD_REFUSALS = [
+  /** A required column is missing or unreadable — the published header moved. */
+  "schema",
+  /** The period is not the period it claims: short, incomplete, duplicated. */
+  "coverage",
+  /** The time axis would be a guess — a period index or a zone that no longer maps. */
+  "time_axis",
+  /** A forecast row that is not shaped like a forecast (published at/after its own valid time). */
+  "forecast_integrity",
+] as const;
+
+export type PayloadRefusal = (typeof PAYLOAD_REFUSALS)[number];
+
+/**
+ * **These bytes are unusable, and re-fetching them will not help.**
+ *
+ * The distinction this class exists to draw is the one that made a day of ONS
+ * history silently never arrive (data-platform 21): a parse that throws because
+ * the *payload* is wrong is a permanent fact about a fingerprint, and a parse
+ * that throws because a socket died, Postgres was down or an adapter had a bug
+ * is not. Both used to be the same `UpstreamError`, and both used to leave the
+ * resource marked as successfully fetched.
+ *
+ * A `PayloadRefusedError` is therefore **recorded** against the
+ * `ons_resource_version` row — `refused_at` and a reason — so the next sweep
+ * neither re-downloads it in a hot loop nor mistakes it for a day that loaded.
+ * Anything else is left unmarked and **retried**, which is what a transient
+ * failure and a fixed adapter both need.
+ *
+ * It stays an `UpstreamError` subclass on purpose: it *is* an upstream problem,
+ * every existing `instanceof UpstreamError` catcher keeps working, and the wire
+ * code is unchanged. What is new is only the classification.
+ *
+ * A refusal is not permanent about the *dataset*, only about the bytes. ONS
+ * re-publishing the file is a new `change_key`, and therefore a new version row
+ * with nothing recorded against it; an adapter fix is re-applied with
+ * `force: true`.
+ */
+export class PayloadRefusedError extends UpstreamError {
+  readonly refusal: PayloadRefusal;
+
+  constructor(refusal: PayloadRefusal, message: string, options?: AppErrorOptions) {
+    super(message, options);
+    this.name = "PayloadRefusedError";
+    this.refusal = refusal;
+  }
+}
+
+/**
+ * The refusal in this error, or null when the failure is not about the bytes.
+ *
+ * The one place the question "may this be recorded against a fingerprint?" is
+ * answered, so no ingestor can answer it differently. Deliberately an
+ * `instanceof` check and not a message match: a refusal is declared at the
+ * throw site by the adapter that knows what it refused.
+ */
+export function payloadRefusal(error: unknown): PayloadRefusedError | null {
+  return error instanceof PayloadRefusedError ? error : null;
+}
+
 /** The server is at capacity. */
 export class BusyError extends AppError {
   constructor(

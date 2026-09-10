@@ -191,6 +191,11 @@ export function createPlantRegistryIngestor(
     // The bridge is the only ONS source that publishes `ceg` and `id_ons` on
     // one row, so this is where a plant acquires its ONS code.
     const linked = await linkPlantOnsCodes(deps.db);
+    // Both halves, because the link above needed both and neither snapshot is
+    // complete without the other. Marking one alone would leave the next sweep
+    // re-downloading a file to redo a snapshot it already holds.
+    await capacity.markIngested();
+    await membership.markIngested();
     report({ done: REGISTRY_STEPS, total: REGISTRY_STEPS });
 
     return {

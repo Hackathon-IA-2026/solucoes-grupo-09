@@ -1,4 +1,4 @@
-import { UpstreamError } from "../../errors.js";
+import { PayloadRefusedError } from "../../errors.js";
 import { parseDelimited, toRecord } from "../csv.js";
 import {
   parseDecimal,
@@ -97,7 +97,8 @@ function assertColumns(columns: string[]): void {
   const present = new Set(columns);
   const missing = REQUIRED_COLUMNS.filter((column) => !present.has(column));
   if (missing.length > 0) {
-    throw new UpstreamError(
+    throw new PayloadRefusedError(
+      "schema",
       `balanco_dessem_detalhe is missing required columns: ${missing.join(", ")}. ` +
         "The published header is authoritative over the data dictionary; a rename " +
         "here is a schema change, not a parse bug.",
@@ -121,7 +122,8 @@ export function referenceDayAnchor(referenceDay: string): {
 } {
   const match = REFERENCE_DAY.exec(referenceDay);
   if (!match) {
-    throw new UpstreamError(
+    throw new PayloadRefusedError(
+      "time_axis",
       `balanco_dessem_detalhe has an unreadable din_programacaodia: ${JSON.stringify(referenceDay)}`,
     );
   }
@@ -148,7 +150,8 @@ export function referenceDayAnchor(referenceDay: string): {
   // transitions never fell at midnight — but a silent guess at a boundary is
   // exactly the three-hour error this layer exists to refuse.
   if (start.kind !== "ok" || end.kind !== "ok") {
-    throw new UpstreamError(
+    throw new PayloadRefusedError(
+      "time_axis",
       `Reference day ${referenceDay} does not start and end at an unambiguous local midnight`,
     );
   }
@@ -215,14 +218,16 @@ function assertDaylightAlignment(
   }
 
   if (nightMax > 0) {
-    throw new UpstreamError(
+    throw new PayloadRefusedError(
+      "time_axis",
       `Reference day ${referenceDay} has ${nightMax} MW of solar generation in local ` +
         "night hours: the num_patamar → wall-clock mapping this adapter infers " +
         "(patamar k = the half hour ending 00:00 + k×30 min Brasília) no longer holds.",
     );
   }
   if (middayMax <= 0) {
-    throw new UpstreamError(
+    throw new PayloadRefusedError(
+      "time_axis",
       `Reference day ${referenceDay} has no solar generation in local midday hours: ` +
         "the num_patamar → wall-clock mapping this adapter infers no longer holds.",
     );
@@ -245,21 +250,26 @@ function assertCoverage(
 ): void {
   for (const [subsystem, patamares] of seen) {
     if (patamares.size !== halfHours) {
-      throw new UpstreamError(
+      throw new PayloadRefusedError(
+        "coverage",
         `Reference day ${referenceDay} has ${patamares.size} patamares for subsystem ` +
           `${subsystem}; the local civil day is ${halfHours} half hours long`,
       );
     }
     for (let patamar = 1; patamar <= halfHours; patamar += 1) {
       if (!patamares.has(patamar)) {
-        throw new UpstreamError(
+        throw new PayloadRefusedError(
+          "coverage",
           `Reference day ${referenceDay} is missing patamar ${patamar} for subsystem ${subsystem}`,
         );
       }
     }
   }
   if (seen.size === 0) {
-    throw new UpstreamError(`Reference day ${referenceDay} carries no subsystem rows`);
+    throw new PayloadRefusedError(
+      "coverage",
+      `Reference day ${referenceDay} carries no subsystem rows`,
+    );
   }
 }
 
@@ -276,7 +286,7 @@ export function parseDessemBalanceCsv(text: string): DessemBalanceParse {
   const table = parseDelimited(text);
   const columns = table.columns.map(trimmed);
   if (columns.length === 0) {
-    throw new UpstreamError("balanco_dessem_detalhe CSV is empty");
+    throw new PayloadRefusedError("schema", "balanco_dessem_detalhe CSV is empty");
   }
   assertColumns(columns);
 
@@ -286,7 +296,8 @@ export function parseDessemBalanceCsv(text: string): DessemBalanceParse {
     days.add(trimmed(record.din_programacaodia ?? ""));
   }
   if (days.size !== 1) {
-    throw new UpstreamError(
+    throw new PayloadRefusedError(
+      "coverage",
       `balanco_dessem_detalhe file covers ${days.size} reference days (${[...days].join(", ")}); ` +
         "these files are split per reference day and must carry exactly one",
     );
@@ -319,14 +330,16 @@ export function parseDessemBalanceCsv(text: string): DessemBalanceParse {
 
     const patamar = Number(trimmed(record.num_patamar ?? ""));
     if (!Number.isInteger(patamar) || patamar < 1 || patamar > halfHours) {
-      throw new UpstreamError(
+      throw new PayloadRefusedError(
+        "time_axis",
         `Reference day ${referenceDay} carries num_patamar=${JSON.stringify(record.num_patamar ?? null)}, ` +
           `outside the ${halfHours} half hours of the local civil day`,
       );
     }
     const patamares = seen.get(subsystem.code) ?? new Set<number>();
     if (patamares.has(patamar)) {
-      throw new UpstreamError(
+      throw new PayloadRefusedError(
+        "coverage",
         `Reference day ${referenceDay} repeats patamar ${patamar} for subsystem ${subsystem.code}`,
       );
     }

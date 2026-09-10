@@ -34,10 +34,35 @@ export interface Republication {
   settledDays: number;
 }
 
+/** A recorded refusal of one resource version's bytes. */
+export interface RecordedRefusal {
+  /** A `PayloadRefusal` — read as text, because the set is the adapters'. */
+  reason: string;
+  detail: string | null;
+  at: Date;
+}
+
 /** What recording an observation of a resource established. */
 export interface RecordedResourceVersion {
   id: string;
+  /**
+   * True when the bytes behind *this exact fingerprint* have already been
+   * downloaded. It is the answer to "did the file move?", and nothing more.
+   */
   alreadySeen: boolean;
+  /**
+   * True when those bytes have also been **parsed to a conclusion** — ingested,
+   * or refused for a reason that is a property of the bytes.
+   *
+   * This is the skip gate, and it is a different question from `alreadySeen`.
+   * Conflating them is what made data-platform 21's silent hole: bytes in hand
+   * read as work done, so a parse that threw was never retried and never
+   * reported. A downloaded-but-unsettled version is retried; a settled one is
+   * not touched again without `force`.
+   */
+  settled: boolean;
+  /** Why these bytes stand refused, when a previous pass refused them. */
+  refusal: RecordedRefusal | null;
   /**
    * Set when this state supersedes bytes WattSteer had already downloaded —
    * i.e. ONS rewrote a file under the same name. Null on a first sighting.
@@ -69,7 +94,14 @@ export async function recordResourceVersion(
   context: ObservationContext = {},
 ): Promise<RecordedResourceVersion> {
   const [existing] = await db
-    .select({ id: onsResourceVersion.id, fetchedAt: onsResourceVersion.fetchedAt })
+    .select({
+      id: onsResourceVersion.id,
+      fetchedAt: onsResourceVersion.fetchedAt,
+      ingestedAt: onsResourceVersion.ingestedAt,
+      refusedAt: onsResourceVersion.refusedAt,
+      refusalReason: onsResourceVersion.refusalReason,
+      refusalDetail: onsResourceVersion.refusalDetail,
+    })
     .from(onsResourceVersion)
     .where(
       and(
@@ -82,9 +114,22 @@ export async function recordResourceVersion(
   if (existing) {
     // Only a completed download counts as "seen": a row from a HEAD-only probe
     // must not stop the next run from fetching the bytes.
+    //
+    // And only a *landed* parse — or a refusal of these bytes — counts as
+    // settled. A row that was fetched and whose parse then threw is neither,
+    // so the next pass fetches it again instead of reporting it done.
     return {
       id: existing.id,
       alreadySeen: existing.fetchedAt !== null,
+      settled: existing.ingestedAt !== null || existing.refusedAt !== null,
+      refusal:
+        existing.refusedAt === null
+          ? null
+          : {
+              reason: existing.refusalReason ?? "unspecified",
+              detail: existing.refusalDetail,
+              at: existing.refusedAt,
+            },
       republication: null,
     };
   }
@@ -122,7 +167,13 @@ export async function recordResourceVersion(
   }
 
   if (!superseded?.fetchedAt) {
-    return { id: inserted.id, alreadySeen: false, republication: null };
+    return {
+      id: inserted.id,
+      alreadySeen: false,
+      settled: false,
+      refusal: null,
+      republication: null,
+    };
   }
 
   const settledDays = Math.max(
@@ -149,6 +200,8 @@ export async function recordResourceVersion(
   return {
     id: inserted.id,
     alreadySeen: false,
+    settled: false,
+    refusal: null,
     republication: {
       priorVersionId: superseded.id,
       priorFetchedAt: superseded.fetchedAt,
@@ -157,7 +210,14 @@ export async function recordResourceVersion(
   };
 }
 
-/** Record the bytes actually fetched, so a HEAD-only probe stays distinguishable. */
+/**
+ * Record the bytes actually fetched, so a HEAD-only probe stays distinguishable.
+ *
+ * **Custody, and only custody.** This is stamped before the parse, on purpose
+ * — see `bulk-resource.ts`. It records that WattSteer holds these bytes and
+ * what their digest is. It says nothing about whether they were understood,
+ * which is `markResourceIngested`'s job.
+ */
 export async function markResourceFetched(
   db: Database,
   versionId: string,
@@ -170,5 +230,53 @@ export async function markResourceFetched(
       byteSize: bytes.byteLength,
       fetchedAt: new Date(),
     })
+    .where(eq(onsResourceVersion.id, versionId));
+}
+
+/**
+ * Record that these bytes were parsed and written — the completion mark.
+ *
+ * Called **after** the write, by the ingestor that did it, because it is the
+ * only party that knows the rows landed. Until it is called the version is
+ * unsettled and the next pass will fetch and parse it again, which is the
+ * behaviour a thrown parse needs and the behaviour it did not have.
+ *
+ * A standing refusal is cleared here: a fixed adapter re-run under `force`
+ * that now succeeds supersedes the refusal rather than sitting beside it.
+ */
+export async function markResourceIngested(
+  db: Database,
+  versionId: string,
+): Promise<void> {
+  await db
+    .update(onsResourceVersion)
+    .set({
+      ingestedAt: new Date(),
+      refusedAt: null,
+      refusalReason: null,
+      refusalDetail: null,
+    })
+    .where(eq(onsResourceVersion.id, versionId));
+}
+
+/**
+ * Record that these exact bytes cannot be ingested, and why.
+ *
+ * The counterpart to `markResourceIngested`, and the reason a refused day is
+ * not the same thing as a thrown parse. The refusal is a property of the bytes,
+ * so it settles this fingerprint — no re-download next sweep — while leaving
+ * `ingested_at` null, so nothing can mistake the day for one that loaded. ONS
+ * re-publishing the file produces a different `change_key` and therefore a
+ * fresh, unsettled row: the refusal never outlives the bytes it is about.
+ */
+export async function markResourceRefused(
+  db: Database,
+  versionId: string,
+  reason: string,
+  detail: string,
+): Promise<void> {
+  await db
+    .update(onsResourceVersion)
+    .set({ refusedAt: new Date(), refusalReason: reason, refusalDetail: detail })
     .where(eq(onsResourceVersion.id, versionId));
 }

@@ -1,4 +1,5 @@
 import type { Database } from "../database/connection.js";
+import { payloadRefusal } from "../errors.js";
 import type { Execute } from "../jobs/index.js";
 import type { PayloadArchive } from "./archive.js";
 import { acquireBulkResource } from "./bulk-resource.js";
@@ -30,6 +31,16 @@ import type { ObservationContext } from "./resource-version.js";
  * What is not different is the per-file path: `HEAD` first, download only on a
  * changed fingerprint, append only what actually changed. A daily backfill
  * therefore costs ~460 `HEAD`s and no downloads once history is in.
+ *
+ * **A refused day is isolated to that day.** This is the only ingestor whose
+ * task is hundreds of files, so it is the only one where a refusal has a blast
+ * radius: a task for 2025-05-23..2026-09-09 died on day 58 of 469 and the 411
+ * days after it were never probed (data-platform 21). ONS publishes days this
+ * adapter is right to refuse — 105 of 475, measured — so a refusal is a normal
+ * outcome of a sweep and is *reported*, per day, the way `refresh.ts` reports a
+ * failed task. Everything else still throws out of the task: a socket that
+ * died or a Postgres that was down is not a fact about a reference day, and
+ * swallowing it would turn a broken run into a quiet one.
  */
 
 /** A range of reference days, defaulting to everything ONS has published. */
@@ -46,6 +57,22 @@ export interface IngestDessemPayload {
    * evidence that a settled period was rewritten — a queryable fact.
    */
   context?: ObservationContext;
+}
+
+/** A reference day whose payload this adapter refuses, and why. */
+export interface DessemRefusal {
+  referenceDay: string;
+  resourceName: string;
+  /** A `PayloadRefusal` — `coverage`, `time_axis`, `forecast_integrity`, `schema`. */
+  reason: string;
+  detail: string;
+  /**
+   * False when a previous pass had already refused these exact bytes. The
+   * distinction a sweep needs: a day that turned up refused *today* is news, a
+   * day standing refused is the recorded state of what ONS published and cost
+   * this run one `HEAD`.
+   */
+  refusedThisRun: boolean;
 }
 
 /** What one reference day did. */
@@ -65,6 +92,8 @@ export interface DessemDayResult {
    * `gate_late` (D−1 19:00 BRT) can see it. Null when nothing was downloaded.
    */
   minLeadTimeMinutes: number | null;
+  /** Set when this day's payload was refused. Null when it loaded or was skipped. */
+  refusal: { reason: string; detail: string } | null;
 }
 
 export interface IngestDessemResult {
@@ -74,6 +103,12 @@ export interface IngestDessemResult {
   daysProcessed: number;
   /** Days whose bytes were downloaded because the fingerprint moved. */
   daysDownloaded: number;
+  /** Days this run parsed and wrote. */
+  daysIngested: number;
+  /** Days this run downloaded and refused. */
+  daysRefused: number;
+  /** Days skipped because a previous pass had already refused these bytes. */
+  daysStandingRefused: number;
   rowsParsed: number;
   rowsRejected: number;
   inserted: number;
@@ -82,6 +117,12 @@ export interface IngestDessemResult {
   /** The smallest lead time seen this run, across every day downloaded. */
   minLeadTimeMinutes: number | null;
   days: DessemDayResult[];
+  /**
+   * Every day this sweep could not load, with its reason. Non-empty is the
+   * normal state of a DESSEM sweep over history, and it is the sweep saying so
+   * rather than a run that quietly inserted nothing.
+   */
+  refusals: DessemRefusal[];
 }
 
 export interface DessemIngestorDeps {
@@ -127,6 +168,9 @@ export function createDessemIngestor(
       daysAvailable: days.length,
       daysProcessed: 0,
       daysDownloaded: 0,
+      daysIngested: 0,
+      daysRefused: 0,
+      daysStandingRefused: 0,
       rowsParsed: 0,
       rowsRejected: 0,
       inserted: 0,
@@ -134,6 +178,7 @@ export function createDessemIngestor(
       unchanged: 0,
       minLeadTimeMinutes: null,
       days: [],
+      refusals: [],
     };
 
     for (const [index, day] of days.entries()) {
@@ -166,39 +211,81 @@ export function createDessemIngestor(
         revised: 0,
         unchanged: 0,
         minLeadTimeMinutes: null,
+        refusal: null,
       };
 
       if (acquired.bytes) {
         result.daysDownloaded += 1;
-        const parsed = parseDessemBalanceCsv(
-          new TextDecoder("utf-8").decode(acquired.bytes),
-        );
-        const written = await writeDessemBalance(deps.db, {
-          rows: parsed.rows,
-          publishedAt: acquired.publishedAt,
-          publishedAtPrecision: acquired.publishedAtPrecision,
-          sourceVersionId: acquired.versionId,
+        try {
+          const parsed = parseDessemBalanceCsv(
+            new TextDecoder("utf-8").decode(acquired.bytes),
+          );
+          const written = await writeDessemBalance(deps.db, {
+            rows: parsed.rows,
+            publishedAt: acquired.publishedAt,
+            publishedAtPrecision: acquired.publishedAtPrecision,
+            sourceVersionId: acquired.versionId,
+          });
+          // Only now is the resource version a day that loaded. Before this
+          // call it is bytes in custody and nothing more, which is what makes
+          // the throw below retryable instead of permanent.
+          await acquired.markIngested();
+          result.daysIngested += 1;
+
+          const earliest = Math.min(...parsed.rows.map((row) => row.validTime.getTime()));
+          dayResult.minLeadTimeMinutes = Math.round(
+            (earliest - acquired.publishedAt.getTime()) / MS_PER_MINUTE,
+          );
+          dayResult.rowsParsed = parsed.rows.length;
+          dayResult.rowsRejected = parsed.rejected.length;
+          dayResult.inserted = written.inserted;
+          dayResult.revised = written.revised;
+          dayResult.unchanged = written.unchanged;
+
+          result.rowsParsed += parsed.rows.length;
+          result.rowsRejected += parsed.rejected.length;
+          result.inserted += written.inserted;
+          result.revised += written.revised;
+          result.unchanged += written.unchanged;
+          result.minLeadTimeMinutes =
+            result.minLeadTimeMinutes === null
+              ? dayResult.minLeadTimeMinutes
+              : Math.min(result.minLeadTimeMinutes, dayResult.minLeadTimeMinutes);
+        } catch (error) {
+          const refused = payloadRefusal(error);
+          if (!refused) {
+            // Not a fact about these bytes — a socket, a schema migration, a
+            // bug. Nothing is marked, so the day is retried; and it takes the
+            // task with it, because a run that hit this is not a healthy run.
+            throw error;
+          }
+          await acquired.markRefused(refused);
+          result.daysRefused += 1;
+          dayResult.refusal = { reason: refused.refusal, detail: refused.message };
+          result.refusals.push({
+            referenceDay: day,
+            resourceName: acquired.resource.name,
+            reason: refused.refusal,
+            detail: refused.message,
+            refusedThisRun: true,
+          });
+        }
+      } else if (acquired.refusal) {
+        // Settled as refused by an earlier pass: one `HEAD`, no download, and
+        // still reported. This is the half of the fix that keeps a
+        // legitimately-refused day out of a hot loop without hiding it.
+        result.daysStandingRefused += 1;
+        dayResult.refusal = {
+          reason: acquired.refusal.reason,
+          detail: acquired.refusal.detail ?? "",
+        };
+        result.refusals.push({
+          referenceDay: day,
+          resourceName: acquired.resource.name,
+          reason: acquired.refusal.reason,
+          detail: acquired.refusal.detail ?? "",
+          refusedThisRun: false,
         });
-
-        const earliest = Math.min(...parsed.rows.map((row) => row.validTime.getTime()));
-        dayResult.minLeadTimeMinutes = Math.round(
-          (earliest - acquired.publishedAt.getTime()) / MS_PER_MINUTE,
-        );
-        dayResult.rowsParsed = parsed.rows.length;
-        dayResult.rowsRejected = parsed.rejected.length;
-        dayResult.inserted = written.inserted;
-        dayResult.revised = written.revised;
-        dayResult.unchanged = written.unchanged;
-
-        result.rowsParsed += parsed.rows.length;
-        result.rowsRejected += parsed.rejected.length;
-        result.inserted += written.inserted;
-        result.revised += written.revised;
-        result.unchanged += written.unchanged;
-        result.minLeadTimeMinutes =
-          result.minLeadTimeMinutes === null
-            ? dayResult.minLeadTimeMinutes
-            : Math.min(result.minLeadTimeMinutes, dayResult.minLeadTimeMinutes);
       }
 
       result.days.push(dayResult);

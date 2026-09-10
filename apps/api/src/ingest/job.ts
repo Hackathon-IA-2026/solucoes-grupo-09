@@ -100,6 +100,10 @@ export function createEnergyBalanceIngestor(
       publishedAtPrecision: acquired.publishedAtPrecision,
       sourceVersionId: acquired.versionId,
     });
+    // The completion mark, after the write and never before it: until this call
+    // the version is bytes in custody and nothing more, so a parse that threw
+    // leaves the file unsettled and the next sweep fetches it again.
+    await acquired.markIngested();
     report({ done: BULK_STEPS, total: BULK_STEPS });
 
     return {

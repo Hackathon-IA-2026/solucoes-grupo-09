@@ -117,6 +117,7 @@ export {
 export {
   createDessemIngestor,
   type DessemDayResult,
+  type DessemRefusal,
   type IngestDessemPayload,
   type IngestDessemResult,
 } from "./dessem-job.js";
@@ -369,12 +370,15 @@ export {
 } from "./repository.js";
 export type {
   ObservationContext,
+  RecordedRefusal,
   RecordedResourceVersion,
   RefreshTier,
   Republication,
 } from "./resource-version.js";
 export {
   markResourceFetched,
+  markResourceIngested,
+  markResourceRefused,
   recordResourceVersion,
 } from "./resource-version.js";
 export {
