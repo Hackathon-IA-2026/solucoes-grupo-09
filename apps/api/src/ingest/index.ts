@@ -318,12 +318,14 @@ export {
   createRefreshSweep,
   planRefresh,
   REFRESH_CADENCE,
+  type RecordedIngestion,
   type RefreshPlanOptions,
   type RefreshSweepDeps,
   type RefreshSweepPayload,
   type RefreshSweepResult,
   type RepublicationCampaign,
   readRepublications,
+  runRecordedIngestion,
 } from "./refresh.js";
 export {
   createPlantRegistryIngestor,

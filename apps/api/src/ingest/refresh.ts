@@ -388,6 +388,116 @@ export interface RefreshSweepDeps {
   run: (task: IngestTask, report: ReportProgress) => Promise<IngestTaskResult>;
 }
 
+/** One ingestion, with the run row that recorded it. */
+export interface RecordedIngestion {
+  /** `ingestion_run.id`, absent only if the insert returned nothing. */
+  runId: string | undefined;
+  outcome: IngestTaskResult;
+  rows: ReturnType<typeof rowsOf>;
+}
+
+/**
+ * Run one ingestion and record it as an `ingestion_run` row.
+ *
+ * Extracted from the sweep's loop rather than copied out of it, because there
+ * are now two callers and the run log is the only place an operator sees that a
+ * period was even attempted: the sweep drives a plan, and
+ * `src/scripts/ingest.ts` drives one task by hand at the `manual` tier. A
+ * backfill that wrote rows and left no run row would be invisible to
+ * `/v1/ingest/health`, which is the view whose whole job is to say what has run.
+ *
+ * A failure is recorded and **rethrown**. Whether one dead period stops the
+ * batch is the caller's policy, not this function's: the sweep absorbs it
+ * because coverage is the point, and a hand-driven task should fail loudly.
+ *
+ * `onRunStarted` fires as soon as the row exists, before the ingestion runs,
+ * and that ordering is load-bearing: a resource version — and so a
+ * re-publication — is recorded before the bytes are parsed, so a task that
+ * fails on a malformed file may still have discovered an overwrite. A caller
+ * collecting run ids to attribute republications must therefore see the id of a
+ * run that went on to fail.
+ */
+export async function runRecordedIngestion(
+  db: Database,
+  tier: RefreshTier,
+  task: IngestTask,
+  run: (task: IngestTask, report: ReportProgress) => Promise<IngestTaskResult>,
+  options: {
+    force?: boolean;
+    report?: ReportProgress;
+    onRunStarted?: (runId: string) => void;
+  } = {},
+): Promise<RecordedIngestion> {
+  const [inserted] = await db
+    .insert(ingestionRun)
+    .values({
+      source: sourceOf(task),
+      tier,
+      periodLabel: periodLabelOf(task),
+      status: "running",
+    })
+    .returning({ id: ingestionRun.id });
+  const runId = inserted?.id;
+  if (runId) {
+    options.onRunStarted?.(runId);
+  }
+
+  // The tier travels with the task, but only where it can mean something.
+  // `context` attributes a *re-publication of a resource* to the sweep that
+  // found it, and two sources have no resource to re-publish: the carga API
+  // serves no file, and a model run is immutable. Weather still takes `force`,
+  // which for it means "re-fetch a run already held".
+  const contextual: IngestTask =
+    task.kind === "load"
+      ? task
+      : task.kind === "weather"
+        ? {
+            ...task,
+            payload: { ...task.payload, force: options.force || task.payload.force },
+          }
+        : ({
+            ...task,
+            payload: {
+              ...task.payload,
+              force: options.force || task.payload.force,
+              context: { tier, runId },
+            },
+          } as IngestTask);
+
+  try {
+    const outcome = await run(contextual, options.report ?? (() => {}));
+    const rows = rowsOf(outcome);
+    if (runId) {
+      await db
+        .update(ingestionRun)
+        .set({
+          status: "ok",
+          finishedAt: new Date(),
+          resourcesProbed: rows.probed,
+          resourcesDownloaded: rows.downloaded,
+          rowsParsed: rows.parsed,
+          rowsInserted: rows.inserted,
+          rowsRevised: rows.revised,
+          rowsUnchanged: rows.unchanged,
+        })
+        .where(eq(ingestionRun.id, runId));
+    }
+    return { runId, outcome, rows };
+  } catch (error) {
+    if (runId) {
+      await db
+        .update(ingestionRun)
+        .set({
+          status: "failed",
+          finishedAt: new Date(),
+          errorMessage: clientSafeMessage(error),
+        })
+        .where(eq(ingestionRun.id, runId));
+    }
+    throw error;
+  }
+}
+
 /**
  * Drive one tier of the refresh regime, recording a run per task.
  *
@@ -425,80 +535,40 @@ export function createRefreshSweep(
 
     const runIds: string[] = [];
     for (const [index, task] of tasks.entries()) {
-      const source = sourceOf(task);
-      const periodLabel = periodLabelOf(task);
-      const [run] = await deps.db
-        .insert(ingestionRun)
-        .values({ source, tier: payload.tier, periodLabel, status: "running" })
-        .returning({ id: ingestionRun.id });
-      const runId = run?.id;
-      if (runId) {
-        runIds.push(runId);
-      }
-
       // The tier travels with the task. A re-publication found here is then
       // attributable to the sweep that found it, which is what makes "the
       // history sweep found this" — the evidence that a settled period was
       // rewritten — a queryable fact rather than an inference.
-      // The tier travels with the task, but only where it can mean something.
-      // `context` attributes a *re-publication of a resource* to the sweep that
-      // found it, and two sources have no resource to re-publish: the carga API
-      // serves no file, and a model run is immutable. Weather still takes
-      // `force`, which for it means "re-fetch a run already held".
-      const contextual: IngestTask =
-        task.kind === "load"
-          ? task
-          : task.kind === "weather"
-            ? {
-                ...task,
-                payload: {
-                  ...task.payload,
-                  force: payload.force || task.payload.force,
-                },
-              }
-            : ({
-                ...task,
-                payload: {
-                  ...task.payload,
-                  force: payload.force || task.payload.force,
-                  context: { tier: payload.tier, runId },
-                },
-              } as IngestTask);
-
       try {
-        const outcome = await deps.run(contextual, () => {});
-        const rows = rowsOf(outcome);
+        const { rows } = await runRecordedIngestion(
+          deps.db,
+          payload.tier,
+          task,
+          deps.run,
+          {
+            force: payload.force,
+            // Collected before the ingestion runs, so a run that then failed is
+            // still asked about below: it may have recorded the re-publication
+            // that made it fail.
+            onRunStarted: (runId) => runIds.push(runId),
+          },
+        );
         result.succeeded += 1;
         result.resourcesProbed += rows.probed;
         result.resourcesDownloaded += rows.downloaded;
         result.rowsInserted += rows.inserted;
         result.rowsRevised += rows.revised;
         result.rowsUnchanged += rows.unchanged;
-        if (runId) {
-          await deps.db
-            .update(ingestionRun)
-            .set({
-              status: "ok",
-              finishedAt: new Date(),
-              resourcesProbed: rows.probed,
-              resourcesDownloaded: rows.downloaded,
-              rowsParsed: rows.parsed,
-              rowsInserted: rows.inserted,
-              rowsRevised: rows.revised,
-              rowsUnchanged: rows.unchanged,
-            })
-            .where(eq(ingestionRun.id, runId));
-        }
       } catch (error) {
-        const message = clientSafeMessage(error);
+        // Recorded on the run row by `runRecordedIngestion`; summarised here,
+        // because the sweep's value is that the other three hundred periods
+        // still get checked.
         result.failed += 1;
-        result.failures.push({ source, period: periodLabel, error: message });
-        if (runId) {
-          await deps.db
-            .update(ingestionRun)
-            .set({ status: "failed", finishedAt: new Date(), errorMessage: message })
-            .where(eq(ingestionRun.id, runId));
-        }
+        result.failures.push({
+          source: sourceOf(task),
+          period: periodLabelOf(task),
+          error: clientSafeMessage(error),
+        });
       }
 
       report({ done: index + 1, total: tasks.length });
