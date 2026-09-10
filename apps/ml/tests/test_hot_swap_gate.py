@@ -569,6 +569,43 @@ def test_every_guardrail_states_the_constant_it_used() -> None:
     }
 
 
+def test_the_crossing_rate_veto_reads_the_settled_hour_figure() -> None:
+    """Forecaster 29's fourth box: the veto is over every settled hour.
+
+    The two figures are separated in both directions, because "it reads the right
+    one" is only demonstrated by a candidate the wrong one would have judged
+    differently:
+
+    - a row whose **settled-hour** rate is over the ceiling while its
+      ``CoverageReport``'s curtailed-subset rate is 0.0 — vetoed;
+    - the mirror, a settled-hour rate of 0.0 beside a curtailed-subset rate of
+      0.5, fifty times the ceiling — **not** vetoed, because the gate is not
+      reading that number and must not start.
+
+    So the published-figure fix in ``as_card_entry`` and the promotion decision
+    stay independent: the gate reads
+    :attr:`~wattsteer_ml.evaluation.metrics.MetricsRow.crossing_rate`, the
+    attribute, never a card field.
+    """
+    over_the_ceiling = metrics_row(
+        crossing_rate=CROSSING_RATE_CEILING + 0.01,
+        coverage=coverage_report(crossing_rate=0.0),
+    )
+    rails = {rail.name: rail for rail in guardrails(over_the_ceiling, metrics_row())}
+    assert rails["crossing_rate"].vetoes
+    assert rails["crossing_rate"].value == CROSSING_RATE_CEILING + 0.01
+
+    only_the_curtailed_subset = metrics_row(
+        crossing_rate=0.0, coverage=coverage_report(crossing_rate=0.5)
+    )
+    mirrored = {
+        rail.name: rail for rail in guardrails(only_the_curtailed_subset, metrics_row())
+    }
+    assert not mirrored["crossing_rate"].vetoes
+    assert mirrored["crossing_rate"].value == 0.0
+    assert not any(rail.vetoes for rail in mirrored.values())
+
+
 def test_an_unmeasurable_guardrail_vetoes() -> None:
     """A veto that passed on absent evidence would be a constant choosing a swap."""
     rails = {

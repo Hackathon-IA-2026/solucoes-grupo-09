@@ -12,12 +12,14 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from datetime import date, timedelta
+from typing import Any
 
 import pytest
 
 from wattsteer_ml.canonical import VintageFidelity
 from wattsteer_ml.constants import SUBSYSTEM_CODES
 from wattsteer_ml.evaluation import FoldSegment, MixedFidelityError, RowKey
+from wattsteer_ml.evaluation.collapse import CollapseBlock
 from wattsteer_ml.evaluation.metrics import (
     FIXED_OPERATING_POINT,
     MetricsError,
@@ -28,6 +30,7 @@ from wattsteer_ml.evaluation.metrics import (
     best_operating_point,
     first_revision_premium,
     interval_width_mean_mwh,
+    merge_disjointly,
     pinball,
     pinball_component,
     pr_auc,
@@ -36,7 +39,7 @@ from wattsteer_ml.evaluation.metrics import (
 )
 from wattsteer_ml.mixture import SERVED_QUANTILES
 from wattsteer_ml.training.bundle import SubThresholdMeans
-from wattsteer_ml.training.conformal import ScoredHour
+from wattsteer_ml.training.conformal import CoverageReport, ScoredHour
 from wattsteer_ml.training.hurdle import HourEstimates, compose_estimates
 
 THRESHOLD_MW = 5.0
@@ -440,3 +443,156 @@ def test_every_published_row_names_the_vintage_of_the_rows_behind_it() -> None:
     assert "f1@0.5" in published
     assert "threshold@best" in published
     assert "share_p50_zero" in published
+
+
+# --- one key, one population (forecaster 29) ---------------------------------
+
+#: An hour whose fitted knots disagree about the shape of the tail: ``q10`` above
+#: ``q90``, stored as fitted, so the composition sorts the served band and marks
+#: it ``crossed``. The fixture that makes ``crossing_rate`` a number rather than
+#: a zero to assert nothing against.
+CROSSED_KNOTS = (0.99, 9.0, 6.0, 3.0)
+
+#: The same hour with the knots in order.
+STRAIGHT_KNOTS = (0.99, 3.0, 6.0, 9.0)
+
+
+def two_populations(
+    *, curtailed: bool = True
+) -> list[tuple[float, float, float, float, float]]:
+    """One complete day — 24 hours × 4 subsystems — that separates the two rates.
+
+    Half the hours are curtailed and every crossed hour is one of them: 12 of 96
+    settled hours crossed, and 12 of the 48 curtailed ones did. So the
+    settled-hour rate is **0.125** and the curtailed-subset rate is **0.25** —
+    two different non-zero numbers, which is what makes the assertions below
+    about a population rather than about a shared zero.
+
+    A whole day because :class:`CollapseBlock` reports absent over an incomplete
+    subsystem-day, and a merge test over a block that is ``None`` would be the
+    vacuous guard this repository keeps finding. ``curtailed=False`` gives the
+    same hours with no curtailed hour among them, and the same 0.125.
+    """
+    rows: list[tuple[float, float, float, float, float]] = []
+    for index in range(HOURS_PER_DAY * len(SUBSYSTEM_CODES)):
+        is_positive = curtailed and index % 2 == 0
+        crossed = index % 8 == 0 and (is_positive or not curtailed)
+        knots = CROSSED_KNOTS if crossed else STRAIGHT_KNOTS
+        rows.append((*knots, 7.0 if is_positive else 0.0))
+    return rows
+
+
+def test_the_published_crossing_rate_is_the_settled_hour_rate_with_coverage() -> None:
+    """Forecaster 29's first box, on the fold that can tell the two apart.
+
+    Before this ticket the published ``crossing_rate`` was **0.25** on these
+    hours — :meth:`CoverageReport.card_fields` was merged on top and its
+    curtailed-subset figure won — so this assertion fails if the defect returns
+    rather than passing on a coincidence of two zeros.
+    """
+    built = row(hours(two_populations()))
+    assert built.coverage is not None
+    published = built.as_card_entry()
+
+    assert built.crossing_rate == pytest.approx(0.125)
+    assert built.coverage.crossing_rate == pytest.approx(0.25)
+    assert published["crossing_rate"] == built.crossing_rate
+    assert published["coverage_crossing_rate"] == built.coverage.crossing_rate
+    # Not interchangeable, and here demonstrably not equal: the row's figure is
+    # counted over 8 settled hours and the coverage block's over the 4 curtailed
+    # ones it is a statement about.
+    assert published["crossing_rate"] != published["coverage_crossing_rate"]
+    assert built.coverage.rows == 48
+
+
+def test_the_published_crossing_rate_is_the_same_figure_without_coverage() -> None:
+    """One meaning, whether or not an unrelated object exists.
+
+    The same hours with no curtailed hour among them: ``coverage`` is ``None``,
+    the settled-hour figure keeps the key, and the curtailed-subset one is
+    **absent** rather than zero — this module's rule for a measurement that was
+    not taken.
+    """
+    built = row(hours(two_populations(curtailed=False)))
+    published = built.as_card_entry()
+
+    assert built.coverage is None
+    assert built.crossing_rate == pytest.approx(0.125)
+    assert published["crossing_rate"] == built.crossing_rate
+    assert "coverage_crossing_rate" not in published
+
+
+def test_the_blocks_merged_onto_a_published_row_are_not_empty() -> None:
+    """The premise the two tests below rest on, asserted rather than assumed.
+
+    A collision check over empty dictionaries cannot fail, which is the shape of
+    guard this repository has been bitten by four times. So: every block
+    :meth:`MetricsRow.as_card_entry` merges is non-empty on this fixture, and the
+    published row is strictly larger than their sum, which is the row's own
+    columns being there for a later block to collide with.
+    """
+    built = row(hours(two_populations()))
+    assert built.coverage is not None
+    assert built.collapse is not None
+    blocks = (
+        built.at_fixed.as_card_entry("0.5"),
+        built.at_best.as_card_entry("best"),
+        built.coverage.card_fields(),
+        built.collapse.as_card_entry(),
+    )
+    for block in blocks:
+        assert block
+    assert len(built.as_card_entry()) > sum(len(block) for block in blocks)
+
+
+def test_the_row_refuses_a_coverage_block_that_reintroduces_the_bare_key() -> None:
+    """The defect itself, put back, and refused. Forecaster 29's second box.
+
+    ``card_fields`` is patched to publish its curtailed-subset figure under the
+    bare ``crossing_rate`` — exactly what the code did before this ticket — and
+    the published row is now an error instead of a number whose population
+    depends on whether a ``CoverageReport`` exists.
+    """
+    scored = hours(two_populations())
+    original = CoverageReport.card_fields
+
+    def as_before(self: CoverageReport) -> dict[str, Any]:
+        fields = original(self)
+        fields["crossing_rate"] = fields.pop("coverage_crossing_rate")
+        return fields
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(CoverageReport, "card_fields", as_before)
+        with pytest.raises(MetricsError, match="crossing_rate"):
+            row(scored).as_card_entry()
+
+
+@pytest.mark.parametrize("column", ["qloss_mwh", "rows", "prevalence", "row_id"])
+def test_no_later_block_may_shadow_any_column_the_row_already_set(column: str) -> None:
+    """The **mechanism**, not the one instance of it — forecaster 29's second box.
+
+    ``crossing_rate`` was one collision; the defect is that a block owned by
+    another module can redefine any column on the row by spelling it the same
+    way, and nothing was watching. Four unrelated columns, shadowed one at a
+    time from the collapse block, and each one is refused.
+    """
+    scored = hours(two_populations())
+    original = CollapseBlock.as_card_entry
+
+    def with_a_stolen_key(self: CollapseBlock) -> dict[str, Any]:
+        return {**original(self), column: "shadowed"}
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(CollapseBlock, "as_card_entry", with_a_stolen_key)
+        with pytest.raises(MetricsError, match=column):
+            row(scored).as_card_entry()
+
+
+def test_merging_disjoint_blocks_is_still_a_merge() -> None:
+    """The helper does its job as well as its refusal — both directions tested."""
+    entry: dict[str, Any] = {"a": 1}
+    assert merge_disjointly(entry, {"b": 2}, source="test") == {"a": 1, "b": 2}
+    assert entry == {"a": 1, "b": 2}
+    with pytest.raises(MetricsError, match="'a'"):
+        merge_disjointly(entry, {"a": 3}, source="test")
+    assert entry["a"] == 1

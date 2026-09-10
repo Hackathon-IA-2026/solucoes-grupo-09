@@ -778,7 +778,7 @@ this is the IDEA §15 table, corrected for a hurdle model:
 | `coverage_p10`, `coverage_p90` | fold, subsystem, local hour | target 0.90 each |
 | `interval_width_mean_mwh` | fold | sharpness — a wide interval covers by cheating |
 | `p50_unbiasedness` | fold | share below P50, target 0.50 |
-| `crossing_rate` | fold | share of hours where the raw boosters crossed |
+| `crossing_rate` | fold | share of **settled** hours where the raw boosters crossed; the same rate over the fold's curtailed hours is published beside it as `coverage_crossing_rate` and is not interchangeable with it |
 | `delta_lo`, `delta_hi` | fold | the conformal corrections themselves |
 | `day_total_coverage`, `peak_coverage` | fold | the ensemble's own calibration |
 | `share_p50_zero`, `hours_per_day_p_ge_50` | fold | the deliverable to ticket 011 |
@@ -1194,7 +1194,7 @@ refuse the artifact:
 | Contract | **`feature_hash`** (sha256 over the ordered feature names *and* the `feature_rows` function definition), `centroid_set_version`, `calendar_day_generator_version`, `publication_lag_hours` table, weather model pin (`ecmwf_ifs`) and run cycle |
 | Data | training window, base-fit window, calibration window, row counts, positive counts, per-fold `vintage_fidelity` |
 | Calibration | reliability curve points, `reliabilitySampleHours`, `reliabilityWindow`, `reliabilityFidelity`, `ece`, `mce`, `top_bin_gap`, `risk_bins` |
-| Quantiles | `δ_lo`, `δ_hi`, per-fold and per-subsystem coverage, `crossing_rate` |
+| Quantiles | `δ_lo`, `δ_hi`, per-fold and per-subsystem coverage, `coverage_crossing_rate` (the crossing rate over this block's curtailed hours; the settled-hour `crossing_rate` is the metrics table's) |
 | Metrics | the full table above, per fold and per rung, plus the baseline ladder |
 | Experiments | `lead_time_penalty` block, `dessem_delta` block, `threshold_sweep` block, `transformer_benchmark` block |
 | Environment | Python, lightgbm, sklearn, numpy versions |
@@ -1259,7 +1259,8 @@ and not on the card it mostly describes.
    - `coverage_p10 ∈ [0.85, 0.97]` and `coverage_p90 ∈ [0.85, 0.97]`;
    - `p50_unbiasedness ∈ [0.45, 0.55]`;
    - `ece ≤ 0.05`;
-   - `crossing_rate ≤ 0.01`;
+   - `crossing_rate ≤ 0.01`, the rate over every settled hour — the row's
+     attribute, never a card field, and never the curtailed-subset figure;
    - `recall@0.5 ≥ incumbent.recall@0.5 − 0.05` (IDEA §18's emphasis, as a
      floor rather than as the objective).
 7. **Serving smoke, on the real vector.** The candidate produces a complete
