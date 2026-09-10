@@ -1,3 +1,4 @@
+import { SUBSYSTEM_CODES } from "@wattsteer/core/constants";
 import { sql } from "drizzle-orm";
 import type { Database } from "../database/connection.js";
 import { diagnosisAttribution, diagnosisAttributionDriver } from "../database/schema.js";
@@ -73,7 +74,7 @@ export type RuleAction = "annotate" | "demote" | "withhold";
 const RULE_ACTION_ORDER: readonly RuleAction[] = ["annotate", "demote", "withhold"];
 
 const RULE_ACTIONS: ReadonlySet<string> = new Set(RULE_ACTION_ORDER);
-const SUBSYSTEMS: ReadonlySet<string> = new Set(["N", "NE", "S", "SE"]);
+const SUBSYSTEMS: ReadonlySet<string> = new Set(SUBSYSTEM_CODES);
 const GATE_PROFILES: ReadonlySet<string> = new Set(["gate_early", "gate_late"]);
 const ORIGIN_KINDS: ReadonlySet<string> = new Set(["served", "backfilled_holdout"]);
 

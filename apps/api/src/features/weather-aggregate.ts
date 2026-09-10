@@ -1,3 +1,4 @@
+import type { Technology } from "@wattsteer/core/domain";
 import { combineFidelity, type VintageFidelity } from "../contract/vintage.js";
 import type { Database } from "../database/connection.js";
 import { type SubsystemCode, toUtcDay } from "../ingest/normalise.js";
@@ -259,7 +260,7 @@ export function aggregateSubsystemHour(
   points: readonly WeatherPoint[],
   weights: CapacityWeightSet,
 ): SubsystemWeatherHour {
-  const vectorFor = (technology: "WIND" | "SOLAR") =>
+  const vectorFor = (technology: Technology) =>
     weights.vectors.find(
       (vector) => vector.subsystem === subsystem && vector.technology === technology,
     );

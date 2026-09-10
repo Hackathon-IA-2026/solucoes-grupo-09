@@ -5,7 +5,7 @@ import {
   SOURCE_ATTRIBUTION,
   SUBSYSTEM_CODES,
 } from "@wattsteer/core/constants";
-import { TECHNOLOGIES } from "@wattsteer/core/domain";
+import { TECHNOLOGIES, type Technology } from "@wattsteer/core/domain";
 import { encodeWire } from "@wattsteer/core/wire";
 import { Elysia, t } from "elysia";
 import type { PlantRegistryObservation } from "../contract/plant-registry.js";
@@ -108,7 +108,7 @@ function civilDate(instant: Date): string {
  */
 function toPlantRegistry(
   observation: PlantRegistryObservation,
-  filters: { subsystem: SubsystemCode | null; technology: "WIND" | "SOLAR" | null },
+  filters: { subsystem: SubsystemCode | null; technology: Technology | null },
 ): PlantRegistry {
   return {
     asOf: observation.asOf.toISOString(),
