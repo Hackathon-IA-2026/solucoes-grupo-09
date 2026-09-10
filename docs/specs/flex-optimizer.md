@@ -374,11 +374,22 @@ one. It is that **the optimizer must not be denominated in money at all**:
   A number picked to fill a coefficient slot would be an invented fact sitting
   underneath every recommendation.
 
-So `economic_assumptions.brl_per_mwh` (default **180**, the value already in
-`apps/web/src/lib/economics.ts`, and the single place it is written down) is a
+So `economic_assumptions.brl_per_mwh` (default **180**, published as
+`BRL_PER_MWH` in `packages/core/src/constants.ts`, the single place it is
+written down) is a
 **post-solve display multiplier on `avoided_energy_mwh`** and never enters the
 model. Changing it changes the money and nothing else. This is asserted by a
 test.
+
+> **Corrected in api-surface 27.** This sentence named
+> `apps/web/src/lib/economics.ts` as "the single place it is written down". That
+> file no longer exists, and while it did, the claim was the live bug
+> `api-surface.md` §`packages/core` was written to close: the optimizer that
+> needs this number is **Python**, and a constant in `apps/web` is one it cannot
+> read. api-surface 03 moved it to `BRL_PER_MWH` in
+> `packages/core/src/constants.ts` and published it to `apps/ml` through
+> `packages/core/fixtures/published-constants/`, so "the single place" is true
+> now in a way it was not then.
 
 **`c_energy` is dropped, and the reason is structural rather than a deferral.**
 (C2) caps `Δ[t]` at `curt[t]` and (C5) forbids `Δ[t] > 0` where there is no

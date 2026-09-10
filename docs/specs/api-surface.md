@@ -1,6 +1,6 @@
 # Spec — WattSteer Public API Surface
 
-> One gateway, fourteen routes, and a boundary drawn so that the ML service
+> One gateway, seventeen routes, and a boundary drawn so that the ML service
 > being down is a stale timestamp rather than an outage.
 >
 > **Upstream specs.** [`forecaster.md`](forecaster.md) fixes the content of a
@@ -466,6 +466,28 @@ Four unversioned probes survive unchanged: `GET /`, `/health`, `/ready`,
 | 12 | `GET /v1/replay?d=&s=` · `POST /v1/replay` | one replay | Time Machine |
 | 13 | `GET /v1/backtest` | the aggregate, forwarded — **served since replay 08 landed it; see 11–13 for why it was absent first** | Time Machine's footer, ops |
 | 14 | `GET /v1/plants` | the plant registry, machine-readable | ODbL §4.6 |
+| 15 | `GET /v1/replay/days/<date>` | one day's verdict, off a body-less path | Time Machine's date picker |
+| 16 | `GET /v1/model/card/raw` | the `*.card.json` verbatim, for auditing | not a screen — an auditor |
+| 17 | `POST /v1/replay/observed-only` | a pre-F1 day: what happened, and the bound | Time Machine |
+
+> **Corrected in api-surface 27: this list was fourteen rows over seventeen
+> served paths.** The three added above are all in `apps/api/src/api`, mounted,
+> cached and rate-limited, and two of them were named nowhere in this document
+> at all — `GET /v1/model/card/raw` (`model-card.ts`) and
+> `POST /v1/replay/observed-only` (`replay.ts`). The third,
+> `GET /v1/replay/days/<date>`, is argued twice in this spec's prose (§11–13 and
+> §Rate limiting, where it is the metering precedent) and had no row, which is
+> the same defect one step less severe.
+>
+> The pattern behind all three is worth naming rather than just fixing: **each
+> is the second representation of a row that was already here.** `card/raw` is
+> `card` unshaped, `replay/observed-only` is `replay` for the days that have no
+> counterfactual, `replay/days/<date>` is `replay/days` for one date. A list
+> organised by *screen* has no natural slot for "the same thing, differently",
+> so all three landed in prose, and the count in the header line went on saying
+> fourteen. It now says seventeen, and `test/spec-claims.test.ts` derives both
+> directions from the route registrations: a path served with no row here fails,
+> and a row here naming a path nothing serves fails too.
 
 **Three things that are deliberately *not* endpoints.**
 
@@ -872,7 +894,7 @@ Five decisions inside that shape:
 #### 5–7. Observed
 
 ```
-GET /v1/curtailment/hours?subsystem=&from=&to=&technology=
+GET /v1/curtailment/hours?subsystem=&from=&to=&technology=&cursor=
 GET /v1/curtailment/episodes?subsystem=&from=&to=&technology=&threshold_mw=&max_gap_hours=
 GET /v1/curtailment/reasons?subsystem=&date=&limit=
 ```
@@ -1017,7 +1039,7 @@ route could have been pointed at either.
 
 The route was therefore absent rather than provisional, and two of the three
 options were worse. A gateway route forwarding to a path that does not exist
-would publish an endpoint answering `502 OPTIMIZER_NOT_READY` forever, naming a
+would publish an endpoint answering `503 OPTIMIZER_NOT_READY` forever, naming a
 healthy service as the broken thing; and a gateway route *computing* the
 aggregate would put a second scoring implementation on the far side of a network
 hop from the replay path it is supposed to aggregate, which replay 08 forbids in
@@ -1125,8 +1147,18 @@ is what the domain model's interval convention exists to prevent.
 
 **No envelope.** A successful response is the resource. Adding
 `{data: …, meta: …}` would buy nothing here — pagination is needed on exactly
-two routes and carries its own `next_cursor` field — and it would put a second
+one route and carries its own `next_cursor` field — and it would put a second
 shape between every screen and every number.
+
+> **Corrected in api-surface 27: one route pages, not two.** `next_cursor` is
+> declared in exactly one place, `packages/core/schema/curtailment.schema.json`,
+> and it is read and issued in exactly one place,
+> `GET /v1/curtailment/hours` (`curtailment.ts`). `episodes` was the presumed
+> second — it takes the same `from`/`to` range — but it accepts no `cursor`
+> parameter and returns no cursor field, and `reasons` bounds itself with
+> `limit` instead. §5–7 above and §Out of Scope both said "two"; the route
+> lines in §5–7 also omitted `hours`'s `cursor=` parameter entirely, so the one
+> route that *does* page was the one the spec did not spell.
 
 ### Reconciling the diagnosis spec's UI contract changes — three flagged, five real
 
@@ -1142,8 +1174,7 @@ five, and the two unflagged ones are larger.
 | 5 | `SubsystemDayForecast.technology` — a forecast *per technology* | one forecast per subsystem; technology is a **scalar split** of the P50 and the expectation | ✗ — no spec names it |
 
 **Changes 1–3, as they land in code.** All three are in
-`apps/web/src/lib/domain.ts`, which is the single frontend definition and is the
-file this spec proposes promoting into `packages/core`:
+`packages/core/src/domain.ts`, which is the single definition both sides read:
 
 ```ts
 export type DriverDirection = "raises" | "lowers" | "mixed";
@@ -1180,8 +1211,29 @@ rename.** The i18n work removed it; labels live in the two dictionaries keyed by
 the driver's code, under a comment noting that a `label` field "would be an
 English string travelling through the data layer". This spec called `labelCode`
 "a sixth change nobody flagged", which was right about the flagging and wrong
-about the direction — it would reintroduce a field the current design
-deliberately does not have. The code alone travels, as it already does.
+about the direction — it would reintroduce a field the *domain* design
+deliberately does not have.
+
+> **Corrected in api-surface 27, twice, and the second half reverses a claim.**
+> First the file: this section named `apps/web/src/lib/domain.ts`, which api
+> surface 03 promoted into `packages/core` and 07 deleted. The block above is
+> `packages/core/src/domain.ts`, and that is what the paragraph now says.
+>
+> Second, and larger: **"the code alone travels" is not true of the wire.**
+> There are two `Driver`s. The domain one, `packages/core/src/domain.ts`, has no
+> `label` and no `labelCode` and says so in its own comment — that is the type
+> the block above shows, and the withdrawal is right about it. The **wire** one,
+> generated into `packages/core/src/types.generated.ts` from
+> `packages/core/schema/diagnosis.schema.json`, carries `label_code` and carries
+> it as a **required** member. So `labelCode` was never withdrawn from the API;
+> it was withdrawn from the domain, and this paragraph said the stronger of the
+> two things.
+>
+> Nothing needs to change in the code, and that is the point of recording it
+> rather than editing the sentence to fit: `label_code` on the wire is a `t()`
+> key, not copy, which is exactly the property the withdrawal was protecting.
+> What was wrong was the scope of the claim, and a reader who trusted it would
+> have gone looking for a field that is in every diagnosis response.
 
 **`"mixed"` reaches the UI in exactly one place and a test says so.** Only the
 merged `other` row can carry it; the eight real groups always have a sign
@@ -1709,6 +1761,43 @@ Plus, verbatim: `SCENARIO_VERSION_UNSUPPORTED`, `SCENARIO_TOO_LARGE`,
 `REPLAY_FORECAST_UNAVAILABLE`, `REPLAY_OBSERVATION_INCOMPLETE`,
 `REPLAY_INTEGRITY_VIOLATION`.
 
+> **Corrected in api-surface 27: the table above was not the code table.**
+> `packages/core/src/errors.ts` publishes **49** codes; the thirteen rows plus
+> the twenty-five named verbatim are **38**. The eleven below were in the enum
+> and named nowhere in this document, so the sentence "the code table is the
+> union of …" was false about the artefact it was describing — and it is the
+> sentence a client author would trust when deciding which codes to translate.
+> Ten of the eleven appeared in this spec not at all; the eleventh,
+> `OPTIMIZER_NOT_READY`, appeared once, in the `/v1/backtest` paragraph, **with
+> the wrong status** (`502`, against `errors.ts`'s `503`).
+>
+> They are added rather than argued away, because each of them is a real answer
+> this surface can give. The reason they went missing is structural and worth
+> naming: the six `OPTIMIZER_*` / `UPSTREAM_*` codes are the `ml-proxy` failure
+> mapping, which this spec settles in a *prose* section (§"The `ml-proxy`
+> verdict"), and the five generic ones are framework-level refusals nobody
+> writes a route for. A vocabulary split between a table and two paragraphs is
+> a vocabulary with no single reader.
+>
+> | Code | Status | Meaning |
+> |---|---|---|
+> | `BAD_INPUT` | 400 | input wrong in a way no more specific code covers |
+> | `REQUEST_INVALID` | 422 | the route schema refused the body or query; field path in `details.field` |
+> | `ROUTE_NOT_FOUND` | 404 | no route matched — the envelope, not Elysia's string shape |
+> | `INTERNAL` | 500 | unexpected, and never carrying detail to the client |
+> | `SERVICE_BUSY` | 503 | the gateway itself is at capacity |
+> | `UPSTREAM_UNAVAILABLE` | 502 | a data source outside WattSteer failed or was unreachable |
+> | `OPTIMIZER_NOT_CONFIGURED` | 502 | `WATTSTEER_ML_URL` unset: the capability is absent, not broken |
+> | `OPTIMIZER_TIMEOUT` | 503 | no answer within `mlTimeoutMs` |
+> | `OPTIMIZER_NOT_READY` | 503 | the ML service answered 502/503/504: up, but cannot serve yet |
+> | `UPSTREAM_REJECTED` | 400 | ML refused (4xx) with a code this enum has no room for; it travels in `details.upstream_code` |
+> | `UPSTREAM_FAILED` | 502 | ML failed (5xx) with a code this enum has no room for |
+>
+> With these, the document names all 49. `test/spec-claims.test.ts` derives the
+> enum from `errors.ts` and fails when a code is added without reaching this
+> spec, and fails again when a `NNN CODE` pairing anywhere in the nine specs
+> disagrees with `ERROR_STATUS` — which is how the `502` above was found.
+
 #### The four "no forecast" states, and what the UI shows
 
 They are four different sentences and collapsing them into a spinner is the
@@ -1811,8 +1900,11 @@ recover: a fetch wrapper returning typed results and throwing an `ApiError`
 carrying `status`, the domain `code`, and a `retryable` flag for 429/5xx/network
 — which is what a UI needs to decide between "retry" and "show state 2 above".
 
-**Four constants move, and one of them is a real bug today.**
-`SCENARIO_BRL_PER_MWH = 180` (`apps/web/src/lib/economics.ts`) is one
+**Four constants move, and one of them was a real bug.** *(Landed in
+api-surface 03; both files named below were deleted by it, and the paragraph is
+kept in the past tense rather than rewritten, because the defect it describes is
+the argument for where the constants live now.)*
+`SCENARIO_BRL_PER_MWH = 180` (`apps/web/src/lib/economics.ts`) was one
 definition, which `apps/web/src/lib/fixtures/mitigate.ts` re-exported under the
 second name `ECONOMIC_ASSUMPTION_BRL_PER_MWH` — an alias worth deleting, but not
 a second definition, and an earlier draft of this section overstated it as
@@ -2028,13 +2120,13 @@ validates against the schema.
   v1 and the whole caching and rate-limiting posture above depends on their
   absence. Adding them later is additive: a `Vary: Authorization` and a per-key
   budget tier.
-- **GraphQL, tRPC, gRPC.** The surface is fourteen read-shaped routes with two
-  fixed-by-spec POST contracts and a static-exported client. REST plus a
+- **GraphQL, tRPC, gRPC.** The surface is seventeen read-shaped routes with
+  three fixed-by-spec POST contracts and a static-exported client. REST plus a
   generated typed client is the shape with the least machinery.
 - **Webhooks, subscriptions, SSE, WebSockets.** Nothing here is push-shaped:
   the data changes twice a day at known instants, which is what
   `/v1/meta.next_publication_at` is for.
-- **Pagination beyond a cursor on the two range endpoints.** Everything else is
+- **Pagination beyond a cursor on the one paged endpoint.** Everything else is
   bounded by four subsystems and twenty-four hours.
 - **A public write surface of any kind.** The product is read-only; the Scenario
   is carried, never stored.

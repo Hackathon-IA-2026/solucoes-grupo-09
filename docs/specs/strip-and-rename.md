@@ -12,7 +12,8 @@ Brazilian grid. These share nothing but their scaffolding.
 
 Every session that opens this repo has to hold two products in its head at once:
 the one the code says it is, and the one it is becoming. Agents reading
-`apps/api/src/index.ts` see a scraper library. Anyone reading `README.md` learns
+`apps/api/src/index.ts` — deleted by this ticket, and named here as it was
+then — see a scraper library. Anyone reading `README.md` learns
 about humanized Chromium. The design system's own header comment describes a
 review-scraping product. Thirteen downstream decision tickets — the domain
 model, the schema, the screens — all want to add WattSteer code to a repo that
