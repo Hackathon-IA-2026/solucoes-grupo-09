@@ -3311,8 +3311,36 @@ export const diagnosisAttributionDriver = pgTable(
      * attribution exists to make unnecessary.
      */
     headlineFeature: text().notNull(),
-    observed: doublePrecision().notNull(),
-    typical: doublePrecision().notNull(),
+    /**
+     * The reading, or NULL with a reason beside it.
+     *
+     * **Nullable on purpose, and never nullable alone.** Three of the eight
+     * real headline features are in the weather block, which arrives from one
+     * run and goes NULL together, so a day whose weather run did not land has
+     * no reading for those bars — at the fixture's own 5% row-level NULL rate,
+     * 99% of days have at least one. The pair is a *subtitle*: the bar's `φ`,
+     * its sign, its share and its rank were computed by the boosters and are
+     * unaffected by it, so refusing the whole day's explanation over it was a
+     * large cost for a small gap.
+     *
+     * What makes the NULL safe is the reason column beside it and the CHECK
+     * that ties the two together: a value XOR a reason, so a reader never has
+     * to decide whether a `0` is a measurement and a reason can never go
+     * missing. `docs/domain-model.md`'s rule is that a zero never stands in
+     * for an absence; this is the absence given a name instead.
+     */
+    observed: doublePrecision(),
+    typical: doublePrecision(),
+    /**
+     * Why there is no `observed` — `null_in_day` — or no `typical` —
+     * `null_in_background`. `text` rather than an enum for the reason
+     * `driver_group` is text: the vocabulary is
+     * `wattsteer_ml.diagnosis.publication.READING_ABSENCE_REASONS`, and the
+     * closed half of it is the gateway's parse — so a third reason upstream is
+     * not a migration.
+     */
+    observedAbsentReason: text(),
+    typicalAbsentReason: text(),
     unit: text().notNull(),
 
     /** Whether a `demote` rule forced this group below the fold. */
@@ -3366,6 +3394,18 @@ export const diagnosisAttributionDriver = pgTable(
     check(
       "diagnosis_attribution_driver_disagreement_at_least_one",
       sql`${t.hourDisagreement} is null or ${t.hourDisagreement} >= 1`,
+    ),
+    // A reading is a number or a stated absence, and never both and never
+    // neither. Both shapes the CHECK forbids are the ones that would make an
+    // absence unreadable: a NULL with no reason is a dropped field, and a
+    // number beside a reason leaves the reader to pick which half to believe.
+    check(
+      "diagnosis_attribution_driver_observed_or_its_absence",
+      sql`(${t.observed} is null) = (${t.observedAbsentReason} is not null)`,
+    ),
+    check(
+      "diagnosis_attribution_driver_typical_or_its_absence",
+      sql`(${t.typical} is null) = (${t.typicalAbsentReason} is not null)`,
     ),
   ],
 );

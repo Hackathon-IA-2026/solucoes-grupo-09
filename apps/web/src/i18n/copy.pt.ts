@@ -565,6 +565,10 @@ export const pt: Copy = {
         "{code} eleva a previsão do modelo: {phi_mwh}, {share} do movimento atribuído, lendo {observed} contra um típico de {typical}.",
       driver_lowers:
         "{code} reduz a previsão do modelo: {phi_mwh}, {share} do movimento atribuído, lendo {observed} contra um típico de {typical}.",
+      driver_raises_no_reading:
+        "{code} eleva a previsão do modelo: {phi_mwh}, {share} do movimento atribuído. Sua variável de destaque não tem par observado-contra-típico neste dia, portanto nenhum é citado.",
+      driver_lowers_no_reading:
+        "{code} reduz a previsão do modelo: {phi_mwh}, {share} do movimento atribuído. Sua variável de destaque não tem par observado-contra-típico neste dia, portanto nenhum é citado.",
       top_two_share:
         "Os dois grupos juntos respondem por {top_two_share} do movimento atribuído.",
       hour_disagreement:

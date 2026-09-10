@@ -949,7 +949,9 @@ see [the error contract](#the-error-contract-and-what-a-missing-forecast-looks-l
       { "code": "net_surplus", "label_code": "driver.net_surplus",
         "phi_mwh": 128.0, "share": 0.31, "direction": "raises",
         "headline_feature": "proxy_renewable_load_ratio",
-        "observed": 1.42, "typical": 0.96, "unit": "ratio",
+        "observed": 1.42, "typical": 0.96,
+        "observed_absent_reason": null, "typical_absent_reason": null,
+        "unit": "ratio",
         "hour_disagreement": 1.1, "demoted": false }
     ],
     "peak_hour_local": 13,
@@ -970,6 +972,35 @@ see [the error contract](#the-error-contract-and-what-a-missing-forecast-looks-l
 assigns that rule to the screen, and putting it server-side would mean the
 `other` row's `direction: "mixed"` computation lives in two places the first
 time a second client appears.
+
+**A headline reading is a number *or* a stated absence.** `observed` and
+`typical` are each nullable, and each carries an `observed_absent_reason` /
+`typical_absent_reason` beside it from the closed set `null_in_day` /
+`null_in_background`. Exactly one of the two is present on each half: a `null`
+with no reason is refused, and a number beside a reason is refused, at the
+schema, at the gateway's parse and by a table CHECK.
+
+This is not a convenience. Three of the eight headline features are in the
+weather block, that block arrives from one model run and goes NULL together,
+and the earlier contract — two required numbers — therefore had no publishable
+pair for those bars. It refused the whole day's diagnosis: measured over a year
+of feature rows at a 5% row-level NULL rate, **99.2% of days** held at least
+one NULL weather hour somewhere, and a 128-row background cell is gap-free with
+probability 0.95^128 ≈ 0.0013. The pair is a *subtitle*: `phi_mwh`,
+`direction`, `share` and `rank` are computed by boosters that handle a NULL
+natively and do not move because a column has no mean. Refusing eight bars, two
+grains and four subsystems because one bar lost its caption was a large cost
+for a small gap.
+
+The two ways to keep the columns required are both worse and both invisible
+once stored: a zero is an invented reading the screen would format and the
+reader would compare against `typical`, and a mean over the hours that happened
+to carry a value is a **different** "typical" than the one the baseline `v(∅)`
+was averaged over, published under the same name. The client already had a
+first-class `none` reading and omits the pair line for it; the narration has its
+own sentence without the pair (`driver_raises_no_reading` /
+`driver_lowers_no_reading`), and the `stale_inputs` rule names the affected
+groups in `rule_flags` as it always did.
 
 **`share_j` is computed over all eight groups, not over the displayed ones.**
 `diagnosis.md` defined it over "the displayed rows", which is circular: the

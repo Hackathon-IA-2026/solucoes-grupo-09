@@ -242,10 +242,30 @@ function peakClause(payload: DiagnosisNarrationInput): NarrationClause {
  * being two words dropped into one. `code` and `unit` travel as codes: the
  * client holds the group's label and appends the unit's symbol, neither of
  * which a server may spell.
+ *
+ * **A group with no reading gets a sentence without the pair**, for the same
+ * reason: the missing half picks the key rather than arriving as a `null` in
+ * a placeholder. A `null` there would be a formatter error at best and the
+ * word "null" in a paragraph at worst, and the two obvious alternatives are
+ * both worse than a shorter sentence — quoting a zero invents a reading, and
+ * dropping the group from the narration edits the ranking. So the
+ * contribution, the share and the direction are said exactly as they always
+ * were, and the comparison is stated as absent.
  */
 function driverClause(group: Driver): NarrationClause {
+  const raises = group.direction === "raises";
+  if (group.observed === null || group.typical === null) {
+    return {
+      key: raises ? "driver_raises_no_reading" : "driver_lowers_no_reading",
+      values: {
+        code: group.code,
+        share: group.share,
+        phi_mwh: group.phiMwh,
+      },
+    };
+  }
   return {
-    key: group.direction === "raises" ? "driver_raises" : "driver_lowers",
+    key: raises ? "driver_raises" : "driver_lowers",
     values: {
       code: group.code,
       share: group.share,

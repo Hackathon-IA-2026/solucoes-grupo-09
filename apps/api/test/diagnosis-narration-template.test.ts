@@ -62,6 +62,8 @@ function groups(): Driver[] {
     headlineFeature: "proxy_renewable_load_ratio",
     observed: 1.42,
     typical: 0.96,
+    observedAbsentReason: null,
+    typicalAbsentReason: null,
     unit: "ratio" as const,
     hourDisagreement: 1 + index / 10,
     demoted: false,

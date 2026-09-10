@@ -53,8 +53,19 @@ export interface AttributionDriverRow {
   /** Day rows only; `null` on the peak hour's. */
   hourDisagreement: number | null;
   headlineFeature: string;
-  observed: number;
-  typical: number;
+  /**
+   * The reading, or `null` when the feature was NULL for the day. Read back
+   * with {@link AttributionDriverRow.observedAbsentReason}, which is set
+   * exactly when this is `null` — the table's CHECK is what makes that
+   * "exactly" rather than "usually".
+   */
+  observed: number | null;
+  /** The same over the matched background, or `null` with its reason. */
+  typical: number | null;
+  /** `null_in_day`, when there is no `observed`. */
+  observedAbsentReason: string | null;
+  /** `null_in_background`, when there is no `typical`. */
+  typicalAbsentReason: string | null;
   unit: string;
   demoted: boolean;
 }
@@ -169,8 +180,10 @@ interface DriverRecord {
   direction: string;
   hour_disagreement: number | null;
   headline_feature: string;
-  observed: number;
-  typical: number;
+  observed: number | null;
+  typical: number | null;
+  observed_absent_reason: string | null;
+  typical_absent_reason: string | null;
   unit: string;
   demoted: boolean;
 }
@@ -234,8 +247,13 @@ export async function readAttributionDayAhead(
         hourDisagreement:
           driver.hour_disagreement === null ? null : asNumber(driver.hour_disagreement),
         headlineFeature: driver.headline_feature,
-        observed: asNumber(driver.observed),
-        typical: asNumber(driver.typical),
+        // `asNumber` is not applied to a NULL: `Number(null)` is 0, and a zero
+        // where a reading is absent is the one substitution this whole column
+        // pair exists to prevent.
+        observed: driver.observed === null ? null : asNumber(driver.observed),
+        typical: driver.typical === null ? null : asNumber(driver.typical),
+        observedAbsentReason: driver.observed_absent_reason,
+        typicalAbsentReason: driver.typical_absent_reason,
         unit: driver.unit,
         demoted: driver.demoted === true,
       });

@@ -51,6 +51,11 @@ from wattsteer_ml.app import app
 from wattsteer_ml.config import settings
 from wattsteer_ml.constants import SUBSYSTEM_CODES
 from wattsteer_ml.diagnosis.driver_groups import DRIVER_GROUP_CODES
+from wattsteer_ml.diagnosis.publication import (
+    READING_ABSENCE_REASONS,
+    AttributionPublicationError,
+    DriverReading,
+)
 from wattsteer_ml.diagnosis.publish import (
     REFUSAL_CONDITIONS,
     DiagnosisPublicationRefusedError,
@@ -406,88 +411,182 @@ def test_a_day_short_of_its_hours_is_refused(
     assert empty.value.condition == "incomplete_day"
 
 
-def test_a_null_headline_feature_is_refused_rather_than_zeroed(
+def test_a_null_headline_feature_publishes_the_bar_with_a_stated_absence(
     nullable_serving_rows: list[dict[str, Any]],
     base_fit_rows: list[dict[str, Any]],
     loaded: LoadedArtifact,
     target_day: date,
 ) -> None:
-    """``null_headline_feature`` — the gap this ticket found rather than closed.
+    """The box api-surface 10 carried, closed the way it said to close it.
 
     The whole weather block arrives from one run and goes NULL together, and
-    three of the eight *real* headline features are in it. ``observed`` and
-    ``typical`` are required numbers on every one of the sixteen driver rows —
-    ``apps/api/src/diagnosis/publication.ts`` reads both through ``num()`` — and
-    there is no ``observed_absent_reason`` beside them, so a day with a missing
-    weather run has no publishable pair for those bars.
+    three of the eight *real* headline features are in it. That used to refuse
+    the day: ``observed`` and ``typical`` were required numbers on all sixteen
+    driver rows and there was nowhere to say the pair was unavailable.
 
-    The two alternatives are both invisible once stored: a zero is the invented
-    number the spec is against, and a mean over the hours that happened to carry
-    a reading is a *different* "typical" than the one ``v(∅)`` was averaged over,
-    published under the same name. So it refuses, and api-surface 10 carries the
-    box.
+    Now the absence is a value. The pair goes ``None`` beside a reason from the
+    closed vocabulary, the bar keeps its ``φ``, its sign, its share and its
+    rank — which the boosters computed and a missing subtitle does not touch —
+    and the day publishes. What is asserted here is the *whole* of that:
+
+    - the publication exists and covers every subsystem;
+    - at least one bar has no ``observed``, and its reason is ``null_in_day``;
+    - **no bar reports a zero or a NaN where a reading is absent**, which is
+      the failure the old refusal existed to prevent;
+    - a group whose headline feature is *not* in the weather block still
+      reports both halves, so the absence is the NULL and not the plumbing.
     """
-    with pytest.raises(DiagnosisPublicationRefusedError) as refused:
-        build_diagnosis_publication(
-            nullable_serving_rows,
-            base_fit_rows,
-            lane=LANE,
-            loaded=loaded,
-            target_date=target_day,
-            published_at=publication_instant(
-                nullable_serving_rows, target_date=target_day
-            ),
-            rows_per_cell=TEST_ROWS_PER_CELL,
+    publication = build_diagnosis_publication(
+        nullable_serving_rows,
+        base_fit_rows,
+        lane=LANE,
+        loaded=loaded,
+        target_date=target_day,
+        published_at=publication_instant(nullable_serving_rows, target_date=target_day),
+        rows_per_cell=TEST_ROWS_PER_CELL,
+    )
+    assert publication.rows
+    assert set(publication.subsystems) == set(SUBSYSTEM_CODES)
+
+    bars = [
+        one
+        for row in publication.as_payload()["attributions"]
+        for key in ("groups", "peak_hour_groups")
+        for one in row[key]
+    ]
+    absent = [one for one in bars if one["observed"] is None]
+    assert absent, "the weather block is NULL for every hour; some bar has no reading"
+    for one in absent:
+        assert one["observed_absent_reason"] == "null_in_day"
+        assert one["headline_feature"].startswith("weather_")
+    # The other half of the pair is a different question with a different
+    # answer: this fixture's base-fit rows are gap-free, so `typical` is a
+    # number even where `observed` is not. An absence is per side.
+    for one in bars:
+        assert one["typical"] is not None
+        assert one["typical_absent_reason"] is None
+        # Neither a zero nor a NaN stands in for an absence anywhere.
+        if one["observed"] is None:
+            assert one["observed_absent_reason"] in READING_ABSENCE_REASONS
+        else:
+            assert math.isfinite(one["observed"])
+            assert one["observed_absent_reason"] is None
+    # And the ranking is intact: eight bars at each grain, shares summing to 1.
+    for row in publication.as_payload()["attributions"]:
+        assert len(row["groups"]) == len(DRIVER_GROUP_CODES)
+        assert math.fsum(one["share"] for one in row["groups"]) == pytest.approx(1.0)
+
+
+def test_a_reading_is_a_number_or_a_stated_absence_and_never_both(
+    nullable_serving_rows: list[dict[str, Any]],
+) -> None:
+    """The guard on the pair, proved to fail in both directions.
+
+    A number beside a reason, and a reason beside no number, are the two shapes
+    that would let an absence be read as a zero or as a dropped field. Both are
+    refused, and the positive case beside them is the ordinary reading. The
+    NaN refusal survives too: a NaN is what a NULL column reads as in a matrix,
+    and only :func:`headline_readings` may turn one into an absence — a NaN
+    arriving here is a computation that went wrong.
+    """
+    assert nullable_serving_rows  # the fixture this file's absence comes from
+
+    assert DriverReading(feature="f", unit="MW", observed=1.0, typical=2.0)
+    assert DriverReading(
+        feature="f",
+        unit="MW",
+        observed=None,
+        typical=2.0,
+        observed_absent_reason="null_in_day",
+    )
+
+    with pytest.raises(AttributionPublicationError, match="never both"):
+        DriverReading(
+            feature="f",
+            unit="MW",
+            observed=1.0,
+            typical=2.0,
+            observed_absent_reason="null_in_day",
         )
-    assert refused.value.condition == "null_headline_feature"
-    assert "invented" not in refused.value.reason
-    assert "no value" in refused.value.reason
+    with pytest.raises(AttributionPublicationError, match="never neither"):
+        DriverReading(feature="f", unit="MW", observed=None, typical=2.0)
+    with pytest.raises(AttributionPublicationError, match="not one of"):
+        DriverReading(
+            feature="f",
+            unit="MW",
+            observed=None,
+            typical=2.0,
+            observed_absent_reason="because",  # type: ignore[arg-type]
+        )
+    with pytest.raises(AttributionPublicationError, match="nan"):
+        DriverReading(feature="f", unit="MW", observed=float("nan"), typical=2.0)
 
 
-def test_a_realistic_window_refuses_because_the_weather_block_has_gaps(
+def test_a_realistic_window_publishes_where_it_used_to_refuse(
     serving_rows: list[dict[str, Any]],
     pre_thirty: LoadedArtifact,
     target_day: date,
 ) -> None:
-    """How big the gap above is, measured rather than characterised.
+    """How big the old refusal was, measured — and that it is gone.
 
-    The pair is refused if the headline feature is NULL *anywhere* in the day or
-    in its background cells, and a background is 128 rows per cell over months
-    of days. At the fixture's own 5% per-day weather-null rate — which is there
-    because a NULL feature is the case the no-imputation rule is about — a
-    window of base-fit length contains gaps with near-certainty.
+    The pair was refused if the headline feature was NULL *anywhere* in the day
+    or in its background cells, and a background is 128 rows per cell drawn
+    over months of days. At the feature fixture's own 5%-per-row weather-null
+    rate — which is there because a NULL feature is the case the no-imputation
+    rule is about — a window of base-fit length contains gaps with near
+    certainty, so the old contract refused the whole day on most real windows.
 
-    So this is not a corner case. Until the wire can say "this bar has no
-    reading", a base-fit-drawn attribution refuses on any window with a missing
-    weather run in it, which is most real ones. That is the box on api-surface
-    10, and this test is its size.
+    This is the same window, asserted to have gaps first so the test cannot
+    pass vacuously, and it now publishes: the weather bars say
+    ``null_in_background`` and every other bar carries its pair.
     """
     start, end = base_fit_window(pre_thirty)
     realistic = feature_rows(first=start, last=end)
     gaps = sum(1 for row in realistic if row["weather_expected_wind_mwh"] is None)
     assert gaps > 0
 
-    with pytest.raises(DiagnosisPublicationRefusedError) as refused:
-        build_diagnosis_publication(
-            serving_rows,
-            realistic,
-            lane=LANE,
-            loaded=pre_thirty,
-            target_date=target_day,
-            published_at=publication_instant(serving_rows, target_date=target_day),
-            rows_per_cell=TEST_ROWS_PER_CELL,
-        )
-    assert refused.value.condition == "null_headline_feature"
+    publication = build_diagnosis_publication(
+        serving_rows,
+        realistic,
+        lane=LANE,
+        loaded=pre_thirty,
+        target_date=target_day,
+        published_at=publication_instant(serving_rows, target_date=target_day),
+        rows_per_cell=TEST_ROWS_PER_CELL,
+    )
+    assert publication.rows
+
+    bars = [
+        one
+        for row in publication.as_payload()["attributions"]
+        for key in ("groups", "peak_hour_groups")
+        for one in row[key]
+    ]
+    without_typical = [one for one in bars if one["typical"] is None]
+    assert without_typical
+    for one in without_typical:
+        assert one["typical_absent_reason"] == "null_in_background"
+    # `serving_rows` has no weather NULL, so the day's own side is intact —
+    # which is what makes the absence above the *background's* and nothing else.
+    for one in bars:
+        assert one["observed"] is not None
+        assert one["observed_absent_reason"] is None
 
 
 def test_every_named_refusal_condition_is_one_a_test_above_produced() -> None:
-    """The closed tuple is a census, not a list of intentions."""
+    """The closed tuple is a census, not a list of intentions.
+
+    ``null_headline_feature`` was the fifth and is deliberately not here: it is
+    no longer a refusal but a stated absence on the row, which the two tests
+    above measure. A refusal condition with no test is what this asserts
+    against, and a *removed* condition with a test still on file is the same
+    drift in the other direction.
+    """
     assert set(REFUSAL_CONDITIONS) == {
         "no_base_fit_window",
         "no_matched_background",
         "contract_and_groups_disagree",
         "incomplete_day",
-        "null_headline_feature",
     }
 
 
@@ -637,8 +736,16 @@ def test_the_publication_is_the_shape_the_gateway_already_parses(
         for one in row["groups"]:
             assert one["headline_feature"]
             assert one["unit"]
-            assert math.isfinite(one["observed"])
-            assert math.isfinite(one["typical"])
+            # A reading is a finite number or a stated absence, and the two
+            # keys always travel: an omitted reason and "there is a number"
+            # would be the same bytes to a reader looking for the absence.
+            for half in ("observed", "typical"):
+                reason = one[f"{half}_absent_reason"]
+                if one[half] is None:
+                    assert reason in READING_ABSENCE_REASONS
+                else:
+                    assert math.isfinite(one[half])
+                    assert reason is None
 
 
 # --- the rules ran, and the module writes nothing -----------------------------

@@ -64,7 +64,7 @@ path ensemble and the private publish route on the modelling service are its
 work, and none of it is re-specified here. Also **data-platform 16** (in flight),
 because the modelling service reads the canonical SQL views to build features.
 
-**Status:** done (**four boxes open** — see “What is still open, and why”)
+**Status:** done (**three boxes open** — see “What is still open, and why”)
 
 The previous revision of this line also said “two boxes open”, and it was
 wrong twice over: a grep found **six** unticked, because the count was written
@@ -73,6 +73,12 @@ sections below added two boxes each. Four of those six are now closed, one
 sub-box was split out of a fifth and left open, and the two that remain are
 named with exactly what is unverified. The count above is a count of unticked
 boxes in this file, which is what it should always have been.
+
+**It is now three**, and the count was re-grepped rather than decremented from
+memory: the null-headline box is closed (option (a) — the wire learned to state
+an absence), leaving the end-to-end run against a real promoted artifact, the
+frozen background sample (forecaster 30), and the un-alerted missed
+publication.
 
 - [x] The two forecast tables exist, append-only, with the project's four time columns
 - [x] Two repeatable jobs run at ten past each gate on the existing worker and the existing Redis
@@ -98,9 +104,13 @@ boxes in this file, which is what it should always have been.
       alone — it is drawn at publish time from the artifact's own base-fit
       rows and stamped `base_fit`, which is measured but not frozen.
       **forecaster 30**
-- [ ] A driver group whose headline feature is NULL for the day can be
+- [x] A driver group whose headline feature is NULL for the day can be
       published with the pair's absence stated, rather than refusing the whole
-      day. See “The gap the route found”
+      day — **option (a)**, and the refusal is gone. `observed` and `typical`
+      are each `number | null`, each with an `observed_absent_reason` /
+      `typical_absent_reason` beside it from the closed set `null_in_day` /
+      `null_in_background`; a value XOR a reason at the schema, the parse and
+      the table. See “The gap the route found — closed”
 
 ## What landed
 
@@ -353,7 +363,9 @@ fifteen. On the `apps/ml` side, the rule is shown firing from
 
 ## What is still open, and why
 
-**Two boxes, and neither is a judgement call.**
+**Two boxes, and neither is a judgement call.** (Written when the null-headline
+box was a third and *was* a judgement call. It has since been decided — option
+(a) — and the two below are unchanged.)
 
 **1. The end-to-end job against the *real* modelling service.** Real Postgres:
 done, and it is how everything above was verified - Postgres 17 in Docker,
@@ -479,17 +491,24 @@ nothing. `REFUSAL_CONDITIONS` is a closed tuple and a test asserts the set:
 | `no_matched_background` | as above | forecaster 30, or a longer run window |
 | `contract_and_groups_disagree` | as above | a line in `driver_groups.yaml` |
 | `incomplete_day` | as above | the feature function |
-| `null_headline_feature` | as above | see below |
+| ~~`null_headline_feature`~~ | ~~as above~~ | **no longer a refusal** — the row states the absence. See “The gap the route found — closed” |
 
 Every code is in `packages/core`'s closed enum, so `mapUpstreamFailure` admits
-it rather than flattening it to `UPSTREAM_REJECTED`.
+it rather than flattening it to `UPSTREAM_REJECTED`. No code was added or
+removed from that enum by any of this; `REFUSAL_CONDITIONS` lost a member and
+is four.
 
 **The roll call.** This route reaches `AttributionRow` through
 `RuleOutcome.for_row()` and an AST test asserts it never spells `rule_flags` or
 `rules_evaluated` itself — so the one publish path cannot hand over a roll call
 it made up, on top of the three layers that already refuse an empty one.
 
-## The gap the route found
+## The gap the route found — closed
+
+> **Closed, as option (a): the wire learned to state an absence.** The section
+> below is the diagnosis as it stood, kept verbatim because the measurement in
+> it is the evidence the decision was made on. What changed is at the end, under
+> “The contract, decided”.
 
 **A driver group whose headline feature is NULL has no publishable
 observed/typical pair, and the wire has no way to say so.**
@@ -536,6 +555,152 @@ chain now gets `DIAGNOSIS_UNAVAILABLE` with `details.condition:
 null_headline_feature` and the three feature names, which says what is missing
 and where to fix it, instead of `UPSTREAM_REJECTED` on a body with no code that
 reads like a wrong base URL.
+
+### The contract, decided
+
+**Option (a).** The refusal was not a corner case, it was the normal case, and
+the number is now exact rather than “near-certainty”. Counted over a year of
+`feature_row_fixtures.feature_rows` at its own default 5% weather-null rate:
+
+| Quantity | Measured |
+|---|---|
+| NULL rows (`weather_expected_wind_mwh`) | 1,770 of 35,040 — **5.05%** |
+| Subsystem-days with ≥1 NULL weather hour | 1,048 of 1,460 — **71.8%** |
+| Calendar days with one somewhere | 362 of 365 — **99.2%** |
+| P(one 128-row background cell gap-free) | `0.9495^128` ≈ **0.0013** |
+| P(all 24 day-grain cells gap-free) | ≈ **7e-70** |
+
+So the old contract refused ~99% of days on the `observed` side alone, and
+effectively every day once the background was drawn at the spec's 128 rows per
+cell. Weighed against that: the pair is a **subtitle** under a bar whose `φ`,
+sign, share and rank the boosters compute *with* the NULL in the matrix — which
+is why `attribute_day` was already succeeding before the refusal fired, one line
+later in `build_diagnosis_publication`. Refusing eight bars, two grains and four
+subsystems because one bar lost its caption was a large cost for a small gap,
+and the explain screen's reader loses the whole day's attribution rather than
+one line of it.
+
+**And forecaster 30 raises the cost of the alternative by an order of
+magnitude.** `fc-30-frozen-background` (`f97e678`, unmerged at the time of
+writing, and this branch is *not* rebased onto it) makes
+`HurdleBundle.background` a required field: `B(s, h)` is drawn once inside
+`train_fold` from the base-fit block and frozen into the joblib. The frozen
+sample is drawn from a **real** base-fit window, so a lane whose window held
+any weather gap freezes a NULL — and under the old contract that artifact
+refuses **every** publication for its whole life, not merely the days that had
+gaps. Freezing did not create the defect; it moved discovery from publish time
+to retrain time and widened the blast radius from one day to one artifact.
+
+That is not a projection. That agent's own `loaded` fixture had to *redraw* a
+null-free background rather than use `trained.bundle`'s, and said why: "the
+shared fixture fold is generated at the harness's own 5% weather-null rate, so
+its frozen background contains NULL headline features and every publication
+from it is a `null_headline_feature` refusal". A ticket having to synthesise a
+clean artifact in order to test the happy path is the clearest possible reading
+on option (b)'s cost. With the absence stated, that artifact publishes — its
+weather bars carrying `typical_absent_reason: null_in_background` — and the
+workaround stops being load-bearing.
+
+**The representation works on both background paths, and does not collapse
+their distinction.** `_reading` is handed a pooled column out of whichever
+`MatchedBackground` `_background()` returned, and it never reads
+`MatchedBackground.source`; `background_source` (`artifact` vs `base_fit`) is
+copied onto the row by `build_attribution_publication` and is untouched here.
+Asserted rather than reasoned:
+`test_an_absent_reading_does_not_depend_on_where_the_background_came_from`
+holes one cell of one headline column and runs `headline_readings` twice, once
+under each label, and requires the same `null_in_background` and the same
+untouched `source` both times — because a reading's absence must never be
+readable as a claim about provenance, or an operator chases the wrong repair.
+
+**What lands where when the two branches meet.** Both touch
+`diagnosis/publish.py` and `tests/test_diagnosis_publication_route.py`. The
+resolutions are decided, not discovered:
+
+- `DiagnosisPublicationRefusedError`'s docstring — fc-30 rewrites the
+  `no_matched_background` bullet, this branch deletes the
+  `null_headline_feature` bullet. Take both.
+- `build_diagnosis_publication` and `_background` — fc-30 rewrites
+  `_background` (frozen sample first, redraw kept and labelled); this branch
+  deletes the `null_headlines` call above it and `_null_headline_features`
+  below it. Disjoint edits on adjacent lines; take both.
+- `test_a_realistic_window_refuses_because_the_weather_block_has_gaps` — fc-30
+  re-points it at its `pre_thirty` fixture; this branch renames it to
+  `…_publishes_where_it_used_to_refuse` and inverts the assertion. **This
+  branch wins**, and the merged test should run over the *frozen* sample as
+  well, because that is now the path where the gap lives.
+- fc-30's `loaded` fixture can stop redrawing a null-free background, and
+  should, since the reason it redraws is closed here.
+
+**What the previous agent got right and this change keeps.** No `nanmean`, no
+zero. `_reading` refuses to average over the values that happened to be there,
+and says why in its docstring: `v(∅)` was averaged over **all** the background
+rows, NULLs included, so a mean over the non-NULL ones is a different “typical”
+under the same name.
+
+**What moved, and it moved together:**
+
+| Layer | Change |
+|---|---|
+| `apps/ml` `DriverReading` | `observed`/`typical` are `float | None` with `observed_absent_reason` / `typical_absent_reason`; a value XOR a reason, non-finite still refused |
+| `apps/ml` `headline_readings` | `_reading()` returns the mean or `(None, reason)`; day and peak, each side its own |
+| `apps/ml` `publish.py` | the `null_headline_feature` branch and `_null_headline_features` are gone; `REFUSAL_CONDITIONS` is four |
+| Payload | both reason keys always travel, `None` included |
+| `packages/core/schema/diagnosis.schema.json` | nullable pair, new `driver_reading_absence` enum, two required reason fields, and an `if`/`then`/`else` per half — the `coverage_absent_reason` pattern from `model-card.schema.json`, verbatim |
+| `types.generated.ts` | regenerated: `DriverReadingAbsence`, and `WIRE_SHAPES.Driver` gained the two keys |
+| Gateway `parseDriver` | `parseReading()` — refuses a `null` with no reason, a number beside one, an unknown reason, and an omitted field |
+| Digest | the absence and its reason are in `attributionDigest`, so `null` and `0` hash differently |
+| Table | `0043_a_reading_or_its_stated_absence.sql`: the two columns nullable, two `text` reason columns, two CHECKs, view recreated |
+| Narration | `driver_raises_no_reading` / `driver_lowers_no_reading` in both locales, and `driverClause` picks the key rather than putting a `null` in a placeholder |
+| Fixtures | the spec fences in `api-surface.md` and `diagnosis.md`, `05-…`, `07-…`, and the cross-language vector `apps/api/test/fixtures/diagnosis/attribution.json` |
+| Specs | `diagnosis.md` and `api-surface.md` both state the contract, the two reason codes, and the measurement above |
+
+**The display half needed nothing, which is the tell that (a) was the intended
+design.** `packages/core`'s `DriverReading` already had `{ kind: "none" }` with
+the comment “a group with no reading at serve time reads as `none`, and the pair
+line is omitted rather than printed empty”; `formatReading` already returns
+`null` for it and `driver-bars.tsx` already omits the line. The wire and the
+table were the only layers that could not say what the domain model already
+said.
+
+**Non-vacuity, each measured rather than argued:**
+
+- **`DriverReading`'s guard fails in four ways** and passes in two:
+  `test_a_reading_is_a_number_or_a_stated_absence_and_never_both` produces a
+  number beside a reason (`never both`), a `None` with none (`never neither`),
+  an invented reason (`not one of`) and a NaN, and asserts the ordinary reading
+  and the honest absence both construct.
+- **The assembly publishes where it refused.**
+  `test_a_null_headline_feature_publishes_the_bar_with_a_stated_absence` runs
+  the real map over a day with `weather_null_rate=1.0`: four subsystems, sixteen
+  bars each grain, shares summing to 1, and every absent half carrying a reason
+  — with the assertion that no bar reports a zero or a NaN where a reading is
+  absent.
+- **The realistic window.**
+  `test_a_realistic_window_publishes_where_it_used_to_refuse` is the renamed
+  refusal test: it still asserts `gaps > 0` *before* publishing, so it cannot
+  pass on a gap-free window, and it asserts the absences are
+  `null_in_background` while the day's own side is intact.
+- **The gateway parse** has seven tests, four of them refusals with the
+  positive case beside them, plus `digests an absent reading differently from a
+  zero` — and differently again for a different reason.
+- **Both table CHECKs fire, by name.** Against Postgres 17 on **5439** (my own
+  container; `fc18-pg` on 5434 was left alone):
+  `diagnosis_attribution_driver_observed_or_its_absence` and
+  `…_typical_or_its_absence`, each proved on both bad shapes, with the honest
+  absence and the ordinary reading both landing. The read path is asserted to
+  come back as `null` and not as `Number(null) === 0`.
+- **The narration-cache digest moved on purpose**, from `593294f6…` to
+  `406b3760…`, and the comment above it says why invalidating every cached
+  paragraph is what we meant: a paragraph written before the document could say
+  “this group has no reading” was written against a document that refused to
+  exist in that case.
+
+**What this does *not* claim.** `stale_inputs` still fires off the *day* side
+only (`RuleContext.null_headline_features` is unchanged), so a background-only
+absence is stated on the row and not in the narration's flag list. That is the
+existing, tested meaning of “no headline reading at serve time” and it was left
+alone deliberately.
 
 ## One stale comment found in passing
 
@@ -603,10 +768,31 @@ Non-vacuity, each measured rather than argued:
   at a sample the window can supply publishing successfully after it.
 - **All five refusal conditions** are produced by a test, and
   `REFUSAL_CONDITIONS` is asserted to be exactly that set — so a sixth branch
-  without a test fails.
+  without a test fails. **Since the null-headline box closed there are four**,
+  and the census test is the same shape: the removed condition had to leave the
+  tuple *and* the assertion together, which is why deleting the branch failed
+  three tests before any of them was touched.
 - **The roll call** is asserted off the AST: every `AttributionRow(...)` in the
   publish module passes `**outcome.for_row()` and names neither `rule_flags`
   nor `rules_evaluated` itself.
+
+### The null-headline pass, with its own numbers
+
+Postgres 17 in Docker on **5439** — my own container, `fc18-pg-api10`; the
+shared one on 5434 was not touched. All **43** migrations applied.
+
+| Suite | Before | After |
+|---|---|---|
+| `bun run check` (typecheck · biome · every JS suite) | clean, exit 0 — 145+471+1237+189 pass, 542 skip, 0 fail | **clean, exit 0** — 526 files, 145+471+**1244**+189 pass, 544 skip, 0 fail |
+| `bun run ml:test` | 1703 passed · 93 skipped | **1705 passed · 93 skipped** |
+| `bun run ml:lint` · `ml:typecheck` | — | clean — 176 files formatted, mypy clean on 175 source files |
+| `apps/api` whole suite with `WATTSTEER_TEST_DATABASE_URL` (5439) | — | **1658 pass · 48 skip · 0 fail**, no timeouts on a container this session owns |
+| `apps/api/test/database-diagnosis.test.ts` alone | 20 pass | **22 pass · 0 fail** — the two new ones are the absence round trip and the CHECKs |
+| `test/drizzle-snapshot.test.ts` | pass | **pass** — `0043` was a plain `bun run db:generate`, only the file name and the header prose were hand-written; the snapshot was not touched |
+
+The `+7` on `apps/api` in `bun run check` is the parser's absence tests; the
+`+2` on skip is the two new DB tests, which skip without the URL. `apps/ml`'s
+`+1` is three tests replaced by two plus one new guard test.
 
 ---
 

@@ -1392,8 +1392,11 @@ export const canonicalDiagnosisDriver = pgView("canonical_diagnosis_driver", {
   /** Day rows only — one hour has nothing to disagree with. */
   hourDisagreement: doublePrecision(),
   headlineFeature: text().notNull(),
-  observed: doublePrecision().notNull(),
-  typical: doublePrecision().notNull(),
+  /** The reading, or NULL with its reason beside it. Never NULL alone. */
+  observed: doublePrecision(),
+  typical: doublePrecision(),
+  observedAbsentReason: text(),
+  typicalAbsentReason: text(),
   unit: text().notNull(),
   demoted: boolean().notNull(),
 }).as(sql`
@@ -1414,6 +1417,8 @@ export const canonicalDiagnosisDriver = pgView("canonical_diagnosis_driver", {
     d.headline_feature,
     d.observed,
     d.typical,
+    d.observed_absent_reason,
+    d.typical_absent_reason,
     d.unit,
     d.demoted
   from diagnosis_attribution_driver d
