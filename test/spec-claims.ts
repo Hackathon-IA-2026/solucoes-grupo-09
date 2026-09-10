@@ -420,8 +420,22 @@ const CORRECTION_MARKERS = [
   "withdrawn",
 ];
 
-/** One sentence of a spec, blockquote markers stripped and lines joined. */
-interface Sentence {
+/**
+ * Where one sentence ends.
+ *
+ * Sentence-terminating punctuation, **plus any closing Markdown emphasis or
+ * quotation that trails it**. The trailing group is not decoration: this
+ * repository's documents lead a paragraph with a bolded sentence — `**Two
+ * boxes, and neither is a judgement call.** (This heading has outlived …` — and
+ * without it the full stop is hidden behind `**`, the two sentences never
+ * separate, and a retrospective marker in the *second* one silently excuses a
+ * live claim in the first. That is api-surface 27's paragraph-scope bug in
+ * miniature, and api-surface 29 hit it on `api-surface/issues/10`.
+ */
+const SENTENCE_END = /(?<=[.;:!?][*_)\u201d"']{0,3})\s+/;
+
+/** One sentence of a document, blockquote markers stripped and lines joined. */
+export interface Sentence {
   /** 1-based line of the paragraph it came from, for grepping. */
   line: number;
   prose: string;
@@ -436,7 +450,8 @@ interface Sentence {
  * wrap across two source lines, and the ones with the most history behind them
  * live inside `> ` notes.
  */
-function sentencesOf(text: string): Sentence[] {
+export function sentencesOf(text: string, extraMarkers: string[] = []): Sentence[] {
+  const markers = [...CORRECTION_MARKERS, ...extraMarkers];
   const found: Sentence[] = [];
   let line = 1;
   for (const block of text.split(/\n[ \t]*\n/)) {
@@ -445,12 +460,12 @@ function sentencesOf(text: string): Sentence[] {
       .map((one) => one.replace(/^\s*>\s?/, ""))
       .join(" ")
       .replace(/\s+/g, " ");
-    for (const sentence of flat.split(/(?<=[.;:!?])\s+/)) {
+    for (const sentence of flat.split(SENTENCE_END)) {
       const lower = sentence.toLowerCase();
       found.push({
         line,
         prose: sentence,
-        quotation: CORRECTION_MARKERS.some((marker) => lower.includes(marker)),
+        quotation: markers.some((marker) => lower.includes(marker)),
       });
     }
     line += block.split("\n").length + 1;

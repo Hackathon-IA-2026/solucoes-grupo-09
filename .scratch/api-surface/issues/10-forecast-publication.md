@@ -85,18 +85,22 @@ one, which is what the count is, and the one that remains needs a promoted
 artifact rather than a decision.
 
 The previous revision of this line also said “two boxes open”, and it was
-wrong twice over: a grep found **six** unticked, because the count was written
-against the acceptance list at the top and nobody updated it when the two
-sections below added two boxes each. Four of those six are now closed, one
+wrong twice over: a grep at the time found **six** unticked, because the count
+was written against the acceptance list at the top and nobody updated it when
+the two sections below added two boxes each. Four of those six are now closed, one
 sub-box was split out of a fifth and left open, and the two that remain are
 named with exactly what is unverified. The count above is a count of unticked
 boxes in this file, which is what it should always have been.
 
-**It is now three**, and the count was re-grepped rather than decremented from
-memory: the null-headline box is closed (option (a) — the wire learned to state
-an absence), leaving the end-to-end run against a real promoted artifact, the
-frozen background sample (forecaster 30), and the un-alerted missed
-publication.
+The previous revision of this paragraph read “**It is now three**, and the count
+was re-grepped rather than decremented from memory” — true on the branch that
+wrote it and stale by the time it merged, which is the defect api-surface 29
+exists to end. What it recorded is kept, because the reasons are the record: the
+null-headline box was closed there (option (a) — the wire learned to state an
+absence), leaving the end-to-end run against a real promoted artifact, the frozen
+background sample (forecaster 30), and the un-alerted missed publication. The
+last two of those three have since landed as well, which is how three became
+one.
 
 - [x] The two forecast tables exist, append-only, with the project's four time columns
 - [x] Two repeatable jobs run at ten past each gate on the existing worker and the existing Redis
@@ -387,12 +391,15 @@ fifteen. On the `apps/ml` side, the rule is shown firing from
 
 ## What is still open, and why
 
-**Two boxes, and neither is a judgement call.** (This heading has outlived two
-revisions of its own count. It was written when there were two; the
-missed-publication alarm became a third and is now closed; the null-headline box
-was a fourth, *was* a judgement call, and has since been decided — option (a).
-The two below are the original two, unchanged, and both wait on work in another
-lane rather than on a decision.)
+**One box, and it is not a judgement call.** (This heading had outlived three
+revisions of its own count before api-surface 29 corrected it. It was written
+when there were two; the missed-publication alarm became a third and is now
+closed; the null-headline box was a fourth, *was* a judgement call, and has since
+been decided — option (a); and the frozen background sample landed with
+forecaster 30. The one below is the first of the original two, unchanged, and it
+waits on work in another lane rather than on a decision. This number is now
+derived from this file's own `- [ ]` lines by `test/ticket-claims.ts`, so the next
+revision that forgets it fails a test instead of outliving its count.)
 
 **1. The end-to-end job against the *real* modelling service.** Real Postgres:
 done, and it is how everything above was verified - Postgres 17 in Docker,
