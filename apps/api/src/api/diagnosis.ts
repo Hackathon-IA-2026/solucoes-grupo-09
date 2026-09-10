@@ -154,6 +154,11 @@ export function toDriver(driver: AttributionDriverRow): Driver {
     // reader's.
     observed: driver.observed,
     typical: driver.typical,
+    // The absence travels as its own field, so the client can tell "no reading"
+    // from "read zero" without a heuristic. A `??  0` here would be exactly the
+    // invented number the stored column pair exists to keep out.
+    observedAbsentReason: driver.observedAbsentReason as Driver["observedAbsentReason"],
+    typicalAbsentReason: driver.typicalAbsentReason as Driver["typicalAbsentReason"],
     unit: driver.unit as Driver["unit"],
     hourDisagreement: driver.hourDisagreement ?? 0,
     demoted: driver.demoted,

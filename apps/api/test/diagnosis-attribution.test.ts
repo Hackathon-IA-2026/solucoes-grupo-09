@@ -279,6 +279,115 @@ describe("the published attribution · what the writer refuses", () => {
  * accepted first, so each refusal is a refusal of the skipped path rather than
  * of every empty flag list.
  */
+/**
+ * A headline reading is a number **or** a stated absence.
+ *
+ * api-surface 10's last open box. The pair beside a bar used to be two required
+ * numbers, so a driver group whose headline feature was NULL for the day had no
+ * publishable pair and the wire had no way to say so — the whole day's
+ * diagnosis was refused, and at real weather-null rates that fired on 99% of
+ * days. The absence is now a value, and these are the three properties that
+ * make it safe to store: it parses, both of the shapes that would make it
+ * unreadable are refused, and it hashes differently from a zero.
+ */
+describe("the published attribution · a reading or its stated absence", () => {
+  const absent = (half: "observed" | "typical", reason: string | undefined) =>
+    attributionPayload({
+      mutate: (payload) => {
+        const bar = rowsOf(attributionOf(payload).groups)[0] as Record<string, unknown>;
+        bar[half] = null;
+        bar[`${half}_absent_reason`] = reason;
+      },
+    });
+
+  it("accepts a bar whose reading is absent for a stated reason", () => {
+    const parsed = parseAttributionPublication(absent("observed", "null_in_day"));
+    const day =
+      parsed.attributions[0]?.drivers.filter((one) => one.grain === "day") ?? [];
+    const [first, ...rest] = day;
+    expect(first?.observed).toBeNull();
+    expect(first?.observedAbsentReason).toBe("null_in_day");
+    // The absence is per half and per bar: the other half of this pair and
+    // every other bar still carry their numbers, and the ranking is whole.
+    expect(first?.typical).toBe(0.96);
+    expect(first?.typicalAbsentReason).toBeNull();
+    expect(day).toHaveLength(DRIVER_GROUP_CODES.length);
+    for (const one of rest) {
+      expect(one.observed).not.toBeNull();
+      expect(one.observedAbsentReason).toBeNull();
+    }
+  });
+
+  it("accepts an absent `typical`, which fails for its own reason", () => {
+    const parsed = parseAttributionPublication(absent("typical", "null_in_background"));
+    const [first] = parsed.attributions[0]?.drivers ?? [];
+    expect(first?.typical).toBeNull();
+    expect(first?.typicalAbsentReason).toBe("null_in_background");
+    expect(first?.observed).not.toBeNull();
+  });
+
+  it("refuses an absent reading with no reason: a dropped field by another name", () => {
+    expect(() => parseAttributionPublication(absent("observed", undefined))).toThrow(
+      /an absence with no reason/,
+    );
+    expect(() => parseAttributionPublication(absent("typical", undefined))).toThrow(
+      /an absence with no reason/,
+    );
+  });
+
+  it("refuses a reason that is not one of the two", () => {
+    expect(() => parseAttributionPublication(absent("observed", "dunno"))).toThrow(
+      /null_in_day or null_in_background/,
+    );
+  });
+
+  it("refuses a number beside a reason, so no reader has to pick a half", () => {
+    const both = attributionPayload({
+      mutate: (payload) => {
+        const bar = rowsOf(attributionOf(payload).groups)[0] as Record<string, unknown>;
+        bar.observed_absent_reason = "null_in_day";
+      },
+    });
+    expect(() => parseAttributionPublication(both)).toThrow(/never both/);
+  });
+
+  it("still refuses an omitted reading, which is neither", () => {
+    const gone = attributionPayload({
+      mutate: (payload) => {
+        const bar = rowsOf(attributionOf(payload).groups)[0] as Record<string, unknown>;
+        bar.observed = undefined;
+      },
+    });
+    expect(() => parseAttributionPublication(gone)).toThrow(/carries no observed/);
+  });
+
+  it("digests an absent reading differently from a zero", () => {
+    // The one substitution the column pair exists to prevent, asserted where it
+    // would do the damage: if the two hashed alike, a day re-published once its
+    // weather run landed would match the vintage that had no reading and write
+    // nothing.
+    const digest = (payload: Record<string, unknown>) => {
+      const parsed = parseAttributionPublication(payload);
+      return attributionDigest(parsed, parsed.attributions[0] as never);
+    };
+    const zeroed = attributionPayload({
+      mutate: (payload) => {
+        const bar = rowsOf(attributionOf(payload).groups)[0] as Record<string, unknown>;
+        bar.observed = 0;
+      },
+    });
+    expect(digest(absent("observed", "null_in_day"))).not.toBe(digest(zeroed));
+    expect(digest(absent("observed", "null_in_day"))).not.toBe(
+      digest(attributionPayload()),
+    );
+    // And the reason itself is in the digest: the same missing number for a
+    // different reason is a different row.
+    expect(digest(absent("observed", "null_in_day"))).not.toBe(
+      digest(absent("observed", "null_in_background")),
+    );
+  });
+});
+
 describe("the published attribution · the rules ran", () => {
   it("accepts a quiet day, which is the case that must keep working", () => {
     // The whole reason the hole existed: nothing firing is normal. If this

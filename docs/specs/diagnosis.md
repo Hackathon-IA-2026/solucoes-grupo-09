@@ -392,6 +392,47 @@ weighting decision hidden in it. The mean rather than the median: `v(∅)` is a
 mean, and a `typical` that was a median would be a different reference from the
 baseline the bar is measured against.
 
+**Either half may be absent, and an absence is stated rather than filled in.**
+`observed` and `typical` are each `number | null`, and each `null` carries a
+reason beside it — `observed_absent_reason` / `typical_absent_reason`, from the
+closed set:
+
+| Reason | On which half | What it means, and what fixes it |
+|---|---|---|
+| `null_in_day` | `observed` | the headline feature is NULL for at least one hour of the target day. The run carrying it did not land; re-publishing the day once it has produces the number |
+| `null_in_background` | `typical` | the feature is NULL somewhere in the matched background cells. The artifact's base-fit window has gaps in that column, and only a redraw over a clean window can say what the column usually reads |
+
+**A reading is a number or a stated absence, never both and never neither**, and
+that is enforced three times: in the schema (`if`/`then`/`else` on each half),
+at the gateway's parse, and by a table CHECK. The two shapes it forbids are
+exactly the ones that would make an absence unreadable — a `null` with no
+reason is a dropped field by another name, and a number beside a reason leaves
+the reader to pick a half to believe.
+
+The reason this is nullable rather than required is measured, not aesthetic.
+Three of the eight headline features are in the weather block; that block
+arrives from one model run and goes NULL together. Over a year of feature rows
+at the 5% row-level NULL rate the no-imputation rule exists for, **71.8% of
+subsystem-days and 99.2% of calendar days** hold at least one NULL weather
+hour, and a 128-row background cell is gap-free with probability
+`0.95^128 ≈ 0.0013`. Two required numbers therefore meant refusing the day's
+whole diagnosis almost always. The pair is a *subtitle*: `Φ_j`, its sign, its
+share and its rank come from boosters that take a NULL natively, and none of
+them moves because a column has no mean.
+
+The alternatives are worse and invisible once stored. A zero is an invented
+reading the screen would format and the reader would compare against `typical`.
+A mean over the hours that happened to carry a value is a **different**
+"typical" than the one `v(∅)` was averaged over — which the paragraph above
+makes the whole point of the pair — published under the same name. So neither
+is written.
+
+What the reader sees: the bar keeps its contribution and its share, the pair
+line is omitted rather than printed empty (the client's reading type has a
+first-class `none`), the narration says the sentence without the comparison
+(`driver_raises_no_reading` / `driver_lowers_no_reading`), and `stale_inputs`
+still names the affected groups in `rule_flags`.
+
 **Display, and the only place a sign can still be lost.** The API returns all
 eight groups, ranked by `|share|`. The screen renders groups with
 `share ≥ 0.03`, capped at six rows, merging the remainder into one `other` row
@@ -692,6 +733,8 @@ this task fails in the one direction that matters: it invents a number.
         "headline_feature": "proxy_renewable_load_ratio",
         "observed": 1.42,
         "typical": 0.96,
+        "observed_absent_reason": null,        // a reading XOR a reason, always both keys
+        "typical_absent_reason": null,
         "unit": "ratio",
         "hour_disagreement": 1.1,
         "demoted": false

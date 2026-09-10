@@ -57,6 +57,8 @@ export function driverRows(): AttributionDriverRow[] {
     headlineFeature: feature,
     observed: 1.42,
     typical: 0.96,
+    observedAbsentReason: null,
+    typicalAbsentReason: null,
     unit: "ratio",
     demoted: false,
   }));

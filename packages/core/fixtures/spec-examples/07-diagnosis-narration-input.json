@@ -42,6 +42,8 @@
         "headline_feature": "proxy_renewable_load_ratio",
         "observed": 1.42,
         "typical": 0.96,
+        "observed_absent_reason": null,
+        "typical_absent_reason": null,
         "unit": "ratio",
         "hour_disagreement": 1.1,
         "demoted": false
@@ -55,6 +57,8 @@
         "headline_feature": "weather_wind_speed_120m_mean",
         "observed": 1,
         "typical": 0.9,
+        "observed_absent_reason": null,
+        "typical_absent_reason": null,
         "unit": "m_s",
         "hour_disagreement": 0.4,
         "demoted": false
@@ -68,6 +72,8 @@
         "headline_feature": "proxy_load_mwh",
         "observed": 1.1,
         "typical": 1,
+        "observed_absent_reason": null,
+        "typical_absent_reason": null,
         "unit": "mwh",
         "hour_disagreement": 0.5,
         "demoted": false
@@ -81,6 +87,8 @@
         "headline_feature": "dessem_export_headroom_mwh",
         "observed": 1.2,
         "typical": 1.1,
+        "observed_absent_reason": null,
+        "typical_absent_reason": null,
         "unit": "mwh",
         "hour_disagreement": 0.6000000000000001,
         "demoted": false
@@ -94,6 +102,8 @@
         "headline_feature": "proxy_residual_load_ramp_1h",
         "observed": 1.3,
         "typical": 1.2,
+        "observed_absent_reason": null,
+        "typical_absent_reason": null,
         "unit": "mwh",
         "hour_disagreement": 0.7,
         "demoted": false
@@ -107,6 +117,8 @@
         "headline_feature": "calendar_day_of_week",
         "observed": 1.4,
         "typical": 1.3,
+        "observed_absent_reason": null,
+        "typical_absent_reason": null,
         "unit": "count",
         "hour_disagreement": 0.8,
         "demoted": false
@@ -120,6 +132,8 @@
         "headline_feature": "lagged_constrained_off_24h_mwh",
         "observed": 1.5,
         "typical": 1.4,
+        "observed_absent_reason": null,
+        "typical_absent_reason": null,
         "unit": "mwh",
         "hour_disagreement": 0.9,
         "demoted": false
@@ -133,6 +147,8 @@
         "headline_feature": "weather_run_age_hours",
         "observed": 1.6,
         "typical": 1.5,
+        "observed_absent_reason": null,
+        "typical_absent_reason": null,
         "unit": "hours",
         "hour_disagreement": 1,
         "demoted": false

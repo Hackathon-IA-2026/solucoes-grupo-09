@@ -302,6 +302,13 @@
       "when": 1789004838403,
       "tag": "0042_the_roll_call_of_the_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1789012005215,
+      "tag": "0043_a_reading_or_its_stated_absence",
+      "breakpoints": true
     }
   ]
 }

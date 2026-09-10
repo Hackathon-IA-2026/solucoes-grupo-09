@@ -65,6 +65,20 @@ name. They are stored rather than derived at read time because deriving
 ``typical`` means holding the matched background, which means loading the
 artifact: the one thing a stored attribution exists to make unnecessary. Their
 day-grain definition is :func:`headline_readings`'.
+
+**Either half of the pair may be absent, and an absence is stated.** Three of
+the eight real headline features are in the weather block, that block arrives
+from one run and goes NULL together, and the pair is a *subtitle* under a bar
+whose ``φ``, sign and share are computed by the boosters and unaffected by it.
+So an absent half travels as ``None`` beside a reason from
+:data:`READING_ABSENCE_REASONS` — ``null_in_day`` or ``null_in_background`` —
+and the day publishes with the ranking intact. The number and the reason are
+mutually exclusive and mutually required at every layer, which is what stops
+an absence being read as a zero or as a dropped field. The previous contract
+refused the whole day instead, and at real NULL rates that refusal fired on
+most windows; see
+``.scratch/api-surface/issues/10-forecast-publication.md``, "The gap the route
+found".
 """
 
 from __future__ import annotations
@@ -108,6 +122,29 @@ RuleAction = Literal["annotate", "demote", "withhold"]
 
 RULE_ACTION_ORDER: tuple[RuleAction, ...] = ("annotate", "demote", "withhold")
 
+#: Why one half of a headline reading has no value, as a closed vocabulary.
+#:
+#: The two halves fail for different reasons and have different repairs, so
+#: they are two codes rather than one "unavailable":
+#:
+#: - ``null_in_day`` — the headline feature is NULL for an hour of the target
+#:   day, so there is no ``observed``. The repair is upstream: the run that
+#:   carries the feature did not land, and re-publishing the day after it does
+#:   produces the value.
+#: - ``null_in_background`` — the headline feature is NULL somewhere in the
+#:   matched background cells, so there is no ``typical``. The repair is the
+#:   artifact's: a base-fit window with gaps in a column cannot say what that
+#:   column usually reads, and only a redraw over a clean window can.
+#:
+#: Closed, and asserted closed, because the reason travels to the screen and a
+#: code the dictionaries do not name would render as nothing at all.
+ReadingAbsence = Literal["null_in_day", "null_in_background"]
+
+READING_ABSENCE_REASONS: tuple[ReadingAbsence, ...] = (
+    "null_in_day",
+    "null_in_background",
+)
+
 
 class AttributionPublicationError(ValueError):
     """These attributions cannot produce a publication."""
@@ -144,16 +181,54 @@ class DriverReading:
     A group has no single value, so the pair is the *headline feature*'s, and
     the feature is named on the row — that is what stops a value pair being read
     as the whole group's reading.
+
+    Either half may be **absent**, and an absence is a value of its own rather
+    than a gap: the number is ``None`` and a reason from
+    :data:`READING_ABSENCE_REASONS` stands in its place. The two travel
+    together and neither may travel alone, which is what stops an absent
+    reading being read as a zero (a number with no reason) or as a dropped
+    field (a reason with no number).
+
+    Why an absence exists at all: three of the eight real headline features are
+    in the weather block, that block arrives from one run and goes NULL
+    together, and this pair is a *subtitle* under a bar whose ``φ``, sign and
+    share are unaffected by it. Refusing the whole day's explanation because one
+    of eight bars lost its subtitle was the old contract, and it fired on most
+    real windows — see ``.scratch/api-surface/issues/10-forecast-publication.md``.
+
+    A non-finite number is still an assembly bug and still refused. A NaN is
+    exactly what a nullable column reads as once it is in a matrix, so the two
+    have to be told apart deliberately: :func:`headline_readings` tests for the
+    NULL and produces an absence; anything else non-finite arriving here is a
+    computation that went wrong and raises.
     """
 
     feature: str
     unit: str
-    observed: float
-    typical: float
+    observed: float | None
+    typical: float | None
+    #: Why there is no ``observed``. Set exactly when ``observed`` is ``None``.
+    observed_absent_reason: ReadingAbsence | None = None
+    #: Why there is no ``typical``. Set exactly when ``typical`` is ``None``.
+    typical_absent_reason: ReadingAbsence | None = None
 
     def __post_init__(self) -> None:
-        for name, value in (("observed", self.observed), ("typical", self.typical)):
-            if not math.isfinite(value):
+        for name, value, reason in (
+            ("observed", self.observed, self.observed_absent_reason),
+            ("typical", self.typical, self.typical_absent_reason),
+        ):
+            if (value is None) == (reason is None):
+                raise AttributionPublicationError(
+                    f"{self.feature!r} reports {name} {value!r} beside the "
+                    f"absence reason {reason!r}; a reading is a number or a "
+                    "stated absence and is never both and never neither"
+                )
+            if reason is not None and reason not in READING_ABSENCE_REASONS:
+                raise AttributionPublicationError(
+                    f"{self.feature!r} reports {name} absent for {reason!r}, "
+                    f"which is not one of {', '.join(READING_ABSENCE_REASONS)}"
+                )
+            if value is not None and not math.isfinite(value):
                 raise AttributionPublicationError(
                     f"{self.feature!r} reports {name} {value!r}"
                 )
@@ -219,28 +294,64 @@ def headline_readings(
                 "not in the background's feature contract; the pair beside the "
                 "bar would be some other feature's"
             )
-        day_typical = float(
-            np.mean(
-                [
-                    float(np.mean(background.cell_for(key).matrix[:, column]))
-                    for key in keys
-                ]
-            )
+        peak_key = keys[peak_position]
+        day_background = np.concatenate(
+            [background.cell_for(key).matrix[:, column] for key in keys]
+        )
+        day_observed, day_observed_absent = _reading(
+            target_rows[:, column], absence="null_in_day"
+        )
+        day_typical, day_typical_absent = _reading(
+            day_background, absence="null_in_background"
         )
         readings[("day", code)] = DriverReading(
             feature=group.headline_feature,
             unit=group.unit,
-            observed=float(np.mean(target_rows[:, column])),
+            observed=day_observed,
             typical=day_typical,
+            observed_absent_reason=day_observed_absent,
+            typical_absent_reason=day_typical_absent,
         )
-        peak_key = keys[peak_position]
+        peak_observed, peak_observed_absent = _reading(
+            target_rows[peak_position : peak_position + 1, column],
+            absence="null_in_day",
+        )
+        peak_typical, peak_typical_absent = _reading(
+            background.cell_for(peak_key).matrix[:, column],
+            absence="null_in_background",
+        )
         readings[("peak_hour", code)] = DriverReading(
             feature=group.headline_feature,
             unit=group.unit,
-            observed=float(target_rows[peak_position, column]),
-            typical=float(np.mean(background.cell_for(peak_key).matrix[:, column])),
+            observed=peak_observed,
+            typical=peak_typical,
+            observed_absent_reason=peak_observed_absent,
+            typical_absent_reason=peak_typical_absent,
         )
     return readings
+
+
+def _reading(
+    values: npt.NDArray[np.float64], *, absence: ReadingAbsence
+) -> tuple[float | None, ReadingAbsence | None]:
+    """The mean over ``values``, or the stated absence of one.
+
+    **Never a mean over the values that happened to be there.** A NULL anywhere
+    in the block makes the whole reading absent, because a mean over 19 of 24
+    hours — or over the background rows that were not NULL — is a different
+    quantity published under the same name, and the difference is invisible
+    once stored. On the ``typical`` side that is not a stylistic preference:
+    the baseline ``v(∅)`` these bars decompose was averaged over **all** the
+    background rows, NULLs and all, so ``nanmean`` would put a figure the
+    baseline never saw under the label "typical".
+
+    ``np.mean`` over a block holding a NaN is a NaN, so the test is on the mean
+    rather than on the block and the two cannot disagree. A non-finite mean
+    that is *not* a NaN is not an absence and is left to
+    :class:`DriverReading` to refuse as the assembly bug it is.
+    """
+    mean = float(np.mean(values))
+    return (None, absence) if math.isnan(mean) else (mean, None)
 
 
 @dataclass(frozen=True)
@@ -385,6 +496,11 @@ class AttributionRow:
                     "headline_feature": reading.feature,
                     "observed": reading.observed,
                     "typical": reading.typical,
+                    # Both reasons always travel, `None` included. An omitted
+                    # key and a stated "there is a number" are the same bytes
+                    # to a reader who is looking for the absence.
+                    "observed_absent_reason": reading.observed_absent_reason,
+                    "typical_absent_reason": reading.typical_absent_reason,
                     "unit": reading.unit,
                     "demoted": contribution.code in self.demoted,
                 }
@@ -404,6 +520,11 @@ class AttributionRow:
                     "headline_feature": reading.feature,
                     "observed": reading.observed,
                     "typical": reading.typical,
+                    # Both reasons always travel, `None` included. An omitted
+                    # key and a stated "there is a number" are the same bytes
+                    # to a reader who is looking for the absence.
+                    "observed_absent_reason": reading.observed_absent_reason,
+                    "typical_absent_reason": reading.typical_absent_reason,
                     "unit": reading.unit,
                     "demoted": contribution.code in self.demoted,
                 }

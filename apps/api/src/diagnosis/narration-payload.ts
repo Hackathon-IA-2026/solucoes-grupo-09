@@ -324,6 +324,8 @@ function toDriver(driver: AttributionDriverRow): Driver {
     // would also put en-US grouping into a Portuguese paragraph.
     observed: driver.observed,
     typical: driver.typical,
+    observedAbsentReason: driver.observedAbsentReason as Driver["observedAbsentReason"],
+    typicalAbsentReason: driver.typicalAbsentReason as Driver["typicalAbsentReason"],
     unit: driver.unit as Driver["unit"],
     hourDisagreement: driver.hourDisagreement,
     demoted: driver.demoted,

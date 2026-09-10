@@ -38,6 +38,7 @@ from attribution_fixtures import (
 from wattsteer_ml.constants import Subsystem
 from wattsteer_ml.diagnosis import publication
 from wattsteer_ml.diagnosis.background import (
+    ARTIFACT_SOURCE,
     BASE_FIT_SOURCE,
     BackgroundCell,
     CellKey,
@@ -356,6 +357,76 @@ def test_the_pair_beside_a_bar_is_its_headline_feature_read_two_ways() -> None:
         assert reading.typical == pytest.approx(0.0)
         peak = readings[("peak_hour", code)]
         assert peak.observed == pytest.approx(float(targets[day.peak_hour_local, index]))
+
+
+def test_an_absent_reading_does_not_depend_on_where_the_background_came_from() -> None:
+    """The absence is a property of the *rows*, not of the sample's provenance.
+
+    This matters because ``B(s, h)`` has two homes. Today it is drawn at publish
+    time from the artifact's base-fit block and stamped ``base_fit``; forecaster
+    30 freezes it into the bundle and stamps ``artifact``, and
+    ``background_source`` is the field that keeps the two distinguishable on
+    every published row. A frozen sample makes the NULL *worse*, not better: a
+    lane whose base-fit window held one weather gap freezes it, so under the old
+    contract every publication from that artifact refused for its whole life
+    rather than only the days with gaps.
+
+    So the representation has to work on both paths, and here it is asserted to:
+    the same NaN produces the same ``null_in_background`` under either label, and
+    the label itself is untouched — a reading's absence must never be readable
+    as a statement about provenance, or an operator would chase the wrong repair.
+    """
+    day = _day()
+    for source in (BASE_FIT_SOURCE, ARTIFACT_SOURCE):
+        background = _background()
+        # One NULL, in one cell, in `net_surplus`'s headline column — exactly
+        # what a weather block that did not land looks like once it is a matrix.
+        cell = background.cell(SUBSYSTEM, 0)
+        holed = cell.matrix.copy()
+        holed[0, 2] = np.nan
+        cells = dict(background.cells)
+        cells[CellKey(subsystem=SUBSYSTEM, local_hour=0)] = BackgroundCell(
+            subsystem=SUBSYSTEM, local_hour=0, keys=cell.keys, matrix=holed
+        )
+        gapped = MatchedBackground(
+            feature_names=background.feature_names,
+            rows_per_cell=background.rows_per_cell,
+            seed=background.seed,
+            source=source,
+            cells=cells,
+        )
+        readings = headline_readings(
+            day,
+            keys=_keys(),
+            target_rows=_targets(),
+            background=gapped,
+            group_map=FIXTURE_MAP,
+        )
+        # `f2` is the third group's headline feature, and the day-grain typical
+        # pools all 24 cells — so the one hole reaches it.
+        holed_reading = readings[("day", DRIVER_GROUP_CODES[2])]
+        assert holed_reading.typical is None
+        assert holed_reading.typical_absent_reason == "null_in_background"
+        # The day's own side is intact: the absence is per half, and this NULL is
+        # in the background and not in the day.
+        assert holed_reading.observed is not None
+        assert holed_reading.observed_absent_reason is None
+        # And the peak hour is hour-specific: the hole is in local hour 0, so a
+        # peak elsewhere still has a typical. Which hour is the peak is the
+        # attribution's business, so both branches are stated rather than assumed.
+        peak = readings[("peak_hour", DRIVER_GROUP_CODES[2])]
+        if day.peak_hour_local == 0:
+            assert peak.typical is None
+        else:
+            assert peak.typical is not None
+        # Every other group is untouched by a hole in one column.
+        for index, code in enumerate(DRIVER_GROUP_CODES):
+            if index == 2:
+                continue
+            assert readings[("day", code)].typical is not None
+            assert readings[("day", code)].typical_absent_reason is None
+        # The label is a fact about the sample and this function never touches it.
+        assert gapped.source == source
 
 
 def test_a_headline_feature_outside_the_contract_stops_the_publication() -> None:

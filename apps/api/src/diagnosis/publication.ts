@@ -45,11 +45,23 @@ import { digestValues } from "../ingest/versioned-write.js";
  *    cut is applied to the share itself — and a wrong denominator is
  *    invisible in storage.
  *
+ * 6. **A headline reading may be absent, and an absence is stated.** The
+ *    observed/typical pair is a *subtitle* under a bar whose `φ`, sign, share
+ *    and rank the boosters computed without it, and three of the eight real
+ *    headline features are in the weather block, which arrives from one run and
+ *    goes NULL together. So a `null` reading travels with a reason from
+ *    {@link READING_ABSENCE_REASONS}, `parseReading` refuses a number beside a
+ *    reason and a `null` without one, and the table refuses the same two
+ *    shapes. The day publishes with the ranking intact instead of being refused
+ *    whole, which is what the old contract did — on 99% of days, measured.
+ *
  * What this module deliberately does **not** do is compute an attribution.
  * There is no Shapley arithmetic here, no re-ranking, no default for a missing
  * figure. A payload short of a field is refused, because the alternative — a
  * zero — is an invented number in the table whose whole purpose is that nothing
- * in it was invented.
+ * in it was invented. A **stated** absence is the opposite of that default: it
+ * is a value that says there is no number, which is exactly what a zero cannot
+ * say.
  */
 
 /** What the eight bars decompose. The one value this table may hold. */
@@ -94,6 +106,32 @@ export const EVALUABLE_RULE_CODES = [
 
 const RULE_CODES: ReadonlySet<string> = new Set(EVALUABLE_RULE_CODES);
 
+/**
+ * Why one half of a headline reading has no value. A closed set.
+ *
+ * `wattsteer_ml.diagnosis.publication.READING_ABSENCE_REASONS`, verbatim, and
+ * the same two members as the schema's `driver_reading_absence` enum. Two codes
+ * rather than one "unavailable", because the halves fail for different reasons
+ * and an operator has different work to do about each:
+ *
+ * - `null_in_day` — the headline feature is NULL for an hour of the target day,
+ *   so there is no `observed`. The run that carries the feature did not land,
+ *   and re-publishing the day once it has produces the number.
+ * - `null_in_background` — the feature is NULL somewhere in the matched
+ *   background, so there is no `typical`. A base-fit window with gaps in a
+ *   column cannot say what that column usually reads.
+ *
+ * Closed *here* and not only upstream: the reason is stored and then rendered,
+ * and a code the dictionaries do not name renders as nothing at all — which is
+ * indistinguishable from the missing field this whole change exists to remove.
+ */
+export const READING_ABSENCE_REASONS = ["null_in_day", "null_in_background"] as const;
+
+/** One of {@link READING_ABSENCE_REASONS}. */
+export type ReadingAbsence = (typeof READING_ABSENCE_REASONS)[number];
+
+const ABSENCE_REASONS: ReadonlySet<string> = new Set(READING_ABSENCE_REASONS);
+
 /** The two rankings one publication carries. */
 export type AttributionGrain = "day" | "peak_hour";
 
@@ -135,8 +173,24 @@ export interface PublishedDriver {
   /** Day rows only. One hour has nothing to disagree with. */
   hourDisagreement: number | null;
   headlineFeature: string;
-  observed: number;
-  typical: number;
+  /**
+   * The headline feature's reading, or `null` when there is none.
+   *
+   * `null` is never a zero and never an omission: it travels with
+   * {@link PublishedDriver.observedAbsentReason}, and the parse refuses a
+   * number beside a reason or a `null` without one. Three of the eight real
+   * headline features are in the weather block, which arrives from one run and
+   * goes NULL together, so an absent reading is the ordinary case rather than
+   * the exceptional one — and the bar's `φ`, sign, share and rank are the
+   * boosters' and are unaffected by it.
+   */
+  observed: number | null;
+  /** The same feature over the matched background, or `null` with a reason. */
+  typical: number | null;
+  /** Set exactly when `observed` is `null`. */
+  observedAbsentReason: ReadingAbsence | null;
+  /** Set exactly when `typical` is `null`. */
+  typicalAbsentReason: ReadingAbsence | null;
   unit: string;
   /** Whether a `demote` rule pushed the bar below the fold. Never a deletion. */
   demoted: boolean;
@@ -466,6 +520,8 @@ function parseDriver(
         "from different hours",
     );
   }
+  const observed = parseReading(raw, "observed", where);
+  const typical = parseReading(raw, "typical", where);
   return {
     grain,
     driverGroup: str(raw, "code", where),
@@ -476,11 +532,62 @@ function parseDriver(
     direction,
     hourDisagreement: disagreement,
     headlineFeature: str(raw, "headline_feature", where),
-    observed: num(raw, "observed", where),
-    typical: num(raw, "typical", where),
+    observed: observed.value,
+    typical: typical.value,
+    observedAbsentReason: observed.absentReason,
+    typicalAbsentReason: typical.absentReason,
     unit: str(raw, "unit", where),
     demoted: raw.demoted === true,
   };
+}
+
+/**
+ * One half of the pair: a finite number, or a stated absence. Never both.
+ *
+ * The bars' `φ`, sign, share and rank come from the boosters and are unmoved by
+ * a missing subtitle, so a driver group whose headline feature is NULL for the
+ * day publishes with its reading absent rather than costing the whole day's
+ * diagnosis. What makes that safe is that the absence is *typed*: a `null` with
+ * no reason is refused, and a number beside a reason is refused too. Neither
+ * shape is representable, so no reader has to decide whether a `0` is a
+ * measurement.
+ *
+ * `.scratch/api-surface/issues/10-forecast-publication.md`, "A driver group
+ * whose headline feature is NULL for the day".
+ */
+function parseReading(
+  raw: Record<string, unknown>,
+  half: "observed" | "typical",
+  where: string,
+): { value: number | null; absentReason: ReadingAbsence | null } {
+  const reasonKey = `${half}_absent_reason`;
+  const rawReason = raw[reasonKey];
+  const rawValue = raw[half];
+  if (rawValue === undefined) {
+    throw new AttributionPayloadError(
+      `${where} carries no ${half}; a reading is a number or a stated absence, ` +
+        "and an omitted field is neither",
+    );
+  }
+  if (rawValue === null) {
+    if (typeof rawReason !== "string" || !ABSENCE_REASONS.has(rawReason)) {
+      throw new AttributionPayloadError(
+        `${where}: ${half} is absent and ${reasonKey} is ` +
+          `${JSON.stringify(rawReason)}; an absent reading states why, from ` +
+          `${READING_ABSENCE_REASONS.join(" or ")}, because an absence with no ` +
+          "reason is a dropped field by another name",
+      );
+    }
+    return { value: null, absentReason: rawReason as ReadingAbsence };
+  }
+  if (rawReason !== undefined && rawReason !== null) {
+    throw new AttributionPayloadError(
+      `${where}: ${half} is ${String(rawValue)} and ${reasonKey} is ` +
+        `${JSON.stringify(rawReason)}; a reading is a number or a stated ` +
+        "absence and never both",
+    );
+  }
+  return { value: num(raw, half, where), absentReason: null };
 }
 
 /** The peak hour is one hour. A disagreement figure on it would be a fiction. */
@@ -726,8 +833,14 @@ export function attributionDigest(
         driver.direction,
         driver.hourDisagreement,
         driver.headlineFeature,
+        // The absence is in the digest beside the value, so a day re-published
+        // once its weather run landed appends a vintage rather than matching
+        // the one that had no reading. `null` and `0` hash differently here for
+        // the same reason they are different values everywhere else.
         driver.observed,
         driver.typical,
+        driver.observedAbsentReason,
+        driver.typicalAbsentReason,
         driver.unit,
         driver.demoted ? "demoted" : "shown",
       ]),
@@ -840,6 +953,8 @@ export async function writeAttributionPublication(
           headlineFeature: driver.headlineFeature,
           observed: driver.observed,
           typical: driver.typical,
+          observedAbsentReason: driver.observedAbsentReason,
+          typicalAbsentReason: driver.typicalAbsentReason,
           unit: driver.unit,
           demoted: driver.demoted,
         });

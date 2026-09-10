@@ -81,7 +81,6 @@ from wattsteer_ml.diagnosis.background import (
 from wattsteer_ml.diagnosis.composed_target import bundle_expectation
 from wattsteer_ml.diagnosis.day_attribution import attribute_day, day_rows
 from wattsteer_ml.diagnosis.driver_groups import (
-    DRIVER_GROUP_CODES,
     DRIVER_GROUP_MAP,
     DriverGroupMap,
 )
@@ -122,15 +121,20 @@ class DiagnosisPublicationRefusedError(Exception):
       ``driver_groups.yaml``.
     - ``incomplete_day`` — the feature rows are not a whole Brasilia civil day
       for any subsystem.
-    - ``null_headline_feature`` — a driver group's headline feature was NULL for
-      some hour of the day or somewhere in its background cells, so the
-      observed/typical pair beside that bar has no value. **This one is a gap in
-      the wire contract and not only in this module** — see
-      :func:`_null_headline_features`.
-
     They are named rather than flattened because the gateway admits the code and
     an operator reading a job log has to know whether to wait, to retrain, or to
     edit a YAML file.
+
+    **``null_headline_feature`` is deliberately not on this list any more.** It
+    was, and it refused the whole day when any driver group's headline feature
+    was NULL for an hour of the day or anywhere in its background — which, at
+    the NULL rates a weather block actually has, is most days. The pair beside
+    a bar is a subtitle; the bar's ``φ``, sign and share are the boosters' and
+    are unaffected by it. So the absence is now *stated* on the row —
+    ``observed``/``typical`` go ``None`` beside a
+    :data:`~wattsteer_ml.diagnosis.publication.READING_ABSENCE_REASONS` code —
+    and the ranking publishes. See ``api-surface`` 10, "A driver group whose
+    headline feature is NULL".
     """
 
     def __init__(self, condition: str, reason: str) -> None:
@@ -147,7 +151,6 @@ REFUSAL_CONDITIONS: tuple[str, ...] = (
     "no_matched_background",
     "contract_and_groups_disagree",
     "incomplete_day",
-    "null_headline_feature",
 )
 
 
@@ -308,23 +311,6 @@ def build_diagnosis_publication(
                 "contract_and_groups_disagree",
                 f"{lane.directory_name} {subsystem} {target_date.isoformat()}: {error}",
             ) from error
-        null_headlines = _null_headline_features(
-            keys=keys,
-            target_rows=target_rows,
-            background=background,
-            group_map=group_map,
-        )
-        if null_headlines:
-            raise DiagnosisPublicationRefusedError(
-                "null_headline_feature",
-                f"{lane.directory_name} {subsystem} {target_date.isoformat()}: "
-                f"{', '.join(null_headlines)} is a driver group's headline "
-                "feature and is NULL for at least one hour of the day or of its "
-                "background, so the observed/typical pair beside that bar has no "
-                "value. The pair is a required number on the wire at both grains, "
-                "so the whole day is refused rather than published with a zero or "
-                "with a mean taken over the hours that happened to have a reading",
-            )
         readings = headline_readings(
             attribution,
             keys=keys,
@@ -420,58 +406,6 @@ def _background(
             "definition for this lane, and an attribution measured against an "
             "invented one is worse than an absent explanation",
         ) from error
-
-
-def _null_headline_features(
-    *,
-    keys: Sequence[RowKey],
-    target_rows: npt.NDArray[np.float64],
-    background: MatchedBackground,
-    group_map: DriverGroupMap,
-) -> tuple[str, ...]:
-    """Headline features with no reading for this day, at either grain.
-
-    **A gap this ticket found rather than closed, and it is not this module's.**
-    ``DriverReading`` refuses a non-finite ``observed`` or ``typical``, and the
-    gateway's parser requires both as numbers on every one of the sixteen driver
-    rows. But three of the eight real headline features are in the weather block
-    — ``weather_expected_wind_mwh``, ``weather_expected_vre_ramp_1h`` and
-    ``weather_centroid_coverage`` — and that block arrives from one run and goes
-    NULL together. So a day with a missing weather run has no publishable
-    observed/typical pair for those bars.
-
-    The design already *knows* this happens: ``RuleContext`` carries
-    ``null_headline_features`` for exactly it, and the ``stale_inputs`` rule can
-    withhold the narration over it. What is missing is a representation for the
-    pair's absence on the wire — the field is a required number and there is no
-    ``observed_absent_reason`` beside it — so the intended outcome (publish the
-    ranking, flag the degradation) is not expressible today.
-
-    Until it is, this is a refusal. The two alternatives are both worse and both
-    invisible once stored: a zero is the invented number the whole spec is
-    against, and a mean over the hours that happened to carry a reading is a
-    *different* "typical" than the one ``v(∅)`` was averaged over, published
-    under the same name.
-
-    Checked over the target rows **and** the background cells, because the pair
-    is two numbers and either half can be the missing one.
-    """
-    names = background.feature_names
-    index = {name: position for position, name in enumerate(names)}
-    absent: list[str] = []
-    for code in DRIVER_GROUP_CODES:
-        feature = group_map.group(code).headline_feature
-        column = index.get(feature)
-        if column is None:
-            # Not this condition: a headline feature outside the contract is
-            # `contract_and_groups_disagree`, and `headline_readings` says so.
-            continue
-        if bool(np.isnan(target_rows[:, column]).any()) or any(
-            bool(np.isnan(background.cell_for(key).matrix[:, column]).any())
-            for key in keys
-        ):
-            absent.append(feature)
-    return tuple(dict.fromkeys(absent))
 
 
 def _day(

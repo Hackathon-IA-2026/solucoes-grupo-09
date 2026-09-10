@@ -462,6 +462,18 @@ export type DriverCode =
  */
 export type DriverDirection = "raises" | "lowers";
 
+/**
+ * Why one half of a headline reading has no value. Two codes rather than one
+ * "unavailable", because the halves fail for different reasons and an operator
+ * has different work to do about each: `null_in_day` means the run that
+ * carries the feature did not land for the target day, so re-publishing it
+ * once the run arrives produces the number; `null_in_background` means the
+ * artifact's base-fit window has gaps in that column, so it cannot say what
+ * the column usually reads and only a redraw over a clean window can.
+ * `wattsteer_ml.diagnosis.publication.READING_ABSENCE_REASONS`, verbatim.
+ */
+export type DriverReadingAbsence = "null_in_day" | "null_in_background";
+
 export interface Driver {
   code: DriverCode;
   /**
@@ -487,14 +499,33 @@ export interface Driver {
   /**
    * The headline feature's reading, as a number. Never a preformatted string
    * like "310 MW left": a preformatted value is a translated string by another
-   * name, and the client formats this one through `Intl` against `unit`.
+   * name, and the client formats this one through `Intl` against `unit`. `null`
+   * when the feature was NULL for an hour of the day - three of the eight
+   * headline features are in the weather block, which arrives from one run and
+   * goes NULL together, so this is the ordinary case rather than the exceptional
+   * one. The bar's `phi_mwh`, its sign, its share and its rank are unaffected:
+   * the pair is a subtitle, and a day is not refused over one.
    */
-  observed: number;
+  observed: number | null;
   /**
    * The same feature over the matched background, as a number, on the same terms
-   * as `observed`.
+   * as `observed`. `null` when the feature was NULL somewhere in the matched
+   * background: the baseline `v(0)` was averaged over all the background rows,
+   * NULLs and all, so a mean over the rows that happened to carry a value would
+   * be a different "typical" published under the same name.
    */
-  typical: number;
+  typical: number | null;
+  /**
+   * Why there is no `observed`, and `null` when there is one. Mutually exclusive
+   * with the reading and mutually required with its absence - see the `allOf`
+   * below. A stated absence is what a zero cannot be: `0` is a reading the
+   * client would format and the reader would compare against `typical`.
+   */
+  observedAbsentReason: DriverReadingAbsence | null;
+  /**
+   * Why there is no `typical`, and `null` when there is one.
+   */
+  typicalAbsentReason: DriverReadingAbsence | null;
   unit: UnitCode;
   hourDisagreement: number;
   demoted: boolean;
@@ -609,6 +640,8 @@ export type NarrationClauseKey =
   | "peak"
   | "driver_raises"
   | "driver_lowers"
+  | "driver_raises_no_reading"
+  | "driver_lowers_no_reading"
   | "top_two_share"
   | "hour_disagreement"
   | "flag_nothing_to_explain"
@@ -2650,6 +2683,8 @@ export const WIRE_SHAPES = {
     headlineFeature: { wire: "headline_feature" },
     observed: { wire: "observed" },
     typical: { wire: "typical" },
+    observedAbsentReason: { wire: "observed_absent_reason" },
+    typicalAbsentReason: { wire: "typical_absent_reason" },
     unit: { wire: "unit" },
     hourDisagreement: { wire: "hour_disagreement" },
     demoted: { wire: "demoted" },

@@ -84,6 +84,8 @@ function drivers(): AttributionDriverRow[] {
     headlineFeature: feature,
     observed: 1.42 + index / 100,
     typical: 0.96,
+    observedAbsentReason: null,
+    typicalAbsentReason: null,
     unit: "ratio",
     demoted: false,
   }));
@@ -177,9 +179,18 @@ function sources(
  * paid for. The spec asks for a test that fails on exactly that, and this
  * constant is it: when it moves, the question to answer is not "what is the new
  * hash" but "is invalidating the whole narration cache what we meant".
+ *
+ * **It moved once, deliberately**, from
+ * `593294f6d1f0a243e8e6d88e0a30b93a6809fa8c934b356a100e6f4842347d1e`: `Driver`
+ * gained `observed_absent_reason` and `typical_absent_reason` when a headline
+ * reading became a number *or* a stated absence (api-surface 10). Invalidating
+ * every cached paragraph is what we meant — a paragraph written before the
+ * document could say "this group has no reading" was written against a
+ * document that had refused to exist in that case, so there is no cached
+ * narration the new document is equivalent to.
  */
 const CANONICAL_DIGEST =
-  "593294f6d1f0a243e8e6d88e0a30b93a6809fa8c934b356a100e6f4842347d1e";
+  "406b37601c57588a63d89f87f201d7b42681d2d0597e94721078fa96b55f0f30";
 
 describe("the narration payload · every figure the copy could want, as a number", () => {
   it("assembles the whole document from the two stored rows", () => {

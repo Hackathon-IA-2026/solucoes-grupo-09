@@ -706,6 +706,15 @@ export const en = {
         "{code} raises the model's forecast: {phi_mwh}, {share} of the attributed movement, reading {observed} against a typical {typical}.",
       driver_lowers:
         "{code} lowers the model's forecast: {phi_mwh}, {share} of the attributed movement, reading {observed} against a typical {typical}.",
+      // The same two sentences without the pair, for a group whose headline
+      // feature has no reading for this day or none over the matched
+      // background. The contribution, the share and the direction are the
+      // model's and are unaffected; only the comparison is missing, and the
+      // sentence says so instead of quoting a zero.
+      driver_raises_no_reading:
+        "{code} raises the model's forecast: {phi_mwh}, {share} of the attributed movement. Its headline feature has no observed-against-typical pair for this day, so none is quoted.",
+      driver_lowers_no_reading:
+        "{code} lowers the model's forecast: {phi_mwh}, {share} of the attributed movement. Its headline feature has no observed-against-typical pair for this day, so none is quoted.",
       top_two_share:
         "Those two groups together account for {top_two_share} of the attributed movement.",
       hour_disagreement:

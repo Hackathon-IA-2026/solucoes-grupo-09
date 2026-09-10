@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { SQL } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { createDiagnosisRoutes } from "../src/api/diagnosis.js";
@@ -135,6 +136,105 @@ suite("the published attribution · persistence and AsOf (real Postgres)", () =>
       expect(stored.typical).toBe(source?.typical as number);
       expect(stored.unit).toBe(source?.unit as string);
     }
+  });
+
+  it("stores an absent reading as an absence, and never as a zero", async () => {
+    // api-surface 10's last box, at the storage layer. `observed` and `typical`
+    // used to be NOT NULL, so a driver group whose headline feature was NULL
+    // for the day had no publishable pair and the whole day's diagnosis was
+    // refused — on 99% of days at real weather-null rates. The absence is now a
+    // value, and the property that makes it safe is that it comes back *as* an
+    // absence: `Number(null)` is 0, and a 0 here is a reading the screen would
+    // format and the reader would compare against `typical`.
+    const absent = publication({
+      mutate: (payload) => {
+        const groups = (payload.attributions as Record<string, unknown>[])[0]
+          ?.groups as Record<string, unknown>[];
+        const first = groups[0] as Record<string, unknown>;
+        first.observed = null;
+        first.observed_absent_reason = "null_in_day";
+        const second = groups[1] as Record<string, unknown>;
+        second.typical = null;
+        second.typical_absent_reason = "null_in_background";
+      },
+    });
+    const written = await writeAttributionPublication(db, absent, { ingestedAt: NOW });
+    // The whole publication landed: sixteen bars, not fifteen and not none.
+    expect(written.driversInserted).toBe(16);
+
+    const back = await read();
+    const [first, second, ...rest] = back?.drivers ?? [];
+    expect(first?.observed).toBeNull();
+    expect(first?.observedAbsentReason).toBe("null_in_day");
+    // The other half of the same pair is untouched, and so is the bar itself:
+    // φ, sign, share and rank are the model's and a missing subtitle does not
+    // reach them.
+    expect(first?.typical).not.toBeNull();
+    expect(first?.typicalAbsentReason).toBeNull();
+    expect(first?.phiMwh).toBe(absent.attributions[0]?.drivers[0]?.phiMwh as number);
+    expect(first?.rank).toBe(1);
+
+    expect(second?.typical).toBeNull();
+    expect(second?.typicalAbsentReason).toBe("null_in_background");
+    expect(second?.observed).not.toBeNull();
+
+    // And nothing else moved.
+    for (const one of rest) {
+      expect(one.observed).not.toBeNull();
+      expect(one.typical).not.toBeNull();
+      expect(one.observedAbsentReason).toBeNull();
+      expect(one.typicalAbsentReason).toBeNull();
+    }
+  });
+
+  it("refuses a NULL reading with no reason, and a reason beside a number", async () => {
+    // The parse refuses both shapes too; this is the *table* refusing them,
+    // which is what makes them unrepresentable rather than merely unwritten by
+    // the one path that writes today. A NULL with no reason is a dropped field
+    // by another name, and a number beside a reason leaves the reader to pick a
+    // half to believe.
+    await writeAttributionPublication(db, publication(), { ingestedAt: NOW });
+
+    // `db.execute` returns a lazy thenable rather than a promise, so the
+    // statement is awaited and the refusal caught rather than handed to
+    // `.rejects` — which would pass on a query that never ran.
+    // The constraint *name* is the assertion, off `error.cause` exactly as the
+    // roll-call tests below read it: a message match would pass on any refusal,
+    // including the wrong one.
+    const refusedBy = async (statement: SQL): Promise<string | undefined> => {
+      try {
+        await db.execute(statement);
+      } catch (error) {
+        return (error as { cause?: { constraint_name?: string } }).cause?.constraint_name;
+      }
+      throw new Error("the statement was accepted");
+    };
+
+    expect(
+      await refusedBy(sql`
+        update diagnosis_attribution_driver
+           set observed = null
+         where grain = 'day' and rank = 1
+      `),
+    ).toBe("diagnosis_attribution_driver_observed_or_its_absence");
+    expect(
+      await refusedBy(sql`
+        update diagnosis_attribution_driver
+           set typical_absent_reason = 'null_in_background'
+         where grain = 'day' and rank = 1
+      `),
+    ).toBe("diagnosis_attribution_driver_typical_or_its_absence");
+
+    // The positive case beside them, so neither refusal above is the plumbing:
+    // the pair moves together and the row is accepted.
+    await db.execute(sql`
+      update diagnosis_attribution_driver
+         set observed = null, observed_absent_reason = 'null_in_day'
+       where grain = 'day' and rank = 1
+    `);
+    const back = await read();
+    expect(back?.drivers[0]?.observed).toBeNull();
+    expect(back?.drivers[0]?.observedAbsentReason).toBe("null_in_day");
   });
 
   it("stores the peak hour's own eight beside the day's, not instead of them", async () => {

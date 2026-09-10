@@ -124,6 +124,8 @@ function ranked(
       headline_feature: HEADLINE[code]?.feature,
       observed: 1.42,
       typical: 0.96,
+      observed_absent_reason: null,
+      typical_absent_reason: null,
       unit: HEADLINE[code]?.unit,
       demoted: demoted.has(code),
     }));
