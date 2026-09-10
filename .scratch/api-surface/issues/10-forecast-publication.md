@@ -1049,6 +1049,11 @@ the **forecast** publication only: the chained `publish_diagnosis` has its own
 way of having failed and `/v1/diagnosis/day-ahead` reports its absence as its
 own, so a watch over it is a separate question and not this box.
 
+> **Closed** — that last sentence was true for one wave. The chained half is now
+> watched, behind the same two crons and in the same file, and the reasons the
+> chain needed more than a copy of this section are in "The chained diagnosis
+> publication is watched too" at the end of this ticket.
+
 
 ---
 
@@ -1093,4 +1098,199 @@ that belongs with the job rather than under `diagnosis/`.
       `unmodelled_outage_regime` can fire
       — `apps/api/src/diagnosis/reason-mix.ts`, cut at `actuals_cutoff`, performed
       by the diagnosis publication job and carried on its request
+
+
+---
+
+## The chained diagnosis publication is watched too
+
+The gap the previous wave named in its own "What this does not do". The two
+publications are chained: a finished `publish_forecast` submits a
+`publish_diagnosis` carrying the day it wrote. So a forecast can publish
+perfectly, the chained half can die, and the watch reports a healthy system —
+which it is, for one grain. Demonstrated rather than asserted: in the run below
+the forecast half printed `verdict: published` and the chained half failed the
+workflow in the same run.
+
+Same file (`src/forecast/publication-watch.ts`), same suite, **same two crons**.
+No parallel mechanism and no second margin.
+
+### The due time is not a gate hour, because it is not a gate
+
+`publish_diagnosis` has no cron. The job table's trigger is "on completion of
+each above", which is the one row that is not a pattern. So the instant it
+becomes answerable for is measured from the forecast publication it chains off,
+and the forecast rows already record that instant — `ingested_at` is the `AsOf`
+axis, the wall clock at the write, as against `published_at`, which is the gate:
+
+    dueAt = max(gateAt(target, profile) + PUBLICATION_GRACE_MS,
+                forecast.ingested_at + diagnosisRecoveryWindowMs())
+
+- `gateAt` is **called**, never restated. No hour appears anywhere on the
+  chained path, in the ledger's DDL (`0044` calls `gate_at` in its CHECK, as
+  `0041` does), or in the workflow's new comment.
+- `diagnosisRecoveryWindowMs()` is derived from `config.jobAttempts`,
+  `config.jobBackoffMs` and `PUBLISH_DIAGNOSIS_TIMEOUT_MS` — **6.25 min**
+  measured. It has no cron-offset term, because a completion-triggered task has
+  no offset: the offset is already inside `ingested_at`.
+- The first term is why there is no third cron. The whole chain — the forecast
+  job's offset and retries (**16.25 min**) then the diagnosis job's
+  (**6.25 min**) = **22.50 min** — fits inside the **2 h** margin the two
+  existing crons already wait, so a scheduled run reaches a verdict. That bound
+  is a test, not a paragraph: had it stopped holding, every scheduled run would
+  report `not_yet_due` and the alarm could never fire, which is worse than none.
+- The second term is what makes it honest when the ordinary case does not hold:
+  a forecast published five hours late by hand starts its chain five hours late,
+  and a diagnosis is not owed before the forecast it explains. Asserted both
+  ways — the ordinary case *equals* the margin, the hand-run case slides.
+
+### Six verdicts, and only one of them alarms
+
+| Verdict | When | The scheduled run |
+|---|---|---|
+| `forecast_absent` | the due gate has no served forecast publication | passes — nothing was owed; the forecast half is the alarm for that and this one must not double-report it |
+| `published` | an attribution is stamped at the due gate's instant | passes, printing the subsystems and the forecast's commit instant |
+| `not_yet_due` | the chain is still inside its own retry budget | passes — alarming here would alarm on a job still allowed to be running |
+| `refused` | `apps/ml` **declared** a typed refusal, observed at or after the forecast committed | passes, printing the condition — a declared refusal is not a missed publication |
+| `never_diagnosed` | the deployment holds no served attribution row at all | passes, printing `NOT YET LIVE` — this is today's real state |
+| `late` | the forecast published, the budget ran out, and there is neither an attribution nor a fresh refusal | **fails** — this is the alarm |
+
+### The refusal had to become a record — `drizzle/0044`
+
+`apps/ml` can *correctly* decline an attribution with a condition out of its own
+closed tuple (`no_base_fit_window`, `no_matched_background`,
+`contract_and_groups_disagree`, `incomplete_day`; **not**
+`null_headline_feature`, which stopped being a refusal this wave and is now a
+stated absence on the driver row). That is the system working — the repair is a
+retrain or a line of YAML — and an absent attribution looks identical in
+Postgres whether it was refused or the chain died. The statement lived only in a
+`console.warn`, so the two were indistinguishable to anything on a schedule, and
+a watch that could not tell them apart would fire on correct behaviour twice a
+day until somebody switched it off.
+
+So `diagnosis_publication_refusal` is the ledger, written by the job
+(`declareRefusal` in `src/jobs/diagnosis-publication.ts`, via
+`src/diagnosis/refusal.ts`) and read by the watch. Six decisions:
+
+- **Only a *declared* refusal is recorded** — `DIAGNOSIS_UNAVAILABLE` carrying
+  one of the four conditions. `MODEL_UNAVAILABLE`, `DATA_UNAVAILABLE`,
+  `SERVICE_BUSY`, a 404 with no code in it, or a condition this side has never
+  heard of are the chain failing and must still reach the watch as the alarm
+  they are. Recording anything wider would be the watch's own off switch. Each
+  of those is asserted to write **nothing**.
+- **`observed_at` against the forecast's `ingested_at` is the freshness test.**
+  A refusal older than the forecast publication now serving is a statement about
+  a previous vintage: the lane-day was refused yesterday, the forecast has since
+  been re-published, and *that* chain left no statement at all. A watch keyed on
+  "is there a refusal for this lane-day" would be silent for good. Its own case,
+  and the one a mutation was reintroduced against.
+- **One current answer per lane-day, upserted.** Each of the queue's attempts
+  refuses again; three rows ten seconds apart are not three refusals. Asserted
+  against real Postgres over three attempts, the last with a different
+  condition.
+- **`expected_published_at` carries `0041`'s constraint**, calling `gate_at`. A
+  refusal about some other instant is a statement about a publication nobody can
+  identify. Refused by Postgres, asserted.
+- **The vocabulary is parsed out of `apps/ml`, not restated.** The test reads
+  `REFUSAL_CONDITIONS` out of `wattsteer_ml/diagnosis/publish.py` and compares
+  it to this side's list *and* to `0044`'s CHECK, and asserts
+  `null_headline_feature` is absent from all three while still present in the
+  Python source, as the removal it is. A fifth condition upstream lands as a
+  failing test rather than as a refusal nothing could record.
+- **A read whose halves disagree draws no verdict**, as in the forecast half: a
+  census of zero beside rows for the gate throws, and so does an attribution
+  standing on a forecast publication that is not there — `0041` makes the
+  instant right and nothing makes the *pair* right.
+
+### Proved firing, proved quiet three ways
+
+Postgres 17 in Docker on **5439** — my own container. 5434 (`fc18-pg`) was
+reserved for a bulk backfill, was never touched, and no suite in this ticket was
+pointed at it. All 44 migrations applied. The alarm was run through the
+workflow's own command, `bun run test:publication-watch`, against that database,
+each state seeded by writing real publications through `writePublication` and
+`writeAttributionPublication` with `published_at` from `gateAt`:
+
+| State of the database | Chained verdict | The run |
+|---|---|---|
+| empty | `forecast_absent` | **passes**, exit 0 — `NOT YET LIVE`, `attributions: 0 rows`, and the forecast half says `never_published` |
+| forecast at the due gate + an attribution for the *previous* day only | `late` | **fails**, exit 1 — `ASSUMPTION EXPIRED`, `5.4 h past the instant the chained publication became answerable for`, "the ledger holds no refusal for this lane-day at all" — *while the forecast half printed `verdict: published`* |
+| the same rows, plus the refusal on the ledger | `refused` | **passes**, exit 0 — `no_matched_background at 2026-09-09T22:06:00.000Z`, naming the lane |
+| the same rows, plus the attribution at the due gate | `published` | **passes**, exit 0 — `this gate covering NE` |
+
+The second row is the whole point, and the two below it are what make it mean
+something: the same guard, unchanged, goes quiet on a refusal the system
+declared and on a chain that completed.
+
+**The inputs are asserted non-empty.** In the real-Postgres section every
+chained verdict is drawn only after `readDiagnosisWatch`'s four halves are
+asserted directly: the empty case asserts `attributionRows === 0`,
+`forecastIngestedAt === null`, no subsystems **and** an empty ledger before
+concluding nothing was owed; the `never_diagnosed` case asserts the forecast's
+commit instant *equals* the instant it was written with; the quiet case asserts
+one attribution row and `["NE"]`; the firing case asserts a non-null commit
+instant beside an empty subsystem list, so `late` is a verdict that matched
+nothing among rows that came back; and the refused case asserts the ledger holds
+exactly one row with the expected condition. The vocabulary tests assert the
+Python scan found the tuple at all and found all of it before comparing, and the
+constraint test asserts the same insert *is accepted* with a real condition at
+the real gate, so the two refusals it demonstrates are the constraints rather
+than a broken statement.
+
+### Verification, with numbers
+
+| Suite | Result |
+|---|---|
+| `bun run check` (typecheck · biome · every JS suite) | **clean, exit 0** — 529 files linted; 145 hygiene · 471 core · 1273 api · 189 web pass, **0 fail** |
+| `apps/api` with `WATTSTEER_TEST_DATABASE_URL` (5439) | **1700 pass · 0 fail · 88 files**, 19.9 s |
+| `test/publication-watch.test.ts` alone, offline | 29 pass · 14 skip · 0 fail |
+| the same, with real Postgres | 39 pass · 2 skip · 0 fail |
+| `test/diagnosis-publication-job.test.ts` with real Postgres | 18 pass · 1 skip · 0 fail |
+| the same, as the workflow runs it | the four-state table above |
+
+Reintroduced against, rather than only written:
+
+- the freshness test dropped, so any refusal for the lane-day silences the
+  watch: **1 fail** — "is not silenced by a refusal older than the forecast now
+  serving".
+- the `late` branch returning `published`, an alarm that cannot fire: **3 fail**
+  — the firing case, the stale-refusal case and the verdict roll call.
+- `null_headline_feature` added back to the TS condition list: **3 fail** — all
+  three vocabulary tests, one against Python and one against the migration.
+- `declareRefusal` removed from the job's catch: **1 fail** — "records the
+  condition apps/ml declared, and still fails the job".
+- `WATTSTEER_JOB_ATTEMPTS=10 WATTSTEER_JOB_BACKOFF_MS=120000`, a chain an hour
+  wide against a two-hour margin: **9 fail**, including the forecast half's own
+  recovery bound and "fits the whole chain inside the margin, so the scheduled
+  run can fire at all".
+- restored in every case: 29 pass · 0 fail offline, 39 · 0 with Postgres.
+
+- [x] The chained `publish_diagnosis` is watched, in the same file and behind
+      the same two crons — `src/forecast/publication-watch.ts`,
+      `watchDiagnosisPublications`
+- [x] Its due time is derived from the forecast publication it chains off, and
+      no gate hour is restated on the path — `gateAt` is called, and the chain's
+      budget comes off `config` and `PUBLISH_DIAGNOSIS_TIMEOUT_MS`
+- [x] A refusal the system declared does not alarm, and is distinguished from
+      "never ran" and from "should have run and did not" —
+      `drizzle/0044_a_refusal_is_a_record.sql`, `src/diagnosis/refusal.ts`
+- [x] The alarm is shown *firing* on a genuinely missed diagnosis publication
+      and *quiet* on an empty database, a healthy chain and a correctly-refused
+      publication — the four-state table above, through the workflow's own
+      command
+- [x] Every check's inputs are asserted non-empty before a verdict is drawn
+
+### What this still does not do
+
+It does not recover a missed diagnosis publication and no catch-up cron was
+added, for the reason the forecast half has none: `writeAttributionPublication`
+is idempotent by digest, so a hand-submitted task is free and a scheduled
+catch-up would be a second producer of one quantity. It does not read
+`apps/ml`: the refusal it trusts is the one the *job* recorded, so a refusal
+declared by a service the worker never reached is not a refusal this watch can
+see — and that failure correctly reads as `late`. It watches the one lane per
+gate profile that `PUBLICATION_LANES` names; a second lane per gate would need
+the verdict to say *which* lane is unexplained, and the ledger is keyed for that
+(`lane` is in the primary key) while the verdict is not. And the reach is still
+GitHub's own failed-workflow notification, the honest ceiling of this idiom.
 

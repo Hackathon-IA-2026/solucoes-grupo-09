@@ -3,6 +3,7 @@ import type { MlEndpoint } from "../api/ml-proxy.js";
 import type { Database } from "../database/connection.js";
 import { type PublishDiagnosisResult, publishDiagnosis } from "../diagnosis/publish.js";
 import { type ReasonMix, readRecentReasonMix } from "../diagnosis/reason-mix.js";
+import { recordDiagnosisRefusal, refusalCondition } from "../diagnosis/refusal.js";
 import { AppError } from "../errors.js";
 import { gateAt } from "../forecast/gate.js";
 import type { ForecastGateProfile } from "../forecast/publication.js";
@@ -116,6 +117,25 @@ const SUBSYSTEMS: readonly SubsystemCode[] = SUBSYSTEM_DISPLAY_ORDER;
 function describeFailure(error: unknown): string {
   const code = error instanceof AppError ? error.code : undefined;
   switch (code) {
+    case "DIAGNOSIS_UNAVAILABLE": {
+      // The declared refusal, named with its condition. `refusalCondition`
+      // rather than `details.condition` directly, so a condition this side does
+      // not know reads as the regression it is rather than as a refusal.
+      const condition = refusalCondition(error);
+      return condition === null
+        ? "the modelling service answered DIAGNOSIS_UNAVAILABLE with no " +
+            "condition this gateway knows, which is a regression upstream " +
+            "rather than a lane-day with no explanation — nothing was recorded " +
+            `and the queue will retry: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+        : `the modelling service declared it has no attribution for this ` +
+            `lane-day: ${condition}. Recorded in ` +
+            "`diagnosis_publication_refusal`, where the publication watch reads " +
+            "it as a declared refusal rather than a missed publication. The " +
+            "forecast is unaffected; the repair is a retrain or a " +
+            "driver-group change rather than a retry";
+    }
     case "FORECAST_UNAVAILABLE":
       return (
         "the model is promoted and the attribution's inputs are not there yet " +
@@ -195,6 +215,64 @@ async function readReasons(
 }
 
 /**
+ * Write down a refusal the modelling service *declared*, and only that.
+ *
+ * The one fact `forecast/publication-watch.ts` cannot get any other way. An
+ * attribution that is absent because `apps/ml` said it has no matched
+ * background is the system working; an attribution that is absent because this
+ * task never ran is the gap the watch exists to catch. Both look identical in
+ * Postgres — no row — so the refusal is recorded where a schedule can read it.
+ * See `diagnosis/refusal.ts` and the table's note in `database/schema.ts`.
+ *
+ * Three properties, each of which is load-bearing:
+ *
+ * 1. **Only a declared refusal is recorded.** `refusalCondition` returns a
+ *    condition only for `DIAGNOSIS_UNAVAILABLE` carrying one of `apps/ml`'s
+ *    four. A service that is down, a request that ran out of budget, a 404 with
+ *    no code in it, an unknown condition — none of them is recorded, and all of
+ *    them therefore still reach the watch as the alarm they are. Recording
+ *    anything wider would be the watch's own off switch.
+ * 2. **It never turns a refusal into a failure of its own.** A ledger write
+ *    that throws would replace a typed cause with "insert failed" in the job
+ *    log and hand the queue a different error to retry. So the write is
+ *    reported and swallowed, and the original error is rethrown by the caller.
+ * 3. **It is the job that writes, not the publisher.** `diagnosis/publish.ts`
+ *    is the call to the modelling service; the *decision* that a refusal is
+ *    worth a durable statement belongs to the scheduled work that will be
+ *    watched for having happened.
+ */
+async function declareRefusal(
+  deps: DiagnosisPublisherDeps,
+  payload: PublishDiagnosisPayload,
+  error: unknown,
+  now: Date,
+): Promise<void> {
+  const condition = refusalCondition(error);
+  if (condition === null) {
+    return;
+  }
+  try {
+    await recordDiagnosisRefusal(deps.db, {
+      targetDate: payload.targetDate,
+      gateProfile: payload.gateProfile,
+      lane: payload.lane,
+      condition,
+      reason: error instanceof Error ? error.message : String(error),
+      observedAt: now,
+    });
+  } catch (writeError) {
+    console.warn(
+      `⚠️  publish-diagnosis:${payload.gateProfile} ${payload.targetDate} — the ` +
+        `refusal (${condition}) could not be recorded, so the publication watch ` +
+        "will read this day as a missed publication rather than a declared " +
+        `refusal: ${
+          writeError instanceof Error ? writeError.message : String(writeError)
+        }`,
+    );
+  }
+}
+
+/**
  * Build the handler the worker runs for a `publish_diagnosis` task.
  *
  * Nothing in the request path reaches this function: it is constructed in
@@ -239,6 +317,7 @@ export function createDiagnosisPublisher(
         `⚠️  publish-diagnosis:${payload.gateProfile} ${payload.targetDate} — ` +
           `${describeFailure(error)}`,
       );
+      await declareRefusal(deps, payload, error, now);
       // Rethrown as itself, so the queue retries under the existing attempts
       // policy and an operator reads a cause rather than "job failed".
       throw error;

@@ -309,6 +309,13 @@
       "when": 1789012005215,
       "tag": "0043_a_reading_or_its_stated_absence",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1789016941110,
+      "tag": "0044_a_refusal_is_a_record",
+      "breakpoints": true
     }
   ]
 }

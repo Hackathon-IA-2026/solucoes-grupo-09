@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
@@ -7,6 +7,7 @@ import { onsResourceVersion } from "../src/database/schema.js";
 import { parseAttributionPublication } from "../src/diagnosis/publication.js";
 import { readAttributionDayAhead } from "../src/diagnosis/reads.js";
 import { readRecentReasonMix } from "../src/diagnosis/reason-mix.js";
+import { readDiagnosisRefusals } from "../src/diagnosis/refusal.js";
 import { isErrorCode } from "../src/errors.js";
 import { gateAt } from "../src/forecast/gate.js";
 import {
@@ -693,6 +694,134 @@ suite("the diagnosis publication end to end (real Postgres)", () => {
           () => {},
         );
         expect(result.kind).toBe("publish_forecast");
+      } finally {
+        service.stop();
+      }
+    });
+  });
+
+  describe("a refusal is written down", () => {
+    /**
+     * The half the publication watch reads — `api-surface` 10's chained box.
+     *
+     * `apps/ml` can *correctly* decline an attribution, naming one of its four
+     * conditions, and that is not a missed publication: the forecast is
+     * serving, the repair is a retrain or a driver-group change, and an alarm
+     * on it would fire on correct behaviour. Until `drizzle/0044` the statement
+     * was a `console.warn`, so `forecast/publication-watch.ts` could not tell a
+     * declared refusal from a chain that died. These two tests are that
+     * distinction, at the only place that can make it.
+     */
+    const refusing = (status: number, code: string, details?: object) =>
+      serving(
+        () =>
+          new Response(
+            JSON.stringify({
+              error: {
+                code,
+                message: `${code} for the test`,
+                ...(details ? { details } : {}),
+              },
+            }),
+            { status, headers: { "content-type": "application/json" } },
+          ),
+      );
+
+    const ledger = async () =>
+      readDiagnosisRefusals(db, { targetDate: TARGET_DATE, gateProfile: "gate_late" });
+
+    beforeEach(async () => {
+      await db.execute(sql`truncate table diagnosis_publication_refusal`);
+    });
+
+    it("records the condition apps/ml declared, and still fails the job", async () => {
+      const service = refusing(404, "DIAGNOSIS_UNAVAILABLE", {
+        lane: LANE,
+        target_date: TARGET_DATE,
+        condition: "no_matched_background",
+      });
+      const publish = createDiagnosisPublisher({
+        db,
+        endpoint: { baseUrl: service.url, timeoutMs: 5000 },
+        now: () => TEN_PAST,
+      });
+      try {
+        // Non-vacuous: the ledger is empty before the attempt, so the row
+        // below was written by this refusal.
+        expect(await ledger()).toEqual([]);
+        await expect(
+          publish(
+            { gateProfile: "gate_late", lane: LANE, targetDate: TARGET_DATE },
+            () => {},
+          ),
+        ).rejects.toThrow();
+        const written = await ledger();
+        expect(written.length).toBe(1);
+        expect(written[0]?.condition).toBe("no_matched_background");
+        expect(written[0]?.lane).toBe(LANE);
+        // The instant the attempt happened, not the gate: this is what lets the
+        // watch tell a refusal of the publication now serving from a stale
+        // statement about a previous vintage of the same day.
+        expect(written[0]?.observedAt.toISOString()).toBe(TEN_PAST.toISOString());
+        // The job still fails, so the queue retries under the existing policy
+        // and the operator reads a cause. Recording is not absolving.
+      } finally {
+        service.stop();
+      }
+    });
+
+    it("records nothing for a failure that is not a declared refusal", async () => {
+      // A modelling service with no promoted artifact, a service that is down,
+      // a request that ran out of budget: none of them is a statement that this
+      // lane-day has no explanation, and recording them would silence the alarm
+      // on exactly the failures it exists for.
+      for (const [status, code] of [
+        [503, "MODEL_UNAVAILABLE"],
+        [503, "DATA_UNAVAILABLE"],
+        [504, "SERVICE_BUSY"],
+      ] as const) {
+        const service = refusing(status, code, { lane: LANE });
+        const publish = createDiagnosisPublisher({
+          db,
+          endpoint: { baseUrl: service.url, timeoutMs: 5000 },
+          now: () => TEN_PAST,
+        });
+        try {
+          await expect(
+            publish(
+              { gateProfile: "gate_late", lane: LANE, targetDate: TARGET_DATE },
+              () => {},
+            ),
+          ).rejects.toThrow();
+          expect(await ledger()).toEqual([]);
+        } finally {
+          service.stop();
+        }
+      }
+    });
+
+    it("records nothing for a condition this side does not know", async () => {
+      // `null_headline_feature` stopped being a refusal this wave. A service
+      // that went back to sending it is a regression, not a lane-day with no
+      // explanation, and the table would refuse the row anyway — so the write
+      // is never attempted and the failure stays an alarm.
+      const service = refusing(404, "DIAGNOSIS_UNAVAILABLE", {
+        lane: LANE,
+        condition: "null_headline_feature",
+      });
+      const publish = createDiagnosisPublisher({
+        db,
+        endpoint: { baseUrl: service.url, timeoutMs: 5000 },
+        now: () => TEN_PAST,
+      });
+      try {
+        await expect(
+          publish(
+            { gateProfile: "gate_late", lane: LANE, targetDate: TARGET_DATE },
+            () => {},
+          ),
+        ).rejects.toThrow();
+        expect(await ledger()).toEqual([]);
       } finally {
         service.stop();
       }
