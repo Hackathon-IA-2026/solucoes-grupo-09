@@ -363,7 +363,7 @@ function toCoverage(quantiles: Record<string, unknown>, regime: string): Coverag
       upperCorrectionNote: str(quantiles, "upper_correction_note"),
     },
     p50Unbiasedness: num(quantiles, "p50_unbiasedness"),
-    crossingRate: num(quantiles, "crossing_rate"),
+    crossingRate: num(quantiles, "coverage_crossing_rate"),
   };
 }
 

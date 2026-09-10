@@ -56,6 +56,12 @@ defensible denominator.**
   :class:`~wattsteer_ml.training.conformal.CoverageReport`'s decision and not a
   second one made here: over every hour the lower statement is trivially true,
   because the composed P10 is zero wherever ``p ≤ 0.90``.
+- ``crossing_rate`` appears in **both** lists as a quantity and in neither as a
+  key twice: the settled-hour rate keeps ``crossing_rate``, and the same rate
+  over the curtailed subset is published as ``coverage_crossing_rate``.
+  :func:`merge_disjointly` is what makes the collision an error instead of a
+  silent last-writer-wins, and the settled-hour figure is the one to quote — see
+  :attr:`MetricsRow.crossing_rate`.
 - ``ece``, ``mce`` and ``top_bin_gap`` come from
   :class:`~wattsteer_ml.training.calibration.ReliabilityCurve` binned over the
   segment's own out-of-fold hours, so the merge rule that produces them is the
@@ -102,6 +108,43 @@ FIXED_OPERATING_POINT = 0.50
 
 class MetricsError(ValueError):
     """The scored hours cannot support the row that was asked for."""
+
+
+def merge_disjointly(
+    entry: dict[str, Any], addition: dict[str, Any], *, source: str
+) -> dict[str, Any]:
+    """Merge one published block into a card entry, refusing to shadow a key.
+
+    **The mechanism forecaster 29 closed, not the one instance of it.**
+    :meth:`MetricsRow.as_card_entry` sets its own columns and then merges four
+    blocks it does not own on top. A plain ``dict.update`` lets the last writer
+    win silently, and it did: ``crossing_rate`` was set over every settled hour
+    and then overwritten by :meth:`CoverageReport.card_fields`'s figure over the
+    curtailed subset, so the published field meant one population or the other
+    depending on whether an unrelated object existed. Nothing failed, because
+    nothing was watching the collision.
+
+    So a collision is an error here rather than a resolution. A block that wants
+    to publish a quantity the row already publishes has to name it differently —
+    which is the only way a reader can tell the two apart — and adding a key to
+    any of the merged blocks can no longer change the meaning of a key on the
+    row.
+
+    Raises:
+        MetricsError: if ``addition`` would overwrite any key already in
+            ``entry``. The message names every clashing key and the block that
+            brought it, because "one of these dictionaries is lying" is not a
+            debuggable error.
+    """
+    shadowed = sorted(set(entry) & set(addition))
+    if shadowed:
+        raise MetricsError(
+            f"{source} would overwrite {shadowed!r} on the published row; two "
+            "populations under one key is the defect, and the block that "
+            "arrives second must name its figure differently rather than win"
+        )
+    entry.update(addition)
+    return entry
 
 
 def pinball(alpha: float, observed: float, predicted: float) -> float:
@@ -393,6 +436,12 @@ class MetricsRow:
     #: Over every settled hour. :attr:`CoverageReport.crossing_rate` is the same
     #: quantity over the curtailed subset; the two are different populations and
     #: are not interchangeable.
+    #:
+    #: **This** one is the published ``crossing_rate`` — on the row and in the
+    #: card — and the one :mod:`wattsteer_ml.evaluation.gate` vetoes on. The
+    #: curtailed-subset figure is published beside it under
+    #: ``coverage_crossing_rate``, which is what stopped the two from taking
+    #: turns under one name (forecaster 29).
     crossing_rate: float
     coverage: CoverageReport | None
     delta_lo: float | None
@@ -552,12 +601,17 @@ class MetricsRow:
                 else SHARE_P50_ZERO_IS_NOT_MODEL_QUALITY
             ),
         }
-        entry.update(self.at_fixed.as_card_entry("0.5"))
-        entry.update(self.at_best.as_card_entry("best"))
+        # Merged, never `update`d: every block below is owned by another module
+        # and a key it adds must not be able to change what a column on this row
+        # means. See :func:`merge_disjointly`.
+        merge_disjointly(entry, self.at_fixed.as_card_entry("0.5"), source="at_fixed")
+        merge_disjointly(entry, self.at_best.as_card_entry("best"), source="at_best")
         if self.coverage is not None:
-            entry.update(self.coverage.card_fields())
+            merge_disjointly(
+                entry, self.coverage.card_fields(), source="CoverageReport.card_fields"
+            )
         if self.collapse is not None:
-            entry.update(self.collapse.as_card_entry())
+            merge_disjointly(entry, self.collapse.as_card_entry(), source="CollapseBlock")
         return entry
 
 

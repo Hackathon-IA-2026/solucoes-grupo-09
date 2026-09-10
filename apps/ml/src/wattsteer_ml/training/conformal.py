@@ -758,6 +758,13 @@ class CoverageReport:
     #: The share of scored hours whose composed quantiles arrived out of order.
     #: Published beside the deltas because a band that had to be sorted is a
     #: band whose coverage statement is about three fits that disagreed.
+    #:
+    #: Over this report's **curtailed** rows, and published as
+    #: ``coverage_crossing_rate``:
+    #: :attr:`~wattsteer_ml.evaluation.metrics.MetricsRow.crossing_rate` is the
+    #: same quantity over every settled hour and keeps the bare
+    #: ``crossing_rate`` key. The two are different populations and are not
+    #: interchangeable — see :meth:`card_fields`.
     crossing_rate: float
     by_subsystem: tuple[CoverageCell, ...]
     by_local_hour: tuple[CoverageCell, ...]
@@ -932,6 +939,20 @@ class CoverageReport:
         :func:`~wattsteer_ml.caveated.caveated_figures` collects the same two
         objects for a reviewer, which is the other half and not a substitute:
         see :mod:`wattsteer_ml.caveated`.
+
+        **Every key here names its population.** ``coverage_``-prefixed, and
+        that is why ``crossing_rate`` is published from here as
+        ``coverage_crossing_rate`` (forecaster 29): the bare name belongs to
+        :attr:`~wattsteer_ml.evaluation.metrics.MetricsRow.crossing_rate`, over
+        every settled hour, which is the figure the hot-swap gate vetoes on.
+        **A reader holding both** quotes the settled-hour one — it is the
+        model's crossing rate and the gate's — and reads
+        ``coverage_crossing_rate`` only as a qualifier on the coverage numbers
+        beside it: a coverage statement counted over rows whose band had to be
+        sorted is a statement about three fits that disagreed. They are never
+        compared to each other and never substituted for one another; they have
+        different denominators, so a difference between them is a fact about
+        which hours are curtailed and not about the band.
         """
         fields: dict[str, Any] = {
             "coverage_fold": self.fold_id,
@@ -951,7 +972,17 @@ class CoverageReport:
             "coverage_claim_note": self.claim_note,
             "upper_correction_note": UPPER_CORRECTION_BOUNDS_COVERAGE_P90,
             "p50_unbiasedness": self.p50_unbiasedness,
-            "crossing_rate": self.crossing_rate,
+            # `coverage_crossing_rate`, and never `crossing_rate` — forecaster
+            # 29. This figure is counted over the **curtailed hours** this
+            # report covers; `MetricsRow.crossing_rate` is the same quantity
+            # over **every settled hour**, and it is the one the hot-swap gate
+            # vetoes on and the one a reader should quote. Under the bare name
+            # this dictionary won whenever it was merged into a row that had
+            # already published the settled-hour figure, so the published
+            # `crossing_rate` meant one population or the other depending on
+            # whether a `CoverageReport` existed. The prefix every other key
+            # here carries is what states the population, so it carries it too.
+            "coverage_crossing_rate": self.crossing_rate,
             "coverage_by_subsystem": [cell.as_card_entry() for cell in self.by_subsystem],
             "coverage_by_local_hour": [
                 cell.as_card_entry() for cell in self.by_local_hour

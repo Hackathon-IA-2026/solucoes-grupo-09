@@ -796,7 +796,12 @@ def test_the_card_publishes_both_deltas_and_coverage_three_ways(
     assert quantiles["coverage_by_subsystem"], "per-subsystem coverage is reported"
     assert quantiles["coverage_by_local_hour"], "per-local-hour coverage is reported"
     assert "p50_unbiasedness" in quantiles
-    assert "crossing_rate" in quantiles
+    # Forecaster 29: this block's crossing rate is over its curtailed rows, so
+    # it publishes the population in the key and leaves the bare name to the
+    # metrics table's settled-hour figure.
+    assert trained.card.coverage is not None
+    assert quantiles["coverage_crossing_rate"] == trained.card.coverage.crossing_rate
+    assert "crossing_rate" not in quantiles
     assert 0.0 <= quantiles["upper_correction_realised"] <= 1.0
     assert "under-application" in quantiles["upper_correction_note"]
     assert "never corrected" in quantiles["coverage_conditional_use"]

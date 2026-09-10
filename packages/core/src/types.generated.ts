@@ -1656,7 +1656,15 @@ export interface Coverage {
   /**
    * Share of scored hours whose composed quantiles arrived out of order. Beside
    * the deltas because a band that had to be sorted is a band whose coverage
-   * statement is about three fits that disagreed.
+   * statement is about three fits that disagreed. **The population is this
+   * block's**: the fold's curtailed hours, and the card spells it
+   * `coverage_crossing_rate` for that reason. The model's own crossing rate -
+   * over every settled hour, and the one the hot-swap gate vetoes above 0.01 -
+   * is the metrics table's `crossing_rate` and is a different figure over a
+   * different denominator. Quote that one; read this one only as a qualifier on
+   * the coverage numbers beside it. They are not interchangeable and a
+   * difference between them says which hours were curtailed, not that the band
+   * moved.
    */
   crossingRate: Probability;
 }

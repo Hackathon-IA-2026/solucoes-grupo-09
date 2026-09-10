@@ -228,6 +228,37 @@ describe("model card · the correction caveat survives to the wire", () => {
     expect(band.coverage.upper.correction_applied).toBe("partial");
   });
 
+  it("reads the crossing rate the card counted over this block's rows", async () => {
+    // Forecaster 29. The card spells this figure `coverage_crossing_rate`,
+    // because it is counted over the fold's *curtailed* hours — the population
+    // this block declares — while the metrics table's `crossing_rate` is the
+    // same quantity over every settled hour and is the one the hot-swap gate
+    // vetoes on. Under one name the two took turns, so the gateway reads the
+    // spelling that names the population and nothing else.
+    serves();
+    const { band } = await wire(await card());
+    const quantiles = CARD.quantiles as Wire;
+    expect(quantiles.coverage_crossing_rate).toBeDefined();
+    expect(quantiles.crossing_rate).toBeUndefined();
+    expect(band.coverage.crossing_rate).toBe(quantiles.coverage_crossing_rate);
+  });
+
+  it("refuses a card that still publishes the crossing rate under the bare name", async () => {
+    // The old spelling is not silently accepted: it carried the curtailed-subset
+    // figure under the name of the settled-hour one, and reading it here would
+    // put a number on the wire whose population depends on which card wrote it.
+    // A refusal names the field, which is what makes the retrain legible.
+    const stale = structuredClone(CARD) as Wire;
+    stale.quantiles.crossing_rate = stale.quantiles.coverage_crossing_rate;
+    delete stale.quantiles.coverage_crossing_rate;
+    serves(envelope(stale));
+    const response = await card();
+    expect(response.status).toBe(502);
+    const body = await wire(response);
+    expect(body.error.code).toBe("UPSTREAM_FAILED");
+    expect(body.error.details.field).toBe("coverage_crossing_rate");
+  });
+
   it("cannot publish a P90 without the fraction that explains it", async () => {
     // The structural half of the claim: the schema requires all three fields of
     // the upper block together, so a client cannot be handed a bare
