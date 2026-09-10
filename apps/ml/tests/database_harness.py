@@ -237,7 +237,16 @@ async def seed_publication(
 
     Returns the publication instant, which is what a scenario pins.
     """
-    gate = published_at or (local_midnight(day) - timedelta(hours=5))
+    # Asked of the database rather than restated. `local_midnight(day) - 5h` is
+    # D-1 19:00 BRT, which is `gate_late` and only `gate_late`: every
+    # `gate_early` seed was stamped nineteen hours when the gate says nine, and
+    # migration 0041's CHECK — `published_at = gate_at(target_date,
+    # gate_profile)` — is what finally said so. A second spelling of the gate
+    # hour in a test harness is the same defect the constraint exists to end,
+    # so the harness now reads the one function the constraint reads.
+    gate = published_at or await conn.fetchval(
+        "select gate_at($1::date, $2::text)", day, gate_profile
+    )
     stamp = ingested_at or datetime(2026, 1, 1, tzinfo=UTC)
     start = local_midnight(day)
     correction = "hurdle_isotonic_conformal_v1"
