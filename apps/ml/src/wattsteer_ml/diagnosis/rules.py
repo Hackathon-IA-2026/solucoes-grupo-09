@@ -92,13 +92,13 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from wattsteer_ml.diagnosis.driver_groups import DRIVER_GROUP_CODES, GroupCode
 from wattsteer_ml.diagnosis.publication import (
     RULE_ACTION_ORDER,
     FiredRule,
     RuleAction,
 )
 from wattsteer_ml.diagnosis.rule_context import UNMODELLED_REASON, RuleContext
+from wattsteer_ml.driver_groups import DRIVER_GROUP_CODES, GroupCode
 
 #: What a fired rule may record. JSON scalars and lists of codes, because
 #: ``rule_flags`` is a ``jsonb`` column the narration is **required** to state,

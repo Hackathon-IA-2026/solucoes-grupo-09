@@ -3502,11 +3502,11 @@ export const diagnosisPublicationRefusal = pgTable(
       columns: [t.targetDate, t.gateProfile, t.lane],
     }),
     index("diagnosis_publication_refusal_observed").on(t.observedAt),
-    // The closed condition vocabulary: the four `apps/ml` distinguishes, and
-    // not the fifth it stopped distinguishing.
+    // The closed condition vocabulary: the five `apps/ml` distinguishes, and
+    // not the one it stopped distinguishing (`null_headline_feature`).
     check(
       "diagnosis_publication_refusal_condition",
-      sql`${t.condition} in ('no_base_fit_window', 'no_matched_background', 'contract_and_groups_disagree', 'incomplete_day')`,
+      sql`${t.condition} in ('no_base_fit_window', 'no_matched_background', 'contract_and_groups_disagree', 'incomplete_day', 'partition_disagrees_with_card')`,
     ),
     // A refusal that says nothing is a row an operator cannot act on.
     check("diagnosis_publication_refusal_reason_given", sql`length(${t.reason}) > 0`),

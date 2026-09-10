@@ -95,7 +95,7 @@ import numpy.typing as npt
 from wattsteer_ml.constants import SUBSYSTEM_CODES, Subsystem
 from wattsteer_ml.diagnosis.attribution import HourAttribution
 from wattsteer_ml.diagnosis.day_attribution import DayAttribution
-from wattsteer_ml.diagnosis.driver_groups import (
+from wattsteer_ml.driver_groups import (
     DRIVER_GROUP_CODES,
     DRIVER_GROUP_MAP,
     DriverGroupMap,

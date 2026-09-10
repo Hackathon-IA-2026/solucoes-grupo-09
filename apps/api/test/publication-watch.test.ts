@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { GATES, localWallClock } from "@wattsteer/core/schedule";
 import { sql } from "drizzle-orm";
@@ -633,13 +633,31 @@ describe("the chained diagnosis watch · the refusal vocabulary", () => {
     // The ledger's CHECK is the storage half of the vocabulary. A condition the
     // watch understands and the table rejects would be a refusal that could not
     // be written down, and therefore an alarm on a correct refusal.
-    const migration = readFileSync(
-      join(import.meta.dir, "..", "drizzle", "0044_a_refusal_is_a_record.sql"),
-      "utf8",
+    //
+    // Read from the *last* migration that defines the constraint rather than
+    // from a named file. The first version of this test read
+    // `0044_a_refusal_is_a_record.sql` by name and broke the moment forecaster
+    // 31's fifth condition arrived and `0045` widened the CHECK — the test was
+    // asserting the vocabulary as of one migration, not as of the schema. Since
+    // `drizzle/` is applied history and a constraint is corrected by a later
+    // migration rather than by an edit, the effective CHECK is the newest
+    // definition, and that is what the table will actually accept.
+    const dir = join(import.meta.dir, "..", "drizzle");
+    const migrations = readdirSync(dir)
+      .filter((name) => name.endsWith(".sql"))
+      .sort();
+    const CONSTRAINT = 'CONSTRAINT "diagnosis_publication_refusal_condition"';
+    const defining = migrations.filter((name) =>
+      readFileSync(join(dir, name), "utf8").includes(CONSTRAINT),
     );
-    const check = migration.slice(
-      migration.indexOf('CONSTRAINT "diagnosis_publication_refusal_condition"'),
-    );
+    // Non-vacuous three ways: the directory was read, the constraint was found
+    // at all, and a listing that matched nothing cannot pass by leaving
+    // `admitted` empty and comparing two empty sets.
+    expect(migrations.length).toBeGreaterThan(40);
+    expect(defining.length).toBeGreaterThan(0);
+
+    const newest = readFileSync(join(dir, defining[defining.length - 1]), "utf8");
+    const check = newest.slice(newest.lastIndexOf(CONSTRAINT));
     const admitted = [
       ...check.slice(0, check.indexOf("))")).matchAll(/'([a-z_]+)'/g),
     ].map((match) => match[1]);

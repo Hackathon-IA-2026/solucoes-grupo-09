@@ -1,10 +1,10 @@
 """The eight driver groups, loaded from data and hashed.
 
 `docs/specs/diagnosis.md`, "Feature grouping — eight players, one total
-partition", is the authority for the eight codes; `driver_groups.yaml` beside
-this module is the map itself and `docs/specs/feature-engineering.md` is the
-naming authority for every feature name in it. This module groups names and
-never invents one.
+partition", is the authority for the eight codes; `diagnosis/driver_groups.yaml`
+is the map itself and `docs/specs/feature-engineering.md` is the naming
+authority for every feature name in it. This module groups names and never
+invents one.
 
 **The map is data, and this module refuses to be a second copy of it.** Nothing
 below names a feature or a group. The eight codes appear once, as a closed
@@ -20,14 +20,29 @@ features fall into. A feature added upstream that nobody placed fails
 
 **Frozen against retrains.** ``driver_group_version`` and
 ``driver_group_hash`` are stamped on the model card by the forecaster's card
-assembly, which reads them from :meth:`DriverGroupMap.card_fields`. A retrain
-never touches the map, so a change to the ranking's vocabulary is a
-product-visible event.
+assembly, which reads them from :meth:`DriverGroupMap.card_fields` — through
+:meth:`~wattsteer_ml.training.headline_check.HeadlineFeatureCheck.card_fields`,
+so the card's partition and the partition the check ranked under are one value
+and not two reads of a global. A retrain never touches the map, so a change to
+the ranking's vocabulary is a product-visible event, and
+:func:`card_partition_fault` is what makes it a *detectable* one.
+
+**Why this module is top level and not in ``diagnosis/``.** Since forecaster 31
+the map has two readers: the attribution, which plays the game over it, and the
+artifact's card assembly, which stamps its identity. ``training/`` cannot import
+any submodule of ``wattsteer_ml.diagnosis`` — importing one runs that package's
+``__init__``, which reaches ``composed_target``, which imports
+``wattsteer_ml.training`` back — so a map that lived in ``diagnosis/`` could not
+be stamped on the card at all. It sits beside :mod:`wattsteer_ml.model_inputs`
+for the same reason that module gives for itself: one file on disk, read once,
+by whoever needs it. ``wattsteer_ml.diagnosis`` re-exports every name here, so
+the attribution's spelling did not change.
 """
 
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
@@ -70,8 +85,15 @@ UnitCode = Literal["mwh", "mw", "ratio", "pct", "hours", "boolean"]
 
 UNIT_CODES: tuple[UnitCode, ...] = ("mwh", "mw", "ratio", "pct", "hours", "boolean")
 
-#: The map, beside this module. Loaded at train time, never generated.
-DRIVER_GROUPS_PATH = Path(__file__).with_name("driver_groups.yaml")
+#: The map itself. Loaded at train time, never generated.
+#:
+#: **The loader moved and the data did not.** `docs/specs/diagnosis.md` names
+#: this path — "`apps/ml/src/wattsteer_ml/diagnosis/driver_groups.yaml`, loaded
+#: at train time, hashed" — and a claim in a spec is a claim this repo checks,
+#: so forecaster 31 moved this module out of the `diagnosis` package and left
+#: the YAML where the spec says it is. The grouping is still the diagnosis
+#: lane's product decision; what moved is the code that reads it.
+DRIVER_GROUPS_PATH = Path(__file__).parent / "diagnosis" / "driver_groups.yaml"
 
 #: The generated model-input artifact, beside this module.
 #:
@@ -258,14 +280,17 @@ class DriverGroupMap:
         return f"sha256:{self.digest}"
 
     def card_fields(self) -> dict[str, str]:
-        """The two model-card fields the forecaster's card assembly stamps.
+        """The two identity fields the forecaster's card assembly stamps.
 
         The third field the diagnosis spec asks the card for —
-        ``headline_feature_check``, whether each declared headline was the
-        largest mean-``|φ|`` member on the newest fold — needs per-member
-        ``|φ|`` and belongs to the ticket that computes ``φ``. It is a card
-        *warning*, never an automatic relabel: a driver whose subtitle changes
-        weekly is worse than one that is second-best.
+        ``headline_feature_check`` — needs the fitted model and the newest
+        fold's rows, so it is assembled by
+        :mod:`wattsteer_ml.training.headline_check`, which calls this method for
+        the two values here rather than re-deriving them: the card's partition
+        and the partition the check ranked under are then one value by
+        construction. It is a card *warning*, never an automatic relabel: a
+        driver whose subtitle changes weekly is worse than one that is
+        second-best.
         """
         return {
             "driver_group_version": str(self.version),
@@ -445,3 +470,58 @@ def load_model_inputs(
 
 #: The map, loaded once. Training, attribution and the card all read this.
 DRIVER_GROUP_MAP = load_driver_group_map()
+
+
+#: The card group the three fields live in. Named here because both the writer
+#: (:meth:`~wattsteer_ml.training.headline_check.HeadlineFeatureCheck.card_fields`,
+#: through the card's assembly) and the reader (:func:`card_partition_fault`)
+#: have to agree about it, and a string typed twice is a group that can be
+#: renamed on one side only.
+CARD_DRIVERS_GROUP = "drivers"
+
+
+def card_partition_fault(
+    card: Mapping[str, object], group_map: DriverGroupMap = DRIVER_GROUP_MAP
+) -> str | None:
+    """Why this card's driver-group partition is not the running code's, or ``None``.
+
+    **The point of stamping the partition at all.** An attribution computed
+    under one partition is not comparable with one computed under another — the
+    eight players are different players — so an artifact whose card names a
+    different map from the one this process holds cannot have an attribution
+    published against it without the rows claiming a partition the artifact
+    never saw. `docs/specs/diagnosis.md` makes the map "frozen against
+    retrains"; this function is what makes a thaw visible.
+
+    Three faults, each named on both sides:
+
+    - the card carries no ``drivers`` group at all — an artifact written before
+      forecaster 31, which cannot say what it was trained beside;
+    - the hashes differ — a member moved group, arrived or left;
+    - the versions differ while the hashes agree, or the reverse, which means
+      somebody edited one of the two by hand.
+
+    Returned rather than raised so the caller decides the severity. It is not a
+    load failure: a YAML edit would otherwise brick every artifact on the volume
+    and stop the forecast as well as the explanation, and the spec's own
+    consequence for a map edit is an invalidated narration cache and not a
+    withdrawn model. :func:`~wattsteer_ml.diagnosis.publish.\
+build_diagnosis_publication` is where it *is* fatal, because that is the one
+    place the difference would be written down as fact.
+    """
+    group = card.get(CARD_DRIVERS_GROUP)
+    if not isinstance(group, Mapping):
+        return (
+            f"the card carries no {CARD_DRIVERS_GROUP!r} group, so it does not "
+            "say which driver-group partition produced it; the running code "
+            f"holds version {group_map.version} / {group_map.driver_group_hash}"
+        )
+    expected = group_map.card_fields()
+    differences = sorted(
+        f"{name}: the card says {group.get(name)!r} and the running code {value!r}"
+        for name, value in expected.items()
+        if group.get(name) != value
+    )
+    if not differences:
+        return None
+    return "; ".join(differences)

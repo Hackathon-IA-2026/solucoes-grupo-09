@@ -75,7 +75,7 @@ from wattsteer_ml.diagnosis.day_attribution import (
     attribute_day,
     day_rows,
 )
-from wattsteer_ml.diagnosis.driver_groups import (
+from wattsteer_ml.driver_groups import (
     DRIVER_GROUP_CODES,
     DriverGroupMap,
     GroupCode,

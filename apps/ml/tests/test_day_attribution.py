@@ -67,8 +67,8 @@ from wattsteer_ml.diagnosis.day_attribution import (
     attribute_day,
     day_rows,
 )
-from wattsteer_ml.diagnosis.driver_groups import DRIVER_GROUP_CODES
 from wattsteer_ml.diagnosis.shapley import exact_shapley, shapley_operator
+from wattsteer_ml.driver_groups import DRIVER_GROUP_CODES
 from wattsteer_ml.evaluation import HOURS_PER_DAY, RowKey
 from wattsteer_ml.training import FeatureBlock, TrainedFold
 from wattsteer_ml.training.background import (

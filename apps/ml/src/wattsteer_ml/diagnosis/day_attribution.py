@@ -72,7 +72,7 @@ from wattsteer_ml.diagnosis.attribution import (
     attribute_hour,
     resample_hour,
 )
-from wattsteer_ml.diagnosis.driver_groups import (
+from wattsteer_ml.driver_groups import (
     DRIVER_GROUP_CODES,
     DRIVER_GROUP_MAP,
     DriverGroupMap,

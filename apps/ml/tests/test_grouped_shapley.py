@@ -63,17 +63,17 @@ from wattsteer_ml.diagnosis.attribution import (
     group_columns,
 )
 from wattsteer_ml.diagnosis.composed_target import bundle_expectation
-from wattsteer_ml.diagnosis.driver_groups import (
-    DRIVER_GROUP_CODES,
-    DRIVER_GROUP_MAP,
-    GroupCode,
-    UngroupedFeatureError,
-)
 from wattsteer_ml.diagnosis.shapley import (
     ShapleyError,
     coalition_count,
     coalition_weights,
     exact_shapley,
+)
+from wattsteer_ml.driver_groups import (
+    DRIVER_GROUP_CODES,
+    DRIVER_GROUP_MAP,
+    GroupCode,
+    UngroupedFeatureError,
 )
 from wattsteer_ml.evaluation import RowKey
 from wattsteer_ml.training import FeatureBlock, TrainedFold
@@ -503,7 +503,7 @@ def test_the_diagnosis_module_holds_no_composition_of_its_own() -> None:
 
 def test_both_real_feature_sets_give_every_group_a_column() -> None:
     """A player who cannot move is a bar that is structurally zero."""
-    from wattsteer_ml.diagnosis.driver_groups import load_model_inputs
+    from wattsteer_ml.driver_groups import load_model_inputs
 
     for names in load_model_inputs().values():
         columns = group_columns(names, DRIVER_GROUP_MAP)

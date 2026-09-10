@@ -52,6 +52,16 @@ export const DIAGNOSIS_REFUSAL_CONDITIONS = [
   "no_matched_background",
   "contract_and_groups_disagree",
   "incomplete_day",
+  // The fifth, from forecaster 31, which landed in the same wave as this
+  // ledger. The artifact's card now names the driver-group partition its
+  // "typical" was ranked under, so a card whose partition disagrees with the
+  // map the publisher reads is a refusal rather than an attribution filed
+  // under the wrong partition. The vocabulary test parses `apps/ml`'s own
+  // tuple rather than trusting this list, which is why the disagreement
+  // surfaced on the merge instead of as a refusal this side declined to
+  // record — and an unrecorded refusal reads, to the watch, as a missed
+  // publication.
+  "partition_disagrees_with_card",
 ] as const;
 
 export type DiagnosisRefusalCondition = (typeof DIAGNOSIS_REFUSAL_CONDITIONS)[number];

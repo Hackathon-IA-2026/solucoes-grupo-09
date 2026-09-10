@@ -84,10 +84,6 @@ import numpy.typing as npt
 from wattsteer_ml.constants import SUBSYSTEM_CODES, Subsystem
 from wattsteer_ml.diagnosis.composed_target import bundle_expectation
 from wattsteer_ml.diagnosis.day_attribution import attribute_day, day_rows
-from wattsteer_ml.diagnosis.driver_groups import (
-    DRIVER_GROUP_MAP,
-    DriverGroupMap,
-)
 from wattsteer_ml.diagnosis.publication import (
     AttributionPublication,
     AttributionRow,
@@ -96,6 +92,11 @@ from wattsteer_ml.diagnosis.publication import (
 )
 from wattsteer_ml.diagnosis.rule_context import ReasonMix, build_rule_context
 from wattsteer_ml.diagnosis.rules import apply_rules
+from wattsteer_ml.driver_groups import (
+    DRIVER_GROUP_MAP,
+    DriverGroupMap,
+    card_partition_fault,
+)
 from wattsteer_ml.evaluation import RowKey
 from wattsteer_ml.lanes import Lane
 from wattsteer_ml.training import (
@@ -130,6 +131,12 @@ class DiagnosisPublicationRefusedError(Exception):
       artifact's contract, or some column is in no group. A player who cannot
       move is a bar that is structurally zero, and the repair is a line in
       ``driver_groups.yaml``.
+    - ``partition_disagrees_with_card`` — the artifact's card names a
+      driver-group partition that is not the one this process holds. An
+      attribution is a game over eight players and two partitions are two sets
+      of players, so publishing anyway would write rows stamped with a partition
+      the artifact never saw. The repair is a retrain, or reverting the YAML
+      edit; see :func:`~wattsteer_ml.driver_groups.card_partition_fault`.
     - ``incomplete_day`` — the feature rows are not a whole Brasilia civil day
       for any subsystem.
     They are named rather than flattened because the gateway admits the code and
@@ -161,6 +168,7 @@ REFUSAL_CONDITIONS: tuple[str, ...] = (
     "no_base_fit_window",
     "no_matched_background",
     "contract_and_groups_disagree",
+    "partition_disagrees_with_card",
     "incomplete_day",
 )
 
@@ -275,6 +283,21 @@ def build_diagnosis_publication(
             f"{lane.directory_name}: the feature function returned no row for "
             f"{target_date.isoformat()}; there is no day to explain and an "
             "explanation of zero hours is not one",
+        )
+
+    # The artifact's partition against the running code's, before a single row
+    # is assembled. Checked against the *live* map and not against `group_map`:
+    # that argument exists so a fixture contract can be attributed at all, and
+    # the question here is whether this deployment's YAML is the one the
+    # artifact was trained beside.
+    fault = card_partition_fault(loaded.card)
+    if fault is not None:
+        raise DiagnosisPublicationRefusedError(
+            "partition_disagrees_with_card",
+            f"{loaded.artifact_id}: {fault}. An attribution stored under one "
+            "driver-group partition is not comparable with one stored under "
+            "another, so no row is published; retrain, or revert the edit to "
+            "driver_groups.yaml",
         )
 
     background = _background(base_fit_rows, loaded=loaded, rows_per_cell=rows_per_cell)
