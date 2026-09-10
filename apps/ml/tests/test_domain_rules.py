@@ -64,6 +64,7 @@ from wattsteer_ml.diagnosis.rule_context import (
     RuleContextError,
     build_rule_context,
     context_field_names,
+    reason_mixes_from_payload,
 )
 from wattsteer_ml.diagnosis.rules import (
     REOPENING_TRIGGER,
@@ -184,6 +185,16 @@ def _row(
     targets: npt.NDArray[np.float64],
     outcome: RuleOutcome | None = None,
 ) -> dict[str, Any]:
+    """The published row for this day, with the rules' verdict on it.
+
+    ``outcome=None`` means "run them and take what comes", **not** "skip them":
+    an `AttributionRow` with no roll call is refused, which is the whole of
+    api-surface 10's third box. `outcome.for_row()` is the one call that carries
+    the flags, the demotions and the roll call together, so the before/after
+    payload comparisons below cannot accidentally compare a row the rules never
+    saw against one they did.
+    """
+    verdict = apply_rules(_context(day, targets)) if outcome is None else outcome
     row = AttributionRow(
         attribution=day,
         readings=headline_readings(
@@ -193,8 +204,7 @@ def _row(
             background=_background(),
             group_map=FIXTURE_MAP,
         ),
-        rule_flags=() if outcome is None else outcome.flags,
-        demoted=frozenset() if outcome is None else outcome.demoted,
+        **verdict.for_row(),
     )
     return row.as_row()
 
@@ -234,7 +244,15 @@ def _always(code: str, action: str) -> Rule:
 
 
 #: The permitted differences, and the whole of them.
-PERMITTED_TOP_LEVEL = frozenset({"rule_flags", "governing_rule_action"})
+#:
+#: ``rules_evaluated`` is on the list for the reason ``rule_flags`` is: it is
+#: part of the rules' own **record**, and not a figure about the model. The test
+#: below deliberately evaluates one rule at a time against a payload built by
+#: evaluating all four, so the roll call differs by construction — and a roll
+#: call is not a number a rule could have changed. Nothing else may move.
+PERMITTED_TOP_LEVEL = frozenset(
+    {"rule_flags", "governing_rule_action", "rules_evaluated"}
+)
 PERMITTED_PER_DRIVER = frozenset({"demoted"})
 
 
@@ -338,8 +356,7 @@ def test_the_attribution_the_rules_ran_against_is_the_one_published() -> None:
             background=_background(),
             group_map=FIXTURE_MAP,
         ),
-        rule_flags=outcome.flags,
-        demoted=outcome.demoted,
+        **outcome.for_row(),
     )
 
     assert row.attribution is day
@@ -417,6 +434,8 @@ def test_a_rule_cannot_demote_a_group_that_does_not_exist() -> None:
                 background=_background(),
                 group_map=FIXTURE_MAP,
             ),
+            rule_flags=(),
+            rules_evaluated=SHIPPING_RULE_CODES,
             demoted=frozenset({"tariff_regime"}),  # type: ignore[arg-type]
         )
 
@@ -836,6 +855,103 @@ def test_unmodelled_outage_regime_fires_only_when_REL_leads() -> None:  # noqa: 
         _fires("unmodelled_outage_regime", _context(day, targets, recent_reasons=tied))
         is None
     )
+
+
+# --- `recent_reasons` comes off the wire, from a real read ---------------------
+#
+# `.scratch/api-surface/issues/10-forecast-publication.md`'s fourth box.
+# Diagnosis 07 shipped `unmodelled_outage_regime`, its predicate and its facts,
+# complete and tested against a *supplied* `ReasonMix` — and left the read
+# unbuilt, so the rule could not fire in production. `apps/api`'s
+# `src/diagnosis/reason-mix.ts` is the read; `reason_mixes_from_payload` is this
+# side of the wire; these are the tests that the two meet.
+
+
+def test_the_rule_fires_from_a_reason_mix_read_off_the_wire() -> None:
+    """End to end on this side: the payload shape the gateway sends fires it.
+
+    The document below is `reasonMixPayload`'s output verbatim — a settled date
+    and shares, no MWh — for a day the read found `REL` leading on. The rule
+    firing from *that* rather than from a hand-built `ReasonMix` is the whole
+    point of the box: what was missing was never the rule.
+    """
+    targets = _targets(21)
+    day = _day(21, targets)
+    wire = {
+        "NE": {"settled_date": "2026-03-02", "shares": {"REL": 0.62, "ENE": 0.38}},
+        "S": {"settled_date": "2026-03-02", "shares": {"CNF": 0.9, "REL": 0.1}},
+    }
+
+    mixes = reason_mixes_from_payload(wire)
+    assert set(mixes) == {"NE", "S"}
+    assert mixes["NE"].settled_date == date(2026, 3, 2)
+    assert mixes["NE"].top_reason == UNMODELLED_REASON
+
+    fired = _fires(
+        "unmodelled_outage_regime", _context(day, targets, recent_reasons=mixes["NE"])
+    )
+    assert fired is not None
+    assert fired.facts == {
+        "settled_date": "2026-03-02",
+        "top_reason": "REL",
+        "top_reason_share": 0.62,
+    }
+    # And the subsystem whose day was led by a different reason does not fire,
+    # so the map is read per subsystem rather than as one national answer.
+    assert (
+        _fires(
+            "unmodelled_outage_regime",
+            _context(day, targets, recent_reasons=mixes["S"]),
+        )
+        is None
+    )
+
+
+def test_a_subsystem_with_no_settled_day_is_absent_rather_than_zeroed() -> None:
+    """An absence stays an absence all the way to the predicate."""
+    targets = _targets(22)
+    day = _day(22, targets)
+    # What the gateway sends when no subsystem had a qualifying settled day:
+    # an empty block, never four mixes of zeros.
+    assert reason_mixes_from_payload({}) == {}
+    assert reason_mixes_from_payload(None) == {}
+    # And the rule does not fire on it, which is the difference that matters:
+    # "nothing was restricted" and "we cannot see that day yet" would otherwise
+    # be the same input to a rule that annotates the screen.
+    assert (
+        _fires(
+            "unmodelled_outage_regime",
+            _context(
+                day, targets, recent_reasons=reason_mixes_from_payload({}).get("NE")
+            ),
+        )
+        is None
+    )
+
+
+def test_a_malformed_reason_block_is_refused_rather_than_dropped() -> None:
+    """A dropped block looks exactly like an absent day, so it is refused.
+
+    Each case is a way the gateway could get this wrong, and each has to fail
+    loudly: a silently dropped mix is a rule that quietly stops firing, which is
+    the state this box was closing in the first place.
+    """
+    with pytest.raises(RuleContextError, match="not a mapping"):
+        reason_mixes_from_payload([{"settled_date": "2026-03-02"}])
+    with pytest.raises(RuleContextError, match="not a subsystem"):
+        reason_mixes_from_payload({"SIN": {"settled_date": "2026-03-02", "shares": {}}})
+    with pytest.raises(RuleContextError, match="no settled_date"):
+        reason_mixes_from_payload({"NE": {"shares": {"REL": 1.0}}})
+    with pytest.raises(RuleContextError, match="no shares"):
+        reason_mixes_from_payload({"NE": {"settled_date": "2026-03-02"}})
+    with pytest.raises(RuleContextError, match="settled_date is"):
+        reason_mixes_from_payload({"NE": {"settled_date": "the 2nd", "shares": {}}})
+    # And the reason vocabulary stays `ReasonMix`'s to police, so the two
+    # cannot come to disagree about it.
+    with pytest.raises(RuleContextError, match="not a ReasonCode"):
+        reason_mixes_from_payload(
+            {"NE": {"settled_date": "2026-03-02", "shares": {"RELAX": 1.0}}}
+        )
 
 
 def test_the_shipping_rules_read_only_context_fields() -> None:

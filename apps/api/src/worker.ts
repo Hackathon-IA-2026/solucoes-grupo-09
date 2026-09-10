@@ -39,12 +39,32 @@ const archive = createPayloadArchive({
   directory: config.archiveDir,
 });
 
+// The forecast publication's follow-on, and the one knot in this file.
+//
+// `docs/specs/api-surface.md` gives `publish-diagnosis` the trigger "on
+// completion of each" forecast publication, so the dispatcher has to be able to
+// put a task back on the queue — and the queue is constructed *from* the
+// dispatcher, so the dispatcher cannot hold it. This closes the loop in the one
+// place that can: the dispatcher is handed a thunk, the runner is built, and the
+// thunk is bound to it. A task that somehow arrived in the window between the
+// two gets a named error rather than a `TypeError` on `undefined`.
+let queue: ((task: WorkerTask) => Promise<string>) | undefined;
+
 const dispatch = createWorkerDispatch({
   db: database.db,
   archive,
   retention: {
     unproductiveDays: config.archiveRetentionDays,
     batchSize: 500,
+  },
+  submit: async (task) => {
+    if (queue === undefined) {
+      throw new Error(
+        "the queue is not ready yet: a follow-on task cannot be submitted " +
+          "before the runner it would go on has been constructed",
+      );
+    }
+    return queue(task);
   },
 });
 
@@ -60,6 +80,8 @@ const runner = createBullMqRunner<WorkerTask, WorkerTaskResult>(
     backoffMs: config.jobBackoffMs,
   },
 );
+
+queue = (task) => runner.submit(task);
 
 // The heartbeat: three sweeps and a retention pass, registered on the queue
 // itself. Registering is idempotent — the ids are stable, so N replicas
@@ -164,7 +186,7 @@ console.log(
 );
 console.log(
   "   handlers: ONS ingestion (7 sources), refresh sweeps, retention, centroid " +
-    "drift, forecast publication",
+    "drift, forecast publication, diagnosis publication",
 );
 if (archive) {
   console.log(`   custody: raw payloads retained in the ${archive.kind} archive`);
@@ -191,6 +213,13 @@ if (config.refreshSchedules && config.mlUrl) {
     ).join(" · ")} (${PUBLICATION_TIME_ZONE})`,
   );
   console.log(`   retrain: ${RETRAIN_JOB_ID} ${RETRAIN_PATTERN} (${RETRAIN_TIME_ZONE})`);
+  // No pattern of its own, and saying so is the point: the diagnosis
+  // publication is the one row of the spec's job table whose trigger is a
+  // completion rather than a cron, so an operator reading this banner and
+  // looking for a third time is told where to look instead.
+  console.log(
+    "   diagnosis: on completion of each forecast publication (no cron of its own)",
+  );
 }
 
 const shutdown = async (signal: string) => {

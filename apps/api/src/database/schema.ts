@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   bigint,
   boolean,
   check,
@@ -2358,6 +2359,49 @@ function forecastOriginColumns() {
 }
 
 /**
+ * `published_at = gate_at(target_date, gate_profile)`, as a table constraint.
+ *
+ * **The publication instant is the gate, made unrepresentable-otherwise rather
+ * than merely refused.** `docs/specs/api-surface.md`'s boundary decision rests
+ * on one sentence — a forecast row's `published_at` is the instant the producer
+ * asserted the value, and by the feature spec that instant is
+ * `gate_at(target_date, gate_profile)` — and until this constraint the sentence
+ * was enforced by *one writer*: `forecast/publish.ts` computes the gate on this
+ * side and refuses a payload stamped with anything else before its first
+ * insert. That is a property of the path that currently writes, not of the
+ * table, and a second writer — a backfill, a repair script, a hand-run INSERT
+ * — would have inherited none of it. The constraint moves it into the schema,
+ * where a mis-stamped row is not a row.
+ *
+ * **It calls `gate_at` rather than restating the gate.** `drizzle/0016` is the
+ * authority for every feature row's `published_at` and therefore for every
+ * published one; `packages/core`'s `GATES` and `forecast/gate.ts` are the two
+ * spellings that already exist, and `forecast/gate.ts` says in as many words
+ * that a fourth would be worth avoiding. So this is a call, not a copy, and
+ * the constraint and the feature rows cannot disagree about the hour.
+ *
+ * **It applies to `backfilled_holdout` rows too, deliberately.** A
+ * reconstruction's `published_at` is the *counterfactual* gate — "the gate that
+ * would have been" for the day it describes, per `forecast/backfill.ts` — which
+ * is the same function of the same two columns. The discriminator between a
+ * record and a reconstruction is `origin_kind`, and it was never the instant.
+ *
+ * `gate_at` is declared `STABLE` rather than `IMMUTABLE` in `0016`, which
+ * Postgres permits in a CHECK. It is deterministic in its two arguments up to
+ * the tzdata `America/Sao_Paulo` resolves under — exactly the assumption the
+ * neighbouring `_is_a_forecast` constraints already make with their inline
+ * `at time zone 'America/Sao_Paulo'`.
+ */
+function publishedAtIsTheGate(
+  name: string,
+  publishedAt: AnyPgColumn,
+  targetDate: AnyPgColumn,
+  gateProfile: AnyPgColumn,
+) {
+  return check(name, sql`${publishedAt} = gate_at(${targetDate}, ${gateProfile}::text)`);
+}
+
+/**
  * One published hour of one subsystem's day-ahead forecast.
  *
  * **A `Forecast`, and its own table family** (`docs/domain-model.md` §4): a
@@ -2469,6 +2513,12 @@ export const curtailmentForecastHour = pgTable(
     ),
     check("curtailment_forecast_hour_local_hour", sql`${t.localHour} between 0 and 23`),
     check("curtailment_forecast_hour_threshold_positive", sql`${t.thresholdMw} > 0`),
+    publishedAtIsTheGate(
+      "curtailment_forecast_hour_published_at_is_the_gate",
+      t.publishedAt,
+      t.targetDate,
+      t.gateProfile,
+    ),
   ],
 );
 
@@ -2711,6 +2761,12 @@ export const curtailmentForecastDay = pgTable(
       "curtailment_forecast_day_risk_edges_ordered",
       sql`0 < ${t.riskBinElevatedFrom} and ${t.riskBinElevatedFrom} < ${t.riskBinHighFrom} and ${t.riskBinHighFrom} < 1`,
     ),
+    publishedAtIsTheGate(
+      "curtailment_forecast_day_published_at_is_the_gate",
+      t.publishedAt,
+      t.targetDate,
+      t.gateProfile,
+    ),
   ],
 );
 
@@ -2858,6 +2914,12 @@ export const curtailmentForecastNationalDay = pgTable(
     check(
       "curtailment_forecast_national_day_risk_edges_ordered",
       sql`0 < ${t.riskBinElevatedFrom} and ${t.riskBinElevatedFrom} < ${t.riskBinHighFrom} and ${t.riskBinHighFrom} < 1`,
+    ),
+    publishedAtIsTheGate(
+      "curtailment_forecast_national_day_published_at_is_the_gate",
+      t.publishedAt,
+      t.targetDate,
+      t.gateProfile,
     ),
   ],
 );
@@ -3054,6 +3116,33 @@ export const diagnosisAttribution = pgTable(
      */
     ruleFlags: jsonb().notNull().default([]),
     /**
+     * The roll call: every rule code the engine **evaluated**, fired or not.
+     *
+     * `.scratch/api-surface/issues/10-forecast-publication.md`'s third box. The
+     * one-way valve is enforced four ways inside `apply_rules` — a rule is
+     * never handed a number it could change, cannot return one, is held to
+     * that by an AST walk, and the payload is compared byte-for-byte before and
+     * after — and not one of the four says the rules were **called**. So a
+     * publish path that assembled a row and skipped them wrote a perfectly
+     * valid row with `rule_flags = []`, which is *also* what a quiet day looks
+     * like, and nothing could tell the two apart afterwards.
+     *
+     * This column is what tells them apart. `[]` on it means the rules did not
+     * run, and the constraint below makes that unwritable; a quiet day carries
+     * the four codes and an empty `rule_flags`. It is a list of codes rather
+     * than a count or a boolean because "which rules did this row see" is the
+     * question a strange narration a year from now actually raises — the
+     * shipping set is expected to grow, and a row explained under three rules
+     * is not the same row as one explained under five.
+     *
+     * It is `text[]` and not an enum: the codes are `apps/ml`'s
+     * `SHIPPING_RULE_CODES` and adding a rule must not be a migration. The
+     * closed half of the check is the *gateway's parse*, which refuses a code
+     * that is not a rule; the check below is the half that cannot be argued
+     * with.
+     */
+    rulesEvaluated: text().array().notNull(),
+    /**
      * The strictest action any fired rule took — `withhold` > `demote` >
      * `annotate` — or null when none fired. It governs the *narration*, and it
      * governs nothing in this table's numbers.
@@ -3101,6 +3190,33 @@ export const diagnosisAttribution = pgTable(
     check(
       "diagnosis_attribution_rule_flags_array",
       sql`jsonb_typeof(${t.ruleFlags}) = 'array'`,
+    ),
+    // The rules ran. An attribution that names no evaluated rule is the
+    // skipped-publish-path row api-surface 10's third box is about, and it is
+    // not representable: `rule_flags = []` is a quiet day only when the roll
+    // call says four rules looked at it and none fired.
+    check(
+      "diagnosis_attribution_the_rules_ran",
+      sql`cardinality(${t.rulesEvaluated}) > 0`,
+    ),
+    // And every rule that fired was evaluated. Two halves of one record, so a
+    // flag list assembled beside a roll call from another run is refused here
+    // as well as at the gateway's parse.
+    //
+    // Through a function because Postgres forbids a subquery in a CHECK and the
+    // test is over the elements of a `jsonb` array.
+    // `rule_flags_were_evaluated` is declared in
+    // `drizzle/0042_the_roll_call_of_the_rules.sql`, beside the constraint that
+    // calls it.
+    check(
+      "diagnosis_attribution_flags_were_evaluated",
+      sql`rule_flags_were_evaluated(${t.ruleFlags}, ${t.rulesEvaluated})`,
+    ),
+    publishedAtIsTheGate(
+      "diagnosis_attribution_published_at_is_the_gate",
+      t.publishedAt,
+      t.targetDate,
+      t.gateProfile,
     ),
   ],
 );

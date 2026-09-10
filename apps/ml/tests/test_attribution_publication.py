@@ -52,6 +52,7 @@ from wattsteer_ml.diagnosis.publication import (
     build_attribution_publication,
     headline_readings,
 )
+from wattsteer_ml.diagnosis.rules import SHIPPING_RULE_CODES
 from wattsteer_ml.evaluation import HOURS_PER_DAY, RowKey
 
 FIXTURE_MAP = synthetic_map(tuple((f"f{index}",) for index in range(8)))
@@ -146,8 +147,18 @@ def _day() -> DayAttribution:
 def _row(
     *,
     rule_flags: Sequence[FiredRule] = (),
+    rules_evaluated: Sequence[str] = SHIPPING_RULE_CODES,
     demoted: frozenset[str] = frozenset(),
 ) -> AttributionRow:
+    """A published row of the fixture day.
+
+    ``rules_evaluated`` defaults to the four shipping codes rather than to
+    ``()`` and that is deliberate: the default has to be the *honest* state —
+    the rules ran and, on this fixture, nothing fired — because a default of
+    ``()`` is the skipped-publish-path lie the row now refuses. Every test
+    below that passes no ``rule_flags`` is asserting "the rules ran and were
+    quiet", which is a different sentence from "nobody asked them".
+    """
     day = _day()
     return AttributionRow(
         attribution=day,
@@ -159,6 +170,7 @@ def _row(
             group_map=FIXTURE_MAP,
         ),
         rule_flags=tuple(rule_flags),
+        rules_evaluated=tuple(rules_evaluated),
         demoted=frozenset(demoted),  # type: ignore[arg-type]
     )
 
@@ -371,7 +383,53 @@ def test_a_bar_with_no_reading_is_refused() -> None:
     )
     del readings[("day", "net_surplus")]
     with pytest.raises(AttributionPublicationError, match="no day reading"):
-        AttributionRow(attribution=day, readings=readings)
+        AttributionRow(
+            attribution=day,
+            readings=readings,
+            rule_flags=(),
+            rules_evaluated=SHIPPING_RULE_CODES,
+        )
+
+
+# --- The rules provably ran -----------------------------------------------------
+#
+# `.scratch/api-surface/issues/10-forecast-publication.md`, "A third thing this
+# ticket will own": the valve is enforced four ways inside `apply_rules` and
+# none of them says the rules were *called*. `rule_flags` defaulted to `()`, so
+# a publish path that skipped them assembled a valid, empty-flagged row.
+#
+# These are written as a pair on purpose. The first is the non-vacuity half —
+# the quiet day is publishable, so the refusal below is a refusal of the
+# skipped path and not of every empty flag list.
+
+
+def test_a_quiet_day_publishes_with_an_empty_flag_list() -> None:
+    """Nothing fired is the common case and is not the refused one."""
+    payload = _publication()
+    (attribution,) = payload["attributions"]
+    assert attribution["rule_flags"] == []
+    assert attribution["governing_rule_action"] is None
+    # And it says so: the roll call is on the row, so "quiet" is a reading of
+    # evidence rather than an absence of it.
+    assert attribution["rules_evaluated"] == list(SHIPPING_RULE_CODES)
+
+
+def test_a_row_that_names_no_evaluated_rules_is_refused() -> None:
+    """The skipped publish path, reintroduced as the one-field diff it is."""
+    with pytest.raises(AttributionPublicationError, match="names no rules as evaluated"):
+        _row(rules_evaluated=())
+
+
+def test_a_fired_rule_outside_the_roll_call_is_refused() -> None:
+    """Flags from one run beside a roll call copied from another."""
+    fired = FiredRule(code="stale_inputs", action="annotate", facts={})
+    with pytest.raises(AttributionPublicationError, match="not in this row's roll call"):
+        _row(rule_flags=(fired,), rules_evaluated=("nothing_to_explain",))
+
+
+def test_a_roll_call_that_names_a_rule_twice_is_refused() -> None:
+    with pytest.raises(AttributionPublicationError, match="appears twice in the roll"):
+        _row(rules_evaluated=("stale_inputs", "stale_inputs"))
 
 
 # --- The publication's own shape ------------------------------------------------

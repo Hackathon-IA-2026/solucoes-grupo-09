@@ -15,6 +15,16 @@ product belongs to the service that owns the Drizzle schema.
 
 ## What a published attribution row carries, and why each field is on it
 
+**The rules provably ran.** A published row carries the *roll call* of the
+rules the engine evaluated beside the list of the ones that fired, and
+:meth:`AttributionRow._assert_the_rules_ran` refuses a row that names none. An
+empty ``rule_flags`` is the honest, common case — most days fire nothing — and
+it is also exactly what a publish path that skipped ``apply_rules`` would
+produce, so the two were indistinguishable and the valve was a convention at
+the one point it mattered. It is now a required field with no default, checked
+here, checked again at the gateway's parse, and stored in a NOT NULL column
+whose cardinality is constrained.
+
 **The eight day contributions, always all eight.** A rule may ``annotate``,
 ``demote`` or ``withhold``; **no rule may change a number and no rule may delete
 a driver**. ``withhold`` suppresses the model narration and the template renders
@@ -247,7 +257,11 @@ class AttributionRow:
 
     attribution: DayAttribution
     readings: Mapping[tuple[Grain, GroupCode], DriverReading]
-    rule_flags: tuple[FiredRule, ...] = ()
+    #: Every rule that fired, with the inputs that fired it. **No default.**
+    rule_flags: tuple[FiredRule, ...]
+    #: Every rule code the engine evaluated, in declared order — the roll call.
+    #: **No default, and never empty.**
+    rules_evaluated: tuple[str, ...]
     #: The groups a ``demote`` rule pushed below the fold. A display fact stored
     #: **beside** a complete contribution and never in place of one: the bar
     #: still carries its ``φ``, its sign and its share, because a rule's power is
@@ -255,6 +269,7 @@ class AttributionRow:
     demoted: frozenset[GroupCode] = frozenset()
 
     def __post_init__(self) -> None:
+        self._assert_the_rules_ran()
         for grain in ("day", "peak_hour"):
             missing = [
                 code for code in DRIVER_GROUP_CODES if (grain, code) not in self.readings
@@ -269,6 +284,60 @@ class AttributionRow:
             raise AttributionPublicationError(
                 f"{', '.join(invented)} is demoted and is not a driver group; a "
                 "rule may push a bar below the fold and may never invent one"
+            )
+
+    def _assert_the_rules_ran(self) -> None:
+        """The one-way valve's missing half: the rules **ran**, provably.
+
+        `.scratch/api-surface/issues/10-forecast-publication.md`, "A third thing
+        this ticket will own": the valve is enforced four ways *inside*
+        :func:`~wattsteer_ml.diagnosis.rules.apply_rules` — a rule is never
+        handed a number it could change, cannot return one, is held to that by
+        an AST walk, and the whole payload is compared before and after — and
+        none of the four says the rules were **called**. ``rule_flags`` used to
+        default to ``()``, so a publish path that skipped
+        :func:`~wattsteer_ml.diagnosis.rules.apply_rules` assembled a valid,
+        empty-flagged row and nothing noticed. That is the hole this closes.
+
+        ``()`` is not a witness, because it is what *both* "the rules ran and
+        nothing fired" and "the rules never ran" look like. So the row requires
+        the **roll call** — the codes the engine evaluated — and refuses:
+
+        - an empty roll call, which is the skipped path exactly;
+        - a fired code that is not in the roll call, which is a flag list
+          assembled by hand beside a roll call copied from somewhere else;
+        - a duplicated code, which would make the roll call unreadable as a set
+          and is already refused by ``apply_rules`` for the same reason;
+        - a ``governing_rule_action`` that disagrees with the flags — free,
+          because it is derived here rather than passed.
+
+        None of this can be satisfied by a default, which is the whole design:
+        the ordinary path is ``**outcome.for_row()`` and the skipping path has
+        to write a lie down.
+        """
+        if not self.rules_evaluated:
+            raise AttributionPublicationError(
+                "this row names no rules as evaluated. An attribution is "
+                "published with the roll call of the rules that ran, because "
+                "an empty `rule_flags` cannot otherwise be told apart from a "
+                "publish path that never called `apply_rules` — pass "
+                "`**apply_rules(context).for_row()`"
+            )
+        seen: set[str] = set()
+        for code in self.rules_evaluated:
+            if code in seen:
+                raise AttributionPublicationError(
+                    f"{code!r} appears twice in the roll call; a fired rule is "
+                    "traced by its code and two of them make the trace ambiguous"
+                )
+            seen.add(code)
+        unevaluated = sorted({flag.code for flag in self.rule_flags} - seen)
+        if unevaluated:
+            raise AttributionPublicationError(
+                f"{', '.join(unevaluated)} fired and is not in this row's roll "
+                "call of evaluated rules; the flags and the roll call are two "
+                "halves of one record and a rule cannot have fired without "
+                "having been evaluated"
             )
 
     @property
@@ -369,6 +438,10 @@ class AttributionRow:
             "background_rows": one.background_rows,
             "coalitions": one.coalitions,
             "rule_flags": [flag.as_row() for flag in self.rule_flags],
+            # The roll call crosses the wire beside the flags, because the
+            # gateway is what writes and it refuses a payload that cannot show
+            # the rules ran. See `apps/api/src/diagnosis/publication.ts`.
+            "rules_evaluated": list(self.rules_evaluated),
             "governing_rule_action": self.governing_rule_action,
             "groups": self._driver_rows(),
             "peak_hour_groups": self._peak_rows(),

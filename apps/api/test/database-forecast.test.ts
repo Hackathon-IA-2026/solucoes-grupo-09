@@ -605,17 +605,22 @@ suite("the published forecast · persistence and AsOf (real Postgres)", () => {
         // A forecast changes **twice** daily and the second supersedes the
         // first as a newer vintage of the same valid hours. There is no
         // invalidation call here to forget: the new run is a new artifact at a
-        // new instant, which is two of the three components moving at once.
+        // new `data_version`, and either one moving is enough.
+        //
+        // The publication instant deliberately does **not** move. Superseding
+        // *within* a gate is a new `data_version` of the same key at the same
+        // `published_at`, because `published_at` is
+        // `gate_at(target_date, gate_profile)` and both of those are fixed
+        // here — which `0041_the_gate_as_a_table_constraint.sql` now enforces
+        // on the table. An earlier version of this test shifted the instant to
+        // 19:30 BRT to move the validator, and that row is exactly the one the
+        // constraint refuses: it asserted a publication that never happened.
         await writePublication(db, publication(), { ingestedAt: NOW });
         const before = (await askAt(READ_AT, QUERY)).headers.get("etag");
 
         await writePublication(
           db,
-          publication({
-            scale: 2,
-            artifactId: "2024-04-04T15:11:07Z",
-            publishedAt: "2024-04-04T22:30:00.000Z",
-          }),
+          publication({ scale: 2, artifactId: "2024-04-04T15:11:07Z" }),
           { ingestedAt: new Date("2024-04-04T23:45:00.000Z") },
         );
         // Read after the second ingestion, so the as-of axis can see it — the

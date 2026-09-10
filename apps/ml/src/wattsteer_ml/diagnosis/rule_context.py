@@ -48,7 +48,7 @@ from typing import Literal
 import numpy as np
 import numpy.typing as npt
 
-from wattsteer_ml.constants import Subsystem
+from wattsteer_ml.constants import SUBSYSTEM_CODES, Subsystem
 from wattsteer_ml.diagnosis.day_attribution import DayAttribution
 from wattsteer_ml.diagnosis.driver_groups import (
     DRIVER_GROUP_MAP,
@@ -148,6 +148,94 @@ class ReasonMix:
     def top_reason_share(self) -> float | None:
         top = self.top_reason
         return None if top is None else self.shares[top]
+
+
+def reason_mixes_from_payload(
+    payload: object,
+) -> dict[Subsystem, ReasonMix]:
+    """Read the ``recent_reasons`` block of a publication request.
+
+    **The wire half of the read the gateway performs.** ``recent_reasons`` is an
+    *observation*, and the worker is what reads it: ``reason-mix.ts`` resolves
+    the most recent settled Brasília day per subsystem, cut at
+    ``actuals_cutoff(target_date, gate_profile, 'restricao-coff')`` so the rule
+    cannot see ONS rows that had not been published when the forecast was made,
+    and puts the shares on the request to ``POST /internal/publish/diagnosis``.
+    This function turns that block into the :class:`ReasonMix` values
+    :func:`build_rule_context` already takes.
+
+    It is read here rather than queried here for the reason the forecast rows
+    are written by the worker and not by this service: one producer per
+    quantity. A second read of the same series at a second instant would be a
+    second producer of the same ratio, under a different vintage axis, with
+    nothing saying which of the two the screen was showing.
+
+    Shape::
+
+        {"NE": {"settled_date": "2026-03-02",
+                "shares": {"REL": 0.62, "ENE": 0.38}}}
+
+    **An absent subsystem is absent.** It is not defaulted to an empty mix:
+    ``RuleContext.recent_reasons`` is ``None`` in that case and
+    ``unmodelled_outage_regime`` does not fire, which is the honest outcome.
+    "Nothing was restricted" and "we cannot see that day yet" must not be the
+    same input to a rule that annotates the screen, and a mix of zero shares
+    would make them one.
+
+    Args:
+        payload: the request's ``recent_reasons`` value. ``None`` and ``{}``
+            both mean "no subsystem has one", which is legal.
+
+    Returns:
+        The mixes, by subsystem code.
+
+    Raises:
+        RuleContextError: if the block is not a mapping, names something that is
+            not a subsystem, or carries a mix without a settled date. A
+            malformed block is refused rather than dropped, because a dropped
+            one is indistinguishable from a genuinely absent day and would turn
+            a bug into a rule that quietly stops firing.
+    """
+    if payload is None:
+        return {}
+    if not isinstance(payload, Mapping):
+        raise RuleContextError(
+            f"recent_reasons is {type(payload).__name__} and not a mapping of "
+            "subsystem to reason mix"
+        )
+    mixes: dict[Subsystem, ReasonMix] = {}
+    for code, raw in payload.items():
+        if code not in SUBSYSTEM_CODES:
+            raise RuleContextError(
+                f"recent_reasons names {code!r}, which is not a subsystem. The "
+                f"four are {', '.join(SUBSYSTEM_CODES)}, and SIN is not one of them"
+            )
+        if not isinstance(raw, Mapping):
+            raise RuleContextError(f"recent_reasons[{code!r}] is not a reason mix")
+        settled = raw.get("settled_date")
+        if not isinstance(settled, str):
+            raise RuleContextError(
+                f"recent_reasons[{code!r}] carries no settled_date; a reason mix "
+                "is the mix of one named day and a mix with no day is a number "
+                "with nothing to attach it to"
+            )
+        try:
+            settled_date = date.fromisoformat(settled)
+        except ValueError as error:
+            raise RuleContextError(
+                f"recent_reasons[{code!r}].settled_date is {settled!r}"
+            ) from error
+        shares = raw.get("shares")
+        if not isinstance(shares, Mapping):
+            raise RuleContextError(f"recent_reasons[{code!r}] carries no shares")
+        # `ReasonMix.__post_init__` is the authority on the codes and the
+        # values: an unknown reason and a negative share are refused there, and
+        # refusing them twice in two vocabularies is how the two drift apart.
+        mixes[code] = ReasonMix(
+            settled_date=settled_date,
+            shares={str(reason): float(share) for reason, share in shares.items()},  # type: ignore[misc]
+        )
+    return mixes
 
 
 @dataclass(frozen=True)
