@@ -58,6 +58,25 @@ card gains an Ensemble group at the same time, and the group is where the
 matrix's per-column Kolmogorov–Smirnov distance is published: a ``U`` that is
 not uniform means the marginals are miscalibrated and every day-grain number
 drawn from it is meaningless.
+
+**The matched background is one required field, added by forecaster ticket
+30.** The bundle carries a
+:class:`~wattsteer_ml.training.background.MatchedBackground` — ``B(s, h)``, 128
+rows per ``(subsystem, local_hour)`` cell drawn once from this artifact's own
+base-fit block with the seed the run stamped — and it is required for the
+fourth time, with an argument that is not the previous three's. The other three
+are pieces the model needs in order to *say* anything. This one is the other
+half of a comparison: ``v(S) = (1/|B|) · Σ_b g(x[S] ⊕ b[S̄])``, and until this
+ticket ``g`` was frozen in the artifact while ``B`` was redrawn at publication
+from a database read. The two halves of one published number had two
+provenances, and the read was not point-in-time — a backfill or a vintage
+correction moved "typical" under an artifact that had not changed, and the
+contract hash catches a column change, never a value change. A bundle written
+before 30 does not load. The card gains a Background group at the same time,
+carrying the four facts
+:meth:`~wattsteer_ml.training.background.MatchedBackground.card_fields`
+publishes and the sample's **measured** size, which is the largest single thing
+in the artifact.
 """
 
 from __future__ import annotations
@@ -95,6 +114,7 @@ from wattsteer_ml.constants import SUBSYSTEM_CODES, Subsystem
 from wattsteer_ml.declined import DeclinedFigure
 from wattsteer_ml.evaluation import Fold, FoldBlocks
 from wattsteer_ml.lanes import Lane, format_instant, is_artifact_id
+from wattsteer_ml.training.background import MatchedBackground
 from wattsteer_ml.training.calibration import Calibration, IsotonicCalibrator
 from wattsteer_ml.training.conformal import ConformalCorrection, CoverageReport
 from wattsteer_ml.training.contract import FeatureContract
@@ -262,6 +282,15 @@ class HurdleBundle:
     #: alternative — summing the hourly band — is what both
     #: `docs/specs/forecaster.md` and `docs/specs/replay.md` forbid.
     pit: PitMatrix
+    #: ``B(s, h)`` — 128 rows per ``(subsystem, local_hour)`` cell, drawn once
+    #: from this artifact's own base-fit block with the seed the run stamped.
+    #: Required, and required for the fourth time for a reason of the same
+    #: shape: an attribution is a comparison, ``g`` is frozen here and the rows
+    #: it is compared *against* were not, so a stored explanation used to be
+    #: reproducible from the artifact plus a database read — two provenances
+    #: for the two halves of one number. A bundle written before forecaster 30
+    #: does not load.
+    background: MatchedBackground
     #: ``lightgbm`` — the allow-list the hot-swap gate's second check enforces.
     estimator_family: str = ESTIMATOR_FAMILY
 
@@ -276,6 +305,13 @@ class HurdleBundle:
             raise BundleError(
                 f"estimator_family {self.estimator_family!r} is outside the "
                 f"gate's allow-list {{{ESTIMATOR_FAMILY!r}}}"
+            )
+        if self.background.feature_names != self.contract.feature_names:
+            raise BundleError(
+                "the frozen background is encoded under a different feature list "
+                "than the bundle's contract; a 'typical' row whose columns are "
+                "not the target's columns attributes the wrong feature to the "
+                "wrong group and says nothing about it"
             )
         threshold_mwh = self.threshold_mw * 1.0
         for code in SUBSYSTEM_CODES:
@@ -359,6 +395,9 @@ class ModelCard:
     #: ``U`` and what it measures about itself — the per-column KS distance, the
     #: days it kept and the days it dropped for holding an unsettled hour.
     pit: PitMatrix
+    #: The frozen sample, as the bundle carries it. The card reports four facts
+    #: about it and its measured size; the rows themselves stay in the joblib.
+    background: MatchedBackground
     #: ``day_total_coverage`` and ``peak_coverage`` on this fold's test period.
     #: ``None`` when the test period held no complete settled day — absent for a
     #: stated reason, like the coverage block above it.
@@ -453,6 +492,15 @@ class ModelCard:
                         "day_grain_absent_reason": NO_SETTLED_DAY_TO_SCORE,
                     }
                 ),
+            },
+            "background": {
+                **self.background.card_fields(),
+                # Measured off the arrays that are about to be pickled, not
+                # computed from the shape they were asked for. It is the
+                # largest thing in the bundle — 12,288 rows at full size
+                # against six boosters — and forecaster 30's last box asks for
+                # a number rather than an estimate of one.
+                "background_matrix_bytes": str(self.background.matrix_bytes),
             },
             "sub_threshold_means": self.sub_threshold_means.as_card_table(),
             "environment": environment_versions(),
@@ -643,7 +691,33 @@ def _validated(loaded: object) -> HurdleBundle:
     _validated_calibration(loaded.calibration)
     _validated_conformal(loaded.conformal)
     _validated_pit(loaded.pit)
+    _validated_background(loaded.background)
     return loaded
+
+
+def _validated_background(background: object) -> None:
+    """``B(s, h)``, after the same ``__init__``-less load.
+
+    The field is required and undefaulted, so a bundle written before
+    forecaster 30 comes back with the attribute *missing* and is caught by the
+    ``None`` sweep above — which is the intended outcome and not a regression:
+    the alternative is an artifact that loads, serves, and quietly redraws its
+    own "typical" from a window the feature function may have moved under.
+
+    What this adds on top is the shape. A background that came back as
+    something else, or with a cell truncated, would not stop the bundle
+    serving forecasts — the estimators are untouched — and the failure would
+    surface as eight plausible bars measured against fewer rows than the card
+    says. So ``__post_init__``'s checks are re-run over the loaded value, where
+    an uneven cell is a refusal.
+    """
+    if not isinstance(background, MatchedBackground):
+        raise PartialBundleError(
+            f"the bundle's matched background is a {type(background).__name__}, "
+            "not a MatchedBackground; without it 'typical' has no definition "
+            "that survives outside the database"
+        )
+    background.__post_init__()
 
 
 def _validated_pit(pit: object) -> None:

@@ -15,10 +15,16 @@ is the one call that cannot produce an unflagged row.
 positive case beside it — a guard that cannot be made to pass is not evidence
 that it can fail, and this repository has been bitten by that four times.
 
-**"Typical" is measured and not invented.** Every published row says
-``background_source: base_fit`` with the seed and the row count it was drawn
-under, because the artifact carries no frozen sample (forecaster 30). A short
-base-fit window refuses rather than thinning one hour's typical.
+**"Typical" is measured and not invented, and the row says which measurement.**
+Since forecaster 30 the artifact carries its own ``B(s, h)``, so a published row
+says ``background_source: artifact`` with the seed the *training run* stamped —
+and a publication with no base-fit rows at all still assembles, which is this
+suite's sharpest statement that the frozen sample is used and not redrawn. The
+publish-time draw is still exercised, on a bundle with the field deleted (the
+``pre_thirty`` fixture, which is the shape ``joblib.load`` produces for an
+artifact written before the ticket): it says ``base_fit``, its seed is the
+artifact id's, and a short base-fit window refuses rather than thinning one
+hour's typical.
 
 **Over the wire.** That a real assembly produces the payload shape the
 gateway's ``parseAttributionPublication`` already accepts — sixteen driver rows,
@@ -31,6 +37,7 @@ from __future__ import annotations
 import ast
 import math
 import os
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -43,7 +50,6 @@ from feature_row_fixtures import FEATURE_SET, GATE_PROFILE, THRESHOLD_MW, featur
 from wattsteer_ml.app import app
 from wattsteer_ml.config import settings
 from wattsteer_ml.constants import SUBSYSTEM_CODES
-from wattsteer_ml.diagnosis.background import BACKGROUND_ROWS_PER_CELL
 from wattsteer_ml.diagnosis.driver_groups import DRIVER_GROUP_CODES
 from wattsteer_ml.diagnosis.publish import (
     REFUSAL_CONDITIONS,
@@ -54,7 +60,11 @@ from wattsteer_ml.diagnosis.publish import (
 )
 from wattsteer_ml.lanes import Lane
 from wattsteer_ml.publication import publication_instant
-from wattsteer_ml.training import LoadedArtifact, TrainedFold
+from wattsteer_ml.training import FeatureBlock, LoadedArtifact, TrainedFold
+from wattsteer_ml.training.background import (
+    BACKGROUND_ROWS_PER_CELL,
+    draw_artifact_background,
+)
 
 client = TestClient(app)
 
@@ -113,19 +123,68 @@ def nullable_serving_rows(target_day: date) -> list[dict[str, Any]]:
 
 
 @pytest.fixture(scope="module")
-def loaded(trained: TrainedFold) -> LoadedArtifact:
+def loaded(trained: TrainedFold, base_fit_rows: list[dict[str, Any]]) -> LoadedArtifact:
+    """The artifact as forecaster 30 writes it: carrying its own ``B(s, h)``.
+
+    The frozen sample is *redrawn here* from the null-free base-fit rows rather
+    than taken off ``trained.bundle``, and the reason is the gap
+    :func:`test_a_realistic_window_refuses_because_the_weather_block_has_gaps`
+    measures: the shared fixture fold is generated at the harness's own 5%
+    weather-null rate, so its frozen background contains NULL headline features
+    and every publication from it is a ``null_headline_feature`` refusal —
+    which is the *real* behaviour of a real window and is asserted as such
+    below, not something to be worked around silently.
+
+    So the redraw is the same call the training run makes, on the same block
+    with the weather present, at the sample size this module runs at. What it
+    buys the tests below is a day that assembles; what it does not do is
+    weaken any of them, because nothing here reads the row values.
+    """
+    block = FeatureBlock.of(
+        base_fit_rows, trained.bundle.contract, threshold_mw=trained.bundle.threshold_mw
+    )
+    background = draw_artifact_background(block, rows_per_cell=TEST_ROWS_PER_CELL)
+    bundle = replace(trained.bundle, background=background)
     return LoadedArtifact(
         artifact_id=trained.card.artifact_id,
-        bundle=trained.bundle,
+        bundle=bundle,
+        card=replace(trained.card, background=background).to_dict(),
+    )
+
+
+@pytest.fixture(scope="module")
+def pre_thirty(trained: TrainedFold) -> LoadedArtifact:
+    """The artifact the publish-time fallback exists for, and the only one.
+
+    A bundle written before forecaster 30 has no ``background`` **attribute** —
+    ``joblib.load`` reconstructs an object without running ``__init__``, so the
+    field is absent rather than ``None`` — and ``load_artifact`` refuses it. It
+    is reachable in this suite and nowhere else, and it is what keeps
+    ``_background``'s redraw and every refusal below from being dead code
+    asserted against nothing.
+
+    ``object.__delattr__`` and not a subclass or a mock: the value under test
+    has to be a real :class:`HurdleBundle` reaching the real branch, and this
+    is precisely the shape the unpickle produces.
+    """
+    bundle = replace(trained.bundle)
+    object.__delattr__(bundle, "background")
+    assert not hasattr(bundle, "background")
+    return LoadedArtifact(
+        artifact_id=trained.card.artifact_id,
+        bundle=bundle,
         card=trained.card.to_dict(),
     )
 
 
 @pytest.fixture(scope="module")
-def base_fit_rows(loaded: LoadedArtifact) -> list[dict[str, Any]]:
+def base_fit_rows(trained: TrainedFold) -> list[dict[str, Any]]:
     """The artifact's own base-fit window, read as the route reads it."""
-    start, end = base_fit_window(loaded)
-    return feature_rows(first=start, last=end, weather_null_rate=0.0)
+    return feature_rows(
+        first=trained.blocks.base_fit_start,
+        last=trained.blocks.base_fit_end,
+        weather_null_rate=0.0,
+    )
 
 
 @pytest.fixture(scope="module")
@@ -206,10 +265,16 @@ def test_the_route_reads_no_row_before_it_has_an_artifact(
 def test_a_short_base_fit_window_refuses_rather_than_thinning_typical(
     serving_rows: list[dict[str, Any]],
     base_fit_rows: list[dict[str, Any]],
-    loaded: LoadedArtifact,
+    pre_thirty: LoadedArtifact,
     target_day: date,
 ) -> None:
     """The guard that matters, proved to fail — and proved not to fail vacuously.
+
+    On ``pre_thirty``, because since forecaster 30 this is the redraw's guard
+    and the redraw only runs for a bundle with no frozen sample. The same short
+    window now fails at *training* instead, which is
+    :func:`test_hurdle_training.\
+test_a_window_too_short_for_the_background_fails_at_training`.
 
     The fixture fold's base-fit window is thirty days, which is thirty rows per
     ``(subsystem, local_hour)`` cell. Asked for the spec's 128 it refuses; asked
@@ -226,7 +291,7 @@ def test_a_short_base_fit_window_refuses_rather_than_thinning_typical(
             serving_rows,
             base_fit_rows,
             lane=LANE,
-            loaded=loaded,
+            loaded=pre_thirty,
             target_date=target_day,
             published_at=publication_instant(serving_rows, target_date=target_day),
             rows_per_cell=BACKGROUND_ROWS_PER_CELL,
@@ -240,7 +305,7 @@ def test_a_short_base_fit_window_refuses_rather_than_thinning_typical(
         serving_rows,
         base_fit_rows,
         lane=LANE,
-        loaded=loaded,
+        loaded=pre_thirty,
         target_date=target_day,
         published_at=publication_instant(serving_rows, target_date=target_day),
         rows_per_cell=TEST_ROWS_PER_CELL,
@@ -249,7 +314,7 @@ def test_a_short_base_fit_window_refuses_rather_than_thinning_typical(
 
 def test_an_empty_base_fit_window_is_a_refusal_and_not_a_pooled_sample(
     serving_rows: list[dict[str, Any]],
-    loaded: LoadedArtifact,
+    pre_thirty: LoadedArtifact,
     target_day: date,
 ) -> None:
     with pytest.raises(DiagnosisPublicationRefusedError) as refused:
@@ -257,7 +322,7 @@ def test_an_empty_base_fit_window_is_a_refusal_and_not_a_pooled_sample(
             serving_rows,
             [],
             lane=LANE,
-            loaded=loaded,
+            loaded=pre_thirty,
             target_date=target_day,
             published_at=publication_instant(serving_rows, target_date=target_day),
             rows_per_cell=TEST_ROWS_PER_CELL,
@@ -381,7 +446,7 @@ def test_a_null_headline_feature_is_refused_rather_than_zeroed(
 
 def test_a_realistic_window_refuses_because_the_weather_block_has_gaps(
     serving_rows: list[dict[str, Any]],
-    loaded: LoadedArtifact,
+    pre_thirty: LoadedArtifact,
     target_day: date,
 ) -> None:
     """How big the gap above is, measured rather than characterised.
@@ -397,7 +462,7 @@ def test_a_realistic_window_refuses_because_the_weather_block_has_gaps(
     weather run in it, which is most real ones. That is the box on api-surface
     10, and this test is its size.
     """
-    start, end = base_fit_window(loaded)
+    start, end = base_fit_window(pre_thirty)
     realistic = feature_rows(first=start, last=end)
     gaps = sum(1 for row in realistic if row["weather_expected_wind_mwh"] is None)
     assert gaps > 0
@@ -407,7 +472,7 @@ def test_a_realistic_window_refuses_because_the_weather_block_has_gaps(
             serving_rows,
             realistic,
             lane=LANE,
-            loaded=loaded,
+            loaded=pre_thirty,
             target_date=target_day,
             published_at=publication_instant(serving_rows, target_date=target_day),
             rows_per_cell=TEST_ROWS_PER_CELL,
@@ -452,17 +517,79 @@ def test_the_seed_is_not_read_from_a_clock_anywhere_in_the_module() -> None:
 # --- what a published row says about where its "typical" came from ------------
 
 
-def test_every_row_says_its_typical_came_from_the_base_fit_block(
-    published: Any,
+def test_every_row_says_its_typical_came_from_the_artifact(
+    published: Any, loaded: LoadedArtifact
 ) -> None:
-    """The artifact carries no frozen sample, and the row does not pretend one.
+    """The frozen sample reaches the wire, and it says so — forecaster 30.
 
-    `docs/specs/diagnosis.md`'s first addition to the bundle has not landed —
-    see `.scratch/forecaster/issues/30-*`. ``background_source`` is what makes a
-    row drawn from the base-fit block at publish time distinguishable from one
-    measured against the frozen sample, and the two are different explanations.
+    Three of the four facts on the row are read off the bundle's own sample
+    rather than restated here, so a publish path that redrew one while the
+    artifact held another cannot pass: the seed in particular is the training
+    run's stamp and is **not** :func:`background_seed`, which is what the
+    fallback derives from the artifact id. The two are asserted to differ,
+    because equal values would make this test unable to tell the paths apart.
     """
     payload = published.as_payload()
+    assert payload["attributions"]
+    frozen = loaded.bundle.background
+    assert frozen.source == "artifact"
+    assert frozen.seed != background_seed(loaded.artifact_id)
+    for row in payload["attributions"]:
+        assert row["background_source"] == "artifact"
+        assert row["background_rows"] == frozen.rows_per_cell == TEST_ROWS_PER_CELL
+        assert row["background_seed"] == frozen.seed
+
+
+def test_the_frozen_sample_is_used_and_the_window_is_not_read_again(
+    serving_rows: list[dict[str, Any]],
+    loaded: LoadedArtifact,
+    target_day: date,
+) -> None:
+    """A publication with **no** base-fit rows at all still publishes.
+
+    The sharpest available statement that the frozen sample is *used* rather
+    than redrawn: the same empty argument that is a ``no_matched_background``
+    refusal for a pre-30 bundle —
+    :func:`test_an_empty_base_fit_window_is_a_refusal_and_not_a_pooled_sample`
+    — assembles a whole publication here, and every row is stamped
+    ``artifact``. The two tests are each other's control.
+    """
+    publication = build_diagnosis_publication(
+        serving_rows,
+        [],
+        lane=LANE,
+        loaded=loaded,
+        target_date=target_day,
+        published_at=publication_instant(serving_rows, target_date=target_day),
+    )
+    assert len(publication.rows) == len(SUBSYSTEM_CODES)
+    assert {row.attribution.background_source for row in publication.rows} == {"artifact"}
+
+
+def test_the_fallback_still_says_base_fit_on_a_bundle_with_no_sample(
+    serving_rows: list[dict[str, Any]],
+    base_fit_rows: list[dict[str, Any]],
+    pre_thirty: LoadedArtifact,
+    target_day: date,
+) -> None:
+    """The distinction, on the other branch. Not deleted, and not confusable.
+
+    ``background_source`` has two possible values and this suite produces both,
+    which is the only thing that makes the field worth storing: a row measured
+    against a publish-time draw of the base-fit window stays distinguishable
+    from one measured against the artifact's own sample, and the seed says
+    which derivation produced it.
+    """
+    publication = build_diagnosis_publication(
+        serving_rows,
+        base_fit_rows,
+        lane=LANE,
+        loaded=pre_thirty,
+        target_date=target_day,
+        published_at=publication_instant(serving_rows, target_date=target_day),
+        rows_per_cell=TEST_ROWS_PER_CELL,
+    )
+    payload = publication.as_payload()
     assert payload["attributions"]
     for row in payload["attributions"]:
         assert row["background_source"] == "base_fit"
@@ -627,7 +754,7 @@ def test_the_modelling_service_writes_nothing_on_this_path() -> None:
 )
 def test_the_whole_publication_assembles_at_the_specs_sample(
     trained: TrainedFold,
-    loaded: LoadedArtifact,
+    pre_thirty: LoadedArtifact,
     serving_rows: list[dict[str, Any]],
     target_day: date,
     record_property: Any,
@@ -655,7 +782,7 @@ def test_the_whole_publication_assembles_at_the_specs_sample(
         serving_rows,
         widened,
         lane=LANE,
-        loaded=loaded,
+        loaded=pre_thirty,
         target_date=target_day,
         published_at=publication_instant(serving_rows, target_date=target_day),
     )

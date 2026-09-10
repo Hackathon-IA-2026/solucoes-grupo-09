@@ -51,7 +51,7 @@ only the features under them differ.
 
 ## ``lead_time_source``, and the discipline it inherits
 
-`diagnosis/background.py` stamps ``background_source``, `training/conformal.py`
+`training/background.py` stamps ``background_source``, `training/conformal.py`
 stamps ``correction_regime``,
 :mod:`~wattsteer_ml.evaluation.collapse_report` stamps ``collapse_source`` and
 :mod:`~wattsteer_ml.evaluation.planning_arms` stamps ``arm_source``. This module

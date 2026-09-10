@@ -42,7 +42,7 @@ v(S) = (1/|B|) · Σ_{b ∈ B(s,h)} g( x[S] ⊕ b[S̄] )        for S ⊆ {1..8}
 function asks "what does the model do when this group is replaced by a typical
 one", which is the question the screen's observed-versus-typical framing already
 asks. The background is drawn once, elsewhere, and stamped
-(:mod:`wattsteer_ml.diagnosis.background`); this module receives one and cannot
+(:mod:`wattsteer_ml.training.background`); this module receives one and cannot
 draw one — it does not import the sampler.
 
 **Offline, batched, once per publication.** 256 coalitions × 128 background rows
@@ -62,7 +62,6 @@ from typing import Any, Literal, Protocol
 import numpy as np
 import numpy.typing as npt
 
-from wattsteer_ml.diagnosis.background import BackgroundCell, MatchedBackground
 from wattsteer_ml.diagnosis.driver_groups import (
     DRIVER_GROUP_CODES,
     DRIVER_GROUP_MAP,
@@ -76,6 +75,7 @@ from wattsteer_ml.diagnosis.shapley import (
     shapley_operator,
 )
 from wattsteer_ml.evaluation import RowKey
+from wattsteer_ml.training.background import BackgroundCell, MatchedBackground
 
 #: What the payload says it attributed. `api-surface.md` spells the day grain
 #: `"expected_mwh_day"`; this is the hour it is summed from.

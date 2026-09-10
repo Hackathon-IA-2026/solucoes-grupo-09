@@ -18,7 +18,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from conftest import FUNCTION_DEFINITION
+from conftest import FIXTURE_BACKGROUND_ROWS_PER_CELL, FUNCTION_DEFINITION
 from ladder_fixtures import (
     EXCEEDANCE_COLUMN,
     SAME_HOUR_MEAN_COLUMN,
@@ -79,7 +79,11 @@ def segments(fold: Fold) -> tuple[FoldSegment, ...]:
 @pytest.fixture(scope="module")
 def full_ladder(pool: OutOfFoldPool) -> tuple[Rung, ...]:
     """The five rungs, with the forest shrunk for the suite's sake."""
-    published = default_ladder(function_definition=FUNCTION_DEFINITION, pool=pool)
+    published = default_ladder(
+        function_definition=FUNCTION_DEFINITION,
+        pool=pool,
+        background_rows_per_cell=FIXTURE_BACKGROUND_ROWS_PER_CELL,
+    )
     return tuple(TEST_FOREST if rung.number == 3 else rung for rung in published)
 
 
@@ -411,7 +415,11 @@ def test_the_ladder_is_five_rungs_and_the_tft_benchmark_is_absent(
     pool: OutOfFoldPool,
 ) -> None:
     """Rung 5 is a benchmark that is never served, so it is not on the ladder."""
-    rungs = default_ladder(function_definition=FUNCTION_DEFINITION, pool=pool)
+    rungs = default_ladder(
+        function_definition=FUNCTION_DEFINITION,
+        pool=pool,
+        background_rows_per_cell=FIXTURE_BACKGROUND_ROWS_PER_CELL,
+    )
     assert [rung.number for rung in rungs] == [0, 1, 2, 3, 4]
     assert [rung.name for rung in rungs] == [
         "prevalence",

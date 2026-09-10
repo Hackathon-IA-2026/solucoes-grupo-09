@@ -33,11 +33,35 @@ check run afterwards:**
 **Drawn once, with a stamped seed.** The spec puts ``B(s, h)`` in the artifact
 bundle — 128 rows per cell, drawn once from the base-fit block — precisely so
 that the attribution is reproducible from the artifact alone and is not a
-function of when it ran. Until the forecaster's bundle carries one, this module
-draws the same shape from a block, stamping the seed and the row count it used
-onto the value; :attr:`MatchedBackground.source` records which of the two it is.
-Nothing in the attribution module draws a background, and a structural test says
-so.
+function of when it ran. Forecaster 30 built that:
+:func:`~wattsteer_ml.training.hurdle.train_fold` calls
+:func:`draw_artifact_background` on the base-fit block it already holds, and the
+sample is a required, undefaulted field of
+:class:`~wattsteer_ml.training.bundle.HurdleBundle`, frozen beside ``μ_sub`` and
+the PIT matrix ``U``. :mod:`wattsteer_ml.diagnosis.publish` still carries the
+publish-time draw as a labelled fallback, and :attr:`MatchedBackground.source`
+is what tells the two apart on every published row. Nothing in the attribution
+module draws a background, and a structural test says so.
+
+**Why this module sits in ``training/`` and not in ``diagnosis/``.** It was
+written in ``diagnosis/`` because the attribution was its only consumer.
+Forecaster 30 made the sample part of the artifact, and the artifact is
+``training/``'s: a :class:`~wattsteer_ml.training.bundle.HurdleBundle` field
+cannot be typed by a module that imports :mod:`wattsteer_ml.training` back. The
+dependency runs one way — diagnosis reads the artifact, the artifact never reads
+diagnosis — and :mod:`wattsteer_ml.diagnosis` re-exports every name defined here
+so that no consumer had to move with it.
+
+**``ARTIFACT_SOURCE`` has exactly one producer, and it is not a keyword
+argument.** :func:`draw_matched_background` stamps :data:`BASE_FIT_SOURCE` and
+takes no ``source`` to override it; the only value in the package that says
+``artifact`` comes out of :func:`draw_artifact_background`, whose one call site
+is :func:`~wattsteer_ml.training.hurdle.train_fold`. A publish path that wanted
+to relabel a live draw would have to add a call an AST test forbids, rather than
+change one keyword. The failure that discipline exists against is invisible by
+construction: an attribution has no ground truth, so a "typical" drawn from the
+wrong rows renders eight plausible bars and nothing on the screen, in the table
+or in the payload says otherwise.
 """
 
 from __future__ import annotations
@@ -51,11 +75,24 @@ import numpy.typing as npt
 
 from wattsteer_ml.constants import SUBSYSTEM_CODES, Subsystem
 from wattsteer_ml.evaluation import HOURS_PER_DAY, RowKey
-from wattsteer_ml.training import FeatureBlock
+from wattsteer_ml.training.design import FeatureBlock
 
 #: ``|B(s, h)|`` — the rows per cell `docs/specs/diagnosis.md` names, and the
 #: number the artifact's own sample is drawn at. 128 × 96 cells = 12,288 rows.
 BACKGROUND_ROWS_PER_CELL = 128
+
+#: The seed the training run stamps onto the artifact's own sample. A published
+#: constant and not a clock read, and not — as the publish-time fallback's
+#: :func:`~wattsteer_ml.diagnosis.publish.background_seed` has to be — a hash of
+#: the artifact id: a stamped seed is the property that derivation was
+#: *reconstructing*. Same value on the sample, on the card and on every
+#: published row, so an auditor can redraw ``B(s, h)`` from the base-fit block
+#: and get the bits back. Distinct from
+#: :data:`~wattsteer_ml.training.ensemble.ENSEMBLE_SEED` and from
+#: :attr:`~wattsteer_ml.training.hyperparameters.ModelConfig.seed` for the
+#: reason those two are distinct from each other — two draws about the same
+#: window should not be one draw.
+BACKGROUND_SEED = 20_260_830
 
 #: What :attr:`MatchedBackground.source` says when the sample came out of the
 #: artifact bundle, and what it says when it was drawn here from a block.
@@ -230,6 +267,60 @@ class MatchedBackground:
         """
         return self.cell(key.subsystem, key.local_hour)
 
+    def __getstate__(self) -> dict[str, object]:
+        """The value as a picklable dict — the cells unwrapped from the proxy.
+
+        :meth:`__post_init__` replaces ``cells`` with a
+        :class:`~types.MappingProxyType` so that no consumer can add a cell to
+        a background after it was drawn. A proxy cannot be pickled, and the
+        bundle is a joblib file, so the two facts have to meet somewhere: they
+        meet here, in a plain ``dict`` on the way out and a proxy again on the
+        way in. The alternative — a mutable mapping on the type — would trade a
+        real invariant for a serialisation convenience.
+        """
+        state = dict(self.__dict__)
+        state["cells"] = dict(self.cells)
+        return state
+
+    def __setstate__(self, state: Mapping[str, object]) -> None:
+        """Restore the proxy, and validate nowhere.
+
+        The shape check belongs to
+        :func:`~wattsteer_ml.training.bundle._validated_background`, which runs
+        ``__post_init__`` over the loaded value and raises the loader's own
+        ``PartialBundleError`` for it — the same division
+        :func:`~wattsteer_ml.training.bundle._validated_pit` makes. Validating
+        here would raise a :class:`BackgroundError` out of the middle of
+        ``joblib.load`` instead, where no caller is catching one.
+        """
+        for name, value in state.items():
+            object.__setattr__(self, name, value)
+        object.__setattr__(self, "cells", MappingProxyType(dict(self.cells)))
+
+    @property
+    def matrix_bytes(self) -> int:
+        """What the sample costs in the bundle, **measured** and not estimated.
+
+        ``sum(cell.matrix.nbytes)`` over every cell — the float64 payload
+        itself, read off the arrays that will be pickled, rather than
+        ``rows × columns × 8`` computed from the shape the draw was asked for.
+        The two agree today and the arithmetic is the thing that would stop
+        being true first: a cell short of ``rows_per_cell`` cannot exist, but a
+        contract that widens moves ``k``, and a card that recomputed the product
+        would keep reporting the old one.
+
+        It is the largest thing in the artifact by a wide margin — 12,288 rows
+        against six boosters — which is why forecaster 30 put a number on the
+        card instead of a sentence about it. Measured on the fixture fold at
+        24 rows per cell and ``k = 100``: 1,843,200 bytes of matrix against a
+        1,936,370-byte increase in the ``.joblib`` on disk, the difference
+        being pickle's own per-array framing. **This is the payload and not the
+        file delta**, deliberately: the payload is a property of the sample and
+        reproducible from it, and the file delta is a property of whatever
+        ``joblib.dump`` was asked to do that day.
+        """
+        return sum(int(cell.matrix.nbytes) for cell in self.cells.values())
+
     def card_fields(self) -> dict[str, str]:
         """What the model card records about the sample the attribution used."""
         return {
@@ -240,12 +331,44 @@ class MatchedBackground:
         }
 
 
+def draw_artifact_background(
+    block: FeatureBlock,
+    *,
+    seed: int = BACKGROUND_SEED,
+    rows_per_cell: int = BACKGROUND_ROWS_PER_CELL,
+) -> MatchedBackground:
+    """``B(s, h)`` as the artifact will carry it — the same draw, stamped ``artifact``.
+
+    **The one producer of :data:`ARTIFACT_SOURCE` in the package**, and the
+    reason :func:`draw_matched_background` no longer takes a ``source``. The
+    label is not a description of the rows — both functions draw from a base-fit
+    block, and this one is called by
+    :func:`~wattsteer_ml.training.hurdle.train_fold` on the block the boosters
+    were fitted on. It is a statement about *where the sample is stored*:
+    ``artifact`` means a reader can reproduce this "typical" from the joblib
+    alone, and ``base_fit`` means they would have to re-read the window and
+    trust that the feature function has not moved under it.
+
+    A live-read draw relabelled ``artifact`` would erase exactly that
+    distinction, on rows nobody can check, so the relabelling is not a keyword
+    away: the caller has to name this function, and an AST test asserts only
+    ``training/hurdle.py`` does.
+    """
+    drawn = draw_matched_background(block, seed=seed, rows_per_cell=rows_per_cell)
+    return MatchedBackground(
+        feature_names=drawn.feature_names,
+        rows_per_cell=drawn.rows_per_cell,
+        seed=drawn.seed,
+        source=ARTIFACT_SOURCE,
+        cells=drawn.cells,
+    )
+
+
 def draw_matched_background(
     block: FeatureBlock,
     *,
     seed: int,
     rows_per_cell: int = BACKGROUND_ROWS_PER_CELL,
-    source: str = BASE_FIT_SOURCE,
 ) -> MatchedBackground:
     """Draw ``B(s, h)`` for every cell the block covers — partitioned, then sampled.
 
@@ -264,7 +387,6 @@ def draw_matched_background(
         block: the base-fit block, encoded against the artifact's contract.
         seed: the stamped seed, recorded on the result.
         rows_per_cell: ``|B|``. Defaults to the spec's 128.
-        source: what to record about where the sample came from.
 
     Raises:
         BackgroundError: if any cell the block covers has fewer rows than
@@ -314,6 +436,6 @@ def draw_matched_background(
         feature_names=block.contract.feature_names,
         rows_per_cell=rows_per_cell,
         seed=seed,
-        source=source,
+        source=BASE_FIT_SOURCE,
         cells=cells,
     )

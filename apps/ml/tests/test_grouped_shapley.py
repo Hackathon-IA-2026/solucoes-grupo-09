@@ -62,10 +62,6 @@ from wattsteer_ml.diagnosis.attribution import (
     attribute_hour,
     group_columns,
 )
-from wattsteer_ml.diagnosis.background import (
-    BACKGROUND_ROWS_PER_CELL,
-    draw_matched_background,
-)
 from wattsteer_ml.diagnosis.composed_target import bundle_expectation
 from wattsteer_ml.diagnosis.driver_groups import (
     DRIVER_GROUP_CODES,
@@ -81,6 +77,10 @@ from wattsteer_ml.diagnosis.shapley import (
 )
 from wattsteer_ml.evaluation import RowKey
 from wattsteer_ml.training import FeatureBlock, TrainedFold
+from wattsteer_ml.training.background import (
+    BACKGROUND_ROWS_PER_CELL,
+    draw_matched_background,
+)
 from wattsteer_ml.training.calibration import IsotonicCalibrator
 
 # --- The eight-player fixture map --------------------------------------------
@@ -600,7 +600,7 @@ def test_the_payload_says_it_explains_the_expectation_and_not_the_band() -> None
 
 def test_the_target_is_attributed_against_its_own_cell_and_no_other() -> None:
     """The caller hands over the whole background; the cell comes from the key."""
-    from wattsteer_ml.diagnosis.background import MissingBackgroundCellError
+    from wattsteer_ml.training.background import MissingBackgroundCellError
 
     background = background_of(FIXTURE_NAMES, _factorial_background(), key=fixture_key())
     elsewhere = RowKey(target_date=fixture_key().target_date, local_hour=3, subsystem="S")

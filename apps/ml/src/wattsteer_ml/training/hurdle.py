@@ -67,6 +67,18 @@ mixtures to :mod:`wattsteer_ml.training.ensemble`, which inverts the same
 ``u``. Grep this file for a day total: there is none, because a day total is
 not a sum of anything this file holds.
 
+**The attribution's "typical" is drawn here, once, and this is the only place
+that can stamp it ``artifact``.** Forecaster ticket 30: ``B(s, h)`` — 128 rows
+per ``(subsystem, local_hour)`` cell — comes out of the base-fit block this
+function already holds and goes into the bundle beside ``μ_sub`` and ``U``.
+Drawing it here rather than at publication is what makes a stored explanation
+reproducible from the artifact alone, costs no second read of the ~17,000-row
+window, and moves the one failure that can stop an attribution — a cell shorter
+than ``|B|`` — from twice a day to once a retrain, where its repair is a longer
+run window. :func:`~wattsteer_ml.training.background.draw_artifact_background`
+is called from this module and no other, and an AST test in the diagnosis suite
+holds that.
+
 **The pool the reliability curve is measured on is an argument, not a
 derivation.** :func:`train_fold` cannot compute out-of-fold predictions across
 every walk-forward fold from one fold's rows, and a curve measured on the fold
@@ -113,6 +125,12 @@ from wattsteer_ml.mixture import (
     HurdleMixture,
     MagnitudeQuantiles,
     compose,
+)
+from wattsteer_ml.training.background import (
+    BACKGROUND_ROWS_PER_CELL,
+    BACKGROUND_SEED,
+    BackgroundError,
+    draw_artifact_background,
 )
 from wattsteer_ml.training.bundle import (
     HOURS_PER_DAY,
@@ -182,6 +200,8 @@ def train_fold(
     pool: OutOfFoldPool,
     incumbent_risk_bins: RiskBins | None = None,
     config: ModelConfig = MODEL_CONFIG_V1,
+    background_rows_per_cell: int = BACKGROUND_ROWS_PER_CELL,
+    background_seed: int = BACKGROUND_SEED,
     created_at: datetime | None = None,
     artifact_id: str | None = None,
     feature_set_version: str | None = None,
@@ -206,6 +226,14 @@ def train_fold(
             one. Held unless this pool violates the rule that chose them — a
             named class that moves weekly is worse than one three points off.
         config: the published configuration. Named, never searched.
+        background_rows_per_cell: ``|B(s, h)|`` for the sample frozen into the
+            bundle. Defaults to the spec's 128, and every production caller
+            takes the default — it is a parameter so that a fixture fold of
+            thirty days can carry a smaller but *real* sample rather than
+            being exempted from carrying one.
+        background_seed: the seed stamped onto that sample. A constant of the
+            run, not a hash of the artifact id: see
+            :data:`~wattsteer_ml.training.background.BACKGROUND_SEED`.
 
     Returns:
         The bundle, the card and the counts behind them.
@@ -306,6 +334,32 @@ def train_fold(
         threshold_mw=stamp.threshold_mw,
         correction=correction,
     )
+    # ``B(s, h)``, drawn here and nowhere else. The base-fit block is already
+    # in memory — the same block the boosters were fitted on and the same one
+    # the publish-time fallback would re-read from the database — so the frozen
+    # sample costs no second read and cannot be drawn from a window that has
+    # moved since. Drawn from `base_fit` and not from `fit_block`: a background
+    # row is a row of features, and dropping the unlabelled hours would make
+    # "typical" a statement about the settled part of the window only.
+    #
+    # A short cell fails **here**, in a weekly retrain whose repair is a longer
+    # run window, rather than twice a day at publication where the same repair
+    # is a retrain anyway and the symptom is a missing explanation.
+    try:
+        background = draw_artifact_background(
+            base_fit,
+            seed=background_seed,
+            rows_per_cell=background_rows_per_cell,
+        )
+    except BackgroundError as error:
+        raise TrainingError(
+            f"{fold.id}: no matched background can be drawn from the base-fit "
+            f"block {blocks.base_fit_start.isoformat()}–"
+            f"{blocks.base_fit_end.isoformat()} — {error}. The artifact carries "
+            "the sample its attributions are measured against, so a window too "
+            "short to supply one is a window too short to train on; the repair "
+            "is a longer run window"
+        ) from error
     bundle = HurdleBundle(
         lane=stamp.lane,
         contract=contract,
@@ -321,6 +375,7 @@ def train_fold(
         calibration=fitted_calibration,
         conformal=correction,
         pit=pit,
+        background=background,
     )
     counts = TrainingCounts(
         base_fit_rows=len(base_fit),
@@ -348,6 +403,7 @@ def train_fold(
         calibration=fitted_calibration,
         conformal=correction,
         pit=pit,
+        background=background,
         day_grain=_fold_day_grain(bundle, test_rows, fold=fold),
         coverage=_fold_coverage(bundle, test_rows, fold=fold),
         feature_set_version=feature_set_version,

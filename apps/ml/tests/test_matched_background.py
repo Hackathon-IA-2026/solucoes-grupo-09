@@ -21,25 +21,32 @@ foreign row, and the lookup that is addressed by the target's own key.
 
 from __future__ import annotations
 
+import ast
 from datetime import date, timedelta
+from pathlib import Path
 
+import joblib
 import numpy as np
 import pytest
 
 from attribution_fixtures import block_of, cell_keys
 from wattsteer_ml.constants import SUBSYSTEM_CODES
-from wattsteer_ml.diagnosis.background import (
+from wattsteer_ml.diagnosis.publish import background_seed
+from wattsteer_ml.evaluation import HOURS_PER_DAY, RowKey
+from wattsteer_ml.training import FeatureBlock
+from wattsteer_ml.training.background import (
+    ARTIFACT_SOURCE,
     BACKGROUND_ROWS_PER_CELL,
+    BACKGROUND_SEED,
     BASE_FIT_SOURCE,
     BackgroundCell,
     BackgroundError,
     CellKey,
     MatchedBackground,
     MissingBackgroundCellError,
+    draw_artifact_background,
     draw_matched_background,
 )
-from wattsteer_ml.evaluation import HOURS_PER_DAY, RowKey
-from wattsteer_ml.training import FeatureBlock
 
 FEATURE_NAMES = ("alpha", "beta", "gamma")
 DAYS = 40
@@ -246,3 +253,201 @@ def test_the_sample_carries_its_own_provenance() -> None:
         "background_source": BASE_FIT_SOURCE,
         "background_cells": str(len(SUBSYSTEM_CODES) * HOURS_PER_DAY),
     }
+
+
+# --- forecaster 30: the sample the artifact carries ---------------------------
+
+
+def test_the_same_seed_and_the_same_block_reproduce_the_same_sample() -> None:
+    """Determinism, asserted on the bytes and not on a summary.
+
+    This is the property that makes freezing the sample worth doing: an auditor
+    holding the artifact's seed and the base-fit block can redraw ``B(s, h)``
+    and get *this* sample back. Compared cell by cell on ``tobytes()`` — a
+    float64 matrix compared with a tolerance would pass for a sample that is
+    merely close, which is not what reproducible means — and the different-seed
+    case is asserted beside it, so a comparison that cannot fail is not
+    mistaken for one that did not.
+    """
+    block = _base_fit_block()
+    once = draw_artifact_background(block, seed=7, rows_per_cell=ROWS_PER_CELL)
+    again = draw_artifact_background(block, seed=7, rows_per_cell=ROWS_PER_CELL)
+    other = draw_artifact_background(block, seed=8, rows_per_cell=ROWS_PER_CELL)
+
+    assert once.cells.keys() == again.cells.keys()
+    assert len(once.cells) == len(SUBSYSTEM_CODES) * HOURS_PER_DAY
+    for cell_key, cell in once.cells.items():
+        assert cell.keys == again.cells[cell_key].keys
+        assert cell.matrix.tobytes() == again.cells[cell_key].matrix.tobytes()
+    # Not vacuous: a different seed draws different rows in at least one cell.
+    assert any(
+        cell.keys != other.cells[cell_key].keys for cell_key, cell in once.cells.items()
+    )
+
+
+def test_the_artifact_draw_and_the_publish_draw_differ_only_by_the_label() -> None:
+    """One sampler, two labels — so the label is a provenance and not a method.
+
+    ``background_source`` distinguishes *where the sample is stored*, not how it
+    was drawn: the training run draws from the base-fit block and so does the
+    publish-time fallback. Asserting the two are bit-identical at one seed is
+    what keeps that claim honest, and it is also what lets a reader verify a
+    stored ``artifact`` sample against a redraw of the same window.
+    """
+    block = _base_fit_block()
+    frozen = draw_artifact_background(block, seed=3, rows_per_cell=ROWS_PER_CELL)
+    redrawn = draw_matched_background(block, seed=3, rows_per_cell=ROWS_PER_CELL)
+
+    assert frozen.source == ARTIFACT_SOURCE
+    assert redrawn.source == BASE_FIT_SOURCE
+    assert frozen.seed == redrawn.seed == 3
+    for cell_key, cell in frozen.cells.items():
+        assert cell.keys == redrawn.cells[cell_key].keys
+        assert cell.matrix.tobytes() == redrawn.cells[cell_key].matrix.tobytes()
+
+
+def test_the_stamped_seed_is_the_default_and_is_not_an_artifact_ids_hash() -> None:
+    """``BACKGROUND_SEED`` is stamped, not reconstructed.
+
+    Forecaster 30's fourth argument: the publish-time fallback *derives* a seed
+    from the ``artifact_id`` in order to have the property a stamped seed simply
+    has. The frozen sample has the property.
+    """
+    block = _base_fit_block()
+    drawn = draw_artifact_background(block, rows_per_cell=ROWS_PER_CELL)
+    assert drawn.seed == BACKGROUND_SEED
+    assert background_seed("2026-08-29T04:00:00Z") != BACKGROUND_SEED
+
+
+def test_the_samples_size_is_measured_off_the_arrays_it_will_pickle() -> None:
+    """The card's number is a measurement, and the arithmetic is its check.
+
+    ``matrix_bytes`` sums ``nbytes`` over the cells that are about to be written
+    into the joblib. The product below is what an estimate *would* say; they
+    agree here, and the point of measuring is that the measurement is still
+    right when they stop agreeing — a widened contract moves ``k``.
+    """
+    block = _base_fit_block()
+    background = draw_artifact_background(block, seed=5, rows_per_cell=ROWS_PER_CELL)
+    cells = len(SUBSYSTEM_CODES) * HOURS_PER_DAY
+    assert background.matrix_bytes == cells * ROWS_PER_CELL * len(FEATURE_NAMES) * 8
+    assert background.matrix_bytes == sum(
+        cell.matrix.nbytes for cell in background.cells.values()
+    )
+
+
+def test_a_sample_survives_the_joblib_with_its_cells_still_sealed(
+    tmp_path: Path,
+) -> None:
+    """``joblib.dump`` cannot pickle a ``mappingproxy``, and the type keeps one.
+
+    So the round trip is asserted rather than assumed, through ``joblib``
+    because that is the file the bundle is: the sample has to come back with
+    the same rows *and* with the mapping still unwritable, because the seal is
+    what stops a consumer adding a cell to a background after it was drawn.
+    """
+    background = draw_artifact_background(
+        _base_fit_block(), seed=9, rows_per_cell=ROWS_PER_CELL
+    )
+    path = tmp_path / "background.joblib"
+    joblib.dump(background, path)
+    restored = joblib.load(path)
+
+    assert restored.source == ARTIFACT_SOURCE
+    assert restored.seed == 9
+    assert restored.cells.keys() == background.cells.keys()
+    for cell_key, cell in background.cells.items():
+        assert cell.matrix.tobytes() == restored.cells[cell_key].matrix.tobytes()
+    with pytest.raises(TypeError):
+        restored.cells[CellKey(subsystem="NE", local_hour=0)] = next(
+            iter(background.cells.values())
+        )
+
+
+# --- and nothing else in the package may claim to be the artifact's sample ----
+
+#: The source tree the AST walk below reads. Production modules only.
+PACKAGE = Path(__file__).resolve().parents[1] / "src" / "wattsteer_ml"
+
+#: Every module allowed to name ``ARTIFACT_SOURCE`` or the function that stamps
+#: it: the definition, the one caller, and the package's re-export.
+ARTIFACT_SAMPLE_PRODUCERS = frozenset(
+    {
+        "training/background.py",
+        "training/hurdle.py",
+        "training/__init__.py",
+    }
+)
+
+
+def test_no_path_in_the_package_can_stamp_a_live_read_as_the_artifacts_sample() -> None:
+    """The valve, asserted structurally — an AST walk over production source.
+
+    ``ARTIFACT_SOURCE`` means "this sample is in the joblib and a reader can
+    reproduce it from the artifact alone". A publish path that stamped it onto a
+    sample it had just drawn from the database would make that claim false on
+    rows nobody can check: an attribution has no ground truth, so eight
+    plausible bars would render and nothing on the screen, in the table or in
+    the payload would say the comparison was against a window that has since
+    moved.
+
+    So the stamp is not a keyword argument on the sampler. It comes from
+    :func:`draw_artifact_background` and from nowhere else, and this test says
+    which modules may name either. Same move as `docs/specs/diagnosis.md` seam
+    3's grep against member-level ``φ``.
+    """
+    forbidden = {"ARTIFACT_SOURCE", "draw_artifact_background"}
+    modules = sorted(PACKAGE.rglob("*.py"))
+    assert len(modules) > 50, "the walk found no package to check"
+
+    offenders: dict[str, set[str]] = {}
+    producers_seen: set[str] = set()
+    constructors: set[str] = set()
+    for module in modules:
+        relative = module.relative_to(PACKAGE).as_posix()
+        named: set[str] = set()
+        for node in ast.walk(ast.parse(module.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Name) and node.id in forbidden:
+                named.add(node.id)
+            elif isinstance(node, ast.Attribute) and node.attr in forbidden:
+                named.add(node.attr)
+            elif isinstance(node, ast.ImportFrom):
+                named |= {alias.name for alias in node.names if alias.name in forbidden}
+            elif (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "MatchedBackground"
+            ):
+                constructors.add(relative)
+        if not named:
+            continue
+        if relative in ARTIFACT_SAMPLE_PRODUCERS:
+            producers_seen.add(relative)
+        else:
+            offenders[relative] = named
+
+    assert not offenders, (
+        f"{sorted(offenders)} name the artifact's own sample source; a sample "
+        "drawn from a live read and stamped `artifact` is a reproducibility "
+        "claim nothing downstream can check"
+    )
+    # Not vacuous: the modules that are *supposed* to name it were all found, so
+    # a rename that made the walk match nothing fails here.
+    assert producers_seen == ARTIFACT_SAMPLE_PRODUCERS
+    # And the constructor is only reached where the sampler lives, so `source=`
+    # cannot be spelled with a literal somewhere else instead.
+    assert constructors == {"training/background.py"}
+
+
+def test_the_publish_module_does_not_name_the_artifacts_sample_source() -> None:
+    """The same statement about the one module that would be tempted.
+
+    Stated separately from the walk above because this is the module with a live
+    read in it, and a future edit that added a production module to
+    ``ARTIFACT_SAMPLE_PRODUCERS`` to make the walk pass would still have to
+    delete this test by name.
+    """
+    source = (PACKAGE / "diagnosis" / "publish.py").read_text(encoding="utf-8")
+    assert "draw_matched_background" in source
+    assert "ARTIFACT_SOURCE" not in source
+    assert "draw_artifact_background" not in source

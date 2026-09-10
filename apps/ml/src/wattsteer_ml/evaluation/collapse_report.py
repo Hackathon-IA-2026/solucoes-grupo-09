@@ -17,7 +17,7 @@ what it is a measurement of.**
 
 ## ``collapse_source``, and why it exists
 
-`diagnosis/background.py` stamps ``background_source`` — ``artifact`` or
+`training/background.py` stamps ``background_source`` — ``artifact`` or
 ``base_fit`` — and `training/conformal.py` stamps ``correction_regime``, so a
 stored row names the rule that produced it rather than leaving a reader to infer
 it from context that does not travel with the row. This module does the same

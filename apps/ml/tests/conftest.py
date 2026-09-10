@@ -29,6 +29,15 @@ AS_OF = date(2025, 4, 8)
 #: something to split on, small enough that the suite fits in a coffee break.
 WINDOW_START = date(2024, 12, 2)
 
+#: ``|B(s, h)|`` for the fixture fold's frozen background. The spec's number is
+#: 128 and every production caller takes it; a thirty-day base-fit block cannot
+#: supply 128 distinct rows for one ``(subsystem, local_hour)`` cell, and
+#: forecaster 30 made that a **training** failure rather than a publication one.
+#: So the harness draws a smaller sample and not an exempt one: 24 real rows per
+#: cell, 96 cells, refused if any cell is short, and the tests that assert on the
+#: count assert on this number rather than on nothing.
+FIXTURE_BACKGROUND_ROWS_PER_CELL = 24
+
 #: Stands in for ``pg_get_functiondef(feature_rows)``. The tests that care about
 #: the hash vary it deliberately; the ones that do not just need it to be fixed.
 FUNCTION_DEFINITION = (
@@ -85,6 +94,7 @@ def trained(
         blocks=blocks,
         function_definition=FUNCTION_DEFINITION,
         pool=pool,
+        background_rows_per_cell=FIXTURE_BACKGROUND_ROWS_PER_CELL,
         artifact_id="2026-08-29T04:00:00Z",
         created_at=None,
     )

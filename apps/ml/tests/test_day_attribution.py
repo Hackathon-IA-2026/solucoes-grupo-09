@@ -53,14 +53,6 @@ from wattsteer_ml.diagnosis.attribution import (
     attribute_hour,
     resample_hour,
 )
-from wattsteer_ml.diagnosis.background import (
-    BACKGROUND_ROWS_PER_CELL,
-    BASE_FIT_SOURCE,
-    BackgroundCell,
-    CellKey,
-    MatchedBackground,
-    draw_matched_background,
-)
 from wattsteer_ml.diagnosis.composed_target import bundle_expectation
 from wattsteer_ml.diagnosis.day_attribution import (
     ATTRIBUTION_TARGET_DAY,
@@ -79,6 +71,14 @@ from wattsteer_ml.diagnosis.driver_groups import DRIVER_GROUP_CODES
 from wattsteer_ml.diagnosis.shapley import exact_shapley, shapley_operator
 from wattsteer_ml.evaluation import HOURS_PER_DAY, RowKey
 from wattsteer_ml.training import FeatureBlock, TrainedFold
+from wattsteer_ml.training.background import (
+    BACKGROUND_ROWS_PER_CELL,
+    BASE_FIT_SOURCE,
+    BackgroundCell,
+    CellKey,
+    MatchedBackground,
+    draw_matched_background,
+)
 
 # --- One player per column, so a day's arithmetic can be written down ---------
 #

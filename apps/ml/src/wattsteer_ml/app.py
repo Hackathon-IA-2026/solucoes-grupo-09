@@ -41,7 +41,7 @@ import asyncio
 import json
 import logging
 import sys
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -690,23 +690,29 @@ async def publish_diagnosis(
 
     target_date = request.target_date or serving_target_date(datetime.now(tz=UTC))
 
-    # The base-fit window is the artifact's own, off its card. Resolved *before*
-    # the day's rows are read, because a lane that cannot say what "typical"
-    # means has no attribution however good today's inputs are, and finding that
-    # out after two reads would cost the reads.
-    try:
-        window_start, window_end = base_fit_window(loaded)
-    except DiagnosisPublicationRefusedError as refusal:
-        return _refusal(
-            404,
-            "DIAGNOSIS_UNAVAILABLE",
-            refusal.reason,
-            {
-                "lane": lane.directory_name,
-                "target_date": target_date.isoformat(),
-                "condition": refusal.condition,
-            },
-        )
+    # Since forecaster 30 the artifact carries its own matched background, so
+    # the base-fit window is not read at all for a bundle that has one: the
+    # ~17,000-row read reconstructed a constant of the artifact, twice a day per
+    # lane. The window is still resolved for a bundle without one — which the
+    # loader refuses, so in practice never — and resolved *before* the day's
+    # rows are read, because a lane that cannot say what "typical" means has no
+    # attribution however good today's inputs are, and finding that out after
+    # two reads would cost the reads.
+    window: tuple[date, date] | None = None
+    if getattr(loaded.bundle, "background", None) is None:
+        try:
+            window = base_fit_window(loaded)
+        except DiagnosisPublicationRefusedError as refusal:
+            return _refusal(
+                404,
+                "DIAGNOSIS_UNAVAILABLE",
+                refusal.reason,
+                {
+                    "lane": lane.directory_name,
+                    "target_date": target_date.isoformat(),
+                    "condition": refusal.condition,
+                },
+            )
 
     gate_profile = cast(GateProfile, lane.gate_profile)
     feature_set = cast(FeatureSet, lane.feature_set)
@@ -730,17 +736,21 @@ async def publish_diagnosis(
             )
         # One connection for both reads, and the base-fit read second: the day's
         # 96 rows are the cheap one and they decide whether the ~17,000-row
-        # window read is worth doing at all.
-        base_fit_rows = await read_feature_rows(
-            conn,
-            FeatureRowsQuery(
-                target_from=window_start,
-                target_to=window_end,
-                gate_profile=gate_profile,
-                feature_set=feature_set,
-                threshold_mw=lane.threshold_mw,
-            ),
-        )
+        # window read is worth doing at all. It is worth doing only for a bundle
+        # with no frozen sample; `window` is `None` for every other artifact and
+        # the read does not happen.
+        base_fit_rows: Sequence[Mapping[str, Any]] = ()
+        if window is not None:
+            base_fit_rows = await read_feature_rows(
+                conn,
+                FeatureRowsQuery(
+                    target_from=window[0],
+                    target_to=window[1],
+                    gate_profile=gate_profile,
+                    feature_set=feature_set,
+                    threshold_mw=lane.threshold_mw,
+                ),
+            )
 
     try:
         publication: AttributionPublication = build_diagnosis_publication(
@@ -766,10 +776,20 @@ async def publish_diagnosis(
                 "lane": lane.directory_name,
                 "target_date": target_date.isoformat(),
                 "condition": refusal.condition,
-                "base_fit_window": {
-                    "start": window_start.isoformat(),
-                    "end": window_end.isoformat(),
-                },
+                # Absent, and not a null pair of dates, when the artifact
+                # carried its own sample: no base-fit window was read, so
+                # naming one here would be reporting a window this request did
+                # not use.
+                **(
+                    {
+                        "base_fit_window": {
+                            "start": window[0].isoformat(),
+                            "end": window[1].isoformat(),
+                        }
+                    }
+                    if window is not None
+                    else {}
+                ),
             },
         )
     except (PublicationError, AttributionPublicationError) as error:

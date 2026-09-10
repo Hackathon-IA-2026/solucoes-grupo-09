@@ -80,7 +80,6 @@ import numpy.typing as npt
 
 from wattsteer_ml.constants import SUBSYSTEM_CODES, Subsystem
 from wattsteer_ml.diagnosis.attribution import HourAttribution
-from wattsteer_ml.diagnosis.background import MatchedBackground
 from wattsteer_ml.diagnosis.day_attribution import DayAttribution
 from wattsteer_ml.diagnosis.driver_groups import (
     DRIVER_GROUP_CODES,
@@ -89,6 +88,7 @@ from wattsteer_ml.diagnosis.driver_groups import (
     GroupCode,
 )
 from wattsteer_ml.evaluation import RowKey
+from wattsteer_ml.training.background import MatchedBackground
 
 #: ``origin_kind`` on every row this module produces. A publication is a
 #: **record**; ``backfilled_holdout`` is a counterfactual publication instant and
