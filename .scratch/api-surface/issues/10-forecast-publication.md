@@ -72,7 +72,10 @@ path ensemble and the private publish route on the modelling service are its
 work, and none of it is re-specified here. Also **data-platform 16** (in flight),
 because the modelling service reads the canonical SQL views to build features.
 
-**Status:** done (**one box open** — see “What is still open, and why”)
+**Status:** done (**one box open** — the end-to-end run against the real
+modelling service, whose blocker moved this wave from “no artifact can be
+minted” to “the gate refused the one that was”; see “The artifact exists, and
+the gate refused it”)
 
 The count was four and is now one. Three were closed in the same wave by three
 different hands: the missed-publication alarm, the null-headline pair's stated
@@ -82,7 +85,9 @@ reduced the count on its own branch without being able to see the others, so
 each recorded a number that was already stale by the time it merged. This is the
 count that holds after all three landed. A grep for `- [ ]` in this file returns
 one, which is what the count is, and the one that remains needs a promoted
-artifact rather than a decision.
+artifact rather than a decision. It still does, and the reason has narrowed: an
+artifact now exists, trained on the real back-filled history, and the gate
+refused it. See “The artifact exists, and the gate refused it”.
 
 The previous revision of this line also said “two boxes open”, and it was
 wrong twice over: a grep at the time found **six** unticked, because the count
@@ -114,11 +119,20 @@ one.
 - [x] A failed publication leaves the previous origin serving, with its real age
 - [ ] The end-to-end job is exercised against real Postgres and the real
       modelling service under the existing environment-variable gating
-      — real Postgres: yes. Real modelling service: **partly**. Both private
-      routes are now probed against a live `apps/ml` under
-      `WATTSTEER_TEST_ML_URL` and both answer a code in the closed enum; a
-      live *publication* still needs a promoted artifact and there is none.
-      See “What is still open, and why”
+      — real Postgres: yes. Real modelling service: **the publication now
+      runs, and the promotion behind it was not the gate's**. An artifact is
+      no longer the blocker: the weekly retrain was run against the real
+      892-day history and minted one through `train_fold` / `save_artifact` in
+      each served lane, with the frozen background forecaster 30 requires. The
+      **gate refused both**, on two named calibration guardrails, so a
+      deployment of this database still has nothing promoted and the gated
+      suite still fails on `MODEL_UNAVAILABLE` — now
+      `lane_state: present_unpromoted` rather than `no_artifact`. Behind a
+      promote line written *by hand*, the whole chain does run against the
+      live service: **14 pass · 1 skip · 0 fail**, 96 hour rows, 4 day rows
+      and 1 national row. The box stays open because that promotion was
+      forced rather than earned, which is a state no deployment is in. See
+      “The artifact exists, and the gate refused it”
 - [x] `apps/ml` serves `POST /internal/publish/diagnosis` — it does, and the
       route is not blocked on the forecaster's frozen background sample. See
       “The route, and why the block was the wrong diagnosis”
@@ -427,6 +441,17 @@ gateway's parser accepts and writes.** Every other link in that chain - the
 schedule, the day resolution, the gate check, the transaction, the idempotence,
 the refusal handling, the reads - is exercised against real Postgres with the
 modelling service as a stub over a real socket.
+
+> **Half superseded, and the half that moved is the important one.** The
+> sentence “minting one needs a retrain over years of ingested ONS history” was
+> right, and that history now exists — data-platform 21 back-filled it. So the
+> retrain was run, two artifacts were minted, and the last unverified link
+> above was measured: a live `apps/ml` publication route *does* return a
+> payload this gateway's parser accepts and writes, and the gated suite goes
+> green on it. What has **not** happened is a promotion the gate agreed to: it
+> refused both candidates on two calibration guardrails, and that refusal is
+> the reason the box is still open. See “The artifact exists, and the gate
+> refused it”.
 
 ~~**2. An unpublished publication raising something a human sees.** Untouched, and
 still deliberately so. The spec carries the weakness by name and the mechanism
@@ -1300,4 +1325,256 @@ gate profile that `PUBLICATION_LANES` names; a second lane per gate would need
 the verdict to say *which* lane is unexplained, and the ledger is keyed for that
 (`lane` is in the primary key) while the verdict is not. And the reach is still
 GitHub's own failed-workflow notification, the honest ceiling of this idiom.
+
+---
+
+## The artifact exists, and the gate refused it
+
+**The box's blocker has moved, and this section is the measurement.** Every
+previous pass recorded the same reason: a live publication needs a promoted
+artifact, there is no `.joblib` and no `promotions.jsonl` anywhere, and minting
+one needs a retrain over years of ingested ONS history. The history landed
+(**data-platform 21**), so the retrain was run. It produced the first two
+artifacts and the first promotion log this repository has ever had. **Both
+lanes were refused.**
+
+So the box is still `- [ ]`, and the sentence that keeps it open is a different
+sentence than before: not *nothing can be trained*, but *the gate does not
+agree the trained thing may serve*. Behind a promote line written by hand — a
+state no deployment is in — the whole chain runs and the gated suite is green,
+which is recorded below in full because it is what tells the two failures apart.
+
+### The data, cloned rather than re-ingested
+
+`fc18-pg` on 5434 was reserved for another agent this round, so it was **read
+and never written**: no migration, no test, no ingestion against it. The
+backfill was cloned into a container this pass owns —
+
+    docker run -d --name api10-pg -p 5441:5432 postgres:17-alpine
+    docker exec fc18-pg pg_dump -U postgres --no-owner --no-acl wattsteer > fc18.sql
+    docker cp fc18.sql api10-pg:/tmp/ && docker exec api10-pg psql -q -f /tmp/fc18.sql
+
+1.535 GB of SQL, restored in **32 s**. The dump arrived at **43** migrations, so
+`bun run db:migrate` applied `0043`, `0044` and `0045` on top — **46** applied —
+and `analyze` was run before anything read it. `bun run ml:test:db` and
+`bun run test:db` were never invoked: both hard-code 5434 and their suites
+truncate the ingestion tables, which is how this backfill was destroyed once
+already (data-platform 21's third finding).
+
+What the clone holds, counted on **5441** after the restore:
+
+| table | rows |
+| --- | --- |
+| `curtailment_report_hour` | 4,765,728 |
+| `weather_forecast_hour` | 673,153 |
+| `programmed_load_half_hour` | 171,076 |
+| `verified_load_half_hour` | 171,072 |
+| `subsystem_energy_balance_hour` | 94,272 |
+| `subsystem_exchange_hour` | 94,272 |
+| `dessem_balance_half_hour` | 69,888 |
+| `plant` | 1,621 |
+| `ons_resource_version` | 542 |
+
+Weather is **larger** than data-platform 21 records (673,153 against the 191,560
+it measured after the truncate) because that lane's quota-bound pass has kept
+running; it is still far short of the 892-day window, and the consequences of
+that are visible in the driver readings below.
+
+### The retrain, through the existing driver
+
+`python -m wattsteer_ml.retrain --run-id 2026-09-10T12:00:00Z --root … --database-url …`
+— the module that already existed, unmodified, with no shortcut around
+`train_fold` or `save_artifact`. **962.965 s** wall clock for both lanes,
+**1,399.8 MB** peak RSS, as its own `Resources` block measured them. Roughly
+four of the sixteen minutes per lane is the one `feature_rows` call for the
+whole window; the rest is the fit, the ladder and the bootstrap.
+
+What each lane was fitted on, off the cards rather than from the request:
+
+| | |
+| --- | --- |
+| arm / window start | `A-full` (`A-full-early` at the early gate), 2024-04-01 |
+| deciding fold | **F6**, the live edge, 2026-07-01 → 2026-09-09 |
+| base fit | 2024-04-01 → 2026-04-01, **70,176** rows, 22,511 positive, 47,665 sub-threshold |
+| calibration | 2026-04-02 → 2026-06-30, **8,640** rows, 3,148 positive |
+| test | **6,816** rows over 71 days |
+| admitted model inputs | **78 of 78** at `gate_late`; **66 of 78** at `gate_early`, 12 withheld for `publication_lag` |
+
+Both bundles carry the field forecaster 30 made required: `background_source:
+artifact`, **128** rows per cell over **96** cells, seed **20260830**, a
+9,830,400-byte matrix. Written zlib-3 per forecaster 32 — the bundles are
+3.60 MB (`gate_early`) and 4.40 MB (`gate_late`) with that inside them.
+
+### The gate's decision, which is a refusal twice
+
+`promotions.jsonl` has three lines. Two of them are the run's:
+
+| lane | decision | vetoed |
+| --- | --- | --- |
+| `dessem_free_v1__gate_early__thr5` | **refuse** | `coverage_p10` 0.9753 against [0.85, 0.97]; `p50_unbiasedness` 0.4439 against [0.45, 0.55] |
+| `dessem_free_v1__gate_late__thr5` | **refuse** | `coverage_p10` 0.9884 against [0.85, 0.97]; `p50_unbiasedness` 0.4464 against [0.45, 0.55] |
+
+**Checks 1 to 5 passed in both lanes, and check 5 passed enormously.** Lane
+identity, the estimator allow-list, the feature contract (candidate and live
+`feature_rows` hash to the same `sha256:f755511b…` at `gate_early`), freshness
+and coverage (trained to 2026-09-09, 1 day old, 71 test days against a minimum
+of 60), and then the paired block bootstrap: **P(candidate better) = 1.000**
+over 2,000 resamples of 70 whole target days, quantile loss **318.15 MWh**
+against the same-hour-7-day baseline's **479.93** at the early gate and
+**326.21** against **480.96** at the late one. The candidate is not marginal on
+accuracy; it is a third better than the rung it had to beat.
+
+What vetoed it is calibration, and only two of the eleven applicable rails:
+`pr_auc` pooled and per subsystem, `recall@0.5`, `coverage_p90`, `ece` (0.0316
+against 0.05) and `crossing_rate` (0.0021 against 0.01) all passed. The two
+that did not say the same thing twice: the **P10 band is too low**, covering
+97.5% / 98.8% of observations where the rail wants at most 97%, and the median
+sits a little under the observations (0.444 / 0.446 against a floor of 0.45).
+`serving_smoke` is `null` in both lines because check 6 stops the run before
+check 7 — the smoke was never reached, so nothing here says anything about
+tomorrow's vector.
+
+**It is a property of the fit, not of one window.** The two lanes are
+deliberately different experiments — 66 admitted inputs against 78 — and both
+over-covered on the same rail in the same direction, one of them by nearly two
+whole points. That is a statement about the conformal correction on real ONS
+history rather than about the live edge this run happened to land on, and it is
+a **forecaster-lane** finding: nothing in `api-surface` can move a guardrail,
+and nothing should — a gate whose bounds are widened to admit the first
+candidate is not a gate. It is recorded here because it is what this box is now
+waiting on, and it replaces "there is no artifact" as the reason.
+
+### What the real service answers with nothing promoted
+
+`apps/ml` was started on 8123 against the clone with the run's artifact
+directory mounted, and asked for the day the gated suite publishes:
+
+    POST /internal/publish/forecast  {"lane":"dessem_free_v1__gate_late__thr5",
+                                      "target_date":"2025-04-08"}   -> 503
+      {"error":{"code":"MODEL_UNAVAILABLE",
+                "message":"1 artifact(s) are on the volume and the gate promoted
+                           none of them; the newest file is the candidate that
+                           was refused",
+                "details":{"lane":"dessem_free_v1__gate_late__thr5",
+                           "lane_state":"present_unpromoted","volume_mounted":true}}}
+
+**`present_unpromoted`, where every previous pass measured `no_artifact`** —
+the third of `artifacts.py`'s lane states, which nothing in this repository had
+ever been in a position to produce. And the gated suite in that state:
+
+    WATTSTEER_TEST_DATABASE_URL=…5441 WATTSTEER_TEST_ML_URL=http://localhost:8123
+      bun test test/forecast-publication-job.test.ts
+    -> 13 pass · 1 skip · 1 fail
+
+the one failure being `runs the queued task and leaves the day readable at its
+gate`, on `ProxiedError: The ML service answered MODEL_UNAVAILABLE (HTTP 503)`
+carrying the new lane state. Same shape as the previous wave recorded, one
+sentence further along.
+
+### The last unverified link, measured behind a forced promotion
+
+The ticket named what was left in one sentence: *that a live `apps/ml`
+publication route returns a payload this gateway's parser accepts and writes.*
+To measure only that, a `promote` line was appended for the refused `gate_late`
+artifact through the repository's own `rollback` — the append-only operator
+mechanism, never an edit — with the reason spelling out in the log itself that
+this is a measurement and not a gate decision:
+
+> operator-forced promotion for api-surface 10 measurement only: the gate
+> REFUSED this candidate on coverage_p10 0.9884 and p50_unbiasedness 0.4464. …
+> Not a gate decision and not a deployment state.
+
+It lives in a session scratch directory and **nothing in this commit contains an
+artifact, a card or a promotion log.** With it in place:
+
+| | |
+| --- | --- |
+| `POST /internal/publish/forecast` | **200**, 1.327 s, 49,928 bytes |
+| the gated suite, same command as above | **14 pass · 1 skip · 0 fail**, 2.78 s |
+| one dispatch of the queue's own task | `published` — 96 hours, 4 days, 1 national row, 0 revised, 1.046 s |
+| `published_at` | `2025-04-07T22:00:00.000Z` — the `gate_late` gate for 2025-04-08, exactly, and `0041`'s CHECK accepted it |
+| a second dispatch | `unchanged`, 0 inserted, `data_version` still 1 |
+| `readForecastDayAhead` | 24 hours for NE, `derivation: path_ensemble` |
+
+The rows a reader can add up, straight out of `curtailment_forecast_hour` and
+`curtailment_forecast_day` on 5441 — real numbers from a real fit, not a
+fixture:
+
+| subsystem | day expected (MWh) |
+| --- | --- |
+| NE | 150,514.6 |
+| SE | 16,836.3 |
+| N | 1,101.8 |
+| S | 26.4 |
+| national (`joint_path_ensemble`) | **168,479.1** |
+
+**And the chained half publishes too.** `POST /internal/publish/diagnosis` for
+the same lane-day answered **200** in **59.1 s** with 26,988 bytes, and
+`parseAttributionPublication` — the gateway's own parser — accepted it: four
+subsystems, eight groups at each grain. Two things in it are worth reading:
+
+- `background_source: artifact`, 128 rows, seed 20260830. This is the *frozen*
+  sample out of the bundle, which is forecaster 30's whole point; the base-fit
+  redraw was never reached, and the ~17,000-row read it would have cost was
+  never spent.
+- **42 stated absences** — 14 `null_in_day` and 28 `null_in_background` —
+  across `renewable_resource`, `net_surplus`, `demand_level`, `ramp_shape`,
+  `recent_history` and `data_conditions`. That is the contract decided earlier
+  in this ticket working exactly as it was argued: weather coverage is partial
+  on this database, the frozen background therefore holds NULL headline
+  features, and under the old contract **every** publication from this artifact
+  would have been a `null_headline_feature` refusal for the artifact's whole
+  life. Instead the day publishes with its captions missing and its φ, shares
+  and ranks intact. `rules_evaluated` carries all four codes with `rule_flags`
+  empty — a quiet day with a full roll call, which is the shape the skipped
+  path cannot forge.
+
+### Why the box is not ticked
+
+Because the promotion was forced. Every link the box lists is now exercised
+against real Postgres and a real `apps/ml` — the schedule, the day resolution,
+the gate equality, the transaction, the idempotence, the parser, the read, and
+now the payload — but a deployment holding this database has `lane_state:
+present_unpromoted` and publishes nothing, so an end-to-end run in the state the
+product would actually be in still ends at `MODEL_UNAVAILABLE`. Ticking on a
+promote line this pass wrote by hand would be recording the measurement as the
+outcome. **What the box now waits on is one gate-agreed promotion**, and the
+two guardrails above name exactly what has to change for there to be one.
+
+### What was not done, and why
+
+- **`bun run ml:test:db` / `bun run test:db` were not run**, deliberately: they
+  hard-code 5434 and truncate the ingestion tables.
+- **`test/diagnosis-publication-job.test.ts` was not run against the clone.**
+  Its setup truncates `curtailment_report_hour`, `reporting_entity` and
+  `ons_resource_version` — 4.7 M rows and the fingerprint state — so running it
+  would have destroyed the very history the retrain reads, for one assertion
+  that a route answers a code. The route was probed directly instead and its
+  payload put through the gateway's parser, which is the same fact without the
+  loss.
+- **No second retrain at another `as_of`.** The gate can be re-asked on a
+  different live edge, and re-asking it until one window's calibration happens
+  to land inside two rails would be shopping for a promotion rather than
+  measuring one. Both lanes failing the same rail in the same direction is the
+  evidence that a second window would not answer differently.
+- **`refresh-featured-days`** is still unbuilt, for the reason it has always
+  been: the Replay shortlist cache does not exist.
+
+### Verification, with numbers
+
+Postgres 17 in Docker on **5441** — `api10-pg`, this pass's own container.
+`fc18-pg` on 5434 was read once, for the dump, and never written. All **46**
+migrations applied.
+
+| Suite | Result |
+| --- | --- |
+| `bun run check` (typecheck · biome · every JS suite) | **clean, exit 0** — 169 hygiene · 471 core · 1,273 api · 189 web pass, 561 skip, 0 fail; unchanged from the same run before this ticket was edited |
+| `test/forecast-publication-job.test.ts`, real Postgres + real `apps/ml`, nothing promoted | 13 pass · 1 skip · **1 fail** (`MODEL_UNAVAILABLE`, `present_unpromoted`) |
+| the same, behind the forced promote line | **14 pass · 1 skip · 0 fail** |
+| `python -m wattsteer_ml.retrain`, both lanes, real history | 962.965 s, 1,399.8 MB peak RSS, 2 artifacts, 2 `refuse` lines, `promoted: []` |
+| `POST /internal/publish/forecast` against the promoted artifact | 200, 1.327 s, 49,928 bytes |
+| `POST /internal/publish/diagnosis` against the same | 200, 59.1 s, 26,988 bytes, parser-accepted |
+
+No source file changed in this pass. The measurement is the deliverable, and the
+one box it was aimed at is still open with a different reason under it.
 
