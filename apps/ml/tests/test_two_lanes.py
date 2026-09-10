@@ -33,7 +33,7 @@ from typing import Any
 import asyncpg
 import pytest
 
-from conftest import FUNCTION_DEFINITION
+from conftest import FIXTURE_BACKGROUND_ROWS_PER_CELL, FUNCTION_DEFINITION
 from database_harness import run
 from feature_row_fixtures import feature_rows
 from wattsteer_ml.admissibility import (
@@ -558,6 +558,7 @@ def morning(
         blocks=blocks,
         function_definition=FUNCTION_DEFINITION,
         pool=pool,
+        background_rows_per_cell=FIXTURE_BACKGROUND_ROWS_PER_CELL,
         artifact_id="2026-08-29T09:10:00Z",
         created_at=None,
     )

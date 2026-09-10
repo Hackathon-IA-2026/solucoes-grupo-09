@@ -20,6 +20,11 @@ package owns is everything between a feature row and an artifact on the volume:
 - :mod:`~wattsteer_ml.training.national` — the national day: the four
   subsystems' paths added draw by draw under the ensemble's shared row index,
   and quantiles read off that. No copula, and no sum of quantiles anywhere.
+- :mod:`~wattsteer_ml.training.background` — ``B(s, h)``, the matched sample
+  the attribution's "typical" is averaged over, drawn once from the base-fit
+  block and frozen into the bundle. It lives here rather than in
+  :mod:`wattsteer_ml.diagnosis` because it is a part of the artifact; diagnosis
+  re-exports it and reads it, and nothing here reads diagnosis.
 - :mod:`~wattsteer_ml.training.bundle` — the frozen bundle, the card, and a load
   that refuses a partial mixture.
 - :mod:`~wattsteer_ml.training.hurdle` — the fit, and the composition, which is
@@ -30,6 +35,19 @@ fold calendar (ticket 03), and the lane layout and promotion log (ticket 02).
 Each of those is imported here and none is restated.
 """
 
+from wattsteer_ml.training.background import (
+    ARTIFACT_SOURCE,
+    BACKGROUND_ROWS_PER_CELL,
+    BACKGROUND_SEED,
+    BASE_FIT_SOURCE,
+    BackgroundCell,
+    BackgroundError,
+    CellKey,
+    MatchedBackground,
+    MissingBackgroundCellError,
+    draw_artifact_background,
+    draw_matched_background,
+)
 from wattsteer_ml.training.bundle import (
     CONTRACT_FAULT_KEY,
     ESTIMATOR_FIELDS,
@@ -166,6 +184,10 @@ from wattsteer_ml.training.national import (
 )
 
 __all__ = [
+    "ARTIFACT_SOURCE",
+    "BACKGROUND_ROWS_PER_CELL",
+    "BACKGROUND_SEED",
+    "BASE_FIT_SOURCE",
     "CONTRACT_FAULT_KEY",
     "CORRECTION_REGIME",
     "COVERAGE_GUARDRAIL",
@@ -194,10 +216,13 @@ __all__ = [
     "RISK_EDGE_STEP",
     "STAMP_COLUMNS",
     "TARGET_COVERAGE",
+    "BackgroundCell",
+    "BackgroundError",
     "BinMerge",
     "BundleError",
     "Calibration",
     "CalibrationError",
+    "CellKey",
     "ConformalCorrection",
     "ConformalError",
     "ContractMismatchError",
@@ -220,6 +245,8 @@ __all__ = [
     "HurdleBundle",
     "IsotonicCalibrator",
     "LoadedArtifact",
+    "MatchedBackground",
+    "MissingBackgroundCellError",
     "ModelCard",
     "ModelConfig",
     "NationalDayGrain",
@@ -250,7 +277,9 @@ __all__ = [
     "contract_fault",
     "day_grain_rows",
     "derive_risk_bins",
+    "draw_artifact_background",
     "draw_day_grain",
+    "draw_matched_background",
     "ensemble_quantile",
     "environment_versions",
     "expected_mwh_for_block",

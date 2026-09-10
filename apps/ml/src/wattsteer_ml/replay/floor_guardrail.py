@@ -306,7 +306,7 @@ class FloorCoverageProvenance:
 
     Constructible only through :meth:`measured` or :meth:`fixture`, so
     :data:`FOLD_EVALUATION_SOURCE` cannot be set by a caller that scored
-    nothing — the discipline `diagnosis/background.py`,
+    nothing — the discipline `training/background.py`,
     `training/conformal.py`, :mod:`~wattsteer_ml.evaluation.collapse_report`,
     :mod:`~wattsteer_ml.evaluation.planning_arms` and
     :mod:`~wattsteer_ml.evaluation.lead_time` all apply to their own published

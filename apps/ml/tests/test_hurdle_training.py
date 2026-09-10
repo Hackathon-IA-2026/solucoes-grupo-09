@@ -21,7 +21,7 @@ from typing import Any
 import pytest
 
 import reproduce_fold
-from conftest import FUNCTION_DEFINITION
+from conftest import FIXTURE_BACKGROUND_ROWS_PER_CELL, FUNCTION_DEFINITION
 from feature_row_fixtures import blinded_sub_threshold
 from out_of_fold_fixtures import pool as out_of_fold_pool
 from wattsteer_ml.evaluation import Fold, FoldBlocks, expected_test_rows
@@ -150,6 +150,7 @@ def test_the_magnitude_models_saw_curtailed_hours_only(
         blocks=blocks,
         function_definition=FUNCTION_DEFINITION,
         pool=out_of_fold_pool(),
+        background_rows_per_cell=FIXTURE_BACKGROUND_ROWS_PER_CELL,
         artifact_id="2026-08-29T05:00:00Z",
     )
     for name in ("magnitude_p10", "magnitude_p50", "magnitude_p90", "magnitude_mean"):
@@ -190,8 +191,62 @@ def test_a_fold_with_no_curtailed_hour_refuses_rather_than_fits(
             blocks=blocks,
             function_definition=FUNCTION_DEFINITION,
             pool=out_of_fold_pool(),
+            background_rows_per_cell=FIXTURE_BACKGROUND_ROWS_PER_CELL,
             artifact_id="2026-08-29T06:00:00Z",
         )
+
+
+def test_a_window_too_short_for_the_background_fails_at_training(
+    rows: list[dict[str, Any]],
+    fold: Fold,
+    blocks: FoldBlocks,
+) -> None:
+    """Forecaster 30's sixth box: the short cell fails once, not twice a day.
+
+    The fixture fold's base-fit block is thirty days, so thirty rows per
+    ``(subsystem, local_hour)`` cell. Asked for the spec's 128 the *training
+    run* refuses, and the message names the repair an operator can act on — a
+    longer run window. Before this ticket the same shortage was a publication
+    refusal every twelve hours, for a fact the retrain could have established
+    once.
+
+    Both halves are here: the refusal, and the same call at a sample the window
+    can supply. A guard that cannot be made to pass proves nothing about
+    whether it can fail, and the fixture's own row count is asserted so the
+    refusal is the arithmetic and not an empty block.
+    """
+    days = len(
+        {row["target_date"] for row in rows if row["target_date"] <= blocks.base_fit_end}
+    )
+    assert FIXTURE_BACKGROUND_ROWS_PER_CELL <= days < 128
+
+    with pytest.raises(ValueError, match="no matched background can be drawn") as short:
+        train_fold(
+            rows,
+            fold=fold,
+            blocks=blocks,
+            function_definition=FUNCTION_DEFINITION,
+            pool=out_of_fold_pool(),
+            background_rows_per_cell=128,
+            artifact_id="2026-08-29T07:00:00Z",
+        )
+    assert "longer" in str(short.value)
+    assert "rows in the block and the sample is drawn at 128" in str(short.value)
+
+    # And the same window at a sample it can supply trains, so the refusal
+    # above is the row count and not the plumbing.
+    assert (
+        train_fold(
+            rows,
+            fold=fold,
+            blocks=blocks,
+            function_definition=FUNCTION_DEFINITION,
+            pool=out_of_fold_pool(),
+            background_rows_per_cell=FIXTURE_BACKGROUND_ROWS_PER_CELL,
+            artifact_id="2026-08-29T07:00:00Z",
+        ).bundle.background.rows_per_cell
+        == FIXTURE_BACKGROUND_ROWS_PER_CELL
+    )
 
 
 def test_all_six_estimators_and_mu_sub_are_fitted(trained: TrainedFold) -> None:
@@ -285,6 +340,7 @@ def test_same_inputs_and_same_seed_reproduce_identical_predictions(
         blocks=blocks,
         function_definition=FUNCTION_DEFINITION,
         pool=pool,
+        background_rows_per_cell=FIXTURE_BACKGROUND_ROWS_PER_CELL,
         artifact_id="2026-08-29T07:00:00Z",
     )
     assert again.bundle.contract.feature_hash == trained.bundle.contract.feature_hash
@@ -348,5 +404,6 @@ def test_a_row_outside_the_three_blocks_is_refused(
             blocks=blocks,
             function_definition=FUNCTION_DEFINITION,
             pool=out_of_fold_pool(),
+            background_rows_per_cell=FIXTURE_BACKGROUND_ROWS_PER_CELL,
             artifact_id="2026-08-29T08:00:00Z",
         )

@@ -72,7 +72,6 @@ from wattsteer_ml.diagnosis.attribution import (
     attribute_hour,
     resample_hour,
 )
-from wattsteer_ml.diagnosis.background import MatchedBackground
 from wattsteer_ml.diagnosis.driver_groups import (
     DRIVER_GROUP_CODES,
     DRIVER_GROUP_MAP,
@@ -80,6 +79,7 @@ from wattsteer_ml.diagnosis.driver_groups import (
     GroupCode,
 )
 from wattsteer_ml.evaluation import HOURS_PER_DAY, RowKey
+from wattsteer_ml.training.background import MatchedBackground
 
 #: What the day payload says it attributed. `api-surface.md` spells it this way;
 #: :data:`~wattsteer_ml.diagnosis.attribution.ATTRIBUTION_TARGET_HOUR` is the

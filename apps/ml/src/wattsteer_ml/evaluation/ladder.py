@@ -95,6 +95,7 @@ from wattsteer_ml.evaluation.folds import Fold, FoldBlocks
 from wattsteer_ml.evaluation.metrics import MetricsRow, MetricsTable
 from wattsteer_ml.evaluation.vintage import FoldSegment
 from wattsteer_ml.mixture import FITTED_ALPHAS, HurdleMixture
+from wattsteer_ml.training.background import BACKGROUND_ROWS_PER_CELL
 from wattsteer_ml.training.bundle import SubThresholdMeans
 from wattsteer_ml.training.calibration import OutOfFoldPool
 from wattsteer_ml.training.conformal import ConformalCorrection, ScoredHour
@@ -876,6 +877,13 @@ class LightGbmRung:
     #: edges. :func:`train_fold` requires it and this rung does not fabricate one.
     pool: OutOfFoldPool
     config: ModelConfig = MODEL_CONFIG_V1
+    #: ``|B(s, h)|`` for the matched background :func:`train_fold` freezes into
+    #: the bundle. The ladder scores forecasts and never attributions, so this
+    #: rung has no use for the sample — but the artifact it fits is the served
+    #: artifact, which since forecaster 30 cannot exist without one. Exposed so
+    #: that a ladder run on a short window fails on its own terms rather than
+    #: on a background it never reads.
+    background_rows_per_cell: int = BACKGROUND_ROWS_PER_CELL
 
     number: int = 4
     name: str = "lightgbm"
@@ -891,6 +899,7 @@ class LightGbmRung:
             function_definition=self.function_definition,
             pool=self.pool,
             config=self.config,
+            background_rows_per_cell=self.background_rows_per_cell,
         )
         return LightGbmFit(bundle=trained.bundle, correction_=trained.bundle.conformal)
 
@@ -898,14 +907,23 @@ class LightGbmRung:
         return fitted.correction_ if isinstance(fitted, LightGbmFit) else None
 
 
-def default_ladder(*, function_definition: str, pool: OutOfFoldPool) -> tuple[Rung, ...]:
+def default_ladder(
+    *,
+    function_definition: str,
+    pool: OutOfFoldPool,
+    background_rows_per_cell: int = BACKGROUND_ROWS_PER_CELL,
+) -> tuple[Rung, ...]:
     """The five rungs, in the spec's order. Rung 5 (TFT) is never served."""
     return (
         PrevalenceRung(),
         SameHourSevenDayRung(),
         LinearRung(),
         ForestRung(),
-        LightGbmRung(function_definition=function_definition, pool=pool),
+        LightGbmRung(
+            function_definition=function_definition,
+            pool=pool,
+            background_rows_per_cell=background_rows_per_cell,
+        ),
     )
 
 

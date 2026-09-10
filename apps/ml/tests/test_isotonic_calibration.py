@@ -38,7 +38,7 @@ import joblib
 import numpy as np
 import pytest
 
-from conftest import FUNCTION_DEFINITION
+from conftest import FIXTURE_BACKGROUND_ROWS_PER_CELL, FUNCTION_DEFINITION
 from out_of_fold_fixtures import (
     PRIOR_FOLDS,
     PRIOR_INSIDE_CALIBRATION,
@@ -137,6 +137,7 @@ def test_the_base_learners_are_not_refit_after_calibration(
         blocks=blocks,
         function_definition=FUNCTION_DEFINITION,
         pool=out_of_fold_pool(seed=7),
+        background_rows_per_cell=FIXTURE_BACKGROUND_ROWS_PER_CELL,
         artifact_id="2026-08-29T10:00:00Z",
     )
     for name, booster in trained.bundle.estimators().items():
@@ -189,6 +190,7 @@ def test_with_early_stopping_off_the_calibration_window_touches_nothing_but_the_
         blocks=blocks,
         function_definition=FUNCTION_DEFINITION,
         pool=out_of_fold_pool(),
+        background_rows_per_cell=FIXTURE_BACKGROUND_ROWS_PER_CELL,
         config=config,
         artifact_id="2026-08-29T12:00:00Z",
     )
@@ -198,6 +200,7 @@ def test_with_early_stopping_off_the_calibration_window_touches_nothing_but_the_
         blocks=blocks,
         function_definition=FUNCTION_DEFINITION,
         pool=out_of_fold_pool(),
+        background_rows_per_cell=FIXTURE_BACKGROUND_ROWS_PER_CELL,
         config=config,
         artifact_id="2026-08-29T13:00:00Z",
     )
@@ -259,6 +262,7 @@ def test_a_calibration_block_with_no_settled_label_refuses(
             blocks=blocks,
             function_definition=FUNCTION_DEFINITION,
             pool=out_of_fold_pool(),
+            background_rows_per_cell=FIXTURE_BACKGROUND_ROWS_PER_CELL,
             artifact_id="2026-08-29T11:00:00Z",
         )
 

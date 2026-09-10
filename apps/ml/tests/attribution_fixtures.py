@@ -25,11 +25,6 @@ import numpy as np
 import numpy.typing as npt
 
 from wattsteer_ml.constants import Subsystem
-from wattsteer_ml.diagnosis.background import (
-    BASE_FIT_SOURCE,
-    BackgroundCell,
-    MatchedBackground,
-)
 from wattsteer_ml.diagnosis.driver_groups import (
     DRIVER_GROUP_CODES,
     DriverGroup,
@@ -39,6 +34,11 @@ from wattsteer_ml.diagnosis.shapley import coalition_count, exact_shapley
 from wattsteer_ml.evaluation import RowKey
 from wattsteer_ml.mixture import MagnitudeQuantiles, compose
 from wattsteer_ml.training import FeatureBlock, FeatureColumn, FeatureContract
+from wattsteer_ml.training.background import (
+    BASE_FIT_SOURCE,
+    BackgroundCell,
+    MatchedBackground,
+)
 
 #: A fixture stand-in for ``pg_get_functiondef(feature_rows)``.
 FUNCTION_DEFINITION = "CREATE FUNCTION feature_rows() RETURNS void AS $$ $$;"

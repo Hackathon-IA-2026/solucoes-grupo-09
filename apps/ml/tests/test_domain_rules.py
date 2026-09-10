@@ -39,12 +39,6 @@ import pytest
 from attribution_fixtures import RowFunction, feature_names_of, synthetic_map
 from wattsteer_ml.constants import Subsystem
 from wattsteer_ml.diagnosis import rules as rules_module
-from wattsteer_ml.diagnosis.background import (
-    BASE_FIT_SOURCE,
-    BackgroundCell,
-    CellKey,
-    MatchedBackground,
-)
 from wattsteer_ml.diagnosis.day_attribution import DayAttribution, attribute_day
 from wattsteer_ml.diagnosis.driver_groups import DRIVER_GROUP_CODES, GroupCode
 from wattsteer_ml.diagnosis.publication import (
@@ -76,6 +70,12 @@ from wattsteer_ml.diagnosis.rules import (
     apply_rules,
 )
 from wattsteer_ml.evaluation import HOURS_PER_DAY, RowKey
+from wattsteer_ml.training.background import (
+    BASE_FIT_SOURCE,
+    BackgroundCell,
+    CellKey,
+    MatchedBackground,
+)
 
 #: Seven one-member groups and a ``data_conditions`` that carries the two
 #: pipeline columns ``stale_inputs`` reads — the real map puts them there too.
@@ -469,7 +469,7 @@ FORBIDDEN_MODULES = frozenset(
     {
         "wattsteer_ml.diagnosis.attribution",
         "wattsteer_ml.diagnosis.day_attribution",
-        "wattsteer_ml.diagnosis.background",
+        "wattsteer_ml.training.background",
         "wattsteer_ml.diagnosis.shapley",
     }
 )

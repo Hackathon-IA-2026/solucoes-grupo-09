@@ -49,7 +49,7 @@ than as a comment about them.
 
 ## ``arm_source``, and the discipline it inherits
 
-`diagnosis/background.py` stamps ``background_source``, `training/conformal.py`
+`training/background.py` stamps ``background_source``, `training/conformal.py`
 stamps ``correction_regime`` and
 :mod:`~wattsteer_ml.evaluation.collapse_report` stamps ``collapse_source``. This
 module is the fourth, and the failure it prevents is the same one: two floors in

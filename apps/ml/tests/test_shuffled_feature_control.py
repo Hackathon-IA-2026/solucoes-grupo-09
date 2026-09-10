@@ -65,13 +65,10 @@ from attribution_fixtures import (
     feature_names_of,
     synthetic_map,
 )
+from conftest import FIXTURE_BACKGROUND_ROWS_PER_CELL
 from feature_row_fixtures import THRESHOLD_MW, feature_rows
 from wattsteer_ml.constants import Subsystem
 from wattsteer_ml.diagnosis.attribution import ComposedExpectation, group_columns
-from wattsteer_ml.diagnosis.background import (
-    BACKGROUND_ROWS_PER_CELL,
-    draw_matched_background,
-)
 from wattsteer_ml.diagnosis.composed_target import bundle_expectation
 from wattsteer_ml.diagnosis.day_attribution import (
     DayAttribution,
@@ -89,6 +86,10 @@ from wattsteer_ml.training import (
     HurdleBundle,
     OutOfFoldPool,
     train_fold,
+)
+from wattsteer_ml.training.background import (
+    BACKGROUND_ROWS_PER_CELL,
+    draw_matched_background,
 )
 
 #: How far the permuted group's ``|Φ|`` has to fall, as a fraction of what it
@@ -797,6 +798,7 @@ def temperature_lane(
         blocks=blocks,
         function_definition=FUNCTION_DEFINITION,
         pool=pool,
+        background_rows_per_cell=FIXTURE_BACKGROUND_ROWS_PER_CELL,
         artifact_id="2026-08-29T04:00:00Z",
         created_at=None,
     )

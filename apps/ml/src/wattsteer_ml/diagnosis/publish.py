@@ -13,37 +13,47 @@ An attribution measures a day against a *matched background* — 128 rows per
 ``(subsystem, local_hour)`` cell, so that "typical" is hour-specific and
 subsystem-specific. `docs/specs/diagnosis.md` asks the forecaster's artifact to
 carry that sample frozen in the bundle, drawn once from the base-fit block with
-a stamped seed. **It does not carry one:** ``HurdleBundle`` has no such field,
-and no forecaster ticket had been sliced for it — see
-`.scratch/forecaster/issues/30-the-matched-background-in-the-bundle.md`, written
-by the ticket that needed it.
+a stamped seed. **Since forecaster 30 it does.**
+:attr:`~wattsteer_ml.training.bundle.HurdleBundle.background` is a required,
+undefaulted field, drawn inside the training run from the block the boosters
+were fitted on, and :func:`_background` returns it. A published "typical" is
+therefore reproducible from the joblib alone — the property api-surface 10 left
+an open box for.
 
-So this module draws the sample here, and the whole of the honesty question is
-*what it draws from*:
+The publish-time draw is still here, one branch below, and the ticket that
+froze the sample is the ticket that said to keep it: "the fallback is deleted
+with the last pre-ticket artifact and not before". What matters is that the two
+are **not confusable**, and that is what ``background_source`` is for:
 
-- **It draws from real ingested rows.** The base-fit window is read off the
-  promoted artifact's own card — ``data.base_fit_window`` — and the rows come
-  back from ``feature_rows(...)`` under the lane's own gate profile, feature set
-  and threshold. These are the days the boosters were fitted on. Nothing is
-  simulated, no cell is filled from a neighbouring hour, and a short cell is a
-  refusal rather than a draw with replacement (see
-  :func:`~wattsteer_ml.diagnosis.background.draw_matched_background`).
-- **It says so on every row.** ``background_source`` is
-  :data:`~wattsteer_ml.diagnosis.background.BASE_FIT_SOURCE` and not
-  ``artifact``, beside ``background_seed`` and ``background_rows``, and the
-  gateway parses and stores all three. A row measured against a publish-time
-  draw is therefore *distinguishable* from one measured against a frozen sample
-  — which is the property :mod:`wattsteer_ml.diagnosis.publication` says the
-  field exists for.
-- **The seed is the artifact's, not the clock's.** :func:`background_seed`
-  derives it from the ``artifact_id``, so two publications of the same day under
-  the same artifact draw the *same* sample and produce the same numbers. That is
-  what keeps the gateway's digest idempotence real: a redelivered task writes
-  nothing rather than appending a vintage that differs only by a seed.
+- **The frozen sample says ``artifact``.** It was drawn once, in the training
+  run, by the one function in the package that can stamp that value, and the
+  card publishes the seed, the row count and the cell count beside it.
+- **The redraw says ``base_fit``, and it draws from real ingested rows.** The
+  base-fit window is read off the promoted artifact's own card —
+  ``data.base_fit_window`` — and the rows come back from ``feature_rows(...)``
+  under the lane's own gate profile, feature set and threshold. These are the
+  days the boosters were fitted on. Nothing is simulated, no cell is filled
+  from a neighbouring hour, and a short cell is a refusal rather than a draw
+  with replacement (see
+  :func:`~wattsteer_ml.training.background.draw_matched_background`).
+- **Either way it says so on every row**, beside ``background_seed`` and
+  ``background_rows``, and the gateway parses and stores all three. A row
+  measured against a publish-time draw stays *distinguishable* from one
+  measured against the frozen sample — which is the property
+  :mod:`wattsteer_ml.diagnosis.publication` says the field exists for.
+- **Neither seed is the clock's.** The frozen sample carries the seed the
+  training run stamped; :func:`background_seed` derives the redraw's from the
+  ``artifact_id``. Both make two publications of one day under one artifact
+  produce the same numbers, which is what keeps the gateway's digest
+  idempotence real: a redelivered task writes nothing rather than appending a
+  vintage that differs only by a seed.
 
-What is still weaker than the spec's ask, and is the reason the forecaster
-ticket exists: the sample is reproducible from the artifact *plus the base-fit
-window as the feature function returns it today*, not from the artifact alone.
+What the redraw was still weaker than the spec's ask *in*, and why the sample
+moved into the artifact: it is reproducible from the artifact **plus the
+base-fit window as the feature function returns it today** — not from the
+artifact alone. A backfill, a vintage correction or an edit to the feature
+function moves "typical" under an artifact that did not change, and the
+bundle's contract hash catches a column change and never a value change.
 
 ## The rules cannot be skipped, and this module does not try
 
@@ -72,12 +82,6 @@ import numpy as np
 import numpy.typing as npt
 
 from wattsteer_ml.constants import SUBSYSTEM_CODES, Subsystem
-from wattsteer_ml.diagnosis.background import (
-    BACKGROUND_ROWS_PER_CELL,
-    BASE_FIT_SOURCE,
-    MatchedBackground,
-    draw_matched_background,
-)
 from wattsteer_ml.diagnosis.composed_target import bundle_expectation
 from wattsteer_ml.diagnosis.day_attribution import attribute_day, day_rows
 from wattsteer_ml.diagnosis.driver_groups import (
@@ -102,6 +106,11 @@ from wattsteer_ml.training import (
     day_grain_rows,
     forecast_rows,
 )
+from wattsteer_ml.training.background import (
+    BACKGROUND_ROWS_PER_CELL,
+    MatchedBackground,
+    draw_matched_background,
+)
 
 
 class DiagnosisPublicationRefusedError(Exception):
@@ -111,9 +120,11 @@ class DiagnosisPublicationRefusedError(Exception):
     payload that disagrees with itself. These are the conditions under which a
     *correct* implementation produces nothing, and each one has its own repair:
 
-    - ``no_matched_background`` — the artifact carries no frozen sample and its
-      base-fit window cannot supply one at ``rows_per_cell``. The repair is the
-      forecaster ticket, or a longer run window.
+    - ``no_matched_background`` — the artifact carries no frozen sample (which
+      since forecaster 30 means it predates the field and should not have
+      loaded at all) and its base-fit window cannot supply one at
+      ``rows_per_cell`` either. The repair is a retrain, which now draws the
+      sample and refuses a window too short to supply it.
     - ``no_base_fit_window`` — the card does not say which days the boosters
       were fitted on, so there is nothing to draw from.
     - ``contract_and_groups_disagree`` — some driver group has no column in this
@@ -382,15 +393,42 @@ def _background(
     loaded: LoadedArtifact,
     rows_per_cell: int,
 ) -> MatchedBackground:
-    """``B(s, h)`` for this artifact, drawn from its own base-fit rows.
+    """``B(s, h)`` for this artifact — the frozen sample, or a labelled redraw.
 
-    Every failure here is ``no_matched_background`` and none of them is a
-    fallback: a cell short of ``rows_per_cell`` is refused rather than drawn
-    with replacement or filled from a neighbouring hour, because either would
-    make one hour's "typical" thinner than another's and nothing downstream
-    would say so.
+    **The bundle's own sample wins whenever there is one**, which since
+    forecaster 30 is every bundle that loads: the field is required and
+    undefaulted, so a pre-30 artifact fails in
+    :func:`~wattsteer_ml.training.bundle.load_artifact` rather than arriving
+    here without one. The redraw below is therefore not a branch this service
+    is expected to take. It is kept because the ticket says to keep it —
+    "deleted with the last pre-ticket artifact and not before" — and because
+    deleting it would also delete the distinction that makes the fallback
+    honest: ``background_source`` says ``artifact`` or ``base_fit`` on every
+    published row, and a field with one possible value stops being read.
+
+    ``rows_per_cell`` applies to the redraw only. The frozen sample was drawn
+    at the count the training run stamped on it, and re-checking that count
+    here would be this module holding an opinion about an artifact's contents;
+    what it publishes instead is
+    :attr:`~wattsteer_ml.training.background.MatchedBackground.rows_per_cell`,
+    off the sample itself.
+
+    Every failure in the redraw is ``no_matched_background`` and none of them
+    is a fallback in turn: a cell short of ``rows_per_cell`` is refused rather
+    than drawn with replacement or filled from a neighbouring hour, because
+    either would make one hour's "typical" thinner than another's and nothing
+    downstream would say so.
     """
     bundle = loaded.bundle
+    # ``getattr`` and not ``bundle.background``: ``joblib.load`` reconstructs an
+    # object without running ``__init__``, so a bundle predating the field comes
+    # back missing the attribute entirely rather than holding ``None``. That
+    # bundle is refused by the loader; this is the same defence one layer on,
+    # and it is what keeps the redraw below reachable for the artifact the
+    # ticket says it exists for.
+    frozen: MatchedBackground | None = getattr(bundle, "background", None)
+    if frozen is not None:
+        return frozen
     if not base_fit_rows:
         raise DiagnosisPublicationRefusedError(
             "no_matched_background",
@@ -407,10 +445,6 @@ def _background(
             block,
             seed=background_seed(loaded.artifact_id),
             rows_per_cell=rows_per_cell,
-            # Never `ARTIFACT_SOURCE`. The bundle carries no frozen sample, and
-            # a row that claimed one would be indistinguishable from a row
-            # measured against the sample the spec asks for.
-            source=BASE_FIT_SOURCE,
         )
     except ValueError as error:
         raise DiagnosisPublicationRefusedError(

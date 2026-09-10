@@ -39,17 +39,6 @@ from wattsteer_ml.diagnosis.attribution import (
     group_columns,
     resample_hour,
 )
-from wattsteer_ml.diagnosis.background import (
-    ARTIFACT_SOURCE,
-    BACKGROUND_ROWS_PER_CELL,
-    BASE_FIT_SOURCE,
-    BackgroundCell,
-    BackgroundError,
-    CellKey,
-    MatchedBackground,
-    MissingBackgroundCellError,
-    draw_matched_background,
-)
 from wattsteer_ml.diagnosis.composed_target import bundle_expectation
 from wattsteer_ml.diagnosis.day_attribution import (
     ATTRIBUTION_TARGET_DAY,
@@ -125,9 +114,18 @@ from wattsteer_ml.diagnosis.rules import (
     RuleOutcome,
     apply_rules,
 )
+from wattsteer_ml.training.background import (
+    BACKGROUND_ROWS_PER_CELL,
+    BASE_FIT_SOURCE,
+    BackgroundCell,
+    BackgroundError,
+    CellKey,
+    MatchedBackground,
+    MissingBackgroundCellError,
+    draw_matched_background,
+)
 
 __all__ = [
-    "ARTIFACT_SOURCE",
     "ATTRIBUTION_TARGET_DAY",
     "ATTRIBUTION_TARGET_HOUR",
     "BACKGROUND_ROWS_PER_CELL",

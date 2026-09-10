@@ -37,12 +37,6 @@ from attribution_fixtures import (
 )
 from wattsteer_ml.constants import Subsystem
 from wattsteer_ml.diagnosis import publication
-from wattsteer_ml.diagnosis.background import (
-    BASE_FIT_SOURCE,
-    BackgroundCell,
-    CellKey,
-    MatchedBackground,
-)
 from wattsteer_ml.diagnosis.day_attribution import DayAttribution, attribute_day
 from wattsteer_ml.diagnosis.driver_groups import DRIVER_GROUP_CODES
 from wattsteer_ml.diagnosis.publication import (
@@ -54,6 +48,12 @@ from wattsteer_ml.diagnosis.publication import (
 )
 from wattsteer_ml.diagnosis.rules import SHIPPING_RULE_CODES
 from wattsteer_ml.evaluation import HOURS_PER_DAY, RowKey
+from wattsteer_ml.training.background import (
+    BASE_FIT_SOURCE,
+    BackgroundCell,
+    CellKey,
+    MatchedBackground,
+)
 
 FIXTURE_MAP = synthetic_map(tuple((f"f{index}",) for index in range(8)))
 FIXTURE_NAMES = feature_names_of(FIXTURE_MAP)

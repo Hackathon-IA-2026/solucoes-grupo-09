@@ -57,7 +57,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from conftest import FUNCTION_DEFINITION
+from conftest import FIXTURE_BACKGROUND_ROWS_PER_CELL, FUNCTION_DEFINITION
 from ladder_fixtures import rows_with_same_hour_features
 from wattsteer_ml.evaluation import (
     Fold,
@@ -117,7 +117,11 @@ def segments(fold: Fold) -> tuple[FoldSegment, ...]:
 @pytest.fixture(scope="module")
 def rungs(pool: OutOfFoldPool) -> tuple[Rung, ...]:
     """The five published rungs, with the forest shrunk for the suite's sake."""
-    published = default_ladder(function_definition=FUNCTION_DEFINITION, pool=pool)
+    published = default_ladder(
+        function_definition=FUNCTION_DEFINITION,
+        pool=pool,
+        background_rows_per_cell=FIXTURE_BACKGROUND_ROWS_PER_CELL,
+    )
     return tuple(TEST_FOREST if rung.number == 3 else rung for rung in published)
 
 
@@ -617,7 +621,11 @@ def test_the_control_holds_on_every_fold_of_the_calendar(
     permutation over the whole window would introduce and then read as a pass.
     """
     calendar = materialize_fold_calendar(SCALE_AS_OF)
-    published = default_ladder(function_definition=FUNCTION_DEFINITION, pool=pool)
+    published = default_ladder(
+        function_definition=FUNCTION_DEFINITION,
+        pool=pool,
+        background_rows_per_cell=FIXTURE_BACKGROUND_ROWS_PER_CELL,
+    )
     rungs = tuple(TEST_FOREST if rung.number == 3 else rung for rung in published)
     for fold in calendar.folds:
         blocks = fold.blocks_for(SCALE_WINDOW_START)
