@@ -446,7 +446,7 @@ def build_publication(
             "publication of zero hours is not one"
         )
 
-    published_at = _one_gate(rows, target_date=target_date)
+    published_at = publication_instant(rows, target_date=target_date)
     valid_times = _valid_times(rows, target_date=target_date)
 
     hours = forecast_rows(bundle, rows)
@@ -672,7 +672,9 @@ def _hours_p50_nonzero(
     return counted
 
 
-def _one_gate(rows: Sequence[Mapping[str, Any]], *, target_date: date) -> datetime:
+def publication_instant(
+    rows: Sequence[Mapping[str, Any]], *, target_date: date
+) -> datetime:
     """The one publication instant these rows were cut against.
 
     Read off ``feature_rows``' own ``gate_at`` column and never computed here.

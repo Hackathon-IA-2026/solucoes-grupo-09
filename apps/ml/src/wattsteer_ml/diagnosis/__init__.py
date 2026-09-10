@@ -93,6 +93,13 @@ from wattsteer_ml.diagnosis.publication import (
     build_attribution_publication,
     headline_readings,
 )
+from wattsteer_ml.diagnosis.publish import (
+    REFUSAL_CONDITIONS,
+    DiagnosisPublicationRefusedError,
+    background_seed,
+    base_fit_window,
+    build_diagnosis_publication,
+)
 from wattsteer_ml.diagnosis.rule_context import (
     FIELD_PROVENANCE,
     REASON_CODES,
@@ -136,6 +143,7 @@ __all__ = [
     "NOTABLE_SHARE_FLOOR",
     "PRODUCER",
     "REASON_CODES",
+    "REFUSAL_CONDITIONS",
     "REOPENING_TRIGGER",
     "RULE_ACTION_ORDER",
     "SERVED_ORIGIN_KIND",
@@ -156,6 +164,7 @@ __all__ = [
     "DayAttribution",
     "DayAttributionError",
     "DayGroupContribution",
+    "DiagnosisPublicationRefusedError",
     "Direction",
     "DriverGroup",
     "DriverGroupMap",
@@ -189,7 +198,10 @@ __all__ = [
     "assert_total_partition",
     "attribute_day",
     "attribute_hour",
+    "background_seed",
+    "base_fit_window",
     "build_attribution_publication",
+    "build_diagnosis_publication",
     "build_rule_context",
     "bundle_expectation",
     "context_field_names",

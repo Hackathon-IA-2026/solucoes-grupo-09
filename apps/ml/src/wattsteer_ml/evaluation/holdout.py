@@ -29,7 +29,7 @@ of it, and the only thing this module adds is *which* days, *which* artifact and
 instant the gate *would* have been for a day nothing was ever published for. It
 is not computed here either: it is read off the feature rows, where the database
 resolved it inside ``feature_rows(...)``, by the same
-:func:`~wattsteer_ml.publication._one_gate` the served path goes through. So a
+:func:`~wattsteer_ml.publication.publication_instant` the served path goes through. So a
 held-out row's publication instant is the served row's function of the same
 date, to the second, rather than a second implementation that agrees today.
 

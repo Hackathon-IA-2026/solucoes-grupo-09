@@ -4,8 +4,10 @@ import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { createDatabase, type Database } from "../src/database/connection.js";
 import { onsResourceVersion } from "../src/database/schema.js";
+import { parseAttributionPublication } from "../src/diagnosis/publication.js";
 import { readAttributionDayAhead } from "../src/diagnosis/reads.js";
 import { readRecentReasonMix } from "../src/diagnosis/reason-mix.js";
+import { isErrorCode } from "../src/errors.js";
 import { gateAt } from "../src/forecast/gate.js";
 import {
   type CurtailmentReportHour,
@@ -45,17 +47,33 @@ import {
  *    a day whose reason mix would change the answer sits just beyond
  *    `actuals_cutoff` and must not be the day that is read.
  *
- * The modelling service is a stub over a real socket, as the forecast
- * publication's suite has it. `apps/ml` serves no `/internal/publish/diagnosis`
- * route yet — that half is blocked on the forecaster's matched background
- * sample in the artifact bundle — so the payload crossing the wire is the
- * checked-in cross-language vector's shape and not a live computation.
+ * The modelling service is a stub over a real socket by default and the real one
+ * when `WATTSTEER_TEST_ML_URL` names it, exactly as the forecast publication's
+ * suite has it. `apps/ml` now serves `POST /internal/publish/diagnosis`
+ * (`wattsteer_ml/diagnosis/publish.py`), so the third assertion below is new:
+ * against the real service the route answers a **code in the closed enum**
+ * rather than FastAPI's `{"detail": "Not Found"}`, which `ml-proxy` mapped to
+ * `UPSTREAM_REJECTED` and which read like a misconfigured base URL. A live
+ * publication still needs a promoted artifact, which no deployment here has —
+ * the same measured limitation the forecast half records.
  *
  *   docker run -d -p 5434:5432 -e POSTGRES_PASSWORD=wattsteer \
  *     -e POSTGRES_DB=wattsteer postgres:17-alpine
  */
 const URL = process.env.WATTSTEER_TEST_DATABASE_URL;
 const suite = URL ? describe : describe.skip;
+
+/**
+ * The real modelling service, when one is named.
+ *
+ * It gates the last block in this file and not the publication tests above:
+ * those assert what crossed the wire, which needs a stub to record it, and a
+ * live service without a promoted artifact would answer `MODEL_UNAVAILABLE`
+ * before any of it. What the real service uniquely proves is the thing the
+ * stub cannot — that the route exists and that its answer carries a code.
+ */
+const REAL_ML = process.env.WATTSTEER_TEST_ML_URL;
+const withRealMl = REAL_ML ? describe : describe.skip;
 
 const LANE = PUBLICATION_LANES.gate_late;
 /** Ten past the late gate for the fixture's day — where the schedule runs. */
@@ -679,5 +697,53 @@ suite("the diagnosis publication end to end (real Postgres)", () => {
         service.stop();
       }
     });
+  });
+});
+
+/**
+ * The route itself, against a real `apps/ml`.
+ *
+ * `api-surface` 10's sub-box: until `wattsteer_ml/diagnosis/publish.py` landed,
+ * this probe answered FastAPI's own `{"detail": "Not Found"}` — a 404 with no
+ * code in it, which `mapUpstreamFailure` turns into `UPSTREAM_REJECTED` and
+ * which reads to an operator like a wrong base URL rather than a capability the
+ * service does not have. The chain fired twice a day into that.
+ *
+ * What is asserted here is therefore the *shape of the answer* and not a
+ * publication: with no promoted artifact on the volume the honest answer is
+ * `MODEL_UNAVAILABLE` carrying `details.lane_state`, and that is a code the
+ * gateway's closed enum admits and `jobs/diagnosis-publication.ts` names in an
+ * operator's vocabulary. A 200 is accepted too, and is then run through the
+ * gateway's own parser — the one link in this chain that a deployment without a
+ * `.joblib` cannot otherwise exercise.
+ *
+ *   WATTSTEER_TEST_ML_URL=http://localhost:8123 bun test diagnosis-publication-job
+ */
+withRealMl("the attribution route, against a real modelling service", () => {
+  it("answers with a code in the closed enum, never a bare 404", async () => {
+    const response = await fetch(`${REAL_ML}/internal/publish/diagnosis`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ lane: LANE, target_date: TARGET_DATE, recent_reasons: {} }),
+    });
+    const body = (await response.json()) as Record<string, unknown>;
+
+    if (response.ok) {
+      const parsed = parseAttributionPublication(body);
+      expect(parsed.lane).toBe(LANE);
+      expect(parsed.targetDate).toBe(TARGET_DATE);
+      return;
+    }
+
+    // FastAPI's own shape is what "the route does not exist" looks like, and it
+    // is the thing this box was about.
+    expect(body.detail).toBeUndefined();
+    const failure = body.error as { code?: unknown; details?: Record<string, unknown> };
+    expect(isErrorCode(failure?.code)).toBe(true);
+    if (failure.code === "MODEL_UNAVAILABLE") {
+      // The refusal a volume with no promoted artifact must give, with the
+      // state that tells a screen which of the three absences it is.
+      expect(typeof failure.details?.lane_state).toBe("string");
+    }
   });
 });

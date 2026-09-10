@@ -17,7 +17,7 @@ Named rather than specified. Nothing here re-specifies any of them.
 
 | Name | What it owes these tickets |
 |---|---|
-| **forecaster** (`.scratch/forecaster/issues/`, being sliced in parallel) | the two estimators and the single composition function; the path ensemble and the day-grain figures; the model card; the three artifact states; **and the two additions this spec asks for** — the matched background sample (128 rows per subsystem × local-hour cell, stamped seed, in the artifact bundle) and the three card fields (driver-group version, driver-group hash, headline-feature check) |
+| **forecaster** (`.scratch/forecaster/issues/`, being sliced in parallel) | the two estimators and the single composition function; the path ensemble and the day-grain figures; the model card; the three artifact states; **and the two additions this spec asks for** — the matched background sample (128 rows per subsystem × local-hour cell, stamped seed, in the artifact bundle; **now sliced as forecaster 30**, written by API 10 when it found no ticket owned it) and the three card fields (driver-group version, driver-group hash, headline-feature check; **still unsliced**) |
 | **flex-optimizer** (`.scratch/flex-optimizer/issues/`, in parallel) | the scenario contract, the eighteen validation rules, the solve, the simulator, the avoidability rule |
 | **replay** | the replay and backtest contracts, the featured-day rule, the pinned-origin discipline |
 | **data-platform 16** (in flight) | the canonical contract as SQL views. `/v1/canonical/*` keeps serving from those views. Gates only the routes that read canonical rows. |

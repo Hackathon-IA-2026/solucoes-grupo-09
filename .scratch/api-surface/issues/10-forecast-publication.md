@@ -64,7 +64,7 @@ path ensemble and the private publish route on the modelling service are its
 work, and none of it is re-specified here. Also **data-platform 16** (in flight),
 because the modelling service reads the canonical SQL views to build features.
 
-**Status:** done (**three boxes open** — see “What is still open, and why”)
+**Status:** done (**four boxes open** — see “What is still open, and why”)
 
 The previous revision of this line also said “two boxes open”, and it was
 wrong twice over: a grep found **six** unticked, because the count was written
@@ -86,10 +86,21 @@ boxes in this file, which is what it should always have been.
 - [x] A failed publication leaves the previous origin serving, with its real age
 - [ ] The end-to-end job is exercised against real Postgres and the real
       modelling service under the existing environment-variable gating
-      — real Postgres: yes. Real modelling service: **no**, and measured to be
-      impossible here; see “What is still open, and why”
-- [ ] `apps/ml` serves `POST /internal/publish/diagnosis` — blocked on the
-      forecaster's matched background sample in the artifact bundle
+      — real Postgres: yes. Real modelling service: **partly**. Both private
+      routes are now probed against a live `apps/ml` under
+      `WATTSTEER_TEST_ML_URL` and both answer a code in the closed enum; a
+      live *publication* still needs a promoted artifact and there is none.
+      See “What is still open, and why”
+- [x] `apps/ml` serves `POST /internal/publish/diagnosis` — it does, and the
+      route is not blocked on the forecaster's frozen background sample. See
+      “The route, and why the block was the wrong diagnosis”
+- [ ] A published attribution's "typical" is reproducible from the artifact
+      alone — it is drawn at publish time from the artifact's own base-fit
+      rows and stamped `base_fit`, which is measured but not frozen.
+      **forecaster 30**
+- [ ] A driver group whose headline feature is NULL for the day can be
+      published with the pair's absence stated, rather than refusing the whole
+      day. See “The gap the route found”
 
 ## What landed
 
@@ -391,9 +402,150 @@ there is no `typical` for the route to measure against. Writing the route
 against a seeded fixture would put an invented "typical" in a table whose whole
 purpose is that nothing in it was invented.
 
+> **The last sentence is right and the conclusion drawn from it was wrong.** A
+> seeded *fixture* would indeed be an invented "typical". But the frozen sample
+> is not the only honest source of one — see the section below. The route is
+> built.
+
 `refresh-featured-days` is also still unbuilt, for the reason the original
 section gave: the Replay shortlist cache does not exist. It is in the spec's job
 table and in no checkbox, and it is named here so it is not lost.
+
+---
+
+## The route, and why the block was the wrong diagnosis
+
+`apps/ml` serves `POST /internal/publish/diagnosis`. The 404 is gone; the
+chain's other end exists.
+
+**What the block actually said.** The recorded reason was: the forecaster owes
+a matched background sample frozen in the artifact bundle, the bundle does not
+carry one, therefore there is no `typical`, therefore writing the route "against
+a seeded fixture would put an invented 'typical' in the table". Every clause is
+true except the middle inference. Checked, one at a time:
+
+| Claim | Verified how | Verdict |
+|---|---|---|
+| The bundle carries no frozen sample | `HurdleBundle`'s field list; `grep -n background training/bundle.py` returns nothing | **true** |
+| A forecaster ticket owns it | `grep -r "matched background" .scratch/forecaster/` returns nothing | **false** — no ticket existed. Written now as **forecaster 30** |
+| There is therefore no `typical` | `background.py`'s own docstring: "Until the forecaster's bundle carries one, this module draws the same shape from a block, stamping the seed and the row count it used; `source` records which of the two it is" | **false** |
+| A fixture-drawn background would be invisible once stored | `AttributionRow.as_row()` emits `background_source`; `parseAttributionPublication` reads it; `diagnosis_attribution` stores it | **true, and it is why the field exists** |
+
+`MatchedBackground.source` has two members — `artifact` and `base_fit` — and
+`BASE_FIT_SOURCE` was put there for exactly this interim.
+`diagnosis/publication.py` says so in as many words: "the matched background
+this ticket's dependency draws is a seeded sample from the base-fit block, and
+the artifact's frozen sample has not landed. A row that does not say which of
+the two defined its 'typical' cannot be told apart from one measured against the
+other." The design had already decided that a base-fit draw is a legitimate,
+*labelled* answer. The previous pass read "not in the bundle" as "not
+available", which conflated a fixture with the real base-fit rows.
+
+**So the route draws it, from real ingested data.**
+`wattsteer_ml/diagnosis/publish.py`:
+
+- the base-fit window comes off the promoted artifact's **own card**
+  (`data.base_fit_window`) — read, never derived, because the fold calendar plus
+  a run window would be a second answer;
+- the rows come back from `feature_rows(...)` under the lane's own gate
+  profile, feature set and threshold — the days the boosters were fitted on;
+- `draw_matched_background` partitions before it draws and refuses a cell short
+  of 128 rows rather than drawing with replacement, so a short window is a
+  refusal and never a thinner "typical";
+- every published row carries `background_source: base_fit`, its seed and its
+  row count, so a row measured this way is *distinguishable* from one measured
+  against the frozen sample the spec asks for;
+- the seed is `blake2b(artifact_id)` and not a clock, so two publications of one
+  day under one artifact draw the same sample and the gateway's digest
+  idempotence survives a redelivery. A retrain is a new id and therefore a new
+  draw, which is correct: the window moved.
+
+What is genuinely weaker than the spec's ask — reproducibility from the artifact
+*alone*, a ~17,000-row read twice a day per lane, and a value drift the contract
+hash cannot see — is **forecaster 30**, written by this pass, with the box above.
+
+**Refusals, five, each with its own repair and each proved to fire** — plus the
+positive case beside it, because a guard that cannot be made to pass proves
+nothing. `REFUSAL_CONDITIONS` is a closed tuple and a test asserts the set:
+
+| Condition | Answer | Repair |
+|---|---|---|
+| lane name is not one | 422 `REQUEST_INVALID` | the caller |
+| malformed `recent_reasons` | 422 `REQUEST_INVALID` | the caller. Refused rather than dropped: a dropped mix is indistinguishable from an absent day |
+| nothing promoted | 503 `MODEL_UNAVAILABLE` + `lane_state` + `volume_mounted` | a promotion, or the mount |
+| no database | 503 `DATA_UNAVAILABLE` | the deployment |
+| no feature rows for the day | 404 `FORECAST_UNAVAILABLE` | the forecast's, not this one's |
+| `no_base_fit_window` | 404 `DIAGNOSIS_UNAVAILABLE` + `condition` | a card that dates its own fit |
+| `no_matched_background` | as above | forecaster 30, or a longer run window |
+| `contract_and_groups_disagree` | as above | a line in `driver_groups.yaml` |
+| `incomplete_day` | as above | the feature function |
+| `null_headline_feature` | as above | see below |
+
+Every code is in `packages/core`'s closed enum, so `mapUpstreamFailure` admits
+it rather than flattening it to `UPSTREAM_REJECTED`.
+
+**The roll call.** This route reaches `AttributionRow` through
+`RuleOutcome.for_row()` and an AST test asserts it never spells `rule_flags` or
+`rules_evaluated` itself — so the one publish path cannot hand over a roll call
+it made up, on top of the three layers that already refuse an empty one.
+
+## The gap the route found
+
+**A driver group whose headline feature is NULL has no publishable
+observed/typical pair, and the wire has no way to say so.**
+
+`DriverReading` refuses a non-finite `observed` or `typical`, and the gateway's
+`parseDriver` reads both through `num()` on every one of the sixteen rows. But
+three of the eight real headline features are in the weather block —
+`weather_expected_wind_mwh`, `weather_expected_vre_ramp_1h`,
+`weather_centroid_coverage` — and that block arrives from one run and goes NULL
+together. A day whose weather run did not land therefore has no pair for those
+bars, at either grain.
+
+The design *knows* this happens: `RuleContext.null_headline_features` exists for
+exactly it and `stale_inputs` can withhold the narration over it. What is
+missing is a representation for the pair's absence — the field is a required
+number and there is no `observed_absent_reason` beside it — so the intended
+outcome, publish the ranking and flag the degradation, is not expressible.
+
+Found by running the assembly rather than by reading: the first pass at the
+happy-path test failed with `'weather_temperature_2m' reports typical nan`.
+
+**And it is not a corner case — that was measured too.** The pair is
+unavailable if the headline feature is NULL *anywhere* in the day or in its
+background cells, and a background is 128 rows per cell drawn over months of
+days. At the feature fixture's own 5%-per-day weather-null rate — which is
+there because a NULL feature is the case the no-imputation rule exists for — a
+window of base-fit length contains gaps with near-certainty. The scale run at
+the spec's 128 had to be given a gap-free window to complete at all;
+`test_a_realistic_window_refuses_because_the_weather_block_has_gaps` is the
+same fact asserted rather than worked around. So on real ONS history, a
+base-fit-drawn attribution refuses on most windows.
+
+Until the contract can say it, the route **refuses the day**, typed, naming the
+features. The two alternatives are both invisible once stored: a zero is the
+invented number the whole spec is against, and a mean over the hours that
+happened to carry a reading is a *different* "typical" than the one `v(∅)` was
+averaged over, published under the same name. Closing it is a wire-contract
+change across both languages and the table — an `observed_absent_reason` beside
+the pair, or a nullable pair the renderer states — which is a ticket and not a
+line; the box is above.
+
+**A typed refusal is still strictly better than the 404 it replaces.** The
+chain now gets `DIAGNOSIS_UNAVAILABLE` with `details.condition:
+null_headline_feature` and the three feature names, which says what is missing
+and where to fix it, instead of `UPSTREAM_REJECTED` on a body with no code that
+reads like a wrong base URL.
+
+## One stale comment found in passing
+
+`test_day_attribution.py`'s scale test and `test_grouped_shapley.py` both build
+a synthetic eight-group map because "the real map's eight groups do not all have
+a column in [the fixture] contract". That is no longer true — the real
+`DRIVER_GROUP_MAP` partitions all 100 fixture columns, 3–30 per group — and the
+new route's tests run the real map, which is the route's own default. The two
+older files are left alone: their synthetic maps are small on purpose, which is
+a separate reason for having them.
 
 ## Verification, with numbers
 
@@ -427,6 +579,34 @@ Every guard added here was reintroduced-against, not just written:
 schema `src/database/schema.ts` actually has: both migrations were produced by a
 plain `bun run db:generate` and then hand-edited for the DDL drizzle-kit cannot
 emit, per `apps/api/README.md`, and neither snapshot was touched.
+
+### The route pass, with its own numbers
+
+| Suite | Before | After |
+|---|---|---|
+| `apps/ml` (`uv run pytest`) | 1666 passed · 91 skipped | **1687 passed · 91 skipped** |
+| `bun run check` (typecheck · biome · every JS suite) | clean | **clean, exit 0** — 524 files, 1233+471+107+189 pass, 0 fail |
+| `apps/api` with `WATTSTEER_TEST_DATABASE_URL` | — | `diagnosis-publication-job` **15 pass · 1 skip · 0 fail** on its own. A whole-suite run on the shared container shows 8 timeouts across four files (`ingest`, `database-weather`, `ml-boundary`, this one); each of those files passes alone, so they are contention on a container this session does not own, not this change |
+| `apps/ml` scale run (`WATTSTEER_SCALE_TESTS=1`) | — | the publication at the spec's 128 rows per cell, four subsystems: **35.1 s**, inside the gateway's 120 s `PUBLISH_DIAGNOSIS_TIMEOUT_MS` |
+
+Non-vacuity, each measured rather than argued:
+
+- **The route's existence.** A stand-in answering FastAPI's own
+  `{"detail": "Not Found"}` on port 8124 fails
+  `answers with a code in the closed enum, never a bare 404` on
+  `expect(body.detail).toBeUndefined()` — 0 pass, 1 fail. A live `apps/ml` on
+  8123 passes it, answering `MODEL_UNAVAILABLE` with
+  `lane_state: no_artifact`, `volume_mounted: false`. So the new test measures
+  the change and not the weather.
+- **The short-window refusal.** Asserted with the day count of the block it
+  refused (30 days, and 30 < 128) *before* the refusal, and with the same call
+  at a sample the window can supply publishing successfully after it.
+- **All five refusal conditions** are produced by a test, and
+  `REFUSAL_CONDITIONS` is asserted to be exactly that set — so a sixth branch
+  without a test fails.
+- **The roll call** is asserted off the AST: every `AttributionRow(...)` in the
+  publish module passes `**outcome.for_row()` and names neither `rule_flags`
+  nor `rules_evaluated` itself.
 
 ---
 
