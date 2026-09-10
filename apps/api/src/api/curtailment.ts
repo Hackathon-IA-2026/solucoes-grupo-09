@@ -11,7 +11,7 @@ import {
   SUBSYSTEM_CODES,
   SUBSYSTEM_THRESHOLD_MW,
 } from "@wattsteer/core/constants";
-import { TECHNOLOGIES } from "@wattsteer/core/domain";
+import { TECHNOLOGIES, type Technology } from "@wattsteer/core/domain";
 import { encodeWire } from "@wattsteer/core/wire";
 import { Elysia, t } from "elysia";
 import type {
@@ -199,7 +199,7 @@ function toCurtailmentHours(
   observation: CurtailmentHoursObservation,
   query: {
     subsystem: SubsystemCode;
-    technology: "WIND" | "SOLAR" | null;
+    technology: Technology | null;
     from: Date;
     to: Date;
   },
@@ -233,7 +233,7 @@ function toCurtailmentEpisodes(
   observation: CurtailmentEpisodesObservation,
   query: {
     subsystem: SubsystemCode;
-    technology: "WIND" | "SOLAR" | undefined;
+    technology: Technology | undefined;
     from: Date;
     to: Date;
     thresholdMw: number;

@@ -1,3 +1,4 @@
+import { TECHNOLOGIES } from "@wattsteer/core/domain";
 import { BadInputError } from "../../errors.js";
 import {
   type CapacityWeightVector,
@@ -484,7 +485,7 @@ function assignIds(clusters: readonly Cluster[]): GeneratedCentroid[] {
     }
   }
   const centroids: GeneratedCentroid[] = [];
-  for (const technology of ["WIND", "SOLAR"] as const) {
+  for (const technology of TECHNOLOGIES) {
     const bucket = byTechnology.get(technology) ?? [];
     bucket.sort(
       (a, b) =>

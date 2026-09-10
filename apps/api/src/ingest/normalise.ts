@@ -7,10 +7,28 @@
  * can quietly implement its own dialect of "canonical".
  */
 
-/** WattSteer's canonical subsystem vocabulary. `SIN` is not a member. */
-export type SubsystemCode = "N" | "NE" | "S" | "SE";
+import { SUBSYSTEM_CODES as PUBLISHED_SUBSYSTEM_CODES } from "@wattsteer/core/constants";
+import type { SubsystemCode } from "@wattsteer/core/domain";
 
-const SUBSYSTEM_CODES = new Set<string>(["N", "NE", "S", "SE"]);
+/**
+ * WattSteer's canonical subsystem vocabulary. `SIN` is not a member.
+ *
+ * Re-exported from `@wattsteer/core/domain` rather than restated: this module
+ * is where every ONS adapter learns what a subsystem is, and a second literal
+ * union here is how the ingest side would come to hold an opinion the gateway
+ * and the web app do not share. The name stays exported from here so the
+ * adapters and repositories that already import it keep reading the vocabulary
+ * from the module that also holds the normalisation rules — they now get the
+ * published definition through it.
+ */
+export type { SubsystemCode };
+
+/**
+ * The membership test, derived from the published list rather than typed out.
+ * A fifth entry in `SUBSYSTEMS` would be accepted here without this file being
+ * edited, which is the point: the enum is closed in one place.
+ */
+const SUBSYSTEM_CODES = new Set<string>(PUBLISHED_SUBSYSTEM_CODES);
 
 /** ONS's national aggregate row. Never a subsystem — filtered at the boundary. */
 export const AGGREGATE_SUBSYSTEM_CODE = "SIN";

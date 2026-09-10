@@ -260,7 +260,7 @@ interface PointRow {
   label: string;
   latitude: number;
   longitude: number;
-  technology: "WIND" | "SOLAR";
+  technology: Technology;
   represented_mw: number;
   origin: "municipality_centroid" | "hand_transcribed";
   municipalities: string;

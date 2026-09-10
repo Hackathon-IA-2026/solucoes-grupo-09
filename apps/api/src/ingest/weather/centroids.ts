@@ -1,3 +1,4 @@
+import type { Technology } from "@wattsteer/core/domain";
 import { BadInputError } from "../../errors.js";
 import type { QueryPoint, RawLocation } from "./single-runs.js";
 
@@ -20,8 +21,14 @@ import type { QueryPoint, RawLocation } from "./single-runs.js";
  * retrain** — never an in-place edit of the numbers below.
  */
 
-/** Where a centroid's weight mass comes from. Weights themselves are elsewhere. */
-export type CentroidTechnology = "WIND" | "SOLAR";
+/**
+ * Where a centroid's weight mass comes from. Weights themselves are elsewhere.
+ *
+ * An alias of the published `Technology`, not a second union: a centroid set
+ * covers the same two fleets the wire and the database do, and the local name
+ * survives only because it reads better at the call sites that already use it.
+ */
+export type CentroidTechnology = Technology;
 
 export interface Centroid {
   /** Stable identifier, and the business key of every weather row. */
