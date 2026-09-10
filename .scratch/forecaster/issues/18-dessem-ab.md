@@ -34,12 +34,13 @@ window lengthens.
 
 **Blocked by:** 09, 11 (the simulator path and the reference fleet).
 
-**Status:** done (machinery and the verdict); the three runs still have to be
-scored against a migrated database — see below. Unlike 16, nothing is missing
-but the run.
+**Status:** done (machinery, the verdict and now the runner); the three runs
+are **one command away and still unrun** — the database in this environment is
+migrated and empty, and no ONS history has been ingested into it. See "The run
+was attempted" below for exactly what is missing.
 
 - [ ] All three runs are scored on identical test rows on the shared calendar
-- [ ] Decision-grade folds are computed from the 180-day base-fit rule, not
+- [x] Decision-grade folds are computed from the 180-day base-fit rule, not
       hardcoded, and non-decision-grade folds are reported but excluded from the
       verdict
 - [ ] `Δ recovered_floor_mwh` is reported for both contrasts, with the reference
@@ -48,6 +49,20 @@ but the run.
       and the sample size in target days is printed beside it
 - [ ] The block lands in the card and is re-runnable each quarter without a code
       change
+
+**Why exactly one box moved.** Box 2 is a property of the arithmetic and it is
+now verified end to end against a real calendar rather than against a fixture's
+fold list: `reportable_folds` derives F4, F5, F6 at 2026-09-09 and F4, F5, F6,
+F7 at 2026-12-01 from the runs' own window starts, `SegmentRow` grades each of
+them against `calendar.rules.min_base_fit_days`, and a source-level assertion
+holds that no fold id is written in either module. F4 is deliberately *in* the
+driver's sample and *out* of the verdict — 133 base-fit days against 180 — which
+is the second half of the box, and a driver that had dropped F4 would have
+satisfied the box by hiding the row. Boxes 1, 3 and 4 are measurements and there
+is nothing to measure. Box 5 is half done and is left unticked: the writer
+lands a real block on a real card through one command (today that block is the
+`NOT_RUN_YET` one) and the quarterly derivation is asserted, but the block the
+box means is the measured one.
 
 ## What was built
 
@@ -101,6 +116,111 @@ What is still needed is a fold sweep against a migrated, ingested database:
 `DessemScorer` is the seam, exactly as `SweepScorer` is in 17, because training
 needs a database and LightGBM and neither belongs to the question the module
 answers.
+
+**The seam now has a caller** — `wattsteer_ml.dessem_ab_run` — so "needs a fold
+sweep" has become "needs an ingested database", which is a shorter sentence and
+somebody else's ticket. See the next section.
+
+## The run was attempted. It is one command away and it did not run
+
+The seam finally has a caller: `apps/ml/src/wattsteer_ml/dessem_ab_run.py`, the
+sibling of `holdout_backfill.py` and built out of the same four pieces —
+`read_lane_inputs`, `build_pool`, `train_fold`, `scored_hours` — so nothing
+about training is restated for the A/B. `DatabaseArms` **is** the
+`DessemScorer` rather than something that adapts to one: it fits once per
+`(arm, fold)`, hands the segment's settled hours back, and the module already
+here does all the judging. Three things are its own:
+
+- **The arm is named, not derived from the lane.** A served lane has one arm, so
+  the retrain recovers it from `lane.gate_profile`; the A/B has three at one
+  gate and two of them share a lane, because a lane is
+  `(feature_set, gate_profile, threshold_mw)` and a *window* is not part of it.
+  So `read_lane_inputs` grew one optional `arm`, and it refuses an arm that
+  disagrees with the lane about the feature set or the gate. The default path is
+  byte-for-byte the retrain's, and `test_weekly_retrain.py` and
+  `test_holdout_backfill_driver.py` pass unchanged (27 passed, 2 skipped).
+- **Nothing is saved and nothing is promoted.** Twelve experiment arms are not
+  twelve candidates: there is no `save_artifact` call, no `promotions.append`,
+  and the only write is `record_dessem_delta` editing a card already on the
+  volume. Asserted at source level, not described.
+- **There is no `--fold`.** The sample is whatever the calendar makes
+  scoreable, which is the "re-runnable each quarter" box; a flag that narrowed
+  the folds could drop a decision-grade quarter and leave a weaker verdict
+  looking like the same verdict.
+
+The command, and it is the whole of it:
+
+    docker run -d -p 5434:5432 -e POSTGRES_PASSWORD=wattsteer \
+      -e POSTGRES_DB=wattsteer postgres:17-alpine
+    cd apps/api && DATABASE_URL=postgres://postgres:wattsteer@localhost:5434/wattsteer \
+      bun run db:migrate
+    cd ../ml && uv run python -m wattsteer_ml.dessem_ab_run \
+      --database-url postgres://postgres:wattsteer@localhost:5434/wattsteer \
+      --root <artifact volume> --as-of 2026-09-09T00:00:00Z
+
+That was run. All 43 migrations apply, the driver reaches Postgres, derives
+`["F4", "F5", "F6"]` from the calendar, and stops where the data is:
+
+    {"as_of": "2026-09-09T00:00:00Z", "folds_reportable": ["F4","F5","F6"],
+     "arms_fitted": [], "measured": false,
+     "not_run": "TrainingError: a booster cannot be fitted on an empty block", …}
+
+Exit code 1, `dessem_source: unmeasured`, `reason: NOT_RUN_YET` on both lanes'
+cards. **No arm was fabricated and no floor was invented.** The three runs are
+still unscored and the two contrasts, the bootstrap and the verdict are still
+absent figures rather than small ones.
+
+### What is missing, precisely
+
+Not a data *source* — 18's original finding stands, and the ONS mirror still
+serves `Balanco_Dessem_Detalhe` daily resources through 2026-09-09. What is
+missing is **the ingestion into this environment**. A freshly migrated database
+holds 43 migrations, 112 `feature_dictionary_entry` rows, 2
+`feature_set_definition` rows, 3 `feature_ab_configuration` rows — and **zero
+rows in every observation table**: `curtailment_report_hour`,
+`dessem_balance_half_hour`, `weather_forecast_hour`, `weather_run_request`,
+`verified_load_half_hour`, `programmed_load_half_hour`,
+`subsystem_exchange_hour`, `subsystem_energy_balance_hour`, `plant`,
+`plant_geo`, `generating_unit`, `centroid_set`, `centroid_point`,
+`reporting_entity`, `ons_resource_version`. `feature_rows` therefore returns
+its spine with no label and the first booster has nothing to fit, which is the
+sentence the run printed.
+
+The window the three arms need is **2024-04-01 → 2026-09-08** — A-full's
+base-fit start to F6's test end, 891 target days — of which the two common arms
+need 2025-05-23 onward. Every canonical view the feature blocks read has to be
+non-empty over it: `canonical_curtailment_by_reporting_entity` (the label),
+`canonical_weather_forecast`, `canonical_day_ahead_balance` (the twenty-two
+`dessem_*` columns), `canonical_programmed_load`, `canonical_system_exchange`,
+`canonical_system_context`, `canonical_installed_capacity` and
+`canonical_capacity_weight`. The jobs that fill them are all nine of
+`IngestTask`: `constrained_off` (wind and solar, monthly, 2024-04 onward),
+`dessem_balance` (daily from `DESSEM_COVERAGE_START` = 2025-05-23, ~475 files),
+`weather` (one Open-Meteo Single-Runs call per target day, ~890 of them),
+`load`, `daily_load`, `interchange`, `energy_balance`, `plant_registry` and
+`siga`.
+
+**The weather backfill is the long pole and it is designed to be.** `planRefresh`
+takes `WEATHER_HISTORY_SLICE_DAYS = 90` per history pass over a bounded archive
+starting 2024-03-15, so the window above is roughly ten monthly passes, and the
+transport's own measurement is 20 locations × 12 variables ≈ 84 KB / 10.5 s per
+call. That is hours of ingestion at best and is a data-platform run, not a
+change here. **It is the only thing standing between this ticket and its other
+four boxes.**
+
+### One thing found on the way, in another lane
+
+`0041_the_gate_as_a_table_constraint.sql` (api-surface 10) added
+`curtailment_forecast_hour_published_at_is_the_gate`, and
+`apps/ml/tests/database_harness.py`'s `seed_publication` computes
+`published_at` as local midnight − 5 h regardless of `gate_profile`. Every
+`gate_early` seed now violates the constraint:
+`tests/test_database_replay_reads.py::test_another_lane_is_not_this_lane_and_is_reported_as_a_candidate`
+fails against a freshly migrated database. Neither file is touched by this ticket
+(the branch changes three source files, none of them on that test's path) and
+the constraint arrives with the base, so this belongs to the merge rather than
+to the branch. Recorded rather than fixed: the harness belongs to whichever
+lane owns `0041`.
 
 ## Two things in the spec that are not right
 
