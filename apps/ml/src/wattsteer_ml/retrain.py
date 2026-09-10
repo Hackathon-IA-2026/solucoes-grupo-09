@@ -141,7 +141,7 @@ from wattsteer_ml.evaluation.ladder import (
     SameHourSevenDayRung,
     run_ladder,
 )
-from wattsteer_ml.evaluation.matrix import MATRIX_RUN_BY_NAME
+from wattsteer_ml.evaluation.matrix import MATRIX_RUN_BY_NAME, MatrixRun
 from wattsteer_ml.evaluation.metrics import MetricsRow, MetricsTable
 from wattsteer_ml.evaluation.serving_lanes import (
     SERVING_LANES,
@@ -313,6 +313,7 @@ async def read_lane_inputs(
     *,
     as_of: datetime,
     fold_id: str | None = None,
+    arm: MatrixRun | None = None,
 ) -> LaneInputs:
     """One query for the whole window, then slice it per fold.
 
@@ -327,6 +328,17 @@ async def read_lane_inputs(
             F6". Naming one instead is forecaster ticket 23's case: the days
             that are `fold_holdout` are the days of the **frozen** quarters, and
             nothing else in the repository can read a frozen fold's window.
+        arm: which matrix run's window and feature set to read. ``None`` — the
+            weekly retrain's case and this module's own — is the arm
+            :data:`LANE_RUNS` maps the lane's gate profile to, because a served
+            lane has exactly one. Naming one instead is forecaster ticket 18's
+            case: the DESSEM A/B reads ``A-full``, ``A-common`` and ``B-common``
+            *at one gate*, and two of those share the lane the third does not,
+            so the arm cannot be recovered from the lane. It must agree with the
+            lane on the feature set and the gate profile — the two together are
+            what the feature function is asked for — and only the window start
+            is then the arm's own, which is exactly the difference the A/B is
+            measuring.
 
     The pool built from the result is the folds *before* the one being scored
     and never ``calendar.frozen_folds``. For the live edge those are the same
@@ -335,13 +347,23 @@ async def read_lane_inputs(
     F2's future, so a reliability curve fitted on them would be fitted on days
     the artifact is about to be measured on.
     """
-    run = LANE_RUNS.get(lane.gate_profile)
-    if run is None:
+    if arm is None:
+        named = LANE_RUNS.get(lane.gate_profile)
+        if named is None:
+            raise RetrainError(
+                f"{lane}: no matrix arm is defined for gate profile "
+                f"{lane.gate_profile!r}; the served lanes are {sorted(LANE_RUNS)}"
+            )
+        arm = MATRIX_RUN_BY_NAME[named]
+    elif (arm.feature_set, arm.gate_profile) != (lane.feature_set, lane.gate_profile):
         raise RetrainError(
-            f"{lane}: no matrix arm is defined for gate profile "
-            f"{lane.gate_profile!r}; the served lanes are {sorted(LANE_RUNS)}"
+            f"{arm.name} reads {arm.feature_set!r} at {arm.gate_profile!r} and "
+            f"{lane} is {lane.feature_set!r} at {lane.gate_profile!r}; the feature "
+            "set and the gate are what the feature function is asked for, so an "
+            "arm read through a lane that disagrees with it would be reported "
+            "under a lane whose rows it never saw"
         )
-    arm = MATRIX_RUN_BY_NAME[run]
+    run = arm.name
     calendar = materialize_fold_calendar(as_of.date())
     if fold_id is None:
         fold = calendar.live_edge
@@ -478,9 +500,16 @@ def build_pool(inputs: LaneInputs) -> OutOfFoldPool:
     return OutOfFoldPool.of(predictions, segments=segments)
 
 
-def _scored(
+def scored_hours(
     forecasts: Sequence[Any], rows: Sequence[Mapping[str, Any]]
 ) -> tuple[ScoredHour, ...]:
+    """A fitted bundle's forecasts, married to the labels they are scored on.
+
+    Public rather than private because forecaster 18's driver needs the same
+    two lines for each of the DESSEM A/B's three arms, and a third copy of
+    ``ScoredHour(key=…, forecast=…, observed_mwh=row[TOTAL_COLUMN])`` is a third
+    place the label column could be read wrongly.
+    """
     return tuple(
         ScoredHour(
             key=hour.key, forecast=hour.forecast, observed_mwh=float(row[TOTAL_COLUMN])
@@ -489,7 +518,8 @@ def _scored(
     )
 
 
-def _settled(rows: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+def settled_rows(rows: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    """The rows whose label has settled. An unsettled hour is absent, not zero."""
     return [row for row in rows if row.get(TOTAL_COLUMN) is not None]
 
 
@@ -585,9 +615,9 @@ def retrain_lane(
         )
     table = MetricsTable(rows=rows)
     deciding = inputs.deciding
-    hours = _scored(
-        forecast_rows(trained.bundle, _settled(fold_rows.segment_rows(deciding))),
-        _settled(fold_rows.segment_rows(deciding)),
+    hours = scored_hours(
+        forecast_rows(trained.bundle, settled_rows(fold_rows.segment_rows(deciding))),
+        settled_rows(fold_rows.segment_rows(deciding)),
     )
     comparator = incumbent or cold_start_baseline(
         fold_rows, segment=deciding, run=inputs.run
@@ -676,10 +706,10 @@ def _incumbent(
         )
     except Exception:
         return artifact_id, None
-    settled = _settled(fold_rows.segment_rows(inputs.deciding))
+    settled = settled_rows(fold_rows.segment_rows(inputs.deciding))
     if not settled:
         return artifact_id, None
-    hours = _scored(forecast_rows(loaded.bundle, settled), settled)
+    hours = scored_hours(forecast_rows(loaded.bundle, settled), settled)
     return artifact_id, Comparator.incumbent(
         artifact_id=artifact_id,
         lane=inputs.lane,
@@ -704,10 +734,10 @@ def _metrics_rows(
     """Rung 4's row per segment — the artifact, scored by the served function."""
     rows: list[MetricsRow] = []
     for segment in inputs.segments:
-        settled = _settled(fold_rows.segment_rows(segment))
+        settled = settled_rows(fold_rows.segment_rows(segment))
         if not settled:
             continue
-        hours = _scored(forecast_rows(bundle, settled), settled)
+        hours = scored_hours(forecast_rows(bundle, settled), settled)
         rows.append(
             MetricsRow.of(
                 hours,

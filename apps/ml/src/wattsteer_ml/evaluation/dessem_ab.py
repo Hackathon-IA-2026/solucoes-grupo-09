@@ -167,7 +167,7 @@ from wattsteer_ml.evaluation.matrix import (
     assert_identical_test_rows,
     row_set_digest,
 )
-from wattsteer_ml.evaluation.metrics import qloss_mwh
+from wattsteer_ml.evaluation.metrics import merge_disjointly, qloss_mwh
 from wattsteer_ml.evaluation.planning_arms import (
     PUBLISHED_FLEET,
     SHIPPED_BASIS,
@@ -920,41 +920,52 @@ class DessemDeltaReport:
         ``operator_notice`` are prose and always present, the discipline the
         three blocks beside this one apply: a reader who reaches the figures has
         already read what they do not license.
+
+        The provenance stamp is merged through
+        :func:`~wattsteer_ml.evaluation.metrics.merge_disjointly` rather than
+        spread, which is forecaster 29's rule applied to the one merge in this
+        block: a stamp that grew a key this block already publishes would
+        otherwise decide the meaning of that key by which dictionary was written
+        last, and ``measured`` is the field a reader checks before reading a
+        floor.
         """
         census = structurally_withheld()
-        block: dict[str, Any] = {
-            **self.provenance.card_fields(),
-            "decides": _DECIDES_NOTHING,
-            "reads": _READS if self.provenance.is_measurement else _NOT_A_READING,
-            "mixture_caveat": _MIXTURE_CAVEAT,
-            "sample_size": _SAMPLE_SIZE,
-            "operator_notice": _OPERATOR_NOTICE,
-            "runs": [
-                {
-                    "run": run.name,
-                    "feature_set": run.feature_set,
-                    "window_start": run.window_start.isoformat(),
-                    "weather_arm": run.weather_arm,
-                    "gate_profile": run.gate_profile,
-                    "isolates": run.isolates,
-                }
-                for run in AB_RUNS
-            ],
-            "lanes": [lane.directory_name for lane in AB_LANES],
-            "planning_basis": SHIPPED_BASIS,
-            "reference_fleet": PUBLISHED_FLEET.card_fields(),
-            "fold_calendar_rules_hash": self.fold_calendar_rules_hash,
-            "min_base_fit_days": self.min_base_fit_days,
-            "structural_withholding": {
-                "reason": "structural",
-                "explanation": WITHHELD_REASONS["structural"],
-                "count": len(census),
-                "columns": sorted(item.column_name for item in census),
+        block: dict[str, Any] = merge_disjointly(
+            {
+                "decides": _DECIDES_NOTHING,
+                "reads": _READS if self.provenance.is_measurement else _NOT_A_READING,
+                "mixture_caveat": _MIXTURE_CAVEAT,
+                "sample_size": _SAMPLE_SIZE,
+                "operator_notice": _OPERATOR_NOTICE,
+                "runs": [
+                    {
+                        "run": run.name,
+                        "feature_set": run.feature_set,
+                        "window_start": run.window_start.isoformat(),
+                        "weather_arm": run.weather_arm,
+                        "gate_profile": run.gate_profile,
+                        "isolates": run.isolates,
+                    }
+                    for run in AB_RUNS
+                ],
+                "lanes": [lane.directory_name for lane in AB_LANES],
+                "planning_basis": SHIPPED_BASIS,
+                "reference_fleet": PUBLISHED_FLEET.card_fields(),
+                "fold_calendar_rules_hash": self.fold_calendar_rules_hash,
+                "min_base_fit_days": self.min_base_fit_days,
+                "structural_withholding": {
+                    "reason": "structural",
+                    "explanation": WITHHELD_REASONS["structural"],
+                    "count": len(census),
+                    "columns": sorted(item.column_name for item in census),
+                },
+                "vintage_fidelities": list(self.fidelities),
+                "folds": [row.card_entry() for row in self.rows],
+                "contrasts": {},
             },
-            "vintage_fidelities": list(self.fidelities),
-            "folds": [row.card_entry() for row in self.rows],
-            "contrasts": {},
-        }
+            self.provenance.card_fields(),
+            source="the DESSEM A/B's provenance stamp",
+        )
         for contrast in CONTRASTS:
             verdict = self.verdict(contrast.name)
             block["contrasts"][contrast.name] = {
