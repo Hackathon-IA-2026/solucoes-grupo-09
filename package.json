@@ -22,6 +22,7 @@
     "test:live": "bun run --cwd apps/api test:live",
     "test:lag": "bun run --cwd apps/api test:lag",
     "test:narration": "bun run --cwd apps/api test:narration",
+    "test:publication-watch": "bun run --cwd apps/api test:publication-watch",
     "typecheck": "bun run --cwd packages/core typecheck && bun run --cwd packages/ui typecheck && bun run --cwd apps/api typecheck && bun run --cwd apps/web typecheck",
     "lint": "bunx biome check",
     "lint:fix": "bunx biome check --write",
