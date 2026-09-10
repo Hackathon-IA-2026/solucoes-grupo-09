@@ -124,6 +124,41 @@ from wattsteer_ml.training.hyperparameters import ESTIMATOR_FAMILY, ModelConfig
 #: Hours in the local target day. `μ_sub` is 4 subsystems × this many hours.
 HOURS_PER_DAY = 24
 
+#: How :func:`save_artifact` compresses the bundle. ``zlib`` at level 3, and
+#: both halves of that are measured rather than chosen.
+#:
+#: **Why the artifact is compressed at all.** Forecaster 30 froze ``B(s, h)``
+#: into the bundle and the sample is the largest thing in it by an order of
+#: magnitude: at the spec's 128 rows per cell, 96 cells and ``k = 100``, the
+#: float64 payload is 9,830,400 bytes against 805,883 for everything else. The
+#: sample is *not* the thing to shrink — 128 rows per cell is what
+#: `docs/specs/diagnosis.md` asks for, float64 is what the boosters were fitted
+#: in, and every column of every row is read (the eight driver groups are a
+#: total partition of the contract, so at the empty coalition the whole row is
+#: the background's). The *container* is. Compression changes no value the
+#: attribution reads, and forecaster 32 measured what it buys on a real
+#: 181-day base-fit window read out of the live database: a bundle carrying the
+#: real 128-row sample is **11,224,847 bytes** written raw and **2,217,719
+#: bytes** written this way — 80.2% less — for **+7.8 ms** on a
+#: :func:`load_artifact` that took 50.6 ms.
+#:
+#: **Why zlib and why 3.** ``zlib`` ships with CPython, so this adds no
+#: dependency to a service whose artifact format is a deployment contract;
+#: ``lz4``, which joblib prefers when it is installed, is not installed and
+#: buying it with a dependency was not worth the difference. Level 9 writes
+#: 2,082,816 bytes — 6% smaller — and takes 3.7× as long to dump, which a
+#: weekly retrain would not notice and a reader of this constant would have to
+#: justify; level 3 is the knee.
+#:
+#: **It is lossless, and that is asserted rather than assumed.** joblib's
+#: codecs are byte-exact, so a cell's ``matrix.tobytes()`` and its ``float64``
+#: dtype survive the round trip unchanged —
+#: ``test_the_written_artifact_is_compressed_and_the_sample_survives_it`` holds
+#: the written-and-reloaded sample against the drawn one cell by cell with no
+#: tolerance, beside the two tests that already prove a reloaded bundle
+#: predicts identically and carries the same sample bit for bit.
+BUNDLE_COMPRESSION: tuple[str, int] = ("zlib", 3)
+
 #: The six estimators, in the order the card lists them. Named here so the
 #: loader's completeness check and the card's inventory cannot drift apart.
 ESTIMATOR_FIELDS: tuple[str, ...] = (
@@ -559,6 +594,12 @@ def save_artifact(
     target on the strength of the file existing. A partial write now leaves a
     ``.tmp`` file that no artifact-id rule matches, and the next run overwrites
     it.
+
+    **The bundle is written compressed** — :data:`BUNDLE_COMPRESSION`, which
+    carries the measurements. Losslessly: the frozen background's rows come back
+    byte for byte and still ``float64``, which is the only way this was allowed
+    to be a size decision rather than a statistical one. A truncated file is
+    still a loud failure, from the codec instead of the unpickler.
     """
     if card.lane != bundle.lane:
         raise ContractMismatchError(
@@ -573,7 +614,10 @@ def save_artifact(
     directory.mkdir(parents=True, exist_ok=True)
     bundle_path = directory / f"{card.artifact_id}{ARTIFACT_SUFFIX}"
     card_path = directory / f"{card.artifact_id}{CARD_SUFFIX}"
-    _atomically(bundle_path, lambda path: joblib.dump(bundle, path))
+    _atomically(
+        bundle_path,
+        lambda path: joblib.dump(bundle, path, compress=BUNDLE_COMPRESSION),
+    )
     _atomically(card_path, lambda path: path.write_text(card.to_json(), encoding="utf-8"))
     return bundle_path, card_path
 

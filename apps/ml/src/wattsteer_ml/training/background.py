@@ -318,6 +318,15 @@ class MatchedBackground:
         file delta**, deliberately: the payload is a property of the sample and
         reproducible from it, and the file delta is a property of whatever
         ``joblib.dump`` was asked to do that day.
+
+        Forecaster 32 is what made that distinction pay. The bundle is now
+        written through
+        :data:`~wattsteer_ml.training.bundle.BUNDLE_COMPRESSION`, so the file
+        delta is a fraction of this number — measured on a real 181-day base-fit
+        window, a 9,830,400-byte payload inside a 2,217,719-byte artifact —
+        while this figure is unchanged, because the sample is unchanged. The
+        card goes on publishing the sample's own size and not the day's
+        compression ratio.
         """
         return sum(int(cell.matrix.nbytes) for cell in self.cells.values())
 

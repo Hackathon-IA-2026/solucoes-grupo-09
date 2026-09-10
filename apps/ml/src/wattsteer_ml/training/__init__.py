@@ -49,6 +49,7 @@ from wattsteer_ml.training.background import (
     draw_matched_background,
 )
 from wattsteer_ml.training.bundle import (
+    BUNDLE_COMPRESSION,
     CONTRACT_FAULT_KEY,
     ESTIMATOR_FIELDS,
     GATE_BLOCK_KEY,
@@ -188,6 +189,7 @@ __all__ = [
     "BACKGROUND_ROWS_PER_CELL",
     "BACKGROUND_SEED",
     "BASE_FIT_SOURCE",
+    "BUNDLE_COMPRESSION",
     "CONTRACT_FAULT_KEY",
     "CORRECTION_REGIME",
     "COVERAGE_GUARDRAIL",
