@@ -402,7 +402,17 @@ step in the whole design, so it carries the sign rule explicitly:
 > `Σ|φ_members| > 1.5 · |Σ φ_members|`, and `raises` / `lowers` otherwise.
 
 `"mixed"` is a **new third member of `Driver.direction`** and is a required
-change to `apps/web/src/lib/domain.ts` — flagged below rather than assumed.
+change to `packages/core/src/domain.ts` — flagged below rather than assumed.
+
+> **Corrected in api-surface 27.** This line named
+> `apps/web/src/lib/domain.ts`, the frontend definition that existed when this
+> spec was written. api-surface 03 promoted it into `packages/core` and 07
+> deleted the web copy, so the file this change is "required to" had not
+> existed for two tickets. The change itself landed:
+> `packages/core/src/domain.ts` declares
+> `DriverDirection = "raises" | "lowers" | "mixed"` and, beside it,
+> `SignedDriverDirection`, which is what a single group's `φ` can carry — the
+> distinction this section's own merge rule needs and the old line predates.
 
 **The selection predicate is shared; the merge is not.** The narration is
 assembled server-side and has to know which groups it is allowed to name, so the

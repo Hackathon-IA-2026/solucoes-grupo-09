@@ -126,7 +126,7 @@ On top of that spine:
    prediction, so that any number can be traced to what was knowable when.
 5. As the platform, I want DESSEM features to be unavailable at the early gate
    by construction, so that a model cannot be served with a file that will not
-   exist for another eleven hours.
+   exist until the afternoon of D−1.
 
 **Observations, and what is actually known at the gate**
 
@@ -307,7 +307,7 @@ km/h on `wind_speed_120m`) and it is the only gate at which DESSEM exists at all
 **DESSEM's exclusion from the early gate is structural, not a rule.** The DESSEM
 file for reference day D is created on the evening of D−1 — 2026-08-28's file was
 created 2026-08-27T17:48 **UTC**. At 09:00 on D−1 the newest DESSEM file describes D−1
-itself. So the A/B is not only a shorter window; it is also **eleven hours less
+itself. So the A/B is not only a shorter window; it is also **ten hours less
 notice**. That cost belongs in the comparison and was not previously recorded.
 
 ### Where the cut actually falls: `valid_time` for observations, `published_at` for forecasts
@@ -1216,7 +1216,7 @@ a day must not be read as an hourly signal.
 | Window | **2024-04-01 → now** (~880 days) | **2025-05-23 → now** (~460 days) |
 | Rows | ≈ 84,500 | ≈ 44,200 |
 | Gates | `gate_early` and `gate_late` | **`gate_late` only** |
-| Operator notice | D−1 09:00 BRT is available | **eleven hours later** — D−1 19:00 BRT, and no earlier |
+| Operator notice | D−1 09:00 BRT is available | **ten hours later** — D−1 19:00 BRT, and no earlier |
 | Day-ahead load | `programmed_load_mwh` (ONS programming) | DESSEM demand, with ONS programming retained |
 | Day-ahead VRE | weather-derived expected generation | DESSEM wind/solar/MMGD **plus** the weather-derived proxies |
 | Residual load | `proxy_residual_load_mwh` | `dessem_residual_load_mwh` |
@@ -1233,12 +1233,36 @@ the trade:
 else DESSEM contributes has a weather- or programming-derived analogue in set A.
 
 **The augmented set has two costs, not one.** The shorter window is the visible
-one and it is in the table above. The second is the **eleven hours of lost
+one and it is in the table above. The second is the **ten hours of lost
 operator notice**: set A is available at `gate_early`, D−1 09:00 BRT, and set B
 is not available until `gate_late`, D−1 19:00 BRT, because the DESSEM file for
 day D does not exist before mid-afternoon on D−1. Both costs belong wherever the
 A/B's result is stated — a comparison that reports only the metric is reporting
 half the trade.
+
+> **Corrected in api-surface 27: the lost notice is ten hours, not eleven.**
+> This document said **eleven** in five places — the user story above, the
+> `gate_early` exclusion paragraph, the feature-set table's *Operator notice*
+> row, this paragraph, and the ship criterion below. `gate_at` is the authority
+> and it is arithmetic: `drizzle/0016_the_feature_gate.sql` maps `gate_early` to
+> local hour **9** and `gate_late` to local hour **19**, so the interval between
+> the two gates is **ten** hours and the *Operator notice* row was saying
+> "09:00 … eleven hours later … 19:00" of a ten-hour gap.
+>
+> The eleven was not invented, and that is why it is recorded rather than
+> quietly overwritten: `drizzle/0025_dessem_and_the_feature_set.sql` spells out
+> where it came from — "ten fewer hours of notice … eleven, counting from the
+> 08:00 BRT dispatch desk the spec's A/B is stated against". That is a
+> *different quantity*: eleven hours is the wait from an 08:00 desk to
+> `gate_late`, and ten hours is the notice the augmented set gives up relative
+> to set A. Only the second one is the cost being priced here, so ten is what
+> this section states, and the desk figure is named here rather than left to be
+> rediscovered as a contradiction.
+>
+> `0025`'s comment and `0033`'s `feature_dictionary_entry` prose still carry the
+> eleven. A landed migration is not rewritten, and the SQL comment argues its
+> own provenance in the sentence above, so the disagreement is documented here
+> instead of edited there.
 
 > **Implemented in ticket 07.** Twenty-one of the twenty-two names are built by
 > `feature_dessem_block` in `drizzle/0025_dessem_and_the_feature_set.sql`.
@@ -1272,7 +1296,7 @@ content with window length:
 `A-full` vs `A-common` measures what the longer history is worth; `B-common` vs
 `A-common` measures what DESSEM is worth. All three are evaluated on the same
 held-out period at `gate_late` with the same threshold. **DESSEM ships only if
-`B-common` beats `A-common` by more than the eleven hours of lost notice are
+`B-common` beats `A-common` by more than the ten hours of lost notice are
 worth** — and that trade is a product decision, not a metric.
 
 > **Implemented in ticket 11 — the ticket that closes this spec.** Nothing here
@@ -1653,7 +1677,7 @@ before either set is trusted.
 **Two costs of DESSEM, not one.** The map recorded DESSEM's cost as a shorter
 window. Writing the gate down surfaced a second: DESSEM is not published until
 the evening of D−1, so the augmented model can only ever run at the late gate.
-Whatever the metric says, the augmented model buys accuracy with eleven hours of
+Whatever the metric says, the augmented model buys accuracy with ten hours of
 operator notice, and that trade should be stated wherever the A/B result is.
 
 **The gate-ablation test is the load-bearing artifact, more than the table.** The

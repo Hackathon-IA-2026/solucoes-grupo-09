@@ -826,18 +826,42 @@ describe("DESSEM and the feature-set argument, structurally", () => {
     expect(segment.slice(0, segment.indexOf("END $$"))).not.toContain("utilisation");
   });
 
-  it("states the eleven hours of lost notice beside the shorter window", () => {
+  it("states the lost notice beside the shorter window, at `gate_at`'s own gap", () => {
     // The augmented set's *second* cost, and the one a metric table hides. The
     // spec records it where the trade is stated, not only where the gate is
     // described, because a comparison that reports only the metric is reporting
     // half the trade.
+    //
+    // **This assertion used to read `toContain("eleven hours")` and was
+    // pinning a false number into the spec.** `gate_at` is the authority and it
+    // is arithmetic: `gate_early` is local hour 9 and `gate_late` is 19, so the
+    // interval is *ten* hours, and `feature-engineering.md` said eleven in five
+    // places — including a table row reading "09:00 BRT … eleven hours later …
+    // 19:00 BRT". api-surface 27 corrected the spec, and the number is derived
+    // here rather than restated, so this test cannot pin the next wrong one.
+    const gapHours = 19 - 9;
+    const early = /WHEN 'gate_early' THEN (\d+)/.exec(RAW);
+    const late = /WHEN 'gate_late' THEN (\d+)/.exec(RAW);
+    // Only `0016` defines `gate_at`, so a null here means the SQL moved and the
+    // derivation below would otherwise be comparing against nothing.
+    expect(early?.[1]).toBeDefined();
+    expect(late?.[1]).toBeDefined();
+    expect(Number(late?.[1]) - Number(early?.[1])).toBe(gapHours);
+
     const spec = readFileSync(
       join(import.meta.dir, "../../../docs/specs/feature-engineering.md"),
       "utf8",
     );
     const table = spec.slice(spec.indexOf("### The two feature sets"));
-    expect(table.slice(0, 2400)).toContain("eleven hours");
-    expect(RAW).toContain("eleven hours");
+    expect(table.slice(0, 2400)).toContain("ten hours of lost");
+
+    // The migrations keep the eleven, and are not edited to remove it: `0025`
+    // spells out where it came from — "ten fewer hours of notice … eleven,
+    // counting from the 08:00 BRT dispatch desk" — which is the desk-to-gate
+    // wait rather than the notice one set gives up relative to the other. The
+    // spec's correction note names both quantities. A landed migration is
+    // never rewritten, so the disagreement is recorded rather than hidden.
+    expect(RAW).toContain("08:00 BRT dispatch desk");
   });
 });
 
