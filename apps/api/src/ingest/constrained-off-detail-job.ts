@@ -130,6 +130,7 @@ export function createConstrainedOffDetailIngestor(
     // This dataset is the only one that names a plant by both identifiers, so
     // reconciliation belongs to its ingest rather than to a later batch job.
     const identity = await reconcilePlantIdentity(deps.db);
+    await acquired.markIngested();
     report({ done: BULK_STEPS, total: BULK_STEPS });
 
     return {

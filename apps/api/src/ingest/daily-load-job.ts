@@ -109,6 +109,7 @@ export function createDailyLoadIngestor(
       publishedAtPrecision: acquired.publishedAtPrecision,
       sourceVersionId: acquired.versionId,
     });
+    await acquired.markIngested();
     report({ done: BULK_STEPS, total: BULK_STEPS });
 
     return {

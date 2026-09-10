@@ -380,6 +380,21 @@ It has since landed — `apps/api/src/ingest/archive.ts`, written through
 `apps/api/src/ingest/custody.ts` — and `payload_custody.archive_uri` is now
 `not null`.
 
+**Holding a payload and having ingested it are two facts, recorded separately.**
+`fetched_at` says WattSteer holds the bytes and is stamped *before* the parse,
+beside the archive write, because custody must not depend on a parser being
+happy. `ingested_at` says the payload was parsed and written, and is stamped by
+the ingestor after its write. `refused_at` and `refusal_reason` record the third
+state: bytes this platform is right to refuse — a short civil day, a forecast
+published after the half hour it describes — which is a property of the bytes
+and so does not change on a re-parse. The skip gate reads the second and third,
+never the first: a version whose parse threw is retried, a version that was
+refused costs one `HEAD` and never a hot loop, and neither can be mistaken for a
+period that loaded. The three were one column once, and the cost was a day of
+ONS history that never arrived while every run reported health
+(`drizzle/0046_a_parse_that_landed.sql`,
+`.scratch/data-platform/issues/22-a-thrown-parse-is-never-retried.md`).
+
 **Where the bytes live: a Railway bucket, not a volume — settled, with the
 reasoning.** The spec deferred the choice; it is made here.
 

@@ -4,7 +4,7 @@ import { type VintageFidelity, vintageFidelity } from "../contract/vintage.js";
 import { canonicalDayAheadBalance } from "../database/canonical-views.js";
 import type { Database } from "../database/connection.js";
 import { dessemBalanceHalfHour } from "../database/schema.js";
-import { UpstreamError } from "../errors.js";
+import { PayloadRefusedError } from "../errors.js";
 import type { SubsystemCode } from "./normalise.js";
 import type { DessemBalanceHalfHour } from "./types.js";
 import {
@@ -112,7 +112,8 @@ export async function writeDessemBalance(
   const { rows, ...vintage } = write;
   for (const row of rows) {
     if (row.validTime.getTime() <= vintage.publishedAt.getTime()) {
-      throw new UpstreamError(
+      throw new PayloadRefusedError(
+        "forecast_integrity",
         `DESSEM reference day ${row.referenceDay} was published at ` +
           `${vintage.publishedAt.toISOString()}, at or after the ` +
           `${row.validTime.toISOString()} half hour it describes. A row with ` +

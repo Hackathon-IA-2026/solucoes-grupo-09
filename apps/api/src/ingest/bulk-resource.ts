@@ -1,5 +1,5 @@
 import type { Database } from "../database/connection.js";
-import { UpstreamError } from "../errors.js";
+import { type PayloadRefusedError, UpstreamError } from "../errors.js";
 import type { ReportProgress } from "../jobs/index.js";
 import type { PayloadArchive } from "./archive.js";
 import { retainPayload } from "./custody.js";
@@ -11,7 +11,10 @@ import {
 } from "./ons/catalogue.js";
 import {
   markResourceFetched,
+  markResourceIngested,
+  markResourceRefused,
   type ObservationContext,
+  type RecordedRefusal,
   type Republication,
   recordResourceVersion,
 } from "./resource-version.js";
@@ -31,6 +34,14 @@ import {
  * `Last-Modified`. That source shares the *versioned write* (see
  * `versioned-write.ts`) but not this acquisition path, and forcing it through
  * here would mean inventing a fingerprint for something that has none.
+ *
+ * **Two marks, not one.** Acquiring bytes and ingesting them are separate facts
+ * and are recorded separately: this helper stamps custody (`fetched_at`, the
+ * archive) and hands the caller `markIngested` / `markRefused` to stamp the
+ * outcome of the parse it performs. They were one fact once, and the cost of
+ * that is written up in `.scratch/data-platform/issues/22-*.md`: a parse that
+ * threw left the resource marked done, so the next sweep skipped it and the
+ * task reported `changed: false, inserted: 0` and exited 0 forever.
  */
 
 /** What acquiring one bulk resource produced. */
@@ -43,6 +54,18 @@ export interface BulkResource {
   changed: boolean;
   /** False when the run stopped at the `HEAD`. */
   downloaded: boolean;
+  /**
+   * True when these exact bytes had already been parsed to a conclusion —
+   * ingested, or refused. The skip gate, and *not* the same question as
+   * "have we downloaded this before?".
+   */
+  settled: boolean;
+  /**
+   * Why these bytes stand refused, when a previous pass refused them. Set on a
+   * skipped acquisition so a caller can report a standing refusal rather than
+   * present it as an unremarkable no-op.
+   */
+  refusal: RecordedRefusal | null;
   /** Null when the run stopped at the `HEAD`. */
   bytes: ArrayBuffer | null;
   /**
@@ -60,6 +83,30 @@ export interface BulkResource {
    */
   publishedAt: Date;
   publishedAtPrecision: "file";
+  /**
+   * Stamp the parse as landed. **Every caller that parses must call this after
+   * its write succeeds**, and no caller may call it before.
+   *
+   * It is the caller's job because the caller is the only party that knows the
+   * rows are in. Forgetting it costs a re-download next sweep — loud in the
+   * byte count, harmless to the data — which is the direction this mark is
+   * deliberately biased in. Marking too early costs a day of history that
+   * never arrives and never complains, which is the failure this replaced.
+   *
+   * A no-op when the run stopped at the `HEAD`: there is nothing to conclude
+   * about bytes this run did not read, and re-stamping a settled row would
+   * erase a standing refusal without having parsed anything.
+   */
+  markIngested: () => Promise<void>;
+  /**
+   * Record that these exact bytes cannot be ingested, so the next sweep neither
+   * re-downloads them nor mistakes them for a period that loaded.
+   *
+   * For a `PayloadRefusedError` only — a defect in the payload, deterministic
+   * in the bytes. Anything else must be left unmarked and rethrown, so it is
+   * retried. Also a no-op when nothing was downloaded.
+   */
+  markRefused: (refusal: PayloadRefusedError) => Promise<void>;
 }
 
 export interface BulkResourceRequest {
@@ -127,13 +174,36 @@ export async function acquireBulkResource(
     format: resource.format,
     versionId: version.id,
     changed: !version.alreadySeen,
+    settled: version.settled,
+    refusal: version.refusal,
     publishedAt: fingerprint.lastModified ?? resource.lastModified ?? new Date(),
     publishedAtPrecision: "file" as const,
     republication: version.republication,
   };
 
-  if (version.alreadySeen && !request.force) {
-    return { ...base, downloaded: false, bytes: null, archiveUri: null };
+  /**
+   * The two outcome marks, for the branch that actually read bytes. Bound to
+   * the version row rather than passed as an id, so a caller cannot stamp a
+   * conclusion against a resource it did not acquire.
+   */
+  const marks = {
+    markIngested: () => markResourceIngested(db, version.id),
+    markRefused: (refusal: PayloadRefusedError) =>
+      markResourceRefused(db, version.id, refusal.refusal, refusal.message),
+  };
+  /** Nothing was read, so there is nothing to conclude. */
+  const noMarks = {
+    markIngested: async (): Promise<void> => {},
+    markRefused: async (): Promise<void> => {},
+  };
+
+  // **Settled**, not merely seen. A version whose bytes we hold but whose parse
+  // threw is deliberately *not* settled, so it is fetched and parsed again here
+  // rather than reported as a period that loaded. A version that was ingested,
+  // or refused for a reason that is a property of its bytes, is settled and
+  // costs this one `HEAD` — which is what keeps a refused day out of a hot loop.
+  if (version.settled && !request.force) {
+    return { ...base, ...noMarks, downloaded: false, bytes: null, archiveUri: null };
   }
 
   const response = await fetchImpl(resource.url);
@@ -147,6 +217,13 @@ export async function acquireBulkResource(
   // is — the only surviving copy of what ONS said today — and a parser that
   // throws on an unexpected column must not be what decides whether the bytes
   // were kept.
+  //
+  // `markResourceFetched` belongs to that argument and stays inside it: the
+  // digest and the byte size are facts about the bytes in hand, established
+  // before anything tries to understand them. What is *not* established here is
+  // that the payload was ingested — that is `markIngested`, stamped by the
+  // caller after its write. The one ordering used to carry both claims, and the
+  // second one was false whenever a parse threw.
   const fetchedAt = new Date();
   const retained = await retainPayload(db, request.archive, {
     provenance: "bulk_resource",
@@ -159,5 +236,11 @@ export async function acquireBulkResource(
   });
   report?.({ done: 3, total: BULK_STEPS });
 
-  return { ...base, downloaded: true, bytes, archiveUri: retained?.archiveUri ?? null };
+  return {
+    ...base,
+    ...marks,
+    downloaded: true,
+    bytes,
+    archiveUri: retained?.archiveUri ?? null,
+  };
 }
