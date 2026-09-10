@@ -117,6 +117,12 @@ branch of `createIngestDispatcher` and no line of `planRefresh`. So
 `go_live_at` after a full ONS backfill. That is a wiring gap, not a data gap,
 and it is the reason the per-plant grain is absent rather than late.
 
+*Verified and closed by ticket 03's reopened slice* (`dp-23-constrained-off-detail`):
+the kind, the dispatcher branch, the `planRefresh` line and the two
+`ingestion_source` members now exist, and 310,080 real rows of 2026-09 landed in
+`plant_detail_hour` through the same driver this ticket built. The box below stays
+unticked for **this** database, which still holds none of them.
+
 **A third, and it destroyed this backfill once while it was running.**
 `apps/api/package.json`'s `test:db` and the root `ml:test:db` both hard-code
 `postgres://…@localhost:5434/wattsteer` — the same database an operator would

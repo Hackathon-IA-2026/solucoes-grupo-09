@@ -30,6 +30,15 @@ const months = (tasks: IngestTask[], technology: "WIND" | "SOLAR"): string[] =>
     )
     .map((task) => periodLabelOf(task) ?? "");
 
+/** The same, at the plant grain — the `_detail` files of the same months. */
+const detailMonths = (tasks: IngestTask[], technology: "WIND" | "SOLAR"): string[] =>
+  tasks
+    .filter(
+      (task) =>
+        task.kind === "constrained_off_detail" && task.payload.technology === technology,
+    )
+    .map((task) => periodLabelOf(task) ?? "");
+
 const years = (tasks: IngestTask[]): number[] =>
   tasks
     .filter((task) => task.kind === "energy_balance")
@@ -72,6 +81,59 @@ describe("refresh plan · tiers", () => {
     // spend a request per month to be told 404 for three years.
     expect(months(history, "SOLAR").every((month) => month >= "2024-04")).toBe(true);
     expect(months(history, "SOLAR")[0]).toBe("2024-04");
+  });
+
+  it("plans both grains of every constrained-off month", () => {
+    // The gap ticket 21 found: the plant-grain adapter was merged and tested
+    // and appeared in no line of this plan, so `plant_detail_hour` could not be
+    // filled by the queue at all. The two grains are revised together — a month
+    // ONS restates is restated in both files — so a month planned at one grain
+    // and not the other is a campaign half-detected.
+    for (const [tier, tasks] of [
+      ["live", live],
+      ["recent", recent],
+      ["history", history],
+    ] as const) {
+      for (const technology of ["WIND", "SOLAR"] as const) {
+        expect({ tier, technology, months: detailMonths(tasks, technology) }).toEqual({
+          tier,
+          technology,
+          months: months(tasks, technology),
+        });
+      }
+    }
+    // Non-empty inputs, so the equality above cannot pass by both being empty.
+    expect(months(live, "WIND").length).toBeGreaterThan(0);
+    expect(detailMonths(history, "SOLAR").length).toBeGreaterThan(0);
+  });
+
+  it("never plans a plant-grain month before its dataset covers it", () => {
+    expect(detailMonths(history, "SOLAR")[0]).toBe("2024-04");
+    expect(detailMonths(history, "WIND")[0]).toBe("2021-10");
+  });
+
+  it("names the plant grain as its own source, not the entity grain's", () => {
+    // Two members rather than one: the grains fail independently, and an
+    // operator watching for a source that went quiet needs the per-plant
+    // silence to be visible while the entity grain still runs.
+    expect(
+      sourceOf({
+        kind: "constrained_off_detail",
+        payload: { technology: "WIND", year: 2026, month: 8 },
+      }),
+    ).toBe("constrained_off_wind_detail");
+    expect(
+      sourceOf({
+        kind: "constrained_off_detail",
+        payload: { technology: "SOLAR", year: 2026, month: 8 },
+      }),
+    ).toBe("constrained_off_solar_detail");
+    expect(
+      periodLabelOf({
+        kind: "constrained_off_detail",
+        payload: { technology: "SOLAR", year: 2026, month: 8 },
+      }),
+    ).toBe("2026-08");
   });
 
   it("covers each period in exactly one tier", () => {

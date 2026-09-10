@@ -1,6 +1,7 @@
 import type { Database } from "../database/connection.js";
 import type { Execute, ReportProgress } from "../jobs/index.js";
 import type { PayloadArchive } from "./archive.js";
+import { createConstrainedOffDetailIngestor } from "./constrained-off-detail-job.js";
 import { createConstrainedOffIngestor } from "./constrained-off-job.js";
 import {
   enforceRetention,
@@ -82,7 +83,7 @@ export interface IngestDispatcherDeps {
  *
  * Every ingestor is constructed once, at wiring time, rather than per job: they
  * are closures over `db`, `fetch` and the archive, and rebuilding them per
- * message would make the hot path allocate nine objects to use one.
+ * message would make the hot path allocate ten objects to use one.
  */
 export function createIngestDispatcher(
   deps: IngestDispatcherDeps,
@@ -90,6 +91,7 @@ export function createIngestDispatcher(
   const shared = { db: deps.db, archive: deps.archive, fetch: deps.fetch };
   const energyBalance = createEnergyBalanceIngestor(shared);
   const constrainedOff = createConstrainedOffIngestor(shared);
+  const constrainedOffDetail = createConstrainedOffDetailIngestor(shared);
   const interchange = createInterchangeIngestor(shared);
   const dailyLoad = createDailyLoadIngestor(shared);
   const dessem = createDessemIngestor(shared);
@@ -108,6 +110,11 @@ export function createIngestDispatcher(
         return { kind: task.kind, result: await energyBalance(task.payload, report) };
       case "constrained_off":
         return { kind: task.kind, result: await constrainedOff(task.payload, report) };
+      case "constrained_off_detail":
+        return {
+          kind: task.kind,
+          result: await constrainedOffDetail(task.payload, report),
+        };
       case "interchange":
         return { kind: task.kind, result: await interchange(task.payload, report) };
       case "daily_load":

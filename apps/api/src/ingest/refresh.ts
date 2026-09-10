@@ -198,13 +198,36 @@ export function planRefresh(options: RefreshPlanOptions): IngestTask[] {
     tasks.push({ kind: "interchange", payload: { year } });
     tasks.push({ kind: "daily_load", payload: { year } });
   };
+  /**
+   * Both grains of one month: the entity-grain file and the plant-grain
+   * `_detail` file, which ONS splits by the same month and covers from the same
+   * first month per technology (wind 2021-10, solar 2024-04).
+   *
+   * They are planned together because they are revised together — a month ONS
+   * restates is restated in both files — and separating them would mean a
+   * campaign detected at one grain and missed at the other. **The cost is not
+   * symmetric and is worth stating**: the `_detail` files are roughly six times
+   * the bytes of the entity-grain file of the same month (34 MB for nine days of
+   * solar 2026-09; 171 MB for a full month of wind against 29 MB at the entity
+   * grain), so a history pass that finds a real campaign downloads that much
+   * more. A pass that finds nothing still costs one `HEAD` per file, which is
+   * what makes planning all four affordable.
+   */
   const monthly = (period: YearMonth) => {
     if (!isBefore(period, WIND_COVERAGE_START)) {
       tasks.push({ kind: "constrained_off", payload: { technology: "WIND", ...period } });
+      tasks.push({
+        kind: "constrained_off_detail",
+        payload: { technology: "WIND", ...period },
+      });
     }
     if (!isBefore(period, SOLAR_COVERAGE_START)) {
       tasks.push({
         kind: "constrained_off",
+        payload: { technology: "SOLAR", ...period },
+      });
+      tasks.push({
+        kind: "constrained_off_detail",
         payload: { technology: "SOLAR", ...period },
       });
     }
