@@ -13,13 +13,14 @@ fix is a line in the YAML rather than a silent landing in `data_conditions`.
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import json
 from pathlib import Path
 
 import pytest
 import yaml
 
-from wattsteer_ml.diagnosis.driver_groups import (
+from wattsteer_ml.driver_groups import (
     DRIVER_GROUP_CODES,
     DRIVER_GROUP_MAP,
     DRIVER_GROUPS_PATH,
@@ -33,6 +34,7 @@ from wattsteer_ml.diagnosis.driver_groups import (
     IdeaDriver,
     UngroupedFeatureError,
     assert_total_partition,
+    card_partition_fault,
     load_driver_group_map,
     load_model_inputs,
 )
@@ -442,3 +444,107 @@ def test_the_exceedance_column_the_spec_always_had_is_now_in_both() -> None:
         "observed_constrained_off_hours_above_threshold_7d"
         in FEATURE_SETS["dessem_free_v1"]
     )
+
+
+# --- the hash cannot be produced by an empty parse ----------------------------
+
+
+def test_an_empty_document_is_not_a_map_with_an_empty_hash(tmp_path: Path) -> None:
+    """The failure mode this repo keeps shipping: a guard whose input is nothing.
+
+    A hash over zero pairs is a perfectly well-formed sha256 — it is the digest
+    of the empty string — and a card carrying it would look exactly like a card
+    carrying a real partition. So the emptiness has to be refused *before* the
+    hash exists, and it is refused in three shapes: a file that parses to
+    nothing, a document with no `groups` key, and a document whose `groups` list
+    is empty. None of them may produce a `DriverGroupMap`.
+    """
+    for body in ("", "{}\n", "version: 2\ngroups: []\nidea_drivers: []\n"):
+        path = tmp_path / "empty.yaml"
+        path.write_text(body, encoding="utf-8")
+        with pytest.raises(DriverGroupMapError):
+            load_driver_group_map(path)
+
+    # And the value the refusals are protecting against, spelled out, so that
+    # "an empty map's digest is harmless" cannot be assumed later.
+    assert DRIVER_GROUP_MAP.digest != hashlib.sha256(b"").hexdigest()
+    assert DRIVER_GROUP_MAP.pair_lines
+
+
+def test_the_hash_is_over_the_pairs_and_not_over_the_files_bytes() -> None:
+    """Stated as an inequality, so the two can never be conflated by accident."""
+    file_digest = hashlib.sha256(DRIVER_GROUPS_PATH.read_bytes()).hexdigest()
+    assert DRIVER_GROUP_MAP.digest != file_digest
+    assert (
+        hashlib.sha256("\n".join(DRIVER_GROUP_MAP.pair_lines).encode("utf-8")).hexdigest()
+        == DRIVER_GROUP_MAP.digest
+    )
+
+
+# --- a card whose partition is not this process's -----------------------------
+
+
+def test_a_card_that_carries_the_running_partition_has_no_fault() -> None:
+    assert card_partition_fault({"drivers": DRIVER_GROUP_MAP.card_fields()}) is None
+
+
+def test_a_card_with_no_drivers_group_cannot_say_what_produced_it() -> None:
+    """An artifact written before forecaster 31. Named, not assumed comparable."""
+    fault = card_partition_fault({"identity": {}})
+    assert fault is not None
+    assert "drivers" in fault
+    assert DRIVER_GROUP_MAP.driver_group_hash in fault
+
+
+def test_a_card_whose_hash_disagrees_is_named_on_both_sides() -> None:
+    """The defect the whole field exists to make visible.
+
+    The hash is doctored rather than the map, because the direction that
+    actually happens is an artifact aging past a YAML edit.
+    """
+    stale = dict(DRIVER_GROUP_MAP.card_fields())
+    stale["driver_group_hash"] = "sha256:" + "0" * 64
+    fault = card_partition_fault({"drivers": stale})
+    assert fault is not None
+    assert "0" * 64 in fault
+    assert DRIVER_GROUP_MAP.driver_group_hash in fault
+
+
+def test_a_card_whose_version_disagrees_is_a_fault_of_its_own() -> None:
+    """Somebody edited one of the two by hand; the hash alone would not say so."""
+    stale = dict(DRIVER_GROUP_MAP.card_fields())
+    stale["driver_group_version"] = str(DRIVER_GROUP_MAP.version + 1)
+    fault = card_partition_fault({"drivers": stale})
+    assert fault is not None
+    assert "driver_group_version" in fault
+    assert "driver_group_hash" not in fault
+
+
+def test_the_fault_is_detected_against_a_real_map_edit_and_not_only_a_typo() -> None:
+    """The control for the three tests above: move a feature, keep the card.
+
+    A card written under today's map, read by a process holding a map with one
+    feature moved between two groups. Nothing is hand-written on either side —
+    the card's hash comes from `card_fields()` and the running map's from the
+    edit — so this is the fault as it would actually arrive.
+    """
+    card = {"drivers": DRIVER_GROUP_MAP.card_fields()}
+    surplus = DRIVER_GROUP_MAP.group("net_surplus")
+    demand = DRIVER_GROUP_MAP.group("demand_level")
+    moved = _map_with(
+        groups=tuple(
+            dataclasses.replace(
+                group,
+                members=tuple(m for m in surplus.members if m != "dessem_hydro_mwh"),
+            )
+            if group.code == "net_surplus"
+            else dataclasses.replace(group, members=(*demand.members, "dessem_hydro_mwh"))
+            if group.code == "demand_level"
+            else group
+            for group in DRIVER_GROUP_MAP.groups
+        )
+    )
+    assert card_partition_fault(card, moved) is not None
+    # And the same card against the same map unedited, which is what makes the
+    # assertion above about the edit rather than about the comparison.
+    assert card_partition_fault(card, DRIVER_GROUP_MAP) is None

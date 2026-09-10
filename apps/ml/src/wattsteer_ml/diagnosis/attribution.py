@@ -62,17 +62,17 @@ from typing import Any, Literal, Protocol
 import numpy as np
 import numpy.typing as npt
 
-from wattsteer_ml.diagnosis.driver_groups import (
-    DRIVER_GROUP_CODES,
-    DRIVER_GROUP_MAP,
-    DriverGroupMap,
-    GroupCode,
-)
 from wattsteer_ml.diagnosis.shapley import (
     coalition_count,
     exact_shapley,
     local_accuracy_residual,
     shapley_operator,
+)
+from wattsteer_ml.driver_groups import (
+    DRIVER_GROUP_CODES,
+    DRIVER_GROUP_MAP,
+    DriverGroupMap,
+    GroupCode,
 )
 from wattsteer_ml.evaluation import RowKey
 from wattsteer_ml.training.background import BackgroundCell, MatchedBackground
@@ -439,7 +439,7 @@ class HourResample:
     """
 
     #: ``(resamples, players)`` — ``φ`` per replicate, in
-    #: :data:`~wattsteer_ml.diagnosis.driver_groups.DRIVER_GROUP_CODES` order.
+    #: :data:`~wattsteer_ml.driver_groups.DRIVER_GROUP_CODES` order.
     phi_mwh: npt.NDArray[np.float64]
     #: ``(resamples,)`` — ``v(∅)`` per replicate, in MWh.
     baseline_expected_mwh: npt.NDArray[np.float64]

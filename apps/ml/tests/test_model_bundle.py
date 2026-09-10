@@ -22,12 +22,18 @@ from wattsteer_ml.artifacts import ARTIFACT_SUFFIX, CARD_SUFFIX
 from wattsteer_ml.artifacts import inspect as inspect_store
 from wattsteer_ml.config import settings
 from wattsteer_ml.constants import SUBSYSTEM_CODES
+from wattsteer_ml.driver_groups import (
+    DRIVER_GROUP_CODES,
+    DRIVER_GROUP_MAP,
+    card_partition_fault,
+)
 from wattsteer_ml.evaluation import HOURS_PER_DAY
 from wattsteer_ml.lanes import Lane
 from wattsteer_ml.promotions import PROMOTION_LOG_FILENAME, PromotionRecord, append
 from wattsteer_ml.training import (
     ARTIFACT_SOURCE,
     BACKGROUND_SEED,
+    HEADLINE_VERDICTS,
     BundleError,
     ContractMismatchError,
     PartialBundleError,
@@ -323,6 +329,68 @@ def test_the_card_group_does_not_collide_with_another_groups_keys(
         if group == "background" or not isinstance(entries, dict):
             continue
         assert not set(entries) & set(card["background"]), group
+
+
+def test_the_card_says_which_driver_group_partition_produced_it(
+    trained: TrainedFold,
+) -> None:
+    """Forecaster 31's three fields, held against the map and not against literals.
+
+    The two identity values come from
+    `DriverGroupMap.card_fields()`, so a card that disagreed with the running
+    map would be the map's own hash disagreeing with itself. `card_partition_fault`
+    is the reader that would notice, and it is asked here rather than trusted.
+    """
+    card = trained.card.to_dict()
+    drivers = card["drivers"]
+    assert (
+        drivers["driver_group_version"]
+        == DRIVER_GROUP_MAP.card_fields()["driver_group_version"]
+    )
+    assert drivers["driver_group_hash"] == DRIVER_GROUP_MAP.driver_group_hash
+    assert card_partition_fault(card) is None
+    # And the same card read by a process holding a different partition is a
+    # fault — which is what makes the `None` above a measurement.
+    doctored = {**card, "drivers": {**drivers, "driver_group_version": "999"}}
+    assert card_partition_fault(doctored) is not None
+
+
+def test_the_cards_headline_check_measured_something_on_this_fold(
+    trained: TrainedFold,
+) -> None:
+    """A verdict block over zero targets would be eight confirmations of nothing.
+
+    The fixture contract is a fraction of the real feature table, so most groups
+    honestly come back `no_member_in_contract`; what this asserts is that the
+    run evaluated real targets and real member columns, and that at least one
+    group got a verdict that required evaluating the model.
+    """
+    block = trained.card.to_dict()["drivers"]["headline_feature_check"]
+    assert int(block["targets"]) > 0
+    assert int(block["members_evaluated"]) > 0
+    assert block["fold_id"] == trained.card.fold.id
+    assert [one["code"] for one in block["groups"]] == list(DRIVER_GROUP_CODES)
+    for entry in block["groups"]:
+        assert entry["verdict"] in HEADLINE_VERDICTS
+    measured = [
+        one
+        for one in block["groups"]
+        if one["verdict"] in {"confirmed", "mismatch", "no_movement"}
+    ]
+    assert measured, block["groups"]
+    assert trained.card.headline_check.group_map is DRIVER_GROUP_MAP
+
+
+def test_the_drivers_group_does_not_collide_with_another_groups_keys(
+    trained: TrainedFold,
+) -> None:
+    """`merge_disjointly` raises on a card-key collision. Same guard as Background."""
+    card = trained.card.to_dict()
+    assert "drivers" in card
+    for group, entries in card.items():
+        if group == "drivers" or not isinstance(entries, dict):
+            continue
+        assert not set(entries) & set(card["drivers"]), group
 
 
 def test_a_reloaded_bundle_carries_the_same_sample_bit_for_bit(

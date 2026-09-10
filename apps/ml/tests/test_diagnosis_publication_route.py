@@ -50,7 +50,6 @@ from feature_row_fixtures import FEATURE_SET, GATE_PROFILE, THRESHOLD_MW, featur
 from wattsteer_ml.app import app
 from wattsteer_ml.config import settings
 from wattsteer_ml.constants import SUBSYSTEM_CODES
-from wattsteer_ml.diagnosis.driver_groups import DRIVER_GROUP_CODES
 from wattsteer_ml.diagnosis.publication import (
     READING_ABSENCE_REASONS,
     AttributionPublicationError,
@@ -63,6 +62,7 @@ from wattsteer_ml.diagnosis.publish import (
     base_fit_window,
     build_diagnosis_publication,
 )
+from wattsteer_ml.driver_groups import DRIVER_GROUP_CODES, card_partition_fault
 from wattsteer_ml.lanes import Lane
 from wattsteer_ml.publication import publication_instant
 from wattsteer_ml.training import FeatureBlock, LoadedArtifact, TrainedFold
@@ -573,6 +573,49 @@ def test_a_realistic_window_publishes_where_it_used_to_refuse(
         assert one["observed_absent_reason"] is None
 
 
+def test_a_card_whose_partition_is_not_this_processes_stops_the_publication(
+    serving_rows: list[dict[str, Any]],
+    base_fit_rows: list[dict[str, Any]],
+    loaded: LoadedArtifact,
+    target_day: date,
+) -> None:
+    """``partition_disagrees_with_card`` — forecaster 31.
+
+    An attribution is a game over eight players, so two partitions are two sets
+    of players and a row published under one against an artifact trained beside
+    the other would be stamped with a partition the artifact never saw. The
+    card's hash is doctored rather than the YAML, because the direction that
+    happens is an artifact aging past an edit.
+
+    The control is the last line: the artifact's own card, read by the same
+    function, has no fault — so the refusal above is about the doctored hash and
+    not about the comparison being broken in one direction.
+    """
+    stale = {
+        **loaded.card,
+        "drivers": {
+            **loaded.card["drivers"],
+            "driver_group_hash": "sha256:" + "0" * 64,
+        },
+    }
+    with pytest.raises(DiagnosisPublicationRefusedError) as refused:
+        build_diagnosis_publication(
+            serving_rows,
+            base_fit_rows,
+            lane=LANE,
+            loaded=LoadedArtifact(
+                artifact_id=loaded.artifact_id, bundle=loaded.bundle, card=stale
+            ),
+            target_date=target_day,
+            published_at=publication_instant(serving_rows, target_date=target_day),
+            rows_per_cell=TEST_ROWS_PER_CELL,
+        )
+    assert refused.value.condition == "partition_disagrees_with_card"
+    assert "0" * 64 in refused.value.reason
+
+    assert card_partition_fault(loaded.card) is None
+
+
 def test_every_named_refusal_condition_is_one_a_test_above_produced() -> None:
     """The closed tuple is a census, not a list of intentions.
 
@@ -586,6 +629,7 @@ def test_every_named_refusal_condition_is_one_a_test_above_produced() -> None:
         "no_base_fit_window",
         "no_matched_background",
         "contract_and_groups_disagree",
+        "partition_disagrees_with_card",
         "incomplete_day",
     }
 

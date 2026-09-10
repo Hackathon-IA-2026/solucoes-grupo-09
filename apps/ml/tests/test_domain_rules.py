@@ -40,7 +40,6 @@ from attribution_fixtures import RowFunction, feature_names_of, synthetic_map
 from wattsteer_ml.constants import Subsystem
 from wattsteer_ml.diagnosis import rules as rules_module
 from wattsteer_ml.diagnosis.day_attribution import DayAttribution, attribute_day
-from wattsteer_ml.diagnosis.driver_groups import DRIVER_GROUP_CODES, GroupCode
 from wattsteer_ml.diagnosis.publication import (
     RULE_ACTION_ORDER,
     AttributionPublicationError,
@@ -69,6 +68,7 @@ from wattsteer_ml.diagnosis.rules import (
     RuleOutcome,
     apply_rules,
 )
+from wattsteer_ml.driver_groups import DRIVER_GROUP_CODES, GroupCode
 from wattsteer_ml.evaluation import HOURS_PER_DAY, RowKey
 from wattsteer_ml.training.background import (
     BASE_FIT_SOURCE,

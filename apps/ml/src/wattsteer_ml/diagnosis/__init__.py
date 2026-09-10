@@ -54,20 +54,6 @@ from wattsteer_ml.diagnosis.day_attribution import (
     attribute_day,
     day_rows,
 )
-from wattsteer_ml.diagnosis.driver_groups import (
-    DRIVER_GROUP_CODES,
-    DRIVER_GROUP_MAP,
-    DriverGroup,
-    DriverGroupMap,
-    DriverGroupMapError,
-    GroupCode,
-    IdeaDriver,
-    UngroupedFeatureError,
-    UnitCode,
-    assert_total_partition,
-    load_driver_group_map,
-    load_model_inputs,
-)
 from wattsteer_ml.diagnosis.publication import (
     PRODUCER,
     RULE_ACTION_ORDER,
@@ -113,6 +99,20 @@ from wattsteer_ml.diagnosis.rules import (
     RuleError,
     RuleOutcome,
     apply_rules,
+)
+from wattsteer_ml.driver_groups import (
+    DRIVER_GROUP_CODES,
+    DRIVER_GROUP_MAP,
+    DriverGroup,
+    DriverGroupMap,
+    DriverGroupMapError,
+    GroupCode,
+    IdeaDriver,
+    UngroupedFeatureError,
+    UnitCode,
+    assert_total_partition,
+    load_driver_group_map,
+    load_model_inputs,
 )
 from wattsteer_ml.training.background import (
     BACKGROUND_ROWS_PER_CELL,

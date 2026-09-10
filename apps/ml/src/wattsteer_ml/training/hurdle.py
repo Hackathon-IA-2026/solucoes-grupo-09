@@ -118,6 +118,7 @@ import numpy as np
 import numpy.typing as npt
 
 from wattsteer_ml.constants import SUBSYSTEM_CODES, Subsystem
+from wattsteer_ml.driver_groups import DRIVER_GROUP_MAP, DriverGroupMap
 from wattsteer_ml.evaluation import Fold, FoldBlocks, RowKey
 from wattsteer_ml.mixture import (
     FITTED_ALPHAS,
@@ -166,6 +167,12 @@ from wattsteer_ml.training.ensemble import (
     draw_day_grain,
     fit_pit_matrix,
 )
+from wattsteer_ml.training.headline_check import (
+    HEADLINE_CHECK_SEED,
+    HEADLINE_CHECK_TARGETS,
+    HeadlineFeatureCheck,
+    check_headline_features,
+)
 from wattsteer_ml.training.hyperparameters import MODEL_CONFIG_V1, ModelConfig
 
 
@@ -202,6 +209,9 @@ def train_fold(
     config: ModelConfig = MODEL_CONFIG_V1,
     background_rows_per_cell: int = BACKGROUND_ROWS_PER_CELL,
     background_seed: int = BACKGROUND_SEED,
+    group_map: DriverGroupMap = DRIVER_GROUP_MAP,
+    headline_check_targets: int = HEADLINE_CHECK_TARGETS,
+    headline_check_seed: int = HEADLINE_CHECK_SEED,
     created_at: datetime | None = None,
     artifact_id: str | None = None,
     feature_set_version: str | None = None,
@@ -234,6 +244,15 @@ def train_fold(
         background_seed: the seed stamped onto that sample. A constant of the
             run, not a hash of the artifact id: see
             :data:`~wattsteer_ml.training.background.BACKGROUND_SEED`.
+        group_map: the eight driver groups. Stamped on the card by
+            identity — ``driver_group_version`` and ``driver_group_hash`` — and
+            ranked over by the headline-feature check. A parameter for the same
+            reason ``background_rows_per_cell`` is one: an artifact must say
+            which partition produced it, and a fixture fold has to be able to
+            say a *real* thing rather than be exempted from saying one.
+        headline_check_targets: how many of the fold's test rows the check's
+            mean ``|φ|`` is taken over.
+        headline_check_seed: the seed those rows are drawn with. Stamped.
 
     Returns:
         The bundle, the card and the counts behind them.
@@ -404,6 +423,14 @@ def train_fold(
         conformal=correction,
         pit=pit,
         background=background,
+        headline_check=_fold_headline_check(
+            bundle,
+            test_rows,
+            fold=fold,
+            group_map=group_map,
+            targets=headline_check_targets,
+            seed=headline_check_seed,
+        ),
         day_grain=_fold_day_grain(bundle, test_rows, fold=fold),
         coverage=_fold_coverage(bundle, test_rows, fold=fold),
         feature_set_version=feature_set_version,
@@ -940,6 +967,52 @@ def _fold_day_grain(
     for key, value in zip(labelled.keys, labelled.total_mwh.tolist(), strict=True):
         observed.setdefault((key.target_date, key.subsystem), []).append(float(value))
     return DayGrainCoverage.of(observed, day_grain_rows(bundle, rows), fold_id=fold.id)
+
+
+def _fold_headline_check(
+    bundle: HurdleBundle,
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    fold: Fold,
+    group_map: DriverGroupMap,
+    targets: int,
+    seed: int,
+) -> HeadlineFeatureCheck:
+    """Whether each group's declared headline is the member doing the work.
+
+    Measured on the fold's **test** rows — "the newest fold", in the spec's
+    words, and the same rows ``_fold_coverage`` and ``_fold_day_grain`` are
+    measured over. Against the bundle's own frozen background, so the ``|φ|``
+    a member is ranked by is the same kind of quantity as the bar it would sit
+    beside.
+
+    ``g`` is :func:`expected_mwh_for_block` with this bundle applied, so the
+    check reads the composition the product serves and holds none of its own.
+
+    Unlike the coverage blocks beside it there is no ``None`` here. A card that
+    could not say whether its subtitles are the right subtitles is a card that
+    cannot say which partition produced it either, and forecaster 30 settled
+    that argument for ``background``: the field is required and a fold that
+    cannot produce one is a training failure whose repair is a longer run
+    window, not a card with a hole in it.
+    """
+    if not rows:
+        raise TrainingError(
+            f"{fold.id}: the test block contains no row, so the declared "
+            "headline features cannot be checked against the newest fold; the "
+            "card records which member of each group moves the model and a "
+            "fold with no newest rows cannot answer that"
+        )
+    block = FeatureBlock.of(rows, bundle.contract, threshold_mw=bundle.threshold_mw)
+    return check_headline_features(
+        block=block,
+        background=bundle.background,
+        expectation=lambda one: expected_mwh_for_block(bundle, one),
+        group_map=group_map,
+        fold_id=fold.id,
+        targets=targets,
+        seed=seed,
+    )
 
 
 def _fold_coverage(

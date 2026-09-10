@@ -38,7 +38,6 @@ from attribution_fixtures import (
 from wattsteer_ml.constants import Subsystem
 from wattsteer_ml.diagnosis import publication
 from wattsteer_ml.diagnosis.day_attribution import DayAttribution, attribute_day
-from wattsteer_ml.diagnosis.driver_groups import DRIVER_GROUP_CODES
 from wattsteer_ml.diagnosis.publication import (
     AttributionPublicationError,
     AttributionRow,
@@ -47,6 +46,7 @@ from wattsteer_ml.diagnosis.publication import (
     headline_readings,
 )
 from wattsteer_ml.diagnosis.rules import SHIPPING_RULE_CODES
+from wattsteer_ml.driver_groups import DRIVER_GROUP_CODES
 from wattsteer_ml.evaluation import HOURS_PER_DAY, RowKey
 from wattsteer_ml.training.background import (
     ARTIFACT_SOURCE,

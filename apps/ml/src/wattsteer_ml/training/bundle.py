@@ -112,6 +112,7 @@ from wattsteer_ml.artifacts import GATE_BLOCK_KEY as GATE_BLOCK_KEY
 from wattsteer_ml.artifacts import contract_fault as contract_fault
 from wattsteer_ml.constants import SUBSYSTEM_CODES, Subsystem
 from wattsteer_ml.declined import DeclinedFigure
+from wattsteer_ml.driver_groups import CARD_DRIVERS_GROUP
 from wattsteer_ml.evaluation import Fold, FoldBlocks
 from wattsteer_ml.lanes import Lane, format_instant, is_artifact_id
 from wattsteer_ml.training.background import MatchedBackground
@@ -119,6 +120,7 @@ from wattsteer_ml.training.calibration import Calibration, IsotonicCalibrator
 from wattsteer_ml.training.conformal import ConformalCorrection, CoverageReport
 from wattsteer_ml.training.contract import FeatureContract
 from wattsteer_ml.training.ensemble import DayGrainCoverage, PitMatrix
+from wattsteer_ml.training.headline_check import HeadlineFeatureCheck
 from wattsteer_ml.training.hyperparameters import ESTIMATOR_FAMILY, ModelConfig
 
 #: Hours in the local target day. `μ_sub` is 4 subsystems × this many hours.
@@ -398,6 +400,13 @@ class ModelCard:
     #: The frozen sample, as the bundle carries it. The card reports four facts
     #: about it and its measured size; the rows themselves stay in the joblib.
     background: MatchedBackground
+    #: The three fields `docs/specs/diagnosis.md` asks the forecaster's card
+    #: for: the partition's version and hash, and the per-group verdict on each
+    #: declared headline feature. Required and undefaulted, for the reason
+    #: :attr:`background` is — a card that cannot say which driver-group
+    #: partition produced the artifact is a card whose stored attributions are
+    #: not comparable with anybody's, and there is no honest default for it.
+    headline_check: HeadlineFeatureCheck
     #: ``day_total_coverage`` and ``peak_coverage`` on this fold's test period.
     #: ``None`` when the test period held no complete settled day — absent for a
     #: stated reason, like the coverage block above it.
@@ -502,6 +511,13 @@ class ModelCard:
                 # a number rather than an estimate of one.
                 "background_matrix_bytes": str(self.background.matrix_bytes),
             },
+            # `driver_group_version`, `driver_group_hash` and the
+            # `headline_feature_check` block — forecaster 31, and the second of
+            # the two additions `docs/specs/diagnosis.md` asks the artifact for.
+            # A group of its own, and its keys are prefixed inside it, because
+            # the card is assembled by `**` merges and `merge_disjointly` now
+            # raises on a collision.
+            CARD_DRIVERS_GROUP: self.headline_check.card_fields(),
             "sub_threshold_means": self.sub_threshold_means.as_card_table(),
             "environment": environment_versions(),
         }

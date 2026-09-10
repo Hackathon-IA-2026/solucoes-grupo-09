@@ -7,7 +7,7 @@
 of what a feature set contains, and nobody types a feature name into it.
 
 **Why this module exists beside the one that already reads that file.**
-:func:`wattsteer_ml.diagnosis.driver_groups.load_model_inputs` wanted the names
+:func:`wattsteer_ml.driver_groups.load_model_inputs` wanted the names
 and nothing else, so it threw away the four other columns the SQL function
 returns. One of them —``available_at_gate_early`` — is the whole of forecaster
 ticket 19: it is the database's own statement of which attributes exist at
