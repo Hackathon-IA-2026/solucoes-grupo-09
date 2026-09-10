@@ -1604,6 +1604,16 @@ export const ingestionSource = pgEnum("ingestion_source", [
   "energy_balance",
   "constrained_off_wind",
   "constrained_off_solar",
+  /**
+   * The plant-grain `_detail` datasets — a second ingestor over two further
+   * CKAN packages, not a second period of the two above. Separate members
+   * because the grains fail independently: the `_detail` files are ~6x the
+   * bytes of the entity-grain files of the same month, and an operator watching
+   * for a source that went quiet needs "the per-plant grain stopped" to be
+   * visible while the entity grain is still running through sibling code.
+   */
+  "constrained_off_wind_detail",
+  "constrained_off_solar_detail",
   "interchange",
   "daily_load",
   "dessem_balance",

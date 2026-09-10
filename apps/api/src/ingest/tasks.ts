@@ -1,5 +1,9 @@
 import type { ingestionSource } from "../database/schema.js";
 import type {
+  IngestConstrainedOffDetailPayload,
+  IngestConstrainedOffDetailResult,
+} from "./constrained-off-detail-job.js";
+import type {
   IngestConstrainedOffPayload,
   IngestConstrainedOffResult,
 } from "./constrained-off-job.js";
@@ -34,6 +38,10 @@ export type IngestionSource = (typeof ingestionSource.enumValues)[number];
 export type IngestTask =
   | { kind: "energy_balance"; payload: IngestEnergyBalancePayload }
   | { kind: "constrained_off"; payload: IngestConstrainedOffPayload }
+  | {
+      kind: "constrained_off_detail";
+      payload: IngestConstrainedOffDetailPayload;
+    }
   | { kind: "interchange"; payload: IngestInterchangePayload }
   | { kind: "daily_load"; payload: IngestDailyLoadPayload }
   | { kind: "dessem_balance"; payload: IngestDessemPayload }
@@ -46,6 +54,7 @@ export type IngestTask =
 export type IngestTaskResult =
   | { kind: "energy_balance"; result: IngestEnergyBalanceResult }
   | { kind: "constrained_off"; result: IngestConstrainedOffResult }
+  | { kind: "constrained_off_detail"; result: IngestConstrainedOffDetailResult }
   | { kind: "interchange"; result: IngestInterchangeResult }
   | { kind: "daily_load"; result: IngestDailyLoadResult }
   | { kind: "dessem_balance"; result: IngestDessemResult }
@@ -68,6 +77,10 @@ export function sourceOf(task: IngestTask): IngestionSource {
       return task.payload.technology === "WIND"
         ? "constrained_off_wind"
         : "constrained_off_solar";
+    case "constrained_off_detail":
+      return task.payload.technology === "WIND"
+        ? "constrained_off_wind_detail"
+        : "constrained_off_solar_detail";
     case "load":
       return task.payload.series === "VERIFIED" ? "verified_load" : "programmed_load";
     default:
@@ -83,6 +96,7 @@ export function periodLabelOf(task: IngestTask): string | null {
     case "daily_load":
       return String(task.payload.year);
     case "constrained_off":
+    case "constrained_off_detail":
       return `${task.payload.year}-${String(task.payload.month).padStart(2, "0")}`;
     case "dessem_balance":
       return `${task.payload.from ?? "start"}..${task.payload.to ?? "latest"}`;

@@ -56,7 +56,7 @@ interface SourceHealthSpec {
   toleranceHours: number;
 }
 
-/** The eleven sources, and what "fresh" means for each. */
+/** The thirteen sources, and what "fresh" means for each. */
 const SOURCES: SourceHealthSpec[] = [
   {
     source: "energy_balance",
@@ -74,6 +74,24 @@ const SOURCES: SourceHealthSpec[] = [
   {
     source: "constrained_off_solar",
     table: "curtailment_report_hour",
+    where: "technology = 'SOLAR'",
+    basis: "valid_time",
+    toleranceHours: 72,
+  },
+  {
+    // The plant grain of the same two datasets, and a separate freshness
+    // question: the `_detail` files can stop while the entity-grain files keep
+    // publishing, and this is the row that would say so. Same tolerance,
+    // because it is the same publication cadence.
+    source: "constrained_off_wind_detail",
+    table: "plant_detail_hour",
+    where: "technology = 'WIND'",
+    basis: "valid_time",
+    toleranceHours: 72,
+  },
+  {
+    source: "constrained_off_solar_detail",
+    table: "plant_detail_hour",
     where: "technology = 'SOLAR'",
     basis: "valid_time",
     toleranceHours: 72,
@@ -220,7 +238,7 @@ function toDate(value: unknown): Date | null {
  * Per-source freshness, and nothing else.
  *
  * The read behind `/v1/meta`'s `data.freshness` block, and the first half of
- * `GET /ingest/health`'s. One function rather than two because the eleven
+ * `GET /ingest/health`'s. One function rather than two because the thirteen
  * sources and what "fresh" means for each are a single table — `SOURCES` above
  * — and a second copy of it in the meta route is exactly how the two surfaces
  * would come to disagree about whether the weather feed is late.

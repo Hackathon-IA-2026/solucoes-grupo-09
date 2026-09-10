@@ -1,12 +1,21 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { createDatabase } from "../src/database/connection.js";
 import { observedPlant, onsResourceVersion, plant } from "../src/database/schema.js";
+import { createIngestDispatcher } from "../src/ingest/dispatch.js";
 import {
+  createDirectoryArchive,
+  type IngestTask,
+  type IngestTaskResult,
   type ObservedPlant,
+  type PayloadArchive,
   type PlantDetailHour,
   readPlantDetailAsOf,
   reconcilePlantIdentity,
+  runRecordedIngestion,
   upsertObservedPlants,
   upsertReportingEntities,
   writePlantDetail,
@@ -420,5 +429,233 @@ suite("plant detail · identity resolves against the other grains", () => {
 
     await db.execute(sql`delete from observed_plant where ons_code = 'CJU_MAPLN'`);
     await db.execute(sql`delete from reporting_entity where ons_code = 'CJU_MAPLN'`);
+  });
+});
+
+// Seam 3 — the wiring itself. The adapter, the parser and the repository above
+// were merged and tested while `createConstrainedOffDetailIngestor` appeared in
+// no `IngestTask` kind, no branch of `createIngestDispatcher` and no line of
+// `planRefresh`, so `plant_detail_hour` was unfillable through the queue and
+// `canonical_curtailment_by_plant` was the one canonical read with a null
+// `go_live_at` after a complete ONS backfill.
+//
+// What is under test here is therefore not the adapter but the path: the very
+// handler the worker registers, driven exactly as `src/scripts/ingest.ts`
+// drives it, with the run row, the custody row, the provenance row and the
+// derived go-live all asserted as consequences of one dispatch.
+suite("plant detail · wired end to end (real Postgres)", () => {
+  const handle = createDatabase(URL as string, 5);
+  const { db } = handle;
+
+  const FIXTURES = join(import.meta.dir, "fixtures", "ons");
+  const RESOURCE_URL =
+    "https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/restricao_coff_eolica_detail_tm/RESTRICAO_COFF_EOLICA_DETAIL_2026_08.csv";
+  const packageShow = JSON.stringify({
+    result: {
+      resources: [
+        {
+          name: "Restricoes_coff_Eolicas_Detalhamento-2026-08",
+          url: RESOURCE_URL,
+          format: "CSV",
+          last_modified: "2026-09-01T15:09:24",
+          size: 4096,
+        },
+      ],
+    },
+  });
+
+  let root = "";
+  let archive: PayloadArchive;
+  let body = "";
+  let networkCalls = 0;
+  let downloads = 0;
+
+  const stubFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    networkCalls += 1;
+    const url = String(input);
+    if (url.includes("package_show")) {
+      return new Response(packageShow, {
+        headers: { "content-type": "application/json" },
+      });
+    }
+    const headers = {
+      "last-modified": "Tue, 01 Sep 2026 15:08:30 GMT",
+      "content-length": String(new TextEncoder().encode(body).byteLength),
+      etag: '"detail-first-vintage"',
+    };
+    if (init?.method === "HEAD") {
+      return new Response(null, { headers });
+    }
+    downloads += 1;
+    return new Response(body, { headers });
+  }) as typeof fetch;
+
+  const task: IngestTask = {
+    kind: "constrained_off_detail",
+    payload: { technology: "WIND", year: 2026, month: 8 },
+  };
+
+  /** One dispatch, recorded, exactly as the hand-driver records one. */
+  const drive = async () => {
+    const dispatch = createIngestDispatcher({ db, archive, fetch: stubFetch });
+    const recorded = await runRecordedIngestion(
+      db,
+      "manual",
+      task,
+      (ingestion, report) => dispatch(ingestion, report) as Promise<IngestTaskResult>,
+    );
+    const outcome = recorded.outcome;
+    if (outcome.kind !== "constrained_off_detail") {
+      throw new Error(`the dispatcher answered ${outcome.kind}`);
+    }
+    return { runId: recorded.runId, result: outcome.result };
+  };
+
+  beforeAll(async () => {
+    root = await mkdtemp(join(tmpdir(), "wattsteer-plant-detail-"));
+    archive = createDirectoryArchive(root);
+    body = await Bun.file(
+      join(FIXTURES, "RESTRICAO_COFF_EOLICA_DETAIL_2026_08.head.csv"),
+    ).text();
+
+    await db.execute(sql`truncate table plant_detail_hour`);
+    await db.execute(sql`truncate table observed_plant cascade`);
+    await db.execute(sql`truncate table payload_custody`);
+    await db.execute(sql`truncate table ingestion_run`);
+    await db.execute(sql`truncate table ons_resource_version cascade`);
+  });
+
+  afterAll(async () => {
+    await handle.close();
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it("has no go-live for the plant grain before anything is ingested", async () => {
+    // The guard this suite exists to move, shown failing first: the read is
+    // derived from `min(plant_detail_hour.ingested_at)` and the table is empty.
+    const [before] = await db.execute<{ go_live_at: string | null }>(
+      sql`select go_live_at from canonical_read_go_live where read = 'curtailment-by-plant'`,
+    );
+    expect(before?.go_live_at ?? null).toBeNull();
+  });
+
+  it("moves rows into plant_detail_hour through the dispatcher", async () => {
+    const { result } = await drive();
+    expect(result).toMatchObject({ downloaded: true, changed: true });
+    expect(result.rowsParsed).toBeGreaterThan(0);
+    expect(result.inserted).toBe(result.rowsParsed);
+    expect(result.plantsSeen).toBeGreaterThan(0);
+
+    const [rows] = await db.execute<{ n: number }>(
+      sql`select count(*)::int as n from plant_detail_hour`,
+    );
+    expect(rows?.n).toBe(result.inserted);
+    const [plants] = await db.execute<{ n: number }>(
+      sql`select count(*)::int as n from observed_plant`,
+    );
+    expect(plants?.n).toBe(result.plantsSeen);
+  });
+
+  it("records one ingestion_run row naming the plant-grain source", async () => {
+    const [run] = await db.execute<{
+      source: string;
+      tier: string;
+      period_label: string;
+      status: string;
+      rows_inserted: number;
+      resources_downloaded: number;
+      resources_probed: number;
+    }>(sql`select * from ingestion_run order by started_at desc limit 1`);
+    // The enum member `0046` added — without it this run row could not be
+    // written at all, which is why the wiring needed a migration.
+    expect(run?.source).toBe("constrained_off_wind_detail");
+    expect(run?.tier).toBe("manual");
+    expect(run?.period_label).toBe("2026-08");
+    expect(run?.status).toBe("ok");
+    expect(run?.rows_inserted).toBeGreaterThan(0);
+    expect(run?.resources_downloaded).toBe(1);
+    expect(run?.resources_probed).toBe(1);
+  });
+
+  it("retains the payload and stamps the provenance row", async () => {
+    const [custody] = await db.execute<{
+      provenance: string;
+      dataset_slug: string;
+      archive_uri: string;
+    }>(sql`select * from payload_custody`);
+    expect(custody?.provenance).toBe("bulk_resource");
+    expect(custody?.dataset_slug).toBe("restricao_coff_eolica_detail");
+
+    // Byte-for-byte, and reachable from provenance alone.
+    const held = await archive.get(custody?.archive_uri as string);
+    expect(new TextDecoder().decode(held as Uint8Array)).toBe(body);
+
+    const [version] = await db.execute<{
+      archive_uri: string | null;
+      fetched_at: string | null;
+      dataset_slug: string;
+    }>(sql`select * from ons_resource_version`);
+    expect(version?.dataset_slug).toBe("restricao_coff_eolica_detail");
+    expect(version?.archive_uri).toBe(custody?.archive_uri as string);
+    expect(version?.fetched_at).not.toBeNull();
+  });
+
+  it("gives canonical_curtailment_by_plant a derived go-live", async () => {
+    const [after] = await db.execute<{ go_live_at: string | null }>(
+      sql`select go_live_at from canonical_read_go_live where read = 'curtailment-by-plant'`,
+    );
+    expect(after?.go_live_at).not.toBeNull();
+
+    // Derived, not seeded: it is the first ingest instant of the rows that
+    // landed, to the microsecond.
+    const [first] = await db.execute<{ first_ingest: string }>(
+      sql`select min(ingested_at)::text as first_ingest from plant_detail_hour`,
+    );
+    expect(new Date(after?.go_live_at as string).getTime()).toBe(
+      new Date(first?.first_ingest as string).getTime(),
+    );
+  });
+
+  it("costs one HEAD and inserts nothing on a re-run", async () => {
+    const [before] = await db.execute<{ n: number }>(
+      sql`select count(*)::int as n from plant_detail_hour`,
+    );
+    networkCalls = 0;
+    downloads = 0;
+
+    const { result } = await drive();
+    expect(result).toMatchObject({ downloaded: false, changed: false, inserted: 0 });
+    expect(result.rowsParsed).toBe(0);
+    // `package_show` and the `HEAD`, and no third call.
+    expect(networkCalls).toBe(2);
+    expect(downloads).toBe(0);
+
+    const [after] = await db.execute<{ n: number }>(
+      sql`select count(*)::int as n from plant_detail_hour`,
+    );
+    expect(after?.n).toBe(before?.n);
+    const [custody] = await db.execute<{ n: number }>(
+      sql`select count(*)::int as n from payload_custody`,
+    );
+    expect(custody?.n).toBe(1);
+    // Still recorded: a run that spent one `HEAD` and found nothing is exactly
+    // the run the health view has to be able to see.
+    const [runs] = await db.execute<{ n: number }>(
+      sql`select count(*)::int as n from ingestion_run`,
+    );
+    expect(runs?.n).toBe(2);
+  });
+
+  it("re-reads the rows it wrote through the canonical view", async () => {
+    const read = await readPlantDetailAsOf(db, {
+      asOf: new Date(),
+      from: new Date("2026-08-01T00:00:00.000Z"),
+      to: new Date("2026-09-01T00:00:00.000Z"),
+    });
+    expect(read.rows.length).toBeGreaterThan(0);
+    expect(read.goLiveAt).not.toBeNull();
+    expect(read.rows.every((row) => row.technology === "WIND")).toBe(true);
+    // The measurement survives the round trip as the value object it is.
+    expect(read.rows.some((row) => row.measurement !== null)).toBe(true);
   });
 });
