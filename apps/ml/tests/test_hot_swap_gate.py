@@ -760,9 +760,7 @@ def test_the_rail_counts_only_the_rows_whose_floor_could_have_been_missed() -> N
         for hour in scored_hours
         if 0.0 < hour.forecast.band.p10 <= math.nextafter(THRESHOLD_MW, math.inf)
     ]
-    on_the_point_mass = [
-        hour for hour in scored_hours if hour.forecast.band.p10 == 0.0
-    ]
+    on_the_point_mass = [hour for hour in scored_hours if hour.forecast.band.p10 == 0.0]
     assert on_the_floor and on_the_point_mass, "the fixture must exercise both atoms"
     # Both atoms are covered for free, so the marginal counts them as successes.
     assert all(hour.covered_lower for hour in on_the_floor + on_the_point_mass)
@@ -849,9 +847,9 @@ def test_the_corrected_rail_is_the_only_lower_coverage_veto_and_says_so() -> Non
     row = metrics_row(coverage=coverage_report(coverage_p10=0.80))
     decision = run(candidate(row=row), incumbent())
     assert decision.promotes
-    assert [rail.name for rail in decision.guardrails if rail.name.startswith(
-        "coverage_p10"
-    )] == [BAND_COVERAGE_RAIL]
+    assert [
+        rail.name for rail in decision.guardrails if rail.name.startswith("coverage_p10")
+    ] == [BAND_COVERAGE_RAIL]
 
     over_covering = candidate(hours=scored(keys(), offset_mwh=0.0, missed_in=0))
     refused = run(over_covering, incumbent())
@@ -859,9 +857,7 @@ def test_the_corrected_rail_is_the_only_lower_coverage_veto_and_says_so() -> Non
     assert [rail.name for rail in refused.guardrails if rail.vetoes] == [
         BAND_COVERAGE_RAIL
     ]
-    rail = next(
-        rail for rail in refused.guardrails if rail.name == BAND_COVERAGE_RAIL
-    )
+    rail = next(rail for rail in refused.guardrails if rail.name == BAND_COVERAGE_RAIL)
     assert rail.value == 1.0
     assert "could have been missed" in rail.detail
     assert BAND_COVERAGE_RAIL in refused.reason

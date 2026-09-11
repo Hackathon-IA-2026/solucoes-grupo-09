@@ -562,7 +562,7 @@ def test_a_window_too_narrow_for_the_fold_is_refused_rather_than_scored_short() 
     with pytest.raises(retrain.RetrainError, match="materialised rows were read for"):
         asyncio.run(
             retrain.read_lane_inputs(
-                NoGoLive(),  # type: ignore[arg-type]
+                NoGoLive(),
                 lane,
                 as_of=AS_OF,
                 fold_id="F6",
@@ -601,7 +601,7 @@ def test_rows_read_for_another_feature_function_are_not_this_arm_s() -> None:
     with pytest.raises(retrain.RetrainError, match="materialised rows are"):
         asyncio.run(
             retrain.read_lane_inputs(
-                NoGoLive(),  # type: ignore[arg-type]
+                NoGoLive(),
                 lane,
                 as_of=AS_OF,
                 fold_id="F6",
