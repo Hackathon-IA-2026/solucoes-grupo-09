@@ -19,9 +19,11 @@ each veto can be exercised alone.
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from statistics import NormalDist
 from typing import Any
 
 import numpy as np
@@ -34,6 +36,7 @@ from wattsteer_ml.canonical import VintageFidelity
 from wattsteer_ml.constants import SUBSYSTEM_CODES
 from wattsteer_ml.evaluation import Fold, FoldBlocks, FoldSegment, RowKey, stamp_fidelity
 from wattsteer_ml.evaluation.gate import (
+    BAND_COVERAGE_RAIL,
     BOOTSTRAP_DRAWS,
     CROSSING_RATE_CEILING,
     ECE_CEILING,
@@ -53,12 +56,15 @@ from wattsteer_ml.evaluation.gate import (
     decide,
     guardrails,
     hour_loss,
+    minimum_band_coverage_rows,
     null_rates,
+    p10_band_coverage,
     paired_block_bootstrap,
     record_decision,
     rollback,
     run_gate,
     serving_smoke,
+    states_a_falsifiable_floor,
 )
 from wattsteer_ml.evaluation.ladder import FoldRows, MissingBaselineFeatureError
 from wattsteer_ml.evaluation.metrics import (
@@ -83,7 +89,13 @@ from wattsteer_ml.training.bundle import (
     save_artifact,
 )
 from wattsteer_ml.training.calibration import RiskBinsUndeterminedError
-from wattsteer_ml.training.conformal import CoverageReport, ScoredHour
+from wattsteer_ml.training.conformal import (
+    COVERAGE_GUARDRAIL,
+    NOMINAL_MISCOVERAGE,
+    TARGET_COVERAGE,
+    CoverageReport,
+    ScoredHour,
+)
 from wattsteer_ml.training.contract import SUBSYSTEM_COLUMN
 from wattsteer_ml.training.hurdle import HourEstimates, compose_estimates
 
@@ -159,28 +171,56 @@ def observations(row_keys: Sequence[RowKey]) -> list[float]:
     return [0.0 if index % 2 else 12.0 for index in range(len(row_keys))]
 
 
+#: One curtailed hour in ten is given a band the label falls *under*, by
+#: lifting all three knots this far above it. Forecaster 34: the lower coverage
+#: rail is now counted over the rows whose P10 could be missed, so a fixture
+#: whose P10 is never missed reads 1.0000 and is refused — correctly, and for a
+#: reason that has nothing to do with what most of these tests are about. The
+#: bump moves the whole band rather than the P10 alone, so the composed knots do
+#: not cross, and it is applied to candidate and comparator alike, so it cannot
+#: make one of them better than the other.
+NOMINAL_LOWER_MISS = 10
+MISS_BUMP_MWH = 2.0
+
+
 def scored(
-    row_keys: Sequence[RowKey], *, offset_mwh: float, probability: float = 0.95
+    row_keys: Sequence[RowKey],
+    *,
+    offset_mwh: float,
+    probability: float = 0.95,
+    missed_in: int = NOMINAL_LOWER_MISS,
 ) -> tuple[ScoredHour, ...]:
     """Composed hours whose knots sit ``offset_mwh`` away from the label.
 
-    ``offset_mwh = 0`` is a model that is exactly right on every hour, and a
+    ``offset_mwh = 0`` is a model that is right on every hour but one in
+    ``missed_in`` of the curtailed ones — see :data:`NOMINAL_LOWER_MISS` — and a
     larger offset is a strictly worse model **on every day**, which is what the
     "strictly better on every test day" box needs to be able to arrange.
+    ``missed_in = 0`` misses none of them, which is the fixture the corrected
+    coverage rail must refuse.
     """
     labels = observations(row_keys)
-    composed = compose_estimates(
-        row_keys,
-        [
+    estimates: list[HourEstimates] = []
+    curtailed = 0
+    for label in labels:
+        bump = 0.0
+        if label > 0.0:
+            if missed_in and curtailed % missed_in == 0:
+                bump = MISS_BUMP_MWH
+            curtailed += 1
+        centre = max(0.0, label + offset_mwh + bump)
+        estimates.append(
             HourEstimates(
                 occurrence_probability=probability,
-                q10=max(0.0, label + offset_mwh - 1.0),
-                q50=max(0.0, label + offset_mwh),
-                q90=max(0.0, label + offset_mwh + 1.0),
-                positive_mean_mwh=max(0.0, label + offset_mwh),
+                q10=max(0.0, centre - 1.0),
+                q50=centre,
+                q90=centre + 1.0,
+                positive_mean_mwh=centre,
             )
-            for label in labels
-        ],
+        )
+    composed = compose_estimates(
+        row_keys,
+        estimates,
         sub_threshold_means=FLAT_MU_SUB,
         threshold_mw=THRESHOLD_MW,
     )
@@ -505,11 +545,6 @@ def test_a_different_lane_is_never_a_swap() -> None:
         ),
         pytest.param({"recall": 0.60}, "recall@0.5[pooled]", id="recall@0.5"),
         pytest.param(
-            {"coverage": coverage_report(coverage_p10=0.80)},
-            "coverage_p10",
-            id="coverage_p10",
-        ),
-        pytest.param(
             {"coverage": coverage_report(coverage_p90=0.99)},
             "coverage_p90",
             id="coverage_p90",
@@ -554,14 +589,14 @@ def test_each_guardrail_is_exercised_alone(kwargs: dict[str, Any], expected: str
 
 def test_every_guardrail_states_the_constant_it_used() -> None:
     """A refused card must not send its reader off to find the number."""
-    rails = guardrails(metrics_row(), metrics_row())
+    rails = guardrails(metrics_row(), metrics_row(), hours=scored(keys(), offset_mwh=0.0))
     assert all(rail.passed for rail in rails)
     assert all(rail.bound for rail in rails)
     assert {rail.name for rail in rails} == {
         "pr_auc[pooled]",
         *(f"pr_auc[{code}]" for code in SUBSYSTEM_CODES),
         "recall@0.5[pooled]",
-        "coverage_p10",
+        BAND_COVERAGE_RAIL,
         "coverage_p90",
         "p50_unbiasedness",
         "ece",
@@ -591,7 +626,12 @@ def test_the_crossing_rate_veto_reads_the_settled_hour_figure() -> None:
         crossing_rate=CROSSING_RATE_CEILING + 0.01,
         coverage=coverage_report(crossing_rate=0.0),
     )
-    rails = {rail.name: rail for rail in guardrails(over_the_ceiling, metrics_row())}
+    rails = {
+        rail.name: rail
+        for rail in guardrails(
+            over_the_ceiling, metrics_row(), hours=scored(keys(), offset_mwh=0.0)
+        )
+    }
     assert rails["crossing_rate"].vetoes
     assert rails["crossing_rate"].value == CROSSING_RATE_CEILING + 0.01
 
@@ -599,7 +639,10 @@ def test_the_crossing_rate_veto_reads_the_settled_hour_figure() -> None:
         crossing_rate=0.0, coverage=coverage_report(crossing_rate=0.5)
     )
     mirrored = {
-        rail.name: rail for rail in guardrails(only_the_curtailed_subset, metrics_row())
+        rail.name: rail
+        for rail in guardrails(
+            only_the_curtailed_subset, metrics_row(), hours=scored(keys(), offset_mwh=0.0)
+        )
     }
     assert not mirrored["crossing_rate"].vetoes
     assert mirrored["crossing_rate"].value == 0.0
@@ -610,12 +653,218 @@ def test_an_unmeasurable_guardrail_vetoes() -> None:
     """A veto that passed on absent evidence would be a constant choosing a swap."""
     rails = {
         rail.name: rail
-        for rail in guardrails(metrics_row(ece=None, no_coverage=True), metrics_row())
+        for rail in guardrails(
+            metrics_row(ece=None, no_coverage=True),
+            metrics_row(),
+            hours=(),
+        )
     }
     assert not rails["ece"].passed
-    assert not rails["coverage_p10"].passed
+    assert not rails[BAND_COVERAGE_RAIL].passed
+    assert rails[BAND_COVERAGE_RAIL].value is None
     assert not rails["p50_unbiasedness"].passed
     assert rails["ece"].value is None
+
+
+# --- forecaster 34: the lower coverage rail counts the rows it can speak for --
+
+
+def test_the_minimum_sample_is_derived_from_the_window_it_is_judged_against() -> None:
+    """98, and every number behind it is one this repository already published.
+
+    The rule is that the statement's sampling interval must fit inside the
+    distance from its target to the nearer bound — otherwise the rail fires on
+    noise, which is the reading forecaster 33 measured on ``p50_unbiasedness``
+    and the one this rail must not re-import. Recomputed here from the
+    constants rather than asserted as a literal, so moving the guardrail moves
+    the sample size with it instead of silently under-powering the rail.
+    """
+    assert minimum_band_coverage_rows() == 98
+    low, high = COVERAGE_GUARDRAIL
+    margin = min(TARGET_COVERAGE - low, high - TARGET_COVERAGE)
+    z = NormalDist().inv_cdf(1.0 - NOMINAL_MISCOVERAGE / 2.0)
+    assert margin == pytest.approx(0.05)
+    assert minimum_band_coverage_rows() == math.ceil(
+        z**2 * TARGET_COVERAGE * (1 - TARGET_COVERAGE) / margin**2
+    )
+    # A wider window needs fewer rows to resolve and a narrower one more; the
+    # rule is the relationship, not the number. It is the *nearer* edge that
+    # binds, so raising the ceiling alone — the change this ticket exists to
+    # refuse — moves nothing here either.
+    assert minimum_band_coverage_rows(guardrail=(0.80, 0.99)) == 31
+    assert minimum_band_coverage_rows(guardrail=(0.88, 0.92)) > 98
+    assert minimum_band_coverage_rows(guardrail=(0.85, 0.99)) == 98
+
+
+def test_the_rail_counts_only_the_rows_whose_floor_could_have_been_missed() -> None:
+    """Three populations, one denominator, and it is the smallest of them.
+
+    The fold is built so all three are present at once: hours at ``p = 0.5``,
+    where the served P10 is the point mass at zero and a scored hour clears it
+    for free; hours whose magnitude booster undershoots ``τ``, where the
+    composed P10 is clamped onto the floor and the same thing happens for a
+    second reason; and hours with a real positive floor, which are the only ones
+    that can be missed.
+    """
+    row_keys = keys(days=30)
+    labels = observations(row_keys)
+    estimates = []
+    with_a_real_floor = 0
+    for index, label in enumerate(labels):
+        if index % 6 == 0:  # the point mass: p ≤ 0.90, so Q_Y(0.10) = 0
+            estimates.append(
+                HourEstimates(
+                    occurrence_probability=0.5,
+                    q10=label,
+                    q50=label,
+                    q90=label + 1.0,
+                    positive_mean_mwh=label,
+                )
+            )
+        elif index % 6 == 2:  # the τ floor: the positive branch clamped onto it
+            estimates.append(
+                HourEstimates(
+                    occurrence_probability=0.99,
+                    q10=0.0,
+                    q50=0.0,
+                    q90=1.0,
+                    positive_mean_mwh=0.0,
+                )
+            )
+        else:
+            # One in four of the rows that *can* be missed is, so the corrected
+            # figure has somewhere to go that the marginal does not.
+            bump = MISS_BUMP_MWH if label and with_a_real_floor % 4 == 0 else 0.0
+            if label:
+                with_a_real_floor += 1
+            centre = label + bump
+            estimates.append(
+                HourEstimates(
+                    occurrence_probability=0.99,
+                    q10=max(0.0, centre - 1.0),
+                    q50=centre,
+                    q90=centre + 1.0,
+                    positive_mean_mwh=centre,
+                )
+            )
+    composed = compose_estimates(
+        row_keys, estimates, sub_threshold_means=FLAT_MU_SUB, threshold_mw=THRESHOLD_MW
+    )
+    hours = tuple(
+        ScoredHour(key=one.key, forecast=one.forecast, observed_mwh=label)
+        for one, label in zip(composed, labels, strict=True)
+    )
+    scored_hours = [hour for hour in hours if hour.is_positive]
+    on_the_floor = [
+        hour
+        for hour in scored_hours
+        if 0.0 < hour.forecast.band.p10 <= math.nextafter(THRESHOLD_MW, math.inf)
+    ]
+    on_the_point_mass = [
+        hour for hour in scored_hours if hour.forecast.band.p10 == 0.0
+    ]
+    assert on_the_floor and on_the_point_mass, "the fixture must exercise both atoms"
+    # Both atoms are covered for free, so the marginal counts them as successes.
+    assert all(hour.covered_lower for hour in on_the_floor + on_the_point_mass)
+
+    band = p10_band_coverage(hours)
+    assert band.rows == len(scored_hours)
+    assert band.qualifying_rows == len(scored_hours) - len(on_the_floor) - len(
+        on_the_point_mass
+    )
+    assert all(
+        states_a_falsifiable_floor(hour)
+        is (hour.forecast.band.p10 > math.nextafter(THRESHOLD_MW, math.inf))
+        for hour in scored_hours
+    )
+    # And the two figures disagree, which is the whole finding: the marginal is
+    # pulled up by rows that could not have failed.
+    marginal = CoverageReport.of(hours, fold_id="F6").coverage_p10
+    assert band.coverage is not None
+    assert band.coverage < marginal
+
+
+def test_a_rail_that_cannot_be_computed_on_enough_rows_refuses() -> None:
+    """Under-powered is a refusal that says so, never a pass.
+
+    Three ways to arrive at one, and all three veto: no hour at all, no hour
+    above ``τ``, and a fold whose qualifying rows are real but too few to
+    resolve the window. The last is the one that matters — it is the reading
+    that would otherwise be green — and its detail says *sample*, not *value*.
+    """
+    for hours in ((), scored(keys(days=1), offset_mwh=0.0)[1::2]):
+        band = p10_band_coverage(hours)
+        assert band.coverage is None
+        assert not band.passes
+        assert band.as_guardrail().vetoes
+
+    short = scored(keys(days=5), offset_mwh=0.0)
+    band = p10_band_coverage(short)
+    assert 0 < band.qualifying_rows < band.minimum_rows
+    assert band.coverage == pytest.approx(0.90)
+    assert not band.sufficient and not band.passes
+    assert "too small" in band.detail
+    assert f"under the {band.minimum_rows}" in band.detail
+    rail = band.as_guardrail()
+    assert rail.vetoes and rail.name == BAND_COVERAGE_RAIL
+    assert str(band.minimum_rows) in rail.bound
+
+    # The same coverage over enough rows is the same number and a pass, so the
+    # refusal above is about the sample and nothing else.
+    enough = p10_band_coverage(scored(keys(days=30), offset_mwh=0.0))
+    assert enough.qualifying_rows >= enough.minimum_rows
+    assert enough.coverage == pytest.approx(band.coverage)
+    assert enough.passes
+
+
+def test_a_floor_that_is_never_missed_is_refused_and_a_nominal_one_is_not() -> None:
+    """The ceiling does its job again, now that the denominator lets it.
+
+    A band whose P10 is under every label reads 1.0000 — over-covering, a floor
+    too low to be the one the product promises — and is refused. The same
+    fixture missed at the nominal rate reads 0.90 and passes. Under the marginal
+    both read inside the window, which is why the gate refused the first
+    artifact this repository ever minted and would have promoted a
+    shuffled-label fit.
+    """
+    never_missed = scored(keys(), offset_mwh=0.0, missed_in=0)
+    band = p10_band_coverage(never_missed)
+    assert band.coverage == 1.0
+    assert band.sufficient and not band.passes
+    assert not band.as_guardrail().passed
+
+    nominal = p10_band_coverage(scored(keys(), offset_mwh=0.0))
+    assert nominal.coverage == pytest.approx(0.90)
+    assert nominal.passes
+
+
+def test_the_corrected_rail_is_the_only_lower_coverage_veto_and_says_so() -> None:
+    """Check 6 carries the new name, and no rail reads the marginal any more.
+
+    The marginal is still published — it is the fold's description and
+    ``CoverageReport`` still computes it — but a candidate whose marginal is far
+    outside the guardrail no longer vetoes on it, because the number is 56%
+    arithmetic on real data.
+    """
+    row = metrics_row(coverage=coverage_report(coverage_p10=0.80))
+    decision = run(candidate(row=row), incumbent())
+    assert decision.promotes
+    assert [rail.name for rail in decision.guardrails if rail.name.startswith(
+        "coverage_p10"
+    )] == [BAND_COVERAGE_RAIL]
+
+    over_covering = candidate(hours=scored(keys(), offset_mwh=0.0, missed_in=0))
+    refused = run(over_covering, incumbent())
+    assert not refused.promotes
+    assert [rail.name for rail in refused.guardrails if rail.vetoes] == [
+        BAND_COVERAGE_RAIL
+    ]
+    rail = next(
+        rail for rail in refused.guardrails if rail.name == BAND_COVERAGE_RAIL
+    )
+    assert rail.value == 1.0
+    assert "could have been missed" in rail.detail
+    assert BAND_COVERAGE_RAIL in refused.reason
 
 
 # --- the cold start ----------------------------------------------------------

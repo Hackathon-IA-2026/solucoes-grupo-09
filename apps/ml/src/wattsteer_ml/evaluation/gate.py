@@ -29,6 +29,18 @@ aggregate of many `Replay`s; what this module reads is *fold evaluation*
 
 **What the shapes here make unrepresentable:**
 
+**A coverage rail is counted over the rows that could falsify it** — forecaster
+34. The marginal ``coverage_p10`` is *not* a rail here and never was a usable
+one: 56% of its denominator on the first two artifacts was the mixture's point
+mass at zero, where a scored hour clears a 0 MWh floor whatever the fit does, so
+the statistic read 0.9753 and 0.9884 against a 0.97 ceiling on a candidate that
+beat the baseline at ``P = 1.000`` while a shuffled-label control read 0.9211
+and passed. :data:`BAND_COVERAGE_RAIL` replaces it with the same coverage over
+the hours whose served P10 is a positive magnitude above ``τ``, and refuses —
+saying the sample was too small — when fewer than
+:func:`minimum_band_coverage_rows` of them exist. The marginal stays on the
+card, under its own name, as the description of the fold it has always been.
+
 - **A decision without its evidence.** :class:`GateDecision` carries every check
   it ran, in order, and refuses to be a promotion unless a bootstrap that
   cleared :data:`PROMOTION_PROBABILITY` is attached to it. "We swapped and
@@ -86,10 +98,12 @@ name nothing an operator could go and inspect.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
+from statistics import NormalDist
 from typing import Any, Literal
 
 import numpy as np
@@ -125,7 +139,12 @@ from wattsteer_ml.training.bundle import (
     read_card,
     write_card,
 )
-from wattsteer_ml.training.conformal import COVERAGE_GUARDRAIL, ScoredHour
+from wattsteer_ml.training.conformal import (
+    COVERAGE_GUARDRAIL,
+    NOMINAL_MISCOVERAGE,
+    TARGET_COVERAGE,
+    ScoredHour,
+)
 from wattsteer_ml.training.contract import feature_column_names
 from wattsteer_ml.training.design import TOTAL_COLUMN
 from wattsteer_ml.training.hurdle import HourForecast, day_grain_rows, forecast_rows
@@ -173,6 +192,17 @@ P50_UNBIASEDNESS_WINDOW: tuple[float, float] = (0.45, 0.55)
 
 #: Guardrail. ``ece ≤ 0.05``.
 ECE_CEILING = 0.05
+
+#: The name the corrected lower-coverage rail is published under, in the card's
+#: gate block and on the promotion log's line. **Not** ``coverage_p10``, which
+#: is the marginal over every curtailed hour and stays on the card as
+#: :attr:`~wattsteer_ml.training.conformal.CoverageReport.coverage_p10`. The two
+#: are different populations — forecaster 33 measured the marginal reading
+#: 0.9753 where this one reads 0.9433 on the same artifact — and forecaster 29
+#: already established what happens when one name carries two denominators:
+#: whichever was written last wins and a reader cannot tell which they hold. The
+#: name states the population, so it travels with it.
+BAND_COVERAGE_RAIL = "coverage_p10_in_band"
 
 #: Guardrail. ``crossing_rate ≤ 0.01``.
 CROSSING_RATE_CEILING = 0.01
@@ -327,6 +357,213 @@ class Guardrail:
             "value": self.value,
             "bound": self.bound,
         }
+
+
+def minimum_band_coverage_rows(
+    *,
+    target: float = TARGET_COVERAGE,
+    guardrail: tuple[float, float] = COVERAGE_GUARDRAIL,
+    miscoverage: float = NOMINAL_MISCOVERAGE,
+) -> int:
+    """How many falsifiable rows a coverage statement needs to be one. **98.**
+
+    Derived from the three numbers this repository has already published, and
+    from no fourth one:
+
+    - the statement's target, :data:`~wattsteer_ml.training.conformal.TARGET_COVERAGE`
+      = 0.90;
+    - the window it is judged against,
+      :data:`~wattsteer_ml.training.conformal.COVERAGE_GUARDRAIL` = [0.85, 0.97],
+      whose **nearer** edge is 0.05 away from the target;
+    - the confidence the rest of this lane is written at,
+      :data:`~wattsteer_ml.training.conformal.NOMINAL_MISCOVERAGE` = 0.10, so a
+      two-sided ``1 − α`` interval and ``z = 1.6449``.
+
+    A rail whose sampling interval is wider than the distance from its target to
+    the bound cannot tell a calibrated model from one it should refuse: at that
+    ``n`` the same correct candidate lands either side of the edge from one week
+    to the next, which is the failure forecaster 33 measured on
+    ``p50_unbiasedness`` and the one this module must not re-import under a new
+    name. So require the half-width of that interval at the target to fit inside
+    the margin::
+
+        z·√(0.90 × 0.10 / n) ≤ min(0.90 − 0.85, 0.97 − 0.90)
+        n ≥ z² × 0.09 / 0.05²  =  97.4  →  98
+
+    **Rows, not hours, and the difference is measured rather than assumed.**
+    This is an iid binomial floor. Curtailed hours cluster inside a target day,
+    so the effective ``n`` behind a fold's coverage figure is smaller than its
+    row count — forecaster 33 measured a design effect of 5.4 on
+    ``p50_unbiasedness`` over all 3,201 scored hours, and forecaster 34
+    measured **4.40** and **2.65** on the rows *this* statistic is counted over
+    — an effective ``n`` of 317 and 525 behind 1,394 and 1,391 rows, both still
+    clear of this floor. The floor is therefore necessary and not sufficient: a
+    lane clearing it by less than its own design effect has a figure that should
+    be read with the day-block interval beside it. It is stated here as the
+    condition that can be checked without a bootstrap in the veto path, and the
+    design effect is measured in the ticket rather than at 03:00.
+    """
+    low, high = guardrail
+    margin = min(target - low, high - target)
+    if margin <= 0.0:
+        raise GateInputError(
+            f"the coverage guardrail {guardrail} does not bracket the target "
+            f"{target}, so there is no margin a sample size could resolve"
+        )
+    z = NormalDist().inv_cdf(1.0 - miscoverage / 2.0)
+    return math.ceil(z * z * target * (1.0 - target) / (margin * margin))
+
+
+def states_a_falsifiable_floor(hour: ScoredHour) -> bool:
+    """Whether this scored hour's P10 is a floor its label could have missed.
+
+    The corrected rail's whole content, in one predicate. A scored hour has
+    ``y > τ > 0`` by the population rule, so on two of the mixture's values the
+    label is at or above the served P10 **whatever the fit does**:
+
+    - the **point mass at zero**, ``Q_Y(0.10) = 0`` for every ``p ≤ 0.90``.
+      :attr:`~wattsteer_ml.training.conformal.ScoredHour.states_lower_bound`
+      already names this one and ``coverage_p10_where_stated`` already nets it
+      out. It was 1,807 and 1,810 of the 3,201 rows the first two artifacts were
+      scored on — 56% of the denominator.
+    - the **τ floor**. :func:`~wattsteer_ml.mixture._into_positive_support`
+      clamps the positive branch to the smallest float above ``τ``, so a P10
+      sitting there is at or below every label that could be scored against it.
+      Nothing nets this one out, and forecaster 33 recommended that something
+      should. On the two artifacts in hand it turns out to bind on **no row at
+      all** — the smallest stated P10 is 19.53 MWh against ``τ = 5`` — so it
+      costs nothing here and is refused on principle rather than on frequency:
+      a rail whose denominator silently includes rows it cannot falsify is the
+      defect being fixed, and "it does not happen on this fold" is not a reason
+      to leave the door open on the next one.
+
+    Everything else is a positive magnitude strictly above ``τ`` and the label
+    can land under it. That — and not ``q``-space flatness — is what makes a row
+    evidence: :class:`~wattsteer_ml.mixture.MagnitudeQuantiles` is flat below its
+    first knot, so ``Q_Y`` is constant on ``q ∈ [1 − p, 0.10]`` and a test like
+    ``Q(0.10) == Q(0.05)`` flags ~77% of the *stated* rows as "flat" — but those
+    rows carry P10s of 133 MWh and upwards and the label fell below them 47
+    times in ``gate_early``. A row that was missed is not a row that could not
+    be.
+    """
+    if not hour.is_positive:
+        return False
+    floor = math.nextafter(hour.forecast.mixture.threshold_mwh, math.inf)
+    return hour.forecast.band.p10 > floor
+
+
+@dataclass(frozen=True)
+class P10BandCoverage:
+    """``coverage_p10`` over the rows whose P10 could have been missed.
+
+    The figure and the denominator it was counted over, in one value, because
+    forecaster 24's finding — a coverage figure and its denominator travel
+    together or not at all — is the reason this class exists at all.
+
+    **Too few rows is a refusal, not a pass.** :attr:`coverage` over a handful
+    of rows is arithmetic with a wide interval around it, and a gate that read
+    it as green would be shipping the vacuity failure this repository has
+    already shipped four times. :attr:`sufficient` is that test, against
+    :func:`minimum_band_coverage_rows`, and :attr:`passes` requires it.
+    """
+
+    #: The curtailed hours of the deciding fold — the population
+    #: :class:`~wattsteer_ml.training.conformal.CoverageReport` counts the
+    #: marginal over, kept so the two figures can be read against each other.
+    rows: int
+    #: Those of them whose P10 is a floor the label could have missed.
+    qualifying_rows: int
+    #: :func:`minimum_band_coverage_rows`, stored so a refusal carries the
+    #: number it turned on without a reader going to find it.
+    minimum_rows: int
+    #: The share of :attr:`qualifying_rows` whose label is at or above the
+    #: served P10, or ``None`` where there are none. **Absent, never 1.0.**
+    coverage: float | None
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.qualifying_rows <= self.rows:
+            raise GateInputError(
+                f"{self.qualifying_rows} of {self.rows} scored hours state a "
+                "falsifiable floor; the qualifying rows are a subset"
+            )
+        if (self.qualifying_rows == 0) is not (self.coverage is None):
+            raise GateInputError(
+                f"coverage {self.coverage!r} over {self.qualifying_rows} "
+                "qualifying rows; a statement with no denominator is not a "
+                "measurement and one with a denominator is not absent"
+            )
+
+    @property
+    def sufficient(self) -> bool:
+        """Whether enough rows can falsify the statement for it to be one.
+
+        ``> 0`` as well as ``≥ minimum_rows``, so that a minimum of zero — which
+        no derivation here produces, and which a caller could still construct —
+        cannot make an absent figure sufficient.
+        """
+        return self.qualifying_rows > 0 and self.qualifying_rows >= self.minimum_rows
+
+    @property
+    def passes(self) -> bool:
+        """Measured, over enough rows, and inside the window. All three."""
+        low, high = COVERAGE_GUARDRAIL
+        return (
+            self.coverage is not None and self.sufficient and low <= self.coverage <= high
+        )
+
+    @property
+    def detail(self) -> str:
+        """The sentence the refused card carries, with its denominator in it."""
+        low, high = COVERAGE_GUARDRAIL
+        if not self.sufficient:
+            return (
+                f"{self.qualifying_rows} of {self.rows} curtailed hours put the "
+                f"served P10 above τ, which is under the {self.minimum_rows} a "
+                f"{TARGET_COVERAGE:.0%} statement needs to be resolved against "
+                f"[{low}, {high}]; the rest is the mixture's point mass and the "
+                "τ floor, where the label clears the floor whatever the fit "
+                "does. The sample is too small, which is a refusal and not a "
+                "measurement of anything"
+            )
+        assert self.coverage is not None  # sufficient implies a denominator
+        return (
+            f"{self.coverage:.4f} against [{low}, {high}], over the "
+            f"{self.qualifying_rows} of {self.rows} curtailed hours whose P10 is "
+            f"above τ and could have been missed"
+        )
+
+    def as_guardrail(self) -> Guardrail:
+        """The rail itself. Unmeasurable and under-powered both veto."""
+        low, high = COVERAGE_GUARDRAIL
+        return Guardrail(
+            name=BAND_COVERAGE_RAIL,
+            passed=self.passes,
+            detail=self.detail,
+            value=self.coverage,
+            bound=f"in [{low}, {high}] over ≥ {self.minimum_rows} rows",
+        )
+
+
+def p10_band_coverage(hours: Sequence[ScoredHour]) -> P10BandCoverage:
+    """Count the lower coverage over the rows it can speak for.
+
+    The population is the deciding fold's **curtailed** hours, exactly as
+    :meth:`~wattsteer_ml.training.conformal.CoverageReport.of` selects them, so
+    the corrected figure and the marginal on the card are two counts over one
+    set of rows and their difference is the denominator and nothing else.
+
+    A fold with no curtailed hour, and a fold whose every P10 is on an atom,
+    both come back with :attr:`~P10BandCoverage.coverage` ``None`` and veto.
+    """
+    scored = [hour for hour in hours if hour.is_positive]
+    qualifying = [hour for hour in scored if states_a_falsifiable_floor(hour)]
+    covered = sum(1 for hour in qualifying if hour.covered_lower)
+    return P10BandCoverage(
+        rows=len(scored),
+        qualifying_rows=len(qualifying),
+        minimum_rows=minimum_band_coverage_rows(),
+        coverage=(covered / len(qualifying) if qualifying else None),
+    )
 
 
 @dataclass(frozen=True)
@@ -1085,7 +1322,9 @@ def decide(
         lane=candidate.lane,
         at=now,
     )
-    rails = guardrails(candidate.deciding, comparator.row) + _floor_rails(floor)
+    rails = guardrails(
+        candidate.deciding, comparator.row, hours=candidate.hours
+    ) + _floor_rails(floor)
     checks.append(_guardrail_check(rails))
     if not checks[-1].passed:
         return _refused(
@@ -1169,7 +1408,12 @@ def _floor_rails(floor: FloorCoverageVeto) -> tuple[Guardrail, ...]:
     )
 
 
-def guardrails(candidate: MetricsRow, comparator: MetricsRow) -> tuple[Guardrail, ...]:
+def guardrails(
+    candidate: MetricsRow,
+    comparator: MetricsRow,
+    *,
+    hours: Sequence[ScoredHour],
+) -> tuple[Guardrail, ...]:
     """Check 6 — every veto, evaluated, whether or not an earlier one fired.
 
     Every constant is stated on the :class:`Guardrail` it decided, and every one
@@ -1178,6 +1422,16 @@ def guardrails(candidate: MetricsRow, comparator: MetricsRow) -> tuple[Guardrail
     ECE is under the ceiling, and a veto that passed on absent evidence would be
     a constant silently choosing a swap — which is the failure mode the whole
     arrangement is built to avoid.
+
+    ``hours`` is the candidate's own composed hours on the deciding segment —
+    the same rows ``candidate.coverage`` was counted over. They are a parameter
+    rather than a lookup because the lower-coverage rail is
+    :func:`p10_band_coverage`, which needs each row's served P10 and the
+    threshold behind it and not only the fold's marginal: forecaster 34's
+    finding is that the marginal ``coverage_p10`` **cannot** be read as a rail
+    at all, because 56% of its denominator is the mixture's point mass at zero,
+    where a scored hour clears its floor whatever the fit does. The marginal is
+    still published, by :meth:`CoverageReport.card_fields`, under its own name.
     """
     rails: list[Guardrail] = [
         _relative(
@@ -1208,6 +1462,7 @@ def guardrails(candidate: MetricsRow, comparator: MetricsRow) -> tuple[Guardrail
             where="pooled",
         )
     )
+    rails.append(p10_band_coverage(hours).as_guardrail())
     coverage = candidate.coverage
     if coverage is None:
         rails.extend(
@@ -1222,13 +1477,11 @@ def guardrails(candidate: MetricsRow, comparator: MetricsRow) -> tuple[Guardrail
                 bound=bound,
             )
             for name, bound in (
-                ("coverage_p10", f"in {list(COVERAGE_GUARDRAIL)}"),
                 ("coverage_p90", f"in {list(COVERAGE_GUARDRAIL)}"),
                 ("p50_unbiasedness", f"in {list(P50_UNBIASEDNESS_WINDOW)}"),
             )
         )
     else:
-        rails.append(_window("coverage_p10", coverage.coverage_p10, COVERAGE_GUARDRAIL))
         rails.append(_window("coverage_p90", coverage.coverage_p90, COVERAGE_GUARDRAIL))
         rails.append(
             _window(
