@@ -537,7 +537,18 @@ export function resolveToken(token: string, consts: Map<string, string>): string
   }
   const template = /^`([^`]*)`$/.exec(one);
   if (template !== null) {
-    return (template[1] as string).replace(/\$\{[^}]*\}/g, "*");
+    // An interpolation whose expression is a string constant this scan already
+    // read resolves to that constant; only the genuinely variable ones become
+    // `*`. Both halves matter. `refresh-featured-days:${subsystem}:${lane}` is
+    // registered as one schedule per (subsystem, lane), and a blanket
+    // substitution rendered it `*:*:*` — which failed to answer to the name
+    // `docs/specs/api-surface.md` gives that job, *and* would have answered to
+    // almost any other three-segment id. Resolving the constant makes the
+    // guard both correct here and stricter everywhere.
+    return (template[1] as string).replace(/\$\{([^}]*)\}/g, (_whole, expression) => {
+      const name = String(expression).trim();
+      return /^[A-Za-z_$][\w$]*$/.test(name) ? (consts.get(name) ?? "*") : "*";
+    });
   }
   if (/^[A-Za-z_$][\w$]*$/.test(one)) {
     return consts.get(one) ?? null;
@@ -865,6 +876,17 @@ export function identityOf(name: string, ids: string[]): string | null {
     // `refresh-featured-days` — which is precisely the phantom this guard
     // exists to catch, absolved by its own prefix.
     const have = id.trim().toLowerCase();
+    // A family instance answers to the family's name. The table names the job
+    // `refresh-featured-days`; the queue registers one schedule per (subsystem,
+    // lane) as `refresh-featured-days:<subsystem>:<lane>`, so the id the guard
+    // sees is a glob with two segments the bare name cannot match.
+    //
+    // The colon is **required**, and that is what keeps this from undoing the
+    // rule above: `refresh-featured-days` does not begin `refresh:`, so the
+    // `refresh:${tier}` family still cannot absolve it. Asserted below.
+    if (have.startsWith(`${literal}:`)) {
+      return id;
+    }
     if (have.includes("*")) {
       const pattern = have
         .split("*")
@@ -1350,5 +1372,34 @@ describe("the readers match what they should and nothing else", () => {
     // reader that swept the whole file would double-count them and would also
     // pick up the ones the prose says it *rejected*.
     expect(workflows.every((one) => /\.github\/workflows\//.test(one.where))).toBe(true);
+  });
+});
+
+describe("phantom schedules · a family id resolves to its family", () => {
+  it("resolves a constant inside an id template instead of blanking it", () => {
+    // `refresh-featured-days:${subsystem}:${lane}` was rendered `*:*:*` when
+    // every interpolation became a star. That failed two ways at once: the
+    // bare name the spec table gives the job could not answer to it, and it
+    // would have answered to almost any other three-segment id. Resolving the
+    // constant is therefore a tightening, and this asserts both halves.
+    const consts = new Map([["PREFIX", "refresh-featured-days"]]);
+    expect(resolveToken("`${PREFIX}:${payload.subsystem}:${payload.lane}`", consts)).toBe(
+      "refresh-featured-days:*:*",
+    );
+    // Genuinely variable interpolations still blank, so nothing is invented.
+    expect(resolveToken("`${a.b}:${c}`", new Map())).toBe("*:*");
+  });
+
+  it("still refuses to let one family absolve a different job", () => {
+    // The bug api-surface 31 found in its own first run, which must stay
+    // fixed: `refresh:${tier}` is a different family from
+    // `refresh-featured-days`, and the colon is what says so.
+    expect(identityOf("refresh-featured-days", ["refresh:*"])).toBeNull();
+    // And the real relationship is accepted, because the boundary is a colon.
+    expect(identityOf("refresh-featured-days", ["refresh-featured-days:*:*"])).toBe(
+      "refresh-featured-days:*:*",
+    );
+    // A bare name never swallows an unrelated longer one.
+    expect(identityOf("refresh", ["refresh-featured-days:*:*"])).toBeNull();
   });
 });
