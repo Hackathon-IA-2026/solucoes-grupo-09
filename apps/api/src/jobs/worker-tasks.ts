@@ -26,6 +26,13 @@ import {
   publicationSchedules,
 } from "./publication.js";
 import {
+  createReplayRefresher,
+  type ReplayRefresherDeps,
+  type ReplayRefreshPayload,
+  type ReplayRefreshResult,
+  replayRefreshSchedules,
+} from "./replay-refresh.js";
+import {
   createRetrainer,
   type RetrainerDeps,
   type RetrainPayload,
@@ -58,7 +65,8 @@ export type WorkerTask =
   | { kind: "publish_forecast"; payload: PublishForecastPayload }
   | { kind: "publish_diagnosis"; payload: PublishDiagnosisPayload }
   | { kind: "retrain"; payload: RetrainPayload }
-  | { kind: "holdout_backfill"; payload: HoldoutBackfillPayload };
+  | { kind: "holdout_backfill"; payload: HoldoutBackfillPayload }
+  | { kind: "refresh_replay_caches"; payload: ReplayRefreshPayload };
 
 /** What a worker task produced. */
 export type WorkerTaskResult =
@@ -66,7 +74,8 @@ export type WorkerTaskResult =
   | { kind: "publish_forecast"; result: ForecastPublicationResult }
   | { kind: "publish_diagnosis"; result: DiagnosisPublicationResult }
   | { kind: "retrain"; result: RetrainResult }
-  | { kind: "holdout_backfill"; result: HoldoutBackfillJobResult };
+  | { kind: "holdout_backfill"; result: HoldoutBackfillJobResult }
+  | { kind: "refresh_replay_caches"; result: ReplayRefreshResult };
 
 export interface WorkerDispatcherDeps extends IngestDispatcherDeps {
   /**
@@ -112,6 +121,15 @@ export interface WorkerDispatcherDeps extends IngestDispatcherDeps {
    * be a second gateway.
    */
   holdoutBackfill?: Omit<HoldoutBackfillerDeps, "db">;
+  /**
+   * Where the modelling service is, for the nightly Replay recompute. Its own
+   * field rather than a reuse of `publication`'s for the reason `diagnosis`
+   * has one: this call has a ten-minute budget where the publication has two
+   * minutes, and a test that wanted to stub one and not the other could not
+   * say so through a shared setting. No `db`: both caches live on the
+   * modelling service and this job writes no row.
+   */
+  replayRefresh?: ReplayRefresherDeps;
 }
 
 /** Build the single handler `worker.ts` registers on the queue. */
@@ -123,6 +141,7 @@ export function createWorkerDispatch(
   const explain = createDiagnosisPublisher({ db: deps.db, ...deps.diagnosis });
   const retrain = createRetrainer(deps.retrain);
   const backfill = createHoldoutBackfiller({ db: deps.db, ...deps.holdoutBackfill });
+  const refreshReplay = createReplayRefresher(deps.replayRefresh ?? {});
 
   return async (task, report) => {
     if (task.kind === "publish_forecast") {
@@ -140,6 +159,12 @@ export function createWorkerDispatch(
       return {
         kind: "holdout_backfill",
         result: await backfill(task.payload, report),
+      };
+    }
+    if (task.kind === "refresh_replay_caches") {
+      return {
+        kind: "refresh_replay_caches",
+        result: await refreshReplay(task.payload, report),
       };
     }
     return ingest(task, report);
@@ -237,6 +262,23 @@ export function retrainScheduleForQueue(): JobSchedule<WorkerTask>[] {
 export function holdoutBackfillScheduleForQueue(): JobSchedule<WorkerTask>[] {
   return holdoutBackfillSchedules<WorkerTask>((payload) => ({
     kind: "holdout_backfill",
+    payload,
+  }));
+}
+
+/**
+ * The nightly Replay recompute, typed for this queue.
+ *
+ * Beside the backfill's, and registered separately for the same reason each of
+ * the others is: this one needs a modelling service to *recompute in* and
+ * writes nothing at all, and the worker says so about each schedule on its own.
+ * `docs/specs/api-surface.md`'s `refresh-featured-days` row is this function's
+ * output and nothing else in the repository — before it, that row described a
+ * cron that existed in no file.
+ */
+export function replayRefreshSchedulesForQueue(): JobSchedule<WorkerTask>[] {
+  return replayRefreshSchedules<WorkerTask>((payload) => ({
+    kind: "refresh_replay_caches",
     payload,
   }));
 }

@@ -143,6 +143,13 @@ from wattsteer_ml.evaluation.ladder import (
 )
 from wattsteer_ml.evaluation.matrix import MATRIX_RUN_BY_NAME, MatrixRun
 from wattsteer_ml.evaluation.metrics import MetricsRow, MetricsTable
+from wattsteer_ml.evaluation.planning_arms import (
+    PlanningArmError,
+    PlanningArmReport,
+    UnmeasuredPlanningArms,
+    measure_planning_arms,
+    record_planning_arms,
+)
 from wattsteer_ml.evaluation.serving_lanes import (
     SERVING_LANES,
     ServingLanesReport,
@@ -613,6 +620,24 @@ def retrain_lane(
             )
             + rows
         )
+    # Both planning arms, onto the card this run just wrote. Forecaster 11's
+    # missing line: `planning_arms.py` was merged, complete and covered, and
+    # `grep -rn "planning_arms"` over this file, `app.py` and `__main__.py`
+    # returned nothing, so no run ever produced the `planning_arm_comparison`
+    # block the ticket said was "published per fold in the card, side by side".
+    #
+    # Here rather than in the gate, and deliberately not a gate input: the block
+    # is evidence for a *posture* decision — whether v1 should go on planning
+    # against P50 — and nothing in `run_gate` reads it. v1 still ships the P50
+    # plan, which `_V1_SERVES_P50` says on the block itself.
+    #
+    # After `save_artifact` because `record_planning_arms` edits a card on the
+    # volume and never mints one, and before the gate because the arms are read
+    # out of Postgres rather than out of this candidate: the numbers do not
+    # depend on the decision, and a refused candidate's card is exactly the one
+    # an operator goes and looks at.
+    _record_planning_arms(request, lane=lane, segments=inputs.segments)
+
     table = MetricsTable(rows=rows)
     deciding = inputs.deciding
     hours = scored_hours(
@@ -656,6 +681,65 @@ def retrain_lane(
             comparator=comparator.kind,
             live_feature_hash=live_feature_hash,
         )
+
+
+async def _measure_arms(
+    request: RetrainRequest, *, lane: Lane, segments: Sequence[FoldSegment]
+) -> PlanningArmReport | UnmeasuredPlanningArms:
+    """One read-only connection, one measurement, closed before anything is written."""
+    conn: asyncpg.Connection[Any] = await asyncpg.connect(
+        request.database_url, server_settings={"default_transaction_read_only": "on"}
+    )
+    try:
+        return await measure_planning_arms(
+            conn, segments=list(segments), lane=lane, as_of=request.as_of
+        )
+    finally:
+        await conn.close()
+
+
+def _record_planning_arms(
+    request: RetrainRequest, *, lane: Lane, segments: Sequence[FoldSegment]
+) -> None:
+    """Write the arm comparison onto this run's card, or write why there is none.
+
+    **A failed measurement does not fail the retrain**, and it does not leave
+    the card silent either. The two failures caught here are the ones that are
+    statements about the *data* rather than about the comparison —
+    :class:`~wattsteer_ml.evaluation.planning_arms.PlanningArmError` for a
+    segment whose held-out bands come from more than one backtest run, and
+    :class:`asyncpg.PostgresError` for a database that cannot answer — and both
+    become an :class:`~wattsteer_ml.evaluation.planning_arms.UnmeasuredPlanningArms`
+    carrying the reason, for the reason that class exists: a card with no arm
+    block and a card saying "this could not be measured" look identical to
+    anybody grepping for the figure, and only one of them is true.
+
+    Anything else propagates. A gate decision is not worth losing to a card
+    edit, but a run that raised something nobody predicted has not been
+    understood, and writing "the arms could not be measured" over it would be
+    the one outcome this repository treats as worse than no answer at all.
+
+    The empty case is *not* caught: ``measure_planning_arms`` raises on an empty
+    segment list, which is a caller mistake rather than an empty table, and a
+    retrain that reached here with no segment has a broken calendar.
+    """
+    try:
+        report: PlanningArmReport | UnmeasuredPlanningArms = asyncio.run(
+            _measure_arms(request, lane=lane, segments=segments)
+        )
+    except (PlanningArmError, asyncpg.PostgresError) as error:
+        print(
+            f"⚠️  planning arms {lane.directory_name}: {error}",
+            file=sys.stderr,
+        )
+        report = UnmeasuredPlanningArms(
+            lane=lane,
+            as_of=request.as_of,
+            reason=(
+                f"the arm measurement did not complete against this database: {error}"
+            ),
+        )
+    record_planning_arms(report, root=request.root, artifact_id=request.run_id)
 
 
 def _incumbent_risk_bins(inputs: LaneInputs, request: RetrainRequest) -> Any:
