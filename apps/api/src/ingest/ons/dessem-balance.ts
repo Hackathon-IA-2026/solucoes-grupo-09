@@ -39,6 +39,20 @@ import type { DessemBalanceHalfHour, DessemBalanceParse, RejectedRow } from "../
  * had to defend against for `din_instante`.
  */
 
+/**
+ * A canonical row before its reference day's coverage is known.
+ *
+ * The rows are built one CSV line at a time and the day's coverage is only
+ * established once the last line has been read, so the two facts cannot be
+ * assembled in one pass. This is that intermediate value, and it exists so the
+ * stamped fields cannot be forgotten: `DessemBalanceHalfHour` requires them and
+ * a `DessemBalanceRow` is not one until `assessCoverage` has answered.
+ */
+type DessemBalanceRow = Omit<
+  DessemBalanceHalfHour,
+  "referenceDayPatamares" | "referenceDayHalfHours"
+>;
+
 /** ONS CKAN package id. Underscores, unlike most ONS slugs — read, never built. */
 export const DESSEM_DETAIL_DATASET_SLUG = "balanco_dessem_detalhe";
 
@@ -53,6 +67,34 @@ export const DESSEM_COVERAGE_START = "2025-05-23";
 export const PATAMAR_MINUTES = 30;
 
 const MS_PER_MINUTE = 60_000;
+
+/**
+ * The local-hour window in which the grid's solar output must be positive, and
+ * the window a partial day has to reach into to be readable at all.
+ *
+ * Named constants rather than literals in `assertDaylightAlignment`, because
+ * `assessCoverage` has to ask a question *about* this window: a short day whose
+ * patamares do not touch it carries no daylight signal, so the one thing that
+ * pins the period index absolutely is absent and the file cannot say what its
+ * own rows mean. Those days stay refused (data-platform 29).
+ */
+const MIDDAY_FROM_HOUR = 9;
+const MIDDAY_TO_HOUR = 15;
+
+/** The local hours in which photovoltaic output must be exactly zero. */
+const NIGHT_TO_HOUR = 4;
+const NIGHT_FROM_HOUR = 21;
+
+/**
+ * The patamares that fall inside the midday window, derived from it.
+ *
+ * Patamar *k* is the half hour **ending** 00:00 + k×30 min, so it starts at
+ * local hour (k−1)/2: hour ≥ 9 is k ≥ 19 and hour < 15 is k ≤ 30. Derived
+ * rather than written as 19…30 so that moving the window moves both the
+ * assertion and the coverage rule together.
+ */
+const MIDDAY_FIRST_PATAMAR = (MIDDAY_FROM_HOUR * 60) / PATAMAR_MINUTES + 1;
+const MIDDAY_LAST_PATAMAR = (MIDDAY_TO_HOUR * 60) / PATAMAR_MINUTES;
 
 /**
  * Columns this adapter requires, spelled as the **file** spells them.
@@ -215,24 +257,24 @@ export function patamarStart(midnightUtc: Date, patamar: number): Date {
  * none is not.
  */
 function assertDaylightAlignment(
-  rows: DessemBalanceHalfHour[],
+  rows: readonly DessemBalanceRow[],
   referenceDay: string,
   midnightUtc: Date,
 ): void {
-  const hourOf = (row: DessemBalanceHalfHour): number =>
+  const hourOf = (row: DessemBalanceRow): number =>
     (row.validTime.getTime() - midnightUtc.getTime()) / (60 * MS_PER_MINUTE);
-  const solar = (row: DessemBalanceHalfHour): number =>
+  const solar = (row: DessemBalanceRow): number =>
     row.solarGenerationMw + row.mmgdGenerationMw;
 
   let nightMax = 0;
   let middayMax = 0;
   for (const row of rows) {
     const hour = hourOf(row);
-    if (hour < 4 || hour >= 21) {
+    if (hour < NIGHT_TO_HOUR || hour >= NIGHT_FROM_HOUR) {
       // Photovoltaic only. MMGD is not a solar-only series and runs after dark.
       nightMax = Math.max(nightMax, row.solarGenerationMw);
     }
-    if (hour >= 9 && hour < 15) {
+    if (hour >= MIDDAY_FROM_HOUR && hour < MIDDAY_TO_HOUR) {
       middayMax = Math.max(middayMax, solar(row));
     }
   }
@@ -255,30 +297,80 @@ function assertDaylightAlignment(
 }
 
 /**
- * Assert the reference day is complete: every subsystem present carries every
- * patamar of the local day exactly once.
+ * How much of the reference day ONS published, and whether that is readable.
  *
- * Loud rather than lenient, and file-level rather than row-level.
+ * Every subsystem present must carry a *contiguous* run of patamares, the runs
+ * must agree to within the one half hour at the edge that a partly-written
+ * patamar produces, and the run every subsystem shares must reach the midday
+ * window. A whole day is the normal answer and the only one this adapter used
+ * to accept; a short one is now admitted with its shortfall stated, and the
+ * shapes a short file can still take that are unreadable are refused as
+ * `coverage`.
  *
- * **The original reason for this was measured and is wrong; the refusal is
- * kept for a different one.** The comment here used to say a short day is "a
- * day whose period index may mean something other than what this adapter
- * assumes". Data-platform 25 read all 34 short days ONS has published and that
- * is not what they are: every one is a *contiguous* run — 23 a prefix starting
- * at patamar 1, 11 a suffix ending at patamar 48, never a day with interior
- * holes — and on 29 of the 34 the solar profile sits exactly where
+ * **Why a short day is admitted at all.** The comment here used to say a short
+ * day is "a day whose period index may mean something other than what this
+ * adapter assumes". Data-platform 25 read all 34 short days ONS has published
+ * and that is not what they are: every one is a *contiguous* run — 23 a prefix
+ * starting at patamar 1, 11 a suffix ending at patamar 48, never a day with
+ * interior holes — and on 29 of the 34 the solar profile sits exactly where
  * `assertDaylightAlignment` requires, with a 12–22 GW midday peak and nothing
- * at all at night. The index is absolute and the file proves it; the other
- * five are too short to carry a midday at all.
+ * at all at night. The index is absolute and the file proves it. A contiguous
+ * run with no interior hole is a **truncation**, not a file with gaps, and that
+ * is the whole reason it can be read: patamar *k* means the same half hour
+ * whether the file stops at 46 or at 48.
  *
- * What stays true is that the *table* cannot say so. A 46-patamar day written
- * into `dessem_balance_half_hour` is indistinguishable from a 48-patamar one:
- * there is no column for "this reference day was published two half hours
- * short", `canonical_day_ahead_balance` would answer 46 rows for it, and every
- * consumer that divides by a day would be quietly wrong. So a partial
- * publication is refused as `coverage` — which is precisely what it is — and
- * admitting it is a schema question, not an adapter one.
+ * **The last patamar of a truncated file can be half written, and data-platform
+ * 29 measured that it usually is.** 25 recorded these days as short in *every*
+ * subsystem; read per subsystem, 11 of the 34 are ragged by exactly one half
+ * hour — N and NE stop at 26 where S and SE carry a 27th (2025-07-19), and the
+ * same ±1 on ten other days. That extra row is not a forecast half hour. On
+ * all 21 of them demand, hydro and thermal continue smoothly (0.97–1.14× the
+ * previous half hour) while **small hydro collapses to 0.00–0.16×, small
+ * thermal to 0.00–0.29× and wind to 0.00–0.14×** — every time, on eleven
+ * different days. `val_ger_pch` cannot fall 90% in thirty minutes while demand
+ * holds; those measures were simply never filled in.
+ *
+ * So the day is the run every subsystem shares, and the ragged rows are
+ * **rejected** — `incomplete_patamar`, counted in `rowsRejected` where an
+ * operator can see them — rather than stored. Storing them would put a
+ * reference day in the table that is 26 half hours in two subsystems and 27 in
+ * the other two, which is a shape no day-level column can state without lying
+ * to half the rows, and it would feed a fabricated near-zero wind half hour to
+ * the one series this dataset exists for.
+ *
+ * **Why it took a schema change rather than a loosened assertion.** A
+ * 46-patamar day written into `dessem_balance_half_hour` used to be
+ * indistinguishable from a 48-patamar one: there was no column for "this
+ * reference day was published two half hours short", so
+ * `canonical_day_ahead_balance` would answer 46 rows for it and every consumer
+ * that divides by a day would be quietly wrong — `feature_rows` computes
+ * `dessem_residual_load_min_of_day` and `dessem_residual_load_rank_in_day`
+ * over the whole day, and on a 21-patamar day those are a minimum and a rank
+ * over ten hours wearing a day's name. So the count now travels with the rows
+ * (`reference_day_patamares`, beside the civil day's own length) and the
+ * canonical read answers whole days unless a caller asks for partial ones
+ * (data-platform 29).
+ *
+ * **The three refusals that remain, all `coverage`:**
+ *
+ * 1. **An interior hole.** Never observed in 470 published days. It is not a
+ *    truncation, so nothing establishes that the patamares on either side of
+ *    the hole mean what they say, and "a day with a hole in it" is a different
+ *    upstream event from "a publication cut short".
+ * 2. **Subsystems that disagree by more than the ragged edge.** One half hour
+ *    at an end is a half-written patamar, measured above. Four is not: a file
+ *    whose subsystems stop hours apart came from more than one run, and
+ *    keeping the shared run would be discarding whole subsystems' half hours
+ *    on a guess about why they differ.
+ * 3. **A run that never reaches midday.** Five of the 34 are too short to
+ *    contain a daylight signal at all — 2025-08-09 (42…48), 2025-08-16 (1…13),
+ *    2025-08-27 (32…48), 2025-09-03 (45…48) and 2026-01-09 (44…48), each one
+ *    uniform across all four subsystems. Nothing in those files pins the
+ *    period index, so admitting them would be admitting rows whose *meaning*
+ *    is a guess, which is the one thing this layer exists to refuse. They keep
+ *    `coverage` as their reason and the refusal says why.
  */
+
 /**
  * The shape of a short day, in one clause appended to its refusal.
  *
@@ -304,35 +396,120 @@ function describeRun(patamares: Set<number>, halfHours: number): string {
   return `The patamares present are the contiguous run ${first}…${last}, touching neither end of the day.`;
 }
 
-function assertCoverage(
+/** The inclusive bounds of a set of patamares, and whether it has a hole. */
+function runOf(patamares: Set<number>): {
+  first: number;
+  last: number;
+  contiguous: boolean;
+} {
+  const sorted = [...patamares].sort((a, b) => a - b);
+  const first = sorted[0] as number;
+  const last = sorted[sorted.length - 1] as number;
+  return { first, last, contiguous: last - first + 1 === sorted.length };
+}
+
+/**
+ * The largest ragged edge a half-written patamar can explain.
+ *
+ * One. ONS writes a patamar as four subsystem rows and the last one of a
+ * truncated file can be written for some of them and not others; every one of
+ * the 11 ragged days measured in data-platform 29 is ragged by exactly this
+ * much. Two hours of disagreement is a different event and is refused.
+ */
+const MAX_RAGGED_EDGE = 1;
+
+/**
+ * The run of patamares every subsystem carries, and how long it is.
+ *
+ * Throws `coverage` for the shapes above. Rows outside `first…last` are the
+ * caller's to reject — this function only says where the day is.
+ */
+function assessCoverage(
   seen: Map<SubsystemCode, Set<number>>,
   referenceDay: string,
   halfHours: number,
-): void {
-  for (const [subsystem, patamares] of seen) {
-    if (patamares.size !== halfHours) {
-      throw new PayloadRefusedError(
-        "coverage",
-        `Reference day ${referenceDay} has ${patamares.size} patamares for subsystem ` +
-          `${subsystem}; the local civil day is ${halfHours} half hours long. ` +
-          `${describeRun(patamares, halfHours)}`,
-      );
-    }
-    for (let patamar = 1; patamar <= halfHours; patamar += 1) {
-      if (!patamares.has(patamar)) {
-        throw new PayloadRefusedError(
-          "coverage",
-          `Reference day ${referenceDay} is missing patamar ${patamar} for subsystem ${subsystem}`,
-        );
-      }
-    }
-  }
+): { first: number; last: number; patamares: number } {
   if (seen.size === 0) {
     throw new PayloadRefusedError(
       "coverage",
       `Reference day ${referenceDay} carries no subsystem rows`,
     );
   }
+
+  const runs: { subsystem: SubsystemCode; first: number; last: number }[] = [];
+  for (const [subsystem, patamares] of seen) {
+    const run = runOf(patamares);
+    if (!run.contiguous) {
+      throw new PayloadRefusedError(
+        "coverage",
+        `Reference day ${referenceDay} has ${patamares.size} patamares for subsystem ` +
+          `${subsystem}; the local civil day is ${halfHours} half hours long. ` +
+          `${describeRun(patamares, halfHours)} A truncated publication is readable — ` +
+          "patamar k means the same half hour whether the file stops early or not — " +
+          "but a day with an interior hole is a different upstream event, and nothing " +
+          "in it establishes what the patamares on either side of the hole mean.",
+      );
+    }
+    runs.push({ subsystem, first: run.first, last: run.last });
+  }
+
+  // The day is what every subsystem agrees on. Each run is contiguous, so the
+  // intersection of contiguous runs sharing a point is contiguous too.
+  const first = Math.max(...runs.map((run) => run.first));
+  const last = Math.min(...runs.map((run) => run.last));
+  const startSpread = first - Math.min(...runs.map((run) => run.first));
+  const endSpread = Math.max(...runs.map((run) => run.last)) - last;
+
+  if (startSpread > MAX_RAGGED_EDGE || endSpread > MAX_RAGGED_EDGE) {
+    const widest = runs.reduce((a, b) => (b.last - b.first > a.last - a.first ? b : a));
+    const narrowest = runs.reduce((a, b) =>
+      b.last - b.first < a.last - a.first ? b : a,
+    );
+    throw new PayloadRefusedError(
+      "coverage",
+      `Reference day ${referenceDay} disagrees between subsystems by more than one ` +
+        `half hour: ${widest.subsystem} carries patamares ${widest.first}…${widest.last} ` +
+        `where ${narrowest.subsystem} carries ${narrowest.first}…${narrowest.last}. One ` +
+        "half hour at an end is a patamar ONS wrote for some subsystems and not others " +
+        "and is dropped as a fragment (data-platform 29); a wider disagreement is a " +
+        "file assembled from more than one run, and reading only the shared part would " +
+        "be discarding whole subsystems' half hours on a guess about why they differ.",
+    );
+  }
+  if (last < first) {
+    throw new PayloadRefusedError(
+      "coverage",
+      `Reference day ${referenceDay} has no patamar that every subsystem carries`,
+    );
+  }
+
+  const count = last - first + 1;
+  if (count === halfHours) {
+    return { first, last, patamares: count };
+  }
+
+  // The one thing that pins the period index is the solar profile, and a run
+  // that never reaches midday does not contain one. `assertDaylightAlignment`
+  // would refuse such a day for `time_axis`, which is the wrong name for it:
+  // the axis is not known to be wrong, it is unknowable from this file.
+  if (last < MIDDAY_FIRST_PATAMAR || first > MIDDAY_LAST_PATAMAR) {
+    const shared = new Set(
+      Array.from({ length: count }, (_unused, index) => first + index),
+    );
+    throw new PayloadRefusedError(
+      "coverage",
+      `Reference day ${referenceDay} has ${count} patamares in every subsystem; ` +
+        `the local civil day is ${halfHours} half hours long. ` +
+        `${describeRun(shared, halfHours)} ` +
+        "A partial day is admissible only if it reaches the midday window " +
+        `(patamares ${MIDDAY_FIRST_PATAMAR}…${MIDDAY_LAST_PATAMAR}), where the solar ` +
+        "profile pins the num_patamar → wall-clock mapping absolutely. This run does " +
+        "not, so nothing in the file says what its own rows mean: the values are " +
+        "readable but the half hours they belong to would be a guess.",
+    );
+  }
+
+  return { first, last, patamares: count };
 }
 
 /**
@@ -340,9 +517,15 @@ function assertCoverage(
  *
  * Row-level defects (an unknown subsystem, a blank measure) are rejected with a
  * reason, as everywhere else. Defects that would make the *time axis* a guess —
- * more than one reference day in a file, a patamar outside the day, an
- * incomplete subsystem, a solar profile that does not sit in daylight — throw,
- * because there is no honest partial answer to them.
+ * more than one reference day in a file, a patamar outside the day, a day with
+ * an interior hole or one too short to pin its own index, a solar profile that
+ * does not sit in daylight — throw, because there is no honest partial answer
+ * to them.
+ *
+ * A day that is merely *short* is not one of those. It returns with
+ * `patamaresPerSubsystem` below `halfHoursInCivilDay` and every row stamped
+ * with both, so that what is missing is stated rather than implied
+ * (data-platform 29).
  */
 export function parseDessemBalanceCsv(text: string): DessemBalanceParse {
   const table = parseDelimited(text);
@@ -367,7 +550,14 @@ export function parseDessemBalanceCsv(text: string): DessemBalanceParse {
   const referenceDay = [...days][0] as string;
   const { midnightUtc, halfHours } = referenceDayAnchor(referenceDay);
 
-  const rows: DessemBalanceHalfHour[] = [];
+  /**
+   * Every readable row with the patamar and file line it came from.
+   *
+   * Staged rather than appended straight to the answer because a row's fate
+   * depends on the *file*: a patamar the other subsystems do not carry is a
+   * fragment, and that cannot be known until the last line has been read.
+   */
+  const staged: { patamar: number; rowNumber: number; row: DessemBalanceRow }[] = [];
   const rejected: RejectedRow[] = [];
   const seen = new Map<SubsystemCode, Set<number>>();
   let aggregateRowsFiltered = 0;
@@ -430,23 +620,59 @@ export function parseDessemBalanceCsv(text: string): DessemBalanceParse {
       return;
     }
 
-    rows.push({
-      subsystem: subsystem.code,
-      validTime: patamarStart(midnightUtc, patamar),
-      referenceDay,
-      ...measures,
+    staged.push({
+      patamar,
+      rowNumber,
+      row: {
+        subsystem: subsystem.code,
+        validTime: patamarStart(midnightUtc, patamar),
+        referenceDay,
+        ...measures,
+      },
     });
   });
 
-  assertCoverage(seen, referenceDay, halfHours);
+  const day = assessCoverage(seen, referenceDay, halfHours);
+  const patamaresPerSubsystem = day.patamares;
+
+  // The ragged edge, dropped with a reason. Measured on all 21 such rows in
+  // the published history: demand, hydro and thermal continue while small
+  // hydro, small thermal and wind collapse to near zero, so this is a patamar
+  // ONS began writing and did not finish, not a half hour it forecast.
+  const rows: DessemBalanceRow[] = [];
+  for (const entry of staged) {
+    if (entry.patamar < day.first || entry.patamar > day.last) {
+      rejected.push({
+        reason: "incomplete_patamar",
+        rowNumber: entry.rowNumber,
+        detail:
+          `num_patamar=${entry.patamar} is carried by subsystem ${entry.row.subsystem} ` +
+          `and not by every subsystem; reference day ${referenceDay} is the run ` +
+          `${day.first}…${day.last}`,
+      });
+      continue;
+    }
+    rows.push(entry.row);
+  }
+
   assertDaylightAlignment(rows, referenceDay, midnightUtc);
 
   return {
-    rows,
+    // The day's coverage travels on every row of it, because that is where the
+    // table keeps it and where a read has to be able to see it. One write is
+    // one reference day, so the three numbers agree by construction and
+    // `writeDessemBalance` refuses a batch where they do not.
+    rows: rows.map((row) => ({
+      ...row,
+      referenceDayPatamares: patamaresPerSubsystem,
+      referenceDayHalfHours: halfHours,
+    })),
     rejected,
     columns,
     referenceDay,
-    patamaresPerSubsystem: halfHours,
+    patamaresPerSubsystem,
+    halfHoursInCivilDay: halfHours,
+    complete: patamaresPerSubsystem === halfHours,
     aggregateRowsFiltered,
   };
 }

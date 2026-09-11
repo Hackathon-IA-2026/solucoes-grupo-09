@@ -234,19 +234,27 @@ const ALLOWED_RELATIONS = new Set([
 ]);
 
 /**
- * The four read axes, and the whole of what a "writer" is.
+ * The five read axes, and the whole of what a "writer" is.
  *
  * Named here because two tests filter on them and because ticket 15 made the
  * distinction load-bearing: `wattsteer.feature_ingestion_history_from` is a
  * transaction-local **memo** for a catalogue walk and an unindexed `min()` per
  * source, not a cut anybody reads a row through, and a guard that counted
  * `set_config` calls could not tell the two apart.
+ *
+ * `partial_reference_days` (data-platform 29) is the fifth, and the reason it
+ * belongs in this list is the feature layer specifically: it admits reference
+ * days ONS published short into `canonical_day_ahead_balance`, and
+ * `feature_rows` minimises and ranks over the whole day that view hands it. A
+ * feature build must therefore write the axis empty rather than inherit an ask
+ * from a read earlier in the same transaction.
  */
 const AXES = [
   "wattsteer.as_of",
   "wattsteer.fleet_date",
   "wattsteer.published_at_or_before",
   "wattsteer.weather_run_cycle",
+  "wattsteer.partial_reference_days",
 ];
 
 /**

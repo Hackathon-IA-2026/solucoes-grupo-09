@@ -94,6 +94,10 @@ const dessem = (validTime: Date, demandMw: number): DessemBalanceHalfHour => ({
   solarGenerationMw: 6,
   mmgdGenerationMw: 7,
   pumpingConsumptionMw: 8,
+  // A whole civil day, which is what this seed is: the canonical read answers
+  // whole reference days unless a caller asks for partial ones.
+  referenceDayPatamares: 48,
+  referenceDayHalfHours: 48,
 });
 
 suite("canonical read contract (real Postgres)", () => {

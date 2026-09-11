@@ -302,6 +302,28 @@ export const canonicalSystemExchange = pgView("canonical_system_exchange", {
  *
  * No `lead_time` is projected. It is `valid_time − published_at`, the consumer
  * holds both, and a stored copy can disagree with the pair it came from.
+ *
+ * ## Whole days, unless a caller asks otherwise
+ *
+ * ONS publishes reference days short: 34 of 470, each a contiguous prefix or
+ * suffix of the civil day (data-platform 25). 29 of them are now stored rather
+ * than refused, and the pair `reference_day_patamares` /
+ * `reference_day_half_hours` is how this read *says* how complete a day is.
+ *
+ * **The default excludes them, and that is the whole point of the change.**
+ * `feature_rows` reads this view and computes `dessem_residual_load_min_of_day`
+ * and `dessem_residual_load_rank_in_day` over the day it finds here; on a
+ * 21-patamar day those would be a minimum and a rank over ten hours wearing a
+ * day's name, and nothing in the answer would say so. A default that quietly
+ * admitted partial days would therefore be worse than the refusal it replaced.
+ * So a reader that does not ask gets exactly what it got before this change,
+ * and `wattsteer.partial_reference_days` is the ask.
+ *
+ * The predicate sits **inside** the `DISTINCT ON`, beside the gate and for the
+ * same reason: dropping partial rows before the version pick means a day ONS
+ * first published whole and later re-published short still answers with the
+ * whole vintage, rather than answering with nothing because the newest version
+ * was filtered out after being chosen.
  */
 export const canonicalDayAheadBalance = pgView("canonical_day_ahead_balance", {
   subsystem: subsystemCode().notNull(),
@@ -322,6 +344,10 @@ export const canonicalDayAheadBalance = pgView("canonical_day_ahead_balance", {
   mmgdGenerationMw: doublePrecision().notNull(),
   pumpingConsumptionMw: doublePrecision().notNull(),
   ...rowVintage,
+  /** How many half hours of this row's reference day ONS published. */
+  referenceDayPatamares: integer().notNull(),
+  /** How many half hours the local civil day contains. Equal on a whole day. */
+  referenceDayHalfHours: integer().notNull(),
 }).as(sql`
   select distinct on (subsystem, valid_time)
     subsystem,
@@ -339,11 +365,15 @@ export const canonicalDayAheadBalance = pgView("canonical_day_ahead_balance", {
     pumping_consumption_mw,
     data_version,
     published_at,
-    ingested_at
+    ingested_at,
+    reference_day_patamares,
+    reference_day_half_hours
   from dessem_balance_half_hour
   where ingested_at <= canonical_as_of()
     and (canonical_published_at_or_before() is null
          or published_at <= canonical_published_at_or_before())
+    and (canonical_partial_reference_days()
+         or reference_day_patamares = reference_day_half_hours)
   order by subsystem, valid_time, ingested_at desc, data_version desc
 `);
 

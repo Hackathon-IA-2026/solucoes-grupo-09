@@ -7,6 +7,8 @@ import { dessemBalanceHalfHour, onsResourceVersion } from "../src/database/schem
 import {
   createDessemIngestor,
   type DessemBalanceHalfHour,
+  dessemBalanceDigest,
+  digestValues,
   readDessemBalanceAsOf,
   writeDessemBalance,
 } from "../src/ingest/index.js";
@@ -45,6 +47,8 @@ const forecast = (
   validTime: Date,
   demandMw: number,
   subsystem: DessemBalanceHalfHour["subsystem"] = "SE",
+  /** How many half hours of the reference day ONS published. 48 is a whole day. */
+  referenceDayPatamares = 48,
 ): DessemBalanceHalfHour => ({
   subsystem,
   validTime,
@@ -58,6 +62,55 @@ const forecast = (
   solarGenerationMw: 6,
   mmgdGenerationMw: 7,
   pumpingConsumptionMw: 8,
+  referenceDayPatamares,
+  referenceDayHalfHours: 48,
+});
+
+/**
+ * The digest, and the one property that decides whether admitting partial days
+ * costs the 70,080 rows already in this platform a spurious restatement.
+ *
+ * Needs no database, so it is asserted whether or not one is configured.
+ */
+describe("DESSEM · the value digest carries the day's shortfall, sparsely", () => {
+  const whole = forecast(HALF_HOUR, 100);
+
+  it("digests a whole day exactly as it did before the column existed", () => {
+    // The pre-change tuple, spelled out. If the shortfall joined it
+    // unconditionally, every row already stored would come back `revised` on
+    // the next forced sweep — 70,080 restatements ONS never made.
+    expect(dessemBalanceDigest(whole)).toBe(
+      digestValues([
+        whole.subsystem,
+        whole.validTime.toISOString(),
+        whole.referenceDay,
+        whole.demandMw,
+        whole.hydroGenerationMw,
+        whole.smallHydroGenerationMw,
+        whole.thermalGenerationMw,
+        whole.smallThermalGenerationMw,
+        whole.windGenerationMw,
+        whole.solarGenerationMw,
+        whole.mmgdGenerationMw,
+        whole.pumpingConsumptionMw,
+      ]),
+    );
+  });
+
+  it("digests a short day differently, on identical numbers", () => {
+    // The half of the property that makes the read safe: the same values under
+    // a 46-patamar day are a different statement, so a day that later arrives
+    // whole revises every half hour it had published rather than leaving 46
+    // rows behind claiming to be part of a short day.
+    const short = forecast(HALF_HOUR, 100, "SE", 46);
+    expect(dessemBalanceDigest(short)).not.toBe(dessemBalanceDigest(whole));
+    expect(dessemBalanceDigest(forecast(HALF_HOUR, 100, "SE", 46))).toBe(
+      dessemBalanceDigest(short),
+    );
+    expect(dessemBalanceDigest(forecast(HALF_HOUR, 100, "SE", 45))).not.toBe(
+      dessemBalanceDigest(short),
+    );
+  });
 });
 
 suite("DESSEM · bitemporal store (real Postgres)", () => {
@@ -190,6 +243,8 @@ suite("DESSEM · bitemporal store (real Postgres)", () => {
         solarGenerationMw: 1,
         mmgdGenerationMw: 1,
         pumpingConsumptionMw: 1,
+        referenceDayPatamares: 48,
+        referenceDayHalfHours: 48,
         dataVersion: 1,
         // After the half hour it describes: an observation, which this table
         // cannot hold.
@@ -207,6 +262,192 @@ suite("DESSEM · bitemporal store (real Postgres)", () => {
       (error: unknown) => (error as { cause?: { constraint_name?: string } }).cause,
     );
     expect(refusal?.constraint_name).toBe("dessem_balance_is_a_forecast");
+  });
+});
+
+/**
+ * A partial reference day, stored and stated (data-platform 29).
+ *
+ * Three things cannot be proved without Postgres and are the reason this suite
+ * exists: that the canonical read leaves a short day out **by default**, that
+ * the axis is what admits it, and that a day ONS later publishes whole restates
+ * the half hours it had already published rather than leaving a mixed day
+ * behind.
+ */
+suite("DESSEM · a reference day published short (real Postgres)", () => {
+  const handle = createDatabase(URL as string, 5);
+  const { db } = handle;
+  let sourceVersionId = "";
+
+  /** A distant day of its own, so this suite cannot collide with the others. */
+  const SHORT_DAY = "2024-05-07";
+  const MIDNIGHT = new Date("2024-05-07T03:00:00.000Z");
+  const PUBLISHED_AT = new Date("2024-05-06T20:00:00.000Z");
+  const T1 = new Date("2026-05-01T00:00:00.000Z");
+  const T2 = new Date("2026-06-01T00:00:00.000Z");
+
+  /** `patamares` half hours of the short day, in all four subsystems. */
+  const day = (patamares: number, published = patamares): DessemBalanceHalfHour[] =>
+    (["N", "NE", "S", "SE"] as const).flatMap((subsystem) =>
+      Array.from({ length: patamares }, (_unused, index) => ({
+        subsystem,
+        validTime: new Date(MIDNIGHT.getTime() + index * 30 * 60_000),
+        referenceDay: SHORT_DAY,
+        demandMw: 100 + index,
+        hydroGenerationMw: 1,
+        smallHydroGenerationMw: 2,
+        thermalGenerationMw: 3,
+        smallThermalGenerationMw: 4,
+        windGenerationMw: 5,
+        solarGenerationMw: 6,
+        mmgdGenerationMw: 7,
+        pumpingConsumptionMw: 8,
+        referenceDayPatamares: published,
+        referenceDayHalfHours: 48,
+      })),
+    );
+
+  const readDay = async (includePartialReferenceDays?: boolean) =>
+    readDessemBalanceAsOf(db, {
+      asOf: T2,
+      from: new Date("2024-05-07T00:00:00.000Z"),
+      to: new Date("2024-05-08T03:00:00.000Z"),
+      subsystem: "SE",
+      includePartialReferenceDays,
+    });
+
+  beforeAll(async () => {
+    await db.execute(
+      sql`delete from dessem_balance_half_hour where run_label = ${SHORT_DAY}`,
+    );
+    const [version] = await db
+      .insert(onsResourceVersion)
+      .values({
+        datasetSlug: "balanco_dessem_detalhe",
+        resourceName: "Balanco_Dessem_Detalhe-2024-05-07",
+        resourceUrl: "https://example.invalid/BALANCO_DESSEM_DETALHE_2024_05_07.csv",
+        format: "CSV",
+        changeKey: 'partial|1|"a"',
+      })
+      .returning({ id: onsResourceVersion.id });
+    sourceVersionId = version?.id ?? "";
+  });
+
+  afterAll(() => handle.close());
+
+  it("stores the shortfall on every row of the day", async () => {
+    const written = await writeDessemBalance(db, {
+      rows: day(46),
+      publishedAt: PUBLISHED_AT,
+      publishedAtPrecision: "file",
+      sourceVersionId,
+      ingestedAt: T1,
+    });
+    expect(written).toEqual({ inserted: 184, revised: 0, unchanged: 0 });
+
+    const stored = await db.execute<{ patamares: number; half_hours: number; n: number }>(
+      sql`select reference_day_patamares as patamares,
+                 reference_day_half_hours as half_hours,
+                 count(*)::int as n
+            from dessem_balance_half_hour
+           where run_label = ${SHORT_DAY}
+           group by 1, 2`,
+    );
+    expect([...stored]).toEqual([{ patamares: 46, half_hours: 48, n: 184 }]);
+  });
+
+  it("does not hand a partial day to a reader that did not ask", async () => {
+    const { rows } = await readDay();
+    expect(rows).toEqual([]);
+  });
+
+  it("answers the partial day, with its shortfall, to a reader that asks", async () => {
+    const { rows } = await readDay(true);
+    expect(rows).toHaveLength(46);
+    expect(rows.every((row) => row.referenceDayPatamares === 46)).toBe(true);
+    expect(rows.every((row) => row.referenceDayHalfHours === 48)).toBe(true);
+    expect(rows[0]?.validTime.toISOString()).toBe("2024-05-07T03:00:00.000Z");
+    expect(rows.at(-1)?.validTime.toISOString()).toBe("2024-05-08T01:30:00.000Z");
+  });
+
+  it("restates the whole day when ONS later publishes it complete", async () => {
+    // The hazard the digest's shortfall exists for. If the 46 half hours had
+    // come back `unchanged` they would have kept saying "46 of 48" while the
+    // two new ones said "48 of 48", and the whole-day read would have answered
+    // a two-row day.
+    const written = await writeDessemBalance(db, {
+      rows: day(48),
+      publishedAt: PUBLISHED_AT,
+      publishedAtPrecision: "file",
+      sourceVersionId,
+      ingestedAt: T2,
+    });
+    expect(written).toEqual({ inserted: 8, revised: 184, unchanged: 0 });
+
+    const now = await readDay();
+    expect(now.rows).toHaveLength(48);
+    expect(now.rows.every((row) => row.referenceDayPatamares === 48)).toBe(true);
+    expect(now.rows.every((row) => row.dataVersion === 2 || row.dataVersion === 1)).toBe(
+      true,
+    );
+
+    // And the earlier as-of still sees the short day it saw, which is what
+    // makes this a restatement rather than a rewrite.
+    const before = await readDessemBalanceAsOf(db, {
+      asOf: T1,
+      from: new Date("2024-05-07T00:00:00.000Z"),
+      to: new Date("2024-05-08T03:00:00.000Z"),
+      subsystem: "SE",
+      includePartialReferenceDays: true,
+    });
+    expect(before.rows).toHaveLength(46);
+    expect(before.rows.every((row) => row.referenceDayPatamares === 46)).toBe(true);
+  });
+
+  it("refuses a write whose rows disagree about the day's coverage", async () => {
+    const mixed = [...day(2, 48), ...day(1, 46)];
+    await expect(
+      writeDessemBalance(db, {
+        rows: mixed,
+        publishedAt: PUBLISHED_AT,
+        publishedAtPrecision: "file",
+        sourceVersionId,
+        ingestedAt: T2,
+      }),
+    ).rejects.toThrow(/disagree about its coverage/);
+  });
+
+  it("cannot store a day that published more half hours than the day holds", async () => {
+    const insertDirectly = async (): Promise<void> => {
+      await db.insert(dessemBalanceHalfHour).values({
+        subsystem: "N",
+        validTime: MIDNIGHT,
+        forecastProducer: "ons_dessem",
+        runLabel: SHORT_DAY,
+        demandMw: 1,
+        hydroGenerationMw: 1,
+        smallHydroGenerationMw: 1,
+        thermalGenerationMw: 1,
+        smallThermalGenerationMw: 1,
+        windGenerationMw: 1,
+        solarGenerationMw: 1,
+        mmgdGenerationMw: 1,
+        pumpingConsumptionMw: 1,
+        referenceDayPatamares: 49,
+        referenceDayHalfHours: 48,
+        dataVersion: 9,
+        publishedAt: PUBLISHED_AT,
+        publishedAtPrecision: "file",
+        ingestedAt: T2,
+        valueDigest: "not-a-real-digest",
+        sourceVersionId,
+      });
+    };
+    const refusal = await insertDirectly().then(
+      () => null,
+      (error: unknown) => (error as { cause?: { constraint_name?: string } }).cause,
+    );
+    expect(refusal?.constraint_name).toBe("dessem_balance_reference_day_coverage");
   });
 });
 
