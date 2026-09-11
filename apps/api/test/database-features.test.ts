@@ -521,6 +521,10 @@ const dessemDay = (
         solarGenerationMw: (mw.solar + delta) * scale,
         mmgdGenerationMw: (mw.mmgd + delta) * scale,
         pumpingConsumptionMw: (mw.pumping + delta) * scale,
+        // 24 hours × 2 half hours: a whole day, which is the only kind the
+        // feature layer reads.
+        referenceDayPatamares: 48,
+        referenceDayHalfHours: 48,
       });
     }
   }

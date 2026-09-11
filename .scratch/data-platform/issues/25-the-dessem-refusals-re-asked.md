@@ -246,6 +246,12 @@ ending at patamar 48 (45…48, 42…48, 15…48). Not one has an interior gap. A
 they are short in *every* subsystem, not one — the refusal naming subsystem `N`
 was only naming the first key the map iterates.
 
+> **Corrected by data-platform 29.** The contiguity holds; "by the same run"
+> does not. 11 of the 34 are ragged by exactly one half hour between
+> subsystems, and the count recorded here is `N`'s, which is on the short side
+> of the raggedness every time. The extra row is a patamar ONS did not finish
+> writing — see 29 §1.
+
 **The stated reason for refusing them is wrong.** The comment said a short day
 "may mean something other than what this adapter assumes" about the period
 index. It does not: on **29 of the 34** the solar profile sits exactly where
@@ -283,7 +289,9 @@ anything this platform can do:
   instant survives in CKAN's `created`; the original values do not, and using
   the instant without the values is leakage.
 - **34 days published short** — a contiguous prefix or suffix of the civil day.
-  Physically readable, structurally unstorable.
+  Physically readable, structurally unstorable. **29 of these were recovered by
+  data-platform 29**, which made the shortfall storable; 5 remain, the ones too
+  short to pin their own period index.
 
 The honest statement of DESSEM's usable history is **366 reference days out of
 the 470 the catalogue offers**, 2025-05-23 → 2026-09-12, with 104 holes in it.
@@ -300,6 +308,25 @@ the rest are now on the rows.
   reference day is incomplete — a column and a read change, decided with the
   forecaster lane, not an adapter loosened on the way past. **Worth its own
   ticket**; the measurement is above and does not need repeating.
+
+  **Done — data-platform 29.** `reference_day_patamares` and
+  `reference_day_half_hours` on the rows, and a fifth read axis whose *absence*
+  answers whole days only, so no reader that did not ask can be handed part of
+  a day. **29 recovered, 5 still refused for `coverage`** — the five whose run
+  never reaches midday, whose index therefore cannot be pinned. `fc18-pg` holds
+  394 reference days and 74,176 rows against 365 and 70,080.
+
+  One measurement above needed correcting, and 29 did it from the retained
+  payloads. The contiguity finding holds exactly — **0 of the 34 has an interior
+  hole** — but "short in *every* subsystem by the same run" does not: read per
+  subsystem, **11 of the 34 are ragged by one half hour** (N and NE stop at 26
+  where S and SE carry a 27th, on 2025-07-19 and ten others). The count in the
+  table above was the first key the refusal's map iterated, which was `N`, and
+  `N` is on the short side of the raggedness every time. That extra row is not a
+  forecast half hour: on all 21 of them demand, hydro and thermal continue
+  smoothly while small hydro, small thermal and wind collapse to 0.00–0.29× the
+  previous half hour. It is a patamar ONS began writing and did not finish, and
+  it is now rejected as `incomplete_patamar` rather than stored.
 - **It does not touch `fc18-pg`.** The wave database stands at 43 migrations
   and the operator instruction for this work was not to migrate it while a
   weather ingestion was running against it. The settlement columns 0047 adds

@@ -41,6 +41,14 @@ import type { ObservationContext } from "./resource-version.js";
  * failed task. Everything else still throws out of the task: a socket that
  * died or a Postgres that was down is not a fact about a reference day, and
  * swallowing it would turn a broken run into a quiet one.
+ *
+ * **A partial day is a third outcome, and it is counted as one.** Since
+ * data-platform 29 a reference day ONS published short is stored with its
+ * shortfall stated rather than refused, so a sweep's days now land in three
+ * buckets and not two: `daysIngested`, of which `daysPartial` are short, and
+ * `daysRefused`. A run that admits a partial publication says so in the same
+ * summary that lists its refusals — the counter exists because "the sweep got
+ * quietly more permissive" is exactly the change nobody would notice.
  */
 
 /** A range of reference days, defaulting to everything ONS has published. */
@@ -92,6 +100,17 @@ export interface DessemDayResult {
    * `gate_late` (D−1 19:00 BRT) can see it. Null when nothing was downloaded.
    */
   minLeadTimeMinutes: number | null;
+  /**
+   * How many half hours ONS published for this reference day, and how many the
+   * local civil day holds. Null when nothing was downloaded.
+   *
+   * A day where the two disagree is a **partial** day: stored, readable, and
+   * short. It is reported here rather than only in the row, because a sweep
+   * that started admitting partial publications must say so in the same place
+   * it says which days it refused (data-platform 29).
+   */
+  patamaresPublished: number | null;
+  halfHoursInCivilDay: number | null;
   /** Set when this day's payload was refused. Null when it loaded or was skipped. */
   refusal: { reason: string; detail: string } | null;
 }
@@ -105,6 +124,12 @@ export interface IngestDessemResult {
   daysDownloaded: number;
   /** Days this run parsed and wrote. */
   daysIngested: number;
+  /**
+   * Of those, days ONS published short — stored with their shortfall stated
+   * rather than refused. `canonical_day_ahead_balance` leaves them out unless a
+   * reader asks for them (data-platform 29).
+   */
+  daysPartial: number;
   /** Days this run downloaded and refused. */
   daysRefused: number;
   /** Days skipped because a previous pass had already refused these bytes. */
@@ -169,6 +194,7 @@ export function createDessemIngestor(
       daysProcessed: 0,
       daysDownloaded: 0,
       daysIngested: 0,
+      daysPartial: 0,
       daysRefused: 0,
       daysStandingRefused: 0,
       rowsParsed: 0,
@@ -211,6 +237,8 @@ export function createDessemIngestor(
         revised: 0,
         unchanged: 0,
         minLeadTimeMinutes: null,
+        patamaresPublished: null,
+        halfHoursInCivilDay: null,
         refusal: null,
       };
 
@@ -232,6 +260,11 @@ export function createDessemIngestor(
           // the throw below retryable instead of permanent.
           await acquired.markIngested();
           result.daysIngested += 1;
+          if (!parsed.complete) {
+            result.daysPartial += 1;
+          }
+          dayResult.patamaresPublished = parsed.patamaresPerSubsystem;
+          dayResult.halfHoursInCivilDay = parsed.halfHoursInCivilDay;
 
           const earliest = Math.min(...parsed.rows.map((row) => row.validTime.getTime()));
           dayResult.minLeadTimeMinutes = Math.round(

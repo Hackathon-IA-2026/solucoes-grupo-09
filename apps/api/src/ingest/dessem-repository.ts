@@ -33,8 +33,26 @@ import {
  * its read exposes `lead_time` as a derived value rather than a column.
  */
 
-/** Digest of a DESSEM row's stored values, and nothing else. */
+/**
+ * Digest of a DESSEM row's stored values, and nothing else.
+ *
+ * **The day's shortfall is part of the value tuple, and it is encoded sparsely
+ * on purpose.** A reference day that ONS first published 46 patamares short
+ * and later published whole is a real restatement of those 46 half hours: the
+ * numbers may be identical but what the row *says about its day* is not, and
+ * if the digest ignored that, the 46 keys would come back `unchanged`, keep
+ * `reference_day_patamares = 46` forever and be filtered out of the read while
+ * the two new half hours sailed through — a two-row answer for a whole day,
+ * which is exactly the quiet wrongness this column exists to prevent.
+ *
+ * So the shortfall joins the tuple, but only when there is one. A whole day
+ * appends nothing, so its digest is byte-identical to the digest this platform
+ * has already stored for 70,080 rows: admitting partial days does not restate
+ * a single existing row, and the next forced sweep still reports them
+ * `unchanged` (data-platform 29).
+ */
 export function dessemBalanceDigest(row: DessemBalanceHalfHour): string {
+  const shortfall = row.referenceDayHalfHours - row.referenceDayPatamares;
   return digestValues([
     row.subsystem,
     row.validTime.toISOString(),
@@ -51,6 +69,7 @@ export function dessemBalanceDigest(row: DessemBalanceHalfHour): string {
     row.solarGenerationMw,
     row.mmgdGenerationMw,
     row.pumpingConsumptionMw,
+    ...(shortfall > 0 ? [`short:${row.referenceDayPatamares}`] : []),
   ]);
 }
 
@@ -79,6 +98,10 @@ const SPEC: VersionedTableSpec<
     solarGenerationMw: row.solarGenerationMw,
     mmgdGenerationMw: row.mmgdGenerationMw,
     pumpingConsumptionMw: row.pumpingConsumptionMw,
+    // How short the day was, stated. `canonical_day_ahead_balance` answers
+    // whole days unless asked otherwise, and this pair is what it asks.
+    referenceDayPatamares: row.referenceDayPatamares,
+    referenceDayHalfHours: row.referenceDayHalfHours,
     dataVersion: version.dataVersion,
     // The file's `Last-Modified`: ONS stamps no DESSEM row individually, so the
     // coarsest honest answer is the file, and the precision column says so.
@@ -155,13 +178,33 @@ function upstreamCause(
  * guarantee, and this is the *diagnosis* — a violation reaching Postgres would
  * surface as a constraint name and a row, where the real question is which
  * reference day was published too late and by how much.
+ *
+ * The day's coverage is checked the same way and for the same reason. One write
+ * is one reference day, so every row of it must agree on how much of that day
+ * ONS published; rows that disagree would put a day in the table that is
+ * partial and whole at once, and the canonical read's whole-day filter would
+ * then answer with whichever half of it happened to say 48.
  */
 export async function writeDessemBalance(
   db: Database,
   write: DessemBalanceWrite,
 ): Promise<DessemBalanceWriteResult> {
   const { rows, firstPublishedAt, ...vintage } = write;
+  const coverage = new Map<string, string>();
   for (const row of rows) {
+    const stated = `${row.referenceDayPatamares}/${row.referenceDayHalfHours}`;
+    const first = coverage.get(row.referenceDay);
+    if (first === undefined) {
+      coverage.set(row.referenceDay, stated);
+    } else if (first !== stated) {
+      throw new PayloadRefusedError(
+        "coverage",
+        `DESSEM reference day ${row.referenceDay} is written with rows that disagree ` +
+          `about its coverage: ${first} patamares on one row and ${stated} on the ` +
+          `${row.validTime.toISOString()} half hour. How much of a day was published ` +
+          "is a fact about the day, so every row of it carries the same pair.",
+      );
+    }
     if (row.validTime.getTime() <= vintage.publishedAt.getTime()) {
       throw new PayloadRefusedError(
         "forecast_integrity",
@@ -209,6 +252,17 @@ export interface DessemBalanceAsOfQuery {
    * what was knowable (`docs/specs/feature-engineering.md`).
    */
   publishedAtOrBefore?: Date;
+  /**
+   * Answer with reference days ONS published short, as well as whole ones.
+   *
+   * Absent is the read every caller gets today: whole reference days only, the
+   * same rows this read answered before partial days were storable at all. A
+   * caller that sets it is told how short each day is —
+   * `referenceDayPatamares` against `referenceDayHalfHours` on every row —
+   * because a partial day is only safe to use by someone who knows it is one
+   * (data-platform 29).
+   */
+  includePartialReferenceDays?: boolean;
 }
 
 const MS_PER_MINUTE = 60_000;
@@ -235,6 +289,7 @@ export async function readDessemBalanceAsOf(
   const axes = {
     asOf: query.asOf,
     publishedAtOrBefore: query.publishedAtOrBefore,
+    partialReferenceDays: query.includePartialReferenceDays,
   };
 
   return withAxes(db, axes, async (tx) => {
@@ -255,6 +310,8 @@ export async function readDessemBalanceAsOf(
       pumping_consumption_mw: number;
       published_at: string;
       ingested_at: string;
+      reference_day_patamares: number;
+      reference_day_half_hours: number;
     }>(sql`
       select * from ${canonicalDayAheadBalance}
       where valid_time >= ${query.from.toISOString()}::timestamptz
@@ -283,6 +340,8 @@ export async function readDessemBalanceAsOf(
           solarGenerationMw: Number(row.solar_generation_mw),
           mmgdGenerationMw: Number(row.mmgd_generation_mw),
           pumpingConsumptionMw: Number(row.pumping_consumption_mw),
+          referenceDayPatamares: Number(row.reference_day_patamares),
+          referenceDayHalfHours: Number(row.reference_day_half_hours),
           dataVersion: row.data_version,
           publishedAt,
           ingestedAt: new Date(row.ingested_at),

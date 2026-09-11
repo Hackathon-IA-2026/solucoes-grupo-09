@@ -62,24 +62,28 @@ const PACKAGE = readFileSync(
 );
 
 /**
- * The captured day with subsystem N truncated to 26 patamares — the exact
- * shape of ONS's file for 2025-07-19, the day that killed the whole-history
- * task in issue 21. Derived from the fixture rather than captured, because the
- * defect it reproduces is a *count*, and deriving it makes the count visible
- * in the test that asserts it.
+ * The captured day truncated to its first 13 patamares in **every** subsystem —
+ * the exact shape of ONS's file for 2025-08-16, one of the five short days this
+ * platform still refuses. Derived from the fixture rather than captured,
+ * because the defect it reproduces is a *count*, and deriving it makes the
+ * count visible in the test that asserts it.
+ *
+ * It was subsystem N alone truncated to 26 until data-platform 29, which is
+ * ONS's 2025-07-19 in miniature and was a refusal for the right reason. That
+ * is no longer the refusal this file needs: a day short in every subsystem is
+ * a *truncation* and is now admitted when it reaches midday, so the shape that
+ * still refuses is a truncation too short to contain one. 13 patamares is
+ * 00:00–06:30 local, which is night on either side of the mapping.
  */
-function shortenSubsystemN(csv: string, referenceDay: string, keep: number): string {
+function truncateEverySubsystem(csv: string, referenceDay: string, keep: number): string {
   const [header, ...rows] = csv.trimEnd().split("\n");
-  const kept = rows.filter((row) => {
-    const [, patamar, subsystem] = row.split(";");
-    return subsystem !== "N" || Number(patamar) <= keep;
-  });
+  const kept = rows.filter((row) => Number(row.split(";")[1]) <= keep);
   return [header, ...kept].join("\n").replaceAll("2026-08-29;", `${referenceDay};`);
 }
 
-const SHORT_DAY_CSV = shortenSubsystemN(DAY_CSV, "2026-08-28", 26);
+const SHORT_DAY_CSV = truncateEverySubsystem(DAY_CSV, "2026-08-28", 13);
 
-/** Count the rows one subsystem carries, so "26 against 48" is measured here too. */
+/** Count the rows one subsystem carries, so "13 against 48" is measured here too. */
 function rowsFor(csv: string, subsystem: string): number {
   return csv
     .trimEnd()
@@ -168,10 +172,16 @@ suite("resource settlement · custody, completion and refusal (real Postgres)", 
     expect(DAY_CSV.length).toBeGreaterThan(10_000);
     expect(rowsFor(DAY_CSV, "N")).toBe(48);
     expect(rowsFor(DAY_CSV, "SE")).toBe(48);
-    expect(SHORT_DAY_CSV.length).toBeGreaterThan(5000);
-    expect(rowsFor(SHORT_DAY_CSV, "N")).toBe(26);
-    expect(rowsFor(SHORT_DAY_CSV, "SE")).toBe(48);
+    expect(SHORT_DAY_CSV.length).toBeGreaterThan(1000);
+    // Short in every subsystem by the same run, which is what ONS publishes —
+    // and short enough that no subsystem reaches the midday window.
+    expect(rowsFor(SHORT_DAY_CSV, "N")).toBe(13);
+    expect(rowsFor(SHORT_DAY_CSV, "SE")).toBe(13);
+    expect(rowsFor(SHORT_DAY_CSV, "NE")).toBe(13);
+    expect(rowsFor(SHORT_DAY_CSV, "S")).toBe(13);
     expect(SHORT_DAY_CSV).toContain("2026-08-28;1;N;");
+    expect(SHORT_DAY_CSV).toContain("2026-08-28;13;SE;");
+    expect(SHORT_DAY_CSV).not.toContain("2026-08-28;14;");
     expect(SHORT_DAY_CSV).not.toContain("2026-08-29;");
   });
 
@@ -249,7 +259,7 @@ suite("resource settlement · custody, completion and refusal (real Postgres)", 
     await refused.markRefused(
       new PayloadRefusedError(
         "coverage",
-        "Reference day 2026-08-28 has 26 patamares for subsystem N; " +
+        "Reference day 2026-08-28 has 13 patamares for every subsystem; " +
           "the local civil day is 48 half hours long",
       ),
     );
@@ -260,7 +270,7 @@ suite("resource settlement · custody, completion and refusal (real Postgres)", 
     expect(row?.ingestedAt).toBeNull();
     expect(row?.refusedAt).not.toBeNull();
     expect(row?.refusalReason).toBe("coverage");
-    expect(row?.refusalDetail).toContain("26 patamares");
+    expect(row?.refusalDetail).toContain("13 patamares");
     // Custody is unaffected: the bytes that were refused are the evidence for
     // the refusal, and they are still held.
     expect(row?.fetchedAt).not.toBeNull();
@@ -272,7 +282,7 @@ suite("resource settlement · custody, completion and refusal (real Postgres)", 
     expect(next.settled).toBe(true);
     expect(next.downloaded).toBe(false);
     expect(next.refusal?.reason).toBe("coverage");
-    expect(next.refusal?.detail).toContain("26 patamares");
+    expect(next.refusal?.detail).toContain("13 patamares");
     expect(gets).toBe(getsAfterDownload);
   });
 
@@ -387,7 +397,7 @@ suite("DESSEM · one refused day does not take the sweep with it", () => {
     expect(result.refusals).toHaveLength(1);
     expect(result.refusals[0]?.referenceDay).toBe("2026-08-28");
     expect(result.refusals[0]?.reason).toBe("coverage");
-    expect(result.refusals[0]?.detail).toContain("26 patamares");
+    expect(result.refusals[0]?.detail).toContain("13 patamares");
     expect(result.refusals[0]?.refusedThisRun).toBe(true);
 
     // The refused day stored nothing, and says so in its provenance row rather

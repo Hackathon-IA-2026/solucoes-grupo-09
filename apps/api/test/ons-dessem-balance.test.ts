@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { payloadRefusal } from "../src/errors.js";
 import {
   availableResourceDays,
   readResources,
@@ -50,6 +51,23 @@ const editRow = (
   return `${header}\n${rewritten.join("\n")}\n`;
 };
 
+/** The refusal a throw declared, or null when the throw was not a refusal. */
+const refusalOf = (run: () => unknown): string | null => {
+  try {
+    run();
+  } catch (error) {
+    return payloadRefusal(error)?.refusal ?? null;
+  }
+  return null;
+};
+
+/** Keep only the patamares in `[first, last]`, in **every** subsystem. */
+const truncateTo = (csv: string, first: number, last: number): string =>
+  filterRows(csv, (cells) => {
+    const patamar = Number(cells[1]);
+    return patamar >= first && patamar <= last;
+  });
+
 describe("DESSEM · the published header wins over the data dictionary", () => {
   it("reads val_ger_hidraulica, the name the file actually uses", () => {
     const parse = parseDessemBalanceCsv(DAY);
@@ -73,7 +91,10 @@ describe("DESSEM · the published header wins over the data dictionary", () => {
     // compared as bytes.
     expect(DESSEM_COVERAGE_START).toBe("2025-05-23");
     expect(FIRST_DAY.split("\n")[0]).toBe(DAY.split("\n")[0]);
-    expect(() => parseDessemBalanceCsv(FIRST_DAY)).toThrow(/patamares for subsystem/);
+    // Two patamares is a truncation, and since data-platform 29 a truncation is
+    // admissible — but only one that reaches midday, which two patamares of
+    // local night cannot. The refusal names that, and stays `coverage`.
+    expect(() => parseDessemBalanceCsv(FIRST_DAY)).toThrow(/midday window/);
   });
 });
 
@@ -190,14 +211,37 @@ describe("DESSEM · a reference day with the wrong number of periods is rejected
     const parse = parseDessemBalanceCsv(DAY);
     expect(parse.rows).toHaveLength(192);
     expect(parse.patamaresPerSubsystem).toBe(48);
+    expect(parse.halfHoursInCivilDay).toBe(48);
+    expect(parse.complete).toBe(true);
     expect(parse.referenceDay).toBe("2026-08-29");
     expect(parse.rejected).toEqual([]);
     expect(parse.aggregateRowsFiltered).toBe(0);
   });
 
-  it("throws when a subsystem is one patamar short", () => {
-    const short = filterRows(DAY, (cells) => !(cells[2] === "SE" && cells[1] === "17"));
-    expect(() => parseDessemBalanceCsv(short)).toThrow(/47 patamares for subsystem SE/);
+  it("throws when a subsystem has an interior hole", () => {
+    // The shape that has never been observed in 470 published days, and the
+    // one the whole change rests on not existing: a truncation is readable
+    // because patamar k means the same half hour either way, a day with a hole
+    // in it establishes nothing about the patamares on either side of it.
+    const holed = filterRows(DAY, (cells) => cells[1] !== "17");
+    expect(() => parseDessemBalanceCsv(holed)).toThrow(/not one contiguous run/);
+    expect(() => parseDessemBalanceCsv(holed)).toThrow(/interior hole/);
+    expect(refusalOf(() => parseDessemBalanceCsv(holed))).toBe("coverage");
+  });
+
+  it("throws when subsystems disagree by more than the ragged edge", () => {
+    // One half hour at an end is a patamar ONS half wrote, and is dropped as a
+    // fragment below. Four is not: this file's subsystems stop two hours apart,
+    // which nothing about a truncation explains, and reading only the shared
+    // run would silently discard four whole half hours of three subsystems.
+    const lopsided = filterRows(
+      DAY,
+      (cells) => !(cells[2] === "SE" && Number(cells[1]) > 44),
+    );
+    expect(() => parseDessemBalanceCsv(lopsided)).toThrow(
+      /disagrees between subsystems by more than one half hour/,
+    );
+    expect(refusalOf(() => parseDessemBalanceCsv(lopsided))).toBe("coverage");
   });
 
   it("throws when a patamar falls outside the local civil day", () => {
@@ -213,6 +257,183 @@ describe("DESSEM · a reference day with the wrong number of periods is rejected
   it("throws when one file carries more than one reference day", () => {
     const twoDays = DAY.replace("2026-08-29;1;N;", "2026-08-30;1;N;");
     expect(() => parseDessemBalanceCsv(twoDays)).toThrow(/covers 2 reference days/);
+  });
+
+  it("throws on a file with a header and no rows at all", () => {
+    const headerOnly = `${DAY.trim().split("\n")[0]}\n`;
+    expect(() => parseDessemBalanceCsv(headerOnly)).toThrow(/covers 0 reference days/);
+    expect(refusalOf(() => parseDessemBalanceCsv(headerOnly))).toBe("coverage");
+  });
+
+  it("throws when every row is filtered away at the boundary", () => {
+    // The coverage rule's own empty input: a file that names a reference day
+    // and leaves nothing to count once the aggregate rows are dropped. A
+    // permissive reading here would admit a day with no half hours in it.
+    const aggregateOnly = filterRows(
+      DAY,
+      (cells) => cells[1] === "1" && cells[2] === "SE",
+    ).replace(";SE;", ";SIN;");
+    expect(() => parseDessemBalanceCsv(aggregateOnly)).toThrow(
+      /carries no subsystem rows/,
+    );
+    expect(refusalOf(() => parseDessemBalanceCsv(aggregateOnly))).toBe("coverage");
+  });
+});
+
+/**
+ * The 29 days this platform used to throw away.
+ *
+ * Data-platform 25 measured the shape of all 34 short days ONS has published
+ * and 29 of them are readable: a contiguous prefix or suffix, short in every
+ * subsystem, with the solar profile sitting exactly where the daylight
+ * assertion requires. The fixtures here are that shape, cut from a real whole
+ * day, and the refusals that remain are the three that are not that shape.
+ */
+describe("DESSEM · a day ONS published short is admitted, and says so", () => {
+  it("admits a contiguous prefix and states how short it is", () => {
+    // 2026-01-14's shape, on 2026-08-29's numbers: patamares 1…46 in all four
+    // subsystems, which is 34 of the 34 measured days' defining property.
+    const prefix = truncateTo(DAY, 1, 46);
+    const parse = parseDessemBalanceCsv(prefix);
+
+    expect(parse.rows).toHaveLength(46 * 4);
+    expect(parse.patamaresPerSubsystem).toBe(46);
+    expect(parse.halfHoursInCivilDay).toBe(48);
+    expect(parse.complete).toBe(false);
+    // The pair is on every row, because the row is where the read filters.
+    expect(
+      parse.rows.every(
+        (row) => row.referenceDayPatamares === 46 && row.referenceDayHalfHours === 48,
+      ),
+    ).toBe(true);
+    // A truncation, not a shift: patamar 1 is still local midnight.
+    expect(parse.rows[0]?.validTime.toISOString()).toBe("2026-08-29T03:00:00.000Z");
+  });
+
+  it("admits a contiguous suffix", () => {
+    // 2025-09-18's shape: 15…48, a publication that starts partway through.
+    const suffix = truncateTo(DAY, 15, 48);
+    const parse = parseDessemBalanceCsv(suffix);
+
+    expect(parse.patamaresPerSubsystem).toBe(34);
+    expect(parse.complete).toBe(false);
+    expect(parse.rows).toHaveLength(34 * 4);
+    // Patamar 15 is 07:00–07:30 local, and it is still patamar 15.
+    const earliest = parse.rows.map((row) => row.validTime.toISOString()).toSorted()[0];
+    expect(earliest).toBe("2026-08-29T10:00:00.000Z");
+  });
+
+  it("leaves a whole day's rows saying they are whole", () => {
+    const parse = parseDessemBalanceCsv(DAY);
+    expect(
+      parse.rows.every(
+        (row) => row.referenceDayPatamares === 48 && row.referenceDayHalfHours === 48,
+      ),
+    ).toBe(true);
+  });
+
+  it("refuses a run that never reaches midday, and keeps calling it coverage", () => {
+    // The five days that stay refused, by shape. Their index cannot be pinned:
+    // nothing in the file says what half hour its rows belong to, so admitting
+    // them would be admitting values whose meaning is a guess. `time_axis`
+    // would be the wrong name — the axis is not known to be wrong, it is
+    // unknowable — so the reason stays `coverage`.
+    for (const [first, last] of [
+      [1, 13], // 2025-08-16
+      [32, 48], // 2025-08-27
+      [42, 48], // 2025-08-09
+      [44, 48], // 2026-01-09
+      [45, 48], // 2025-09-03
+    ] as const) {
+      const cut = truncateTo(DAY, first, last);
+      expect(() => parseDessemBalanceCsv(cut)).toThrow(/midday window/);
+      expect(refusalOf(() => parseDessemBalanceCsv(cut))).toBe("coverage");
+    }
+  });
+
+  it("admits the shortest run that does reach midday, and no shorter", () => {
+    // Patamares 19…30 are the midday window itself. One patamar on either side
+    // of it is the boundary, and the boundary is where an off-by-one would sit.
+    expect(parseDessemBalanceCsv(truncateTo(DAY, 19, 19)).patamaresPerSubsystem).toBe(1);
+    expect(parseDessemBalanceCsv(truncateTo(DAY, 30, 30)).patamaresPerSubsystem).toBe(1);
+    expect(() => parseDessemBalanceCsv(truncateTo(DAY, 1, 18))).toThrow(/midday window/);
+    expect(() => parseDessemBalanceCsv(truncateTo(DAY, 31, 48))).toThrow(/midday window/);
+  });
+
+  it("drops the half-written last patamar and counts the day without it", () => {
+    // 2025-07-19's real shape, measured from the retained payload: N and NE
+    // stop at 26, S and SE carry a 27th whose small hydro, small thermal and
+    // wind have collapsed while demand and hydro continue. Eleven of the 34
+    // short days are ragged exactly like this. The day is the run every
+    // subsystem carries, and the fragment is rejected rather than stored —
+    // storing it would make one reference day 26 half hours in two subsystems
+    // and 27 in the other two, and would feed a fabricated near-zero wind half
+    // hour to the series this dataset exists for.
+    const ragged = filterRows(DAY, (cells) => {
+      const patamar = Number(cells[1]);
+      const subsystem = cells[2] as string;
+      return (
+        patamar <= 26 || (patamar === 27 && (subsystem === "S" || subsystem === "SE"))
+      );
+    });
+    const parse = parseDessemBalanceCsv(ragged);
+
+    expect(parse.patamaresPerSubsystem).toBe(26);
+    expect(parse.complete).toBe(false);
+    expect(parse.rows).toHaveLength(26 * 4);
+    expect(parse.rows.every((row) => row.referenceDayPatamares === 26)).toBe(true);
+    // Rejected, not silently dropped: two rows, both naming patamar 27.
+    expect(parse.rejected).toHaveLength(2);
+    expect(parse.rejected.every((row) => row.reason === "incomplete_patamar")).toBe(true);
+    expect(parse.rejected[0]?.detail).toContain("num_patamar=27");
+    expect(parse.rejected[0]?.detail).toContain("1…26");
+    // And no row of the stored day is in the 27th half hour.
+    const latest = Math.max(...parse.rows.map((row) => row.validTime.getTime()));
+    expect(new Date(latest).toISOString()).toBe("2026-08-29T15:30:00.000Z");
+  });
+
+  it("drops a ragged edge at the start of a suffix day too", () => {
+    const ragged = filterRows(DAY, (cells) => {
+      const patamar = Number(cells[1]);
+      const subsystem = cells[2] as string;
+      return patamar >= 16 || (patamar === 15 && subsystem === "N");
+    });
+    const parse = parseDessemBalanceCsv(ragged);
+    expect(parse.patamaresPerSubsystem).toBe(33);
+    expect(parse.rows).toHaveLength(33 * 4);
+    expect(parse.rejected).toEqual([
+      {
+        reason: "incomplete_patamar",
+        rowNumber: 1,
+        detail:
+          "num_patamar=15 is carried by subsystem N and not by every subsystem; " +
+          "reference day 2026-08-29 is the run 16…48",
+      },
+    ]);
+  });
+
+  it("still holds the daylight assertion over a partial day", () => {
+    // Admission is not a waiver. A short day whose midday carries no solar at
+    // all fails the same assertion a whole day would, for `time_axis` — which
+    // is the right name there, because the profile *is* present and *is* wrong.
+    const noon = truncateTo(DAY, 1, 46);
+    const dark = noon
+      .split("\n")
+      .map((line) => {
+        const cells = line.split(";");
+        const patamar = Number(cells[1]);
+        if (patamar >= 19 && patamar <= 30) {
+          cells[9] = "0.000";
+          cells[10] = "0.000";
+          return cells.join(";");
+        }
+        return line;
+      })
+      .join("\n");
+    expect(() => parseDessemBalanceCsv(dark)).toThrow(
+      /no solar generation in local midday hours/,
+    );
+    expect(refusalOf(() => parseDessemBalanceCsv(dark))).toBe("time_axis");
   });
 });
 

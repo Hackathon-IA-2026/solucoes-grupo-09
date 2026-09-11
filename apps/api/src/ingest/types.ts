@@ -83,7 +83,20 @@ export type RejectionReason =
    * file and populated together everywhere else — so half-populated is an
    * illegal state rather than a partial one.
    */
-  | "half_populated_measurement";
+  | "half_populated_measurement"
+  /**
+   * A DESSEM `num_patamar` that some subsystems carry and others do not.
+   *
+   * ONS writes a half hour as four subsystem rows, and the last half hour of a
+   * truncated file is sometimes written for two of them. That row is not a
+   * forecast: measured over all 21 of them in the published history, demand,
+   * hydro and thermal continue smoothly from the previous half hour while
+   * small hydro, small thermal and wind collapse to between 0.00× and 0.29× —
+   * every time, on eleven different days. So the reference day is the run
+   * every subsystem carries and the fragment is rejected here, where a run
+   * summary can show it (data-platform 29).
+   */
+  | "incomplete_patamar";
 
 /** A rejected source row, kept so a run can explain itself. */
 export interface RejectedRow {
@@ -496,6 +509,23 @@ export interface DessemBalanceHalfHour {
   mmgdGenerationMw: number;
   /** `val_cons_elevatoria` — pumping load, a consumption not a generation. */
   pumpingConsumptionMw: number;
+  /**
+   * How many half hours of this reference day ONS published — the same number
+   * for every subsystem and therefore for every row of the day.
+   *
+   * Equal to `referenceDayHalfHours` on a whole day, and below it on a
+   * publication cut short. It is stored per row because that is the grain a
+   * read filters at: a reader that asks for whole days must not be handed part
+   * of one, and the pair is what lets it tell the difference
+   * (data-platform 29).
+   */
+  referenceDayPatamares: number;
+  /**
+   * How many half hours the *local civil day* contains — 48 everywhere in the
+   * DESSEM window, measured from the zone rather than assumed, so that a
+   * 46- or 50-hour day would be read as one and not as a shortfall.
+   */
+  referenceDayHalfHours: number;
 }
 
 /** What the DESSEM adapter produces from one reference day's file. */
@@ -507,10 +537,19 @@ export interface DessemBalanceParse {
   /** `din_programacaodia`, which must be one single day for the whole file. */
   referenceDay: string;
   /**
-   * How many patamares each subsystem carried — 48 for every day in scope, and
-   * asserted against the length of the local civil day rather than hard-coded.
+   * How many patamares each subsystem carried — 48 on every whole day, fewer on
+   * a publication cut short, and the same number in every subsystem or the file
+   * is refused.
    */
   patamaresPerSubsystem: number;
+  /**
+   * How many half hours the local civil day contains, measured from the zone
+   * rather than hard-coded at 48: a future 46- or 50-patamar day has to read as
+   * a whole day, not as a shortfall of two.
+   */
+  halfHoursInCivilDay: number;
+  /** `patamaresPerSubsystem === halfHoursInCivilDay`. */
+  complete: boolean;
   /** `SIN` rows removed at the boundary. Zero on every DESSEM file seen. */
   aggregateRowsFiltered: number;
 }

@@ -19,6 +19,14 @@ import type { CanonicalReadName } from "./manifest.js";
  *    The settings live on a pooled connection, and a read that only wrote the
  *    axes it cared about would inherit the previous read's gate — an answer
  *    that is wrong in a way no test of that read alone could see.
+ *
+ *    `partial_reference_days` (data-platform 29) is the one axis the Python
+ *    mirror does not write, and it is safe for a reason worth stating rather
+ *    than assuming: the setting's *absence* is its default, so a read that
+ *    never writes it can only ever get the whole-days answer — the same answer
+ *    it got before the axis existed. The hazard property 1 is about runs the
+ *    other way, and `feature_apply_gate` closes it from the SQL side by
+ *    writing this axis empty like the other four.
  * 2. **`set_config(..., true)` is transaction-local**, so the axes cannot
  *    outlive the transaction that set them and cannot leak back into the pool.
  *    That is also why `applyAxes` must be called inside one: `withAxes` opens a
@@ -37,11 +45,37 @@ export interface ReadAxes {
   publishedAtOrBefore?: Date;
   /** Restrict the weather read to one run cycle. Absent is the normal read. */
   weatherRunCycle?: "00Z" | "12Z";
+  /**
+   * Admit reference days ONS published short into the day-ahead balance read.
+   *
+   * Absent — the normal read — the view answers whole reference days only, and
+   * that default is deliberate rather than incidental: a partial day carries
+   * real DESSEM half hours but cannot be divided by a day, so a reader that did
+   * not ask for one must not be handed it (`canonical_day_ahead_balance`,
+   * data-platform 29). Present, the read answers partial days too and says how
+   * short each one is in `reference_day_patamares` beside
+   * `reference_day_half_hours`.
+   *
+   * The only boolean axis, because it is the only one whose absence is a
+   * choice rather than "no cut": an instant that is absent removes a filter,
+   * while this one being absent adds one.
+   */
+  partialReferenceDays?: boolean;
 }
 
 /** An absent axis is written as the empty string, which the SQL side reads as null. */
 const axis = (value: Date | string | undefined): string =>
   value === undefined ? "" : typeof value === "string" ? value : value.toISOString();
+
+/**
+ * A boolean axis, written the way the SQL side reads it.
+ *
+ * `true` is the only value that turns the axis on. Absent and false are the
+ * same statement — "answer the way you answer when nobody asked" — and both go
+ * over as the empty string, so there is one spelling of the default rather than
+ * two.
+ */
+const flag = (value: boolean | undefined): string => (value === true ? "true" : "");
 
 /**
  * Write the axes for the statements that follow, for this transaction only.
@@ -57,7 +91,9 @@ export async function applyAxes(tx: Database, axes: ReadAxes): Promise<void> {
       set_config('wattsteer.fleet_date', ${axis(axes.fleetDate)}, true),
       set_config('wattsteer.published_at_or_before',
                  ${axis(axes.publishedAtOrBefore)}, true),
-      set_config('wattsteer.weather_run_cycle', ${axis(axes.weatherRunCycle)}, true)
+      set_config('wattsteer.weather_run_cycle', ${axis(axes.weatherRunCycle)}, true),
+      set_config('wattsteer.partial_reference_days',
+                 ${flag(axes.partialReferenceDays)}, true)
   `);
 }
 

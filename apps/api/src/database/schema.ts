@@ -955,6 +955,37 @@ export const dessemBalanceHalfHour = pgTable(
     /** `val_cons_elevatoria` — pumping load. */
     pumpingConsumptionMw: doublePrecision().notNull(),
 
+    /**
+     * How many half hours of this reference day ONS published.
+     *
+     * **The column that makes a partial day sayable.** ONS has published 34
+     * reference days short — a contiguous prefix or suffix of the civil day,
+     * never a day with interior holes, and short in every subsystem
+     * (data-platform 25). Those days were refused, because a 46-patamar day in
+     * this table was byte-for-byte indistinguishable from a 48-patamar one and
+     * every consumer that divides by a day would have been quietly wrong. With
+     * the count on the row the difference is *stated*, and
+     * `canonical_day_ahead_balance` answers whole days unless a caller asks for
+     * partial ones (data-platform 29).
+     *
+     * Per row rather than per day because that is the grain the read filters
+     * at, and because the alternative — a day-grain table joined on
+     * `run_label` — would need its own vintage to answer "which coverage was
+     * current at the as-of?".
+     */
+    referenceDayPatamares: integer().notNull(),
+    /**
+     * How many half hours the *local civil day* contains — 48 for every day in
+     * the DESSEM window, derived from the zone rather than assumed.
+     *
+     * Stored beside the count rather than folded into a boolean: `complete`
+     * would be a derived fact with no way to check itself, and hard-coding 48
+     * in the view would turn a future 46- or 50-hour day into a permanent
+     * shortfall. Measured, in this database: a DST-start day is 46 half hours
+     * (2018-11-04) and a DST-end day 50 (2019-02-16).
+     */
+    referenceDayHalfHours: integer().notNull(),
+
     ...vintageColumns(),
   },
   (t) => [
@@ -969,6 +1000,15 @@ export const dessemBalanceHalfHour = pgTable(
     // nothing else — so the illegal state is unrepresentable rather than merely
     // avoided by the one adapter that writes here today.
     check("dessem_balance_is_a_forecast", sql`${t.publishedAt} < ${t.validTime}`),
+    // A day carries at least one half hour and never more than the civil day
+    // holds. The upper bound is what makes the pair readable as "published of
+    // expected" rather than as two unrelated numbers, and it is a table
+    // constraint for the same reason the forecast check is: the adapter that
+    // writes here today is not the only one that ever will.
+    check(
+      "dessem_balance_reference_day_coverage",
+      sql`${t.referenceDayPatamares} between 1 and ${t.referenceDayHalfHours}`,
+    ),
   ],
 );
 /**
