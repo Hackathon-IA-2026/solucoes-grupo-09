@@ -133,6 +133,20 @@ one.
       and 1 national row. The box stays open because that promotion was
       forced rather than earned, which is a state no deployment is in. See
       “The artifact exists, and the gate refused it”
+      — **and it has been re-measured since, with the two calibration vetoes
+      fixed.** Forecaster 36 re-minted both lanes through the unmodified
+      `retrain` at the same `as_of`, on a clone of the real history: checks
+      1–6 passed and **all twelve guardrails passed in both lanes** with no
+      threshold moved (`coverage_p10_in_band` 0.9077 / 0.9005,
+      `p50_unbiasedness` 0.4536 / 0.4599, bootstrap `P = 1.000`). The gate
+      **still refused both**, now on **check 7, `serving_smoke`**: the
+      serving day 2026-09-11 has 0 weather rows and, in `gate_late`, 0
+      programmed-load rows in the database the retrain reads, so 15 and 21
+      features are 100% NULL against a 5% drift ceiling. What this box waits
+      on is therefore no longer a calibration guardrail and no longer a
+      decision — it is the serving day's inputs. Nothing promoted, so the
+      end-to-end was not re-run and no second forced promotion was written.
+      See `.scratch/forecaster/issues/36-the-gate-decides.md`
 - [x] `apps/ml` serves `POST /internal/publish/diagnosis` — it does, and the
       route is not blocked on the forecaster's frozen background sample. See
       “The route, and why the block was the wrong diagnosis”
@@ -1540,6 +1554,21 @@ product would actually be in still ends at `MODEL_UNAVAILABLE`. Ticking on a
 promote line this pass wrote by hand would be recording the measurement as the
 outcome. **What the box now waits on is one gate-agreed promotion**, and the
 two guardrails above name exactly what has to change for there to be one.
+
+> **Overtaken, and the last sentence is now wrong.** Both guardrails have since
+> been fixed — forecaster 34 replaced the marginal `coverage_p10` with
+> `coverage_p10_in_band`, forecaster 35 re-ranked `δ_lo` over the rows its shift
+> can move — and forecaster 36 re-minted both lanes through the unmodified
+> `retrain` at the same `as_of`. **All twelve guardrails now pass in both
+> lanes**, with `COVERAGE_GUARDRAIL` and `P50_UNBIASEDNESS_WINDOW` byte-for-byte
+> unchanged, and the gate reached check 7 for the first time. It refuses there:
+> `serving_smoke` finds tomorrow's vector complete in shape (96 rows, 24 per
+> subsystem, no faults) and 100% NULL in 15 weather features — 21 in `gate_late`,
+> which also loses programmed load — because the database holds no weather
+> forecast and no programmed load for the serving day. So what this box waits on
+> is one gate-agreed promotion still, but the thing standing in its way is an
+> ingestion gap and not a calibration rail. No second forced promotion was
+> written and the end-to-end was not re-run.
 
 ### What was not done, and why
 
