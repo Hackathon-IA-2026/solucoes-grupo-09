@@ -41,3 +41,32 @@ catalogues this ticket writes into.
 - [ ] The response states which source produced the narration
 - [ ] The panel footnote no longer asserts unconditionally that a language model wrote the paragraph
 - [ ] The banned-vocabulary check passes over the new catalogue entries
+
+---
+
+## 30 — Noted, not corrected: the client-side renderer is reached by no screen
+
+api-surface 30's reachability sweep found `apps/web/src/i18n/narration.ts` —
+`renderNarration`, `renderNarrationTemplate`, `renderNarrationClause`,
+`formatNarrationValue`, `NARRATION_VALUE_NAMES` — imported by **no** screen.
+Its only importers are `apps/web/test/narration.test.ts` and
+`test/narration-precision-tie.test.ts`. `apps/web/src/app/app/explain.tsx`
+composes its paragraph itself, from `copy.app.explain.narration` and the
+fixture's own values.
+
+So the fifth box — "numbers are interpolated and formatted client-side" — is
+true of a module the app does not run. **The status line is left as `done`,
+deliberately**, because this ticket's shipped half is the server template
+(`apps/api/src/diagnosis/narration-template.ts`), which is reached from the
+mounted `GET /v1/diagnosis/day-ahead` (`api/index.ts:204`), and because the
+screen *says so in its own source*: "This screen is still on fixtures … the
+constant becomes `explain.narration.source` the day the screen reads the
+endpoint" (`explain.tsx:194-205`). A thing recorded as unbuilt is not a lie,
+and this one is recorded — in the code rather than in the ticket, which is why
+it is written down here too.
+
+**What it would take to wire it.** The Explain screen fetching
+`/v1/diagnosis/day-ahead` instead of `buildExplain`, and passing the response's
+`narration` through `renderNarration(narration, copy, f)`. That is the fixture
+retirement the screen already names, not a repair.
+

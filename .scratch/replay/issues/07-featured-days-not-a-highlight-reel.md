@@ -31,7 +31,10 @@ is deterministic given the data.
 constant — the list is not reproducible if the fleet it is computed against is
 restated per surface).
 
-**Status:** done
+**Status:** done for the rule and the endpoint; **nothing ever calls the
+endpoint, so the cache is never filled and `/v1/replay/days` serves `pending`
+in production** — corrected by api-surface 30, see "30 — Corrected" below. The
+status line previously read `done` without qualification.
 
 - [ ] `GET /v1/replay/days` returns the calendar and the eight featured days together
 - [ ] The query is deterministic given the data, and re-running it changes nothing
@@ -41,3 +44,49 @@ restated per surface).
 - [ ] Duplicates collapse, padding comes from the top of the first criterion, ties break on date ascending
 - [ ] It is computed against `REFERENCE_FLEET`, stamped on the response
 - [ ] The rule is rendered on the screen in one sentence
+
+---
+
+## 30 — Corrected: the nightly job the design depends on does not exist
+
+**Status of this correction:** the ticket's status line is amended; no code is
+changed here. Found by api-surface 30's reachability sweep, which is
+data-platform 03's failure mode asked of every `done` ticket.
+
+The shortlist rule is built, the endpoint is built, and both are covered
+(`apps/ml/tests/test_database_featured_days.py`). The design is explicit that
+the list is **computed nightly and never on the request path** — a recompute is
+~13 s and the gateway's ML timeout is five seconds — so `GET /v1/replay/days`
+serves a process-local cache and `POST /internal/replay/featured-days`
+(`apps/ml/src/wattsteer_ml/app.py:1847`) fills it.
+
+**Nothing calls that endpoint.** Checked directly:
+
+- no member of `WorkerTask` in `apps/api/src/jobs/worker-tasks.ts:58-61`
+  (`publish_forecast`, `publish_diagnosis`, `retrain`, `holdout_backfill`);
+- no schedule registered in `apps/api/src/worker.ts`;
+- no cron in `railway.json`, `apps/ml/railway.json`, `docker-compose.yml` or
+  `.github/workflows/`;
+- `grep -rn "refresh-featured-days"` finds it only in the docstrings that name
+  it, one test's docstring, and `docs/specs/api-surface.md:323`, where the
+  scheduled-jobs table lists `refresh-featured-days | 30 3 * * *` as though it
+  ran. The only callers of the route are `apps/ml/tests/
+  test_database_featured_days.py:390` and its siblings.
+
+So the first box — "`GET /v1/replay/days` returns the calendar and the eight
+featured days together" — is false of every deployed instance. The cache starts
+empty and nothing fills it, so the route permanently returns the `pending`
+payload: *"the featured-days rule has not been run on this instance yet; the
+nightly refresh-featured-days job computes it"* (`app.py:1827-1830`).
+
+**The service is honest and the ticket was not**, the same split forecaster 11
+and 17 show: the fallback names the missing job in the response body, so an API
+reader is told. A ticket reader was told the days were served.
+
+**What it would take to wire it.** The same shape `holdout_backfill` already
+has, and that is the whole of the work: a `refresh_featured_days` member on
+`WorkerTask`, a branch beside `worker-tasks.ts:139`, and a schedule entry in
+`worker.ts` beside `holdoutBackfillScheduleForQueue()`. One task per subsystem
+per served lane. `apps/api/**` is reachable from this branch but `apps/ml/**`
+is owned by a sibling this wave, and the endpoint needs no change — only a
+caller — so the correction is recorded rather than made here.
