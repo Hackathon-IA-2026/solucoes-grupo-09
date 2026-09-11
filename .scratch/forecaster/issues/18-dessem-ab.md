@@ -34,14 +34,21 @@ window lengthens.
 
 **Blocked by:** 09, 11 (the simulator path and the reference fleet).
 
-**Status:** done, and **run** — the three arms were scored against
-data-platform 21's ingested history and the ruling is **do not ship DESSEM**.
-`B-common − A-common = −5,845.5 MWh` of promised floor over **70 target days**
-on F6, `P(treatment better) = 0.001` under the gate's paired block bootstrap
-against a bar of 0.9. The verdict rests on **one** decision-grade fold rather
-than two, because `A-full` cannot be fitted on this database at all in F4 or F5
-— and every arm is weather-blind over the decision-grade test periods, which is
-recorded beside the figures rather than around them. See "The run" below.
+**Status:** done, and **run twice**. The ruling is unchanged and is **do not
+ship DESSEM**. On the second run — a later pin of the same shared database, with
+the whole A/B made tractable first — `B-common − A-common = −7,915.5 MWh` of
+promised floor over **70 target days** on F6, `P(treatment better) = 0.000`
+under the gate's paired block bootstrap against a bar of 0.9.
+
+The verdict still rests on **one** decision-grade fold and not two, and the
+reason **moved**: on the first pin `A-full` refused F4 and F5, and on the second
+`A-full` fits F5 while **`A-common`** refuses it. Both refusals are
+`derive_risk_bins`, both were reproduced through the direct read path as well as
+the materialised one, and each fold that could not be scored is named with its
+arm and its arithmetic rather than dropped. Every arm remains largely
+weather-blind over F6's test period (8 of 70 days now carry a weather value,
+against 1 on the first pin), which is recorded beside the figures rather than
+around them. See "The run" and "The second run" below.
 
 - [ ] All three runs are scored on identical test rows on the shared calendar
 - [x] Decision-grade folds are computed from the 180-day base-fit rule, not
@@ -109,6 +116,15 @@ So `B-common − A-common = −5,845.5 MWh` at `P(treatment better) = 0.001` is 
 one-fold result that **could be a two-fold result today**, with no new
 ingestion, no decision and no key. That is the cheapest remaining strengthening
 of any figure in this repository.
+
+> **Correction, from the second run below.** The arithmetic here is right and
+> this conclusion is wrong. F5 is decision-grade for all three arms, and being
+> decision-grade is not the same as being *fittable*: the re-run scored F5 and
+> `derive_risk_bins` refused it — for `A-common` this time rather than `A-full`
+> — so the verdict still rests on one fold. The strengthening was cheap and was
+> worth taking; what it bought was a 10-minute observable run, arms that are one
+> dataset by construction, and the ruling's sign confirmed on a second pin. It
+> did not buy a second fold. See "The second run".
 
 The calendar also dates the rest: F7 becomes decision-grade around 2026-12-01,
 F8 around 2027-03-01, F9 around 2027-06-01 — one per quarter, which is what the
@@ -557,3 +573,285 @@ The pinning is the point and not a detail: run it against a database being
 ingested and the three arms are three datasets. It costs about an hour of wall
 clock, nearly all of it in `feature_rows` — the `A-full` window measures 4m43s
 per read.
+
+---
+
+# The second run — the cheapest strengthening, and what it actually bought
+
+The first run's verdict rested on one decision-grade fold, and the section "A
+second decision-grade fold was available all along" showed the reason was not
+the data: F5 and F6 both clear the 180-day rule for all three arms, and did on
+the day the first run was made. That run was stopped part-way inside a single
+`feature_rows` call. So the A/B was made tractable and re-run, at the **same**
+`as_of` — 2026-09-09T00:00:00Z, the first run's own instant, so F6 is a
+reproduction and F5 the addition rather than a new question.
+
+**What it bought is not a second fold.** F5 still cannot be scored with three
+arms — and on this pin it cannot be scored with *two* either, because the arm
+that refuses is now `A-common`, which is the **control of both contrasts**. The
+ruling is unchanged and is better supported than before only in the sense that
+the database underneath it is better ingested. That is the honest summary and
+the rest of this section is its arithmetic.
+
+## Made tractable first, because that is why it looked hung
+
+`feature_rows` measures at 58.4 s per 17,376 rows on real data (forecaster 32)
+and this driver called it **once per `(arm, fold)`**: nine reads, of which only
+two were distinct windows, inside a loop that printed nothing.
+
+`plan_windows` now derives, from the arms' own window starts and the folds' own
+test ends, the smallest set of reads that covers every `(arm, fold)` pair. It is
+**two**, and both halves of that are arithmetic rather than a guess: every fold
+of one arm opens on that arm's window start and differs only in where the test
+block ends, so the widest fold's span contains all of them; and `A-full` and
+`A-common` differ only in *window start*, for which the feature function has no
+parameter, so `A-full`'s span contains `A-common`'s and one read serves both.
+`MaterialisedFeatureRows` carries the rows with the four arguments they were
+read under, `read_lane_inputs` grew one optional `rows` and slices what it is
+handed, and the driver's `DatabaseArms.materialise` makes both reads before any
+arm is fitted. Measured on this pin:
+
+```
+dessem_augmented_v1@gate_late  2025-05-23..2026-09-08   45,504 rows   2m40s
+dessem_free_v1@gate_late       2024-04-01..2026-09-08   85,536 rows   4m36s
+```
+
+131,040 rows in **7m16s**, against the 4,824 arm-fold-days — roughly 463,000
+rows — the nine-read path would have asked for. Nine fits then took **2m46s**,
+because the read was the whole of the cost: `A-full@F6` fits in 31 s once its
+85,536 rows are already in hand. **The run took 10m03s end to end and exited 0.**
+The measurement the first attempt was killed over was 93 minutes.
+
+It is one path and not two. The materialised rows are an *argument* to the
+function that otherwise reads them itself, so the arms are composed exactly as
+the weekly retrain composes them, and `rows=None` is still the retrain's and the
+holdout backfill's byte-for-byte behaviour (`test_weekly_retrain.py` and
+`test_holdout_backfill_driver.py` pass unchanged).
+
+**It is also the stronger discipline and not only the faster one.** The old path
+opened a connection per `(arm, fold)`, so against a database under concurrent
+ingestion three arms read minutes apart saw three databases — and
+`assert_identical_test_rows` compares row *keys*, so it would have passed. One
+read is one dataset by construction, which is the thing the first run had to
+take a manual `pg_dump` to obtain.
+
+## The equivalence was proved, not assumed
+
+That a `feature_rows` row is a function of its own target date and **not** of
+the range bounds it was asked for is a statement about SQL this service does not
+own — `feature_rows` lives in the API's migration tree. So it is checked three
+ways and none of them is a row count:
+
+1. **Every run, on every window.** `MaterialisedFeatureRows.agrees_with_a_direct_read`
+   re-reads the last `EQUIVALENCE_PROBE_DAYS = 14` of each span through the
+   ordinary path and compares the rows **whole and in order**, values and all. A
+   disagreement raises `MaterialisationError` — which is deliberately *not* one
+   of `DATA_FAILURES` — before an arm is fitted. Both windows passed, and each
+   window's span, row count and probe range are on the report and on the block.
+2. **At full fold scale, and through the fit.** `A-common@F5`'s own window was
+   read directly (`rows=None`, the nine-read path) and compared to the slice of
+   the materialised free window. Identical, whole and in order, for **all three**
+   of that arm's pool folds — F3 21,408 rows, F4 30,048, F5 38,784 — and both
+   paths then refused `derive_risk_bins` with the byte-identical message. That
+   is what says the refusal below is the database's and not this change's.
+3. **As a test.** `test_the_materialised_window_is_what_a_direct_read_returns`
+   does (1) against real Postgres and is skipped without a database; four
+   further tests pin the slicing rule, the refusal of a window too narrow for
+   the fold it is asked for, the refusal of rows read under another feature
+   function, and the refusal of a probe outside the window.
+
+The narration is a property now, not a courtesy: one timestamped line per window
+and per arm per fold, on **stderr** so the one JSON report on stdout stays
+parseable, flushed, and asserted —
+`test_the_run_narrates_every_arm_and_fold_with_an_instant`.
+
+## The pin, and why it is not the first run's pin
+
+`fc18-pg` is still being written — it is the shared wave database and
+data-platform's weather pass has kept walking forward. It was read and never
+written, nothing here ran `ml:test:db`, and the arms were scored against a
+`pg_dump -Fc` taken **2026-09-11T01:19 Z** and restored into this session's own
+container on port **5450**, removed afterwards. That pin is **not** the first
+run's, and the difference matters enough to tabulate:
+
+| | first run's pin (2026-09-10T20:34 Z) | this pin (2026-09-11T01:19 Z) |
+|---|---|---|
+| migrations | 43 | **49** |
+| `curtailment_report_hour` | 4,765,728 | 4,782,883 |
+| `dessem_balance_half_hour` | 69,888 | 70,080 |
+| `weather_forecast_hour` | 829,637 | **1,417,839** |
+| `centroid_point` | 2 | 2 |
+| weather days in F5 test | **0** of 91 | **81** of 91 |
+| weather days in F6 calibration | **0** of 90 | **80** of 90 |
+| weather days in F6 test | **1** of 70 | **8** of 70 |
+
+So F6's figures are **not** expected to reproduce −5,845.5 and do not, and this
+is not a second measurement of the same thing. It is the same question asked of a
+materially better-ingested database, at the same `as_of`, and the two answers
+agree on the sign and on the verdict.
+
+## What was scoreable, and the refusal that moved
+
+All three arms were attempted on all three reportable folds — `["F4","F5","F6"]`,
+derived, no fold id written — and seven of the nine `(arm, fold)` pairs fitted:
+
+```
+arms_fitted  A-common@F4  A-common@F6  A-full@F5  A-full@F6
+             B-common@F4  B-common@F5  B-common@F6
+```
+
+- **F4 is refused by `A-full`** — `RiskBinsUndeterminedError`, the closest split
+  on the 0.05 grid being (0.5, 0.85), which fails because low predicts 0.070
+  against an observed 0.121, a gap of 0.051 above 0.05. F4 decides nothing
+  anyway: 133 base-fit days against 180.
+- **F5 is refused by `A-common`** — the same class, closest split (0.45, 0.9),
+  low predicting 0.080 against an observed 0.139, a gap of 0.060. **This is the
+  finding.** On the first pin `A-common` fitted every reportable fold and
+  `A-full` refused F4 and F5; on this pin `A-full` has become fittable on F5 and
+  `A-common` has stopped being. The arm that refuses has swapped, and because
+  `A-common` is the control of *both* contrasts, F5 is now unscoreable for the
+  ruling's contrast as well as for the three-arm block — where on the first pin
+  it was scoreable as a two-arm partial and gave +1,500.1 MWh.
+- **F6 carries all three arms** and is the only fold that does, exactly as on the
+  first pin.
+
+The refusal is the published-surface refusal `risk_bins` is entitled to make and
+it is not this ticket's to relax. It is recorded on the block as
+`folds_not_scored` and in the report as `segments_refused`, each naming the arm
+and carrying its own pool's arithmetic.
+
+## The figures
+
+One three-arm segment, F6, `revision_optimistic` (this database still has no
+`canonical_forecast_hour` go-live, so nothing splits a fold), 6,720 rows, 280
+complete subsystem-days over 70 target days, none excluded. Base fits `A-full`
+731 days, `A-common` 314, `B-common` 314 — decision-grade for all three against
+the calendar's 180. Reference fleet
+`sha256:119036fb1f9d198a48f3c8839f0e7a74483cad19f01dba6a9a7a2d48db295228`,
+planning basis `p50`, calendar rules
+`sha256:c8d615f68184e0907a352316336c0512bf21e8eb5ae3ff08912687500812e214`, row
+digest `sha256:811e405a75ec7a06e7e122ed280162268a0d1b5f52e8fa245c3d6dffbdc75ab5`.
+
+| arm | recovered_floor_mwh | floor_baseline_mwh | qloss_mwh | share_p10_forced_zero |
+|---|---|---|---|---|
+| `A-full` | 37,716.6 | 4,007,837.9 | 321.3 | 0.7372 |
+| `A-common` | 41,977.1 | 2,342,250.8 | 324.1 | 0.7635 |
+| `B-common` | 34,061.6 | 2,851,537.6 | 305.8 | 0.7738 |
+
+**Both contrasts, per fold and pooled**, with the sample size in target days
+beside each. The three-arm block's own verdict is the F6 row, because it is the
+only decision-grade fold that carries three arms; the pooled row is the ruling's
+contrast over every fold that carries **its** two arms, computed through the
+module's own types — `RunFloor.of`, `assert_paired_hours`, `FloorBootstrap.of` —
+and recorded here as an explicit partial rather than on the card:
+
+| fold | decision-grade | `dessem_contribution` | P(B better) | `history_price` | P(A-full better) | target days |
+|---|---|---|---|---|---|---|
+| F4 | no (133 base-fit days) | **+1,072.7** | 0.641 | — `A-full` refused | — | 90 |
+| F5 | yes (223) | — `A-common` refused | — | — `A-common` refused | — | 91 |
+| F6 | yes (314) | **−7,915.5** | **0.000** | **−4,260.5** | 0.005 | **70** |
+| **F4 + F6 pooled** | — | **−6,842.8** | **0.018** | not computable | — | **160** |
+
+- **`dessem_contribution` = B-common − A-common = −7,915.5 MWh** over **70
+  target days** (280 subsystem-days), `P(treatment better) = 0.000` at 2,000
+  draws, seed 20260913, against the bar of 0.9. **Not met.** 121.6 MWh of floor
+  per subsystem-day for `B-common` against `A-common`'s 149.9.
+- **`history_price` = A-full − A-common = −4,260.5 MWh** over the same 70 days,
+  `P = 0.005`. **Not met** — the full-history arm is still *worse* than the
+  fifteen-month one here, by less than on the first pin (−6,882.7), and it is
+  published rather than assumed for exactly this reason.
+- **The pooled partial adds 90 target days and does not change the sign.**
+  F4 is where DESSEM is ahead and it clears nothing; pooled over the 160 days
+  the two arms share, the contrast is −6,842.8 MWh at P = 0.018, which is
+  further from the bar than the first pin's F5+F6 partial (−4,345.5 at 0.059)
+  and agrees with it.
+
+**Read `share_p10_forced_zero` before the floor**, as on the first run and for
+the same reason: `B-common` forces the composed P10 to zero in 77.4% of hours
+against `A-common`'s 76.3%, and its `qloss_mwh` is again the **best** of the
+three (305.8 against 324.1). The two currencies still disagree, which is
+precisely what the spec refuses to settle in pinball loss. `floor_coverage`
+moves with the floor and not against it: `A-common` holds its promise on 58 of
+70 SE days, `B-common` on 59, `A-full` on 63.
+
+## The ruling, unchanged
+
+**Do not ship DESSEM.** The first conjunct fails on both samples this pin can
+offer — the block's own verdict (F6, 70 target days, P = 0.000) and the wider
+two-arm partial (F4+F6, 160 target days, P = 0.018) — against a bar of 0.9, with
+a negative delta in each. It failed on both samples the first pin could offer
+too, at −5,845.5 / P = 0.001 and −4,345.5 / P = 0.059. Four samples over two
+pins, one sign. The second conjunct, that the product accepts a D−1 19:00 BRT
+publication, was again never reached and has no field here.
+
+So the spec's fallback applies as written and for the second time: the `dessem_*`
+features stay a **monitored candidate, re-run each quarter as the window
+lengthens**, and the served evening view stays the free-feature run.
+
+## What this attempt set out to do and did not
+
+**The two-fold verdict is still not available, and the reason is no longer the
+one this ticket named.** "A second decision-grade fold was available all along"
+was right about the calendar and wrong about the conclusion it drew: F5 *is*
+decision-grade for all three arms by the 180-day rule, and being decision-grade
+is not the same as being fittable. On the first pin F5 lost `A-full`; on this one
+it loses `A-common`. A named fold can turn out to be unfittable for one arm, and
+which arm it is moves with the ingestion — so the sample the verdict rests on is
+a property of the database on the day, not of the calendar, and the calendar
+cannot promise it.
+
+What the work did buy, and it is worth having:
+
+- the run is **10 minutes and observable**, so no future attempt is killed for
+  silence, and the quarterly re-run is now cheap enough to be routine;
+- the arms are **one dataset by construction** rather than by a hand-taken dump;
+- `A-full` fits F5 on this pin, so `history_price` is one fold from being
+  readable on a wider sample — the first thing to re-check next quarter;
+- the sign of the ruling's contrast has now been taken on four samples across
+  two pins of the database and has not changed.
+
+**Two things would still make the next run worth more than this one**, both
+somebody else's ticket: the weather backfill finishing (F6's test period is 8 of
+70 days, so these floors are still not the floors the product would see); and
+whatever makes `derive_risk_bins` determinable for the common-window arms,
+without which the sample is one quarter and which arm is missing is a lottery.
+
+## Which boxes moved, and the three that did not
+
+Boxes 3 and 4 were already measured and stay ticked: both contrasts are
+published per fold and pooled with the reference fleet's hash on them, and the
+verdict is `FloorBootstrap` over `gate.py`'s own `resample_day_blocks` at its
+`BOOTSTRAP_DRAWS = 2000`, its `BOOTSTRAP_SEED = 20260913` and its
+`PROMOTION_PROBABILITY = 0.9`, with the sample size in target days printed in
+the verdict's own sentence. `gate.py` was not touched; its own tests pass
+unchanged.
+
+**Box 1 stays open**, and it is the box this attempt was for. Three arms were
+scored on identical test rows — asserted by digest and pairwise against the
+labels, and now also proved equal to a direct read, whole, at full fold scale —
+on **one** of the three reportable folds. The discipline held everywhere it was
+exercised and the completeness the box asks for still does not hold.
+
+**Box 5 stays open.** The block did land on both lanes' cards, measured, through
+one command, and the folds are still derived — but the card it landed on was
+named with `--artifact-id` against a volume seeded for the run, because neither
+A/B lane has a promoted artifact on this database (`LANE_RUNS` maps `gate_late`
+to `A-full`, which is fittable on F5 and F6 here but was not promoted). The box
+means a block that is an edit of a card the product actually served.
+
+## How to re-run it
+
+    docker run -d --name fc39-snap -p 5450:5432 -e POSTGRES_PASSWORD=wattsteer \
+      -e POSTGRES_DB=wattsteer postgres:17-alpine
+    docker exec fc18-pg pg_dump -U postgres -Fc --no-owner wattsteer > snap.dump
+    docker cp snap.dump fc39-snap:/tmp/snap.dump
+    docker exec fc39-snap pg_restore -U postgres -d wattsteer --no-owner -j 4 /tmp/snap.dump
+    cd apps/ml && uv run python -m wattsteer_ml.dessem_ab_run \
+      --database-url postgres://postgres:wattsteer@localhost:5450/wattsteer \
+      --root <artifact volume> --artifact-id <a card on it> \
+      --as-of 2026-09-09T00:00:00Z
+
+Ten minutes, seven of them the two reads, and one timestamped line per step. The
+pinning is still the point: run it against `fc18-pg` itself and the arms are
+three datasets — except that now they are read once, so they would at least be
+*one* wrong dataset rather than three.
