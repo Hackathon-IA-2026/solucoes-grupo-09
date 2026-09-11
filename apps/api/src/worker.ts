@@ -3,11 +3,18 @@ import { database } from "./database/connection.js";
 import { createPayloadArchive, REFRESH_CADENCE } from "./ingest/index.js";
 import { createBullMqRunner } from "./jobs/bullmq.js";
 import { FORECAST_PUBLICATIONS, PUBLICATION_TIME_ZONE } from "./jobs/publication.js";
+import {
+  REPLAY_REFRESH_JOB_PREFIX,
+  REPLAY_REFRESH_PATTERN,
+  REPLAY_REFRESH_TIME_ZONE,
+  replayRefreshTargets,
+} from "./jobs/replay-refresh.js";
 import { RETRAIN_JOB_ID, RETRAIN_PATTERN, RETRAIN_TIME_ZONE } from "./jobs/retrain.js";
 import {
   createWorkerDispatch,
   forecastPublicationSchedules,
   holdoutBackfillScheduleForQueue,
+  replayRefreshSchedulesForQueue,
   retrainScheduleForQueue,
   type WorkerTask,
   type WorkerTaskResult,
@@ -179,6 +186,29 @@ if (config.refreshSchedules) {
         "walk-forward test day with REPLAY_FORECAST_UNAVAILABLE.",
     );
   }
+  // The Replay caches: 03:30 in Brasília, nightly, one schedule per (subsystem,
+  // served lane). `docs/specs/api-surface.md`'s scheduled-jobs table has listed
+  // `refresh-featured-days | 30 3 * * *` since replay 07 landed the endpoint,
+  // and until this loop existed that row described a cron in no file: the
+  // shortlist and the Backtest aggregate were computed by tests and by nothing
+  // else, so `/v1/replay/days` and `/v1/backtest` served their `pending`
+  // payloads on every deployed instance.
+  //
+  // Its own `if` for the reason the three above have one: without a modelling
+  // service there is nothing to recompute *in*, and the absence a reader then
+  // meets is a stated `pending` rather than a stale number — which is a
+  // different sentence from the retrain's and deserves its own.
+  if (config.mlUrl) {
+    for (const schedule of replayRefreshSchedulesForQueue()) {
+      await runner.schedule(schedule);
+    }
+  } else {
+    console.warn(
+      "⚠️  replay refresh: WATTSTEER_ML_URL is unset — the featured-days " +
+        "shortlist and the Backtest aggregate will not be computed, and " +
+        "/v1/replay/days and /v1/backtest will keep serving pending.",
+    );
+  }
 }
 
 console.log(
@@ -219,6 +249,11 @@ if (config.refreshSchedules && config.mlUrl) {
   // looking for a third time is told where to look instead.
   console.log(
     "   diagnosis: on completion of each forecast publication (no cron of its own)",
+  );
+  console.log(
+    `   replay refresh: ${REPLAY_REFRESH_JOB_PREFIX} ${REPLAY_REFRESH_PATTERN} ` +
+      `(${REPLAY_REFRESH_TIME_ZONE}) × ${replayRefreshTargets().length} ` +
+      "(subsystem, lane) pairs — the featured-days shortlist and the Backtest",
   );
 }
 

@@ -320,10 +320,22 @@ worker and the existing Redis — no second scheduler, per `data-platform.md`:
 | `publish-forecast:gate_early` | `10 9 * * *` | `dessem_free_v1__gate_early__thr5` | `curtailment_forecast_hour`, `curtailment_forecast_day` |
 | `publish-forecast:gate_late` | `10 19 * * *` | the promoted `gate_late` lane | the same, superseding |
 | `publish-diagnosis` | on completion of each above | same lane | `diagnosis_attribution` |
-| `refresh-featured-days` | `30 3 * * *` | — | the Replay shortlist cache |
+| `refresh-featured-days` | `30 3 * * *` | every served lane, per subsystem | the Replay shortlist cache **and** the Backtest aggregate cache |
 
 Ten minutes after the gate, not on it, because the gate is when the *inputs*
 become knowable, not when the job may start.
+
+> **The fourth row described a cron that existed in no file until api-surface
+> 30's wiring landed.** It is now `replayRefreshSchedulesForQueue()` in
+> `apps/api/src/jobs/worker-tasks.ts`, registered in `apps/api/src/worker.ts`
+> beside the other three, and it carries **both** Replay caches rather than only
+> the shortlist: replay 07 and replay 08 are one omission, both caches are
+> filled only from an `/internal` route on the modelling service, and a second
+> schedule could drift into refreshing a shortlist against one night's rows and
+> an aggregate against another's. It fans out one job per (subsystem, served
+> lane) because `/v1/replay/days` and `/v1/backtest` both require the caller to
+> name a lane. The row's cron and its name are unchanged, so the claim this
+> table made is now true rather than corrected away.
 
 The worker calls the ML service over the private network at
 `POST /internal/publish/forecast` — **worker → ml, never gateway → ml**. The ML

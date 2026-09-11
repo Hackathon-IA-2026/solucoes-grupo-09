@@ -605,9 +605,10 @@ describe("the ml boundary detector is calibrated", () => {
       served.filter((path) => path.startsWith(PRIVATE_PREFIX)).length,
     ).toBeGreaterThan(0);
     // And the prefix discriminates: inside `apps/api`, the only modules that
-    // spell it are the four the *worker* runs — `forecast/publish.ts`,
-    // `diagnosis/publish.ts`, `jobs/retrain.ts` and
-    // `jobs/holdout-backfill.ts`, which are the precomputation this whole
+    // spell it are the five the *worker* runs — `forecast/publish.ts`,
+    // `diagnosis/publish.ts`, `jobs/retrain.ts`,
+    // `jobs/holdout-backfill.ts` and `jobs/replay-refresh.ts`, which are the
+    // precomputation this whole
     // boundary exists to move the model into, and which the gateway's request
     // graph cannot reach. That is what makes the prefix a signal rather than a
     // coincidence: it already separates the two sides correctly, with no
@@ -619,6 +620,13 @@ describe("the ml boundary detector is calibrated", () => {
     // re-export of the publish path through that barrel would have put
     // `/internal/publish/diagnosis` on the request graph. The barrel does not
     // re-export it, and this is one of the two tests that says so.
+    //
+    // `jobs/replay-refresh.ts` joined the list with api-surface 30's wiring of
+    // replay 07 and 08 — the nightly recompute of the two Replay caches, whose
+    // `/internal/replay/featured-days` and `/internal/replay/backtest` had no
+    // caller at all. It arrives on the *worker* side of the boundary, which is
+    // the whole point: `src/api/replay.ts` forwards the public reads and must
+    // never reach the recompute, and the last assertion below is what says so.
     const spelling = [...MODULES.keys()]
       .filter((id) =>
         [...code(MODULES.get(id) as string).matchAll(/["'`]([^"'`]*)["'`]/g)].some(
@@ -630,6 +638,7 @@ describe("the ml boundary detector is calibrated", () => {
       "diagnosis/publish.ts",
       "forecast/publish.ts",
       "jobs/holdout-backfill.ts",
+      "jobs/replay-refresh.ts",
       "jobs/retrain.ts",
     ]);
     expect(spelling.filter((id) => requestGraph(MODULES).has(id))).toEqual([]);
