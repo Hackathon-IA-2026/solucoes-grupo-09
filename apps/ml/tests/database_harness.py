@@ -94,8 +94,65 @@ def run[T](work: Callable[[asyncpg.Connection[Any]], Awaitable[T]]) -> T:
     return asyncio.run(main())
 
 
+#: Every fixture in this suite registers its resources under this host, and no
+#: real ONS or Open-Meteo resource ever will. That makes "is this database a
+#: fixture database?" decidable rather than a matter of trust.
+FIXTURE_URL_HOST = "example.invalid"
+
+#: The deliberate override, for someone who has read the refusal and means it.
+DISPOSABLE_VARIABLE = "WATTSTEER_TEST_DB_IS_DISPOSABLE"
+
+
+async def refuse_if_not_disposable(conn: asyncpg.Connection[Any]) -> None:
+    """Refuse to empty a database that holds real ingested history.
+
+    On 2026-09-10 a suite run against `WATTSTEER_TEST_DATABASE_URL` pointed at
+    a working database destroyed 4.7M `curtailment_report_hour` rows, 69,888
+    DESSEM rows and 330,507 weather rows — five hours of live, rate-limited API
+    calls — and left twenty-four fixture rows in their place. Nothing refused,
+    because a truncate cannot tell whose rows it is dropping.
+
+    Port was not the defect and is not the fix: `test:db` and `ml:test:db`
+    happen to hard-code one, but any URL can be pointed anywhere. What makes
+    the two cases distinguishable is *provenance*. Every fixture resource is
+    registered under :data:`FIXTURE_URL_HOST`; a real ONS bulk resource never
+    is. So a database carrying resource versions this suite did not write is
+    one this suite must not empty.
+
+    Weather is checked separately by volume, because the Open-Meteo path
+    records run requests rather than bulk resources and so has no URL to read.
+    Its bound is the fixtures' own: `seed_weather_run` writes a handful of runs
+    per test, never thousands.
+    """
+    if os.environ.get(DISPOSABLE_VARIABLE):
+        return
+
+    foreign = await conn.fetchval(
+        "select count(*) from ons_resource_version where resource_url not like $1",
+        f"%{FIXTURE_URL_HOST}%",
+    )
+    weather_runs = await conn.fetchval("select count(*) from weather_run_request")
+    if not foreign and (weather_runs or 0) <= FIXTURE_WEATHER_RUN_CEILING:
+        return
+
+    raise RuntimeError(
+        f"Refusing to truncate: this database holds {foreign} resource version(s) "
+        f"not registered under {FIXTURE_URL_HOST} and {weather_runs} weather run "
+        "request(s), so it is carrying ingested history rather than fixtures. "
+        f"Point {URL_VARIABLE} at a throwaway database, or set "
+        f"{DISPOSABLE_VARIABLE}=1 if you have checked and mean it."
+    )
+
+
+#: What a fixture database can hold. `seed_weather_run` writes single runs;
+#: the real backfill wrote 788 and climbing, so anything in the hundreds is
+#: already not ours.
+FIXTURE_WEATHER_RUN_CEILING = 50
+
+
 async def truncate(conn: asyncpg.Connection[Any]) -> None:
     """Everything these fixtures write, and nothing they do not."""
+    await refuse_if_not_disposable(conn)
     await conn.execute(
         "truncate table curtailment_forecast_hour, curtailment_forecast_day, "
         "curtailment_report_hour"
@@ -111,6 +168,7 @@ async def truncate_weather(conn: asyncpg.Connection[Any]) -> None:
     suites and a fixture that emptied a table it never writes is a fixture
     that can break an unrelated one.
     """
+    await refuse_if_not_disposable(conn)
     await conn.execute("truncate table weather_run_request cascade")
 
 
