@@ -418,15 +418,44 @@ So: **Conformalised Quantile Regression** (Romano, Patterson & Candès 2019) —
 the boosters supply the shape, conformal supplies a scalar per tail that makes
 the coverage honest.
 
-**Two one-sided corrections, not one symmetric one.** Let the calibration window
-contain positive rows `i` with observed `y_i`. Define, on the *composed* band:
+**Two one-sided corrections, not one symmetric one — and they are not ranked
+over the same rows.** Let the calibration window contain positive rows `i` with
+observed `y_i`. Define, on the *composed* band:
 
 ```
 E_lo,i = Q_Y(0.10 | x_i) − y_i    (positive when the interval was too high)
 E_hi,i = y_i − Q_Y(0.90 | x_i)
-δ_lo   = the ⌈(n+1)(1 − 0.10)⌉-th smallest value of E_lo
-δ_hi   = the ⌈(n+1)(1 − 0.10)⌉-th smallest value of E_hi
+δ_lo   = the ⌈(n_lo+1)(1 − 0.10)⌉-th smallest E_lo, over the n_lo rows
+         where Q_Y(0.10 | x_i) > 0  — i.e. p(x_i) > 0.90
+δ_hi   = the ⌈(n+1)(1 − 0.10)⌉-th smallest E_hi, over all n positive rows
 ```
+
+**Why the lower tail is ranked over fewer rows.** `δ` is applied inside the
+positive branch, so on any row whose `Q_Y(0.10)` is the mixture's point mass at
+zero — every row with `p(x) ≤ 0.90` — the shift moves nothing and the row is
+covered by arithmetic, with probability one. Ranking `E_lo` over those rows
+spends the miss budget on certainties. Measured on the artifacts of
+2026-09-10: **1,931 of 3,000 rows inert, 1,069 moved**, and the moved set is
+exactly the rows that state a floor.
+
+Leaving them in is not merely wasteful, it is unsafe in the direction that
+matters: on a window where `p` is independent of magnitude the contaminated
+ranking covered the *stated* rows at **0.73** against a 0.90 target — too
+narrow exactly where the floor says something. Ranking over the stated rows
+alone returns that to 0.9008. See `.scratch/forecaster/issues/35-the-shift-is-inert-on-the-atoms.md`.
+
+The upper tail keeps the whole population deliberately: its ineligible rows are
+certain *misses* rather than certain hits, so dropping them would take the
+marginal `coverage_p90` below nominal with nothing to make it up.
+
+So what is aimed at 90% is `coverage_p10_where_stated` on the lower tail and
+the *marginal* `coverage_p90` on the upper. The marginal `coverage_p10` comes
+out above 0.90 by the share of rows whose floor is the point mass —
+`coverage_p10 = (1−s)·1 + s·coverage_p10_where_stated` — and that excess is
+structure, not slack. `conformal_method` on the card reads
+`one_sided_split_cqr_stated_lower` for this reason, and the card publishes
+`conformal_lower_calibration_rows` and `conformal_lower_rank` beside the
+window's own `n`.
 
 **The correction is applied to the quantity it was measured on.** The residuals
 are differences of the *composed* band, so `δ` is a shift of `Q_Y`, not of

@@ -274,21 +274,25 @@
       "elevated": 0.1474206763035622,
       "high": 0.6009551796485707
     },
-    "risk_bins_rule": "(a) |mean predicted \u2212 observed| \u2264 0.05 in every class; (b) adjacent classes' observed frequencies differ by more than the sum of their 95% binomial CI half-widths; edges on a 0.05 grid, most nearly equal in hour count"
+    "risk_bins_rule": "(a) |mean predicted − observed| ≤ 0.05 in every class; (b) adjacent classes' observed frequencies differ by more than the sum of their 95% binomial CI half-widths; edges on a 0.05 grid, most nearly equal in hour count"
   },
   "quantiles": {
     "delta_lo": -21.61271373276672,
     "delta_hi": 144.44574685111186,
-    "conformal_method": "one_sided_split_cqr",
+    "conformal_method": "one_sided_split_cqr_stated_lower",
     "conformal_miscoverage": 0.1,
     "conformal_target_coverage": 0.9,
     "conformal_calibration_rows": 955,
     "conformal_rank": 861,
+    "conformal_lower_calibration_rows": 611,
+    "conformal_lower_rank": 551,
+    "conformal_lower_tail_fitted": true,
+    "conformal_lower_population": "delta_lo is ranked over the 611 of this window's 955 curtailed hours whose P10 is a positive number, because the shift moves nothing on the others: their served floor is the mixture's point mass at zero. The 90% the lower tail is aimed at is therefore a statement about coverage_p10_where_stated, and the marginal coverage_p10 is that number blended with the rows covered by arithmetic — necessarily higher, never lower.",
     "conformal_window": {
       "start": "2025-01-01",
       "end": "2025-03-31"
     },
-    "conformal_guarantee": "approximate: split conformal assumes exchangeability between the calibration window and the test period, and a time series with a growing fleet and a seasonal cycle is not exchangeable. Empirical fold coverage is the check; delta_lo growing across folds is the drift signal.",
+    "conformal_guarantee": "approximate: split conformal assumes exchangeability between the calibration window and the test period, and a time series with a growing fleet and a seasonal cycle is not exchangeable. Empirical fold coverage is the check; delta_lo growing across folds is the drift signal. What is aimed at 90% is coverage_p10_where_stated on the lower tail and the marginal coverage_p90 on the upper: the lower tail is ranked over the rows its delta can move, so the marginal coverage_p10 comes out above 90% by the share of rows whose floor is the point mass at zero, and that excess is structure rather than slack.",
     "coverage_fold": "F1",
     "coverage_population": "curtailed_hours",
     "coverage_rows": 77,
