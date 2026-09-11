@@ -93,8 +93,18 @@ describe("the binders bind something", () => {
   test("a status line that states a count produces a live claim from that line", () => {
     // Derived coverage, so nobody has to remember to register the shape the
     // defect actually took: `**Status:** done (**two boxes open** …)`.
+    //
+    // The trigger is a *count* of boxes, not the word. `**Status:** decided,
+    // nothing promoted, no threshold moved, the box stays open` states no
+    // number — and the box it names belongs to another ticket, which
+    // api-surface 29 put out of scope on purpose. Demanding a claim there
+    // would fail a truthful status and push whoever writes the next one into
+    // inventing a count to satisfy the guard, which is the disease rather
+    // than the cure.
+    const STATES_A_BOX_COUNT =
+      /\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|no|zero)\s+(?:more\s+)?box(?:es)?\b/i;
     for (const ticket of ALL) {
-      if (!/box/i.test(ticket.status)) {
+      if (!STATES_A_BOX_COUNT.test(ticket.status)) {
         continue;
       }
       const onStatusLine = LIVE.filter(
@@ -102,6 +112,37 @@ describe("the binders bind something", () => {
       );
       expect(onStatusLine.length).toBeGreaterThanOrEqual(1);
     }
+  });
+
+  test("the count trigger reads a number, not the word box", () => {
+    // Both halves, because a trigger that matched nothing would make the test
+    // above pass by skipping every ticket.
+    const TRIGGER =
+      /\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|no|zero)\s+(?:more\s+)?box(?:es)?\b/i;
+    for (const counted of [
+      "done (**one box open** — see below)",
+      "done (**two boxes open**)",
+      "done, three boxes open",
+      "done — no boxes open",
+    ]) {
+      expect({ counted, fires: TRIGGER.test(counted) }).toEqual({ counted, fires: true });
+    }
+    for (const uncounted of [
+      "decided, nothing promoted, no threshold moved, the box stays open",
+      "done",
+      "done — measured, and closed without a change",
+      "landed (first half; the three card fields are not this ticket)",
+    ]) {
+      expect({ uncounted, fires: TRIGGER.test(uncounted) }).toEqual({
+        uncounted,
+        fires: false,
+      });
+    }
+    // And it is live on the corpus rather than a rule about nothing: at least
+    // one real ticket states a box count today.
+    expect(ALL.filter((one) => TRIGGER.test(one.status)).length).toBeGreaterThanOrEqual(
+      1,
+    );
   });
 
   test("a still-open section that leads with a count produces a live claim", () => {
