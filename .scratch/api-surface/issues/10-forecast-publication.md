@@ -147,6 +147,28 @@ one.
       decision — it is the serving day's inputs. Nothing promoted, so the
       end-to-end was not re-run and no second forced promotion was written.
       See `.scratch/forecaster/issues/36-the-gate-decides.md`
+      — **and forecaster 37 went back for the serving day and found the box
+      now waits on two things, not one.** It waited 69 minutes on the two
+      blockers 36 named. The first cleared (`fc18-pg` reached 48 migrations);
+      the second did not — the weather head never moved off 2026-09-10 11:00Z,
+      because Open-Meteo's **free daily unit allowance is spent** (`ingestion_run`
+      for source `weather`: **2 ok, 27 failed** on UTC 2026-09-11, and the
+      02:36Z attempt 156 minutes after UTC midnight was refused like the rest,
+      so it is not an hourly window). The way out is already in the code and is
+      a purchase decision: `WATTSTEER_OPEN_METEO_KEY` plus the commercial host
+      `customer-single-runs-api.open-meteo.com`. 37 cloned at 48 migrations and
+      re-minted anyway, at an `as_of` of *now*, on strictly better data — a day
+      more curtailment, programmed load filled forward to 2026-09-12 02:30Z,
+      resource versions re-settled — and **the gate refused one check earlier
+      than 36 did**: `p50_unbiasedness` **0.4390** against its 0.45 floor at
+      `gate_early` (short by 0.0110) and `recall@0.5[pooled]` **0.8163**
+      against a 0.8689 bound at `gate_late` (short by 0.0526), with
+      `serving_smoke` never reached. The bootstrap was `P = 1.000` in both
+      lanes again. So **36's twelve-for-twelve did not reproduce a day later at
+      unchanged thresholds**, and this box now waits on a weather key *and* on
+      calibration rails that pass on the day it lands. Nothing promoted; no
+      threshold moved; no third forced promotion. See
+      `.scratch/forecaster/issues/37-the-serving-day.md`
 - [x] `apps/ml` serves `POST /internal/publish/diagnosis` — it does, and the
       route is not blocked on the forecaster's frozen background sample. See
       “The route, and why the block was the wrong diagnosis”
