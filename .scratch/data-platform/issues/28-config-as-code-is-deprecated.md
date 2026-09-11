@@ -61,8 +61,59 @@ via the automated path would remove the only written record that `DOCKERFILE`
 was ever intended.
 
 **Therefore: do not run `railway config migrate --apply` on this repository.**
-`.railway/railway.ts` should be authored so that all thirteen fields survive,
-with the emitted file used only as a starting shape.
+
+## `railway config pull` is the right route, and it was tried
+
+`pull` imports the *live* project rather than translating the local files, and
+on this project it produced a faithful snapshot in one command: `Redis` and
+`Postgres` with their private-network endpoints and Redis's start command, both
+50,000 MB volumes with their usage alerts and `allowOnlineResize`, the
+`wattsteer-archive` bucket at `iad`, and `api` and `worker` under their real
+names with every variable as `preserve()`.
+
+That matters beyond convenience, because the IaC contract is **"one project
+definition, one apply, omit means delete"**. Hand-authoring from the two
+`railway.json` files would have declared two services and omitted Postgres,
+Redis, both volumes and the bucket — and an apply would then have destroyed
+them. `pull` is the only route that starts from everything.
+
+It also confirmed, incidentally, that the `WATTSTEER_ARCHIVE_*` variables set
+alongside data-platform 27 are present on both services.
+
+## Three fields have no IaC expression at all
+
+Checked against the DSL reference rather than assumed. `service()` documents
+`source`, `build`, `start`, `healthcheck`, `healthcheckTimeout`, `preDeploy`,
+`replicas`, `env`, `volumeMounts`, `domains`. It does **not** document:
+
+- `builder: "DOCKERFILE"`
+- `restartPolicyType` / `restartPolicyMaxRetries`
+- `watchPatterns`
+
+So these are not lost by a careless migration — **they cannot be carried by
+any migration**, careful or not. The restart policy in particular is a real
+behaviour (`ON_FAILURE`, five retries) with nowhere to live. Before this
+migration is finished, someone has to establish whether Railway infers the
+Dockerfile builder from the repository, and where a restart policy now
+belongs. That question, not the authoring, is the actual work.
+
+## Two more things the pull exposed
+
+- **`apps/ml/railway.json` configures a service that does not exist.** The
+  project has `api`, `worker`, `Postgres` and `Redis`; there is no `ml`
+  service. That file has never applied to anything.
+- **`railway config plan` needs the `railway` npm package** installed at the
+  repository root. Adding a dependency and running a plan against production
+  are both decisions for whoever owns the deployment, so neither was taken.
+
+**Deliberately not committed: the pulled `.railway/railway.ts`.** It is
+faithful to *live state*, which is exactly the problem — the live services have
+never deployed, so their live state has no healthcheck, no timeout and no
+restart policy, and IaC takes precedence over `railway.json` once present.
+Committing it half-authored would silently drop the three deploy settings that
+`railway.json` is currently the only record of, which is the failure this
+ticket was written about. Regenerate it with `railway config pull` as the first
+step of the real migration.
 
 **One thing to check while doing it**, because it is invisible today: the
 production services carry `WATTSTEER_ARCHIVE_*` variables referencing the
@@ -81,7 +132,11 @@ decision.
       **Not** by `railway config migrate --apply`: measured above, it drops 8
       of 13 fields and misnames the services
 - [ ] The builder, healthcheck path, timeout and restart policy survive the
-      migration, compared field by field against the originals
+      migration, compared field by field against the originals — noting that
+      three of them have no documented IaC field, so this box may require a
+      platform answer rather than an edit
+- [ ] `apps/ml/railway.json` is reconciled: either an `ml` service exists, or
+      the file is removed as configuration for nothing
 - [ ] The deprecation warning is gone from a plain CLI invocation, which is the
       observable that says it took
 - [ ] The archive variable references are confirmed to resolve, or the way they
