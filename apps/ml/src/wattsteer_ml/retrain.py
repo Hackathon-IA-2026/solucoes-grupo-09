@@ -157,6 +157,7 @@ from wattsteer_ml.evaluation.serving_lanes import (
 )
 from wattsteer_ml.features import (
     FeatureRowsQuery,
+    MaterialisedFeatureRows,
     read_feature_rows,
     read_serving_rows,
     serving_target_date,
@@ -321,6 +322,7 @@ async def read_lane_inputs(
     as_of: datetime,
     fold_id: str | None = None,
     arm: MatrixRun | None = None,
+    rows: MaterialisedFeatureRows | None = None,
 ) -> LaneInputs:
     """One query for the whole window, then slice it per fold.
 
@@ -346,6 +348,23 @@ async def read_lane_inputs(
             what the feature function is asked for — and only the window start
             is then the arm's own, which is exactly the difference the A/B is
             measuring.
+        rows: feature rows already materialised for **this** arm's
+            ``(feature_set, gate_profile, threshold_mw)``, covering at least
+            ``[blocks.base_fit_start, blocks.test_end]``. ``None`` — the weekly
+            retrain's case — reads them here, which is the only behaviour this
+            function ever had. Passing them is forecaster ticket 18's case: one
+            fold's three arms, and one arm's several folds, all slice the *same*
+            rows out of one window, and ``feature_rows`` measures at 58.4 s per
+            17,376 rows on real data, so a driver that reads once per
+            ``(arm, fold)`` pays for the same rows nine times over and looks
+            hung while it does. The rows are sliced by ``target_date`` exactly as
+            a fresh read would be, and a caller that hands over a window too
+            narrow for the fold it asked for is refused rather than quietly
+            scored on a short block.
+
+    Raises:
+        RetrainError: if ``rows`` is given and does not span the arm's blocks,
+            or if no rows are found for the window at all.
 
     The pool built from the result is the folds *before* the one being scored
     and never ``calendar.frozen_folds``. For the live edge those are the same
@@ -387,24 +406,56 @@ async def read_lane_inputs(
             raise RetrainError(str(unknown)) from unknown
     go_live = await read_go_live(conn, "canonical_forecast_hour")
     blocks = fold.blocks_for(arm.window_start)
-    rows = await read_feature_rows(
-        conn,
-        FeatureRowsQuery(
-            target_from=blocks.base_fit_start,
-            target_to=blocks.test_end,
-            gate_profile=arm.gate_profile,
-            feature_set=arm.feature_set,
-            threshold_mw=lane.threshold_mw,
-        ),
-    )
-    if not rows:
+    window: Sequence[Mapping[str, Any]]
+    if rows is None:
+        window = await read_feature_rows(
+            conn,
+            FeatureRowsQuery(
+                target_from=blocks.base_fit_start,
+                target_to=blocks.test_end,
+                gate_profile=arm.gate_profile,
+                feature_set=arm.feature_set,
+                threshold_mw=lane.threshold_mw,
+            ),
+        )
+    else:
+        # A materialised window is this fold's rows only if it *contains* them,
+        # and containment is judged against the span the caller asked the
+        # database for rather than against the dates that came back. A database
+        # holding no row for the last week of a test block is a data fact; a
+        # caller that read a week too few is a bug, and comparing observed dates
+        # would make the two indistinguishable.
+        if not rows.covers(blocks.base_fit_start, blocks.test_end):
+            raise RetrainError(
+                f"{lane}: materialised rows were read for "
+                f"{rows.target_from.isoformat()}–{rows.target_to.isoformat()} and "
+                f"{fold.id} needs "
+                f"{blocks.base_fit_start.isoformat()}–{blocks.test_end.isoformat()} "
+                f"for {run}; a window narrower than the fold would be scored on a "
+                "short block that looks like an ingestion gap"
+            )
+        if (rows.gate_profile, rows.feature_set, rows.threshold_mw) != (
+            arm.gate_profile,
+            arm.feature_set,
+            lane.threshold_mw,
+        ):
+            raise RetrainError(
+                f"{lane}: materialised rows are "
+                f"{rows.feature_set!r} at {rows.gate_profile!r}/"
+                f"{rows.threshold_mw} and {run} reads {arm.feature_set!r} at "
+                f"{arm.gate_profile!r}/{lane.threshold_mw}; rows shared between "
+                "two arms that disagree about the feature function are not one "
+                "dataset"
+            )
+        window = rows.between(blocks.base_fit_start, blocks.test_end)
+    if not window:
         raise RetrainError(
             f"{lane}: feature_rows returned nothing for "
             f"{blocks.base_fit_start.isoformat()}–{blocks.test_end.isoformat()}"
         )
     prior: list[tuple[Fold, FoldBlocks, tuple[FoldSegment, ...]]] = []
     by_fold: dict[str, tuple[Mapping[str, Any], ...]] = {
-        fold.id: _between(rows, blocks.base_fit_start, blocks.test_end)
+        fold.id: _between(window, blocks.base_fit_start, blocks.test_end)
     }
     for earlier in calendar.folds:
         if earlier.index >= fold.index:
@@ -421,7 +472,7 @@ async def read_lane_inputs(
             continue
         prior.append((earlier, earlier_blocks, stamp_fidelity(earlier, go_live)))
         by_fold[earlier.id] = _between(
-            rows, earlier_blocks.base_fit_start, earlier_blocks.test_end
+            window, earlier_blocks.base_fit_start, earlier_blocks.test_end
         )
     serving_day = serving_target_date(as_of)
     return LaneInputs(

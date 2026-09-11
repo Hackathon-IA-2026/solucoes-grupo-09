@@ -34,7 +34,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -59,6 +59,7 @@ from wattsteer_ml.evaluation.dessem_ab import (
     NOT_RUN_YET,
 )
 from wattsteer_ml.evaluation.matrix import MATRIX_RUN_BY_NAME
+from wattsteer_ml.features import MaterialisedFeatureRows
 from wattsteer_ml.lanes import Lane, is_artifact_id
 
 #: The A/B is quarterly and this is the quarter it was first run in. A fixed
@@ -454,6 +455,213 @@ def test_there_is_no_flag_that_narrows_the_folds() -> None:
     assert "--as-of" in source
 
 
+# --- the rows are read once per window -----------------------------------------
+
+
+def test_the_windows_are_planned_per_feature_set_and_not_per_fit() -> None:
+    """Nine ``(arm, fold)`` reads collapse to two, and the two are derived.
+
+    This is the ticket's own finding about why the first run looked hung:
+    ``feature_rows`` measures at 58.4 s per 17,376 rows and the driver called it
+    once per fit. What makes two reads enough is arithmetic and not a guess —
+    every fold of one arm opens on that arm's window start, and ``A-full``'s
+    window start precedes ``A-common``'s at the same feature set — so the
+    assertion is that the planned spans *contain* every block every arm will ask
+    for, not that there happen to be two of them.
+    """
+    calendar = materialize_fold_calendar(AS_OF.date())
+    folds = reportable_folds(calendar)
+    windows = driver.plan_windows(folds)
+
+    by_key = {window.key: window for window in windows}
+    assert len(by_key) == len(windows)
+    # One per feature set at the A/B's one gate and one threshold. Derived:
+    # the two free-feature arms share a read because the feature function has
+    # no window-start parameter to tell them apart.
+    assert {key[0] for key in by_key} == {one.feature_set for one in AB_RUNS}
+
+    asked = 0
+    for matrix_run in AB_RUNS:
+        window = by_key[
+            (matrix_run.feature_set, AB_GATE_PROFILE, float(SUBSYSTEM_THRESHOLD_MW))
+        ]
+        for fold in folds:
+            blocks = fold.blocks_for(matrix_run.window_start)
+            assert window.target_from <= blocks.base_fit_start
+            assert blocks.test_end <= window.target_to
+            asked += 1
+    # The saving, stated as the ratio it is rather than as a wall clock.
+    assert asked > len(windows)
+
+
+def test_a_materialised_window_is_sliced_exactly_as_a_direct_read_is() -> None:
+    """``between`` is the ``target_date`` predicate and nothing else.
+
+    Asserted on rows built here rather than read, because what is being pinned
+    is the slicing rule — inclusive at both ends, order preserved, whole rows —
+    and a database would only confirm it for the dates it happens to hold.
+    """
+    rows = tuple(
+        {"target_date": date(2026, 7, 1) + timedelta(days=offset), "n": offset}
+        for offset in range(10)
+    )
+    materialised = MaterialisedFeatureRows(
+        target_from=date(2026, 7, 1),
+        target_to=date(2026, 7, 10),
+        gate_profile="gate_late",
+        feature_set="dessem_free_v1",
+        threshold_mw=5.0,
+        rows=rows,
+    )
+
+    assert materialised.between(date(2026, 7, 3), date(2026, 7, 5)) == rows[2:5]
+    assert materialised.between(date(2026, 7, 1), date(2026, 7, 10)) == rows
+    assert materialised.covers(date(2026, 7, 2), date(2026, 7, 9))
+    assert not materialised.covers(date(2026, 6, 30), date(2026, 7, 9))
+    assert not materialised.covers(date(2026, 7, 2), date(2026, 7, 11))
+
+
+class NoGoLive:
+    """The only thing ``read_lane_inputs`` touches before it judges the rows.
+
+    A stub and not a database, because what these two tests pin is that a
+    materialised window is refused **before** anything is read or fitted — a
+    check that only fired after a fold's worth of work would be a check that
+    costs what it was meant to save.
+    """
+
+    async def fetchval(self, *_: Any) -> None:
+        return None
+
+
+def test_a_window_too_narrow_for_the_fold_is_refused_rather_than_scored_short() -> None:
+    """A short read is a bug and a short database is a fact; they must differ.
+
+    Containment is judged against the range the rows were *asked* for, so a
+    caller that materialised a fortnight too few is refused even though the
+    rows it holds would slice without complaint.
+    """
+    arm = MATRIX_RUN_BY_NAME["B-common"]
+    lane = Lane(
+        feature_set=arm.feature_set,
+        gate_profile=AB_GATE_PROFILE,
+        threshold_mw=float(SUBSYSTEM_THRESHOLD_MW),
+    )
+    blocks = (
+        materialize_fold_calendar(AS_OF.date()).fold("F6").blocks_for(arm.window_start)
+    )
+    narrow = MaterialisedFeatureRows(
+        target_from=blocks.base_fit_start,
+        target_to=blocks.test_end - timedelta(days=14),
+        gate_profile=arm.gate_profile,
+        feature_set=arm.feature_set,
+        threshold_mw=lane.threshold_mw,
+        rows=(),
+    )
+
+    with pytest.raises(retrain.RetrainError, match="materialised rows were read for"):
+        asyncio.run(
+            retrain.read_lane_inputs(
+                NoGoLive(),  # type: ignore[arg-type]
+                lane,
+                as_of=AS_OF,
+                fold_id="F6",
+                arm=arm,
+                rows=narrow,
+            )
+        )
+
+
+def test_rows_read_for_another_feature_function_are_not_this_arm_s() -> None:
+    """Sharing one read between two arms is only sound if they agree on it.
+
+    ``A-full`` and ``A-common`` may share a window because the feature function
+    takes no window start. ``B-common`` may not share theirs, and the refusal is
+    at the point the rows are handed over rather than at the point a figure
+    comes out of them.
+    """
+    arm = MATRIX_RUN_BY_NAME["B-common"]
+    lane = Lane(
+        feature_set=arm.feature_set,
+        gate_profile=AB_GATE_PROFILE,
+        threshold_mw=float(SUBSYSTEM_THRESHOLD_MW),
+    )
+    blocks = (
+        materialize_fold_calendar(AS_OF.date()).fold("F6").blocks_for(arm.window_start)
+    )
+    wrong = MaterialisedFeatureRows(
+        target_from=blocks.base_fit_start,
+        target_to=blocks.test_end,
+        gate_profile=arm.gate_profile,
+        feature_set="dessem_free_v1",
+        threshold_mw=lane.threshold_mw,
+        rows=(),
+    )
+
+    with pytest.raises(retrain.RetrainError, match="materialised rows are"):
+        asyncio.run(
+            retrain.read_lane_inputs(
+                NoGoLive(),  # type: ignore[arg-type]
+                lane,
+                as_of=AS_OF,
+                fold_id="F6",
+                arm=arm,
+                rows=wrong,
+            )
+        )
+
+
+def test_a_probe_outside_the_materialised_window_compares_nothing() -> None:
+    """The equivalence check refuses to pass vacuously."""
+    materialised = MaterialisedFeatureRows(
+        target_from=date(2026, 7, 1),
+        target_to=date(2026, 7, 10),
+        gate_profile="gate_late",
+        feature_set="dessem_free_v1",
+        threshold_mw=5.0,
+        rows=(),
+    )
+    with pytest.raises(ValueError, match="compares nothing"):
+        asyncio.run(
+            materialised.agrees_with_a_direct_read(
+                None,
+                first=date(2026, 6, 1),
+                last=date(2026, 7, 10),
+            )
+        )
+
+
+def test_the_run_narrates_every_arm_and_fold_with_an_instant(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    """Ninety-three minutes of silence is indistinguishable from a hang.
+
+    That is not a preference: it is what the first attempt at this run was
+    killed for, and the fold it cost. So the narration is a property of the
+    driver and asserted like one — on stderr, so the one JSON report on stdout
+    stays parseable, and stamped, so a reader can tell a slow read from a
+    stopped one.
+    """
+    seed_cards(tmp_path)
+    driver.run_dessem_ab_from_database(request(tmp_path))
+
+    captured = capsys.readouterr()
+    lines = [line for line in captured.err.splitlines() if line.startswith("[")]
+    assert lines
+    assert all(line[1:21].endswith("Z") for line in lines)
+    assert any("folds reportable" in line for line in lines)
+    # stdout is the report a caller parses, and the narration is not on it.
+    assert captured.out == ""
+
+    # The unreachable database above gets as far as the fold list and no
+    # further, so the lines a real run's *long* steps print are asserted where
+    # they are written rather than by fitting twelve boosters in a unit test.
+    # Source-level, because the property is "no step of this run is silent".
+    for step in ("materialise", "fit"):
+        assert "_progress(" in inspect.getsource(getattr(driver.DatabaseArms, step))
+    assert "_progress(" in inspect.getsource(driver._scoreable_segments)
+
+
 # --- against real Postgres -----------------------------------------------------
 
 
@@ -527,3 +735,45 @@ def test_an_un_ingested_database_produces_the_absence_and_not_a_verdict(
         block = json.loads(path.read_text(encoding="utf-8"))[DESSEM_DELTA_BLOCK_KEY]
         assert block["measured"] is False
         assert block["reason"] == NOT_RUN_YET
+
+
+def test_the_materialised_window_is_what_a_direct_read_returns() -> None:
+    """The one property materialising rests on, asked of the real function.
+
+    ``feature_rows`` is a set-returning function in the API's migration tree and
+    nothing in this service owns it. That a row is a function of its own target
+    date and not of the range bounds it was asked for is therefore an assumption
+    about somebody else's SQL — so it is read twice and compared whole, values
+    and all, and not by count or by key.
+
+    Skipped without a database, and honest on an un-ingested one: two empty
+    reads are still two reads that agree, which is why the test also records how
+    many rows it actually compared.
+    """
+    assert database_url()
+    arm = MATRIX_RUN_BY_NAME["B-common"]
+    calendar = materialize_fold_calendar(AS_OF.date())
+    folds = reportable_folds(calendar)
+    window = next(
+        one for one in driver.plan_windows(folds) if one.feature_set == arm.feature_set
+    )
+    probe_last = window.target_to
+    probe_first = max(
+        window.target_from,
+        probe_last - timedelta(days=driver.EQUIVALENCE_PROBE_DAYS - 1),
+    )
+
+    async def compare(conn: Any) -> tuple[bool, int]:
+        materialised = await MaterialisedFeatureRows.of(conn, window.query())
+        agrees = await materialised.agrees_with_a_direct_read(
+            conn, first=probe_first, last=probe_last
+        )
+        return agrees, len(materialised.between(probe_first, probe_last))
+
+    agrees, compared = run(compare)
+    assert agrees, (
+        f"{window.feature_set} rows differ between a read of "
+        f"{window.target_from}..{window.target_to} sliced to "
+        f"{probe_first}..{probe_last} and a direct read of the latter"
+    )
+    assert compared >= 0

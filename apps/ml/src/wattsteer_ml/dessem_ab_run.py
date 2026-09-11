@@ -50,6 +50,38 @@ are the three the A/B needs:
    drop a decision-grade one and leave a *weaker* verdict looking like the same
    verdict.
 
+## The rows are read once per window, not once per fit
+
+``feature_rows`` measures at 58.4 s per 17,376 rows on real data (forecaster
+32), and this driver used to call it once per ``(arm, fold)``: nine reads of two
+distinct windows for a three-fold calendar, ninety minutes of them, inside a
+loop that printed nothing. The first attempt at the real run was killed on the
+strength of that silence and the A/B lost a decision-grade fold to it.
+
+So :func:`plan_windows` derives, from the arms' own window starts and the
+folds' own test ends, the smallest set of reads that covers every
+``(arm, fold)`` pair — **two**, because each arm's folds share a base-fit start
+and ``A-full``'s span contains ``A-common``'s — :meth:`DatabaseArms.materialise`
+makes them before any arm is fitted, and
+:func:`~wattsteer_ml.retrain.read_lane_inputs` slices what it is handed. It is
+one path and not two: the materialised rows are an argument to the function that
+otherwise reads them itself, so the arms are composed exactly as the weekly
+retrain composes them.
+
+**It is also the stronger discipline and not merely the faster one.** The old
+path opened a connection per ``(arm, fold)``, so against a database under
+concurrent ingestion three arms minutes apart read three databases —
+and ``assert_identical_test_rows`` compares row *keys*, so it would have passed.
+One read is one dataset by construction.
+
+The equivalence materialising rests on — that a ``feature_rows`` row is a
+function of its own target date and not of the range bounds it was asked for —
+is a statement about SQL this module does not own, so it is **checked** rather
+than assumed: :data:`EQUIVALENCE_PROBE_DAYS` at the end of each span are re-read
+through the ordinary path and compared whole, and a disagreement raises
+:class:`MaterialisationError` before an arm is fitted. Each window's span, row
+count and probe land on the report.
+
 ## Which folds are scoreable, and why that is not the same as decision-grade
 
 :func:`reportable_folds` applies two conditions and neither names a fold:
@@ -116,7 +148,7 @@ import json
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -148,6 +180,7 @@ from wattsteer_ml.evaluation.dessem_ab import (
 )
 from wattsteer_ml.evaluation.ladder import FoldRows
 from wattsteer_ml.evaluation.matrix import MatrixRun
+from wattsteer_ml.features import FeatureRowsQuery, MaterialisedFeatureRows
 from wattsteer_ml.lanes import Lane, format_instant
 from wattsteer_ml.promotions import PROMOTION_LOG_FILENAME, PromotionLog
 from wattsteer_ml.retrain import (
@@ -269,6 +302,113 @@ class ArmFit:
     fold_rows: FoldRows
 
 
+def _progress(message: str) -> None:
+    """One observable line, on stderr, stamped with the instant it happened.
+
+    The first attempt at this run was killed after ninety-three minutes because
+    from outside, silence and a hang are the same thing — and that cost a
+    decision-grade fold. stdout carries the one JSON report a caller parses, so
+    the narration goes to stderr and is flushed: a line buffered until the run
+    ends is not progress.
+    """
+    print(
+        f"[{datetime.now(UTC).strftime('%Y-%m-%dT%H:%M:%SZ')}] {message}",
+        file=sys.stderr,
+        flush=True,
+    )
+
+
+@dataclass(frozen=True)
+class ArmWindow:
+    """The one ``feature_rows`` call a set of ``(arm, fold)`` reads is sliced from.
+
+    A window is ``(feature_set, gate_profile, threshold_mw)`` plus a span of
+    target dates, and it is deliberately **neither** per arm nor per fold:
+
+    - every fold of one arm shares that arm's base-fit start and differs only in
+      where the test block ends, so the widest fold's span contains all of them;
+    - ``A-full`` and ``A-common`` differ only in *window start*, and the feature
+      function has no parameter for one — so ``A-full``'s span contains
+      ``A-common``'s and a single read serves both.
+
+    Three arms over three folds is therefore **two** calls rather than nine, and
+    at forecaster 32's measured 58.4 s per 17,376 rows that is the difference
+    between a run somebody watches and a run somebody kills.
+    """
+
+    feature_set: str
+    gate_profile: str
+    threshold_mw: float
+    target_from: date
+    target_to: date
+
+    @property
+    def key(self) -> tuple[str, str, float]:
+        return (self.feature_set, self.gate_profile, self.threshold_mw)
+
+    def query(self) -> FeatureRowsQuery:
+        return FeatureRowsQuery(
+            target_from=self.target_from,
+            target_to=self.target_to,
+            gate_profile=self.gate_profile,  # type: ignore[arg-type]
+            feature_set=self.feature_set,  # type: ignore[arg-type]
+            threshold_mw=self.threshold_mw,
+        )
+
+
+def plan_windows(folds: Sequence[Fold]) -> tuple[ArmWindow, ...]:
+    """The smallest set of reads that covers every arm on every fold.
+
+    Derived from the arms' own window starts and the folds' own test ends —
+    nothing here knows a date. A fold an arm has no base-fit block in
+    contributes nothing to that arm's span, which is the rule
+    :func:`reportable_folds` already applies and not a second one.
+    """
+    spans: dict[tuple[str, str, float], tuple[date, date]] = {}
+    threshold = float(SUBSYSTEM_THRESHOLD_MW)
+    for run in AB_RUNS:
+        key = (run.feature_set, AB_GATE_PROFILE, threshold)
+        for fold in folds:
+            if not _has_base_fit(fold, run):
+                continue
+            blocks = fold.blocks_for(run.window_start)
+            first, last = spans.get(key, (blocks.base_fit_start, blocks.test_end))
+            spans[key] = (
+                min(first, blocks.base_fit_start),
+                max(last, blocks.test_end),
+            )
+    return tuple(
+        ArmWindow(
+            feature_set=feature_set,
+            gate_profile=gate_profile,
+            threshold_mw=threshold_mw,
+            target_from=first,
+            target_to=last,
+        )
+        for (feature_set, gate_profile, threshold_mw), (first, last) in sorted(
+            spans.items()
+        )
+    )
+
+
+#: How many days of each materialised window are re-read directly and compared
+#: to the slice, whole, before any arm is fitted. Short, because what is being
+#: checked is whether a feature row depends on the *range bounds* it was asked
+#: for and a row either does or does not; long enough to span a fortnight of
+#: gates, weekends and a month boundary rather than one lucky day.
+EQUIVALENCE_PROBE_DAYS = 14
+
+
+class MaterialisationError(DessemAbRunError):
+    """The materialised rows are not what a direct read returns.
+
+    Its own class, and deliberately not one of :data:`DATA_FAILURES`: a
+    window-dependent feature row would make every figure in the block a
+    measurement of something other than the arms, and that is a fault in the
+    code rather than an absence in the data. It ends the run.
+    """
+
+
 @dataclass
 class DatabaseArms:
     """The :data:`~wattsteer_ml.evaluation.dessem_ab.DessemScorer`, over Postgres.
@@ -277,10 +417,30 @@ class DatabaseArms:
     fit per ``(arm, fold)`` — twelve for a four-fold calendar — and the arms of
     one fold are read against the same instant because each read materialises
     the calendar from ``request.as_of`` and nothing here reads a clock.
+
+    **The rows underneath those fits are read once per window, not once per
+    fit.** :func:`plan_windows` collapses the nine reads a three-arm,
+    three-fold calendar used to make into two, and
+    :func:`~wattsteer_ml.retrain.read_lane_inputs` is then handed the
+    materialised rows to slice. Reading once is the stronger discipline and not
+    only the faster one: the old path opened a connection per ``(arm, fold)``,
+    so three arms read minutes apart saw three states of a database under
+    concurrent ingestion, and
+    :func:`~wattsteer_ml.evaluation.dessem_ab.assert_identical_test_rows`
+    compares row *keys* and would have passed.
+
+    The equivalence that makes it legitimate is **checked, not assumed**:
+    :meth:`materialise` re-reads :data:`EQUIVALENCE_PROBE_DAYS` of each window
+    through the ordinary path and compares the rows whole, and a disagreement
+    raises :class:`MaterialisationError` before any arm is fitted.
     """
 
     request: DessemAbRequest
+    folds: tuple[Fold, ...] = ()
     _fits: dict[tuple[str, str], ArmFit] = field(default_factory=dict)
+    _windows: dict[tuple[str, str, float], MaterialisedFeatureRows] = field(
+        default_factory=dict
+    )
 
     def __call__(self, run: MatrixRun, segment: FoldSegment) -> tuple[ScoredHour, ...]:
         fit = self.fit(run, segment.fold_id)
@@ -318,6 +478,58 @@ class DatabaseArms:
         """
         return format_instant(self.request.as_of)
 
+    def materialise(self) -> tuple[str, ...]:
+        """Read every window once, prove each one sliceable, and keep it.
+
+        Returns one line per window for the report: the span, the row count and
+        the probe that was compared. Called before any fit, so the whole cost of
+        the run's reads is paid in one visible place, with a timestamp on each
+        line, rather than scattered through the fold loop where it looked like a
+        hang.
+        """
+        read: list[str] = []
+        for window in plan_windows(self.folds):
+            span = f"{window.target_from.isoformat()}..{window.target_to.isoformat()}"
+            _progress(f"read  {window.feature_set} {span} ...")
+            materialised, probe = asyncio.run(self._materialise(window))
+            self._windows[window.key] = materialised
+            read.append(
+                f"{window.feature_set}@{window.gate_profile} {span} "
+                f"{len(materialised.rows)} rows; probe "
+                f"{probe[0].isoformat()}..{probe[1].isoformat()} identical to a "
+                "direct read"
+            )
+            _progress(f"read  {read[-1]}")
+        return tuple(read)
+
+    async def _materialise(
+        self, window: ArmWindow
+    ) -> tuple[MaterialisedFeatureRows, tuple[date, date]]:
+        conn: asyncpg.Connection[Any] = await asyncpg.connect(
+            self.request.database_url,
+            server_settings={"default_transaction_read_only": "on"},
+        )
+        try:
+            rows = await MaterialisedFeatureRows.of(conn, window.query())
+            # The probe sits at the end of the span, which is where the test
+            # blocks are: the rows the verdict is actually taken on.
+            last = window.target_to
+            first = max(
+                window.target_from, last - timedelta(days=EQUIVALENCE_PROBE_DAYS - 1)
+            )
+            if not await rows.agrees_with_a_direct_read(conn, first=first, last=last):
+                raise MaterialisationError(
+                    f"{window.feature_set}@{window.gate_profile}: the rows sliced "
+                    f"out of {window.target_from.isoformat()}.."
+                    f"{window.target_to.isoformat()} for {first.isoformat()}.."
+                    f"{last.isoformat()} are not the rows a direct read of that "
+                    "range returns, so a feature row depends on the range it was "
+                    "asked for and materialising would change every figure here"
+                )
+            return rows, (first, last)
+        finally:
+            await conn.close()
+
     def fit(self, run: MatrixRun, fold_id: str) -> ArmFit:
         key = (run.name, fold_id)
         cached = self._fits.get(key)
@@ -328,7 +540,9 @@ class DatabaseArms:
             gate_profile=AB_GATE_PROFILE,
             threshold_mw=float(SUBSYSTEM_THRESHOLD_MW),
         )
+        _progress(f"fit   {run.name}@{fold_id} reading ...")
         inputs = asyncio.run(self._read(lane, run, fold_id))
+        _progress(f"fit   {run.name}@{fold_id} {len(inputs.rows)} rows, training ...")
         trained = train_fold(
             inputs.rows,
             fold=inputs.fold,
@@ -349,6 +563,7 @@ class DatabaseArms:
             ),
         )
         self._fits[key] = fit
+        _progress(f"fit   {run.name}@{fold_id} fitted")
         return fit
 
     async def _read(self, lane: Lane, run: MatrixRun, fold_id: str) -> LaneInputs:
@@ -358,7 +573,17 @@ class DatabaseArms:
         )
         try:
             return await read_lane_inputs(
-                conn, lane, as_of=self.request.as_of, fold_id=fold_id, arm=run
+                conn,
+                lane,
+                as_of=self.request.as_of,
+                fold_id=fold_id,
+                arm=run,
+                # ``None`` when nothing was materialised, which is the direct
+                # read this driver used to make every time: the fast path is an
+                # optimisation of the slow one and never a second path.
+                rows=self._windows.get(
+                    (run.feature_set, AB_GATE_PROFILE, lane.threshold_mw)
+                ),
             )
         finally:
             await conn.close()
@@ -420,8 +645,10 @@ def _scoreable_segments(
                 reasons[run.name] = f"{type(absent).__name__}: {absent}"
         if reasons:
             refused[segment.row_id] = reasons
+            _progress(f"score {segment.row_id} refused by {sorted(reasons)}")
         else:
             scoreable.append(segment)
+            _progress(f"score {segment.row_id} carries all three arms")
     return tuple(scoreable), refused
 
 
@@ -456,6 +683,12 @@ class DessemAbRunReport:
     #: than subtracted from it, so the difference between the folds the calendar
     #: opened and the folds the verdict rests on is visible in the report.
     segments_refused: Mapping[str, Mapping[str, str]] = field(default_factory=dict)
+    #: One line per materialised ``feature_rows`` window: its span, its row
+    #: count and the probe range that was re-read directly and found identical.
+    #: On the report rather than only in the log, because "the arms were scored
+    #: on rows nobody re-read" and "the arms were scored on rows checked against
+    #: a direct read" are different claims and only one of them is this run's.
+    windows: tuple[str, ...] = ()
 
     @property
     def is_measurement(self) -> bool:
@@ -470,6 +703,7 @@ class DessemAbRunReport:
                 row_id: dict(reasons)
                 for row_id, reasons in sorted(self.segments_refused.items())
             },
+            "windows_materialised": list(self.windows),
             "arms_fitted": list(self.fitted),
             "measured": self.is_measurement,
             "not_run": self.not_run,
@@ -505,13 +739,18 @@ def run_dessem_ab_from_database(request: DessemAbRequest) -> DessemAbRunReport:
             "This is the calendar's arithmetic against the runs' window starts, "
             "and it changes when the next quarter freezes"
         )
-    scorer = DatabaseArms(request=request)
+    scorer = DatabaseArms(request=request, folds=folds)
     measured: DessemDeltaReport | None = None
     not_run: str | None = None
     segments: tuple[FoldSegment, ...] = ()
     refused: dict[str, dict[str, str]] = {}
+    windows: tuple[str, ...] = ()
+    _progress(f"folds reportable {[fold.id for fold in folds]}")
     try:
         go_live = asyncio.run(_go_live(request.database_url))
+        # Every read the run will make, made now, checked now, and narrated.
+        # A MaterialisationError here is not a DATA_FAILURE and propagates.
+        windows = scorer.materialise()
         segments = tuple(
             segment for fold in folds for segment in stamp_fidelity(fold, go_live)
         )
@@ -565,6 +804,7 @@ def run_dessem_ab_from_database(request: DessemAbRequest) -> DessemAbRunReport:
         not_run=not_run,
         cards=tuple(cards),
         cards_absent=tuple(absent_cards),
+        windows=windows,
         segments_refused={
             row_id: dict(reasons) for row_id, reasons in sorted(refused.items())
         },
@@ -632,14 +872,18 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 __all__ = [
     "DATA_FAILURES",
+    "EQUIVALENCE_PROBE_DAYS",
     "GO_LIVE_VIEW",
     "ArmFit",
+    "ArmWindow",
     "DatabaseArms",
     "DessemAbRequest",
     "DessemAbRunError",
     "DessemAbRunReport",
+    "MaterialisationError",
     "NoArmDataError",
     "main",
+    "plan_windows",
     "reportable_folds",
     "run_dessem_ab_from_database",
 ]
