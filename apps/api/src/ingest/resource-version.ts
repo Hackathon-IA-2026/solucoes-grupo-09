@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, desc, eq, isNotNull } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
 import type { Database } from "../database/connection.js";
 import {
   onsResourceVersion,
@@ -180,6 +180,21 @@ export async function recordResourceVersion(
     0,
     Math.floor((Date.now() - superseded.fetchedAt.getTime()) / MS_PER_DAY),
   );
+
+  // The prior bytes are gone upstream, so say so on the row itself rather than
+  // leaving it indistinguishable from one whose parse threw. This is the same
+  // fact the republication row records, written where the settlement census
+  // reads — `superseded` above is already "the newest state whose bytes we
+  // hold", so nothing new is computed here.
+  await db
+    .update(onsResourceVersion)
+    .set({ supersededAt: new Date() })
+    .where(
+      and(
+        eq(onsResourceVersion.id, superseded.id),
+        isNull(onsResourceVersion.supersededAt),
+      ),
+    );
   await db
     .insert(resourceRepublication)
     .values({

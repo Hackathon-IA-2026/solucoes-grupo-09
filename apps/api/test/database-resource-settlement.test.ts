@@ -12,8 +12,10 @@ import {
   type CatalogueResource,
   createDessemIngestor,
   createDirectoryArchive,
+  markResourceFetched,
   type PayloadArchive,
   readRetainedPayload,
+  recordResourceVersion,
 } from "../src/ingest/index.js";
 import { createInProcessRunner } from "../src/jobs/inprocess.js";
 
@@ -461,5 +463,68 @@ suite("DESSEM · one refused day does not take the sweep with it", () => {
       .from(dessemBalanceHalfHour)
       .orderBy(dessemBalanceHalfHour.runLabel);
     expect(stored.map((row) => row.referenceDay)).toEqual(["2026-08-28", "2026-08-29"]);
+  });
+});
+
+suite("resource settlement · bytes upstream withdrew (real Postgres)", () => {
+  const handle = createDatabase(URL as string, 5);
+  const { db } = handle;
+
+  afterAll(async () => {
+    await handle.close();
+  });
+
+  it("marks the prior version superseded when a replacement is recorded", async () => {
+    // The state data-platform 22 left unnamed. A version that was fetched and
+    // never settled is indistinguishable, in 22's census, from one whose parse
+    // threw — but if upstream has replaced its bytes, no retry can ever settle
+    // it. Measured on the working database: all 18 unsettled rows were of this
+    // kind, and the census read them as poison.
+    const url = `https://example.invalid/superseded-${Date.now()}.csv`;
+    const named = (etag: string): CatalogueResource => ({
+      name: "superseded.csv",
+      url,
+      format: "CSV",
+      lastModified: new Date("2026-08-28T19:42:43.000Z"),
+      size: 10,
+    });
+
+    const first = await recordResourceVersion(db, "slug", named("v1"), {
+      changeKey: "v1",
+      lastModified: new Date("2026-08-28T19:42:43.000Z"),
+      contentLength: 10,
+      etag: "v1",
+    });
+    // Fetched, never settled — exactly the shape that was being miscounted.
+    await markResourceFetched(db, first.id, new ArrayBuffer(10));
+
+    const beforeRow = await db
+      .select({ superseded: onsResourceVersion.supersededAt })
+      .from(onsResourceVersion)
+      .where(eq(onsResourceVersion.id, first.id));
+    // Non-vacuous: it is genuinely unmarked before the replacement, so the
+    // assertion below is measuring the write rather than a default.
+    expect(beforeRow[0]?.superseded ?? null).toBeNull();
+
+    await recordResourceVersion(db, "slug", named("v2"), {
+      changeKey: "v2",
+      lastModified: new Date("2026-08-29T19:42:43.000Z"),
+      contentLength: 11,
+      etag: "v2",
+    });
+
+    const afterRow = await db
+      .select({
+        superseded: onsResourceVersion.supersededAt,
+        ingested: onsResourceVersion.ingestedAt,
+        refused: onsResourceVersion.refusedAt,
+      })
+      .from(onsResourceVersion)
+      .where(eq(onsResourceVersion.id, first.id));
+    expect(afterRow[0]?.superseded).toBeInstanceOf(Date);
+    // And it is still neither ingested nor refused — the mark adds a state
+    // rather than faking a settlement, which is the whole distinction.
+    expect(afterRow[0]?.ingested ?? null).toBeNull();
+    expect(afterRow[0]?.refused ?? null).toBeNull();
   });
 });

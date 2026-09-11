@@ -169,6 +169,23 @@ export const onsResourceVersion = pgTable(
     refusedAt: timestamp({ withTimezone: true }),
     refusalReason: text(),
     refusalDetail: text(),
+    /**
+     * When a later version of the same resource replaced these bytes upstream.
+     *
+     * Data-platform 22 split "we hold these bytes" from "these bytes were
+     * parsed to a conclusion", which made a thrown parse retryable. It left one
+     * state unnamed: a version that was fetched, never settled, and that
+     * upstream has since withdrawn — its `change_key` is a `Last-Modified` or
+     * `ETag` ONS no longer serves, so nothing will ever settle it. Measured on
+     * the working database: **all 18** unsettled rows were of exactly this
+     * kind, each with a later settled row for the same resource.
+     *
+     * Without the mark, 22's census cannot tell "poisoned, retry it" from
+     * "gone, nothing to retry". After a day that is 18 rows; after a year the
+     * loud signal drowns in them, which is the failure 22 exists to prevent,
+     * one level up.
+     */
+    supersededAt: timestamp({ withTimezone: true }),
   },
   (t) => [
     // The idempotency anchor: re-probing an unchanged file finds this row and
