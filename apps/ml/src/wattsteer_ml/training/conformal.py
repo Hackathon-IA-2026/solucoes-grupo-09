@@ -109,6 +109,61 @@ did: the shift lives on the mixture the ensemble already held, so the corrected
 marginals *are* the served marginals and the hour band and the day band cannot
 disagree about hour 14.
 
+**Which rows each ``δ`` is ranked over — forecaster ticket 35.** Split
+conformal's order statistic makes ``P(E ≤ δ) = 1 − α`` over *the rows it was
+ranked on*, and that is a statement about the served band only where the served
+band is the function of ``δ`` the residual assumed. It is not, on every row.
+``Q_Y(0.10) = 0`` for every ``p ≤ 0.90``, and the shift is added inside the
+positive branch, so on those rows ``δ_lo`` moves the served floor by exactly
+nothing while their residuals ``E_lo = 0 − y`` sit in the ranking as though it
+did. Forecaster ticket 33 measured the consequence in-window, where split
+conformal is supposed to be exact by construction: ``coverage_p10`` **0.9771**
+and **0.9765** on the two lanes' own calibration windows, against a 0.90 target.
+
+The arithmetic is an identity, not an estimate. Write ``s`` for the share of
+scored hours whose P10 is a positive number:
+
+    ``coverage_p10 = (1 − s)·1 + s·coverage_p10_where_stated``
+
+— the first term because a scored hour has ``y > τ > 0`` and ``y ≥ 0`` needs no
+fit. Ticket 33's published in-window triples satisfy it to four decimals
+(1061/3148 at 0.9321 gives 0.97710; 1051/3148 at 0.9296 gives 0.97648), so the
+marginal was never the thing the ranking controlled.
+
+**The lower tail is therefore ranked over the rows whose P10 is a statement**,
+``p > 0.90``, the same population :attr:`CoverageReport.lower_stated_rows`
+counts and :attr:`CoverageReport.coverage_p10_where_stated` is taken over.
+What that buys and what it costs, precisely:
+
+- ``coverage_p10_where_stated`` becomes exact in-window — the order statistic's
+  own ``⌈(n+1)(1 − α)⌉/n``, on a population selected by ``p(x)`` alone and so
+  legitimately conditionable, with the same approximate-exchangeability caveat
+  as before.
+- **The marginal guarantee is not traded for it.** The dropped rows are covered
+  with probability one, so the marginal is ``(1 − s) + s·(≥ 0.90) ≥ 0.90`` by
+  arithmetic, whatever the fit does. Nothing about the floor's promise rests on
+  the fit for those rows, and nothing about it is weakened here.
+- The served P10 moves, and **which way is a property of the data, not of the
+  change**. Where the point-mass rows carry systematically smaller labels than
+  the stated ones — which is the real classifier's behaviour, ticket 33's
+  magnitude-decile table — the contaminated ranking over-covered the stated
+  rows and the fix narrows the floor toward nominal. Where the two populations
+  carry the same labels, it under-covered them badly and the fix widens it.
+  Both directions are measured in :mod:`tests.test_conformal_quantiles`.
+
+**The upper tail is deliberately left alone, and the asymmetry is the point.**
+``E_hi`` has the same contamination — at ``p ≤ 0.10`` the served P90 is zero and
+``δ_hi`` cannot move it — but its ineligible rows are certain *misses*, not
+certain hits. Dropping them would lower ``δ_hi``, narrow the P90, and take the
+marginal ``coverage_p90`` from ``s_hi·c`` to ``s_hi·0.90``, strictly below
+nominal, with no arithmetic left to make up the difference. That is the
+under-stated worst case forecaster ticket 21 refused to ship, and it is exactly
+what the lower tail's fix does *not* cost. So the upper tail keeps a
+conservative ``δ_hi`` and publishes the contamination instead:
+:attr:`CoverageReport.upper_correction_realised` is ``s_hi`` and the
+factorisation ``coverage_p90 = upper_correction_realised × coverage_p90_where_stated``
+is where its shortfall is read.
+
 **Exchangeability is violated and is not pretended otherwise.** The calibration
 window is the 90 days immediately preceding the test period, which is the best
 available proxy and is not exchangeability, so the guarantee is **approximate**
@@ -170,6 +225,28 @@ NOMINAL_MISCOVERAGE = 0.10
 
 #: ``1 − α`` — what ``coverage_p10`` and ``coverage_p90`` are aimed at.
 TARGET_COVERAGE = 1.0 - NOMINAL_MISCOVERAGE
+
+#: What the card carries in place of ``δ_lo`` when the calibration window holds
+#: curtailed hours but too few of them have a P10 that is a positive number to
+#: rank a residual over. **A fact about the classifier, not about the window's
+#: length** — a longer window ranks the same kind of row over the same atom —
+#: so the sentence says so rather than inviting a caller to widen the window
+#: and try again, and ``δ_lo`` is ``0`` rather than a number ranked from
+#: residuals that were never a test of the floor. On such a window every
+#: ``E_lo`` is ``0 − y``: an order statistic of the negative labels, with no
+#: model in it at all, which would then be applied to whatever stated rows the
+#: *test* fold happens to have. Forecaster ticket 35.
+LOWER_TAIL_NOT_FITTED = DeclinedFigure(
+    "delta_lo is not stated for this fold. Its calibration window has too few "
+    "curtailed hours whose P10 is a positive number to rank a residual over, "
+    "so the served floor is the boosters' own 0.10 quantile, uncorrected, and "
+    "carries no coverage statement. This is the classifier putting its "
+    "curtailed hours in the point mass at zero, not a calibration window that "
+    "is too short: a longer window ranks the same rows over the same atom.",
+    figure="delta_lo, the lower conformal correction",
+    kind="unrunnable",
+    surface="the model card's Quantiles group, `conformal_lower_population`",
+)
 
 #: The hot-swap gate's coverage guardrail (`docs/specs/forecaster.md`). Named
 #: here because this module is where coverage is measured; the veto itself is
@@ -521,12 +598,24 @@ class ConformalCorrection:
     delta_lo: float
     #: MWh added to the ``α = 0.90`` knot.
     delta_hi: float
-    #: ``n`` — the calibration window's curtailed hours that both tails were
-    #: ranked over. One count, because both tails see the same rows.
+    #: ``n_hi`` — the calibration window's curtailed hours, which is what the
+    #: **upper** tail is ranked over. It was both tails' count until forecaster
+    #: ticket 35; the lower tail now carries its own, below, and this field
+    #: keeps its old name, its old meaning and its old value.
     calibration_rows: int
-    #: ``⌈(n + 1)(1 − α)⌉``, 1-based. Stored so the published δ can be checked
-    #: against the sample it came from without re-running the fit.
+    #: ``⌈(n_hi + 1)(1 − α)⌉``, 1-based — the upper tail's order statistic.
+    #: Stored so the published δ can be checked against the sample it came from
+    #: without re-running the fit.
     rank: int
+    #: ``n_lo`` — the subset of those hours whose served P10 is a positive
+    #: number, and so the only rows ``δ_lo`` can move. Never above
+    #: :attr:`calibration_rows`, and on Brazilian curtailment roughly a third
+    #: of it. A separate field and not a ratio because the rank is an integer
+    #: order statistic over an integer sample and a reader has to be able to
+    #: re-derive it.
+    lower_calibration_rows: int
+    #: ``⌈(n_lo + 1)(1 − α)⌉``, 1-based — the lower tail's own order statistic.
+    lower_rank: int
     #: ``α``. A field rather than a constant read at use time, so a bundle
     #: fitted under one miscoverage cannot be read under another.
     miscoverage: float
@@ -555,6 +644,34 @@ class ConformalCorrection:
                 f"rank {self.rank} is not ⌈(n+1)(1 − α)⌉ = {expected} for "
                 f"n = {self.calibration_rows} at α = {self.miscoverage}"
             )
+        if self.lower_calibration_rows > self.calibration_rows:
+            raise ConformalError(
+                f"{self.lower_calibration_rows} rows state a P10 out of "
+                f"{self.calibration_rows} curtailed calibration hours; the "
+                "lower tail is ranked over a subset of the window, never over "
+                "more rows than the window holds"
+            )
+        if self.lower_calibration_rows < 0:
+            raise ConformalError(f"{self.lower_calibration_rows} is not a row count")
+        if self.lower_calibration_rows < floor:
+            if self.lower_rank != 0 or self.delta_lo != 0.0:
+                raise ConformalError(
+                    f"{self.lower_calibration_rows} of {self.calibration_rows} "
+                    "curtailed calibration hours state a P10, which is below "
+                    f"the {floor} an order statistic needs, so delta_lo is "
+                    "declined and must be 0.0 at rank 0; got "
+                    f"delta_lo={self.delta_lo!r} at rank {self.lower_rank!r}. "
+                    "A number ranked over rows the shift cannot move is not a "
+                    "correction, and it is not made into one by being stored."
+                )
+            return
+        expected_lower = conformal_rank(self.lower_calibration_rows, self.miscoverage)
+        if self.lower_rank != expected_lower:
+            raise ConformalError(
+                f"lower_rank {self.lower_rank} is not ⌈(n+1)(1 − α)⌉ = "
+                f"{expected_lower} for n = {self.lower_calibration_rows} at "
+                f"α = {self.miscoverage}"
+            )
         if self.window_start > self.window_end:
             raise ConformalError(
                 f"empty calibration window {self.window_start.isoformat()} to "
@@ -565,6 +682,19 @@ class ConformalCorrection:
     def target_coverage(self) -> float:
         """``1 − α`` — what each tail is aimed at, one tail at a time."""
         return 1.0 - self.miscoverage
+
+    @property
+    def lower_tail_fitted(self) -> bool:
+        """Whether ``δ_lo`` is an order statistic or a declined figure.
+
+        ``False`` means the calibration window had fewer than
+        :func:`minimum_calibration_rows` curtailed hours whose P10 was a
+        positive number, ``delta_lo`` is ``0.0`` because nothing could be
+        ranked, and the served floor is uncorrected. One predicate, so no
+        reader has to infer it from a zero — ``delta_lo = 0.0`` is also a
+        perfectly possible *fitted* value.
+        """
+        return self.lower_rank != 0
 
     @classmethod
     def fit(
@@ -586,14 +716,37 @@ class ConformalCorrection:
         Neither sequence carries a key, an hour or a subsystem. The correction
         the spec asks for is global, and this signature is why a future edit
         cannot quietly make it conditional.
+
+        **The two sequences are no longer the same rows** — forecaster ticket
+        35. ``upper_residuals`` is the window's curtailed hours;
+        ``lower_residuals`` is the subset of them whose P10 is a positive
+        number, because ``δ_lo`` moves nothing on the rest. So the lengths
+        differ, each tail gets its own ``n`` and its own
+        ``⌈(n+1)(1 − α)⌉``, and the only cross-check left is the one that is
+        actually an invariant: the lower population is a subset, so it can
+        never be the larger of the two.
+
+        **A window with too few stated rows declines ``δ_lo`` rather than
+        inventing one.** Below :func:`minimum_calibration_rows` on the lower
+        population there is no order statistic to take, and the residuals that
+        remain are all ``0 − y`` — an order statistic of the negative labels,
+        with no model in it. So ``delta_lo`` is ``0.0``, ``lower_rank`` is
+        ``0``, :attr:`lower_tail_fitted` is ``False`` and the card carries
+        :data:`LOWER_TAIL_NOT_FITTED`. The served floor is then the boosters'
+        own 0.10 quantile, uncorrected and carrying no coverage statement,
+        which is what it always was on such a window — the difference is that
+        it now says so. The *upper* tail still refuses outright when the window
+        itself is too short, because there is then no fold to speak of at all.
         """
-        if len(lower_residuals) != len(upper_residuals):
+        if len(lower_residuals) > len(upper_residuals):
             raise ConformalError(
                 f"{len(lower_residuals)} lower and {len(upper_residuals)} upper "
-                "residuals are not the same calibration rows; both tails are "
-                "ranked over one window"
+                "residuals: the lower tail is ranked over the subset of this "
+                "window's curtailed hours whose P10 is positive, so it cannot "
+                "hold more rows than the window does"
             )
-        rows = len(lower_residuals)
+        rows = len(upper_residuals)
+        lower_rows = len(lower_residuals)
         floor = minimum_calibration_rows(miscoverage)
         if rows < floor:
             raise ConformalError(
@@ -604,11 +757,20 @@ class ConformalCorrection:
                 "A wider band is not the answer — the window is the answer."
             )
         rank = conformal_rank(rows, miscoverage)
+        for value in lower_residuals:
+            if not math.isfinite(value):
+                raise ConformalError(f"E_lo carries {value!r}; a residual is MWh")
+        fitted = lower_rows >= floor
+        lower_rank = conformal_rank(lower_rows, miscoverage) if fitted else 0
         return cls(
-            delta_lo=_order_statistic(lower_residuals, rank, "E_lo"),
+            delta_lo=(
+                _order_statistic(lower_residuals, lower_rank, "E_lo") if fitted else 0.0
+            ),
             delta_hi=_order_statistic(upper_residuals, rank, "E_hi"),
             calibration_rows=rows,
             rank=rank,
+            lower_calibration_rows=lower_rows,
+            lower_rank=lower_rank,
             miscoverage=miscoverage,
             window_start=window[0],
             window_end=window[1],
@@ -634,14 +796,33 @@ class ConformalCorrection:
         return TailShift(lower_mwh=self.delta_lo, upper_mwh=self.delta_hi)
 
     def card_fields(self) -> dict[str, Any]:
+        population = (
+            (
+                "delta_lo is ranked over the "
+                f"{self.lower_calibration_rows} of this window's "
+                f"{self.calibration_rows} curtailed hours whose P10 is a "
+                "positive number, because the shift moves nothing on the "
+                "others: their served floor is the mixture's point mass at "
+                "zero. The 90% the lower tail is aimed at is therefore a "
+                "statement about coverage_p10_where_stated, and the marginal "
+                "coverage_p10 is that number blended with the rows covered by "
+                "arithmetic — necessarily higher, never lower."
+            )
+            if self.lower_tail_fitted
+            else LOWER_TAIL_NOT_FITTED
+        )
         return {
             "delta_lo": self.delta_lo,
             "delta_hi": self.delta_hi,
-            "conformal_method": "one_sided_split_cqr",
+            "conformal_method": "one_sided_split_cqr_stated_lower",
             "conformal_miscoverage": self.miscoverage,
             "conformal_target_coverage": self.target_coverage,
             "conformal_calibration_rows": self.calibration_rows,
             "conformal_rank": self.rank,
+            "conformal_lower_calibration_rows": self.lower_calibration_rows,
+            "conformal_lower_rank": self.lower_rank,
+            "conformal_lower_tail_fitted": self.lower_tail_fitted,
+            "conformal_lower_population": population,
             "conformal_window": {
                 "start": self.window_start.isoformat(),
                 "end": self.window_end.isoformat(),
@@ -651,7 +832,12 @@ class ConformalCorrection:
                 "the calibration window and the test period, and a time series "
                 "with a growing fleet and a seasonal cycle is not exchangeable. "
                 "Empirical fold coverage is the check; delta_lo growing across "
-                "folds is the drift signal."
+                "folds is the drift signal. What is aimed at 90% is "
+                "coverage_p10_where_stated on the lower tail and the marginal "
+                "coverage_p90 on the upper: the lower tail is ranked over the "
+                "rows its delta can move, so the marginal coverage_p10 comes "
+                "out above 90% by the share of rows whose floor is the point "
+                "mass at zero, and that excess is structure rather than slack."
             ),
         }
 
@@ -1086,17 +1272,36 @@ class DeltaDrift:
 def residuals(
     hours: Sequence[ScoredHour],
 ) -> tuple[tuple[float, ...], tuple[float, ...]]:
-    """``(E_lo, E_hi)`` over the curtailed hours of a calibration window.
+    """``(E_lo, E_hi)`` over the rows each tail's ``δ`` can actually move.
 
-    The one place the population is decided. Only rows above ``τ`` contribute:
+    The one place the population is decided, and **the two tails no longer
+    share it** — forecaster ticket 35. Both start from the curtailed hours:
     ``Q_pos`` is conditional on ``Y > τ`` and a sub-threshold row carries no
     information about the width of the conditional interval — its composed P10
     is zero and its residual would be ``−y``, a number that drags the order
     statistic down without ever having been a test of the tail.
+
+    ``E_lo`` is then narrowed again, to the curtailed hours whose **P10 is a
+    positive number** — :attr:`ScoredHour.states_lower_bound`, ``p > 0.90``,
+    the same rows :attr:`CoverageReport.coverage_p10_where_stated` is counted
+    over. On the others the served floor is the point mass at zero, ``δ_lo``
+    moves it by nothing at all, and the row is covered by arithmetic rather
+    than by a fit. Ranking such a row is the same category error a
+    sub-threshold row would be, one level up: a residual that was never a test
+    of the tail. See the module docstring, "Which rows each ``δ`` is ranked
+    over".
+
+    ``E_hi`` is **not** narrowed the same way, deliberately, and the module
+    docstring says why: its ineligible rows are certain *misses*, not certain
+    hits, and dropping them would trade a marginal guarantee the lower tail's
+    fix keeps for free.
+
+    The two sequences therefore differ in length, and the shorter one is always
+    the lower tail's.
     """
     scored = [hour for hour in hours if hour.is_positive]
     return (
-        tuple(hour.lower_residual for hour in scored),
+        tuple(hour.lower_residual for hour in scored if hour.states_lower_bound),
         tuple(hour.upper_residual for hour in scored),
     )
 

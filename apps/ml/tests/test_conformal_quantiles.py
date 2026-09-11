@@ -42,6 +42,7 @@ import inspect
 import json
 import math
 import random
+from collections.abc import Sequence
 from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
@@ -377,6 +378,8 @@ def _correction(*, delta_lo: float, delta_hi: float) -> ConformalCorrection:
         delta_hi=delta_hi,
         calibration_rows=100,
         rank=conformal_rank(100),
+        lower_calibration_rows=40,
+        lower_rank=conformal_rank(40),
         miscoverage=NOMINAL_MISCOVERAGE,
         window_start=_window()[0],
         window_end=_window()[1],
@@ -747,11 +750,23 @@ def test_in_sample_lower_coverage_is_at_least_the_order_statistics_share(
 ) -> None:
     """The one coverage inequality that holds for any sample, checked here.
 
-    On the window the correction was fitted on, ``#{E_lo ≤ δ_lo} = rank`` by the
-    definition of the order statistic, and the composed P10 moves by exactly
-    ``δ_lo`` wherever it is in the positive branch and stays at zero — covering
-    trivially — wherever it is not. So in-sample lower coverage is at least
-    ``rank / n``. It is *not* evidence about the test fold: the boosters were
+    A row whose P10 is on the point mass is covered by arithmetic — the hour is
+    scored, so ``y > τ > 0`` — and a row whose P10 is a positive number is
+    covered exactly when ``E_lo ≤ δ_lo``, which the order statistic makes true
+    of ``lower_rank`` of the ``lower_calibration_rows`` it was ranked over. So
+    in-sample marginal lower coverage is at least
+    ``lower_rank / lower_calibration_rows`` wherever the lower tail was fitted
+    at all, and exactly ``1.0`` where it was not, because then no scored row
+    states a floor.
+
+    **Which is what this fixture measures**, and forecaster 35 is why the
+    assertion now says so in two branches rather than one: this fold's
+    classifier never reaches ``p > 0.90`` on a curtailed hour, so ``δ_lo`` is
+    declined and the marginal is arithmetic all the way down. Before 35 the
+    same inequality was written against the *window's* rank, which held here
+    for a reason that had nothing to do with the fit.
+
+    It is *not* evidence about the test fold either way: the boosters were
     early-stopped here and the isotonic map was fitted here, so this window is
     the optimistic one.
     """
@@ -772,7 +787,13 @@ def test_in_sample_lower_coverage_is_at_least_the_order_statistics_share(
     ]
     report = CoverageReport.of(scored, fold_id="calibration-window")
     assert report.rows == correction.calibration_rows
-    assert report.coverage_p10 >= correction.rank / correction.calibration_rows
+    if correction.lower_tail_fitted:
+        assert report.coverage_p10 >= (
+            correction.lower_rank / correction.lower_calibration_rows
+        )
+    else:
+        assert report.lower_stated_rows == 0
+        assert report.coverage_p10 == 1.0
 
 
 def test_the_card_publishes_both_deltas_and_coverage_three_ways(
@@ -847,6 +868,8 @@ def test_a_served_band_is_never_the_uncorrected_one(
         delta_hi=0.0,
         calibration_rows=correction.calibration_rows,
         rank=correction.rank,
+        lower_calibration_rows=correction.lower_calibration_rows,
+        lower_rank=correction.lower_rank,
         miscoverage=correction.miscoverage,
         window_start=correction.window_start,
         window_end=correction.window_end,
@@ -882,6 +905,8 @@ def test_delta_drift_reports_the_signal_and_changes_nothing() -> None:
             delta_hi=2.0,
             calibration_rows=100,
             rank=conformal_rank(100),
+            lower_calibration_rows=40,
+            lower_rank=conformal_rank(40),
             miscoverage=NOMINAL_MISCOVERAGE,
             window_start=_window()[0],
             window_end=_window()[1],
@@ -908,6 +933,8 @@ def test_delta_drift_keeps_the_walk_forward_order_rather_than_sorting() -> None:
         delta_hi=1.0,
         calibration_rows=100,
         rank=conformal_rank(100),
+        lower_calibration_rows=40,
+        lower_rank=conformal_rank(40),
         miscoverage=NOMINAL_MISCOVERAGE,
         window_start=_window()[0],
         window_end=_window()[1],
@@ -1167,3 +1194,480 @@ def test_the_unmeasured_reason_says_unrun_and_never_no_data_source() -> None:
     assert "fixture" in reason
     for banned in ("0.5974", "0.6494", "0.60"):
         assert banned not in reason, "a register entry may not carry a fixture figure"
+
+
+# --- Forecaster 35: which rows each δ is ranked over ------------------------
+
+
+def _mixed(
+    count: int,
+    *,
+    stated_share: float,
+    lower_scale: float,
+    seed: int,
+    centre: float = 40.0,
+    sigma: float = 0.6,
+    magnitude_driven_p: bool = False,
+) -> list[ScoredHour]:
+    """A calibration window whose rows are *not* all in the positive branch.
+
+    :func:`_draw` composes every row at ``p = 1.0``, which is the right fixture
+    for "does conformal reach nominal on exchangeable data" and the wrong one
+    for forecaster 35: at ``p = 1`` every served P10 is a positive number and
+    the defect cannot appear. Here each row draws its own ``p``, so a share of
+    the window sits on the mixture's point mass at zero exactly as the real
+    classifier's does.
+
+    ``magnitude_driven_p`` is the second regime and the one that matters for
+    reading the real numbers. With it off, ``p`` is independent of the label,
+    and the point-mass rows carry the same magnitudes as the stated ones. With
+    it on, ``p`` rises with the hour's magnitude — forecaster 33's
+    magnitude-decile table, where the zero-P10 share is 0.93 in the first
+    decile and 0.13 in the tenth — so the point-mass rows carry systematically
+    smaller labels. The two regimes put the contaminated ranking's error on
+    *opposite* sides of nominal, which is why both are fixtures here.
+    """
+    rng = _rng(seed)
+    z_lo, z_hi = -1.2815515655446004, 1.2815515655446004
+    hours: list[ScoredHour] = []
+    for key in _keys(count):
+        spread = (
+            1.4 * rng.gauss(0.0, 1.0)
+            if magnitude_driven_p
+            else 0.5 * rng.uniform(-1.0, 1.0)
+        )
+        mu = math.log(centre) + spread
+        observed = THRESHOLD_MW + math.exp(rng.gauss(mu, sigma))
+        if magnitude_driven_p:
+            occurrence = 0.05 + 0.949 / (
+                1.0 + math.exp(-(mu - math.log(centre * 1.5)) / 0.35)
+            )
+        else:
+            occurrence = (
+                rng.uniform(0.905, 0.999)
+                if rng.random() < stated_share
+                else rng.uniform(0.05, 0.895)
+            )
+        quantiles = MagnitudeQuantiles.from_boosters(
+            q10=(THRESHOLD_MW + math.exp(mu + z_lo * sigma)) * lower_scale,
+            q50=THRESHOLD_MW + math.exp(mu),
+            q90=THRESHOLD_MW + math.exp(mu + z_hi * sigma),
+        )
+        hours.append(
+            ScoredHour(
+                key=key,
+                forecast=compose(
+                    occurrence_probability=occurrence,
+                    positive_quantiles=quantiles,
+                    positive_mean_mwh=THRESHOLD_MW + math.exp(mu),
+                    sub_threshold_mean_mwh=THRESHOLD_MW / 2.0,
+                    threshold_mw=THRESHOLD_MW,
+                ),
+                observed_mwh=observed,
+            )
+        )
+    return hours
+
+
+def _shifted(hours: Sequence[ScoredHour], shift: TailShift) -> list[ScoredHour]:
+    """The same rows recomposed under an arbitrary shift, through ``compose``."""
+    out: list[ScoredHour] = []
+    for hour in hours:
+        mixture = hour.forecast.mixture
+        assert isinstance(mixture.positive_quantiles, MagnitudeQuantiles)
+        out.append(
+            ScoredHour(
+                key=hour.key,
+                forecast=compose(
+                    occurrence_probability=mixture.occurrence_probability,
+                    positive_quantiles=mixture.positive_quantiles,
+                    tail_shift=shift,
+                    positive_mean_mwh=mixture.positive_mean_mwh,
+                    sub_threshold_mean_mwh=mixture.sub_threshold_mean_mwh,
+                    threshold_mw=mixture.threshold_mw,
+                ),
+                observed_mwh=hour.observed_mwh,
+            )
+        )
+    return out
+
+
+def _contaminated_delta_lo(hours: Sequence[ScoredHour]) -> float:
+    """``δ_lo`` under the pre-35 rule: ranked over **every** curtailed hour.
+
+    Reconstructed here and nowhere else, for the same reason
+    :func:`_v1_knot_correction` is: the "before" column of forecaster 35's
+    table has to be this repository's own arithmetic rather than a remembered
+    number, and ``training/conformal.py`` must have exactly one ranking rule in
+    it.
+    """
+    every = sorted(hour.lower_residual for hour in hours if hour.is_positive)
+    return every[conformal_rank(len(every)) - 1]
+
+
+def _lower_coverage(hours: Sequence[ScoredHour]) -> tuple[float, float, int]:
+    """``(marginal, where_stated, stated_rows)`` for the lower tail."""
+    stated = [hour for hour in hours if hour.states_lower_bound]
+    marginal = sum(1 for hour in hours if hour.covered_lower) / len(hours)
+    where = sum(1 for hour in stated if hour.covered_lower) / len(stated)
+    return marginal, where, len(stated)
+
+
+def test_delta_lo_is_ranked_only_over_the_rows_whose_floor_it_can_move() -> None:
+    """The population, and the proof that it is the movable one.
+
+    Two claims, and the second is what makes the first more than a naming
+    choice: ``residuals`` hands the lower tail exactly the rows whose P10 is a
+    positive number, *and* those are exactly the rows a change in ``δ_lo``
+    moves. The second is measured by moving ``δ_lo`` and looking, not asserted
+    from the branch structure.
+    """
+    hours = _mixed(SYNTHETIC_ROWS, stated_share=0.34, lower_scale=0.85, seed=35)
+    lower, upper = residuals(hours)
+    stated = [hour for hour in hours if hour.states_lower_bound]
+
+    assert len(upper) == len(hours), "the upper tail still sees every curtailed hour"
+    assert len(lower) == len(stated) < len(upper), "the lower tail sees a strict subset"
+    assert lower == tuple(hour.lower_residual for hour in stated)
+
+    here = _shifted(hours, TailShift(lower_mwh=0.0, upper_mwh=0.0))
+    there = _shifted(hours, TailShift(lower_mwh=10.0, upper_mwh=0.0))
+    moved = {
+        one.key
+        for one, other in zip(here, there, strict=True)
+        if one.forecast.band.p10 != other.forecast.band.p10
+    }
+    assert moved == {hour.key for hour in stated}, (
+        "the shift moves the served floor on the stated rows and on no other"
+    )
+
+
+def test_a_flat_step_below_the_p10_is_not_a_row_the_shift_cannot_move() -> None:
+    """``Q_Y(0.05) == Q_Y(0.10)`` is not evidence of an inert shift.
+
+    Forecaster 33 counted rows whose served band is flat between ``q = 0.05``
+    and ``q = 0.10`` and read them as sitting on the ``τ`` floor, where the
+    shift would indeed do nothing. They are not. Composition asks ``Q_pos`` for
+    ``u = (q − (1 − p))/p`` and ``u_lo ≤ 0.10`` for **every** ``p ≤ 1``, so both
+    reads land in ``MagnitudeQuantiles``' flat region below its first knot and
+    the two agree for every row with ``p > 0.95`` whatever the ``τ`` floor is
+    doing. ``TailShift`` is likewise flat below ``q = 0.10``, so those rows
+    receive ``δ_lo`` in full. The measurement, not the argument:
+    """
+    hours = _mixed(SYNTHETIC_ROWS, stated_share=0.34, lower_scale=0.85, seed=35)
+    flat = [
+        hour
+        for hour in hours
+        if hour.forecast.mixture.quantile(0.05) == hour.forecast.mixture.quantile(0.10)
+        and hour.forecast.band.p10 > 0.0
+    ]
+    assert flat, "the fixture has rows the old test would have called atoms"
+
+    here = _shifted(flat, TailShift(lower_mwh=0.0, upper_mwh=0.0))
+    raised = _shifted(flat, TailShift(lower_mwh=-10.0, upper_mwh=0.0))
+    for one, other in zip(here, raised, strict=True):
+        assert other.forecast.band.p10 - one.forecast.band.p10 == pytest.approx(10.0)
+    assert all(hour.states_lower_bound for hour in flat)
+
+    # The ``τ`` floor *is* an atom, and this is where it actually appears: a
+    # widening ``δ_lo`` can push a small ``q̂^0.10`` down into the clamp, and
+    # there the shift is genuinely inert. It is a property of the correction's
+    # sign and size, not of the row — with the artifacts' own ``δ_lo = −37``,
+    # which raises the floor, it cannot arise at all. And it is conservative on
+    # the scored population regardless: a clamped floor is ``τ⁺`` and every
+    # scored hour has ``y > τ``, so the row is covered for free.
+    lowered = _shifted(flat, TailShift(lower_mwh=10.0, upper_mwh=0.0))
+    clamped = [
+        hour
+        for one, hour in zip(here, lowered, strict=True)
+        if one.forecast.band.p10 - hour.forecast.band.p10 != pytest.approx(10.0)
+    ]
+    assert all(
+        hour.forecast.band.p10 == math.nextafter(THRESHOLD_MW, math.inf)
+        for hour in clamped
+    )
+    assert all(hour.covered_lower for hour in clamped)
+
+
+@pytest.mark.parametrize(
+    ("magnitude_driven_p", "direction"),
+    [(False, "under"), (True, "over")],
+)
+def test_the_floor_reaches_nominal_where_it_states_one_and_did_not_before(
+    magnitude_driven_p: bool, direction: str
+) -> None:
+    """Seam 4, on the population the guarantee is actually about.
+
+    ``δ_lo`` ranked over every curtailed hour makes ``#{E_lo ≤ δ_lo}/n`` equal
+    ``rank/n`` over *all* of them — including the rows it cannot move — so the
+    90% lands on a mixture of a fit and an arithmetic certainty and the rows
+    where the floor says something are left wherever they fall. Ranked over the
+    stated rows, ``coverage_p10_where_stated`` is the order statistic's own
+    share.
+
+    Both regimes are run because the contaminated rule misses in **both**
+    directions and a one-sided fixture would have licensed calling the defect
+    "conservative". Where ``p`` is independent of the magnitude it under-covers
+    the stated rows badly; where ``p`` rises with the magnitude — the real
+    classifier's shape — it over-covers them.
+    """
+    hours = _mixed(
+        SYNTHETIC_ROWS,
+        stated_share=0.34,
+        lower_scale=0.55 if magnitude_driven_p else 0.85,
+        seed=35,
+        centre=200.0 if magnitude_driven_p else 40.0,
+        sigma=0.9 if magnitude_driven_p else 0.6,
+        magnitude_driven_p=magnitude_driven_p,
+    )
+    fitted = conformalise(hours, window=_window())
+    assert fitted.lower_tail_fitted
+
+    _, before, _ = _lower_coverage(
+        _shifted(hours, TailShift(lower_mwh=_contaminated_delta_lo(hours), upper_mwh=0.0))
+    )
+    after_marginal, after, stated_rows = _lower_coverage(_shifted(hours, fitted.shift()))
+
+    assert stated_rows == fitted.lower_calibration_rows
+    assert after == pytest.approx(TARGET_COVERAGE, abs=COVERAGE_TOLERANCE)
+    if direction == "under":
+        assert before < TARGET_COVERAGE - COVERAGE_TOLERANCE
+    else:
+        assert before > TARGET_COVERAGE + COVERAGE_TOLERANCE
+    assert abs(after - TARGET_COVERAGE) < abs(before - TARGET_COVERAGE)
+    assert after_marginal >= TARGET_COVERAGE
+
+
+def test_the_marginal_floor_coverage_is_the_stated_one_blended_with_arithmetic() -> None:
+    """``coverage_p10 = (1 − s) + s·coverage_p10_where_stated``, and why it is ≥ 0.90.
+
+    The identity forecaster 35 turns on. Every row whose P10 is on the point
+    mass is covered because the hour is scored, so ``y > τ > 0``; the rest are
+    covered at whatever rate the fit achieves. So the marginal cannot fall
+    below the conditional, the conditional is what conformal now aims at, and
+    the marginal's excess over nominal is structure rather than slack. **The
+    marginal guarantee is not traded for the conditional one** — that is the
+    whole argument for narrowing the ranking population, and it is arithmetic
+    rather than a hope about the fit.
+    """
+    hours = _mixed(
+        SYNTHETIC_ROWS,
+        stated_share=0.34,
+        lower_scale=0.55,
+        seed=35,
+        centre=200.0,
+        sigma=0.9,
+        magnitude_driven_p=True,
+    )
+    served = _shifted(hours, conformalise(hours, window=_window()).shift())
+    marginal, where_stated, stated_rows = _lower_coverage(served)
+    share = stated_rows / len(served)
+
+    assert marginal == pytest.approx((1.0 - share) + share * where_stated)
+    assert marginal >= where_stated
+    assert marginal >= TARGET_COVERAGE
+    unstated = [hour for hour in served if not hour.states_lower_bound]
+    assert unstated and all(hour.covered_lower for hour in unstated)
+    assert all(hour.forecast.band.p10 == 0.0 for hour in unstated)
+
+
+def test_the_upper_tail_still_ranks_every_curtailed_hour() -> None:
+    """``δ_hi`` is deliberately left contaminated, because the fix would cost a guarantee.
+
+    ``E_hi`` has the same defect — at ``p ≤ 0.10`` the served P90 is zero and
+    ``δ_hi`` cannot move it — but those rows are certain **misses**, not certain
+    hits. Dropping them lowers ``δ_hi``, narrows the P90, and takes the marginal
+    ``coverage_p90`` from ``s_hi·c`` to ``s_hi·0.90``, strictly below nominal,
+    with no arithmetic left to make up the difference: the under-stated worst
+    case forecaster 21 refused to ship. The lower tail's fix costs nothing of
+    the kind, and that asymmetry is why only one tail moved.
+
+    Measured rather than argued: dropping them does narrow the band and does
+    drop the marginal upper coverage.
+    """
+    base = _mixed(SYNTHETIC_ROWS, stated_share=0.34, lower_scale=0.85, seed=35)
+    hours = [
+        ScoredHour(
+            key=hour.key,
+            forecast=compose(
+                occurrence_probability=(
+                    0.05
+                    if index % 8 == 0
+                    else hour.forecast.mixture.occurrence_probability
+                ),
+                positive_quantiles=hour.forecast.mixture.positive_quantiles,
+                positive_mean_mwh=hour.forecast.mixture.positive_mean_mwh,
+                sub_threshold_mean_mwh=hour.forecast.mixture.sub_threshold_mean_mwh,
+                threshold_mw=hour.forecast.mixture.threshold_mw,
+            ),
+            observed_mwh=hour.observed_mwh,
+        )
+        for index, hour in enumerate(base)
+    ]
+    fitted = conformalise(hours, window=_window())
+    assert fitted.calibration_rows == len(hours), "every curtailed hour ranks E_hi"
+
+    stated_upper = [hour.upper_residual for hour in hours if hour.states_upper_bound]
+    assert len(stated_upper) < len(hours), "the fixture has certain-miss rows"
+    narrowed = sorted(stated_upper)[conformal_rank(len(stated_upper)) - 1]
+    assert narrowed < fitted.delta_hi, "dropping the certain misses narrows the P90"
+
+    now = sum(1 for hour in _shifted(hours, fitted.shift()) if hour.covered_upper) / len(
+        hours
+    )
+    then = sum(
+        1
+        for hour in _shifted(
+            hours, TailShift(lower_mwh=fitted.delta_lo, upper_mwh=narrowed)
+        )
+        if hour.covered_upper
+    ) / len(hours)
+    assert then < now, "and costs marginal upper coverage that nothing replaces"
+
+
+def test_a_window_whose_classifier_states_no_floor_declines_delta_lo() -> None:
+    """The drift case: every curtailed hour on the point mass, so no ``δ_lo``.
+
+    A classifier that has drifted — or a lane whose curtailed hours simply sit
+    below ``p = 0.90``, which is forecaster 33's ``gate_late`` in N — leaves no
+    row on which the floor is a statement. Every ``E_lo`` is then ``0 − y``: an
+    order statistic of the negative labels with no model in it, which would be
+    applied to whatever stated rows the *test* fold happened to have. So the
+    figure is declined rather than invented, and the card says which figure and
+    why.
+    """
+    drifted = _mixed(SYNTHETIC_ROWS, stated_share=0.0, lower_scale=0.85, seed=35)
+    assert not any(hour.states_lower_bound for hour in drifted)
+
+    correction = conformalise(drifted, window=_window())
+    assert correction.lower_tail_fitted is False
+    assert correction.delta_lo == 0.0
+    assert correction.lower_rank == 0
+    assert correction.lower_calibration_rows == 0
+    assert correction.delta_hi != 0.0, "the upper tail is unaffected"
+
+    fields = correction.card_fields()
+    assert fields["conformal_lower_tail_fitted"] is False
+    assert fields["conformal_lower_population"] is conformal_module.LOWER_TAIL_NOT_FITTED
+    assert "not stated" in fields["conformal_lower_population"]
+    assert "point mass" in fields["conformal_lower_population"]
+
+    served = _shifted(drifted, correction.shift())
+    assert all(hour.forecast.band.p10 == 0.0 for hour in served)
+
+
+def test_a_window_just_short_of_the_floor_declines_and_one_row_more_does_not() -> None:
+    """The guard's edge, from both sides, at ``minimum_calibration_rows``."""
+    floor = minimum_calibration_rows()
+    base = _mixed(SYNTHETIC_ROWS, stated_share=0.0, lower_scale=0.85, seed=35)
+    stated = _mixed(64, stated_share=1.0, lower_scale=0.85, seed=36)
+    assert all(hour.states_lower_bound for hour in stated)
+
+    short = conformalise(base + stated[: floor - 1], window=_window())
+    assert short.lower_calibration_rows == floor - 1
+    assert short.lower_tail_fitted is False
+    assert short.delta_lo == 0.0
+
+    enough = conformalise(base + stated[:floor], window=_window())
+    assert enough.lower_calibration_rows == floor
+    assert enough.lower_tail_fitted is True
+    assert enough.lower_rank == conformal_rank(floor)
+
+
+def test_an_empty_calibration_window_refuses_rather_than_declining() -> None:
+    """Empty input is a refusal, not a declined lower tail.
+
+    A window with no curtailed hour at all has no upper residual either, and
+    "there is no fold here" is a different statement from "this fold's
+    classifier states no floor". The first must stop the fit.
+    """
+    with pytest.raises(ConformalError) as empty:
+        conformalise([], window=_window())
+    assert "0 curtailed hours" in str(empty.value)
+
+    sub_threshold = [
+        ScoredHour(key=hour.key, forecast=hour.forecast, observed_mwh=THRESHOLD_MW / 2.0)
+        for hour in _mixed(64, stated_share=1.0, lower_scale=0.85, seed=37)
+    ]
+    assert not any(hour.is_positive for hour in sub_threshold)
+    with pytest.raises(ConformalError):
+        conformalise(sub_threshold, window=_window())
+
+
+def test_a_declined_lower_tail_may_not_carry_a_correction() -> None:
+    """``δ_lo ≠ 0`` at rank 0 is refused: a number nothing ranked is not a δ."""
+    with pytest.raises(ConformalError) as smuggled:
+        ConformalCorrection(
+            delta_lo=-37.0,
+            delta_hi=1.0,
+            calibration_rows=100,
+            rank=conformal_rank(100),
+            lower_calibration_rows=3,
+            lower_rank=0,
+            miscoverage=NOMINAL_MISCOVERAGE,
+            window_start=_window()[0],
+            window_end=_window()[1],
+        )
+    assert "declined" in str(smuggled.value)
+
+    with pytest.raises(ConformalError) as too_many:
+        ConformalCorrection(
+            delta_lo=0.0,
+            delta_hi=1.0,
+            calibration_rows=100,
+            rank=conformal_rank(100),
+            lower_calibration_rows=101,
+            lower_rank=conformal_rank(101),
+            miscoverage=NOMINAL_MISCOVERAGE,
+            window_start=_window()[0],
+            window_end=_window()[1],
+        )
+    assert "subset" in str(too_many.value)
+
+
+def test_the_card_publishes_the_population_delta_lo_was_ranked_over(
+    trained: TrainedFold,
+) -> None:
+    """The two new counts survive ``json.dumps``, beside the two that were there.
+
+    A reader has to be able to re-derive ``lower_rank`` from
+    ``lower_calibration_rows`` without the bundle, which is why the count is
+    published rather than a share.
+    """
+    quantiles = json.loads(trained.card.to_json())["quantiles"]
+    correction = trained.bundle.conformal
+    assert quantiles["conformal_calibration_rows"] == correction.calibration_rows
+    assert quantiles["conformal_lower_calibration_rows"] == (
+        correction.lower_calibration_rows
+    )
+    assert quantiles["conformal_lower_rank"] == correction.lower_rank
+    assert quantiles["conformal_lower_tail_fitted"] == correction.lower_tail_fitted
+    assert quantiles["conformal_method"] == "one_sided_split_cqr_stated_lower"
+    assert (
+        quantiles["conformal_lower_calibration_rows"]
+        <= (quantiles["conformal_calibration_rows"])
+    )
+
+
+def test_the_fixture_folds_own_lower_tail_is_declined(trained: TrainedFold) -> None:
+    """Measured on the shared fit: this fixture states no floor anywhere.
+
+    Not a fixture defect to be tuned away. The fixture's classifier never
+    reaches ``p > 0.90`` on a curtailed hour, so its served P10 is zero on every
+    one of them, and ``coverage_p10`` on it has always been arithmetic —
+    ``test_the_card_refuses_to_call_a_short_band_a_ninety_percent_band`` already
+    said so from the other end. What changed is that ``δ_lo`` no longer comes
+    back as a number ranked over those rows.
+
+    The figure is a property of these invented rows and means nothing about the
+    Brazilian grid; what it demonstrates is the declined path running end to end
+    through a real fit, a real bundle and a real card.
+    """
+    correction = trained.bundle.conformal
+    assert correction.lower_calibration_rows == 0
+    assert correction.lower_tail_fitted is False
+    assert correction.delta_lo == 0.0
+    quantiles = json.loads(trained.card.to_json())["quantiles"]
+    assert quantiles["conformal_lower_population"] == (
+        conformal_module.LOWER_TAIL_NOT_FITTED
+    )

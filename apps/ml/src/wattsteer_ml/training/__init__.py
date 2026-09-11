@@ -96,6 +96,7 @@ from wattsteer_ml.training.calibration import (
 from wattsteer_ml.training.conformal import (
     CORRECTION_REGIME,
     COVERAGE_GUARDRAIL,
+    LOWER_TAIL_NOT_FITTED,
     NOMINAL_MISCOVERAGE,
     TARGET_COVERAGE,
     ConformalCorrection,
@@ -215,6 +216,7 @@ __all__ = [
     "KS_CRITICAL_95",
     "KS_FAMILYWISE_LEVEL",
     "LABEL_PREFIX",
+    "LOWER_TAIL_NOT_FITTED",
     "MAX_RISK_BIN_GAP",
     "MIN_BIN_HOURS",
     "MIN_ENSEMBLE_DAYS",
