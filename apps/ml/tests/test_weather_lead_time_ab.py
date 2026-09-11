@@ -160,6 +160,8 @@ def correction(fold: Fold, *, delta_lo: float, delta_hi: float) -> ConformalCorr
         delta_hi=delta_hi,
         calibration_rows=400,
         rank=361,
+        lower_calibration_rows=200,
+        lower_rank=181,
         miscoverage=NOMINAL_MISCOVERAGE,
         window_start=fold.calibration_start,
         window_end=fold.calibration_end,
