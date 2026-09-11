@@ -18,19 +18,29 @@ import {
   configKeys,
   describeOrphan,
   dispatchedKinds,
+  enqueuedWorkerKinds,
   ingestionSourceMembers,
   isTestFile,
+  mlInternalRoutes,
   mountedRoutes,
   orphanUnits,
   plannedKinds,
   producibleSources,
   routeObjects,
   type Source,
+  scheduleProducers,
   sourceAt,
   stripCode,
   taskKinds,
+  textAt,
+  uncalledMlRoutes,
+  undeclaredWorkerKinds,
+  unreachedWorkerKinds,
   unreadConfigKeys,
   wiredUnits,
+  workerDispatchedKinds,
+  workerTaskDelegates,
+  workerTaskKinds,
 } from "./reachability";
 
 const ALL = allSources();
@@ -43,6 +53,10 @@ const REFRESH = sourceAt("apps/api/src/ingest/refresh.ts");
 const SCHEMA = sourceAt("apps/api/src/database/schema.ts");
 const API_INDEX = sourceAt("apps/api/src/api/index.ts");
 const CONFIG = sourceAt("apps/api/src/config.ts");
+const WORKER_TASKS = sourceAt("apps/api/src/jobs/worker-tasks.ts");
+const WORKER = sourceAt("apps/api/src/worker.ts");
+/** Raw, not stripped: `stripCode` is a TypeScript stripper and this is Python. */
+const ML_APP = textAt("apps/ml/src/wattsteer_ml/app.py");
 
 /** A `Source` built from text, so a check can be fed a mutated corpus. */
 function synthetic(file: string, text: string): Source {
@@ -330,5 +344,249 @@ describe("every config key is read", () => {
 
   test("an empty corpus makes every key unread, rather than none", () => {
     expect(unreadConfigKeys(keys, []).length).toBe(keys.length);
+  });
+});
+
+/* ------------------------------------------------------------ worker tasks */
+
+/**
+ * The sixth check, proved the only way a retroactive claim can be proved: by
+ * putting replay 07/08 back the way they were, one half at a time.
+ *
+ * The wiring agent that closed those two orphans said in its own handover that
+ * this guard had not caught them and could not have — `createReplayRefresher`
+ * is not a `create*Ingestor` or `create*Routes`, and `WorkerTask` kinds were
+ * checked by nothing. Three mutations reconstruct the three shapes the defect
+ * can take, each against real repository text.
+ */
+describe("every WorkerTask kind is dispatched and enqueued", () => {
+  const kinds = workerTaskKinds(WORKER_TASKS.code);
+  const dispatched = workerDispatchedKinds(WORKER_TASKS.code);
+  const producers = scheduleProducers(SRC);
+  const enqueued = enqueuedWorkerKinds(producers, SRC);
+
+  test("the union, the dispatcher and the schedules are all non-empty", () => {
+    // The non-vacuity floor beside the verdict, not instead of it: the verdict
+    // functions themselves refuse an empty input, which is what the tests
+    // below prove.
+    expect(kinds.length).toBeGreaterThanOrEqual(5);
+    expect(kinds).toContain("refresh_replay_caches");
+    expect(dispatched.length).toBeGreaterThanOrEqual(5);
+    expect(producers.length).toBeGreaterThanOrEqual(4);
+    expect(enqueued.length).toBeGreaterThanOrEqual(5);
+  });
+
+  test("the ingest union is folded in and delegated, not branched on", () => {
+    // `QueueTask`'s kinds are check 2's business. What has to be true here is
+    // that the fall-through exists at all: without it half the union reaches
+    // nothing and no `kind:` member would be missing.
+    expect(workerTaskDelegates(WORKER_TASKS.code)).toEqual(["QueueTask"]);
+    expect(WORKER_TASKS.code).toMatch(/return ingest\(task, report\);/);
+  });
+
+  test("no declared kind is unreached", () => {
+    expect(unreachedWorkerKinds(kinds, dispatched, enqueued)).toEqual([]);
+  });
+
+  test("no branch or schedule exists for a kind the union does not declare", () => {
+    expect(
+      undeclaredWorkerKinds(
+        kinds,
+        dispatched,
+        producers.flatMap((one) => one.kinds),
+      ),
+    ).toEqual([]);
+  });
+
+  test("`publish_diagnosis` is chained, not scheduled — and that is not a failure", () => {
+    // The false positive this check exists not to produce. `publish_diagnosis`
+    // is the one row of `docs/specs/api-surface.md`'s job table whose trigger
+    // is "on completion of each" rather than a cron, and a check demanding a
+    // schedule for every kind would fire on correct code and be deleted.
+    expect(producers.flatMap((one) => one.kinds)).not.toContain("publish_diagnosis");
+    expect(enqueued).toContain("publish_diagnosis");
+    expect(WORKER_TASKS.code).toContain('submit({ kind: "publish_diagnosis"');
+  });
+
+  test("the three inline-literal ingest schedules count as enqueued", () => {
+    // The third mechanism: `worker.ts` registers these with no producer
+    // function at all, so a producer-only reading would miss them.
+    for (const kind of ["refresh_sweep", "retention", "centroid_drift"]) {
+      expect(enqueued).toContain(kind);
+    }
+  });
+
+  test("replay 07/08, mutation 1: the union member removed while the wiring stays", () => {
+    const drifted = WORKER_TASKS.code.replace(
+      '  | { kind: "holdout_backfill"; payload: HoldoutBackfillPayload }\n' +
+        '  | { kind: "refresh_replay_caches"; payload: ReplayRefreshPayload };',
+      '  | { kind: "holdout_backfill"; payload: HoldoutBackfillPayload };',
+    );
+    expect(drifted).not.toBe(WORKER_TASKS.code);
+    const mutatedKinds = workerTaskKinds(drifted);
+    expect(mutatedKinds).not.toContain("refresh_replay_caches");
+    // Red, and from both halves: the branch and the schedule go on existing
+    // for a kind the type no longer admits.
+    expect(
+      undeclaredWorkerKinds(
+        mutatedKinds,
+        workerDispatchedKinds(drifted),
+        producers.flatMap((one) => one.kinds),
+      ),
+    ).toEqual([{ kind: "refresh_replay_caches", from: ["dispatch", "schedule"] }]);
+  });
+
+  test("replay 07/08, mutation 2: the dispatcher branch removed", () => {
+    const drifted = WORKER_TASKS.code.replace(
+      /\n {4}if \(task\.kind === "refresh_replay_caches"\) \{[\s\S]*?\n {4}\}/,
+      "",
+    );
+    expect(drifted).not.toBe(WORKER_TASKS.code);
+    const mutated = workerDispatchedKinds(drifted);
+    expect(mutated).not.toContain("refresh_replay_caches");
+    expect(unreachedWorkerKinds(kinds, mutated, enqueued)).toEqual([
+      { kind: "refresh_replay_caches", missing: ["dispatch"] },
+    ]);
+  });
+
+  test("replay 07/08, mutation 3: the schedule registration removed from worker.ts", () => {
+    // The exact state the ticket describes: the producer still exists in
+    // `worker-tasks.ts`, and nothing loops over it. A check that only asked
+    // whether a producer existed would read this green.
+    const unregistered = synthetic(
+      WORKER.file,
+      WORKER.text.replaceAll("replayRefreshSchedulesForQueue", "someOtherThing"),
+    );
+    const corpus = SRC.map((one) => (one.file === WORKER.file ? unregistered : one));
+    expect(corpus).not.toEqual(SRC);
+    const mutated = enqueuedWorkerKinds(scheduleProducers(corpus), corpus);
+    expect(mutated).not.toContain("refresh_replay_caches");
+    expect(unreachedWorkerKinds(kinds, dispatched, mutated)).toEqual([
+      { kind: "refresh_replay_caches", missing: ["enqueue"] },
+    ]);
+  });
+
+  test("a kind added to the union and to nothing else is red on both halves", () => {
+    const drifted = WORKER_TASKS.code.replace(
+      '  | { kind: "refresh_replay_caches"; payload: ReplayRefreshPayload };',
+      '  | { kind: "refresh_replay_caches"; payload: ReplayRefreshPayload }\n' +
+        '  | { kind: "recompute_something"; payload: ReplayRefreshPayload };',
+    );
+    expect(drifted).not.toBe(WORKER_TASKS.code);
+    expect(unreachedWorkerKinds(workerTaskKinds(drifted), dispatched, enqueued)).toEqual([
+      { kind: "recompute_something", missing: ["dispatch", "enqueue"] },
+    ]);
+  });
+
+  test("a comment naming a kind does not wire it", () => {
+    // The `createArchiveFetch` bug class, on this check: an earlier revision of
+    // the sweep read a docstring's usage example as a call site.
+    const corpus = [
+      synthetic(
+        "apps/api/src/worker.ts",
+        '// someday: submit({ kind: "recompute_something", payload: {} });\n',
+      ),
+    ];
+    expect(enqueuedWorkerKinds(producers, corpus)).not.toContain("recompute_something");
+  });
+
+  test("a `//` containing a block-open does not hide a real enqueue after it", () => {
+    // The other direction, and the defect that broke two previous guards:
+    // `apps/api/src/api/grid.ts:280` is a line comment containing `/*`. A
+    // stripper that removed block comments first would eat everything after it
+    // and report the enqueue below as absent.
+    const offender = /^.*\/\/[^\n]*\/\*.*$/m.exec(
+      sourceAt("apps/api/src/api/grid.ts").text,
+    ) as RegExpExecArray;
+    const corpus = [
+      synthetic(
+        "apps/api/src/worker.ts",
+        `${offender[0]}\nawait runner.submit({ kind: "recompute_something", payload: {} });\n`,
+      ),
+    ];
+    expect(enqueuedWorkerKinds(producers, corpus)).toContain("recompute_something");
+  });
+
+  test("an empty union, dispatcher or schedule set throws rather than passing", () => {
+    expect(() => workerTaskKinds("")).toThrow(/WorkerTask/);
+    expect(() => workerTaskKinds("export type WorkerTask = QueueTask;\n")).toThrow(
+      /governing nothing/,
+    );
+    expect(() => workerDispatchedKinds("")).toThrow(/createWorkerDispatch/);
+    expect(() =>
+      workerDispatchedKinds(
+        "export function createWorkerDispatch(deps) {\n  return ingest;\n}\n",
+      ),
+    ).toThrow(/empty dispatcher/);
+    expect(() => scheduleProducers([])).toThrow(/no schedule/);
+    expect(() => scheduleProducers(SRC.map((one) => ({ ...one, code: "" })))).toThrow(
+      /no schedule/,
+    );
+    expect(() => unreachedWorkerKinds([], dispatched, enqueued)).toThrow(
+      /governing nothing/,
+    );
+    expect(() => unreachedWorkerKinds(kinds, [], enqueued)).toThrow(/empty dispatcher/);
+    expect(() => unreachedWorkerKinds(kinds, dispatched, [])).toThrow(/empty queue/);
+    expect(() => undeclaredWorkerKinds([], dispatched, [])).toThrow(/governing nothing/);
+  });
+});
+
+/**
+ * The half the sixth check structurally cannot cover, from the other side.
+ *
+ * Replay 07/08 were not *half*-wired: they had no `WorkerTask` member, no
+ * branch and no schedule, so there was no declared shape for a reachability
+ * check over TypeScript to find unreachable. What did exist was the pair of
+ * `/internal/` routes on the modelling service. That is the population this
+ * reads, and it is the one that would have gone red on the day replay 07
+ * merged.
+ */
+describe("every /internal route on the modelling service has a caller", () => {
+  const routes = mlInternalRoutes(ML_APP);
+
+  test("the population is the modelling service's own decorators", () => {
+    expect(routes.length).toBeGreaterThanOrEqual(6);
+    expect(routes).toContain("/internal/replay/featured-days");
+    expect(routes).toContain("/internal/replay/backtest");
+  });
+
+  test("nothing on that surface is unreachable from the worker", () => {
+    expect(uncalledMlRoutes(routes, SRC)).toEqual([]);
+  });
+
+  test("replay 07/08 as they actually were: the route with no TypeScript at all", () => {
+    // `jobs/replay-refresh.ts` is the caller. Without it — the state before it
+    // was written — both routes are named by nothing but their own tests.
+    const corpus = SRC.filter(
+      (one) => one.file !== "apps/api/src/jobs/replay-refresh.ts",
+    );
+    expect(corpus.length).toBe(SRC.length - 1);
+    expect(uncalledMlRoutes(routes, corpus)).toEqual([
+      "/internal/replay/featured-days",
+      "/internal/replay/backtest",
+    ]);
+  });
+
+  test("a comment naming the route is not a caller", () => {
+    // `replay-refresh.ts`'s own header names both paths in prose, which is
+    // exactly the shape that made an earlier sweep call `createArchiveFetch`
+    // reached. Only the stripped code counts.
+    const commentOnly = [
+      synthetic(
+        "apps/api/src/jobs/replay-refresh.ts",
+        "/** Calls `POST /internal/replay/backtest` some day. */\nexport const x = 1;\n",
+      ),
+    ];
+    expect(uncalledMlRoutes(["/internal/replay/backtest"], commentOnly)).toEqual([
+      "/internal/replay/backtest",
+    ]);
+  });
+
+  test("an empty app or an empty corpus is a failure, not a pass", () => {
+    expect(() => mlInternalRoutes("")).toThrow(/reading nothing/);
+    expect(() => mlInternalRoutes('# @app.post("/internal/ghost")\n')).toThrow(
+      /reading nothing/,
+    );
+    expect(uncalledMlRoutes(routes, []).length).toBe(routes.length);
   });
 });

@@ -175,8 +175,11 @@ than listed:
 4. **Every route object** under `apps/api/src/api/` is mounted in
    `api/index.ts`.
 5. **Every `config` key** is read as `config.<key>` outside `config.ts`.
+6. **Every `WorkerTask` kind** reaches a `createWorkerDispatch` branch **and**
+   something that puts it on the queue. Added by **api-surface 32**; see the
+   section below for what "reaches" means and why it is not "has a cron".
 
-None of the five is an allow-list and none needs an edit when a module is added.
+None of the six is an allow-list and none needs an edit when a module is added.
 
 ### Proving it can fail, and that its inputs are not empty
 
@@ -282,3 +285,105 @@ It did not delete a single line of product code. Four orphans and four
 dead-but-claimed modules are a temptation to tidy, and tidying them would have
 destroyed the evidence and mixed an audit with a refactor. The record is
 corrected; the wiring is described and left for the lane that owns it.
+
+---
+
+## api-surface 32 — the sixth check, and the gap it closes
+
+The agent that wired the four orphans reported honestly that this guard had not
+caught replay 07 and 08 and **could not have**: the five checks govern
+`create*Ingestor`/`create*Routes` factories, `IngestTask` kinds,
+`ingestion_source` members, route mounts and `config` keys, and
+`createReplayRefresher` is none of those while `WorkerTask` kinds were checked
+by nothing. Its recommendation was a sixth check. This is that check.
+
+### How each `WorkerTask` kind is actually reached, found before deciding
+
+The naive rule — *every kind needs a cron* — would fire on correct code and be
+deleted within a week, which is api-surface 25's fourth lesson. There are
+**three** mechanisms, and they look nothing alike:
+
+| kind | dispatch | enqueue |
+|---|---|---|
+| `publish_forecast` | `task.kind === …` branch | `forecastPublicationSchedules()`, looped by `worker.ts:135` |
+| `publish_diagnosis` | branch | **chained, not scheduled** — `chainDiagnosis` submits it from inside the `publish_forecast` branch through `deps.submit` |
+| `retrain` | branch | `retrainScheduleForQueue()`, `worker.ts:160` |
+| `holdout_backfill` | branch | `holdoutBackfillScheduleForQueue()`, `worker.ts:179` |
+| `refresh_replay_caches` | branch | `replayRefreshSchedulesForQueue()`, `worker.ts:202` |
+| `QueueTask` (the ingest union, folded in) | the `return ingest(task, report)` delegation | check 2, plus three **inline schedule literals** — `refresh_sweep`, `retention`, `centroid_drift` are registered in `worker.ts` as `payload: { kind: … }` objects with no producer function at all |
+
+**`publish_diagnosis` is legitimately unscheduled.** It is the one row of
+`docs/specs/api-surface.md`'s job table whose trigger is *"on completion of
+each"* rather than a cron pattern. A check demanding a schedule for it would be
+accusing correct code, so the rule is dispatch **and** (registered schedule
+producer **or** chain **or** inline literal).
+
+### What the sixth check derives, all by shape
+
+- the **kinds**, from the `export type WorkerTask =` union — plus the union's
+  *type-reference* members (`QueueTask`), so that half the union is not silently
+  ignored: the test asserts the `return ingest(task, report)` delegation exists;
+- the **dispatch** side, from the body of `createWorkerDispatch` (both
+  `task.kind === "…"` and `case "…":`, so a rewrite from one to the other does
+  not empty the check);
+- the **schedule producers**, by *return type* — every
+  `export function …(): JobSchedule<WorkerTask>[]` — never by name, so a fifth
+  one called anything at all is governed the day it is written;
+- the **registration**, by requiring a non-test module *other than the declaring
+  one* to name the producer. A producer nobody loops over schedules nothing;
+- the **chain** (`submit({ kind: … })`) and the **inline literal**
+  (`payload: { kind: … }`) in any non-test file.
+
+It also runs the **other direction**: a branch or a schedule for a kind the
+union no longer declares. That is the shape a half-reverted wiring commit leaves
+behind, and it is the only way the *member*'s removal can be seen.
+
+### Proved retroactively, by putting replay 07/08 back one half at a time
+
+Each mutation is applied to real repository text and the verdict is asserted,
+not described:
+
+| mutation | verdict |
+|---|---|
+| the `WorkerTask` member removed, branch and schedule left | **red** — `refresh_replay_caches` undeclared, `from: ["dispatch", "schedule"]` |
+| the `createWorkerDispatch` branch removed | **red** — `missing: ["dispatch"]` |
+| `worker.ts`'s `replayRefreshSchedulesForQueue()` loop removed | **red** — `missing: ["enqueue"]`, with the producer still sitting in `worker-tasks.ts` |
+
+**The honest limit, stated rather than skipped.** Replay 07/08 were not
+*half*-wired: they had **no** member, **no** branch and **no** schedule. A check
+over declared shapes cannot see a capability nothing declares, so the sixth
+check alone would still have read green on the day replay 07 merged. The
+recommendation as written is therefore only two-thirds true, and the missing
+third is covered **from the other side of the wire**: every `/internal/` route
+the modelling service declares must be named by non-test TypeScript. That
+population is `app.py`'s own decorators — six routes today, all six named by a
+path constant under `apps/api/src/`. Deleting `jobs/replay-refresh.ts` from the
+corpus, which is exactly the pre-wiring state, reports
+`/internal/replay/featured-days` and `/internal/replay/backtest` as uncalled.
+`apps/ml` is read and never edited; only its route table is read, which is a
+declaration rather than a call graph.
+
+### Non-vacuity, checked in the place the repository has been bitten
+
+`workerTaskKinds`, `workerDispatchedKinds`, `scheduleProducers`,
+`mlInternalRoutes`, `unreachedWorkerKinds` and `undeclaredWorkerKinds` all
+**throw** rather than return `[]`: on empty text, on a union with no `kind:`
+member, on a dispatcher that branches on nothing, on a corpus the stripper has
+emptied, and on an empty dispatched or enqueued set at the verdict itself.
+`uncalledMlRoutes(routes, [])` reports every route uncalled rather than none.
+
+The comment-stripping path is tested in **both** directions on the file that
+broke two previous guards:
+
+- a `//`-commented `submit({ kind: … })` is **not** a call site — the
+  `createArchiveFetch` bug, where a docstring's usage example was read as a
+  caller (and `jobs/replay-refresh.ts`'s own header names both `/internal/`
+  paths in prose, so this is live, not hypothetical);
+- the actual offending line from `apps/api/src/api/grid.ts` — a `//` comment
+  containing `/*` — placed **above** a real enqueue does not hide it, which a
+  block-comments-first stripper would.
+
+`bun run check` is green: typecheck, biome (2 pre-existing warnings in
+`test/phantom-schedules.test.ts`, api-surface 31's file), 273 hygiene tests
+across 15 files, 471 core, 1282 api, 189 web. Nothing under `apps/ml/**`,
+`apps/api/src/ingest/**` or `apps/api/src/jobs/**` was edited.
