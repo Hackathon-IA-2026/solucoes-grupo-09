@@ -40,18 +40,35 @@
  *     `api/index.ts`. A route defined and mounted nowhere answers nothing.
  *  5. **Every `config` key** is read outside `config.ts`. A flag nothing reads
  *     is a setting that does not exist.
+ *  6. **Every `WorkerTask` kind** reaches a `createWorkerDispatch` branch *and*
+ *     something that puts it on the queue — a registered schedule producer, a
+ *     chain, or an inline schedule literal, which are the three mechanisms this
+ *     repository actually uses. Added by api-surface 32, because the wiring of
+ *     `.scratch/replay/issues/07` and `/08` was found by hand and the five
+ *     checks above could not have found it: `createReplayRefresher` is not a
+ *     `create*Ingestor` or `create*Routes`, and `WorkerTask` is not
+ *     `IngestTask`. See {@link workerTaskKinds} for how each kind is reached
+ *     and why `publish_diagnosis` legitimately has no cron.
+ *
+ * Beside them, and not a sixth of the same kind because its population is not
+ * TypeScript: **every `/internal/` route the modelling service declares is
+ * named by non-test TypeScript** ({@link mlInternalRoutes}). Check 6 governs
+ * kinds that exist; that one governs the case where a capability was wired
+ * nowhere at all, which is what replay 07/08 actually were.
  *
  * Nothing here is an allow-list, and no check needs an edit when a module is
- * added — that is api-surface 27's rule and the reason a sixth check is not
- * bolted on with a hand-maintained exception set.
+ * added — that is api-surface 27's rule, and it is the rule check 6 was built
+ * under rather than an exception to it.
  *
  * ### What this guard cannot see, stated rather than implied
  *
  *  - **SQL.** The feature gate is a Postgres function in `apps/api/drizzle/`.
  *    Reachability of a view or a function is not derivable from TypeScript, and
  *    this file does not pretend to it.
- *  - **Python.** `apps/ml` dispatches through FastAPI decorators and a CLI;
- *    another agent owns that tree in this wave.
+ *  - **Python.** `apps/ml` dispatches through FastAPI decorators and a CLI, so
+ *    a caller sweep *inside* that tree is advisory only. The one thing read
+ *    from it is its route table, which is a declaration rather than a call
+ *    graph; nothing under `apps/ml` is edited here.
  *  - **Writes through a generic helper.** Tables are written by
  *    `writeVersioned(db, SPEC, rows, vintage)`, so "no textual `.insert(table)`"
  *    proves nothing and no table-write check is attempted.
@@ -457,4 +474,341 @@ export function unreadConfigKeys(keys: string[], sources: Source[]): string[] {
       (source) => source.file !== "apps/api/src/config.ts" && read.test(source.code),
     );
   });
+}
+
+/* ------------------------------------------------------------ worker tasks */
+
+/**
+ * The sixth check, and the one the wiring of replay 07/08 asked for.
+ *
+ * `.scratch/replay/issues/07-featured-days-not-a-highlight-reel.md` and
+ * `.scratch/replay/issues/08-backtest-aggregate.md` were found **by hand**.
+ * The five checks above could not see them: `createReplayRefresher` is neither
+ * a `create*Ingestor` nor a `create*Routes`, and `WorkerTask` is not
+ * `IngestTask`. So `POST /internal/replay/featured-days` and
+ * `POST /internal/replay/backtest` sat on the modelling service with no
+ * `WorkerTask` member, no dispatcher branch and no schedule, and
+ * `/v1/replay/days` and `/v1/backtest` served `pending` on every deployed
+ * instance while the spec read as though a nightly job maintained them.
+ *
+ * ### How a `WorkerTask` kind is actually reached, found before deciding
+ *
+ * The naive rule — "every kind needs a cron" — fires on correct code and would
+ * be deleted, which is api-surface 25's fourth lesson again. There are three
+ * ways a kind is reached in this repository and they look nothing alike:
+ *
+ *  1. **A schedule producer.** A function returning `JobSchedule<WorkerTask>[]`
+ *     — `forecastPublicationSchedules`, `retrainScheduleForQueue`,
+ *     `holdoutBackfillScheduleForQueue`, `replayRefreshSchedulesForQueue` —
+ *     built in `jobs/worker-tasks.ts` and *registered* by `worker.ts`. Both
+ *     halves matter: a producer nobody loops over schedules nothing, which is
+ *     exactly the state replay 07/08 would be back in if `worker.ts`'s loop
+ *     were deleted.
+ *  2. **A chain.** `publish_diagnosis` has **no cron and correctly so**:
+ *     `docs/specs/api-surface.md` gives it the trigger "on completion of each"
+ *     forecast publication, and `chainDiagnosis` submits it from inside the
+ *     `publish_forecast` branch through `deps.submit`. A check that demanded a
+ *     cron for it would be accusing the one row of the job table that is not a
+ *     cron pattern.
+ *  3. **An inline schedule literal.** `worker.ts` registers `refresh_sweep`,
+ *     `retention` and `centroid_drift` as `payload: { kind: … }` object
+ *     literals, with no producer function at all.
+ *
+ * So "reached" is: dispatched **and** (scheduled by a registered producer, or
+ * chained, or scheduled inline). All three are discovered by shape and none is
+ * an allow-list — a kind added tomorrow is governed the day it is written.
+ *
+ * ### Both directions, because the defect has three shapes
+ *
+ * Removing the union member is as much a break as removing the branch, and it
+ * is the one a one-directional check cannot see: the branch and the schedule
+ * go on existing for a kind the type no longer admits.
+ * {@link undeclaredWorkerKinds} is that direction.
+ *
+ * **What it still cannot see,** stated rather than implied: a capability wired
+ * nowhere at all — no member, no branch, no schedule — the state replay
+ * 07/08 were actually in. Nothing in the TypeScript declared it to exist, so
+ * there was no shape to be unreachable. {@link mlInternalRoutes} is the half
+ * that covers that case, from the other side of the wire.
+ */
+export function workerTaskKinds(workerTasksCode: string): string[] {
+  const union = /export type WorkerTask =([\s\S]*?);\n/.exec(workerTasksCode);
+  if (union === null) {
+    throw new Error("worker-tasks.ts no longer declares `export type WorkerTask =`");
+  }
+  const kinds = [
+    ...new Set(
+      [...(union[1] as string).matchAll(/kind:\s*"([a-z_]+)"/g)].map(
+        (m) => m[1] as string,
+      ),
+    ),
+  ];
+  if (kinds.length === 0) {
+    throw new Error(
+      "the WorkerTask union declares no `kind:` member — the guard is governing nothing",
+    );
+  }
+  return kinds;
+}
+
+/**
+ * The union members that are a type reference rather than an inline member.
+ *
+ * `QueueTask` is the ingest union folded in one level up; its kinds are check
+ * 2's business and are reached through the dispatcher's delegation rather than
+ * a branch of their own. Returned so the test can assert that the delegation
+ * exists rather than quietly ignoring half the union.
+ */
+export function workerTaskDelegates(workerTasksCode: string): string[] {
+  const union = /export type WorkerTask =([\s\S]*?);\n/.exec(workerTasksCode);
+  if (union === null) {
+    throw new Error("worker-tasks.ts no longer declares `export type WorkerTask =`");
+  }
+  return [...(union[1] as string).matchAll(/^\s*\|\s*([A-Z]\w*)\s*$/gm)].map(
+    (m) => m[1] as string,
+  );
+}
+
+/**
+ * Every kind `createWorkerDispatch` branches on.
+ *
+ * `if (task.kind === "…")` is the shape this dispatcher uses where the ingest
+ * one uses `switch`; both are read, so a rewrite from one to the other does not
+ * silently empty the check.
+ */
+export function workerDispatchedKinds(workerTasksCode: string): string[] {
+  const body = /export function createWorkerDispatch\([\s\S]*?\n}/.exec(workerTasksCode);
+  if (body === null) {
+    throw new Error(
+      "worker-tasks.ts no longer declares `export function createWorkerDispatch`",
+    );
+  }
+  const text = body[0];
+  const kinds = [
+    ...new Set([
+      ...[...text.matchAll(/task\.kind === "([a-z_]+)"/g)].map((m) => m[1] as string),
+      ...[...text.matchAll(/case\s+"([a-z_]+)":/g)].map((m) => m[1] as string),
+    ]),
+  ];
+  if (kinds.length === 0) {
+    throw new Error(
+      "createWorkerDispatch branches on no kind — the guard is reading an empty dispatcher",
+    );
+  }
+  return kinds;
+}
+
+/** A function that manufactures repeatable work for the worker's queue. */
+export interface ScheduleProducer {
+  name: string;
+  file: string;
+  /** The kinds its returned schedules carry. */
+  kinds: string[];
+}
+
+/**
+ * Every function returning `JobSchedule<WorkerTask>[]`, with the kinds it emits.
+ *
+ * Found by return type, not by name: `*ScheduleForQueue` and `*Schedules` are
+ * both already in use, and a fifth one named anything at all is picked up the
+ * day it is written.
+ */
+export function scheduleProducers(sources: Source[]): ScheduleProducer[] {
+  const found: ScheduleProducer[] = [];
+  for (const source of sources) {
+    if (isTestFile(source.file)) {
+      continue;
+    }
+    for (const match of source.code.matchAll(
+      /export function (\w+)\([^)]*\):\s*JobSchedule<WorkerTask>\[\]\s*\{([\s\S]*?)\n}/g,
+    )) {
+      found.push({
+        name: match[1] as string,
+        file: source.file,
+        kinds: [
+          ...new Set(
+            [...(match[2] as string).matchAll(/kind:\s*"([a-z_]+)"/g)].map(
+              (m) => m[1] as string,
+            ),
+          ),
+        ],
+      });
+    }
+  }
+  if (found.length === 0) {
+    throw new Error(
+      "no function returning JobSchedule<WorkerTask>[] was found — the guard found no schedule",
+    );
+  }
+  return found;
+}
+
+/**
+ * The kinds something actually puts on the queue, by all three mechanisms.
+ *
+ * A producer counts only when a non-test module **other than the one declaring
+ * it** names it: `worker.ts`'s `for (const schedule of …ScheduleForQueue())`
+ * loop is the registration, and without it the producer is a function that
+ * manufactures schedules nobody registers — replay 07/08's defect wearing a
+ * different hat.
+ */
+export function enqueuedWorkerKinds(
+  producers: ScheduleProducer[],
+  sources: Source[],
+): string[] {
+  const enqueued = new Set<string>();
+  for (const producer of producers) {
+    const named = sources.some(
+      (source) =>
+        !isTestFile(source.file) &&
+        source.file !== producer.file &&
+        new RegExp(String.raw`\b${producer.name}\s*\(`).test(source.code),
+    );
+    if (named) {
+      for (const kind of producer.kinds) {
+        enqueued.add(kind);
+      }
+    }
+  }
+  for (const source of sources) {
+    if (isTestFile(source.file)) {
+      continue;
+    }
+    // The chain: `submit({ kind: "publish_diagnosis", payload })`.
+    for (const match of source.code.matchAll(/submit\(\s*\{\s*kind:\s*"([a-z_]+)"/g)) {
+      enqueued.add(match[1] as string);
+    }
+    // The inline schedule literal: `payload: { kind: "retention", payload: {} }`.
+    for (const match of source.code.matchAll(/payload:\s*\{\s*kind:\s*"([a-z_]+)"/g)) {
+      enqueued.add(match[1] as string);
+    }
+  }
+  return [...enqueued];
+}
+
+/** A kind that is declared and not fully wired, with the half that is missing. */
+export interface UnreachedKind {
+  kind: string;
+  /** `"dispatch"`, `"enqueue"`, or both. */
+  missing: string[];
+}
+
+/**
+ * The declared kinds that do not reach both halves.
+ *
+ * **Throws on empty input of either kind.** `[] === []` is how this repository
+ * has read green over nothing four times; an empty dispatcher or an empty
+ * enqueue set means the parse broke, not that the code is clean.
+ */
+export function unreachedWorkerKinds(
+  kinds: string[],
+  dispatched: string[],
+  enqueued: string[],
+): UnreachedKind[] {
+  if (kinds.length === 0) {
+    throw new Error("no WorkerTask kind was found — the guard is governing nothing");
+  }
+  if (dispatched.length === 0) {
+    throw new Error(
+      "no dispatched kind was found — the guard is reading an empty dispatcher",
+    );
+  }
+  if (enqueued.length === 0) {
+    throw new Error("nothing enqueues any kind — the guard is reading an empty queue");
+  }
+  const canDispatch = new Set(dispatched);
+  const canEnqueue = new Set(enqueued);
+  const unreached: UnreachedKind[] = [];
+  for (const kind of kinds) {
+    const missing: string[] = [];
+    if (!canDispatch.has(kind)) {
+      missing.push("dispatch");
+    }
+    if (!canEnqueue.has(kind)) {
+      missing.push("enqueue");
+    }
+    if (missing.length > 0) {
+      unreached.push({ kind, missing });
+    }
+  }
+  return unreached;
+}
+
+/**
+ * The other direction: a branch or a schedule for a kind the union no longer has.
+ *
+ * This is the shape that catches the *member* being removed while the wiring
+ * stays, which a one-directional check reads as green — and it is what a
+ * half-reverted wiring commit leaves behind.
+ */
+export function undeclaredWorkerKinds(
+  kinds: string[],
+  dispatched: string[],
+  scheduled: string[],
+): { kind: string; from: string[] }[] {
+  if (kinds.length === 0) {
+    throw new Error("no WorkerTask kind was found — the guard is governing nothing");
+  }
+  const declared = new Set(kinds);
+  const out: { kind: string; from: string[] }[] = [];
+  for (const kind of [...new Set([...dispatched, ...scheduled])]) {
+    if (declared.has(kind)) {
+      continue;
+    }
+    const from: string[] = [];
+    if (dispatched.includes(kind)) {
+      from.push("dispatch");
+    }
+    if (scheduled.includes(kind)) {
+      from.push("schedule");
+    }
+    out.push({ kind, from });
+  }
+  return out;
+}
+
+/* ----------------------------------------------- the other side of the wire */
+
+/**
+ * Every `/internal/` route the modelling service declares.
+ *
+ * The half that covers the case the sixth check structurally cannot: a
+ * capability wired **nowhere** in TypeScript. Replay 07/08 were in exactly that
+ * state — the endpoints existed and were tested on `apps/ml`, and no
+ * `WorkerTask` member, no branch and no schedule existed to be unreachable. The
+ * convention `apps/ml` holds to without exception is that `/internal/` is the
+ * worker's private surface and `/v1/` is the gateway's, so an `/internal/`
+ * route no TypeScript names is a route nothing can ever call.
+ *
+ * Read from the raw text on purpose: `stripCode` is a TypeScript stripper and
+ * `//` is floor division in Python. Anchoring on `@app.` at the start of a line
+ * is what keeps a commented-out decorator out of the population.
+ */
+export function mlInternalRoutes(appText: string): string[] {
+  const routes = [
+    ...new Set(
+      [...appText.matchAll(/^@app\.\w+\(\s*"(\/internal\/[^"]+)"/gm)].map(
+        (m) => m[1] as string,
+      ),
+    ),
+  ];
+  if (routes.length === 0) {
+    throw new Error(
+      "the modelling service declares no /internal route — the guard is reading nothing",
+    );
+  }
+  return routes;
+}
+
+/** The modelling-service routes no non-test TypeScript names. */
+export function uncalledMlRoutes(routes: string[], sources: Source[]): string[] {
+  return routes.filter(
+    (route) =>
+      !sources.some((source) => !isTestFile(source.file) && source.code.includes(route)),
+  );
+}
+
+/** Read one repo file as raw text, by repo-relative path. */
+export function textAt(file: string): string {
+  return readFileSync(join(ROOT, file), "utf8");
 }
