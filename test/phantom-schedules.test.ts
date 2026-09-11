@@ -1383,11 +1383,17 @@ describe("phantom schedules · a family id resolves to its family", () => {
     // would have answered to almost any other three-segment id. Resolving the
     // constant is therefore a tightening, and this asserts both halves.
     const consts = new Map([["PREFIX", "refresh-featured-days"]]);
-    expect(resolveToken("`${PREFIX}:${payload.subsystem}:${payload.lane}`", consts)).toBe(
-      "refresh-featured-days:*:*",
-    );
+    // The argument is template *source read as text*: `resolveToken` parses
+    // interpolations out of a file it never executes, so the dollar-brace has
+    // to survive as characters. A real template literal would be evaluated
+    // here and the test would assert nothing about the parser.
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: source read as text
+    const template = "`${PREFIX}:${payload.subsystem}:${payload.lane}`";
+    expect(resolveToken(template, consts)).toBe("refresh-featured-days:*:*");
     // Genuinely variable interpolations still blank, so nothing is invented.
-    expect(resolveToken("`${a.b}:${c}`", new Map())).toBe("*:*");
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: source read as text
+    const variable = "`${a.b}:${c}`";
+    expect(resolveToken(variable, new Map())).toBe("*:*");
   });
 
   it("still refuses to let one family absolve a different job", () => {
