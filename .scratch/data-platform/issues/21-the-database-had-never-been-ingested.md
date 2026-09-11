@@ -49,8 +49,8 @@ is multiplied out and labelled as such.
 - [ ] The whole 891-day window is non-empty across all nine kinds. **Six of nine
       cover it completely** (constrained-off wind and solar, verificada,
       programada, balanço, intercâmbio, carga diária, registry, SIGA — 892 of 892
-      days each where the source is daily). Weather is rate-bounded and
-      unfinished. DESSEM cannot cover the window at all: its source begins
+      days each where the source is daily). Weather is quota-bounded and stands
+      at 397 of 891 target days. DESSEM cannot cover the window at all: its source begins
       2025-05-23, and 105 of the 475 days it does publish are refused
 - [ ] `canonical_curtailment_by_plant` answers. It cannot: see the finding below
 
@@ -186,6 +186,7 @@ time, no parallelism against either public API. Target window
 | `subsystem_energy_balance_hour` | 94,272 | 2024-01-01 | 2026-09-09 | 983 |
 | `subsystem_exchange_hour` | 94,272 | 2024-01-01 | 2026-09-09 | 983 |
 | `subsystem_load_day` | 3,928 | 2024-01-01 | 2026-09-08 | 982 |
+| `weather_forecast_hour` | 1,060,316 | 2024-03-31 | 2026-09-02 | 424 — **incomplete, quota-bound** |
 | `plant` | 1,621 | — | — | one snapshot |
 | `plant_geo` | 1,615 | — | — | one snapshot |
 | `generating_unit` | 3,385 | — | — | one snapshot |
@@ -222,7 +223,7 @@ At `as_of = 2026-09-11`, `fleet_date = 2026-09-09`, mid-weather-pass:
 | `canonical_system_context` | 94,272 |
 | `canonical_programmed_load` | 85,488 |
 | `canonical_day_ahead_balance` | 69,888 |
-| `canonical_weather_forecast` | 55,386 — mid-pass, quota-bound |
+| `canonical_weather_forecast` | 191,540 — 44.5% of the window, quota-bound |
 | `canonical_plant_registry` | 1,619 |
 | `canonical_capacity_weight` | **5** — capped by the harness centroid set |
 | `canonical_curtailment_by_plant` | **0** — no way to drive its ingestor |
@@ -287,14 +288,21 @@ that is ~49 units a call, so a 5,000-unit hour is ~100 calls and a 10,000-unit
 day is ~200. Total successful calls before the wall, across the whole session:
 **~290**.
 
-The honest statement is therefore a **range, measured**: the free tier delivered
-**54 to 180 calls per hour** and then refused, i.e. **27 to 90 target days an
-hour**. The 891-day window is **1,782 calls**, so finishing it on this tier is
-**on the order of 10 to 35 elapsed hours**, nearly all of it spent waiting out
-quota rather than transferring bytes. There is no throttle to raise: the
-19-point, 12-variable, 3-day request is what the frozen centroid set and the
-feature set require, and splitting it per point multiplies the call count by
-nineteen against the same budget.
+Those are burst figures. **The sustained rate was then measured over 20.8
+elapsed hours**, running one 90-day slice at a time behind a probe that waits
+out each 429: **788 calls, 37.7 calls/hour**, of which the schedule spent
+1.8 h calling and **17.7 h waiting on quota**. Every one of the ten slices
+ultimately died on `WeatherRateLimitError` and every one landed rows first, so
+the pass is a ratchet rather than a sequence of completions.
+
+So the honest cost is **37.7 calls/hour sustained — 18.9 target days an hour**.
+The 891-day window is 1,782 calls, i.e. **~47 elapsed hours on the free tier,
+95% of it waiting**. There is no throttle to raise: the 19-point,
+12-variable, 3-day request is what the frozen centroid set and the feature set
+require, and splitting it per point multiplies the call count by nineteen
+against the same unit budget. Finishing inside a working day needs a keyed or
+paid tier; on this tier it needs two days of an hourly cron, which is what
+`REFRESH_CADENCE` would do on its own anyway.
 
 Finishing it means either ten hourly slices on a cron, or a keyed/paid tier.
 `WeatherRateLimitError` says exactly this and says it well — "this endpoint
@@ -302,17 +310,18 @@ returns no rate-limit headers, so backoff has nothing to obey but the status;
 the schedule is exhausted" — and a backfill driver should treat it as "come back
 next hour" rather than retry into it.
 
-At its high-water mark the weather pass held **330,507 rows over 121 target
-days** from 236 calls with no fallback and no missing run: the archive answered
-every scheduled run it was asked for. What survives in the database after the
-concurrent truncate and the partial re-run is **191,560 rows over 81 valid
-dates** — the rest has to be re-asked, and being immutable it will come back
-identically.
+After 20.8 hours of that pacing the database holds **1,060,316 weather rows
+over 424 valid dates**, from **788 run requests covering 397 distinct run days,
+2024-03-31 → 2026-09-01** — **44.5% of the 891-day window**, with only 4
+rate-limit retries ever absorbed by the backoff (the rest were hard
+exhaustions the driver waited out) and **no fallback and no missing run**: the
+archive answered every scheduled run it was asked for, which is a better hit
+rate than the 5-in-112 gap the research sampled.
 
 ### What remains
 
-1. **Weather: the large majority of the 891 target days, 10–35 elapsed hours of
-   quota.** Resumable at no cost — a run already held is answered
+1. **Weather: 494 of 891 target days remain — ~994 calls, ~26 elapsed hours at
+   the measured 37.7 calls/hour.** Resumable at no cost — a run already held is answered
    from `weather_run_request` without an HTTP call, so re-running a completed
    slice is free and the pass can be restarted anywhere. To finish it, walk the
    window in `planRefresh`'s own 90-day slices, **one per hour**:
