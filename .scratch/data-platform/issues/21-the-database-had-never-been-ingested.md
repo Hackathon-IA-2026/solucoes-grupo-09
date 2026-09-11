@@ -90,6 +90,28 @@ and the days they died on name two distinct causes:
   concrete — for these days the true publication instant is gone from upstream,
   and no adapter change recovers it.
 
+  > **Correction, data-platform 25.** The verdict holds; this explanation of
+  > it is wrong for **58 of the 68**. CKAN carries a `created` alongside
+  > `last_modified` and `readResources` was folding the two into one field, so
+  > the census could not tell them apart. Read apart: 58 of these days have a
+  > `created` that is *itself* after the reference day and a null
+  > `last_modified` — the resource entered the catalogue once, late, and was
+  > never touched again. They were not re-published; they were **published
+  > late for the first time**, in gap-filling batches (ten days catalogued on
+  > 2025-10-23, thirteen on 2025-11-17) while the days either side of each gap
+  > went out on their own D−1 evening. No day-ahead vintage of them was ever
+  > offered, so there is nothing for a corrected reading to recover, and
+  > `published_at` was already being read from the right place: with
+  > `last_modified` null, the adapter falls through to `created`.
+  >
+  > Only **10** are genuine rewrites of an on-time publication, and for those
+  > the original *instant* does survive in `created` — it is the *values* that
+  > do not. Using the instant without the values would stamp a January rewrite
+  > with a December publication time and leak it through the
+  > `published_at ≤ gate` cut. So `published_at` is unchanged for every
+  > consumer, and what ticket 25 adds is only that a refused day now says
+  > which of the two things happened to it.
+
 *And a refused day never gets retried.* `markResourceFetched` stamps
 `fetched_at` on the resource version as soon as the bytes are in hand, which is
 **before** the parse. So a day whose parse threw is `alreadySeen` on the next
@@ -251,6 +273,43 @@ against freshly downloaded bytes both times — and returned **370/105 both
 times, day for day**. It is a property of what ONS published, not of a
 transient.
 
+> **Superseded by data-platform 25, which re-asked all of it with the
+> settlement fix in place.** The table above is left as measured. What the
+> re-ask found, against 470 reference days (the catalogue itself has moved —
+> ONS offers five fewer CSV days in range than it did here):
+>
+> | outcome | days |
+> | --- | --- |
+> | loaded | **366** |
+> | refused — `forecast_integrity` | **70** |
+> | refused — `coverage` (short civil day) | **34** |
+> | refused — `time_axis` (solar in local night) | **0** |
+>
+> **One day recovered — 2025-10-18, 192 rows — and it was our defect.**
+> `assertDaylightAlignment` summed `val_ger_fotovoltaica + val_ger_mmgd` and
+> demanded zero at night. On all three of the days it refused,
+> `val_ger_fotovoltaica` is exactly 0.000 through the whole evening; what
+> fired the assertion was 3–6 MW of MMGD — distributed generation that is not
+> solar-only and runs after dark — against a 17–21 GW midday peak. The night
+> test now reads photovoltaic alone, which makes it sharper rather than
+> looser. The other two of the three turn out to be doubly defective and are
+> now refused as `forecast_integrity`, which is the defect the night
+> assertion had been masking.
+>
+> The 34 short days are **confirmed refused, for a corrected reason**: every
+> one is a contiguous prefix or suffix of the civil day, never a day with
+> interior holes, and on 29 of the 34 the solar profile pins the patamar index
+> exactly where this adapter assumes it. They are refused not because the time
+> axis is in doubt — the files disprove that — but because a 46-patamar day is
+> indistinguishable from a 48-patamar one once written, and nothing in the
+> schema can say otherwise.
+>
+> Also measured there, and never measured before: a **no-force** re-run of the
+> whole history costs **470 `HEAD`s, zero downloads, zero rows and 98
+> seconds**, reports all 105 standing refusals with `refusedThisRun: false`,
+> and leaves **zero unsettled** resource versions. That is data-platform 22's
+> whole claim, exercised at scale for the first time.
+
 **105 of 475 reference days, 22%, cannot be loaded** — and the two large causes
 are properties of what ONS published, not of the window asked for. The refused
 short days run the whole range from 3 patamares to 46; the re-published ones
@@ -332,10 +391,15 @@ rate than the 5-in-112 gap the research sampled.
    ten of those cover 2024-04-01 → 2026-09-08, and the ones already held cost
    nothing. One slice per hour, sequentially — the endpoint 429s at 6-way
    concurrency and the hourly quota is one slice deep.
-2. **The 105 refused DESSEM days.** 34 short days and 3 night-solar days are
-   ONS's data and stay refused. The 68 re-published ones are refused by an
-   input error — `published_at` from the resource's current `Last-Modified` —
-   and are the ones worth a ticket.
+2. ~~**The 105 refused DESSEM days.**~~ **Closed by data-platform 25.** The
+   answer is 366 loaded and 104 refused of 470: one day recovered (a defect in
+   the night-solar assertion, which summed a non-solar column into "solar"),
+   34 short days confirmed refused for a corrected reason, and the 70
+   `forecast_integrity` days confirmed as ONS's data — 60 never catalogued
+   until after the day had passed, 10 overwritten after an on-time
+   publication. `published_at` is unchanged for every consumer. The one thing
+   ticket 25 leaves open is whether a *partial* day should be admittable at
+   all, which needs a column before it needs an adapter change.
 3. **`plant_detail_hour` / `observed_plant`: zero, and unreachable.** Wiring
    `constrained_off_detail` into `IngestTask` and `planRefresh` is a code
    change, not a backfill. Note the size before scheduling it: the entity-grain

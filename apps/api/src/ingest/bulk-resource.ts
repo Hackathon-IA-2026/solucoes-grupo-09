@@ -84,6 +84,20 @@ export interface BulkResource {
   publishedAt: Date;
   publishedAtPrecision: "file";
   /**
+   * When this resource **first entered the catalogue**, which is not the same
+   * question as `publishedAt` and is deliberately not used as it.
+   *
+   * `publishedAt` is the vintage of the bytes in hand; when ONS overwrites a
+   * file, the bytes in hand were asserted at the rewrite, and stamping them
+   * with the earlier first-publication instant would place values nobody could
+   * have read before the gate that admits them. So this is carried *beside*
+   * the vintage rather than in place of it — it is what lets an adapter say
+   * whether a period that failed a vintage check was published late for the
+   * first time or published on time and rewritten. Null when CKAN has no
+   * `created`.
+   */
+  firstPublishedAt: Date | null;
+  /**
    * Stamp the parse as landed. **Every caller that parses must call this after
    * its write succeeds**, and no caller may call it before.
    *
@@ -178,6 +192,7 @@ export async function acquireBulkResource(
     refusal: version.refusal,
     publishedAt: fingerprint.lastModified ?? resource.lastModified ?? new Date(),
     publishedAtPrecision: "file" as const,
+    firstPublishedAt: resource.firstPublishedAt,
     republication: version.republication,
   };
 

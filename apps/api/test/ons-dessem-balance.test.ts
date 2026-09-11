@@ -31,6 +31,25 @@ const filterRows = (csv: string, keep: (cells: string[]) => boolean): string => 
   return `${header}\n${kept.join("\n")}\n`;
 };
 
+/** The one row starting with `prefix`, with its cells rewritten. */
+const editRow = (
+  csv: string,
+  prefix: string,
+  edit: (cells: string[]) => string[],
+): string => {
+  const [header, ...lines] = csv.trim().split("\n");
+  const matched = lines.filter((line) => line.startsWith(prefix));
+  if (matched.length !== 1) {
+    throw new Error(
+      `expected exactly one row starting ${prefix}, found ${matched.length}`,
+    );
+  }
+  const rewritten = lines.map((line) =>
+    line.startsWith(prefix) ? edit(line.split(";")).join(";") : line,
+  );
+  return `${header}\n${rewritten.join("\n")}\n`;
+};
+
 describe("DESSEM · the published header wins over the data dictionary", () => {
   it("reads val_ger_hidraulica, the name the file actually uses", () => {
     const parse = parseDessemBalanceCsv(DAY);
@@ -125,7 +144,43 @@ describe("DESSEM · num_patamar maps to wall-clock time, and it is asserted", ()
         `${prefix}${((Number(patamar) + 11) % 48) + 1}${suffix}`,
     );
     expect(() => parseDessemBalanceCsv(shifted)).toThrow(
-      /solar generation in local night hours/,
+      /photovoltaic generation in local night hours/,
+    );
+  });
+
+  it("accepts MMGD running after dark, because MMGD is not photovoltaic", () => {
+    // The three days this recovers, in miniature. `val_ger_mmgd` is micro and
+    // mini distributed generation — mostly rooftop PV, but carrying small
+    // hydro, biogas and cogeneration that run at night — so 6 MW of it at
+    // local 21:00 says nothing about the patamar mapping. Measured on
+    // 2025-10-18, 2025-12-03 and 2025-12-24, each a complete 48-patamar day
+    // with `val_ger_fotovoltaica` exactly 0.000 all evening and a lone 3–6 MW
+    // MMGD blip with zeros on both sides of it (data-platform 25). The old
+    // assertion summed the two columns and refused all three.
+    const mmgdAtNight = editRow(DAY, "2026-08-29;43;N;", (cells) => {
+      cells[10] = "6.000";
+      return cells;
+    });
+    const parse = parseDessemBalanceCsv(mmgdAtNight);
+    expect(parse.rows).toHaveLength(192);
+    const night = parse.rows.find(
+      (row) =>
+        row.subsystem === "N" &&
+        row.validTime.toISOString() === "2026-08-30T00:00:00.000Z",
+    );
+    expect(night?.mmgdGenerationMw).toBe(6);
+    expect(night?.solarGenerationMw).toBe(0);
+  });
+
+  it("still refuses photovoltaic output in the same half hour", () => {
+    // The guard got sharper, not looser: the column that must be zero at night
+    // still is, and putting anything in it refuses the day.
+    const pvAtNight = editRow(DAY, "2026-08-29;43;N;", (cells) => {
+      cells[9] = "6.000";
+      return cells;
+    });
+    expect(() => parseDessemBalanceCsv(pvAtNight)).toThrow(
+      /6 MW of photovoltaic generation in local night hours/,
     );
   });
 });
