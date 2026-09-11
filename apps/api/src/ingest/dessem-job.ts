@@ -224,6 +224,7 @@ export function createDessemIngestor(
             rows: parsed.rows,
             publishedAt: acquired.publishedAt,
             publishedAtPrecision: acquired.publishedAtPrecision,
+            firstPublishedAt: acquired.firstPublishedAt,
             sourceVersionId: acquired.versionId,
           });
           // Only now is the resource version a day that loaded. Before this

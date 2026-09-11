@@ -24,6 +24,25 @@ export interface CatalogueResource {
   format: ResourceFormat;
   /** CKAN's own stamp. Trails S3 by up to a minute and is sometimes null. */
   lastModified: Date | null;
+  /**
+   * CKAN's `created` — when this resource **first entered the catalogue**, and
+   * therefore the earliest instant anything downstream could have read it.
+   *
+   * Read separately from `lastModified` because they answer different
+   * questions and only one of them survives a rewrite. A file ONS overwrites
+   * keeps its `created` and moves its `last_modified`; a file ONS publishes
+   * late for the first time has no `last_modified` at all and a `created`
+   * after the period it covers. Folded into one field — which is what
+   * `last_modified ?? created` used to do, under the name of the first — those
+   * two cases are indistinguishable, and data-platform 21 misdiagnosed 59 days
+   * of *never published in time* as *re-published later* because of it
+   * (data-platform 25).
+   *
+   * **Not** a substitute for `published_at`. See `lastModified`'s use in
+   * `bulk-resource.ts`: the vintage of the bytes in hand is when those bytes
+   * were written, not when some earlier bytes under the same name were.
+   */
+  firstPublishedAt: Date | null;
   size: number | null;
 }
 
@@ -57,6 +76,8 @@ export function readResources(payload: unknown): CatalogueResource[] {
       url: String(raw.url ?? ""),
       format: format as ResourceFormat,
       lastModified: typeof stamp === "string" ? new Date(`${stamp}Z`) : null,
+      firstPublishedAt:
+        typeof raw.created === "string" ? new Date(`${raw.created}Z`) : null,
       size: typeof raw.size === "number" ? raw.size : null,
     });
   }

@@ -92,9 +92,60 @@ const SPEC: VersionedTableSpec<
 
 export interface DessemBalanceWrite extends VintageStamp {
   rows: DessemBalanceHalfHour[];
+  /**
+   * CKAN's `created` for the resource these rows came from — when the
+   * reference day's file **first** entered the catalogue.
+   *
+   * Never written and never compared against. It exists so that a day refused
+   * for `forecast_integrity` can say *which* of two upstream facts produced
+   * it, because the remedies are opposite and data-platform 21 got the split
+   * wrong by 59 days for want of this one stamp:
+   *
+   * - `created` is itself after the reference day → ONS never catalogued a
+   *   day-ahead vintage of this day. There is nothing to recover, ever.
+   * - `created` is before the day and `published_at` after it → a day-ahead
+   *   vintage existed and ONS overwrote it. The instant is recoverable; the
+   *   values are not, and they are what the gate would be admitting.
+   */
+  firstPublishedAt?: Date | null;
 }
 
 export type DessemBalanceWriteResult = VersionedWriteResult;
+
+/**
+ * Which upstream fact produced a `forecast_integrity` refusal, in ONS's own
+ * timestamps — a sentence appended to the refusal, never a decision.
+ *
+ * Two things fail this check and they are not the same thing. Measured over
+ * the whole published history in data-platform 25: **59 of 70** refused days
+ * had no catalogue entry at all until after the day had passed — ONS fills
+ * gaps in batches, ten missing days at a time, with the days either side of
+ * each gap published on their own D−1 evening. The remaining **11** were
+ * published on time and the file later overwritten. Only the second kind ever
+ * had a day-ahead vintage, and neither kind can be loaded from the bytes in
+ * hand, which is why this changes the sentence and not the verdict.
+ */
+function upstreamCause(
+  validTime: Date,
+  firstPublishedAt: Date | null | undefined,
+): string {
+  if (!firstPublishedAt) {
+    return "The catalogue records no first-publication instant for this resource.";
+  }
+  if (firstPublishedAt.getTime() >= validTime.getTime()) {
+    return (
+      `ONS first catalogued this file at ${firstPublishedAt.toISOString()}, itself at ` +
+      "or after that half hour: the day was published late for the first time, so no " +
+      "day-ahead vintage of it was ever offered and none can be recovered."
+    );
+  }
+  return (
+    `ONS first catalogued this file at ${firstPublishedAt.toISOString()}, before that ` +
+    "half hour, and overwrote it afterwards: a day-ahead vintage existed, but the bytes " +
+    "in hand are the rewrite. Stamping them with the earlier instant would admit values " +
+    "through a gate that could not have seen them."
+  );
+}
 
 /**
  * Append the DESSEM rows whose values actually changed. Idempotent.
@@ -109,7 +160,7 @@ export async function writeDessemBalance(
   db: Database,
   write: DessemBalanceWrite,
 ): Promise<DessemBalanceWriteResult> {
-  const { rows, ...vintage } = write;
+  const { rows, firstPublishedAt, ...vintage } = write;
   for (const row of rows) {
     if (row.validTime.getTime() <= vintage.publishedAt.getTime()) {
       throw new PayloadRefusedError(
@@ -117,7 +168,8 @@ export async function writeDessemBalance(
         `DESSEM reference day ${row.referenceDay} was published at ` +
           `${vintage.publishedAt.toISOString()}, at or after the ` +
           `${row.validTime.toISOString()} half hour it describes. A row with ` +
-          "published_at ≥ valid_time is an observation, and this table holds forecasts.",
+          "published_at ≥ valid_time is an observation, and this table holds " +
+          `forecasts. ${upstreamCause(row.validTime, firstPublishedAt)}`,
       );
     }
   }

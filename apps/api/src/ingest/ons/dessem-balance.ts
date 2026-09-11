@@ -180,12 +180,31 @@ export function patamarStart(midnightUtc: Date, patamar: number): Date {
  * physics on every single file.
  *
  * Solar output is the one quantity in this file whose wall-clock shape is known
- * a priori: it is exactly zero at night and large in the middle of the day.
- * Summed over subsystems, `val_ger_fotovoltaica + val_ger_mmgd` must therefore
- * be zero across local 00:00–04:00 and 21:00–24:00 and positive somewhere
- * across 09:00–15:00. Any offset in the mapping — an end/start relabelling, a
- * UTC-versus-Brasília slip, a 1-based/0-based change — walks the solar day into
- * the night window and fails here.
+ * a priori: it is exactly zero at night and large in the middle of the day. Any
+ * offset in the mapping — an end/start relabelling, a UTC-versus-Brasília slip,
+ * a 1-based/0-based change — walks the solar day into the night window and
+ * fails here.
+ *
+ * **The two windows read different columns, and that asymmetry is the point.**
+ * The night test reads `val_ger_fotovoltaica` alone, because photovoltaic
+ * output is the only quantity in the file that *must* be exactly zero in
+ * darkness. `val_ger_mmgd` is micro and mini distributed generation, which is
+ * mostly rooftop PV but not only: it carries small hydro, biogas and
+ * cogeneration that run after sunset. Summing the two and demanding zero
+ * therefore asserted something about the data that was never true, and it
+ * refused three otherwise complete days over it — 2025-10-18, 2025-12-03 and
+ * 2025-12-24, each a full 48 patamares for all four subsystems, each with
+ * `val_ger_fotovoltaica` exactly 0.000 through the whole evening and a lone
+ * 3–6 MW MMGD blip at local 21:00 with zeros on both sides of it
+ * (data-platform 25). Six megawatts is 0.03% of that day's 17 GW midday peak
+ * and sits in no shifted solar profile: a shift that could produce it would
+ * have moved the peak too, and the midday test would have collapsed. Dropping
+ * MMGD from the night window makes this guard **sharper**, not looser — the
+ * quantity removed was the only one that could satisfy it without the mapping
+ * being wrong.
+ *
+ * The midday test keeps the sum, deliberately: there it is a floor, and a
+ * floor that more terms can clear is the safe direction.
  *
  * Its known blind spot, stated rather than hidden: the solar day is nearly
  * symmetric about local noon, so a *reversed* patamar order would pass. Nothing
@@ -210,7 +229,8 @@ function assertDaylightAlignment(
   for (const row of rows) {
     const hour = hourOf(row);
     if (hour < 4 || hour >= 21) {
-      nightMax = Math.max(nightMax, solar(row));
+      // Photovoltaic only. MMGD is not a solar-only series and runs after dark.
+      nightMax = Math.max(nightMax, row.solarGenerationMw);
     }
     if (hour >= 9 && hour < 15) {
       middayMax = Math.max(middayMax, solar(row));
@@ -220,7 +240,7 @@ function assertDaylightAlignment(
   if (nightMax > 0) {
     throw new PayloadRefusedError(
       "time_axis",
-      `Reference day ${referenceDay} has ${nightMax} MW of solar generation in local ` +
+      `Reference day ${referenceDay} has ${nightMax} MW of photovoltaic generation in local ` +
         "night hours: the num_patamar → wall-clock mapping this adapter infers " +
         "(patamar k = the half hour ending 00:00 + k×30 min Brasília) no longer holds.",
     );
@@ -238,11 +258,52 @@ function assertDaylightAlignment(
  * Assert the reference day is complete: every subsystem present carries every
  * patamar of the local day exactly once.
  *
- * Loud rather than lenient, and file-level rather than row-level. A day short
- * one patamar is not a day with a hole in it — it is a day whose period index
- * may mean something other than what this adapter assumes, and storing 47 of 48
- * half hours under a mapping that might have shifted is worse than storing none.
+ * Loud rather than lenient, and file-level rather than row-level.
+ *
+ * **The original reason for this was measured and is wrong; the refusal is
+ * kept for a different one.** The comment here used to say a short day is "a
+ * day whose period index may mean something other than what this adapter
+ * assumes". Data-platform 25 read all 34 short days ONS has published and that
+ * is not what they are: every one is a *contiguous* run — 23 a prefix starting
+ * at patamar 1, 11 a suffix ending at patamar 48, never a day with interior
+ * holes — and on 29 of the 34 the solar profile sits exactly where
+ * `assertDaylightAlignment` requires, with a 12–22 GW midday peak and nothing
+ * at all at night. The index is absolute and the file proves it; the other
+ * five are too short to carry a midday at all.
+ *
+ * What stays true is that the *table* cannot say so. A 46-patamar day written
+ * into `dessem_balance_half_hour` is indistinguishable from a 48-patamar one:
+ * there is no column for "this reference day was published two half hours
+ * short", `canonical_day_ahead_balance` would answer 46 rows for it, and every
+ * consumer that divides by a day would be quietly wrong. So a partial
+ * publication is refused as `coverage` — which is precisely what it is — and
+ * admitting it is a schema question, not an adapter one.
  */
+/**
+ * The shape of a short day, in one clause appended to its refusal.
+ *
+ * Which patamares are missing is the whole difference between "ONS published
+ * part of a day" and "ONS published a day with a hole in it", and only the
+ * first has ever been observed. Saying which, in the refusal itself, is what
+ * stops the next census from having to re-download 470 files to find out.
+ */
+function describeRun(patamares: Set<number>, halfHours: number): string {
+  const sorted = [...patamares].sort((a, b) => a - b);
+  const first = sorted[0] as number;
+  const last = sorted[sorted.length - 1] as number;
+  const contiguous = last - first + 1 === sorted.length;
+  if (!contiguous) {
+    return `The patamares present are not one contiguous run (${first}…${last}, ${sorted.length} of ${halfHours}), so the file is not a truncated publication.`;
+  }
+  if (first === 1) {
+    return `The patamares present are the contiguous prefix 1…${last}: a publication cut short, not a shifted index.`;
+  }
+  if (last === halfHours) {
+    return `The patamares present are the contiguous suffix ${first}…${halfHours}: a publication that starts partway through the day, not a shifted index.`;
+  }
+  return `The patamares present are the contiguous run ${first}…${last}, touching neither end of the day.`;
+}
+
 function assertCoverage(
   seen: Map<SubsystemCode, Set<number>>,
   referenceDay: string,
@@ -253,7 +314,8 @@ function assertCoverage(
       throw new PayloadRefusedError(
         "coverage",
         `Reference day ${referenceDay} has ${patamares.size} patamares for subsystem ` +
-          `${subsystem}; the local civil day is ${halfHours} half hours long`,
+          `${subsystem}; the local civil day is ${halfHours} half hours long. ` +
+          `${describeRun(patamares, halfHours)}`,
       );
     }
     for (let patamar = 1; patamar <= halfHours; patamar += 1) {
