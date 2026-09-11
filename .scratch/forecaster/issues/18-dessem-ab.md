@@ -82,6 +82,42 @@ the command is one command, but neither A/B lane has a promoted artifact on this
 database — the served evening lane's own arm *is* `A-full` — so there is no card
 for the block to be an edit of, and `record_dessem_delta` mints none.
 
+## A second decision-grade fold was available all along — measured 2026-09-11
+
+The verdict above rests on **one** decision-grade fold, and this ticket has
+said so honestly. The reason turns out not to be the data.
+
+Asked of the calendar's own arithmetic, with no run and no database:
+
+```
+min_base_fit_days = 180        arms: A-full, A-common, B-common
+
+as_of 2026-09-11   reportable F4, F5, F6
+  F4   base-fit days per arm  A-full 550 · A-common 133 · B-common 133  -> excluded
+  F5                          A-full 640 · A-common 223 · B-common 223  -> DECISION-GRADE
+  F6                          A-full 731 · A-common 314 · B-common 314  -> DECISION-GRADE
+```
+
+**F5 and F6 both clear the rule for all three arms, and did on the day the run
+was made.** The single-fold verdict is an artefact of the run being stopped
+part-way — the coordinator killed it while a further arm was still scoring,
+believing it hung; it was in fact inside a single `feature_rows` call, which
+forecaster 32 later measured at 58.4 s per 17,376 rows on real data. The run
+committed what it had.
+
+So `B-common − A-common = −5,845.5 MWh` at `P(treatment better) = 0.001` is a
+one-fold result that **could be a two-fold result today**, with no new
+ingestion, no decision and no key. That is the cheapest remaining strengthening
+of any figure in this repository.
+
+The calendar also dates the rest: F7 becomes decision-grade around 2026-12-01,
+F8 around 2027-03-01, F9 around 2027-06-01 — one per quarter, which is what the
+ticket's "re-runnable each quarter without a code change" box is for.
+
+**The re-run should materialise `feature_rows` once per window rather than once
+per arm.** Three arms over one calendar currently pay for the same rows three
+times, which is why the first attempt looked hung.
+
 ## What was built
 
 `apps/ml/src/wattsteer_ml/evaluation/dessem_ab.py`, in the shape 16 and 17 use:
