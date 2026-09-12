@@ -26,7 +26,14 @@ COPY packages/core/src ./packages/core/src
 COPY packages/ui/src ./packages/ui/src
 # expo-env.d.ts is git-ignored (auto-generated types) and not needed for the
 # Metro/babel export, so it's intentionally not copied.
-COPY apps/web/app.json apps/web/tsconfig.json ./apps/web/
+# `metro.config.js` is load-bearing, not optional tooling: it restores the
+# TypeScript rule that `./thing.js` inside `packages/core` means `./thing.ts`,
+# which Metro does not do natively, and it declares `watchFolders` so the
+# symlinked workspace package resolves at all. Without it the export dies on
+# `Unable to resolve module ./causality.js` — which is exactly how this image
+# failed before the file was copied. `test/metro-resolves-core.test.ts` guards
+# the config's *contents*; it did not guard that the image receives it.
+COPY apps/web/metro.config.js apps/web/app.json apps/web/tsconfig.json ./apps/web/
 COPY apps/web/src ./apps/web/src
 COPY apps/web/assets ./apps/web/assets
 COPY apps/web/public ./apps/web/public

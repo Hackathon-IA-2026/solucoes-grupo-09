@@ -34,6 +34,22 @@ describe("the web bundle can resolve @wattsteer/core", () => {
     expect(text).toMatch(/\.js/);
   });
 
+  it("the web image receives the metro config, not just the repository", () => {
+    // The gap this guard admitted to having. It checked the config's contents
+    // and never that the Docker build copies it, so `apps/web/Dockerfile`
+    // shipped without `metro.config.js` and `expo export` died inside the
+    // image on the exact error the docstring above describes — while the
+    // export ran fine locally, where the file is simply present. Contents and
+    // delivery are two claims and this file now makes both.
+    const dockerfile = readFileSync(join(ROOT, "apps/web/Dockerfile"), "utf8");
+    const copies = dockerfile
+      .split("\n")
+      .filter((line) => line.startsWith("COPY ") && !line.includes("--from="));
+    // Non-vacuous: the Dockerfile was read and it does copy things.
+    expect(copies.length).toBeGreaterThan(3);
+    expect(copies.some((line) => line.includes("apps/web/metro.config.js"))).toBe(true);
+  });
+
   it("every `.js` specifier in core's barrel names a real `.ts` file", () => {
     // The barrel is what the web app imports, and the one file whose bad
     // specifier takes the whole bundle down.
