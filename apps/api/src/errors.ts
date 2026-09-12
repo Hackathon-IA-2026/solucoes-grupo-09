@@ -261,7 +261,59 @@ export interface ErrorResponse {
  * unexpected failure's text is a connection string, a query or a stack as
  * often as not, and none of that belongs in a public response.
  */
+/**
+ * Postgres `undefined_table` / `invalid_schema_name`.
+ *
+ * A database that answers and has no schema is not a bug in this code, and
+ * saying `INTERNAL` about it is the opposite of what every other refusal in
+ * this service does. Measured on the first production deploy: `/v1/meta`
+ * returned `500 INTERNAL` while the logs said `relation
+ * "subsystem_energy_balance_hour" does not exist` — the operator could not
+ * tell a missing migration from a genuine fault without reading the logs,
+ * which is exactly the diagnosis the envelope exists to carry.
+ *
+ * It maps to `DATA_UNAVAILABLE` (503) rather than a new code: that code is
+ * documented as "Postgres unreachable. The generic case, and the only generic
+ * sentence", and a reachable-but-unmigrated database belongs to the same
+ * family — the data is not there to be read, through no fault of the caller.
+ * 503 also says retry-after-an-operator-acts, which 500 does not.
+ */
+const SCHEMA_ABSENT = new Set(["42P01", "3F000"]);
+
+/** The relation Postgres named, when it named one. */
+function missingRelation(error: unknown): string | null {
+  if (typeof error !== "object" || error === null) {
+    return null;
+  }
+  const code = (error as { code?: unknown }).code;
+  if (typeof code !== "string" || !SCHEMA_ABSENT.has(code)) {
+    return null;
+  }
+  const message = (error as { message?: unknown }).message;
+  const named =
+    typeof message === "string"
+      ? /relation "([^"]+)" does not exist/.exec(message)
+      : null;
+  return named?.[1] ?? "unknown";
+}
+
 export function toErrorEnvelope(error: unknown, requestId?: string): ErrorResponse {
+  const absent = missingRelation(error);
+  if (absent !== null && !(error instanceof AppError)) {
+    return {
+      status: statusForCode("DATA_UNAVAILABLE"),
+      body: {
+        error: {
+          code: "DATA_UNAVAILABLE",
+          message:
+            "The database is reachable but has no schema for this read. " +
+            "Apply the migrations before serving.",
+          details: { relation: absent },
+          ...(requestId ? { request_id: requestId } : {}),
+        },
+      },
+    };
+  }
   const known = error instanceof AppError ? error : null;
   const code: ErrorCode = known ? known.code : "INTERNAL";
   const message = known ? known.message : "Internal server error";

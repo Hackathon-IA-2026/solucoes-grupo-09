@@ -226,3 +226,45 @@ describe("errors · LOCALE_UNSUPPORTED fires on the primary subtag", () => {
     }
   });
 });
+
+describe("a database with no schema is not an INTERNAL", () => {
+  it("names the missing relation and answers 503, not 500", () => {
+    // Measured on the first production deploy: `/v1/meta` returned
+    // `500 INTERNAL` while the logs said `relation
+    // "subsystem_energy_balance_hour" does not exist`. The operator could not
+    // tell a missing migration from a genuine fault without reading the logs.
+    const pgError = Object.assign(new Error('relation "plant" does not exist'), {
+      code: "42P01",
+    });
+    const { status, body } = toErrorEnvelope(pgError, "req-1");
+    expect(status).toBe(503);
+    expect(body.error.code).toBe("DATA_UNAVAILABLE");
+    expect(body.error.details).toEqual({ relation: "plant" });
+    expect(body.error.request_id).toBe("req-1");
+  });
+
+  it("still discards the text of a genuine fault", () => {
+    // The rule this must not weaken: an unexpected failure's message is a
+    // connection string or a query as often as not, so it is dropped. Only the
+    // two schema codes are given a voice, and only the relation name from them.
+    const secret = new Error("connect ECONNREFUSED postgres://user:hunter2@host/db");
+    const { status, body } = toErrorEnvelope(secret, "req-2");
+    expect(status).toBe(500);
+    expect(body.error.code).toBe("INTERNAL");
+    expect(body.error.message).toBe("Internal server error");
+    expect(JSON.stringify(body)).not.toContain("hunter2");
+  });
+
+  it("is not fooled by a message without the code, or a code without a message", () => {
+    // Both halves are required, so a log line quoted into an ordinary error
+    // cannot promote itself to a 503.
+    const prose = new Error('relation "plant" does not exist');
+    expect(toErrorEnvelope(prose).body.error.code).toBe("INTERNAL");
+
+    const coded = Object.assign(new Error("something else entirely"), { code: "42P01" });
+    const envelope = toErrorEnvelope(coded);
+    expect(envelope.body.error.code).toBe("DATA_UNAVAILABLE");
+    // Named "unknown" rather than invented, because Postgres did not say.
+    expect(envelope.body.error.details).toEqual({ relation: "unknown" });
+  });
+});
