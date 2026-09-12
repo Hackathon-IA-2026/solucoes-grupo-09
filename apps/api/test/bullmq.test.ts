@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "bun:test";
-import { createBullMqRunner } from "../src/jobs/bullmq.js";
+import { createBullMqRunner, redactedRedisError } from "../src/jobs/bullmq.js";
 import type { JobRecord, JobRunner } from "../src/jobs/types.js";
 
 // Runs only when a test Redis is provided (the `test:redis` script sets it).
@@ -110,4 +110,37 @@ suite("jobs · bullmq runner (real Redis)", () => {
       await enqueueOnly.close();
     }
   }, 15_000);
+});
+
+// No Redis required: the leak is a property of how an ioredis error is
+// formatted, not of any connection.
+describe("jobs · bullmq redis errors never carry the password to the log", () => {
+  const password = "CorrectHorseBatteryStaple";
+
+  /** The shape ioredis attaches on a failed AUTH. */
+  function replyError(): Error {
+    const err = new Error(
+      "WRONGPASS invalid username-password pair or user is disabled.",
+    );
+    (err as Error & { command: unknown }).command = {
+      name: "auth",
+      args: ["default", password],
+    };
+    return err;
+  }
+
+  it("logs the message and not the command that failed", () => {
+    expect(redactedRedisError(replyError())).not.toContain(password);
+    expect(redactedRedisError(replyError())).toContain("WRONGPASS");
+  });
+
+  // Non-vacuity: the guard is only worth its line if the unguarded path leaks.
+  it("the unguarded path it replaces does leak the password", () => {
+    expect(Bun.inspect(replyError())).toContain(password);
+  });
+
+  it("a non-Error rejection still reaches the log as something", () => {
+    expect(redactedRedisError("connection refused")).toBe("connection refused");
+    expect(redactedRedisError(undefined)).toBe("undefined");
+  });
 });

@@ -38,12 +38,29 @@ function mapState(state: string): JobStatus {
   return "waiting"; // waiting | delayed | prioritized | paused | waiting-children
 }
 
+/**
+ * What a Redis connection error may be written to the log as.
+ *
+ * ioredis hangs the failed command off the error object — `err.command` is
+ * `{ name: "auth", args: ["default", "<the password>"] }` — and every console
+ * that formats an Error by inspecting its own properties (Bun's among them)
+ * prints those args verbatim. A single WRONGPASS therefore writes the Redis
+ * password into the deployment log, where it outlives the rotation that was
+ * supposed to retire it. `toErrorEnvelope` guards the response path; this
+ * guards the log path, and it does it by narrowing to the message rather than
+ * by redacting the object, because a redactor has to be right about every
+ * field ioredis might add and a narrowing has to be right about one.
+ */
+export function redactedRedisError(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 /** Own the redis connection so we can swallow the benign close-time error. */
 function connect(url: string): Redis {
   const conn = new Redis(url, { maxRetriesPerRequest: null });
   conn.on("error", (err) => {
     if (!/connection is closed/i.test(err.message)) {
-      console.error("redis error:", err);
+      console.error("redis error:", redactedRedisError(err));
     }
   });
   return conn;
@@ -118,7 +135,7 @@ export function createBullMqRunner<TPayload, TResult>(
     );
     worker.on("error", (err) => {
       if (!/connection is closed/i.test(err.message)) {
-        console.error("bullmq worker error:", err);
+        console.error("bullmq worker error:", redactedRedisError(err));
       }
     });
   }
