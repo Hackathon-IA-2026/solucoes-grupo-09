@@ -170,10 +170,18 @@ export default defineRailway(() => {
     healthcheckTimeout: 120,
     replicas: { [REGION]: 1 },
     deploy: { ...RESTART_ON_FAILURE },
-    volumeMounts: { "/data": mlModels },
+    // Mounted at the artifact directory itself, not at `/data`. A volume
+    // mounted one level up masks the image's `mkdir -p /data/models`, and
+    // `artifacts.py` reads a missing directory as "the volume did not mount" —
+    // which is exactly what `/v1/meta` reported before this was corrected.
+    volumeMounts: { "/data/models": mlModels },
     env: {
       DATABASE_URL: preserve(),
       PORT: preserve(),
+      // Start the container as root so the entrypoint can chown the
+      // root-owned volume; it drops to `wattsteer` via setpriv before exec'ing
+      // the service, so the Python process is not root.
+      RAILWAY_RUN_UID: preserve(),
       WATTSTEER_ML_ARTIFACT_DIR: preserve(),
       WATTSTEER_ML_ENV: preserve(),
     },

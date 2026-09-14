@@ -68,10 +68,19 @@ ENV PATH="/app/.venv/bin:$PATH" \
 
 # The mount point for the model-artifact volume — a Railway volume in
 # production, a named docker volume locally. Created and owned here so the
-# container still starts (with an empty store) when nothing is mounted.
+# container still starts (with an empty store) when nothing is mounted. When one
+# *is* mounted it arrives root-owned and masks this, which is what the
+# entrypoint exists to repair.
 RUN mkdir -p /data/models && chown -R wattsteer:wattsteer /data
 
-USER wattsteer
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# No `USER wattsteer`: the entrypoint starts as root, chowns the mounted volume
+# — the one thing only root can do — and then `exec`s the service through
+# `setpriv` as `wattsteer`. The Python process is unprivileged either way; what
+# changes is that it can now write to its own artifact store.
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 EXPOSE $PORT
 
