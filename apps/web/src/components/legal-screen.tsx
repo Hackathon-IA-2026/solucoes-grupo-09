@@ -107,7 +107,7 @@ export function LegalScreen({
             >
               <Image
                 source={require("../../assets/images/logo.png")}
-                style={{ width: 34, height: 38 }}
+                style={{ width: 38, height: 27 }}
                 contentFit="contain"
                 accessibilityLabel="WattSteer"
               />

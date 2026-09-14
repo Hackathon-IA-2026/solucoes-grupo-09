@@ -154,7 +154,7 @@ export function SiteFooter() {
       <View style={styles.brand}>
         <Image
           source={require("../../assets/images/logo.png")}
-          style={{ width: 30, height: 28 }}
+          style={{ width: 34, height: 24 }}
           contentFit="contain"
           accessibilityLabel="WattSteer"
         />

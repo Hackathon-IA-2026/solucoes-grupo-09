@@ -102,7 +102,7 @@ export default function Gate() {
         >
           <Image
             source={require("../../assets/images/logo.png")}
-            style={{ width: 44, height: 50 }}
+            style={{ width: 48, height: 34 }}
             contentFit="contain"
             accessibilityLabel="WattSteer"
           />

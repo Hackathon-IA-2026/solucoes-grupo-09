@@ -1,11 +1,9 @@
 import { Text, View } from "react-native";
-import Svg, { Path, Rect } from "react-native-svg";
+import Svg, { G, Path, Rect } from "react-native-svg";
 import { usePalette } from "../hooks/use-palette";
+import { WATTSTEER_MARK_PATHS, wattSteerMarkTransform } from "../lib/mark";
 
-/**
- * Brand mark: lime rounded square with the stroked Z-path
- * "M9 9H23L9 23H23" (top bar → diagonal → bottom bar).
- */
+/** Brand mark: lime rounded square with the dark W. */
 export function WattSteerMark({
   size = 28,
   tint,
@@ -18,14 +16,11 @@ export function WattSteerMark({
   return (
     <Svg width={size} height={size} viewBox="0 0 32 32" aria-hidden={true}>
       <Rect width={32} height={32} rx={9} fill={tint ?? colors.accent} />
-      <Path
-        d="M9 9H23L9 23H23"
-        stroke={colors.onAccent}
-        strokeWidth={3.2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      />
+      <G transform={wattSteerMarkTransform(32)}>
+        {WATTSTEER_MARK_PATHS.map((d) => (
+          <Path key={d} d={d} fill={colors.onAccent} />
+        ))}
+      </G>
     </Svg>
   );
 }

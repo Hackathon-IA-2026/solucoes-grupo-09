@@ -1,12 +1,27 @@
 /**
- * Deterministic brand-asset generator: the WattSteer mark is the script "Z"
- * glyph (lime on charcoal). Every favicon / PWA / app / OG asset is rendered
- * from a single hi-res transparent glyph so they stay in lockstep. Rerun after
- * any brand change: `bun scripts/generate-assets.ts` (from apps/web).
+ * Deterministic brand-asset generator: the WattSteer mark is the W glyph
+ * (lime on charcoal). Every favicon / PWA / app / OG asset is rendered from
+ * one definition so they stay in lockstep. Rerun after any brand change:
+ * `bun scripts/generate-assets.ts` (from apps/web).
+ *
+ * **The glyph is imported, not read off disk.** It used to be two checked-in
+ * master PNGs — `logo-source.png` and `logo-mono-source.png` — which meant the
+ * mark existed twice: once as a path in `@wattsteer/ui` and once as pixels
+ * here, with nothing holding them together. Importing the paths makes the
+ * component the single definition, so a mark that changes in the app cannot
+ * fail to change on the favicon.
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { chromium } from "@playwright/test";
+// The geometry module by relative path, not through the package barrel: the
+// barrel re-exports the components, which import `react-native`, which does not
+// parse outside Metro. `lib/mark.ts` has no framework import for this reason.
+import {
+  WATTSTEER_MARK_BOX as MARK_BOX,
+  WATTSTEER_MARK_PATHS,
+  wattSteerMarkTransform,
+} from "../../../packages/ui/src/lib/mark";
 
 const ROOT = join(import.meta.dir, "..");
 const LIME = "#D0F244";
@@ -17,21 +32,38 @@ const MUTED = "#A2A2AC";
 const GRAPE = "#8D5DF6";
 const BORDER = "rgba(255,255,255,0.08)";
 
-/** The lime Z glyph (transparent) — the master brand mark. */
-const GLYPH = readFileSync(join(ROOT, "assets/images/logo-source.png")).toString(
-  "base64",
-);
-/** White Z glyph, for the Android themed (monochrome) icon layer. */
-const GLYPH_MONO = readFileSync(
-  join(ROOT, "assets/images/logo-mono-source.png"),
-).toString("base64");
-
-/** A bare, centered glyph at `px` (square, contain). */
-function glyphImg(px: number, b64 = GLYPH) {
-  return `<img src="data:image/png;base64,${b64}" style="width:${px}px;height:${px}px;object-fit:contain" alt="" />`;
+/** The glyph as inline SVG, at `px` square, in `fill`. */
+function glyphImg(px: number, fill = LIME) {
+  const paths = WATTSTEER_MARK_PATHS.map((d) => `<path d="${d}" fill="${fill}"/>`).join(
+    "",
+  );
+  // `inset: 1` — the caller has already chosen the box, so the glyph fills it.
+  return `<svg width="${px}" height="${px}" viewBox="0 0 ${px} ${px}" xmlns="http://www.w3.org/2000/svg">
+      <g transform="${wattSteerMarkTransform(px, 1)}">${paths}</g>
+    </svg>`;
 }
 
-/** Charcoal rounded badge + the lime Z (favicon / PWA / touch / app icons). */
+/**
+ * The glyph at its own aspect ratio, tight to its bounding box.
+ *
+ * The square form above is right for a badge, where the mark sits inside a tile
+ * with its own padding. It is wrong for an `<Image>` on a page: a square canvas
+ * around a mark that is wider than it is tall is transparent padding, and
+ * `contentFit="contain"` then fits the *padding* and renders the mark smaller
+ * than the box it was given.
+ */
+function glyphTight(width: number, fill = LIME) {
+  const height = Math.round((width * MARK_BOX.height) / MARK_BOX.width);
+  const scale = width / MARK_BOX.width;
+  const paths = WATTSTEER_MARK_PATHS.map((d) => `<path d="${d}" fill="${fill}"/>`).join(
+    "",
+  );
+  return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+      <g transform="translate(${-MARK_BOX.x * scale}, ${-MARK_BOX.y * scale}) scale(${scale})">${paths}</g>
+    </svg>`;
+}
+
+/** Charcoal rounded badge + the lime W (favicon / PWA / touch / app icons). */
 function badge(size: number, radius: number) {
   return `<div style="width:${size}px;height:${size}px;border-radius:${radius}px;background:${CHARCOAL};display:grid;place-items:center">
       ${glyphImg(Math.round(size * 0.6))}
@@ -67,7 +99,19 @@ const ASSETS: Asset[] = [
     html: badge(64, 14),
   },
   {
-    // Splash mark: bare lime Z (the splash background is charcoal).
+    // The in-page mark: bare lime W on transparent, used by the landing header,
+    // the footer and the legal screens through `<Image>`. Generated here for
+    // the reason everything else is — it was the last checked-in raster of the
+    // logo, so a brand change that did not regenerate it left the old mark on
+    // three screens.
+    file: "assets/images/logo.png",
+    width: 368,
+    height: 264,
+    transparent: true,
+    html: glyphTight(368),
+  },
+  {
+    // Splash mark: bare lime W (the splash background is charcoal).
     file: "assets/images/splash-icon.png",
     width: 512,
     height: 512,
@@ -93,7 +137,7 @@ const ASSETS: Asset[] = [
     width: 1024,
     height: 1024,
     transparent: true,
-    html: `<div style="width:1024px;height:1024px;display:grid;place-items:center">${glyphImg(560, GLYPH_MONO)}</div>`,
+    html: `<div style="width:1024px;height:1024px;display:grid;place-items:center">${glyphImg(560, FG)}</div>`,
   },
   // PWA-manifest + apple-touch icons: the charcoal badge, scaled. Opaque
   // (iOS fills transparent touch-icon pixels with black anyway).

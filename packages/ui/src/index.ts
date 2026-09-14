@@ -12,4 +12,5 @@ export * from "./hooks/use-palette";
 export * from "./hooks/use-reduced-motion";
 export * from "./lib/focus-ring";
 export * from "./lib/gradient";
+export * from "./lib/mark";
 export * from "./tokens";
