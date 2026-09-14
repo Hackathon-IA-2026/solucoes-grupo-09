@@ -16,21 +16,26 @@ things here and they are different tests:
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
+import pytest
+
+from wattsteer_ml import calendar_generator
 from wattsteer_ml.calendar_generator import (
-    ARTIFACT_PATH,
     CALENDAR_VERSION,
     GENERATOR,
     CalendarDay,
+    artifact_path,
     calendar_digest,
     generate_calendar,
     generate_rows,
     render,
+    repository_root,
 )
 
 
 def _artifact() -> dict[str, object]:
-    stored: dict[str, object] = json.loads(ARTIFACT_PATH.read_text(encoding="utf-8"))
+    stored: dict[str, object] = json.loads(artifact_path().read_text(encoding="utf-8"))
     return stored
 
 
@@ -41,7 +46,7 @@ def test_regenerating_reproduces_the_stored_artifact_exactly() -> None:
     and the digest the loader checks is computed over the order — so the file is
     the thing that has to match.
     """
-    assert render(generate_calendar()) == ARTIFACT_PATH.read_text(encoding="utf-8")
+    assert render(generate_calendar()) == artifact_path().read_text(encoding="utf-8")
 
 
 def test_the_artifact_names_the_version_that_produced_it() -> None:
@@ -147,3 +152,31 @@ def test_both_categories_are_generated() -> None:
         row.name for row in rows if row.uf == "BR" and row.category == "optional"
     }
     assert {"Carnaval", "Corpus Christi"} <= optional_national
+
+
+def test_the_artifact_path_is_found_by_search_not_by_counting_levels() -> None:
+    """The container bug, as an assertion.
+
+    ``parents[4]`` was right for ``apps/ml/src/wattsteer_ml/`` and wrong for the
+    container's ``/app/src/wattsteer_ml/``, where it raised ``IndexError`` at
+    *import* time — and ``declined.package_modules`` imports every module in the
+    package, so that one line 500'd ``/v1/meta``.
+    """
+    root = repository_root()
+    assert root is not None
+    # The root is the checkout, identified by what is actually being addressed.
+    assert (root / "packages" / "core" / "fixtures" / "calendar").is_dir()
+    assert artifact_path().is_file()
+    # Non-vacuity: the depth that the counted form encoded is an accident of
+    # this layout, and the search must not depend on it.
+    depth = len(Path(__file__).resolve().relative_to(root).parts)
+    assert depth != 5, "the layout moved; this test is asserting the old accident"
+
+
+def test_without_a_checkout_it_refuses_instead_of_raising_indexerror(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A container has no calendar to generate, and should be told so."""
+    monkeypatch.setattr(calendar_generator, "repository_root", lambda: None)
+    with pytest.raises(RuntimeError, match="not running from a checkout"):
+        calendar_generator.artifact_path()

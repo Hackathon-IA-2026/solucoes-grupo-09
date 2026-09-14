@@ -95,17 +95,54 @@ UFS: tuple[str, ...] = tuple(
 
 CATEGORIES: tuple[str, ...] = (PUBLIC, OPTIONAL)
 
-#: Where the artifact lives. Shared rather than inside ``apps/ml`` because the
-#: loader that writes it into Postgres is TypeScript, and a file only one of the
-#: two languages that use it can see is not a shared definition.
-ARTIFACT_PATH = (
-    Path(__file__).resolve().parents[4]
-    / "packages"
-    / "core"
-    / "fixtures"
-    / "calendar"
-    / f"{CALENDAR_VERSION}.json"
-)
+#: Where the artifact lives, relative to the repository root. Shared rather than
+#: inside ``apps/ml`` because the loader that writes it into Postgres is
+#: TypeScript, and a file only one of the two languages that use it can see is
+#: not a shared definition.
+ARTIFACT_RELATIVE_PATH = Path("packages") / "core" / "fixtures" / "calendar"
+
+
+def repository_root() -> Path | None:
+    """The checkout this module was imported from, or ``None`` outside one.
+
+    Found by searching upward for the directory it is looking for rather than
+    by counting levels to it. The counted form — ``parents[4]`` — was correct
+    for ``apps/ml/src/wattsteer_ml/`` and wrong everywhere else, and "everywhere
+    else" turned out to include the only place this service actually runs: the
+    container installs the package at ``/app/src/wattsteer_ml/``, four levels
+    from the filesystem root rather than from a checkout, so ``parents[4]``
+    raised ``IndexError``.
+
+    That mattered far past this module, because it happened **at import time**
+    and ``declined.package_modules`` imports every module in the package by
+    design. One positional assumption in a generator nobody calls at runtime
+    was therefore enough to 500 the service's ``/v1/meta``.
+
+    ``None`` rather than a guess: there is no calendar artifact in a container
+    and there is not meant to be. This is a generator whose output is committed.
+    """
+    for candidate in Path(__file__).resolve().parents:
+        if (candidate / ARTIFACT_RELATIVE_PATH).is_dir():
+            return candidate
+    return None
+
+
+def artifact_path() -> Path:
+    """The artifact's path, or a refusal that says why there isn't one.
+
+    A function and not a module-level constant, deliberately: computing it on
+    import is what broke the service, and nothing that imports this module
+    needs the value.
+    """
+    root = repository_root()
+    if root is None:
+        raise RuntimeError(
+            "the holiday calendar is generated into the repository "
+            f"({ARTIFACT_RELATIVE_PATH}), and this process is not running from "
+            "a checkout that has one — the artifact is committed, so there is "
+            "nothing to generate here"
+        )
+    return root / ARTIFACT_RELATIVE_PATH / f"{CALENDAR_VERSION}.json"
 
 
 @dataclass(frozen=True, order=True)
@@ -214,8 +251,9 @@ def render(artifact: dict[str, object]) -> str:
     return json.dumps(artifact, ensure_ascii=False, indent=2, sort_keys=False) + "\n"
 
 
-def write_calendar(path: Path = ARTIFACT_PATH) -> Path:
+def write_calendar(path: Path | None = None) -> Path:
     """Regenerate the artifact in place. The reviewable half of the job is the diff."""
+    path = path if path is not None else artifact_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(render(generate_calendar()), encoding="utf-8")
     return path
