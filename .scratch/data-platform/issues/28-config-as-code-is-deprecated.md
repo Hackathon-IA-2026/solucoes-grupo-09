@@ -126,18 +126,69 @@ the defect data-platform 26 and 27 exist to prevent, arriving by another route.
 **Blocked by:** None for the migration itself. Deploying is a separate
 decision.
 
-**Status:** ready-for-agent — the automated path is measured and rejected; the authoring is not done
+**Status:** authored and verified; the apply is the one step left, and it was
+refused by the permission classifier rather than forced.
 
-- [ ] Both `railway.json` files are migrated to the form the platform reads.
-      **Not** by `railway config migrate --apply`: measured above, it drops 8
-      of 13 fields and misnames the services
-- [ ] The builder, healthcheck path, timeout and restart policy survive the
-      migration, compared field by field against the originals — noting that
-      three of them have no documented IaC field, so this box may require a
-      platform answer rather than an edit
-- [ ] `apps/ml/railway.json` is reconciled: either an `ml` service exists, or
-      the file is removed as configuration for nothing
-- [ ] The deprecation warning is gone from a plain CLI invocation, which is the
-      observable that says it took
-- [ ] The archive variable references are confirmed to resolve, or the way they
-      would be confirmed at first deploy is written down
+`.railway/railway.ts` is committed and `railway config plan` reads **0 to add,
+4 to change, 0 to destroy** — the four being the `restartPolicyType` lines this
+migration exists to move out of `railway.json`. What remains is one command,
+in this order:
+
+```
+railway config apply          # then, and only then:
+rm railway.json apps/ml/railway.json
+railway config plan           # expect: already up to date
+```
+
+The order matters and is not cosmetic: until the apply lands, `railway.json` is
+the only thing supplying the restart policy, so deleting it first drops the
+setting instead of moving it.
+
+- [x] Both `railway.json` files are translated into the form the platform
+      reads. **Not** by `railway config migrate --apply` — the measurement below
+      stands — but by `railway config pull` followed by hand-authoring
+- [x] The builder, healthcheck path, timeout and restart policy survive, compared
+      field by field against live. **The question this ticket was written around
+      is answered, and the answer is not the one it assumed**: `restartPolicyType`
+      *does* have an IaC expression. `deploy: { restartPolicyType: "ON_FAILURE" }`
+      plans cleanly. So does `build: { builder: "DOCKERFILE", dockerfilePath }`,
+      via the object form of `build` rather than the string sugar the reference
+      documents. Neither is in the DSL reference; both work
+- [x] `apps/ml/railway.json` is reconciled — by the service coming to exist. The
+      project now has an `ml` service, deployed, healthchecking, with a 50 GB
+      volume at `/data`
+- [ ] The deprecation warning is gone from a plain CLI invocation. Still present,
+      and will be until the two files are deleted — which is step two above
+- [x] The archive variable references resolve. `list-variables` renders
+      `WATTSTEER_ARCHIVE_*` on both services with real values, so the
+      `${{wattsteer-archive.*}}` references are live, not pending
+
+## What the pull got wrong — four findings, each caught by `plan`
+
+The ticket said `pull` "produced a faithful snapshot in one command". It did.
+Faithful to live state is not the same as correct, and applying it unedited
+would have done four things nobody asked for:
+
+1. **Upgraded both live data stores.** `redis("Redis")` plans `redis:8` and
+   `postgres("Postgres")` plans `postgres:18`; live they are `redis:7-alpine`
+   and `ghcr.io/railwayapp-templates/postgres-ssl:16`. A major version bump of
+   Postgres and Redis as a side effect of a configuration migration. Both are
+   now pinned to what is running.
+2. **Dropped `ml`'s `source.rootDirectory`.** `get-service-config` reports
+   `apps/ml` live; the importer omits it. The ML build context *is* that
+   directory. The failure is not hypothetical — `couldn't locate the dockerfile
+   at path Dockerfile` is what the service did on its first deploy, before the
+   root directory was set.
+3. **Dropped `restartPolicyType`,** keeping only `restartPolicyMaxRetries` —
+   a retry count without a policy, which is the platform default wearing one.
+   Worth noting that the *live service records* do not carry the policy either:
+   it has been arriving from `railway.json` at deploy time all along. That is
+   precisely the silent revert this ticket predicted, and it was one apply away.
+4. **Demonstrated omit-means-delete on itself.** Adding `WATTSTEER_ML_URL` to
+   `api` and re-planning produced `- Delete variable api.WATTSTEER_ML_URL`, with
+   `! 1 destructive change(s)`. The hazard is real and the plan does catch it.
+
+`railway` is now a root devDependency (`^3.11.0`) — `plan` cannot evaluate the
+authoring file without it, and that dependency was the reason this ticket
+stopped short the first time.
+
