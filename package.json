@@ -2,7 +2,7 @@
   "name": "wattsteer-monorepo",
   "private": true,
   "version": "0.1.0",
-  "description": "WattSteer \u2014 renewable curtailment intelligence for the Brazilian grid (API, web app, shared core).",
+  "description": "WattSteer — renewable curtailment intelligence for the Brazilian grid (API, web app, shared core).",
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -45,6 +45,7 @@
     "@sinclair/typebox": "0.34.49"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.16"
+    "@biomejs/biome": "^2.4.16",
+    "railway": "^3.11.0"
   }
 }

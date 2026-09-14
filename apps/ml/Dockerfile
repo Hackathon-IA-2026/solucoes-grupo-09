@@ -18,13 +18,23 @@ WORKDIR /app
 # pyproject.toml or uv.lock changes, so editing service code does not re-resolve
 # the world. `--frozen` fails loudly if uv.lock is stale rather than quietly
 # resolving something the lockfile never recorded.
+#
+# The cache mount's `id=` is Railway's required shape, not a name we chose:
+# its builder rejects an anonymous mount (`missing an id argument`) and then
+# rejects a plain name too (`missing the cacheKey prefix from its id`). The
+# documented form is `s/<service id>-<target path>`, and the service id must be
+# a literal — Railway states outright that environment variables are invalid
+# syntax inside a cache-mount id, so there is no way to derive it. If the `ml`
+# service is ever recreated, this id goes stale and the only consequence is a
+# cold cache on the next dependency change. Locally the id is arbitrary, so the
+# same line builds under plain BuildKit and docker-compose.
 COPY pyproject.toml uv.lock ./
-RUN --mount=type=cache,target=/root/.cache/uv \
+RUN --mount=type=cache,id=s/f94e0b64-4a8a-4f2f-9b75-7d1af25cc10f-/root/.cache/uv,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev
 
 COPY src ./src
 COPY README.md ./
-RUN --mount=type=cache,target=/root/.cache/uv \
+RUN --mount=type=cache,id=s/f94e0b64-4a8a-4f2f-9b75-7d1af25cc10f-/root/.cache/uv,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
 
