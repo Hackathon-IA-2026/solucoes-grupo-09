@@ -38,6 +38,7 @@ export function createJobRunner<TPayload, TResult>(
       failedRetentionSec: config.jobFailedRetentionSec,
       attempts: config.jobAttempts,
       backoffMs: config.jobBackoffMs,
+      lockDurationMs: config.jobLockDurationMs,
     });
   }
   return createInProcessRunner(execute);

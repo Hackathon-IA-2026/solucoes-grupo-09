@@ -85,6 +85,7 @@ const runner = createBullMqRunner<WorkerTask, WorkerTaskResult>(
     failedRetentionSec: config.jobFailedRetentionSec,
     attempts: config.jobAttempts,
     backoffMs: config.jobBackoffMs,
+    lockDurationMs: config.jobLockDurationMs,
   },
 );
 

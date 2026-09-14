@@ -107,6 +107,29 @@ export const config = {
   jobAttempts: int(process.env.WATTSTEER_JOB_ATTEMPTS, 3, 1, 10),
   /** Base backoff (ms) between job retries (exponential). */
   jobBackoffMs: int(process.env.WATTSTEER_JOB_BACKOFF_MS, 5000, 100, 120_000),
+  /**
+   * How long a worker's claim on a running job survives without renewal.
+   *
+   * BullMQ's 30 s default is a claim on a job that finishes in seconds, and the
+   * live refresh sweep is not that: measured in production on 2026-09-14 it ran
+   * **12m 57s** (16:17:00 → 16:29:57 UTC), fetching and parsing ONS monthly
+   * constrained-off files that are ~244 MB apiece. Thirty seconds in, the lock
+   * expired; the stalled-job checker then handed the same sweep to a second
+   * processor while the first was still ingesting, and both finished into a
+   * `Lock mismatch … Cmd moveToFinished from active` — so the run did its work
+   * twice and recorded it zero times.
+   *
+   * Twenty minutes is chosen against the *measured* run and the cadence that
+   * bounds it: comfortably above 12m57s so a slow upstream does not expire the
+   * claim, comfortably below the sweep's own hourly period so a genuinely wedged
+   * worker is still reclaimed before the next one is due.
+   */
+  jobLockDurationMs: int(
+    process.env.WATTSTEER_JOB_LOCK_DURATION_MS,
+    1_200_000,
+    30_000,
+    3_600_000,
+  ),
 
   // --- ingestion: refresh, custody, retention ---
   /**

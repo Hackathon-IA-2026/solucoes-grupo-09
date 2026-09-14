@@ -817,6 +817,15 @@ export const extra = new Elysia().get("/v1/forecast/nowcast", () => nowcast());
  * arrangement — and `apps/ml` is the service. Test files are excluded because
  * several of them assert the variable is *unset*, which is the opposite of a
  * breach.
+ *
+ * `.railway/` is excluded on a different ground, and it is worth stating rather
+ * than folding into the list above. It is deployment configuration, not source:
+ * it is never bundled, never imported, and never runs in a browser. What it says
+ * about `WATTSTEER_ML_URL` is that the *worker service* is handed one —
+ * `preserve()`, so not even the value is here — which is the arrangement this
+ * boundary describes rather than a breach of it. The rule being enforced is
+ * that no code a reader's browser runs can reach the modelling service; a file
+ * that provisions the worker is not that code.
  */
 const OUTSIDE_SUFFIXES = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
 
@@ -831,6 +840,7 @@ const OUTSIDE_SKIP = new Set([
   ".next",
   "test-results",
   "playwright-report",
+  ".railway",
 ]);
 
 function sourceOutsideTheGateway(): string[] {

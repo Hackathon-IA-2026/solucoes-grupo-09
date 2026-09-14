@@ -29,6 +29,17 @@ export interface BullMqOptions {
   attempts?: number;
   /** Base backoff (ms) for exponential retry between attempts. */
   backoffMs?: number;
+  /**
+   * How long this worker's claim on a running job survives without renewal.
+   *
+   * BullMQ renews the claim on a timer while the handler runs, and treats a
+   * claim it could not renew in time as a *stalled* job: it hands the same job
+   * to another processor and refuses the original's `moveToFinished`. So this
+   * is not a tuning knob, it is an assertion about how long a job may run —
+   * set it below the truth and a long job is silently run twice and recorded
+   * never. `config.jobLockDurationMs` carries the measurement it is set from.
+   */
+  lockDurationMs?: number;
 }
 
 function mapState(state: string): JobStatus {
@@ -131,7 +142,17 @@ export function createBullMqRunner<TPayload, TResult>(
           throw new Error(clientSafeMessage(err));
         }
       },
-      { connection: connection(workerConn), concurrency: opts.concurrency ?? 2 },
+      {
+        connection: connection(workerConn),
+        concurrency: opts.concurrency ?? 2,
+        // Both derive from one number, and they have to: `stalledInterval` is
+        // how often the checker looks for claims that lapsed, so a checker that
+        // sweeps faster than the claim can lapse reclaims jobs that are merely
+        // slow. BullMQ's own default keeps them equal; this keeps them equal
+        // from a value that was measured rather than assumed.
+        lockDuration: opts.lockDurationMs ?? 30_000,
+        stalledInterval: opts.lockDurationMs ?? 30_000,
+      },
     );
     worker.on("error", (err) => {
       if (!/connection is closed/i.test(err.message)) {
