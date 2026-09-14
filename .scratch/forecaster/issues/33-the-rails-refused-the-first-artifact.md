@@ -410,7 +410,9 @@ computed and not yet published per cell.
 
 ---
 
-**Status:** decided, nothing changed
+**Status:** decided, and **closed by forecaster 41** — the lower rail by
+forecaster 34, the median rail by 41. Neither threshold moved; both populations
+did.
 
 - [x] The gate's two vetoed figures are reproduced bit for bit from the refused
       artifacts on a clone of the real history — 0.9753202124336144,

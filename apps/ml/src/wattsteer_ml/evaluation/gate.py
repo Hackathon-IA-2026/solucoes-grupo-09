@@ -204,6 +204,13 @@ ECE_CEILING = 0.05
 #: name states the population, so it travels with it.
 BAND_COVERAGE_RAIL = "coverage_p10_in_band"
 
+#: The name the corrected median rail is published under, for the reason
+#: :data:`BAND_COVERAGE_RAIL` carries its own: ``p50_unbiasedness`` is the
+#: marginal over every curtailed hour and stays on the card under that name.
+#: These are two counts over two populations, and forecaster 29 established what
+#: happens when one name carries two denominators.
+BAND_MEDIAN_RAIL = "p50_unbiasedness_in_band"
+
 #: Guardrail. ``crossing_rate ≤ 0.01``.
 CROSSING_RATE_CEILING = 0.01
 
@@ -452,6 +459,65 @@ def states_a_falsifiable_floor(hour: ScoredHour) -> bool:
     return hour.forecast.band.p10 > floor
 
 
+def states_a_falsifiable_median(hour: ScoredHour) -> bool:
+    """Whether this scored hour's P50 is a median its label could have fallen below.
+
+    :func:`states_a_falsifiable_floor`'s twin, and the same argument with the
+    quantile changed. A scored hour has ``y > τ > 0``, so wherever the served
+    P50 is at or below ``τ`` the label is above it **whatever the fit does**:
+
+    - the **point mass at zero**, ``Q_Y(0.50) = 0`` for every ``p ≤ 0.50``. On
+      the pooled folds forecaster 38 measured this at 1,850 and 2,066 of 10,115
+      scored hours — 18% and 20% of the denominator, and every one of them a
+      guaranteed "not below".
+    - the **τ floor**, for the reason the P10's version of this excludes it: a
+      P50 clamped to the smallest float above ``τ`` is below every label that
+      could be scored against it.
+
+    Everything else is a positive median strictly above ``τ``, and the label can
+    land either side of it. That is what makes a row evidence about whether the
+    P50 is a median.
+    """
+    if not hour.is_positive:
+        return False
+    floor = math.nextafter(hour.forecast.mixture.threshold_mwh, math.inf)
+    return hour.forecast.band.p50 > floor
+
+
+def minimum_band_median_rows(
+    *,
+    target: float = 0.50,
+    guardrail: tuple[float, float] = P50_UNBIASEDNESS_WINDOW,
+    miscoverage: float = NOMINAL_MISCOVERAGE,
+) -> int:
+    """How many falsifiable rows a median statement needs to be one. **271.**
+
+    :func:`minimum_band_coverage_rows`' derivation with the median's target and
+    window substituted, and it is deliberately the same function shape rather
+    than a second rule: a rail whose sampling interval is wider than the
+    distance from its target to its bound cannot tell a calibrated model from
+    one it should refuse, whichever quantile it is about.
+
+        z·√(0.50 × 0.50 / n) ≤ min(0.50 − 0.45, 0.55 − 0.50)
+        n ≥ z² × 0.25 / 0.05²  =  270.6  →  271
+
+    Larger than the coverage rail's 98 for the reason a fair coin is harder to
+    pin down than a 90% one: the variance is maximal at 0.50. The same caveat
+    applies — this is an iid binomial floor and curtailed hours cluster inside a
+    day, so it is necessary and not sufficient, and the day-block interval is
+    what a close reading needs beside it.
+    """
+    low, high = guardrail
+    margin = min(target - low, high - target)
+    if margin <= 0.0:
+        raise GateInputError(
+            f"the median guardrail {guardrail} does not bracket the target "
+            f"{target}, so there is no margin a sample size could resolve"
+        )
+    z = NormalDist().inv_cdf(1.0 - miscoverage / 2.0)
+    return math.ceil(z * z * target * (1.0 - target) / (margin * margin))
+
+
 @dataclass(frozen=True)
 class P10BandCoverage:
     """``coverage_p10`` over the rows whose P10 could have been missed.
@@ -563,6 +629,133 @@ def p10_band_coverage(hours: Sequence[ScoredHour]) -> P10BandCoverage:
         qualifying_rows=len(qualifying),
         minimum_rows=minimum_band_coverage_rows(),
         coverage=(covered / len(qualifying) if qualifying else None),
+    )
+
+
+@dataclass(frozen=True)
+class P50BandUnbiasedness:
+    """``p50_unbiasedness`` over the rows whose P50 the label could have fallen below.
+
+    :class:`P10BandCoverage`'s twin, and it exists for the same measured reason
+    one quantile down. Forecaster 38 and 40 established that the marginal
+    ``p50_unbiasedness`` **cannot be read as a rail**: pooled over three folds
+    at an effective ``n`` of 1,445 it reads 0.3735 and 0.3855 against a
+    ``[0.45, 0.55]`` window — and a model that is *right by construction* reads
+    **0.3406 and 0.3467** on the same population, below the candidate it is
+    supposed to vindicate. A rail a correct model fails harder than the
+    candidate is not measuring the candidate.
+
+    The cause is structural and is the same one forecaster 34 found in the
+    coverage rail: a fifth of the denominator is rows whose served P50 is on the
+    mixture's point mass, where a scored hour is above its median whatever the
+    fit does. Netting them out puts the statistic where the rail's own wording
+    assumes it is.
+
+    **Why this does not cost the shuffled-label control.** Forecaster 38
+    measured that on this population a permuted fit reads 0.5234 and 0.5440 and
+    passes the window, and stopped there, treating per-rail discrimination as
+    something every rail owes. It is not: the shuffled-label control names its
+    own detector, and it is ``pr_auc`` against
+    :func:`~wattsteer_ml.evaluation.shuffled_label.chance_interval` — measured
+    over 40 permutation seeds to sit 0.043 to 0.070 *below* the interval's
+    ceiling while the honest run sits 0.124 above it. Asking the median rail to
+    catch a permutation as well is asking it to duplicate that detector, and the
+    price of the duplication is the rail being unable to do its own job. So this
+    rail is free to measure the median, and the permutation is still refused —
+    by the check that was built to refuse it.
+    """
+
+    #: The curtailed hours of the deciding fold, kept so the marginal on the
+    #: card and this figure can be read against each other.
+    rows: int
+    #: Those of them whose P50 is above ``τ``, and so could have been missed low.
+    qualifying_rows: int
+    #: :func:`minimum_band_median_rows`, stored so a refusal carries it.
+    minimum_rows: int
+    #: The share of :attr:`qualifying_rows` whose label is below the served P50,
+    #: or ``None`` where there are none. **Absent, never 0.0.**
+    unbiasedness: float | None
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.qualifying_rows <= self.rows:
+            raise GateInputError(
+                f"{self.qualifying_rows} of {self.rows} scored hours state a "
+                "falsifiable median; the qualifying rows are a subset"
+            )
+        if (self.qualifying_rows == 0) is not (self.unbiasedness is None):
+            raise GateInputError(
+                f"unbiasedness {self.unbiasedness!r} over {self.qualifying_rows} "
+                "qualifying rows; a statement with no denominator is not a "
+                "measurement and one with a denominator is not absent"
+            )
+
+    @property
+    def sufficient(self) -> bool:
+        """Whether enough rows can falsify the statement for it to be one."""
+        return self.qualifying_rows > 0 and self.qualifying_rows >= self.minimum_rows
+
+    @property
+    def passes(self) -> bool:
+        """Measured, over enough rows, and inside the window. All three."""
+        low, high = P50_UNBIASEDNESS_WINDOW
+        return (
+            self.unbiasedness is not None
+            and self.sufficient
+            and low <= self.unbiasedness <= high
+        )
+
+    @property
+    def detail(self) -> str:
+        """The sentence the refused card carries, with its denominator in it."""
+        low, high = P50_UNBIASEDNESS_WINDOW
+        if not self.sufficient:
+            return (
+                f"{self.qualifying_rows} of {self.rows} curtailed hours put the "
+                f"served P50 above τ, which is under the {self.minimum_rows} a "
+                f"median statement needs to be resolved against [{low}, {high}]; "
+                "the rest is the mixture's point mass and the τ floor, where the "
+                "label is above the median whatever the fit does. The sample is "
+                "too small, which is a refusal and not a measurement of anything"
+            )
+        assert self.unbiasedness is not None  # sufficient implies a denominator
+        return (
+            f"{self.unbiasedness:.4f} against [{low}, {high}], over the "
+            f"{self.qualifying_rows} of {self.rows} curtailed hours whose P50 is "
+            f"above τ and could have been missed low"
+        )
+
+    def as_guardrail(self) -> Guardrail:
+        """The rail itself. Unmeasurable and under-powered both veto."""
+        low, high = P50_UNBIASEDNESS_WINDOW
+        return Guardrail(
+            name=BAND_MEDIAN_RAIL,
+            passed=self.passes,
+            detail=self.detail,
+            value=self.unbiasedness,
+            bound=f"in [{low}, {high}] over ≥ {self.minimum_rows} rows",
+        )
+
+
+def p50_band_unbiasedness(hours: Sequence[ScoredHour]) -> P50BandUnbiasedness:
+    """Count the median crossings over the rows the statistic can speak for.
+
+    The population is the deciding fold's **curtailed** hours, exactly as
+    :meth:`~wattsteer_ml.training.conformal.CoverageReport.of` selects them, so
+    the corrected figure and the marginal on the card are two counts over one
+    set of rows and their difference is the denominator and nothing else.
+
+    A fold with no curtailed hour, and a fold whose every P50 is on an atom,
+    both come back with :attr:`~P50BandUnbiasedness.unbiasedness` ``None`` and
+    veto.
+    """
+    scored = [hour for hour in hours if hour.is_positive]
+    qualifying = [hour for hour in scored if states_a_falsifiable_median(hour)]
+    below = sum(1 for hour in qualifying if hour.below_median)
+    return P50BandUnbiasedness(
+        rows=len(scored),
+        qualifying_rows=len(qualifying),
+        minimum_rows=minimum_band_median_rows(),
+        unbiasedness=(below / len(qualifying) if qualifying else None),
     )
 
 
@@ -1463,31 +1656,23 @@ def guardrails(
         )
     )
     rails.append(p10_band_coverage(hours).as_guardrail())
+    rails.append(p50_band_unbiasedness(hours).as_guardrail())
     coverage = candidate.coverage
     if coverage is None:
-        rails.extend(
+        rails.append(
             Guardrail(
-                name=name,
+                name="coverage_p90",
                 passed=False,
                 detail=(
                     "this fold's test period held no curtailed hour, so there is "
                     "no coverage to measure; a guardrail cannot pass on a "
                     "measurement that was not taken"
                 ),
-                bound=bound,
-            )
-            for name, bound in (
-                ("coverage_p90", f"in {list(COVERAGE_GUARDRAIL)}"),
-                ("p50_unbiasedness", f"in {list(P50_UNBIASEDNESS_WINDOW)}"),
+                bound=f"in {list(COVERAGE_GUARDRAIL)}",
             )
         )
     else:
         rails.append(_window("coverage_p90", coverage.coverage_p90, COVERAGE_GUARDRAIL))
-        rails.append(
-            _window(
-                "p50_unbiasedness", coverage.p50_unbiasedness, P50_UNBIASEDNESS_WINDOW
-            )
-        )
     rails.append(_ceiling("ece", candidate.ece, ECE_CEILING))
     rails.append(
         _ceiling("crossing_rate", candidate.crossing_rate, CROSSING_RATE_CEILING)

@@ -85,7 +85,24 @@ INCUMBENT_ID = "2026-05-25T03:00:00Z"
 #: than five. The spec's constant is a *strict* "more than", and a fixture whose
 #: grid cannot express the boundary would not be able to show that.
 DAYS = 20
-BUSY_HOURS: tuple[int, ...] = (10, 11, 12, 13, 14, 15)
+
+#: Sixteen busy hours a day, and the number is the corrected median rail's
+#: rather than this rail's. `floor_coverage` counts **days**, which
+#: `test_the_metric_counts_days_and_not_hours` pins, so widening the block
+#: changes nothing it measures — but `p50_unbiasedness_in_band` needs 271
+#: falsifiable rows before it will say anything, and six hours over twenty days
+#: is 120. Widening the block rather than the day count is what buys the rows
+#: without touching the 1-in-20 boundary above. 23 stays outside it, so the
+#: ``complete=False`` fixture still drops an hour that was never busy.
+BUSY_HOURS: tuple[int, ...] = tuple(range(5, 21))
+
+#: How far the median is lifted above the label on alternate busy hours.
+#: The band here is otherwise degenerate — ``q10 == q50 == q90`` — so the label
+#: never falls *below* the median and the fixture read 0.05 against a
+#: ``[0.45, 0.55]`` window. Only the median moves: the P10 stays exactly on the
+#: forecast, which is the floor this file is about, and ``q90`` follows ``q50``
+#: so no knot crosses.
+MEDIAN_LIFT_MWH = 1.0
 
 #: What a day that turns out as forecast delivers in a busy hour.
 AS_FORECAST_MWH = 20.0
@@ -157,12 +174,13 @@ def hours(
                     )
                 )
                 magnitude = forecast_mwh if hour in BUSY_HOURS else 0.0
+                lift = MEDIAN_LIFT_MWH if magnitude and hour % 2 == 0 else 0.0
                 estimates.append(
                     HourEstimates(
                         occurrence_probability=probability if magnitude else 0.01,
                         q10=magnitude,
-                        q50=magnitude,
-                        q90=magnitude,
+                        q50=magnitude + lift,
+                        q90=magnitude + lift,
                         positive_mean_mwh=magnitude,
                     )
                 )

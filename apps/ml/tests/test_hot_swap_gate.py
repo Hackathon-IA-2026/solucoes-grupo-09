@@ -37,11 +37,13 @@ from wattsteer_ml.constants import SUBSYSTEM_CODES
 from wattsteer_ml.evaluation import Fold, FoldBlocks, FoldSegment, RowKey, stamp_fidelity
 from wattsteer_ml.evaluation.gate import (
     BAND_COVERAGE_RAIL,
+    BAND_MEDIAN_RAIL,
     BOOTSTRAP_DRAWS,
     CROSSING_RATE_CEILING,
     ECE_CEILING,
     MINIMUM_TEST_DAYS,
     NULL_RATE_DRIFT_CEILING,
+    P50_UNBIASEDNESS_WINDOW,
     PROMOTION_PROBABILITY,
     Comparator,
     ContractDriftError,
@@ -51,14 +53,17 @@ from wattsteer_ml.evaluation.gate import (
     GateInputError,
     Guardrail,
     NoCandidate,
+    P50BandUnbiasedness,
     ServingSmoke,
     cold_start_baseline,
     decide,
     guardrails,
     hour_loss,
     minimum_band_coverage_rows,
+    minimum_band_median_rows,
     null_rates,
     p10_band_coverage,
+    p50_band_unbiasedness,
     paired_block_bootstrap,
     record_decision,
     rollback,
@@ -107,9 +112,18 @@ OTHER_LANE = Lane(feature_set="dessem_free_v1", gate_profile="gate_early", thres
 FIRST = date(2026, 4, 1)
 TEST_DAYS = MINIMUM_TEST_DAYS
 
-#: Two local hours per day per subsystem. The gate resamples *days*, so the
-#: number of hours inside one is a cost, not a property under test.
-HOURS_PER_DAY = 2
+#: Local hours per day per subsystem. The gate resamples *days*, so the number
+#: of hours inside one is a cost, not a property under test — which is why it
+#: was two, and why raising it is not a change of what any test means.
+#:
+#: Three, because the corrected median rail needs a denominator to be a
+#: statement. `minimum_band_median_rows()` is 271, and at two hours this fixture
+#: offered 240 qualifying rows — so every gate test would have read "the sample
+#: is too small", which is the rail working and no test asserting anything. At
+#: three it offers 360. Production is not close to this edge: one real deciding
+#: fold carried 3,201 curtailed hours, ~82% of them with a P50 off the atom, so
+#: ~2,600 qualifying against a floor of 271.
+HOURS_PER_DAY = 3
 
 #: The per-subsystem PR-AUC the builder gives every cell unless a test moves one.
 #: Held apart from the pooled figure so "pooled fell" and "one subsystem fell"
@@ -182,6 +196,20 @@ def observations(row_keys: Sequence[RowKey]) -> list[float]:
 NOMINAL_LOWER_MISS = 10
 MISS_BUMP_MWH = 2.0
 
+#: The band is centred *on* the label, so `observed < p50` is false on every
+#: unbumped row and the fixture's median read 0.1000 — refused by the corrected
+#: median rail for saying something true about a fixture and nothing about the
+#: gate. This nudges the centre above and below the label by turns, so the label
+#: falls under the median on exactly half the curtailed hours.
+#:
+#: Small enough not to disturb the coverage rail: at ±0.25 the P10 is still
+#: `label − 0.75` or `label − 1.25`, under the label either way, so the 1-in-10
+#: miss rate is untouched. And the bump rides on the *even* rows, which are the
+#: raised ones, so a bumped row is already counted and the share is 0.5 rather
+#: than 0.55. Applied to candidate and comparator alike, so it cannot make one
+#: better than the other.
+MEDIAN_JITTER_MWH = 0.25
+
 
 def scored(
     row_keys: Sequence[RowKey],
@@ -204,11 +232,13 @@ def scored(
     curtailed = 0
     for label in labels:
         bump = 0.0
+        jitter = 0.0
         if label > 0.0:
             if missed_in and curtailed % missed_in == 0:
                 bump = MISS_BUMP_MWH
+            jitter = MEDIAN_JITTER_MWH if curtailed % 2 == 0 else -MEDIAN_JITTER_MWH
             curtailed += 1
-        centre = max(0.0, label + offset_mwh + bump)
+        centre = max(0.0, label + offset_mwh + bump + jitter)
         estimates.append(
             HourEstimates(
                 occurrence_probability=probability,
@@ -549,11 +579,6 @@ def test_a_different_lane_is_never_a_swap() -> None:
             "coverage_p90",
             id="coverage_p90",
         ),
-        pytest.param(
-            {"coverage": coverage_report(p50_unbiasedness=0.60)},
-            "p50_unbiasedness",
-            id="p50_unbiasedness",
-        ),
         pytest.param({"ece": ECE_CEILING + 0.01}, "ece", id="ece"),
         pytest.param(
             {"crossing_rate": CROSSING_RATE_CEILING + 0.01},
@@ -568,6 +593,13 @@ def test_each_guardrail_is_exercised_alone(kwargs: dict[str, Any], expected: str
     Each case clears the bootstrap — the candidate is strictly better on every
     day — and is then vetoed by exactly one constant, which is what makes the
     guardrails vetoes rather than the decision.
+
+    **Two rails are absent from this list and neither is an oversight.** Both
+    band rails read the scored *hours*, not the :class:`MetricsRow`, so there is
+    no ``kwargs`` that can move them and a case here could only fake one. Each
+    has a dedicated test below that drives it through the population it counts:
+    :func:`test_the_rail_counts_only_the_rows_whose_floor_could_have_been_missed`
+    and :func:`test_the_median_rail_counts_only_the_rows_that_could_fall_below`.
     """
     row = metrics_row(**kwargs)
     decision = run(candidate(row=row), incumbent())
@@ -597,8 +629,8 @@ def test_every_guardrail_states_the_constant_it_used() -> None:
         *(f"pr_auc[{code}]" for code in SUBSYSTEM_CODES),
         "recall@0.5[pooled]",
         BAND_COVERAGE_RAIL,
+        BAND_MEDIAN_RAIL,
         "coverage_p90",
-        "p50_unbiasedness",
         "ece",
         "crossing_rate",
     }
@@ -662,7 +694,10 @@ def test_an_unmeasurable_guardrail_vetoes() -> None:
     assert not rails["ece"].passed
     assert not rails[BAND_COVERAGE_RAIL].passed
     assert rails[BAND_COVERAGE_RAIL].value is None
-    assert not rails["p50_unbiasedness"].passed
+    # The median rail's twin: no hours means no denominator, and an absent
+    # statement vetoes rather than passing.
+    assert not rails[BAND_MEDIAN_RAIL].passed
+    assert rails[BAND_MEDIAN_RAIL].value is None
     assert rails["ece"].value is None
 
 
@@ -1295,3 +1330,139 @@ def test_the_defaults_are_the_specs_numbers() -> None:
     assert MINIMUM_TEST_DAYS == 60
     assert NULL_RATE_DRIFT_CEILING == 0.05
     assert isinstance(Guardrail(name="x", passed=True, detail="y").value, type(None))
+
+
+# --- forecaster 41: the median rail counts the rows it can speak for ----------
+
+
+def test_the_median_minimum_sample_is_derived_from_its_own_window() -> None:
+    """271, recomputed from the window rather than asserted as a literal.
+
+    The same rule as the coverage rail's 98 with the median's target and window
+    substituted, and the number is larger for the reason a fair coin is harder
+    to pin down than a 90% one: ``p(1 − p)`` is maximal at 0.50.
+    """
+    assert minimum_band_median_rows() == 271
+    low, high = P50_UNBIASEDNESS_WINDOW
+    margin = min(0.50 - low, high - 0.50)
+    z = NormalDist().inv_cdf(1.0 - NOMINAL_MISCOVERAGE / 2.0)
+    assert margin == pytest.approx(0.05)
+    assert minimum_band_median_rows() == math.ceil(z**2 * 0.25 / margin**2)
+    # The relationship, not the number: a wider window resolves on fewer rows.
+    assert minimum_band_median_rows(guardrail=(0.40, 0.60)) < 271
+    assert minimum_band_median_rows(guardrail=(0.48, 0.52)) > 271
+    # It is the *nearer* edge that binds, so widening one side alone moves
+    # nothing — which is what stops "just widen the window" from buying power.
+    assert minimum_band_median_rows(guardrail=(0.45, 0.65)) == 271
+
+
+def test_the_median_rail_counts_only_the_rows_that_could_fall_below() -> None:
+    """The point mass and the τ floor are both excluded, and for one reason.
+
+    A scored hour has ``y > τ > 0``. Wherever the served P50 is at or below
+    ``τ`` the label is above it whatever the fit does, so the row is not
+    evidence about whether the P50 is a median. The fold is built with all three
+    populations present at once, exactly as forecaster 34's coverage fixture is.
+
+    Longer than forecaster 34's thirty days, and the arithmetic is the reason:
+    two of every three curtailed hours here are built onto an atom, so the
+    qualifying third has to reach `minimum_band_median_rows()` = 271 before the
+    figure is a statement at all. At thirty days it is sixty rows and the rail
+    correctly refuses to say anything; at a hundred and fifty it is three
+    hundred.
+    """
+    row_keys = keys(days=150)
+    labels = observations(row_keys)
+    estimates = []
+    with_a_real_median = 0
+    below = 0
+    for index, label in enumerate(labels):
+        if index % 6 == 0:  # the point mass: p ≤ 0.50, so Q_Y(0.50) = 0
+            estimates.append(
+                HourEstimates(
+                    occurrence_probability=0.4,
+                    q10=label,
+                    q50=label,
+                    q90=label + 1.0,
+                    positive_mean_mwh=label,
+                )
+            )
+        elif index % 6 == 2:  # the τ floor: the positive branch clamped onto it
+            estimates.append(
+                HourEstimates(
+                    occurrence_probability=0.99,
+                    q10=0.0,
+                    q50=0.0,
+                    q90=1.0,
+                    positive_mean_mwh=0.0,
+                )
+            )
+        else:
+            # Half of the rows that *can* fall below the median do, so the
+            # corrected figure lands where the rail's wording assumes it is.
+            lift = MISS_BUMP_MWH if label and with_a_real_median % 2 == 0 else 0.0
+            if label:
+                with_a_real_median += 1
+                below += 1 if lift else 0
+            centre = label + lift
+            estimates.append(
+                HourEstimates(
+                    occurrence_probability=0.99,
+                    q10=max(0.0, centre - 1.0),
+                    q50=centre,
+                    q90=centre + 1.0,
+                    positive_mean_mwh=centre,
+                )
+            )
+    composed = compose_estimates(
+        row_keys, estimates, sub_threshold_means=FLAT_MU_SUB, threshold_mw=THRESHOLD_MW
+    )
+    hours = tuple(
+        ScoredHour(key=hour.key, forecast=hour.forecast, observed_mwh=label)
+        for hour, label in zip(composed, labels, strict=True)
+    )
+    scored_hours = [hour for hour in hours if hour.is_positive]
+    band = p50_band_unbiasedness(hours)
+
+    on_an_atom = [
+        hour
+        for hour in scored_hours
+        if hour.forecast.band.p50 <= math.nextafter(THRESHOLD_MW, math.inf)
+    ]
+    assert on_an_atom, "the fixture must contain the rows being excluded"
+    assert band.rows == len(scored_hours)
+    assert band.qualifying_rows == len(scored_hours) - len(on_an_atom)
+
+    # The denominator is the correction: the marginal counts the atoms and is
+    # dragged below the window by them; the corrected figure is not.
+    marginal = sum(1 for hour in scored_hours if hour.below_median) / len(scored_hours)
+    assert band.unbiasedness is not None
+    assert band.unbiasedness > marginal
+    assert band.unbiasedness == pytest.approx(0.5, abs=0.02)
+    assert band.passes
+    # ...and the marginal, on the very same rows, would have been refused.
+    low, high = P50_UNBIASEDNESS_WINDOW
+    assert not low <= marginal <= high
+
+
+def test_an_under_powered_median_is_a_refusal_and_says_the_sample_was_small() -> None:
+    """Too few falsifiable rows is not a pass, and the sentence says which."""
+    thin = p50_band_unbiasedness(scored(keys(days=MINIMUM_TEST_DAYS), offset_mwh=0.0))
+    assert thin.qualifying_rows >= thin.minimum_rows, "the fixture clears the floor"
+
+    starved = P50BandUnbiasedness(
+        rows=400,
+        qualifying_rows=10,
+        minimum_rows=minimum_band_median_rows(),
+        unbiasedness=0.50,
+    )
+    assert not starved.sufficient
+    assert not starved.passes, "a perfect figure over ten rows is still a refusal"
+    assert "too small" in starved.detail
+    assert str(minimum_band_median_rows()) in starved.detail
+
+    # And the empty case: no denominator at all vetoes rather than passing.
+    empty = p50_band_unbiasedness(())
+    assert empty.unbiasedness is None
+    assert not empty.passes
+    assert not empty.as_guardrail().passed
