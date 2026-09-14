@@ -9,8 +9,9 @@
  * two services and omitted Postgres, Redis, three volumes and the bucket, and
  * an apply would then have destroyed them.
  *
- * **Two fields the pull did not carry, and both were verified against the live
- * service records rather than assumed:**
+ * **Two fields the pull did not carry.** One was a real loss and one was not,
+ * and telling them apart took reading the platform's defaults rather than the
+ * importer's output:
  *
  * 1. `ml`'s `source.rootDirectory` (`apps/ml`). `get-service-config` reports it
  *    live; the importer omits it. The ML image's build context *is* `apps/ml`
@@ -20,13 +21,12 @@
  *    That failure is not hypothetical: it is what this service did on its first
  *    deploy, before the root directory was set.
  *
- * 2. `restartPolicyType: "ON_FAILURE"` on the three Dockerfile services. Only
- *    `restartPolicyMaxRetries` survived the import, and a max-retries without a
- *    policy is the platform default (`ALWAYS`) wearing a retry count. Note that
- *    the live service records do not carry the policy *either*: it has been
- *    coming from `railway.json` at deploy time all along. So this line is not a
- *    copy of live state — it is the setting that silently reverts to `ALWAYS`
- *    the moment Config as Code stops being read, written down before it can.
+ * 2. `restartPolicyType: "ON_FAILURE"` — **and here the pull was right.** It
+ *    looked like the same kind of loss and it is not: `ON_FAILURE` is Railway's
+ *    *default* policy, so the platform stores nothing for it and never reads it
+ *    back. Declaring it produced a plan that reported the same four changes on
+ *    every run and applied them into nothing. `RESTART_RETRIES` below states
+ *    the only part of the policy that actually differs from the platform.
  *
  * `preserve()` keeps each variable's value on Railway rather than in git. The
  * generated `*.up.railway.app` domains are deliberately absent: IaC does not
@@ -44,14 +44,23 @@ import {
 } from "railway/iac";
 
 /**
- * Every Dockerfile-built service restarts on failure, five times.
+ * Five restarts on failure rather than Railway's ten.
  *
- * One object because the three services genuinely share one policy, and
- * because the pair has to move together: `restartPolicyMaxRetries` alone is
- * what the importer produced, and it means something different.
+ * **Only the retry count is stated, and that is the correction.** Railway's
+ * default policy is already `ON_FAILURE`, with a maximum of 10 restarts, so
+ * `restartPolicyType: "ON_FAILURE"` is the default said out loud: the platform
+ * stores nothing for it and never reads it back, and an authoring file that
+ * declares it produces a plan that can never converge — `0 to add, 4 to change`
+ * on every run, for ever, which would make `plan --detailed-exit-code` useless
+ * as a drift gate in CI.
+ *
+ * That also settles what data-platform 28 was actually worried about. The fear
+ * was that the restart policy would silently revert to `ALWAYS` once Config as
+ * Code stopped being read. It cannot: it reverts to itself. The setting that is
+ * genuinely carried here — the one that differs from the platform — is the
+ * retry count, and the importer got that right.
  */
-const RESTART_ON_FAILURE = {
-  restartPolicyType: "ON_FAILURE",
+const RESTART_RETRIES = {
   restartPolicyMaxRetries: 5,
 } as const;
 
@@ -91,7 +100,6 @@ export default defineRailway(() => {
     type: "image",
     image: "ghcr.io/railwayapp-templates/postgres-ssl:16",
   };
-  Postgres.deploy = { restartPolicyType: "ON_FAILURE" };
   Postgres.networking = { privateNetworkEndpoint: "postgres" };
 
   const postgresData = volume("postgres-data", VOLUME);
@@ -108,7 +116,7 @@ export default defineRailway(() => {
     healthcheck: "/health",
     healthcheckTimeout: 120,
     replicas: { [REGION]: 1 },
-    deploy: { ...RESTART_ON_FAILURE },
+    deploy: { ...RESTART_RETRIES },
     env: {
       DATABASE_URL: preserve(),
       NODE_ENV: preserve(),
@@ -138,7 +146,7 @@ export default defineRailway(() => {
     },
     start: "bun run src/worker.ts",
     replicas: { [REGION]: 1 },
-    deploy: { ...RESTART_ON_FAILURE },
+    deploy: { ...RESTART_RETRIES },
     env: {
       DATABASE_URL: preserve(),
       NODE_ENV: preserve(),
@@ -169,7 +177,7 @@ export default defineRailway(() => {
     healthcheck: "/health",
     healthcheckTimeout: 120,
     replicas: { [REGION]: 1 },
-    deploy: { ...RESTART_ON_FAILURE },
+    deploy: { ...RESTART_RETRIES },
     // Mounted at the artifact directory itself, not at `/data`. A volume
     // mounted one level up masks the image's `mkdir -p /data/models`, and
     // `artifacts.py` reads a missing directory as "the volume did not mount" —

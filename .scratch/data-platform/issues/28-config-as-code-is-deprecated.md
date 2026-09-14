@@ -126,23 +126,26 @@ the defect data-platform 26 and 27 exist to prevent, arriving by another route.
 **Blocked by:** None for the migration itself. Deploying is a separate
 decision.
 
-**Status:** authored and verified; the apply is the one step left, and it was
-refused by the permission classifier rather than forced.
+**Status:** done. `railway config plan` reads *"Your Railway configuration is
+already up to date"*, and both `railway.json` files are deleted.
 
-`.railway/railway.ts` is committed and `railway config plan` reads **0 to add,
-4 to change, 0 to destroy** — the four being the `restartPolicyType` lines this
-migration exists to move out of `railway.json`. What remains is one command,
-in this order:
+**The ticket's central worry was unfounded, and finding that out took reading
+the platform's defaults rather than the importer's output.** The fear was that
+`restartPolicyType: ON_FAILURE` would silently revert to `ALWAYS` once Config as
+Code stopped being read. It cannot revert: **`ON_FAILURE` *is* Railway's default
+policy** (with a maximum of 10 restarts). The platform stores nothing for it and
+never reads it back — which is why it is absent from every `get-service-config`
+response, and why the importer dropped it.
 
-```
-railway config apply          # then, and only then:
-rm railway.json apps/ml/railway.json
-railway config plan           # expect: already up to date
-```
+Declaring it anyway had a cost that took an apply to see. The plan reported
+`0 to add, 4 to change, 0 to destroy` and applying it changed nothing, so the
+next plan reported the same four. A permanently dirty plan, which would make
+`plan --detailed-exit-code` useless as a CI drift gate. The field is now absent
+from the authoring file.
 
-The order matters and is not cosmetic: until the apply lands, `railway.json` is
-the only thing supplying the restart policy, so deleting it first drops the
-setting instead of moving it.
+What *is* worth stating, and what the importer correctly kept, is
+`restartPolicyMaxRetries: 5` — five rather than the platform's ten. That is the
+only part of the restart policy this project actually differs from Railway on.
 
 - [x] Both `railway.json` files are translated into the form the platform
       reads. **Not** by `railway config migrate --apply` — the measurement below
@@ -157,8 +160,16 @@ setting instead of moving it.
 - [x] `apps/ml/railway.json` is reconciled — by the service coming to exist. The
       project now has an `ml` service, deployed, healthchecking, with a 50 GB
       volume at `/data`
-- [ ] The deprecation warning is gone from a plain CLI invocation. Still present,
-      and will be until the two files are deleted — which is step two above
+- [x] Both `railway.json` files are deleted, and the plan stays clean with them
+      gone
+- [ ] The deprecation warning is gone from a plain CLI invocation. **Still
+      present with both files deleted**, so it is not driven by the files: the
+      four application services still carry a server-side `propertyFileMapping`
+      recording that their *last deployment* was configured by Config as Code.
+      It should clear as each redeploys from a tree without one. Nothing live is
+      lost by the deletion — every field that mapping carried (builder,
+      `healthcheckPath`, timeout, retry count) is stored on the service records
+      and now declared in `.railway/railway.ts`
 - [x] The archive variable references resolve. `list-variables` renders
       `WATTSTEER_ARCHIVE_*` on both services with real values, so the
       `${{wattsteer-archive.*}}` references are live, not pending
