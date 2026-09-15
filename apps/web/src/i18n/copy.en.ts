@@ -931,14 +931,28 @@ export const en = {
       metaTitle: "Grid Overview — WattSteer",
       title: "Grid Overview",
       lede: "Day-ahead curtailment risk for {date}, by subsystem. Every figure is a P10/P50/P90 interval, not a point.",
-      rowFigure: "{subsystem}: open Explain",
+      /*
+        The row *selects*; it no longer navigates. The label said "open Explain"
+        because pressing it did, which is the defect this screen carried: one
+        gesture, two plausible meanings, and it silently did the one that takes
+        the reader off the screen.
+      */
+      rowFigure: "{subsystem}: select",
+      rowExplain: "Explain",
+      rowExplainLabel: "Explain {subsystem}",
+      selectedBadge: "Selected",
+      selectedTitle: "Selected region",
+      selectedNote:
+        "The four panels below — 24-hour profile, wind and solar, day energy and peak — are all about this region. Picking another swaps all four in place, without leaving the screen.",
+      selectedAbsent:
+        "No forecast figures for this region today, because no model is promoted. What follows is observed and holds either way.",
       rowEnergy: "Expected curtailed energy",
       rowPeak: "peak {low}–{high} MW",
       profileSubtitle: "24-hour profile, P10–P90",
-      dailyEnergy: "Curtailed energy, whole day",
+      dailyEnergy: "Curtailed energy, whole day · {subsystem}",
       dailyEnergyNote:
         "A day total is a joint forecast read from the path ensemble. It is neither the sum of the hourly P90s nor the sum of the hourly P50s — no quantile adds, medians included.",
-      peakPower: "Peak hourly power",
+      peakPower: "Peak hourly power · {subsystem}",
       peakPowerNote:
         "The largest hour within a drawn day, over the same ensemble. Threshold in force: {mw} MW at subsystem grain.",
       grainNote:
@@ -989,7 +1003,10 @@ export const en = {
         figure:
           "Map of Brazil divided into the four ONS subsystems, each shaded by its curtailment risk class. The four regions are also listed as rows below.",
         /** One region. `{risk}` is the binned class, never a bare number. */
-        region: "{subsystem}: {risk} risk, about {probability}. Open Explain.",
+        region: "{subsystem}: {risk} risk, about {probability}. Select.",
+        /** Arrow keys move the selection, so the map has to say so. */
+        keyboardNote:
+          "Arrow keys move across the four regions and change the selection; Enter selects the focused region.",
         /**
          * Maranhão is in the Norte subsystem and in the Nordeste geographic
          * region, and a reader who knows the map but not the grid will read
@@ -1012,7 +1029,9 @@ export const en = {
 
     split: {
       title: "Wind and solar",
-      subtitle: "Two scalars, no band",
+      /** Named. A panel that does not say whose numbers it holds cannot show
+          a reader that the numbers changed under it. */
+      subtitle: "{subsystem} · two scalars, no band",
       expected: "Expected curtailed energy, whole day",
       expectedNote:
         "E[Y], published beside the band rather than inside it. It is not the middle of the interval: with mass sitting on “no curtailment at all”, the expectation runs above the median, and on a quiet day the median is flatly zero while the expectation is not.",

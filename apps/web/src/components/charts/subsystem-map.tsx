@@ -34,7 +34,7 @@ import {
   useReducedMotion,
   webTransition,
 } from "@wattsteer/ui";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Platform, Text, View } from "react-native";
 import Svg, { G, Path, Rect, Text as SvgText } from "react-native-svg";
 import { riskColor } from "@/components/charts/risk-class";
@@ -68,6 +68,94 @@ const FONT =
  * overflow horizontally.
  */
 const MAX_WIDTH = 380;
+
+/**
+ * Which way each arrow key walks the four regions.
+ *
+ * One ring in `SUBSYSTEM_DISPLAY_ORDER` rather than a true 2-D adjacency graph.
+ * Four regions do not form a grid — N is north-west, NE is north-east, SE/CO is
+ * the middle and S is the tail — so a geographic mapping would have to answer
+ * "what is east of S?" with something invented, and a reader pressing the same
+ * key twice would arrive somewhere that depends on where they started. A ring
+ * is learnable in two presses and is the order the rows beside the map are
+ * already in, so the keyboard walks the list the eye walks.
+ */
+const ARROW_STEP: Record<string, number> = {
+  ArrowRight: 1,
+  ArrowDown: 1,
+  ArrowLeft: -1,
+  ArrowUp: -1,
+};
+
+/**
+ * Move the browser's focus to another region's path.
+ *
+ * Arrow keys change the selection, and a selection the keyboard has moved to
+ * without taking focus with it leaves the focus ring on the region the reader
+ * has left — so the visible marker and the live selection would disagree, which
+ * is precisely the confusion this screen is being fixed for.
+ *
+ * Scoped to the map's own container rather than found by document id: the
+ * landing page has already been bitten once by a document-wide
+ * `getElementById` resolving to a stale duplicate of a screen that was still
+ * mounted (`e2e/landing-scroll.spec.ts` documents it), and a second Overview in
+ * the stack would give this the same two candidates.
+ *
+ * Called from an effect and never from the key handler — see `keyboardTarget`
+ * below for why.
+ */
+/**
+ * Put focus on a region's path, and say whether it is already there.
+ *
+ * Scoped to the map's own container rather than found by document id: the
+ * landing page has already been bitten once by a document-wide
+ * `getElementById` resolving to a stale duplicate of a screen that was still
+ * mounted (`e2e/landing-scroll.spec.ts` documents it), and a second Overview in
+ * the stack would give this the same two candidates.
+ */
+function focusRegion(host: unknown, code: SubsystemCode): "held" | "asked" | "absent" {
+  const container = host as { querySelector?: (s: string) => unknown } | null;
+  const target = container?.querySelector?.(`[data-region="${code}"]`) as
+    | { focus?: () => void; matches?: (selector: string) => boolean }
+    | null
+    | undefined;
+  if (target === null || target === undefined) {
+    return "absent";
+  }
+  if (target.matches?.(":focus") === true) {
+    return "held";
+  }
+  target.focus?.();
+  return "asked";
+}
+
+/**
+ * The region an arrow key asked for, parked **outside the component** on
+ * purpose, and held until focus actually lands there.
+ *
+ * Writing the selection goes through `router.setParams`, and measured in
+ * chromium against the real export that **remounts this whole subtree, more
+ * than once**: the four `<path>` elements are replaced, the element the reader
+ * was on is detached, and the browser drops focus to the document. Component
+ * state and refs go with it, and a single `focus()` — however well timed — is
+ * undone by the next remount.
+ *
+ * So the request outlives the instance that made it (module scope) *and*
+ * outlives one commit (cleared only once the element reports it holds focus).
+ * It terminates on its own: the re-focus happens on every commit until one of
+ * them sticks, and commits stop.
+ *
+ * Every simpler shape of this looked like it worked and did not. Focusing
+ * inside the key handler focuses the node about to be detached; an effect on
+ * component state never runs on the new instance; clearing the request on the
+ * first attempt loses it to the remount that follows. All three land the first
+ * arrow press and silently drop the second, after which the arrows do nothing
+ * at all because focus is on `<body>`.
+ *
+ * Read back only when it names the region actually selected, so two maps
+ * mounted at once cannot steal each other's focus.
+ */
+let pendingArrowFocus: SubsystemCode | null = null;
 
 /** The three-step glyph from the risk chip, in SVG. Never colour alone. */
 function Steps({
@@ -139,6 +227,28 @@ export function SubsystemMap({
    * pointer already has the fill lift and its own cursor.
    */
   const [focusedCode, setFocusedCode] = useState<SubsystemCode | null>(null);
+  /**
+   * The rendered container, so an arrow key can find the next region's path.
+   *
+   * `react-native-web` forwards a `View`'s ref to its host element, so this is
+   * a real DOM node on web and an unused ref everywhere else.
+   */
+  const host = useRef<View | null>(null);
+  /*
+    Hand the keyboard back what it was holding. No dependency array: this has
+    to run on the *mount* that follows the remount `setParams` causes, which is
+    a different instance from the one the arrow was pressed on. The guard on
+    `selected` keeps it from firing on a render that is not the one the arrow
+    asked for, and keeps a second mounted map out of it.
+  */
+  useEffect(() => {
+    if (
+      pendingArrowFocus === selected &&
+      focusRegion(host.current, selected) === "held"
+    ) {
+      pendingArrowFocus = null;
+    }
+  });
 
   const width = Math.min(containerWidth > 0 ? containerWidth : MAX_WIDTH, MAX_WIDTH);
   const height = (width * BRAZIL_VIEWBOX.height) / BRAZIL_VIEWBOX.width;
@@ -146,7 +256,7 @@ export function SubsystemMap({
   const byCode = new Map(forecasts.map((each) => [each.subsystem, each]));
 
   return (
-    <View onLayout={onLayout} style={{ alignItems: "center" }}>
+    <View ref={host} onLayout={onLayout} style={{ alignItems: "center" }}>
       <Svg
         viewBox={`0 0 ${BRAZIL_VIEWBOX.width} ${BRAZIL_VIEWBOX.height}`}
         width={width}
@@ -197,8 +307,13 @@ export function SubsystemMap({
             Nothing translates, scales or pulses, so there is no motion for
             `useReducedMotion` to suppress — only the CSS transition that eases
             the colour change, which it does suppress.
+
+            The `raised` boolean that stood here folded hover and selection into
+            one step. It is now three steps on `fillOpacity` below, because the
+            two states stopped being interchangeable the day a click selected
+            instead of navigating: hover is where the pointer is *now*, and
+            selection is what the four panels underneath are about.
           */
-          const raised = isActive || isSelected;
           const isFocused = code === focusedCode;
           const handlers =
             Platform.OS === "web"
@@ -221,13 +336,47 @@ export function SubsystemMap({
                   // is what a screen reader reads either way.
                   "aria-label": label,
                   "aria-pressed": isSelected,
-                  onClick: () => onSelect(code),
+                  // Queried by `focusRegion`, and not an `id`: ids are
+                  // document-wide and this map can be mounted twice.
+                  "data-region": code,
+                  onClick: () => {
+                    // A pointer already shows where it is, so a click never
+                    // asks for focus to be moved — and clears a request an
+                    // arrow left unconsumed.
+                    pendingArrowFocus = null;
+                    onSelect(code);
+                  },
                   onPress: () => onSelect(code),
-                  onKeyDown: (event: { key: string; preventDefault: () => void }) => {
+                  onKeyDown: (event: {
+                    key: string;
+                    preventDefault: () => void;
+                    currentTarget?: unknown;
+                  }) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
                       onSelect(code);
+                      return;
                     }
+                    const step = ARROW_STEP[event.key];
+                    if (step === undefined) {
+                      return;
+                    }
+                    // `preventDefault` because the map is inside the screen's
+                    // scroll view and an unhandled arrow scrolls the page —
+                    // which would move the map out from under the reader on the
+                    // very gesture meant to walk across it.
+                    event.preventDefault();
+                    const order = SUBSYSTEM_DISPLAY_ORDER;
+                    const at = order.indexOf(selected);
+                    const next = order[(at + step + order.length) % order.length];
+                    // Selection follows focus, deliberately. The panels below
+                    // are the answer to "which region", so a keyboard reader
+                    // who has to press Enter at every stop is being asked to
+                    // confirm a question they answered by arriving. It is also
+                    // what makes the arrow key *live*, which is the point.
+                    pendingArrowFocus = next;
+                    onSelect(next);
+                    setFocusedCode(next);
                   },
                   onMouseEnter: () => setActive(code),
                   onMouseLeave: () => setActive(null),
@@ -270,7 +419,13 @@ export function SubsystemMap({
               <Path
                 d={SUBSYSTEM_PATH[code]}
                 fill={tone.fg}
-                fillOpacity={raised ? 0.72 : 0.5}
+                // Three steps, not two. Hover and selection used to share one
+                // lift, so the moment the pointer left, the selected region
+                // dropped back to looking exactly like the other three — and
+                // clicking a region now re-points four panels rather than
+                // navigating, which makes a selection that does not persist
+                // visually a change with nothing on screen to attribute it to.
+                fillOpacity={isSelected ? 0.88 : isActive ? 0.72 : 0.5}
                 // Focus outranks selection, because a keyboard user moving
                 // across the map has to be able to see where they are even
                 // while the selected region stays selected behind them.
@@ -327,6 +482,22 @@ export function SubsystemMap({
           pointerEvents="none"
         />
       </Svg>
+
+      {/*
+        The arrow keys are a real affordance now, so they are written down.
+        Undiscoverable keyboard behaviour is behaviour a sighted keyboard user
+        finds by accident and a mouse user never finds at all.
+      */}
+      <Text
+        style={{
+          fontSize: 10,
+          color: colors.inkFaint,
+          marginTop: space.sm,
+          textAlign: "center",
+        }}
+      >
+        {copy.app.overview.map.keyboardNote}
+      </Text>
 
       {/*
         Attribution, on the figure rather than only in a comment. IBGE's data

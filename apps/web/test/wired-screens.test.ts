@@ -169,8 +169,13 @@ describe("a refused forecast renders no forecast", () => {
     expect(OVERVIEW_FLAT).toContain(
       'const forecast = state.status === "read" ? state.forecast : null;',
     );
+    // The branch now has a sibling: `SelectedRegion` renders on the `null`
+    // side, because a reader still picks a subsystem when nothing is promoted
+    // and still has to see which one. It takes `row={null}` there — a prop
+    // that cannot carry a band — so the property this guard is about is
+    // unchanged: no forecast figure exists outside `ForecastPanels`.
     expect(OVERVIEW_FLAT).toContain(
-      "{forecast === null ? null : ( <ForecastPanels forecast={forecast} onSelect={select} /> )}",
+      "{forecast === null ? ( <SelectedRegion subsystem={params.subsystem} row={null} onExplain={() => explain(params.subsystem)} /> ) : ( <ForecastPanels forecast={forecast} onSelect={select} onExplain={explain} /> )}",
     );
     for (const panel of ["<SubsystemMap", "<FanChart", "<BandCard", "<SubsystemRow"]) {
       const inPanels =

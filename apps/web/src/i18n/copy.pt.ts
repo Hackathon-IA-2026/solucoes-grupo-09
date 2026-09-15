@@ -698,14 +698,28 @@ export const pt: Copy = {
       metaTitle: "Visão da rede — WattSteer",
       title: "Visão da rede",
       lede: "Risco de curtailment para o dia seguinte em {date}, por subsistema. Todo número é um intervalo P10/P50/P90, não um ponto.",
-      rowFigure: "{subsystem}: abrir Explicar",
+      /*
+        The row *selects*; it no longer navigates. The label said "abrir
+        Explicar" because pressing it did, which is the defect this screen
+        carried: one gesture, two plausible meanings, and it silently did the
+        one that takes the reader off the screen.
+      */
+      rowFigure: "{subsystem}: selecionar",
+      rowExplain: "Explicar",
+      rowExplainLabel: "Explicar {subsystem}",
+      selectedBadge: "Selecionado",
+      selectedTitle: "Região selecionada",
+      selectedNote:
+        "Os quatro painéis abaixo — perfil de 24 horas, eólica e solar, energia do dia e pico — são todos sobre esta região. Escolher outra troca os quatro no lugar, sem sair da tela.",
+      selectedAbsent:
+        "Nenhum número de previsão para esta região hoje, porque nenhum modelo está promovido. O que vem abaixo é observado e vale igual.",
       rowEnergy: "Energia cortada esperada",
       rowPeak: "pico {low}–{high} MW",
       profileSubtitle: "Perfil de 24 horas, P10–P90",
-      dailyEnergy: "Energia cortada, dia inteiro",
+      dailyEnergy: "Energia cortada, dia inteiro · {subsystem}",
       dailyEnergyNote:
         "O total do dia é uma previsão conjunta lida do ensemble de trajetórias. Não é a soma das P90 horárias nem a soma das P50 — nenhum quantil soma, medianas incluídas.",
-      peakPower: "Pico de potência horária",
+      peakPower: "Pico de potência horária · {subsystem}",
       peakPowerNote:
         "A maior hora dentro de um dia sorteado, no mesmo ensemble. Limiar em vigor: {mw} MW no grão de subsistema.",
       grainNote:
@@ -741,7 +755,9 @@ export const pt: Copy = {
         subtitle: "Mesma classe de risco das linhas abaixo",
         figure:
           "Mapa do Brasil dividido nos quatro subsistemas do ONS, cada um sombreado pela sua classe de risco de curtailment. As quatro regiões também aparecem como linhas logo abaixo.",
-        region: "{subsystem}: risco {risk}, cerca de {probability}. Abrir Explicar.",
+        region: "{subsystem}: risco {risk}, cerca de {probability}. Selecionar.",
+        keyboardNote:
+          "As setas percorrem as quatro regiões e trocam a seleção; Enter seleciona a região em foco.",
         boundaryNote:
           "Fronteiras elétricas, não regiões geográficas: o Maranhão está no subsistema Norte, o Acre e Rondônia estão no Sudeste/Centro-Oeste, e Mato Grosso, Mato Grosso do Sul, Goiás e o Distrito Federal também.",
         source: "Limites: IBGE, Malhas Territoriais (dados abertos governamentais).",
@@ -750,7 +766,9 @@ export const pt: Copy = {
 
     split: {
       title: "Eólica e solar",
-      subtitle: "Dois escalares, sem faixa",
+      /** Named. A panel that does not say whose numbers it holds cannot show
+          a reader that the numbers changed under it. */
+      subtitle: "{subsystem} · dois escalares, sem faixa",
       expected: "Energia cortada esperada, dia inteiro",
       expectedNote:
         "E[Y], publicada ao lado da faixa e não dentro dela. Não é o meio do intervalo: com massa parada em “nenhum corte”, a expectativa fica acima da mediana, e num dia calmo a mediana é zero cravado enquanto a expectativa não é.",
