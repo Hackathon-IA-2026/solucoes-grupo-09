@@ -28,7 +28,6 @@
 
 import { space, usePalette } from "@wattsteer/ui";
 import { Text, View } from "react-native";
-import { ObservedBadge } from "@/components/app/honesty";
 import { useCopy, useFormat } from "@/i18n";
 import type { Technology, TechnologySplit } from "@/lib/fixtures";
 import { splitFor } from "@/lib/fixtures";
@@ -201,7 +200,20 @@ export function ObservedSplitPanel({
           <Text style={{ fontSize: 13, fontWeight: "500", color: colors.inkMuted }}>
             {copy.app.observed.splitTotal}
           </Text>
-          <ObservedBadge />
+          {/*
+            **No badge here, and the panel header's is the one that stays.** This
+            component renders inside a `Panel` whose `PanelHeader` already
+            carries `ObservedBadge` on its right edge, so the word appeared
+            twice within one card — once naming the panel and once naming the
+            total inside it. A caveat repeated inside its own scope stops
+            reading as a caveat and starts reading as decoration, which is the
+            same argument that collapsed four "Dados de exemplo" badges on the
+            landing hero into one and then to none.
+
+            The claim is not weakened: every figure in this panel is under a
+            header that says `Observado`, and the subtitle beside it says
+            "liquidado, duas medições".
+          */}
         </View>
         <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6 }}>
           <Text

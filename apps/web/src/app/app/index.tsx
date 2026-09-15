@@ -915,7 +915,7 @@ function EpisodesPanel({ observed }: { observed: ObservedNetwork }) {
           to: f.date(observed.episodes.to.slice(0, 10)),
           mw: f.number(observed.episodes.thresholdMw),
         })}
-        row={copy.app.overview.episodeRow}
+        columns={copy.app.overview.episodeColumns}
         note={copy.app.overview.episodeNote}
         empty={copy.app.overview.episodesEmpty}
       />

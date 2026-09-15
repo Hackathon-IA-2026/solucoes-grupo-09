@@ -59,7 +59,6 @@ import type {
 } from "@wattsteer/core/api";
 import {
   ClockIcon,
-  LayersIcon,
   Panel,
   PanelHeader,
   Pill,
@@ -93,6 +92,7 @@ import { useAppParams } from "@/components/app/use-app-params";
 import { useReplay } from "@/components/app/use-replay";
 import { useScenario } from "@/components/app/use-scenario";
 import { CompareBars, type CompareRow } from "@/components/charts/compare-bars";
+import { EpisodeList } from "@/components/charts/episode-list";
 import { FanChart } from "@/components/charts/fan-chart";
 import { PlanVsExecuted } from "@/components/charts/plan-vs-executed";
 import { type Copy, type Formatters, useCopy, useFormat } from "@/i18n";
@@ -746,53 +746,34 @@ function Episodes({
   episodes: CurtailmentEpisode[];
   maxGapHours: number;
 }) {
-  const colors = usePalette();
   const copy = useCopy();
   const f = useFormat();
-  if (episodes.length === 0) {
-    return null;
-  }
+  /*
+    **`EpisodeList`, not a second copy of it.** This screen carried its own
+    rendering of the same list — the same fields, the same order, its own
+    `episodeRow` sentence — which is exactly what `EpisodeList`'s docstring was
+    written to prevent: *"Two spellings of the same list would be two places the
+    threshold could stop being printed."* It had already become two places the
+    list could stop being readable: the Overview's became a table and this one
+    stayed a wall of prose.
+
+    The words are still this screen's own. `EpisodeList` takes its title,
+    subtitle, footnote and empty sentence as props for the reason its docstring
+    gives — one panel covers a past day and the other a fortnight, and a
+    component that owned the subtitle would say "this day" on both.
+  */
   return (
-    <Panel>
-      <PanelHeader
-        icon={<LayersIcon size={18} color={colors.inkMuted} />}
-        title={copy.app.replay.episodesTitle}
-        subtitle={copy.app.replay.episodesSubtitle}
-      />
-      <View style={{ marginTop: space.lg, gap: space.sm }}>
-        {episodes.map((episode) => (
-          <Text
-            key={episode.startedAt}
-            style={{
-              fontSize: 12,
-              lineHeight: 19,
-              color: colors.inkMuted,
-              fontVariant: ["tabular-nums"],
-            }}
-          >
-            {fill(copy.app.replay.episodeRow, {
-              from: f.dateTime(episode.startedAt),
-              to: f.dateTime(episode.endedAt),
-              hours: f.number(episode.durationHours),
-              mwh: f.compact(episode.totalMwh),
-              peak: f.number(episode.peakMw),
-              mw: f.number(episode.thresholdMw),
-              gap: f.number(episode.maxGapHours),
-            })}
-          </Text>
-        ))}
-      </View>
-      <Text
-        style={{
-          marginTop: space.md,
-          fontSize: 11,
-          lineHeight: 18,
-          color: colors.inkFaint,
-        }}
-      >
-        {fill(copy.app.replay.episodeNote, { gap: f.number(maxGapHours) })}
-      </Text>
-    </Panel>
+    <EpisodeList
+      episodes={episodes}
+      maxGapHours={maxGapHours}
+      title={copy.app.replay.episodesTitle}
+      subtitle={fill(copy.app.replay.episodesSubtitle, {
+        mw: f.number(episodes[0]?.thresholdMw ?? 0),
+      })}
+      columns={copy.app.replay.episodeColumns}
+      note={copy.app.replay.episodeNote}
+      empty={copy.app.replay.episodesEmpty}
+    />
   );
 }
 

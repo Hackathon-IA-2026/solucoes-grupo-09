@@ -450,7 +450,6 @@ export const pt: Copy = {
   app: {
     shell: {
       backToLanding: "WattSteer — voltar para a página inicial",
-      prototypeBadge: "PROTÓTIPO",
       noModelBadge: "NENHUM MODELO PROMOVIDO",
       /** Names the `tablist` around the four screen pills for a screen reader. */
       screensLabel: "Telas",
@@ -772,8 +771,12 @@ export const pt: Copy = {
       settledDayEmpty: "Nenhum curtailment liquidado neste subsistema neste dia.",
       episodesTitle: "Episódios recentes",
       episodesSubtitle: "{from} a {to}, acima de {mw} MW",
-      episodeRow:
-        "{from} → {to} · {hours} h · {mwh} MWh · pico {peak} MW · acima de {mw} MW, lacunas ≤ {gap} h",
+      episodeColumns: {
+        period: "Período",
+        duration: "Duração",
+        energy: "Energia",
+        peak: "Pico",
+      },
       episodeNote:
         "Um episódio é uma sequência de horas acima do limiar, unida por lacunas de no máximo {gap} h. Os dois parâmetros vão carimbados em cada episódio, porque fazem parte do que um episódio é.",
       episodesEmpty: "Nenhuma hora desta janela passou do limiar neste subsistema.",
@@ -1045,9 +1048,15 @@ export const pt: Copy = {
         "Retrospecto, e rotulado como tal: este plano foi construído sobre o próprio dia apurado, o que nenhuma previsão pode ser. É um limite superior e nunca uma alegação de recuperação, e a diferença ao lado é o único uso honesto dele — quanto uma previsão melhor teria valido neste dia, para esta frota.",
 
       episodesTitle: "Episódios",
-      episodesSubtitle: "Uma visão de leitura do dia, carregando os próprios parâmetros",
-      episodeRow:
-        "{from} → {to} · {hours} h · {mwh} MWh · pico {peak} MW · limiar {mw} MW · tolerância de intervalo {gap} h",
+      episodesSubtitle:
+        "Uma visão de leitura do dia, acima de {mw} MW — carregando os próprios parâmetros",
+      episodeColumns: {
+        period: "Período",
+        duration: "Duração",
+        energy: "Energia",
+        peak: "Pico",
+      },
+      episodesEmpty: "Nenhuma hora deste dia passou do limiar neste subsistema.",
       episodeNote:
         "Um episódio é uma visão de leitura das horas de curtailment, nunca uma linha armazenada. Cada um acima carrega o limiar e a tolerância de intervalo de {gap} hora que o produziram, porque uma duração sem carimbo não pode ser comparada com outra — um limiar diferente produziria episódios diferentes a partir dos mesmos dados.",
 

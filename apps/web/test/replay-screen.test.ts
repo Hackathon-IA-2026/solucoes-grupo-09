@@ -331,9 +331,25 @@ describe("an absence is rendered as an absence", () => {
       expect(typeof episode.thresholdMw).toBe("number");
       expect(typeof episode.maxGapHours).toBe("number");
     }
+    /*
+      **The panel carries them, which is where a per-panel constant belongs.**
+
+      This asserted them on `episodeRow`, a one-sentence template that printed
+      every field of every episode — including the threshold and the gap, which
+      are identical on every line because they are parameters of the cut, not
+      properties of an episode. A fortnight of episodes was therefore a wall in
+      which the two figures that *do* differ between rows sat sixth and seventh
+      in a sentence. The list is a table now and those two constants are printed
+      once each: the threshold in the subtitle, the gap tolerance in the
+      footnote.
+
+      The invariant is unchanged and is the one `episode-list.tsx` states — a
+      list must never be rendered beside a threshold it was not cut with. What
+      moved is where the panel says it, not whether.
+    */
     for (const catalogue of [EN.app.replay, PT.app.replay]) {
-      expect(catalogue.episodeRow).toContain("{mw}");
-      expect(catalogue.episodeRow).toContain("{gap}");
+      expect(catalogue.episodesSubtitle).toContain("{mw}");
+      expect(catalogue.episodeNote).toContain("{gap}");
     }
   });
 });

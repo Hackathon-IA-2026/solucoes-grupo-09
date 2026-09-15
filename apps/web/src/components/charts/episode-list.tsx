@@ -26,12 +26,51 @@ import { Text, View } from "react-native";
 import { useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
 
+/** A column heading: small, faint, and never a number. */
+function Heading({
+  children,
+  style,
+  color,
+}: {
+  children: string;
+  style?: object;
+  color: string;
+}) {
+  return (
+    <Text role="columnheader" style={[{ fontSize: 11, fontWeight: "600", color }, style]}>
+      {children}
+    </Text>
+  );
+}
+
+/** One cell. `tabular-nums` everywhere, including the period, which is dates. */
+function Cell({
+  children,
+  style,
+  color,
+}: {
+  children: string;
+  style?: object;
+  color: string;
+}) {
+  return (
+    <Text
+      style={[
+        { fontSize: 12, lineHeight: 20, color, fontVariant: ["tabular-nums"] },
+        style,
+      ]}
+    >
+      {children}
+    </Text>
+  );
+}
+
 export function EpisodeList({
   episodes,
   maxGapHours,
   title,
   subtitle,
-  row,
+  columns,
   note,
   empty,
 }: {
@@ -39,8 +78,25 @@ export function EpisodeList({
   maxGapHours: number;
   title: string;
   subtitle: string;
-  /** The row template, with `{from} {to} {hours} {mwh} {peak} {mw} {gap}`. */
-  row: string;
+  /**
+   * The four column headings.
+   *
+   * **This replaced a one-sentence row template**, and the reason is worth
+   * keeping. Every episode printed as
+   * `{from} → {to} · {hours} h · {mwh} MWh · pico {peak} MW · acima de {mw} MW,
+   * lacunas ≤ {gap} h` — so a fortnight of episodes was a wall of identical
+   * prose in which the two figures that actually differ between rows, the
+   * energy and the peak, sat sixth and seventh in a sentence. Nothing could be
+   * compared down a column because there were no columns.
+   *
+   * The threshold and the gap tolerance came off the rows entirely: they are
+   * constants of the cut, identical on every line, and they are already printed
+   * once in this panel's subtitle and once in its footnote. The docstring's
+   * rule — that an episode is never shown beside a threshold it was not cut
+   * with — is satisfied by the panel, which is where a per-panel constant
+   * belongs, and repeating it per row was what made the list unreadable.
+   */
+  columns: { period: string; duration: string; energy: string; peak: string };
   /** The footnote template, with `{gap}`. */
   note: string;
   /**
@@ -74,27 +130,56 @@ export function EpisodeList({
         </Text>
       ) : (
         <>
-          <View style={{ marginTop: space.lg, gap: space.sm }}>
+          {/*
+            A table, and the numeric columns are right-aligned on
+            `tabular-nums`. That pair is the whole of why a column can be
+            scanned: equal-width digits put the units, tens and hundreds of
+            every row on the same vertical, so the eye compares magnitudes
+            without reading a single figure. Left-aligned or proportional and it
+            is a list again, whatever the borders say.
+          */}
+          <View role="table" style={{ marginTop: space.lg, gap: space.xs }}>
+            <View
+              role="row"
+              style={{
+                flexDirection: "row",
+                paddingBottom: space.xs,
+                borderBottomWidth: 1,
+                borderBottomColor: colors.border,
+              }}
+            >
+              <Heading style={{ flex: 2.4 }} color={colors.inkFaint}>
+                {columns.period}
+              </Heading>
+              <Heading style={{ flex: 1, textAlign: "right" }} color={colors.inkFaint}>
+                {columns.duration}
+              </Heading>
+              <Heading style={{ flex: 1.2, textAlign: "right" }} color={colors.inkFaint}>
+                {columns.energy}
+              </Heading>
+              <Heading style={{ flex: 1.1, textAlign: "right" }} color={colors.inkFaint}>
+                {columns.peak}
+              </Heading>
+            </View>
             {episodes.map((episode) => (
-              <Text
+              <View
                 key={episode.startedAt}
-                style={{
-                  fontSize: 12,
-                  lineHeight: 19,
-                  color: colors.inkMuted,
-                  fontVariant: ["tabular-nums"],
-                }}
+                role="row"
+                style={{ flexDirection: "row", alignItems: "baseline" }}
               >
-                {fill(row, {
-                  from: f.dateTime(episode.startedAt),
-                  to: f.dateTime(episode.endedAt),
-                  hours: f.number(episode.durationHours),
-                  mwh: f.compact(episode.totalMwh),
-                  peak: f.number(episode.peakMw),
-                  mw: f.number(episode.thresholdMw),
-                  gap: f.number(episode.maxGapHours),
-                })}
-              </Text>
+                <Cell style={{ flex: 2.4 }} color={colors.ink}>
+                  {`${f.dateTime(episode.startedAt)} → ${f.dateTime(episode.endedAt)}`}
+                </Cell>
+                <Cell style={{ flex: 1, textAlign: "right" }} color={colors.inkMuted}>
+                  {`${f.number(episode.durationHours)} h`}
+                </Cell>
+                <Cell style={{ flex: 1.2, textAlign: "right" }} color={colors.ink}>
+                  {`${f.compact(episode.totalMwh)} MWh`}
+                </Cell>
+                <Cell style={{ flex: 1.1, textAlign: "right" }} color={colors.inkMuted}>
+                  {`${f.number(episode.peakMw)} MW`}
+                </Cell>
+              </View>
             ))}
           </View>
           <Text

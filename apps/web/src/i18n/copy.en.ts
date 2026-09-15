@@ -583,7 +583,6 @@ export const en = {
        * `/v1/meta` rather than a label, and disappears on its own the day an
        * artifact is promoted.
        */
-      prototypeBadge: "PROTOTYPE",
       noModelBadge: "NO MODEL PROMOTED",
       /** Names the `tablist` around the four screen pills for a screen reader. */
       screensLabel: "Screens",
@@ -1029,8 +1028,12 @@ export const en = {
       settledDayEmpty: "No curtailment settled in this subsystem on this day.",
       episodesTitle: "Recent episodes",
       episodesSubtitle: "{from} to {to}, above {mw} MW",
-      episodeRow:
-        "{from} → {to} · {hours} h · {mwh} MWh · peak {peak} MW · above {mw} MW, gaps ≤ {gap} h",
+      episodeColumns: {
+        period: "Period",
+        duration: "Duration",
+        energy: "Energy",
+        peak: "Peak",
+      },
       episodeNote:
         "An episode is a run of hours above the threshold, joined across gaps of at most {gap} h. Both parameters are stamped on every episode, because they are part of what an episode is.",
       episodesEmpty: "No hour in this window went above the threshold in this subsystem.",
@@ -1382,9 +1385,15 @@ export const en = {
         "Hindsight, and labelled as one: this plan was built on the settled day itself, which no forecast can be. It is an upper bound and never a recovery claim, and the gap beside it is the only honest use of it — what a better forecast would have been worth on this day, for this fleet.",
 
       episodesTitle: "Episodes",
-      episodesSubtitle: "A read-time view of the day, carrying its own parameters",
-      episodeRow:
-        "{from} → {to} · {hours} h · {mwh} MWh · peak {peak} MW · threshold {mw} MW · gap tolerance {gap} h",
+      episodesSubtitle:
+        "A read-time view of the day, above {mw} MW — carrying its own parameters",
+      episodeColumns: {
+        period: "Period",
+        duration: "Duration",
+        energy: "Energy",
+        peak: "Peak",
+      },
+      episodesEmpty: "No hour of this day went above the threshold in this subsystem.",
       episodeNote:
         "An episode is a read-time view of curtailment hours, never a stored row. Every one above carries the threshold and the {gap}-hour gap tolerance that produced it, because an unstamped duration cannot be compared with another one — a different threshold would produce different episodes from the same data.",
 

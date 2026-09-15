@@ -55,7 +55,20 @@ export function Provenance({ wide }: { wide: boolean }) {
         ))}
       </View>
 
-      <Panel style={{ gap: space.xl }}>
+      {/*
+        **Out of the card, and that is the point of the section.**
+
+        This used to sit inside a `Panel` like the source cards above it, which
+        framed "what WattSteer will not claim" as one more tile in a grid of
+        tiles. It is not one of those: the cards above describe the data that
+        *is* here, and this describes the claims that are not. Out of the panel
+        it takes the page's own width and rhythm and reads as the section's
+        closing statement rather than as a sixth source.
+
+        `space.xxl` above it because it is a section break now rather than a
+        card in a stack — the gap carries what the border used to.
+      */}
+      <View style={{ gap: space.xl, marginTop: space.xxl }}>
         <Text
           style={{
             fontSize: 20,
@@ -86,27 +99,18 @@ export function Provenance({ wide }: { wide: boolean }) {
             columnGap: space.xl,
           }}
         >
-          {copy.provenance.honesty.items.map((item, index) => {
+          {copy.provenance.honesty.items.map((item) => {
             /*
-              The odd one out, centred rather than left-flush.
-
-              Five items in a two-column wrap leaves the fifth alone on its row,
-              and `space-between` has nothing to space it against, so it sat
-              hard against the left edge under a column of four — a ragged
-              corner on the one card in the page that argues for care. Auto
-              horizontal margins centre it without touching the paired rows,
-              which is what `space-between` is still doing the work for.
-
-              Derived from the count rather than hard-coded to "the fifth": a
-              sixth limitation would pair off and this would correctly do
-              nothing, and a seventh would centre in its turn. The cap stays at
-              half the row either way, so every body keeps the same measure —
-              the reason the maxWidth above exists.
+              **The last item sits where the others do, at the left of its
+              column.** It was briefly centred with auto margins, on the
+              argument that a fifth item alone on its row looked ragged under a
+              column of four. That was true while this block was inside a
+              `Panel`; out of the card the section has the page's own left
+              edge, and an item that starts somewhere else is the thing that now
+              reads as misaligned. Every body in this list begins on the same
+              vertical, whichever row it lands on — which is also what makes the
+              five scannable as one list rather than as four plus one.
             */
-            const alone =
-              wide &&
-              copy.provenance.honesty.items.length % 2 === 1 &&
-              index === copy.provenance.honesty.items.length - 1;
             return (
               <View
                 key={item.label}
@@ -116,7 +120,6 @@ export function Provenance({ wide }: { wide: boolean }) {
                   maxWidth: wide ? "48%" : "100%",
                   flexDirection: "row",
                   gap: space.sm,
-                  ...(alone ? { marginLeft: "auto", marginRight: "auto" } : null),
                 }}
               >
                 {/* 24 px across, not the 22 it was — on the 4-pt scale, and one
@@ -157,7 +160,7 @@ export function Provenance({ wide }: { wide: boolean }) {
             );
           })}
         </View>
-      </Panel>
+      </View>
     </>
   );
 }

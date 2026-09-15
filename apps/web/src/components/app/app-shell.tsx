@@ -270,19 +270,22 @@ function ChromeBadge() {
         gap: 6,
       }}
     >
-      <View
-        style={{
-          borderRadius: radius.pill,
-          borderWidth: 1,
-          borderColor: colors.border,
-          paddingHorizontal: 10,
-          paddingVertical: 4,
-        }}
-      >
-        <Text style={{ fontSize: 11, fontWeight: "600", color: colors.inkFaint }}>
-          {copy.app.shell.prototypeBadge}
-        </Text>
-      </View>
+      {/*
+        **No `PROTÓTIPO` badge.** It was the chrome's standing caveat, and it
+        earned its place while the screens drew fixture numbers. They do not:
+        every figure here is either a settled ONS megawatt-hour or a model
+        output that is withheld when there is no model, and the badge beside it
+        says which. In that company "prototype" adds no fact — it is the context
+        the reader already has, and a caveat that says nothing dilutes the one
+        next to it that says a great deal.
+
+        The copy key went with it. I had kept it, reasoning that a key costs
+        nothing — and `i18n.test.ts`'s "no key is written and never rendered"
+        refused that, correctly: an unrendered string is not free, it is copy two
+        translators maintain and a reviewer has to decide about, for a screen
+        that will never show it. If this chrome is ever needed somewhere the
+        context is not implicit, the word is four characters to retype.
+      */}
       {absent ? (
         <View
           testID="app-no-model-badge"
