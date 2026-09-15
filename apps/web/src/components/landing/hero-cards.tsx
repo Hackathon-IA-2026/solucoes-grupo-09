@@ -66,20 +66,15 @@ const styles = StyleSheet.create({
   // `landing-layout.test.ts` is right to refuse it. At this card width the
   // difference is invisible and the rule is worth more than the two pixels.
   card: { width: CARD_WIDTH, padding: space.md, gap: space.sm },
+  // Still used by the cards that carry a small note under their figure; it was
+  // the `captionRow` beside it that went with the sample caption.
+  caption: { fontSize: 12, lineHeight: 17, fontVariant: ["tabular-nums"] },
   figure: {
     fontSize: 30,
     lineHeight: 34,
     fontWeight: "600",
     letterSpacing: -0.8,
     fontVariant: ["tabular-nums"],
-  },
-  caption: { fontSize: 12, lineHeight: 17, fontVariant: ["tabular-nums"] },
-  captionRow: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: space.lg,
-    alignItems: "center",
   },
 });
 
@@ -142,17 +137,6 @@ function Floaty({
     >
       {children}
     </Animated.View>
-  );
-}
-
-/** The layer's one caveat, captioning all four cards rather than each of them. */
-function SampleCaption() {
-  const copy = useCopy();
-  const colors = usePalette();
-  return (
-    <Text style={[styles.caption, { color: colors.inkFaint }]}>
-      {copy.readout.sampleBadge}
-    </Text>
   );
 }
 
@@ -388,13 +372,19 @@ export function HeroCards() {
         </View>
       ))}
       {/*
-        Centred under the stage rather than attached to a card: it captions all
-        four, and a caveat that appears once reads as a caveat. Fading in behind
-        the last card so it is not the first thing that resolves.
+        **No caveat here, and it is not an omission.** This layer used to carry
+        one "Dados de exemplo" per card; those collapsed into a single caption
+        under the stage, on the argument that a caveat which appears once reads
+        as a caveat and one that appears four times reads as furniture. The same
+        argument taken one step further removes the caption too: the readout
+        beside these cards already carries the badge, on its own right edge and
+        within a screen of here, so a second marker on the same view is the
+        repetition the collapse was meant to end rather than a second reader
+        being informed.
+
+        The claim that these are samples is *not* softened by this — it is made
+        once, in the readout, and again on the showcase section further down.
       */}
-      <FadeIn duration={600} delay={520} distance={8} style={styles.captionRow}>
-        <SampleCaption />
-      </FadeIn>
     </View>
   );
 }

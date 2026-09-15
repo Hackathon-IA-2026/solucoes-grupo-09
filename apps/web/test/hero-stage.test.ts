@@ -118,23 +118,39 @@ describe("the floating cards stay out of the hero column", () => {
 });
 
 describe("nothing floating in the hero is presented as live", () => {
-  it("the layer carries the readout's own caveat, exactly once", () => {
+  it("the hero view carries the caveat exactly once, and the layer is not where", () => {
     /*
-      It used to be a badge on every card — four copies of the same six words
-      in one screenful, which reads as chrome rather than as a caveat. It is
-      now one caption under the layer, still from the dictionary key the
-      readout's badge uses, so a rename cannot leave the cards saying something
-      softer than the panel beneath them.
+      **The claim is asserted of the view, not of the file — and that changed.**
 
-      Exactly once is the assertion. Zero is a floating "89%" with no marker —
-      the shape of the claim this page must not make — and four is what was
-      wrong with the first version.
+      This began as a badge on every card: four copies of the same six words in
+      one screenful, which reads as chrome rather than as a caveat. Those
+      collapsed to one caption under the layer. That caption is now gone too,
+      because the readout sits beside these cards at the same scroll position
+      and already carries the badge on its own right edge — a second marker on
+      the same view is the repetition the collapse was meant to end, not a
+      second reader being informed.
+
+      So the invariant this test defends is unchanged and the assertion moved
+      with the claim: **a reader looking at the floating figures can see, in the
+      same view, that they are samples.** Zero anywhere in the hero is a
+      floating "89%" with no marker — the shape of the claim this page must not
+      make — and it is what this still fails on.
+
+      The layer stays `aria-hidden` (asserted above), so no screen reader ever
+      reaches these numbers without the readout's badge and `sampleNote`
+      adjacent to them in the reading order. That half never depended on the
+      caption.
     */
-    expect(CARDS).toContain("copy.readout.sampleBadge");
+    // The hero — the view these cards float in — makes the claim.
+    expect(HERO).toContain("copy.readout.sampleBadge");
+    // Once. A page that said it twice in one view is what was removed.
+    expect([...HERO.matchAll(/copy\.readout\.sampleBadge/g)]).toHaveLength(1);
+    // And the layer itself carries no second copy.
+    expect(CARDS).not.toContain("copy.readout.sampleBadge");
+    // Non-vacuity: there are several cards, so "once" is a real constraint
+    // rather than a statement about a layer with one thing in it.
     const cards = [...CARDS.matchAll(/<Panel style=\{styles\.card\}>/g)].length;
     expect(cards).toBeGreaterThan(1);
-    expect([...CARDS.matchAll(/copy\.readout\.sampleBadge/g)]).toHaveLength(1);
-    expect([...CARDS.matchAll(/<SampleCaption \/>/g)]).toHaveLength(1);
   });
 
   it("takes every figure from the landing fixture, not from a literal", () => {

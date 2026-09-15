@@ -56,7 +56,14 @@ export function Provenance({ wide }: { wide: boolean }) {
       </View>
 
       <Panel style={{ gap: space.xl }}>
-        <Text style={{ fontSize: 20, fontWeight: "600", color: colors.ink }}>
+        <Text
+          style={{
+            fontSize: 20,
+            fontWeight: "600",
+            color: colors.ink,
+            textAlign: "center",
+          }}
+        >
           {copy.provenance.honesty.title}
         </Text>
         {/*
@@ -79,53 +86,76 @@ export function Provenance({ wide }: { wide: boolean }) {
             columnGap: space.xl,
           }}
         >
-          {copy.provenance.honesty.items.map((item) => (
-            <View
-              key={item.label}
-              style={{
-                flexGrow: 1,
-                flexBasis: wide ? "46%" : "100%",
-                maxWidth: wide ? "48%" : "100%",
-                flexDirection: "row",
-                gap: space.sm,
-              }}
-            >
-              {/* 24 px across, not the 22 it was — on the 4-pt scale, and one
+          {copy.provenance.honesty.items.map((item, index) => {
+            /*
+              The odd one out, centred rather than left-flush.
+
+              Five items in a two-column wrap leaves the fifth alone on its row,
+              and `space-between` has nothing to space it against, so it sat
+              hard against the left edge under a column of four — a ragged
+              corner on the one card in the page that argues for care. Auto
+              horizontal margins centre it without touching the paired rows,
+              which is what `space-between` is still doing the work for.
+
+              Derived from the count rather than hard-coded to "the fifth": a
+              sixth limitation would pair off and this would correctly do
+              nothing, and a seventh would centre in its turn. The cap stays at
+              half the row either way, so every body keeps the same measure —
+              the reason the maxWidth above exists.
+            */
+            const alone =
+              wide &&
+              copy.provenance.honesty.items.length % 2 === 1 &&
+              index === copy.provenance.honesty.items.length - 1;
+            return (
+              <View
+                key={item.label}
+                style={{
+                  flexGrow: 1,
+                  flexBasis: wide ? "46%" : "100%",
+                  maxWidth: wide ? "48%" : "100%",
+                  flexDirection: "row",
+                  gap: space.sm,
+                  ...(alone ? { marginLeft: "auto", marginRight: "auto" } : null),
+                }}
+              >
+                {/* 24 px across, not the 22 it was — on the 4-pt scale, and one
                   step under `IconCircle`'s 32. Top-aligned against a 22 px
                   label line, which is 1 px of optical drift and the reason the
                   label carries an explicit `lineHeight` at all. */}
-              <View
-                style={{
-                  width: space.xl,
-                  height: space.xl,
-                  borderRadius: 12,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  backgroundColor: colors.dangerSoft,
-                }}
-              >
-                <XIcon size={14} color={colors.onDangerSoft} />
-              </View>
-              {/* The body used to start at the item's left edge while the
-                  label started 30 px in, so every paragraph hung left of its
-                  own heading. One column under the mark aligns the two. */}
-              <View style={{ flex: 1, gap: space.sm }}>
-                <Text
+                <View
                   style={{
-                    fontSize: 15,
-                    lineHeight: 22,
-                    fontWeight: "600",
-                    color: colors.ink,
+                    width: space.xl,
+                    height: space.xl,
+                    borderRadius: 12,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: colors.dangerSoft,
                   }}
                 >
-                  {item.label}
-                </Text>
-                <Text style={{ fontSize: 14, lineHeight: 22, color: colors.inkMuted }}>
-                  {item.body}
-                </Text>
+                  <XIcon size={14} color={colors.onDangerSoft} />
+                </View>
+                {/* The body used to start at the item's left edge while the
+                  label started 30 px in, so every paragraph hung left of its
+                  own heading. One column under the mark aligns the two. */}
+                <View style={{ flex: 1, gap: space.sm }}>
+                  <Text
+                    style={{
+                      fontSize: 15,
+                      lineHeight: 22,
+                      fontWeight: "600",
+                      color: colors.ink,
+                    }}
+                  >
+                    {item.label}
+                  </Text>
+                  <Text style={{ fontSize: 14, lineHeight: 22, color: colors.inkMuted }}>
+                    {item.body}
+                  </Text>
+                </View>
               </View>
-            </View>
-          ))}
+            );
+          })}
         </View>
       </Panel>
     </>
