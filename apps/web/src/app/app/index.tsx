@@ -65,6 +65,7 @@ import { ObservedProfile } from "@/components/charts/observed-profile";
 import { RiskCaveat } from "@/components/charts/risk-class";
 import { SubsystemMap } from "@/components/charts/subsystem-map";
 import { TechnologySplitPanel } from "@/components/charts/technology-split";
+import { useVoiceHighlight } from "@/components/voice/use-voice-agent";
 import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
 import {
@@ -201,6 +202,24 @@ function ForecastPanels({
   const [overviewWidth, onOverviewLayout] = useContainerWidth();
   // One hover, two affordances — see `SubsystemMap`'s `hovered` prop.
   const [hovered, setHovered] = useState<SubsystemCode | null>(null);
+  /**
+   * The third end of the same affordance: the voice agent lights both.
+   *
+   * `subsystem-map.tsx` already lifted the highlight because *"hovering a
+   * region lights its row and hovering a row lights its region"*. A `highlight`
+   * tool call is a third source for that one value and not a new mechanism —
+   * `docs/plans/voice-copilot.md` §3.1 says so, and it is what makes the demo's
+   * first step work: the reader asks which region to worry about, and the
+   * answer is the NE lighting up on the screen they are already on, with **no
+   * navigation at all**.
+   *
+   * The pointer wins where there is one. A reader moving a mouse is making a
+   * live choice; the agent's emphasis is an answer to a question they asked a
+   * moment ago, and an answer that fought the pointer would read as the map
+   * being stuck.
+   */
+  const spoken = useVoiceHighlight();
+  const active = hovered ?? spoken;
   const side = overviewWidth >= layout.desktop;
 
   // One scale across all four rows, so "wider" and "bigger" mean what they look
@@ -233,7 +252,7 @@ function ForecastPanels({
               <SubsystemMap
                 forecasts={rows}
                 selected={params.subsystem}
-                hovered={hovered}
+                hovered={active}
                 onHoverChange={setHovered}
                 onSelect={onSelect}
               />
@@ -258,7 +277,7 @@ function ForecastPanels({
                 emphasis={params.technology}
                 domainMax={domainMax}
                 selected={row.subsystem === params.subsystem}
-                highlighted={row.subsystem === hovered}
+                highlighted={row.subsystem === active}
                 onHoverChange={(on) => setHovered(on ? row.subsystem : null)}
                 onPress={() => onSelect(row.subsystem)}
               />

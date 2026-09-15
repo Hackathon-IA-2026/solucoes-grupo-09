@@ -504,6 +504,99 @@ export class ApiClient {
       },
     );
   }
+
+  /**
+   * `GET /v1/voice/session` — an ephemeral credential for the realtime socket.
+   *
+   * **The one method that does not decode through `WIRE_SHAPES`, and the reason
+   * is that there is nothing to decode.** Every other route on this client
+   * answers with a *published resource*: a forecast, a diagnosis, a replay —
+   * something with a JSON Schema in `packages/core/schema`, a Python consumer,
+   * and a generated camelCase interface that a renamed field breaks the compile
+   * of. This route answers with a **credential**: four fields, good for a few
+   * minutes, never cached (the route sets `no-store` for a reason —
+   * `apps/api/src/api/voice.ts`), never rendered, never persisted, and with no
+   * cross-language consumer at all. Giving it a schema would publish a contract
+   * for a secret.
+   *
+   * So the two snake_case names are read here, by hand, at their one call site.
+   * That is a four-field boundary rather than a second translator: there is no
+   * rule being applied, nothing generic to disagree with `wire.ts` about, and
+   * nothing a future field could silently slip past — a fifth field would be
+   * invisible here and therefore unused, which is the failure mode a credential
+   * can afford.
+   *
+   * It throws `ApiError` like everything else, so the web app tells
+   * `VOICE_NOT_CONFIGURED` (render no dock at all) from `VOICE_UNAVAILABLE`
+   * (voice exists here and is having a bad day) off the same closed enum every
+   * other refusal on this client uses.
+   */
+  async voiceSession(signal?: AbortSignal): Promise<VoiceSessionCredential> {
+    const body = await this.requestRaw("/v1/voice/session", signal);
+    const payload = (typeof body === "object" && body !== null ? body : {}) as Record<
+      string,
+      unknown
+    >;
+    return {
+      clientSecret: String(payload.client_secret ?? ""),
+      expiresAt: String(payload.expires_at ?? ""),
+      model: String(payload.model ?? ""),
+      voice: String(payload.voice ?? ""),
+    };
+  }
+
+  /**
+   * A `GET` that returns the parsed body without a shape, for the one caller
+   * above. Private, so "no schema" cannot spread beyond the credential.
+   */
+  private async requestRaw(path: string, signal?: AbortSignal): Promise<unknown> {
+    const url = buildUrl(this.baseUrl, path);
+    let response: Response;
+    try {
+      response = await this.doFetch(url, {
+        method: "GET",
+        headers: { accept: "application/json", ...this.headers },
+        signal,
+      });
+    } catch (cause) {
+      throw new ApiError({
+        status: 0,
+        code: null,
+        message: `Request to ${url} failed`,
+        cause,
+      });
+    }
+    const text = await response.text();
+    let body: unknown = null;
+    if (text !== "") {
+      try {
+        body = JSON.parse(text) as unknown;
+      } catch {
+        body = null;
+      }
+    }
+    if (!response.ok) {
+      throw readEnvelope(response.status, body, `${response.status} from ${url}`);
+    }
+    return body;
+  }
+}
+
+/**
+ * What `GET /v1/voice/session` hands the browser.
+ *
+ * camelCase here and `snake_case` on the wire, like every other shape — the
+ * difference is only that this one is renamed at its call site rather than
+ * through the generated table, for the reason {@link ApiClient.voiceSession}
+ * gives.
+ */
+export interface VoiceSessionCredential {
+  /** Short-lived. Not the account key, and it cannot be used as one. */
+  readonly clientSecret: string;
+  /** ISO-8601 UTC. The client re-mints against this rather than dying mid-sentence. */
+  readonly expiresAt: string;
+  readonly model: string;
+  readonly voice: string;
 }
 
 /** Build a client. A function, so a caller does not have to know the class name. */
