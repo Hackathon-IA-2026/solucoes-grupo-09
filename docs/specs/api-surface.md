@@ -1,6 +1,6 @@
 # Spec — WattSteer Public API Surface
 
-> One gateway, seventeen routes, and a boundary drawn so that the ML service
+> One gateway, eighteen routes, and a boundary drawn so that the ML service
 > being down is a stale timestamp rather than an outage.
 >
 > **Upstream specs.** [`forecaster.md`](forecaster.md) fixes the content of a
@@ -481,6 +481,7 @@ Four unversioned probes survive unchanged: `GET /`, `/health`, `/ready`,
 | 15 | `GET /v1/replay/days/<date>` | one day's verdict, off a body-less path | Time Machine's date picker |
 | 16 | `GET /v1/model/card/raw` | the `*.card.json` verbatim, for auditing | not a screen — an auditor |
 | 17 | `POST /v1/replay/observed-only` | a pre-F1 day: what happened, and the bound | Time Machine |
+| 18 | `GET /v1/model/artifacts` | every artifact on a lane, promoted or **refused**, and any one card verbatim | not a screen — an operator reading a refusal |
 
 > **Corrected in api-surface 27: this list was fourteen rows over seventeen
 > served paths.** The three added above are all in `apps/api/src/api`, mounted,
@@ -497,7 +498,7 @@ Four unversioned probes survive unchanged: `GET /`, `/health`, `/ready`,
 > counterfactual, `replay/days/<date>` is `replay/days` for one date. A list
 > organised by *screen* has no natural slot for "the same thing, differently",
 > so all three landed in prose, and the count in the header line went on saying
-> fourteen. It now says seventeen, and `test/spec-claims.test.ts` derives both
+> fourteen. It now says eighteen, and `test/spec-claims.test.ts` derives both
 > directions from the route registrations: a path served with no row here fails,
 > and a row here naming a path nothing serves fails too.
 
@@ -2163,7 +2164,7 @@ validates against the schema.
   v1 and the whole caching and rate-limiting posture above depends on their
   absence. Adding them later is additive: a `Vary: Authorization` and a per-key
   budget tier.
-- **GraphQL, tRPC, gRPC.** The surface is seventeen read-shaped routes with
+- **GraphQL, tRPC, gRPC.** The surface is eighteen read-shaped routes with
   three fixed-by-spec POST contracts and a static-exported client. REST plus a
   generated typed client is the shape with the least machinery.
 - **Webhooks, subscriptions, SSE, WebSockets.** Nothing here is push-shaped:
