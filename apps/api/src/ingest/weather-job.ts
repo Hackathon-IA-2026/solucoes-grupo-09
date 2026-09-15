@@ -21,6 +21,7 @@ import {
   runAgeHours,
   scheduledRunFor,
   WEATHER_VARIABLES,
+  WeatherRateLimitError,
 } from "./weather/single-runs.js";
 import {
   readHeldRunInits,
@@ -87,6 +88,23 @@ export interface IngestWeatherPayload {
    * revision. See `readHeldRunInits`.
    */
   force?: boolean;
+  /**
+   * Weighted call units this invocation may spend before it stops.
+   *
+   * The free tier's allowance is a **daily** one and the endpoint publishes no
+   * `X-RateLimit-*` or `Retry-After`, so the only way to respect it is to count
+   * what is spent rather than to discover the ceiling by being refused.
+   * Forecaster 37 measured what discovery costs: on 2026-09-11 the weather
+   * source recorded **2 ok and 27 failed**, the head did not move for 69
+   * minutes, and every one of four forward attempts was refused before it
+   * reached a forward valid time at all.
+   *
+   * Units are :func:`callBudget`'s, which applies Open-Meteo's own weighting
+   * pessimistically. `undefined` means unbounded, which is the right default
+   * for a commercial key and the wrong one for the free tier — `config`
+   * supplies the bound, so the tier is a variable rather than a code change.
+   */
+  maxWeightedUnits?: number;
 }
 
 /** What one run contributed, and which run it actually was. */
@@ -137,6 +155,23 @@ export interface IngestWeatherResult {
    */
   supersededByNewerRun: number;
   runs: WeatherRunSummary[];
+  /**
+   * Weighted units this invocation spent, by :func:`callBudget`'s weighting.
+   * Reported so a sweep's cost is a number in the record rather than an
+   * inference from `requests`.
+   */
+  weightedUnitsSpent: number;
+  /**
+   * Why the sweep ended. `complete` means every slot was reached.
+   *
+   * The other two are **outcomes, not failures**, and that distinction is the
+   * point: a sweep that ran out of allowance has ingested everything it paid
+   * for and left a head that moved. Throwing instead — which is what a
+   * propagating `WeatherRateLimitError` did — discards the whole invocation's
+   * work and writes a failed `ingestion_run`, which is how 27 failures got
+   * recorded for a source that was working exactly as well as its quota let it.
+   */
+  stoppedBecause: "complete" | "budget_exhausted" | "rate_limited";
 }
 
 export interface WeatherIngestorDeps {
@@ -193,6 +228,38 @@ export function targetDays(from: string, to: string): string[] {
  * variables is billed as multiple calls, and it is not published whether a
  * multi-location request is billed per location, so this assumes it is.
  */
+/** One run slot: the target day, the cycle, and the run that answers it. */
+export interface RunSlot {
+  day: string;
+  cycle: RunCycle;
+  scheduled: Date;
+}
+
+/**
+ * The slots a sweep will walk, **newest run first**.
+ *
+ * The order is the whole of forecaster 37's fix, and it is a fix about
+ * *priority* rather than about capacity. The order used to be chronological,
+ * which under a bounded allowance starts at the wrong end: the sweep spent its
+ * quota on the oldest backfill target and was refused "before it reaches a
+ * forward valid time at all", so the serving day — the only slot a forecast
+ * needs — was never reached, four attempts running.
+ *
+ * Reversed, an exhausted allowance leaves the head moved and the backfill
+ * behind. That is the recoverable direction: yesterday's history can be caught
+ * up tomorrow, and tomorrow's forecast cannot be published late.
+ *
+ * Pure and exported so the ordering is checkable without a database, which is
+ * what the ingest tests need to be gated on.
+ */
+export function plannedSlots(days: string[], cycles: RunCycle[]): RunSlot[] {
+  return days
+    .flatMap((day) =>
+      cycles.map((cycle) => ({ day, cycle, scheduled: scheduledRunFor(day, cycle) })),
+    )
+    .sort((a, b) => b.scheduled.getTime() - a.scheduled.getTime());
+}
+
 export function callBudget(options: {
   days: number;
   cycles: number;
@@ -320,14 +387,30 @@ export function createWeatherIngestor(
       unchanged: 0,
       supersededByNewerRun: 0,
       runs: [],
+      weightedUnitsSpent: 0,
+      stoppedBecause: "complete",
     };
 
     // The local probe, read once for the whole range rather than per slot: it
     // is the thing that stops a sweep re-downloading an immutable archive.
-    const slots = days.flatMap((day) =>
-      cycles.map((cycle) => ({ day, cycle, scheduled: scheduledRunFor(day, cycle) })),
-    );
+    //
+    // **Newest first.** The order used to be chronological, and under a bounded
+    // allowance that is the wrong end to start from: forecaster 37 measured a
+    // sweep refused on its *first* model run, "before it reaches a forward
+    // valid time at all", so the oldest backfill target consumed the quota and
+    // the serving day — the only slot the forecast needs — was never reached.
+    // Reversing it means an exhausted allowance leaves the head moved and the
+    // backfill behind, which is the direction that can be caught up later.
+    const slots = plannedSlots(days, cycles);
     const held = payload.force ? new Set<string>() : await heldSlots(deps.db, slots);
+
+    // One slot's cost, in the same units the budget is denominated in.
+    const unitsPerSlot = callBudget({
+      days: 1,
+      cycles: 1,
+      centroids: centroids.length,
+    }).weightedUnits;
+    const ceiling = payload.maxWeightedUnits ?? config.openMeteoMaxWeightedUnits;
 
     let done = 0;
     for (const { day, cycle, scheduled } of slots) {
@@ -337,14 +420,35 @@ export function createWeatherIngestor(
         report({ done, total: result.runsScheduled });
         continue;
       }
-      const attempt = await fetchWithFallback(
-        scheduled,
-        points,
-        configured,
-        maxSteps,
-        forecastDays,
-      );
+      // Checked *before* spending, not after: a budget discovered by being
+      // refused is the failure mode this replaces. A held slot costs nothing
+      // and is skipped above, so a repeated sweep still walks the whole range
+      // for free.
+      if (ceiling !== undefined && result.weightedUnitsSpent + unitsPerSlot > ceiling) {
+        result.stoppedBecause = "budget_exhausted";
+        break;
+      }
+      let attempt: Awaited<ReturnType<typeof fetchWithFallback>>;
+      try {
+        attempt = await fetchWithFallback(
+          scheduled,
+          points,
+          configured,
+          maxSteps,
+          forecastDays,
+        );
+      } catch (error) {
+        // A rate limit that outlasted the backoff is the allowance answering,
+        // and everything already ingested in this invocation is good. Stop and
+        // say so; anything else is not this error and still throws.
+        if (error instanceof WeatherRateLimitError) {
+          result.stoppedBecause = "rate_limited";
+          break;
+        }
+        throw error;
+      }
       result.requests += attempt.requests;
+      result.weightedUnitsSpent += unitsPerSlot;
       done += 1;
 
       if (!(attempt.response && attempt.runInit)) {

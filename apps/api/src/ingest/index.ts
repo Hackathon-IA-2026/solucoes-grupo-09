@@ -545,6 +545,7 @@ export {
   createWeatherIngestor,
   type IngestWeatherPayload,
   type IngestWeatherResult,
+  plannedSlots,
   targetDays,
   type WeatherIngestorDeps,
   type WeatherRunSummary,

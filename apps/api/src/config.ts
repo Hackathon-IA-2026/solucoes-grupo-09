@@ -222,4 +222,30 @@ export const config = {
    * non-commercial-only. It is redacted out of every stored request URL.
    */
   openMeteoApiKey: process.env.WATTSTEER_OPEN_METEO_KEY || undefined,
+  /**
+   * Weighted call units one weather ingest may spend. **Unbounded with a key.**
+   *
+   * The free tier's allowance is a daily one — Open-Meteo publishes 600/min,
+   * 5,000/hour, **10,000/day**, 300,000/month — and the endpoint returns no
+   * `X-RateLimit-*` and no `Retry-After`, so a client can either count what it
+   * spends or find the ceiling by being refused. Forecaster 37 measured the
+   * second: `2 ok, 27 failed` in a UTC day, the head unmoved for 69 minutes,
+   * and four forward attempts all refused before reaching a forward valid time.
+   *
+   * The default is derived rather than picked. The live sweep is hourly
+   * (`REFRESH_CADENCE.live`), so 24 invocations share the day; at a third of
+   * the published allowance the margin covers the other tiers' sweeps, the
+   * retries a 429 costs before backoff gives up, and anything else on the same
+   * IP:
+   *
+   *     floor(10_000 / 3 / 24) = 138
+   *
+   * A key means the commercial tier, where this bound is the wrong one to
+   * apply, so it lifts entirely — `undefined`, which the ingestor reads as
+   * unbounded. That keeps the whole tier difference an environment change,
+   * which is what `openMeteoHost` above is also for.
+   */
+  openMeteoMaxWeightedUnits: process.env.WATTSTEER_OPEN_METEO_KEY
+    ? undefined
+    : int(process.env.WATTSTEER_OPEN_METEO_MAX_UNITS, 138, 1, 300_000),
 } as const;

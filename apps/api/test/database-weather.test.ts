@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { createDatabase } from "../src/database/connection.js";
 import {
+  callBudget,
   createWeatherIngestor,
   locationsOf,
   type ModelRunResponse,
@@ -288,6 +289,99 @@ suite("weather · bitemporal store (real Postgres)", () => {
         sql`select count(*) as n from weather_run_request`,
       );
       expect(Number(stored[0]?.n)).toBe(2);
+    });
+
+    it("spends its allowance on the serving day before the backfill", async () => {
+      // Forecaster 37: the sweep was refused "before it reaches a forward valid
+      // time at all", four attempts running, because it started at the oldest
+      // target. The order is now newest-first, so a bounded allowance buys the
+      // head rather than the tail.
+      const seen: string[] = [];
+      const ingestor = createWeatherIngestor({
+        db,
+        fetch: archive(
+          { "2024-04-09T00:00": RUN_00Z, "2024-04-09T12:00": RUN_12Z },
+          seen,
+        ),
+      });
+      const result = await run(ingestor, {
+        from: "2024-04-08",
+        to: "2024-04-10",
+        centroidIds: ["W1", "W7", "S5"],
+        // One slot's worth: enough to reach exactly one run and stop.
+        maxWeightedUnits: callBudget({ days: 1, cycles: 1, centroids: 3 }).weightedUnits,
+      });
+
+      expect(result.stoppedBecause).toBe("budget_exhausted");
+      expect(result.runsIngested).toBe(1);
+      // The one run it paid for answers the *last* target day, not the first.
+      expect(result.runs[0]?.targetDay).toBe("2024-04-10");
+      expect(seen).toHaveLength(1);
+    });
+
+    it("an exhausted allowance is an outcome, and keeps what it paid for", async () => {
+      const ingestor = createWeatherIngestor({
+        db,
+        fetch: archive({ "2024-04-09T00:00": RUN_00Z, "2024-04-09T12:00": RUN_12Z }),
+      });
+      const result = await run(ingestor, {
+        from: "2024-04-10",
+        to: "2024-04-10",
+        centroidIds: ["W1", "W7", "S5"],
+        maxWeightedUnits: callBudget({ days: 1, cycles: 1, centroids: 3 }).weightedUnits,
+      });
+
+      expect(result.stoppedBecause).toBe("budget_exhausted");
+      expect(result.runsIngested).toBe(1);
+      expect(result.inserted).toBeGreaterThan(0);
+      expect(result.weightedUnitsSpent).toBeLessThanOrEqual(
+        callBudget({ days: 1, cycles: 1, centroids: 3 }).weightedUnits,
+      );
+
+      // Non-vacuity: unbounded, the same payload reaches both cycles.
+      const unbounded = createWeatherIngestor({
+        db,
+        fetch: archive({ "2024-04-09T00:00": RUN_00Z, "2024-04-09T12:00": RUN_12Z }),
+      });
+      const all = await run(unbounded, {
+        from: "2024-04-10",
+        to: "2024-04-10",
+        centroidIds: ["W1", "W7", "S5"],
+        force: true,
+      });
+      expect(all.stoppedBecause).toBe("complete");
+      expect(all.runsIngested).toBe(2);
+    });
+
+    it("a rate limit ends the sweep instead of failing it", async () => {
+      // The endpoint publishes no `Retry-After`, so backoff eventually gives up
+      // and throws. That used to abort the invocation and write a failed
+      // `ingestion_run` — 27 of them in one day — discarding work that was good.
+      let calls = 0;
+      const limited: typeof fetch = (async (input: string | URL | Request) => {
+        const url = new URL(String(input));
+        calls += 1;
+        if (calls === 1) {
+          return new Response(RUN_00Z, { status: 200 });
+        }
+        return new Response("slow down", { status: 429 });
+      }) as typeof fetch;
+
+      const ingestor = createWeatherIngestor({
+        db,
+        fetch: limited,
+        backoff: { maxRetries: 1, sleep: async () => {} },
+      });
+      const result = await run(ingestor, {
+        from: "2024-04-09",
+        to: "2024-04-10",
+        centroidIds: ["W1", "W7", "S5"],
+      });
+
+      expect(result.stoppedBecause).toBe("rate_limited");
+      // The run it did take in before the refusal is kept, not rolled back.
+      expect(result.runsIngested).toBe(1);
+      expect(result.inserted).toBeGreaterThan(0);
     });
 
     it("falls back to an older cycle when the archive is missing a run", async () => {

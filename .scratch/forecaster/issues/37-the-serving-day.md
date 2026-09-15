@@ -279,7 +279,10 @@ Two things now, where 36 could say one:
 
 ---
 
-**Status:** decided, nothing promoted, no threshold moved, the box stays open
+**Status:** decided, nothing promoted, no threshold moved. **The quota half is
+now addressed without a key** — see data-platform 31. The commercial key is
+still needed before WattSteer monetises, but for a licence reason rather than a
+capacity one, and it no longer blocks the serving day.
 
 - [x] Waited **69 minutes** on the two blockers 36 named, polling every 30 s.
       `fc18-pg` reached **48** migrations and the first blocker cleared; the
