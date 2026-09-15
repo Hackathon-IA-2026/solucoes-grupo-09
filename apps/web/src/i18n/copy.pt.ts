@@ -169,7 +169,7 @@ export const pt: Copy = {
     profileCaption:
       "A faixa sombreada é P10–P90; a linha é a P50. Uma hora conta como cortada acima do limiar de 5 MW por subsistema, que é carimbado em todo número que o WattSteer publica.",
     additivityNote:
-      "Nada nesta coluna soma o número ao lado. Faixas não são aditivas, e medianas também não: a P50 de uma soma só é a soma das P50 se os quatro subsistemas se moverem juntos, e eles não se movem. O valor esperado é a única grandeza que soma exatamente — por isso o número nacional é um.",
+      "A linha de valor esperado é a que soma: os quatro valores esperados dão exatamente o número nacional ao lado, e você pode conferir. As P50 não somam — a P50 de uma soma só é a soma das P50 se os quatro subsistemas se moverem juntos, e eles não se movem — e faixas não são aditivas de jeito nenhum. É por isso que o número nacional é um valor esperado e não uma mediana.",
     originLabel: "Origem da previsão",
     originValue:
       "{producer} · {run} · publicada em {published} · rodada meteorológica {weatherRun}",
@@ -196,7 +196,7 @@ export const pt: Copy = {
     railBand: "{label}: mediana {p50} {unit}, percentil 10 a 90 de {p10} a {p90} {unit}",
     hourFigure: "{hour} — mediana {p50} {unit}, P10 a P90 de {p10} a {p90} {unit}",
     explainerBody:
-      "Uma previsão de curtailment que diz 4.180 MWh e mais nada é um número se passando por fato. O WattSteer publica P10, P50 e P90 juntos e desenha a distância entre eles, para que a largura da incerteza seja tão visível quanto o meio dela. Onde um número genuinamente não tem faixa — um valor histórico medido — ele é marcado como observado, para que a ausência signifique alguma coisa.",
+      "Uma previsão de curtailment que diz {value} MWh e mais nada é um número se passando por fato. O WattSteer publica P10, P50 e P90 juntos e desenha a distância entre eles, para que a largura da incerteza seja tão visível quanto o meio dela. Onde um número genuinamente não tem faixa — um valor histórico medido — ele é marcado como observado, para que a ausência signifique alguma coisa.",
   },
 
   engines: {
@@ -765,7 +765,7 @@ export const pt: Copy = {
       riskTitle: "Risco de curtailment",
       riskSubtitle: "P(qualquer hora acima do limiar)",
       magnitude: "Magnitude esperada, dia inteiro",
-      magnitudeNote: "Condicionada a o dia ultrapassar o limiar em alguma hora.",
+      magnitudeNote: "Condicionada ao dia ultrapassar o limiar em alguma hora.",
       peakPower: "Pico de potência horária",
       readingTitle: "Lendo o diagnóstico",
       readingNote:

@@ -5,6 +5,7 @@ import { fill } from "@/i18n/format";
 import { band, centre, formatMwhExact, formatRange } from "./band";
 import { BandRail, useRailLabel } from "./band-figure";
 import { DriverBars } from "./driver-bars";
+import { SHOWCASE_MEDIAN } from "./fixtures";
 import { MitigationStack } from "./mitigation-stack";
 import { ReplayCompare } from "./replay-compare";
 import { SectionHeading } from "./section";
@@ -80,8 +81,8 @@ export function Showcase({ wide }: { wide: boolean }) {
 }
 
 /** Two forecasts, same median, different confidence — drawn side by side. */
-const CONFIDENT = band(3900, 4180, 4500);
-const UNCERTAIN = band(1400, 4180, 8600);
+const CONFIDENT = band(3020, SHOWCASE_MEDIAN, 3480);
+const UNCERTAIN = band(1100, SHOWCASE_MEDIAN, 7400);
 
 /**
  * The design decision, made arguable on the page itself. Both examples share
@@ -101,8 +102,17 @@ function BandExplainer({ wide }: { wide: boolean }) {
           <Text style={{ fontSize: 20, fontWeight: "600", color: colors.ink }}>
             {copy.band.explainerTitle}
           </Text>
+          {/*
+            The figure in this sentence is the rails' own median, filled in
+            rather than written into the copy. It was spelled out as "4.180 MWh"
+            in both dictionaries, so moving the rails would have left the prose
+            quoting a number no longer on the panel — and it is how the
+            forbidden sum-of-medians got two independent places to live.
+          */}
           <Text style={{ fontSize: 14, lineHeight: 22, color: colors.inkMuted }}>
-            {copy.band.explainerBody}
+            {fill(copy.band.explainerBody, {
+              value: formatMwhExact(locale, centre(CONFIDENT)),
+            })}
           </Text>
         </View>
         <View

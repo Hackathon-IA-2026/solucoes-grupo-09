@@ -16,6 +16,7 @@ import {
   HOURLY_PROFILE,
   MITIGATION,
   NATIONAL,
+  SHOWCASE_MEDIAN,
   SUBSYSTEMS,
 } from "../src/components/landing/fixtures";
 import { en as EN } from "../src/i18n/copy.en";
@@ -122,6 +123,26 @@ describe("landing fixture", () => {
     for (const s of SUBSYSTEMS) {
       expect(s.expectedMwh).toBeGreaterThan(centre(s.energy));
     }
+  });
+
+  it("illustrates with a figure that is not the sum of the column above it", () => {
+    // The band explainer's two rails share a median to make its point, and that
+    // median was 4,180 — the componentwise sum of the four P50s in the readout
+    // above, which `docs/specs/api-surface.md` §"The national readout" names as
+    // a quantity that must not be constructed. The section arguing that a
+    // single number is dishonest was printing the forbidden one as its example.
+    const sumOfMedians = SUBSYSTEMS.reduce((sum, s) => sum + centre(s.energy), 0);
+    expect(SHOWCASE_MEDIAN).not.toBe(sumOfMedians);
+    // And not any other total this page renders either, because "not 4,180"
+    // alone would pass for the national expectation or a subsystem's own.
+    expect(SHOWCASE_MEDIAN).not.toBe(NATIONAL.expectedMwh);
+    const totals = new Set<number>([
+      sumOfMedians,
+      NATIONAL.expectedMwh,
+      SUBSYSTEMS.reduce((sum, s) => sum + s.expectedMwh, 0),
+      ...SUBSYSTEMS.flatMap((s) => [centre(s.energy), s.expectedMwh]),
+    ]);
+    expect(totals.has(SHOWCASE_MEDIAN)).toBe(false);
   });
 
   it("publishes no national band, and says why", () => {
