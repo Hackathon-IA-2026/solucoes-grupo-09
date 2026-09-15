@@ -104,6 +104,14 @@ are ranked from, and so both make ``δ`` **slightly small** — the direction
 forecaster ticket 04 predicted. Setting ``early_stopping_rounds`` to 0 in a
 configuration removes the booster half outright; the isotonic half is inherent
 to fitting the map and the correction on one window.
+
+**Forecaster 46 measured what that costs and the answer is nothing a fold can
+see**: 0.9013 against 0.9014 on stationary rows, across eight folds of ~950
+scored test rows, with the split-block and no-early-stopping arms at 0.9011 and
+0.8994. The numbers and the arms are in
+:mod:`wattsteer_ml.training.conformal`'s module docstring, where the caveat is
+stated in full. The reuse stays, now as a measured cost rather than an
+unquantified one.
 """
 
 from __future__ import annotations

@@ -33,7 +33,12 @@ slightly small and the published coverage slightly optimistic — the direction
 forecaster ticket 04 predicted. No test here claims otherwise, and
 ``test_with_early_stopping_off_the_calibration_window_touches_nothing_but_the_map``
 in `test_isotonic_calibration.py` is the configuration under which the booster
-half of it is gone.
+half of it is gone. Forecaster 46 measured its size on stationary folds — 0.9013
+against an in-window 0.9014, with the no-early-stopping arm at 0.8994 — so the
+caveat now has a number and the number is "nothing a fold can see". That sweep
+fits four LightGBM fits into each of eight folds and is recorded in the ticket
+rather than run here; what runs here is the arithmetic, at a thousand rows a
+second.
 """
 
 from __future__ import annotations
@@ -42,7 +47,7 @@ import inspect
 import json
 import math
 import random
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
@@ -1758,7 +1763,7 @@ _SWEEP_SEEDS: tuple[int, ...] = tuple(range(43, 55))
 
 
 def _heteroscedastic_block(
-    count: int, *, seed: int, magnitude_scale: float
+    count: int, *, seed: int, magnitude_scale: float, sigma: float = 1.1
 ) -> list[ScoredHour]:
     """Rows whose magnitudes span orders of magnitude, and a ``q̂^0.10`` that over-covers.
 
@@ -1774,10 +1779,15 @@ def _heteroscedastic_block(
     the fleet moves without the fit's *shape* changing at all. That is what
     isolates the units question: a correction in MWh means something different
     at a different scale, and a correction in spreads does not.
+
+    ``sigma`` is the other axis, and forecaster 46 added it: the dispersion,
+    which a rescaling cannot absorb. Moving it moves the *shape* of the residual
+    distribution rather than its scale, and that is the shift no choice of units
+    survives — see
+    :func:`test_no_scale_holds_the_rail_when_the_dispersion_moves`.
     """
     rng = _rng(seed)
     z_lo, z_hi = -1.2815515655446004, 1.2815515655446004
-    sigma = 1.1
     hours: list[ScoredHour] = []
     for key in _keys(count):
         mu = math.log(120.0 * magnitude_scale) + 1.5 * rng.gauss(0.0, 1.0)
@@ -1923,3 +1933,216 @@ def test_the_normalised_floor_survives_the_fleet_moving_and_the_additive_one_doe
         "the additive arm fails even under exchangeability, so the sweep is "
         "measuring a broken reconstruction rather than the units"
     )
+
+
+# --- Forecaster 46: which of the candidate causes the gap actually has -------
+
+
+def test_the_ranking_population_and_the_scored_population_are_one_predicate() -> None:
+    """``n_lo`` and ``lower_stated_rows`` count the same rows, or the 90% is of nothing.
+
+    Forecaster 35 narrowed ``δ_lo``'s ranking to the rows whose P10 is a
+    positive number and forecaster 24 counts ``coverage_p10_where_stated`` over
+    the rows whose P10 is a positive number. Those are the same sentence, and if
+    they ever stop being the same *rows* the order statistic guarantees a
+    coverage over one population while the card publishes it over another — a
+    failure that moves no field, raises nothing, and is invisible on every
+    figure either side of it.
+
+    Both are :attr:`ScoredHour.states_lower_bound` today, and the point of
+    asserting it here is that it is asserted against the two production
+    functions rather than against the branch structure or a test helper:
+    :func:`conformalise` decides one and :meth:`CoverageReport.of` the other,
+    and nothing connects them but this.
+
+    Swept across the classifier regimes, because a predicate mismatch that only
+    showed up where ``p`` tracks magnitude would still be one.
+    """
+    for stated_share in (0.2, 0.34, 0.6):
+        for magnitude_driven_p in (False, True):
+            hours = _mixed(
+                SYNTHETIC_ROWS,
+                stated_share=stated_share,
+                lower_scale=0.85,
+                seed=46,
+                magnitude_driven_p=magnitude_driven_p,
+            )
+            fitted = conformalise(hours, window=_window())
+            report = CoverageReport.of(hours, fold_id="F6")
+            assert fitted.lower_calibration_rows == report.lower_stated_rows, (
+                f"delta_lo was ranked over {fitted.lower_calibration_rows} rows "
+                f"and coverage_p10_where_stated counted "
+                f"{report.lower_stated_rows}; the 90% the order statistic "
+                "guarantees is then a statement about a population the card "
+                "does not publish"
+            )
+            # And the denominator is not the whole fold, or the equality above
+            # would also hold for a rule that had dropped the narrowing.
+            assert 0 < report.lower_stated_rows < report.rows
+
+
+#: The dispersion the test block's labels are drawn at, as a multiple of the
+#: calibration block's ``σ = 1.1``. A season that brings longer curtailments
+#: rather than more of them moves this and not ``magnitude_scale``.
+_DISPERSION_MULTIPLIERS: tuple[float, ...] = (0.7, 1.0, 1.4)
+
+
+def _lower_half_width(hour: ScoredHour) -> float:
+    """``Q_pos(0.50) − Q_pos(0.10)``, floored at 1 MWh like the spread is.
+
+    The scale forecaster 46 measured against the one in force. Its case is
+    a priori rather than empirical: ``E_lo`` is a displacement of the *lower*
+    half of the band, and ``Q_pos(0.90) − Q_pos(0.10)`` is mostly the upper
+    half — which has its own tail, its own ``δ_hi``, and, on a right-skewed
+    magnitude distribution, a width that moves with ``e^{zσ}`` where the lower
+    half's moves with ``1 − e^{−zσ}``.
+    """
+    quantiles = hour.forecast.mixture.positive_quantiles
+    return max(quantiles(0.50) - quantiles(0.10), 1.0)
+
+
+def _floor_coverage_under(
+    calibration: Sequence[ScoredHour],
+    test: Sequence[ScoredHour],
+    scale: Callable[[ScoredHour], float],
+) -> float:
+    """``coverage_p10_where_stated`` under a rule that ranks ``E_lo / scale``.
+
+    Reconstructed here for the reason :func:`_additive_floor_coverage` and
+    :func:`_contaminated_delta_lo` are: ``training/conformal.py`` has exactly
+    one rule in it, and a column of a sweep has to be this repository's own
+    arithmetic rather than a number remembered from a ticket. ``lambda _: 1.0``
+    is the pre-43 additive arm and reproduces
+    :func:`_additive_floor_coverage`, which is kept because forecaster 43's own
+    sweep is asserted against it.
+    """
+    stated = [hour for hour in calibration if hour.states_lower_bound]
+    residual = sorted(
+        (hour.forecast.band.p10 - hour.observed_mwh) / scale(hour) for hour in stated
+    )
+    delta = residual[conformal_rank(len(residual)) - 1]
+    floor = math.nextafter(THRESHOLD_MW, math.inf)
+    scored = [hour for hour in test if hour.states_lower_bound]
+    covered = sum(
+        1
+        for hour in scored
+        if max(hour.forecast.band.p10 - delta * scale(hour), floor) <= hour.observed_mwh
+    )
+    return covered / len(scored)
+
+
+def test_no_scale_holds_the_rail_when_the_dispersion_moves(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The measurement forecaster 46 exists for, and it is a negative result.
+
+    Forecaster 43 swept the fleet's *magnitude* — the whole log-normal
+    rescaled — and found that a correction in MWh does not survive it while one
+    in spreads does. This sweeps the other axis: the dispersion moving with the
+    location fixed, which is what a season bringing longer curtailments rather
+    than more of them does, and which no rescaling can absorb.
+
+    Three rules on the same blocks: ``E_lo`` in MWh (pre-43), over the positive
+    spread (in force since 43), and over the lower half-width
+    (:func:`_lower_half_width`). What comes out:
+
+    - **No rule holds the rail on every seed at ``σ × 1.4``** — additive on 10
+      of 12, the half-width on 3, the rule in force on none. That is the
+      finding, and read beside forecaster 43's sweep — where the additive rule
+      holds the rail at *no* seed once the magnitudes move to 0.4 — it says the
+      stronger thing: **there is no scale that is robust on both axes**, because
+      the two shifts are different failures and a scalar is one number. The
+      residual's shape has moved, and no choice of units makes a scalar track a
+      shape. `docs/specs/forecaster.md` names the answer — adaptive conformal,
+      an online update of the target level — and
+      :class:`~wattsteer_ml.training.conformal.DeltaDrift` is where the signal
+      is already published.
+    - **The rule in force is the worst of the three under this shift**,
+      including worse than the additive one it replaced: 0.7441 against 0.8664
+      at ``σ × 1.4`` and 0.9764 against 0.9274 at ``σ × 0.7``. Normalising
+      divides out the scale and multiplies up the dispersion: ``δ_lo`` is
+      negative on both refused artifacts, so the correction *raises* the floor,
+      and a test block whose spread has grown raises it further still.
+    - The lower half-width is better behaved than the spread on this axis and
+      no worse on forecaster 43's. It is **not adopted**: a second change of
+      units costs a regime marker, a card, a spec, a generated type and a
+      retrain, and what it buys here is a smaller excursion outside the rail
+      rather than an artifact inside it.
+
+    The rail is the gate's own :data:`COVERAGE_GUARDRAIL` rather than a
+    tolerance chosen here, because the question the sweep answers is whether
+    the hot-swap gate would refuse the artifact.
+    """
+    low, high = COVERAGE_GUARDRAIL
+    arms: dict[str, Callable[[ScoredHour], float]] = {
+        "additive": lambda _: 1.0,
+        "spread": lambda hour: hour.forecast.mixture.positive_spread_mwh,
+        "half": _lower_half_width,
+    }
+    sweep: dict[float, dict[str, list[float]]] = {}
+    for multiplier in _DISPERSION_MULTIPLIERS:
+        cell: dict[str, list[float]] = {name: [] for name in arms}
+        for seed in _SWEEP_SEEDS:
+            calibration = _heteroscedastic_block(800, seed=seed, magnitude_scale=1.0)
+            test = _heteroscedastic_block(
+                800, seed=seed + 900, magnitude_scale=1.0, sigma=1.1 * multiplier
+            )
+            for name, scale in arms.items():
+                cell[name].append(_floor_coverage_under(calibration, test, scale))
+        sweep[multiplier] = cell
+
+    inside = {
+        multiplier: {
+            name: sum(1 for value in values if low <= value <= high)
+            for name, values in cell.items()
+        }
+        for multiplier, cell in sweep.items()
+    }
+
+    rows = ["", "sigma x   " + "".join(f"{name:>18}" for name in arms)]
+    for multiplier, cell in sweep.items():
+        counts = "".join(
+            f"{sum(values) / len(values):>12.4f}"
+            f"{inside[multiplier][name]:>3}/{len(values)}"
+            for name, values in cell.items()
+        )
+        rows.append(f"{multiplier:<9.1f}{counts}")
+    with capsys.disabled():
+        print("\n".join(rows))
+
+    # The control, and it is forecaster 43's: with the dispersion where the
+    # calibration window found it, every rule is the exact order statistic and
+    # every rule holds. Without this, a sweep in which all three arms were
+    # simply broken would read as the finding below.
+    for name, values in sweep[1.0].items():
+        assert all(low <= value <= high for value in values), (
+            f"the {name} arm fails under exchangeability, so this sweep is "
+            f"measuring a broken reconstruction rather than the dispersion: "
+            f"{values}"
+        )
+
+    # The finding. Not "the normalised rule is fragile" — *every* rule is, and
+    # a test that asserted only the first would invite a repair that does not
+    # exist.
+    for name in arms:
+        assert inside[1.4][name] < len(_SWEEP_SEEDS), (
+            f"the {name} arm held the gate's rail at every seed with the "
+            "dispersion 40% wider than the window it was ranked on; if that is "
+            "real then a scalar correction does track a shape, and this test's "
+            f"conclusion is wrong: {sweep[1.4][name]}"
+        )
+
+    # And the direction, which is the part that bears on the units in force:
+    # normalising by the full spread is the worst of the three when the
+    # dispersion is what moved, the additive rule it replaced included.
+    for multiplier in (0.7, 1.4):
+        assert inside[multiplier]["spread"] < inside[multiplier]["additive"], (
+            "the spread-normalised rule is not the fragile one under a "
+            f"dispersion shift of {multiplier}, which is the measurement "
+            f"forecaster 46 reports: {inside[multiplier]}"
+        )
+        assert inside[multiplier]["spread"] < inside[multiplier]["half"], (
+            "the lower half-width is not better behaved than the full spread "
+            f"at {multiplier}, which is the other half of that measurement: "
+            f"{inside[multiplier]}"
+        )
