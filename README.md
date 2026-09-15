@@ -1,9 +1,75 @@
 # WattSteer
 
-**Renewable curtailment intelligence for the Brazilian grid.** Predict how much
-wind and solar will be curtailed tomorrow, explain the grid conditions driving
-it, and size the storage and flexible demand that could absorb it — from
-openly published ONS, ANEEL and weather data.
+**Day-ahead curtailment intelligence for the Brazilian power grid.** WattSteer
+forecasts how much wind and solar generation will be curtailed tomorrow,
+explains the grid conditions driving it, and sizes the storage or flexible
+demand that could absorb it — built entirely on openly published ONS, ANEEL and
+weather data.
+
+Curtailment is renewable energy that was generated and then thrown away because
+the grid could not take it. Brazil curtails a great deal of it, the data is
+public, and nobody was turning that data into a number an operator could act on
+the day before.
+
+## Demo
+
+- **Live application:** https://www.wattsteer.com
+- **Pitch deck:** https://www.wattsteer.com/pitch
+
+## Technologies
+
+| | |
+| --- | --- |
+| **Languages** | TypeScript (Bun runtime), Python 3.12 |
+| **Frameworks** | Elysia (HTTP gateway) · Expo / React Native Web (universal frontend) · FastAPI (modelling service) · BullMQ (scheduled jobs) · Drizzle (data access) |
+| **Databases** | PostgreSQL (the domain and every observation) · Redis (the job queue and rate-limit counters) |
+| **Modelling** | LightGBM — a hurdle model (occurrence classifier + magnitude quantiles) with conformalised prediction intervals, and a MILP flexibility optimizer |
+| **External APIs** | ONS Dados Abertos (constrained-off, energy balance, load, interchange, DESSEM) · ANEEL SIGA (plant registry) · Open-Meteo (weather forecasts) · xAI Grok (the voice copilot, optional) |
+
+## Running the project
+
+```bash
+# Clone the repository
+git clone https://github.com/vtorres/WattSteer.git
+cd WattSteer
+
+# Install the JavaScript dependencies
+bun install
+
+# Start PostgreSQL and Redis
+docker compose up -d postgres redis
+
+# Apply the database migrations
+DATABASE_URL=postgres://wattsteer:wattsteer@localhost:5432/wattsteer \
+  bun run --cwd apps/api db:migrate
+
+# Run the API gateway (http://localhost:3000)
+bun run api
+
+# Run the web application (Expo dev server — press `w` for web)
+bun run web
+```
+
+Point the web app at a different gateway with `EXPO_PUBLIC_API_URL`.
+
+The Python modelling service is optional for local development — the gateway
+reports its absence rather than failing — but it is required for forecasts,
+the optimizer and the replay:
+
+```bash
+cd apps/ml
+uv sync
+uv run wattsteer-ml
+```
+
+### Prerequisites
+
+- **Bun 1.2+** — the runtime, package manager and test runner for everything in
+  TypeScript.
+- **Python 3.12** and **uv** — the modelling service pins `>=3.12,<3.13`.
+- **Docker** — for PostgreSQL 17 and Redis. `docker compose up --build` brings
+  up the whole stack if you would rather not run the services by hand.
+- **Node.js 20+** — only for Playwright, which drives the end-to-end suite.
 
 ## Monorepo layout
 
@@ -14,6 +80,10 @@ apps/
   api/    Gateway + ingestion: the public HTTP API and the scheduled jobs that
           pull ONS, ANEEL and weather data into Postgres.
           (Elysia, BullMQ, Drizzle/Postgres.)
+  ml/     Modelling and optimisation: feature engineering, training, the
+          hot-swap gate, inference and the MILP flexibility optimizer. Reads
+          Postgres, reached only through the gateway, never exposed publicly.
+          (Python, FastAPI, LightGBM.)
   web/    The product frontend: Expo (React Native) universal app —
           static-rendered SEO web build, plus iOS/Android from the same code.
 packages/
@@ -24,33 +94,16 @@ packages/
   ui/     The design system: tokens, brand, icons and primitives.
 ```
 
-A Python service (`apps/ml`) for feature engineering, model training, inference
-and the flexibility optimizer joins this layout later; it reads Postgres and is
-reached only through the API gateway.
-
-## Quick start
-
-```bash
-bun install
-
-# 1. the API (defaults to http://localhost:3000)
-bun run api
-
-# 2. the web app (Expo dev server; press w for web)
-bun run web
-```
-
-Point the web app at a different API with `EXPO_PUBLIC_API_URL`.
-
-## Scripts (repo root)
+## Scripts (repository root)
 
 | Script | What it does |
 | --- | --- |
 | `bun run api` / `api:dev` / `worker` | Run the API / watch mode / BullMQ worker |
 | `bun run web` | Expo dev server |
 | `bun run web:export` | Static web build (SEO-ready) to `apps/web/dist` |
-| `bun run test` | Unit tests: core + api + web |
-| `bun run test:e2e` | Playwright e2e (exported web bundle) |
+| `bun run test` | Unit tests: hygiene + core + api + web |
+| `bun run test:e2e` | Playwright end-to-end (exported web bundle) |
+| `bun run --cwd apps/api test:db` | The database-backed suites — see below |
 | `bun run test:live` | Live conformance against the real ONS / ANEEL / Open-Meteo sources (gated, scheduled) |
 | `bun run typecheck` | TypeScript across all workspaces |
 | `bun run lint` | Biome |
@@ -59,30 +112,36 @@ Point the web app at a different API with `EXPO_PUBLIC_API_URL`.
 
 ## Testing
 
-- **`packages/core`** — formatting helpers. `bun test`.
-- **`apps/api`** — the surviving plugin-stack and job-runner suites: error
-  mapping, rate limiting, security headers, body limit, CORS, request
-  correlation, and both job runners. The BullMQ suite needs a throwaway Redis
-  (`bun run test:redis`).
+- **`bun run test`** runs the default suites. **It skips roughly a third of the
+  gateway's** — every repository, every contract read and the whole ingestion
+  path are gated on a Postgres, and report as `skip` rather than as failures.
+  `bun run --cwd apps/api test:db` supplies one and runs them; a hygiene suite
+  keeps that arrangement legible so the gate cannot quietly grow a second
+  spelling.
+- **`apps/ml`** — `uv run pytest`. Includes the cross-language golden vectors
+  that `packages/core/fixtures/` defines and both languages enumerate, so a
+  drift between the TypeScript and Python understandings of the domain fails on
+  both sides.
 - **Live conformance** — `apps/api/test/live-conformance.test.ts`, gated on
-  `WATTSTEER_LIVE_CONFORMANCE` and scheduled daily in CI. It talks to the real
-  sources and asserts they still look the way `docs/research/` found them; a
-  failure names the expired assumption in prose. It never runs in the default
-  test path.
+  `WATTSTEER_LIVE_CONFORMANCE` and scheduled daily. It talks to the real sources
+  and asserts they still look the way `docs/research/` found them; a failure
+  names the expired assumption in prose. It never runs in the default path.
 - **Publication-lag conformance** — `apps/api/test/publication-lag-conformance.test.ts`,
-  gated on `WATTSTEER_PUBLICATION_LAG_CONFORMANCE` (`bun run test:lag`) and
-  scheduled separately. Measures the real publication lag of every observation
-  dataset against the constants the feature layer's migrations seed, and the
-  day-ahead programme's availability relative to each gate. It reports in the
-  same vocabulary (`apps/api/test/support/conformance.ts`) and publishes its
-  numbers even when it passes; findings live in
-  `docs/research/publication-lag.md`. It never runs in the default test path.
-- **`apps/web`** — legal table-of-contents unit tests, plus a Playwright e2e
-  suite covering the footer and legal pages against the real exported bundle.
-  Run `bun run web:export` before `bun run test:e2e`.
+  gated on `WATTSTEER_PUBLICATION_LAG_CONFORMANCE` (`bun run test:lag`). It
+  measures the real publication lag of every observation dataset against the
+  constants the feature layer seeds, and publishes its numbers even when it
+  passes. Findings live in `docs/research/publication-lag.md`.
+- **End-to-end** — Playwright against the real exported bundle. Run
+  `bun run web:export` first.
 
 ## Data sources
 
-ONS Dados Abertos (constrained-off, balanço energético, load, interchange,
-DESSEM), ANEEL SIGA (plant coordinates), and Open-Meteo (weather). Their exact
-shapes, traps and licensing are documented in `docs/research/`.
+ONS Dados Abertos (constrained-off, energy balance, load, interchange, DESSEM),
+ANEEL SIGA (plant coordinates) and Open-Meteo (weather). Their exact shapes,
+traps and licensing are documented in `docs/research/`, and the attribution the
+ODbL requires is published on the application's own terms page.
+
+## License
+
+This project is released under the MIT License — see [LICENSE](LICENSE) for the
+full text.
