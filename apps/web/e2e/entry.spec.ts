@@ -54,9 +54,40 @@ test.describe("the loading screen at /", () => {
     await context.close();
   });
 
-  test("sends an English browser to /en/", async ({ browser }) => {
+  test("sends an English browser to /pt/ too, and that is the decision", async ({
+    browser,
+  }) => {
+    /*
+      This asserted `/en/` and had been failing for as long as the decision it
+      contradicts has been in force. `+html.tsx` states it in the redirect's own
+      comment: *"the reader's own languages are deliberately not consulted — a
+      Brazilian product defaults to Portuguese"*. `navigator.languages` was
+      removed on purpose; the only thing that carries a reader to English is
+      having chosen it, which `language-switch.tsx` writes to
+      `wattsteer.locale` and the next test covers.
+
+      Kept rather than deleted, and inverted rather than loosened: the claim
+      worth making is that the default is *insensitive* to the browser's
+      locale, and an `en-US` context is the sharpest way to make it. A test
+      deleted here would have left nothing asserting that at all.
+    */
     const context = await browser.newContext({ locale: "en-US" });
     const page = await context.newPage();
+    await page.goto("/");
+    await expect(page).toHaveURL(/\/pt\/$/);
+    await context.close();
+  });
+
+  test("a stored choice outranks the default, whatever the browser says", async ({
+    browser,
+  }) => {
+    // The other half, and the reason the default can be this blunt: a reader
+    // who switched to English is carried by their own choice, not by a guess
+    // about their browser.
+    const context = await browser.newContext({ locale: "pt-BR" });
+    const page = await context.newPage();
+    await page.goto("/pt/");
+    await page.evaluate(() => localStorage.setItem("wattsteer.locale", "en"));
     await page.goto("/");
     await expect(page).toHaveURL(/\/en\/$/);
     await context.close();
