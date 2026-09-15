@@ -1,0 +1,125 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://wattsteer.com/schema/rag-evidence.schema.json",
+  "title": "RagEvidence",
+  "description": "Evidência documental recuperada do corpus público do ONS/ANEEL para um subsistema e uma data. O RAG busca, recupera e cita; nunca classifica. Toda afirmação (claim) carrega ao menos uma citação cujo trecho existe literalmente no chunk indexado. Campo `evidencia_documental` do alerta (L-03 do Bisogno).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "subsystem", "target_date", "gate_at", "verdict", "items", "corpus_version", "generated_at", "trace"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "subsystem": { "type": "string", "enum": ["N", "NE", "SE", "S"] },
+    "target_date": { "type": "string", "format": "date", "description": "Dia D do alerta (D-1 é a rodada)." },
+    "gate_at": { "type": "string", "format": "date-time", "description": "Instante de corte: só documentos com published_at <= gate_at entram (mesma disciplina do gate_at do modelo)." },
+    "question": { "type": "string", "maxLength": 600, "description": "Pergunta efetivamente enviada ao retrieval (após reescrita)." },
+    "verdict": {
+      "type": "string",
+      "enum": ["found", "insufficient", "not_found"],
+      "description": "found = ao menos um claim com citação válida; insufficient = houve trechos mas nenhum claim passou nos gates; not_found = nada aplicável (NA-01), ver reason."
+    },
+    "reason": {
+      "type": ["string", "null"],
+      "enum": ["no_public_intervention_schedule", "corpus_no_coverage_for_date", "gates_rejected_all_claims", "quota_exhausted_partial", "rag_not_configured", null],
+      "description": "Obrigatório quando verdict != found."
+    },
+    "items": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["claim", "supports", "confidence", "evidence_weight", "citations"],
+        "properties": {
+          "claim": { "type": "string", "minLength": 10, "maxLength": 400, "description": "Afirmação em linguagem de operador (T17): 'o documento registra', nunca 'causou'. Todo número precisa aparecer em alguma citation.quote." },
+          "supports": { "type": "string", "enum": ["REL", "CNF", "ENE", "NONE"], "description": "Que causa a evidência apoia. É informação para a regra, não decisão." },
+          "confidence": { "type": "string", "enum": ["high", "medium", "low"], "description": "REL sem cronograma público nunca passa de medium (D09/NA-01)." },
+          "evidence_weight": { "type": "number", "minimum": 0, "maximum": 1, "description": "Peso de exibição definido pelo Bisogno (REL 0,7-0,9; CNF 0,4-0,6; ENE 0,2-0,4). Nunca entra no classificador." },
+          "period": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "properties": {
+              "start": { "type": "string", "format": "date-time" },
+              "end": { "type": "string", "format": "date-time" }
+            },
+            "description": "Janela que o documento cobre, quando extraível (usada no desempate por duração)."
+          },
+          "citations": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 4,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["document_id", "source", "title", "published_at", "locator", "quote", "url", "sha256"],
+              "properties": {
+                "document_id": { "type": "string" },
+                "source": { "type": "string", "enum": ["BDO", "IPDO", "RAP", "PROCEDIMENTOS_REDE", "NORMA", "ONS_DADOS_ABERTOS", "SIGA"] },
+                "title": { "type": "string", "maxLength": 200 },
+                "published_at": { "type": "string", "format": "date-time" },
+                "locator": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "page": { "type": ["integer", "null"], "minimum": 1 },
+                    "section": { "type": ["string", "null"], "maxLength": 120, "description": "Ex.: '§7.1', 'Submódulo 4.2 item 5.3'." },
+                    "table": { "type": ["string", "null"], "maxLength": 120, "description": "Ex.: 'BDO 12_MotivoDespachoTermico' para tabelas do BDO." },
+                    "row": { "type": ["integer", "null"], "minimum": 0 }
+                  },
+                  "description": "Ao menos um de page, section ou table precisa ser não nulo (validado no gate)."
+                },
+                "quote": { "type": "string", "minLength": 20, "maxLength": 300, "description": "Trecho literal do chunk. Gate 1: precisa existir byte a byte no chunk indexado." },
+                "url": { "type": "string", "format": "uri" },
+                "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$", "description": "sha256 do documento bruto, para o replay reproduzir a mesma evidência." },
+                "chunk_id": { "type": ["string", "null"] }
+              }
+            }
+          }
+        }
+      }
+    },
+    "rule_disagreement": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "rule_cause": { "type": "string", "enum": ["REL", "CNF", "ENE", "NA"] },
+        "evidence_cause": { "type": "string", "enum": ["REL", "CNF", "ENE", "NONE"] },
+        "note": { "type": "string", "maxLength": 300 }
+      },
+      "description": "Preenchido pelo Decision Engine quando a evidência contradiz a regra: publicam-se as duas e declara-se a divergência; a classificação continua pela regra + SHAP."
+    },
+    "numbers_whitelist": { "type": "array", "items": { "type": "string" }, "description": "Todos os números presentes nas citações (gate 2 da narração)." },
+    "corpus_version": { "type": "string", "description": "Identificador do snapshot do corpus (data + contagem de documentos + hash do manifesto)." },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["trace_id", "retrieval", "generation"],
+      "properties": {
+        "trace_id": { "type": "string" },
+        "retrieval": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["hybrid_candidates", "reranked", "rerank_provider"],
+          "properties": {
+            "hybrid_candidates": { "type": "integer", "minimum": 0 },
+            "reranked": { "type": "integer", "minimum": 0 },
+            "rerank_provider": { "type": ["string", "null"], "description": "null quando o rerank foi pulado por cota (on_exhausted: skip_rerank)." },
+            "filters": { "type": "object" }
+          }
+        },
+        "generation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["provider", "model", "attempts", "source"],
+          "properties": {
+            "provider": { "type": ["string", "null"] },
+            "model": { "type": ["string", "null"] },
+            "attempts": { "type": "integer", "minimum": 0 },
+            "source": { "type": "string", "enum": ["model", "template", "none"] },
+            "gate_failures": { "type": "array", "items": { "type": "string", "enum": ["quote_not_in_chunk", "number_not_in_quote", "causal_vocabulary", "schema_invalid", "locator_missing"] } }
+          }
+        }
+      }
+    }
+  }
+}
