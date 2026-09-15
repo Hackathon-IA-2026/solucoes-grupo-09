@@ -137,12 +137,16 @@ export const pt: Copy = {
   },
 
   hero: {
-    eyebrow: "Previsão de curtailment para o dia seguinte · rede brasileira",
+    eyebrow: "Curtailment do dia seguinte · rede brasileira",
     headline: {
       lead: "Hoje conseguimos saber que houve curtailment.",
       accent: "O WattSteer avisa antes.",
     },
-    sub: "O Brasil está adicionando solar e eólica muito mais rápido do que consegue tornar a rede flexível. Em vários momentos temos energia limpa disponível e precisamos cortá-la. O WattSteer prevê essas horas com um dia de antecedência a partir dos dados abertos do ONS — como faixa, não como chute —, explica as condições da rede por trás delas e dimensiona o armazenamento e a demanda flexível capazes de absorvê-las.",
+    // The deck's own subhead (p. 01, "a camada de decisão entre o plano do ONS
+    // e a operação em tempo real") carries this sentence in Portuguese, so
+    // this is the original and `en` is the rendering of it — the reverse of
+    // the usual direction here. See the note on `en.hero.sub`.
+    sub: "A camada de decisão entre o plano do dia seguinte do ONS e o tempo real: o risco de corte de amanhã por subsistema, o que o empurrou para cima e a faixa em volta — nunca um número solto.",
     primaryCta: "Abrir o protótipo",
     secondaryCta: "Como a previsão é construída",
   },

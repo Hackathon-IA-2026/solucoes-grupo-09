@@ -174,12 +174,42 @@ export const en = {
   },
 
   hero: {
-    eyebrow: "Day-ahead curtailment forecast · Brazilian grid",
+    eyebrow: "Day-ahead curtailment · Brazilian grid",
     headline: {
       lead: "Today we can tell that curtailment happened.",
       accent: "WattSteer tells you it is coming.",
     },
-    sub: "Brazil is adding wind and solar far faster than it is making the grid flexible, so there are hours when the clean energy is there and it has to be cut. WattSteer forecasts those hours a day ahead from ONS open data — as a range, not a guess — explains the grid conditions behind them, and sizes the storage and flexible demand that could absorb them.",
+    /**
+     * The team's own deck, not the essay this used to be.
+     *
+     * It ran 351 characters across four clauses, three of which restated the
+     * problem the headline directly above had already stated. Page 01 of
+     * `public/wattsteer-pitch.pdf` makes the whole pitch in 118 — a figure, a
+     * fact, a claim — and page 04's spine ("do plano à decisão") is the
+     * sentence this now is: the deck's own subhead, "a camada de decisão
+     * entre o plano do ONS e a operação em tempo real", plus the three things
+     * the product puts in that layer.
+     *
+     * Every clause is a description of the product, not a promise about this
+     * deployment: no artifact is promoted, so nothing here may read as "a
+     * forecast is waiting for you". "Tomorrow's curtailment risk" is the
+     * deck's own wording for the demonstration site (p. 05, "risco de corte
+     * do dia seguinte por região, sempre como faixa"), and the readout
+     * directly below carries the sample badge that says whose numbers those
+     * are.
+     *
+     * The middle term is "what pushed it up", where the deck names the thing
+     * the ONS reason codes name. Not a softening — the §10 boundary in
+     * `docs/domain-model.md`. The engine reports attribution, so the product
+     * may say the model raised or lowered its forecast and may not say a
+     * grid condition brought the cut about. The Portuguese for the deck's
+     * word is a banned lemma and the repo-level boundary guard under `test/`
+     * caught it here; the English one is not, and would have shipped on the
+     * same sentence a scan had just rejected. That asymmetry is
+     * why both locales take the sanctioned verb rather than only the one the
+     * scanner happened to stop.
+     */
+    sub: "The decision layer between ONS's day-ahead plan and real time: tomorrow's curtailment risk by subsystem, what pushed it up, and the band around it — never a bare number.",
     primaryCta: "Open the prototype",
     secondaryCta: "How the forecast is built",
   },
