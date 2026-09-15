@@ -176,6 +176,38 @@ drifting narrow and the split-conformal assumption is failing. It **reports**
 and adapts nothing — adaptive conformal (an online update of the target level)
 is the spec's named next step and is deliberately not built here.
 
+**Forecaster 46 asked whether the remaining gap has a fixable cause, and the
+answer is no — not in this module.** Three candidates were measured rather than
+argued, and the last of them is why the next step is the spec's one and not
+another scalar:
+
+- *The window is stale.* It is not. ``calibration_start`` is derived from
+  ``train_end`` and ``calibration_days`` in `fold_calendar.yaml` and is never
+  supplied, so it is always the 90 days that close where the training block
+  does — for F6, ``2026-04-02``–``2026-06-30``, immediately before that fold's
+  test period. There is no nearer block that is not the thing being scored.
+- *The ranking and the scoring populations disagree.* They do not.
+  :func:`residuals` narrows ``E_lo`` by :attr:`ScoredHour.states_lower_bound`
+  and :meth:`CoverageReport.of` counts ``coverage_p10_where_stated`` over the
+  same predicate; ``tests.test_conformal_quantiles`` holds
+  ``lower_calibration_rows == lower_stated_rows`` against both production
+  functions, across classifier regimes.
+- *The scale is wrong.* A different scale is **better** and no scale is
+  **enough**. Forecaster 43 swept the fleet's magnitude, where a flat MWh
+  correction fails and a normalised one holds. 46 swept the axis 43 did not:
+  the dispersion, with the location fixed. There the rule in force is the worst
+  of the three tried — 0.7441 mean coverage at ``σ × 1.4``, outside the rail on
+  every seed, against 0.8664 for the MWh rule it replaced — because normalising
+  divides out the scale and multiplies up the dispersion. The lower half-width
+  ``Q_pos(0.50) − Q_pos(0.10)`` is better behaved on both axes and is not
+  adopted, because it is also outside the rail on 9 of 12 seeds there. Read
+  beside 43's table: **no scale is robust on both axes**, because a scalar is
+  one number and the two shifts are two failures.
+
+That is the evidence for the spec's next step rather than a fourth scalar. What
+a growing fleet does to a correction, units can absorb; what a turning season
+does to the residual's *shape*, they cannot.
+
 **The caveat this ticket inherits, and what it costs the coverage claim.** The
 calibration block is passed to LightGBM as an early-stopping monitor, so it
 chose the tree count for the two pinball boosters as well as for the classifier.
@@ -186,13 +218,32 @@ optimistic in the same direction. Both push the composed band toward the labels,
 both shrink ``E_lo`` and ``E_hi``, and so **both make ``δ_lo`` and ``δ_hi``
 slightly small**: the published interval is a little narrower than an honest
 90% and the empirical coverage a little under nominal. Forecaster ticket 04
-predicted exactly this ("δ slightly optimistic") and it is not corrected here,
-because a correction with no measurement behind it would be worse than a stated
-bias. Setting ``early_stopping_rounds`` to 0 in a
-:class:`~wattsteer_ml.training.hyperparameters.ModelConfig` removes the booster
-half of it outright; the isotonic half is inherent to fitting the map and the
-correction on one window, and is the cost the spec accepted when it declined
-cross-conformal.
+predicted exactly this ("δ slightly optimistic").
+
+**Forecaster 46 measured it, and it is immaterial at fold scale.** Four arms on
+the fixture generator, which is stationary — no trend, no season — so the
+calibration window and the test fold genuinely are exchangeable there and any
+gap is this reuse and nothing else. Eight folds, ~950 scored test rows each,
+``p`` pinned at 0.95 so every curtailed hour states a floor and the question is
+the tail's width alone. Mean ``coverage_p10_where_stated`` on the test block,
+against an in-window order statistic of 0.9014:
+
+- today's rule, all three duties on one block — **0.9013**
+- ``early_stopping_rounds = 0``, so the boosters never see it — **0.8994**
+- the block split, monitor on the first half and ``δ`` ranked on the second —
+  **0.9011**
+- the same split reversed, ``δ`` ranked on the *older* half — **0.9016**
+
+The four are inside each other's sampling noise, so the tree count and the
+isotonic map chosen on the window δ is ranked over cost nothing a fold can
+measure, and neither does ranking δ on the freshest half of it. The bias is
+real and its direction is as stated; its size is not what a short fold coverage
+is made of. Setting ``early_stopping_rounds`` to 0 in a
+:class:`~wattsteer_ml.training.hyperparameters.ModelConfig` still removes the
+booster half outright, and is still the configuration to reach for when the
+window must be untouched; the isotonic half is inherent to fitting the map and
+the correction on one window, and is the cost the spec accepted when it
+declined cross-conformal.
 
 **The median gets no correction.** A median has no interval to cover.
 :class:`~wattsteer_ml.mixture.TailShift` is zero at ``q = 0.50`` by
@@ -1224,6 +1275,17 @@ class DeltaDrift:
     failing; the recorded next step is adaptive conformal — an online update of
     the target level — and it is not built, not partially built, and not
     switched on by any field here.
+
+    **Forecaster 46 is the evidence under that note, and it did not build it
+    either.** The three cheaper repairs were measured and none of them is the
+    cause: the calibration window is already the nearest 90 days, the ranked and
+    the scored populations are one predicate, and the block's triple duty as
+    early-stopping monitor, isotonic fit and conformal window costs 0.0001 of
+    coverage on stationary folds. What is left is a residual distribution whose
+    *shape* moves between the window and the fold, which no scalar tracks in any
+    units — see the module docstring. Building an online update on that evidence
+    is the next ticket's work and not a line to slip in here; what this class is
+    for is making the signal visible while it is not built.
     """
 
     fold_ids: tuple[str, ...]
