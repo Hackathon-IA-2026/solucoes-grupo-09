@@ -123,11 +123,36 @@ export function useSectionFragment(
    * `onLayout`. Both rects rather than `offsetTop`, so this stays correct if
    * the scroller ever stops being the page's first element or a section gains
    * an offset parent between itself and the content container.
+   *
+   * ## Why the lookup is scoped to this scroller, not `document.getElementById`
+   *
+   * Because an id on this page is **not** unique, and was being trusted to be.
+   * Measured on the exported build: load `/pt/`, open the deck at `/pitch`,
+   * then follow the link home. The landing screen is mounted a second time
+   * while the first copy is still in the tree, so the document holds two
+   * elements for every section id — `document.querySelectorAll("[id]")`
+   * returned `forecast, engines, showcase, provenance, deck` twice over.
+   * `getElementById` answers with the *first* in tree order, which is the
+   * stale copy: its container is not laid out, so its rect read
+   * `{top: 0, height: 0}` and every nav click computed an offset of 0 and
+   * scrolled nowhere while still writing the fragment to the URL. The live
+   * section was at 4,075 px.
+   *
+   * Scoping the query to the scroller this hook was handed makes the answer
+   * right by construction — a copy of the page somewhere else in the document
+   * cannot be inside *this* scroll container. That matters beyond the
+   * navigation that produced it: any second route rendering these sections
+   * brings the duplicate ids back.
+   *
+   * `[id="…"]` rather than `#…`: it needs no escaping rules of its own, and
+   * `id` is one of `SECTION_IDS`, which is a closed vocabulary the fragment
+   * parser validates against — never a string off the URL.
    */
   const domOffset = useCallback(
     (id: SectionId): number | null => {
       const scroller = scrollerNode();
-      const target = typeof document === "undefined" ? null : document.getElementById(id);
+      const found = scroller?.querySelector(`[id="${id}"]`) ?? null;
+      const target = found instanceof HTMLElement ? found : null;
       if (scroller === null || target === null) {
         return null;
       }

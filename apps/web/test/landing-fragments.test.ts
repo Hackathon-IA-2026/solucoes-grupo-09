@@ -238,8 +238,40 @@ describe("the nav items are links, and the page acts on the fragment", () => {
       still collected, because on native there is no DOM to read.
     */
     const hook = code(join(LANDING, "use-section-fragment.ts"));
-    expect(hook).toContain("document.getElementById(id)");
     expect(hook).toContain("getBoundingClientRect()");
     expect(hook).toContain("offsets.current[id]");
+  });
+
+  test("the section is found inside the scroller, never document-wide", () => {
+    /*
+      A section id is not unique. Measured on the exported build: `/pt/` →
+      `/pitch` → the link home mounted a second landing screen while the first
+      was still in the tree, so `document.querySelectorAll("[id]")` returned
+      forecast, engines, showcase, provenance and deck *twice*.
+      `document.getElementById` answers with the first in tree order — the
+      stale copy, whose rect read `{top: 0, height: 0}` — so every nav click
+      computed an offset of 0, scrolled nowhere, and still wrote the fragment
+      to the URL. The live section was at 4,075 px.
+
+      `dismissTo` on the home links removes today's duplicate, but the lookup
+      is what makes this correct however many copies exist, which is why it is
+      asserted separately from them: any second route rendering these sections
+      brings the duplicate ids straight back.
+
+      The behavioural guard, with two elements really sharing an id, is
+      `e2e/landing-scroll.spec.ts`. This one is here so the shape cannot be
+      reverted without a test naming the reason.
+    */
+    const hook = code(join(LANDING, "use-section-fragment.ts"));
+    // A regex rather than a string: the shape being asserted contains a
+    // template placeholder, and a string literal holding one is a lint error
+    // here (`noTemplateCurlyInString`) — correctly, since it looks like a
+    // template that forgot its backticks.
+    expect(hook).toMatch(/scroller\?\.querySelector\(`\[id="\$\{id\}"\]`\)/);
+    expect(hook).not.toContain("document.getElementById");
+    // Non-vacuity: the forbidden call is a string this assertion does find.
+    expect("const target = document.getElementById(id);").toContain(
+      "document.getElementById",
+    );
   });
 });

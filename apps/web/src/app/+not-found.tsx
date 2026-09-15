@@ -47,7 +47,13 @@ export default function NotFound() {
         {/* Straight to the locale this page is already being read in — the
             same rule the wordmark follows. `/` would work, but only by way of
             a second navigation the reader can see. */}
-        <Link href={localePath(locale) as never} style={{ marginTop: 8 }}>
+        {/* `dismissTo`: pop back to the landing screen already in the stack
+            rather than push a second copy of it. See `localePath`. */}
+        <Link
+          href={localePath(locale) as never}
+          dismissTo={true}
+          style={{ marginTop: 8 }}
+        >
           <Text style={{ fontSize: 14, fontWeight: "600", color: colors.accent }}>
             {copy.notFound.back}
           </Text>

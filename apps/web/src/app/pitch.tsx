@@ -82,7 +82,11 @@ export default function Pitch() {
             borderBottomColor: colors.border,
           }}
         >
-          <Link href={localePath(locale) as never} asChild={true}>
+          {/* `dismissTo`, not a push: this is the link that produced the bug
+              — it stacked a second landing screen on top of the one still
+              mounted underneath `/pitch`, and two copies of the page means two
+              elements per section id. See `localePath`. */}
+          <Link href={localePath(locale) as never} dismissTo={true} asChild={true}>
             <Pressable
               accessibilityRole="link"
               accessibilityLabel={copy.legal.homeLink}

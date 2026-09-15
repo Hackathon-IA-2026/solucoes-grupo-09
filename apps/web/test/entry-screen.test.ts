@@ -231,6 +231,49 @@ describe("everything that means home honours the locale", () => {
     }
   });
 
+  test("a link home pops back to the landing page rather than stacking one", () => {
+    /*
+      Measured on the exported build: `/pt/` → `/pitch` → the link home left
+      *two* landing screens in the stack, the first still mounted. Two copies
+      of that page means two elements for every section id, which is how the
+      nav silently stopped scrolling (see `landing-fragments.test.ts`), and it
+      leaves the stale copy's `Animated.loop`s and `popstate` listener running
+      for the rest of the visit.
+
+      `dismissTo` pops to the landing screen already in the stack instead.
+      Every screen that offers a way home is listed, because the one that is
+      forgotten is the one that reintroduces the duplicate.
+
+      `landing-nav.tsx` is deliberately absent: its wordmark is on the landing
+      page itself, so it targets the screen the reader is already on and
+      pushes nothing.
+    */
+    // The `Link` screens carry the prop; the app chrome navigates
+    // imperatively and carries the call. Matched against the *code* — each of
+    // these files also explains itself in a comment, and an `includes` over
+    // the whole file would be satisfied by the explanation alone.
+    const HOME_LINKS: ReadonlyMap<string, string> = new Map([
+      [join("app", "pitch.tsx"), "dismissTo={true}"],
+      [join("app", "+not-found.tsx"), "dismissTo={true}"],
+      [join("components", "legal-screen.tsx"), "dismissTo={true}"],
+      [
+        join("components", "app", "app-shell.tsx"),
+        "router.dismissTo(localePath(locale) as never)",
+      ],
+    ]);
+    const stripped = (rel: string) =>
+      readFileSync(join(SRC, rel), "utf8")
+        .split("\n")
+        .filter((line) => !/^\s*(\*|\/\/|\/\*|\{\/\*)/.test(line))
+        .join("\n");
+    for (const [rel, shape] of HOME_LINKS) {
+      expect([rel, stripped(rel).includes(shape)]).toEqual([rel, true]);
+    }
+    // A push to the same place is the defect, by either spelling.
+    const shell = stripped(join("components", "app", "app-shell.tsx"));
+    expect(shell).not.toContain("router.push(localePath(locale) as never)");
+  });
+
   test("a locale root keeps its trailing slash wherever it is linked", () => {
     // One canonical form, so the logo and the sitemap name the same URL.
     for (const locale of LOCALES) {
