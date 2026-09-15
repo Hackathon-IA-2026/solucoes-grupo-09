@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 // Straight from the token module rather than from the package index: the
@@ -123,14 +123,14 @@ const OWNED = (): { file: string; source: string }[] => {
 };
 
 describe("the landing page below the hero keeps to the design system", () => {
-  test("every spacing value is on the 4-pt scale", () => {
+  it("every spacing value is on the 4-pt scale", () => {
     const offenders = OWNED().flatMap(({ file, source }) =>
       offScale(file, source).map((found) => `${found.file}:${found.line}: ${found.text}`),
     );
     expect(offenders).toEqual([]);
   });
 
-  test("no prose is capped at a number instead of at `layout.prose`", () => {
+  it("no prose is capped at a number instead of at `layout.prose`", () => {
     const offenders = OWNED().flatMap(({ file, source }) =>
       overWideCap(file, source).map(
         (found) => `${found.file}:${found.line}: ${found.text}`,
@@ -139,7 +139,7 @@ describe("the landing page below the hero keeps to the design system", () => {
     expect(offenders).toEqual([]);
   });
 
-  test("the blocks that ran too wide are still capped", () => {
+  it("the blocks that ran too wide are still capped", () => {
     /*
       Measured on the exported build at 1280: `engines.status` ran 1,248 px at
       12 px (196 characters a line) and the section lede was capped at a bare
@@ -160,7 +160,7 @@ describe("the landing page below the hero keeps to the design system", () => {
     expect(layout.prose).toBe(680);
   });
 
-  test("it scans the files it says it does, and the exemptions have not rotted", () => {
+  it("it scans the files it says it does, and the exemptions have not rotted", () => {
     // A scope that walks nothing passes forever.
     const owned = OWNED();
     expect(owned.length).toBeGreaterThan(6);
@@ -179,7 +179,7 @@ describe("the landing page below the hero keeps to the design system", () => {
     }
   });
 
-  test("it still catches an off-scale value and still passes a scale one", () => {
+  it("it still catches an off-scale value and still passes a scale one", () => {
     // The check has to fail on the thing it exists for.
     expect(offScale("probe.tsx", "const s = { gap: 10, padding: 20 };")).toHaveLength(2);
     expect(offScale("probe.tsx", "const s = { gap: space.sm, padding: 16 };")).toEqual(

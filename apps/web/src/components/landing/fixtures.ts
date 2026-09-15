@@ -43,7 +43,11 @@ import type { Copy, Formatters } from "@/i18n";
 import { fill } from "@/i18n/format";
 import type { RiskClass } from "@/lib/fixtures";
 
-export type { BandUnavailableReason, ForecastOrigin, SubsystemCode };
+export type {
+  BandUnavailableReason,
+  ForecastOrigin,
+  SubsystemCode,
+} from "@wattsteer/core";
 
 /**
  * The landing panel's drivers are the **product's** drivers.

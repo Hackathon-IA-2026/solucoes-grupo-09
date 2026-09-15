@@ -32,11 +32,11 @@ export interface PayloadArchive {
   /** Which backing store this is — reported by the health view, never branched on. */
   readonly kind: "bucket" | "directory";
   /** Store bytes under `key`. Writing the same key twice is a no-op. */
-  put(key: string, bytes: Uint8Array): Promise<void>;
+  put: (key: string, bytes: Uint8Array) => Promise<void>;
   /** Read bytes back, or null when the key is absent (purged, or never held). */
-  get(key: string): Promise<Uint8Array | null>;
+  get: (key: string) => Promise<Uint8Array | null>;
   /** Drop bytes. Absent keys are not an error — retention must be re-runnable. */
-  remove(key: string): Promise<void>;
+  remove: (key: string) => Promise<void>;
 }
 
 /** What a payload is, for key purposes. */
@@ -206,5 +206,4 @@ export function createPayloadArchive(config: ArchiveConfig): PayloadArchive | un
   if (config.directory) {
     return createDirectoryArchive(config.directory);
   }
-  return undefined;
 }

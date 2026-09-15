@@ -70,7 +70,7 @@ export function schemaFiles(): string[] {
  * against the `$id` with no registry gymnastics.
  */
 export function createValidator(): Ajv2020 {
-  const ajv = new Ajv2020({
+  const validator = new Ajv2020({
     strict: false,
     allErrors: true,
     // The schemas describe a wire, and a wire carries what it carries. Removing
@@ -79,8 +79,8 @@ export function createValidator(): Ajv2020 {
     useDefaults: false,
     removeAdditional: false,
   });
-  addFormats(ajv);
-  ajv.addKeyword({
+  addFormats(validator);
+  validator.addKeyword({
     keyword: "x-quantile-ordering",
     type: "object",
     schemaType: "array",
@@ -103,9 +103,9 @@ export function createValidator(): Ajv2020 {
     },
   });
   for (const [file, schema] of readSchemas()) {
-    ajv.addSchema(schema, `https://wattsteer.com/schema/${file}`);
+    validator.addSchema(schema, `https://wattsteer.com/schema/${file}`);
   }
-  return ajv;
+  return validator;
 }
 
 /** A JSON Pointer into the directory: `"grid-now.schema.json"` or `"common.schema.json#/$defs/band"`. */

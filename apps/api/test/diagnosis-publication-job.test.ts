@@ -261,12 +261,7 @@ describe("the diagnosis publication, chained", () => {
     const shifted = attributionPayload({
       publishedAt: "2024-05-06T22:30:00.000Z",
     });
-    const service = serving(
-      () =>
-        new Response(JSON.stringify(shifted), {
-          headers: { "content-type": "application/json" },
-        }),
-    );
+    const service = serving(() => Response.json(shifted));
     const publish = createDiagnosisPublisher({
       db: untouchable(),
       endpoint: { baseUrl: service.url, timeoutMs: 5000 },
@@ -448,11 +443,9 @@ suite("the diagnosis publication end to end (real Postgres)", () => {
 
     it("runs the queued task, supplying the reason mix it read", async () => {
       let asked: Record<string, unknown> | null = null;
-      const service = serving(async (request) => {
-        asked = (await request.json()) as Record<string, unknown>;
-        return new Response(JSON.stringify(attributionPayload()), {
-          headers: { "content-type": "application/json" },
-        });
+      const service = serving(async (incoming) => {
+        asked = (await incoming.json()) as Record<string, unknown>;
+        return Response.json(attributionPayload());
       });
       const submitted: WorkerTask[] = [];
       const dispatch = dispatchWith(service.url, submitted);
@@ -496,12 +489,7 @@ suite("the diagnosis publication end to end (real Postgres)", () => {
     });
 
     it("writes nothing on a re-run whose numbers match", async () => {
-      const service = serving(
-        () =>
-          new Response(JSON.stringify(attributionPayload()), {
-            headers: { "content-type": "application/json" },
-          }),
-      );
+      const service = serving(() => Response.json(attributionPayload()));
       const submitted: WorkerTask[] = [];
       const dispatch = dispatchWith(service.url, submitted);
       const task: WorkerTask = {
@@ -607,8 +595,8 @@ suite("the diagnosis publication end to end (real Postgres)", () => {
           endpoint: { baseUrl: service.url, timeoutMs: 120_000 },
           now: () => new Date("2025-04-07T22:10:00.000Z"),
         },
-        submit: async (task) => {
-          submitted.push(task);
+        submit: async (queued) => {
+          submitted.push(queued);
           return "queued";
         },
       });
@@ -627,7 +615,7 @@ suite("the diagnosis publication end to end (real Postgres)", () => {
         service.stop();
       }
       expect(submitted).toHaveLength(2);
-      expect(submitted.map((task) => task.kind)).toEqual([
+      expect(submitted.map((entry) => entry.kind)).toEqual([
         "publish_diagnosis",
         "publish_diagnosis",
       ]);

@@ -129,7 +129,7 @@ function describeFailure(error: unknown): string {
             `and the queue will retry: ${
               error instanceof Error ? error.message : String(error)
             }`
-        : `the modelling service declared it has no attribution for this ` +
+        : "the modelling service declared it has no attribution for this " +
             `lane-day: ${condition}. Recorded in ` +
             "`diagnosis_publication_refusal`, where the publication watch reads " +
             "it as a declared refusal rather than a missed publication. The " +

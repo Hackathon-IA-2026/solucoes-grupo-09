@@ -288,7 +288,7 @@ export function observedReasonsFromFlags(
 ): ObservedReasonsLatest | undefined {
   const flag = ruleFlags.find((one) => one.code === OUTAGE_REGIME_RULE);
   if (flag === undefined) {
-    return undefined;
+    return;
   }
   const date = flag.facts.settled_date;
   const topReason = flag.facts.top_reason;

@@ -205,13 +205,13 @@ function refuse(
     reason: {
       code,
       ...(field === undefined ? {} : { field }),
-      ...(value === undefined ? {} : { value: describe(value) }),
+      ...(value === undefined ? {} : { value: describeValue(value) }),
     },
   };
 }
 
 /** A hallucinated argument, as a short string safe to put in a template. */
-function describe(value: unknown): string {
+function describeValue(value: unknown): string {
   const text =
     typeof value === "string" ? value : (JSON.stringify(value) ?? String(value));
   return text.length > 40 ? `${text.slice(0, 40)}…` : text;
@@ -407,7 +407,7 @@ function daysFrom(date: string, days: number): string {
 function replayDayBefore(target: string): string | undefined {
   const candidates = REPLAY_DAYS.filter((day) => day.date <= target);
   if (candidates.length === 0) {
-    return undefined;
+    return;
   }
   return candidates.reduce((latest, day) => (day.date > latest.date ? day : latest)).id;
 }

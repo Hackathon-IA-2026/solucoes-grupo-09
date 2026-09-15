@@ -18,7 +18,7 @@
  * which is what these tests enumerate.
  */
 
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { NOTABLE_DRIVER_LIMIT, NOTABLE_SHARE_MIN } from "@wattsteer/core/driver-display";
 import { en as EN } from "../src/i18n/copy.en";
 import { pt as PT } from "../src/i18n/copy.pt";
@@ -54,7 +54,7 @@ const EVERY_RESPONSE = SUBSYSTEM_DISPLAY_ORDER.map((subsystem) =>
 );
 
 describe("the eight groups are the driver code set", () => {
-  test("every response returns all eight, ranked, and nothing else", () => {
+  it("every response returns all eight, ranked, and nothing else", () => {
     for (const explain of EVERY_RESPONSE) {
       const codes = explain.drivers.map((driver) => driver.code);
       expect([...codes].sort()).toEqual([...GROUPS].sort());
@@ -63,7 +63,7 @@ describe("the eight groups are the driver code set", () => {
     }
   });
 
-  test("each group has a label in both locales, and `other` is not a group", () => {
+  it("each group has a label in both locales, and `other` is not a group", () => {
     for (const code of GROUPS) {
       expect(PT.app.drivers.groups[code]).toBeTruthy();
       expect(EN.app.drivers.groups[code]).toBeTruthy();
@@ -76,7 +76,7 @@ describe("the eight groups are the driver code set", () => {
     expect(driverLabel("other", EN)).toBe(EN.app.drivers.merged);
   });
 
-  test("a driver carries φ, its headline feature, its disagreement and its flag", () => {
+  it("a driver carries φ, its headline feature, its disagreement and its flag", () => {
     for (const explain of EVERY_RESPONSE) {
       for (const driver of explain.drivers) {
         expect(Number.isFinite(driver.phiMwh)).toBe(true);
@@ -90,7 +90,7 @@ describe("the eight groups are the driver code set", () => {
     }
   });
 
-  test("there is no technology dimension on the attribution", () => {
+  it("there is no technology dimension on the attribution", () => {
     for (const explain of EVERY_RESPONSE) {
       expect(explain).not.toHaveProperty("technology");
     }
@@ -101,14 +101,14 @@ describe("the eight groups are the driver code set", () => {
 });
 
 describe("the share is a share of the attributed movement", () => {
-  test("shares are normalised over all eight groups and sum to 1", () => {
+  it("shares are normalised over all eight groups and sum to 1", () => {
     for (const explain of EVERY_RESPONSE) {
       const total = explain.drivers.reduce((sum, driver) => sum + driver.share, 0);
       expect(total).toBeCloseTo(1, 6);
     }
   });
 
-  test("each share is |φ_j| / Σ_k |φ_k| over all eight, not over the displayed", () => {
+  it("each share is |φ_j| / Σ_k |φ_k| over all eight, not over the displayed", () => {
     for (const explain of EVERY_RESPONSE) {
       const gross = explain.drivers.reduce(
         (sum, driver) => sum + Math.abs(driver.phiMwh),
@@ -126,7 +126,7 @@ describe("the share is a share of the attributed movement", () => {
     }
   });
 
-  test("the footnote under the bars says movement, in both locales", () => {
+  it("the footnote under the bars says movement, in both locales", () => {
     expect(EN.app.drivers.note).toContain("attributed movement");
     expect(EN.app.drivers.note).not.toContain("attributed magnitude");
     expect(PT.app.drivers.note).toContain("movimento atribuído");
@@ -135,7 +135,7 @@ describe("the share is a share of the attributed movement", () => {
 });
 
 describe("the display rule: a shared predicate and a client-only merge", () => {
-  test("the selection is the shared predicate, applied unchanged", () => {
+  it("the selection is the shared predicate, applied unchanged", () => {
     for (const explain of EVERY_RESPONSE) {
       const rows = driverRows(explain.drivers);
       const named = rows.filter((row) => row.code !== "other");
@@ -146,7 +146,7 @@ describe("the display rule: a shared predicate and a client-only merge", () => {
     }
   });
 
-  test("the merged row's φ is the signed sum of what it absorbed", () => {
+  it("the merged row's φ is the signed sum of what it absorbed", () => {
     for (const explain of EVERY_RESPONSE) {
       const rows = driverRows(explain.drivers);
       const other = rows.find((row) => row.code === "other");
@@ -175,7 +175,7 @@ describe("the display rule: a shared predicate and a client-only merge", () => {
     }
   });
 
-  test("a demoted group goes below the fold with its φ, sign and share intact", () => {
+  it("a demoted group goes below the fold with its φ, sign and share intact", () => {
     const explain = buildExplain("NE");
     const source = explain.drivers.find((driver) => driver.demoted);
     if (source === undefined) {
@@ -187,7 +187,7 @@ describe("the display rule: a shared predicate and a client-only merge", () => {
     expect(demoted).toHaveLength(1);
     // Below every group that was not demoted, whatever their shares say.
     expect(named.at(-1)?.code).toBe(demoted[0].code);
-    expect(demoted[0].share).toBeGreaterThan(named[named.length - 2].share);
+    expect(demoted[0].share).toBeGreaterThan(named.at(-2).share);
     // And nothing else about the row moved. A rule may annotate, demote or
     // withhold; it may never change a φ, a sign or a share.
     expect(demoted[0].phiMwh).toBe(source.phiMwh);
@@ -200,7 +200,7 @@ describe("the display rule: a shared predicate and a client-only merge", () => {
 });
 
 describe("mixed reaches the UI in exactly one place", () => {
-  test("no response carries a mixed direction on one of the eight", () => {
+  it("no response carries a mixed direction on one of the eight", () => {
     for (const explain of EVERY_RESPONSE) {
       for (const driver of explain.drivers) {
         expect(GROUPS).toContain(driver.code);
@@ -213,7 +213,7 @@ describe("mixed reaches the UI in exactly one place", () => {
     }
   });
 
-  test("no rendered row that is one of the eight is mixed either", () => {
+  it("no rendered row that is one of the eight is mixed either", () => {
     for (const explain of EVERY_RESPONSE) {
       for (const row of driverRows(explain.drivers)) {
         if (row.code !== "other") {
@@ -223,7 +223,7 @@ describe("mixed reaches the UI in exactly one place", () => {
     }
   });
 
-  test("the merged row is mixed exactly when its members cancel", () => {
+  it("the merged row is mixed exactly when its members cancel", () => {
     // The rule itself: `Σ|φ| > 1.5 · |Σφ|`.
     expect(mergedDirection(-8, 24)).toBe("mixed");
     expect(mergedDirection(-8, 8 * MIXED_DIRECTION_RATIO)).toBe("lowers");
@@ -239,7 +239,7 @@ describe("mixed reaches the UI in exactly one place", () => {
     expect(quiet?.direction).toBe("lowers");
   });
 
-  test("mixed has words in both locales, and its own accessible sentence", () => {
+  it("mixed has words in both locales, and its own accessible sentence", () => {
     expect(PT.app.drivers.direction.mixed).toBeTruthy();
     expect(EN.app.drivers.direction.mixed).toBeTruthy();
     // Not slotted into "{direction} risk": a cancelled remainder neither
@@ -251,7 +251,7 @@ describe("mixed reaches the UI in exactly one place", () => {
 });
 
 describe("the categorical reading variant survives", () => {
-  test("calendar_season reads as a term, not as a number", () => {
+  it("calendar_season reads as a term, not as a number", () => {
     for (const explain of EVERY_RESPONSE) {
       const calendar = explain.drivers.find((d) => d.code === "calendar_season");
       expect(calendar?.headlineFeature).toBe("calendar_is_weekend");
@@ -260,7 +260,7 @@ describe("the categorical reading variant survives", () => {
     }
   });
 
-  test("every term a reading can carry has words in both locales", () => {
+  it("every term a reading can carry has words in both locales", () => {
     for (const explain of EVERY_RESPONSE) {
       for (const driver of explain.drivers) {
         for (const reading of [driver.observed, driver.typical]) {
@@ -273,7 +273,7 @@ describe("the categorical reading variant survives", () => {
     }
   });
 
-  test("a reading pair is never shown without the feature it came from", () => {
+  it("a reading pair is never shown without the feature it came from", () => {
     for (const explain of EVERY_RESPONSE) {
       for (const driver of explain.drivers) {
         if (driver.observed.kind !== "none") {
@@ -288,7 +288,7 @@ describe("the categorical reading variant survives", () => {
 });
 
 describe("the screen says once what the bars explain", () => {
-  test("the scope sentence is in both locales and names the expectation", () => {
+  it("the scope sentence is in both locales and names the expectation", () => {
     expect(EN.app.drivers.scopeNote).toContain("expected MWh");
     expect(EN.app.drivers.scopeNote).toContain("P10");
     expect(EN.app.drivers.scopeNote).toContain("P90");

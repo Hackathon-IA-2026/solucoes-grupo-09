@@ -83,10 +83,7 @@ describe("replay · the calendar is server-evaluated and proxied whole", () => {
         },
       ],
     };
-    reply = () =>
-      new Response(JSON.stringify(calendar), {
-        headers: { "content-type": "application/json" },
-      });
+    reply = () => Response.json(calendar);
     const { status, body } = await get(CALENDAR);
     expect(status).toBe(200);
     // Byte-for-byte, because the body is already the wire casing. A second
@@ -96,24 +93,21 @@ describe("replay · the calendar is server-evaluated and proxied whole", () => {
 
   it("carries provenance and both windows, not a training cut", async () => {
     reply = () =>
-      new Response(
-        JSON.stringify({
-          days: [
-            {
-              date: "2026-08-01",
-              replayable: true,
-              provenance: "served",
-              held_out_by: {
-                fold: "F6",
-                artifact_id: "a",
-                train_window: ["2024-04-01", "2026-06-30"],
-                calibration_window: ["2026-04-02", "2026-06-30"],
-              },
+      Response.json({
+        days: [
+          {
+            date: "2026-08-01",
+            replayable: true,
+            provenance: "served",
+            held_out_by: {
+              fold: "F6",
+              artifact_id: "a",
+              train_window: ["2024-04-01", "2026-06-30"],
+              calibration_window: ["2026-04-02", "2026-06-30"],
             },
-          ],
-        }),
-        { headers: { "content-type": "application/json" } },
-      );
+          },
+        ],
+      });
     const { body } = await get(CALENDAR);
     const day = body.days?.[0];
     expect(day).toBeDefined();
@@ -260,10 +254,7 @@ describe("replay · the calendar caches on the shortlist's computation id", () =
   });
 
   const answer = (body: unknown) => {
-    reply = () =>
-      new Response(JSON.stringify(body), {
-        headers: { "content-type": "application/json" },
-      });
+    reply = () => Response.json(body);
   };
 
   const ask = (path: string, headers: Record<string, string> = {}) =>

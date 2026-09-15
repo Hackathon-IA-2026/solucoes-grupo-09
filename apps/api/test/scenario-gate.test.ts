@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
@@ -139,12 +139,12 @@ async function post(
 }
 
 describe("a scenario rejected at the gateway never reaches the ml service", () => {
-  test("the vector directory is not empty, so a passing run means something", () => {
+  it("the vector directory is not empty, so a passing run means something", () => {
     expect(REFUSALS.length).toBeGreaterThan(0);
   });
 
   for (const vector of REFUSALS) {
-    test(`${vector.file}: ${vector.expected_code}`, async () => {
+    it(`${vector.file}: ${vector.expected_code}`, async () => {
       const reached: string[] = [];
       const app = optimizeApp(reached, new Date(vector.now));
       const { status, envelope } = await post(app, vector.scenario);
@@ -158,7 +158,7 @@ describe("a scenario rejected at the gateway never reaches the ml service", () =
     });
   }
 
-  test("hold no file this suite did not enumerate", () => {
+  it("hold no file this suite did not enumerate", () => {
     // The third side of the same claim `packages/core/test/
     // scenario-validation.test.ts` and `apps/ml/tests/
     // test_scenario_validation.py` each make about this directory. Without it,
@@ -178,7 +178,7 @@ describe("a scenario rejected at the gateway never reaches the ml service", () =
     expect([...onDisk].sort()).toEqual([...consumed].sort());
   });
 
-  test("the admissions are not empty either, so the guard is not vacuous", () => {
+  it("the admissions are not empty either, so the guard is not vacuous", () => {
     expect(ADMISSIONS.length).toBeGreaterThan(0);
     // At least one admission must be one the gateway can actually carry, or
     // "a valid scenario does reach the ml service" would be asserted about
@@ -189,7 +189,7 @@ describe("a scenario rejected at the gateway never reaches the ml service", () =
   for (const vector of ADMISSIONS.filter(
     (entry) => entry.gateway_refuses === undefined,
   )) {
-    test(`${vector.file}: ${vector.name} does reach it`, async () => {
+    it(`${vector.file}: ${vector.name} does reach it`, async () => {
       // The test of the test. If the gate refused everything, every refusal
       // assertion above would pass and the endpoint would be a 422 machine.
       // Every admission is run, not one: half the value of a refusal suite is
@@ -217,7 +217,7 @@ describe("the admission the table accepts and the transport cannot carry", () =>
   for (const vector of ADMISSIONS.filter(
     (entry) => entry.gateway_refuses !== undefined,
   )) {
-    test(`${vector.file}: ${vector.gateway_refuses} before the table is consulted`, async () => {
+    it(`${vector.file}: ${vector.gateway_refuses} before the table is consulted`, async () => {
       const reached: string[] = [];
       const app = optimizeApp(reached, new Date(vector.now));
       const { status, envelope } = await post(app, vector.scenario);
@@ -231,7 +231,7 @@ describe("the admission the table accepts and the transport cannot carry", () =>
 
 describe("the refusal a client actually receives", () => {
   for (const vector of REFUSALS) {
-    test(`${vector.file} carries a code and no translated string`, async () => {
+    it(`${vector.file} carries a code and no translated string`, async () => {
       const app = optimizeApp([], new Date(vector.now));
       const { envelope } = await post(app, vector.scenario);
 
@@ -276,13 +276,13 @@ describe("both transports pass through the same gate", () => {
     return null;
   }
 
-  test("the prototype's 70 MW load is refused on the body path", () => {
+  it("the prototype's 70 MW load is refused on the body path", () => {
     expect(code(() => admitScenarioBody(prototypeLoad, { now }))).toBe(
       "SHIFT_EXCEEDS_BASELINE",
     );
   });
 
-  test("and on the ?s= path, from the same bytes", () => {
+  it("and on the ?s= path, from the same bytes", () => {
     // A share link and a POST are the same scenario, so they cannot disagree
     // about whether it is one. The blob is built from the canonical bytes the
     // body path produced, which is what a share button would put in the URL.
@@ -290,7 +290,7 @@ describe("both transports pass through the same gate", () => {
     expect(code(() => admitScenarioParam(blob, { now }))).toBe("SHIFT_EXCEEDS_BASELINE");
   });
 
-  test("the byte cap, not the asset cap, is what a fleet of batteries hits", () => {
+  it("the byte cap, not the asset cap, is what a fleet of batteries hits", () => {
     // Worth pinning rather than discovering later: the two halves of
     // `SCENARIO_TOO_LARGE` do not bite in the order the table lists them.
     // Nineteen minimal batteries already exceed the 4 096-byte blob cap, so the
@@ -318,7 +318,7 @@ describe("both transports pass through the same gate", () => {
     expect(code(() => admitScenarioBody(fleet(21), { now }))).toBe("SCENARIO_TOO_LARGE");
   });
 
-  test("an oversized blob is refused before anything parses it", () => {
+  it("an oversized blob is refused before anything parses it", () => {
     expect(code(() => admitScenarioParam("A".repeat(5000), { now }))).toBe(
       "SCENARIO_TOO_LARGE",
     );

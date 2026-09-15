@@ -78,7 +78,6 @@ const sqlStateOf = (error: unknown): string | undefined => {
     }
     current = (current as { cause?: unknown }).cause;
   }
-  return undefined;
 };
 
 const pairs = async (db: Database, query: ReturnType<typeof sql>) => {

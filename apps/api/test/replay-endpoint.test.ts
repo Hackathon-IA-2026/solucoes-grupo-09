@@ -201,9 +201,24 @@ function firstAsset(wire: Record<string, unknown>): Record<string, unknown> {
 const SHARED_CORPUS: { name: string; blob: string }[] = [
   { name: "a valid scenario", blob: blob() },
   { name: "no forecast_origin", blob: blob({ forecastOrigin: undefined }) },
-  { name: "an unsupported version", blob: rawBlob((w) => (w.v = 2)) },
-  { name: "an unknown subsystem", blob: rawBlob((w) => (w.subsystem = "SIN")) },
-  { name: "no assets", blob: rawBlob((w) => (w.assets = [])) },
+  {
+    name: "an unsupported version",
+    blob: rawBlob((w) => {
+      w.v = 2;
+    }),
+  },
+  {
+    name: "an unknown subsystem",
+    blob: rawBlob((w) => {
+      w.subsystem = "SIN";
+    }),
+  },
+  {
+    name: "no assets",
+    blob: rawBlob((w) => {
+      w.assets = [];
+    }),
+  },
   {
     name: "too many assets",
     blob: rawBlob((w) => {
@@ -244,12 +259,21 @@ const SHARED_CORPUS: { name: string; blob: string }[] = [
   },
   {
     name: "an economic assumption out of range",
-    blob: rawBlob((w) => (w.economic_assumptions = { brl_per_mwh: 1e9 })),
+    blob: rawBlob((w) => {
+      w.economic_assumptions = { brl_per_mwh: 1e9 };
+    }),
   },
-  { name: "a malformed target_date", blob: rawBlob((w) => (w.target_date = "15/06/25")) },
+  {
+    name: "a malformed target_date",
+    blob: rawBlob((w) => {
+      w.target_date = "15/06/25";
+    }),
+  },
   {
     name: "a target_date naming no day",
-    blob: rawBlob((w) => (w.target_date = "2025-02-31")),
+    blob: rawBlob((w) => {
+      w.target_date = "2025-02-31";
+    }),
   },
   { name: "not an object at all", blob: Buffer.from("[]", "utf8").toString("base64url") },
 ];
@@ -364,7 +388,9 @@ describe("replay · scenario validation parity with /v1/optimize, minus its date
   it("a refused scenario never reaches the solver, on either endpoint", async () => {
     const replay = replayRoutes();
     const optimize = optimizeRoutes();
-    const bad = rawBlob((w) => (w.subsystem = "SIN"));
+    const bad = rawBlob((w) => {
+      w.subsystem = "SIN";
+    });
     expect((await replayGet(replay, bad)).status).toBe(422);
     expect((await optimizeGet(optimize, bad)).status).toBe(422);
     expect(received).toEqual([]);
@@ -567,11 +593,11 @@ describe("replay · one scenario, two verbs, one set of bytes", () => {
         v: 1,
       }),
     );
-    const solves = received.filter((entry) => entry.path === "/v1/replay");
-    expect(solves).toHaveLength(2);
-    expect(solves[0]?.body).toBe(solves[1]?.body as string);
-    expect(solves[0]?.method).toBe("POST");
-    expect(solves[0]?.search).toContain("lane=dessem_free_v1__gate_late__thr5");
+    const replaySolves = received.filter((entry) => entry.path === "/v1/replay");
+    expect(replaySolves).toHaveLength(2);
+    expect(replaySolves[0]?.body).toBe(replaySolves[1]?.body as string);
+    expect(replaySolves[0]?.method).toBe("POST");
+    expect(replaySolves[0]?.search).toContain("lane=dessem_free_v1__gate_late__thr5");
   });
 
   it("a link whose visible date is not the day it replays is refused", async () => {

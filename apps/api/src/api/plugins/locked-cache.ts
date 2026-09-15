@@ -30,14 +30,14 @@ export interface LockedCache {
   /** For the boot log: where entries are actually going. */
   readonly detail: string;
   /** The stored text, or `null` for a miss — including any failure. */
-  get(key: string): Promise<string | null>;
+  get: (key: string) => Promise<string | null>;
   /** Store with a TTL. A failure is swallowed: a cache that cannot write is a cache. */
-  set(key: string, value: string, ttlSec: number): Promise<void>;
+  set: (key: string, value: string, ttlSec: number) => Promise<void>;
   /** `SET NX PX` — `true` when this caller won the right to do the work. */
-  acquire(key: string, ttlMs: number): Promise<boolean>;
+  acquire: (key: string, ttlMs: number) => Promise<boolean>;
   /** Drop the lock. Best effort; the TTL is what makes it safe. */
-  release(key: string): Promise<void>;
-  close(): Promise<void>;
+  release: (key: string) => Promise<void>;
+  close: () => Promise<void>;
 }
 
 /**

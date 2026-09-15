@@ -9,11 +9,11 @@ export type Database = PostgresJsDatabase<typeof schema>;
 export interface DatabaseHandle {
   db: Database;
   /** Apply pending migrations from the `drizzle/` folder. */
-  migrate(): Promise<void>;
+  migrate: () => Promise<void>;
   /** Round-trip a trivial query — used by the readiness probe. */
-  ping(): Promise<boolean>;
+  ping: () => Promise<boolean>;
   /** Close the connection pool. */
-  close(): Promise<void>;
+  close: () => Promise<void>;
 }
 
 /** Create a Drizzle/postgres handle for a given URL (used by the app and tests). */

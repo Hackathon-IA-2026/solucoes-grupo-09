@@ -656,7 +656,7 @@ describe("the chained diagnosis watch · the refusal vocabulary", () => {
     expect(migrations.length).toBeGreaterThan(40);
     expect(defining.length).toBeGreaterThan(0);
 
-    const newest = readFileSync(join(dir, defining[defining.length - 1]), "utf8");
+    const newest = readFileSync(join(dir, defining.at(-1)), "utf8");
     const check = newest.slice(newest.lastIndexOf(CONSTRAINT));
     const admitted = [
       ...check.slice(0, check.indexOf("))")).matchAll(/'([a-z_]+)'/g),

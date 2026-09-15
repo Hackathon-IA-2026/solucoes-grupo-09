@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { readSchemas, SCHEMA_DIR, validate } from "../src/schema.js";
@@ -34,7 +34,7 @@ const diagnosis = () => clone(fixture("05-diagnosis-day-ahead.json"));
 describe("rule 1 — a band is one shared reference, findable by grep", () => {
   const BAND_REF = "common.schema.json#/$defs/band";
 
-  test("every band on the surface is that reference and not a copy of it", () => {
+  it("every band on the surface is that reference and not a copy of it", () => {
     // The rule's whole value is the grep. An inlined `{p10, p50, p90}` would
     // validate identically and would be invisible to the next person asking
     // "where are all the bands", which is the question this rule exists to
@@ -76,7 +76,7 @@ describe("rule 1 — a band is one shared reference, findable by grep", () => {
     expect(offenders).toEqual([]);
   });
 
-  test("the reference is used, and used widely", () => {
+  it("the reference is used, and used widely", () => {
     const uses = [...readSchemas().values()].reduce(
       (total, schema) => total + JSON.stringify(schema).split(BAND_REF).length - 1,
       0,
@@ -84,7 +84,7 @@ describe("rule 1 — a band is one shared reference, findable by grep", () => {
     expect(uses).toBeGreaterThan(5);
   });
 
-  test("a band with p10 > p50 fails, which JSON Schema alone cannot say", () => {
+  it("a band with p10 > p50 fails, which JSON Schema alone cannot say", () => {
     expect(validate(BAND_REF, { p10: 1, p50: 2, p90: 3 }).valid).toBe(true);
     expect(validate(BAND_REF, { p10: 5, p50: 2, p90: 3 }).valid).toBe(false);
     expect(validate(BAND_REF, { p10: 1, p50: 4, p90: 3 }).valid).toBe(false);
@@ -92,13 +92,13 @@ describe("rule 1 — a band is one shared reference, findable by grep", () => {
 });
 
 describe("rule 2 — an expectation is never inside a band object", () => {
-  test("the day expectation is a sibling of the day band", () => {
+  it("the day expectation is a sibling of the day band", () => {
     const body = forecast();
     expect(body.day_expected_mwh).toBeDefined();
     expect(validate("forecast-day-ahead.schema.json", body).valid).toBe(true);
   });
 
-  test("moving it inside the band fails validation", () => {
+  it("moving it inside the band fails validation", () => {
     const body = forecast();
     const band = body.day_energy_mwh as Record<string, unknown>;
     band.expected_mwh = body.day_expected_mwh;
@@ -108,7 +108,7 @@ describe("rule 2 — an expectation is never inside a band object", () => {
     expect(validate("forecast-day-ahead.schema.json", body).valid).toBe(false);
   });
 
-  test("a band may not be relabelled as its own centre either", () => {
+  it("a band may not be relabelled as its own centre either", () => {
     const body = forecast();
     const band = body.day_energy_mwh as Record<string, unknown>;
     band.p50 = body.day_expected_mwh;
@@ -118,7 +118,7 @@ describe("rule 2 — an expectation is never inside a band object", () => {
 });
 
 describe("rule 3 — a technology split is two scalars", () => {
-  test("two numbers pass", () => {
+  it("two numbers pass", () => {
     expect(
       validate("common.schema.json#/$defs/technology_split", {
         wind_mwh: 2410.0,
@@ -127,7 +127,7 @@ describe("rule 3 — a technology split is two scalars", () => {
     ).toBe(true);
   });
 
-  test("a quantile under the split fails", () => {
+  it("a quantile under the split fails", () => {
     // The forecaster publishes no per-technology band; the schema is what stops
     // a screen rendering one anyway.
     expect(
@@ -138,7 +138,7 @@ describe("rule 3 — a technology split is two scalars", () => {
     ).toBe(false);
   });
 
-  test("an extra property under the split fails", () => {
+  it("an extra property under the split fails", () => {
     expect(
       validate("common.schema.json#/$defs/technology_split", {
         wind_mwh: 2410.0,
@@ -150,13 +150,13 @@ describe("rule 3 — a technology split is two scalars", () => {
 });
 
 describe("rule 4 — avoidability is number | null and the null is meaningful", () => {
-  test("null passes", () => {
+  it("null passes", () => {
     const body = result();
     body.avoidability = null;
     expect(validate("optimization-result.schema.json", body).valid).toBe(true);
   });
 
-  test("the key may not simply be absent", () => {
+  it("the key may not simply be absent", () => {
     // The distinction the rule protects is null against zero, and both are
     // destroyed by the field going missing: an absent ratio reads as "not
     // applicable" on every screen that forgets to check.
@@ -165,7 +165,7 @@ describe("rule 4 — avoidability is number | null and the null is meaningful", 
     expect(validate("optimization-result.schema.json", body).valid).toBe(false);
   });
 
-  test("a string is not a way of saying undefined", () => {
+  it("a string is not a way of saying undefined", () => {
     const body = result();
     body.avoidability = "undefined";
     expect(validate("optimization-result.schema.json", body).valid).toBe(false);
@@ -173,7 +173,7 @@ describe("rule 4 — avoidability is number | null and the null is meaningful", 
 });
 
 describe("rule 5 — lead time is absent", () => {
-  test("no schema anywhere names one", () => {
+  it("no schema anywhere names one", () => {
     // `valid_time − published_at`, computable by anyone holding a
     // `ForecastOrigin` and the hour it describes. A stored copy is a second
     // number that can disagree with the two instants it came from.
@@ -190,13 +190,13 @@ describe("rule 5 — lead time is absent", () => {
 });
 
 describe("rule 6 — SIN is not a subsystem value anywhere", () => {
-  test("the enum has exactly the four", () => {
+  it("the enum has exactly the four", () => {
     const common = readSchemas().get("common.schema.json") as Record<string, unknown>;
     const defs = common.$defs as Record<string, { enum: string[] }>;
     expect(defs.subsystem.enum).toEqual(["N", "NE", "S", "SE"]);
   });
 
-  test("a SIN subsystem fails", () => {
+  it("a SIN subsystem fails", () => {
     expect(validate("common.schema.json#/$defs/subsystem", "SIN").valid).toBe(false);
     const body = outlook();
     const subsystems = body.subsystems as Record<string, unknown>[];
@@ -205,7 +205,7 @@ describe("rule 6 — SIN is not a subsystem value anywhere", () => {
     expect(validate("grid-outlook.schema.json", body).valid).toBe(false);
   });
 
-  test("a national figure lives under `national`, with its derivation named", () => {
+  it("a national figure lives under `national`, with its derivation named", () => {
     // The observed national total is legitimate — observations add exactly —
     // and it says how it was built rather than pretending to be an ONS row.
     const now = clone(fixture("03-grid-now.json"));
@@ -214,7 +214,7 @@ describe("rule 6 — SIN is not a subsystem value anywhere", () => {
     expect(validate("grid-now.schema.json", now).valid).toBe(false);
   });
 
-  test("a national forecast band may not be published without a reason", () => {
+  it("a national forecast band may not be published without a reason", () => {
     // Medians do not add and neither do quantiles, so until the path ensemble
     // shares a draw index across subsystems the band is null and says why.
     const body = outlook();
@@ -227,14 +227,14 @@ describe("rule 6 — SIN is not a subsystem value anywhere", () => {
 });
 
 describe("rule 7 — reason codes are the identifier and the gloss is not returned", () => {
-  test("the code passes and an English gloss does not", () => {
+  it("the code passes and an English gloss does not", () => {
     expect(validate("common.schema.json#/$defs/reason_code", "ENE").valid).toBe(true);
     expect(
       validate("common.schema.json#/$defs/reason_code", "Energetic (oversupply)").valid,
     ).toBe(false);
   });
 
-  test("no schema carries a translated label beside a code", () => {
+  it("no schema carries a translated label beside a code", () => {
     // `label_code` is a `t()` key and is allowed; `label`, `reason_label` and
     // `description_en` would be English travelling through the data layer,
     // which is how a bilingual product goes monolingual again.
@@ -249,7 +249,7 @@ describe("rule 7 — reason codes are the identifier and the gloss is not return
     expect(offenders).toEqual([]);
   });
 
-  test("an observed reason row rejects a gloss field", () => {
+  it("an observed reason row rejects a gloss field", () => {
     const row = {
       grain: "conjunto",
       entity_code: "CJ-0042",
@@ -281,13 +281,13 @@ describe("rule 8 — threshold_mw is on every object it applies to", () => {
   ];
 
   for (const [file, what] of REQUIRED_ON) {
-    test(`${what} requires it`, () => {
+    it(`${what} requires it`, () => {
       const schema = readSchemas().get(file) as { required: string[] };
       expect(schema.required).toContain("threshold_mw");
     });
   }
 
-  test("every episode carries it, and its max_gap_hours too", () => {
+  it("every episode carries it, and its max_gap_hours too", () => {
     const episode = readSchemas().get("common.schema.json") as {
       $defs: Record<string, { required: string[] }>;
     };
@@ -295,7 +295,7 @@ describe("rule 8 — threshold_mw is on every object it applies to", () => {
     expect(episode.$defs.episode?.required).toContain("max_gap_hours");
   });
 
-  test("an episode without it fails", () => {
+  it("an episode without it fails", () => {
     const body = replay();
     const episodes = body.episodes as Record<string, unknown>[];
     expect(validate("replay.schema.json", body).valid).toBe(true);
@@ -318,20 +318,20 @@ describe("rule 9 — vintage_fidelity is on every object carrying a metric", () 
   ];
 
   for (const file of REQUIRED_ON) {
-    test(`${file} requires it`, () => {
+    it(`${file} requires it`, () => {
       const schema = readSchemas().get(file) as { required: string[] };
       expect(schema.required).toContain("vintage_fidelity");
     });
   }
 
-  test("a response without it fails", () => {
+  it("a response without it fails", () => {
     const body = diagnosis();
     expect(validate("diagnosis.schema.json", body).valid).toBe(true);
     delete body.vintage_fidelity;
     expect(validate("diagnosis.schema.json", body).valid).toBe(false);
   });
 
-  test("it stays top level on a replay rather than moving under `integrity`", () => {
+  it("it stays top level on a replay rather than moving under `integrity`", () => {
     // A field whose whole purpose is that shared names do not shift meaning
     // must not shift position either. The replay-only vintage *detail* lives
     // under `integrity`; the verdict does not.
@@ -342,7 +342,7 @@ describe("rule 9 — vintage_fidelity is on every object carrying a metric", () 
     expect(validate("replay.schema.json", body).valid).toBe(false);
   });
 
-  test("nothing invents a third fidelity to average two into", () => {
+  it("nothing invents a third fidelity to average two into", () => {
     expect(validate("common.schema.json#/$defs/vintage_fidelity", "mixed").valid).toBe(
       false,
     );
@@ -353,7 +353,7 @@ describe("rule 9 — vintage_fidelity is on every object carrying a metric", () 
 });
 
 describe("timestamps — two representations, and no third", () => {
-  test("an instant must carry an explicit Z", () => {
+  it("an instant must carry an explicit Z", () => {
     expect(
       validate("common.schema.json#/$defs/utc_instant", "2026-08-29T03:00:00Z").valid,
     ).toBe(true);
@@ -368,7 +368,7 @@ describe("timestamps — two representations, and no third", () => {
     ).toBe(false);
   });
 
-  test("a civil date is a date and not an instant", () => {
+  it("a civil date is a date and not an instant", () => {
     expect(validate("common.schema.json#/$defs/civil_date", "2026-08-29").valid).toBe(
       true,
     );
@@ -377,7 +377,7 @@ describe("timestamps — two representations, and no third", () => {
     ).toBe(false);
   });
 
-  test("hour_local is 0-23 in Brasilia", () => {
+  it("hour_local is 0-23 in Brasilia", () => {
     expect(validate("common.schema.json#/$defs/hour_local", 23).valid).toBe(true);
     expect(validate("common.schema.json#/$defs/hour_local", 24).valid).toBe(false);
     expect(validate("common.schema.json#/$defs/hour_local", -1).valid).toBe(false);
@@ -385,7 +385,7 @@ describe("timestamps — two representations, and no third", () => {
 });
 
 describe("no response envelope", () => {
-  test("a successful response is the resource, not `{data, meta}`", () => {
+  it("a successful response is the resource, not `{data, meta}`", () => {
     // Adding a wrapper would buy nothing — pagination is needed on exactly two
     // routes and carries its own cursor — and would put a second shape between
     // every screen and every number.
@@ -401,7 +401,7 @@ describe("no response envelope", () => {
     }
   });
 
-  test("the error envelope is the single exception, and it is closed", () => {
+  it("the error envelope is the single exception, and it is closed", () => {
     const schema = readSchemas().get("error.schema.json") as {
       properties: Record<string, unknown>;
       additionalProperties: boolean;

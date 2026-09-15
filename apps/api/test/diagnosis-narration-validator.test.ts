@@ -402,7 +402,7 @@ describe("a failure buys exactly one retry, and then the template", () => {
       calls: () => call,
       attempt: async (complaint: string | undefined) => {
         complaints.push(complaint);
-        const text = texts[call] ?? texts[texts.length - 1];
+        const text = texts[call] ?? texts.at(-1);
         call += 1;
         return text;
       },

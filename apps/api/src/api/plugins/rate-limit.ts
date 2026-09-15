@@ -168,7 +168,7 @@ export function clientKey(
     .split(",")
     .map((hop) => hop.trim())
     .filter(Boolean);
-  return hops[hops.length - depth] || socketIp;
+  return hops.at(-depth) || socketIp;
 }
 
 export interface RateLimitOptions {

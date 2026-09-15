@@ -359,7 +359,7 @@ function parseNational(
   targetDate: string,
 ): PublishedNationalDay | undefined {
   if (raw === undefined || raw === null) {
-    return undefined;
+    return;
   }
   const where = "national";
   if (!isRecord(raw)) {
@@ -877,7 +877,7 @@ async function latestNationalVersion(
   publication: ForecastPublication,
 ): Promise<LatestVersion | undefined> {
   if (publication.national === undefined) {
-    return undefined;
+    return;
   }
   const rows = await db.execute<{
     data_version: number;

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { Elysia } from "elysia";
 import { app } from "../src/api/index.js";
 import {
@@ -26,19 +26,19 @@ const sized = (path: string, bytes: number) =>
   });
 
 describe("bodyLimit · the ceilings", () => {
-  test("exceedsLimit compares Content-Length to the max", () => {
+  it("exceedsLimit compares Content-Length to the max", () => {
     expect(exceedsLimit(null, 100)).toBe(false);
     expect(exceedsLimit("0", 100)).toBe(false);
     expect(exceedsLimit("100", 100)).toBe(false);
     expect(exceedsLimit("101", 100)).toBe(true);
   });
 
-  test("the solve ceiling is 16 KB — four times the largest legal Scenario", () => {
+  it("the solve ceiling is 16 KB — four times the largest legal Scenario", () => {
     expect(SOLVE_MAX_BODY_BYTES).toBe(16 * 1024);
     expect(MAX_BODY_BYTES).toBe(10 * 1024 * 1024);
   });
 
-  test("a scoped limit governs only the paths it applies to", async () => {
+  it("a scoped limit governs only the paths it applies to", async () => {
     const scoped = new Elysia()
       .use(solveBodyLimit())
       .post("/v1/optimize", () => ({ ok: true }))
@@ -47,7 +47,7 @@ describe("bodyLimit · the ceilings", () => {
     expect((await scoped.handle(sized("/ingest", 20 * 1024))).status).toBe(200);
   });
 
-  test("the numeric shorthand still means a global ceiling", async () => {
+  it("the numeric shorthand still means a global ceiling", async () => {
     const global = new Elysia().use(bodyLimit(1024)).post("/anything", () => "ok");
     expect((await global.handle(sized("/anything", 2048))).status).toBe(413);
     expect((await global.handle(sized("/anything", 512))).status).toBe(200);
@@ -55,7 +55,7 @@ describe("bodyLimit · the ceilings", () => {
 });
 
 describe("bodyLimit · the mounted surface", () => {
-  test("a 20 KB body on /v1/optimize is a 413 before any handler runs", async () => {
+  it("a 20 KB body on /v1/optimize is a 413 before any handler runs", async () => {
     const response = await app.handle(sized("/v1/optimize", 20 * 1024));
 
     // The route itself does not exist yet, so a 404 would be the answer if the
@@ -67,16 +67,16 @@ describe("bodyLimit · the mounted surface", () => {
     expect(body.error.details?.limit_bytes).toBe(SOLVE_MAX_BODY_BYTES);
   });
 
-  test("/v1/replay carries the same ceiling", async () => {
+  it("/v1/replay carries the same ceiling", async () => {
     expect((await app.handle(sized("/v1/replay", 20 * 1024))).status).toBe(413);
   });
 
-  test("the same body elsewhere is under the global 10 MB ceiling", async () => {
+  it("the same body elsewhere is under the global 10 MB ceiling", async () => {
     // Not a 413: 20 KB is only too large for the solver.
     expect((await app.handle(sized("/no-such-route", 20 * 1024))).status).toBe(404);
   });
 
-  test("a 4 KB Scenario is well within the solve ceiling", async () => {
+  it("a 4 KB Scenario is well within the solve ceiling", async () => {
     // The limit refuses on size, not on existence — this one gets as far as
     // routing, which is the point.
     expect((await app.handle(sized("/v1/optimize", 4096))).status).not.toBe(413);

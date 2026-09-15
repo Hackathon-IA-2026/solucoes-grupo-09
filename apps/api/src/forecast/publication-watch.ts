@@ -489,7 +489,7 @@ export function classifyDiagnosisWatch(
     // off the same view through the same axes, so if they disagree the read is
     // broken and no verdict may be drawn from it.
     throw new Error(
-      `The census says no served attribution rows exist and ` +
+      "The census says no served attribution rows exist and " +
         `${inputs.attributedSubsystems.length} came back for ${due.gateProfile} ` +
         `${due.targetDate} from the same view. The watch read is incoherent; no ` +
         "verdict is drawn from it.",
@@ -522,7 +522,7 @@ export function classifyDiagnosisWatch(
       refusal: null,
       observed:
         `${due.gateProfile} for ${due.targetDate} has no served forecast ` +
-        `publication, so no diagnosis publication was owed for it — the chain ` +
+        "publication, so no diagnosis publication was owed for it — the chain " +
         "is triggered by a forecast publication's completion and there was " +
         "none to complete. Whether *that* is a missed publication or a " +
         "deployment that has never published is the forecast half of this " +
@@ -618,7 +618,7 @@ export function classifyDiagnosisWatch(
         ? "The ledger holds no refusal for this lane-day at all, so the chain " +
           "was not asked and answered — it did not run, or it died in its " +
           "retries, or it was never queued."
-        : `The newest refusal for this lane-day was observed at ` +
+        : "The newest refusal for this lane-day was observed at " +
           `${stale.observedAt.toISOString()} (${stale.condition}), which is ` +
           "older than the forecast publication now serving, so it is a " +
           "statement about a previous vintage rather than about this one. ") +

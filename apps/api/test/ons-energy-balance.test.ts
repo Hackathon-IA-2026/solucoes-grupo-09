@@ -12,8 +12,12 @@ import {
 } from "../src/ingest/ons/energy-balance.js";
 import { valueDigest } from "../src/ingest/repository.js";
 import { zonedWallClockToUtc } from "../src/ingest/time.js";
-import headHeaders from "./fixtures/ons/head-BALANCO_ENERGIA_SUBSISTEMA_2026.parquet.json";
-import packageShow from "./fixtures/ons/package-show-balanco-energia-subsistema.json";
+import headHeaders from "./fixtures/ons/head-BALANCO_ENERGIA_SUBSISTEMA_2026.parquet.json" with {
+  type: "json",
+};
+import packageShow from "./fixtures/ons/package-show-balanco-energia-subsistema.json" with {
+  type: "json",
+};
 
 // Seam 1 — the source adapter, driven by real payloads captured from ONS on
 // 2026-08-28. Provenance and capture dates are in `fixtures/ons/FIXTURES.md`.

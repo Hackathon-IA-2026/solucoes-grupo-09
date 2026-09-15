@@ -65,8 +65,19 @@ function docComment(node: Node, indent = ""): string {
   let line = "";
   for (const word of words) {
     if (line.length + word.length + 1 > 76) {
-      lines.push(line);
-      line = word;
+      // A wrapped line may not begin with `*`. The descriptions carry Markdown
+      // emphasis, and a line of a JSDoc block that opens with an asterisk
+      // reads as a second leading asterisk rather than as emphasis — to a
+      // reader and to `useSingleJsDocAsterisk` alike. So the word before it
+      // comes down too, which keeps the emphasis mid-line and the line short.
+      const carried = word.startsWith("*") ? line.lastIndexOf(" ") : -1;
+      if (carried > 0) {
+        lines.push(line.slice(0, carried));
+        line = `${line.slice(carried + 1)} ${word}`;
+      } else {
+        lines.push(line);
+        line = word;
+      }
     } else {
       line = line === "" ? word : `${line} ${word}`;
     }
@@ -92,11 +103,11 @@ class Generator {
         root.oneOf !== undefined ||
         root.properties !== undefined
       ) {
-        this.register(file, root, this.titleOf(root, file));
+        this.register(file, root, Generator.titleOf(root, file));
       }
       const defs = (root.$defs ?? {}) as Record<string, Node>;
       for (const [key, node] of Object.entries(defs)) {
-        this.register(`${file}#/$defs/${key}`, node, this.titleOf(node, key));
+        this.register(`${file}#/$defs/${key}`, node, Generator.titleOf(node, key));
       }
     }
 
@@ -117,10 +128,10 @@ class Generator {
       }
     }
 
-    return this.render(emitted);
+    return Generator.render(emitted);
   }
 
-  private titleOf(node: Node, fallback: string): string {
+  private static titleOf(node: Node, fallback: string): string {
     const title = typeof node.title === "string" ? node.title : "";
     return title === "" ? pascal(fallback) : pascal(title);
   }
@@ -170,7 +181,7 @@ class Generator {
       return known;
     }
     const key = canonical.split("/").pop() ?? canonical;
-    return this.register(canonical, node, this.titleOf(node, key));
+    return this.register(canonical, node, Generator.titleOf(node, key));
   }
 
   private emit(name: string, ref: string, node: Node): Emitted {
@@ -292,7 +303,7 @@ class Generator {
     file: string,
     inlineName: string,
   ): { name: string; list: boolean; map?: boolean } | null {
-    const unwrapped = this.unwrapNullable(property, file);
+    const unwrapped = Generator.unwrapNullable(property, file);
     if (unwrapped === null) {
       return null;
     }
@@ -355,7 +366,10 @@ class Generator {
    * that the null is a stated member of the contract rather than a missing key.
    * Unwrap it for typing and for the codec; the null itself needs no shape.
    */
-  private unwrapNullable(node: Node, file: string): { node: Node; file: string } | null {
+  private static unwrapNullable(
+    node: Node,
+    file: string,
+  ): { node: Node; file: string } | null {
     if (node.oneOf === undefined) {
       return { node, file };
     }
@@ -377,7 +391,7 @@ class Generator {
       return (node.enum as unknown[]).map((value) => JSON.stringify(value)).join(" | ");
     }
     if (node.oneOf !== undefined) {
-      const nullable = this.unwrapNullable(node, file);
+      const nullable = Generator.unwrapNullable(node, file);
       if (nullable !== null && nullable.node !== node) {
         return `${this.typeOf(nullable.node, file, inlineName)} | null`;
       }
@@ -412,7 +426,7 @@ class Generator {
     return types.map(primitive).join(" | ");
   }
 
-  private render(emitted: Emitted[]): string {
+  private static render(emitted: Emitted[]): string {
     const shapes = emitted
       .filter((entry) => entry.shape !== undefined)
       .map((entry) => entry.shape);

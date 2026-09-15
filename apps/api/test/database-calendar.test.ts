@@ -488,7 +488,6 @@ suite("the calendar and the astronomy (real Postgres)", () => {
         }
         current = (current as { cause?: unknown }).cause;
       }
-      return undefined;
     };
 
     for (const dstDay of ["2018-11-04", "2019-02-16"]) {

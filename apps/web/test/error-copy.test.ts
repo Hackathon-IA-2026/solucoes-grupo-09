@@ -121,7 +121,8 @@ describe("error copy · the developer message is never rendered", () => {
     // A check that stopped matching would pass forever.
     expect(FORBIDDEN.some((p) => p.test("<Text>{error.message}</Text>"))).toBe(true);
     // The sanctioned shape — the code, translated — must not be flagged.
-    const translated = `<Text>{t(\`error.$\{error.code}\`)}</Text>`;
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: the sanctioned shape is this literal source text, placeholder and all
+    const translated = "<Text>{t(`error.${error.code}`)}</Text>";
     expect(FORBIDDEN.some((p) => p.test(translated))).toBe(false);
   });
 

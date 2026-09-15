@@ -21,7 +21,7 @@ import type { SubsystemCode } from "@wattsteer/core/domain";
  * from the module that also holds the normalisation rules — they now get the
  * published definition through it.
  */
-export type { SubsystemCode };
+export type { SubsystemCode } from "@wattsteer/core/domain";
 
 /**
  * The membership test, derived from the published list rather than typed out.

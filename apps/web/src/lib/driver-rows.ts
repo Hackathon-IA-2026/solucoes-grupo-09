@@ -95,7 +95,10 @@ export interface DriverRow {
  */
 export function driverRows(drivers: readonly AttributedDriver[]): DriverRow[] {
   const selected = selectNotableDrivers(drivers);
-  const merged = drivers.filter((driver) => !selected.includes(driver));
+  // Membership by identity, the same test `includes` was making — through a
+  // set so the partition below is one pass rather than one per driver.
+  const isSelected = new Set(selected);
+  const merged = drivers.filter((driver) => !isSelected.has(driver));
   const ordered = [
     ...selected.filter((driver) => !driver.demoted),
     ...selected.filter((driver) => driver.demoted),

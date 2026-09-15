@@ -382,7 +382,7 @@ function assertDaylightAlignment(
 function describeRun(patamares: Set<number>, halfHours: number): string {
   const sorted = [...patamares].sort((a, b) => a - b);
   const first = sorted[0] as number;
-  const last = sorted[sorted.length - 1] as number;
+  const last = sorted.at(-1) as number;
   const contiguous = last - first + 1 === sorted.length;
   if (!contiguous) {
     return `The patamares present are not one contiguous run (${first}…${last}, ${sorted.length} of ${halfHours}), so the file is not a truncated publication.`;
@@ -404,7 +404,7 @@ function runOf(patamares: Set<number>): {
 } {
   const sorted = [...patamares].sort((a, b) => a - b);
   const first = sorted[0] as number;
-  const last = sorted[sorted.length - 1] as number;
+  const last = sorted.at(-1) as number;
   return { first, last, contiguous: last - first + 1 === sorted.length };
 }
 

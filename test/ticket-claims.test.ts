@@ -7,7 +7,7 @@
  * and that a `done` ticket with all its boxes unticked is *not* a violation.
  */
 
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import {
   BINDERS,
   type BoxClaim,
@@ -36,20 +36,20 @@ function synthetic(file: string, text: string): Ticket {
 }
 
 describe("the corpus is discovered by shape, not by a list", () => {
-  test("every lane's tickets are walked", () => {
+  it("every lane's tickets are walked", () => {
     expect(ALL.length).toBeGreaterThanOrEqual(100);
     const lanes = new Set(ALL.map((one) => one.file.split("/")[1]));
     expect(lanes.size).toBeGreaterThanOrEqual(8);
   });
 
-  test("a ticket is a file with a **Status:** line, and nothing else is", () => {
+  it("a ticket is a file with a **Status:** line, and nothing else is", () => {
     for (const ticket of ALL) {
       expect(ticket.status.length).toBeGreaterThan(0);
       expect(ticket.file.endsWith("00-README.md")).toBe(false);
     }
   });
 
-  test("a ticket written today is covered without an edit here", () => {
+  it("a ticket written today is covered without an edit here", () => {
     // The registry-free property, asserted rather than asserted-about: a file
     // this suite has never seen is bound the moment it exists. This is the
     // shape `.scratch/data-platform/issues/21-*` arrived in mid-wave.
@@ -66,7 +66,7 @@ describe("the corpus is discovered by shape, not by a list", () => {
 });
 
 describe("the binders bind something", () => {
-  test("the corpus states counts, and they are found", () => {
+  it("the corpus states counts, and they are found", () => {
     expect(CLAIMS.length).toBeGreaterThanOrEqual(4);
     // The vacuity floor. Not a restatement of a count — a floor, and the point
     // of it is the marker vocabulary: a retrospective phrase broad enough to
@@ -76,21 +76,21 @@ describe("the binders bind something", () => {
     expect(new Set(LIVE.map((one) => one.binder)).size).toBeGreaterThanOrEqual(2);
   });
 
-  test("every stated number parsed as a number", () => {
+  it("every stated number parsed as a number", () => {
     // The patterns spell the numeral rather than capturing a word, so a bound
     // claim with no number would mean a binder had matched prose it does not
     // understand.
     expect(CLAIMS.filter((one) => one.stated === null)).toEqual([]);
   });
 
-  test("corrections are recognised, and they are quotations rather than claims", () => {
+  it("corrections are recognised, and they are quotations rather than claims", () => {
     // Non-empty in the other direction: these tickets do quote their own wrong
     // numbers back, and a marker vocabulary that recognised none of them would
     // make every correction note a failure.
     expect(CLAIMS.filter((one) => one.quotation).length).toBeGreaterThanOrEqual(1);
   });
 
-  test("a status line that states a count produces a live claim from that line", () => {
+  it("a status line that states a count produces a live claim from that line", () => {
     // Derived coverage, so nobody has to remember to register the shape the
     // defect actually took: `**Status:** done (**two boxes open** …)`.
     //
@@ -114,7 +114,7 @@ describe("the binders bind something", () => {
     }
   });
 
-  test("the count trigger reads a number, not the word box", () => {
+  it("the count trigger reads a number, not the word box", () => {
     // Both halves, because a trigger that matched nothing would make the test
     // above pass by skipping every ticket.
     const TRIGGER =
@@ -145,7 +145,7 @@ describe("the binders bind something", () => {
     );
   });
 
-  test("a still-open section that leads with a count produces a live claim", () => {
+  it("a still-open section that leads with a count produces a live claim", () => {
     for (const ticket of ALL) {
       const lead = /^#{1,6}\s+[^\n]*still\s+open[^\n]*\n+(\*\*[^\n]*)/im.exec(
         ticket.text,
@@ -167,7 +167,7 @@ describe("the binders bind something", () => {
 });
 
 describe("a ticket's stated count of open boxes is its own count of open boxes", () => {
-  test("no live count disagrees with the file's `- [ ]` lines", () => {
+  it("no live count disagrees with the file's `- [ ]` lines", () => {
     expect(driftedBoxClaims(CLAIMS).map(describeBoxClaim)).toEqual([]);
   });
 });
@@ -177,25 +177,25 @@ describe("unticked boxes are not a signal of open work, and this guard says noth
     (one) => /^done\b/i.test(one.status) && one.ticked === 0 && one.open > 0,
   );
 
-  test("that population is most of the repository", () => {
+  it("that population is most of the repository", () => {
     // If this ever went empty the test below would be vacuous, which is the
     // one way this guard could become the thing it was written not to be.
     expect(doneWithNothingTicked.length).toBeGreaterThanOrEqual(80);
   });
 
-  test("not one of them yields a claim, let alone a violation", () => {
+  it("not one of them yields a claim, let alone a violation", () => {
     const claims = boxCountClaims(doneWithNothingTicked);
     expect(claims.map(describeBoxClaim)).toEqual([]);
   });
 
-  test("a `done` ticket with five unticked boxes and no prose count is clean", () => {
+  it("a `done` ticket with five unticked boxes and no prose count is clean", () => {
     // forecaster 28's shape, found by shape rather than by name.
     const shaped = doneWithNothingTicked.filter((one) => one.open === 5);
     expect(shaped.length).toBeGreaterThanOrEqual(1);
     expect(boxCountClaims(shaped)).toEqual([]);
   });
 
-  test("`done` is not read as “zero boxes open”", () => {
+  it("`done` is not read as “zero boxes open”", () => {
     const plainDone = synthetic(
       ".scratch/nowhere/issues/98-done-and-unticked.md",
       "**Status:** done\n\n- [ ] a\n- [ ] b\n- [ ] c\n",
@@ -204,7 +204,7 @@ describe("unticked boxes are not a signal of open work, and this guard says noth
     expect(boxCountClaims([plainDone])).toEqual([]);
   });
 
-  test("the prose shapes that are not self-counts stay out", () => {
+  it("the prose shapes that are not self-counts stay out", () => {
     // Real sentences from the corpus, in the shapes named out of scope: a
     // count of another ticket's boxes, a delta, and “boxes” that are tiles on
     // a screen rather than checkboxes.
@@ -240,14 +240,14 @@ describe("the guard fails on drift", () => {
     );
   }
 
-  test("the status line's count moved", () => {
+  it("the status line's count moved", () => {
     const drifted = mutated("(**one box open**", "(**three boxes open**");
     expect(drifted.length).toBeGreaterThanOrEqual(1);
     expect(drifted[0]?.stated).toBe(3);
     expect(drifted[0]?.derived).toBe(1);
   });
 
-  test("the still-open section's lead count moved", () => {
+  it("the still-open section's lead count moved", () => {
     const drifted = mutated(
       "**One box, and it is not a judgement call.**",
       "**Two boxes, and neither is one.**",
@@ -257,12 +257,12 @@ describe("the guard fails on drift", () => {
     );
   });
 
-  test("the re-grep note's count moved", () => {
+  it("the re-grep note's count moved", () => {
     const drifted = mutated("in this file returns\none,", "in this file returns\nfive,");
     expect(drifted.map((one) => one.stated)).toContain(5);
   });
 
-  test("the boxes moved and the prose did not — the wave's actual defect", () => {
+  it("the boxes moved and the prose did not — the wave's actual defect", () => {
     // Nothing in the prose is touched. A box is closed, exactly as three
     // agents did on three branches in one wave, and every count in the file
     // that was true becomes false.
@@ -282,7 +282,7 @@ describe("the guard fails on drift", () => {
     }
   });
 
-  test("a box added below the prose that counts them", () => {
+  it("a box added below the prose that counts them", () => {
     const drifted = driftedBoxClaims(
       boxCountClaims([
         synthetic(
@@ -297,7 +297,7 @@ describe("the guard fails on drift", () => {
 });
 
 describe("the guard is not vacuous: an empty parse does not pass", () => {
-  test("an empty corpus fails the non-emptiness assertions rather than the drift one", () => {
+  it("an empty corpus fails the non-emptiness assertions rather than the drift one", () => {
     // The polarity that has bitten this repository four times. With no tickets
     // there is nothing to drift, so `driftedBoxClaims` is empty and *looks*
     // green; what must go red is the assertion above it.
@@ -308,7 +308,7 @@ describe("the guard is not vacuous: an empty parse does not pass", () => {
     expect(() => expect(liveBoxClaims(none).length).toBeGreaterThanOrEqual(3)).toThrow();
   });
 
-  test("a corpus with no boxes at all still fails the floor", () => {
+  it("a corpus with no boxes at all still fails the floor", () => {
     const boxless = synthetic(
       ".scratch/nowhere/issues/96-prose-only.md",
       "**Status:** done\n\nNo checklist at all.\n",
@@ -318,7 +318,7 @@ describe("the guard is not vacuous: an empty parse does not pass", () => {
     ).toThrow();
   });
 
-  test("a binder whose pattern stops matching fails the floor", () => {
+  it("a binder whose pattern stops matching fails the floor", () => {
     // Every binder broken at once — the state a refactor of the prose, or of
     // the regexes, could arrive at silently.
     const broken = BINDERS.map((binder) => ({
@@ -331,7 +331,7 @@ describe("the guard is not vacuous: an empty parse does not pass", () => {
     expect(() => expect(claims.length).toBeGreaterThanOrEqual(4)).toThrow();
   });
 
-  test("a marker vocabulary broad enough to excuse every claim fails the floor", () => {
+  it("a marker vocabulary broad enough to excuse every claim fails the floor", () => {
     // The other direction of vacuity, and the one 27 caught in itself: if
     // exemption grew until nothing was live, the drift assertion would pass
     // over a corpus it had stopped governing.
@@ -342,7 +342,7 @@ describe("the guard is not vacuous: an empty parse does not pass", () => {
     ).toThrow();
   });
 
-  test("the exempt half is measured, not trusted", () => {
+  it("the exempt half is measured, not trusted", () => {
     // Reported rather than bounded by a ratio: unlike the specs' 135 path
     // references, the bound claims here are concentrated in the one ticket
     // that narrates three revisions of its own count, so a majority of them

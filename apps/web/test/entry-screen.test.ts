@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { en } from "../src/i18n/copy.en";
@@ -44,7 +44,7 @@ const SCRIPT = SHELL.slice(SHELL.indexOf("(function(){try{"));
 const EFFECT = SCREEN.slice(SCREEN.indexOf("const target ="));
 
 describe("the loading screen at /", () => {
-  test("says one sentence, in one locale, and lists no languages", () => {
+  it("says one sentence, in one locale, and lists no languages", () => {
     // The chooser's defining shape was a list: `LOCALES.map(…)` into a link
     // per locale, and both taglines side by side. Its absence is the change.
     expect(SCREEN).not.toContain("LOCALE_NAME");
@@ -55,7 +55,7 @@ describe("the loading screen at /", () => {
     expect(SCREEN).toContain("copy.splash.tagline");
   });
 
-  test("the subtitle is real copy in both locales, not one sentence twice", () => {
+  it("the subtitle is real copy in both locales, not one sentence twice", () => {
     for (const dictionary of [pt, en]) {
       expect(dictionary.splash.tagline.length).toBeGreaterThan(20);
     }
@@ -68,7 +68,7 @@ describe("the loading screen at /", () => {
     expect(en.splash.tagline).toBe("Curtailment intelligence for the Brazilian grid.");
   });
 
-  test("it redirects on every platform, not only on native", () => {
+  it("it redirects on every platform, not only on native", () => {
     // The chooser's effect began `if (Platform.OS === "web") return;` — the
     // web redirect was the shell's job alone. That left client-side
     // navigation into `/` (an unknown locale, redirected by
@@ -78,13 +78,13 @@ describe("the loading screen at /", () => {
     expect(SCREEN).not.toMatch(/if \(Platform\.OS === "web"\) \{\s*return;/);
   });
 
-  test("it replaces rather than pushes", () => {
+  it("it replaces rather than pushes", () => {
     // Pushed, it sits in the history stack: Back from `/pt/` lands here and
     // is bounced straight forward again, and the visitor cannot leave.
     expect(SCREEN).not.toMatch(/router\.push\(/);
   });
 
-  test("the no-JS way out is one link, revealed by <noscript>", () => {
+  it("the no-JS way out is one link, revealed by <noscript>", () => {
     // Not a chooser reintroduced by the back door: one link, to the default
     // locale the resolver would have picked anyway. Both roots still reach a
     // crawler through the hreflang set, which is why it can be one.
@@ -97,14 +97,14 @@ describe("the loading screen at /", () => {
     expect(SHELL).toMatch(/data-noscript-only[^}]*!important/);
   });
 
-  test("it is noindex,follow and declares both locale roots", () => {
+  it("it is noindex,follow and declares both locale roots", () => {
     expect(SCREEN).toMatch(/content="noindex,follow"/);
     expect(SCREEN).toContain("alternatesFor");
   });
 });
 
 describe("a chosen language persists", () => {
-  test("the pre-hydration script reads the key the switch writes", () => {
+  it("the pre-hydration script reads the key the switch writes", () => {
     // The script is a string literal — outside the module graph, so nothing
     // else can check that it still names the same storage key. Derived from
     // `locale.ts` here rather than restated, so renaming the key breaks this
@@ -113,7 +113,7 @@ describe("a chosen language persists", () => {
     expect(read("i18n", "index.tsx")).toContain("LOCALE_STORAGE_KEY");
   });
 
-  test("a stored choice is the only thing that beats the default", () => {
+  it("a stored choice is the only thing that beats the default", () => {
     /*
       The rule was stored → browser languages → pt. It is now stored → pt, and
       the change was measured rather than preferred: the deployed build sent a
@@ -125,18 +125,18 @@ describe("a chosen language persists", () => {
     expect(SCRIPT).not.toContain("navigator.language");
   });
 
-  test("it falls back to the default locale and to nothing else", () => {
+  it("it falls back to the default locale and to nothing else", () => {
     expect(SHELL).toContain(`?s:"${DEFAULT_LOCALE}"`);
   });
 
-  test("the route's own effect applies the same rule", () => {
+  it("the route's own effect applies the same rule", () => {
     // Same two steps, same order, or a client-side navigation into `/` and a
     // full load of `/` disagree about where the reader belongs.
     expect(EFFECT).toContain("readStoredLocale() ?? DEFAULT_LOCALE");
     expect(EFFECT).not.toContain("matchLocale(");
   });
 
-  test("the language switch writes the choice on a link, not only on a toggle", () => {
+  it("the language switch writes the choice on a link, not only on a toggle", () => {
     // Under the route-driven provider the switch is a `Link`; the navigation
     // is the Link's job and the write is the component's. Drop the `onPress`
     // and the switch still works — and the choice survives exactly until the
@@ -146,7 +146,7 @@ describe("a chosen language persists", () => {
     expect((source.match(/setLocale\(option\)/g) ?? []).length).toBe(2);
   });
 
-  test("and it does not overwrite the navigation it was cloned with", () => {
+  it("and it does not overwrite the navigation it was cloned with", () => {
     // `Link asChild` injects its own `onPress` — the one that navigates. A
     // bare `onPress={onPress}` after the spread replaced it, and the switch
     // wrote the preference and then stayed on the page it was on. Both
@@ -198,7 +198,7 @@ function sourceFiles(dir: string): string[] {
 const ROUTED = [join(SRC, "app"), join(SRC, "components")].flatMap(sourceFiles);
 
 describe("everything that means home honours the locale", () => {
-  test("no screen links to bare /", () => {
+  it("no screen links to bare /", () => {
     const ROOT_LINK = /(?:href=\{?"\/"\}?|(?:push|replace|navigate)\("\/"\))/;
     const offenders = ROUTED.map((file) => relative(SRC, file))
       .filter((rel) => !MAY_LINK_TO_ROOT.has(rel))
@@ -210,7 +210,7 @@ describe("everything that means home honours the locale", () => {
     expect(ROOT_LINK.test("<Link href={localePath(locale) as never}>")).toBe(false);
   });
 
-  test("the exemption list names only files that still exist and still do it", () => {
+  it("the exemption list names only files that still exist and still do it", () => {
     // An exemption that has stopped being needed stops describing the tree.
     for (const [rel, why] of MAY_LINK_TO_ROOT) {
       expect([rel, statSync(join(SRC, rel)).isFile()]).toEqual([rel, true]);
@@ -218,7 +218,7 @@ describe("everything that means home honours the locale", () => {
     }
   });
 
-  test("the wordmark, the 404 and the app chrome route through localePath", () => {
+  it("the wordmark, the 404 and the app chrome route through localePath", () => {
     for (const rel of [
       join("components", "landing", "landing-nav.tsx"),
       join("components", "app", "app-shell.tsx"),
@@ -231,7 +231,7 @@ describe("everything that means home honours the locale", () => {
     }
   });
 
-  test("a link home pops back to the landing page rather than stacking one", () => {
+  it("a link home pops back to the landing page rather than stacking one", () => {
     /*
       Measured on the exported build: `/pt/` → `/pitch` → the link home left
       *two* landing screens in the stack, the first still mounted. Two copies
@@ -274,7 +274,7 @@ describe("everything that means home honours the locale", () => {
     expect(shell).not.toContain("router.push(localePath(locale) as never)");
   });
 
-  test("a locale root keeps its trailing slash wherever it is linked", () => {
+  it("a locale root keeps its trailing slash wherever it is linked", () => {
     // One canonical form, so the logo and the sitemap name the same URL.
     for (const locale of LOCALES) {
       expect(localePath(locale)).toBe(`/${locale}/`);
@@ -292,7 +292,7 @@ describe("the loading screen is actually seen, and defaults to pt", () => {
    * the script, so the loading screen existed in the bundle and never on a
    * screen. The hold is what makes it a screen rather than a code path.
    */
-  test("both redirect paths hold for the same minimum", () => {
+  it("both redirect paths hold for the same minimum", () => {
     /*
       Read out of the route rather than restated here, and then required of the
       shell: the shell's redirect is a string inside the document and cannot
@@ -314,14 +314,14 @@ describe("the loading screen is actually seen, and defaults to pt", () => {
    * English-locale browser to `/en/` on a first visit — measured, the deployed
    * build redirected to `/en/` from a default Chromium.
    */
-  test("neither path consults the browser's languages", () => {
+  it("neither path consults the browser's languages", () => {
     expect(shell).not.toContain("navigator.languages");
     expect(shell).not.toContain("navigator.language");
     expect(route).not.toContain("navigator.language");
     expect(route).not.toContain("matchLocale");
   });
 
-  test("a stored choice still wins over the default", () => {
+  it("a stored choice still wins over the default", () => {
     // Non-vacuity for the test above: dropping the browser step must not have
     // dropped persistence with it.
     expect(shell).toContain('localStorage.getItem("wattsteer.locale")');

@@ -231,7 +231,7 @@ export function toBase64Url(bytes: Uint8Array): string {
  * throws {@link ScenarioTransportError} with `BAD_INPUT`.
  */
 export function fromBase64Url(blob: string): Uint8Array {
-  const text = blob.replace(/=+$/, "");
+  const text = blob.replace(/[=]+$/, "");
   if (text.length % 4 === 1) {
     throw new ScenarioTransportError(
       "BAD_INPUT",
@@ -310,7 +310,6 @@ function variantKeys(assetType: string): Set<string> | undefined {
       return new Set(fields.map((field) => field.wire));
     }
   }
-  return undefined;
 }
 
 /**

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 // The API's implementation, imported straight from the other workspace so the
@@ -46,11 +46,11 @@ const vectors: Array<{ file: string; body: GateVector }> = readdirSync(FIXTURES)
   }));
 
 describe("the gate instant, vector by vector", () => {
-  test("the directory is not empty, so a passing run means something", () => {
+  it("the directory is not empty, so a passing run means something", () => {
     expect(vectors.length).toBeGreaterThan(0);
   });
 
-  test("no vector file is skipped", () => {
+  it("no vector file is skipped", () => {
     // The half that stops a vector added for the Python or SQL side being
     // ignored here. The listing above is flat, so the comparison is against a
     // *recursive* walk: a vector filed under a subdirectory would otherwise be
@@ -66,13 +66,13 @@ describe("the gate instant, vector by vector", () => {
 
   for (const { file, body } of vectors) {
     describe(`${file}: ${body.name}`, () => {
-      test("the gateway's gateAt resolves the expected instant", () => {
+      it("the gateway's gateAt resolves the expected instant", () => {
         expect(gateAt(body.target_date, body.gate_profile).toISOString()).toBe(
           body.expected_gate_at,
         );
       });
 
-      test("the published gate table names the expected local hour", () => {
+      it("the published gate table names the expected local hour", () => {
         // The half a wrong instant cannot distinguish from a wrong zone: if
         // this fails, the table moved; if only the assertion above fails, the
         // zone did.
@@ -80,7 +80,7 @@ describe("the gate instant, vector by vector", () => {
         expect(gate?.publishesAtLocal).toBe(body.expected_local_time);
       });
 
-      test("that hour on the expected local date is the expected instant", () => {
+      it("that hour on the expected local date is the expected instant", () => {
         // The zone, on its own. `localWallClock` is given the D−1 date the
         // vector states rather than deriving it, so this assertion fails only
         // when the offset is wrong.
@@ -92,7 +92,7 @@ describe("the gate instant, vector by vector", () => {
         ).toBe(body.expected_gate_at);
       });
 
-      test("the offset between the wall clock and the instant is the expected one", () => {
+      it("the offset between the wall clock and the instant is the expected one", () => {
         const naive = Date.parse(
           `${body.expected_local_date}T${body.expected_local_time}:00Z`,
         );
@@ -104,7 +104,7 @@ describe("the gate instant, vector by vector", () => {
 });
 
 describe("the test of the test", () => {
-  test("a gate read as a fixed −03:00 fails the summer-time vectors", () => {
+  it("a gate read as a fixed −03:00 fails the summer-time vectors", () => {
     // The deliberately broken implementation, written out here so the suite
     // proves something: subtracting three hours from the wall clock is right
     // on every date the product serves and wrong on the vectors that exist for
@@ -122,7 +122,7 @@ describe("the test of the test", () => {
     expect(disagreements.length).toBeGreaterThan(0);
   });
 
-  test("the two profiles do not resolve to the same instant", () => {
+  it("the two profiles do not resolve to the same instant", () => {
     // A profile switch read as a label rather than an hour would make the 00Z
     // lane claim the 12Z run's inputs, and every per-vector assertion above
     // would still pass if both hours were the same.

@@ -491,7 +491,7 @@ suite("resource settlement · bytes upstream withdrew (real Postgres)", () => {
     // it. Measured on the working database: all 18 unsettled rows were of this
     // kind, and the census read them as poison.
     const url = `https://example.invalid/superseded-${Date.now()}.csv`;
-    const named = (etag: string): CatalogueResource => ({
+    const named = (_etag: string): CatalogueResource => ({
       name: "superseded.csv",
       url,
       format: "CSV",

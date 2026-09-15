@@ -42,7 +42,7 @@ const isProd = config.isProd;
  * route spends the daily cap against the same counter, and it cannot import the
  * module that mounts it.
  */
-export { limitStore };
+export { limitStore } from "./plugins/limit-store-handle.js";
 
 /**
  * The service banner — a constant of the deployment, built once.

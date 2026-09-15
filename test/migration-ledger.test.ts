@@ -212,7 +212,9 @@ export function sequenceBreaks(ledger: Ledger): string[] {
 export function journalDisagreements(ledger: Ledger): string[] {
   const problems: string[] = [];
   const fileTags = new Set(
-    ledger.files.map((file) => parseTag(file)?.tag).filter((tag): tag is string => !!tag),
+    ledger.files
+      .map((file) => parseTag(file)?.tag)
+      .filter((tag): tag is string => Boolean(tag)),
   );
   const journalTags = new Set(ledger.journal.map((entry) => entry.tag));
 
@@ -403,7 +405,9 @@ export function migrationReferences(
   ledger: Ledger,
 ): MigrationReference[] {
   const tags = new Set(
-    ledger.files.map((file) => parseTag(file)?.tag).filter((tag): tag is string => !!tag),
+    ledger.files
+      .map((file) => parseTag(file)?.tag)
+      .filter((tag): tag is string => Boolean(tag)),
   );
   const byNumber = new Map<number, string>();
   for (const file of ledger.files) {

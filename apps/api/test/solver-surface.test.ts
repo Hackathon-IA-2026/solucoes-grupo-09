@@ -528,7 +528,7 @@ describe("solver surface · with the modelling service returning 503", () => {
   it("every solve route answers 503 OPTIMIZER_NOT_READY", async () => {
     unavailable();
     const api = surface();
-    const answers = await Promise.all([
+    const verdicts = await Promise.all([
       verdict(await hit(api, OPTIMIZE_GET(blob()))),
       verdict(await post(api, "/v1/optimize", canonicalBody())),
       verdict(await hit(api, REPLAY_GET(blob()))),
@@ -537,7 +537,7 @@ describe("solver surface · with the modelling service returning 503", () => {
       verdict(await hit(api, CALENDAR)),
       verdict(await hit(api, CALENDAR_DAY)),
     ]);
-    for (const answer of answers) {
+    for (const answer of verdicts) {
       expect(answer).toEqual({ status: 503, code: "OPTIMIZER_NOT_READY" });
     }
   });
@@ -655,11 +655,11 @@ describe("solver surface · the scenario is carried, and the cache is evictable"
     const unreachable: ResultCache = redisCache("redis://127.0.0.1:6399", 50);
     try {
       const api = surface(unreachable);
-      const answers = await Promise.all([
+      const verdicts = await Promise.all([
         hit(api, OPTIMIZE_GET(blob())).then(verdict),
         hit(api, REPLAY_GET(blob())).then(verdict),
       ]);
-      for (const answer of answers) {
+      for (const answer of verdicts) {
         expect(answer.status).toBe(200);
       }
       // And the miss is a miss rather than a throw, on both verbs of the
@@ -688,16 +688,13 @@ describe("solver surface · a replay with nothing promoted", () => {
   it("answers a complete replay while the lane holds no artifact", async () => {
     reply = (request) =>
       request.path === "/v1/meta"
-        ? new Response(
-            JSON.stringify({
-              artifacts: {
-                mounted: true,
-                writable: false,
-                lanes: [{ lane: LANE, state: "no_artifact", promoted: null }],
-              },
-            }),
-            { headers: { "content-type": "application/json" } },
-          )
+        ? Response.json({
+            artifacts: {
+              mounted: true,
+              writable: false,
+              lanes: [{ lane: LANE, state: "no_artifact", promoted: null }],
+            },
+          })
         : new Response(replayed(), {
             headers: {
               "content-type": "application/json",

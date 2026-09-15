@@ -1,0 +1,310 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.4.16/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "ignoreUnknown": true,
+    "includes": ["**", "!reference", "!apps/api/test/fixtures", "!apps/api/drizzle/meta"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 90
+  },
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "recommended": true,
+        "noDuplicateClasses": "on",
+        "organizeImports": "on",
+        // The three sorters below stay off. Alphabetical order is not the order
+        // these things are written in: an object literal's keys sit next to the
+        // spread that may overwrite them, JSX attributes sit next to the spread
+        // that may overwrite them, and an interface's members are grouped by
+        // what they describe. Sorting any of the three is either a behaviour
+        // change or a diff that buries the grouping a reader relies on.
+        "useSortedAttributes": "off",
+        "useSortedInterfaceMembers": "off",
+        "useSortedKeys": "off",
+        "useSortedProperties": "off"
+      }
+    }
+  },
+  "javascript": {
+    "globals": ["Bun"],
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all",
+      "arrowParentheses": "always"
+    }
+  },
+  // Every group is on, which means every rule Biome ships — recommended or not,
+  // nursery included. The rules this codebase declines are listed one by one in
+  // the first override below, each with the reason it was declined. A rule that
+  // is off should be off on purpose and say so; a rule that is on should have no
+  // findings. There is no third state.
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "correctness": "on",
+      "suspicious": "on",
+      "style": "on",
+      "complexity": "on",
+      "performance": "on",
+      "security": "on",
+      "a11y": "on",
+      "nursery": "on"
+    }
+  },
+  "overrides": [
+    {
+      // The declined rules. Each one was enabled, its findings read, and turned
+      // off here because the fix it wanted was worse than the finding — either
+      // it fights a decision this codebase has already made on purpose, or the
+      // only way to satisfy it is to change what the code does.
+      "includes": ["**"],
+      "linter": {
+        "rules": {
+          "style": {
+            // Grid work is numeric. MW, MWh, hours of the day, quantile levels,
+            // percentages, HTTP codes: naming each occurrence would push the
+            // number one hop away from the arithmetic that reads it.
+            "noMagicNumbers": "off",
+            // Wire and database field names are snake_case by contract with the
+            // ONS feeds, the SQL schema and the JSON schemas in packages/core.
+            // The convention the rule wants is not ours to choose.
+            "useNamingConvention": "off",
+            // The API and the worker are server processes. Reading the
+            // environment is how they are configured.
+            "noProcessEnv": "off",
+            // Expo Router routes and drizzle config are addressed by default
+            // export; the framework requires it.
+            "noDefaultExport": "off",
+            // Files here are ordered so the reader meets the exported thing
+            // first and its helpers after. That is the order we want.
+            "useExportsLast": "off",
+            // A nested ternary in a formatter or a band selector is a table,
+            // and reads as one. Rewriting them as if/else would be longer.
+            "noNestedTernary": "off",
+            // The UI carries its copy inline in a few places where the string
+            // is the component. The dictionaries cover what is translated.
+            "noJsxLiterals": "off",
+            // drizzle.config.ts and a handful of tool configs are CommonJS
+            // because the tools that read them are.
+            "noCommonJs": "off",
+            // Parameter properties are how the small service classes declare
+            // their dependencies, and the constructors read better for it.
+            "noParameterProperties": "off",
+            // `if (x)` on a boolean is the idiom here; `if (x === true)` adds a
+            // word and no meaning.
+            "noImplicitBoolean": "off",
+            // A Fast-Refresh ergonomics rule. Satisfying it means splitting a
+            // constant or a hook out of the component file it belongs to —
+            // and in `app/[locale]/_layout.tsx` it wants `generateStaticParams`
+            // moved, which Expo Router requires to be exported from the route.
+            "useComponentExportOnlyModules": "off"
+          },
+          "correctness": {
+            // Bun and Node built-ins are the runtime for apps/api, the worker,
+            // the scripts and the tests. This rule is for browser bundles.
+            "noNodejsModules": "off",
+            // Same reason: `process` is a real global in the processes we ship.
+            "noProcessGlobal": "off",
+            // A Qwik rule. There is no Qwik here, and it reads every closure in
+            // the React tree as a serialisation boundary it is not.
+            "useQwikValidLexicalScope": "off",
+            // The static ids it objects to are the landing page's scroll
+            // anchors and an SVG gradient's `url(#…)` target. A `useId()` value
+            // changes per render, which is exactly what a fragment link and a
+            // paint server cannot have.
+            "useUniqueElementIds": "off"
+          },
+          "suspicious": {
+            // Structured log lines go to stdout on purpose; that is the log
+            // transport in this deployment.
+            "noConsole": "off",
+            // An `async` signature is part of an interface. Several
+            // implementations satisfy one without awaiting anything, and
+            // dropping `async` from them would change the contract.
+            "useAwait": "off",
+            // Deliberate no-op blocks — a catch that is allowed to swallow, a
+            // constructor that exists for its parameter properties. Every one
+            // of them carries a comment saying why it is empty.
+            "noEmptyBlockStatements": "off",
+            // Hashing and bit-packing in the cache keys and the scenario
+            // vectors. Bitwise is the point.
+            "noBitwiseOperators": "off",
+            // Three test files are shared guards: `phantom-schedules`,
+            // `migration-ledger` and `subsystem-order` each export the reader
+            // that other suites and the ticket tests import. The alternative is
+            // a fourth copy of the parser, which is the drift they exist to
+            // catch.
+            "noExportsInTest": "off",
+            // One empty file — `apps/api/test/phantom-schedules.test.ts`, left
+            // behind at zero bytes by commit a6999f1; the guard it was named
+            // for lives in `test/phantom-schedules.test.ts`. Deleting a test
+            // file is not this pass's call to make, so the rule is off and the
+            // file is named here instead of being quietly removed.
+            "noEmptySource": "off"
+          },
+          "complexity": {
+            // The long functions here are the ones that compute a forecast or
+            // assemble a response, and they are long because the calculation is
+            // long. Splitting them to satisfy a line count would scatter the
+            // reasoning the comments hang on.
+            "noExcessiveLinesPerFunction": "off",
+            "noExcessiveCognitiveComplexity": "off",
+            // Wide parameter lists in the pure calculation functions are the
+            // inputs of the calculation. Bundling them into an options object
+            // would hide which ones are required.
+            "useMaxParams": "off",
+            // `void promise` is how a deliberately unawaited promise is marked
+            // here. Removing the marker does not remove the promise.
+            "noVoid": "off"
+          },
+          "performance": {
+            // Module-level regexes would move the pattern away from the parser
+            // that uses it, and none of these are on a hot path.
+            "useTopLevelRegex": "off",
+            // The sequential awaits in the ingest jobs are sequential on
+            // purpose: they pace calls to the ONS endpoints and they write in
+            // an order the database depends on.
+            "noAwaitInLoops": "off",
+            // packages/core and packages/ui are consumed as one surface; the
+            // re-export barrels are that surface.
+            "noReExportAll": "off",
+            "noBarrelFile": "off",
+            "noNamespaceImport": "off",
+            // Every `delete` here removes a key so that a schema validator or a
+            // response sees it *absent*. `x = undefined` leaves the key in
+            // place, which is a different fact and a different test.
+            "noDelete": "off",
+            // A Solid rule. This is React Native Web; `props` here is a plain
+            // object, not a Solid store, and the rule's fix does not apply.
+            "useSolidForComponent": "off"
+          },
+          "nursery": {
+            // A ternary is an expression with two arms. Banning it would turn
+            // every one of them into a statement and a mutable binding.
+            "noTernary": "off",
+            // Inference is the house style. Annotating every binding and every
+            // return would restate what the types already say and would rot.
+            "useExplicitType": "off",
+            "useExplicitReturnType": "off",
+            // The `u` flag is not free: it changes how the pattern parses. This
+            // rule cannot be satisfied without changing what these regexes
+            // match, so it stays off until someone audits them one by one.
+            "useUnicodeRegex": "off",
+            // Same family — renaming capture groups rewrites working patterns
+            // and the code that indexes into their matches, for no behaviour
+            // anyone asked for.
+            "useNamedCaptureGroup": "off",
+            // `continue` is the guard clause of a loop. The alternative is
+            // another level of nesting per skipped case.
+            "noContinue": "off",
+            // A file's length is not a defect on its own, and the long files
+            // here are schemas and vocabularies that belong in one place.
+            "noExcessiveLinesPerFile": "off",
+            // Destructuring at every use site is a style preference, not a
+            // correctness one, and this codebase names `x.y` where it helps.
+            "useDestructuring": "off",
+            // `i++` in a `for` loop.
+            "noIncrementDecrement": "off",
+            // Attaching a `cause` to a rethrown error changes what that error
+            // serialises to, and several of these errors are read off the wire
+            // by the frontend. That is a behaviour change, not a lint fix.
+            "useErrorCause": "off",
+            // `typeof window === "undefined"` is how this app asks whether it
+            // is running in a browser. `globalThis` is defined on every target
+            // including React Native, so the rule's fix does not rename the
+            // check — it deletes it.
+            "useGlobalThis": "off",
+            // `x === undefined ? a : x` and `x ?? a` are not the same test, and
+            // this codebase distinguishes null from undefined on purpose — a
+            // row that is absent from the database is not a row whose column is
+            // null. The rule's fix is a behaviour change; it applied it to
+            // three sites and turned one API test red, which is the proof.
+            "useNullishCoalescing": "off",
+            // An assertion inside an `if` or a `for` is how this suite does
+            // case analysis: the claim genuinely differs by branch, and the
+            // rule's target — an `expect` inside a swallowed `catch` — is not
+            // what any of these 51 are.
+            "noConditionalExpect": "off",
+            // It reads a test whose assertions are in a helper as a test with
+            // no assertions. The helpers are named `expect*` and `serves`, and
+            // `noMisplacedAssertion` is already off in tests for the same
+            // reason.
+            "useExpect": "off",
+            // A React rule reading an uppercase `const` in an API test — `GET`,
+            // `POST`, `SOURCE`, `CALENDAR_BODY` — as a component factory. There
+            // are no components in `apps/api`.
+            "noComponentHookFactories": "off",
+            // `<title>` inside `expo-router/head` and `<SvgText>` from
+            // `react-native-svg` are not React Native hosts, and neither takes
+            // a `<Text>` wrapper.
+            "noReactNativeRawText": "off",
+            // The overlay alphas and `"transparent"` it objects to are one-off
+            // values on a landing page and a keyword. Hoisting them into the
+            // shared palette would put a page's private value in every app's
+            // theme.
+            "noReactNativeLiteralColors": "off",
+            // `errors.ts` is the error taxonomy — eight classes, one per code,
+            // and the file is the taxonomy. The others pair a transport with
+            // the error it raises. One class per file would scatter both.
+            "noExcessiveClassesPerFile": "off",
+            // Another Solid rule: it wants every inline handler hoisted. In
+            // React that hoisting is what `useCallback` is for, and doing it
+            // blindly would change when the handlers are recreated.
+            "noJsxPropsBind": "off",
+            // `it` is what three quarters of this suite already calls a test,
+            // inside a describe and out. The rest had drifted to `test`; they
+            // are the same function, so the drift is now settled one way.
+            "useConsistentTestIt": {
+              "level": "on",
+              "options": { "function": "it", "withinDescribe": "it" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/doctor.config.json"],
+      "json": { "parser": { "allowComments": true, "allowTrailingCommas": true } }
+    },
+    {
+      // Generated from packages/core/schema/*.json. The fixture-shaped constants
+      // in it trip the secret scanner; the file is not edited by hand.
+      "includes": ["packages/core/src/types.generated.ts"],
+      "linter": { "rules": { "security": { "noSecrets": "off" } } }
+    },
+    {
+      "includes": ["**/test/**", "**/e2e/**", "**/*.test.ts"],
+      "linter": {
+        "rules": {
+          // Assertions inside test helpers are the helper's whole job.
+          "suspicious": { "noMisplacedAssertion": "off" },
+          // Test fixtures are full of high-entropy strings that are not secrets.
+          "security": { "noSecrets": "off" }
+        }
+      }
+    },
+    {
+      // The e2e specs are Playwright, not bun:test. Their `test` is imported
+      // from `@playwright/test` and there is no `it` beside it, so the
+      // `it`-everywhere convention would rename a function out of existence.
+      "includes": ["apps/web/e2e/**"],
+      "linter": {
+        "rules": {
+          "nursery": { "useConsistentTestIt": "off" },
+          // Playwright's `test.skip(condition, reason)` is a conditional skip,
+          // not a disabled test — here it skips the nav specs on a viewport too
+          // narrow to render the nav at all.
+          "suspicious": { "noSkippedTests": "off" }
+        }
+      }
+    }
+  ]
+}

@@ -9,7 +9,7 @@ import type { SectionId } from "@/lib/section-fragment";
  * and this file cannot be one — re-exported here so the components still read
  * the vocabulary from the module that renders it.
  */
-export type { SectionId };
+export type { SectionId } from "@/lib/section-fragment";
 
 /**
  * The page gutter, shared by the nav, every section and the footer.

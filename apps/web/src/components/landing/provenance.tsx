@@ -1,13 +1,4 @@
-import {
-  IconCircle,
-  LinkIcon,
-  layout,
-  Panel,
-  radius,
-  space,
-  usePalette,
-  XIcon,
-} from "@wattsteer/ui";
+import { IconCircle, LinkIcon, Panel, space, usePalette, XIcon } from "@wattsteer/ui";
 import { Text, View } from "react-native";
 import { useCopy } from "@/i18n";
 import { SectionHeading } from "./section";

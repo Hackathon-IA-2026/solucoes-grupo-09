@@ -53,7 +53,7 @@ export interface JobSchedule<TPayload> {
 export interface JobRunner<TPayload, TResult> {
   readonly mode: "inprocess" | "bullmq";
   /** Enqueue work; resolves to the job id. */
-  submit(payload: TPayload): Promise<string>;
+  submit: (payload: TPayload) => Promise<string>;
   /**
    * Register recurring work under a stable `id`, replacing any prior schedule
    * with the same id.
@@ -65,9 +65,9 @@ export interface JobRunner<TPayload, TResult> {
    * to everything that watches the queue. BullMQ's job scheduler is leader-safe
    * across workers, so N replicas produce one run.
    */
-  schedule(schedule: JobSchedule<TPayload>): Promise<void>;
+  schedule: (schedule: JobSchedule<TPayload>) => Promise<void>;
   /** Look up a job's status/result, or `null` if the id is unknown. */
-  status(id: string): Promise<JobRecord<TResult> | null>;
+  status: (id: string) => Promise<JobRecord<TResult> | null>;
   /** Release resources (worker, connections). */
-  close(): Promise<void>;
+  close: () => Promise<void>;
 }

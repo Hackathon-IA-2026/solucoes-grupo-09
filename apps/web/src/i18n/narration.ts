@@ -105,6 +105,24 @@ function unitOf(clause: NarrationClause): UnitCode {
   return unit as UnitCode;
 }
 
+/**
+ * One `Intl.ListFormat` per language tag, built on first use.
+ *
+ * Constructing an `Intl` formatter is the expensive part and `.format` is
+ * stateless, so the cached instance answers exactly as a fresh one would. There
+ * are two tags in this app, so the map has two entries.
+ */
+const LIST_FORMATTERS = new Map<string, Intl.ListFormat>();
+function listFormatFor(tag: string): Intl.ListFormat {
+  const existing = LIST_FORMATTERS.get(tag);
+  if (existing !== undefined) {
+    return existing;
+  }
+  const made = new Intl.ListFormat(tag, { style: "long", type: "conjunction" });
+  LIST_FORMATTERS.set(tag, made);
+  return made;
+}
+
 const percent: Formatter = (value, { f }) => f.percent(asNumber(value));
 const energy: Formatter = (value, { f }) => mwh(asNumber(value), f);
 const headline: Formatter = (value, context) =>
@@ -149,10 +167,7 @@ const FORMATTERS: Readonly<Record<string, Formatter>> = {
     if (!Array.isArray(value)) {
       throw new Error("null_headline_features is not a list");
     }
-    return new Intl.ListFormat(formatTag(f.locale), {
-      style: "long",
-      type: "conjunction",
-    }).format(value.map((one) => String(one)));
+    return listFormatFor(formatTag(f.locale)).format(value.map((one) => String(one)));
   },
 };
 

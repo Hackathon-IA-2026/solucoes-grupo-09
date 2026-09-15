@@ -1,6 +1,7 @@
 declare global {
   /** Runtime API-origin override — set before the bundle runs (web only). */
   // eslint-disable-next-line no-var
+  // biome-ignore lint/nursery/useVarsOnTop: a global augmentation can only be declared with `var`
   var __WATTSTEER_API_URL__: string | undefined;
 }
 

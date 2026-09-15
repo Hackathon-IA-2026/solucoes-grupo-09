@@ -191,7 +191,7 @@ interface DriverRecord {
 const asNumber = (value: unknown): number => Number(value);
 
 /** The one origin kind the day-ahead diagnosis may return. A constant. */
-export const SERVED: "served" = "served";
+export const SERVED = "served";
 
 /**
  * The attribution for one subsystem-day at one gate, or `null` if none exists.

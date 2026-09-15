@@ -475,7 +475,7 @@ export interface MutableResponse {
 
 /** The read slice of a `Request`. Same reason. */
 export interface RevalidatingRequest {
-  headers: { get(name: string): string | null };
+  headers: { get: (name: string) => string | null };
 }
 
 /** What a route hands over: where to write, and what asked. */

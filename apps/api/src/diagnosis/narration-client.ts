@@ -102,7 +102,9 @@ export class NarrationModelError extends UpstreamError {
  * request that is never sent.
  */
 export interface NarrationMessages {
-  create(params: Anthropic.MessageCreateParamsNonStreaming): Promise<Anthropic.Message>;
+  create: (
+    params: Anthropic.MessageCreateParamsNonStreaming,
+  ) => Promise<Anthropic.Message>;
 }
 
 /** Everything one request varies on. Three values, all of them codes. */

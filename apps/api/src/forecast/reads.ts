@@ -40,7 +40,7 @@ import type { ForecastGateProfile } from "./publication.js";
  */
 
 /** The one origin kind this route may return. A constant, not a parameter. */
-export const SERVED: "served" = "served";
+export const SERVED = "served";
 
 /** The band shape, exactly as the wire publishes it. */
 export interface ForecastBand {

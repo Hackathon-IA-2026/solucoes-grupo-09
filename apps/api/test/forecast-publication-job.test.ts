@@ -252,12 +252,7 @@ describe("the publication job's day and gate", () => {
       forecast_origin: { published_at: string };
     };
     shifted.forecast_origin.published_at = "2025-04-07T22:10:00+00:00";
-    const service = serving(
-      () =>
-        new Response(JSON.stringify(shifted), {
-          headers: { "content-type": "application/json" },
-        }),
-    );
+    const service = serving(() => Response.json(shifted));
     const publish = createForecastPublisher({
       db: untouchable(),
       endpoint: { baseUrl: service.url, timeoutMs: 5000 },

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ApiError, createClient, isRetryableStatus } from "../src/client.js";
@@ -36,7 +36,7 @@ function stub(status: number, body: unknown, headers: Record<string, string> = {
 }
 
 describe("a successful read arrives in the app's vocabulary", () => {
-  test("the wire's snake_case is gone by the time a screen sees it", async () => {
+  it("the wire's snake_case is gone by the time a screen sees it", async () => {
     const { doFetch, calls } = stub(200, fixture("03-grid-now.json"));
     const client = createClient({ baseUrl: "https://api.example.com", fetch: doFetch });
     const now = await client.gridNow();
@@ -47,7 +47,7 @@ describe("a successful read arrives in the app's vocabulary", () => {
     expect(calls[0]?.url).toBe("https://api.example.com/v1/grid/now");
   });
 
-  test('a query parameter that was not supplied is not sent as "undefined"', async () => {
+  it('a query parameter that was not supplied is not sent as "undefined"', async () => {
     const { doFetch, calls } = stub(200, fixture("02-grid-outlook.json"));
     const client = createClient({ baseUrl: "https://api.example.com/", fetch: doFetch });
     await client.gridOutlook({ targetDate: "2026-08-29" });
@@ -56,7 +56,7 @@ describe("a successful read arrives in the app's vocabulary", () => {
     );
   });
 
-  test("a POST body leaves in the wire's casing", async () => {
+  it("a POST body leaves in the wire's casing", async () => {
     const { doFetch, calls } = stub(200, fixture("11-optimization-result.json"));
     const client = createClient({ baseUrl: "https://api.example.com", fetch: doFetch });
     const scenario = fixture("10-scenario.json") as Record<string, unknown>;
@@ -93,7 +93,7 @@ describe("a successful read arrives in the app's vocabulary", () => {
 });
 
 describe("a replay is the optimizer's blob, asked as a question about the past", () => {
-  test("the pinned day goes out as a GET, with the blob and the lane", async () => {
+  it("the pinned day goes out as a GET, with the blob and the lane", async () => {
     // A `GET` and not the `POST`: the scenario is already in the address bar of
     // the screen that asks, so sending it as a query parameter keeps the
     // request a shared-cacheable function of exactly what a shared link
@@ -120,7 +120,7 @@ describe("a replay is the optimizer's blob, asked as a question about the past",
     expect(replay.scoredOn).toBe("observed");
   });
 
-  test("an observed-only body is sent verbatim, byte for byte", async () => {
+  it("an observed-only body is sent verbatim, byte for byte", async () => {
     // The answer is stamped with the hash of the bytes that arrived, so a body
     // this client re-serialised would be a different document answering under
     // the same name. `bodyText` is the path that guarantees it, and this is the
@@ -137,7 +137,7 @@ describe("a replay is the optimizer's blob, asked as a question about the past",
     expect(calls[0]?.init.body).toBe(canonical);
   });
 
-  test("a refused day is a code, not a caveated answer", async () => {
+  it("a refused day is a code, not a caveated answer", async () => {
     // The one refusal with a view behind it. Every other clause is answered
     // with its sentence and no figures.
     const { doFetch } = stub(422, {
@@ -159,7 +159,7 @@ describe("a replay is the optimizer's blob, asked as a question about the past",
 });
 
 describe("the typed error carries status, domain code and a retryable flag", () => {
-  test("a 404 envelope becomes an ApiError with all three", async () => {
+  it("a 404 envelope becomes an ApiError with all three", async () => {
     const { doFetch } = stub(404, {
       error: {
         code: "FORECAST_NOT_YET_PUBLISHED",
@@ -182,7 +182,7 @@ describe("the typed error carries status, domain code and a retryable flag", () 
     expect(failure?.retryable).toBe(false);
   });
 
-  test("no promoted artifact is a 503 and is retryable, but is still its own state", async () => {
+  it("no promoted artifact is a 503 and is retryable, but is still its own state", async () => {
     const { doFetch } = stub(503, {
       error: {
         code: "MODEL_UNAVAILABLE",
@@ -202,7 +202,7 @@ describe("the typed error carries status, domain code and a retryable flag", () 
     expect(failure.details?.lane_state).toBe("present_unpromoted");
   });
 
-  test("a transport failure has no status and no code, and is retryable", async () => {
+  it("a transport failure has no status and no code, and is retryable", async () => {
     const doFetch = (async () => {
       throw new TypeError("network down");
     }) as unknown as typeof globalThis.fetch;
@@ -213,7 +213,7 @@ describe("the typed error carries status, domain code and a retryable flag", () 
     expect(failure.retryable).toBe(true);
   });
 
-  test("a body that is not the envelope is reported as such, not as a code", async () => {
+  it("a body that is not the envelope is reported as such, not as a code", async () => {
     // A CDN 502 page, or a proxy that answered before the gateway did. Claiming
     // a domain code here would be inventing one.
     const { doFetch } = stub(502, "<html>Bad gateway</html>");
@@ -224,7 +224,7 @@ describe("the typed error carries status, domain code and a retryable flag", () 
     expect(failure.retryable).toBe(true);
   });
 
-  test("an unknown code is not admitted to the closed enum", async () => {
+  it("an unknown code is not admitted to the closed enum", async () => {
     const { doFetch } = stub(400, {
       error: { code: "SOMETHING_NEW", message: "from a newer gateway" },
     });
@@ -236,7 +236,7 @@ describe("the typed error carries status, domain code and a retryable flag", () 
 });
 
 describe("retryable is a property of the failure, not of the screen", () => {
-  test("429, 5xx and a transport failure; nothing else", () => {
+  it("429, 5xx and a transport failure; nothing else", () => {
     expect(isRetryableStatus(0)).toBe(true);
     expect(isRetryableStatus(429)).toBe(true);
     expect(isRetryableStatus(500)).toBe(true);
@@ -249,7 +249,7 @@ describe("retryable is a property of the failure, not of the screen", () => {
     expect(isRetryableStatus(422)).toBe(false);
   });
 
-  test("every code in the closed enum gets a verdict from its canonical status", () => {
+  it("every code in the closed enum gets a verdict from its canonical status", () => {
     // No code can be in a state where a screen has to guess. Asserted over the
     // whole enum rather than over a sample, so a code added by a later ticket
     // is covered the moment it is declared.

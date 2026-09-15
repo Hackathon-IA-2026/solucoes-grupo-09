@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { SUBSYSTEM_DISPLAY_ORDER } from "@wattsteer/core";
@@ -92,7 +92,7 @@ function resolveLocal(from: string, specifier: string): string | undefined {
       ? resolve(dirname(from), specifier)
       : undefined;
   if (base === undefined) {
-    return undefined;
+    return;
   }
   for (const candidate of [
     `${base}.ts`,
@@ -104,7 +104,6 @@ function resolveLocal(from: string, specifier: string): string | undefined {
       return candidate;
     }
   }
-  return undefined;
 }
 
 /** Every file reachable from `entry` by a runtime import, and the bare names. */
@@ -135,7 +134,7 @@ function runtimeGraph(entry: string): { files: Set<string>; bare: Map<string, st
 
 describe("the pure layer is pure", () => {
   for (const module of PURE_MODULES) {
-    test(`${relative(VOICE, module)} reaches no React, no React Native and no router`, () => {
+    it(`${relative(VOICE, module)} reaches no React, no React Native and no router`, () => {
       const { bare } = runtimeGraph(module);
       const offending = [...bare.entries()].filter(([specifier]) =>
         FORBIDDEN.some((name) => specifier === name || specifier.startsWith(`${name}/`)),
@@ -147,7 +146,7 @@ describe("the pure layer is pure", () => {
     });
   }
 
-  test("the guard actually looks at a graph, not just at four files", () => {
+  it("the guard actually looks at a graph, not just at four files", () => {
     // Without this, the check above would pass on a `tools.ts` that imported a
     // component that imported React. `execute.ts` reaches `params.ts` and
     // `scenario.ts` — both deliberately React-free — so the graph is bigger
@@ -159,7 +158,7 @@ describe("the pure layer is pure", () => {
     );
   });
 
-  test("a React-importing module would be caught", () => {
+  it("a React-importing module would be caught", () => {
     // Non-vacuity, proved in-process rather than by hand: `use-serving.ts` does
     // import React, and the same walk over it finds it. If the walker were
     // broken — a regex that matched nothing, a resolver that returned
@@ -170,7 +169,7 @@ describe("the pure layer is pure", () => {
 });
 
 describe("the six tools", () => {
-  test("there are exactly six, in the order the plan fixes", () => {
+  it("there are exactly six, in the order the plan fixes", () => {
     expect(TOOL_NAMES).toEqual([
       "show_grid",
       "explain",
@@ -182,7 +181,7 @@ describe("the six tools", () => {
     expect(VOICE_TOOLS.map((tool) => tool.name)).toEqual([...TOOL_NAMES]);
   });
 
-  test("isToolName refuses everything else", () => {
+  it("isToolName refuses everything else", () => {
     for (const name of TOOL_NAMES) {
       expect(isToolName(name)).toBe(true);
     }
@@ -191,7 +190,7 @@ describe("the six tools", () => {
     }
   });
 
-  test("every tool is a function tool that forbids extra properties", () => {
+  it("every tool is a function tool that forbids extra properties", () => {
     for (const tool of VOICE_TOOLS) {
       expect(tool.type).toBe("function");
       expect(tool.parameters.type).toBe("object");
@@ -202,7 +201,7 @@ describe("the six tools", () => {
     }
   });
 
-  test("every required property is a declared property", () => {
+  it("every required property is a declared property", () => {
     for (const tool of VOICE_TOOLS) {
       for (const key of tool.parameters.required) {
         expect(Object.keys(tool.parameters.properties)).toContain(key);
@@ -210,7 +209,7 @@ describe("the six tools", () => {
     }
   });
 
-  test("highlight is the only tool with a required argument", () => {
+  it("highlight is the only tool with a required argument", () => {
     const withRequired = VOICE_TOOLS.filter(
       (tool) => tool.parameters.required.length > 0,
     );
@@ -218,13 +217,13 @@ describe("the six tools", () => {
     expect(toolNamed("highlight")?.parameters.required).toEqual(["subsystem"]);
   });
 
-  test("show_grid takes nothing at all", () => {
+  it("show_grid takes nothing at all", () => {
     const tool = toolNamed("show_grid");
     expect(tool?.parameters.properties).toEqual({});
     expect(tool?.parameters.required).toEqual([]);
   });
 
-  test("toolNamed answers for the six and for nothing else", () => {
+  it("toolNamed answers for the six and for nothing else", () => {
     for (const name of TOOL_NAMES) {
       expect(toolNamed(name)?.name).toBe(name);
     }
@@ -239,14 +238,14 @@ describe("the enums are the app's, not a second opinion", () => {
       .map(([, property]) => property.enum),
   );
 
-  test("every subsystem enum is SUBSYSTEM_DISPLAY_ORDER", () => {
+  it("every subsystem enum is SUBSYSTEM_DISPLAY_ORDER", () => {
     expect(subsystemEnums.length).toBe(4);
     for (const values of subsystemEnums) {
       expect(values).toEqual([...SUBSYSTEM_DISPLAY_ORDER]);
     }
   });
 
-  test("the run enum is RUN_LABELS and the technology enum is the URL spelling", () => {
+  it("the run enum is RUN_LABELS and the technology enum is the URL spelling", () => {
     const focus = toolNamed("focus");
     expect(focus?.parameters.properties.run.enum).toEqual([...RUN_LABELS]);
     expect(focus?.parameters.properties.technology.enum).toEqual([...TECHNOLOGY_VALUES]);
@@ -255,13 +254,13 @@ describe("the enums are the app's, not a second opinion", () => {
     expect(TECHNOLOGY_VALUES).toEqual(["wind", "solar"]);
   });
 
-  test("the episode enum is the replay catalogue", () => {
+  it("the episode enum is the replay catalogue", () => {
     expect(toolNamed("replay")?.parameters.properties.episode.enum).toEqual(
       REPLAY_DAYS.map((day) => day.id),
     );
   });
 
-  test("the driver enum is the eight groups the diagnosis contract publishes", () => {
+  it("the driver enum is the eight groups the diagnosis contract publishes", () => {
     // `DriverCode` is a type and has no runtime list, so the union is read off
     // the source of `packages/core`. A ninth driver group is then a failing
     // test here rather than a row the model can never be pointed at.
@@ -279,7 +278,7 @@ describe("the enums are the app's, not a second opinion", () => {
     expect(DRIVER_CODES).not.toContain("other" as never);
   });
 
-  test("the size bounds are the steppers' own", () => {
+  it("the size bounds are the steppers' own", () => {
     const mitigate = toolNamed("mitigate");
     const properties = mitigate?.parameters.properties ?? {};
     expect(properties.battery_mwh.minimum).toBe(ASSET_LIMITS.batteryEnergyMwh.min);
@@ -290,14 +289,14 @@ describe("the enums are the app's, not a second opinion", () => {
     expect(properties.load_mwh.maximum).toBe(ASSET_LIMITS.loadDailyEnergyMwh.max);
   });
 
-  test("relative_day is past-only and bounded", () => {
+  it("relative_day is past-only and bounded", () => {
     const relative_day = toolNamed("replay")?.parameters.properties.relative_day;
     expect(relative_day?.type).toBe("integer");
     expect(relative_day?.maximum).toBe(-1);
     expect(relative_day?.minimum).toBe(RELATIVE_DAY_FLOOR);
   });
 
-  test("highlight's description says it does not navigate", () => {
+  it("highlight's description says it does not navigate", () => {
     // The step that proves the thesis (plan §6, step 1). If the model is not
     // told this, it opens Explain to answer a question that fits where the
     // reader already is, and the demo loses its best moment.

@@ -300,7 +300,7 @@ export function parseSigaCsv(text: string): SigaParse {
       // One extract, one generation stamp. Two would mean the file is a
       // concatenation of cuts and nothing about its vintage is knowable.
       throw new UpstreamError(
-        `SIGA extract carries two DatGeracaoConjuntoDados values: ` +
+        "SIGA extract carries two DatGeracaoConjuntoDados values: " +
           `${snapshotDate.toISOString().slice(0, 10)} and ` +
           `${outcome.snapshotDate.toISOString().slice(0, 10)}`,
       );

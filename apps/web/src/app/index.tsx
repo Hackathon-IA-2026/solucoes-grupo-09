@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { Animated, Platform, Pressable, Text, View } from "react-native";
 import { readStoredLocale, useCopy, useI18n } from "@/i18n";
 import { DEFAULT_LOCALE, localePath } from "@/i18n/locale";
+import { alternatesFor } from "@/lib/seo";
 
 /**
  * How long the loading screen is held before the redirect.
@@ -23,8 +24,6 @@ import { DEFAULT_LOCALE, localePath } from "@/i18n/locale";
  * why `entry-screen.test.ts` asserts the script carries this number.
  */
 export const SPLASH_MIN_MS = 900;
-
-import { alternatesFor } from "@/lib/seo";
 
 /**
  * The loading screen at bare `/`.

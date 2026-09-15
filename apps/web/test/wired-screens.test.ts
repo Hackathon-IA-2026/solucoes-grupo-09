@@ -19,7 +19,7 @@
  *     split exists to prevent.
  */
 
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -73,7 +73,7 @@ describe("the two screens read the gateway and not a fixture", () => {
     ["the Overview", OVERVIEW],
     ["Explain", EXPLAIN],
   ] as const) {
-    test(`${name} calls no fixture builder`, () => {
+    it(`${name} calls no fixture builder`, () => {
       const found = BUILDERS.filter((builder) =>
         new RegExp(`\\b${builder}\\b`).test(source),
       );
@@ -81,7 +81,7 @@ describe("the two screens read the gateway and not a fixture", () => {
     });
   }
 
-  test("each screen drives one hook, and the hook is its own", () => {
+  it("each screen drives one hook, and the hook is its own", () => {
     expect(OVERVIEW).toContain("useNetwork({");
     expect(EXPLAIN).toContain("useExplain({");
     // Not each other's: one hook per screen is the pattern `use-replay.ts` and
@@ -100,7 +100,7 @@ describe("one client, one casing boundary", () => {
   ] as const;
 
   for (const [name, source] of REQUESTING) {
-    test(`${name} reaches the gateway only through \`api\``, () => {
+    it(`${name} reaches the gateway only through \`api\``, () => {
       expect(source).toContain('from "@/lib/api"');
       // A bare `fetch`, an `XMLHttpRequest` or a second `ApiClient` would each
       // be a second translator between the wire's snake_case and this app's
@@ -111,7 +111,7 @@ describe("one client, one casing boundary", () => {
     });
   }
 
-  test("every request this work added is a method on the one client", () => {
+  it("every request this work added is a method on the one client", () => {
     const client = readFileSync(
       join(import.meta.dir, "..", "..", "..", "packages", "core", "src", "client.ts"),
       "utf8",
@@ -133,7 +133,7 @@ describe("one client, one casing boundary", () => {
 });
 
 describe("the chrome badge is a fact, not a label", () => {
-  test("`FIXTURE DATA` is gone from both dictionaries", () => {
+  it("`FIXTURE DATA` is gone from both dictionaries", () => {
     for (const locale of ["copy.en.ts", "copy.pt.ts"] as const) {
       // Comments stripped: the badge's own doc comment quotes the string it
       // used to say, which is the explanation and not the label.
@@ -143,7 +143,7 @@ describe("the chrome badge is a fact, not a label", () => {
     }
   });
 
-  test("the badge's second half is read from /v1/meta, never declared", () => {
+  it("the badge's second half is read from /v1/meta, never declared", () => {
     // Non-vacuity rests on this pair: the badge renders `noModelBadge` only
     // under a value `useServing` computed, and `useServing` only ever reports
     // `known` after `api.meta` answered.
@@ -153,7 +153,7 @@ describe("the chrome badge is a fact, not a label", () => {
     expect(SERVING).toContain("serving: anyLaneServing(lanes)");
   });
 
-  test("a lane counts as serving only when promoted and not reported unusable", () => {
+  it("a lane counts as serving only when promoted and not reported unusable", () => {
     const absence = code(read("lib", "absence.ts"));
     expect(absence).toContain(
       'lanes.some((lane) => lane.condition === "promoted" && lane.usable !== false)',
@@ -162,7 +162,7 @@ describe("the chrome badge is a fact, not a label", () => {
 });
 
 describe("a refused forecast renders no forecast", () => {
-  test("the Overview's forecast panels are behind the `read` state alone", () => {
+  it("the Overview's forecast panels are behind the `read` state alone", () => {
     // `forecast` is `null` in every state but `read`, and each forecast panel
     // is inside the component that takes it. A panel moved outside this guard
     // would draw a band from a state that has none.
@@ -182,7 +182,7 @@ describe("a refused forecast renders no forecast", () => {
     }
   });
 
-  test("Explain's diagnosis panels are behind the `explained` state alone", () => {
+  it("Explain's diagnosis panels are behind the `explained` state alone", () => {
     expect(EXPLAIN_FLAT).toContain(
       'const day = state.status === "explained" ? state.day : null;',
     );
@@ -197,7 +197,7 @@ describe("a refused forecast renders no forecast", () => {
     }
   });
 
-  test("the refusal is rendered from the code, never from the envelope's message", () => {
+  it("the refusal is rendered from the code, never from the envelope's message", () => {
     for (const [name, source] of [
       ["the Overview", OVERVIEW],
       ["Explain", EXPLAIN],
@@ -219,7 +219,7 @@ describe("a refused forecast renders no forecast", () => {
 });
 
 describe("the observed half needs no model", () => {
-  test("the Overview's observed reads are the three that answer with nothing promoted", () => {
+  it("the Overview's observed reads are the three that answer with nothing promoted", () => {
     for (const call of [
       "api.gridNow(",
       "api.curtailmentHours(",
@@ -235,7 +235,7 @@ describe("the observed half needs no model", () => {
     expect(forecastAt).toBeGreaterThan(observedAt);
   });
 
-  test("Explain's observed read is the restriction reasons, and it is not grouped with the day", () => {
+  it("Explain's observed read is the restriction reasons, and it is not grouped with the day", () => {
     expect(EXPLAIN_HOOK).toContain("api.observedReasons(");
     const observedAt = EXPLAIN_HOOK.indexOf("const observed = Promise.all");
     const dayAt = EXPLAIN_HOOK.indexOf("const day = Promise.all");
@@ -265,7 +265,7 @@ describe("the observed half needs no model", () => {
     return [...union.matchAll(/readonly status: "(\w+)"/g)].map((m) => m[1]).sort();
   }
 
-  test("the Overview's hook has exactly its four states", () => {
+  it("the Overview's hook has exactly its four states", () => {
     expect(statesOf(NETWORK_HOOK, "NetworkState")).toEqual([
       "observedOnly",
       "read",
@@ -274,7 +274,7 @@ describe("the observed half needs no model", () => {
     ]);
   });
 
-  test("Explain's hook has exactly its four states, named to match", () => {
+  it("Explain's hook has exactly its four states, named to match", () => {
     expect(statesOf(EXPLAIN_HOOK, "ExplainState")).toEqual([
       "explained",
       "observedOnly",

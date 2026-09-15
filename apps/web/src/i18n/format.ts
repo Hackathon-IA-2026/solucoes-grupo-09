@@ -27,7 +27,7 @@
 
 import type { Locale } from "./locale";
 
-export type { Locale };
+export type { Locale } from "./locale";
 
 /**
  * The BCP-47 tag `Intl` is keyed off.

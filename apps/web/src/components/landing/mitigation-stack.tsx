@@ -44,7 +44,8 @@ export function MitigationStack() {
   const { locale } = useI18n();
   const colors = usePalette();
   const baseline = MITIGATION[0];
-  const final = MITIGATION[MITIGATION.length - 1];
+  // `MITIGATION` is a non-empty literal in `fixtures.ts`; `.at` cannot see that.
+  const final = MITIGATION.at(-1) as MitigationStep;
   const max = Math.max(...MITIGATION.map((step) => upper(step.remaining))) * 1.05;
   const avoided = 1 - centre(final.remaining) / centre(baseline.remaining);
   const recoveredMedian = final.recovered === null ? 0 : centre(final.recovered);
@@ -173,6 +174,7 @@ function StepRow({ step, max }: { step: MitigationStep; max: number }) {
       <Text
         style={{ fontSize: 12, color: colors.inkMuted, fontVariant: ["tabular-nums"] }}
       >
+        {/* biome-ignore lint/nursery/noLeakedRender: both arms are a string or null, and this is a ternary rather than a `&&` — there is no falsy value to leak */}
         {step.remaining.kind === "band"
           ? `${copy.band.rangeLabel} ${formatRange(locale, step.remaining.band)}${detail === null ? "" : ` · ${detail}`}`
           : detail}

@@ -561,7 +561,6 @@ const sqlStateOf = (error: unknown): string | undefined => {
     }
     current = (current as { cause?: unknown }).cause;
   }
-  return undefined;
 };
 
 const featuresOnly = (row: Record<string, unknown>): Record<string, unknown> =>
@@ -2858,17 +2857,17 @@ suite("the gate, end to end (real Postgres)", () => {
 
     for (let hour = 0; hour < 24; hour += 1) {
       const row = neAt(ne, hour);
-      const programmed = NE_PROGRAMMED(hour);
+      const programmedMwh = NE_PROGRAMMED(hour);
       expect(Number(row?.proxy_residual_load_ratio)).toBeCloseTo(
-        proxyResidual(hour) / programmed,
+        proxyResidual(hour) / programmedMwh,
         9,
       );
       expect(Number(row?.proxy_renewable_load_ratio)).toBeCloseTo(
-        PROXY_EXPECTED_VRE / programmed,
+        PROXY_EXPECTED_VRE / programmedMwh,
         9,
       );
       expect(Number(row?.proxy_vre_surplus_mwh)).toBeCloseTo(
-        PROXY_EXPECTED_VRE - programmed,
+        PROXY_EXPECTED_VRE - programmedMwh,
         6,
       );
       // The three are one quantity seen three ways, and the identities that say

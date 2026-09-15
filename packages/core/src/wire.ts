@@ -35,12 +35,11 @@
  * It is re-exported here, and nothing at runtime calls it.
  */
 
-import { toCamelKey } from "./casing.js";
 import type { WireField, WireShape } from "./types.generated.js";
 import { WIRE_SHAPES, type WireShapeName } from "./types.generated.js";
 
-export type { WireField, WireShape, WireShapeName };
-export { toCamelKey };
+export { toCamelKey } from "./casing.js";
+export type { WireField, WireShape, WireShapeName } from "./types.generated.js";
 
 /** The shape descriptor for a generated type, by name. */
 export function shapeOf(name: WireShapeName): WireShape {

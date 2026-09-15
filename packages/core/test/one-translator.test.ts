@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { toCamelKey } from "../src/casing.js";
@@ -92,7 +92,7 @@ function sourceFiles(directory: string, found: string[] = []): string[] {
 }
 
 describe("exactly one module translates between the wire and the app", () => {
-  test("no unsanctioned file converts a key's casing", () => {
+  it("no unsanctioned file converts a key's casing", () => {
     const offenders: string[] = [];
     for (const file of sourceFiles(ROOT)) {
       const path = relative(ROOT, file);
@@ -109,7 +109,7 @@ describe("exactly one module translates between the wire and the app", () => {
     expect(offenders).toEqual([]);
   });
 
-  test("the one that does is the one that ships the table", () => {
+  it("the one that does is the one that ships the table", () => {
     // A guard on the guard: if `wire.ts` stopped doing the renaming the test
     // above would pass vacuously.
     const source = readFileSync(join(ROOT, "packages", "core", "src", "wire.ts"), "utf8");
@@ -118,7 +118,7 @@ describe("exactly one module translates between the wire and the app", () => {
     expect(source).toContain("encodeWire");
   });
 
-  test("the walk read the repository, so the empty offender list means something", () => {
+  it("the walk read the repository, so the empty offender list means something", () => {
     // The other half of the same worry, and the one that was missing: the test
     // above pins that `wire.ts` still translates, but nothing pinned that the
     // *scan* still reads anything. Measured: narrowing the extension filter to
@@ -146,7 +146,7 @@ describe("exactly one module translates between the wire and the app", () => {
 });
 
 describe("the generated table is the schema's field names, spelled the one way", () => {
-  test("every wire name in the table came from a schema property", () => {
+  it("every wire name in the table came from a schema property", () => {
     const declared = new Set<string>();
     for (const schema of readSchemas().values()) {
       const walk = (node: unknown): void => {
@@ -177,7 +177,7 @@ describe("the generated table is the schema's field names, spelled the one way",
     expect(invented).toEqual([]);
   });
 
-  test("every camel name in the table is the convention applied to its wire name", () => {
+  it("every camel name in the table is the convention applied to its wire name", () => {
     const wrong: string[] = [];
     for (const [name, shape] of Object.entries(WIRE_SHAPES)) {
       for (const [camel, field] of Object.entries(shape)) {
@@ -189,7 +189,7 @@ describe("the generated table is the schema's field names, spelled the one way",
     expect(wrong).toEqual([]);
   });
 
-  test("the convention keeps a digit attached to the segment it was written with", () => {
+  it("the convention keeps a digit attached to the segment it was written with", () => {
     // The reason the table is generated rather than computed at runtime: this
     // mapping is not invertible, so the reverse direction has to be a lookup.
     expect(toCamelKey("last_24h_constrained_off_mwh")).toBe("last24hConstrainedOffMwh");
@@ -213,7 +213,7 @@ describe("the codec round-trips every checked-in example", () => {
   ];
 
   for (const [shape, file] of cases) {
-    test(`${file} survives decode then encode unchanged`, () => {
+    it(`${file} survives decode then encode unchanged`, () => {
       const wire = JSON.parse(
         readFileSync(
           join(import.meta.dir, "..", "fixtures", "spec-examples", file),
@@ -228,7 +228,7 @@ describe("the codec round-trips every checked-in example", () => {
     });
   }
 
-  test("decoding actually renames, rather than passing the body through", () => {
+  it("decoding actually renames, rather than passing the body through", () => {
     const wire = JSON.parse(
       readFileSync(
         join(import.meta.dir, "..", "fixtures", "spec-examples", "03-grid-now.json"),
@@ -246,7 +246,7 @@ describe("the codec round-trips every checked-in example", () => {
     expect(first.onsDisplayName).toBe("NORDESTE");
   });
 
-  test("a map whose keys are data is not renamed", () => {
+  it("a map whose keys are data is not renamed", () => {
     // `/v1/meta`'s attribution block and `error.details` are dictionaries. A
     // codec that camel-cased their keys would rewrite values, not field names.
     const wire = JSON.parse(
@@ -297,7 +297,7 @@ describe("a map's values are renamed even though its keys are not", () => {
     machine_readable_at: "/v1/plants",
   };
 
-  test("encoding renames a multi-word field inside a map value", () => {
+  it("encoding renames a multi-word field inside a map value", () => {
     const encoded = encodeWire("Meta", { attribution: { aneel_siga: APP } }) as {
       attribution: Record<string, Record<string, unknown>>;
     };
@@ -310,7 +310,7 @@ describe("a map's values are renamed even though its keys are not", () => {
     expect(encoded.attribution.aneel_siga?.derivativeDatabase).toBeUndefined();
   });
 
-  test("decoding renames it back, on both endpoints that carry the block", () => {
+  it("decoding renames it back, on both endpoints that carry the block", () => {
     for (const shape of ["Meta", "PlantRegistry"] as const) {
       const decoded = decodeWire(shape, { attribution: { aneel_siga: WIRE } }) as {
         attribution: Record<string, Record<string, unknown>>;
@@ -320,12 +320,12 @@ describe("a map's values are renamed even though its keys are not", () => {
     }
   });
 
-  test("the round trip is exact, which is what the map branch has to preserve", () => {
+  it("the round trip is exact, which is what the map branch has to preserve", () => {
     const app = decodeWire("Meta", { attribution: { ons: WIRE } });
     expect(encodeWire("Meta", app)).toEqual({ attribution: { ons: WIRE } });
   });
 
-  test("a map whose values are scalars is still carried through whole", () => {
+  it("a map whose values are scalars is still carried through whole", () => {
     // `error.details` — the distinction the map branch has to keep making. Its
     // values have no shape to recurse into, so a key that happens to look like
     // a field name is still data and is not touched.
@@ -336,7 +336,7 @@ describe("a map's values are renamed even though its keys are not", () => {
     expect(encoded.error.details).toEqual(details);
   });
 
-  test("the table says which fields are maps, and only those", () => {
+  it("the table says which fields are maps, and only those", () => {
     // A guard on the mechanism rather than on one payload: the generator marks
     // a map value's shape, and the two attribution blocks are the only maps in
     // the whole contract whose values have one. A third appearing here is a

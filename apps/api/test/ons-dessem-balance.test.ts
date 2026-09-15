@@ -182,9 +182,9 @@ describe("DESSEM · num_patamar maps to wall-clock time, and it is asserted", ()
       cells[10] = "6.000";
       return cells;
     });
-    const parse = parseDessemBalanceCsv(mmgdAtNight);
-    expect(parse.rows).toHaveLength(192);
-    const night = parse.rows.find(
+    const parsed = parseDessemBalanceCsv(mmgdAtNight);
+    expect(parsed.rows).toHaveLength(192);
+    const night = parsed.rows.find(
       (row) =>
         row.subsystem === "N" &&
         row.validTime.toISOString() === "2026-08-30T00:00:00.000Z",

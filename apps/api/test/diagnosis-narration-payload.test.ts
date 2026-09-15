@@ -457,9 +457,9 @@ describe("the narration payload · the canonical form", () => {
     const missing: string[] = [];
     const walk = (value: unknown, name: string) => {
       if (Array.isArray(value)) {
-        value.forEach((item) => {
+        for (const item of value) {
           walk(item, name);
-        });
+        }
       } else if (typeof value === "object" && value !== null) {
         for (const [key, member] of Object.entries(value)) {
           walk(member, key);
