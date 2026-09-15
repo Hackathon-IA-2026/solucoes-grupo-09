@@ -225,8 +225,17 @@ test.describe("the voice session outlives a tool-call navigation", () => {
       }),
     );
 
-    // The step that proves the thesis: the assistant answers where the reader
-    // already is. A URL that changed here would be a lesser product.
+    /*
+      The step that proves the thesis: the assistant answers where the reader
+      already is. A URL that changed here would be a lesser product.
+
+      Asserting an *absence* is the one case a fixed wait is honest. There is no
+      positive signal to poll for, because the passing behaviour is that nothing
+      happens — `expect.poll` would re-check a condition that is already true at
+      t = 0 and pass instantly, proving nothing. 500 ms is an order of magnitude
+      beyond the ~30 ms a `highlight` intent takes to reach the router here.
+    */
+    // biome-ignore lint/nursery/noPlaywrightWaitForTimeout: an absence needs elapsed time; see above.
     await page.waitForTimeout(500);
     expect(new URL(page.url()).pathname.replace(/\/$/, "")).toBe("/app");
     await expect(page.getByTestId("voice-dock")).toBeVisible();
@@ -273,7 +282,15 @@ test.describe("there is no voice outside /app", () => {
  * What `SOCKET_RECORDER` installs, declared so the `page.evaluate` bodies above
  * type-check. `var` is what `declare global` requires for a global binding.
  */
+/*
+  `declare global` accepts only `var` for a global binding — `let` and `const`
+  are module-scoped and would not describe a property of `globalThis`, which is
+  what the injected socket recorder actually installs. `useVarsOnTop` is about
+  hoisting hazards in executable code; this block declares types and emits none.
+*/
 declare global {
+  // biome-ignore lint/nursery/useVarsOnTop: `declare global` requires `var`; see above.
   var __voiceStats: { opened: number; closed: number; sent: string[] };
+  // biome-ignore lint/nursery/useVarsOnTop: `declare global` requires `var`; see above.
   var __voiceEmit: (frame: unknown) => void;
 }

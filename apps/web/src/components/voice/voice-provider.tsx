@@ -309,13 +309,13 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
             return next;
           }),
         onToolCall,
-        onLevel: (value) => {
+        onLevel: (frameLevel) => {
           const now = Date.now();
           if (now - levelAtRef.current < LEVEL_FRAME_MS) {
             return;
           }
           levelAtRef.current = now;
-          setLevel(value);
+          setLevel(frameLevel);
         },
         onError: (message) => {
           setError(message);

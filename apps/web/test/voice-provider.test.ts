@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -73,7 +73,7 @@ function recorder() {
 }
 
 describe("the provider sits above the Stack, inside ServingProvider", () => {
-  test("`VoiceProvider` wraps the `Stack` — the session outlives a screen change", () => {
+  it("`VoiceProvider` wraps the `Stack` — the session outlives a screen change", () => {
     // The whole feature turns on this line. A `VoiceProvider` moved inside a
     // screen, or below the `Stack`, tears down the socket on every navigation —
     // and navigation is the agent's primary action, so it would break at the
@@ -81,14 +81,14 @@ describe("the provider sits above the Stack, inside ServingProvider", () => {
     expect(APP_LAYOUT_FLAT).toContain("<VoiceProvider> <Stack");
   });
 
-  test("`VoiceDock` is a sibling of the `Stack`, not a child of a screen", () => {
+  it("`VoiceDock` is a sibling of the `Stack`, not a child of a screen", () => {
     // `animation: "fade"` re-animates everything inside the stack. The dock has
     // to be the still thing while the screen behind it changes — that is what
     // makes an automatic navigation read as the assistant acting.
     expect(APP_LAYOUT_FLAT).toContain("/> <VoiceDock /> </VoiceProvider>");
   });
 
-  test("the voice provider is inside `ServingProvider`, never outside it", () => {
+  it("the voice provider is inside `ServingProvider`, never outside it", () => {
     // Two sources for "is a model promoted" is the defect `ServingProvider`'s
     // own comment exists to prevent. The dock and the chrome badge must not be
     // able to disagree.
@@ -98,33 +98,33 @@ describe("the provider sits above the Stack, inside ServingProvider", () => {
     expect(voice).toBeGreaterThan(serving);
   });
 
-  test("there is no voice at the root — no dock on the landing page or /pitch", () => {
+  it("there is no voice at the root — no dock on the landing page or /pitch", () => {
     // §9: "A microphone on the marketing page is a gimmick with nothing behind
     // it." The tools operate on the four modes and nothing else.
     expect(ROOT_LAYOUT).not.toContain("VoiceProvider");
     expect(ROOT_LAYOUT).not.toContain("VoiceDock");
   });
 
-  test("the provider reads the focused screen's params, not the layout's", () => {
+  it("the provider reads the focused screen's params, not the layout's", () => {
     // `useLocalSearchParams` in a layout above the `Stack` answers about the
     // layout. The agent must act on what the reader is looking at.
     expect(PROVIDER).toContain("useGlobalSearchParams");
     expect(PROVIDER).not.toContain("useLocalSearchParams");
   });
 
-  test("the provider holds the microphone state — it is not asked per screen", () => {
+  it("the provider holds the microphone state — it is not asked per screen", () => {
     // Session state, held once. A copilot that re-prompts on every navigation
     // is unusable, and that is the default if this lives below the `Stack`.
     expect(PROVIDER).toContain("useState<VoiceMicState>");
   });
 
-  test("the provider answers every tool call back to the model", () => {
+  it("the provider answers every tool call back to the model", () => {
     // A tool call the conversation never answers leaves the model's next turn
     // built on a gap, and the gap is where it invents the figure it was refused.
     expect(PROVIDER).toContain("respondToTool");
   });
 
-  test("the provider pushes the context sentence, and fetches nothing of its own", () => {
+  it("the provider pushes the context sentence, and fetches nothing of its own", () => {
     expect(PROVIDER).toContain("updateContext");
     expect(PROVIDER).toContain("contextSentence");
     // §3.4: the context is "a pure function of already-fetched state — it must
@@ -133,7 +133,7 @@ describe("the provider sits above the Stack, inside ServingProvider", () => {
     expect(PROVIDER).not.toMatch(/\bfetch\s*\(/);
   });
 
-  test("the hook layer imports no router, no socket and no React Native", () => {
+  it("the hook layer imports no router, no socket and no React Native", () => {
     // What makes `performIntent` testable here at all. The moment this file
     // imports `expo-router`, every assertion below stops being runnable and
     // becomes a grep.
@@ -144,7 +144,7 @@ describe("the provider sits above the Stack, inside ServingProvider", () => {
 });
 
 describe("an intent is performed through the port, and highlight never navigates", () => {
-  test("a navigate intent pushes a route with its params", () => {
+  it("a navigate intent pushes a route with its params", () => {
     const { calls, nav } = recorder();
     performIntent(
       {
@@ -159,7 +159,7 @@ describe("an intent is performed through the port, and highlight never navigates
     ]);
   });
 
-  test("a params intent sets params and does not change route", () => {
+  it("a params intent sets params and does not change route", () => {
     const { calls, nav } = recorder();
     performIntent({ kind: "params", params: { technology: "solar" } }, nav);
     expect(calls).toEqual(['setParams {"technology":"solar"}']);
@@ -175,7 +175,7 @@ describe("an intent is performed through the port, and highlight never navigates
    * highlight method was called", because the failure is a highlight that
    * “also” navigates — which would still call `highlight`.
    */
-  test("a highlight intent lights a region and navigates nowhere", () => {
+  it("a highlight intent lights a region and navigates nowhere", () => {
     const { calls, nav } = recorder();
     performIntent({ kind: "highlight", subsystem: "NE" }, nav);
     expect(calls).toEqual(["highlight NE"]);
@@ -183,13 +183,13 @@ describe("an intent is performed through the port, and highlight never navigates
     expect(calls.some((call) => call.startsWith("setParams"))).toBe(false);
   });
 
-  test("a cleared highlight is still a highlight, not a navigation", () => {
+  it("a cleared highlight is still a highlight, not a navigation", () => {
     const { calls, nav } = recorder();
     performIntent({ kind: "highlight", subsystem: null }, nav);
     expect(calls).toEqual(["highlight null"]);
   });
 
-  test("a refusal moves the reader nowhere", () => {
+  it("a refusal moves the reader nowhere", () => {
     // The highest-stakes rule in the feature: a hallucinated argument must not
     // send a reader to a screen about the wrong region. Refusing and then
     // navigating anyway would be the same defect wearing the fix.
@@ -202,7 +202,7 @@ describe("an intent is performed through the port, and highlight never navigates
 });
 
 describe("what the model is told happened", () => {
-  test("every intent kind produces a result, including a refusal", () => {
+  it("every intent kind produces a result, including a refusal", () => {
     const intents: NavigationIntent[] = [
       { kind: "navigate", pathname: "/app", params: { subsystem: "NE" } },
       { kind: "params", params: { run: "12Z" } },
@@ -220,7 +220,7 @@ describe("what the model is told happened", () => {
     }
   });
 
-  test("a highlight result says out loud that no screen changed", () => {
+  it("a highlight result says out loud that no screen changed", () => {
     // The model is about to speak. If the result did not distinguish a
     // highlight from a navigation, the voice would say "I opened Explain" while
     // the reader sat on the Overview.
@@ -229,7 +229,7 @@ describe("what the model is told happened", () => {
     );
   });
 
-  test("a refusal result carries the code and the value that caused it", () => {
+  it("a refusal result carries the code and the value that caused it", () => {
     expect(
       toolResult({
         kind: "refused",
@@ -238,7 +238,7 @@ describe("what the model is told happened", () => {
     ).toBe("refused: unknown_subsystem (subsystem=SUDESTE)");
   });
 
-  test("a scenario blob is named, not spelled, in the tool result", () => {
+  it("a scenario blob is named, not spelled, in the tool result", () => {
     // A base64 document read back to the model is 300 tokens of noise it may
     // try to interpret. The result is a sentence about what happened.
     const blob = "x".repeat(400);
@@ -253,7 +253,7 @@ describe("what the model is told happened", () => {
 });
 
 describe("the credential is replaced before it lapses", () => {
-  test("re-minting is scheduled a margin ahead of expiry, never at it", () => {
+  it("re-minting is scheduled a margin ahead of expiry, never at it", () => {
     const now = Date.parse("2026-09-15T12:00:00Z");
     const expires = "2026-09-15T12:05:00Z";
     // A literal, not `5 * 60_000 - REMINT_MARGIN_MS`. Spending the constant on
@@ -266,12 +266,12 @@ describe("the credential is replaced before it lapses", () => {
     expect(REMINT_MARGIN_MS).toBeGreaterThanOrEqual(10_000);
   });
 
-  test("an already-stale credential re-mints now rather than in the past", () => {
+  it("an already-stale credential re-mints now rather than in the past", () => {
     const now = Date.parse("2026-09-15T12:00:00Z");
     expect(remintDelayMs("2026-09-15T11:59:00Z", now)).toBe(0);
   });
 
-  test("a credential whose life cannot be read is replaced immediately", () => {
+  it("a credential whose life cannot be read is replaced immediately", () => {
     // A clock we cannot parse is one we cannot trust to outlive this turn.
     expect(remintDelayMs("", Date.now())).toBe(0);
     expect(remintDelayMs("not a date", Date.now())).toBe(0);
@@ -279,11 +279,11 @@ describe("the credential is replaced before it lapses", () => {
 });
 
 describe("the three sizes, and who decides which", () => {
-  test("an idle session is the IDLE pill", () => {
+  it("an idle session is the IDLE pill", () => {
     expect(dockSizeFor("idle", false)).toBe("idle");
   });
 
-  test("every live status is the ACTIVE pill", () => {
+  it("every live status is the ACTIVE pill", () => {
     for (const status of [
       "connecting",
       "listening",
@@ -295,7 +295,7 @@ describe("the three sizes, and who decides which", () => {
     }
   });
 
-  test("a reader who expanded the dock keeps it expanded through every status", () => {
+  it("a reader who expanded the dock keeps it expanded through every status", () => {
     // The agent does not get to resize a panel the reader opened. A dock that
     // collapsed itself when the model started speaking would close under the
     // reader mid-sentence.
@@ -312,11 +312,11 @@ describe("the three sizes, and who decides which", () => {
     }
   });
 
-  test("an error reads as idle, not as a fourth size", () => {
+  it("an error reads as idle, not as a fourth size", () => {
     expect(dockSizeFor("error", false)).toBe("idle");
   });
 
-  test("`isLive` covers connecting — the orb is not frozen while a socket opens", () => {
+  it("`isLive` covers connecting — the orb is not frozen while a socket opens", () => {
     expect(isLive("connecting")).toBe(true);
     expect(isLive("idle")).toBe(false);
     expect(isLive("error")).toBe(false);
@@ -324,7 +324,7 @@ describe("the three sizes, and who decides which", () => {
 });
 
 describe("outside the provider, voice is absent rather than pending", () => {
-  test("the default context state renders nothing and does nothing", () => {
+  it("the default context state renders nothing and does nothing", () => {
     // A component mounted with no provider above it is not waiting for an
     // answer; it is in a tree where voice was never installed. `unknown` would
     // make the landing page render a trigger.
