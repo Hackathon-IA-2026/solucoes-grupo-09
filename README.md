@@ -5,11 +5,6 @@ wind and solar will be curtailed tomorrow, explain the grid conditions driving
 it, and size the storage and flexible demand that could absorb it — from
 openly published ONS, ANEEL and weather data.
 
-> **Status: early.** The repository was rebuilt from a template; the previous
-> product's domain has been removed and WattSteer's is being specified. The API
-> serves health and readiness, the web app renders its shell, and no product
-> feature exists yet. See `.wayfinder/map.md` for the plan.
-
 ## Monorepo layout
 
 Bun workspaces, split by responsibility:
@@ -61,119 +56,6 @@ Point the web app at a different API with `EXPO_PUBLIC_API_URL`.
 | `bun run lint` | Biome |
 | `bun run docker:up` | Postgres + Redis + API + worker via compose |
 | `bun run preflight` | Refuse to start work on a base behind `origin/main` (fetches) |
-
-## The base guard
-
-A ticket branched behind the tip is the one defect no test in this repository
-can see. It typechecks, lints, passes its own suite — and then merges a
-regression back over work it never saw. `scripts/preflight-base.ts` decides that
-question and refuses; `bun run preflight` asks it by hand about the worktree you
-are standing in.
-
-Asking by hand is not a guard, so the merge is gated:
-
-- **`.githooks/`** holds `pre-merge-commit` and `pre-commit`, both of which ask
-  one question: **will the commit this merge writes contain `origin/main`?**
-  That holds when the destination already carries the tip, and also when an
-  incoming head does; a stale incoming head is printed as a note and allowed.
-  `pre-commit` is inert except when a merge is in progress, which is the path
-  git takes when the merge conflicted and `pre-merge-commit` never ran.
-- **`core.hooksPath`** points git at that tracked directory, because
-  `.git/hooks` is not committed and a hook written there enforces nothing for
-  the next clone and nothing for anyone else.
-- **`postinstall`** sets it (`scripts/install-hooks.ts`), so the gate arrives
-  with `bun install` rather than with a paragraph in a README asking you to
-  install it.
-
-### Why a hook and not a documented step: observed, not hypothesised
-
-On 2026-09-09 four agents were started in parallel. Their worktrees were created
-from the local `main` ref rather than from the development tip, and **three of
-the four began on a stale base.** One noticed unprompted; two had to be told.
-`bun run preflight` existed at the time and none of them ran it. That is the
-argument against leaving this as a step in a README or a lane document: the
-mechanism has to be the one that runs whether or not anybody remembered it.
-
-The same incident says something less comfortable about *where*, and it is
-recorded here rather than smoothed over:
-
-- **The stale base was created at worktree-creation time**, not at commit or
-  check time. That is the earliest point a refusal would help, and it is not
-  reachable from this repository. `post-checkout` does fire on `git worktree
-  add`, but its exit status is ignored — the worktree already exists — so it can
-  warn and cannot refuse. What actually chose those bases is harness
-  configuration outside the repo. The merge is therefore the earliest point
-  where a *refusal* is possible, which is why the gate is there.
-- **`origin/main` is not currently the ref that matters.** On that day the tip
-  work was landing on was a local development branch nine commits *ahead* of
-  `origin/main`. So the guard answered `ok` for a base that was nine commits
-  behind the real tip — correctly, by its own contract, and uselessly. The
-  contract, not the enforcement, was the weak part: **the gate as first written
-  would not have caught that incident**, and the standing answer is the rule at
-  the top of this section — keep `main` and `origin/main` at the tip work is
-  actually landing on, so that "contains `origin/main`" means what it says. That
-  is now the workflow: every landed merge is pushed and `main` is
-  fast-forwarded, so `origin/main` is the real tip rather than a ref nine
-  commits behind it.
-
-### The contract was corrected once, and the old one is recorded here
-
-The first version asked whether the **incoming branch** contained
-`origin/main`. It was replaced the same day, for two reasons:
-
-1. **It refused the ordinary case.** Checked against this repository's own
-   history, it rejected two of the first three merges it was pointed at —
-   `Merge forecaster 27` and `Merge data-platform 20` — because `main` moved
-   between cutting the branch and merging it. It also refused its own merge,
-   which is how it was found. A gate that fires on the ordinary case is a gate
-   that gets switched off.
-2. **It was wrong about the risk.** Git's three-way merge does not drop the
-   work an old branch never saw; the merge base is the common ancestor and both
-   sides survive. What a stale branch actually costs is *semantic* — code
-   written against an API that has since moved — and by merge time that is
-   already paid. The check for that is `bun run preflight` when work **starts**,
-   which still reads `HEAD` and still refuses.
-
-So the merge gate now guards the property a merge can still protect: the result
-is current. The staleness that a merge cannot fix is reported as a note, where
-a reader can act on it, rather than as a refusal nobody can satisfy without a
-rebase they did not need.
-
-### The tradeoffs this accepts, in plain terms
-
-**`bun run check` was deliberately left alone.** It is the natural place to put
-a guard and it is the wrong one: `check` runs dozens of times during a ticket,
-takes about thirteen seconds, and works with no network — an invariant the
-scheduled workflows are written around too. A fetch inside it would either fail
-closed, making every offline commit impossible, or fail open, which is worse
-than absent: the guard would report its healthiest verdict at the moment it read
-nothing, the exact vacuity failure it was written against. So `check` stays
-offline and the network check lives at the merge, which happens once and is the
-moment the harm occurs.
-
-**A hook only binds clones that ran `bun install`.** That is nearly everyone
-here, and the wiring is committed and tested rather than living in one person's
-`.git/hooks` — but it is not the same guarantee as a server-side check. There is
-no CI on push or pull request in this repository (the three workflows are
-scheduled and deliberately never run on push), so nothing today would catch a
-stale base pushed from a clone with the gate uninstalled. If that flow ever
-appears, this belongs there too.
-
-**`core.hooksPath` is relative to each worktree, and it supersedes
-`.git/hooks`.** Two consequences worth knowing. Nothing in `.git/hooks` runs any
-more — no loss today, since this repository has never committed one. And a
-worktree checked out at a commit from *before* this one has no `.githooks/`
-directory in its tree, so it has no gate: git looks, finds nothing and says
-nothing. That is the same class of blind spot as the stale base itself, and the
-only cure is the tip reaching every worktree, which is what the guard is for.
-
-**`git merge --no-verify` still bypasses it, by design.** So does deleting
-`core.hooksPath`. The gate is a guard against forgetting, not against intent,
-and a refusal that cannot be overridden gets removed the first time it is wrong.
-
-**It fails closed, including when it cannot run.** No network, no readable ref,
-no `bun` on `PATH`, no identifiable incoming head: each is a refusal. A gate that
-waves the merge through whenever it could not do its job is not a gate.
 
 ## Testing
 
