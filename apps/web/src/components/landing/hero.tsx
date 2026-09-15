@@ -14,7 +14,7 @@ import {
   usePalette,
   ZapIcon,
 } from "@wattsteer/ui";
-import { StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useCopy, useFormat, useI18n } from "@/i18n";
 import { fill } from "@/i18n/format";
 import { formatMwhExact, formatProbability, formatRange, upper } from "./band";
@@ -29,6 +29,8 @@ import {
   SUBSYSTEMS,
   type SubsystemOutlook,
 } from "./fixtures";
+import { HeroCards } from "./hero-cards";
+import { GUTTER_GATE, HERO_CHROME, HERO_COLUMN_MAX, MIN_STAGE } from "./hero-metrics";
 import { Footnote } from "./section";
 
 /**
@@ -65,6 +67,24 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   dot: { width: 6, height: 6, borderRadius: 3 },
+  stage: {
+    width: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+    // Matches the reference stage's vertical padding, and keeps the intro off
+    // the fold on a viewport too short for `MIN_STAGE`.
+    paddingVertical: 40,
+    // The floating cards are rotated and sit in the gutters; without this a
+    // card's corner can push the page's horizontal scroll width past the
+    // viewport at the exact widths where the gate has just opened.
+    overflow: "hidden",
+  },
+  column: {
+    gap: space.lg,
+    width: "100%",
+    maxWidth: HERO_COLUMN_MAX,
+    alignItems: "center",
+  },
 });
 
 export function Hero({ onExplain }: { onExplain: () => void }) {
@@ -72,6 +92,20 @@ export function Hero({ onExplain }: { onExplain: () => void }) {
   const colors = usePalette();
   const [width, onLayout] = useContainerWidth();
   const wide = width >= 900;
+  const { height } = useWindowDimensions();
+  /**
+   * One viewport tall, the way the reference's hero is.
+   *
+   * On web this is a CSS expression rather than the measured window height on
+   * purpose. The static export renders with no window, so a JS-computed height
+   * would ship 523px of markup and then grow to ~700px at hydration, shoving
+   * the readout down the page — layout shift on the largest element above the
+   * fold. `dvh` resolves at first paint, before the bundle is fetched.
+   */
+  const stageMinHeight =
+    Platform.OS === "web"
+      ? (`max(${MIN_STAGE}px, calc(100dvh - ${HERO_CHROME}px))` as unknown as number)
+      : Math.max(height - HERO_CHROME, MIN_STAGE);
   // One scale across every subsystem rail: a rail normalised to its own band
   // would make the quietest subsystem look as uncertain as the loudest.
   const subsystemMax = Math.max(...SUBSYSTEMS.map((s) => upper(s.energy))) * 1.05;
@@ -79,80 +113,90 @@ export function Hero({ onExplain }: { onExplain: () => void }) {
   return (
     <View onLayout={onLayout} style={{ gap: space.xxl }}>
       {/*
-        Centred. The hero states the product's entire claim and has no adjacent
-        column to balance against, so a left rag leaves a wide screen looking
-        like the layout stopped halfway. The readout below keeps its own
-        alignment, because a table of subsystems does not centre.
+        The stage: one viewport tall, its content centred in it, with the
+        floating cards in whatever gutter is left over. The readout is
+        deliberately *outside* it — the stage is the claim, the readout is the
+        evidence, and the fold is the right place to separate the two.
       */}
-      <View
-        style={{
-          gap: space.lg,
-          maxWidth: 760,
-          alignSelf: "center",
-          alignItems: "center",
-        }}
-      >
-        <View
-          style={[
-            styles.eyebrow,
-            { borderColor: colors.border, backgroundColor: colors.surface },
-          ]}
-        >
-          <View style={[styles.dot, { backgroundColor: colors.accent }]} />
-          <Text style={{ fontSize: 12, fontWeight: "500", color: colors.inkMuted }}>
-            {copy.hero.eyebrow}
+      <View testID="hero-stage" style={[styles.stage, { minHeight: stageMinHeight }]}>
+        {/*
+          Decoration, and gated on space rather than stacked or shrunk: below
+          `GUTTER_GATE` there is no gutter to float in, and a card that moved
+          into the column would be a second, unlabelled copy of the readout's
+          own figures directly above it.
+        */}
+        {width >= GUTTER_GATE ? <HeroCards /> : null}
+
+        {/*
+          Centred. The hero states the product's entire claim and has no
+          adjacent column to balance against, so a left rag leaves a wide
+          screen looking like the layout stopped halfway. The readout below
+          keeps its own alignment, because a table of subsystems does not
+          centre.
+        */}
+        <View style={styles.column}>
+          <View
+            style={[
+              styles.eyebrow,
+              { borderColor: colors.border, backgroundColor: colors.surface },
+            ]}
+          >
+            <View style={[styles.dot, { backgroundColor: colors.accent }]} />
+            <Text style={{ fontSize: 12, fontWeight: "500", color: colors.inkMuted }}>
+              {copy.hero.eyebrow}
+            </Text>
+          </View>
+
+          <Text
+            accessibilityRole="header"
+            aria-level={1}
+            style={{
+              fontSize: wide ? 56 : 34,
+              lineHeight: wide ? 60 : 40,
+              fontWeight: "600",
+              letterSpacing: -1.6,
+              color: colors.inkMuted,
+              textAlign: "center",
+            }}
+          >
+            {copy.hero.headline.lead}
+            <Text style={{ color: colors.ink }}>{` ${copy.hero.headline.accent}`}</Text>
           </Text>
-        </View>
 
-        <Text
-          accessibilityRole="header"
-          aria-level={1}
-          style={{
-            fontSize: wide ? 56 : 34,
-            lineHeight: wide ? 60 : 40,
-            fontWeight: "600",
-            letterSpacing: -1.6,
-            color: colors.inkMuted,
-            textAlign: "center",
-          }}
-        >
-          {copy.hero.headline.lead}
-          <Text style={{ color: colors.ink }}>{` ${copy.hero.headline.accent}`}</Text>
-        </Text>
+          <Text
+            style={{
+              fontSize: 16,
+              lineHeight: 26,
+              color: colors.inkMuted,
+              maxWidth: 660,
+              textAlign: "center",
+            }}
+          >
+            {copy.hero.sub}
+          </Text>
 
-        <Text
-          style={{
-            fontSize: 16,
-            lineHeight: 26,
-            color: colors.inkMuted,
-            maxWidth: 660,
-            textAlign: "center",
-          }}
-        >
-          {copy.hero.sub}
-        </Text>
-
-        <View
-          style={{
-            flexDirection: "row",
-            flexWrap: "wrap",
-            justifyContent: "center",
-            gap: space.md,
-            marginTop: space.sm,
-          }}
-        >
-          <CtaLink
-            testID="hero-open-app"
-            href={APP_HREF}
-            label={copy.hero.primaryCta}
-            primary={true}
-            icon={<ArrowRightIcon size={16} color={colors.onAccent} />}
-          />
-          <PillButton
-            testID="hero-explain"
-            label={copy.hero.secondaryCta}
-            onPress={onExplain}
-          />
+          <View
+            style={{
+              flexDirection: "row",
+              flexWrap: "wrap",
+              justifyContent: "center",
+              gap: space.md,
+              marginTop: space.sm,
+            }}
+          >
+            <CtaLink
+              testID="hero-open-app"
+              href={APP_HREF}
+              label={copy.hero.primaryCta}
+              primary={true}
+              icon={<ArrowRightIcon size={16} color={colors.onAccent} />}
+            />
+            <PillButton
+              testID="hero-explain"
+              label={copy.hero.secondaryCta}
+              onPress={onExplain}
+            />
+          </View>
         </View>
       </View>
 
@@ -250,12 +294,28 @@ function Readout({ wide, subsystemMax }: { wide: boolean; subsystemMax: number }
               gap: space.md,
             }}
           >
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            {/*
+              `flexWrap` and `flexShrink` are load-bearing at 400px. The sub
+              line is a full sentence — "Energia prevista em constrained-off
+              por hora, nacional" — and in a non-wrapping row it refused to
+              break, pushing the page's scroll width to 479px against a 400px
+              viewport. Measured on the static export; it was the page's only
+              horizontal overflow.
+            */}
+            <View
+              style={{
+                flexDirection: "row",
+                flexWrap: "wrap",
+                alignItems: "center",
+                flexShrink: 1,
+                gap: 10,
+              }}
+            >
               <ClockIcon size={16} color={colors.inkMuted} />
               <Text style={{ fontSize: 14, fontWeight: "600", color: colors.ink }}>
                 {copy.readout.profileTitle}
               </Text>
-              <Text style={{ fontSize: 13, color: colors.inkMuted }}>
+              <Text style={{ flexShrink: 1, fontSize: 13, color: colors.inkMuted }}>
                 {copy.readout.profileSub}
               </Text>
             </View>
