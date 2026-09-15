@@ -342,16 +342,16 @@ describe("a failure says what it measured, not what it was configured with", () 
       () => new Promise<Response>(() => {}) as unknown as Promise<Response>,
     );
     const warnings: string[] = [];
-    const warn = console.warn;
-    console.warn = (line: unknown) => {
-      warnings.push(String(line));
+    const realWarn = console.warn;
+    console.warn = (entry: unknown) => {
+      warnings.push(String(entry));
     };
     try {
       await createRetrainer({
         endpoint: { baseUrl: stalled.url, timeoutMs: 50 },
       })({}, () => {}).catch(() => undefined);
     } finally {
-      console.warn = warn;
+      console.warn = realWarn;
       stalled.stop();
     }
     const line = warnings.join("\n");
