@@ -39,6 +39,7 @@ from wattsteer_ml.evaluation.gate import (
     BAND_COVERAGE_RAIL,
     BAND_MEDIAN_RAIL,
     BOOTSTRAP_DRAWS,
+    CALIBRATION_EXCESS_RAIL,
     CROSSING_RATE_CEILING,
     ECE_CEILING,
     MINIMUM_TEST_DAYS,
@@ -193,7 +194,17 @@ def observations(row_keys: Sequence[RowKey]) -> list[float]:
 #: bump moves the whole band rather than the P10 alone, so the composed knots do
 #: not cross, and it is applied to candidate and comparator alike, so it cannot
 #: make one of them better than the other.
-NOMINAL_LOWER_MISS = 10
+# One curtailed hour in **twenty**, because the fixture declares `p = 0.95` and
+# a band that misses its floor more often than `1 − p` is mis-calibrated against
+# its own law. At one in ten the fixture cleared its floor 90% of the time while
+# claiming 95%, which `p10_calibration_excess` reads as −0.0500 ± 0.0175 and
+# refuses — correctly, and for a defect the fixture had before that rail existed
+# and nothing was measuring. Twenty makes the clearance rate equal the declared
+# probability, which is what a correctly calibrated band means.
+#
+# `coverage_p10_in_band` is unaffected: 0.95 sits inside its [0.85, 0.97] window
+# exactly as 0.90 did.
+NOMINAL_LOWER_MISS = 20
 MISS_BUMP_MWH = 2.0
 
 #: The band is centred *on* the label, so `observed < p50` is false on every
@@ -629,6 +640,7 @@ def test_every_guardrail_states_the_constant_it_used() -> None:
         *(f"pr_auc[{code}]" for code in SUBSYSTEM_CODES),
         "recall@0.5[pooled]",
         BAND_COVERAGE_RAIL,
+        CALIBRATION_EXCESS_RAIL,
         BAND_MEDIAN_RAIL,
         "coverage_p90",
         "ece",
@@ -834,7 +846,9 @@ def test_a_rail_that_cannot_be_computed_on_enough_rows_refuses() -> None:
     short = scored(keys(days=5), offset_mwh=0.0)
     band = p10_band_coverage(short)
     assert 0 < band.qualifying_rows < band.minimum_rows
-    assert band.coverage == pytest.approx(0.90)
+    # Derived from the miss rate rather than restated: five days is a short
+    # sample, so the realised rate is the nearest achievable to 1 − 1/20.
+    assert band.coverage == pytest.approx(1 - 1 / NOMINAL_LOWER_MISS, abs=0.05)
     assert not band.sufficient and not band.passes
     assert "too small" in band.detail
     assert f"under the {band.minimum_rows}" in band.detail
@@ -842,11 +856,12 @@ def test_a_rail_that_cannot_be_computed_on_enough_rows_refuses() -> None:
     assert rail.vetoes and rail.name == BAND_COVERAGE_RAIL
     assert str(band.minimum_rows) in rail.bound
 
-    # The same coverage over enough rows is the same number and a pass, so the
-    # refusal above is about the sample and nothing else.
+    # The same *fixture* over enough rows passes, so the refusal above is about
+    # the sample and nothing else. Not the same number: five days cannot realise
+    # a one-in-twenty miss rate exactly, which is itself why it is refused.
     enough = p10_band_coverage(scored(keys(days=30), offset_mwh=0.0))
     assert enough.qualifying_rows >= enough.minimum_rows
-    assert enough.coverage == pytest.approx(band.coverage)
+    assert enough.coverage == pytest.approx(1 - 1 / NOMINAL_LOWER_MISS)
     assert enough.passes
 
 
@@ -855,7 +870,7 @@ def test_a_floor_that_is_never_missed_is_refused_and_a_nominal_one_is_not() -> N
 
     A band whose P10 is under every label reads 1.0000 — over-covering, a floor
     too low to be the one the product promises — and is refused. The same
-    fixture missed at the nominal rate reads 0.90 and passes. Under the marginal
+    fixture missed at its declared rate reads 1 − 1/20 and passes. Under the marginal
     both read inside the window, which is why the gate refused the first
     artifact this repository ever minted and would have promoted a
     shuffled-label fit.
@@ -867,7 +882,7 @@ def test_a_floor_that_is_never_missed_is_refused_and_a_nominal_one_is_not() -> N
     assert not band.as_guardrail().passed
 
     nominal = p10_band_coverage(scored(keys(), offset_mwh=0.0))
-    assert nominal.coverage == pytest.approx(0.90)
+    assert nominal.coverage == pytest.approx(1 - 1 / NOMINAL_LOWER_MISS)
     assert nominal.passes
 
 
@@ -886,11 +901,16 @@ def test_the_corrected_rail_is_the_only_lower_coverage_veto_and_says_so() -> Non
         rail.name for rail in decision.guardrails if rail.name.startswith("coverage_p10")
     ] == [BAND_COVERAGE_RAIL]
 
+    # A floor that is never missed fails two rails, and both readings are true
+    # of it: it over-covers against the window, and it clears its own floor more
+    # often than the `p` it declares. The second is `p10_calibration_excess`
+    # saying the same defect in the model's own units.
     over_covering = candidate(hours=scored(keys(), offset_mwh=0.0, missed_in=0))
     refused = run(over_covering, incumbent())
     assert not refused.promotes
     assert [rail.name for rail in refused.guardrails if rail.vetoes] == [
-        BAND_COVERAGE_RAIL
+        BAND_COVERAGE_RAIL,
+        CALIBRATION_EXCESS_RAIL,
     ]
     rail = next(rail for rail in refused.guardrails if rail.name == BAND_COVERAGE_RAIL)
     assert rail.value == 1.0

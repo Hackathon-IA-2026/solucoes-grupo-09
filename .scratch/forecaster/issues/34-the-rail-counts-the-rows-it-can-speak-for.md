@@ -312,7 +312,9 @@ fit.
 
 ---
 
-**Status:** shipped, with one acceptance test failing and reported
+**Status:** done. **The failing acceptance test is closed by forecaster 42** —
+`p10_calibration_excess`, the follow-up this ticket handed over rather than
+took.
 
 - [x] The rail is `coverage_p10` counted over rows whose P10 is above `τ` and
       could have been missed, published as `coverage_p10_in_band` with its
@@ -332,7 +334,14 @@ fit.
 - [x] **The shuffled-label control fails the corrected rail** — 0.6278 and
       0.6551, inside the window in 0 of 400 draws, against 400 of 400 on the
       marginal
-- [ ] **The perfectly-calibrated null does not pass the corrected rail** —
+- [x] **The perfectly-calibrated null passes — on the statistic this ticket
+      handed over.** Not on `coverage_p10_in_band`, which cannot be made to, for
+      the reason recorded below. Forecaster 42 built the second rail this ticket
+      named: `mean(1{y ≥ P10} − p)`, zero under the null by construction because
+      the atom at the P10 sits in both terms. Measured over 200 null draws at
+      this ticket's own `mean(p)` of 0.977: the window rail passes **9/200**,
+      the excess rail **193/200** — the nominal rate. Original finding, kept
+      because it is what made the second rail necessary:
       0.9790 and 0.9809, inside the window in 2% and 0% of draws. Measured cause:
       the served law puts mass `p − 0.90` exactly on the P10 (7.9% and 8.2% of
       null draws land there), so `P(y* ≥ P10) = p ≈ 0.98` on every qualifying

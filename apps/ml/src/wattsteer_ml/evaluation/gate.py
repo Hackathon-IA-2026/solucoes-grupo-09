@@ -211,6 +211,12 @@ BAND_COVERAGE_RAIL = "coverage_p10_in_band"
 #: happens when one name carries two denominators.
 BAND_MEDIAN_RAIL = "p50_unbiasedness_in_band"
 
+#: The name the calibration-excess rail is published under. A third population
+#: name for the same rows as :data:`BAND_COVERAGE_RAIL`, because it is a
+#: different *statement* about them — how far the realised floor clearance is
+#: from the model's own implied rate, rather than where it sits in a window.
+CALIBRATION_EXCESS_RAIL = "p10_calibration_excess"
+
 #: Guardrail. ``crossing_rate ≤ 0.01``.
 CROSSING_RATE_CEILING = 0.01
 
@@ -629,6 +635,198 @@ def p10_band_coverage(hours: Sequence[ScoredHour]) -> P10BandCoverage:
         qualifying_rows=len(qualifying),
         minimum_rows=minimum_band_coverage_rows(),
         coverage=(covered / len(qualifying) if qualifying else None),
+    )
+
+
+@dataclass(frozen=True)
+class P10CalibrationExcess:
+    """The floor's realised clearance against the model's **own implied** rate.
+
+    Forecaster 34 shipped `coverage_p10_in_band` with one acceptance test
+    failing and handed this over as the thing that would settle it: *"score the
+    floor against the model's own implied coverage — the mean of
+    ``1{y ≥ P10} − p`` over qualifying rows, which is zero by construction under
+    the null."*
+
+    **Why that box could not be closed by counting different rows.** Forecaster
+    34 measured the mechanism: ``Q_pos`` is flat below its first knot, so the
+    served law puts probability mass ``p − 0.90`` *exactly at* the P10 — 7.9%
+    and 8.2% of a perfectly-calibrated null's qualifying draws land there.
+    Coverage counts ``y ≥ P10``, so that whole atom counts as covered and
+    ``P(y ≥ P10) = p`` on every qualifying row. The null's coverage is therefore
+    ``mean(p)`` — 0.9790 and 0.9809 — which is above the 0.97 ceiling before any
+    row is chosen. No denominator can move a number that the model's own law
+    fixes.
+
+    **And the other route was refused by an older decision, not by oversight.**
+    Forecaster 34's second option was to make ``Q_pos`` non-degenerate below its
+    first knot. `MagnitudeQuantiles` holds it flat there deliberately: *"a
+    quantile fit says nothing beyond its outermost alpha, and a straight line
+    drawn past α = 0.9 is an invented tail — the ensemble's day totals would
+    inherit it as though it had been fitted."* Fixing the atom that way means
+    inventing the tail that design refuses.
+
+    So the statistic moves instead of the band. ``d_i = 1{y_i ≥ P10_i} − p_i``
+    has expectation **exactly zero** under the served law, whatever the atom
+    does, because the atom is in both terms.
+
+    **The bound is not invented either.** Forecaster 34 said a new statistic
+    "wants the user's decision" for its threshold, and the studentised form
+    removes the choice: the test is whether the excess is distinguishable from
+    zero at `NOMINAL_MISCOVERAGE`, which is the constant the coverage rails
+    already derive their own sample floor from. A correctly-calibrated model
+    passes at the nominal rate **by construction** rather than by a window
+    someone picked around it.
+
+    **Clustered by target day, in closed form.** Curtailed hours are not
+    independent inside a day — forecaster 34 measured design effects of 4.40 and
+    2.65 on exactly these rows — so an iid standard error would be too small and
+    the rail would veto correct models. The variance is the cluster-robust one
+    over target-day blocks, which is `O(n)` arithmetic rather than a resample:
+    the gate's veto path states its conditions without a bootstrap, and this
+    keeps that property.
+    """
+
+    #: The curtailed hours of the deciding fold.
+    rows: int
+    #: Those whose P10 is a floor the label could have missed — the same
+    #: population :class:`P10BandCoverage` counts over, so the two figures are
+    #: two statements about one set of rows.
+    qualifying_rows: int
+    #: Distinct target days among them; the cluster count behind the interval.
+    day_blocks: int
+    #: :func:`minimum_band_coverage_rows`, shared with the coverage rail because
+    #: it is the same population and the same miscoverage.
+    minimum_rows: int
+    #: ``mean(1{y ≥ P10} − p)``. Zero under the null. ``None`` with no rows.
+    excess: float | None
+    #: Cluster-robust standard error of :attr:`excess` over day blocks.
+    standard_error: float | None
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.qualifying_rows <= self.rows:
+            raise GateInputError(
+                f"{self.qualifying_rows} of {self.rows} scored hours state a "
+                "falsifiable floor; the qualifying rows are a subset"
+            )
+        if (self.qualifying_rows == 0) is not (self.excess is None):
+            raise GateInputError(
+                f"excess {self.excess!r} over {self.qualifying_rows} qualifying "
+                "rows; a statement with no denominator is not a measurement"
+            )
+
+    @property
+    def sufficient(self) -> bool:
+        """Enough rows, and more than one day block to estimate spread from."""
+        return (
+            self.qualifying_rows >= self.minimum_rows
+            and self.qualifying_rows > 0
+            and self.day_blocks > 1
+            and self.standard_error is not None
+        )
+
+    @property
+    def half_width(self) -> float | None:
+        """``z · SE`` at :data:`NOMINAL_MISCOVERAGE`."""
+        if self.standard_error is None:
+            return None
+        z = NormalDist().inv_cdf(1.0 - NOMINAL_MISCOVERAGE / 2.0)
+        return z * self.standard_error
+
+    @property
+    def passes(self) -> bool:
+        """Measured, over enough rows and days, and indistinguishable from zero."""
+        if not self.sufficient or self.excess is None:
+            return False
+        half = self.half_width
+        return half is not None and abs(self.excess) <= half
+
+    @property
+    def detail(self) -> str:
+        """The sentence the card carries, with the interval that decided it."""
+        if not self.sufficient:
+            return (
+                f"{self.qualifying_rows} of {self.rows} curtailed hours put the "
+                f"served P10 above τ, over {self.day_blocks} target day(s), "
+                f"against the {self.minimum_rows} rows and 2 days this needs; "
+                "the excess is a refusal rather than a measurement"
+            )
+        assert self.excess is not None and self.half_width is not None
+        verdict = "inside" if self.passes else "outside"
+        return (
+            f"{self.excess:+.4f} against 0 ± {self.half_width:.4f} — {verdict}. "
+            f"The realised floor clearance minus the model's own implied rate, "
+            f"over {self.qualifying_rows} qualifying rows in {self.day_blocks} "
+            f"day blocks. Zero is what a correctly calibrated band reads here, "
+            f"whatever the point mass at the P10 does, because the atom is in "
+            f"both terms"
+        )
+
+    def as_guardrail(self) -> Guardrail:
+        """The rail. Unmeasurable and under-powered both veto."""
+        return Guardrail(
+            name=CALIBRATION_EXCESS_RAIL,
+            passed=self.passes,
+            detail=self.detail,
+            value=self.excess,
+            bound=(
+                f"|excess| ≤ z·SE at α={NOMINAL_MISCOVERAGE} "
+                f"over ≥ {self.minimum_rows} rows and ≥ 2 day blocks"
+            ),
+        )
+
+
+def p10_calibration_excess(hours: Sequence[ScoredHour]) -> P10CalibrationExcess:
+    """Score the floor against the law that produced it.
+
+    The population is :func:`states_a_falsifiable_floor`'s, so this and
+    `coverage_p10_in_band` are two readings of one set of rows: the first says
+    how often the floor was cleared, the second says whether that differs from
+    what the model itself predicted.
+    """
+    scored = [hour for hour in hours if hour.is_positive]
+    qualifying = [hour for hour in scored if states_a_falsifiable_floor(hour)]
+    if not qualifying:
+        return P10CalibrationExcess(
+            rows=len(scored),
+            qualifying_rows=0,
+            day_blocks=0,
+            minimum_rows=minimum_band_coverage_rows(),
+            excess=None,
+            standard_error=None,
+        )
+
+    # d_i = realised − implied. `occurrence_probability` is the model's own
+    # P(Y ≥ P10) on a qualifying row, which is forecaster 34's measured identity
+    # rather than an assumption: the atom at the P10 carries mass p − 0.90 and
+    # coverage counts it, so the served law clears its own floor with
+    # probability exactly p.
+    by_day: dict[object, list[float]] = {}
+    for hour in qualifying:
+        d = (1.0 if hour.covered_lower else 0.0) - hour.forecast.occurrence_probability
+        by_day.setdefault(hour.key.target_date, []).append(d)
+
+    n = len(qualifying)
+    excess = sum(sum(block) for block in by_day.values()) / n
+
+    # Cluster-robust variance of the mean over day blocks: the sum of squared
+    # block-level deviations, scaled. One block cannot estimate a spread, so it
+    # comes back `None` and `sufficient` refuses.
+    blocks = list(by_day.values())
+    standard_error: float | None = None
+    if len(blocks) > 1:
+        centred = [sum(d - excess for d in block) for block in blocks]
+        g = len(blocks)
+        variance = sum(value * value for value in centred) * g / ((g - 1) * n * n)
+        standard_error = math.sqrt(variance) if variance > 0 else 0.0
+
+    return P10CalibrationExcess(
+        rows=len(scored),
+        qualifying_rows=n,
+        day_blocks=len(blocks),
+        minimum_rows=minimum_band_coverage_rows(),
+        excess=excess,
+        standard_error=standard_error,
     )
 
 
@@ -1656,6 +1854,7 @@ def guardrails(
         )
     )
     rails.append(p10_band_coverage(hours).as_guardrail())
+    rails.append(p10_calibration_excess(hours).as_guardrail())
     rails.append(p50_band_unbiasedness(hours).as_guardrail())
     coverage = candidate.coverage
     if coverage is None:
