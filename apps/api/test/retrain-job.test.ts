@@ -320,3 +320,47 @@ redisSuite("the retrain schedule on the existing Redis", () => {
     }
   });
 });
+
+describe("a failure says what it measured, not what it was configured with", () => {
+  it("names the elapsed time beside the ceiling on an aborted call", async () => {
+    /*
+      `OPTIMIZER_TIMEOUT` is what `ml-proxy` raises for *any* aborted fetch —
+      including one aborted because this container was replaced mid-request,
+      which a deploy does routinely. The message used to assert "did not finish
+      inside 40 minutes" whatever had actually happened, and on 2026-09-15 that
+      sentence sent an operator looking for a forty-minute run that had lasted
+      two seconds.
+
+      A log line stating a duration it did not measure is worse than one stating
+      none: it is a confident wrong answer to the first question anybody asks.
+
+      Here the abort is genuine and fast — a server that never answers, against
+      a 50 ms endpoint ceiling — which is the *shape* of the deploy case: an
+      `OPTIMIZER_TIMEOUT` nowhere near forty minutes.
+    */
+    const stalled = serving(
+      () => new Promise<Response>(() => {}) as unknown as Promise<Response>,
+    );
+    const warnings: string[] = [];
+    const warn = console.warn;
+    console.warn = (line: unknown) => {
+      warnings.push(String(line));
+    };
+    try {
+      await createRetrainer({
+        endpoint: { baseUrl: stalled.url, timeoutMs: 50 },
+      })({}, () => {}).catch(() => undefined);
+    } finally {
+      console.warn = warn;
+      stalled.stop();
+    }
+    const line = warnings.join("\n");
+    // The ceiling is still named — it is what a real timeout would mean.
+    expect(line).toContain(`${RETRAIN_TIMEOUT_MS / 60_000} minutes`);
+    // And the measured elapsed time beside it, which is what tells a redeploy
+    // from a genuine overrun at a glance.
+    expect(line).toMatch(/aborted after \d+s/);
+    // The old sentence asserted the ceiling as fact. It must not come back.
+    expect(line).not.toContain("did not finish inside");
+  });
+});

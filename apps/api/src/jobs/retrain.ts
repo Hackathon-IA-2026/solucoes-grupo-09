@@ -209,7 +209,7 @@ export interface RetrainerDeps {
  * function names is the cases where no decision was reached, and whether the
  * repair is to wait or to go and look.
  */
-function describeFailure(error: unknown): string {
+function describeFailure(error: unknown, elapsedMs?: number): string {
   const app = error instanceof AppError ? error : undefined;
   // `RETRAIN_IN_PROGRESS` and `RETRAIN_FAILED` are the modelling service's own
   // codes and are deliberately **not** added to `packages/core`'s enum: that
@@ -230,12 +230,32 @@ function describeFailure(error: unknown): string {
       return "the modelling service cannot reach Postgres";
     case "REQUEST_INVALID":
       return "the run id is not an artifact stem — a bug on this side, not an outage";
-    case "OPTIMIZER_TIMEOUT":
+    case "OPTIMIZER_TIMEOUT": {
+      // **The elapsed time, not the ceiling.** This used to assert "did not
+      // finish inside 40 minutes" whatever had actually happened, because
+      // `OPTIMIZER_TIMEOUT` is what `ml-proxy` raises for *any* aborted fetch —
+      // including one aborted because this container was replaced mid-request,
+      // which a deploy does routinely. On 2026-09-15 that sentence sent an
+      // operator looking for a forty-minute run that had lasted two seconds.
+      //
+      // A log line that states a duration it did not measure is worse than one
+      // that states none: it is a confident wrong answer to the first question
+      // anybody asks. So the ceiling is still named — it is what a real timeout
+      // would mean — and the measured elapsed time is named beside it, which is
+      // what tells the two apart at a glance.
+      const ceiling = `${RETRAIN_TIMEOUT_MS / 60_000} minutes`;
+      const measured =
+        elapsedMs === undefined
+          ? ""
+          : ` The call was aborted after ${Math.round(elapsedMs / 1000)}s; if that ` +
+            `is far short of ${ceiling}, the abort was not the ceiling — a redeploy ` +
+            "or a dropped connection ends a request the same way.";
       return (
-        `the retrain did not finish inside ${RETRAIN_TIMEOUT_MS / 60_000} minutes. ` +
+        `the retrain call was aborted, against a ${ceiling} ceiling.${measured} ` +
         "The run may still be completing on the modelling service; the retry is " +
         "idempotent on the run id, so it will not produce a second artifact"
       );
+    }
     default:
       return `the retrain did not complete: ${
         error instanceof Error ? error.message : String(error)
@@ -306,6 +326,9 @@ export function createRetrainer(
       timeoutMs: RETRAIN_TIMEOUT_MS,
     };
     report({ done: 0, total: 1 });
+    // Measured so the failure can say how long it actually waited, rather than
+    // asserting the ceiling it was configured with. See `describeFailure`.
+    const startedAt = Date.now();
     let response: Response;
     try {
       response = await postMl(
@@ -317,7 +340,9 @@ export function createRetrainer(
         endpoint,
       );
     } catch (error) {
-      console.warn(`⚠️  retrain ${runId} — ${describeFailure(error)}`);
+      console.warn(
+        `⚠️  retrain ${runId} — ${describeFailure(error, Date.now() - startedAt)}`,
+      );
       // Rethrown as itself so the queue's backoff policy retries it, and so the
       // modelling service's own code survives the crossing.
       throw error;
