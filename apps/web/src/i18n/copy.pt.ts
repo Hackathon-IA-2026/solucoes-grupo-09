@@ -325,6 +325,8 @@ export const pt: Copy = {
   },
 
   meta: {
+    /** Alt text for the 1200×630 share card (`public/og.png`). */
+    imageAlt: "WattSteer — inteligência de curtailment para a rede brasileira",
     home: {
       title: "WattSteer — inteligência de curtailment renovável para a rede brasileira",
       description:
@@ -450,6 +452,8 @@ export const pt: Copy = {
       backToLanding: "WattSteer — voltar para a página inicial",
       prototypeBadge: "PROTÓTIPO",
       noModelBadge: "NENHUM MODELO PROMOVIDO",
+      /** Names the `tablist` around the four screen pills for a screen reader. */
+      screensLabel: "Telas",
       screens: {
         overview: "Visão da rede",
         explain: "Explicar",

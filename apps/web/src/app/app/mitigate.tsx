@@ -131,7 +131,7 @@ export default function MitigateScreen() {
       <>
         <Head>
           <title>{copy.app.mitigate.metaTitle}</title>
-          <meta name="robots" content="noindex" />
+          <meta name="robots" content="noindex,follow" />
         </Head>
         <AppShell>
           {header}
@@ -153,7 +153,7 @@ export default function MitigateScreen() {
       <>
         <Head>
           <title>{copy.app.mitigate.metaTitle}</title>
-          <meta name="robots" content="noindex" />
+          <meta name="robots" content="noindex,follow" />
         </Head>
         <AppShell>
           {header}
@@ -169,7 +169,7 @@ export default function MitigateScreen() {
       <>
         <Head>
           <title>{copy.app.mitigate.metaTitle}</title>
-          <meta name="robots" content="noindex" />
+          <meta name="robots" content="noindex,follow" />
         </Head>
         <AppShell>
           {header}
@@ -192,7 +192,7 @@ export default function MitigateScreen() {
     <>
       <Head>
         <title>{copy.app.mitigate.metaTitle}</title>
-        <meta name="robots" content="noindex" />
+        <meta name="robots" content="noindex,follow" />
       </Head>
       <AppShell>
         {header}

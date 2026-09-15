@@ -95,7 +95,7 @@ export default function ExplainScreen() {
     <>
       <Head>
         <title>{copy.app.explain.metaTitle}</title>
-        <meta name="robots" content="noindex" />
+        <meta name="robots" content="noindex,follow" />
       </Head>
       <AppShell>
         <ScreenTitle

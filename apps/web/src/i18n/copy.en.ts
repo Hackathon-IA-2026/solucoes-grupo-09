@@ -411,6 +411,8 @@ export const en = {
    * like everything else rather than a constant in the route file.
    */
   meta: {
+    /** Alt text for the 1200×630 share card (`public/og.png`). */
+    imageAlt: "WattSteer — curtailment intelligence for the Brazilian grid",
     home: {
       title: "WattSteer — renewable curtailment intelligence for the Brazilian grid",
       description:
@@ -583,6 +585,8 @@ export const en = {
        */
       prototypeBadge: "PROTOTYPE",
       noModelBadge: "NO MODEL PROMOTED",
+      /** Names the `tablist` around the four screen pills for a screen reader. */
+      screensLabel: "Screens",
       screens: {
         overview: "Grid Overview",
         explain: "Explain",

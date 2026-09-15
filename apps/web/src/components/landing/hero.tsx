@@ -87,11 +87,29 @@ const styles = StyleSheet.create({
   },
 });
 
+/**
+ * The hero's own width at which the headline takes its large setting.
+ *
+ * Exported because `+html.tsx` holds the same number in a `@container` rule —
+ * the headline has to be the large size in the *static* HTML on a wide screen,
+ * or it resizes when the bundle lands and the resize is layout shift. A
+ * container query, not a media query: this is the hero's width, which is the
+ * viewport less the section gutters. `test/responsive-css.test.ts` checks the
+ * stylesheet and this constant agree.
+ */
+export const HERO_WIDE = 900;
+
+/** `dataSet` → `data-*` on web; nothing on native. See `legal-screen.tsx`. */
+const marker = (name: string) =>
+  Platform.OS === "web" ? ({ dataSet: { [name]: "" } } as object) : {};
+const HERO_ROOT_MARKER = marker("heroRoot");
+const HEADLINE_MARKER = marker("heroHeadline");
+
 export function Hero({ onExplain }: { onExplain: () => void }) {
   const copy = useCopy();
   const colors = usePalette();
   const [width, onLayout] = useContainerWidth();
-  const wide = width >= 900;
+  const wide = width >= HERO_WIDE;
   const { height } = useWindowDimensions();
   /**
    * One viewport tall, the way the reference's hero is.
@@ -111,7 +129,7 @@ export function Hero({ onExplain }: { onExplain: () => void }) {
   const subsystemMax = Math.max(...SUBSYSTEMS.map((s) => upper(s.energy))) * 1.05;
 
   return (
-    <View onLayout={onLayout} style={{ gap: space.xxl }}>
+    <View onLayout={onLayout} {...HERO_ROOT_MARKER} style={{ gap: space.xxl }}>
       {/*
         The stage: one viewport tall, its content centred in it, with the
         floating cards in whatever gutter is left over. The readout is
@@ -170,6 +188,7 @@ export function Hero({ onExplain }: { onExplain: () => void }) {
           <Text
             accessibilityRole="header"
             aria-level={1}
+            {...HEADLINE_MARKER}
             style={{
               fontSize: wide ? 56 : 34,
               lineHeight: wide ? 60 : 40,
