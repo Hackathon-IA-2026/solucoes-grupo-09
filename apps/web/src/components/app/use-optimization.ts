@@ -29,8 +29,8 @@
 
 import { type ErrorCode, encodeScenario } from "@wattsteer/core";
 import type { Scenario } from "@wattsteer/core/api";
-import { ApiError } from "@wattsteer/core/client";
 import { useEffect, useRef, useState } from "react";
+import { refusalOf } from "@/lib/absence";
 import { api } from "@/lib/api";
 import type { MitigationStep } from "@/lib/fixtures";
 import { mitigationSteps, SOLVED_STEPS, stepScenario } from "@/lib/optimization";
@@ -39,22 +39,6 @@ export type OptimizationState =
   | { readonly status: "solving" }
   | { readonly status: "solved"; readonly steps: MitigationStep[] }
   | { readonly status: "refused"; readonly code: ErrorCode };
-
-/**
- * The code off whatever the client threw.
- *
- * A failure that never reached the gateway has no code — the browser is
- * offline, or the origin is misconfigured — and `UPSTREAM_UNAVAILABLE` is the
- * honest reading of it from here: the service this screen depends on could not
- * be reached. It is deliberately not one of the optimizer's own codes, which
- * would claim knowledge of a service we never spoke to.
- */
-function refusalOf(cause: unknown): ErrorCode {
-  if (cause instanceof ApiError && cause.code !== null) {
-    return cause.code;
-  }
-  return "UPSTREAM_UNAVAILABLE";
-}
 
 /**
  * `null` is "the link was refused", not "no scenario": the screen renders that

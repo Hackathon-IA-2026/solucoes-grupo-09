@@ -37,6 +37,7 @@ import {
   type Technology,
 } from "@/lib/fixtures";
 import { sharedParams, useAppParams } from "./use-app-params";
+import { useServing } from "./use-serving";
 
 /**
  * A screen is a key and a route. Its name is copy and lives in the
@@ -99,7 +100,23 @@ export function AppShell({
             gap: space.lg,
           }}
         >
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          {/*
+            Wraps, since the badge stopped being one fixed-width pill.
+            `NO MODEL PROMOTED` beside `PROTOTYPE` and the language switch does
+            not fit a 400 px header, and measured in a browser at that width the
+            unwrapped row clipped the second badge at the viewport edge — the
+            page did not scroll sideways, so the only symptom was a truncated
+            word. The brand keeps the left of the first line and the switch is
+            pushed to the far edge of whatever line it lands on.
+          */}
+          <View
+            style={{
+              flexDirection: "row",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: 12,
+            }}
+          >
             <Pressable
               testID="app-home-link"
               accessibilityRole="link"
@@ -127,19 +144,7 @@ export function AppShell({
                 WattSteer
               </Text>
             </Pressable>
-            <View
-              style={{
-                borderRadius: radius.pill,
-                borderWidth: 1,
-                borderColor: colors.border,
-                paddingHorizontal: 10,
-                paddingVertical: 4,
-              }}
-            >
-              <Text style={{ fontSize: 11, fontWeight: "600", color: colors.inkFaint }}>
-                {copy.app.shell.prototypeBadge}
-              </Text>
-            </View>
+            <ChromeBadge />
             {/* Pushes the switch to the far edge of the header row. */}
             <View style={{ flex: 1 }} />
             <LanguageSwitch testID="app-language-switch" />
@@ -192,6 +197,82 @@ export function AppShell({
         {children}
       </View>
     </ScrollView>
+  );
+}
+
+/**
+ * The chrome badge, and why it no longer says `FIXTURE DATA`.
+ *
+ * It said `PROTOTYPE · FIXTURE DATA` on every screen, unconditionally, and by
+ * the time a reader asked why, it had been false on half of them for a while:
+ * Mitigate solves on `POST /v1/optimize` and the Time Machine replays on `GET
+ * /v1/replay`, and now the Overview and Explain read the gateway too. A label
+ * that says every number on the page was invented, above four screens where
+ * none of them is, is not a disclaimer — it is the one piece of copy on the
+ * page that is definitely wrong, and it teaches a reader to ignore the ones
+ * that are right.
+ *
+ * So it is two claims now, and each is rendered only while it is true.
+ *
+ *  - **`PROTOTYPE`** is unconditional, because it is still true. This is a
+ *    prototype; the badge is not the place that stops being said.
+ *  - **`NO MODEL PROMOTED`** is read from `/v1/meta` through
+ *    {@link useServing}. Today it renders: the hot-swap gate refused the only
+ *    artifact on both serving lanes and the retrain has not run, so every
+ *    forecast read on every screen refuses. The day an artifact is promoted it
+ *    disappears on its own, with no edit here — which is the test of whether it
+ *    was a fact or a decoration.
+ *
+ * While `/v1/meta` is in flight, and when it could not be reached at all, only
+ * the unconditional half renders. A chrome that guesses is a chrome that
+ * flickers from a wrong claim to a right one, and "the gateway is down" is not
+ * a statement about whether a model is promoted.
+ */
+function ChromeBadge() {
+  const colors = usePalette();
+  const copy = useCopy();
+  const serving = useServing();
+  const absent = serving.status === "known" && !serving.serving;
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: 6,
+      }}
+    >
+      <View
+        style={{
+          borderRadius: radius.pill,
+          borderWidth: 1,
+          borderColor: colors.border,
+          paddingHorizontal: 10,
+          paddingVertical: 4,
+        }}
+      >
+        <Text style={{ fontSize: 11, fontWeight: "600", color: colors.inkFaint }}>
+          {copy.app.shell.prototypeBadge}
+        </Text>
+      </View>
+      {absent ? (
+        <View
+          testID="app-no-model-badge"
+          style={{
+            borderRadius: radius.pill,
+            borderWidth: 1,
+            borderColor: colors.warning,
+            backgroundColor: colors.warningSoft,
+            paddingHorizontal: 10,
+            paddingVertical: 4,
+          }}
+        >
+          <Text style={{ fontSize: 11, fontWeight: "600", color: colors.onWarningSoft }}>
+            {copy.app.shell.noModelBadge}
+          </Text>
+        </View>
+      ) : null}
+    </View>
   );
 }
 

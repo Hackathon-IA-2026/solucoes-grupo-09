@@ -50,8 +50,8 @@
 
 import { canonicalScenarioJson, type ErrorCode, encodeScenario } from "@wattsteer/core";
 import type { Replay, ReplayObservedOnly, Scenario } from "@wattsteer/core/api";
-import { ApiError } from "@wattsteer/core/client";
 import { useEffect, useRef, useState } from "react";
+import { refusalOf } from "@/lib/absence";
 import { api } from "@/lib/api";
 import { REPLAY_LANE } from "@/lib/replay";
 
@@ -66,21 +66,6 @@ export type ReplayState =
  * other four are answered with their sentence and no numbers.
  */
 const PRE_HOLDOUT: ErrorCode = "REPLAY_DATE_BEFORE_HOLDOUT_WINDOW";
-
-/**
- * The code off whatever the client threw.
- *
- * A failure that never reached the gateway has no code — the browser is
- * offline, or the origin is misconfigured — and `UPSTREAM_UNAVAILABLE` is the
- * honest reading of it from here. It is deliberately not one of the replay's
- * own codes, which would claim knowledge of a service we never spoke to.
- */
-function refusalOf(cause: unknown): ErrorCode {
-  if (cause instanceof ApiError && cause.code !== null) {
-    return cause.code;
-  }
-  return "UPSTREAM_UNAVAILABLE";
-}
 
 /**
  * `null` is "the link was refused", not "no scenario": the screen renders that

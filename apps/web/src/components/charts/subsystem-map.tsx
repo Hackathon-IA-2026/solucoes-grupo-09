@@ -42,11 +42,9 @@ import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
 import {
   type RiskClass,
-  riskClass,
   roundProbability,
   SUBSYSTEM_DISPLAY_ORDER,
   type SubsystemCode,
-  type SubsystemDayForecast,
   subsystemMeta,
 } from "@/lib/fixtures";
 import {
@@ -55,6 +53,7 @@ import {
   SUBSYSTEM_LABEL_ANCHOR,
   SUBSYSTEM_PATH,
 } from "@/lib/geo/brazil-subsystems";
+import type { OutlookRow } from "@/lib/network";
 
 const FONT =
   "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif";
@@ -110,7 +109,7 @@ export function SubsystemMap({
   onHoverChange,
   onSelect,
 }: {
-  forecasts: SubsystemDayForecast[];
+  forecasts: readonly OutlookRow[];
   selected: SubsystemCode;
   /**
    * The subsystem the pointer is on, held by the parent rather than here.
@@ -165,7 +164,12 @@ export function SubsystemMap({
             return null;
           }
           const meta = subsystemMeta(code);
-          const klass = riskClass(forecast.occurrenceProbability);
+          // The wire's class, never recomputed. `GET /v1/grid/outlook` carries
+          // both `risk_class` and the `risk_bins` it was cut with; deriving it
+          // again here from a local copy of the cut points would be a second
+          // opinion about the same number, and the two copies are kept in step
+          // by nothing.
+          const klass = forecast.riskClass;
           const tone = riskColor(colors, klass);
           const isSelected = code === selected;
           const isActive = code === active;

@@ -19,4 +19,9 @@ export function useAppParams(): AppParams & {
   return { ...params, setParams };
 }
 
-export { type AppParams, parseAppParams, sharedParams } from "./params";
+export {
+  type AppParams,
+  gateProfileOf,
+  parseAppParams,
+  sharedParams,
+} from "./params";

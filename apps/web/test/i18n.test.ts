@@ -132,7 +132,6 @@ const UNRENDERED: ReadonlyMap<string, string> = new Map([
   ["noForecast.noPromotedArtifact", "same — and it is this deployment's own state"],
   ["noForecast.stale", "same"],
   ["noForecast.unavailable", "same"],
-  ["app.explain.narrationWithheld", "a withhold rule; no fixture withholds"],
   ["app.explain.narrationSourceModel", "`narration.source`; Explain is on fixtures"],
   ["app.explain.narrationSourceTemplate", "same"],
 ]);
