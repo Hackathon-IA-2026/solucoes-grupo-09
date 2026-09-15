@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { SUBSYSTEM_DISPLAY_ORDER, type SubsystemCode } from "@wattsteer/core";
@@ -52,7 +52,7 @@ function source(path: string): string {
 }
 
 /** The file with comments blanked, as `replay-screen.test.ts` does it. */
-function code(path: string): string {
+function sourceWithoutComments(path: string): string {
   return source(path).replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, (match) =>
     match.replace(/[^\n]/g, " "),
   );
@@ -96,13 +96,13 @@ function contains(d: string, px: number, py: number): boolean {
 }
 
 describe("the UF → subsystem partition", () => {
-  test("the four groups cover exactly the 27 federal units", () => {
+  it("the four groups cover exactly the 27 federal units", () => {
     const union = SUBSYSTEM_DISPLAY_ORDER.flatMap((code) => SUBSYSTEM_UNITS[code]);
     expect([...union].sort()).toEqual([...FEDERAL_UNITS].sort());
     expect(union.length).toBe(27);
   });
 
-  test("no federal unit is in two subsystems", () => {
+  it("no federal unit is in two subsystems", () => {
     for (const a of SUBSYSTEM_DISPLAY_ORDER) {
       for (const b of SUBSYSTEM_DISPLAY_ORDER) {
         if (a === b) {
@@ -114,19 +114,19 @@ describe("the UF → subsystem partition", () => {
     }
   });
 
-  test("every subsystem has at least one federal unit", () => {
+  it("every subsystem has at least one federal unit", () => {
     for (const code of SUBSYSTEM_DISPLAY_ORDER) {
       expect(SUBSYSTEM_UNITS[code].length).toBeGreaterThan(0);
     }
   });
 
-  test("`subsystemOf` is total and agrees with the groups", () => {
+  it("`subsystemOf` is total and agrees with the groups", () => {
     for (const uf of FEDERAL_UNITS) {
       expect(SUBSYSTEM_UNITS[subsystemOf(uf)]).toContain(uf);
     }
   });
 
-  test("the three assignments that are not the geographic ones", () => {
+  it("the three assignments that are not the geographic ones", () => {
     // Each of these is argued, with its source, in the module header. They are
     // asserted by name because the failure mode is somebody "fixing" them back
     // to the IBGE regions, which is what every intuition says they should be.
@@ -144,7 +144,7 @@ describe("the UF → subsystem partition", () => {
 });
 
 describe("the geometry", () => {
-  test("every subsystem code has a path and an anchor", () => {
+  it("every subsystem code has a path and an anchor", () => {
     for (const code of SUBSYSTEM_DISPLAY_ORDER) {
       expect(SUBSYSTEM_PATH[code].length).toBeGreaterThan(500);
       expect(SUBSYSTEM_PATH[code].startsWith("M")).toBe(true);
@@ -156,13 +156,13 @@ describe("the geometry", () => {
     );
   });
 
-  test("the paths use only the commands the containment test understands", () => {
+  it("the paths use only the commands the containment test understands", () => {
     for (const code of SUBSYSTEM_DISPLAY_ORDER) {
       expect(SUBSYSTEM_PATH[code]).toMatch(/^[ML0-9. Z-]+$/);
     }
   });
 
-  test("the state borders are interior lines, not a fifth region", () => {
+  it("the state borders are interior lines, not a fifth region", () => {
     // Open polylines: no `Z`, or the hairline would close across the map and
     // the 27 states would read as 27 filled shapes over the four regions.
     expect(STATE_BORDER_D).not.toContain("Z");
@@ -170,12 +170,12 @@ describe("the geometry", () => {
     expect(STATE_BORDER_D.split("M").length - 1).toBeGreaterThan(20);
   });
 
-  test("no two subsystems were given the same geometry", () => {
+  it("no two subsystems were given the same geometry", () => {
     const ds = SUBSYSTEM_DISPLAY_ORDER.map((code) => SUBSYSTEM_PATH[code]);
     expect(new Set(ds).size).toBe(4);
   });
 
-  test("every path stays inside the viewBox", () => {
+  it("every path stays inside the viewBox", () => {
     for (const code of SUBSYSTEM_DISPLAY_ORDER) {
       for (const ring of ringsOf(SUBSYSTEM_PATH[code])) {
         for (const [x, y] of ring) {
@@ -187,7 +187,7 @@ describe("the geometry", () => {
     }
   });
 
-  test("each label anchor falls inside its own region and no other", () => {
+  it("each label anchor falls inside its own region and no other", () => {
     for (const code of SUBSYSTEM_DISPLAY_ORDER) {
       const { x, y } = SUBSYSTEM_LABEL_ANCHOR[code];
       const inside = SUBSYSTEM_DISPLAY_ORDER.filter((other) =>
@@ -222,7 +222,7 @@ describe("the geometry", () => {
   ];
 
   for (const [name, lon, lat, expected] of CITIES) {
-    test(`${name} falls in ${expected}`, () => {
+    it(`${name} falls in ${expected}`, () => {
       const { x, y } = projectToViewBox(lon, lat);
       const inside = SUBSYSTEM_DISPLAY_ORDER.filter((code) =>
         contains(SUBSYSTEM_PATH[code], x, y),
@@ -233,8 +233,8 @@ describe("the geometry", () => {
 });
 
 describe("the map's wiring", () => {
-  test("the overview defines its selection once and hands it to both", () => {
-    const screen = code(SCREEN);
+  it("the overview defines its selection once and hands it to both", () => {
+    const screen = sourceWithoutComments(SCREEN);
     // One navigation call in the file. Two would be two selection models that
     // happen to agree today.
     expect(screen.match(/router\.push/g)?.length ?? 0).toBe(1);
@@ -245,32 +245,32 @@ describe("the map's wiring", () => {
     expect(screen).toContain("onPress={() => onSelect(row.subsystem)}");
   });
 
-  test("the map renders one region per subsystem, from the shared order", () => {
-    const map = code(MAP);
+  it("the map renders one region per subsystem, from the shared order", () => {
+    const map = sourceWithoutComments(MAP);
     // Not four literals: the list the rest of the app iterates.
     expect(map).toContain("SUBSYSTEM_DISPLAY_ORDER.map");
     expect(map).not.toMatch(/\["N", "NE", "SE", "S"\]/);
   });
 
-  test("the geometry's publisher is credited on the figure, not only in a comment", () => {
+  it("the geometry's publisher is credited on the figure, not only in a comment", () => {
     // IBGE's mesh is open data, and open data still has a publisher. The
     // credit is rendered, so it survives a reader who never opens the source.
-    expect(code(MAP)).toContain("copy.app.overview.map.source");
+    expect(sourceWithoutComments(MAP)).toContain("copy.app.overview.map.source");
     for (const dict of [PT, EN]) {
       expect(dict.app.overview.map.source).toContain("IBGE");
     }
   });
 
-  test("the map colours regions with the risk palette, not its own", () => {
-    const map = code(MAP);
+  it("the map colours regions with the risk palette, not its own", () => {
+    const map = sourceWithoutComments(MAP);
     expect(map).toContain('from "@/components/charts/risk-class"');
     expect(map).toContain("riskColor(colors, klass)");
     // No raw hex anywhere: every colour comes from the palette.
     expect(map).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   });
 
-  test("a region is focusable, activates on Enter and Space, and rings", () => {
-    const map = code(MAP);
+  it("a region is focusable, activates on Enter and Space, and rings", () => {
+    const map = sourceWithoutComments(MAP);
     expect(map).toContain("tabIndex: 0");
     expect(map).toContain('event.key === "Enter"');
     expect(map).toContain('event.key === " "');
@@ -287,15 +287,15 @@ describe("the map's wiring", () => {
     expect(map).toContain("accessibilityRole");
   });
 
-  test("motion is asked about before it is applied", () => {
-    const map = code(MAP);
+  it("motion is asked about before it is applied", () => {
+    const map = sourceWithoutComments(MAP);
     expect(map).toContain("useReducedMotion()");
     expect(map).toContain("reduced ? {} : webTransition(");
   });
 });
 
 describe("the map's labels", () => {
-  test("both locales carry every map string, and they differ", () => {
+  it("both locales carry every map string, and they differ", () => {
     for (const dict of [PT, EN]) {
       for (const key of [
         "title",
@@ -312,7 +312,7 @@ describe("the map's labels", () => {
     expect(PT.app.overview.map.boundaryNote).not.toBe(EN.app.overview.map.boundaryNote);
   });
 
-  test("the region label resolves with nothing left unfilled, in both", () => {
+  it("the region label resolves with nothing left unfilled, in both", () => {
     for (const dict of [PT, EN]) {
       for (const code of SUBSYSTEM_DISPLAY_ORDER) {
         for (const klass of ["low", "elevated", "high"] as const) {
@@ -328,7 +328,7 @@ describe("the map's labels", () => {
     }
   });
 
-  test("the boundary note names the states it exists to explain", () => {
+  it("the boundary note names the states it exists to explain", () => {
     // The note is the answer to "why is the north-east corner blue?". A note
     // that has stopped naming Maranhão has stopped answering it.
     for (const dict of [PT, EN]) {
@@ -343,8 +343,8 @@ describe("the map's labels", () => {
 });
 
 describe("the map is legible without colour", () => {
-  test("each region prints its own short code and the three-step glyph", () => {
-    const map = code(MAP);
+  it("each region prints its own short code and the three-step glyph", () => {
+    const map = sourceWithoutComments(MAP);
     // `risk-class.tsx` argues that hue alone fails colour-vision-deficient
     // readers. The same argument binds the map: the class has to be readable
     // with the fills removed.
@@ -360,7 +360,7 @@ describe("the map is legible without colour", () => {
  * code that is valid and simply is not Brazil's — which is what a
  * copy-and-adapt from another country's map would leave behind.
  */
-test("the 27 codes are Brazil's", () => {
+it("the 27 codes are Brazil's", () => {
   const CANON: FederalUnit[] = [
     "AC",
     "AL",
@@ -418,36 +418,36 @@ describe("the regions are drawn, not turned into buttons", () => {
     and the fix's own comment necessarily quotes the string being banned — so a
     guard over the raw file would fail on the explanation of why it exists.
   */
-  const source = raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  const stripped = raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
 
   /*
     Only the *web* branch. `accessibilityRole` is correct on native, where there
     is no DOM host element to be replaced — so a blanket ban would be wrong, and
     would contradict the third case below.
   */
-  const webBranch = source.slice(
-    source.indexOf('Platform.OS === "web"'),
-    source.indexOf("onPress: () => onSelect(code)"),
+  const webBranch = stripped.slice(
+    stripped.indexOf('Platform.OS === "web"'),
+    stripped.indexOf("onPress: () => onSelect(code)"),
   );
 
-  test("the web branch passes no role to the region path", () => {
+  it("the web branch passes no role to the region path", () => {
     expect(webBranch.length).toBeGreaterThan(200); // the slice found both ends
     expect(webBranch).not.toMatch(/\brole:\s*["']button["']/);
     expect(webBranch).not.toMatch(/accessibilityRole:/);
   });
 
-  test("still makes the region focusable and announced", () => {
+  it("still makes the region focusable and announced", () => {
     // The accessibility has to survive the fix, or the guard above would be
     // satisfied by deleting it.
-    expect(source).toContain("tabIndex: 0");
-    expect(source).toContain('"aria-label": label');
-    expect(source).toContain('"aria-pressed": isSelected');
+    expect(stripped).toContain("tabIndex: 0");
+    expect(stripped).toContain('"aria-label": label');
+    expect(stripped).toContain('"aria-pressed": isSelected');
   });
 
-  test("keeps the native branch on accessibilityRole, which is correct there", () => {
+  it("keeps the native branch on accessibilityRole, which is correct there", () => {
     // `onPress` + `accessibilityRole` is right on native, where there is no DOM
     // host element to be replaced. Only the web branch had the defect.
-    expect(source).toContain('accessibilityRole: "button"');
+    expect(stripped).toContain('accessibilityRole: "button"');
   });
 });
 
@@ -456,7 +456,7 @@ describe("the region responds to a pointer, and so does its row", () => {
     join(import.meta.dir, "..", "src/components/charts/subsystem-map.tsx"),
     "utf8",
   );
-  const source = raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  const stripped = raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
   const overview = readFileSync(
     join(import.meta.dir, "..", "src/app/app/index.tsx"),
     "utf8",
@@ -472,9 +472,9 @@ describe("the region responds to a pointer, and so does its row", () => {
    * fire; both are kept, because `onClick` is what a keyboard-less DOM test and
    * an `Enter` key press go through.
    */
-  test("the region has onPress, not only onClick", () => {
-    expect(source).toContain("onPress: () => onSelect(code)");
-    expect(source).toContain("onClick: () => onSelect(code)");
+  it("the region has onPress, not only onClick", () => {
+    expect(stripped).toContain("onPress: () => onSelect(code)");
+    expect(stripped).toContain("onClick: () => onSelect(code)");
   });
 
   /**
@@ -482,7 +482,7 @@ describe("the region responds to a pointer, and so does its row", () => {
    * region; lifted to the overview it lights the row as well, and hovering the
    * row lights the region.
    */
-  test("hover is owned by the overview, not by either child", () => {
+  it("hover is owned by the overview, not by either child", () => {
     expect(overview).toContain("const [hovered, setHovered]");
     expect(overview).toContain("hovered={hovered}");
     expect(overview).toContain("onHoverChange={setHovered}");
@@ -493,9 +493,9 @@ describe("the region responds to a pointer, and so does its row", () => {
     // hover: see the focus test above. So the guard names the thing it forbids
     // rather than forbidding `useState` outright, which would have blocked the
     // fix that separated the two.
-    expect(source).not.toMatch(/const \[hovered/);
-    expect(source).not.toMatch(/setHovered/);
-    expect(source).toContain("const active = hovered");
-    expect(source).toContain("const [focusedCode, setFocusedCode]");
+    expect(stripped).not.toMatch(/const \[hovered/);
+    expect(stripped).not.toMatch(/setHovered/);
+    expect(stripped).toContain("const active = hovered");
+    expect(stripped).toContain("const [focusedCode, setFocusedCode]");
   });
 });

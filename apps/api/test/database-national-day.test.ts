@@ -268,9 +268,9 @@ suite("the national day grain, persisted (real Postgres)", () => {
     await publish();
     const outlook = (await (await get()).json()) as OutlookBody;
     const summed = outlook.subsystems.reduce(
-      (band, entry) => ({
-        p10: band.p10 + entry.day_energy_mwh.p10,
-        p90: band.p90 + entry.day_energy_mwh.p90,
+      (running, entry) => ({
+        p10: running.p10 + entry.day_energy_mwh.p10,
+        p90: running.p90 + entry.day_energy_mwh.p90,
       }),
       { p10: 0, p90: 0 },
     );

@@ -100,7 +100,7 @@ function stub(texts: readonly string[]): NarrationMessages & {
     sent,
     create: async (params) => {
       sent.push(params);
-      const text = texts[sent.length - 1] ?? texts[texts.length - 1] ?? "";
+      const text = texts[sent.length - 1] ?? texts.at(-1) ?? "";
       return {
         id: "msg_stub",
         type: "message",

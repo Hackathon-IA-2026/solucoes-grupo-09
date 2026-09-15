@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import {
   CAUSALITY_BANNED_LEMMAS,
   crossesCausalityBoundary,
@@ -16,7 +16,7 @@ import {
  */
 
 describe("the banned lemma set", () => {
-  test("is the spec's list, deduplicated, and stays that way", () => {
+  it("is the spec's list, deduplicated, and stays that way", () => {
     // The set is asserted whole. Anything added here should be added to
     // `docs/specs/diagnosis.md` in the same commit, and anything removed is a
     // deliberate narrowing of the boundary rather than a tidy-up.
@@ -40,7 +40,7 @@ describe("the banned lemma set", () => {
     expect(new Set(CAUSALITY_BANNED_LEMMAS).size).toBe(CAUSALITY_BANNED_LEMMAS.length);
   });
 
-  test("every lemma is found, in either casing", () => {
+  it("every lemma is found, in either casing", () => {
     for (const lemma of CAUSALITY_BANNED_LEMMAS) {
       expect(crossesCausalityBoundary(`… ${lemma} …`)).toBe(true);
       expect(crossesCausalityBoundary(`… ${lemma.toUpperCase()} …`)).toBe(true);
@@ -49,7 +49,7 @@ describe("the banned lemma set", () => {
 });
 
 describe("what the matcher must not catch", () => {
-  test("ordinary prose that merely contains the letters", () => {
+  it("ordinary prose that merely contains the letters", () => {
     // `because` contains `caus`. This codebase's comments say it constantly,
     // and a substring scan would report every one of them.
     expect(
@@ -61,7 +61,7 @@ describe("what the matcher must not catch", () => {
     );
   });
 
-  test("the domain's own proper nouns", () => {
+  it("the domain's own proper nouns", () => {
     // `RestrictionCause` is `docs/domain-model.md` §4's value object and the
     // name of columns this product writes on every ingest. ONS's reported
     // reason is evidence the product displays, not a claim the product makes.
@@ -75,7 +75,7 @@ describe("what the matcher must not catch", () => {
     }
   });
 
-  test("but the claim itself is caught in the same sentences", () => {
+  it("but the claim itself is caught in the same sentences", () => {
     // The mirror of the two tests above: the words that were let through are
     // let through because of what follows them, not because the check is weak.
     expect(crossesCausalityBoundary("It was curtailed because the grid was full.")).toBe(
@@ -86,7 +86,7 @@ describe("what the matcher must not catch", () => {
 });
 
 describe("what the matcher reports", () => {
-  test("the lemma, the text as written, and where it was", () => {
+  it("the lemma, the text as written, and where it was", () => {
     const hits = findCausalityHits("Uma afirmação Causal sobre a rede.");
     expect(hits).toHaveLength(1);
     expect(hits[0]?.lemma).toBe("causal");
@@ -94,7 +94,7 @@ describe("what the matcher reports", () => {
     expect(hits[0]?.index).toBe(14);
   });
 
-  test("a phrase split across a wrapped comment line", () => {
+  it("a phrase split across a wrapped comment line", () => {
     // Copy and doc comments wrap. A claim that survives by being reflowed is
     // the cheapest possible way past this check.
     expect(crossesCausalityBoundary("It happened\n * because the grid was full.")).toBe(
@@ -102,7 +102,7 @@ describe("what the matcher reports", () => {
     );
   });
 
-  test("both readings of an overlapping phrase", () => {
+  it("both readings of an overlapping phrase", () => {
     // `causa raiz` is reported twice, as `causa` and as `causa raiz`, so an
     // allowlist entry written for one reading cannot silently permit the other.
     expect(findCausalityHits("A causa raiz.").map((h) => h.lemma)).toEqual([
@@ -111,7 +111,7 @@ describe("what the matcher reports", () => {
     ]);
   });
 
-  test("nothing at all in text that stays inside the boundary", () => {
+  it("nothing at all in text that stays inside the boundary", () => {
     // The sentence the product is allowed to say, in both locales.
     expect(
       findCausalityHits("The model raised its forecast for tomorrow afternoon."),

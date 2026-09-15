@@ -55,7 +55,9 @@ describe("retrain · the banner reports the schedule it registered", () => {
     const source = readFileSync(join(ROOT, "src/worker.ts"), "utf8");
     // Non-vacuity: the old line interpolated the constant directly, and that is
     // what made the banner able to disagree with the queue.
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: the assertion is about this literal text in another file's source
     expect(source).not.toContain("${RETRAIN_JOB_ID} ${RETRAIN_PATTERN}");
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: the assertion is about this literal text in another file's source
     expect(source).toContain("${schedule.id} ${schedule.pattern}");
   });
 

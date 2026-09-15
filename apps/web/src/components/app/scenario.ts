@@ -41,7 +41,6 @@ import {
   encodeScenario,
   type JsonValue,
   REFERENCE_FLEET,
-  SCENARIO_PARAM,
   type SubsystemCode,
   type TargetDateRule,
   validateScenarioWire,
@@ -50,7 +49,7 @@ import type { Battery, Scenario, ShiftableLoad } from "@wattsteer/core/api";
 import type { BatteryAsset, ShiftableLoadAsset } from "@/lib/fixtures";
 
 /** The query parameter the scenario travels in — core's, not a second one. */
-export { SCENARIO_PARAM };
+export { SCENARIO_PARAM } from "@wattsteer/core";
 
 /**
  * A scenario that decoded and passed the table, or the code that refused it.

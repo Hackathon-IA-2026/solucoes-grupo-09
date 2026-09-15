@@ -10,8 +10,12 @@ import {
   INTERCHANGE_FORMATS,
   parseInterchangeCsv,
 } from "../src/ingest/ons/interchange.js";
-import headHeaders from "./fixtures/ons/head-INTERCAMBIO_NACIONAL_2000.csv.json";
-import packageShow from "./fixtures/ons/package-show-intercambio-nacional.json";
+import headHeaders from "./fixtures/ons/head-INTERCAMBIO_NACIONAL_2000.csv.json" with {
+  type: "json",
+};
+import packageShow from "./fixtures/ons/package-show-intercambio-nacional.json" with {
+  type: "json",
+};
 
 // Seam 1 — the interchange adapter, driven by real payloads captured from ONS
 // on 2026-08-28. Provenance is in `fixtures/ons/FIXTURES.md`.

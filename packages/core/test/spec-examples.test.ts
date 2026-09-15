@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { explain, validate } from "../src/schema.js";
@@ -44,13 +44,13 @@ const byKey = new Map(examples.map((example) => [exampleKey(example), example]))
 const entries = new Map(manifest.examples.map((entry) => [entry.key, entry]));
 
 describe("the specs' examples are all accounted for", () => {
-  test("every JSON document in every spec has a manifest entry", () => {
+  it("every JSON document in every spec has a manifest entry", () => {
     // The half that stops an example being added without being validated.
     const unlisted = [...byKey.keys()].filter((key) => !entries.has(key));
     expect(unlisted).toEqual([]);
   });
 
-  test("every manifest entry names a document that still exists", () => {
+  it("every manifest entry names a document that still exists", () => {
     // The half that stops the manifest describing prose that has moved. Line
     // numbers are part of the key on purpose: an example that moves has to be
     // re-pointed, which is a moment somebody looks at it again.
@@ -58,7 +58,7 @@ describe("the specs' examples are all accounted for", () => {
     expect(missing).toEqual([]);
   });
 
-  test("there is at least one example from each of the five specs", () => {
+  it("there is at least one example from each of the five specs", () => {
     // A guard on the guard: a regex that stopped matching fences would make
     // every assertion above vacuously true.
     const specs = new Set(examples.map((example) => example.spec));
@@ -80,12 +80,12 @@ for (const entry of manifest.examples) {
       readFileSync(join(FIXTURES, entry.fixture), "utf8"),
     ) as unknown;
 
-    test(`validates against ${entry.schema}`, () => {
+    it(`validates against ${entry.schema}`, () => {
       const result = validate(entry.schema, fixture);
       expect(result.valid ? "" : explain(result)).toBe("");
     });
 
-    test("reproduces every part of the spec block that the spec stated", () => {
+    it("reproduces every part of the spec block that the spec stated", () => {
       const example = byKey.get(entry.key);
       expect(example).toBeDefined();
       const disagreements = nonElidedDisagreements(example?.value, fixture).filter(
@@ -97,7 +97,7 @@ for (const entry of manifest.examples) {
       expect(disagreements).toEqual([]);
     });
 
-    test("every completed path is justified in writing", () => {
+    it("every completed path is justified in writing", () => {
       if (entry.completes.length > 0) {
         expect(entry.note.length).toBeGreaterThan(40);
       }

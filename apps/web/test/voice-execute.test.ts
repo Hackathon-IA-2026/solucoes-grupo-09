@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { SubsystemCode } from "@wattsteer/core";
@@ -83,7 +83,7 @@ function linkedScenario(intent: NavigationIntent): Scenario {
 }
 
 describe("executeTool is total", () => {
-  test("every malformed shape returns an intent rather than throwing", () => {
+  it("every malformed shape returns an intent rather than throwing", () => {
     const shapes: ToolCall[] = [
       { name: "" },
       { name: "promote_model" },
@@ -105,19 +105,19 @@ describe("executeTool is total", () => {
     }
   });
 
-  test("a name that is not one of the six is unknown_tool", () => {
+  it("a name that is not one of the six is unknown_tool", () => {
     for (const name of ["", "promote", "show grid", "SHOW_GRID", "highlight "]) {
       expect(refusal(run(name, {}))).toBe("unknown_tool");
     }
   });
 
-  test("arguments that are not an object are malformed_arguments", () => {
+  it("arguments that are not an object are malformed_arguments", () => {
     for (const args of ["not json", "{", "[1,2]", 7, true, ["a"]]) {
       expect(refusal(run("explain", args))).toBe("malformed_arguments");
     }
   });
 
-  test("absent, null and empty-string arguments all mean 'no arguments'", () => {
+  it("absent, null and empty-string arguments all mean 'no arguments'", () => {
     // The realtime protocol sends `""` for a no-argument call. Reading that as
     // malformed would make `show_grid` — the most-used tool — always refuse.
     for (const args of [undefined, null, "", "  ", {}, "{}"]) {
@@ -125,11 +125,11 @@ describe("executeTool is total", () => {
     }
   });
 
-  test("a JSON string is parsed exactly like the object it encodes", () => {
+  it("a JSON string is parsed exactly like the object it encodes", () => {
     expect(run("focus", '{"subsystem":"S"}')).toEqual(run("focus", { subsystem: "S" }));
   });
 
-  test("every refusal code is one of the published ones", () => {
+  it("every refusal code is one of the published ones", () => {
     const seen = new Set<string>();
     const calls: ToolCall[] = [
       { name: "nope" },
@@ -157,20 +157,20 @@ describe("executeTool is total", () => {
 });
 
 describe("show_grid", () => {
-  test("opens the overview carrying the selection", () => {
+  it("opens the overview carrying the selection", () => {
     const { pathname, params } = navigation(run("show_grid", {}));
     expect(pathname).toBe(SCREEN_PATHS.overview);
     expect(params).toEqual({ subsystem: "NE", technology: "wind", run: "12Z" });
   });
 
-  test("carries whatever the selection happens to be", () => {
+  it("carries whatever the selection happens to be", () => {
     const { params } = navigation(
       run("show_grid", {}, { ...NE, subsystem: "S", technology: "SOLAR", run: "00Z" }),
     );
     expect(params).toEqual({ subsystem: "S", technology: "solar", run: "00Z" });
   });
 
-  test("any argument at all is unexpected_argument", () => {
+  it("any argument at all is unexpected_argument", () => {
     for (const args of [{ subsystem: "NE" }, { driver: "net_surplus" }, { x: 1 }]) {
       // A `show_grid` carrying a subsystem is a model that meant `focus` or
       // `highlight`. Ignoring the key would answer a question nobody asked.
@@ -180,14 +180,14 @@ describe("show_grid", () => {
 });
 
 describe("explain", () => {
-  test("no arguments keeps the current selection", () => {
+  it("no arguments keeps the current selection", () => {
     const { pathname, params } = navigation(run("explain", {}));
     expect(pathname).toBe(SCREEN_PATHS.explain);
     expect(params).toEqual({ subsystem: "NE", technology: "wind", run: "12Z" });
   });
 
   for (const subsystem of SUBSYSTEM_DISPLAY_ORDER) {
-    test(`subsystem ${subsystem} moves the selection and keeps the rest`, () => {
+    it(`subsystem ${subsystem} moves the selection and keeps the rest`, () => {
       const { pathname, params } = navigation(run("explain", { subsystem }));
       expect(pathname).toBe(SCREEN_PATHS.explain);
       expect(params.subsystem).toBe(subsystem);
@@ -197,16 +197,16 @@ describe("explain", () => {
   }
 
   for (const driver of DRIVER_CODES) {
-    test(`driver ${driver} is carried`, () => {
+    it(`driver ${driver} is carried`, () => {
       expect(navigation(run("explain", { driver })).params.driver).toBe(driver);
     });
   }
 
-  test("no driver means no driver parameter", () => {
+  it("no driver means no driver parameter", () => {
     expect(navigation(run("explain", {})).params.driver).toBeUndefined();
   });
 
-  test("a hallucinated subsystem refuses and names the value", () => {
+  it("a hallucinated subsystem refuses and names the value", () => {
     const intent = run("explain", { subsystem: "SUDESTE" });
     expect(refusal(intent)).toBe("unknown_subsystem");
     if (intent.kind === "refused") {
@@ -215,7 +215,7 @@ describe("explain", () => {
     }
   });
 
-  test("every near-miss on subsystem refuses rather than coercing", () => {
+  it("every near-miss on subsystem refuses rather than coercing", () => {
     // `parseAppParams` would answer `NE` for every one of these, correctly, for
     // a hand-edited URL. Here it would be the screen, the numbers and the
     // spoken sentence all agreeing and all wrong.
@@ -224,26 +224,26 @@ describe("explain", () => {
     }
   });
 
-  test("a hallucinated driver refuses", () => {
+  it("a hallucinated driver refuses", () => {
     for (const value of ["other", "wind", "", 3]) {
       expect(refusal(run("explain", { driver: value }))).toBe("unknown_driver");
     }
   });
 
-  test("a property explain does not have is unexpected_argument", () => {
+  it("a property explain does not have is unexpected_argument", () => {
     expect(refusal(run("explain", { run: "12Z" }))).toBe("unexpected_argument");
     expect(refusal(run("explain", { battery_mwh: 500 }))).toBe("unexpected_argument");
   });
 });
 
 describe("focus changes the selection and not the screen", () => {
-  test("one field named writes one field", () => {
+  it("one field named writes one field", () => {
     const intent = run("focus", { subsystem: "S" });
     expect(intent).toEqual({ kind: "params", params: { subsystem: "S" } });
   });
 
   for (const run_ of RUN_LABELS) {
-    test(`run ${run_} is written`, () => {
+    it(`run ${run_} is written`, () => {
       expect(run("focus", { run: run_ })).toEqual({
         kind: "params",
         params: { run: run_ },
@@ -251,7 +251,7 @@ describe("focus changes the selection and not the screen", () => {
     });
   }
 
-  test("technology is written in the URL's spelling", () => {
+  it("technology is written in the URL's spelling", () => {
     expect(run("focus", { technology: "solar" })).toEqual({
       kind: "params",
       params: { technology: "solar" },
@@ -264,14 +264,14 @@ describe("focus changes the selection and not the screen", () => {
     });
   });
 
-  test("three fields named writes three", () => {
+  it("three fields named writes three", () => {
     expect(run("focus", { subsystem: "N", technology: "wind", run: "00Z" })).toEqual({
       kind: "params",
       params: { subsystem: "N", technology: "wind", run: "00Z" },
     });
   });
 
-  test("the fields not named are not written", () => {
+  it("the fields not named are not written", () => {
     // `router.setParams` merges. Writing the other two back would silently undo
     // a pill the reader pressed while the model was thinking.
     const intent = run("focus", { technology: "solar" });
@@ -280,12 +280,12 @@ describe("focus changes the selection and not the screen", () => {
     ]);
   });
 
-  test("an empty focus is missing_argument, not a no-op", () => {
+  it("an empty focus is missing_argument, not a no-op", () => {
     expect(refusal(run("focus", {}))).toBe("missing_argument");
     expect(refusal(run("focus", undefined))).toBe("missing_argument");
   });
 
-  test("each hallucinated value has its own code", () => {
+  it("each hallucinated value has its own code", () => {
     expect(refusal(run("focus", { subsystem: "SUDESTE" }))).toBe("unknown_subsystem");
     expect(refusal(run("focus", { technology: "hydro" }))).toBe("unknown_technology");
     expect(refusal(run("focus", { run: "06Z" }))).toBe("unknown_run");
@@ -293,13 +293,13 @@ describe("focus changes the selection and not the screen", () => {
     expect(refusal(run("focus", { technology: 1 }))).toBe("unknown_technology");
   });
 
-  test("a bad value refuses the whole call, even beside a good one", () => {
+  it("a bad value refuses the whole call, even beside a good one", () => {
     // Half-applying would move the reader's subsystem and leave them wondering
     // why the fleet did not change.
     expect(refusal(run("focus", { subsystem: "NE", run: "06Z" }))).toBe("unknown_run");
   });
 
-  test("a property focus does not have is unexpected_argument", () => {
+  it("a property focus does not have is unexpected_argument", () => {
     expect(refusal(run("focus", { episode: REPLAY_DAYS[0].id }))).toBe(
       "unexpected_argument",
     );
@@ -308,35 +308,35 @@ describe("focus changes the selection and not the screen", () => {
 
 describe("highlight does not navigate", () => {
   for (const subsystem of SUBSYSTEM_DISPLAY_ORDER) {
-    test(`${subsystem} lights, and nothing moves`, () => {
+    it(`${subsystem} lights, and nothing moves`, () => {
       const intent = run("highlight", { subsystem });
       expect(intent).toEqual({ kind: "highlight", subsystem });
     });
   }
 
-  test("an explicit null clears the highlight", () => {
+  it("an explicit null clears the highlight", () => {
     expect(run("highlight", { subsystem: null })).toEqual({
       kind: "highlight",
       subsystem: null,
     });
   });
 
-  test("no subsystem at all is missing_argument", () => {
+  it("no subsystem at all is missing_argument", () => {
     expect(refusal(run("highlight", {}))).toBe("missing_argument");
     expect(refusal(run("highlight", undefined))).toBe("missing_argument");
   });
 
-  test("a hallucinated subsystem refuses", () => {
+  it("a hallucinated subsystem refuses", () => {
     expect(refusal(run("highlight", { subsystem: "SUDESTE" }))).toBe("unknown_subsystem");
   });
 
-  test("a property highlight does not have is unexpected_argument", () => {
+  it("a property highlight does not have is unexpected_argument", () => {
     expect(refusal(run("highlight", { subsystem: "NE", technology: "wind" }))).toBe(
       "unexpected_argument",
     );
   });
 
-  test("no highlight call ever produces a navigation", () => {
+  it("no highlight call ever produces a navigation", () => {
     for (const subsystem of [...SUBSYSTEM_DISPLAY_ORDER, null]) {
       expect(run("highlight", { subsystem }).kind).toBe("highlight");
     }
@@ -345,7 +345,7 @@ describe("highlight does not navigate", () => {
 
 describe("replay", () => {
   for (const day of REPLAY_DAYS) {
-    test(`episode ${day.id} opens the Time Machine on it`, () => {
+    it(`episode ${day.id} opens the Time Machine on it`, () => {
       const { pathname, params } = navigation(run("replay", { episode: day.id }));
       expect(pathname).toBe(SCREEN_PATHS.replay);
       expect(params.episode).toBe(day.id);
@@ -353,7 +353,7 @@ describe("replay", () => {
     });
   }
 
-  test("an unknown episode refuses rather than falling back to the first day", () => {
+  it("an unknown episode refuses rather than falling back to the first day", () => {
     // `replayDay()` falls back, correctly, for a hand-edited URL. Here it would
     // replay a different day than the one asked about.
     for (const value of ["", "2026-08-11", "yesterday", 1, null]) {
@@ -361,7 +361,7 @@ describe("replay", () => {
     }
   });
 
-  test("a relative day resolves to the nearest replayable day at or before it", () => {
+  it("a relative day resolves to the nearest replayable day at or before it", () => {
     // 2026-09-16 − 7 = 2026-09-09; the catalogue's most recent day at or before
     // that is 2026-08-11. Rounding forward would answer about a day the reader
     // has not had yet.
@@ -376,48 +376,48 @@ describe("replay", () => {
     );
   });
 
-  test("a day older than the catalogue refuses rather than clamping", () => {
+  it("a day older than the catalogue refuses rather than clamping", () => {
     expect(refusal(run("replay", { relative_day: -3000 }))).toBe(
       "no_episode_for_relative_day",
     );
   });
 
-  test("relative_day must be a past integer inside the floor", () => {
+  it("relative_day must be a past integer inside the floor", () => {
     for (const value of [0, 1, 7, -0.5, -3651, Number.NaN, "-7", null]) {
       expect(refusal(run("replay", { relative_day: value }))).toBe("value_out_of_range");
     }
   });
 
-  test("both an episode and a relative day is ambiguous_replay", () => {
+  it("both an episode and a relative day is ambiguous_replay", () => {
     expect(refusal(run("replay", { episode: REPLAY_DAYS[0].id, relative_day: -7 }))).toBe(
       "ambiguous_replay",
     );
   });
 
-  test("neither is missing_argument", () => {
+  it("neither is missing_argument", () => {
     expect(refusal(run("replay", {}))).toBe("missing_argument");
   });
 
-  test("a property replay does not have is unexpected_argument", () => {
+  it("a property replay does not have is unexpected_argument", () => {
     expect(refusal(run("replay", { subsystem: "NE" }))).toBe("unexpected_argument");
   });
 });
 
 describe("mitigate", () => {
-  test("with no sizes it navigates and writes no scenario", () => {
+  it("with no sizes it navigates and writes no scenario", () => {
     const { pathname, params } = navigation(run("mitigate", {}));
     expect(pathname).toBe(SCREEN_PATHS.mitigate);
     expect(params[SCENARIO_PARAM]).toBeUndefined();
     expect(params.subsystem).toBe("NE");
   });
 
-  test("with a subsystem only it carries the subsystem and no scenario", () => {
+  it("with a subsystem only it carries the subsystem and no scenario", () => {
     const { params } = navigation(run("mitigate", { subsystem: "S" }));
     expect(params.subsystem).toBe("S");
     expect(params[SCENARIO_PARAM]).toBeUndefined();
   });
 
-  test("a battery energy is written through the codec, not assembled", () => {
+  it("a battery energy is written through the codec, not assembled", () => {
     const scenario = linkedScenario(run("mitigate", { battery_mwh: 500 }));
     expect(scenarioBattery(scenario).energyCapacityMwh).toBe(500);
     // The rest of the fleet is untouched: `withBattery` spreads over the asset
@@ -428,7 +428,7 @@ describe("mitigate", () => {
     );
   });
 
-  test("a battery power is written", () => {
+  it("a battery power is written", () => {
     const scenario = linkedScenario(run("mitigate", { battery_mw: 300 }));
     expect(scenarioBattery(scenario).maxPowerMw).toBe(300);
     expect(scenarioBattery(scenario).energyCapacityMwh).toBe(
@@ -436,12 +436,12 @@ describe("mitigate", () => {
     );
   });
 
-  test("a load energy is written", () => {
+  it("a load energy is written", () => {
     const scenario = linkedScenario(run("mitigate", { load_mwh: 2000 }));
     expect(scenarioLoad(scenario).dailyEnergyMwh).toBe(2000);
   });
 
-  test("all three at once", () => {
+  it("all three at once", () => {
     const scenario = linkedScenario(
       run("mitigate", { battery_mwh: 800, battery_mw: 200, load_mwh: 1500 }),
     );
@@ -450,7 +450,7 @@ describe("mitigate", () => {
     expect(scenarioLoad(scenario).dailyEnergyMwh).toBe(1500);
   });
 
-  test("a subsystem moves the whole scenario, assets and all", () => {
+  it("a subsystem moves the whole scenario, assets and all", () => {
     const scenario = linkedScenario(
       run("mitigate", { subsystem: "S", battery_mwh: 500 }),
     );
@@ -462,7 +462,7 @@ describe("mitigate", () => {
     }
   });
 
-  test("a supplied scenario is edited in place, not replaced", () => {
+  it("a supplied scenario is edited in place, not replaced", () => {
     const supplied: Scenario = {
       ...defaultScenario("NE", NE.date),
       assets: defaultScenario("NE", NE.date).assets.map((asset) =>
@@ -478,13 +478,13 @@ describe("mitigate", () => {
     expect(scenarioBattery(scenario).initialStateOfCharge).toBe(0.25);
   });
 
-  test("the day the scenario plans is the day the selection names", () => {
+  it("the day the scenario plans is the day the selection names", () => {
     expect(linkedScenario(run("mitigate", { battery_mwh: 500 })).targetDate).toBe(
       NE.date,
     );
   });
 
-  test("every size outside the steppers' own range refuses", () => {
+  it("every size outside the steppers' own range refuses", () => {
     const outside: [string, unknown][] = [
       ["battery_mwh", ASSET_LIMITS.batteryEnergyMwh.min - 1],
       ["battery_mwh", ASSET_LIMITS.batteryEnergyMwh.max + 1],
@@ -504,7 +504,7 @@ describe("mitigate", () => {
     }
   });
 
-  test("the range's own endpoints are accepted", () => {
+  it("the range's own endpoints are accepted", () => {
     for (const value of [
       ASSET_LIMITS.batteryEnergyMwh.min,
       ASSET_LIMITS.batteryEnergyMwh.max,
@@ -516,17 +516,17 @@ describe("mitigate", () => {
     }
   });
 
-  test("a hallucinated subsystem refuses before anything is written", () => {
+  it("a hallucinated subsystem refuses before anything is written", () => {
     expect(refusal(run("mitigate", { subsystem: "SUDESTE", battery_mwh: 500 }))).toBe(
       "unknown_subsystem",
     );
   });
 
-  test("a property mitigate does not have is unexpected_argument", () => {
+  it("a property mitigate does not have is unexpected_argument", () => {
     expect(refusal(run("mitigate", { run: "00Z" }))).toBe("unexpected_argument");
   });
 
-  test("every link the agent writes is one the screen can read back", () => {
+  it("every link the agent writes is one the screen can read back", () => {
     // The one failure a shareable URL cannot survive is a link the API rejects
     // and the screen accepts. `linkedScenario` decodes through the real codec
     // and the real refusal table, so this is that assertion.
@@ -541,7 +541,7 @@ describe("mitigate", () => {
     }
   });
 
-  test("a fleet the refusal table rejects is refused, not linked to", () => {
+  it("a fleet the refusal table rejects is refused, not linked to", () => {
     // `load_mwh: 100` is the stepper's own minimum and still trips
     // `SHIFT_EXCEEDS_BASELINE`: the rule is about the combination, not the
     // field, so no per-argument range could have caught it. This case is why
@@ -593,7 +593,7 @@ describe("property: any valid call leaves the URL parseable", () => {
     ),
   );
 
-  test("no valid call is ever refused", () => {
+  it("no valid call is ever refused", () => {
     for (const params of EVERY_PARAMS) {
       for (const call of VALID_CALLS) {
         const intent = executeTool(call, params);
@@ -602,7 +602,7 @@ describe("property: any valid call leaves the URL parseable", () => {
     }
   });
 
-  test("the params of every intent parse back through parseAppParams", () => {
+  it("the params of every intent parse back through parseAppParams", () => {
     for (const params of EVERY_PARAMS) {
       for (const call of VALID_CALLS) {
         const intent = executeTool(call, params);
@@ -630,7 +630,7 @@ describe("property: any valid call leaves the URL parseable", () => {
     }
   });
 
-  test("a navigation's selection round-trips exactly, SOLAR included", () => {
+  it("a navigation's selection round-trips exactly, SOLAR included", () => {
     // `sharedParams` alone emits `SOLAR`, which `parseAppParams` does not read —
     // it falls back to wind. From a tab press that is a wrong pill; from the
     // agent it would be the voice saying "solar" over a wind screen.
@@ -639,7 +639,7 @@ describe("property: any valid call leaves the URL parseable", () => {
     expect(parseAppParams(params, NOW).technology).toBe("SOLAR");
   });
 
-  test("every tool is exercised by the property set", () => {
+  it("every tool is exercised by the property set", () => {
     expect([...new Set(VALID_CALLS.map((call) => call.name))].sort()).toEqual(
       [...TOOL_NAMES].sort(),
     );
@@ -794,13 +794,13 @@ describe("the demo script (plan §6), as gherkin", () => {
     parseFeature(readFileSync(join(FEATURES, file), "utf8")),
   );
 
-  test("the feature files carry the six steps of the script", () => {
+  it("the feature files carry the six steps of the script", () => {
     expect(files.length).toBeGreaterThan(0);
     expect(scenarios.length).toBe(6);
   });
 
   for (const scenario of scenarios) {
-    test(scenario.name, () => {
+    it(scenario.name, () => {
       const world: World = { params: NE };
       for (const step of scenario.steps) {
         const bound = STEPS.find(([pattern]) => pattern.test(step));

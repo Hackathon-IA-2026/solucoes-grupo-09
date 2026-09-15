@@ -282,7 +282,6 @@ function resolveId(
       return candidate;
     }
   }
-  return undefined;
 }
 
 /**

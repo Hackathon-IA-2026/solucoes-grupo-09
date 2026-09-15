@@ -192,7 +192,6 @@ function variantKeys(assetType: string): Set<string> | undefined {
       return new Set(fields.map((field) => field.wire));
     }
   }
-  return undefined;
 }
 
 // --- the checks --------------------------------------------------------------
@@ -586,7 +585,7 @@ export function validateScenarioWire(
  */
 function checkTargetDateShape(raw: JsonValue | undefined): asserts raw is string {
   if (typeof raw !== "string" || !CIVIL_DATE.test(raw)) {
-    refuse("REQUEST_INVALID", `target_date must be YYYY-MM-DD`, {
+    refuse("REQUEST_INVALID", "target_date must be YYYY-MM-DD", {
       field: "target_date",
     });
   }

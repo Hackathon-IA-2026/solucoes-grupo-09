@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import {
   CAP_TIME_ZONE,
   dailyCap,
@@ -25,7 +25,7 @@ import { memoryStore } from "../src/api/plugins/limit-store.js";
  */
 
 describe("dayKey · the civil day the cap rolls over on", () => {
-  test("is Brasília's day, not UTC's", () => {
+  it("is Brasília's day, not UTC's", () => {
     // 2026-08-29T02:00Z is still the 28th in Brasília (UTC−3).
     const instant = Date.parse("2026-08-29T02:00:00Z");
     expect(dayKey(instant)).toBe("2026-08-28");
@@ -33,20 +33,20 @@ describe("dayKey · the civil day the cap rolls over on", () => {
     expect(CAP_TIME_ZONE).toBe("America/Sao_Paulo");
   });
 
-  test("rolls over at local midnight, not in the middle of the evening gate", () => {
+  it("rolls over at local midnight, not in the middle of the evening gate", () => {
     // The late gate publishes at 19:00 BRT — nowhere near a rollover.
     expect(dayKey(Date.parse("2026-08-28T21:59:00Z"))).toBe("2026-08-28");
     expect(dayKey(Date.parse("2026-08-29T03:01:00Z"))).toBe("2026-08-29");
   });
 
-  test("a counter outlives its day, with slack for clock skew", () => {
+  it("a counter outlives its day, with slack for clock skew", () => {
     const now = Date.parse("2026-08-28T12:00:00Z");
     expect(expiresAt(now)).toBeGreaterThan(now + 86_400_000);
   });
 });
 
 describe("dailyCap · the budget", () => {
-  test("allows up to the cap, then says serve the template", async () => {
+  it("allows up to the cap, then says serve the template", async () => {
     const cap = dailyCap({ name: "narration", limit: 3, store: memoryStore() });
     const now = Date.parse("2026-08-28T12:00:00Z");
     for (let i = 1; i <= 3; i++) {
@@ -61,7 +61,7 @@ describe("dailyCap · the budget", () => {
     expect(over.day).toBe("2026-08-28");
   });
 
-  test("keeps counting past the cap — an over-cap attempt is still demand", async () => {
+  it("keeps counting past the cap — an over-cap attempt is still demand", async () => {
     const cap = dailyCap({ name: "narration", limit: 1, store: memoryStore() });
     const now = Date.parse("2026-08-28T12:00:00Z");
     await cap.take(now);
@@ -69,7 +69,7 @@ describe("dailyCap · the budget", () => {
     expect((await cap.take(now)).used).toBe(3);
   });
 
-  test("is global, not per client — one counter for the deployment", async () => {
+  it("is global, not per client — one counter for the deployment", async () => {
     // Two caps over one store are two request handlers over one budget, which
     // is what "global daily cap" has to mean once there is a second replica.
     const store = memoryStore();
@@ -81,7 +81,7 @@ describe("dailyCap · the budget", () => {
     expect((await a.take(now)).allowed).toBe(false);
   });
 
-  test("two named caps do not share a counter", async () => {
+  it("two named caps do not share a counter", async () => {
     const store = memoryStore();
     const narration = dailyCap({ name: "narration", limit: 1, store });
     const other = dailyCap({ name: "something-else", limit: 1, store });
@@ -90,7 +90,7 @@ describe("dailyCap · the budget", () => {
     expect((await other.take(now)).allowed).toBe(true);
   });
 
-  test("a zero cap disables the budget", async () => {
+  it("a zero cap disables the budget", async () => {
     const cap = dailyCap({ name: "narration", limit: 0, store: memoryStore() });
     for (let i = 0; i < 5; i++) {
       expect((await cap.take()).allowed).toBe(true);

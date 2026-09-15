@@ -133,7 +133,7 @@ export interface EnergyBalanceParse {
  * other. An ingest row and an API response now name the same two values by
  * construction.
  */
-export type { Technology };
+export type { Technology } from "@wattsteer/core/domain";
 
 /** Which variant of `ReportingEntity` an ONS `id_ons` denotes. */
 export type ReportingEntityKind = "CONJUNTO" | "PLANT";

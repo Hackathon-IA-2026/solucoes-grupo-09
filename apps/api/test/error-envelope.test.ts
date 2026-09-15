@@ -1,4 +1,4 @@
-import { describe, expect, it, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { Elysia, t } from "elysia";
 import { bodyLimit } from "../src/api/plugins/body-limit.js";
 import { errorHandler, fieldPath, validationFailure } from "../src/api/plugins/errors.js";
@@ -52,7 +52,7 @@ describe("the error envelope · one case per code", () => {
   // that a code added without a status, or added and never exercised, cannot
   // pass by being forgotten.
   for (const code of ERROR_CODES) {
-    test(`${code} answers ${ERROR_STATUS[code]} in the envelope`, async () => {
+    it(`${code} answers ${ERROR_STATUS[code]} in the envelope`, async () => {
       const { status, body } = await answer(
         throwing(new CodedError(code, `developer prose for ${code}`)),
       );
@@ -101,9 +101,11 @@ describe("the error envelope · the shapes that used to escape it", () => {
   });
 
   it("falls back to REQUEST_INVALID for a field the enum does not name", async () => {
-    const app = new Elysia().use(errorHandler).post("/boom", ({ body }) => body, {
-      body: t.Object({ horizon_hours: t.Number() }),
-    });
+    const app = new Elysia()
+      .use(errorHandler)
+      .post("/boom", ({ body: posted }) => posted, {
+        body: t.Object({ horizon_hours: t.Number() }),
+      });
     const response = await app.handle(
       new Request("http://localhost/boom", {
         method: "POST",

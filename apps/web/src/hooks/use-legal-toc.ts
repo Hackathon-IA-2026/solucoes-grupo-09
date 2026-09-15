@@ -29,7 +29,8 @@ export function computeActiveSection(
     return "";
   }
   if (atBottom) {
-    return sections[sections.length - 1].id;
+    // Non-empty: the length guard above already returned.
+    return (sections.at(-1) as LegalTocSection).id;
   }
   let active = sections[0].id;
   for (const section of sections) {

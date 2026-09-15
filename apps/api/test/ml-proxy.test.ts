@@ -190,10 +190,7 @@ describe("ml-proxy · failure mapping", () => {
   });
 
   it("passes a healthy answer through untouched", async () => {
-    reply = () =>
-      new Response(JSON.stringify({ status: "ok" }), {
-        headers: { "content-type": "application/json" },
-      });
+    reply = () => Response.json({ status: "ok" });
     const response = await callMl(
       "/v1/forecast/day-ahead",
       new URLSearchParams(),

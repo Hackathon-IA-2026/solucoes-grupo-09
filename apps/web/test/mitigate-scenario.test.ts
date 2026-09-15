@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -56,7 +56,7 @@ function decoded(scenario: Scenario): Scenario {
 }
 
 describe("the scenario is the URL", () => {
-  test("the screen's default fleet is REFERENCE_FLEET, not a local restatement", () => {
+  it("the screen's default fleet is REFERENCE_FLEET, not a local restatement", () => {
     const battery = scenarioBattery(DEFAULT);
     const load = scenarioLoad(DEFAULT);
     expect(battery.maxPowerMw).toBe(REFERENCE_FLEET.battery.maxPowerMw);
@@ -73,12 +73,12 @@ describe("the scenario is the URL", () => {
     expect(load.maxShiftMw / (load.dailyEnergyMwh / 24)).toBeLessThan(0.75);
   });
 
-  test("the fixture defaults and the scenario defaults are the same fleet", () => {
+  it("the fixture defaults and the scenario defaults are the same fleet", () => {
     expect(fixtureBattery(scenarioBattery(DEFAULT))).toEqual(DEFAULT_BATTERY);
     expect(fixtureLoad(scenarioLoad(DEFAULT))).toEqual(DEFAULT_LOAD);
   });
 
-  test("a scenario URL round-trips to byte-identical bytes and the same hash", () => {
+  it("a scenario URL round-trips to byte-identical bytes and the same hash", () => {
     // What a bookmark and a paste into Slack actually do: the canonical bytes
     // out and the canonical bytes back have to be the same bytes, or the cache
     // key on the other side means something else.
@@ -89,7 +89,7 @@ describe("the scenario is the URL", () => {
     expect(scenarioHash(back)).toBe(scenarioHash(DEFAULT));
   });
 
-  test("and therefore to a byte-identical question for the solver", () => {
+  it("and therefore to a byte-identical question for the solver", () => {
     // The plan used to be recomputed here and compared. It is solved on the
     // server now, so what a round trip has to preserve is the *request*: the
     // canonical bytes are what `POST /v1/optimize` answers and what its cache is
@@ -98,7 +98,7 @@ describe("the scenario is the URL", () => {
     expect(encodeScenario(decoded(DEFAULT))).toBe(encodeScenario(DEFAULT));
   });
 
-  test("an edit round-trips too, and keeps the fields the editors never touch", () => {
+  it("an edit round-trips too, and keeps the fields the editors never touch", () => {
     // A blob carrying an availability window and a per-direction limit is
     // edited on this screen and comes back still carrying them. The editors
     // spread over the asset rather than rebuilding it from four fields.
@@ -120,18 +120,18 @@ describe("the scenario is the URL", () => {
     expect(after.maxChargeMw).toBe(80);
   });
 
-  test("an absent blob is the default, not a refusal", () => {
+  it("an absent blob is the default, not a refusal", () => {
     const readout = readScenario(undefined, DEFAULT, { now: NOW });
     expect(readout.ok).toBe(true);
   });
 });
 
 describe("one plan, one promise", () => {
-  test("the plan is built against the median, and the basis is not a parameter", () => {
+  it("the plan is built against the median, and the basis is not a parameter", () => {
     expect(PLANNING_BASIS).toBe("p50");
   });
 
-  test("the basis toggle is gone from the screen and from both dictionaries", () => {
+  it("the basis toggle is gone from the screen and from both dictionaries", () => {
     // The acceptance box, asserted rather than reviewed. A control the spec
     // removed is the kind of thing that comes back as "just an option", so the
     // absence is a test: no state for it on the screen, and no words for it in
@@ -168,7 +168,7 @@ describe("one plan, one promise", () => {
 });
 
 describe("R$ moves the money and nothing else", () => {
-  test("changing the assumed price leaves the plan and every KPI identical", () => {
+  it("changing the assumed price leaves the plan and every KPI identical", () => {
     const cheap = withBrlPerMwh(DEFAULT, 90);
     const dear = withBrlPerMwh(DEFAULT, 420);
     expect(scenarioBrlPerMwh(cheap)).toBe(90);
@@ -184,7 +184,7 @@ describe("R$ moves the money and nothing else", () => {
     expect(after).toEqual(before);
   });
 
-  test("the default assumption is the one published rate", () => {
+  it("the default assumption is the one published rate", () => {
     expect(scenarioBrlPerMwh(DEFAULT)).toBe(BRL_PER_MWH);
     expect(ASSET_LIMITS.brlPerMwh.min).toBeGreaterThan(0);
   });
@@ -298,7 +298,7 @@ describe("a nonsensical link is refused, never quietly corrected", () => {
   ];
 
   for (const { name, wire, code } of cases) {
-    test(`${name} → ${code}`, () => {
+    it(`${name} → ${code}`, () => {
       const readout = readScenario(blobOf(wire), DEFAULT, { now: NOW });
       expect(readout.ok).toBe(false);
       if (!readout.ok) {
@@ -307,7 +307,7 @@ describe("a nonsensical link is refused, never quietly corrected", () => {
     });
   }
 
-  test("every code the screen can produce has a sentence in both locales", () => {
+  it("every code the screen can produce has a sentence in both locales", () => {
     // The i18n rule, on this screen specifically: the API returns codes and the
     // screen owns the strings. `error-copy.test.ts` already guarantees the
     // dictionaries cover the whole enum; this asserts the codes this screen
@@ -323,7 +323,7 @@ describe("a nonsensical link is refused, never quietly corrected", () => {
     }
   });
 
-  test("a blob over the published cap is refused before it is parsed", () => {
+  it("a blob over the published cap is refused before it is parsed", () => {
     const huge: Scenario = {
       ...DEFAULT,
       assets: Array.from({ length: 40 }, () => scenarioBattery(DEFAULT)),
@@ -339,12 +339,12 @@ describe("a nonsensical link is refused, never quietly corrected", () => {
     }
   });
 
-  test("a blob that is not a blob is refused rather than crashing the screen", () => {
+  it("a blob that is not a blob is refused rather than crashing the screen", () => {
     const readout = readScenario("not-base64url-json", DEFAULT, { now: NOW });
     expect(readout.ok).toBe(false);
   });
 
-  test("the editors cannot reach a refusal on their own", () => {
+  it("the editors cannot reach a refusal on their own", () => {
     // Every stepper floor and ceiling, driven to both ends. The cross-field
     // rules are deliberately reachable (a stepper cannot express "at most the
     // other stepper"); the single-field ones must not be, or a reader who held
@@ -403,7 +403,7 @@ describe("a stepper drag is one commit, not thirty", () => {
     };
   }
 
-  test("thirty presses inside the window commit once, with the last value", () => {
+  it("thirty presses inside the window commit once, with the last value", () => {
     const clock = fakeTimers();
     const written: number[] = [];
     const commit = debounce((value: number) => written.push(value), 400, clock.timers);
@@ -417,7 +417,7 @@ describe("a stepper drag is one commit, not thirty", () => {
     expect(written).toEqual([30]);
   });
 
-  test("a press after the window is its own commit", () => {
+  it("a press after the window is its own commit", () => {
     const clock = fakeTimers();
     const written: number[] = [];
     const commit = debounce((value: number) => written.push(value), 400, clock.timers);
@@ -428,7 +428,7 @@ describe("a stepper drag is one commit, not thirty", () => {
     expect(written).toEqual([1, 2]);
   });
 
-  test("cancelling forgets the pending write — an unmounted screen writes nothing", () => {
+  it("cancelling forgets the pending write — an unmounted screen writes nothing", () => {
     const clock = fakeTimers();
     const written: number[] = [];
     const commit = debounce((value: number) => written.push(value), 400, clock.timers);
@@ -440,7 +440,7 @@ describe("a stepper drag is one commit, not thirty", () => {
     expect(commit.pending()).toBe(false);
   });
 
-  test("each committed scenario is a distinct hash, and a re-press is not", () => {
+  it("each committed scenario is a distinct hash, and a re-press is not", () => {
     // Why the debounce is worth having on this screen and not just on this
     // control: the hash is the cache key, so an uncommitted intermediate fleet
     // would be a distinct key and, on a miss, a distinct solve.
@@ -454,7 +454,7 @@ describe("a stepper drag is one commit, not thirty", () => {
 });
 
 describe("the untrusted field", () => {
-  test("a label survives a round trip and is never a screen string", () => {
+  it("a label survives a round trip and is never a screen string", () => {
     const nasty = "</Text><script>alert(1)</script>";
     const battery: Battery = { ...scenarioBattery(DEFAULT), label: nasty };
     const load: ShiftableLoad = scenarioLoad(DEFAULT);

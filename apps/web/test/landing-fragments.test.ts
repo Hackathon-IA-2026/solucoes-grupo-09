@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { en } from "../src/i18n/copy.en";
@@ -41,7 +41,7 @@ function code(path: string): string {
 }
 
 describe("the fragment vocabulary is one vocabulary", () => {
-  test("every nav target in both locales is a section id", () => {
+  it("every nav target in both locales is a section id", () => {
     // The nav's targets are cast to `SectionId` at the call site, so a typo in
     // a dictionary is not a compile error — it is a nav item that scrolls
     // nowhere, in one language only.
@@ -59,7 +59,7 @@ describe("the fragment vocabulary is one vocabulary", () => {
     }
   });
 
-  test("the two locales name the same sections, in the same order", () => {
+  it("the two locales name the same sections, in the same order", () => {
     // The row is the same row; only the labels are translated. Two locales
     // whose nav pointed at different sections would be two different pages.
     expect(pt.nav.links.map((link) => link.target)).toEqual(
@@ -67,7 +67,7 @@ describe("the fragment vocabulary is one vocabulary", () => {
     );
   });
 
-  test("every section id is a section the landing page actually renders", () => {
+  it("every section id is a section the landing page actually renders", () => {
     // An id in the list with no `<Section id="…">` behind it is a fragment
     // that resolves to nothing — and `/pt/#whatever` failing silently is the
     // defect. Read off the page rather than the components, because the page
@@ -80,7 +80,7 @@ describe("the fragment vocabulary is one vocabulary", () => {
 });
 
 describe("a fragment is parsed, not trusted", () => {
-  test("it resolves the ids the nav uses", () => {
+  it("it resolves the ids the nav uses", () => {
     expect(sectionFromHash("#engines")).toBe("engines");
     expect(sectionFromHash("#deck")).toBe("deck");
     // Browsers hand back the hash with its `#`; a caller passing the bare id
@@ -88,7 +88,7 @@ describe("a fragment is parsed, not trusted", () => {
     expect(sectionFromHash("engines")).toBe("engines");
   });
 
-  test("it rejects everything else rather than returning it", () => {
+  it("it rejects everything else rather than returning it", () => {
     // Whatever comes back is used as a key into the offsets table and as an
     // argument to `scrollTo`. An unvalidated string there is a silent no-op on
     // a good day; this is a URL somebody else wrote.
@@ -100,7 +100,7 @@ describe("a fragment is parsed, not trusted", () => {
     expect(sectionFromHash(undefined)).toBeNull();
   });
 
-  test("a malformed escape is a miss, not a thrown error", () => {
+  it("a malformed escape is a miss, not a thrown error", () => {
     // `decodeURIComponent("%")` throws `URIError`. This runs during the first
     // render of the landing page, so an uncaught throw there would be a blank
     // page for anyone who mangled the URL — worse than the link not working.
@@ -110,7 +110,7 @@ describe("a fragment is parsed, not trusted", () => {
     expect(sectionFromHash("#%65ngines")).toBe("engines");
   });
 
-  test("the href a nav item carries is the id the parser reads back", () => {
+  it("the href a nav item carries is the id the parser reads back", () => {
     // The round trip is the contract: whatever the nav writes into the URL has
     // to be something the cold-load path can recognise.
     for (const id of SECTION_IDS) {
@@ -120,7 +120,7 @@ describe("a fragment is parsed, not trusted", () => {
 });
 
 describe("the nav items are links, and the page acts on the fragment", () => {
-  test("every in-page nav item carries an href", () => {
+  it("every in-page nav item carries an href", () => {
     // This is the change: they used to be `<div role="button">`, which scrolls
     // and leaves the address bar reading `/pt/` from top to bottom. Nothing
     // about the scrolling would break if the href went away again.
@@ -130,7 +130,7 @@ describe("the nav items are links, and the page acts on the fragment", () => {
     expect(nav).not.toContain('accessibilityRole="button"');
   });
 
-  test("a modified click is left to the browser", () => {
+  it("a modified click is left to the browser", () => {
     // Cmd-clicking a section to open it in a new tab is the reason these are
     // links rather than buttons. Preventing the default unconditionally would
     // scroll this tab instead and quietly throw that away.
@@ -141,7 +141,7 @@ describe("the nav items are links, and the page acts on the fragment", () => {
     }
   });
 
-  test("the deck link is still a route and not a fragment", () => {
+  it("the deck link is still a route and not a fragment", () => {
     // `/pitch` is a real page outside the locale tree. Turning it into `#deck`
     // alongside the rest of the row would be a regression dressed as
     // consistency.
@@ -150,7 +150,7 @@ describe("the nav items are links, and the page acts on the fragment", () => {
     expect(nav).toContain("<Link href={href as never} asChild={true}>");
   });
 
-  test("each section renders a DOM id for its fragment to resolve to", () => {
+  it("each section renders a DOM id for its fragment to resolve to", () => {
     // `nativeID` is what react-native-web emits as `id`. Without it the href
     // is decoration: nothing for the browser to find, and nothing for a reader
     // with scripting off.
@@ -158,7 +158,7 @@ describe("the nav items are links, and the page acts on the fragment", () => {
     expect(section).toContain("nativeID={id}");
   });
 
-  test("the URL is written with pushState, not by assigning location.hash", () => {
+  it("the URL is written with pushState, not by assigning location.hash", () => {
     /*
       Assigning `location.hash` asks the browser to jump to the element — which
       now exists — in the same tick the smooth scroll starts in, so the page
@@ -176,7 +176,7 @@ describe("the nav items are links, and the page acts on the fragment", () => {
     expect('window.location.hash === "#" + id').not.toMatch(/location\.hash\s*=[^=]/);
   });
 
-  test("a fragment present at mount is held for layout, not spent on mount", () => {
+  it("a fragment present at mount is held for layout, not spent on mount", () => {
     /*
       The static export ships the section's markup, but nothing has a position
       until the browser has laid the page out. An effect reading geometry on
@@ -197,7 +197,7 @@ describe("the nav items are links, and the page acts on the fragment", () => {
     expect(hook).toContain('window.removeEventListener("popstate"');
   });
 
-  test("the cold-load target is re-applied, and the window that does it closes", () => {
+  it("the cold-load target is re-applied, and the window that does it closes", () => {
     /*
       Measured on the exported build at 1440 × 900: applying the fragment once,
       on the target's first layout, landed `/en/#deck` 336 px past the section
@@ -228,7 +228,7 @@ describe("the nav items are links, and the page acts on the fragment", () => {
     expect(hook).toMatch(/pending\.current = null;\s*apply\(id, true\)/);
   });
 
-  test("the position is read from the DOM, not from the last onLayout", () => {
+  it("the position is read from the DOM, not from the last onLayout", () => {
     /*
       react-native-web's `onLayout` observes an element's *size*. A section
       pushed down the page by something above it growing has not changed size,
@@ -242,7 +242,7 @@ describe("the nav items are links, and the page acts on the fragment", () => {
     expect(hook).toContain("offsets.current[id]");
   });
 
-  test("the section is found inside the scroller, never document-wide", () => {
+  it("the section is found inside the scroller, never document-wide", () => {
     /*
       A section id is not unique. Measured on the exported build: `/pt/` →
       `/pitch` → the link home mounted a second landing screen while the first

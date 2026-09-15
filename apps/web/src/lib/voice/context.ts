@@ -116,7 +116,6 @@ export function forecastRefusal(input: VoiceContextInput): ErrorCode | undefined
   if (input.network !== undefined && input.network.status !== "reading") {
     return input.network.status === "read" ? undefined : input.network.code;
   }
-  return undefined;
 }
 
 function servingLine(serving: ServingState): string {
@@ -160,7 +159,7 @@ function observedLine(input: VoiceContextInput): string | undefined {
     network === undefined ||
     (network.status !== "read" && network.status !== "observedOnly")
   ) {
-    return undefined;
+    return;
   }
   const { hoursDate, hours, episodes } = network.observed;
   const total = hours.reduce((sum, hour) => sum + hour.constrainedOffMwh, 0);
@@ -178,7 +177,6 @@ function forecastLine(input: VoiceContextInput): string | undefined {
     const { forecast } = input.network.forecast;
     return `Forecast for ${input.params.date}: risk ${forecast.riskClass}. Day energy ${bandPhrase(forecast.dayEnergyMwh)}. Every figure you speak must be one of these three quantiles, and you must speak all three.`;
   }
-  return undefined;
 }
 
 /**

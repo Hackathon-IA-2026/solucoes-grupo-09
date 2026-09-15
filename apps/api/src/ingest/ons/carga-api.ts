@@ -427,7 +427,7 @@ export function assertCoverage(
     throw new EmptyLoadResponseError(
       `GET ${url} returned HTTP 200 with an empty array for a period the series ` +
         `covers (from ${coverageStart}). This API answers an unknown ` +
-        `cod_areacarga the same way, so an empty response is never data.`,
+        "cod_areacarga the same way, so an empty response is never data.",
     );
   }
 

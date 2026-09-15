@@ -8,6 +8,13 @@
  * that the dense product screens do not.
  */
 
+import type { Band } from "@wattsteer/core";
+import {
+  formatExact,
+  formatPercent as formatPercentIn,
+  type Locale,
+} from "@/i18n/format";
+
 export {
   type Band,
   band,
@@ -17,13 +24,6 @@ export {
   spread,
   upper,
 } from "@wattsteer/core";
-
-import type { Band } from "@wattsteer/core";
-import {
-  formatExact,
-  formatPercent as formatPercentIn,
-  type Locale,
-} from "@/i18n/format";
 
 /**
  * Exact, thousands-grouped: "12.500" in Portuguese, "12,500" in English.

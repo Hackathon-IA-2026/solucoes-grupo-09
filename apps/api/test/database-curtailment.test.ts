@@ -306,7 +306,7 @@ suite("GET /v1/curtailment/* (real Postgres)", () => {
       // ONS restated 11:00 in place: a second version of the same key.
       expect(late.data_version).toBe("2");
       const lateRows = late.rows as Record<string, unknown>[];
-      expect(lateRows[lateRows.length - 1]?.constrained_off_mwh).toBe(8);
+      expect(lateRows.at(-1)?.constrained_off_mwh).toBe(8);
     });
 
     it("says point_in_time only when the window post-dates go-live", async () => {

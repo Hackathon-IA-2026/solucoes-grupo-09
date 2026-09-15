@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 // The API's implementation, imported straight from the other workspace so the
@@ -56,7 +56,7 @@ const manifest = JSON.parse(
 ) as ManifestFixture;
 
 describe("the directory holds no file this suite did not enumerate", () => {
-  test("every vector is consumed by one of the blocks below", () => {
+  it("every vector is consumed by one of the blocks below", () => {
     // The half that stops a vector added for the Python side being ignored
     // here. `README.md` has claimed this since the directory was created and
     // the check was not written; a non-emptiness guard cannot see a vector
@@ -76,18 +76,18 @@ describe("the directory holds no file this suite did not enumerate", () => {
 });
 
 describe("the canonical read manifest matches the shared vector", () => {
-  test("the base path is the one both languages build URLs from", () => {
+  it("the base path is the one both languages build URLs from", () => {
     expect(CANONICAL_BASE_PATH).toBe(manifest.base_path);
   });
 
-  test("the contract exposes exactly the reads the vector names, in order", () => {
+  it("the contract exposes exactly the reads the vector names, in order", () => {
     expect(CANONICAL_READS.map((read) => String(read.name))).toEqual(
       manifest.reads.map((read) => read.name),
     );
   });
 
   for (const expected of manifest.reads) {
-    test(`${expected.name} is described identically`, () => {
+    it(`${expected.name} is described identically`, () => {
       const actual = CANONICAL_READS.find((read) => read.name === expected.name);
       expect(actual).toBeDefined();
       // Widened to the vector's own types on purpose: the assertion is about
@@ -107,7 +107,7 @@ describe("the canonical read manifest matches the shared vector", () => {
 });
 
 describe("the vocabulary rules the manifest is supposed to encode", () => {
-  test("a restriction cause is reachable from exactly one read", () => {
+  it("a restriction cause is reachable from exactly one read", () => {
     // `docs/domain-model.md` §3: a reason is a property of a ReportingEntity,
     // and there is no path in the type system from a Plant to one. A second
     // `true` here would mean that path had been opened.
@@ -117,7 +117,7 @@ describe("the vocabulary rules the manifest is supposed to encode", () => {
     ]);
   });
 
-  test("a forecast read names its producer and an observation read cannot", () => {
+  it("a forecast read names its producer and an observation read cannot", () => {
     for (const read of CANONICAL_READS) {
       if (read.kind === "forecast") {
         expect(read.producer).not.toBeNull();
@@ -127,7 +127,7 @@ describe("the vocabulary rules the manifest is supposed to encode", () => {
     }
   });
 
-  test("no read name carries source vocabulary", () => {
+  it("no read name carries source vocabulary", () => {
     // The acceptance criterion, made checkable. `conjunto` is the one sanctioned
     // survival (`docs/domain-model.md` naming rule 2) and is not in this list.
     const SOURCE_WORDS = [
@@ -163,12 +163,12 @@ interface FidelityFixture {
 describe("VintageFidelity — the rule, vector by vector", () => {
   const vectors = cases<FidelityFixture>("vintage-fidelity");
 
-  test("the directory is not empty, so a passing run means something", () => {
+  it("the directory is not empty, so a passing run means something", () => {
     expect(vectors.length).toBeGreaterThan(0);
   });
 
   for (const { file, body } of vectors) {
-    test(`${file}: ${body.name}`, () => {
+    it(`${file}: ${body.name}`, () => {
       const goLiveAt = body.go_live_at === null ? null : new Date(body.go_live_at);
       expect(vintageFidelity(new Date(body.window_start), goLiveAt)).toBe(
         body.expected as VintageSource["vintageFidelity"],
@@ -176,7 +176,7 @@ describe("VintageFidelity — the rule, vector by vector", () => {
     });
   }
 
-  test("composing a single source is that source, so the two cannot disagree", () => {
+  it("composing a single source is that source, so the two cannot disagree", () => {
     // The property that keeps `combineFidelity` and `vintageFidelity` honest
     // about each other without either being defined in terms of the other.
     for (const { body } of vectors) {
@@ -201,12 +201,12 @@ interface CombineFixture {
 describe("composing several sources into one receipt", () => {
   const vectors = cases<CombineFixture>("combine-fidelity");
 
-  test("the directory is not empty, so a passing run means something", () => {
+  it("the directory is not empty, so a passing run means something", () => {
     expect(vectors.length).toBeGreaterThan(0);
   });
 
   for (const { file, body } of vectors) {
-    test(`${file}: ${body.name}`, () => {
+    it(`${file}: ${body.name}`, () => {
       const sources: VintageSource[] = body.sources.map((entry) => ({
         read: entry.read,
         vintageFidelity: entry.vintage_fidelity as VintageSource["vintageFidelity"],

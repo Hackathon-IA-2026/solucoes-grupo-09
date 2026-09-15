@@ -171,7 +171,7 @@ export interface LimitStore {
   /** One line naming what is counting, for the boot log and `/v1/meta`. */
   readonly detail: string;
   /** Spend one request against `key` under `policy`. */
-  consume(policy: LimitPolicy, key: string, now: number): Promise<Decision>;
+  consume: (policy: LimitPolicy, key: string, now: number) => Promise<Decision>;
   /**
    * Increment a counter that expires at `expiresAtMs` and return its new
    * value. The daily cap's whole mechanism.
@@ -180,8 +180,8 @@ export interface LimitStore {
    * eviction uses the same instant the caller reasoned about — a counter must
    * never be dropped out from under a caller that is still spending against it.
    */
-  bumpDaily(key: string, now: number, expiresAtMs: number): Promise<number>;
-  close(): Promise<void>;
+  bumpDaily: (key: string, now: number, expiresAtMs: number) => Promise<number>;
+  close: () => Promise<void>;
 }
 
 /** Sweep whenever a map crosses this size (amortized cleanup). */
@@ -296,15 +296,15 @@ return count
 `;
 
 interface ScriptedRedis extends Redis {
-  wsWindow(key: string, windowMs: string, max: string): Promise<[number, number]>;
-  wsBucket(
+  wsWindow: (key: string, windowMs: string, max: string) => Promise<[number, number]>;
+  wsBucket: (
     key: string,
     burst: string,
     rate: string,
     now: string,
     ttlMs: string,
-  ): Promise<[number, number]>;
-  wsDaily(key: string, expiresAtMs: string): Promise<number>;
+  ) => Promise<[number, number]>;
+  wsDaily: (key: string, expiresAtMs: string) => Promise<number>;
 }
 
 export interface RedisStoreOptions {

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { REFERENCE_FLEET } from "../src/constants.js";
@@ -73,12 +73,12 @@ function refusal(vector: Vector): ScenarioValidationError {
 }
 
 describe("the vector directories", () => {
-  test("are populated, so a passing run means something", () => {
+  it("are populated, so a passing run means something", () => {
     expect(REFUSALS.length).toBeGreaterThan(0);
     expect(ADMISSIONS.length).toBeGreaterThan(0);
   });
 
-  test("hold no file this suite did not enumerate", () => {
+  it("hold no file this suite did not enumerate", () => {
     // The half that stops a vector added for the Python side being ignored
     // here. Every `.json` under the directory is run by one of the suites below.
     const consumed = new Set([
@@ -101,18 +101,18 @@ describe("the vector directories", () => {
 describe("a scenario that is not one is refused", () => {
   for (const vector of REFUSALS) {
     describe(`${vector.file}: ${vector.name}`, () => {
-      test(`is ${vector.expected_code}`, () => {
+      it(`is ${vector.expected_code}`, () => {
         expect(refusal(vector).code).toBe(vector.expected_code as ErrorCode);
       });
 
-      test("names the field that broke the rule", () => {
+      it("names the field that broke the rule", () => {
         if (vector.expected_field === undefined) {
           return;
         }
         expect(refusal(vector).details?.field).toBe(vector.expected_field);
       });
 
-      test("answers at the status its code is published under", () => {
+      it("answers at the status its code is published under", () => {
         // The status is a property of the code and not of the throw site, so
         // two rules cannot answer one condition with different numbers.
         const error = refusal(vector);
@@ -120,7 +120,7 @@ describe("a scenario that is not one is refused", () => {
         expect(error.status).toBe(422);
       });
 
-      test("carries a code, and a message no client is meant to render", () => {
+      it("carries a code, and a message no client is meant to render", () => {
         const error = refusal(vector);
         expect(ERROR_CODES).toContain(error.code as ErrorCode);
         // `docs/specs/i18n.md`: the API returns codes, never translated
@@ -130,7 +130,7 @@ describe("a scenario that is not one is refused", () => {
         expect(typeof error.message).toBe("string");
       });
 
-      test("leaves the scenario exactly as it arrived", () => {
+      it("leaves the scenario exactly as it arrived", () => {
         // **The ticket, as an assertion.** Nothing is clamped, defaulted into
         // place or rounded on the way to the refusal, so the object a caller
         // handed in is the object they get back on the floor.
@@ -141,7 +141,7 @@ describe("a scenario that is not one is refused", () => {
     });
   }
 
-  test("every code in the spec's table has a case, except the one that needs a database", () => {
+  it("every code in the spec's table has a case, except the one that needs a database", () => {
     // The table is `docs/specs/flex-optimizer.md` §Validation, transcribed. The
     // suite fails if a rule is added to the spec and never given a vector, and
     // it fails if a vector claims a code the closed enum does not have.
@@ -177,14 +177,14 @@ describe("a scenario that is not one is refused", () => {
 
 describe("a scenario that describes a real fleet is admitted", () => {
   for (const vector of ADMISSIONS) {
-    test(`${vector.file}: ${vector.name}`, () => {
+    it(`${vector.file}: ${vector.name}`, () => {
       expect(() =>
         validateScenarioWire(vector.scenario, { now: new Date(vector.now) }),
       ).not.toThrow();
     });
   }
 
-  test("the published REFERENCE_FLEET is a scenario this build will plan", () => {
+  it("the published REFERENCE_FLEET is a scenario this build will plan", () => {
     // Not a re-run of the vector: the vector is a copy of the fleet's numbers
     // and this is the constant itself. Floor coverage, `Δ recovered_floor_mwh`,
     // the featured-days list and the hot-swap guardrail are all measured
@@ -257,7 +257,7 @@ describe("the refusals a clamp would have hidden", () => {
     return null;
   }
 
-  test("an initial SOC below its floor is refused, not raised to it", () => {
+  it("an initial SOC below its floor is refused, not raised to it", () => {
     // The mirror of the vector, from the other side of the window. Both
     // directions matter: a clamp is symmetric and a rule has to be too.
     expect(code(battery({ initial_state_of_charge: 0.01 }))).toBe(
@@ -266,7 +266,7 @@ describe("the refusals a clamp would have hidden", () => {
     expect(code(battery({ initial_state_of_charge: 0.05 }))).toBeNull();
   });
 
-  test("either half of the efficiency pair alone is refused", () => {
+  it("either half of the efficiency pair alone is refused", () => {
     for (const half of ["charge_efficiency", "discharge_efficiency"]) {
       const wire = battery({ [half]: 0.959 }) as Record<string, JsonValue>;
       const assets = wire.assets as Record<string, JsonValue>[];
@@ -276,13 +276,13 @@ describe("the refusals a clamp would have hidden", () => {
     }
   });
 
-  test("a round trip beside either half is refused", () => {
+  it("a round trip beside either half is refused", () => {
     expect(code(battery({ charge_efficiency: 0.959, discharge_efficiency: 0.959 }))).toBe(
       "EFFICIENCY_PAIR_INCOMPLETE",
     );
   });
 
-  test("a mixed-subsystem scenario is refused rather than summed", () => {
+  it("a mixed-subsystem scenario is refused rather than summed", () => {
     expect(
       code({
         v: 1,
@@ -312,19 +312,19 @@ describe("the refusals a clamp would have hidden", () => {
     ).toBe("SUBSYSTEM_MISMATCH");
   });
 
-  test("a magnitude is refused at zero as well as above the cap", () => {
+  it("a magnitude is refused at zero as well as above the cap", () => {
     expect(code(battery({ max_power_mw: 0 }))).toBe("MAGNITUDE_OUT_OF_RANGE");
     expect(code(battery({ energy_capacity_mwh: -1 }))).toBe("MAGNITUDE_OUT_OF_RANGE");
     expect(code(battery({ max_power_mw: 10_000 }))).toBeNull();
   });
 
-  test("a numeric string is not a number", () => {
+  it("a numeric string is not a number", () => {
     // `Number("100")` would admit this and the plan would be right by accident.
     // A caller sending the wrong type is a caller to tell, not to guess for.
     expect(code(battery({ max_power_mw: "100" }))).toBe("REQUEST_INVALID");
   });
 
-  test("the target date's own boundaries", () => {
+  it("the target date's own boundaries", () => {
     const wire = (date: string): JsonValue => ({
       ...(battery({}) as Record<string, JsonValue>),
       target_date: date,
@@ -337,7 +337,7 @@ describe("the refusals a clamp would have hidden", () => {
     expect(code(wire("2026-02-31"))).toBe("REQUEST_INVALID");
   });
 
-  test("the asset cap is on the count, not only on the bytes", () => {
+  it("the asset cap is on the count, not only on the bytes", () => {
     const one = (label: string): JsonValue => ({
       asset_type: "battery",
       label,
@@ -361,7 +361,7 @@ describe("the refusals a clamp would have hidden", () => {
 // --- the transport and the table, on the same object -------------------------
 
 describe("validation runs on the bytes the hash was taken over", () => {
-  test("a decoded scenario's canonical text is what the validator reads", () => {
+  it("a decoded scenario's canonical text is what the validator reads", () => {
     // The two halves of the request path meet here: `decodeScenarioBody`
     // produces the canonical bytes and the hash, and the validator runs on the
     // same document rather than on a second parse of the original body. A
@@ -394,7 +394,7 @@ describe("validation runs on the bytes the hash was taken over", () => {
 // --- the code defined here and thrown by ticket 07 ---------------------------
 
 describe("FORECAST_UNAVAILABLE", () => {
-  test("has one definition, with the status the closed enum publishes it under", () => {
+  it("has one definition, with the status the closed enum publishes it under", () => {
     // Defined here and thrown nowhere in this module: it is the only row of the
     // table that is not a fact about the scenario. The scenario is well formed
     // and the fleet is real; there is simply no forecast to plan against, and
@@ -409,7 +409,7 @@ describe("FORECAST_UNAVAILABLE", () => {
     });
   });
 
-  test("carries no origin when none was resolved", () => {
+  it("carries no origin when none was resolved", () => {
     expect(forecastUnavailable("S", "2026-08-29").details).toEqual({
       subsystem: "S",
       target_date: "2026-08-29",

@@ -220,6 +220,7 @@ function PitchEmbed({ wide, title }: { wide: boolean; title: string }) {
         ...(wide ? { aspectRatio: SLIDE_ASPECT } : { height: NARROW_EMBED_HEIGHT }),
       }}
     >
+      {/* biome-ignore lint/nursery/useIframeSandbox: a sandbox attribute disables the browser's own PDF viewer, which is the entire content of this frame */}
       <iframe
         title={title}
         src={`${PITCH_PDF_PATH}#view=FitH`}
@@ -227,6 +228,7 @@ function PitchEmbed({ wide, title }: { wide: boolean; title: string }) {
         // PDF fragment directives are honoured by Chrome's and Firefox's
         // built-in viewers and ignored everywhere else, which is the right
         // shape for a hint — it cannot fail loudly.
+        // biome-ignore lint/nursery/noInlineStyles: a raw DOM element; a react-native-web StyleSheet does not reach it
         style={{ width: "100%", height: "100%", border: "none", display: "block" }}
       />
     </View>
@@ -297,6 +299,7 @@ function PitchPdfLink({ label }: { label: string }) {
       href={PITCH_PDF_PATH}
       target="_blank"
       rel="noreferrer"
+      // biome-ignore lint/nursery/noInlineStyles: a raw DOM anchor; a react-native-web StyleSheet does not reach it
       style={{ textDecoration: "none" }}
     >
       {button}

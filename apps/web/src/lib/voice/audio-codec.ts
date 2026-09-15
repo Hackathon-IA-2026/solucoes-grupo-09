@@ -37,8 +37,7 @@ export function levelFromFloat(samples: Float32Array): number {
     return 0;
   }
   let sum = 0;
-  for (let index = 0; index < samples.length; index += 1) {
-    const sample = samples[index] as number;
+  for (const sample of samples) {
     sum += sample * sample;
   }
   const rms = Math.sqrt(sum / samples.length);
@@ -68,6 +67,7 @@ export function resampleLinear(
   return output;
 }
 
+// biome-ignore lint/security/noSecrets: the base64 alphabet, which is high entropy by definition
 const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 export function bytesToBase64(bytes: Uint8Array): string {

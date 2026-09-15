@@ -1,9 +1,7 @@
 import type { SubsystemCode } from "../ingest/normalise.js";
 import type {
-  ReasonCode,
   ReportingEntityKind,
   RestrictionCause,
-  RestrictionOrigin,
   Technology,
 } from "../ingest/types.js";
 import type { CanonicalReadName, FactKind, ForecastOrigin } from "./manifest.js";
@@ -23,14 +21,14 @@ import type { VintageFidelity, VintageSource } from "./vintage.js";
  * those names, and there is no compensating rename left anywhere to perform.
  */
 
+export type { SubsystemCode } from "../ingest/normalise.js";
 export type {
   ReasonCode,
   ReportingEntityKind,
   RestrictionCause,
   RestrictionOrigin,
-  SubsystemCode,
   Technology,
-};
+} from "../ingest/types.js";
 
 /**
  * The vintage of an answer, returned **beside** the rows on every read.
@@ -297,10 +295,5 @@ export interface ConjuntoMembershipAtDate extends RowVintage {
   memberTo: Date | null;
 }
 
-export type {
-  CanonicalReadName,
-  FactKind,
-  ForecastOrigin,
-  VintageFidelity,
-  VintageSource,
-};
+export type { CanonicalReadName, FactKind, ForecastOrigin } from "./manifest.js";
+export type { VintageFidelity, VintageSource } from "./vintage.js";

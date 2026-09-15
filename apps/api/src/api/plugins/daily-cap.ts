@@ -98,7 +98,7 @@ export interface DailyCap {
    * evidence of demand, and a caller that has to ask permission before
    * counting races with itself across replicas.
    */
-  take(now?: number): Promise<CapDecision>;
+  take: (now?: number) => Promise<CapDecision>;
 }
 
 /**

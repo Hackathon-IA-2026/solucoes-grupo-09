@@ -23,7 +23,7 @@ describe("weather · the serving day is fetched before the backfill", () => {
     expect(times).toEqual([...times].sort((a, b) => b - a));
     // The head of the plan is a run for the last target day, which is the one
     // a forecast for tomorrow needs.
-    expect(slots[0]?.day).toBe(days[days.length - 1] as string);
+    expect(slots[0]?.day).toBe(days.at(-1) as string);
   });
 
   /**
@@ -36,9 +36,7 @@ describe("weather · the serving day is fetched before the backfill", () => {
       (a, b) => a.scheduled.getTime() - b.scheduled.getTime(),
     );
     expect(chronological[0]?.day).toBe(days[0] as string);
-    expect(chronological[chronological.length - 1]?.day).toBe(
-      days[days.length - 1] as string,
-    );
+    expect(chronological.at(-1)?.day).toBe(days.at(-1) as string);
     expect(chronological[0]?.day).not.toBe(plannedSlots(days, cycles)[0]?.day);
   });
 

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Replay } from "@wattsteer/core/api";
@@ -46,7 +46,7 @@ function source(path: string): string {
  * make the guards fire on their own documentation, and the honest response to
  * such a failure would be to delete an explanation.
  */
-function code(path: string): string {
+function sourceWithoutComments(path: string): string {
   return source(path).replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, (match) =>
     match.replace(/[^\n]/g, " "),
   );
@@ -61,7 +61,7 @@ const EXAMPLE: Replay = decodeWire(
 ) as Replay;
 
 describe("the day total is joint, and the screen reads it", () => {
-  test("the published day total is not the componentwise sum of the hours", () => {
+  it("the published day total is not the componentwise sum of the hours", () => {
     // Quantiles do not add. Summing 24 P90s describes a day on which every hour
     // lands at its own 90th percentile *together*, which is a far worse day
     // than a 90th-percentile day.
@@ -87,11 +87,11 @@ describe("the day total is joint, and the screen reads it", () => {
     );
   });
 
-  test("the screen reads the joint total and builds no band of its own", () => {
+  it("the screen reads the joint total and builds no band of its own", () => {
     // `test/no-summed-bands.test.ts` is the standing repo-wide guard; this is
     // the local half, which says the screen reaches for the field that exists
     // rather than reaching for it and *also* keeping a sum around.
-    const screen = code(SCREEN);
+    const screen = sourceWithoutComments(SCREEN);
     expect(screen).toContain("replay.forecast.dayTotal");
     expect(screen).not.toMatch(/forecast\.hours\s*\.\s*reduce/);
     expect(screen).not.toContain("forecastBand");
@@ -99,7 +99,7 @@ describe("the day total is joint, and the screen reads it", () => {
 });
 
 describe("the denominator is the day, not the episode", () => {
-  test("the published example divides the day total, not the episode total", () => {
+  it("the published example divides the day total, not the episode total", () => {
     // They differ in the published example, which is the whole reason the
     // distinction is worth a test: an episode is the run of hours above the
     // threshold, so a share taken over it would improve simply for having drawn
@@ -125,8 +125,8 @@ describe("the denominator is the day, not the episode", () => {
     expect(avoidability).not.toBeCloseTo(EXAMPLE.avoidedEnergyMwh / episode.totalMwh, 3);
   });
 
-  test("the screen never reads an episode total as the actual", () => {
-    const screen = code(SCREEN);
+  it("the screen never reads an episode total as the actual", () => {
+    const screen = sourceWithoutComments(SCREEN);
     expect(screen).toContain("replay.actual.totalMwh");
     // Scoped to the replayed day's own body. An episode's `total_mwh` is
     // rendered further down, on the episode row it belongs to, and that is the
@@ -141,8 +141,8 @@ describe("the denominator is the day, not the episode", () => {
 });
 
 describe("the honesty block is above the numbers, and cannot be put away", () => {
-  test("it is rendered before the first figure on the replayed day", () => {
-    const screen = code(SCREEN);
+  it("it is rendered before the first figure on the replayed day", () => {
+    const screen = sourceWithoutComments(SCREEN);
     const replayed = screen.slice(screen.indexOf("function Replayed("));
     const honesty = replayed.indexOf("<HonestyNote");
     const firstPanel = replayed.indexOf("<Panel");
@@ -151,11 +151,11 @@ describe("the honesty block is above the numbers, and cannot be put away", () =>
     expect(honesty).toBeLessThan(firstPanel);
   });
 
-  test("the block itself has no collapse affordance", () => {
+  it("the block itself has no collapse affordance", () => {
     // A caveat behind an interaction is a caveat nobody reads, and these ones
     // change what the number means. Asserted on the component rather than on
     // the screen, because that is where a disclosure control would be added.
-    const honesty = code(
+    const honesty = sourceWithoutComments(
       join(ROOT, "apps", "web", "src", "components", "app", "honesty.tsx"),
     );
     const block = honesty.slice(honesty.indexOf("export function HonestyNote("));
@@ -164,8 +164,8 @@ describe("the honesty block is above the numbers, and cannot be put away", () =>
     expect(block).not.toContain("collaps");
   });
 
-  test("the provenance statement and the vintage statement are two, never merged", () => {
-    const screen = code(SCREEN);
+  it("the provenance statement and the vintage statement are two, never merged", () => {
+    const screen = sourceWithoutComments(SCREEN);
     expect(screen).toContain("<ProvenanceBadge");
     expect(screen).toContain("<VintageBadge");
     // Two axes, neither derived from the other. They coincide today, which is
@@ -175,7 +175,7 @@ describe("the honesty block is above the numbers, and cannot be put away", () =>
     expect(screen).toContain("vintageNote");
   });
 
-  test("the IN-SAMPLE branch is deleted, not left unreachable", () => {
+  it("the IN-SAMPLE branch is deleted, not left unreachable", () => {
     // Under this spec no replayable day is in-sample — a day no artifact held
     // out is refused rather than labelled — so the badge stops being a warning
     // and becomes a provenance statement. Dead code that says otherwise is a
@@ -185,7 +185,7 @@ describe("the honesty block is above the numbers, and cannot be put away", () =>
     const glob = new Bun.Glob("**/*.{ts,tsx}");
     const offenders: string[] = [];
     for (const relative of glob.scanSync(web)) {
-      const text = code(join(web, relative));
+      const text = sourceWithoutComments(join(web, relative));
       for (const suspect of suspects) {
         if (text.includes(suspect)) {
           offenders.push(`${relative}: ${suspect}`);
@@ -197,7 +197,7 @@ describe("the honesty block is above the numbers, and cannot be put away", () =>
 });
 
 describe("one headline, the floor beside it, and no carbon anywhere", () => {
-  test("absorbed, recovered and avoided are one number on the contract", () => {
+  it("absorbed, recovered and avoided are one number on the contract", () => {
     // Three names for one quantity, which is why the screen renders one
     // headline for it: `avoided_energy_mwh` at the top level is
     // `scored.observed.recovered_mwh` by construction.
@@ -208,20 +208,20 @@ describe("one headline, the floor beside it, and no carbon anywhere", () => {
     );
   });
 
-  test("the floor is the P10 recovery, and the verdict travels with it", () => {
+  it("the floor is the P10 recovery, and the verdict travels with it", () => {
     expect(EXAMPLE.recoveredFloorMwh).toBe(EXAMPLE.scored.p10.recoveredMwh);
     expect(EXAMPLE.floorMet).toBe(EXAMPLE.avoidedEnergyMwh >= EXAMPLE.recoveredFloorMwh);
     expect(EXAMPLE.floorMarginMwh).toBeCloseTo(
       EXAMPLE.avoidedEnergyMwh - EXAMPLE.recoveredFloorMwh,
       6,
     );
-    const screen = code(SCREEN);
+    const screen = sourceWithoutComments(SCREEN);
     expect(screen).toContain("replay.recoveredFloorMwh");
     expect(screen).toContain("replay.floorMet");
     expect(screen).toContain("replay.floorMarginMwh");
   });
 
-  test("no carbon field exists on the contract and none is rendered", () => {
+  it("no carbon field exists on the contract and none is rendered", () => {
     // None is derivable from recovered renewable energy without a
     // marginal-emissions model, and none is offered. Asserted over the whole
     // payload and over both catalogues, because a claim nobody can support is
@@ -240,7 +240,7 @@ describe("one headline, the floor beside it, and no carbon anywhere", () => {
 });
 
 describe("scheduled and executed are two series", () => {
-  test("the contract carries both, and they are separate arrays", () => {
+  it("the contract carries both, and they are separate arrays", () => {
     expect(Array.isArray(EXAMPLE.dispatch)).toBe(true);
     expect(Array.isArray(EXAMPLE.executed)).toBe(true);
     expect(EXAMPLE.executionRule).toBe("follow_curtailment");
@@ -251,11 +251,11 @@ describe("scheduled and executed are two series", () => {
     expect(EXAMPLE.scoredOn).toBe("observed");
   });
 
-  test("the screen hands both to the chart, and the chart takes both", () => {
-    const screen = code(SCREEN);
+  it("the screen hands both to the chart, and the chart takes both", () => {
+    const screen = sourceWithoutComments(SCREEN);
     expect(screen).toContain("scheduled={dispatchSeries(replay.dispatch)}");
     expect(screen).toContain("executed={dispatchSeries(replay.executed)}");
-    const chart = code(
+    const chart = sourceWithoutComments(
       join(ROOT, "apps", "web", "src", "components", "charts", "plan-vs-executed.tsx"),
     );
     expect(chart).toContain("scheduled: HourlyDispatch[]");
@@ -270,7 +270,7 @@ describe("scheduled and executed are two series", () => {
 });
 
 describe("perfect foresight is fenced, and labelled in the spec's own words", () => {
-  test("the label is verbatim", () => {
+  it("the label is verbatim", () => {
     expect(EN.app.replay.foresightLabel).toBe(
       "The best any plan could have done knowing the answer",
     );
@@ -281,7 +281,7 @@ describe("perfect foresight is fenced, and labelled in the spec's own words", ()
     expect(PT.app.replay.foresightLabel.length).toBeGreaterThan(0);
   });
 
-  test("no headline figure is populated from the bound", () => {
+  it("no headline figure is populated from the bound", () => {
     // It lives under `upper_bound`, never in `avoided_energy_mwh` and never in
     // `scored`. On the published example it is strictly larger than what the
     // plan achieved, which is what makes the confusion possible and the fence
@@ -291,7 +291,7 @@ describe("perfect foresight is fenced, and labelled in the spec's own words", ()
       EXAMPLE.upperBound.recoveredMwh - EXAMPLE.avoidedEnergyMwh,
       6,
     );
-    const screen = code(SCREEN);
+    const screen = sourceWithoutComments(SCREEN);
     const headline = screen.slice(
       screen.indexOf("function Replayed("),
       screen.indexOf("function ObservedOnly("),
@@ -310,11 +310,11 @@ describe("perfect foresight is fenced, and labelled in the spec's own words", ()
 });
 
 describe("an absence is rendered as an absence", () => {
-  test("undefined avoidability reads as a dash with its reason", () => {
+  it("undefined avoidability reads as a dash with its reason", () => {
     // Zero would mean "nothing could be avoided". `null` means there was
     // nothing to avoid, which is a different statement, and the sentence beside
     // the dash names the threshold no hour of the day reached.
-    const screen = code(SCREEN);
+    const screen = sourceWithoutComments(SCREEN);
     expect(screen).toContain("replay.avoidability === null");
     expect(screen).toContain("copy.app.replay.avoidabilityUndefined");
     for (const catalogue of [EN.app.replay, PT.app.replay]) {
@@ -326,7 +326,7 @@ describe("an absence is rendered as an absence", () => {
     ).toBe(true);
   });
 
-  test("every episode carries the threshold and the gap tolerance that made it", () => {
+  it("every episode carries the threshold and the gap tolerance that made it", () => {
     for (const episode of EXAMPLE.episodes) {
       expect(typeof episode.thresholdMw).toBe("number");
       expect(typeof episode.maxGapHours).toBe("number");
@@ -339,8 +339,8 @@ describe("an absence is rendered as an absence", () => {
 });
 
 describe("the fleet re-plans, and never re-forecasts", () => {
-  test("the screen's only request is the replay, and it sends a scenario", () => {
-    const hook = code(
+  it("the screen's only request is the replay, and it sends a scenario", () => {
+    const hook = sourceWithoutComments(
       join(ROOT, "apps", "web", "src", "components", "app", "use-replay.ts"),
     );
     // Two calls, both on the replay surface. Nothing here loads a forecast,
@@ -350,14 +350,14 @@ describe("the fleet re-plans, and never re-forecasts", () => {
     expect(calls.length).toBeGreaterThan(0);
     expect(hook).toContain("api.replayObservedOnly(");
     expect(hook).not.toContain("forecastDayAhead");
-    expect(code(SCREEN)).not.toContain("forecastDayAhead");
+    expect(sourceWithoutComments(SCREEN)).not.toContain("forecastDayAhead");
     // Keyed on the canonical scenario bytes, so an object React rebuilt with
     // identical contents is the same question and does not re-request.
     expect(hook).toContain("encodeScenario(scenario)");
   });
 
-  test("the editors are the same ones Mitigate uses", () => {
-    const screen = code(SCREEN);
+  it("the editors are the same ones Mitigate uses", () => {
+    const screen = sourceWithoutComments(SCREEN);
     expect(screen).toContain("<BatteryEditor");
     expect(screen).toContain("<LoadEditor");
     expect(screen).toContain("withBattery(scenario, next)");
@@ -374,7 +374,7 @@ describe("every refusal renders in both locales from a typed code", () => {
     "REPLAY_INTEGRITY_VIOLATION",
   ] as const;
 
-  test("all five have a sentence in both catalogues", () => {
+  it("all five have a sentence in both catalogues", () => {
     for (const code of CODES) {
       for (const catalogue of [EN.error, PT.error]) {
         const sentence: string = catalogue[code];
@@ -386,8 +386,8 @@ describe("every refusal renders in both locales from a typed code", () => {
     }
   });
 
-  test("the screen renders the code and never the envelope's message", () => {
-    const screen = code(SCREEN);
+  it("the screen renders the code and never the envelope's message", () => {
+    const screen = sourceWithoutComments(SCREEN);
     expect(screen).toContain("copy.error[code]");
     expect(screen).toContain("copy.error[view.refusal.code]");
     // `message` on the envelope is developer prose for a log. A screen that
@@ -414,7 +414,7 @@ describe("every refusal renders in both locales from a typed code", () => {
  * report the reader has to write themselves.
  */
 describe("the absence names the live API it is waiting for", () => {
-  test("the replaying note carries the reason, in both locales", () => {
+  it("the replaying note carries the reason, in both locales", () => {
     for (const catalogue of [EN.app.replay, PT.app.replay]) {
       const sentence: string = catalogue.replayingLive;
       expect(sentence.length).toBeGreaterThan(40);
@@ -430,8 +430,8 @@ describe("the absence names the live API it is waiting for", () => {
     expect(EN.app.replay.replayingLive).not.toBe(PT.app.replay.replayingLive);
   });
 
-  test("the screen renders it beside the note it explains", () => {
-    const screen = code(SCREEN);
+  it("the screen renders it beside the note it explains", () => {
+    const screen = sourceWithoutComments(SCREEN);
     expect(screen).toContain("copy.app.replay.replayingLive");
     // In the `replaying` branch — the state the export freezes on — and not
     // somewhere a reader of the exported build would never reach.
@@ -442,8 +442,8 @@ describe("the absence names the live API it is waiting for", () => {
     );
   });
 
-  test("no fixture-scored plan came back with it", () => {
-    const screen = code(SCREEN);
+  it("no fixture-scored plan came back with it", () => {
+    const screen = sourceWithoutComments(SCREEN);
     // The absence is explained, never filled. A fixture behind these boxes
     // would be a second execution rule in a browser.
     for (const token of [

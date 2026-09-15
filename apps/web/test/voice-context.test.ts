@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 
 import type {
   CurtailmentEpisodes,
@@ -110,7 +110,7 @@ const EXPLAINED: ExplainState = {
 };
 
 describe("the context describes the selection", () => {
-  test("it names the screen, the subsystem, the fleet, the run and the day", () => {
+  it("it names the screen, the subsystem, the fleet, the run and the day", () => {
     const first = contextLines(input())[0];
     expect(first).toContain("Grid Overview");
     expect(first).toContain("NE");
@@ -121,14 +121,14 @@ describe("the context describes the selection", () => {
 
   const screens: VoiceScreen[] = ["overview", "explain", "mitigate", "replay"];
   for (const screen of screens) {
-    test(`${screen} is named in the first line`, () => {
+    it(`${screen} is named in the first line`, () => {
       expect(contextLines(input({ screen }))[0].startsWith("The reader is on ")).toBe(
         true,
       );
     });
   }
 
-  test("only the Time Machine states an episode", () => {
+  it("only the Time Machine states an episode", () => {
     const withEpisode = contextSentence(input({ screen: "replay" }));
     expect(withEpisode).toContain("2026-08-11-ne");
     // Elsewhere the episode is not what the reader is looking at, and a model
@@ -136,12 +136,12 @@ describe("the context describes the selection", () => {
     expect(contextSentence(input({ screen: "explain" }))).not.toContain("2026-08-11-ne");
   });
 
-  test("the reader's locale is stated", () => {
+  it("the reader's locale is stated", () => {
     expect(contextSentence(input({ locale: "pt" }))).toContain("Answer in pt-BR.");
     expect(contextSentence(input({ locale: "en" }))).toContain("Answer in en.");
   });
 
-  test("the block is the same grid in both locales", () => {
+  it("the block is the same grid in both locales", () => {
     // The block is machine-facing, and writing it twice would create a surface
     // on which a Portuguese reader could be told about a different day than an
     // English one.
@@ -153,14 +153,14 @@ describe("the context describes the selection", () => {
 });
 
 describe("with nothing promoted, the absence is stated", () => {
-  test("the absence line is present and unambiguous", () => {
+  it("the absence line is present and unambiguous", () => {
     const block = contextSentence(input({ network: OBSERVED_ONLY }));
     expect(block).toContain("NO FORECAST IS AVAILABLE");
     expect(block).toContain("Do not estimate");
     expect(hasForecast(input({ network: OBSERVED_ONLY }))).toBe(false);
   });
 
-  test("it names the clause that refused", () => {
+  it("it names the clause that refused", () => {
     // `FORECAST_NOT_YET_PUBLISHED` resolves at tonight's gate and
     // `FORECAST_UNAVAILABLE` does not. A reader can act on the difference.
     expect(contextSentence(input({ network: OBSERVED_ONLY }))).toContain(
@@ -173,14 +173,14 @@ describe("with nothing promoted, the absence is stated", () => {
     expect(forecastRefusal(input({ network: unavailable }))).toBe("FORECAST_UNAVAILABLE");
   });
 
-  test("MODEL_UNAVAILABLE on Explain is carried the same way", () => {
+  it("MODEL_UNAVAILABLE on Explain is carried the same way", () => {
     const refused: ExplainState = { status: "refused", code: "MODEL_UNAVAILABLE" };
     expect(contextSentence(input({ screen: "explain", explain: refused }))).toContain(
       "MODEL_UNAVAILABLE",
     );
   });
 
-  test("no band, no risk class and no quantile is stated anywhere", () => {
+  it("no band, no risk class and no quantile is stated anywhere", () => {
     const block = contextSentence(input({ network: OBSERVED_ONLY }));
     // The one sentence the whole module exists to make impossible: a P50 in a
     // block with no forecast behind it.
@@ -188,40 +188,40 @@ describe("with nothing promoted, the absence is stated", () => {
     expect(block).not.toContain("risk high");
   });
 
-  test("the lane state says why, and says the gate is working", () => {
+  it("the lane state says why, and says the gate is working", () => {
     const block = contextSentence(input({ network: OBSERVED_ONLY }));
     expect(block).toContain("No model is promoted");
     expect(block).toContain("present_unpromoted");
     expect(block).toContain("the gate working");
   });
 
-  test("the settled record survives and is offered as fact", () => {
+  it("the settled record survives and is offered as fact", () => {
     const block = contextSentence(input({ network: OBSERVED_ONLY }));
     expect(block).toContain("Observed and settled");
     expect(block).toContain("200 MWh");
     expect(block).toContain("2026-09-14");
   });
 
-  test("an absence is stated even when no read has been attempted", () => {
+  it("an absence is stated even when no read has been attempted", () => {
     // The dock can open before a screen's hooks have answered. Saying nothing
     // about the forecast would let the model assume there is one.
     expect(contextSentence(input())).toContain("NO FORECAST IS AVAILABLE");
     expect(forecastRefusal(input())).toBeUndefined();
   });
 
-  test("a reading serving state claims nothing either way", () => {
+  it("a reading serving state claims nothing either way", () => {
     expect(contextSentence(input({ serving: { status: "reading" } }))).toContain(
       "do not claim either way",
     );
   });
 
-  test("an unreachable gateway is stated rather than guessed", () => {
+  it("an unreachable gateway is stated rather than guessed", () => {
     expect(contextSentence(input({ serving: { status: "unknown" } }))).toContain(
       "did not answer /v1/meta",
     );
   });
 
-  test("an unreachable modelling service is its own sentence", () => {
+  it("an unreachable modelling service is its own sentence", () => {
     const unreachable: ServingState = {
       status: "known",
       lanes: [],
@@ -235,7 +235,7 @@ describe("with nothing promoted, the absence is stated", () => {
 });
 
 describe("with a promoted model, the band is three numbers", () => {
-  test("the forecast line carries P10, P50 and P90 together", () => {
+  it("the forecast line carries P10, P50 and P90 together", () => {
     const block = contextSentence(input({ serving: PROMOTED, network: READ }));
     expect(block).toContain("P10 120 MWh");
     expect(block).toContain("P50 480 MWh");
@@ -245,7 +245,7 @@ describe("with a promoted model, the band is three numbers", () => {
     expect(hasForecast(input({ serving: PROMOTED, network: READ }))).toBe(true);
   });
 
-  test("Explain adds the top driver", () => {
+  it("Explain adds the top driver", () => {
     const block = contextSentence(
       input({ screen: "explain", serving: PROMOTED, explain: EXPLAINED }),
     );
@@ -253,13 +253,13 @@ describe("with a promoted model, the band is three numbers", () => {
     expect(block).toContain("P50 480 MWh");
   });
 
-  test("the promoted lane count is stated", () => {
+  it("the promoted lane count is stated", () => {
     expect(contextSentence(input({ serving: PROMOTED, network: READ }))).toContain(
       "1 of 2 serving lanes is promoted",
     );
   });
 
-  test("bandPhrase never renders a centre alone", () => {
+  it("bandPhrase never renders a centre alone", () => {
     const phrase = bandPhrase({ p10: 10, p50: 20, p90: 30 });
     expect(phrase).toContain("P10 10");
     expect(phrase).toContain("P50 20");
@@ -269,7 +269,7 @@ describe("with a promoted model, the band is three numbers", () => {
     expect(phrase.match(/P\d+/g)?.length).toBe(3);
   });
 
-  test("every forecast line that names a P50 also names P10 and P90", () => {
+  it("every forecast line that names a P50 also names P10 and P90", () => {
     for (const state of [READ, OBSERVED_ONLY]) {
       for (const line of contextLines(input({ serving: PROMOTED, network: state }))) {
         if (line.includes("P50")) {
@@ -282,7 +282,7 @@ describe("with a promoted model, the band is three numbers", () => {
 });
 
 describe("the context issues no request", () => {
-  test("it is a pure function of its argument", () => {
+  it("it is a pure function of its argument", () => {
     // Called twice with the same input it must produce the same block: anything
     // that fetched, or read a clock, would not.
     expect(contextSentence(input({ network: READ }))).toBe(
@@ -290,7 +290,7 @@ describe("the context issues no request", () => {
     );
   });
 
-  test("the module names no endpoint it could call", () => {
+  it("the module names no endpoint it could call", () => {
     // `use-serving.ts` records what a second read of the same question costs:
     // the badge and the panel answering differently across a promotion. The
     // context builder taking already-fetched state is how that is prevented,

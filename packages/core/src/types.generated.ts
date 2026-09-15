@@ -486,9 +486,9 @@ export interface Driver {
    */
   phiMwh: number;
   /**
-   * Share of the attributed *movement*: |phi_j| / sum_k |phi_k|, computed over
-   * **all eight** groups, not over the displayed ones. A denominator that does
-   * not exist until after the display cut cannot be put on a wire.
+   * Share of the attributed *movement*: |phi_j| / sum_k |phi_k|, computed
+   * over **all eight** groups, not over the displayed ones. A denominator that
+   * does not exist until after the display cut cannot be put on a wire.
    */
   share: Probability;
   direction: DriverDirection;
@@ -1074,14 +1074,14 @@ export interface DeclinedFigure {
  * people actively use. A caveat sentence *is* its census entry - a `str`
  * subclass declared beside the code that publishes it, which
  * `apps/ml/src/wattsteer_ml/caveated.py` walks the package for - so nothing
- * about where a consumer meets one has moved and adding one edits no list.
- * **Collected here and attached there, and the two are not alternatives.**
- * Every one of these sentences is also published in the block that carries the
- * figure, because a caveat on this endpoint does nothing for the code path
- * that reads `share_p50_zero`; this half is for a reviewer, who cannot read
- * every card block to discover which of a build's numbers do not mean what
- * they say. It is **not** a third `kind` on `declines`: `unrunnable` and
- * `unrun` are two answers to one question - does this figure exist? - and
+ * about where a consumer meets one has moved and adding one edits no
+ * list. **Collected here and attached there, and the two are not
+ * alternatives.** Every one of these sentences is also published in the block
+ * that carries the figure, because a caveat on this endpoint does nothing for
+ * the code path that reads `share_p50_zero`; this half is for a reviewer, who
+ * cannot read every card block to discover which of a build's numbers do not
+ * mean what they say. It is **not** a third `kind` on `declines`: `unrunnable`
+ * and `unrun` are two answers to one question - does this figure exist? - and
  * every row here answers yes to it, so filing one under a heading whose whole
  * contract is absence would tell a reviewer `coverage_p10` was withheld when
  * the defect is precisely that it is not.
@@ -1703,13 +1703,13 @@ export interface Coverage {
 }
 
 /**
- * What was added to the band and what it bought. Both are shifts of the
- * *composed* quantile, applied inside the positive branch at the mixture's own
- * `q` — not of the knots of `Q_pos`, which is where forecaster ticket 21 moved
- * them from. **They are not in the same units**: `delta_hi` is MWh added at `q
- * = 0.90`, while since forecaster ticket 43 `delta_lo` is a *multiple of the
- * row's own positive spread* `Q_pos(0.90) − Q_pos(0.10)`, subtracted at `q =
- * 0.10`. A flat MWh floor correction delivered between 0.8023 and 0.9504
+ * What was added to the band and what it bought. Both are shifts of
+ * the *composed* quantile, applied inside the positive branch at the mixture's
+ * own `q` — not of the knots of `Q_pos`, which is where forecaster ticket 21
+ * moved them from. **They are not in the same units**: `delta_hi` is MWh added
+ * at `q = 0.90`, while since forecaster ticket 43 `delta_lo` is a *multiple of
+ * the row's own positive spread* `Q_pos(0.90) − Q_pos(0.10)`, subtracted at `q
+ * = 0.10`. A flat MWh floor correction delivered between 0.8023 and 0.9504
  * coverage depending only on how the fleet's magnitudes moved between the
  * calibration window and the test period; scaled per row it delivered 0.9165
  * across the same sweep. `method` names the variant, so a card in the old

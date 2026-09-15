@@ -238,12 +238,12 @@ export interface RunSlot {
 /**
  * The slots a sweep will walk, **newest run first**.
  *
- * The order is the whole of forecaster 37's fix, and it is a fix about
- * *priority* rather than about capacity. The order used to be chronological,
- * which under a bounded allowance starts at the wrong end: the sweep spent its
- * quota on the oldest backfill target and was refused "before it reaches a
- * forward valid time at all", so the serving day — the only slot a forecast
- * needs — was never reached, four attempts running.
+ * The order is the whole of forecaster 37's fix, and it is a fix
+ * about *priority* rather than about capacity. The order used to be
+ * chronological, which under a bounded allowance starts at the wrong end: the
+ * sweep spent its quota on the oldest backfill target and was refused "before
+ * it reaches a forward valid time at all", so the serving day — the only slot
+ * a forecast needs — was never reached, four attempts running.
  *
  * Reversed, an exhausted allowance leaves the head moved and the backfill
  * behind. That is the recoverable direction: yesterday's history can be caught

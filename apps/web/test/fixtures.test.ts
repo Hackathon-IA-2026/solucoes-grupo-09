@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { DATA_WINDOW } from "@wattsteer/core";
 import { parseAppParams, technologyParam } from "../src/components/app/params";
 import {
@@ -15,18 +15,18 @@ import {
 describe("forecast fixtures", () => {
   const forecast = buildForecast("NE", "12Z");
 
-  test("emits 24 hours", () => {
+  it("emits 24 hours", () => {
     expect(forecast.hours).toHaveLength(24);
   });
 
-  test("every hour's band is ordered P10 <= P50 <= P90", () => {
+  it("every hour's band is ordered P10 <= P50 <= P90", () => {
     for (const hour of forecast.hours) {
       expect(hour.constrainedOff.p10).toBeLessThanOrEqual(hour.constrainedOff.p50);
       expect(hour.constrainedOff.p50).toBeLessThanOrEqual(hour.constrainedOff.p90);
     }
   });
 
-  test("the day band is not the componentwise sum of the hourly bands", () => {
+  it("the day band is not the componentwise sum of the hourly bands", () => {
     // Quantiles do not add — and neither do medians, which is the half of the
     // rule the fixture used to break by setting the day P50 to the sum of the
     // hourly P50s. The day figures are read from the path ensemble, so *no*
@@ -64,7 +64,7 @@ describe("forecast fixtures", () => {
     });
   });
 
-  test("the peak-power band is drawn, not the largest hourly band", () => {
+  it("the peak-power band is drawn, not the largest hourly band", () => {
     // A day's peak is a property of a *path*: the biggest hour of a drawn day,
     // not the componentwise extreme of 24 marginals. Reducing it from the
     // hours reports the P90 of the worst hour as if the day were certain to
@@ -75,7 +75,7 @@ describe("forecast fixtures", () => {
     expect(forecast.peakPower.p50).toBeLessThanOrEqual(forecast.peakPower.p90);
   });
 
-  test("the forecast carries no technology, and needs none to build", () => {
+  it("the forecast carries no technology, and needs none to build", () => {
     // Contract change 5: one object per subsystem-day. A `technology` key here
     // would be claiming a per-technology head the forecaster does not have,
     // and `buildForecast` taking one would let a screen ask for it.
@@ -84,7 +84,7 @@ describe("forecast fixtures", () => {
     expect(buildForecast.length).toBe(2);
   });
 
-  test("the split is two scalars at both grains, and they sum to E[Y]", () => {
+  it("the split is two scalars at both grains, and they sum to E[Y]", () => {
     const day = forecast.split;
     expect(Object.keys(day).sort()).toEqual(["solarMwh", "windMwh"]);
     expect(typeof day.windMwh).toBe("number");
@@ -105,7 +105,7 @@ describe("forecast fixtures", () => {
     }
   });
 
-  test("the expectation is a sibling of the band, never its centre", () => {
+  it("the expectation is a sibling of the band, never its centre", () => {
     // For a hurdle mixture the expectation exceeds the median whenever the
     // occurrence probability is below an even chance, so a screen reading the
     // P50 as "the expected figure" under-reports every quiet day — by all of
@@ -120,7 +120,7 @@ describe("forecast fixtures", () => {
     }
   });
 
-  test("the 12Z run carries a narrower band than 00Z", () => {
+  it("the 12Z run carries a narrower band than 00Z", () => {
     const early = buildForecast("NE", "00Z");
     const width = (f: typeof forecast) => f.dailyEnergy.p90 - f.dailyEnergy.p10;
     expect(width(forecast)).toBeLessThan(width(early));
@@ -128,13 +128,13 @@ describe("forecast fixtures", () => {
 });
 
 describe("risk classification", () => {
-  test("bins rather than reporting a point probability", () => {
+  it("bins rather than reporting a point probability", () => {
     expect(riskClass(0.08)).toBe("low");
     expect(riskClass(0.31)).toBe("elevated");
     expect(riskClass(0.89)).toBe("high");
   });
 
-  test("probabilities round to the nearest 5 points", () => {
+  it("probabilities round to the nearest 5 points", () => {
     expect(roundProbability(0.31)).toBe(30);
     expect(roundProbability(0.89)).toBe(90);
   });
@@ -158,7 +158,7 @@ describe("the replay day catalogue", () => {
    * fixture that could restate it.
    */
 
-  test("the catalogue is dates and nothing else", () => {
+  it("the catalogue is dates and nothing else", () => {
     // A verdict here would be a second opinion about the thing the endpoint
     // answers, and the two would eventually disagree with nothing failing.
     for (const day of REPLAY_DAYS) {
@@ -168,7 +168,7 @@ describe("the replay day catalogue", () => {
     }
   });
 
-  test("the days span the three ranges the window partitions into", () => {
+  it("the days span the three ranges the window partitions into", () => {
     // Not a restatement of the fold calendar — the boundaries come from the
     // published constants — but the property that matters for a screen: all
     // three of its arms are reachable from the picker, so it cannot be built
@@ -185,13 +185,13 @@ describe("the replay day catalogue", () => {
     expect(dates.some((date) => date >= INGESTION_GO_LIVE)).toBe(true);
   });
 
-  test("the fixture's window dates are the published ones", () => {
+  it("the fixture's window dates are the published ones", () => {
     // `/v1/meta` returns it. A fixture that restated it could put the screen a
     // quarter out of step with the API with nothing failing.
     expect(INGESTION_GO_LIVE).toBe(DATA_WINDOW.ingestionGoLive);
   });
 
-  test("every day the picker offers is one a link can address", () => {
+  it("every day the picker offers is one a link can address", () => {
     // `parseAppParams` falls back rather than crashing, so a catalogue entry
     // whose id the parser rejects would silently redirect the reader to the
     // first day. Asserted both ways: the ids round-trip, and an unknown one
@@ -202,7 +202,7 @@ describe("the replay day catalogue", () => {
     expect(parseAppParams({ episode: "1999-01-01-ne" }).episode).toBe(REPLAY_DAYS[0].id);
   });
 
-  test("the forecast origin names two artifacts, in two fields", () => {
+  it("the forecast origin names two artifacts, in two fields", () => {
     // The defect `docs/specs/api-surface.md` found on the landing hero: the
     // WattSteer run label with the weather run glued onto it as
     // " · weather 12Z". One string cannot be filtered, compared or superseded
@@ -223,28 +223,28 @@ describe("the replay day catalogue", () => {
 });
 
 describe("URL params", () => {
-  test("defaults hold for an empty query", () => {
+  it("defaults hold for an empty query", () => {
     const params = parseAppParams({});
     expect(params.subsystem).toBe("NE");
     expect(params.technology).toBe("WIND");
     expect(params.run).toBe("12Z");
   });
 
-  test("a hand-edited URL falls back rather than crashing", () => {
+  it("a hand-edited URL falls back rather than crashing", () => {
     const params = parseAppParams({ subsystem: "SIN", technology: "hydro", run: "18Z" });
     expect(params.subsystem).toBe("NE");
     expect(params.technology).toBe("WIND");
     expect(params.run).toBe("12Z");
   });
 
-  test("valid values survive", () => {
+  it("valid values survive", () => {
     const params = parseAppParams({ subsystem: "S", technology: "solar", run: "00Z" });
     expect(params.subsystem).toBe("S");
     expect(params.technology).toBe("SOLAR");
     expect(params.run).toBe("00Z");
   });
 
-  test("the URL keeps its own lowercase spelling of technology", () => {
+  it("the URL keeps its own lowercase spelling of technology", () => {
     // The domain, the database enum and the API all say WIND / SOLAR. A URL
     // reads better lowercase, so params.ts owns the translation — the same
     // shape of boundary as the ONS carga API calling SE "SECO". The transport
@@ -267,7 +267,7 @@ describe("defects the specs found in this prototype", () => {
    * the property belongs to the contract and the fixture has no band to check.
    */
 
-  test("the reference flexible load can actually shed what it claims", () => {
+  it("the reference flexible load can actually shed what it claims", () => {
     // flex-optimizer.md rejects max_shift_mw above the implied baseline as
     // SHIFT_EXCEEDS_BASELINE — a load cannot shed more than it was drawing.
     const baselineMw = DEFAULT_LOAD.dailyEnergyMwh / 24;

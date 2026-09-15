@@ -53,11 +53,11 @@ const REGIME = "conformal_v2_full_upper";
  */
 const RETIRED_REGIME = "conformal_v1_partial_upper";
 
-const envelope = (card: unknown = CARD, regime = REGIME) => ({
+const envelope = (body: unknown = CARD, regime = REGIME) => ({
   lane: LANE,
   artifact_id: ARTIFACT,
   correction_regime: regime,
-  card,
+  card: body,
 });
 
 let reply: () => Response = () => Response.json(envelope());

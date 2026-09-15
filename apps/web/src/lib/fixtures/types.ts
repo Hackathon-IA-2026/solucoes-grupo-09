@@ -17,6 +17,16 @@
  * service read the same definitions instead of forming a second opinion.
  */
 
+import type {
+  AttributedDriver,
+  Band,
+  ForecastOrigin,
+  ReasonCode,
+  RestrictionOrigin,
+  SubsystemCode,
+  TechnologySplit,
+} from "@wattsteer/core";
+
 export {
   type AttributedDriver,
   type Band,
@@ -52,16 +62,6 @@ export {
  * them rather than inventing a parallel spelling.
  */
 export type { ReplayIntegrity, ReplayIntegrityHeldOutBy } from "@wattsteer/core/api";
-
-import type {
-  AttributedDriver,
-  Band,
-  ForecastOrigin,
-  ReasonCode,
-  RestrictionOrigin,
-  SubsystemCode,
-  TechnologySplit,
-} from "@wattsteer/core";
 
 /** `CurtailmentHour`, forecast side: the atom the model predicts. */
 export interface CurtailmentHourForecast {

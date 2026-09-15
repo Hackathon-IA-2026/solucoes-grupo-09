@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import type { NarrationClause, NarrationFromTemplate } from "@wattsteer/core/api";
 import { en } from "../src/i18n/copy.en";
 import { pt } from "../src/i18n/copy.pt";
@@ -85,7 +85,7 @@ function driver(): NarrationClause["values"] {
 
 describe("the catalogue can say every sentence the contract allows", () => {
   for (const locale of LOCALES) {
-    test(`${locale} renders every clause with no placeholder left behind`, () => {
+    it(`${locale} renders every clause with no placeholder left behind`, () => {
       const copy = dictionaries[locale];
       const f = formattersFor(locale);
       for (const one of EVERY_CLAUSE) {
@@ -98,14 +98,14 @@ describe("the catalogue can say every sentence the contract allows", () => {
     });
   }
 
-  test("every value the server can send has a formatter", () => {
+  it("every value the server can send has a formatter", () => {
     const sent = new Set(EVERY_CLAUSE.flatMap((one) => Object.keys(one.values)));
     for (const name of sent) {
       expect(NARRATION_VALUE_NAMES).toContain(name);
     }
   });
 
-  test("a value with no formatter fails loudly rather than printing itself", () => {
+  it("a value with no formatter fails loudly rather than printing itself", () => {
     expect(() =>
       renderNarrationClause(
         clause("top_two_share", { invented_field: 1 }),
@@ -123,15 +123,15 @@ describe("numbers are formatted in the reader's locale, not the server's", () =>
     total_attributed_mwh: 1316.5,
   });
 
-  test("Portuguese writes the decimal comma and groups with a period", () => {
+  it("Portuguese writes the decimal comma and groups with a period", () => {
     expect(renderNarrationClause(one, pt, formattersFor("pt"))).toContain("1.412,5 MWh");
   });
 
-  test("English writes the decimal point and groups with a comma", () => {
+  it("English writes the decimal point and groups with a comma", () => {
     expect(renderNarrationClause(one, en, formattersFor("en"))).toContain("1,412.5 MWh");
   });
 
-  test("a driver group is named by its label, and its code never reaches a reader", () => {
+  it("a driver group is named by its label, and its code never reaches a reader", () => {
     const sentence = renderNarrationClause(
       clause("driver_raises", driver()),
       pt,
@@ -141,7 +141,7 @@ describe("numbers are formatted in the reader's locale, not the server's", () =>
     expect(sentence).not.toContain("net_surplus");
   });
 
-  test("a share is a percentage and an hour is a wall clock", () => {
+  it("a share is a percentage and an hour is a wall clock", () => {
     const sentence = renderNarrationClause(
       clause("peak", { peak_power_p50_mw: 118, peak_hour_local: 13 }),
       en,
@@ -163,13 +163,13 @@ describe("the panel renders whichever surface produced the paragraph", () => {
     ],
   };
 
-  test("a template becomes one paragraph, its clauses in order", () => {
+  it("a template becomes one paragraph, its clauses in order", () => {
     const paragraph = renderNarration(template, pt, formattersFor("pt"));
     expect(paragraph.split("\n")).toHaveLength(1);
     expect(paragraph.indexOf("NORDESTE")).toBeLessThan(paragraph.indexOf("56%"));
   });
 
-  test("a model narration is returned as it arrived", () => {
+  it("a model narration is returned as it arrived", () => {
     const text = "O modelo elevou a previsão em 316,0 MWh.";
     expect(
       renderNarration(

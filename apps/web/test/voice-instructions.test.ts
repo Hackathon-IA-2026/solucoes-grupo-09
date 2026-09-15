@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { LOCALES } from "../src/i18n/locale";
 import { TOOL_REFUSAL_CODES } from "../src/lib/voice/execute";
 import {
@@ -25,12 +25,12 @@ import { TOOL_NAMES } from "../src/lib/voice/tools";
 const NON_NEGOTIABLE = ["never_invent", "band_is_three", "gate_refusal", "refusals"];
 
 describe("both locales carry the same contract", () => {
-  test("the prompt exists in every locale the site has", () => {
+  it("the prompt exists in every locale the site has", () => {
     expect(INSTRUCTION_LOCALES).toEqual(LOCALES);
     expect(Object.keys(INSTRUCTIONS).sort()).toEqual([...LOCALES].sort());
   });
 
-  test("both locales carry exactly the same clause keys", () => {
+  it("both locales carry exactly the same clause keys", () => {
     for (const locale of LOCALES) {
       expect(Object.keys(INSTRUCTIONS[locale]).sort()).toEqual(
         [...INSTRUCTION_CLAUSES].sort(),
@@ -38,7 +38,7 @@ describe("both locales carry the same contract", () => {
     }
   });
 
-  test("no clause is empty in either locale", () => {
+  it("no clause is empty in either locale", () => {
     for (const locale of LOCALES) {
       for (const clause of INSTRUCTION_CLAUSES) {
         expect(INSTRUCTIONS[locale][clause].trim().length).toBeGreaterThan(40);
@@ -46,7 +46,7 @@ describe("both locales carry the same contract", () => {
     }
   });
 
-  test("Portuguese is authored, not left in English", () => {
+  it("Portuguese is authored, not left in English", () => {
     for (const clause of INSTRUCTION_CLAUSES) {
       expect(INSTRUCTIONS.pt[clause]).not.toBe(INSTRUCTIONS.en[clause]);
     }
@@ -55,7 +55,7 @@ describe("both locales carry the same contract", () => {
     expect(INSTRUCTIONS.pt.band_is_three).toContain("TRÊS números");
   });
 
-  test("the four non-negotiable clauses exist and are named", () => {
+  it("the four non-negotiable clauses exist and are named", () => {
     for (const clause of NON_NEGOTIABLE) {
       expect(INSTRUCTION_CLAUSES).toContain(clause as never);
     }
@@ -63,7 +63,7 @@ describe("both locales carry the same contract", () => {
 });
 
 describe("the four rules the plan will not trade", () => {
-  test("no figure outside the context block", () => {
+  it("no figure outside the context block", () => {
     expect(INSTRUCTIONS.en.never_invent).toContain("NEVER state a figure");
     expect(INSTRUCTIONS.pt.never_invent).toContain("NUNCA diga um número");
     for (const locale of LOCALES) {
@@ -71,7 +71,7 @@ describe("the four rules the plan will not trade", () => {
     }
   });
 
-  test("a band is three numbers and a P50 may not be spoken alone", () => {
+  it("a band is three numbers and a P50 may not be spoken alone", () => {
     for (const locale of LOCALES) {
       const clause = INSTRUCTIONS[locale].band_is_three;
       expect(clause).toContain("P10");
@@ -82,7 +82,7 @@ describe("the four rules the plan will not trade", () => {
     }
   });
 
-  test("never 'the model predicts' while nothing is promoted", () => {
+  it("never 'the model predicts' while nothing is promoted", () => {
     expect(INSTRUCTIONS.en.gate_refusal).toContain("the model predicts");
     expect(INSTRUCTIONS.pt.gate_refusal).toContain("o modelo prevê");
     for (const locale of LOCALES) {
@@ -98,7 +98,7 @@ describe("the four rules the plan will not trade", () => {
     }
   });
 
-  test("every refusal code the executor can produce is something the voice can say", () => {
+  it("every refusal code the executor can produce is something the voice can say", () => {
     for (const locale of LOCALES) {
       const clause = INSTRUCTIONS[locale].refusals;
       for (const code of TOOL_REFUSAL_CODES) {
@@ -114,7 +114,7 @@ describe("the four rules the plan will not trade", () => {
 });
 
 describe("the remaining clauses", () => {
-  test("every tool is named in both locales", () => {
+  it("every tool is named in both locales", () => {
     for (const locale of LOCALES) {
       for (const tool of INSTRUCTED_TOOLS) {
         expect(INSTRUCTIONS[locale].tools).toContain(tool);
@@ -123,35 +123,35 @@ describe("the remaining clauses", () => {
     expect(INSTRUCTED_TOOLS).toEqual(TOOL_NAMES);
   });
 
-  test("highlight is described as the one that does not navigate", () => {
+  it("highlight is described as the one that does not navigate", () => {
     expect(INSTRUCTIONS.en.tools).toContain("WITHOUT navigating");
     expect(INSTRUCTIONS.pt.tools).toContain("SEM navegar");
   });
 
-  test("the four subsystem codes are the only ones offered", () => {
+  it("the four subsystem codes are the only ones offered", () => {
     for (const locale of LOCALES) {
       expect(INSTRUCTIONS[locale].tools).toMatch(/N, NE, SE (and|e) S/);
     }
   });
 
-  test("brevity is instructed — these are spoken aloud", () => {
+  it("brevity is instructed — these are spoken aloud", () => {
     expect(INSTRUCTIONS.en.brevity).toContain("Two sentences");
     expect(INSTRUCTIONS.pt.brevity).toContain("Duas frases");
   });
 
-  test("ambiguity resolves to a tool call, not a clarifying question", () => {
+  it("ambiguity resolves to a tool call, not a clarifying question", () => {
     expect(INSTRUCTIONS.en.prefer_showing).toContain("which region?");
     expect(INSTRUCTIONS.pt.prefer_showing).toContain("qual região?");
   });
 
-  test("each locale is told to answer in its own language", () => {
+  it("each locale is told to answer in its own language", () => {
     expect(INSTRUCTIONS.pt.locale).toContain("português do Brasil");
     expect(INSTRUCTIONS.en.locale).toContain("in English");
   });
 });
 
 describe("the assembled prompt", () => {
-  test("it carries every clause, in the declared order", () => {
+  it("it carries every clause, in the declared order", () => {
     for (const locale of LOCALES) {
       const prompt = voiceInstructions(locale);
       let cursor = -1;
@@ -163,7 +163,7 @@ describe("the assembled prompt", () => {
     }
   });
 
-  test("the honesty clauses sit above the tool descriptions", () => {
+  it("the honesty clauses sit above the tool descriptions", () => {
     // A prompt that explained the capabilities first would be a prompt whose
     // limits compete with a wall of capability.
     for (const locale of LOCALES) {
@@ -177,7 +177,7 @@ describe("the assembled prompt", () => {
     }
   });
 
-  test("the context block is appended last, under a header", () => {
+  it("the context block is appended last, under a header", () => {
     const prompt = voiceInstructions("pt", "NO FORECAST IS AVAILABLE for this day.");
     expect(prompt).toContain("--- CONTEXT (pt-BR) ---");
     expect(prompt.indexOf("--- CONTEXT")).toBeGreaterThan(
@@ -186,13 +186,13 @@ describe("the assembled prompt", () => {
     expect(prompt.endsWith("NO FORECAST IS AVAILABLE for this day.")).toBe(true);
   });
 
-  test("an absent or blank context adds no header", () => {
+  it("an absent or blank context adds no header", () => {
     for (const context of [undefined, "", "   "]) {
       expect(voiceInstructions("en", context)).not.toContain("--- CONTEXT");
     }
   });
 
-  test("the two prompts are different documents", () => {
+  it("the two prompts are different documents", () => {
     expect(voiceInstructions("pt")).not.toBe(voiceInstructions("en"));
     expect(voiceInstructions("pt").length).toBeGreaterThan(1000);
   });

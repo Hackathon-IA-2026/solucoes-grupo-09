@@ -262,9 +262,9 @@ describe("a database with no schema is not an INTERNAL", () => {
     expect(toErrorEnvelope(prose).body.error.code).toBe("INTERNAL");
 
     const coded = Object.assign(new Error("something else entirely"), { code: "42P01" });
-    const envelope = toErrorEnvelope(coded);
-    expect(envelope.body.error.code).toBe("DATA_UNAVAILABLE");
+    const fromCoded = toErrorEnvelope(coded);
+    expect(fromCoded.body.error.code).toBe("DATA_UNAVAILABLE");
     // Named "unknown" rather than invented, because Postgres did not say.
-    expect(envelope.body.error.details).toEqual({ relation: "unknown" });
+    expect(fromCoded.body.error.details).toEqual({ relation: "unknown" });
   });
 });

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { createHash, randomBytes } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -71,20 +71,24 @@ describe("a number has one canonical spelling", () => {
     }
   ).cases;
 
-  test("the vector file is not empty, so a passing run means something", () => {
+  it("the vector file is not empty, so a passing run means something", () => {
     expect(cases.length).toBeGreaterThan(0);
   });
 
   for (const { name, input, expected } of cases) {
-    test(name, () => {
+    it(name, () => {
       expect(canonicalJson(input)).toBe(expected);
     });
   }
 
-  test("a non-finite number has no canonical form and is refused", () => {
+  it("a non-finite number has no canonical form and is refused", () => {
     // Not reachable through `JSON.parse` — JSON has no `Infinity` — but very
     // reachable through a screen that divided by zero and posted the result.
-    for (const value of [Number.NaN, Number.POSITIVE_INFINITY, -Infinity]) {
+    for (const value of [
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+    ]) {
       expect(() => canonicalJson(value)).toThrow(ScenarioTransportError);
     }
   });
@@ -103,7 +107,7 @@ interface ScenarioVector {
 describe("a scenario, canonically encoded", () => {
   const cases = vectors<ScenarioVector>("scenarios");
 
-  test("the directory is not empty, so a passing run means something", () => {
+  it("the directory is not empty, so a passing run means something", () => {
     expect(cases.length).toBeGreaterThan(0);
   });
 
@@ -111,25 +115,25 @@ describe("a scenario, canonically encoded", () => {
     describe(`${file}: ${body.name}`, () => {
       const app = decodeWire("Scenario", body.scenario) as Scenario;
 
-      test("the app's camelCase view re-encodes to the vector's canonical bytes", () => {
+      it("the app's camelCase view re-encodes to the vector's canonical bytes", () => {
         expect(canonicalScenarioJson(app)).toBe(body.canonical);
       });
 
-      test("the blob is the base64url of those bytes", () => {
+      it("the blob is the base64url of those bytes", () => {
         expect(encodeScenario(app)).toBe(body.blob);
       });
 
-      test("the hash is the sha256 of those bytes", () => {
+      it("the hash is the sha256 of those bytes", () => {
         expect(scenarioHash(app)).toBe(body.hash);
       });
 
-      test("the blob round-trips byte-identically", () => {
+      it("the blob round-trips byte-identically", () => {
         const decoded = decodeScenarioParam(body.blob);
         expect(decoded.canonical).toBe(body.canonical);
         expect(encodeScenario(decoded.scenario)).toBe(body.blob);
       });
 
-      test("GET ?s= and POST decode to the identical canonical bytes", () => {
+      it("GET ?s= and POST decode to the identical canonical bytes", () => {
         // The acceptance criterion, stated as an equality between the two
         // transports rather than as two assertions against the same constant.
         const fromParam = decodeScenarioParam(body.blob);
@@ -139,7 +143,7 @@ describe("a scenario, canonically encoded", () => {
         expect(fromParam.canonical).toBe(body.canonical);
       });
 
-      test("the canonical text is what the hash was taken over", () => {
+      it("the canonical text is what the hash was taken over", () => {
         expect(hashCanonicalBytes(utf8.encode(body.canonical))).toBe(body.hash);
       });
     });
@@ -159,12 +163,12 @@ interface EquivalenceVector {
 describe("different documents, one scenario, one hash", () => {
   const cases = vectors<EquivalenceVector>("equivalences");
 
-  test("the directory is not empty, so a passing run means something", () => {
+  it("the directory is not empty, so a passing run means something", () => {
     expect(cases.length).toBeGreaterThan(0);
   });
 
   for (const { file, body } of cases) {
-    test(`${file}: ${body.name}`, () => {
+    it(`${file}: ${body.name}`, () => {
       expect(body.variants.length).toBeGreaterThan(1);
       for (const variant of body.variants) {
         const decoded = decodeScenarioBody(variant);
@@ -175,7 +179,7 @@ describe("different documents, one scenario, one hash", () => {
     });
   }
 
-  test("the test of the test: a trailing zero in a vector fails", () => {
+  it("the test of the test: a trailing zero in a vector fails", () => {
     // `fixtures/.../README.md` and api-surface ticket 21 both ask for this —
     // a deliberately broken vector must fail, or the suite proves nothing.
     const broken = { ...JSON.parse('{"round_trip_efficiency":0.92}') } as JsonValue;
@@ -208,28 +212,28 @@ function refusalCode(run: () => unknown): ErrorCode | null {
 describe("the blobs this build refuses to read", () => {
   const cases = vectors<RefusalVector>("refusals");
 
-  test("the directory is not empty, so a passing run means something", () => {
+  it("the directory is not empty, so a passing run means something", () => {
     expect(cases.length).toBeGreaterThan(0);
   });
 
   for (const { file, body } of cases) {
-    test(`${file}: ${body.name}`, () => {
+    it(`${file}: ${body.name}`, () => {
       // Every refusal names one path; a vector carrying a blob is exercised
       // through the query transport, one carrying a scenario through the body.
       const run =
-        body.blob !== undefined
-          ? () => decodeScenarioParam(body.blob as string)
-          : () => decodeScenarioBody(body.scenario as JsonValue);
+        body.blob === undefined
+          ? () => decodeScenarioBody(body.scenario as JsonValue)
+          : () => decodeScenarioParam(body.blob as string);
       expect(refusalCode(run)).toBe(body.expected_code);
     });
   }
 
-  test("every refusal answers with the status its code is published under", () => {
+  it("every refusal answers with the status its code is published under", () => {
     for (const { body } of cases) {
       const run =
-        body.blob !== undefined
-          ? () => decodeScenarioParam(body.blob as string)
-          : () => decodeScenarioBody(body.scenario as JsonValue);
+        body.blob === undefined
+          ? () => decodeScenarioBody(body.scenario as JsonValue)
+          : () => decodeScenarioParam(body.blob as string);
       try {
         run();
         throw new Error("expected a refusal");
@@ -240,7 +244,7 @@ describe("the blobs this build refuses to read", () => {
     }
   });
 
-  test("a 5 KB blob is refused before anything parses it", () => {
+  it("a 5 KB blob is refused before anything parses it", () => {
     // The spec's own number, and the reason the cap is on the *encoded* form:
     // this is what arrives in a query string from an unauthenticated caller.
     const blob = "A".repeat(5 * 1024);
@@ -248,7 +252,7 @@ describe("the blobs this build refuses to read", () => {
     expect(refusalCode(() => decodeScenarioParam(blob))).toBe("SCENARIO_TOO_LARGE");
   });
 
-  test("a blob at exactly the cap is not refused for its size", () => {
+  it("a blob at exactly the cap is not refused for its size", () => {
     // The boundary, from the other side: 4096 is admitted, so the cap is `>`
     // and not `>=`. It is not valid base64url content, so the refusal that does
     // arrive is about the bytes rather than the length.
@@ -256,7 +260,7 @@ describe("the blobs this build refuses to read", () => {
     expect(refusalCode(() => decodeScenarioParam(blob))).not.toBe("SCENARIO_TOO_LARGE");
   });
 
-  test("a scenario too large to share is refused on the way out too", () => {
+  it("a scenario too large to share is refused on the way out too", () => {
     // A share button that produced a link the API would reject is a worse
     // failure than one that says the scenario is too big to share.
     const oversized = JSON.parse(
@@ -270,7 +274,7 @@ describe("the blobs this build refuses to read", () => {
 // --- the sum type ------------------------------------------------------------
 
 describe("a battery carrying max_shift_mw", () => {
-  test("does not typecheck", () => {
+  it("does not typecheck", () => {
     // The compile half of the acceptance criterion. `additionalProperties:
     // false` on each variant generates an interface the field is not on, so the
     // excess property is an error — and `@ts-expect-error` makes it a *failing
@@ -289,7 +293,7 @@ describe("a battery carrying max_shift_mw", () => {
     expect(asset.assetType).toBe("battery");
   });
 
-  test("does not parse", () => {
+  it("does not parse", () => {
     expect(
       refusalCode(() =>
         decodeScenarioBody({
@@ -312,7 +316,7 @@ describe("a battery carrying max_shift_mw", () => {
     ).toBe("FIELD_NOT_ON_VARIANT");
   });
 
-  test("and neither does a shiftable load carrying energy_capacity_mwh", () => {
+  it("and neither does a shiftable load carrying energy_capacity_mwh", () => {
     // The same rule in the other direction, so the check is about the variant
     // rather than about one field somebody remembered.
     expect(
@@ -342,21 +346,21 @@ describe("a battery carrying max_shift_mw", () => {
 // --- base64url ---------------------------------------------------------------
 
 describe("base64url, unpadded", () => {
-  test("round-trips every byte length up to four blocks", () => {
+  it("round-trips every byte length up to four blocks", () => {
     for (let length = 0; length < 16; length += 1) {
       const bytes = new Uint8Array(length).map((_, index) => (index * 37 + 11) % 256);
       expect([...fromBase64Url(toBase64Url(bytes))]).toEqual([...bytes]);
     }
   });
 
-  test("agrees with Node's own encoder, minus the padding and the alphabet", () => {
+  it("agrees with Node's own encoder, minus the padding and the alphabet", () => {
     for (let trial = 0; trial < 64; trial += 1) {
       const bytes = new Uint8Array(randomBytes(trial));
       expect(toBase64Url(bytes)).toBe(Buffer.from(bytes).toString("base64url"));
     }
   });
 
-  test("the alphabet is base64url's, not base64's", () => {
+  it("the alphabet is base64url's, not base64's", () => {
     // 0xFB 0xFF exercises both characters the two alphabets disagree about.
     expect(toBase64Url(new Uint8Array([0xfb, 0xff, 0xbf]))).toBe("-_-_");
   });
@@ -365,7 +369,7 @@ describe("base64url, unpadded", () => {
 // --- sha256 ------------------------------------------------------------------
 
 describe("the digest", () => {
-  test("agrees with node:crypto over the padding boundaries", () => {
+  it("agrees with node:crypto over the padding boundaries", () => {
     // `packages/core` cannot import `node:crypto` — it is bundled into an Expo
     // app — so the digest is written out in `src/sha256.ts`. This is the test
     // that keeps the hand-written one honest, and the lengths are the ones a
@@ -377,7 +381,7 @@ describe("the digest", () => {
     }
   });
 
-  test("is prefixed, because ScenarioHash is `sha256:` and 64 hex characters", () => {
+  it("is prefixed, because ScenarioHash is `sha256:` and 64 hex characters", () => {
     const hash = hashCanonicalBytes(utf8.encode("{}"));
     expect(hash).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(hash).toBe(`sha256:${createHash("sha256").update("{}").digest("hex")}`);

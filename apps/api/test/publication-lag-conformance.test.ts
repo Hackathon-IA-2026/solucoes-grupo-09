@@ -331,7 +331,7 @@ async function tailFreshness(
       "rows are not its newest ones and this measurement cannot be made from a " +
       "range request any more. Read the Parquet rendition instead.",
   );
-  const newest = stamps[stamps.length - 1] as string;
+  const newest = stamps.at(-1) as string;
   return {
     // ONS bulk timestamps are Brasília wall clock; the offset is applied by the
     // same helper every adapter uses rather than by a fixed −3.

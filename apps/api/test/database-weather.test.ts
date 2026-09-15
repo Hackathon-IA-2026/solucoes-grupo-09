@@ -251,9 +251,9 @@ suite("weather · bitemporal store (real Postgres)", () => {
     const archive = (runs: Record<string, string>, seen?: string[]): typeof fetch =>
       (async (input: string | URL | Request) => {
         const url = new URL(String(input));
-        const run = url.searchParams.get("run") ?? "";
+        const runStamp = url.searchParams.get("run") ?? "";
         seen?.push(url.toString());
-        const body = runs[run];
+        const body = runs[runStamp];
         return body
           ? new Response(body, { status: 200 })
           : new Response(UNAVAILABLE, { status: 400 });
@@ -359,7 +359,7 @@ suite("weather · bitemporal store (real Postgres)", () => {
       // `ingestion_run` — 27 of them in one day — discarding work that was good.
       let calls = 0;
       const limited: typeof fetch = (async (input: string | URL | Request) => {
-        const url = new URL(String(input));
+        const _url = new URL(String(input));
         calls += 1;
         if (calls === 1) {
           return new Response(RUN_00Z, { status: 200 });

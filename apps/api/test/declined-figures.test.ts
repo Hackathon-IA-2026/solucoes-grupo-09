@@ -97,28 +97,25 @@ const reachable = (): MlEndpoint => ({
 const NOW = new Date("2026-08-28T18:04:11.000Z");
 
 /** The modelling service's `/v1/meta`, carrying whatever census a test wants. */
-function mlMeta(declines: unknown): void {
+function mlMeta(census: unknown): void {
   reply = () =>
-    new Response(
-      JSON.stringify({
-        service: "wattsteer-ml",
-        version: "0.1.0",
-        environment: "test",
-        database_configured: false,
-        database_access: "read-only",
-        artifacts: {
-          path: "/data/models",
-          mounted: false,
-          writable: false,
-          count: 0,
-          lanes: [],
-          promotion_log: { path: "/data/models/promotions.jsonl", decisions: 0 },
-          unrecognised: [],
-        },
-        ...(declines === undefined ? {} : { declines }),
-      }),
-      { headers: { "content-type": "application/json" } },
-    );
+    Response.json({
+      service: "wattsteer-ml",
+      version: "0.1.0",
+      environment: "test",
+      database_configured: false,
+      database_access: "read-only",
+      artifacts: {
+        path: "/data/models",
+        mounted: false,
+        writable: false,
+        count: 0,
+        lanes: [],
+        promotion_log: { path: "/data/models/promotions.jsonl", decisions: 0 },
+        unrecognised: [],
+      },
+      ...(census === undefined ? {} : { declines: census }),
+    });
 }
 
 interface WireFigure {

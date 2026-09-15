@@ -276,7 +276,7 @@ function ProfileCard() {
   const envelope = `${line((p) => p.p90)} ${HOURLY_PROFILE.map(
     (point, i) =>
       `L${x(HOURLY_PROFILE.length - 1 - i).toFixed(1)} ${y(
-        (HOURLY_PROFILE[HOURLY_PROFILE.length - 1 - i] as typeof point).p10,
+        (HOURLY_PROFILE.at(-1 - i) as typeof point).p10,
       ).toFixed(1)}`,
   ).join(" ")} Z`;
 

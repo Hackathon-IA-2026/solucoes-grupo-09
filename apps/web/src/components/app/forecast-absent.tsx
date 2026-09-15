@@ -65,7 +65,7 @@ export function ForecastAbsent({
           note,
         ]}
       />
-      {serving.status !== "known" ? null : (
+      {serving.status === "known" ? (
         <View
           style={{
             flexDirection: "row",
@@ -115,7 +115,7 @@ export function ForecastAbsent({
             ))
           )}
         </View>
-      )}
+      ) : null}
       {serving.status === "known" && serving.lanes.length > 0 ? (
         <Text style={{ fontSize: 11, lineHeight: 18, color: colors.inkFaint }}>
           {fill(copy.app.lane.note, { count: String(serving.lanes.length) })}

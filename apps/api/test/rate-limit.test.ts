@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { Elysia } from "elysia";
 import {
   type BucketState,
@@ -33,29 +33,29 @@ import type { ErrorEnvelope } from "../src/errors.js";
  */
 
 describe("clientKey · the hop a trusted proxy set", () => {
-  test("depth 1 takes the last hop, not the first", () => {
+  it("depth 1 takes the last hop, not the first", () => {
     // The first hop is whatever the client typed. Behind one proxy, the last
     // is the only one the proxy itself wrote.
     expect(clientKey("203.0.113.9, 10.0.0.1", "127.0.0.1", 1)).toBe("10.0.0.1");
   });
 
-  test("a forged prefix buys no fresh budget", () => {
+  it("a forged prefix buys no fresh budget", () => {
     const forged = (spoof: string) => clientKey(`${spoof}, 10.0.0.1`, "127.0.0.1", 1);
     expect(forged("1.2.3.4")).toBe(forged("5.6.7.8"));
     expect(forged("1.2.3.4")).toBe("10.0.0.1");
   });
 
-  test("depth 2 takes the second hop from the end", () => {
+  it("depth 2 takes the second hop from the end", () => {
     expect(clientKey("1.1.1.1, 203.0.113.9, 10.0.0.1", "127.0.0.1", 2)).toBe(
       "203.0.113.9",
     );
   });
 
-  test("depth 0 ignores the header entirely", () => {
+  it("depth 0 ignores the header entirely", () => {
     expect(clientKey("203.0.113.9, 10.0.0.1", "127.0.0.1", 0)).toBe("127.0.0.1");
   });
 
-  test("a chain shorter than the trusted depth falls back to the socket", () => {
+  it("a chain shorter than the trusted depth falls back to the socket", () => {
     expect(clientKey("203.0.113.9", "192.168.1.5", 2)).toBe("192.168.1.5");
     expect(clientKey(null, "192.168.1.5")).toBe("192.168.1.5");
     expect(clientKey("", "192.168.1.5")).toBe("192.168.1.5");
@@ -64,7 +64,7 @@ describe("clientKey · the hop a trusted proxy set", () => {
 });
 
 describe("the published budgets", () => {
-  test("are the three the spec publishes", () => {
+  it("are the three the spec publishes", () => {
     // 120 / 30 burst 10 / 200 a day. Invented constants, placed where being
     // wrong is conservative — but published, so they are asserted.
     expect(config.rateLimitMax).toBe(120);
@@ -77,25 +77,25 @@ describe("the published budgets", () => {
 });
 
 describe("classifyTier · three tiers", () => {
-  test("the probes and the docs are unmetered", () => {
+  it("the probes and the docs are unmetered", () => {
     for (const path of ["/", "/health", "/ready", "/docs", "/docs/json"]) {
       expect(classifyTier("GET", path)).toBe(null);
     }
   });
 
-  test("the solver and the replay are the solve tier, by either verb", () => {
+  it("the solver and the replay are the solve tier, by either verb", () => {
     expect(classifyTier("POST", "/v1/optimize")).toBe("solve");
     expect(classifyTier("GET", "/v1/optimize")).toBe("solve");
     expect(classifyTier("POST", "/v1/replay")).toBe("solve");
     expect(isSolvePath("/v1/optimize")).toBe(true);
   });
 
-  test("the replay calendar is a read, not a solve", () => {
+  it("the replay calendar is a read, not a solve", () => {
     // A date picker must not be throttled at the solver's rate.
     expect(classifyTier("GET", "/v1/replay/days")).toBe("read");
   });
 
-  test("everything else is a read", () => {
+  it("everything else is a read", () => {
     expect(classifyTier("GET", "/v1/forecast/day-ahead")).toBe("read");
     expect(classifyTier("GET", "/v1/meta")).toBe("read");
   });
@@ -104,7 +104,7 @@ describe("classifyTier · three tiers", () => {
 describe("consume · the read tier's fixed window", () => {
   const opts = { max: 3, windowMs: 1000 } as const;
 
-  test("allows up to max requests, limits the next", () => {
+  it("allows up to max requests, limits the next", () => {
     const windows = new Map<string, WindowState>();
     for (let i = 0; i < 3; i++) {
       expect(consume(windows, "a", 0, opts).limited).toBe(false);
@@ -114,7 +114,7 @@ describe("consume · the read tier's fixed window", () => {
     expect(fourth.retryAfterSec).toBeGreaterThanOrEqual(1);
   });
 
-  test("resets after the window elapses", () => {
+  it("resets after the window elapses", () => {
     const windows = new Map<string, WindowState>();
     for (let i = 0; i < 4; i++) {
       consume(windows, "a", 0, opts);
@@ -122,7 +122,7 @@ describe("consume · the read tier's fixed window", () => {
     expect(consume(windows, "a", 1001, opts).limited).toBe(false);
   });
 
-  test("tracks clients independently", () => {
+  it("tracks clients independently", () => {
     const windows = new Map<string, WindowState>();
     for (let i = 0; i < 4; i++) {
       consume(windows, "a", 0, opts);
@@ -135,7 +135,7 @@ describe("consumeBucket · the solve tier's token bucket", () => {
   // The published budget: 30 a minute, burst 10.
   const policy = { max: 30, windowMs: 60_000, burst: 10 } as const;
 
-  test("permits a burst of exactly ten, then throttles", () => {
+  it("permits a burst of exactly ten, then throttles", () => {
     const buckets = new Map<string, BucketState>();
     for (let i = 0; i < 10; i++) {
       expect(consumeBucket(buckets, "a", 0, policy).limited).toBe(false);
@@ -145,7 +145,7 @@ describe("consumeBucket · the solve tier's token bucket", () => {
     expect(eleventh.retryAfterSec).toBeGreaterThanOrEqual(1);
   });
 
-  test("refills at the sustained rate — one token every two seconds at 30/min", () => {
+  it("refills at the sustained rate — one token every two seconds at 30/min", () => {
     const buckets = new Map<string, BucketState>();
     for (let i = 0; i < 11; i++) {
       consumeBucket(buckets, "a", 0, policy);
@@ -157,7 +157,7 @@ describe("consumeBucket · the solve tier's token bucket", () => {
     expect(consumeBucket(buckets, "a", 2000, policy).limited).toBe(true);
   });
 
-  test("never refills past the burst capacity", () => {
+  it("never refills past the burst capacity", () => {
     const buckets = new Map<string, BucketState>();
     consumeBucket(buckets, "a", 0, policy);
     // An hour later the bucket is full, not overflowing.
@@ -167,7 +167,7 @@ describe("consumeBucket · the solve tier's token bucket", () => {
     expect(consumeBucket(buckets, "a", 3_600_000, policy).limited).toBe(true);
   });
 
-  test("is what a fixed window is not: no boundary double-spend", () => {
+  it("is what a fixed window is not: no boundary double-spend", () => {
     // A 30/min fixed window lets 60 through across a boundary. The bucket
     // caps any 60-second span at burst + the sustained rate.
     const buckets = new Map<string, BucketState>();
@@ -180,7 +180,7 @@ describe("consumeBucket · the solve tier's token bucket", () => {
     expect(allowed).toBeLessThanOrEqual(policy.burst + policy.max + 1);
   });
 
-  test("tracks clients independently", () => {
+  it("tracks clients independently", () => {
     const buckets = new Map<string, BucketState>();
     for (let i = 0; i < 11; i++) {
       consumeBucket(buckets, "a", 0, policy);
@@ -190,7 +190,7 @@ describe("consumeBucket · the solve tier's token bucket", () => {
 });
 
 describe("sweeping · the maps cannot grow unbounded", () => {
-  test("sweep drops only expired windows", () => {
+  it("sweep drops only expired windows", () => {
     const windows = new Map([
       ["old", { count: 1, resetAt: 10 }],
       ["live", { count: 1, resetAt: 100 }],
@@ -200,7 +200,7 @@ describe("sweeping · the maps cannot grow unbounded", () => {
     expect(windows.has("live")).toBe(true);
   });
 
-  test("sweepBuckets drops buckets that have refilled to capacity", () => {
+  it("sweepBuckets drops buckets that have refilled to capacity", () => {
     const policy = { max: 30, windowMs: 60_000, burst: 10 };
     const buckets = new Map([
       ["full", { tokens: 10, ts: 0 }],
@@ -238,7 +238,7 @@ const hit = (app: ReturnType<typeof makeApp>, path: string, ip: string, method =
   );
 
 describe("rateLimit plugin · the three budgets", () => {
-  test("the read tier refuses past its budget, with the envelope and Retry-After", async () => {
+  it("the read tier refuses past its budget, with the envelope and Retry-After", async () => {
     const app = makeApp();
     for (let i = 0; i < 3; i++) {
       expect((await hit(app, "/v1/meta", "1.1.1.1")).status).toBe(200);
@@ -255,7 +255,7 @@ describe("rateLimit plugin · the three budgets", () => {
     expect(body.error.details?.retry_after_sec).toBe(retryAfter);
   });
 
-  test("the solve tier permits a burst of ten back to back, then throttles", async () => {
+  it("the solve tier permits a burst of ten back to back, then throttles", async () => {
     const app = makeApp();
     for (let i = 0; i < 10; i++) {
       expect((await hit(app, "/v1/optimize", "2.2.2.2", "POST")).status).toBe(200);
@@ -265,7 +265,7 @@ describe("rateLimit plugin · the three budgets", () => {
     expect(((await eleventh.json()) as ErrorEnvelope).error.details?.tier).toBe("solve");
   });
 
-  test("the tiers are three budgets, not one", async () => {
+  it("the tiers are three budgets, not one", async () => {
     const app = makeApp();
     // Spend the read tier dry…
     for (let i = 0; i < 4; i++) {
@@ -279,7 +279,7 @@ describe("rateLimit plugin · the three budgets", () => {
     }
   });
 
-  test("a forged forwarded-for prefix does not reset the budget", async () => {
+  it("a forged forwarded-for prefix does not reset the budget", async () => {
     const app = makeApp();
     // Same real client (last hop), four different forged first hops.
     for (let i = 0; i < 3; i++) {
@@ -288,7 +288,7 @@ describe("rateLimit plugin · the three budgets", () => {
     expect((await hit(app, "/v1/meta", "9.9.9.99, 10.0.0.7")).status).toBe(429);
   });
 
-  test("other clients are unaffected", async () => {
+  it("other clients are unaffected", async () => {
     const app = makeApp();
     for (let i = 0; i < 4; i++) {
       await hit(app, "/v1/meta", "4.4.4.4");
@@ -296,7 +296,7 @@ describe("rateLimit plugin · the three budgets", () => {
     expect((await hit(app, "/v1/meta", "5.5.5.5")).status).toBe(200);
   });
 
-  test("a zero budget disables that tier", async () => {
+  it("a zero budget disables that tier", async () => {
     const app = new Elysia()
       .use(
         rateLimit({
@@ -316,7 +316,7 @@ describe("rateLimit plugin · the three budgets", () => {
     }
   });
 
-  test("a CORS preflight is never metered", async () => {
+  it("a CORS preflight is never metered", async () => {
     const app = makeApp();
     for (let i = 0; i < 10; i++) {
       const res = await hit(app, "/v1/meta", "6.6.6.6", "OPTIONS");
@@ -326,7 +326,7 @@ describe("rateLimit plugin · the three budgets", () => {
 });
 
 describe("rateLimit plugin · the counter is a seam", () => {
-  test("two apps sharing one store share one budget", async () => {
+  it("two apps sharing one store share one budget", async () => {
     // This is the property that makes a second replica safe: the budget is a
     // property of the store, not of the process. With Redis as the store it is
     // literally two processes (see rate-limit-redis.test.ts); with the memory
@@ -341,7 +341,7 @@ describe("rateLimit plugin · the counter is a seam", () => {
     expect((await hit(b, "/v1/meta", "7.7.7.7")).status).toBe(429);
   });
 
-  test("the fallback store says what it is", () => {
+  it("the fallback store says what it is", () => {
     const store = memoryStore();
     expect(store.kind).toBe("memory");
     expect(store.detail).toContain("per-process");

@@ -8,7 +8,9 @@ import {
   regimeForDate,
 } from "../src/ingest/ons/daily-load.js";
 import { localDayInterval } from "../src/ingest/time.js";
-import packageShow from "./fixtures/ons/package-show-carga-energia.json";
+import packageShow from "./fixtures/ons/package-show-carga-energia.json" with {
+  type: "json",
+};
 
 // Seam 1 — the daily-load adapter, driven by real payloads captured from ONS on
 // 2026-08-28. Provenance is in `fixtures/ons/FIXTURES.md`.

@@ -84,7 +84,8 @@ export default function Root({ children }: PropsWithChildren) {
           <style
             // biome-ignore lint/security/noDangerouslySetInnerHtml: static critical CSS
             dangerouslySetInnerHTML={{
-              __html: `[data-noscript-only]{display:flex!important}`,
+              // biome-ignore lint/security/noSecrets: a CSS rule, read as high entropy because it has no spaces
+              __html: "[data-noscript-only]{display:flex!important}",
             }}
           />
         </noscript>

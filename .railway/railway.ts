@@ -22,11 +22,12 @@
  *    deploy, before the root directory was set.
  *
  * 2. `restartPolicyType: "ON_FAILURE"` — **and here the pull was right.** It
- *    looked like the same kind of loss and it is not: `ON_FAILURE` is Railway's
- *    *default* policy, so the platform stores nothing for it and never reads it
- *    back. Declaring it produced a plan that reported the same four changes on
- *    every run and applied them into nothing. `RESTART_RETRIES` below states
- *    the only part of the policy that actually differs from the platform.
+ *    looked like the same kind of loss and it is not: `ON_FAILURE` is
+ *    Railway's *default* policy, so the platform stores nothing for it and
+ *    never reads it back. Declaring it produced a plan that reported the same
+ *    four changes on every run and applied them into nothing.
+ *    `RESTART_RETRIES` below states the only part of the policy that actually
+ *    differs from the platform.
  *
  * `preserve()` keeps each variable's value on Railway rather than in git. The
  * generated `*.up.railway.app` domains are deliberately absent: IaC does not

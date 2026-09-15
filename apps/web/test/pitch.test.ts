@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { en } from "../src/i18n/copy.en";
@@ -49,7 +49,7 @@ function code(path: string): string {
 }
 
 describe("the pitch deck asset", () => {
-  test("the file the screen points at exists and is a real PDF", () => {
+  it("the file the screen points at exists and is a real PDF", () => {
     // Not `existsSync` alone: a zero-byte or truncated placeholder would
     // satisfy that and still render a blank frame, which is the whole defect.
     const bytes = readFileSync(DECK);
@@ -59,7 +59,7 @@ describe("the pitch deck asset", () => {
     expect(bytes.subarray(-2048).toString("latin1")).toContain("%%EOF");
   });
 
-  test("it is addressed from one constant, not a literal in the screen", () => {
+  it("it is addressed from one constant, not a literal in the screen", () => {
     // The screen, the fallback link and this test all read the same string.
     // A path spelled out twice is a path that can be renamed once.
     const screen = code(SCREEN);
@@ -69,7 +69,7 @@ describe("the pitch deck asset", () => {
     expect(PITCH_PATH).toBe("/pitch");
   });
 
-  test("it is served from public/, which both build steps carry", () => {
+  it("it is served from public/, which both build steps carry", () => {
     // `public/` is copied verbatim into `dist/` by `expo export` and into the
     // build stage by the Dockerfile. The Dockerfile copies a hand-written list
     // of paths rather than the whole app — `metro.config.js` was once left off
@@ -79,7 +79,7 @@ describe("the pitch deck asset", () => {
     expect(source(join(WEB, "Dockerfile"))).toContain("COPY apps/web/public");
   });
 
-  test("the server answers the deck uncompressed", () => {
+  it("the server answers the deck uncompressed", () => {
     // `server.ts` gzips by content type. A PDF is already deflate-compressed
     // internally, and gzipping it would cost CPU on every request for nothing;
     // the regex must therefore not match `application/pdf`. Asserted against
@@ -98,14 +98,14 @@ describe("the pitch deck asset", () => {
 describe("the /pitch route", () => {
   const screen = code(SCREEN);
 
-  test("the route file is where expo-router will find `/pitch`", () => {
+  it("the route file is where expo-router will find `/pitch`", () => {
     // File-based routing: `src/app/pitch.tsx` is the route, and a default
     // export is what the router mounts.
     expect(statSync(SCREEN).isFile()).toBe(true);
     expect(screen).toMatch(/export default function Pitch\(/);
   });
 
-  test("the embed is web-only and has an accessible name", () => {
+  it("the embed is web-only and has an accessible name", () => {
     // `<iframe>` has no React Native counterpart, so it sits behind the same
     // Platform guard the rest of the app uses for web-only rendering.
     expect(screen).toContain("<iframe");
@@ -115,7 +115,7 @@ describe("the /pitch route", () => {
     expect(screen).toMatch(/title=\{title\}/);
   });
 
-  test("the way to the file is a plain anchor, not a router Link", () => {
+  it("the way to the file is a plain anchor, not a router Link", () => {
     // The deck is a static asset, not a route. `Link` would resolve
     // `/wattsteer-pitch.pdf` against the route tree and land on the 404.
     expect(screen).toMatch(/<a\s+href=\{PITCH_PDF_PATH\}/);
@@ -127,7 +127,7 @@ describe("the /pitch route", () => {
     expect("<Link href={PITCH_PDF_PATH}>").toMatch(/<Link[^>]*PITCH_PDF_PATH/);
   });
 
-  test("the fallback link is not conditional on the embed failing", () => {
+  it("the fallback link is not conditional on the embed failing", () => {
     // A browser set to download PDFs shows an empty frame and no error, so
     // there is nothing to fall back *from*. The link is unconditional; only
     // the iframe is guarded.
@@ -136,7 +136,7 @@ describe("the /pitch route", () => {
     expect(screen).toMatch(/<PitchPdfLink label=\{copy\.pitch\.openLabel\}/);
   });
 
-  test("it declares noindex and emits no locale canonical", () => {
+  it("it declares noindex and emits no locale canonical", () => {
     // One PDF, one URL. `SeoHead` would assert a canonical per locale and an
     // hreflang pair between two pages whose indexable content is identical.
     expect(screen).toContain('content="noindex,follow"');
@@ -144,7 +144,7 @@ describe("the /pitch route", () => {
     expect(screen).not.toContain("alternatesFor");
   });
 
-  test("the sitemap leaves it out, consistently with that", () => {
+  it("the sitemap leaves it out, consistently with that", () => {
     // Listing a noindexed URL in a sitemap is a contradiction, not a hint —
     // the same rule that keeps the gate and /app out of it.
     const sitemap = source(join(PUBLIC, "sitemap.xml"));
@@ -155,7 +155,7 @@ describe("the /pitch route", () => {
     expect(source(join(PUBLIC, "robots.txt"))).not.toMatch(/^Disallow:/m);
   });
 
-  test("the export is required to produce it, once and outside the locale tree", () => {
+  it("the export is required to produce it, once and outside the locale tree", () => {
     // `localize-export.ts` is the last point in the build that can still see
     // the difference between a page that shipped and a page that did not, and
     // it exits non-zero rather than shipping a gap. The deck's two artifacts
@@ -195,7 +195,7 @@ describe("the pitch copy", () => {
     "slideAlt",
   ] as const;
 
-  test("every string the screen renders resolves in both locales", () => {
+  it("every string the screen renders resolves in both locales", () => {
     // `Copy` already makes a *missing* key a compile error. What it cannot see
     // is a key that resolves to nothing, which renders as a gap on the page.
     for (const key of KEYS) {
@@ -206,7 +206,7 @@ describe("the pitch copy", () => {
     expect(Object.keys(en.pitch).sort()).toEqual([...KEYS].sort());
   });
 
-  test("Portuguese is written, not copied from English", () => {
+  it("Portuguese is written, not copied from English", () => {
     // The repo-wide version of this lives in `i18n.test.ts`; asserted here too
     // because a new screen is exactly where an untranslated placeholder gets
     // in, and the global check only inspects strings over 24 characters.
@@ -215,7 +215,7 @@ describe("the pitch copy", () => {
     }
   });
 
-  test("something renders every one of them", () => {
+  it("something renders every one of them", () => {
     /*
       A key nothing renders is copy a translator maintains for nobody. Most are
       the screen's; `footerLink` is the *footer's* link to the screen, `navLink`
@@ -234,8 +234,8 @@ describe("the pitch copy", () => {
       slideAlt: deck,
     };
     for (const key of KEYS) {
-      const source = RENDERER[key] ?? screen;
-      expect([key, source.includes(`copy.pitch.${key}`)]).toEqual([key, true]);
+      const rendered = RENDERER[key] ?? screen;
+      expect([key, rendered.includes(`copy.pitch.${key}`)]).toEqual([key, true]);
     }
   });
 });
@@ -245,7 +245,7 @@ describe("the deck section on the landing page", () => {
   const SLIDE = join(WEB, "assets", "images", "pitch-slide-1.webp");
   const HOME = join(WEB, "src", "app", "[locale]", "index.tsx");
 
-  test("the landing page renders it, with a section id the nav can reach", () => {
+  it("the landing page renders it, with a section id the nav can reach", () => {
     // Without an `id` the section is not addressable by a fragment, which is
     // the whole reason it is a `Section` rather than a bare `View`.
     const home = code(HOME);
@@ -253,7 +253,7 @@ describe("the deck section on the landing page", () => {
     expect(home).toMatch(/id="deck"[\s\S]{0,120}onSectionLayout=\{onSectionLayout\}/);
   });
 
-  test("it does not embed the PDF", () => {
+  it("it does not embed the PDF", () => {
     /*
       The three measured reasons are in `deck.tsx`'s header: a wheel over a PDF
       iframe scrolls the PDF rather than the page, which is a scroll trap in the
@@ -276,7 +276,7 @@ describe("the deck section on the landing page", () => {
     expect(screen).toContain("PITCH_PDF_PATH");
   });
 
-  test("the action is a real anchor to the route, not a button", () => {
+  it("the action is a real anchor to the route, not a button", () => {
     // `CtaLink` is the site's pill-that-is-an-`<a>`; `PillButton` renders a
     // `<div role="button">` with no href, which a crawler cannot follow and a
     // reader cannot middle-click. `PITCH_PATH` rather than a literal, for the
@@ -287,7 +287,7 @@ describe("the deck section on the landing page", () => {
     expect(deck).not.toMatch(/href="\/pitch"/);
   });
 
-  test("the slide preview is a bundled asset, and a small one", () => {
+  it("the slide preview is a bundled asset, and a small one", () => {
     /*
       The point of previewing slide one rather than embedding the deck is that
       it costs a fraction of it. Measured: 34,266 bytes of WebP against 706,193
@@ -309,7 +309,7 @@ describe("the deck section on the landing page", () => {
 });
 
 describe("the deck is reachable without knowing its URL", () => {
-  test("the footer links to it", () => {
+  it("the footer links to it", () => {
     /*
       The route shipped with nothing pointing at it: reachable only to someone
       already holding the URL. It sits in the footer's link row beside the

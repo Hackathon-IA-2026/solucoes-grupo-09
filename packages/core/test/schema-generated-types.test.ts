@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { generatedSource } from "../scripts/generate-types.js";
@@ -26,7 +26,7 @@ import type { WireErrorCode } from "../src/types.generated.js";
  */
 
 describe("the checked-in generated types are current", () => {
-  test("regenerating produces the file that is committed", () => {
+  it("regenerating produces the file that is committed", () => {
     const committed = readFileSync(
       join(import.meta.dir, "..", "src", "types.generated.ts"),
       "utf8",
@@ -36,7 +36,7 @@ describe("the checked-in generated types are current", () => {
     expect(generatedSource).toBe(committed);
   });
 
-  test("every schema file contributed at least one type", () => {
+  it("every schema file contributed at least one type", () => {
     // A guard on the guard. A generator that silently skipped a file would
     // leave the assertion above passing and half the contract untyped.
     const missing: string[] = [];
@@ -79,16 +79,16 @@ describe("the error code enum has one definition and one restatement", () => {
   };
   const schemaCodes = errorSchema.properties.error.properties.code.enum;
 
-  test("the schema names every code the TypeScript table declares", () => {
+  it("the schema names every code the TypeScript table declares", () => {
     expect([...schemaCodes].sort()).toEqual([...ERROR_CODES].sort());
   });
 
-  test("the schema invents no code the table has never heard of", () => {
+  it("the schema invents no code the table has never heard of", () => {
     const unknown = schemaCodes.filter((code) => !(code in ERROR_STATUS));
     expect(unknown).toEqual([]);
   });
 
-  test("the generated wire type is the same union", () => {
+  it("the generated wire type is the same union", () => {
     // A type-level assertion, checked by `bun run typecheck` rather than at
     // runtime: assigning every runtime code to the generated union fails to
     // compile the moment the two drift.

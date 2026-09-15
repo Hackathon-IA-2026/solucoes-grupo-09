@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -72,11 +72,11 @@ const published = {
 };
 
 describe("the published constants match the shared vector", () => {
-  test("every published value, compared whole", () => {
+  it("every published value, compared whole", () => {
     expect(published).toEqual(VECTOR as typeof published);
   });
 
-  test("the vector introduces no section this side does not publish", () => {
+  it("the vector introduces no section this side does not publish", () => {
     expect(Object.keys(VECTOR).sort()).toEqual(Object.keys(published).sort());
   });
 });
@@ -84,25 +84,25 @@ describe("the published constants match the shared vector", () => {
 describe("the rules the constants have to satisfy to be publishable", () => {
   const load = REFERENCE_FLEET.shiftableLoad;
 
-  test("the reference load cannot shed more power than it draws", () => {
+  it("the reference load cannot shed more power than it draws", () => {
     // `SHIFT_EXCEEDS_BASELINE` in `docs/specs/flex-optimizer.md`. The
     // prototype's 70 MW against 1,200 MWh/day failed this, which is why the
     // constant exists in this shape at all.
     expect(load.maxShiftMw).toBeLessThanOrEqual(load.dailyEnergyMwh / 24);
   });
 
-  test("the reference load's shift fits inside its connection", () => {
+  it("the reference load's shift fits inside its connection", () => {
     // `SHIFT_EXCEEDS_CONNECTION`.
     expect(load.maxShiftMw).toBeLessThanOrEqual(load.maxPowerMw);
   });
 
-  test("the fleet is not one rounding away from a 422", () => {
+  it("the fleet is not one rounding away from a 422", () => {
     // The reason neither single-field repair was taken: both sat at 98.8 % and
     // exactly 100 % of the cap. Anything above ~90 % is back on the boundary.
     expect(load.maxShiftMw / (load.dailyEnergyMwh / 24)).toBeLessThan(0.9);
   });
 
-  test("the battery's state of charge and efficiency are fractions", () => {
+  it("the battery's state of charge and efficiency are fractions", () => {
     expect(REFERENCE_FLEET.battery.initialStateOfCharge).toBeGreaterThanOrEqual(0);
     expect(REFERENCE_FLEET.battery.initialStateOfCharge).toBeLessThanOrEqual(1);
     // `RTE_OUT_OF_RANGE`: [0.50, 1.00).
@@ -110,7 +110,7 @@ describe("the rules the constants have to satisfy to be publishable", () => {
     expect(REFERENCE_FLEET.battery.roundTripEfficiency).toBeLessThan(1);
   });
 
-  test("there are exactly four subsystems and SIN is not one of them", () => {
+  it("there are exactly four subsystems and SIN is not one of them", () => {
     expect(SUBSYSTEMS).toHaveLength(4);
     expect(SUBSYSTEMS.map((s) => String(s.code))).not.toContain("SIN");
   });

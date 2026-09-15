@@ -77,8 +77,7 @@ export const pt: Copy = {
     OPTIMIZER_NOT_CONFIGURED:
       "O otimizador não está configurado nesta instalação, então cenários não podem ser resolvidos aqui.",
     OPTIMIZER_UNAVAILABLE: "Não foi possível alcançar o otimizador.",
-    VOICE_NOT_CONFIGURED:
-      "A voz não está configurada nesta instalação.",
+    VOICE_NOT_CONFIGURED: "A voz não está configurada nesta instalação.",
     VOICE_UNAVAILABLE: "Não foi possível iniciar a sessão de voz.",
     OPTIMIZER_TIMEOUT: "O otimizador não respondeu a tempo.",
     OPTIMIZER_NOT_READY: "O otimizador está subindo e ainda não consegue resolver.",

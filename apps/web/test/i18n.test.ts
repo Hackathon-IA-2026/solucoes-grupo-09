@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { DRIVERS } from "../src/components/landing/fixtures";
@@ -41,22 +41,22 @@ const PT = flat(pt);
 const EN = flat(en);
 
 describe("i18n", () => {
-  test("Portuguese is the default locale", () => {
+  it("Portuguese is the default locale", () => {
     // A product decision, not a fallback: the audience is Brazilian.
     expect(DEFAULT_LOCALE).toBe("pt");
     expect(LOCALES[0]).toBe("pt");
   });
 
-  test("both locales carry exactly the same keys", () => {
+  it("both locales carry exactly the same keys", () => {
     expect([...PT.keys()].sort()).toEqual([...EN.keys()].sort());
   });
 
-  test("no string is empty or whitespace in either locale", () => {
+  it("no string is empty or whitespace in either locale", () => {
     const empty = [...PT, ...EN].filter(([, value]) => value.trim() === "");
     expect(empty.map(([key]) => key)).toEqual([]);
   });
 
-  test("the section targets are identical — they are ids, not copy", () => {
+  it("the section targets are identical — they are ids, not copy", () => {
     // `nav.links[].target` addresses a scroll anchor. Translating one would
     // break navigation in that locale only, which is the kind of bug that
     // hides until someone switches language.
@@ -65,7 +65,7 @@ describe("i18n", () => {
     expect(targets(PT)).toEqual(targets(EN));
   });
 
-  test("Portuguese is not just the English strings copied over", () => {
+  it("Portuguese is not just the English strings copied over", () => {
     // A locale that silently duplicates English would satisfy every other
     // check here. Prose must actually differ; notation legitimately does not.
     const NOTATION = new Set([
@@ -87,7 +87,7 @@ describe("i18n", () => {
     expect(prose.length).toBeGreaterThan(20);
   });
 
-  test("quantile notation stays verbatim in both locales", () => {
+  it("quantile notation stays verbatim in both locales", () => {
     expect(PT.get("band.rangeLabel")).toBe("P10–P90");
     expect(EN.get("band.rangeLabel")).toBe("P10–P90");
   });
@@ -137,7 +137,7 @@ const UNRENDERED: ReadonlyMap<string, string> = new Map([
 ]);
 
 describe("every string in the dictionaries reaches a screen", () => {
-  test("no key is written and never rendered", () => {
+  it("no key is written and never rendered", () => {
     // A leaf is rendered if its own path is referenced, or if any ancestor is
     // referenced *as a whole value* — `copy.provenance.sources.map(…)` renders
     // every leaf under it. Distinguishing the two is the whole difficulty:
@@ -185,7 +185,7 @@ describe("every string in the dictionaries reaches a screen", () => {
     expect(dead).toEqual([]);
   });
 
-  test("nothing is exempted that the source does render", () => {
+  it("nothing is exempted that the source does render", () => {
     // The exemption list is the part of this test that rots. A key that has
     // since been wired up must leave the list, or the list stops meaning
     // "these are the strings no screen can reach".
@@ -197,7 +197,7 @@ describe("every string in the dictionaries reaches a screen", () => {
 });
 
 describe("the landing page claims the product's own grain", () => {
-  test("every driver it draws is one the Diagnosis engine reports", () => {
+  it("every driver it draws is one the Diagnosis engine reports", () => {
     // The eight groups are the players in the Shapley game; `other` is the
     // client's merged remainder. A feature name here would be a bar for an
     // attribution no model produces — which is what this panel used to draw.
@@ -209,7 +209,7 @@ describe("the landing page claims the product's own grain", () => {
     expect(groups).toHaveLength(8);
   });
 
-  test("there is one dictionary of driver words, not two", () => {
+  it("there is one dictionary of driver words, not two", () => {
     // The landing page carried its own `showcase.explain.drivers` map. Two
     // dictionaries for one set is how the two surfaces drifted apart in the
     // first place, and a renamed group would only have reached one of them.
@@ -223,7 +223,7 @@ describe("the landing page claims the product's own grain", () => {
 });
 
 describe("no call to action promises more than /app serves", () => {
-  test("the product links do not describe fixtures as live data", () => {
+  it("the product links do not describe fixtures as live data", () => {
     // `APP_HREF` is `/app`, whose chrome stamps `PROTOTYPE · FIXTURE DATA`:
     // Grid Overview and Explain build every figure from `@/lib/fixtures` and
     // issue no request. A button reading "Open the live grid" contradicted the
@@ -300,7 +300,7 @@ describe("the hero says it in the deck's voice", () => {
     ["pt", PT],
     ["en", EN],
   ] as const) {
-    test(`${name}: the eyebrow fits the pill on one line at 400px`, () => {
+    it(`${name}: the eyebrow fits the pill on one line at 400px`, () => {
       const eyebrow = dict.get("hero.eyebrow") ?? "";
       expect([name, eyebrow.length, eyebrow.length <= EYEBROW_BUDGET]).toEqual([
         name,
@@ -309,7 +309,7 @@ describe("the hero says it in the deck's voice", () => {
       ]);
     });
 
-    test(`${name}: the subtitle is a subtitle, not the page's argument`, () => {
+    it(`${name}: the subtitle is a subtitle, not the page's argument`, () => {
       const sub = dict.get("hero.sub") ?? "";
       expect([name, sub.length, sub.length <= SUB_BUDGET]).toEqual([
         name,
@@ -319,7 +319,7 @@ describe("the hero says it in the deck's voice", () => {
     });
   }
 
-  test("the hero never promises a forecast this deployment can serve", () => {
+  it("the hero never promises a forecast this deployment can serve", () => {
     // No artifact is promoted, so every forecasting surface answers `pending`
     // or a named refusal. The hero may say what the product is; it may not
     // tell a visitor that a forecast is waiting for them. A present-tense

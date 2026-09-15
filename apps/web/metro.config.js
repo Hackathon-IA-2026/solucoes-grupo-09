@@ -22,6 +22,10 @@
 const path = require("node:path");
 const { getDefaultConfig } = require("expo/metro-config");
 
+// Metro loads this file as CommonJS — `require` above, `module.exports` below
+// — and `import.meta` is a syntax error there, so `__dirname` is the only
+// spelling this file can use.
+// biome-ignore lint/correctness/noGlobalDirnameFilename: CommonJS module; import.meta is a syntax error here
 const projectRoot = __dirname;
 const workspaceRoot = path.resolve(projectRoot, "..", "..");
 

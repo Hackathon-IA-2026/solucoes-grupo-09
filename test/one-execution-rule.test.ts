@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 
@@ -478,7 +478,7 @@ function sourceFiles(): string[] {
 describe("the detector is calibrated", () => {
   // Before the scan is evidence of anything, it has to be able to fail.
   for (const [name, suffix, source] of POSITIVE_CONTROLS) {
-    test(`a second implementation in ${name} is detected`, () => {
+    it(`a second implementation in ${name} is detected`, () => {
       const missing = CONCEPT_NAMES.filter(
         (each) => !conceptsIn(codeOf(suffix, source)).includes(each),
       );
@@ -487,14 +487,14 @@ describe("the detector is calibrated", () => {
   }
 
   for (const [name, suffix, source] of NEGATIVE_CONTROLS) {
-    test(`${name} is not detected`, () => {
+    it(`${name} is not detected`, () => {
       // Tightening the detector until a real failure goes away breaks this
       // first, and the next author deletes the guard rather than argue with it.
       expect(implementsTheRule(suffix, source)).toBe(false);
     });
   }
 
-  test("a round-trip factor written as a bare decimal is still an efficiency", () => {
+  it("a round-trip factor written as a bare decimal is still an efficiency", () => {
     // The signal, asserted at the signal rather than only through a verdict:
     // the concept has to come from `SCALED_LEG` and not from a name, or the
     // control above would pass for the wrong reason.
@@ -506,7 +506,7 @@ describe("the detector is calibrated", () => {
   });
 
   for (const [name, suffix, source] of CHART_ARITHMETIC) {
-    test(`${name} is not an efficiency`, () => {
+    it(`${name} is not an efficiency`, () => {
       // Widening `SCALED_LEG` past a leg's own line breaks these first. The
       // third case is the one that matters: a decimal *and* a state of charge
       // in the same file, on different lines, which an unscoped signal cannot
@@ -515,7 +515,7 @@ describe("the detector is calibrated", () => {
     });
   }
 
-  test("the registered site is detected", () => {
+  it("the registered site is detected", () => {
     // The scan's own positive control, on the real file. If the one
     // implementation stops looking like the execution rule, either it moved or
     // the detector went blind — and either way the repository-wide assertion
@@ -531,7 +531,7 @@ describe("the detector is calibrated", () => {
 });
 
 describe("there is exactly one implementation of the execution rule", () => {
-  test("no other file in the repository implements it", () => {
+  it("no other file in the repository implements it", () => {
     const found = sourceFiles().filter((path) =>
       implementsTheRule(suffixOf(path), readFileSync(join(ROOT, path), "utf8")),
     );
@@ -554,7 +554,7 @@ describe("there is exactly one implementation of the execution rule", () => {
     expect(missing).toEqual([]);
   });
 
-  test("the scan actually read the repository", () => {
+  it("the scan actually read the repository", () => {
     // A walk that found nothing would pass every assertion above.
     const files = sourceFiles();
     expect(files.length).toBeGreaterThan(200);

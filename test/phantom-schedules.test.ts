@@ -151,7 +151,7 @@ const DOC_FILES = ["README.md"];
 
 function walkFiles(
   dir: string,
-  test: (name: string) => boolean,
+  matches: (name: string) => boolean,
   out: string[],
 ): string[] {
   let entries: string[];
@@ -166,8 +166,8 @@ function walkFiles(
     }
     const path = join(dir, entry);
     if (statSync(path).isDirectory()) {
-      walkFiles(path, test, out);
-    } else if (test(entry)) {
+      walkFiles(path, matches, out);
+    } else if (matches(entry)) {
       out.push(relative(ROOT, path));
     }
   }
@@ -288,9 +288,12 @@ export function claimedSchedules(docs: Map<string, string>): ClaimedSchedule[] {
       while (j < lines.length && isTableRow(lines[j] as string)) {
         j += 1;
       }
+      // `i` is the loop's own cursor and moves below; the row numbers are read
+      // off a fixed copy of where this table started.
+      const start = i;
       const rows = lines
-        .slice(i, j)
-        .map((line, k) => ({ at: i + k, cells: cellsOf(line) }));
+        .slice(start, j)
+        .map((line, k) => ({ at: start + k, cells: cellsOf(line) }));
       const schedules = rows.filter((row) => codeSpans(row.cells[1] ?? "").some(isCron));
       if (schedules.length > 0) {
         for (const row of rows) {

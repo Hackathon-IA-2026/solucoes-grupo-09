@@ -106,7 +106,7 @@ export function parseHoldoutBackfill(payload: unknown): HoldoutBackfill {
   const envelope = text(payload, "origin_kind");
   if (envelope !== BACKFILLED_HOLDOUT) {
     throw new HoldoutBackfillError(
-      `a backtest run persists reconstructions and nothing else; this one ` +
+      "a backtest run persists reconstructions and nothing else; this one " +
         `claims origin_kind ${envelope}. A counterfactual published_at under ` +
         "the served discriminator is a forecast the product never made wearing " +
         "the badge of one it did",

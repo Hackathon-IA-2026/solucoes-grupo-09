@@ -12,7 +12,7 @@
  * plan, and a route defined and mounted nowhere.
  */
 
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import {
   allSources,
   configKeys,
@@ -64,7 +64,7 @@ function synthetic(file: string, text: string): Source {
 }
 
 describe("the stripper does not eat its own input", () => {
-  test("a line comment containing a block-open costs nothing", () => {
+  it("a line comment containing a block-open costs nothing", () => {
     // api-surface 25's third defect, on the file it was found in: `api/grid.ts`
     // has a `//` comment containing `/*`, and a scanner that removed block
     // comments first deleted a hundred lines of route code from there on.
@@ -81,13 +81,13 @@ describe("the stripper does not eat its own input", () => {
     expect(grid.code.length).toBe(grid.text.length);
   });
 
-  test("a block comment naming a symbol does not count as a reference", () => {
+  it("a block comment naming a symbol does not count as a reference", () => {
     const stripped = stripCode("/** createFooIngestor is nice. */\nconst x = 1;\n");
     expect(stripped).not.toContain("createFooIngestor");
     expect(stripped).toContain("const x = 1;");
   });
 
-  test("a `//` inside a string literal is not a comment, and strings survive", () => {
+  it("a `//` inside a string literal is not a comment, and strings survive", () => {
     const stripped = stripCode('const u = "https://x/y"; const v = 2;\n');
     expect(stripped).toContain('"https://x/y"');
     expect(stripped).toContain("const v = 2;");
@@ -95,21 +95,21 @@ describe("the stripper does not eat its own input", () => {
 });
 
 describe("the corpus is discovered, and it is not empty", () => {
-  test("the walk finds the product, the app and the packages", () => {
+  it("the walk finds the product, the app and the packages", () => {
     expect(SRC.length).toBeGreaterThanOrEqual(150);
     for (const root of ["apps/api/src/", "apps/web/src/", "packages/core/src/"]) {
       expect(SRC.some((one) => one.file.startsWith(root))).toBe(true);
     }
   });
 
-  test("tests are separated from the product, and both exist", () => {
+  it("tests are separated from the product, and both exist", () => {
     expect(ALL.filter((one) => isTestFile(one.file)).length).toBeGreaterThanOrEqual(20);
     expect(SRC.every((one) => !isTestFile(one.file))).toBe(true);
   });
 });
 
 describe("every wired unit has a call site", () => {
-  test("the convention governs a real population", () => {
+  it("the convention governs a real population", () => {
     // The non-vacuity floor. If the repo renamed its factories tomorrow this
     // drops to zero and fails here rather than passing green over nothing.
     expect(UNITS.length).toBeGreaterThanOrEqual(15);
@@ -117,11 +117,11 @@ describe("every wired unit has a call site", () => {
     expect(UNITS.some((one) => one.name.endsWith("Routes"))).toBe(true);
   });
 
-  test("no ingestor or route factory is reachable from nothing", () => {
+  it("no ingestor or route factory is reachable from nothing", () => {
     expect(orphanUnits(UNITS).map(describeOrphan)).toEqual([]);
   });
 
-  test("ticket 03's defect is red — an ingestor named only by its barrel", () => {
+  it("ticket 03's defect is red — an ingestor named only by its barrel", () => {
     const corpus: Source[] = [
       synthetic(
         "apps/api/src/ingest/constrained-off-detail-job.ts",
@@ -149,7 +149,7 @@ describe("every wired unit has a call site", () => {
     expect(orphans[0]?.tests.length).toBe(1);
   });
 
-  test("a factory the dispatcher constructs is not an orphan", () => {
+  it("a factory the dispatcher constructs is not an orphan", () => {
     const corpus: Source[] = [
       synthetic(
         "apps/api/src/ingest/foo-job.ts",
@@ -167,7 +167,7 @@ describe("every wired unit has a call site", () => {
     expect(orphanUnits(wiredUnits(corpus))).toEqual([]);
   });
 
-  test("an empty corpus throws rather than reporting no orphans", () => {
+  it("an empty corpus throws rather than reporting no orphans", () => {
     // The vacuity trap this repo has fallen into four times: `[] === []`. The
     // verdict function itself refuses, so the failure lands at the assertion
     // the suite actually runs and not only at a floor beside it.
@@ -175,7 +175,7 @@ describe("every wired unit has a call site", () => {
     expect(() => orphanUnits(wiredUnits([]))).toThrow(/governing nothing/);
   });
 
-  test("a corpus the stripper has emptied throws too", () => {
+  it("a corpus the stripper has emptied throws too", () => {
     // The nastier version of the same thing: the walk found files, and the
     // scanner deleted the code out of them. api-surface 25's defect 3, as an
     // input rather than as a story.
@@ -188,30 +188,30 @@ describe("every wired unit has a call site", () => {
 describe("the ingest queue reaches every kind it declares", () => {
   const kinds = taskKinds(TASKS.code);
 
-  test("the union is non-empty and covers both grains", () => {
+  it("the union is non-empty and covers both grains", () => {
     expect(kinds.length).toBeGreaterThanOrEqual(10);
     expect(kinds).toContain("constrained_off");
     expect(kinds).toContain("constrained_off_detail");
   });
 
-  test("every kind reaches a dispatcher branch", () => {
+  it("every kind reaches a dispatcher branch", () => {
     const dispatched = new Set(dispatchedKinds(DISPATCH.code));
     expect(kinds.filter((kind) => !dispatched.has(kind))).toEqual([]);
   });
 
-  test("the exhaustive default counts, so `plant_registry` is not accused", () => {
+  it("the exhaustive default counts, so `plant_registry` is not accused", () => {
     // The false positive this check is built to avoid: there is no
     // `case "plant_registry":` anywhere in the dispatcher.
     expect(DISPATCH.code).not.toContain('case "plant_registry":');
     expect(dispatchedKinds(DISPATCH.code)).toContain("plant_registry");
   });
 
-  test("every kind is planned by planRefresh", () => {
+  it("every kind is planned by planRefresh", () => {
     const planned = new Set(plannedKinds(REFRESH.code));
     expect(kinds.filter((kind) => !planned.has(kind))).toEqual([]);
   });
 
-  test("a kind added to the union and to nothing else is red twice", () => {
+  it("a kind added to the union and to nothing else is red twice", () => {
     // Added to the real union, exactly as a new source would arrive.
     const drifted = TASKS.code.replace(
       '| { kind: "weather"; payload: IngestWeatherPayload };',
@@ -226,7 +226,7 @@ describe("the ingest queue reaches every kind it declares", () => {
     expect(mutated.filter((kind) => !planned.has(kind))).toEqual(["brand_new_source"]);
   });
 
-  test("deleting the plant-grain plan line turns the plan check red", () => {
+  it("deleting the plant-grain plan line turns the plan check red", () => {
     const withoutDetail = REFRESH.code.replaceAll(
       'kind: "constrained_off_detail"',
       'kind: "x"',
@@ -237,7 +237,7 @@ describe("the ingest queue reaches every kind it declares", () => {
     ]);
   });
 
-  test("an empty tasks file throws rather than reporting zero unreached kinds", () => {
+  it("an empty tasks file throws rather than reporting zero unreached kinds", () => {
     expect(() => taskKinds("")).toThrow(/IngestTask/);
   });
 });
@@ -246,18 +246,18 @@ describe("every ingestion_source member can be produced", () => {
   const members = ingestionSourceMembers(SCHEMA.code);
   const kinds = taskKinds(TASKS.code);
 
-  test("the enum is non-empty and holds both plant-grain members", () => {
+  it("the enum is non-empty and holds both plant-grain members", () => {
     expect(members.length).toBeGreaterThanOrEqual(13);
     expect(members).toContain("constrained_off_wind_detail");
     expect(members).toContain("constrained_off_solar_detail");
   });
 
-  test("`sourceOf` can return every one of them", () => {
+  it("`sourceOf` can return every one of them", () => {
     const producible = new Set(producibleSources(TASKS.code, kinds));
     expect(members.filter((member) => !producible.has(member))).toEqual([]);
   });
 
-  test("data-platform 15's defect is red — a member in the enum and in no plan", () => {
+  it("data-platform 15's defect is red — a member in the enum and in no plan", () => {
     const drifted = SCHEMA.code.replace(
       '"weather",\n]);',
       '"weather",\n  "a_source_with_no_plan",\n]);',
@@ -270,7 +270,7 @@ describe("every ingestion_source member can be produced", () => {
     ]);
   });
 
-  test("an empty schema throws rather than reporting an empty enum", () => {
+  it("an empty schema throws rather than reporting an empty enum", () => {
     expect(() => ingestionSourceMembers("")).toThrow(/ingestion_source/);
   });
 });
@@ -279,19 +279,19 @@ describe("every route object is mounted", () => {
   const objects = routeObjects(SRC);
   const mounted = new Set(mountedRoutes(API_INDEX.code));
 
-  test("the route surface is non-empty and discovered by shape", () => {
+  it("the route surface is non-empty and discovered by shape", () => {
     expect(objects.length).toBeGreaterThanOrEqual(10);
     expect(objects.map((one) => one.name)).toContain("canonicalReads");
     expect(objects.map((one) => one.name)).toContain("replayRoutes");
   });
 
-  test("nothing defines a surface the app does not compose", () => {
+  it("nothing defines a surface the app does not compose", () => {
     expect(
       objects.filter((one) => !mounted.has(one.name)).map((one) => one.file),
     ).toEqual([]);
   });
 
-  test("unmounting one turns it red", () => {
+  it("unmounting one turns it red", () => {
     const without = new Set(
       mountedRoutes(API_INDEX.code.replace(".use(replayRoutes)", "")),
     );
@@ -300,7 +300,7 @@ describe("every route object is mounted", () => {
     ).toEqual(["replayRoutes"]);
   });
 
-  test("a new route module mounted nowhere is red the day it is written", () => {
+  it("a new route module mounted nowhere is red the day it is written", () => {
     const corpus = [
       ...SRC,
       synthetic(
@@ -312,7 +312,7 @@ describe("every route object is mounted", () => {
     expect(fresh.map((one) => one.name)).toEqual(["tariffRoutes"]);
   });
 
-  test("an empty index mounts nothing, and that is a failure not a pass", () => {
+  it("an empty index mounts nothing, and that is a failure not a pass", () => {
     expect(mountedRoutes("")).toEqual([]);
     expect(
       objects.filter((one) => !new Set(mountedRoutes("")).has(one.name)).length,
@@ -323,26 +323,26 @@ describe("every route object is mounted", () => {
 describe("every config key is read", () => {
   const keys = configKeys(CONFIG.code);
 
-  test("the key set is non-empty", () => {
+  it("the key set is non-empty", () => {
     expect(keys.length).toBeGreaterThanOrEqual(25);
     expect(keys).toContain("databaseUrl");
   });
 
-  test("no flag is read nowhere", () => {
+  it("no flag is read nowhere", () => {
     expect(unreadConfigKeys(keys, SRC)).toEqual([]);
   });
 
-  test("a key nothing reads is red", () => {
+  it("a key nothing reads is red", () => {
     expect(unreadConfigKeys([...keys, "aFlagNobodyReads"], SRC)).toEqual([
       "aFlagNobodyReads",
     ]);
   });
 
-  test("an empty config throws rather than reporting zero unread keys", () => {
+  it("an empty config throws rather than reporting zero unread keys", () => {
     expect(() => configKeys("")).toThrow(/config\.ts/);
   });
 
-  test("an empty corpus makes every key unread, rather than none", () => {
+  it("an empty corpus makes every key unread, rather than none", () => {
     expect(unreadConfigKeys(keys, []).length).toBe(keys.length);
   });
 });
@@ -365,7 +365,7 @@ describe("every WorkerTask kind is dispatched and enqueued", () => {
   const producers = scheduleProducers(SRC);
   const enqueued = enqueuedWorkerKinds(producers, SRC);
 
-  test("the union, the dispatcher and the schedules are all non-empty", () => {
+  it("the union, the dispatcher and the schedules are all non-empty", () => {
     // The non-vacuity floor beside the verdict, not instead of it: the verdict
     // functions themselves refuse an empty input, which is what the tests
     // below prove.
@@ -376,7 +376,7 @@ describe("every WorkerTask kind is dispatched and enqueued", () => {
     expect(enqueued.length).toBeGreaterThanOrEqual(5);
   });
 
-  test("the ingest union is folded in and delegated, not branched on", () => {
+  it("the ingest union is folded in and delegated, not branched on", () => {
     // `QueueTask`'s kinds are check 2's business. What has to be true here is
     // that the fall-through exists at all: without it half the union reaches
     // nothing and no `kind:` member would be missing.
@@ -384,11 +384,11 @@ describe("every WorkerTask kind is dispatched and enqueued", () => {
     expect(WORKER_TASKS.code).toMatch(/return ingest\(task, report\);/);
   });
 
-  test("no declared kind is unreached", () => {
+  it("no declared kind is unreached", () => {
     expect(unreachedWorkerKinds(kinds, dispatched, enqueued)).toEqual([]);
   });
 
-  test("no branch or schedule exists for a kind the union does not declare", () => {
+  it("no branch or schedule exists for a kind the union does not declare", () => {
     expect(
       undeclaredWorkerKinds(
         kinds,
@@ -398,7 +398,7 @@ describe("every WorkerTask kind is dispatched and enqueued", () => {
     ).toEqual([]);
   });
 
-  test("`publish_diagnosis` is chained, not scheduled — and that is not a failure", () => {
+  it("`publish_diagnosis` is chained, not scheduled — and that is not a failure", () => {
     // The false positive this check exists not to produce. `publish_diagnosis`
     // is the one row of `docs/specs/api-surface.md`'s job table whose trigger
     // is "on completion of each" rather than a cron, and a check demanding a
@@ -408,7 +408,7 @@ describe("every WorkerTask kind is dispatched and enqueued", () => {
     expect(WORKER_TASKS.code).toContain('submit({ kind: "publish_diagnosis"');
   });
 
-  test("the three inline-literal ingest schedules count as enqueued", () => {
+  it("the three inline-literal ingest schedules count as enqueued", () => {
     // The third mechanism: `worker.ts` registers these with no producer
     // function at all, so a producer-only reading would miss them.
     for (const kind of ["refresh_sweep", "retention", "centroid_drift"]) {
@@ -416,7 +416,7 @@ describe("every WorkerTask kind is dispatched and enqueued", () => {
     }
   });
 
-  test("replay 07/08, mutation 1: the union member removed while the wiring stays", () => {
+  it("replay 07/08, mutation 1: the union member removed while the wiring stays", () => {
     const drifted = WORKER_TASKS.code.replace(
       '  | { kind: "holdout_backfill"; payload: HoldoutBackfillPayload }\n' +
         '  | { kind: "refresh_replay_caches"; payload: ReplayRefreshPayload };',
@@ -436,7 +436,7 @@ describe("every WorkerTask kind is dispatched and enqueued", () => {
     ).toEqual([{ kind: "refresh_replay_caches", from: ["dispatch", "schedule"] }]);
   });
 
-  test("replay 07/08, mutation 2: the dispatcher branch removed", () => {
+  it("replay 07/08, mutation 2: the dispatcher branch removed", () => {
     const drifted = WORKER_TASKS.code.replace(
       /\n {4}if \(task\.kind === "refresh_replay_caches"\) \{[\s\S]*?\n {4}\}/,
       "",
@@ -449,7 +449,7 @@ describe("every WorkerTask kind is dispatched and enqueued", () => {
     ]);
   });
 
-  test("replay 07/08, mutation 3: the schedule registration removed from worker.ts", () => {
+  it("replay 07/08, mutation 3: the schedule registration removed from worker.ts", () => {
     // The exact state the ticket describes: the producer still exists in
     // `worker-tasks.ts`, and nothing loops over it. A check that only asked
     // whether a producer existed would read this green.
@@ -466,7 +466,7 @@ describe("every WorkerTask kind is dispatched and enqueued", () => {
     ]);
   });
 
-  test("a kind added to the union and to nothing else is red on both halves", () => {
+  it("a kind added to the union and to nothing else is red on both halves", () => {
     const drifted = WORKER_TASKS.code.replace(
       '  | { kind: "refresh_replay_caches"; payload: ReplayRefreshPayload };',
       '  | { kind: "refresh_replay_caches"; payload: ReplayRefreshPayload }\n' +
@@ -478,7 +478,7 @@ describe("every WorkerTask kind is dispatched and enqueued", () => {
     ]);
   });
 
-  test("a comment naming a kind does not wire it", () => {
+  it("a comment naming a kind does not wire it", () => {
     // The `createArchiveFetch` bug class, on this check: an earlier revision of
     // the sweep read a docstring's usage example as a call site.
     const corpus = [
@@ -490,7 +490,7 @@ describe("every WorkerTask kind is dispatched and enqueued", () => {
     expect(enqueuedWorkerKinds(producers, corpus)).not.toContain("recompute_something");
   });
 
-  test("a `//` containing a block-open does not hide a real enqueue after it", () => {
+  it("a `//` containing a block-open does not hide a real enqueue after it", () => {
     // The other direction, and the defect that broke two previous guards:
     // `apps/api/src/api/grid.ts:280` is a line comment containing `/*`. A
     // stripper that removed block comments first would eat everything after it
@@ -507,7 +507,7 @@ describe("every WorkerTask kind is dispatched and enqueued", () => {
     expect(enqueuedWorkerKinds(producers, corpus)).toContain("recompute_something");
   });
 
-  test("an empty union, dispatcher or schedule set throws rather than passing", () => {
+  it("an empty union, dispatcher or schedule set throws rather than passing", () => {
     expect(() => workerTaskKinds("")).toThrow(/WorkerTask/);
     expect(() => workerTaskKinds("export type WorkerTask = QueueTask;\n")).toThrow(
       /governing nothing/,
@@ -544,17 +544,17 @@ describe("every WorkerTask kind is dispatched and enqueued", () => {
 describe("every /internal route on the modelling service has a caller", () => {
   const routes = mlInternalRoutes(ML_APP);
 
-  test("the population is the modelling service's own decorators", () => {
+  it("the population is the modelling service's own decorators", () => {
     expect(routes.length).toBeGreaterThanOrEqual(6);
     expect(routes).toContain("/internal/replay/featured-days");
     expect(routes).toContain("/internal/replay/backtest");
   });
 
-  test("nothing on that surface is unreachable from the worker", () => {
+  it("nothing on that surface is unreachable from the worker", () => {
     expect(uncalledMlRoutes(routes, SRC)).toEqual([]);
   });
 
-  test("replay 07/08 as they actually were: the route with no TypeScript at all", () => {
+  it("replay 07/08 as they actually were: the route with no TypeScript at all", () => {
     // `jobs/replay-refresh.ts` is the caller. Without it — the state before it
     // was written — both routes are named by nothing but their own tests.
     const corpus = SRC.filter(
@@ -567,7 +567,7 @@ describe("every /internal route on the modelling service has a caller", () => {
     ]);
   });
 
-  test("a comment naming the route is not a caller", () => {
+  it("a comment naming the route is not a caller", () => {
     // `replay-refresh.ts`'s own header names both paths in prose, which is
     // exactly the shape that made an earlier sweep call `createArchiveFetch`
     // reached. Only the stripped code counts.
@@ -582,7 +582,7 @@ describe("every /internal route on the modelling service has a caller", () => {
     ]);
   });
 
-  test("an empty app or an empty corpus is a failure, not a pass", () => {
+  it("an empty app or an empty corpus is a failure, not a pass", () => {
     expect(() => mlInternalRoutes("")).toThrow(/reading nothing/);
     expect(() => mlInternalRoutes('# @app.post("/internal/ghost")\n')).toThrow(
       /reading nothing/,

@@ -494,6 +494,9 @@ suite("canonical read contract (real Postgres)", () => {
         sql`select current_setting('wattsteer.as_of', true) as as_of`,
       )),
     ];
-    expect(setting?.as_of == null || setting.as_of === "").toBe(true);
+    // Unset and empty are the same answer here: `current_setting(..., true)`
+    // gives back an empty string when nothing was set, and the row itself may
+    // be absent. `?? ""` folds all three into one.
+    expect((setting?.as_of ?? "") === "").toBe(true);
   });
 });

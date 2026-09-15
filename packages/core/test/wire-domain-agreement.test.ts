@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { SUBSYSTEM_DISPLAY_ORDER } from "../src/constants.js";
@@ -58,7 +58,7 @@ const DISPLAY_CODES: readonly DisplayDriverCode[] = [...WIRE_DRIVER_CODES, "othe
  */
 
 describe("the wire's nouns and the domain's nouns are the same nouns", () => {
-  test("a wire Band is a domain Band and back, checked by the compiler", () => {
+  it("a wire Band is a domain Band and back, checked by the compiler", () => {
     // `bun run typecheck` is what enforces this; the runtime assertion below
     // only keeps the test honest about having run.
     const wire: WireBand = { p10: 1, p50: 2, p90: 3 };
@@ -67,7 +67,7 @@ describe("the wire's nouns and the domain's nouns are the same nouns", () => {
     expect(backAgain).toEqual(wire);
   });
 
-  test("a wire Subsystem is a domain SubsystemCode and back", () => {
+  it("a wire Subsystem is a domain SubsystemCode and back", () => {
     const wire: WireSubsystem = "NE";
     const domain: SubsystemCode = wire;
     const backAgain: WireSubsystem = domain;
@@ -77,7 +77,7 @@ describe("the wire's nouns and the domain's nouns are the same nouns", () => {
     expect(SUBSYSTEM_DISPLAY_ORDER).not.toContain(national as SubsystemCode);
   });
 
-  test("a wire Technology is a domain Technology, uppercase on both sides", () => {
+  it("a wire Technology is a domain Technology, uppercase on both sides", () => {
     const wire: WireTechnology = "WIND";
     const domain: Technology = wire;
     expect(TECHNOLOGIES).toContain(domain);
@@ -86,7 +86,7 @@ describe("the wire's nouns and the domain's nouns are the same nouns", () => {
     expect(TECHNOLOGIES).not.toContain(lower as Technology);
   });
 
-  test("a wire TechnologySplit is a domain TechnologySplit and back", () => {
+  it("a wire TechnologySplit is a domain TechnologySplit and back", () => {
     const wire: WireSplit = { windMwh: 1200, solarMwh: 340 };
     const domain: DomainSplit = wire;
     const backAgain: WireSplit = domain;
@@ -96,7 +96,7 @@ describe("the wire's nouns and the domain's nouns are the same nouns", () => {
     expect(splitOther(domain, "WIND")).toBe(340);
   });
 
-  test("neither side of the split has anywhere to put a quantile", () => {
+  it("neither side of the split has anywhere to put a quantile", () => {
     // The type-level half of `vocabulary-rules.test.ts`'s schema assertion: a
     // split is two scalars, so a client cannot carry a band through it even by
     // accident, and no chart can be handed one to draw.
@@ -105,7 +105,7 @@ describe("the wire's nouns and the domain's nouns are the same nouns", () => {
     expect(typeof (banded as unknown as { windMwh: unknown }).windMwh).toBe("object");
   });
 
-  test("a wire DriverCode is a domain DriverCode and back — the same eight", () => {
+  it("a wire DriverCode is a domain DriverCode and back — the same eight", () => {
     // The change `api-surface.md` calls "a contract change nobody flagged":
     // the domain's driver codes used to be twelve prototype *feature* names
     // (`vre_load_ratio`, `hub_wind_speed`, …) while the wire's were the eight
@@ -127,7 +127,7 @@ describe("the wire's nouns and the domain's nouns are the same nouns", () => {
     expect(DISPLAY_CODES).toContain(merged as DisplayDriverCode);
   });
 
-  test("a wire Driver's direction is a domain direction, and neither is mixed", () => {
+  it("a wire Driver's direction is a domain direction, and neither is mixed", () => {
     // `"mixed"` is a member of the domain's `DriverDirection` because the
     // merged `other` row reports it — and it is unreachable from anything the
     // wire can produce, because `Driver.direction` is the signed pair. A
@@ -161,7 +161,7 @@ describe("the schema, the constants module and the published vector agree", () =
     ),
   ) as { subsystems: Array<{ code: string }>; technologies: string[] };
 
-  test("the subsystem enum is the same four in all three", () => {
+  it("the subsystem enum is the same four in all three", () => {
     // Three places name the four subsystems: the schema (which Python reads),
     // `constants.ts` (which the gateway and the web app read) and the vector
     // (which is how the Python constants module is pinned). Two agreeing and
@@ -174,14 +174,14 @@ describe("the schema, the constants module and the published vector agree", () =
     );
   });
 
-  test("the technology enum is uppercase in all three", () => {
+  it("the technology enum is uppercase in all three", () => {
     expect(defs.technology?.enum).toEqual([...TECHNOLOGIES]);
     expect(defs.technology?.enum).toEqual(vector.technologies);
   });
 });
 
 describe("nothing in a request path reads the schema directory", () => {
-  test("no other module under src/ imports src/schema.ts", () => {
+  it("no other module under src/ imports src/schema.ts", () => {
     // `apps/api/Dockerfile` copies `packages/core/src` and not
     // `packages/core/schema`. An import from a route handler would pass
     // typecheck, pass `bun test`, and die in the container on first request —
@@ -204,7 +204,7 @@ describe("nothing in a request path reads the schema directory", () => {
     expect(listing).toContain("wire.ts");
   });
 
-  test("the package index does not re-export it either", () => {
+  it("the package index does not re-export it either", () => {
     const index = readFileSync(join(import.meta.dir, "..", "src", "index.ts"), "utf8");
     expect(index).not.toMatch(/export \* from "\.\/schema\.js"/);
   });

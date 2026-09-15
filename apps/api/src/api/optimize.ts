@@ -56,7 +56,7 @@ import { admitScenarioBody, admitScenarioParam } from "./scenario-gate.js";
  */
 
 /** How long the answer to an identical scenario may be reused. */
-export { OPTIMIZE_TTL_SEC };
+export { OPTIMIZE_TTL_SEC } from "./plugins/result-cache.js";
 
 /** The dependencies, injected so every branch is reachable without a network. */
 export interface OptimizeDeps {

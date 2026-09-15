@@ -58,6 +58,7 @@ export class WebAudioBackend implements AudioBackend {
   private playCursor = 0;
   private onLevel: ((level: number) => void) | null = null;
 
+  // biome-ignore lint/nursery/useThisInClassMethods: it implements `AudioBackend.openSocket`; a static would not satisfy the interface
   openSocket(url: string, clientSecret: string): WebSocket {
     return new WebSocket(url, [`xai-client-secret.${clientSecret}`]);
   }

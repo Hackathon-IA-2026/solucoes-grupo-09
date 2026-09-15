@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -19,7 +19,7 @@ import {
 const SOURCE = readFileSync(join(import.meta.dir, "..", "src", "domain.ts"), "utf8");
 
 describe("`SIN` is not a subsystem", () => {
-  test("it is not representable in the type", () => {
+  it("it is not representable in the type", () => {
     // The type-level assertion: uncommenting the annotation below is a compile
     // error, which `bun run typecheck` is what actually enforces.
     // const national: SubsystemCode = "SIN";
@@ -30,14 +30,14 @@ describe("`SIN` is not a subsystem", () => {
     expect(members).not.toContain(national);
   });
 
-  test("it is not accepted from a query parameter either", () => {
+  it("it is not accepted from a query parameter either", () => {
     expect(parseSubsystem("SIN")).toBeNull();
     expect(parseSubsystem("N")).toBe("N");
   });
 });
 
 describe("a lead time is derived, so nothing here stores one", () => {
-  test("no exported type carries a lead-time field", () => {
+  it("no exported type carries a lead-time field", () => {
     // `valid_time − published_at` is computable by anyone holding a
     // `ForecastOrigin` and the hour it describes. A stored copy is a second
     // number that can disagree with the two instants it came from.
@@ -49,13 +49,13 @@ describe("a lead time is derived, so nothing here stores one", () => {
 });
 
 describe("the technology parameter's casing is decided, not implicit", () => {
-  test("the canonical spelling is uppercase", () => {
+  it("the canonical spelling is uppercase", () => {
     const wind: Technology = "WIND";
     expect(parseTechnology(wind)).toBe("WIND");
     expect(parseTechnology("SOLAR")).toBe("SOLAR");
   });
 
-  test("a lowercase spelling is rejected rather than silently accepted", () => {
+  it("a lowercase spelling is rejected rather than silently accepted", () => {
     // Deliberate strictness: these responses are public and shared-cacheable
     // with no `Authorization` to `Vary` on, so a case-insensitive parameter
     // would fragment one answer across several cache entries.

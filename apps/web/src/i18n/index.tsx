@@ -11,13 +11,7 @@ import { Platform } from "react-native";
 import { type Copy, en } from "./copy.en";
 import { pt } from "./copy.pt";
 import { type Formatters, formattersFor } from "./format";
-import {
-  DEFAULT_LOCALE,
-  LOCALE_STORAGE_KEY,
-  LOCALES,
-  type Locale,
-  languageTag,
-} from "./locale";
+import { DEFAULT_LOCALE, LOCALE_STORAGE_KEY, type Locale, languageTag } from "./locale";
 
 /**
  * Locale state for the app.
@@ -47,8 +41,8 @@ import {
  * whole of how a choice persists.
  */
 
-export type { Locale };
-export { DEFAULT_LOCALE, LOCALES, languageTag };
+export type { Locale } from "./locale";
+export { DEFAULT_LOCALE, LOCALES, languageTag } from "./locale";
 
 const dictionaries: Record<Locale, Copy> = { pt, en };
 
@@ -200,7 +194,7 @@ export function useCopy(): Copy {
   return useI18n().copy;
 }
 
-export type { Formatters };
+export type { Formatters } from "./format";
 
 /**
  * The value formatters, bound to the active locale.
@@ -220,6 +214,7 @@ export function useFormat(): Formatters {
   return useMemo<Formatters>(() => formattersFor(locale), [locale]);
 }
 
+export type { Copy } from "./copy.en";
+export { en } from "./copy.en";
+export { pt } from "./copy.pt";
 export { GRID_TIME_ZONE, GRID_TIME_ZONE_LABEL } from "./format";
-export type { Copy };
-export { en, pt };

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { OptimizationResult, Scenario } from "@wattsteer/core/api";
@@ -64,11 +64,11 @@ function result(over: Partial<OptimizationResult> = {}): OptimizationResult {
 const SCENARIO = defaultScenario("NE", "2026-08-29");
 
 describe("the step scenarios", () => {
-  test("the two solved steps are the battery, then the battery and the load", () => {
+  it("the two solved steps are the battery, then the battery and the load", () => {
     expect([...SOLVED_STEPS]).toEqual(["battery", "battery_and_load"]);
   });
 
-  test("the battery step is the reader's scenario with the load removed", () => {
+  it("the battery step is the reader's scenario with the load removed", () => {
     const only = stepScenario(SCENARIO, "battery");
     expect(only.assets.map((asset) => asset.assetType)).toEqual(["battery"]);
     // The load is *removed*, not defaulted away: everything else is the
@@ -76,11 +76,11 @@ describe("the step scenarios", () => {
     expect({ ...only, assets: [] }).toEqual({ ...SCENARIO, assets: [] });
   });
 
-  test("the full step is the scenario itself, byte for byte", () => {
+  it("the full step is the scenario itself, byte for byte", () => {
     expect(stepScenario(SCENARIO, "battery_and_load")).toEqual(SCENARIO);
   });
 
-  test("a battery carrying fields the editors never touch keeps them", () => {
+  it("a battery carrying fields the editors never touch keeps them", () => {
     // The step is a subset of the fleet. A link that pinned a forecast origin
     // or an availability window is solved as it was shared.
     const rich: Scenario = {
@@ -93,7 +93,7 @@ describe("the step scenarios", () => {
     expect(only.assets[0]).toEqual(rich.assets[0]);
   });
 
-  test("no step asks the solver for an empty fleet", () => {
+  it("no step asks the solver for an empty fleet", () => {
     // A scenario with no assets is `assets` below its minimum and the refusal
     // table rejects it — correctly, since an empty fleet is not a what-if. "No
     // action" is therefore read off the baseline rather than solved.
@@ -127,7 +127,7 @@ describe("the reveal is read off the answer", () => {
   });
   const steps = mitigationSteps({ battery, battery_and_load: result() });
 
-  test("three steps, in reveal order", () => {
+  it("three steps, in reveal order", () => {
     expect(steps.map((step) => step.key)).toEqual([
       "no_action",
       "battery",
@@ -135,13 +135,13 @@ describe("the reveal is read off the answer", () => {
     ]);
   });
 
-  test("no action is the day, read from the baseline the solver reported", () => {
+  it("no action is the day, read from the baseline the solver reported", () => {
     expect(steps[0].remaining).toEqual({ p10: 101, p50: 1000, p90: 2000 });
     expect(steps[0].recovered).toEqual({ p10: 0, p50: 0, p90: 0 });
     expect(steps[0].dispatch).toEqual([]);
   });
 
-  test("nothing attempted is an absence, never a zero", () => {
+  it("nothing attempted is an absence, never a zero", () => {
     // The screen renders `—` for both. A `0` would read as "nothing could be
     // avoided" rather than "nothing was attempted", and priced at R$ 0 it would
     // read as an outcome.
@@ -149,13 +149,13 @@ describe("the reveal is read off the answer", () => {
     expect(steps[0].brl).toBeNull();
   });
 
-  test("the remaining, recovered and avoidability bands come from `scored`", () => {
+  it("the remaining, recovered and avoidability bands come from `scored`", () => {
     expect(steps[1].remaining).toEqual({ p10: 81, p50: 820, p90: 1760 });
     expect(steps[2].recovered).toEqual({ p10: 41, p50: 300, p90: 420 });
     expect(steps[2].avoidability).toEqual({ p10: 0.11, p50: 0.3, p90: 0.21 });
   });
 
-  test("the shares are keyed by realisation and are not sorted into an interval", () => {
+  it("the shares are keyed by realisation and are not sorted into an interval", () => {
     const shares = steps[2].avoidability;
     expect(shares).not.toBeNull();
     if (shares !== null) {
@@ -167,7 +167,7 @@ describe("the reveal is read off the answer", () => {
     }
   });
 
-  test("an undefined share on any realisation makes the set null, not partial", () => {
+  it("an undefined share on any realisation makes the set null, not partial", () => {
     const quiet = result({
       scored: {
         p10: { baselineMwh: 0, remainingMwh: 0, recoveredMwh: 0, avoidability: null },
@@ -180,7 +180,7 @@ describe("the reveal is read off the answer", () => {
     ).toBeNull();
   });
 
-  test("the floor is the contract's field, not the band re-read", () => {
+  it("the floor is the contract's field, not the band re-read", () => {
     // `recovered_floor_mwh == scored.p10.recovered_mwh` is an identity the
     // contract states. Reading it from the field rather than from the band is
     // what makes a service that broke the identity visible here.
@@ -188,7 +188,7 @@ describe("the reveal is read off the answer", () => {
     expect(steps[1].recoveredFloorMwh).toBe(20);
   });
 
-  test("every step carries the threshold and the forecast origin it was optimised against", () => {
+  it("every step carries the threshold and the forecast origin it was optimised against", () => {
     // The acceptance box. A figure whose threshold is not on it cannot be
     // compared with another one, and a plan without its origin is a statement
     // about whenever the page happened to load.
@@ -198,12 +198,12 @@ describe("the reveal is read off the answer", () => {
     }
   });
 
-  test("the money is the solver's own figure, not a second multiplication", () => {
+  it("the money is the solver's own figure, not a second multiplication", () => {
     expect(steps[1].brl).toBe(32_400);
     expect(steps[2].brl).toBe(54_000);
   });
 
-  test("a dispatch hour's absent components are drawn as zero, not as gaps", () => {
+  it("a dispatch hour's absent components are drawn as zero, not as gaps", () => {
     // The schema makes every component optional — a fleet with no battery has
     // no battery leg — and the chart draws series. Defaulting is a rendering
     // decision and it happens once.
@@ -221,7 +221,7 @@ describe("the reveal is read off the answer", () => {
 });
 
 describe("the screen computes nothing", () => {
-  test("Mitigate reads the solver's answer and no local evaluator", () => {
+  it("Mitigate reads the solver's answer and no local evaluator", () => {
     // `test/one-execution-rule.test.ts` is the repository-wide guard; this is
     // the narrow one, on the screen the second implementation existed for.
     const screen = readFileSync(
@@ -245,7 +245,7 @@ describe("the screen computes nothing", () => {
    * against the same three envelopes and reports `scored.p50.recovered_mwh`,
    * so the card reads the contract's own per-step recovery instead.
    */
-  test("the step card reads the contract's per-step recovery, not a delta of two steps", () => {
+  it("the step card reads the contract's per-step recovery, not a delta of two steps", () => {
     const screen = readFileSync(
       join(import.meta.dir, "..", "src", "app", "app", "mitigate.tsx"),
       "utf8",
@@ -258,7 +258,7 @@ describe("the screen computes nothing", () => {
     expect(screen).not.toContain("stepDelta");
   });
 
-  test("the card's sentence is a per-step recovery in both locales", () => {
+  it("the card's sentence is a per-step recovery in both locales", () => {
     for (const catalogue of [EN.app.mitigate, PT.app.mitigate]) {
       const sentence: string = catalogue.stepRecovered;
       expect(sentence).toContain("{recovered}");
@@ -274,7 +274,7 @@ describe("the screen computes nothing", () => {
     expect("stepDelta" in PT.app.mitigate).toBe(false);
   });
 
-  test("the per-step recovery is a field on the answer and nothing is combined to make it", () => {
+  it("the per-step recovery is a field on the answer and nothing is combined to make it", () => {
     const steps = mitigationSteps({
       battery: result({ scored: { ...result().scored } }),
       battery_and_load: result(),

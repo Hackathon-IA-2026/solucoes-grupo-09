@@ -158,12 +158,12 @@ export function replayKey(parts: {
 /** Somewhere a solved plan can be put and later found, or not. */
 export interface ResultCache {
   /** The stored response text, or `null` for a miss — including any failure. */
-  get(key: string): Promise<string | null>;
+  get: (key: string) => Promise<string | null>;
   /** Store, with a TTL. A failure is swallowed: a cache that cannot write is a cache. */
-  set(key: string, value: string, ttlSec: number): Promise<void>;
+  set: (key: string, value: string, ttlSec: number) => Promise<void>;
   /** For the boot log: where entries are actually going. */
   readonly detail: string;
-  close(): Promise<void>;
+  close: () => Promise<void>;
 }
 
 /** The cache that remembers nothing. The default with no Redis configured. */

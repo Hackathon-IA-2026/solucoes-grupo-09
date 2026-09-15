@@ -93,33 +93,30 @@ function mlMeta(overrides: {
   caveats?: unknown[];
 }) {
   reply = () =>
-    new Response(
-      JSON.stringify({
-        service: "wattsteer-ml",
-        version: "0.1.0",
-        environment: "test",
-        database_configured: true,
-        database_access: "read-only",
-        artifacts: {
-          path: "/data/models",
-          mounted: overrides.mounted ?? true,
-          writable: overrides.writable ?? true,
-          count: (overrides.lanes ?? []).length,
-          lanes: overrides.lanes ?? [],
-          promotion_log: { path: "/data/models/promotions.jsonl", decisions: 1 },
-          unrecognised: [],
-        },
-        // Forecaster 25's census, as `wattsteer_ml/declined.py` assembles it.
-        // Its contents are asserted in `declined-figures.test.ts`; what it is
-        // doing here is keeping this stub the shape of the real reply.
-        declines: overrides.declines ?? [],
-        // Forecaster 28's mirror, from `wattsteer_ml/caveated.py`: the
-        // figures this build *does* state that do not mean what their
-        // names say. Same reason for being here — the stub keeps the shape.
-        caveats: overrides.caveats ?? [],
-      }),
-      { headers: { "content-type": "application/json" } },
-    );
+    Response.json({
+      service: "wattsteer-ml",
+      version: "0.1.0",
+      environment: "test",
+      database_configured: true,
+      database_access: "read-only",
+      artifacts: {
+        path: "/data/models",
+        mounted: overrides.mounted ?? true,
+        writable: overrides.writable ?? true,
+        count: (overrides.lanes ?? []).length,
+        lanes: overrides.lanes ?? [],
+        promotion_log: { path: "/data/models/promotions.jsonl", decisions: 1 },
+        unrecognised: [],
+      },
+      // Forecaster 25's census, as `wattsteer_ml/declined.py` assembles it.
+      // Its contents are asserted in `declined-figures.test.ts`; what it is
+      // doing here is keeping this stub the shape of the real reply.
+      declines: overrides.declines ?? [],
+      // Forecaster 28's mirror, from `wattsteer_ml/caveated.py`: the
+      // figures this build *does* state that do not mean what their
+      // names say. Same reason for being here — the stub keeps the shape.
+      caveats: overrides.caveats ?? [],
+    });
 }
 
 describe("meta · one request says what this deployment can do", () => {
