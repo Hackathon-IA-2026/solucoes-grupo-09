@@ -123,3 +123,35 @@ describe("locale resolution", () => {
     expect(ERROR_STATUS.LOCALE_UNSUPPORTED).toBe(422);
   });
 });
+
+describe("no refusal uses a status the edge will eat", () => {
+  it("assigns 502 to nothing", () => {
+    /*
+      Measured on 2026-09-15 against `api.wattsteer.com`: a 503 or a 404 from
+      this gateway reaches the client with its JSON envelope intact; a **502
+      does not** — the edge replaces the body with its own `error code: 502` in
+      `text/plain`, so `error.code` never arrives.
+
+      That is fatal to what this enum is for. The client branches on the code —
+      `copy.error[code]` is how a refusal becomes a sentence in the reader's
+      language — and sixteen bytes of English plain text is a refusal the
+      product cannot render. `OPTIMIZER_NOT_CONFIGURED` was 502 and had
+      therefore been unrenderable on the Mitigate screen for as long as the edge
+      has been in front of it, silently, because no test asserts a status
+      *through* the CDN.
+    */
+    const eaten = Object.entries(ERROR_STATUS).filter(([, status]) => status === 502);
+    expect(eaten).toEqual([]);
+  });
+
+  it("still uses the statuses that do survive, so this is not a blanket rule", () => {
+    // Non-vacuity: a table that had collapsed to one status would pass the
+    // assertion above and would have thrown away the distinction the enum
+    // carries between "you sent something wrong" and "we cannot serve".
+    const statuses = new Set(Object.values(ERROR_STATUS));
+    expect(statuses.has(422)).toBe(true);
+    expect(statuses.has(404)).toBe(true);
+    expect(statuses.has(503)).toBe(true);
+    expect(statuses.size).toBeGreaterThan(3);
+  });
+});

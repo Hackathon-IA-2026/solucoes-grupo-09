@@ -337,13 +337,13 @@ describe("optimize · the failure table, one row at a time", () => {
     expect((await envelope(response)).code).toBe("SOC_INITIAL_OUT_OF_BOUNDS");
   });
 
-  it("an unreachable solver is a 502 and not a bad request", async () => {
+  it("an unreachable solver is a 503 and not a bad request", async () => {
     const api = routes({
       cache: memoryCache(),
       endpoint: endpoint({ baseUrl: `http://127.0.0.1:${closedPort}` }),
     });
     const response = await get(api, BLOB);
-    expect(response.status).toBe(502);
+    expect(response.status).toBe(503);
     expect((await envelope(response)).code).toBe("OPTIMIZER_UNAVAILABLE");
   });
 
@@ -453,7 +453,7 @@ describe("optimize · the cache is keyed on provenance", () => {
       endpoint: endpoint({ baseUrl: `http://127.0.0.1:${closedPort}` }),
     });
     const response = await get(api, BLOB);
-    expect(response.status).toBe(502);
+    expect(response.status).toBe(503);
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("etag")).toBeNull();
   });

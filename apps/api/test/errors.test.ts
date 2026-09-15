@@ -24,7 +24,7 @@ describe("errors · toErrorEnvelope", () => {
       status: 400,
       body: { error: { code: "BAD_INPUT", message: "bad id" } },
     });
-    expect(toErrorEnvelope(new UpstreamError()).status).toBe(502);
+    expect(toErrorEnvelope(new UpstreamError()).status).toBe(503);
     expect(toErrorEnvelope(new BusyError()).status).toBe(503);
   });
 
