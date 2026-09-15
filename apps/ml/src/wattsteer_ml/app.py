@@ -52,7 +52,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from . import __version__, artifacts
-from .artifacts import CARD_SUFFIX
+from .artifacts import CARD_SUFFIX, inspect
 from .caveated import caveated_figures
 from .config import settings
 from .constants import Subsystem
@@ -1390,6 +1390,98 @@ async def replay_day(
 # `contract_fault`: an artifact marked invalid on its own card is one this lane
 # may not serve, and publishing its numbers as a serving model's would describe
 # a model nothing is allowed to run.
+
+
+@app.get("/internal/model/artifacts", tags=["model"])
+def lane_artifacts(
+    lane: Annotated[
+        str,
+        Query(description="The artifact lane, e.g. dessem_free_v1__gate_late__thr5."),
+    ],
+    artifact_id: Annotated[
+        str | None,
+        Query(
+            description=(
+                "One artifact's card, verbatim. Omitted, the response lists the "
+                "ids on the volume and which of them is promoted."
+            )
+        ),
+    ] = None,
+) -> JSONResponse:
+    """Every artifact on a lane, promoted or not — and any one of their cards.
+
+    **Why this exists at all.** `artifacts.py` says a refused candidate is
+    written to the volume on purpose — *"that is why it is written, so a refused
+    model can be inspected"* — and until now nothing could inspect one.
+    `/v1/model/card` resolves through the promotion log by design, so a lane
+    whose only artifact was refused answered `MODEL_UNAVAILABLE` and the card
+    that says *why* it was refused was unreachable over HTTP. The volume browser
+    needs an SSH key on the Railway account, which is not a thing a diagnosis
+    should depend on.
+
+    So this is the inspection surface the refusal already assumed. It is
+    `/internal/` because it is an operator's read rather than a reader's: the
+    gateway does not proxy it, and it returns a card the gate has *refused*,
+    which must never be mistaken for something being served.
+
+    It does not resolve, rank or choose. `/v1/model/card` remains the only
+    answer to "what may this lane serve".
+    """
+    try:
+        parsed = Lane.parse(lane)
+    except LaneNameError as error:
+        return _refusal(422, "REQUEST_INVALID", str(error))
+
+    store = inspect()
+    view = next((each for each in store.lanes if each.lane == parsed), None)
+    if view is None:
+        return _refusal(
+            503,
+            "MODEL_UNAVAILABLE",
+            f"{parsed.directory_name} has no directory on the volume",
+            {"lane": parsed.directory_name, "volume_mounted": store.mounted},
+        )
+
+    if artifact_id is None:
+        return JSONResponse(
+            {
+                "lane": parsed.directory_name,
+                "artifacts": list(view.artifacts),
+                "promoted": view.promoted,
+                "fault": view.fault,
+                "ignored": list(view.ignored),
+            }
+        )
+
+    if artifact_id not in view.artifacts:
+        return _refusal(
+            404,
+            "NOT_FOUND",
+            f"{artifact_id} is not on the volume for {parsed.directory_name}",
+            {"lane": parsed.directory_name, "artifacts": list(view.artifacts)},
+        )
+
+    card_path = (
+        settings.artifact_dir / parsed.directory_name / f"{artifact_id}{CARD_SUFFIX}"
+    )
+    try:
+        card = read_card(card_path)
+    except (ValueError, OSError) as error:
+        return _refusal(
+            503,
+            "MODEL_UNAVAILABLE",
+            f"{artifact_id}'s card could not be read: {error}",
+            {"lane": parsed.directory_name, "artifact_id": artifact_id},
+        )
+    # Stated, so nobody reads a refused card as a serving one.
+    return JSONResponse(
+        {
+            "lane": parsed.directory_name,
+            "artifact_id": artifact_id,
+            "promoted": view.promoted == artifact_id,
+            "card": card,
+        }
+    )
 
 
 @app.get("/v1/model/card", tags=["model"])
