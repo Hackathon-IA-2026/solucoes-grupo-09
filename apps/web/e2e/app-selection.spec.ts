@@ -101,3 +101,38 @@ test.describe("the selection bar writes a URL it can read back", () => {
     await expectChecked(page, "S", true);
   });
 });
+
+test.describe("a deep link is the selection", () => {
+  test("a cold load honours every parameter, not just the route", async ({ page }) => {
+    /*
+      The URL is this product's only persistence — `params.ts` says so, and
+      Mitigate and Time Machine both tell the reader on screen that "the address
+      bar is the scenario" and "this link is the entire state". A cold load
+      honoured none of it: `/app?subsystem=S` rendered NE.
+
+      The cause was not parsing. The hook computed `S` correctly on the client's
+      first render; the export had prerendered the HTML with the defaults, and
+      **React's hydration does not correct an attribute mismatch** — it keeps the
+      server markup. Worse, every later render then compared `S` to `S` in
+      React's own tree and patched nothing, so the DOM and the app disagreed for
+      the life of the page, silently. Forcing a re-render does not fix it; only
+      making the first client render agree with the server, and changing on the
+      second, does.
+    */
+    const checked = async () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll('[role="radio"]')]
+          .filter((el) => el.getAttribute("aria-checked") === "true")
+          .map((el) => el.getAttribute("aria-label"))
+          .filter((label) => label !== null && !/Portugu|English/.test(label)),
+      );
+
+    await page.goto("/app?subsystem=S&run=00Z&technology=solar");
+    await expect.poll(checked).toEqual(["S", "Solar", "00Z"]);
+
+    // Non-vacuity: the defaults must still be the defaults, or the assertion
+    // above would hold of a page that simply echoed whatever it was asked for.
+    await page.goto("/app");
+    await expect.poll(checked).toEqual(["NE", "Eólica", "12Z"]);
+  });
+});
