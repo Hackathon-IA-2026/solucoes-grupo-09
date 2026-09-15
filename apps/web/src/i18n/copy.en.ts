@@ -450,6 +450,15 @@ export const en = {
     footerLink: "Pitch deck",
     /** The top-nav link. Same words as the footer's, one row apart. */
     navLink: "Pitch deck",
+    /**
+     * The landing page's deck section. `title` and `lede` above are reused
+     * there verbatim — one document, one description of it — so the section
+     * adds only the two strings the `/pitch` page has no use for: the button
+     * that opens it, and the alternative text for the slide it previews.
+     */
+    sectionCta: "Open the deck",
+    slideAlt:
+      "The deck's first slide: R$ 6.5 billion of clean energy curtailed in 2025, beside a map of Brazil's four subsystems.",
   },
 
   legal: {

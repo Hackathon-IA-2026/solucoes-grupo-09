@@ -185,11 +185,14 @@ describe("the pitch copy", () => {
     "embedTitle",
     "fallback",
     "openLabel",
-    // Not rendered by the screen — these are the two links *to* it. In this
-    // list because the assertion below is that the block holds exactly these
-    // keys, which is what catches one added to a single locale.
+    // Not rendered by the screen — these are the links *to* it, and the
+    // landing page's section about it. In this list because the assertion
+    // below is that the block holds exactly these keys, which is what catches
+    // one added to a single locale.
     "footerLink",
     "navLink",
+    "sectionCta",
+    "slideAlt",
   ] as const;
 
   test("every string the screen renders resolves in both locales", () => {
@@ -214,19 +217,94 @@ describe("the pitch copy", () => {
 
   test("something renders every one of them", () => {
     /*
-      A key nothing renders is copy a translator maintains for nobody. All but
-      one are the screen's; `footerLink` is the *footer's* link to the screen,
-      so the rule is kept and the renderer is named per key rather than the key
-      being quietly exempted.
+      A key nothing renders is copy a translator maintains for nobody. Most are
+      the screen's; `footerLink` is the *footer's* link to the screen, `navLink`
+      the nav's, and the landing page's deck section renders four — `title` and
+      `lede` shared with the screen, plus the two it adds. The rule is kept and
+      the renderer is named per key rather than the key being quietly exempted.
     */
     const screen = code(SCREEN);
     const footer = code(join(WEB, "src", "components", "site-footer.tsx"));
     const nav = code(join(WEB, "src", "components", "landing", "landing-nav.tsx"));
+    const deck = code(join(WEB, "src", "components", "landing", "deck.tsx"));
+    const RENDERER: Partial<Record<(typeof KEYS)[number], string>> = {
+      footerLink: footer,
+      navLink: nav,
+      sectionCta: deck,
+      slideAlt: deck,
+    };
     for (const key of KEYS) {
-      const source =
-        key === "footerLink" ? footer : key === "navLink" ? nav : screen;
+      const source = RENDERER[key] ?? screen;
       expect([key, source.includes(`copy.pitch.${key}`)]).toEqual([key, true]);
     }
+  });
+});
+
+describe("the deck section on the landing page", () => {
+  const SECTION = join(WEB, "src", "components", "landing", "deck.tsx");
+  const SLIDE = join(WEB, "assets", "images", "pitch-slide-1.webp");
+  const HOME = join(WEB, "src", "app", "[locale]", "index.tsx");
+
+  test("the landing page renders it, with a section id the nav can reach", () => {
+    // Without an `id` the section is not addressable by a fragment, which is
+    // the whole reason it is a `Section` rather than a bare `View`.
+    const home = code(HOME);
+    expect(home).toContain("<Deck wide={wide} />");
+    expect(home).toMatch(/id="deck"[\s\S]{0,120}onSectionLayout=\{onSectionLayout\}/);
+  });
+
+  test("it does not embed the PDF", () => {
+    /*
+      The three measured reasons are in `deck.tsx`'s header: a wheel over a PDF
+      iframe scrolls the PDF rather than the page, which is a scroll trap in the
+      middle of a document; the file is 706,193 bytes and this page is the one a
+      link drops a visitor on; and `/pitch` is `noindex` while this page is the
+      one that is indexed.
+
+      None of that is visible in a render, and all of it is one `<iframe>` away
+      from being undone, so it is asserted here. `PITCH_PDF_PATH` is forbidden
+      too, not just the tag: an `<object>`, an `<embed>` or a `fetch` of the
+      same 706 KB would cost the same bytes by another spelling.
+    */
+    const deck = code(SECTION);
+    expect(deck).not.toContain("<iframe");
+    expect(deck).not.toContain("PITCH_PDF_PATH");
+    // Non-vacuous: the same checks do find both shapes on the page that is
+    // *supposed* to carry them.
+    const screen = code(SCREEN);
+    expect(screen).toContain("<iframe");
+    expect(screen).toContain("PITCH_PDF_PATH");
+  });
+
+  test("the action is a real anchor to the route, not a button", () => {
+    // `CtaLink` is the site's pill-that-is-an-`<a>`; `PillButton` renders a
+    // `<div role="button">` with no href, which a crawler cannot follow and a
+    // reader cannot middle-click. `PITCH_PATH` rather than a literal, for the
+    // same reason the footer uses it: `/pt/pitch` would 404.
+    const deck = code(SECTION);
+    expect(deck).toContain("<CtaLink");
+    expect(deck).toContain("href={PITCH_PATH}");
+    expect(deck).not.toMatch(/href="\/pitch"/);
+  });
+
+  test("the slide preview is a bundled asset, and a small one", () => {
+    /*
+      The point of previewing slide one rather than embedding the deck is that
+      it costs a fraction of it. Measured: 34,266 bytes of WebP against 706,193
+      of PDF and 93,830 for the same frame as a PNG. The cap is a budget with
+      room to re-encode, not a transcription of today's number — but it is well
+      under a tenth of the deck, which is the claim `deck.tsx` makes.
+    */
+    const bytes = statSync(SLIDE).size;
+    expect(bytes).toBeGreaterThan(1000);
+    expect(bytes).toBeLessThan(60_000);
+    expect(bytes * 10).toBeLessThan(statSync(DECK).size);
+    // `require`d, so a missing file is a build error rather than a blank box —
+    // which is exactly what the PDF in `public/` cannot be, and why that one
+    // needs `localize-export.ts` to notice.
+    expect(code(SECTION)).toContain(
+      'require("../../../assets/images/pitch-slide-1.webp")',
+    );
   });
 });
 

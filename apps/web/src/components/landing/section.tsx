@@ -1,9 +1,15 @@
 import { layout, space, usePalette } from "@wattsteer/ui";
 import type { ReactNode } from "react";
 import { type LayoutChangeEvent, Text, View } from "react-native";
+import type { SectionId } from "@/lib/section-fragment";
 
-/** Named scroll targets. The nav and the CTAs address sections by these. */
-export type SectionId = "forecast" | "engines" | "showcase" | "provenance";
+/**
+ * Named scroll targets. Declared in `lib/section-fragment.ts`, because the URL
+ * fragment that names one has to be parsed by a module `bun test` can import
+ * and this file cannot be one — re-exported here so the components still read
+ * the vocabulary from the module that renders it.
+ */
+export type { SectionId };
 
 /**
  * The page gutter, shared by the nav, every section and the footer.
@@ -36,10 +42,18 @@ export function sectionPad(wide: boolean): number {
 }
 
 /**
- * Page-width section wrapper. `onLayout` reports the section's y within the
- * scroll content so the nav can scroll to it — measured rather than
- * hard-coded, and identical on web and native (an anchor-hash approach would
- * only work on one of the two).
+ * Page-width section wrapper.
+ *
+ * `onLayout` reports the section's y within the scroll content so the nav can
+ * scroll to it — measured rather than hard-coded, and identical on web and
+ * native, which is why the scrolling is not delegated to the browser's own
+ * anchor handling.
+ *
+ * `nativeID` renders as a DOM `id` on web, which is what makes the nav's
+ * `href="#engines"` an honest anchor rather than a decoration: the fragment
+ * resolves to an element with or without JavaScript, and the same id is the
+ * one `lib/section-fragment.ts` parses out of the URL. It is inert on native,
+ * where the measured offset above is the whole mechanism.
  */
 export function Section({
   id,
@@ -64,6 +78,7 @@ export function Section({
   return (
     <View
       testID={testID}
+      nativeID={id}
       onLayout={handleLayout}
       style={{
         width: "100%",
