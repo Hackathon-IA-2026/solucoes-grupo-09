@@ -305,7 +305,10 @@ export function retrainSchedules<TPayload>(
   return [
     {
       id: RETRAIN_JOB_ID,
-      pattern: RETRAIN_PATTERN,
+      // `config.retrainPattern` is the operator's catch-up lever: the id is
+      // stable, so an override re-registers this schedule rather than adding a
+      // second one, and clearing the variable restores the weekly cadence.
+      pattern: config.retrainPattern ?? RETRAIN_PATTERN,
       timeZone: RETRAIN_TIME_ZONE,
       payload: wrap({}),
     },

@@ -245,6 +245,27 @@ export const config = {
    * unbounded. That keeps the whole tier difference an environment change,
    * which is what `openMeteoHost` above is also for.
    */
+  /**
+   * Cron for the weekly retrain, overriding `RETRAIN_PATTERN`.
+   *
+   * **This is the operator path to a catch-up run, and until now there was
+   * none.** `retrainRunId`'s own docstring says the run instant "is floored to
+   * the day rather than to the week so that a hand-submitted catch-up" resolves
+   * to a stable id — so a hand-submitted retrain was anticipated by the design
+   * and then had no way to be submitted. `scripts/ingest.ts task` reaches the
+   * `IngestTask` kinds only; a `WorkerTask` has to go on the queue, and the
+   * queue is on a private network by design.
+   *
+   * Overriding the pattern is the one lever that does not require exposing
+   * Redis, the modelling service or the unauthenticated jobs dashboard to the
+   * public internet. `upsertJobScheduler` is keyed on `RETRAIN_JOB_ID`, so
+   * changing the pattern re-registers the same schedule rather than creating a
+   * second one, and clearing the variable puts the weekly cadence back.
+   *
+   * Unset means `RETRAIN_PATTERN` — Friday 03:10 UTC. A malformed cron is
+   * BullMQ's to refuse, loudly, at registration rather than silently at 03:10.
+   */
+  retrainPattern: process.env.WATTSTEER_RETRAIN_PATTERN || undefined,
   openMeteoMaxWeightedUnits: process.env.WATTSTEER_OPEN_METEO_KEY
     ? undefined
     : int(process.env.WATTSTEER_OPEN_METEO_MAX_UNITS, 138, 1, 300_000),
