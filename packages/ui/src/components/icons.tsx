@@ -192,6 +192,16 @@ export function LayoutDashboardIcon(props: IconProps) {
   );
 }
 
+export function MapIcon(props: IconProps) {
+  return (
+    <Base {...props}>
+      <Path d="M14.1 5.55a2 2 0 0 0 1.8 0l3.65-1.83A1 1 0 0 1 21 4.62v12.76a1 1 0 0 1-.55.9l-4.55 2.27a2 2 0 0 1-1.8 0l-4.2-2.1a2 2 0 0 0-1.8 0l-3.65 1.83A1 1 0 0 1 3 19.38V6.62a1 1 0 0 1 .55-.9l4.55-2.27a2 2 0 0 1 1.8 0z" />
+      <Path d="M15 5.76v15" />
+      <Path d="M9 3.24v15" />
+    </Base>
+  );
+}
+
 export function ChevronDownIcon(props: IconProps) {
   return (
     <Base {...props}>

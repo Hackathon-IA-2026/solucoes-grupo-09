@@ -7,6 +7,7 @@
 import {
   FadeIn,
   LayoutDashboardIcon,
+  MapIcon,
   Panel,
   PanelHeader,
   PieChartIcon,
@@ -23,10 +24,16 @@ import { sharedParams, useAppParams } from "@/components/app/use-app-params";
 import { BandCard } from "@/components/charts/band-figure";
 import { FanChart } from "@/components/charts/fan-chart";
 import { RiskCaveat } from "@/components/charts/risk-class";
+import { SubsystemMap } from "@/components/charts/subsystem-map";
 import { TechnologySplitPanel } from "@/components/charts/technology-split";
 import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
-import { buildAllForecasts, buildForecast, subsystemMeta } from "@/lib/fixtures";
+import {
+  buildAllForecasts,
+  buildForecast,
+  type SubsystemCode,
+  subsystemMeta,
+} from "@/lib/fixtures";
 
 export default function GridOverviewScreen() {
   const colors = usePalette();
@@ -43,6 +50,21 @@ export default function GridOverviewScreen() {
   // One scale across all four rows, so "wider" and "bigger" mean what they look
   // like. Computed from the P90s, not the P50s.
   const domainMax = Math.max(...all.map((each) => each.dailyEnergy.p90)) * 1.05;
+
+  /**
+   * Choosing a subsystem, defined once.
+   *
+   * The map and the rows are two affordances over one action, and the action
+   * is "open Explain for this subsystem, carrying the rest of the selection
+   * along". Written out twice it would be two actions that currently agree —
+   * and the way that drifts is a new shared parameter added to `sharedParams`
+   * and threaded through only one of them.
+   */
+  const select = (subsystem: SubsystemCode) =>
+    router.push({
+      pathname: "/app/explain" as never,
+      params: { ...sharedParams(params), subsystem },
+    });
 
   return (
     <>
@@ -82,6 +104,31 @@ export default function GridOverviewScreen() {
         />
 
         <FadeIn style={{ gap: space.md }}>
+          <Panel>
+            <PanelHeader
+              icon={<MapIcon size={18} color={colors.inkMuted} />}
+              title={copy.app.overview.map.title}
+              subtitle={copy.app.overview.map.subtitle}
+            />
+            <View style={{ marginTop: space.lg }}>
+              <SubsystemMap
+                forecasts={all}
+                selected={params.subsystem}
+                onSelect={select}
+              />
+            </View>
+            <Text
+              style={{
+                fontSize: 11,
+                color: colors.inkFaint,
+                lineHeight: 17,
+                marginTop: space.md,
+              }}
+            >
+              {copy.app.overview.map.boundaryNote}
+            </Text>
+          </Panel>
+
           {all.map((forecast) => (
             <SubsystemRow
               key={forecast.subsystem}
@@ -89,12 +136,7 @@ export default function GridOverviewScreen() {
               emphasis={params.technology}
               domainMax={domainMax}
               selected={forecast.subsystem === params.subsystem}
-              onPress={() =>
-                router.push({
-                  pathname: "/app/explain" as never,
-                  params: { ...sharedParams(params), subsystem: forecast.subsystem },
-                })
-              }
+              onPress={() => select(forecast.subsystem)}
             />
           ))}
           <RiskCaveat />

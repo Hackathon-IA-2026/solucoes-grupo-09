@@ -622,6 +622,16 @@ export const pt: Copy = {
       fixtureTitle: "Estes números são uma fixture",
       fixtureNote:
         "A Visão da rede renderiza uma fixture determinística e não lê nenhuma API, que é o que permite a ela existir numa exportação estática. Nenhum artefato de modelo está promovido para atendimento, então não há previsão do dia seguinte para desenhar no lugar — não uma pequena, nenhuma. Os componentes, as unidades e as faixas são os do próprio produto; os números dentro deles não são previsão de coisa alguma.",
+      map: {
+        title: "Os quatro subsistemas",
+        subtitle: "Mesma classe de risco das linhas abaixo",
+        figure:
+          "Mapa do Brasil dividido nos quatro subsistemas do ONS, cada um sombreado pela sua classe de risco de curtailment. As quatro regiões também aparecem como linhas logo abaixo.",
+        region: "{subsystem}: risco {risk}, cerca de {probability}. Abrir Explicar.",
+        boundaryNote:
+          "Fronteiras elétricas, não regiões geográficas: o Maranhão está no subsistema Norte, o Acre e Rondônia estão no Sudeste/Centro-Oeste, e Mato Grosso, Mato Grosso do Sul, Goiás e o Distrito Federal também.",
+        source: "Limites: IBGE, Malhas Territoriais (dados abertos governamentais).",
+      },
     },
 
     split: {

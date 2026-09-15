@@ -804,6 +804,37 @@ export const en = {
       fixtureTitle: "These figures are a fixture",
       fixtureNote:
         "Grid Overview renders a deterministic fixture and reads no API, which is what lets it ship in a static export. No model artifact is promoted for serving, so there is no day-ahead forecast to draw in its place — not a small one, none. The components, the units and the bands are the product's own; the numbers inside them are not a forecast of anything.",
+      map: {
+        title: "The four subsystems",
+        subtitle: "Same risk class as the rows below",
+        /**
+         * The whole map, for a reader who gets one string for the figure.
+         * It says what the shape is and what the colour means, because a map
+         * whose only description is "map of Brazil" has told a screen-reader
+         * user nothing the rows below do not already say better.
+         */
+        figure:
+          "Map of Brazil divided into the four ONS subsystems, each shaded by its curtailment risk class. The four regions are also listed as rows below.",
+        /** One region. `{risk}` is the binned class, never a bare number. */
+        region: "{subsystem}: {risk} risk, about {probability}. Open Explain.",
+        /**
+         * Maranhão is in the Norte subsystem and in the Nordeste geographic
+         * region, and a reader who knows the map but not the grid will read
+         * the north-east corner as an error. The note is on the figure rather
+         * than in a tooltip because it is the answer to a question the map
+         * itself provokes.
+         */
+        boundaryNote:
+          "Electrical boundaries, not geographic regions: Maranhão is in the Norte subsystem, Acre and Rondônia are in Sudeste/Centro-Oeste, and so are Mato Grosso, Mato Grosso do Sul, Goiás and the Distrito Federal.",
+        /**
+         * Attribution, shown under the figure rather than buried in a source
+         * comment. IBGE publishes this mesh as open government data under the
+         * Lei de Acesso à Informação, which asks for the credit and not for a
+         * licence notice — so the line names the publisher and the year of the
+         * mesh, which is also what makes the map checkable against a newer one.
+         */
+        source: "Boundaries: IBGE, Malhas Territoriais (open government data).",
+      },
     },
 
     split: {
