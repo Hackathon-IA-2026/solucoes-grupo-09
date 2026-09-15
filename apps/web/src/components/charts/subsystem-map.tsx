@@ -35,7 +35,6 @@ import {
   useReducedMotion,
   webTransition,
 } from "@wattsteer/ui";
-import { useState } from "react";
 import { Platform, Text, View } from "react-native";
 import Svg, { G, Path, Rect, Text as SvgText } from "react-native-svg";
 import { riskColor } from "@/components/charts/risk-class";
@@ -107,10 +106,21 @@ function Steps({
 export function SubsystemMap({
   forecasts,
   selected,
+  hovered = null,
+  onHoverChange,
   onSelect,
 }: {
   forecasts: SubsystemDayForecast[];
   selected: SubsystemCode;
+  /**
+   * The subsystem the pointer is on, held by the parent rather than here.
+   *
+   * Lifted because the highlight has two ends: hovering a region lights its row
+   * and hovering a row lights its region. Kept in this component it could only
+   * ever light one of them.
+   */
+  hovered?: SubsystemCode | null;
+  onHoverChange?: (subsystem: SubsystemCode | null) => void;
   /** The overview's own row handler. Not a map-specific one. */
   onSelect: (subsystem: SubsystemCode) => void;
 }) {
@@ -119,7 +129,8 @@ export function SubsystemMap({
   const f = useFormat();
   const reduced = useReducedMotion();
   const [containerWidth, onLayout] = useContainerWidth();
-  const [active, setActive] = useState<SubsystemCode | null>(null);
+  const setActive = (code: SubsystemCode | null) => onHoverChange?.(code);
+  const active = hovered;
 
   const width = Math.min(containerWidth > 0 ? containerWidth : MAX_WIDTH, MAX_WIDTH);
   const height = (width * BRAZIL_VIEWBOX.height) / BRAZIL_VIEWBOX.width;
@@ -197,6 +208,7 @@ export function SubsystemMap({
                   "aria-label": label,
                   "aria-pressed": isSelected,
                   onClick: () => onSelect(code),
+                  onPress: () => onSelect(code),
                   onKeyDown: (event: { key: string; preventDefault: () => void }) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();

@@ -18,6 +18,7 @@ import {
 } from "@wattsteer/ui";
 import { router } from "expo-router";
 import Head from "expo-router/head";
+import { useState } from "react";
 import { Text, View } from "react-native";
 import { AppShell, ScreenTitle } from "@/components/app/app-shell";
 import { ForecastStamp, HonestyNote } from "@/components/app/honesty";
@@ -55,6 +56,8 @@ export default function GridOverviewScreen() {
   // viewport query would put the map beside the rows inside a column that
   // cannot hold both.
   const [overviewWidth, onOverviewLayout] = useContainerWidth();
+  // One hover, two affordances — see `SubsystemMap`'s `hovered` prop.
+  const [hovered, setHovered] = useState<SubsystemCode | null>(null);
   const side = overviewWidth >= layout.desktop;
 
   const domainMax = Math.max(...all.map((each) => each.dailyEnergy.p90)) * 1.05;
@@ -142,6 +145,8 @@ export default function GridOverviewScreen() {
                 <SubsystemMap
                   forecasts={all}
                   selected={params.subsystem}
+                  hovered={hovered}
+                  onHoverChange={setHovered}
                   onSelect={select}
                 />
               </View>
@@ -165,6 +170,8 @@ export default function GridOverviewScreen() {
                   emphasis={params.technology}
                   domainMax={domainMax}
                   selected={forecast.subsystem === params.subsystem}
+                  highlighted={forecast.subsystem === hovered}
+                  onHoverChange={(on) => setHovered(on ? forecast.subsystem : null)}
                   onPress={() => select(forecast.subsystem)}
                 />
               ))}

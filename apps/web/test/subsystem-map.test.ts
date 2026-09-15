@@ -440,3 +440,46 @@ describe("the regions are drawn, not turned into buttons", () => {
     expect(source).toContain('accessibilityRole: "button"');
   });
 });
+
+describe("the region responds to a pointer, and so does its row", () => {
+  const raw = readFileSync(
+    join(import.meta.dir, "..", "src/components/charts/subsystem-map.tsx"),
+    "utf8",
+  );
+  const source = raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  const overview = readFileSync(
+    join(import.meta.dir, "..", "src/app/app/index.tsx"),
+    "utf8",
+  );
+
+  /**
+   * `onClick` alone did not fire. It was attached — the rendered path carries
+   * it in `__reactProps$` — but react-native-web's press responder consumes the
+   * event before React's own handler runs, so a click on a region did nothing
+   * while `onMouseEnter` on the same element worked. Measured in a browser
+   * against the deployed build: hover moved `fill-opacity` 0.5 → 0.72 and the
+   * click left the URL unchanged. `onPress` is react-native-svg's own and does
+   * fire; both are kept, because `onClick` is what a keyboard-less DOM test and
+   * an `Enter` key press go through.
+   */
+  test("the region has onPress, not only onClick", () => {
+    expect(source).toContain("onPress: () => onSelect(code)");
+    expect(source).toContain("onClick: () => onSelect(code)");
+  });
+
+  /**
+   * Hover has two ends. Held inside the map it could only ever light the
+   * region; lifted to the overview it lights the row as well, and hovering the
+   * row lights the region.
+   */
+  test("hover is owned by the overview, not by either child", () => {
+    expect(overview).toContain("const [hovered, setHovered]");
+    expect(overview).toContain("hovered={hovered}");
+    expect(overview).toContain("onHoverChange={setHovered}");
+    expect(overview).toContain("highlighted={forecast.subsystem === hovered}");
+    // Non-vacuity: if the map kept its own state the prop would be unused and
+    // the row would never light.
+    expect(source).not.toMatch(/useState<SubsystemCode \| null>/);
+    expect(source).toContain("const active = hovered");
+  });
+});

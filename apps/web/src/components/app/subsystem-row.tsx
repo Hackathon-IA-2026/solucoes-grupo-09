@@ -32,7 +32,9 @@ export function SubsystemRow({
   emphasis,
   domainMax,
   selected,
+  highlighted = false,
   onPress,
+  onHoverChange,
 }: {
   forecast: SubsystemDayForecast;
   /**
@@ -44,7 +46,17 @@ export function SubsystemRow({
   emphasis: Technology;
   domainMax: number;
   selected: boolean;
+  /**
+   * Pointed at from the map, rather than by this row's own pointer.
+   *
+   * Hovering a region has to light the row it belongs to, or the two
+   * affordances read as two lists. It is deliberately the *same* treatment the
+   * row gives its own hover — one highlight vocabulary, whichever end the
+   * pointer is at.
+   */
+  highlighted?: boolean;
   onPress: () => void;
+  onHoverChange?: (hovered: boolean) => void;
 }) {
   const colors = usePalette();
   const copy = useCopy();
@@ -58,16 +70,23 @@ export function SubsystemRow({
         subsystem: meta.onsDisplayName,
       })}
       onPress={onPress}
+      onHoverIn={() => onHoverChange?.(true)}
+      onHoverOut={() => onHoverChange?.(false)}
       style={(state) => {
-        const { focused = false, hovered = false } = state as {
+        const { focused = false, hovered: selfHovered = false } = state as {
           focused?: boolean;
           hovered?: boolean;
         };
+        const hovered = selfHovered || highlighted;
         return {
           borderRadius: radius.lg,
           borderCurve: "continuous",
           borderWidth: 1,
-          borderColor: selected ? colors.accent : colors.border,
+          borderColor: selected
+            ? colors.accent
+            : hovered
+              ? colors.borderStrong
+              : colors.border,
           backgroundColor: hovered ? colors.surfaceSunken : colors.surface,
           padding: 16,
           gap: space.md,
