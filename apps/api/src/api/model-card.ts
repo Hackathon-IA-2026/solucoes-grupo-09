@@ -696,14 +696,25 @@ export function createModelCardRoutes(endpoint?: MlEndpoint) {
     .get(
       "/v1/model/card",
       async ({ query, request, set }) => {
-        const envelope = await fetchCard(laneName("lane", query.lane), endpoint);
-        // The artifact id and nothing else. `api-surface.md`'s caching table:
+        const lane = laneName("lane", query.lane);
+        const envelope = await fetchCard(lane, endpoint);
+        // The artifact id **and the lane**. `api-surface.md`'s caching table:
         // this response "changes only on promotion", so its cache identity *is*
         // the artifact — there is no clock in this key and no invalidation call
         // to forget, because a promotion mints a new id by construction.
+        //
+        // **The lane was missing, and an artifact id is only unique within
+        // one.** `jobs/retrain.ts` says so directly — the run id "is the
+        // artifact stem in both lanes" — so one retrain mints one id across
+        // `gate_early` and `gate_late` alike. A client holding the late gate's
+        // validator could send it with `lane=…gate_early…` and be answered 304
+        // with no body, then render the late gate's reliability curve, coverage
+        // and risk bins as the early gate's. The two gates see different
+        // weather runs; their calibration is not interchangeable.
         if (
           applyCachePolicy({ set, request }, CACHE_POLICIES.modelCard, [
             envelope.artifact_id,
+            lane,
           ])
         ) {
           return null;
@@ -731,13 +742,17 @@ export function createModelCardRoutes(endpoint?: MlEndpoint) {
     .get(
       "/v1/model/card/raw",
       async ({ query, request, set }) => {
-        const envelope = await fetchCard(laneName("lane", query.lane), endpoint);
+        const lane = laneName("lane", query.lane);
+        const envelope = await fetchCard(lane, endpoint);
         // The same provenance with the representation on it: the raw card and
         // the shaped one are two encodings of one artifact, and a shared cache
         // holding both under one validator would serve either for the other.
+        // The lane is here for the reason it is on the shaped route above — an
+        // artifact id is unique within a lane and not across them.
         if (
           applyCachePolicy({ set, request }, CACHE_POLICIES.modelCard, [
             envelope.artifact_id,
+            lane,
             "raw",
           ])
         ) {

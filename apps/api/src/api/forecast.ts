@@ -243,11 +243,28 @@ export function createForecastRoutes(deps: {
       // that no longer says which artifact answered. `plugins/cache-policy.ts`
       // is where the row is now read from, so this route and
       // `/v1/grid/outlook` cannot drift apart again.
+      //
+      // **`subsystem` is in the validator, and leaving it out was a correctness
+      // bug rather than an omission.** One retrain mints one artifact id across
+      // every subsystem, and `publishedAt` is `gate_at(target_date,
+      // gate_profile)` — the same instant for all four. So the other three
+      // components are *identical* across subsystems on a given day and gate,
+      // and a client holding the Northeast's validator could send it with
+      // `subsystem=S` and be answered `304 Not Modified` with no body: it would
+      // render the Northeast's band as the South's, confidently, with the
+      // screen and the numbers agreeing and both wrong.
+      //
+      // The routes next door already had it right — `plants.ts` appends its
+      // filters and `curtailment.ts` appends its range — which is what makes
+      // this an inconsistency to fix rather than a policy to debate. The rule:
+      // **every axis the response varies on belongs in the validator**, and a
+      // required query parameter is always such an axis.
       if (
         applyCachePolicy({ set, request }, CACHE_POLICIES.forecast, [
           published.day.artifactId,
           published.day.publishedAt,
           published.day.dataVersion,
+          subsystem,
         ])
       ) {
         return null;

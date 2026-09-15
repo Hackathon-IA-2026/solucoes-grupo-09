@@ -382,3 +382,36 @@ export function envelope(
   });
   return toErrorEnvelope(error, options?.requestId);
 }
+
+/**
+ * What an error may be written to a **log** as.
+ *
+ * `toErrorEnvelope` guards the response path. This guards the log path, and the
+ * two need separate answers: a response must carry no detail at all, while a
+ * log wants the stack — an uncaught exception with no frames is an incident
+ * with no lead.
+ *
+ * **What it exists to drop is an error's own attached properties.** ioredis
+ * hangs the failed command off the error object — `err.command` is
+ * `{ name: "auth", args: ["default", "<the password>"] }` — and every console
+ * that formats an `Error` by inspecting its properties (Bun's among them)
+ * prints those args verbatim. One WRONGPASS therefore writes `REDIS_URL`'s
+ * password into the deployment log, where it outlives the rotation that was
+ * meant to retire it. `redactedRedisError` in `jobs/bullmq.ts` was written when
+ * that happened; it was applied to one of the two Redis handlers and to none of
+ * the five process-level sinks that can receive the same object through an
+ * unhandled rejection.
+ *
+ * **`stack` rather than `message`, and by construction rather than by
+ * redaction.** `Error.prototype.stack` is built from the name, the message and
+ * the frames; it does not walk own-properties, so `command.args` cannot appear
+ * in it however many fields a library attaches. A redactor would have to be
+ * right about every field ioredis — or the next library — might add. This has
+ * to be right about one: that `stack` is a string.
+ */
+export function loggableError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.stack ?? `${error.name}: ${error.message}`;
+  }
+  return String(error);
+}

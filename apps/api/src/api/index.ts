@@ -5,6 +5,7 @@ import { swagger } from "@elysiajs/swagger";
 import { Elysia } from "elysia";
 import { config } from "../config.js";
 import { database } from "../database/connection.js";
+import { loggableError } from "../errors.js";
 import { canonicalReads } from "./canonical.js";
 import { curtailmentRoutes } from "./curtailment.js";
 import { diagnosisRoutes } from "./diagnosis.js";
@@ -308,13 +309,13 @@ if (import.meta.main) {
   // A rejected promise somewhere must NOT take the whole server down — log it
   // and keep serving every other in-flight request.
   process.on("unhandledRejection", (reason) => {
-    console.error("⚠️  Unhandled rejection (continuing):", reason);
+    console.error("⚠️  Unhandled rejection (continuing):", loggableError(reason));
   });
 
   // After an uncaught exception the process state is undefined, so the safe
   // move is a graceful shutdown then exit (a supervisor restarts us).
   process.on("uncaughtException", (err) => {
-    console.error("💥 Uncaught exception — shutting down:", err);
+    console.error("💥 Uncaught exception — shutting down:", loggableError(err));
     void shutdown("uncaughtException");
   });
 }

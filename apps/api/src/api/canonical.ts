@@ -19,8 +19,8 @@ import {
 import { toWire } from "../contract/wire.js";
 import type { Database } from "../database/connection.js";
 import { database } from "../database/connection.js";
-import { BadInputError, BusyError } from "../errors.js";
-import { instant, optionalInstant } from "./params.js";
+import { BadInputError, BusyError, CodedError } from "../errors.js";
+import { instant, MAX_OBSERVED_RANGE_DAYS, optionalInstant } from "./params.js";
 import {
   applyCachePolicy,
   CACHE_POLICIES,
@@ -71,6 +71,36 @@ function factWindow(query: { as_of: string; from: string; to: string }): {
     // was no curtailment", which is a different and much worse statement.
     throw new BadInputError(
       "`to` must be strictly after `from` — the window is [from, to)",
+    );
+  }
+  // **The same 400-day cap the observed reads have, and its absence here was an
+  // availability bug rather than a gap in symmetry.** These reads have no
+  // `LIMIT`, materialise every row into a JS array before encoding, and
+  // `training-window` runs seven of them serially inside one transaction on a
+  // pool of ten connections. `no-store` means nothing absorbs a repeat. So ten
+  // concurrent `from=1970-01-01&to=2100-01-01` — well inside the published
+  // 120/min read budget, from one client — hold all ten connections, starve
+  // `/ready`'s `select 1` until the instance is pulled from rotation, and keep
+  // running after the caller has gone.
+  //
+  // `MAX_OBSERVED_RANGE_DAYS` is imported rather than restated: it is a property
+  // of the observed surface, and a second copy of the number is how the two
+  // would come to disagree. Refused rather than clamped, for the reason
+  // `observedRange` gives — a clamped range returns real numbers for a window
+  // the caller did not ask for, and nothing on the payload says so.
+  const days = (to.getTime() - from.getTime()) / 86_400_000;
+  if (days > MAX_OBSERVED_RANGE_DAYS) {
+    throw new CodedError(
+      "DATE_RANGE_TOO_LARGE",
+      `A canonical window may span at most ${MAX_OBSERVED_RANGE_DAYS} days; ` +
+        `this one spans ${Math.ceil(days)}`,
+      {
+        details: {
+          from: from.toISOString(),
+          to: to.toISOString(),
+          max_days: MAX_OBSERVED_RANGE_DAYS,
+        },
+      },
     );
   }
   return { asOf: instant("as_of", query.as_of), from, to };

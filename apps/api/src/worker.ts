@@ -1,5 +1,6 @@
 import { config } from "./config.js";
 import { database } from "./database/connection.js";
+import { loggableError } from "./errors.js";
 import { createPayloadArchive, REFRESH_CADENCE } from "./ingest/index.js";
 import { createBullMqRunner } from "./jobs/bullmq.js";
 import { FORECAST_PUBLICATIONS, PUBLICATION_TIME_ZONE } from "./jobs/publication.js";
@@ -276,12 +277,12 @@ const shutdown = async (signal: string) => {
 process.on("SIGTERM", () => void shutdown("SIGTERM"));
 process.on("SIGINT", () => void shutdown("SIGINT"));
 process.on("unhandledRejection", (reason) => {
-  console.error("⚠️  Unhandled rejection (continuing):", reason);
+  console.error("⚠️  Unhandled rejection (continuing):", loggableError(reason));
 });
 
 // After an uncaught exception the process state is undefined — drain in-flight
 // jobs (runner.close() waits for them) and exit so the supervisor restarts us.
 process.on("uncaughtException", (err) => {
-  console.error("💥 Uncaught exception — shutting down:", err);
+  console.error("💥 Uncaught exception — shutting down:", loggableError(err));
   void shutdown("uncaughtException");
 });

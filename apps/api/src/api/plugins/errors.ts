@@ -3,6 +3,7 @@ import {
   type ErrorCode,
   type ErrorDetails,
   envelope,
+  loggableError,
   toErrorEnvelope,
 } from "../../errors.js";
 import { refuseToCache } from "./cache-policy.js";
@@ -142,7 +143,7 @@ export const errorHandler = new Elysia({ name: "error-handler" })
 
     const mapped = toErrorEnvelope(error, requestId);
     if (mapped.status >= 500) {
-      console.error("💥 Unhandled API error:", error);
+      console.error("💥 Unhandled API error:", loggableError(error));
     }
     if (mapped.retryAfterSec !== undefined) {
       set.headers["retry-after"] = String(mapped.retryAfterSec);

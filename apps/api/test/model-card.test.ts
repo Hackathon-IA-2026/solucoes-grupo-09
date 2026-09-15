@@ -331,14 +331,43 @@ describe("model card · what the published band actually rests on", () => {
 });
 
 describe("model card · its cache identity is the artifact's", () => {
-  it("ETags on the artifact id and caches for an hour", async () => {
+  it("ETags on the artifact id and the lane, and caches for an hour", async () => {
     serves();
     const response = await card();
-    expect(response.headers.get("etag")).toBe(`W/"${ARTIFACT}"`);
+    // The lane is in the validator because **an artifact id is unique within a
+    // lane and not across them** — see the test below, which is the failure
+    // this pair prevents.
+    expect(response.headers.get("etag")).toBe(`W/"${ARTIFACT}:${LANE}"`);
     expect(response.headers.get("cache-control")).toBe("public, max-age=3600");
     // Nothing in this domain is immutable, and this response least of all: a
     // promotion changes it.
     expect(response.headers.get("cache-control")).not.toContain("immutable");
+  });
+
+  it("does not answer one lane's validator with another lane's card", async () => {
+    // `jobs/retrain.ts`: the run id "is the artifact stem in both lanes", so one
+    // retrain mints one artifact id across `gate_early` and `gate_late` alike.
+    // With the id alone as the validator, a client holding the late gate's ETag
+    // could send it against the early gate and be answered 304 with no body —
+    // then render the late gate's reliability curve, coverage and risk bins as
+    // the early gate's. The two gates see different weather runs and their
+    // calibration is not interchangeable.
+    const early = "dessem_free_v1__gate_early__thr5";
+    serves();
+    const late = await card();
+    const lateTag = late.headers.get("etag") as string;
+    expect(lateTag).toContain(ARTIFACT);
+
+    serves();
+    const crossed = await get(`/v1/model/card?lane=${early}`, {
+      "if-none-match": lateTag,
+    });
+    expect(crossed.status).not.toBe(304);
+    // And the two lanes' validators differ, which is the property that makes
+    // the line above hold for a reason rather than by accident.
+    serves();
+    const earlyTag = (await get(`/v1/model/card?lane=${early}`)).headers.get("etag");
+    expect(earlyTag).not.toBe(lateTag);
   });
 
   it("revalidates to a 304 rather than re-reading the card", async () => {
