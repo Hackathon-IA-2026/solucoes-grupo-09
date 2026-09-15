@@ -106,6 +106,7 @@ export const app = new Elysia()
       }),
       store: limitStore,
       trustedProxyDepth: config.trustedProxyDepth,
+      edgeClientIpHeader: config.edgeClientIpHeader ?? null,
     }),
   )
   .use(

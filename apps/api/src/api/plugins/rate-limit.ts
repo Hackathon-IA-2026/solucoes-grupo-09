@@ -160,7 +160,34 @@ export function clientKey(
   forwardedFor: string | null,
   socketIp: string,
   depth = 1,
+  edgeClientIp: string | null = null,
 ): string {
+  // **The edge's own client header wins, when the deployment says it may.**
+  //
+  // Behind Cloudflare the positional rule above is right and still wrong:
+  // Cloudflare appends the client, Railway's edge then appends *Cloudflare*, so
+  // the last hop is a Cloudflare data centre and every reader behind that colo
+  // is charged to one key. Verified on the live deployment — `api.wattsteer.com`
+  // answers with `server: cloudflare` and a `cf-ray`, while
+  // `wattsteer-api.up.railway.app` answers with `server: railway-hikari` and no
+  // `cf-*` at all. With the voice tier at six mints a minute, that is a
+  // self-denial-of-service against real users from an attacker spending six
+  // requests.
+  //
+  // `CF-Connecting-IP` is the fix and **only where the origin cannot be reached
+  // around the edge.** Cloudflare overwrites that header on every request it
+  // proxies, so it cannot be forged *through* Cloudflare — but it can be forged
+  // by anyone who reaches the origin directly, which today anyone can: the
+  // Railway service domain is live beside the custom one. Trusting it
+  // unconditionally would hand back the free-budget-reset this function's
+  // positional rule was written to close.
+  //
+  // So it is opt-in, off by default, and `config.ts` says what must be true
+  // before it is turned on. Two ingress paths with different chain lengths
+  // cannot both be served by one `depth`; the real repair is one path.
+  if (edgeClientIp !== null && edgeClientIp !== "") {
+    return edgeClientIp;
+  }
   if (depth <= 0) {
     return socketIp;
   }
@@ -180,6 +207,14 @@ export interface RateLimitOptions {
   store?: LimitStore;
   /** How many proxies sit in front of this process. See `clientKey`. */
   trustedProxyDepth?: number;
+  /**
+   * The header the edge writes the true client into, if one may be trusted.
+   *
+   * `null` — the default — means no header is trusted and the positional
+   * `X-Forwarded-For` rule decides. See `clientKey` for what must be true of the
+   * deployment before this is set.
+   */
+  edgeClientIpHeader?: string | null;
 }
 
 /** The budgets the spec publishes, as policies. */
@@ -209,6 +244,7 @@ export const rateLimit = (options: RateLimitOptions) => {
   const classify = options.classify ?? classifyTier;
   const store = options.store ?? memoryStore();
   const depth = options.trustedProxyDepth ?? 1;
+  const edgeHeader = options.edgeClientIpHeader ?? null;
   return new Elysia({ name: "rate-limit", seed: options.tiers })
     .onRequest(async ({ request, set, server }) => {
       if (request.method === "OPTIONS") {
@@ -227,6 +263,7 @@ export const rateLimit = (options: RateLimitOptions) => {
         request.headers.get("x-forwarded-for"),
         server?.requestIP(request)?.address ?? "unknown",
         depth,
+        edgeHeader === null ? null : request.headers.get(edgeHeader),
       );
       const { limited, retryAfterSec } = await store.consume(
         policy,

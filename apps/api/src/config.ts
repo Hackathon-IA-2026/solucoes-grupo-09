@@ -72,6 +72,23 @@ export const config = {
    */
   voiceSessionMax: int(process.env.WATTSTEER_RATE_LIMIT_VOICE, 6, 0, 10_000),
   /**
+   * The header a trusted edge writes the true client IP into — `CF-Connecting-IP`
+   * behind Cloudflare. Unset means no header is trusted.
+   *
+   * **Two things must be true before this is set, and one of them is not true
+   * today.** Cloudflare overwrites this header on every request it proxies, so
+   * it cannot be forged *through* the edge. It can be forged by anyone who
+   * reaches the origin around it — and the Railway service domain is live beside
+   * the custom one, so today anyone can. Setting this while that is so hands
+   * back the free-budget-reset the positional `X-Forwarded-For` rule closed:
+   * `CF-Connecting-IP: <random>` would buy a fresh budget every request.
+   *
+   * So: close the direct path first, *then* set this. Until both hold, the
+   * positional rule is the safer of two imperfect answers — it over-charges one
+   * Cloudflare colo rather than under-charging an attacker.
+   */
+  edgeClientIpHeader: process.env.WATTSTEER_EDGE_CLIENT_IP_HEADER || undefined,
+  /**
    * How many proxies sit in front of this process.
    *
    * The client a budget is charged to is the `n`-th `X-Forwarded-For` hop from

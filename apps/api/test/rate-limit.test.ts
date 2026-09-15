@@ -347,3 +347,46 @@ describe("rateLimit plugin · the counter is a seam", () => {
     expect(store.detail).toContain("per-process");
   });
 });
+
+describe("the client key behind an edge that rewrites the chain", () => {
+  it("charges the last hop when no edge header is trusted", () => {
+    // The default, and the rule the positional comment argues for: with one
+    // trusted proxy, the only hop nobody could have lied about is the last.
+    expect(clientKey("9.9.9.9, 203.0.113.7", "10.0.0.1", 1)).toBe("203.0.113.7");
+  });
+
+  it("collapses every reader behind one Cloudflare colo onto one key", () => {
+    // The defect this exists to document. Behind Cloudflare the chain is
+    // [client, cloudflare] and Railway appends its own view, so the last hop is
+    // a Cloudflare data centre — shared by every reader behind it. Verified on
+    // the live deployment: api.wattsteer.com answers `server: cloudflare` with
+    // a cf-ray, wattsteer-api.up.railway.app answers `server: railway-hikari`
+    // with no cf-* at all. With voice at six mints a minute, one attacker
+    // denies the whole colo.
+    const colo = "172.71.0.5";
+    const readerA = clientKey(`198.51.100.1, ${colo}`, "10.0.0.1", 1);
+    const readerB = clientKey(`198.51.100.2, ${colo}`, "10.0.0.1", 1);
+    expect(readerA).toBe(readerB);
+  });
+
+  it("separates them when the edge header is trusted", () => {
+    const colo = "172.71.0.5";
+    const readerA = clientKey(`198.51.100.1, ${colo}`, "10.0.0.1", 1, "198.51.100.1");
+    const readerB = clientKey(`198.51.100.2, ${colo}`, "10.0.0.1", 1, "198.51.100.2");
+    expect(readerA).not.toBe(readerB);
+    expect(readerA).toBe("198.51.100.1");
+  });
+
+  it("is off unless a deployment names the header", () => {
+    // **Not defaulted on, and the reason is the whole of why this is opt-in.**
+    // Cloudflare overwrites CF-Connecting-IP on everything it proxies, so it
+    // cannot be forged *through* the edge — but it can be forged by anyone who
+    // reaches the origin *around* it, which today anyone can, because the
+    // Railway service domain is live beside the custom one. Trusting it while
+    // that holds hands back the free-budget-reset the positional rule closed.
+    expect(config.edgeClientIpHeader).toBeUndefined();
+    // And a null/empty header value must not be treated as a client.
+    expect(clientKey("1.1.1.1, 2.2.2.2", "10.0.0.1", 1, null)).toBe("2.2.2.2");
+    expect(clientKey("1.1.1.1, 2.2.2.2", "10.0.0.1", 1, "")).toBe("2.2.2.2");
+  });
+});
