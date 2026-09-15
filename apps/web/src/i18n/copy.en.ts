@@ -624,6 +624,83 @@ export const en = {
     /** `Technology` is an enum in the API; these are its words. */
     technology: { WIND: "Wind", SOLAR: "Solar" },
 
+    /**
+     * The voice copilot — `components/voice/*`.
+     *
+     * Keyed on the same unions the code branches on: `VoiceStatus` (seven, two
+     * of them WattSteer's own) and `ToolRefusalCode` (thirteen). That is
+     * deliberate and `voice-dock.test.ts` asserts it, because the failure it
+     * prevents is invisible — a status or a refusal with no sentence is a pill
+     * that renders blank or a card that renders `undefined`, at exactly the
+     * moment the reader is watching hardest.
+     *
+     * The refusals are written as the **agent** speaking, not as the app
+     * reporting. `execute.ts` separates its codes by what the reader should
+     * hear — `unknown_subsystem` is answerable with "I know N, NE, SE and S"
+     * and `unknown_run` with "there are two runs" — and writing them in the
+     * third person would spend that separation on nothing.
+     */
+    voice: {
+      /** The header control. Short, because it sits beside `PT / EN`. */
+      trigger: "Speak",
+      triggerHint: "Ask WattSteer about this screen, out loud.",
+      /** The IDLE pill — the invitation, written out in full exactly once. */
+      idle: "Ask WattSteer",
+      panelTitle: "WATTSTEER AI",
+      expand: "Open the voice panel",
+      collapse: "Collapse the voice panel",
+      close: "End the voice session",
+      status: {
+        idle: "Ask WattSteer",
+        connecting: "Connecting…",
+        listening: "Listening…",
+        thinking: "Thinking…",
+        speaking: "Speaking…",
+        acting: "Opening it for you…",
+        error: "Voice stopped. Press to try again.",
+      },
+      transcript: {
+        you: "You",
+        agent: "WattSteer",
+        empty:
+          "Ask about a region, why a day looks the way it does, or what could be done about it.",
+      },
+      action: {
+        navigate: "Opened {screen} for you",
+        focused: "Changed the selection for you",
+        highlighted: "Highlighted {subsystem}",
+        highlightCleared: "Cleared the highlight",
+        refused: "I didn't do that",
+        noScreenChange: "No screen change — you're already where the answer is.",
+        scenarioChanged: "scenario updated",
+      },
+      refusal: {
+        unknown_tool: "That isn't something I can do here.",
+        malformed_arguments: "I couldn't read what I asked for. Say it again?",
+        unexpected_argument: "That doesn't belong to what I was doing.",
+        missing_argument: "I need to know which one you mean.",
+        unknown_subsystem: "I don't know that subsystem — I know N, NE, SE and S.",
+        unknown_technology: "I know two fleets: wind and solar.",
+        unknown_run: "There are two D−1 runs: 00Z and 12Z.",
+        unknown_driver: "That isn't one of the driver groups the attribution ranks.",
+        unknown_episode: "That day isn't in the Time Machine's catalogue.",
+        value_out_of_range: "That value is outside what the editors themselves accept.",
+        ambiguous_replay: "Tell me either a day or how far back — not both.",
+        no_episode_for_relative_day: "Nothing that far back is in the catalogue.",
+        scenario_refused: "That fleet isn't one the optimizer would accept.",
+      },
+      mic: {
+        deniedTitle: "No microphone",
+        deniedBody:
+          "The browser didn't let WattSteer hear you. Type instead — the same questions work.",
+      },
+      typed: {
+        label: "Type a question instead of speaking",
+        placeholder: "Type a question",
+        send: "Send",
+      },
+    },
+
     /** Stamped on every forecast surface — see `components/app/honesty.tsx`. */
     stamp: {
       published: "{producer} · {run} · published {when} BRT",

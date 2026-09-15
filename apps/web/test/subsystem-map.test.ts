@@ -478,15 +478,25 @@ describe("the region responds to a pointer, and so does its row", () => {
   });
 
   /**
-   * Hover has two ends. Held inside the map it could only ever light the
-   * region; lifted to the overview it lights the row as well, and hovering the
-   * row lights the region.
+   * Hover had two ends and now has three. Held inside the map it could only
+   * ever light the region; lifted to the overview it lights the row as well,
+   * and hovering the row lights the region. The third end is the voice agent's
+   * `highlight` tool, which lights both — `docs/plans/voice-copilot.md` §3.1
+   * asked for exactly that and called it *"a one-line change to who can call
+   * `setHovered`, and no new highlight mechanism at all"*.
+   *
+   * So the prop the children read is `active` — the pointer's hover where there
+   * is one, the agent's emphasis otherwise — and the two children must read the
+   * **same** one. A map wired to `active` and a row still wired to `hovered`
+   * would light the region and not its row, which is precisely the defect
+   * lifting the state was supposed to have ended.
    */
   test("hover is owned by the overview, not by either child", () => {
     expect(overview).toContain("const [hovered, setHovered]");
-    expect(overview).toContain("hovered={hovered}");
+    expect(overview).toContain("const active = hovered ?? spoken");
+    expect(overview).toContain("hovered={active}");
     expect(overview).toContain("onHoverChange={setHovered}");
-    expect(overview).toContain("highlighted={row.subsystem === hovered}");
+    expect(overview).toContain("highlighted={row.subsystem === active}");
     // Non-vacuity: if the map kept its own *hover* state the prop would be
     // unused and the row would never light. The map does hold one piece of
     // state — which region the keyboard is on — and that is deliberately not

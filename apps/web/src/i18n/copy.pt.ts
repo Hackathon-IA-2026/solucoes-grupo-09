@@ -77,8 +77,7 @@ export const pt: Copy = {
     OPTIMIZER_NOT_CONFIGURED:
       "O otimizador não está configurado nesta instalação, então cenários não podem ser resolvidos aqui.",
     OPTIMIZER_UNAVAILABLE: "Não foi possível alcançar o otimizador.",
-    VOICE_NOT_CONFIGURED:
-      "A voz não está configurada nesta instalação.",
+    VOICE_NOT_CONFIGURED: "A voz não está configurada nesta instalação.",
     VOICE_UNAVAILABLE: "Não foi possível iniciar a sessão de voz.",
     OPTIMIZER_TIMEOUT: "O otimizador não respondeu a tempo.",
     OPTIMIZER_NOT_READY: "O otimizador está subindo e ainda não consegue resolver.",
@@ -479,6 +478,78 @@ export const pt: Copy = {
     },
 
     technology: { WIND: "Eólica", SOLAR: "Solar" },
+
+    /**
+     * O copiloto de voz — `components/voice/*`.
+     *
+     * As mesmas uniões que o código percorre: `VoiceStatus` (sete, duas
+     * próprias da WattSteer) e `ToolRefusalCode` (treze). A falha que isso
+     * previne é invisível — um estado ou uma recusa sem frase é uma pílula em
+     * branco ou um cartão com `undefined`, justamente quando quem lê está mais
+     * atento.
+     *
+     * As recusas são escritas como **o agente falando**, não como o aplicativo
+     * relatando. `execute.ts` separa os códigos pelo que quem ouve precisa
+     * ouvir, e escrevê-los na terceira pessoa gastaria essa separação à toa.
+     */
+    voice: {
+      trigger: "Falar",
+      triggerHint: "Pergunte à WattSteer sobre esta tela, em voz alta.",
+      idle: "Pergunte ao WattSteer",
+      panelTitle: "WATTSTEER AI",
+      expand: "Abrir o painel de voz",
+      collapse: "Recolher o painel de voz",
+      close: "Encerrar a sessão de voz",
+      status: {
+        idle: "Pergunte ao WattSteer",
+        connecting: "Conectando…",
+        listening: "Ouvindo você…",
+        thinking: "Pensando…",
+        speaking: "Respondendo…",
+        acting: "Abrindo para você…",
+        error: "A voz parou. Toque para tentar de novo.",
+      },
+      transcript: {
+        you: "Você",
+        agent: "WattSteer",
+        empty:
+          "Pergunte sobre uma região, por que o dia está assim, ou o que dava para fazer.",
+      },
+      action: {
+        navigate: "Abri {screen} para você",
+        focused: "Mudei a seleção para você",
+        highlighted: "Destaquei {subsystem}",
+        highlightCleared: "Tirei o destaque",
+        refused: "Isso eu não fiz",
+        noScreenChange: "Sem mudar de tela — a resposta está onde você já está.",
+        scenarioChanged: "cenário atualizado",
+      },
+      refusal: {
+        unknown_tool: "Isso não é algo que eu consiga fazer por aqui.",
+        malformed_arguments: "Não consegui ler o que pedi. Pode repetir?",
+        unexpected_argument: "Isso não faz parte do que eu estava fazendo.",
+        missing_argument: "Preciso saber qual deles você quer dizer.",
+        unknown_subsystem: "Não conheço esse subsistema — conheço N, NE, SE e S.",
+        unknown_technology: "Conheço duas fontes: eólica e solar.",
+        unknown_run: "São duas rodadas de D−1: 00Z e 12Z.",
+        unknown_driver: "Esse não é um dos grupos de fatores que a atribuição ordena.",
+        unknown_episode: "Esse dia não está no catálogo da Máquina do tempo.",
+        value_out_of_range: "Esse valor está fora do que os próprios controles aceitam.",
+        ambiguous_replay: "Me diga um dia ou quantos dias atrás — não os dois.",
+        no_episode_for_relative_day: "Não há nada tão antigo assim no catálogo.",
+        scenario_refused: "Esse parque não é um que o otimizador aceitaria.",
+      },
+      mic: {
+        deniedTitle: "Sem microfone",
+        deniedBody:
+          "O navegador não deixou a WattSteer ouvir você. Digite — as mesmas perguntas funcionam.",
+      },
+      typed: {
+        label: "Digitar uma pergunta em vez de falar",
+        placeholder: "Digite uma pergunta",
+        send: "Enviar",
+      },
+    },
 
     stamp: {
       published: "{producer} · {run} · publicado {when} BRT",

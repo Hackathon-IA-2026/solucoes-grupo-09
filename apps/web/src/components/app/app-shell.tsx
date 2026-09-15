@@ -27,6 +27,7 @@ import { router, usePathname } from "expo-router";
 import type { ReactNode } from "react";
 import { Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { LanguageSwitch } from "@/components/language-switch";
+import { VoiceTrigger } from "@/components/voice/voice-trigger";
 import { type Copy, useCopy, useFormat, useI18n } from "@/i18n";
 import { localePath } from "@/i18n/locale";
 import {
@@ -151,6 +152,16 @@ export function AppShell({
             {/* Pushes the switch to the far edge of the header row. */}
             <View style={{ flex: 1 }} />
             <LanguageSwitch testID="app-language-switch" />
+            {/*
+              Right of `PT / EN`, exactly as `docs/plans/voice-copilot.md` §5.2
+              sketches it, and deliberately **not** a fifth item in the tab row
+              below: a route for voice would put it *beside* the four modes when
+              its whole value is sitting *across* them, and it would break
+              `sharedParams`, which is built on the four screens being four
+              views of one selection. It renders nothing at all on a deployment
+              with no key.
+            */}
+            <VoiceTrigger />
           </View>
 
           <ScrollView
