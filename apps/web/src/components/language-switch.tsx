@@ -44,7 +44,14 @@ export function LanguageSwitch({ testID }: { testID?: string }) {
   return (
     <View
       testID={testID}
-      accessibilityRole="radiogroup"
+      // Two shapes, because the control has two: on a locale-prefixed route
+      // the options are links to another URL, and a `radiogroup` full of
+      // `role="link"` children is a lie about what pressing one does. Only
+      // the `/app` fallback — where the switch really is a state toggle —
+      // keeps the radio semantics.
+      {...(routeLocale
+        ? ({ role: "group" } as const)
+        : ({ role: "radiogroup" } as const))}
       accessibilityLabel={locale === "pt" ? "Idioma" : "Language"}
       style={{
         flexDirection: "row",
@@ -65,6 +72,7 @@ export function LanguageSwitch({ testID }: { testID?: string }) {
             <Option
               locale={option}
               active={active}
+              asLink={true}
               // Persist the explicit choice so `/` sends this visitor here
               // next time. The navigation itself is the Link's job.
               onPress={() => setLocale(option)}
@@ -77,6 +85,7 @@ export function LanguageSwitch({ testID }: { testID?: string }) {
             key={option}
             locale={option}
             active={active}
+            asLink={false}
             onPress={() => setLocale(option)}
           >
             <Chip locale={option} active={active} />
@@ -106,12 +115,15 @@ export function LanguageSwitch({ testID }: { testID?: string }) {
 function Option({
   locale,
   active,
+  asLink,
   onPress,
   children,
   ...rest
 }: {
   locale: Locale;
   active: boolean;
+  /** True when this instance is wrapped in `Link asChild` and renders an `<a>`. */
+  asLink: boolean;
   onPress: () => void;
   children: ReactNode;
 }) {
@@ -123,9 +135,24 @@ function Option({
     <Pressable
       {...rest}
       testID={`locale-${locale}`}
-      accessibilityRole="radio"
-      aria-checked={active}
-      accessibilityLabel={LOCALE_NAME[locale]}
+      // `aria-checked` is not allowed on `role="link"`, and `Link asChild`
+      // makes this an `<a role="link">` — axe's `aria-allowed-attr` failed on
+      // both chips of every locale-prefixed page for exactly that reason. The
+      // link variant says "this is the page you are on" with `aria-current`,
+      // which is the attribute for that and is allowed on any role; only the
+      // `/app` toggle, which really is a radio, keeps `aria-checked`.
+      {...(asLink
+        ? {
+            role: "link" as const,
+            "aria-current": active ? ("page" as const) : undefined,
+          }
+        : { role: "radio" as const, "aria-checked": active })}
+      // The chip's visible text is "PT"/"EN", and WCAG 2.5.3 (Label in Name)
+      // — axe's `label-content-name-mismatch` — requires the accessible name
+      // to contain it. The endonym alone did not ("PT" is not a substring of
+      // "Português (Brasil)"), so the label now leads with the code a speech
+      // user would say and keeps the full language name after it.
+      accessibilityLabel={`${LOCALE_LABEL[locale]} — ${LOCALE_NAME[locale]}`}
       onPress={(event) => {
         // Preference first, navigation second: the write is synchronous and
         // the navigation is what unmounts this tree.

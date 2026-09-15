@@ -160,6 +160,7 @@ export default function Pitch() {
                   precisely the reader looking at a blank rectangle, and a way
                   out they have to scroll to find is not one. */}
               <View
+                {...FALLBACK_MARKER}
                 style={{
                   flexDirection: wide ? "row" : "column",
                   alignItems: wide ? "center" : "flex-start",
@@ -187,8 +188,25 @@ export default function Pitch() {
   );
 }
 
-/** Where the frame stops being a phone-sized column and becomes a slide. */
-const WIDE = 720;
+/**
+ * Where the frame stops being a phone-sized column and becomes a slide.
+ *
+ * Measured on the page: `onLayout` sits on the screen's outermost `View`, so
+ * this is the viewport width and `+html.tsx` can mirror it with a plain
+ * `min-width` media query. It has to mirror it, because the static export
+ * paints before anything is measured and therefore paints the narrow frame —
+ * a 520px strip that then became a 648px slide when the bundle landed, moving
+ * the footer under it and scoring 0.19 CLS on this page alone.
+ * `test/responsive-css.test.ts` asserts the two numbers agree.
+ */
+export const PITCH_WIDE = 720;
+const WIDE = PITCH_WIDE;
+
+/** `dataSet` → `data-*` on web; nothing on native. See `legal-screen.tsx`. */
+const marker = (name: string) =>
+  Platform.OS === "web" ? ({ dataSet: { [name]: "" } } as object) : {};
+const FALLBACK_MARKER = marker("pitchFallbackRow");
+const EMBED_MARKER = marker("pitchEmbed");
 
 /**
  * Frame geometry, measured off the deck rather than guessed: all 10 pages
@@ -211,6 +229,7 @@ function PitchEmbed({ wide, title }: { wide: boolean; title: string }) {
   return (
     <View
       testID="pitch-embed"
+      {...EMBED_MARKER}
       style={{
         width: "100%",
         overflow: "hidden",

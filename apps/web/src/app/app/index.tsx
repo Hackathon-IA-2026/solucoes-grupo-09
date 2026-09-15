@@ -105,7 +105,14 @@ export default function GridOverviewScreen() {
     <>
       <Head>
         <title>{copy.app.overview.metaTitle}</title>
-        <meta name="robots" content="noindex" />
+        {/* `follow`, which the four `/app` screens and the 404 used to omit.
+            The rest of the site already pairs the two — `/` and `/pitch` say
+            `noindex,follow` — and for the same reason: the page should stay
+            out of the index, but the links in its footer point at the landing
+            page and the legal pages, and a bare `noindex` eventually has
+            Google treat those links as `nofollow`. Nothing here is worth
+            ranking; the pages it links to are. */}
+        <meta name="robots" content="noindex,follow" />
       </Head>
       <AppShell>
         <ScreenTitle

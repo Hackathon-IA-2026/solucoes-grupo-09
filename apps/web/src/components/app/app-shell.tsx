@@ -167,20 +167,34 @@ export function AppShell({
               paddingBottom: 16,
             }}
           >
-            {SCREENS.map((screen) => (
-              <Pill
-                key={screen.key}
-                accessibilityRole="tab"
-                label={copy.app.shell.screens[screen.key]}
-                tone="secondary"
-                active={
-                  screen.path === "/app"
-                    ? pathname === "/app" || pathname === "/app/"
-                    : pathname.startsWith(screen.path)
-                }
-                onPress={() => go(screen.path)}
-              />
-            ))}
+            {/* `role="tab"` requires a `tablist` ancestor, and the horizontal
+                ScrollView is not one — axe's `aria-required-parent` failed on
+                all four pills. The wrapper carries the role rather than the
+                ScrollView because the scroller's own element is not the tabs'
+                parent (react-native-web nests a content container inside it),
+                and it repeats the row's `flexDirection`/`gap` so the rendered
+                geometry is byte-for-byte what the content container produced
+                on its own. */}
+            <View
+              accessibilityRole="tablist"
+              accessibilityLabel={copy.app.shell.screensLabel}
+              style={{ flexDirection: "row", gap: 8 }}
+            >
+              {SCREENS.map((screen) => (
+                <Pill
+                  key={screen.key}
+                  accessibilityRole="tab"
+                  label={copy.app.shell.screens[screen.key]}
+                  tone="secondary"
+                  active={
+                    screen.path === "/app"
+                      ? pathname === "/app" || pathname === "/app/"
+                      : pathname.startsWith(screen.path)
+                  }
+                  onPress={() => go(screen.path)}
+                />
+              ))}
+            </View>
           </ScrollView>
         </View>
       </View>

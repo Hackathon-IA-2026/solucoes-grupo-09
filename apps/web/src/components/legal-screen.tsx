@@ -24,8 +24,39 @@ export interface LegalContentSection {
   content: ReactNode;
 }
 
-/** Breakpoint at which the TOC sidebar moves beside the content. */
-const WIDE = 1024;
+/**
+ * Breakpoint at which the TOC sidebar moves beside the content.
+ *
+ * Measured on the *page*, not on a nested box: `onLayout` below sits on the
+ * screen's outermost `View`, so this number is the viewport width and the
+ * media query in `+html.tsx` that mirrors it can be a plain `min-width`.
+ * `test/responsive-css.test.ts` asserts the two agree.
+ */
+export const LEGAL_WIDE = 1024;
+const WIDE = LEGAL_WIDE;
+
+/**
+ * Whether the responsive switch is CSS's job rather than JavaScript's.
+ *
+ * Only on web, and only because a stylesheet resolves before the bundle has
+ * even been fetched. Native has no such thing, so there the measured width
+ * stays the source of truth — which is also why both branches below have to
+ * keep working.
+ */
+const CSS_RESPONSIVE = Platform.OS === "web";
+
+/**
+ * The `data-` hooks the media query selects on.
+ *
+ * `dataSet` is react-native-web's way to emit a `data-` attribute; it has no
+ * counterpart on React Native's `ViewProps`, hence the cast, and it spreads
+ * nothing on native — where there is no stylesheet to select with anyway.
+ */
+const marker = (name: string) =>
+  CSS_RESPONSIVE ? ({ dataSet: { [name]: "" } } as object) : {};
+const COLUMNS_MARKER = marker("legalColumns");
+const SIDE_MARKER = marker("legalSidebarSide");
+const INLINE_MARKER = marker("legalSidebarInline");
 
 /**
  * Shared legal-page shell (terms / privacy): a home-linking header, a
@@ -78,6 +109,7 @@ export function LegalScreen({
         path={path}
         title={headTitle}
         description={description}
+        imageAlt={copy.meta.imageAlt}
         ogType="article"
       />
 
@@ -135,9 +167,19 @@ export function LegalScreen({
         </View>
 
         <View
+          {...COLUMNS_MARKER}
           style={{
             flex: 1,
-            flexDirection: wide ? "row" : "column",
+            // On web this is the *narrow* arrangement unconditionally, and the
+            // media query in `+html.tsx` is what makes it a row at 1024px.
+            // `wide` is measured, so it is false until `onLayout` fires — which
+            // is after hydration, which is after the static HTML has painted.
+            // Measured on the export, the column→row switch moved the whole
+            // content pane and scored 0.195 CLS on both legal pages at desktop
+            // width, costing them ~9 Lighthouse points each. CSS resolves at
+            // first paint and cannot be late. Native has no stylesheet, so it
+            // keeps the measured boolean.
+            flexDirection: CSS_RESPONSIVE ? "column" : wide ? "row" : "column",
             gap: space.xl,
             width: "100%",
             maxWidth: layout.page,
@@ -145,10 +187,24 @@ export function LegalScreen({
             paddingHorizontal: space.lg,
           }}
         >
-          {wide ? (
+          {/* Both placements exist in the web DOM and CSS shows exactly one.
+              The sidebar cannot be *moved* by a media query — beside the
+              content it sits outside the scroller and stays put while the page
+              scrolls, and inline it scrolls away with the text, which is two
+              different parents rather than two styles. Rendering both is the
+              price of having neither of them appear late. The hidden copy is
+              `display:none`, so it is out of the accessibility tree and out of
+              the tab order; only one TOC is ever reachable. */}
+          {CSS_RESPONSIVE || wide ? (
             <View
               testID="legal.sidebar.container"
-              style={{ width: 280, alignSelf: "flex-start", paddingTop: space.xl }}
+              {...SIDE_MARKER}
+              style={{
+                width: 280,
+                alignSelf: "flex-start",
+                paddingTop: space.xl,
+                ...(CSS_RESPONSIVE ? { display: "none" as const } : null),
+              }}
             >
               {sidebar}
             </View>
@@ -170,7 +226,15 @@ export function LegalScreen({
               alignSelf: "center",
             }}
           >
-            {wide ? null : <View style={{ marginBottom: space.xl }}>{sidebar}</View>}
+            {CSS_RESPONSIVE || !wide ? (
+              <View
+                testID="legal.sidebar.inline"
+                {...INLINE_MARKER}
+                style={{ marginBottom: space.xl }}
+              >
+                {sidebar}
+              </View>
+            ) : null}
 
             <LegalHero badge={badge} updated={updated} title={title} intro={intro} />
 

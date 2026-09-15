@@ -99,7 +99,17 @@ for (const locale of LOCALES) {
       });
 
       test("renders the TOC navigation with multiple items", async ({ page }) => {
-        const nav = page.getByTestId("legal.sidebar.navigation").first();
+        // Both placements of the sidebar are in the DOM on web — the one
+        // beside the content and the one inline above it — and CSS shows
+        // exactly one, so that neither of them can appear late and shift the
+        // page. `.first()` alone would therefore pick the hidden copy at
+        // whichever width hides the first in document order; the visible
+        // filter asks for the one a reader actually has. See
+        // `components/legal-screen.tsx`.
+        const nav = page
+          .getByTestId("legal.sidebar.navigation")
+          .filter({ visible: true })
+          .first();
         await expect(nav).toBeVisible();
         const items = nav.locator('[data-testid^="legal.sidebar.item."]');
         expect(await items.count()).toBeGreaterThan(1);
@@ -108,6 +118,7 @@ for (const locale of LOCALES) {
       test("clicking a TOC item scrolls to its section", async ({ page }) => {
         const items = page
           .getByTestId("legal.sidebar.navigation")
+          .filter({ visible: true })
           .first()
           .locator('[data-testid^="legal.sidebar.item."]');
         await expect(items.first()).toBeVisible({ timeout: 10_000 });

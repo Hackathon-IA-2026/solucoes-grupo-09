@@ -22,7 +22,7 @@ export default function NotFound() {
     <>
       <Head>
         <title>{copy.notFound.metaTitle}</title>
-        <meta name="robots" content="noindex" />
+        <meta name="robots" content="noindex,follow" />
       </Head>
       <View
         style={{

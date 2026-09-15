@@ -77,8 +77,7 @@ export const pt: Copy = {
     OPTIMIZER_NOT_CONFIGURED:
       "O otimizador não está configurado nesta instalação, então cenários não podem ser resolvidos aqui.",
     OPTIMIZER_UNAVAILABLE: "Não foi possível alcançar o otimizador.",
-    VOICE_NOT_CONFIGURED:
-      "A voz não está configurada nesta instalação.",
+    VOICE_NOT_CONFIGURED: "A voz não está configurada nesta instalação.",
     VOICE_UNAVAILABLE: "Não foi possível iniciar a sessão de voz.",
     OPTIMIZER_TIMEOUT: "O otimizador não respondeu a tempo.",
     OPTIMIZER_NOT_READY: "O otimizador está subindo e ainda não consegue resolver.",
@@ -326,6 +325,8 @@ export const pt: Copy = {
   },
 
   meta: {
+    /** Alt text for the 1200×630 share card (`public/og.png`). */
+    imageAlt: "WattSteer — inteligência de curtailment para a rede brasileira",
     home: {
       title: "WattSteer — inteligência de curtailment renovável para a rede brasileira",
       description:
@@ -451,6 +452,8 @@ export const pt: Copy = {
       backToLanding: "WattSteer — voltar para a página inicial",
       prototypeBadge: "PROTÓTIPO",
       noModelBadge: "NENHUM MODELO PROMOVIDO",
+      /** Names the `tablist` around the four screen pills for a screen reader. */
+      screensLabel: "Telas",
       screens: {
         overview: "Visão da rede",
         explain: "Explicar",

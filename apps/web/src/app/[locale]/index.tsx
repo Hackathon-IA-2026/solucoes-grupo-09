@@ -52,6 +52,7 @@ export default function Home() {
         path=""
         title={copy.meta.home.title}
         description={copy.meta.home.description}
+        imageAlt={copy.meta.imageAlt}
       />
 
       <ScrollView

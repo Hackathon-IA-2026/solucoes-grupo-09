@@ -88,7 +88,52 @@ export default function Root({ children }: PropsWithChildren) {
             }}
           />
         </noscript>
-        {/* Match the page background before hydration to avoid a white flash. */}
+        {/*
+          The critical stylesheet: the page background before hydration (so
+          there is no white flash), the reduced-motion rule, and the responsive
+          layouts that CSS owns rather than JavaScript.
+
+          ## Why any layout is CSS's job here
+
+          Every "is this wide?" decision in this app is measured, by
+          `useContainerWidth` + `onLayout`, and `onLayout` cannot fire before
+          React has mounted — which cannot happen before a 500 KB bundle has
+          been fetched and evaluated. The static export paints long before
+          that, and it paints the `width === 0` branch: the narrow one. Every
+          element whose arrangement depends on a measurement therefore *moves*
+          once the bundle lands, and moving content after first paint is
+          precisely what CLS counts.
+
+          Measured on the export at desktop width, before these rules:
+          `/pt/terms` and `/pt/privacy` scored 0.195 CLS — one shift, the whole
+          content pane, when the TOC left it — and `/pitch` 0.190, the footer's
+          one column becoming two. All three pages scored 91 on Performance for
+          that reason alone; nothing else on any of them was slow.
+
+          A stylesheet has the property `onLayout` lacks: it resolves at first
+          paint, with no JavaScript at all. So for the handful of switches that
+          cost real points, the CSS decides and the measured boolean is left to
+          drive native, which has no stylesheet. Each rule below therefore has
+          a counterpart in a component, and every breakpoint is a constant that
+          component exports — `test/responsive-css.test.ts` asserts the pairs
+          agree, and that no rule here selects an attribute nothing emits.
+
+          That test exists because this exact failure had already happened: the
+          rule that used to live here selected `[data-hero-headline]`, an
+          attribute no component has emitted for some time, at a 960px
+          breakpoint the hero no longer uses. It was matching nothing, silently,
+          and the headline it was written to hold still was resizing after
+          hydration. Its intent is kept below, against the element and the
+          breakpoint that now exist.
+
+          `@container` rather than `@media` wherever a component asks about
+          *its own* width rather than the viewport's: the footer and the hero
+          each sit inside page gutters that differ per route, so a viewport
+          breakpoint would flip them at the wrong width on two pages out of
+          three. Where `onLayout` sits on a full-bleed element — the legal
+          screen's root — the two are the same question, and a media query is
+          the simpler one.
+        */}
         <style
           // biome-ignore lint/security/noDangerouslySetInnerHtml: static critical CSS
           dangerouslySetInnerHTML={{
@@ -99,16 +144,67 @@ export default function Root({ children }: PropsWithChildren) {
                 *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
               }
 
-              /* Hero headline, wide variant from first paint (matches the
-                 wideHeadline breakpoint in the hero). The static
-                 render emits the narrow variant (it can't measure); without
-                 this, the post-hydration resize counts as layout shift. */
-              @media (min-width: 960px) {
+              /* Legal pages: TOC beside the content at >= 1024px, matching
+                 LEGAL_WIDE in components/legal-screen.tsx. Both placements of
+                 the sidebar are in the DOM; this chooses one. */
+              [data-legal-sidebar-side] { display: none !important; }
+              @media (min-width: 1024px) {
+                [data-legal-columns] { flex-direction: row !important; }
+                [data-legal-sidebar-side] { display: flex !important; }
+                [data-legal-sidebar-inline] { display: none !important; }
+              }
+
+              /* Site footer: two columns at >= 640px of its own width,
+                 matching FOOTER_WIDE in components/site-footer.tsx. */
+              [data-footer-wrap] {
+                container-type: inline-size;
+                container-name: wsfooter;
+              }
+              @container wsfooter (min-width: 640px) {
+                [data-footer-cta-band] {
+                  padding-left: 24px !important;   /* space.xl */
+                  padding-right: 24px !important;
+                  padding-top: 72px !important;    /* space.huge */
+                  padding-bottom: 72px !important;
+                }
+                [data-footer-bar] { flex-direction: row !important; }
+                /* react-native-web writes "flex: 1" as this triple, and a View
+                   with no flex as "flex-shrink: 0" — so restoring the wide
+                   variant means setting all three, not just grow. */
+                [data-footer-rights], [data-footer-links] {
+                  flex-grow: 1 !important;
+                  flex-shrink: 1 !important;
+                  flex-basis: 0% !important;
+                }
+                [data-footer-rights] { align-items: flex-start !important; }
+                [data-footer-links] { justify-content: flex-end !important; }
+              }
+
+              /* The deck at /pitch: a 16:9 slide instead of a fixed portrait
+                 strip at >= 720px, matching PITCH_WIDE in app/pitch.tsx. The
+                 frame is the tallest box on that page, so its height changing
+                 moves everything under it. */
+              @media (min-width: 720px) {
+                [data-pitch-fallback-row] {
+                  flex-direction: row !important;
+                  align-items: center !important;
+                }
+                [data-pitch-embed] {
+                  height: auto !important;
+                  aspect-ratio: 1.7777777777777777 !important;
+                }
+              }
+
+              /* Hero headline: the large variant at >= 900px of the hero's own
+                 width, matching HERO_WIDE in components/landing/hero.tsx. */
+              [data-hero-root] {
+                container-type: inline-size;
+                container-name: wshero;
+              }
+              @container wshero (min-width: 900px) {
                 [data-hero-headline] {
-                  font-size: 44px !important;
-                  line-height: 50px !important;
-                  max-width: 1000px !important;
-                  white-space: normal !important;
+                  font-size: 56px !important;
+                  line-height: 60px !important;
                 }
               }
             `,

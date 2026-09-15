@@ -247,7 +247,7 @@ export default function TimeMachineScreen() {
     <>
       <Head>
         <title>{copy.app.replay.metaTitle}</title>
-        <meta name="robots" content="noindex" />
+        <meta name="robots" content="noindex,follow" />
       </Head>
       <AppShell showSelection={false}>
         <ScreenTitle

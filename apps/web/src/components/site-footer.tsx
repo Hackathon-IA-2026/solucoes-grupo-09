@@ -8,7 +8,7 @@ import {
 } from "@wattsteer/ui";
 import { Image } from "expo-image";
 import { Link } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useI18n } from "@/i18n";
 import { fill } from "@/i18n/format";
 import { DEFAULT_LOCALE, localePath } from "@/i18n/locale";
@@ -39,6 +39,36 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 });
+
+/**
+ * The width, measured on the footer itself, at which it lays out wide.
+ *
+ * Exported because `+html.tsx` has to hold the same number in a `@container`
+ * rule and `test/responsive-css.test.ts` checks that it does. A *container*
+ * query and not a media query, because this number is the footer's own width
+ * and the footer sits in a different box on each of the three pages that
+ * render it — inside the landing scroller it is the viewport, on `/pitch` and
+ * the legal pages it is the viewport less that page's gutters. A viewport
+ * media query would therefore flip at the wrong width on two pages out of
+ * three; `@container` asks the element the same question `onLayout` does.
+ */
+export const FOOTER_WIDE = 640;
+
+/**
+ * Whether the responsive switch is CSS's job. Web only — see the identical
+ * note in `legal-screen.tsx`, and the CLS this exists to remove: the footer's
+ * one-column→two-column switch is what `/pitch` was losing 9 points to.
+ */
+const CSS_RESPONSIVE = Platform.OS === "web";
+
+/** `dataSet` → `data-*` on web; nothing on native. See `legal-screen.tsx`. */
+const marker = (name: string) =>
+  CSS_RESPONSIVE ? ({ dataSet: { [name]: "" } } as object) : {};
+const WRAP_MARKER = marker("footerWrap");
+const CTA_MARKER = marker("footerCtaBand");
+const BAR_MARKER = marker("footerBar");
+const RIGHTS_MARKER = marker("footerRights");
+const LINKS_MARKER = marker("footerLinks");
 
 /** Legal link (expo-router Link → real <a> on web) with a hit-slop target. */
 function LegalLink({
@@ -88,13 +118,17 @@ export function SiteFooter() {
     localePath(routeLocale ?? DEFAULT_LOCALE, path);
   const year = new Date().getFullYear();
   const [width, onLayout] = useContainerWidth();
-  const wide = width >= 640;
+  // On web the four `wide` reads below are all overridden by the `@container`
+  // rules in `+html.tsx`, so what this evaluates to before `onLayout` fires no
+  // longer reaches the screen. It still drives native, where nothing else can.
+  const wide = width >= FOOTER_WIDE;
 
   return (
-    <View testID="site-footer" onLayout={onLayout} style={styles.wrap}>
+    <View testID="site-footer" {...WRAP_MARKER} onLayout={onLayout} style={styles.wrap}>
       {/* CTA band */}
       <View
         testID="footer-cta"
+        {...CTA_MARKER}
         style={[
           styles.cta,
           // `space.huge` top and bottom is right on a desktop band 265 px tall
@@ -176,6 +210,7 @@ export function SiteFooter() {
           the one doing work, so the other is gone, and `footer.tagline` with
           it rather than being left as a key nothing renders. */}
       <View
+        {...BAR_MARKER}
         style={{
           flexDirection: wide ? "row" : "column",
           alignItems: "center",
@@ -183,6 +218,7 @@ export function SiteFooter() {
         }}
       >
         <View
+          {...RIGHTS_MARKER}
           style={{
             flex: wide ? 1 : undefined,
             alignItems: wide ? "flex-start" : "center",
@@ -194,6 +230,7 @@ export function SiteFooter() {
         </View>
         <View
           testID="footer-legal-links"
+          {...LINKS_MARKER}
           style={{
             flex: wide ? 1 : undefined,
             flexDirection: "row",
