@@ -93,8 +93,10 @@ export function LegalScreen({
           }}
         >
           {/* Home means *this locale's* home. A bare "/" here would bounce a
-              reader out to the gate and, worse, let the gate's stored-locale
-              redirect decide their language for them mid-visit. */}
+              reader out to the resolver at `/` and let it decide their
+              language for them mid-visit — right only while their stored
+              choice survives, and a silent reset to Portuguese when it does
+              not. */}
           <Link href={localePath(locale) as never} asChild={true}>
             <Pressable
               accessibilityRole="link"

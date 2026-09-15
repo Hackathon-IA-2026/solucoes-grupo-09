@@ -27,7 +27,8 @@ import { router, usePathname } from "expo-router";
 import type { ReactNode } from "react";
 import { Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { LanguageSwitch } from "@/components/language-switch";
-import { type Copy, useCopy, useFormat } from "@/i18n";
+import { type Copy, useCopy, useFormat, useI18n } from "@/i18n";
+import { localePath } from "@/i18n/locale";
 import {
   RUN_LABELS,
   type RunLabel,
@@ -64,6 +65,7 @@ export function AppShell({
 }) {
   const colors = usePalette();
   const copy = useCopy();
+  const { locale } = useI18n();
   const pathname = usePathname();
   const params = useAppParams();
 
@@ -99,9 +101,14 @@ export function AppShell({
         >
           <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
             <Pressable
+              testID="app-home-link"
               accessibilityRole="link"
               accessibilityLabel={copy.app.shell.backToLanding}
-              onPress={() => router.push("/")}
+              // This locale's landing page, not `/`. `/app` carries no locale
+              // in its URL, so the one here comes from the stored choice the
+              // language switch wrote; going via `/` would re-resolve it and
+              // hand an English reader Portuguese whenever storage is blocked.
+              onPress={() => router.push(localePath(locale) as never)}
               style={(state) => {
                 const { focused = false } = state as { focused?: boolean };
                 return {

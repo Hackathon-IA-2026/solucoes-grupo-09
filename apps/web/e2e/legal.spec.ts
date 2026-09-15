@@ -1,8 +1,13 @@
 import { expect, type Page, test } from "@playwright/test";
 
 /**
- * Footer (CTA + legal links), the legal pages, and the language gate — all
- * against the locale-prefixed route tree.
+ * Footer (CTA + legal links) and the legal pages, against the locale-prefixed
+ * route tree.
+ *
+ * The suite that used to live at the top of this file covered the language
+ * gate at `/`. The gate is gone; what replaced it — the loading screen, its
+ * resolution order, and the no-JS link — is in `entry.spec.ts`, which asserts
+ * it against the same real `dist/`.
  *
  * Every path here carries a locale prefix, which is the point: after
  * `docs/specs/i18n.md`'s route tree there is no unprefixed `/privacy`, and the
@@ -17,61 +22,6 @@ function headingCount(page: Page): Promise<number> {
     () => document.querySelectorAll('h1, h2, h3, [role="heading"]').length,
   );
 }
-
-test.describe("the language gate at /", () => {
-  test("ships real links to both locale roots", async ({ page }) => {
-    // The gate's own redirect fires before hydration, so read the HTML the
-    // server actually sends rather than the page it turns into. This is the
-    // JavaScript-disabled contract: two working links, no script required.
-    const response = await page.request.get("/");
-    const html = await response.text();
-    expect(html).toContain('href="/pt/"');
-    expect(html).toContain('href="/en/"');
-    // noindex,follow — no unique content to rank, but crawl equity should
-    // still reach the two locale roots.
-    expect(html).toMatch(/name="robots"\s+content="noindex,follow"/);
-    expect(html).toContain('hreflang="x-default" href="https://wattsteer.com/pt/"');
-  });
-
-  test("robots.txt still allows the gate", async ({ page }) => {
-    const robots = await (await page.request.get("/robots.txt")).text();
-    expect(robots).toContain("Allow: /");
-    expect(robots).not.toContain("Disallow");
-  });
-
-  test("sends a first-time visitor to the default locale", async ({ page }) => {
-    await page.goto("/");
-    await expect(page).toHaveURL(/\/pt\/$/);
-  });
-
-  test("sends an English browser to /en/", async ({ browser }) => {
-    const context = await browser.newContext({ locale: "en-US" });
-    const page = await context.newPage();
-    await page.goto("/");
-    await expect(page).toHaveURL(/\/en\/$/);
-    await context.close();
-  });
-
-  test("honours a stored preference over the browser's language", async ({ browser }) => {
-    const context = await browser.newContext({ locale: "en-US" });
-    const page = await context.newPage();
-    await page.goto("/pt/");
-    await page.evaluate(() => localStorage.setItem("wattsteer.locale", "pt"));
-    await page.goto("/");
-    await expect(page).toHaveURL(/\/pt\/$/);
-    await context.close();
-  });
-
-  test("replaces rather than pushes, so Back does not trap", async ({ page }) => {
-    await page.goto("/pt/terms");
-    await page.goto("/");
-    await expect(page).toHaveURL(/\/pt\/$/);
-    await page.goBack();
-    // If the gate had been pushed, Back would land on it and bounce forward
-    // again — the visitor would be unable to leave.
-    await expect(page).toHaveURL(/\/pt\/terms/);
-  });
-});
 
 for (const locale of LOCALES) {
   test.describe(`site footer (${locale})`, () => {

@@ -51,7 +51,7 @@ export type LocalizedPath = (typeof LOCALIZED_PATHS)[number];
 /**
  * The URL path for a page in a locale. A locale root keeps its trailing slash
  * (`/pt/`) so there is exactly one canonical form of it, matching what the
- * sitemap and the gate page's links say.
+ * sitemap says and what every wordmark in the site links to.
  */
 export function localePath(locale: Locale, path: LocalizedPath = ""): string {
   return path === "" ? `/${locale}/` : `/${locale}${path}`;
@@ -62,7 +62,7 @@ export function localePath(locale: Locale, path: LocalizedPath = ""): string {
  *
  * Used by the language switch, which is a *link* rather than a state toggle:
  * `/en/privacy` ⇄ `/pt/privacy`. A path that is not already locale-prefixed
- * (the gate, `/app`) is prefixed rather than rewritten.
+ * (`/`, `/app`) is prefixed rather than rewritten.
  */
 export function swapLocale(pathname: string, next: Locale): string {
   const segments = pathname.split("/").filter(Boolean);
@@ -75,8 +75,11 @@ export function swapLocale(pathname: string, next: Locale): string {
  *
  * Deliberately prefix-matching on the primary subtag: `pt-PT` and `pt-BR` both
  * mean "give this reader Portuguese", and the site has only one Portuguese.
- * Used by the gate page **only** — inside the `[locale]` tree the URL is the
- * single source of truth and the browser is never consulted.
+ * Used by the loading screen at `/` **only**, and by the copy of that same
+ * rule in `+html.tsx`'s pre-hydration script — inside the `[locale]` tree the
+ * URL is the single source of truth and the browser is never consulted. It is
+ * also consulted *after* storage, never before: a reader who chose English
+ * keeps English on a pt-BR browser.
  */
 export function matchLocale(tags: readonly string[]): Locale | null {
   for (const tag of tags) {

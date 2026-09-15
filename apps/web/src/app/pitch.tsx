@@ -40,7 +40,7 @@ import { PITCH_PDF_PATH } from "@/lib/pitch";
  * with the frame around it), and `follow` so the links out of the footer still
  * carry. It is consequently absent from `sitemap.xml` on purpose: listing a
  * noindexed URL there is a contradiction, which is the same rule that keeps
- * the gate and `/app` out of it.
+ * `/` and `/app` out of it.
  *
  * The embed is web-only. An `<iframe>` has no meaning under React Native, and
  * a PDF viewer is not something this app ships; on native the link above the
@@ -71,7 +71,8 @@ export default function Pitch() {
         {/* Same header as the legal pages: wordmark home link centered, the
             language switch pinned right so the mark stays optically centered.
             Home means the locale the reader is currently being addressed in —
-            a bare "/" would bounce them to the gate mid-visit. */}
+            a bare "/" would bounce them through the resolver at `/` mid-visit
+            and could answer in a language they did not pick. */}
         <View
           style={{
             alignItems: "center",

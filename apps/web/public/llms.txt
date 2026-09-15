@@ -17,9 +17,10 @@ exists at both prefixes and each declares the other as an `hreflang`
 alternate. Portuguese is the default and the `x-default` target: the audience
 is Brazilian grid operators and renewable IPPs, and the data is ONS's.
 
-`https://wattsteer.com/` itself is only a language gate — `noindex,follow`,
-with links to both roots. It is not a page worth reading; follow it through to
-one of the two below.
+`https://wattsteer.com/` itself is only a loading screen — `noindex,follow`.
+It asks nothing: it resolves the reader's locale (their stored choice, then
+their browser's languages, then Portuguese) and redirects. It is not a page
+worth reading; go straight to one of the two below.
 
 ## Pages
 

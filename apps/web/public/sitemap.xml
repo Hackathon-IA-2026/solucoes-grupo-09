@@ -3,8 +3,9 @@
   The six real, indexable pages: three routes × two locales.
 
   Not listed, deliberately:
-  - "/" — the language gate. It is noindex,follow: no unique content, but it
-    passes crawl equity to the two locale roots it links to.
+  - "/" — the loading screen, which resolves a locale and redirects. It is
+    noindex,follow: no unique content, but it declares both locale roots as
+    hreflang alternates, so crawl equity still reaches them.
   - "/app" — the product shell, which declares noindex itself. A sitemap entry
     for a noindexed URL is a contradiction, so it is gone.
 

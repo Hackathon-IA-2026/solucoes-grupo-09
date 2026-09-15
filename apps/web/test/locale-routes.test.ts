@@ -63,9 +63,10 @@ describe("static SEO artifacts agree with the route tree", () => {
     expect(locs.sort()).toEqual([...expected].sort());
   });
 
-  test("sitemap does not list the gate, the app, or the 404", () => {
-    // The gate is noindex,follow and /app declares its own noindex. Listing a
-    // noindexed URL in a sitemap is a contradiction, not a hint.
+  test("sitemap does not list /, the app, or the 404", () => {
+    // `/` is the loading screen — noindex,follow — and /app declares its own
+    // noindex. Listing a noindexed URL in a sitemap is a contradiction, not a
+    // hint.
     expect(sitemap).not.toContain("<loc>https://wattsteer.com/</loc>");
     expect(sitemap).not.toContain("/app<");
   });
@@ -86,9 +87,9 @@ describe("static SEO artifacts agree with the route tree", () => {
     }
   });
 
-  test("robots.txt still allows the gate", () => {
-    // Pairing Disallow with the gate's noindex would mean the noindex is
-    // never crawled and therefore never obeyed.
+  test("robots.txt still allows /", () => {
+    // Pairing Disallow with the loading screen's noindex would mean the
+    // noindex is never crawled and therefore never obeyed.
     const robots = read("robots.txt");
     expect(robots).toContain("Allow: /");
     expect(robots).not.toMatch(/^Disallow:/m);

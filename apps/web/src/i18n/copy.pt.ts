@@ -24,8 +24,10 @@ export const pt: Copy = {
     ],
   },
 
-  gate: {
+  splash: {
     tagline: "Inteligência de curtailment para a rede elétrica brasileira.",
+    loading: "Carregando o WattSteer",
+    continue: "Continuar para o WattSteer",
   },
 
   footer: {

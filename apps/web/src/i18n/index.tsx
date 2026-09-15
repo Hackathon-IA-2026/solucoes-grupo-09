@@ -41,7 +41,10 @@ import {
  *   state toggle, exactly as before.
  *
  * Browser/device language is read in exactly one place in the product: the
- * gate page at `/`, to decide where to send a first-time visitor.
+ * loading screen at `/`, to decide where to send a visitor who has never
+ * chosen. A visitor who *has* chosen is sent by `LOCALE_STORAGE_KEY`, which is
+ * read first — the language switch writes it on every switch, and that is the
+ * whole of how a choice persists.
  */
 
 export type { Locale };

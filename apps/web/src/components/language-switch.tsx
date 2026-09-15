@@ -1,7 +1,13 @@
 import { focusRing, radius, usePalette } from "@wattsteer/ui";
 import { Link, usePathname } from "expo-router";
 import type { ReactNode } from "react";
-import { Platform, Pressable, Text, View } from "react-native";
+import {
+  type GestureResponderEvent,
+  Platform,
+  Pressable,
+  Text,
+  View,
+} from "react-native";
 import { useI18n } from "@/i18n";
 import {
   LOCALE_LABEL,
@@ -22,7 +28,10 @@ import {
  * `/pt/privacy` — switching language changes the URL, because if it did not
  * the two languages would collapse back into one URL with client state, which
  * is exactly the failure mode the prefixed routes exist to avoid. It still
- * writes the choice to storage on the way, so the gate remembers it next time.
+ * writes the choice to storage on the way. That write is the persistence
+ * mechanism for the whole site: `/` reads it before it reads the browser, the
+ * unprefixed routes (`/app`, `/pitch`, the 404) render from it, and the
+ * wordmark on every page links to `localePath` of whatever it resolved to.
  *
  * On a route with no locale in its URL (`/app`, which is `noindex`) there is
  * nothing to navigate to, so it falls back to the state toggle it used to be.
@@ -81,6 +90,18 @@ export function LanguageSwitch({ testID }: { testID?: string }) {
 /**
  * The pressable shell. Split out so `Link asChild` has exactly one child to
  * clone, and so the link and the toggle variants cannot drift apart visually.
+ *
+ * **The two `onPress`es have to be composed, not stacked.** `Link asChild`
+ * clones this element with its *own* `onPress` — the one that calls
+ * `preventDefault` and hands the navigation to the router — and that arrives
+ * in `rest`. Declaring `onPress={onPress}` after the spread replaced it, so
+ * the switch wrote the preference and then navigated nowhere: on a legal page
+ * in Portuguese, clicking EN left the reader on `/pt/terms`, with the anchor's
+ * `href="/en/terms"` right there in the markup and unused (react-native-web's
+ * Pressable consumes the click, so the browser's own default never ran
+ * either). `e2e/legal.spec.ts` asserts the crossing and had been failing on
+ * it — unnoticed, because the suite's config pointed at a mock server that no
+ * longer exists and so never started at all.
  */
 function Option({
   locale,
@@ -95,6 +116,9 @@ function Option({
   children: ReactNode;
 }) {
   const colors = usePalette();
+  // `Link asChild`'s handler, if this instance is a link. Typed by hand
+  // because the props above deliberately do not declare what the clone injects.
+  const navigate = (rest as { onPress?: (event: GestureResponderEvent) => void }).onPress;
   return (
     <Pressable
       {...rest}
@@ -102,7 +126,12 @@ function Option({
       accessibilityRole="radio"
       aria-checked={active}
       accessibilityLabel={LOCALE_NAME[locale]}
-      onPress={onPress}
+      onPress={(event) => {
+        // Preference first, navigation second: the write is synchronous and
+        // the navigation is what unmounts this tree.
+        onPress();
+        navigate?.(event);
+      }}
       hitSlop={6}
       style={(state) => {
         const { focused = false, hovered = false } = state as {

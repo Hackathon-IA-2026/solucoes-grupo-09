@@ -2,7 +2,8 @@ import { usePalette } from "@wattsteer/ui";
 import { Link } from "expo-router";
 import Head from "expo-router/head";
 import { Text, View } from "react-native";
-import { useCopy } from "@/i18n";
+import { useCopy, useI18n } from "@/i18n";
+import { localePath } from "@/i18n/locale";
 
 /**
  * Branded 404 — mainly so the exported `+not-found.html` has a real title.
@@ -15,6 +16,7 @@ import { useCopy } from "@/i18n";
  */
 export default function NotFound() {
   const copy = useCopy();
+  const { locale } = useI18n();
   const colors = usePalette();
   return (
     <>
@@ -42,7 +44,10 @@ export default function NotFound() {
         <Text style={{ fontSize: 14, color: colors.inkMuted, textAlign: "center" }}>
           {copy.notFound.body}
         </Text>
-        <Link href="/" style={{ marginTop: 8 }}>
+        {/* Straight to the locale this page is already being read in — the
+            same rule the wordmark follows. `/` would work, but only by way of
+            a second navigation the reader can see. */}
+        <Link href={localePath(locale) as never} style={{ marginTop: 8 }}>
           <Text style={{ fontSize: 14, fontWeight: "600", color: colors.accent }}>
             {copy.notFound.back}
           </Text>
