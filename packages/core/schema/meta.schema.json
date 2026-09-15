@@ -43,6 +43,15 @@
       "items": { "$ref": "#/$defs/gate" }
     },
     "model": { "$ref": "#/$defs/model" },
+    "voice": {
+      "type": "object",
+      "description": "Whether this instance can mint a voice session at all. A capability flag so a client does not have to press a button to find out: the dock is designed to be absent rather than broken where no key is set, and the only way to learn that was to call `/v1/voice/session`, which mints a credential — so the control rendered, a reader pressed it, and nothing visible happened. `configured` says a key exists and nothing else about it, which is the whole of what a client needs and the most that can safely be said.",
+      "properties": {
+        "configured": { "type": "boolean" }
+      },
+      "required": ["configured"],
+      "additionalProperties": false
+    },
     "forecast": { "$ref": "#/$defs/forecast_state" },
     "data": {
       "type": "object",
@@ -79,6 +88,7 @@
     "defaults",
     "gates",
     "model",
+    "voice",
     "forecast",
     "data",
     "reference_fleet",

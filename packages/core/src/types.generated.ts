@@ -953,6 +953,16 @@ export interface Meta {
   defaults: MetaDefaults;
   gates: MetaGate[];
   model: MetaModel;
+  /**
+   * Whether this instance can mint a voice session at all. A capability flag so
+   * a client does not have to press a button to find out: the dock is designed
+   * to be absent rather than broken where no key is set, and the only way to
+   * learn that was to call `/v1/voice/session`, which mints a credential — so
+   * the control rendered, a reader pressed it, and nothing visible happened.
+   * `configured` says a key exists and nothing else about it, which is the whole
+   * of what a client needs and the most that can safely be said.
+   */
+  voice: MetaVoice;
   forecast: MetaForecastState;
   data: MetaData;
   /**
@@ -2425,6 +2435,19 @@ export interface MetaDefaults {
   brlPerMwh: number;
 }
 
+/**
+ * Whether this instance can mint a voice session at all. A capability flag so
+ * a client does not have to press a button to find out: the dock is designed
+ * to be absent rather than broken where no key is set, and the only way to
+ * learn that was to call `/v1/voice/session`, which mints a credential — so
+ * the control rendered, a reader pressed it, and nothing visible happened.
+ * `configured` says a key exists and nothing else about it, which is the whole
+ * of what a client needs and the most that can safely be said.
+ */
+export interface MetaVoice {
+  configured: boolean;
+}
+
 export interface MetaData {
   freshness: MetaFreshness[];
 }
@@ -2886,6 +2909,7 @@ export const WIRE_SHAPES = {
     defaults: { wire: "defaults", shape: "MetaDefaults" },
     gates: { wire: "gates", shape: "MetaGate", list: true },
     model: { wire: "model", shape: "MetaModel" },
+    voice: { wire: "voice", shape: "MetaVoice" },
     forecast: { wire: "forecast", shape: "MetaForecastState" },
     data: { wire: "data", shape: "MetaData" },
     referenceFleet: { wire: "reference_fleet", shape: "MetaReferenceFleet" },
@@ -3333,6 +3357,9 @@ export const WIRE_SHAPES = {
     reportingEntityThresholdMw: { wire: "reporting_entity_threshold_mw" },
     maxGapHours: { wire: "max_gap_hours" },
     brlPerMwh: { wire: "brl_per_mwh" },
+  },
+  MetaVoice: {
+    configured: { wire: "configured" },
   },
   MetaData: {
     freshness: { wire: "freshness", shape: "MetaFreshness", list: true },

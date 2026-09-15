@@ -55,6 +55,17 @@ export type ServingState =
       readonly modelReachable: boolean;
       /** Whether any lane is promoted and loadable. */
       readonly serving: boolean;
+      /**
+       * Whether this instance can mint a voice session at all.
+       *
+       * Read here rather than discovered by pressing the control. The dock is
+       * designed to be *absent* rather than broken where no key is set, and the
+       * only way to learn that was to call `/v1/voice/session` — which mints a
+       * credential. So the trigger rendered, a reader pressed it, a request went
+       * out, and nothing visible happened: a dead control that spent a
+       * rate-limit token to stay dead.
+       */
+      readonly voiceConfigured: boolean;
     }
   | { readonly status: "unknown" };
 
@@ -82,6 +93,7 @@ function useServingRead(): ServingState {
           status: "known",
           lanes,
           modelReachable: meta.model.reachable,
+          voiceConfigured: meta.voice.configured,
           serving: anyLaneServing(lanes),
         });
       })

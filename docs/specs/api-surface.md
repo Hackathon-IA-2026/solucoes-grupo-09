@@ -561,6 +561,12 @@ correct.
     "volume": { "mounted": true, "writable": true }
   },
 
+  // Whether this instance can mint a voice session at all, so a client need not
+  // press the control to find out. The dock is absent rather than broken where
+  // no key is set (row 19), and learning that by calling `/v1/voice/session`
+  // meant minting a credential to discover there was none.
+  "voice": { "configured": true },
+
   "forecast": {
     "latest_published": [ { "target_date": "2026-08-29", "gate_profile": "gate_late",
                             "published_at": "2026-08-28T22:00:00Z", "age_hours": 0.1,

@@ -587,6 +587,24 @@ export function toMeta(parts: {
       weatherRun: gate.weatherRun,
     })),
     model: parts.model,
+    /**
+     * Whether this instance can mint a voice session at all.
+     *
+     * **A capability flag so the web app does not have to press a button to
+     * find out.** The dock is designed to be absent rather than broken where
+     * `XAI_API_KEY` is unset — `docs/plans/voice-copilot.md` §2.1 — but the only
+     * way to learn that was to call `/v1/voice/session`, which *mints a
+     * credential*. So the trigger rendered, a reader pressed it, a request went
+     * out, and nothing visible happened: a dead control, and one that spent a
+     * rate-limit token to stay dead.
+     *
+     * A boolean here costs nothing, is known without contacting xAI, and lets
+     * the header render the control only when it can work. It is deliberately
+     * **not** the key or anything derived from it: `configured` says a key
+     * exists and nothing else about it, which is the whole of what a client
+     * needs and the most that can safely be said.
+     */
+    voice: { configured: config.xaiApiKey !== undefined },
     forecast: {
       // The publications that exist, newest target date first, read from the
       // day-grain rows — one per (subsystem, day), so a publication is one

@@ -156,6 +156,11 @@ describe("meta · one request says what this deployment can do", () => {
       "server_time",
       "service",
       "version",
+      // Whether this instance can mint a voice session. A capability flag, so
+      // the header can render the control only when it can work rather than a
+      // reader pressing it to discover there is no key — which also spent a
+      // rate-limit token to stay dead.
+      "voice",
       "window",
     ]);
   });

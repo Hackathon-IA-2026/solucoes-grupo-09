@@ -27,6 +27,7 @@
 
 import { focusRing, radius, space, type, usePalette } from "@wattsteer/ui";
 import { Platform, Pressable, Text, View } from "react-native";
+import { useServing } from "@/components/app/use-serving";
 import { useCopy } from "@/i18n";
 import { useVoiceAgent } from "./use-voice-agent";
 import { VoiceOrb } from "./voice-orb";
@@ -35,8 +36,32 @@ export function VoiceTrigger({ compact = false }: { compact?: boolean }) {
   const colors = usePalette();
   const copy = useCopy();
   const agent = useVoiceAgent();
+  const serving = useServing();
 
-  if (agent.availability === "absent") {
+  /*
+    **Absent before the first press, not after it.**
+
+    The provider still latches `absent` on `VOICE_NOT_CONFIGURED`, and that is
+    the authority — but learning it that way means *minting a credential to
+    discover there is no key to mint one with*. On a deployment with no
+    `XAI_API_KEY` the control rendered, a reader pressed it, a request went out,
+    and nothing visible happened. A dead control that spent a rate-limit token
+    to stay dead, which is the worst of both readings of "the dock is absent
+    rather than broken".
+
+    `/v1/meta` now says whether a session can be minted at all, and the app
+    already reads that document once before first paint for the lane state. So
+    the control is simply not rendered on an instance that cannot honour it, and
+    the press-to-discover path remains only as the late authority for the case
+    the flag cannot cover: a key that exists at page load and is revoked before
+    the reader presses.
+
+    `reading` renders the trigger. A flash of a control that then disappears is
+    better than a reader who never learns the feature exists because the meta
+    read was slow.
+  */
+  const configuredByMeta = serving.status !== "known" || serving.voiceConfigured;
+  if (agent.availability === "absent" || !configuredByMeta) {
     return null;
   }
 

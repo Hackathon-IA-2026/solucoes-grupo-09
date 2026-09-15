@@ -34,13 +34,16 @@
       {
         "lane": "dessem_free_v1__gate_late__thr5",
         "state": "promoted",
-        "artifact_id": "…/2026-08-28T03:11:07Z"
+        "artifact_id": "\u2026/2026-08-28T03:11:07Z"
       }
     ],
     "volume": {
       "mounted": true,
       "writable": true
     }
+  },
+  "voice": {
+    "configured": true
   },
   "forecast": {
     "latest_published": [
@@ -49,7 +52,12 @@
         "gate_profile": "gate_late",
         "published_at": "2026-08-28T22:00:00Z",
         "age_hours": 0.1,
-        "subsystems": ["N", "NE", "S", "SE"]
+        "subsystems": [
+          "N",
+          "NE",
+          "S",
+          "SE"
+        ]
       }
     ],
     "next_publication_at": "2026-08-29T12:00:00Z"
@@ -144,19 +152,19 @@
     "ons": {
       "name": "ONS Dados Abertos",
       "licence": "CC-BY-4.0",
-      "url": "…"
+      "url": "\u2026"
     },
     "aneel_siga": {
       "name": "ANEEL SIGA",
       "licence": "ODbL-1.0",
-      "url": "…",
+      "url": "\u2026",
       "derivative_database": true,
       "machine_readable_at": "/v1/plants"
     },
     "open_meteo": {
       "name": "Open-Meteo",
       "licence": "CC-BY-4.0",
-      "url": "…"
+      "url": "\u2026"
     }
   }
 }

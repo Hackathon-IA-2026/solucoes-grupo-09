@@ -308,3 +308,41 @@ describe("the trigger and the map", () => {
     expect(OVERVIEW).toContain("hovered ?? spoken");
   });
 });
+
+describe("the trigger is absent on an instance that cannot honour it", () => {
+  it("renders nothing when /v1/meta says voice is not configured", () => {
+    /*
+      The dock is designed to be *absent* rather than broken where no key is
+      set. Learning that from `VOICE_NOT_CONFIGURED` alone means minting a
+      credential to discover there is no key to mint one with — so on a
+      deployment without `XAI_API_KEY` the control rendered, a reader pressed
+      it, a request went out, and nothing visible happened. A dead control that
+      spent a rate-limit token to stay dead.
+
+      Asserted over the source because the trigger's decision is a render-time
+      branch and there is no DOM in this suite; the e2e spec drives the
+      rendered case.
+    */
+    const source = readFileSync(
+      join(import.meta.dir, "../src/components/voice/voice-trigger.tsx"),
+      "utf8",
+    );
+    // It consults the meta read...
+    expect(source).toContain("useServing()");
+    expect(source).toContain("voiceConfigured");
+    // ...and still honours the provider's own latch, which is the late
+    // authority for a key revoked between page load and the press.
+    expect(source).toContain('agent.availability === "absent"');
+  });
+
+  it("renders the trigger while the meta read is still in flight", () => {
+    // A flash of a control that then disappears is better than a reader who
+    // never learns the feature exists because the meta read was slow. The
+    // guard is that `reading` is not treated as `not configured`.
+    const source = readFileSync(
+      join(import.meta.dir, "../src/components/voice/voice-trigger.tsx"),
+      "utf8",
+    );
+    expect(source).toContain('serving.status !== "known" || serving.voiceConfigured');
+  });
+});
