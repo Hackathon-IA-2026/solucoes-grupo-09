@@ -189,7 +189,81 @@ Non-negotiables on it, and each is a guard to write:
 which means it needs `copy.error.VOICE_UNAVAILABLE` in **both** locales — there
 is a test asserting every code has copy in both.
 
-### 2.2 Files to create
+### 2.2 It is a provider, and that is not a convenience
+
+The session **must** outlive a screen change, and this is the one structural
+requirement that cannot be compromised: navigating is the agent's *primary
+action*. A dock mounted per screen would tear down its WebSocket, drop the mic,
+and cut the sentence in half **every time a tool call succeeded** — the feature
+would break precisely when it worked.
+
+So `VoiceProvider` wraps the stack in `apps/web/src/app/app/_layout.tsx  (edit — wrap the Stack)`, beside
+the provider that is already there for a weaker version of the same reason:
+
+> `ServingProvider` wraps the stack rather than sitting inside `AppShell`
+> because it has to outlive a screen change: the chrome badge and a screen's
+> honesty note must be two renderings of one answer, and a provider remounted
+> per screen would re-ask `/v1/meta` on every tab press and could answer the
+> two differently across a promotion.
+
+```tsx
+export default function AppLayout() {
+  return (
+    <ServingProvider>
+      <VoiceProvider>
+        <Stack screenOptions={{ headerShown: false, animation: "fade" }} />
+        <VoiceDock />
+      </VoiceProvider>
+    </ServingProvider>
+  );
+}
+```
+
+**Inside `ServingProvider`, not outside it.** The voice agent has to know whether
+a model is promoted — §3.4 and §4.3 turn on it — and reading that from the same
+provider the screens read means the dock and the chrome badge cannot disagree
+about it. Two sources for "is there a model" is exactly the defect
+`ServingProvider`'s own comment was written to prevent.
+
+**`<VoiceDock />` is a sibling of `<Stack>`, not a child of a screen.** It is
+fixed to the viewport and must not be clipped, re-mounted or re-animated by the
+stack's `animation: "fade"` when the agent navigates. The dock has to be the one
+still thing while the screen behind it changes — that is what makes an automatic
+navigation read as *the assistant did something* rather than as a glitch.
+
+#### At `/app`, not at the root
+
+The provider mounts on the `/app` layout and **not** on the root layout, because
+the tools operate on the four modes and nothing else. Voice on the landing page,
+the legal pages or the deck would be a microphone with no actions behind it —
+§9 says so and this is where it is enforced. A reader on `/pitch` gets no dock,
+no mic permission prompt and no session minted.
+
+#### What the provider owns, and what stays pure
+
+The split from §3.3 survives contact with React, and this is what keeps the
+agent testable:
+
+| lives in the provider | stays pure |
+|---|---|
+| the `WattSteerVoiceSession` instance | `tools.ts` — the schema |
+| `VoiceStatus`, transcript, audio level | `execute.ts` — call → `NavigationIntent` |
+| dock size (idle / active / expanded) | `context.ts` — state → context sentence |
+| the last `NavigationIntent`, for the action card | `instructions.ts` — the prompt |
+| session expiry and re-minting | |
+
+The provider is the only thing holding a socket, a microphone or a router. It
+calls `executeTool(call, params)`, gets an intent back, and performs it. So the
+entire behaviour of the agent — every tool, every argument, every refusal — is
+still assertable without mounting a single component.
+
+#### Mic permission is session state, not screen state
+
+Asked once, held by the provider, and remembered across navigation. A copilot
+that re-prompts for the microphone each time it opens a screen is unusable, and
+that is the default outcome if this lives anywhere else.
+
+### 2.3 Files to create
 
 ```
 apps/api/src/api/voice.ts                     the route + the xAI call
@@ -205,7 +279,8 @@ apps/web/src/lib/voice/execute.ts             tool call → NavigationIntent —
 apps/web/src/lib/voice/instructions.ts        the system prompt, per locale
 apps/web/src/lib/voice/context.ts             URL state → a sentence for the model
 
-apps/web/src/components/voice/use-voice-agent.ts    the one React binding
+apps/web/src/components/voice/voice-provider.tsx    the session, above the Stack
+apps/web/src/components/voice/use-voice-agent.ts    the hook that reads it
 apps/web/src/components/voice/voice-dock.tsx        the 3-size container
 apps/web/src/components/voice/voice-orb.tsx         the waveform/orb
 apps/web/src/components/voice/voice-transcript.tsx  expanded view
@@ -215,6 +290,8 @@ apps/web/src/components/voice/voice-trigger.tsx     the header button
 apps/web/test/voice-tools.test.ts             every tool → intent, exhaustively
 apps/web/test/voice-context.test.ts           the context sentence
 apps/web/test/voice-dock.test.ts              the three sizes, i18n, a11y
+apps/web/test/voice-provider.test.ts          it wraps the Stack; it is not at the root
+apps/web/e2e/voice-survives-navigation.spec.ts  the session outlives a tool call
 ```
 
 **`tools.ts` and `execute.ts` contain no React, no audio, and no network.** That
@@ -489,7 +566,7 @@ paragraph in it.
 | phase | what | demo-ready after |
 |---|---|---|
 | **1** | `GET /v1/voice/session`, `VOICE_UNAVAILABLE`, key-leak guards | — |
-| **2** | vendor core + web backend; `useVoiceAgent`; dock at IDLE/ACTIVE; talk and be answered, no tools | first voice |
+| **2** | vendor core + web backend; **`VoiceProvider` above the Stack**; dock at IDLE/ACTIVE; talk and be answered, no tools | first voice |
 | **3** | `tools.ts` + `execute.ts` + tests; `focus`, `show_grid`, `explain` | **the thesis is provable** |
 | **4** | `context.ts` + instructions; honest refusal while nothing is promoted | safe in front of an audience |
 | **5** | `highlight` into the map; action card; EXPANDED transcript | the moment that sells it |
@@ -510,6 +587,7 @@ Phases 1–4 are the product. 5–7 are what make it land in a room.
 | **Cost / abuse on a public unauthenticated product** | Its own rate-limit bucket, short expiry, and a hard session cap. This is a **public** product with no accounts — anyone who can load the page can mint a session. Decide the cap before phase 1 ships. |
 | **Mic permission denied** | An explicit state in the dock with the ⌨ typed fallback, not an error toast. |
 | **Safari `AudioWorklet` / autoplay** | Backend is a seam; a `ScriptProcessorNode` fallback fits behind it. Must be tested in Safari specifically — our other browser bugs this week were all Safari-adjacent. |
+| **A route change kills the session** | §2.2 — the provider is above the `Stack`, and an e2e test drives a tool call and asserts the socket and the mic survive it. This is the failure mode that would make the feature break exactly when it worked. |
 | **The voice talks over the reader** | `enable_echo_detection_filtering` is already in the demo's `session.update`, plus `server_vad`. Take both. |
 | **Grok voice API changes** | The vendored core is ours the moment we copy it. Pin the model string in one constant; the demo already does. |
 
