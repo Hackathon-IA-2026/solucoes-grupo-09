@@ -382,3 +382,61 @@ test("the 27 codes are Brazil's", () => {
   ];
   expect([...FEDERAL_UNITS].sort()).toEqual([...CANON].sort());
 });
+
+describe("the regions are drawn, not turned into buttons", () => {
+  /**
+   * The bug this shipped with, as a guard.
+   *
+   * `react-native-svg` renders `Path` through react-native-web's
+   * `createElement`, and `propsToAccessibilityComponent` maps
+   * `role`/`accessibilityRole` onto the *host element*. `role: "button"`
+   * therefore produced a real `<button>` carrying `d`, `fill` and `stroke` as
+   * unknown attributes — and a `<button>` draws no geometry. All four regions
+   * vanished, leaving only the non-interactive interior-borders path: a map
+   * that was uniformly dark grey and had nothing to click.
+   *
+   * Source-level, because the defect is in what is *passed*, not in what the
+   * component computes: a render test would need the whole RNW host layer to
+   * reproduce it, and the export assertion below covers the rendered side.
+   */
+  const raw = readFileSync(
+    join(import.meta.dir, "..", "src/components/charts/subsystem-map.tsx"),
+    "utf8",
+  );
+  /*
+    Comments stripped first. The guard is about what the component *passes*,
+    and the fix's own comment necessarily quotes the string being banned — so a
+    guard over the raw file would fail on the explanation of why it exists.
+  */
+  const source = raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+
+  /*
+    Only the *web* branch. `accessibilityRole` is correct on native, where there
+    is no DOM host element to be replaced — so a blanket ban would be wrong, and
+    would contradict the third case below.
+  */
+  const webBranch = source.slice(
+    source.indexOf('Platform.OS === "web"'),
+    source.indexOf("onPress: () => onSelect(code)"),
+  );
+
+  test("the web branch passes no role to the region path", () => {
+    expect(webBranch.length).toBeGreaterThan(200); // the slice found both ends
+    expect(webBranch).not.toMatch(/\brole:\s*["']button["']/);
+    expect(webBranch).not.toMatch(/accessibilityRole:/);
+  });
+
+  test("still makes the region focusable and announced", () => {
+    // The accessibility has to survive the fix, or the guard above would be
+    // satisfied by deleting it.
+    expect(source).toContain("tabIndex: 0");
+    expect(source).toContain('"aria-label": label');
+    expect(source).toContain('"aria-pressed": isSelected');
+  });
+
+  test("keeps the native branch on accessibilityRole, which is correct there", () => {
+    // `onPress` + `accessibilityRole` is right on native, where there is no DOM
+    // host element to be replaced. Only the web branch had the defect.
+    expect(source).toContain('accessibilityRole: "button"');
+  });
+});

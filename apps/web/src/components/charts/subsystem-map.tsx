@@ -179,7 +179,21 @@ export function SubsystemMap({
             Platform.OS === "web"
               ? ({
                   tabIndex: 0,
-                  role: "button",
+                  // **No `role: "button"` here, and that is the whole of a bug
+                  // this shipped with.** `react-native-svg` renders `Path`
+                  // through react-native-web's `createElement`, and
+                  // `propsToAccessibilityComponent` turns `role`/
+                  // `accessibilityRole` into the *host element*: `"button"`
+                  // produced a real `<button>` carrying `d`, `fill` and
+                  // `stroke` as unknown attributes. A `<button>` draws no
+                  // geometry, so all four regions vanished and the map showed
+                  // only its non-interactive interior-borders path — dark grey,
+                  // uncolourable and unclickable.
+                  //
+                  // `aria-*` and `tabIndex` do not go through that mapping, so
+                  // the path stays a path and is still focusable and announced.
+                  // The role is carried by `aria-pressed` plus the label, which
+                  // is what a screen reader reads either way.
                   "aria-label": label,
                   "aria-pressed": isSelected,
                   onClick: () => onSelect(code),

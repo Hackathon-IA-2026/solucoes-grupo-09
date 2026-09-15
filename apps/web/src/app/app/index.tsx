@@ -7,11 +7,13 @@
 import {
   FadeIn,
   LayoutDashboardIcon,
+  layout,
   MapIcon,
   Panel,
   PanelHeader,
   PieChartIcon,
   space,
+  useContainerWidth,
   usePalette,
 } from "@wattsteer/ui";
 import { router } from "expo-router";
@@ -49,6 +51,12 @@ export default function GridOverviewScreen() {
 
   // One scale across all four rows, so "wider" and "bigger" mean what they look
   // like. Computed from the P90s, not the P50s.
+  // Measured on the container, not the viewport: this screen is nested, and a
+  // viewport query would put the map beside the rows inside a column that
+  // cannot hold both.
+  const [overviewWidth, onOverviewLayout] = useContainerWidth();
+  const side = overviewWidth >= layout.desktop;
+
   const domainMax = Math.max(...all.map((each) => each.dailyEnergy.p90)) * 1.05;
 
   /**
@@ -103,42 +111,65 @@ export default function GridOverviewScreen() {
           points={[copy.app.overview.fixtureNote]}
         />
 
-        <FadeIn style={{ gap: space.md }}>
-          <Panel>
-            <PanelHeader
-              icon={<MapIcon size={18} color={colors.inkMuted} />}
-              title={copy.app.overview.map.title}
-              subtitle={copy.app.overview.map.subtitle}
-            />
-            <View style={{ marginTop: space.lg }}>
-              <SubsystemMap
-                forecasts={all}
-                selected={params.subsystem}
-                onSelect={select}
-              />
-            </View>
-            <Text
-              style={{
-                fontSize: 11,
-                color: colors.inkFaint,
-                lineHeight: 17,
-                marginTop: space.md,
-              }}
-            >
-              {copy.app.overview.map.boundaryNote}
-            </Text>
-          </Panel>
+        <FadeIn style={{ gap: space.md }} onLayout={onOverviewLayout}>
+          {/*
+            Map and rows side by side once there is room for both, stacked
+            below that. `side` is measured against `layout.desktop` on the
+            *container* rather than the viewport, so the pair reflows correctly
+            inside whatever it is nested in.
 
-          {all.map((forecast) => (
-            <SubsystemRow
-              key={forecast.subsystem}
-              forecast={forecast}
-              emphasis={params.technology}
-              domainMax={domainMax}
-              selected={forecast.subsystem === params.subsystem}
-              onPress={() => select(forecast.subsystem)}
-            />
-          ))}
+            The map keeps its own 380 px cap (`subsystem-map.tsx`), so on a wide
+            screen the left column is the map at its natural size and the right
+            column takes the remaining width — which is where the rows want to
+            be, since their bars are the part that benefits from length. Below
+            the breakpoint the rows would be squeezed to roughly half of a phone
+            width, so they go back under the map instead.
+          */}
+          <View
+            style={{
+              flexDirection: side ? "row" : "column",
+              alignItems: side ? "flex-start" : "stretch",
+              gap: space.md,
+            }}
+          >
+            <Panel style={side ? { width: 420 } : undefined}>
+              <PanelHeader
+                icon={<MapIcon size={18} color={colors.inkMuted} />}
+                title={copy.app.overview.map.title}
+                subtitle={copy.app.overview.map.subtitle}
+              />
+              <View style={{ marginTop: space.lg }}>
+                <SubsystemMap
+                  forecasts={all}
+                  selected={params.subsystem}
+                  onSelect={select}
+                />
+              </View>
+              <Text
+                style={{
+                  fontSize: 11,
+                  color: colors.inkFaint,
+                  lineHeight: 17,
+                  marginTop: space.md,
+                }}
+              >
+                {copy.app.overview.map.boundaryNote}
+              </Text>
+            </Panel>
+
+            <View style={{ flex: side ? 1 : undefined, gap: space.md }}>
+              {all.map((forecast) => (
+                <SubsystemRow
+                  key={forecast.subsystem}
+                  forecast={forecast}
+                  emphasis={params.technology}
+                  domainMax={domainMax}
+                  selected={forecast.subsystem === params.subsystem}
+                  onPress={() => select(forecast.subsystem)}
+                />
+              ))}
+            </View>
+          </View>
           <RiskCaveat />
         </FadeIn>
 
