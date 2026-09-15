@@ -45,11 +45,19 @@ export default function Root({ children }: PropsWithChildren) {
             no-op, including on the server's SPA fallback, which answers
             unknown paths with `/`'s HTML.
 
-            The order — stored choice, then browser languages, then `pt` — is
-            the persistence rule. A reader who switched to English on any page
-            wrote `wattsteer.locale` doing it (see `language-switch.tsx`), and
-            it is read here *before* `navigator.languages`, so a pt-BR browser
-            never pulls them back out of English.
+            The rule is: a stored choice, otherwise **pt-BR**. The browser's
+            own languages are deliberately *not* consulted — a Brazilian
+            product defaults to Portuguese, and an English-locale browser
+            arriving for the first time should still land on pt. A reader who
+            switched to English wrote `wattsteer.locale` doing it (see
+            `language-switch.tsx`), and that choice is what carries them.
+
+            The 900 ms is the loading screen's minimum display. Redirecting on
+            the same tick made it unobservable — the landing page was already
+            painted at 0 ms, so the screen existed in the bundle and never on a
+            screen. It is a deliberate hold, not work being waited on: there is
+            nothing to resolve here, and saying so is better than pretending a
+            spinner is measuring something.
 
             With scripting off nothing happens, and the loading screen's
             continue link is revealed by the `<noscript>` rule below. */}
@@ -60,11 +68,8 @@ export default function Root({ children }: PropsWithChildren) {
   var p=location.pathname;
   if(p!=="/"&&p!=="/index.html")return;
   var s=null;try{s=localStorage.getItem("wattsteer.locale");}catch(e){}
-  var l=(s==="pt"||s==="en")?s:null;
-  if(!l){var tags=(navigator.languages&&navigator.languages.length?navigator.languages:[navigator.language||""]);
-    for(var i=0;i<tags.length;i++){var m=String(tags[i]).toLowerCase().split("-")[0];
-      if(m==="pt"||m==="en"){l=m;break;}}}
-  location.replace("/"+(l||"pt")+"/");
+  var l=(s==="pt"||s==="en")?s:"pt";
+  setTimeout(function(){location.replace("/"+l+"/");},900);
 }catch(e){}})();`,
           }}
         />

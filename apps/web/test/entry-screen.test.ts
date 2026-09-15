@@ -113,28 +113,27 @@ describe("a chosen language persists", () => {
     expect(read("i18n", "index.tsx")).toContain("LOCALE_STORAGE_KEY");
   });
 
-  test("it reads the stored choice before the browser's languages", () => {
-    // The whole persistence rule is an ordering. Reversed, a reader who chose
-    // English on a pt-BR laptop is sent back to Portuguese on their next
-    // visit — the exact "silently reset to pt" this screen must not do.
-    const stored = SCRIPT.indexOf("localStorage.getItem");
-    const browser = SCRIPT.indexOf("navigator.languages");
-    expect(stored).toBeGreaterThan(-1);
-    expect(browser).toBeGreaterThan(-1);
-    expect(stored).toBeLessThan(browser);
+  test("a stored choice is the only thing that beats the default", () => {
+    /*
+      The rule was stored → browser languages → pt. It is now stored → pt, and
+      the change was measured rather than preferred: the deployed build sent a
+      default Chromium to `/en/` on a first visit, and the product is Brazilian.
+      The browser's languages are no longer an input on either path.
+    */
+    expect(SCRIPT.indexOf("localStorage.getItem")).toBeGreaterThan(-1);
+    expect(SCRIPT).not.toContain("navigator.languages");
+    expect(SCRIPT).not.toContain("navigator.language");
   });
 
   test("it falls back to the default locale and to nothing else", () => {
-    expect(SHELL).toContain(`location.replace("/"+(l||"${DEFAULT_LOCALE}")+"/")`);
+    expect(SHELL).toContain(`?s:"${DEFAULT_LOCALE}"`);
   });
 
-  test("the route's own effect applies the same three steps in the same order", () => {
-    const stored = EFFECT.indexOf("readStoredLocale()");
-    const browser = EFFECT.indexOf("matchLocale(");
-    const fallback = EFFECT.indexOf("DEFAULT_LOCALE");
-    expect(stored).toBeGreaterThan(-1);
-    expect(stored).toBeLessThan(browser);
-    expect(browser).toBeLessThan(fallback);
+  test("the route's own effect applies the same rule", () => {
+    // Same two steps, same order, or a client-side navigation into `/` and a
+    // full load of `/` disagree about where the reader belongs.
+    expect(EFFECT).toContain("readStoredLocale() ?? DEFAULT_LOCALE");
+    expect(EFFECT).not.toContain("matchLocale(");
   });
 
   test("the language switch writes the choice on a link, not only on a toggle", () => {
@@ -237,5 +236,52 @@ describe("everything that means home honours the locale", () => {
     for (const locale of LOCALES) {
       expect(localePath(locale)).toBe(`/${locale}/`);
     }
+  });
+});
+
+describe("the loading screen is actually seen, and defaults to pt", () => {
+  const shell = readFileSync(join(import.meta.dir, "..", "src/app/+html.tsx"), "utf8");
+  const route = readFileSync(join(import.meta.dir, "..", "src/app/index.tsx"), "utf8");
+
+  /**
+   * Measured against the deployed build before this change: navigating to `/`
+   * painted the *landing page* at 0 ms. The redirect ran on the same tick as
+   * the script, so the loading screen existed in the bundle and never on a
+   * screen. The hold is what makes it a screen rather than a code path.
+   */
+  test("both redirect paths hold for the same minimum", () => {
+    /*
+      Read out of the route rather than restated here, and then required of the
+      shell: the shell's redirect is a string inside the document and cannot
+      import the constant, so the only thing keeping the two in step is this
+      assertion. Importing the route instead would pull react-native into the
+      test and hand back `undefined`.
+    */
+    const declared = route.match(/SPLASH_MIN_MS = (\d+)/);
+    expect(declared).not.toBeNull();
+    const ms = Number((declared as RegExpMatchArray)[1]);
+    expect(ms).toBeGreaterThan(0);
+    expect(route).toContain("setTimeout(");
+    expect(shell).toContain(`},${ms});`);
+  });
+
+  /**
+   * The product is Brazilian and the brief was explicit: pt-BR unless the
+   * reader has chosen otherwise. Consulting `navigator.languages` sent an
+   * English-locale browser to `/en/` on a first visit — measured, the deployed
+   * build redirected to `/en/` from a default Chromium.
+   */
+  test("neither path consults the browser's languages", () => {
+    expect(shell).not.toContain("navigator.languages");
+    expect(shell).not.toContain("navigator.language");
+    expect(route).not.toContain("navigator.language");
+    expect(route).not.toContain("matchLocale");
+  });
+
+  test("a stored choice still wins over the default", () => {
+    // Non-vacuity for the test above: dropping the browser step must not have
+    // dropped persistence with it.
+    expect(shell).toContain('localStorage.getItem("wattsteer.locale")');
+    expect(route).toContain("readStoredLocale() ?? DEFAULT_LOCALE");
   });
 });

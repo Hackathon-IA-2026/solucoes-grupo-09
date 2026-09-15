@@ -12,7 +12,18 @@ import Head from "expo-router/head";
 import { useEffect, useState } from "react";
 import { Animated, Platform, Pressable, Text, View } from "react-native";
 import { readStoredLocale, useCopy, useI18n } from "@/i18n";
-import { DEFAULT_LOCALE, localePath, matchLocale } from "@/i18n/locale";
+import { DEFAULT_LOCALE, localePath } from "@/i18n/locale";
+
+/**
+ * How long the loading screen is held before the redirect.
+ *
+ * Kept in step with the inline script in `+html.tsx` by hand, because that
+ * script is a string in the document shell and cannot import this. If the two
+ * ever disagree the slower one wins and the faster one is dead code — which is
+ * why `entry-screen.test.ts` asserts the script carries this number.
+ */
+export const SPLASH_MIN_MS = 900;
+
 import { alternatesFor } from "@/lib/seo";
 
 /**
@@ -71,17 +82,19 @@ export default function LoadingScreen() {
     // pre-hydration script only sees a full document load, so a client-side
     // navigation into `/` — the redirect out of an unknown locale — would
     // otherwise sit here with nothing to move it on.
-    const target =
-      readStoredLocale() ??
-      matchLocale(
-        typeof navigator !== "undefined" && navigator.language
-          ? [navigator.language]
-          : [],
-      ) ??
-      DEFAULT_LOCALE;
+    // Stored choice, otherwise the default — and the browser's languages are
+    // deliberately not consulted. Same rule as the shell's script, and it has
+    // to be the same or the two disagree on a client-side navigation.
+    const target = readStoredLocale() ?? DEFAULT_LOCALE;
     // `replace`, not `push`: this must never sit in the history stack, or Back
     // from `/pt/` lands here and bounces the visitor straight forward again.
-    router.replace(localePath(target) as never);
+    // Held for the same 900 ms the shell's script holds, so the screen is seen
+    // whichever path reaches it.
+    const timer = setTimeout(
+      () => router.replace(localePath(target) as never),
+      SPLASH_MIN_MS,
+    );
+    return () => clearTimeout(timer);
   }, [router]);
 
   return (
