@@ -619,8 +619,80 @@ const LANE_DESCRIPTION =
   "defaulted: a card is a property of one lane's promoted artifact, and a " +
   "default would answer a question about a model the caller did not ask about.";
 
+/**
+ * Every artifact on a lane, and any one of their cards — including refused ones.
+ *
+ * `artifacts.py` writes a refused candidate to the volume on purpose, *"so a
+ * refused model can be inspected"*, and until this route existed nothing could:
+ * `/v1/model/card` resolves through the promotion log, so the lane whose only
+ * artifact the gate had just refused answered `MODEL_UNAVAILABLE` and the card
+ * saying *why* was unreachable.
+ *
+ * **Public, and that is consistent rather than lax.** `/v1/model/card` is
+ * already public, and the product's claim is that no number is a black box — a
+ * card the gate *refused* is if anything more worth reading than one it
+ * accepted. What this must never do is let a refused card be mistaken for a
+ * serving one, so the response carries `promoted` per artifact and the caller
+ * is told which.
+ */
+async function fetchArtifacts(
+  lane: string,
+  artifactId: string | undefined,
+  endpoint?: MlEndpoint,
+): Promise<unknown> {
+  const query = new URLSearchParams({ lane });
+  if (artifactId !== undefined) {
+    query.set("artifact_id", artifactId);
+  }
+  const response = await callMl(
+    "/internal/model/artifacts",
+    query,
+    ...(endpoint === undefined ? [] : [endpoint]),
+  );
+  const body = await response.json().catch(() => null);
+  if (!isRecord(body)) {
+    throw new UpstreamError("The modelling service returned an unreadable listing", {
+      code: "UPSTREAM_FAILED",
+    });
+  }
+  return body;
+}
+
 export function createModelCardRoutes(endpoint?: MlEndpoint) {
   return new Elysia({ name: "model-card" })
+    .get(
+      "/v1/model/artifacts",
+      async ({ query }) =>
+        fetchArtifacts(
+          laneName("lane", query.lane),
+          query.artifact_id === undefined || query.artifact_id === ""
+            ? undefined
+            : query.artifact_id,
+          endpoint,
+        ),
+      {
+        query: t.Object({
+          lane: t.String({ description: LANE_DESCRIPTION }),
+          artifact_id: t.Optional(
+            t.String({
+              description:
+                "One artifact's card, verbatim, promoted or not. Omitted, the " +
+                "response lists the ids on the lane and which is promoted.",
+            }),
+          ),
+        }),
+        detail: {
+          summary: "Every artifact on a lane, promoted or refused",
+          description:
+            "The inspection surface a refusal assumes. `/v1/model/card` answers " +
+            "what a lane *may serve*; this answers what is *on the volume*, so " +
+            "the card that says why the gate refused a candidate can be read. " +
+            "`promoted` is stated per artifact — a refused card is never to be " +
+            "mistaken for a serving one. Not cached: the volume changes on a " +
+            "retrain, not on a promotion.",
+        },
+      },
+    )
     .get(
       "/v1/model/card",
       async ({ query, request, set }) => {
