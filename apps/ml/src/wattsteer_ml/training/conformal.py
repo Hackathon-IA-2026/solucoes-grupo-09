@@ -1062,15 +1062,45 @@ class CoverageReport:
 
     @property
     def guardrail_satisfied(self) -> bool:
-        """Whether both coverages sit inside the gate's window. Reported only.
+        """Whether both tails sit inside the **claim** window. Reported only.
 
         The veto is forecaster ticket 13's; this property exists so the card can
         carry the answer beside the numbers rather than leaving a reader to
         compare them against a constant they have to go and find.
+
+        **It is the claim window and no longer the gate's.** Forecaster 47 gave
+        the gate its own, lower :data:`promotion floor
+        <wattsteer_ml.evaluation.gate.PROMOTION_COVERAGE_FLOOR>` so that a band
+        may serve without being called a 90% band, and this property is the
+        second of those two questions. It cannot accidentally become the first:
+        the floor lives in :mod:`wattsteer_ml.evaluation.gate`, which imports
+        this module, so nothing here can read it.
+
+        **The lower tail is counted where it states a bound** — forecaster 47
+        again, and it is a tightening rather than a convenience. The marginal
+        ``coverage_p10`` is the conditional figure blended with rows covered by
+        arithmetic, ``(1 − s) + s·coverage_p10_where_stated``, so it is
+        *necessarily higher* and lands inside a 0.85 window at conditional
+        figures well outside it: at ``s = 0.39`` a floor covering 0.8477 where
+        it states one reads 0.9403 marginally. Deriving the claim from that
+        number would have let the card print "this fold's served band is a 90%
+        band" about the artifact forecaster 46 measured at six standard
+        deviations under its own guarantee. The module docstring has said since
+        forecaster 35 that what is aimed at 90% is
+        ``coverage_p10_where_stated`` on the lower tail and the marginal
+        ``coverage_p90`` on the upper; this property now reads the two figures
+        that sentence names.
+
+        A tail that states no bound is ``None`` here and cannot satisfy a
+        window — :attr:`nominal_claim` refuses it explicitly as well, because
+        one of the two has to be the place a reader looks.
         """
         low, high = COVERAGE_GUARDRAIL
-        return all(
-            low <= value <= high for value in (self.coverage_p10, self.coverage_p90)
+        lower = self.coverage_p10_where_stated
+        return (
+            lower is not None
+            and low <= lower <= high
+            and low <= self.coverage_p90 <= high
         )
 
     @property
@@ -1079,14 +1109,20 @@ class CoverageReport:
 
         Two conditions, both necessary, and neither of them new arithmetic.
 
-        **The marginals sit inside** :data:`COVERAGE_GUARDRAIL` --
-        :attr:`guardrail_satisfied`, the window the hot-swap gate already
-        vetoes outside. A hard ``>= 0.90`` would be the wrong test and not a
-        stricter one: conformal makes empirical coverage *equal* nominal rather
-        than exceed it, so an honest 90% band lands either side of 0.90 by
-        sampling noise, and a claim that flipped on the noise would say nothing.
-        The window is the repository's already-published statement of where a
-        coverage figure has to be, so nothing is invented here.
+        **Both tails sit inside** :data:`COVERAGE_GUARDRAIL` --
+        :attr:`guardrail_satisfied`, which counts the lower tail where it states
+        a bound and the upper one marginally, for the reasons written there. A
+        hard ``>= 0.90`` would be the wrong test and not a stricter one:
+        conformal makes empirical coverage *equal* nominal rather than exceed
+        it, so an honest 90% band lands either side of 0.90 by sampling noise,
+        and a claim that flipped on the noise would say nothing. The window is
+        the repository's already-published statement of where a coverage figure
+        has to be, so nothing is invented here.
+
+        **It is no longer the window an artifact is promoted against.**
+        Forecaster 47 lowered that one, deliberately, to 0.80, and left this one
+        where it was: a band between the two serves *and* is refused this claim,
+        which is the whole point of there being two numbers.
 
         **And each edge is a bound on at least one row.** A ``coverage_p10`` of
         1.0 over no stated row is arithmetic over an edge that is 0 MWh

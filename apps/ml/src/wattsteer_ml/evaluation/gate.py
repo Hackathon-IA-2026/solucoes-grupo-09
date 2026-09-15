@@ -193,6 +193,63 @@ P50_UNBIASEDNESS_WINDOW: tuple[float, float] = (0.45, 0.55)
 #: Guardrail. ``ece ≤ 0.05``.
 ECE_CEILING = 0.05
 
+#: **The lowest lower coverage that may be promoted**, and deliberately not the
+#: lowest that may be *described* as a 90% band. The two were one constant —
+#: :data:`~wattsteer_ml.training.conformal.COVERAGE_GUARDRAIL` — until
+#: forecaster 47, and separating them is the whole of that ticket.
+#:
+#: **Why there are two numbers.** ``COVERAGE_GUARDRAIL`` was doing two jobs at
+#: once: this module's veto on whether an artifact may serve, and
+#: :attr:`~wattsteer_ml.training.conformal.CoverageReport.nominal_claim`'s
+#: choice between
+#: :data:`~wattsteer_ml.training.conformal.NINETY_PERCENT_BAND` and
+#: :data:`~wattsteer_ml.training.conformal.NOT_A_NINETY_PERCENT_BAND` on the
+#: card and on the wire. Lowering that one constant to admit an artifact would
+#: therefore have made the product *assert* "this fold's served band is a 90%
+#: band" about a band covering 0.8477 — the exact sentence
+#: ``NOT_A_NINETY_PERCENT_BAND`` exists to prevent, printed by the machinery
+#: built to prevent it. A product may decide to serve a band it cannot call a
+#: 90% band. It may not decide to call it one.
+#:
+#: **Whose decision this is.** The owner's, taken with the trade-off in front of
+#: him: *"promote this fucker, can we put rail > 0.80 ? to promote ?"*, and,
+#: after the split below was put to him rather than the single-constant change,
+#: *"ok, adjust the claim and later we improve this"*. It is recorded in
+#: `.scratch/forecaster/issues/47-the-promotion-floor-is-not-the-claim.md` with
+#: the coverage it admits and with what forecaster 46 measured about that
+#: coverage, because this repository has written "no threshold was moved"
+#: repeatedly and this one moved. A future reader must not be able to mistake it
+#: for drift.
+#:
+#: **What it admits, stated rather than implied.** The artifact this was lowered
+#: for covers 0.8477 where its floor states one, against an order statistic that
+#: guarantees 0.9008 on its own calibration window. That is a 0.0531 shortfall
+#: against its own promise — 6.2 standard errors at n = 1240 — and not the
+#: 0.0023 by which it misses the claim window's edge. Forecaster 46 ruled out
+#: the three repairable causes and found the shortfall real. This floor admits a
+#: band that genuinely under-covers, knowingly.
+#:
+#: **The two cannot be collapsed back by accident.** This constant lives here,
+#: in the module that refuses things, and ``COVERAGE_GUARDRAIL`` lives in
+#: :mod:`wattsteer_ml.training.conformal`, which refuses nothing and does not
+#: import this module — so ``nominal_claim`` cannot read this number even if a
+#: later edit wanted it to, and the claim cannot follow the floor down without
+#: an import that would be circular. ``test_hot_swap_gate`` holds them apart by
+#: value as well, and says why in the same breath.
+PROMOTION_COVERAGE_FLOOR = 0.80
+
+#: The window the two coverage rails are vetoed against:
+#: :data:`PROMOTION_COVERAGE_FLOOR` below, and
+#: :data:`~wattsteer_ml.training.conformal.COVERAGE_GUARDRAIL`'s own ceiling
+#: above. **The ceiling did not move and was not asked to**: over-coverage is a
+#: band too wide for its own claim, nobody asked to admit one, and a rail that
+#: stopped vetoing in both directions at once would have been deleted rather
+#: than lowered.
+PROMOTION_COVERAGE_WINDOW: tuple[float, float] = (
+    PROMOTION_COVERAGE_FLOOR,
+    COVERAGE_GUARDRAIL[1],
+)
+
 #: The name the corrected lower-coverage rail is published under, in the card's
 #: gate block and on the promotion log's line. **Not** ``coverage_p10``, which
 #: is the marginal over every curtailed hour and stays on the card as
@@ -379,6 +436,18 @@ def minimum_band_coverage_rows(
     miscoverage: float = NOMINAL_MISCOVERAGE,
 ) -> int:
     """How many falsifiable rows a coverage statement needs to be one. **98.**
+
+    **Derived from the claim window and deliberately not from the promotion
+    floor** — forecaster 47. The rail is now vetoed against
+    :data:`PROMOTION_COVERAGE_WINDOW`, whose nearer edge is 0.07 from the target
+    and would ask for 31 rows; this stays on
+    :data:`~wattsteer_ml.training.conformal.COVERAGE_GUARDRAIL`'s 0.05 and its
+    98. The sample size answers "is this figure resolved enough to be a
+    statement about the 90% the product aims at", which is a question about the
+    claim and not about where a product decided to set its serving bar. Lowering
+    the floor may admit a band that under-covers; it may not also buy a smaller
+    sample to measure it on, which would make the admission unfalsifiable as
+    well as knowing.
 
     Derived from the three numbers this repository has already published, and
     from no fourth one:
@@ -577,36 +646,94 @@ class P10BandCoverage:
 
     @property
     def passes(self) -> bool:
-        """Measured, over enough rows, and inside the window. All three."""
-        low, high = COVERAGE_GUARDRAIL
+        """Measured, over enough rows, and inside the **promotion** window. All three.
+
+        :data:`PROMOTION_COVERAGE_WINDOW` and not
+        :data:`~wattsteer_ml.training.conformal.COVERAGE_GUARDRAIL` since
+        forecaster 47: this predicate decides whether an artifact may serve, and
+        whether its band may be *called* a 90% band is a different question with
+        a different constant behind it. :attr:`states_nominal_band` is that
+        second question, answered on the same figure, and a candidate can pass
+        this one while failing that one — which is the state the owner's
+        decision exists to make expressible.
+        """
+        low, high = PROMOTION_COVERAGE_WINDOW
         return (
             self.coverage is not None and self.sufficient and low <= self.coverage <= high
         )
 
     @property
-    def detail(self) -> str:
-        """The sentence the refused card carries, with its denominator in it."""
+    def states_nominal_band(self) -> bool:
+        """Whether this coverage also earns the 90% claim. **Reported, never vetoed.**
+
+        The claim window is
+        :data:`~wattsteer_ml.training.conformal.COVERAGE_GUARDRAIL`, unmoved,
+        and the authority for the claim itself is
+        :attr:`~wattsteer_ml.training.conformal.CoverageReport.nominal_claim`,
+        which derives it from that same constant for the card and the wire. This
+        property exists so the gate's own prose can say which of the two bars an
+        artifact cleared without a reader holding two numbers in their head.
+        Nothing in the decision reads it: :attr:`Guardrail.vetoes` sees
+        :attr:`passes` and this is not on that path.
+        """
         low, high = COVERAGE_GUARDRAIL
+        return self.coverage is not None and low <= self.coverage <= high
+
+    @property
+    def detail(self) -> str:
+        """The sentence the card carries, with its denominator and both bars in it.
+
+        **Both bars since forecaster 47**, because an artifact between them
+        serves and is not a 90% band, and a line naming only the bar it was
+        judged against would leave a reader to discover the other one on a
+        different surface at 03:00.
+        """
+        claim_low, claim_high = COVERAGE_GUARDRAIL
+        low, high = PROMOTION_COVERAGE_WINDOW
         if not self.sufficient:
             return (
                 f"{self.qualifying_rows} of {self.rows} curtailed hours put the "
                 f"served P10 above τ, which is under the {self.minimum_rows} a "
                 f"{TARGET_COVERAGE:.0%} statement needs to be resolved against "
-                f"[{low}, {high}]; the rest is the mixture's point mass and the "
-                "τ floor, where the label clears the floor whatever the fit "
-                "does. The sample is too small, which is a refusal and not a "
-                "measurement of anything"
+                f"[{claim_low}, {claim_high}]; the rest is the mixture's point "
+                "mass and the τ floor, where the label clears the floor whatever "
+                "the fit does. The sample is too small, which is a refusal and "
+                "not a measurement of anything"
             )
         assert self.coverage is not None  # sufficient implies a denominator
+        counted = (
+            f"over the {self.qualifying_rows} of {self.rows} curtailed hours "
+            "whose P10 is above τ and could have been missed"
+        )
+        if self.states_nominal_band:
+            return (
+                f"{self.coverage:.4f} against the promotion window "
+                f"[{low}, {high}], and inside the claim window "
+                f"[{claim_low}, {claim_high}] as well, {counted}"
+            )
+        if self.passes:
+            return (
+                f"{self.coverage:.4f} against the promotion window "
+                f"[{low}, {high}], {counted}. It is outside the claim window "
+                f"[{claim_low}, {claim_high}], so this artifact may serve and "
+                "its band is NOT a 90% band: the card's `nominal_claim` is false "
+                "and `claim_note` says so before it says any figure"
+            )
         return (
-            f"{self.coverage:.4f} against [{low}, {high}], over the "
-            f"{self.qualifying_rows} of {self.rows} curtailed hours whose P10 is "
-            f"above τ and could have been missed"
+            f"{self.coverage:.4f} against the promotion window "
+            f"[{low}, {high}], {counted}. Below the floor an artifact may serve "
+            f"at, and below the claim window [{claim_low}, {claim_high}] too"
         )
 
     def as_guardrail(self) -> Guardrail:
-        """The rail itself. Unmeasurable and under-powered both veto."""
-        low, high = COVERAGE_GUARDRAIL
+        """The rail itself. Unmeasurable and under-powered both veto.
+
+        The ``bound`` names the promotion window, because that is what this
+        guardrail's ``passed`` was decided against. The claim window is in
+        :attr:`detail` beside it and on the card in ``nominal_claim``, so no
+        surface carries one of the two without the other.
+        """
+        low, high = PROMOTION_COVERAGE_WINDOW
         return Guardrail(
             name=BAND_COVERAGE_RAIL,
             passed=self.passes,
@@ -1900,11 +2027,18 @@ def guardrails(
                     "no coverage to measure; a guardrail cannot pass on a "
                     "measurement that was not taken"
                 ),
-                bound=f"in {list(COVERAGE_GUARDRAIL)}",
+                bound=f"in {list(PROMOTION_COVERAGE_WINDOW)}",
             )
         )
     else:
-        rails.append(_window("coverage_p90", coverage.coverage_p90, COVERAGE_GUARDRAIL))
+        # The promotion window, for the same reason the floor rail takes it:
+        # this is a veto on whether an artifact may serve. Whether the *band* is
+        # a 90% band is `CoverageReport.nominal_claim`, which reads both
+        # marginals against the unmoved claim window and is on the card either
+        # way. Forecaster 47.
+        rails.append(
+            _window("coverage_p90", coverage.coverage_p90, PROMOTION_COVERAGE_WINDOW)
+        )
     rails.append(_ceiling("ece", candidate.ece, ECE_CEILING))
     rails.append(
         _ceiling("crossing_rate", candidate.crossing_rate, CROSSING_RATE_CEILING)

@@ -18,6 +18,8 @@ each veto can be exercised alone.
 
 from __future__ import annotations
 
+import ast
+import inspect
 import json
 import math
 from collections.abc import Mapping, Sequence
@@ -35,6 +37,7 @@ from wattsteer_ml.artifacts import ARTIFACT_SUFFIX, CARD_SUFFIX
 from wattsteer_ml.canonical import VintageFidelity
 from wattsteer_ml.constants import SUBSYSTEM_CODES
 from wattsteer_ml.evaluation import Fold, FoldBlocks, FoldSegment, RowKey, stamp_fidelity
+from wattsteer_ml.evaluation import gate as gate_module
 from wattsteer_ml.evaluation.gate import (
     BAND_COVERAGE_RAIL,
     BAND_MEDIAN_RAIL,
@@ -45,6 +48,8 @@ from wattsteer_ml.evaluation.gate import (
     MINIMUM_TEST_DAYS,
     NULL_RATE_DRIFT_CEILING,
     P50_UNBIASEDNESS_WINDOW,
+    PROMOTION_COVERAGE_FLOOR,
+    PROMOTION_COVERAGE_WINDOW,
     PROMOTION_PROBABILITY,
     Comparator,
     ContractDriftError,
@@ -84,6 +89,7 @@ from wattsteer_ml.evaluation.transformer_benchmark import BENCHMARK_ARM
 from wattsteer_ml.lanes import Lane
 from wattsteer_ml.promotions import PROMOTION_LOG_FILENAME, PromotionLog
 from wattsteer_ml.training import TrainedFold
+from wattsteer_ml.training import conformal as conformal_module
 from wattsteer_ml.training.bundle import (
     CONTRACT_FAULT_KEY,
     GATE_BLOCK_KEY,
@@ -97,7 +103,9 @@ from wattsteer_ml.training.bundle import (
 from wattsteer_ml.training.calibration import RiskBinsUndeterminedError
 from wattsteer_ml.training.conformal import (
     COVERAGE_GUARDRAIL,
+    NINETY_PERCENT_BAND,
     NOMINAL_MISCOVERAGE,
+    NOT_A_NINETY_PERCENT_BAND,
     TARGET_COVERAGE,
     CoverageReport,
     ScoredHour,
@@ -277,7 +285,16 @@ def coverage_report(
     coverage_p90: float = 0.92,
     p50_unbiasedness: float = 0.50,
     crossing_rate: float = 0.0,
+    coverage_p10_where_stated: float | None = None,
 ) -> CoverageReport:
+    """A report whose two lower figures agree unless a caller separates them.
+
+    ``coverage_p10_where_stated`` defaults to the marginal, which keeps every
+    fixture written before forecaster 47 saying what it said. On real folds the
+    two differ — the marginal is the conditional blended with rows covered by
+    arithmetic and is necessarily higher — and the tests that turn on that
+    difference pass both.
+    """
     return CoverageReport(
         fold_id=DECIDING.row_id,
         rows=480,
@@ -286,7 +303,11 @@ def coverage_report(
         upper_correction_realised=0.8,
         lower_stated_rows=480,
         upper_stated_rows=384,
-        coverage_p10_where_stated=coverage_p10,
+        coverage_p10_where_stated=(
+            coverage_p10
+            if coverage_p10_where_stated is None
+            else coverage_p10_where_stated
+        ),
         coverage_p90_where_stated=coverage_p90,
         p50_unbiasedness=p50_unbiasedness,
         crossing_rate=crossing_rate,
@@ -1486,3 +1507,223 @@ def test_an_under_powered_median_is_a_refusal_and_says_the_sample_was_small() ->
     assert empty.unbiasedness is None
     assert not empty.passes
     assert not empty.as_guardrail().passed
+
+
+# --- forecaster 47: the promotion floor is not the claim window --------------
+#
+# One constant was doing two jobs: may this artifact serve, and may its band be
+# called a 90% band. The owner lowered the first to 0.80 to promote an artifact
+# covering 0.8477; the second did not move, and these four tests are what holds
+# them apart. Between the two bars an artifact serves *and* the product says its
+# band is not a 90% band — which is a state the product could not express while
+# one number answered both questions.
+
+
+def _band_at(missed_in: int) -> tuple[ScoredHour, ...]:
+    """Composed hours that miss their floor one curtailed hour in ``missed_in``.
+
+    So :attr:`P10BandCoverage.coverage` comes out at ``1 − 1/missed_in`` exactly
+    — 6 puts it between the promotion floor and the claim window, 20 inside the
+    claim window, 4 under the floor — and the fixture is the one the rest of
+    this file already uses rather than a second one built to land on a number.
+    """
+    return scored(keys(), offset_mwh=0.0, missed_in=missed_in)
+
+
+def test_between_the_two_bars_the_floor_is_clear_and_the_band_is_not_a_ninety() -> None:
+    """The state the owner's decision exists to make expressible, and its limit.
+
+    The artifact this was lowered for covers 0.8477 where its floor states one.
+    The fixture here covers 1 − 1/6 = 0.8333, which is the same place: above
+    :data:`PROMOTION_COVERAGE_FLOOR` and below
+    :data:`~wattsteer_ml.training.conformal.COVERAGE_GUARDRAIL`'s lower edge. It
+    must clear the coverage rail and it must **not** be describable as a 90%
+    band, and if those two ever stop being simultaneously true the product is
+    either refusing what the owner decided to serve or claiming what it cannot.
+
+    **The marginal is inside the claim window and the claim is still refused**,
+    which is the second thing this asserts. ``coverage_p10`` is the conditional
+    figure blended with rows covered by arithmetic — ``(1 − s) + s·where_stated``
+    — so it reads 0.94 while the floor covers 0.8333, and deriving the claim
+    from it would have printed :data:`NINETY_PERCENT_BAND` about this band. That
+    was true before forecaster 47 and independently of any floor; it is why
+    ``guardrail_satisfied`` now reads the tail where it states a bound.
+
+    **And the limit, which is the finding of forecaster 47 and not its
+    decision**: clearing this rail is not the same as promoting. The decision
+    below still refuses, on :data:`CALIBRATION_EXCESS_RAIL` — a second statement
+    about the same rows, which asks whether the realised clearance differs from
+    the model's *own implied* rate and has no constant in it to lower. A row
+    qualifies only when its P10 is above ``τ``, which needs ``p > 0.90``, so the
+    implied rate over qualifying rows always exceeds 0.90 and a coverage below
+    it is an excess below zero by at least the difference. Lowering the coverage
+    floor therefore cannot promote a floor that under-covers; it only stops the
+    product calling such a band a 90% band. The ticket says so, and this test is
+    where it is true rather than argued.
+    """
+    hours = _band_at(6)
+    band = p10_band_coverage(hours)
+    assert band.coverage is not None
+    assert band.sufficient
+    assert PROMOTION_COVERAGE_FLOOR <= band.coverage < COVERAGE_GUARDRAIL[0]
+
+    # Serving, as far as this rail is concerned: it passes and does not veto.
+    assert band.passes and not band.as_guardrail().vetoes
+    # And not a 90% band: the same figure, the other bar.
+    assert not band.states_nominal_band
+    assert "promotion window" in band.detail and "NOT a 90% band" in band.detail
+    assert f"[{COVERAGE_GUARDRAIL[0]}, {COVERAGE_GUARDRAIL[1]}]" in band.detail
+
+    report = coverage_report(
+        coverage_p10=0.94,
+        coverage_p10_where_stated=band.coverage,
+        coverage_p90=0.92,
+    )
+    low, high = COVERAGE_GUARDRAIL
+    assert low <= report.coverage_p10 <= high, (
+        "the marginal must be inside the claim window for this test to mean "
+        "anything: it is the number that would have granted the claim"
+    )
+    assert not report.nominal_claim
+    assert not report.guardrail_satisfied
+    assert report.claim_note.startswith(NOT_A_NINETY_PERCENT_BAND)
+    assert "0.8333" in report.claim_note
+
+    decision = run(
+        candidate(hours=hours, row=metrics_row(coverage=report)),
+        incumbent(),
+    )
+    vetoing = {rail.name for rail in decision.guardrails if rail.vetoes}
+    assert vetoing == {CALIBRATION_EXCESS_RAIL}, (
+        "the coverage floor is the only rail this ticket moved, and the "
+        "calibration-excess rail is the reason moving it does not promote an "
+        f"under-covering floor on its own: {vetoing}"
+    )
+    assert not decision.promotes
+
+
+def test_an_artifact_inside_the_claim_window_promotes_and_keeps_the_claim() -> None:
+    """The control for the test above: the gap only exists between the two bars.
+
+    Same fixture at 1 − 1/20 = 0.95, which clears both. Without this the split
+    could be a claim that is never granted at all, which would be a different
+    product and not a more honest one.
+    """
+    hours = _band_at(NOMINAL_LOWER_MISS)
+    band = p10_band_coverage(hours)
+    assert band.coverage is not None
+    low, high = COVERAGE_GUARDRAIL
+    assert low <= band.coverage <= high
+    assert band.passes and band.states_nominal_band
+    assert "inside the claim window" in band.detail
+
+    report = coverage_report(
+        coverage_p10=0.96,
+        coverage_p10_where_stated=band.coverage,
+        coverage_p90=0.92,
+    )
+    decision = run(
+        candidate(hours=hours, row=metrics_row(coverage=report)),
+        incumbent(),
+    )
+    assert decision.promotes
+    assert report.nominal_claim
+    assert report.claim_note == NINETY_PERCENT_BAND
+
+
+def test_an_artifact_under_the_promotion_floor_still_does_not_promote() -> None:
+    """The floor is a floor. Lowering a rail is not removing it.
+
+    1 − 1/4 = 0.75 is under 0.80, the rail vetoes, and the decision refuses —
+    and the refusal names the floor rather than the claim window, because the
+    floor is what it turned on.
+    """
+    hours = _band_at(4)
+    band = p10_band_coverage(hours)
+    assert band.coverage is not None
+    assert band.sufficient and band.coverage < PROMOTION_COVERAGE_FLOOR
+    assert not band.passes and not band.states_nominal_band
+    assert band.as_guardrail().vetoes
+    assert "Below the floor an artifact may serve at" in band.detail
+
+    report = coverage_report(
+        coverage_p10=0.91,
+        coverage_p10_where_stated=band.coverage,
+        coverage_p90=0.92,
+    )
+    decision = run(
+        candidate(hours=hours, row=metrics_row(coverage=report)),
+        incumbent(),
+    )
+    assert not decision.promotes
+    assert BAND_COVERAGE_RAIL in {
+        rail.name for rail in decision.guardrails if rail.vetoes
+    }
+
+
+def test_the_promotion_floor_and_the_claim_window_cannot_be_one_constant() -> None:
+    """They are two numbers, in two modules, and the second cannot read the first.
+
+    **Why they are separate**: ``COVERAGE_GUARDRAIL`` decides whether the card
+    and the wire may call a band a 90% band; ``PROMOTION_COVERAGE_FLOOR``
+    decides whether an artifact may serve. Collapsing them in either direction
+    is a product change and not a tidy-up — raising the floor to meet the claim
+    un-promotes what the owner decided to serve, and lowering the claim to meet
+    the floor makes the product assert a 90% band about one covering 0.8477,
+    which is the sentence :data:`NOT_A_NINETY_PERCENT_BAND` exists to prevent.
+
+    The structural half is stronger than the numeric one:
+    :mod:`wattsteer_ml.training.conformal` does not import
+    :mod:`wattsteer_ml.evaluation.gate` — the dependency runs the other way — so
+    ``nominal_claim`` *cannot* read the promotion floor whatever a later edit
+    intends. Asserted against the source, because an import is easy to add.
+    """
+    assert COVERAGE_GUARDRAIL[0] > PROMOTION_COVERAGE_FLOOR, (
+        "the promotion floor has met the claim window; if that is deliberate "
+        "the two constants have stopped being two decisions"
+    )
+    assert (PROMOTION_COVERAGE_FLOOR, COVERAGE_GUARDRAIL[1]) == PROMOTION_COVERAGE_WINDOW
+    # The ceiling did not move: over-coverage vetoes at the same place it always
+    # did, so what was lowered is a floor and not a rail.
+    assert PROMOTION_COVERAGE_WINDOW[1] == COVERAGE_GUARDRAIL[1] == 0.97
+
+    # The gap is non-empty, which is what makes "serving and not a 90% band" a
+    # reachable state rather than a sentence in a docstring.
+    admitted = 0.8477
+    assert PROMOTION_COVERAGE_FLOOR <= admitted < COVERAGE_GUARDRAIL[0]
+
+    # Against the import statements and not the file's text, because this
+    # module's own prose names the gate repeatedly — the question is whether
+    # anything in `conformal` can *read* the floor, not whether it mentions it.
+    # `conformal` does import `wattsteer_ml.evaluation` for `RowKey`, and the
+    # package deliberately does not re-export the gate: the gate imports
+    # `training.conformal`, so the reverse import would be a cycle and the
+    # dependency direction is what keeps the claim above the floor.
+    tree = ast.parse(inspect.getsource(conformal_module))
+    modules = {
+        node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)
+    }
+    names = {
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom | ast.Import)
+        for alias in node.names
+    }
+    assert "wattsteer_ml.evaluation.gate" not in modules, (
+        "training.conformal has imported the gate, so the claim window can now "
+        "be derived from the promotion floor; the two decisions were kept in "
+        f"two modules precisely so that edit has to be visible: {sorted(modules)}"
+    )
+    assert "PROMOTION_COVERAGE_FLOOR" not in names
+    assert "PROMOTION_COVERAGE_WINDOW" not in names
+
+    gate_imports = {
+        node.module or ""
+        for node in ast.walk(ast.parse(inspect.getsource(gate_module)))
+        if isinstance(node, ast.ImportFrom)
+    }
+    assert "wattsteer_ml.training.conformal" in gate_imports, (
+        "the gate no longer imports the claim window, so the dependency that "
+        "makes the reverse import a cycle — and the structural half of this "
+        "guard — is gone"
+    )
