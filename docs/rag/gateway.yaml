@@ -1,0 +1,105 @@
+# WattSteer LLM gateway: provedores, limites e cadeias por tarefa (F0, 15/09/2026)
+# Validado por docs/rag/llm-gateway-config.schema.json. Chaves nunca ficam aqui: só o nome da env var.
+# Limites: quando o provedor não publica (NVIDIA), começar conservador e ajustar pelos 429 observados no teste da AWS (18 a 20/09).
+version: 1
+
+providers:
+  nvidia:
+    kind: openai_compatible
+    base_url: https://integrate.api.nvidia.com/v1
+    api_key_env: NVIDIA_API_KEY
+    timeout_s: 60
+    limits: { rpm: 30, tpm: 60000, rpd: 4000 }          # não publicado; relatos de ~40 RPM
+    extra:
+      rerank_base_url: https://ai.api.nvidia.com/v1/retrieval   # rerankers usam outra raiz
+  groq:
+    kind: openai_compatible
+    base_url: https://api.groq.com/openai/v1
+    api_key_env: GROQ_API_KEY
+    timeout_s: 45
+    limits_per_model:                                       # tabela free oficial (15/09/2026)
+      openai/gpt-oss-120b: { rpm: 30, rpd: 1000, tpm: 8000, tpd: 200000 }
+      openai/gpt-oss-20b:  { rpm: 30, rpd: 1000, tpm: 8000, tpd: 200000 }
+  openrouter:
+    kind: openai_compatible
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    timeout_s: 60
+    limits: { rpm: 20, rpd: 50 }                            # 1000/dia se a conta já comprou US$ 10
+  sambanova:
+    kind: openai_compatible
+    base_url: https://api.sambanova.ai/v1
+    api_key_env: SAMBANOVA_API_KEY
+    timeout_s: 60
+    limits: { rpm: 20, rpd: 20, tpd: 200000 }
+  local:
+    kind: local                                             # executor OpenAI-compatível na LAN ou no próprio host
+    base_url: ${WATTSTEER_RAG_LOCAL_URL:-http://127.0.0.1:8081/v1}   # text-embeddings-inference / infinity
+    api_key_env: null
+    timeout_s: 120
+    limits: { rpm: 600 }
+  bedrock:                                                  # só quando os créditos AWS existirem (D-RAG-06)
+    kind: bedrock
+    region: us-east-1
+    enabled: false
+  emergency_paid:                                           # elo pago (Bisogno recomenda US$ 5/dia); desligado até decisão
+    kind: openai_compatible
+    base_url: https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY
+    enabled: false
+    budget_usd_day: 5
+  template:
+    kind: template                                          # texto-padrão determinístico, nunca falha
+
+tasks:
+  generate_strong:          # Evidence Builder (JSON estrito, temperatura 0)
+    chain:
+      - { provider: nvidia,     model: nvidia/nemotron-3-super-120b-a12b, max_input_tokens: 24000 }
+      - { provider: groq,       model: openai/gpt-oss-120b,               max_input_tokens: 6000 }   # TPM 8k
+      - { provider: openrouter, model: nvidia/nemotron-3-super-120b-a12b:free, max_input_tokens: 24000 }
+      - { provider: sambanova,  model: DeepSeek-V3.1,                      max_input_tokens: 24000 }
+      - { provider: emergency_paid, model: gpt-5-mini, max_input_tokens: 24000 }   # ignorado enquanto enabled=false
+    require: { json_schema: true }
+    temperature: 0
+    max_output_tokens: 1500
+    on_exhausted: waiting_quota           # job espera; nunca erro
+  generate_small:           # metadados de documento, reescrita de consulta, classificação
+    chain:
+      - { provider: groq,   model: openai/gpt-oss-20b,                 max_input_tokens: 6000 }
+      - { provider: nvidia, model: nvidia/nemotron-3.5-lightning-30b-a3b, max_input_tokens: 16000 }
+      - { provider: nvidia, model: openai/gpt-oss-20b,                 max_input_tokens: 16000 }
+    require: { json_schema: true }
+    temperature: 0
+    max_output_tokens: 800
+    on_exhausted: waiting_quota
+  embed:                    # NUNCA troca de modelo, só de executor (mesmo espaço vetorial)
+    model: BAAI/bge-m3
+    dimensions: 1024
+    chain:
+      - { provider: nvidia, model: baai/bge-m3 }
+      - { provider: local,  model: BAAI/bge-m3 }
+    batch_size: 32
+    on_exhausted: waiting_quota
+  rerank:
+    chain:
+      - { provider: nvidia, model: nvidia/llama-3.2-nv-rerankqa-1b-v2 }
+      - { provider: local,  model: BAAI/bge-reranker-v2-m3 }
+    top_n: 8
+    on_exhausted: skip_rerank             # degrada para a ordem do RRF, declara no trace
+  narrate:                  # redação do card (F3; hoje o apps/api chama a Anthropic direto)
+    chain:
+      - { provider: nvidia, model: nvidia/nemotron-3-super-120b-a12b, max_input_tokens: 8000 }
+      - { provider: groq,   model: openai/gpt-oss-120b,               max_input_tokens: 6000 }
+      - { provider: template }
+    temperature: 0
+    max_output_tokens: 700
+    on_exhausted: template
+
+behaviour:
+  counters: redis                          # janelas deslizantes por (provider, model): rpm, tpm, rpd, tpd
+  preflight: true                          # estima tokens antes de escolher o elo
+  cooling_s_default: 60                    # após 429/5xx/timeout sem Retry-After
+  retry_same_link: 0                       # não repete no mesmo elo; passa ao próximo com o MESMO payload
+  invalid_json_counts_as_failure: true
+  log_table: rag.llm_call                  # provider, model, attempt, latency_ms, tokens_in/out, status, trace_id
+  quota_endpoint: /internal/llm/quota

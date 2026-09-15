@@ -1,0 +1,96 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://wattsteer.com/schema/llm-gateway-config.schema.json",
+  "title": "LlmGatewayConfig",
+  "description": "Configuração do gateway de provedores de LLM/embeddings/rerank do WattSteer (docs/rag/gateway.yaml). Adapters plugáveis, limites por provedor e por modelo, cadeias de fallback por tarefa. A aplicação orquestra as cotas; nunca quebra por limite de tier gratuito.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "providers", "tasks", "behaviour"],
+  "properties": {
+    "version": { "type": "integer", "const": 1 },
+    "providers": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind"],
+        "properties": {
+          "kind": { "type": "string", "enum": ["openai_compatible", "local", "bedrock", "template"] },
+          "base_url": { "type": "string" },
+          "api_key_env": { "type": ["string", "null"], "description": "Nome da variável de ambiente com a chave. Nunca a chave." },
+          "region": { "type": "string" },
+          "timeout_s": { "type": "integer", "minimum": 1, "maximum": 600, "default": 60 },
+          "enabled": { "type": "boolean", "default": true },
+          "budget_usd_day": { "type": "number", "minimum": 0, "description": "Teto diário para elos pagos; ao atingir, o elo fica exhausted até o reset (fuso America/Sao_Paulo)." },
+          "limits": { "$ref": "#/definitions/limits" },
+          "limits_per_model": { "type": "object", "additionalProperties": { "$ref": "#/definitions/limits" } },
+          "extra": { "type": "object" }
+        }
+      }
+    },
+    "tasks": {
+      "type": "object",
+      "required": ["generate_strong", "generate_small", "embed", "rerank"],
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["chain"],
+        "properties": {
+          "chain": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["provider"],
+              "properties": {
+                "provider": { "type": "string" },
+                "model": { "type": "string" },
+                "max_input_tokens": { "type": "integer", "minimum": 256 }
+              }
+            }
+          },
+          "model": { "type": "string", "description": "Para embed: o único modelo permitido em toda a cadeia (mesmo espaço vetorial). Validação: todo elo de embed precisa ter model equivalente." },
+          "dimensions": { "type": "integer", "minimum": 64 },
+          "batch_size": { "type": "integer", "minimum": 1 },
+          "top_n": { "type": "integer", "minimum": 1 },
+          "require": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "json_schema": { "type": "boolean" }, "tools": { "type": "boolean" } }
+          },
+          "temperature": { "type": "number", "minimum": 0, "maximum": 2 },
+          "max_output_tokens": { "type": "integer", "minimum": 1 },
+          "on_exhausted": { "type": "string", "enum": ["waiting_quota", "template", "skip_rerank", "fail"], "default": "waiting_quota" }
+        }
+      }
+    },
+    "behaviour": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["counters", "preflight", "cooling_s_default", "retry_same_link", "invalid_json_counts_as_failure", "log_table", "quota_endpoint"],
+      "properties": {
+        "counters": { "type": "string", "enum": ["redis", "memory"] },
+        "preflight": { "type": "boolean" },
+        "cooling_s_default": { "type": "integer", "minimum": 1 },
+        "retry_same_link": { "type": "integer", "minimum": 0, "maximum": 2 },
+        "invalid_json_counts_as_failure": { "type": "boolean" },
+        "log_table": { "type": "string" },
+        "quota_endpoint": { "type": "string" }
+      }
+    }
+  },
+  "definitions": {
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rpm": { "type": "integer", "minimum": 1, "description": "requests por minuto" },
+        "tpm": { "type": "integer", "minimum": 1, "description": "tokens (entrada + saída) por minuto" },
+        "rpd": { "type": "integer", "minimum": 1, "description": "requests por dia" },
+        "tpd": { "type": "integer", "minimum": 1, "description": "tokens por dia" }
+      }
+    }
+  }
+}
