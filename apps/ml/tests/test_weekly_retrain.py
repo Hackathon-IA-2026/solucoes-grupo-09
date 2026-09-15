@@ -21,8 +21,11 @@ the repository's existing `WATTSTEER_TEST_DATABASE_URL` switch.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
+import sys
+import time
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -451,6 +454,238 @@ def test_a_run_already_in_flight_here_is_refused_rather_than_raced() -> None:
         app_module._RETRAINING.discard(RUN_ID)
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "RETRAIN_IN_PROGRESS"
+
+
+# --- forecaster 45: the run outlives the request that started it -------------
+#
+# The measurement this section exists for, taken on the live deployment on
+# 2026-09-15: the worker's POST aborted after exactly 300 s and was reported as
+# `OPTIMIZER_TIMEOUT`, while this service went on training (CPU 36%, RSS
+# 2.80 GB) well past the abort and completed. Every retrain reported a failure
+# that had not happened. A request that transmits no bytes for twelve minutes is
+# not a shape the deployment's internal networking will hold, and no timeout on
+# either end changes that.
+#
+# So the POST starts a child and answers, and a *separate* short request asks how
+# it is going. The child below is a real second process with real pipes — what is
+# under test is process supervision, and a stubbed coroutine would only assert
+# that the stub agrees with itself.
+
+#: How long the fake retrain runs for. An order of magnitude longer than the 202
+#: may take, which is the whole property.
+_CHILD_SECONDS = 0.8
+
+#: The report the fake child prints on stdout, in the shape
+#: `python -m wattsteer_ml.retrain` prints.
+_CHILD_REPORT = {
+    "at": "2026-09-04T03:10:00Z",
+    "run_id": RUN_ID,
+    "lanes": [
+        {
+            "lane": "dessem_free_v1__gate_early__thr5",
+            "gate_profile": "gate_early",
+            "status": "refused",
+            "artifact_id": None,
+            "reason": "coverage_p90 = 0.83 is outside [0.85, 0.97]",
+            "already_decided": False,
+        }
+    ],
+    "promoted": [],
+    "resources": {"wall_clock_seconds": 742.25, "peak_rss_mb": 1912.4},
+}
+
+#: A child in the driver's shape: one progress line per lane on stderr as it
+#: goes, one JSON report on stdout at the end.
+_CHILD_SCRIPT = (
+    "import json, sys, time\n"
+    "for done in (1, 2):\n"
+    f"    time.sleep({_CHILD_SECONDS} / 2)\n"
+    '    print(json.dumps({"progress": {"done": done, "total": 2}}),'
+    " file=sys.stderr, flush=True)\n"
+    f"print({json.dumps(json.dumps(_CHILD_REPORT))})\n"
+)
+
+
+def _stub_child(monkeypatch: pytest.MonkeyPatch, script: str, exit_code: int = 0) -> None:
+    """Make the retrain route spawn ``script`` instead of the real driver.
+
+    Intercepted at ``asyncio.create_subprocess_exec`` rather than at the argv, so
+    everything the route does with the child — the two pipes, the stderr pump,
+    the exit code — is the production path over a real process.
+    """
+    real = asyncio.create_subprocess_exec
+
+    async def spawn(*_argv: str, **kwargs: Any) -> Any:
+        return await real(
+            sys.executable, "-c", f"{script}\nimport sys\nsys.exit({exit_code})", **kwargs
+        )
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", spawn)
+
+
+def _startable(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """The two settings the POST refuses without, neither of them under test."""
+    from wattsteer_ml.app import settings as app_settings
+
+    monkeypatch.setattr(app_settings, "database_url", "postgresql://stub/stub")
+    monkeypatch.setattr(app_settings, "artifact_dir", tmp_path)
+
+
+def _poll_until(client: TestClient, run_id: str, *, deadline: float) -> dict[str, Any]:
+    """Short requests until the run is over — exactly how the worker polls."""
+    running: list[dict[str, Any]] = []
+    while time.monotonic() < deadline:
+        response = client.get(f"/internal/retrain/{run_id}")
+        body = response.json()
+        if response.status_code != 200 or body.get("status") != "running":
+            body["_running_polls"] = running
+            return body
+        running.append(body)
+        time.sleep(0.05)
+    raise AssertionError(f"the run never left 'running'; saw {running}")
+
+
+def test_a_run_longer_than_a_request_still_reaches_a_decision(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """**The property this whole ticket exists for.**
+
+    A retrain that takes longer than any single request may last still reaches a
+    decision, because no single request is waiting for it. The assertions say why
+    the old shape cannot satisfy it: the POST is answered *while the child is
+    still running* — 202, in a fraction of the run — and the verdict arrives over
+    a sequence of short GETs.
+
+    Against the synchronous shape this fails twice over: the POST does not return
+    until the child is done, and it answers 200 with the report rather than 202
+    with a run id.
+    """
+    _startable(monkeypatch, tmp_path)
+    _stub_child(monkeypatch, _CHILD_SCRIPT)
+    with TestClient(ml_app) as client:
+        began = time.monotonic()
+        accepted = client.post("/internal/retrain", json={"run_id": RUN_ID})
+        answered_in = time.monotonic() - began
+
+        assert accepted.status_code == 202
+        assert accepted.json()["run_id"] == RUN_ID
+        assert accepted.json()["status"] == "running"
+        # Answered while the child is still training, not after it.
+        assert answered_in < _CHILD_SECONDS / 2
+
+        final = _poll_until(client, RUN_ID, deadline=began + 30)
+
+    assert final["status"] == "decided"
+    assert [lane["status"] for lane in final["lanes"]] == ["refused"]
+    assert final["resources"]["wall_clock_seconds"] == 742.25
+    # And it was observable while it mattered, which a 202 and nothing else
+    # would leave out.
+    assert final["_running_polls"], "no poll ever observed the run in flight"
+
+
+def test_the_queues_progress_is_the_runs_progress(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """One lane finished is one lane reported, mid-run.
+
+    ``report({done, total})`` used to be called once before the POST and once
+    after, so a forty-minute job had no progress at all and an operator's only
+    window on a live run was the container's process metrics. The child prints a
+    line per lane on stderr, the service reads that stream as the run goes, and
+    the status route publishes it.
+    """
+    _startable(monkeypatch, tmp_path)
+    _stub_child(monkeypatch, _CHILD_SCRIPT)
+    with TestClient(ml_app) as client:
+        assert (
+            client.post("/internal/retrain", json={"run_id": RUN_ID}).status_code == 202
+        )
+        final = _poll_until(client, RUN_ID, deadline=time.monotonic() + 30)
+
+    progressed = [poll["progress"]["done"] for poll in final["_running_polls"]]
+    assert max(progressed, default=0) >= 1, (
+        f"no poll saw a lane finish while the run was in flight: {progressed}"
+    )
+    assert final["_running_polls"][-1]["progress"]["total"] == 2
+    # Elapsed is measured rather than asserted from a ceiling — the same repair
+    # forecaster 45 made to the worker's failure line.
+    assert final["_running_polls"][0]["elapsed_seconds"] >= 0
+
+
+def test_a_child_that_fails_is_reported_by_the_status_route(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The verdict moved with the run: a failed child is now a failed *poll*.
+
+    The POST cannot report it any more — it answered before the child had
+    finished — so `RETRAIN_FAILED`, its exit code and the tail of its stderr are
+    what the status route answers, which is the body the POST used to return.
+    """
+    _startable(monkeypatch, tmp_path)
+    _stub_child(
+        monkeypatch,
+        'import sys\nprint("Traceback: LightGBMError", file=sys.stderr)',
+        exit_code=3,
+    )
+    with TestClient(ml_app) as client:
+        assert (
+            client.post("/internal/retrain", json={"run_id": RUN_ID}).status_code == 202
+        )
+        final = _poll_until(client, RUN_ID, deadline=time.monotonic() + 30)
+    assert final["error"]["code"] == "RETRAIN_FAILED"
+    assert final["error"]["details"]["exit_code"] == 3
+    assert "LightGBMError" in final["error"]["details"]["stderr"]
+
+
+def test_a_run_this_instance_never_started_is_unknown_rather_than_running() -> None:
+    """404 `RETRAIN_UNKNOWN` — which is what a replaced container looks like.
+
+    It must not read as ``running``: a worker polling a run whose child went with
+    the container would poll for forty minutes and report a timeout, which is the
+    same confident wrong answer this ticket removed from the other end. The
+    worker fails that attempt instead, and the queue's retry is safe because a
+    lane carrying a decision line for the run id appends nothing.
+    """
+    response = app_client.get("/internal/retrain/2026-01-02T03:10:00Z")
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "RETRAIN_UNKNOWN"
+
+    # The worker escapes the run id as the path parameter it is — `%3A` for the
+    # stem's colons — so the escaped form has to name the same run as the plain
+    # one. It is asserted here rather than taken on trust because the two sides
+    # spell the path differently and nothing else would notice.
+    escaped = app_client.get("/internal/retrain/2026-01-02T03%3A10%3A00Z")
+    assert escaped.status_code == 404
+    assert escaped.json()["error"]["details"]["run_id"] == "2026-01-02T03:10:00Z"
+
+
+def test_a_run_still_in_flight_is_never_forgotten(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The eviction pass drops finished runs only.
+
+    Forgetting a live run would make the status route answer 404 about a child
+    that is alive — this ticket's defect, reintroduced from the other end.
+    """
+    from wattsteer_ml import app as app_module
+
+    monkeypatch.setattr(app_module, "_RETRAIN_HISTORY", 1)
+    monkeypatch.setattr(app_module, "_RETRAIN_RUNS", {})
+    runs: dict[str, Any] = app_module._RETRAIN_RUNS
+    for index in range(4):
+        finished = app_module._RetrainRun(
+            run_id=f"2026-01-0{index + 1}T03:10:00Z", started_at=time.monotonic()
+        )
+        finished.status = "decided"
+        finished.report = {"lanes": []}
+        runs[finished.run_id] = finished
+    live = app_module._RetrainRun(run_id=RUN_ID, started_at=time.monotonic())
+    runs[live.run_id] = live
+
+    app_module._forget_old_runs()
+
+    assert RUN_ID in runs
+    assert len([one for one in runs.values() if one.finished]) == 1
 
 
 # --- forecaster 44: an idempotent run is not a failed one --------------------
