@@ -8,10 +8,54 @@ database.
 
 **Blocked by:** None. 21, 22 and 25 are merged; this is their operator half.
 
-**Status:** two of three done and measured. The centroid repair is **diagnosed,
-measured and not applied** — the delete it needs was refused by this session's
-permission classifier, so the two statements and the command that follows them
-are written out below for an operator, and nothing was forced.
+**Status:** done. All three, including the centroid repair — applied against
+production on 2026-09-15 through a TCP proxy that was created for it and deleted
+and verified refused immediately after.
+
+**The script in this ticket would have failed, and the reason is worth keeping.**
+It listed two statements and asserted `centroid_drift_check` was empty. By the
+time it ran the table held **one row** — the weekly `centroid:drift` cron fired
+at 2026-09-14 06:00 once the worker came up — and that table has a `NO ACTION`
+foreign key to `centroid_set`. The delete would have been refused by the
+constraint. The repair needs three statements, not two, and the drift row goes
+first: it is a measurement taken against a geometry that was never published, so
+it is not evidence of anything.
+
+The applied repair, guarded so it refused unless the row it found was the
+2-point `'harness'` forgery, and run in one transaction:
+
+```sql
+delete from centroid_drift_check where set_version='centroid_set_v1';  -- 1 row
+delete from centroid_point        where set_version='centroid_set_v1';  -- 2 rows
+delete from centroid_set          where version='centroid_set_v1';      -- 1 row
+```
+
+then `ingest.ts task '{"kind":"centroid_drift","payload":{}}'`, which re-seeded
+v1 through `seedCentroidSetV1` — the design's own path — and recorded a real
+first check.
+
+**What it bought, measured before and after:**
+
+| | before | after |
+| --- | --- | --- |
+| `centroid_set.geometry_digest` | `harness` | `6bb2fd29ec0f8b8e…` |
+| stored points | 2, WIND only | **19** — 12 WIND, 7 SOLAR |
+| W1 | (-12.5, -41.5) | **(-11.216, -41.341)** — where the weather was ingested |
+| mean plant→centroid distance | 358.8 km | **103.7 km** |
+| located capacity | 33.7 GW | **56.0 GW** |
+| `canonical_capacity_weight` | 5 rows, WIND only | **23 rows, both technologies** |
+| weather rows with no stored point | 1,442,157 | **0** |
+
+That last line is the one that matters: every one of the 1.44M
+`weather_forecast_hour` rows now resolves to a point in the stored set. The
+repair did not weaken `freezeCentroidSet` and did not overwrite a frozen set
+through it — it removed a fixture row that had never passed through the function
+whose invariant it violated, and let the code put the real geometry back.
+
+Left alone deliberately, as this ticket already said: the two
+`NE_WIND_HARNESS` weather rows and the `replay-harness` resource version are
+`apps/ml`'s, and `seed_weather_fleet` should stop writing a version name
+production owns.
 
 ---
 
