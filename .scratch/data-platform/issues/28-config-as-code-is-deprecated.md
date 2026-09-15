@@ -162,14 +162,12 @@ only part of the restart policy this project actually differs from Railway on.
       volume at `/data`
 - [x] Both `railway.json` files are deleted, and the plan stays clean with them
       gone
-- [ ] The deprecation warning is gone from a plain CLI invocation. **Still
-      present with both files deleted**, so it is not driven by the files: the
-      four application services still carry a server-side `propertyFileMapping`
-      recording that their *last deployment* was configured by Config as Code.
-      It should clear as each redeploys from a tree without one. Nothing live is
-      lost by the deletion — every field that mapping carried (builder,
-      `healthcheckPath`, timeout, retry count) is stored on the service records
-      and now declared in `.railway/railway.ts`
+- [x] The deprecation warning is gone from a plain CLI invocation. It outlived
+      the files, because it was driven by a server-side `propertyFileMapping`
+      recording that each service's *last deployment* was Config-as-Code
+      configured — not by the files themselves. It cleared once `api`, `worker`
+      and `ml` redeployed from a tree without one, which is the observable that
+      says the migration took.
 - [x] The archive variable references resolve. `list-variables` renders
       `WATTSTEER_ARCHIVE_*` on both services with real values, so the
       `${{wattsteer-archive.*}}` references are live, not pending
