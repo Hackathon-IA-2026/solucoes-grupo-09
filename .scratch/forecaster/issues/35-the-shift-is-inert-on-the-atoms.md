@@ -301,7 +301,8 @@ not need a row.
 
 ---
 
-**Status:** decided and implemented, spec not updated
+**Status:** decided and implemented. The spec box was stale — it was
+updated by this ticket's own merge. One box remains: no artifact minted.
 
 - [x] The mechanism is confirmed by moving `δ_lo` through `compose` and
       comparing served floors row by row: **1,931 of 3,000** rows inert, and the
@@ -326,8 +327,15 @@ not need a row.
       row-count edge from both sides, and on a smuggled `δ_lo`
 - [x] `bun run ml:test` run and reported below; `ruff check`, `ruff format` and
       `mypy` clean
-- [ ] **`docs/specs/forecaster.md`'s formula is not updated**, deliberately —
-      it is another lane's file. This box stays open until it is
+- [x] **`docs/specs/forecaster.md`'s formula is updated** — and it was updated
+      by this ticket's own merge, `383e45b`. The box was written before the
+      merge landed and then never ticked, so it has been reading as open work
+      for a change that shipped with it. Verified three ways rather than by the
+      commit alone: the spec's formula ranks `δ_lo` over the rows where
+      `Q_Y(0.10) > 0`, i.e. `p(x) > 0.90`; `conformal.py` ranks over
+      `lower_stated_rows`, which its own docstring defines as `p > 0.90`; and
+      the card's `conformal_method` reads `one_sided_split_cqr_stated_lower` in
+      both the spec and the code
 - [ ] **No artifact was minted and no real figure was re-scored.** The refused
       bundles are not on disk. This box stays open until the change is measured
       on a real fit

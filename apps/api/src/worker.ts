@@ -243,7 +243,14 @@ if (config.refreshSchedules && config.mlUrl) {
       (publication) => `${publication.payload.gateProfile} ${publication.pattern}`,
     ).join(" · ")} (${PUBLICATION_TIME_ZONE})`,
   );
-  console.log(`   retrain: ${RETRAIN_JOB_ID} ${RETRAIN_PATTERN} (${RETRAIN_TIME_ZONE})`);
+  // Printed from the schedules that were *registered*, not from the constant.
+  // The banner used to read `RETRAIN_PATTERN` directly, so an operator who set
+  // `WATTSTEER_RETRAIN_PATTERN` was told the weekly cadence by a process that
+  // was keeping a different one — a schedule that exists only in the log, which
+  // is the inverse of what `test/phantom-schedules.test.ts` was written about.
+  for (const schedule of retrainScheduleForQueue()) {
+    console.log(`   retrain: ${schedule.id} ${schedule.pattern} (${RETRAIN_TIME_ZONE})`);
+  }
   // No pattern of its own, and saying so is the point: the diagnosis
   // publication is the one row of the spec's job table whose trigger is a
   // completion rather than a cron, so an operator reading this banner and

@@ -48,3 +48,21 @@ describe("retrain · the schedule has an operator override", () => {
     expect(jobs).not.toContain("process.env");
   });
 });
+
+describe("retrain · the banner reports the schedule it registered", () => {
+  it("prints the schedule's own pattern, not the constant", () => {
+    const source = readFileSync(join(ROOT, "src/worker.ts"), "utf8");
+    // Non-vacuity: the old line interpolated the constant directly, and that is
+    // what made the banner able to disagree with the queue.
+    expect(source).not.toContain("${RETRAIN_JOB_ID} ${RETRAIN_PATTERN}");
+    expect(source).toContain("${schedule.id} ${schedule.pattern}");
+  });
+
+  it("the banner's source is the same function the queue is fed from", () => {
+    const source = readFileSync(join(ROOT, "src/worker.ts"), "utf8");
+    // `retrainScheduleForQueue` is what `runner.schedule` is called with, so
+    // the printed cadence and the registered one cannot drift.
+    expect(source).toContain("for (const schedule of retrainScheduleForQueue())");
+    expect(source).toContain("await runner.schedule(schedule)");
+  });
+});
