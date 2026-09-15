@@ -1,8 +1,18 @@
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { parseAppParams, sharedParams } from "@/components/app/params";
-import { RUN_LABELS, SUBSYSTEM_DISPLAY_ORDER } from "@/lib/fixtures";
+import {
+  type AppParams,
+  parseAppParams,
+  sharedParams,
+  writeParams,
+} from "@/components/app/params";
+import {
+  REPLAY_DAYS,
+  RUN_LABELS,
+  SUBSYSTEM_DISPLAY_ORDER,
+  type Technology,
+} from "@/lib/fixtures";
 import {
   DEFAULT_LOCALE,
   isLocale,
@@ -158,5 +168,79 @@ describe("the selection survives a tab press", () => {
     // says the transport owns its own spelling.
     const solar = parseAppParams({ technology: "solar" }, AT);
     expect(sharedParams(solar).technology).toBe("solar");
+  });
+});
+
+/**
+ * The shape of guard that caught the `sharedParams` defect, turned on every
+ * control instead of on one caller.
+ *
+ * `sharedParams` was fixed and its sibling survived: the `Tecnologia` chip
+ * wrote through `useAppParams().setParams`, which cast a domain value into the
+ * query string, so pressing Solar put `technology=SOLAR` in the address bar and
+ * `parseAppParams` — reading only `solar` — answered `WIND`. An example test per
+ * control would have missed it the same way the first one did, because the
+ * field nobody writes an example for is the field that breaks. So the statement
+ * is a property: **whatever the app writes must parse back to what it meant.**
+ */
+describe("every control the app can write parses back to what it meant", () => {
+  const AT = new Date("2026-09-15T12:00:00Z");
+
+  /*
+    Total over the writable selection by type, so a fifth field added to
+    `AppParams` is a compile error here before it is a silent hole in
+    `writeParams`. `date` is excluded because it is derived from the clock and
+    no control writes it.
+  */
+  const CONTROLS: {
+    [K in keyof Omit<AppParams, "date">]: readonly AppParams[K][];
+  } = {
+    subsystem: SUBSYSTEM_DISPLAY_ORDER,
+    technology: ["WIND", "SOLAR"] satisfies readonly Technology[],
+    run: RUN_LABELS,
+    episode: REPLAY_DAYS.map((day) => day.id),
+  };
+
+  const FIELDS = Object.keys(CONTROLS) as (keyof typeof CONTROLS)[];
+
+  it("round-trips every value of every control, one press at a time", () => {
+    // One field at a time, because that is what a press does: `setParams`
+    // merges, so the URL a chip writes names its field and nothing else.
+    for (const field of FIELDS) {
+      const values = CONTROLS[field];
+      expect(values.length).toBeGreaterThan(0);
+      for (const value of values) {
+        const written = writeParams({ [field]: value } as Partial<AppParams>);
+        // Non-vacuity: a `writeParams` that dropped the field would leave the
+        // parse on its default and pass for whichever value the default is.
+        expect(Object.keys(written)).toEqual([field]);
+        expect(parseAppParams(written, AT)[field]).toBe(value);
+      }
+    }
+  });
+
+  it("round-trips a whole selection written at once", () => {
+    for (const subsystem of CONTROLS.subsystem) {
+      for (const technology of CONTROLS.technology) {
+        for (const run of CONTROLS.run) {
+          for (const episode of CONTROLS.episode) {
+            const meant = { subsystem, technology, run, episode };
+            const back = parseAppParams(writeParams(meant), AT);
+            expect(back.subsystem).toBe(subsystem);
+            expect(back.technology).toBe(technology);
+            expect(back.run).toBe(run);
+            expect(back.episode).toBe(episode);
+          }
+        }
+      }
+    }
+  });
+
+  it("writes the URL spelling, not the domain one, for a reader to read", () => {
+    // The address bar is a surface. A round-trip alone would also be satisfied
+    // by a parser that accepted both spellings, which is the vacuous fix: it
+    // would leave `technology=SOLAR` in every shared link.
+    expect(writeParams({ technology: "SOLAR" }).technology).toBe("solar");
+    expect(writeParams({ technology: "WIND" }).technology).toBe("wind");
   });
 });

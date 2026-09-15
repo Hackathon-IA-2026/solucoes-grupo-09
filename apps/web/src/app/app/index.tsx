@@ -30,12 +30,14 @@
 import {
   ClockIcon,
   FadeIn,
+  focusRing,
   LayoutDashboardIcon,
   layout,
   MapIcon,
   Panel,
   PanelHeader,
   PieChartIcon,
+  radius,
   space,
   useContainerWidth,
   usePalette,
@@ -43,10 +45,11 @@ import {
 import { router } from "expo-router";
 import Head from "expo-router/head";
 import { type ReactNode, useState } from "react";
-import { Text, View } from "react-native";
+import { Platform, Pressable, Text, View } from "react-native";
 import { AppShell, ScreenTitle } from "@/components/app/app-shell";
 import { ForecastAbsent } from "@/components/app/forecast-absent";
 import { ForecastStamp, HonestyNote, VintageBadge } from "@/components/app/honesty";
+import { SelectedRegion } from "@/components/app/selected-region";
 import { SubsystemRow } from "@/components/app/subsystem-row";
 import {
   gateProfileOf,
@@ -88,15 +91,31 @@ export default function GridOverviewScreen() {
   });
 
   /**
-   * Choosing a subsystem, defined once.
+   * **Selecting and navigating are two actions now, and they were one.**
    *
-   * The map and the rows are two affordances over one action, and the action
-   * is "open Explain for this subsystem, carrying the rest of the selection
-   * along". Written out twice it would be two actions that currently agree —
-   * and the way that drifts is a new shared parameter added to `sharedParams`
-   * and threaded through only one of them.
+   * `select` used to be the `router.push` below. So a click on the map or on a
+   * row carried two plausible meanings — "show me this region here" and "go
+   * explain this region" — and silently did the second, which left the
+   * four panels on this screen ("Perfil de 24 horas", "Eólica e solar",
+   * "Energia cortada, dia inteiro", "Pico de potência horária") re-pointable
+   * only from the menu at the top. A reader clicked a region expecting those
+   * panels to change and was navigated away instead.
+   *
+   * `docs/plans/voice-copilot.md` §3.1 already drew exactly this line for the
+   * agent: `highlight` "should **not** navigate. It should stay on Visão da
+   * rede, light the NE on the map, and speak the band", while `explain` goes to
+   * `/app/explain`. The mouse did not agree with the voice — the same gesture
+   * the agent is forbidden to make by navigating was the only one a pointer
+   * could make. **The two agree now**: a click selects, `highlight` emphasises,
+   * and only a control with "Explicar" written on it navigates.
+   *
+   * Both are still defined once and handed to both affordances, which is what
+   * the note that stood here was for, and still true.
    */
-  const select = (subsystem: SubsystemCode) =>
+  const select = (subsystem: SubsystemCode) => params.setParams({ subsystem });
+
+  /** The explicit affordance. Carries the rest of the selection with it. */
+  const explain = (subsystem: SubsystemCode) =>
     router.push({
       pathname: "/app/explain" as never,
       params: { ...sharedParams(params), subsystem },
@@ -170,11 +189,35 @@ export default function GridOverviewScreen() {
         />
       ) : null}
 
-      {forecast === null ? null : (
-        <ForecastPanels forecast={forecast} onSelect={select} />
+      {/*
+        The selection strip renders in **both** states, and this is the only
+        place it can, because the map and the four rows live inside
+        `ForecastPanels` and there is nothing promoted for them to draw. With
+        no forecast a reader still picks a subsystem — from the chips in the
+        chrome, or from the settled rows below — and still has to see which one
+        they picked and why there are no numbers for it. `row` is `null` there
+        and the strip says so rather than showing nothing.
+
+        In the `read` state it sits under the map instead, inside
+        `ForecastPanels`, because that is where the click that changes it
+        happens. Same component, placed where the reader's eyes are in each
+        state.
+      */}
+      {forecast === null ? (
+        <SelectedRegion
+          subsystem={params.subsystem}
+          row={null}
+          onExplain={() => explain(params.subsystem)}
+        />
+      ) : (
+        <ForecastPanels forecast={forecast} onSelect={select} onExplain={explain} />
       )}
 
-      <ObservedPanels observed={observed} subsystem={params.subsystem} />
+      <ObservedPanels
+        observed={observed}
+        subsystem={params.subsystem}
+        onSelect={select}
+      />
 
       <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkFaint }}>
         {fill(copy.app.overview.grainNote, { subsystem: meta.onsDisplayName })}
@@ -195,9 +238,11 @@ export default function GridOverviewScreen() {
 function ForecastPanels({
   forecast,
   onSelect,
+  onExplain,
 }: {
   forecast: ForecastNetwork;
   onSelect: (subsystem: SubsystemCode) => void;
+  onExplain: (subsystem: SubsystemCode) => void;
 }) {
   const colors = usePalette();
   const copy = useCopy();
@@ -264,6 +309,31 @@ function ForecastPanels({
                 onSelect={onSelect}
               />
             </View>
+            {/*
+              Directly under the map graphic and above its own footnotes, and
+              this is choice (3) of the ticket: something must visibly respond
+              inside the viewport. The panels this selection re-points are below
+              the fold on a laptop and far below it on a phone, so a click could
+              otherwise produce no visible change at all — and placed after the
+              boundary note and the attribution, the strip was itself at the
+              edge of the fold at 1440, measured on the export.
+
+              The alternative was to scroll the panel block into view on every
+              selection. Rejected: this is a comparison screen, and scrolling
+              takes the map — the thing a reader is comparing from — off the
+              screen, so every comparison costs a scroll back. It is worse still
+              on the keyboard, where an arrow key would fling the page. A strip
+              in place costs no motion and leaves the next click where the last
+              one was.
+            */}
+            <View style={{ marginTop: space.md }}>
+              <SelectedRegion
+                subsystem={params.subsystem}
+                row={rows.find((row) => row.subsystem === params.subsystem) ?? null}
+                onExplain={() => onExplain(params.subsystem)}
+              />
+            </View>
+
             <Text
               style={{
                 fontSize: 11,
@@ -287,6 +357,7 @@ function ForecastPanels({
                 highlighted={row.subsystem === active}
                 onHoverChange={(on) => setHovered(on ? row.subsystem : null)}
                 onPress={() => onSelect(row.subsystem)}
+                onExplain={() => onExplain(row.subsystem)}
               />
             ))}
           </View>
@@ -315,7 +386,12 @@ function ForecastPanels({
           <PanelHeader
             icon={<PieChartIcon size={18} color={colors.inkMuted} />}
             title={copy.app.split.title}
-            subtitle={copy.app.split.subtitle}
+            // Named. Every one of these four panels is about the selected
+            // subsystem and only the profile panel said so — which is exactly
+            // what let a selection change four panels invisibly.
+            subtitle={fill(copy.app.split.subtitle, {
+              subsystem: meta.onsDisplayName,
+            })}
           />
           <View style={{ marginTop: space.lg }}>
             <TechnologySplitPanel
@@ -332,13 +408,17 @@ function ForecastPanels({
         style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}
       >
         <BandCard
-          label={copy.app.overview.dailyEnergy}
+          label={fill(copy.app.overview.dailyEnergy, {
+            subsystem: meta.onsDisplayName,
+          })}
           band={selected.dailyEnergy}
           unit="MWh"
           footnote={copy.app.overview.dailyEnergyNote}
         />
         <BandCard
-          label={copy.app.overview.peakPower}
+          label={fill(copy.app.overview.peakPower, {
+            subsystem: meta.onsDisplayName,
+          })}
           band={selected.peakPower}
           unit="MW"
           tone="violet"
@@ -362,9 +442,21 @@ function ForecastPanels({
 function ObservedPanels({
   observed,
   subsystem,
+  onSelect,
 }: {
   observed: ObservedNetwork;
   subsystem: SubsystemCode;
+  /**
+   * The same selector the map and the forecast rows take.
+   *
+   * With nothing promoted the map and the four forecast rows are absent, and
+   * these four settled rows are then the only per-subsystem list on the screen.
+   * They already marked the selected one in bold and could not change it, which
+   * is a list that shows a selection and refuses to take one — so the refusal
+   * path had strictly less of the screen's own affordance than the success
+   * path did.
+   */
+  onSelect: (subsystem: SubsystemCode) => void;
 }) {
   const colors = usePalette();
   const copy = useCopy();
@@ -387,13 +479,38 @@ function ObservedPanels({
           />
           <View style={{ marginTop: space.lg, gap: space.sm }}>
             {rows.map((row) => (
-              <View
+              <Pressable
                 key={row.subsystem}
-                style={{
-                  flexDirection: "row",
-                  flexWrap: "wrap",
-                  alignItems: "baseline",
-                  gap: 8,
+                accessibilityRole="button"
+                accessibilityLabel={fill(copy.app.overview.rowFigure, {
+                  subsystem: row.onsDisplayName,
+                })}
+                onPress={() => onSelect(row.subsystem)}
+                style={(state) => {
+                  const { focused = false, hovered = false } = state as {
+                    focused?: boolean;
+                    hovered?: boolean;
+                  };
+                  const isSelected = row.subsystem === subsystem;
+                  return {
+                    flexDirection: "row",
+                    flexWrap: "wrap",
+                    alignItems: "baseline",
+                    gap: 8,
+                    // The same accent-border mark the forecast row and the map
+                    // region carry, so "this one" looks the same in all three
+                    // places — including the state where the other two are not
+                    // on the screen at all.
+                    borderRadius: radius.md,
+                    borderCurve: "continuous",
+                    borderWidth: 1,
+                    borderColor: isSelected ? colors.accent : "transparent",
+                    backgroundColor: hovered ? colors.surfaceSunken : "transparent",
+                    paddingHorizontal: 10,
+                    paddingVertical: 6,
+                    ...focusRing(focused, colors.focus),
+                    ...(Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null),
+                  };
                 }}
               >
                 <Text
@@ -430,7 +547,7 @@ function ObservedPanels({
                     solar: f.compact(row.split.solarMwh),
                   })}
                 </Text>
-              </View>
+              </Pressable>
             ))}
           </View>
           <Text

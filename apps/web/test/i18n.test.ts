@@ -347,3 +347,23 @@ describe("the hero says it in the deck's voice", () => {
     }
   });
 });
+describe("the two dictionaries say the same thing about the product", () => {
+  it("the technology badge claims emphasis, not visibility", () => {
+    // en said "shown", so the badge read "Wind · shown" — which says the solar
+    // number is not shown. That is a filter, and a filter is exactly the
+    // misreading `split.note` exists to prevent, two lines below the badge:
+    // there is one head per subsystem, so the split is a division of one
+    // expectation and picking a technology emphasises one half of it. pt has
+    // always said "em destaque". It was the only place the dictionaries made
+    // different claims about what the product does.
+    const visibility = /\b(shown|hidden|visible|displayed|oculto|escondido)\b/i;
+    expect(en.app.split.emphasised).not.toMatch(visibility);
+    expect(pt.app.split.emphasised).not.toMatch(visibility);
+    // And each badge word is the verb its own paragraph uses, which is the
+    // check that survives a rewording of either.
+    expect(en.app.split.note).toContain("emphasis");
+    expect(en.app.split.emphasised).toContain("emphasis");
+    expect(pt.app.split.note).toContain("destac");
+    expect(pt.app.split.emphasised).toContain("destaque");
+  });
+});

@@ -504,13 +504,39 @@ function SubsystemRow({ outlook, max }: { outlook: SubsystemOutlook; max: number
         label={railLabel(outlook.energy, "MWh", outlook.displayName)}
       />
 
-      <Text
-        style={{ fontSize: 12, color: colors.inkMuted, fontVariant: ["tabular-nums"] }}
-      >
-        {outlook.energy.kind === "band"
-          ? `${formatMwhExact(locale, outlook.energy.band.p50)} MWh · ${copy.band.rangeLabel} ${formatRange(locale, outlook.energy.band)}`
-          : `${formatMwhExact(locale, outlook.energy.value)} MWh · ${copy.band.observedLabel}`}
-      </Text>
+      {/*
+        Two lines, and the first one now says which quantile it is.
+        The centre figure was printed bare — "2.780 MWh · P10–P90 1.720–4.260" —
+        so the four of them read as a column of magnitudes that a visitor adds
+        to 4.180 and compares against a headline of 4.580 that the prose beside
+        it calls an exact sum. Both numbers were right; the page simply never
+        showed the quantity the headline is a sum *of*.
+
+        So: the median is labelled `P50`, and each subsystem's `expectedMwh`
+        sits under it. The second line is the one that adds — 2.960 + 700 + 590
+        + 330 = 4.580 — which turns the additivity claim from an assertion into
+        something a reader can check on the page in ten seconds. That is the
+        page's entire thesis, and it was the one claim not checkable here.
+
+        Showing the expectation rather than rewording the national prose,
+        because the prose is true and precise: it is the *column* that was
+        missing a number, and deleting a correct sentence to hide a gap is the
+        opposite of what this panel is for. It also costs nothing the design
+        does not already have — `expectedLabel` and `medianLabel` are existing
+        strings in both locales, and the line matches the one above it.
+      */}
+      <View style={{ gap: 2 }}>
+        <Text
+          style={{ fontSize: 12, color: colors.inkMuted, fontVariant: ["tabular-nums"] }}
+        >
+          {outlook.energy.kind === "band"
+            ? `${copy.band.medianLabel} ${formatMwhExact(locale, outlook.energy.band.p50)} MWh · ${copy.band.rangeLabel} ${formatRange(locale, outlook.energy.band)}`
+            : `${formatMwhExact(locale, outlook.energy.value)} MWh · ${copy.band.observedLabel}`}
+        </Text>
+        <Text style={{ fontSize: 12, color: colors.ink, fontVariant: ["tabular-nums"] }}>
+          {`${copy.band.expectedLabel} ${formatMwhExact(locale, outlook.expectedMwh)} MWh`}
+        </Text>
+      </View>
     </View>
   );
 }

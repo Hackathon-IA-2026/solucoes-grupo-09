@@ -107,6 +107,34 @@ function first(value: string | string[] | undefined): string | undefined {
 }
 
 /**
+ * **The fallback stays silent, now that the app can no longer reach it.**
+ *
+ * The docstring at the top of this module defends the defaulting: the product
+ * is public and read-only, the URL is the whole of its state, and a query
+ * string that arrives hand-edited, truncated by a chat client or pasted from
+ * an older build must still render a screen. That argument is about a *reader*
+ * supplying a value this code never wrote, and it still holds.
+ *
+ * What it never defended — and what made the fallback look guilty — was the
+ * app supplying one. `technology=SOLAR` in the address bar was not a reader's
+ * typo; it was the `Tecnologia` chip's own write, and the fallback obligingly
+ * turned it back into `WIND`. The fix is at the writer, not here: every write
+ * now goes through {@link writeParams}, so the only values this function can
+ * fall back on are values the app did not write.
+ *
+ * The alternatives were both worse. Accepting the domain spelling too would
+ * leave `technology=SOLAR` in shareable URLs, against the boundary rule the
+ * `TECHNOLOGY_PARAM` docstring states — and `locale-routes.test.ts` already
+ * names that as the vacuous fix. Throwing, or rendering an error screen, would
+ * turn a mistyped URL into a dead end while catching nothing: after the writer
+ * is fixed, an invalid value is by construction a reader's, and a reader gets
+ * a working page and a chip they can press.
+ *
+ * So the invariant "a value the app wrote is never silently rewritten" is
+ * enforced where it is enforceable — as a property of the writers, asserted in
+ * `locale-routes.test.ts` over every control the app can write — rather than
+ * by making this function louder about inputs it cannot attribute.
+ *
  * `now` is an argument so the parsing rules stay a pure function.
  *
  * The day being forecast is a function of the clock, and a module that read one
@@ -153,9 +181,48 @@ export function parseAppParams(
  * example-based test here was making, and is now asserted of both callers.
  */
 export function sharedParams(params: AppParams): Record<string, string> {
-  return {
+  return writeParams({
     subsystem: params.subsystem,
-    technology: technologyParam(params.technology),
+    technology: params.technology,
     run: params.run,
-  };
+  });
+}
+
+/**
+ * The one way a control writes a selection into the URL.
+ *
+ * `sharedParams` was fixed for the tab row and the sibling defect survived in
+ * the `Tecnologia` chip, which reached `router.setParams` directly and put the
+ * domain spelling `SOLAR` in the address bar — where `parseAppParams` does not
+ * read it, and silently answered `WIND`. Two writers, one translation, and only
+ * one of them performing it: the panel's own copy promised that "escolher uma
+ * tecnologia ali em cima destaca um destes dois números" and nothing moved.
+ *
+ * Fixing the chip's call site would have fixed the chip and left the next
+ * control to make the same mistake, so the translation moved to the crossing
+ * itself. `sharedParams` is now this function over three fields, `useAppParams`
+ * is this function over whatever a control names, and `technologyParam` has
+ * exactly one caller left. A field parsed one way and written another is now a
+ * thing that can only be got wrong in one place.
+ *
+ * Only the named fields are emitted — `router.setParams` merges, and writing
+ * the others back would undo a concurrent change to them.
+ */
+export function writeParams(
+  next: Partial<Omit<AppParams, "date">>,
+): Record<string, string> {
+  const query: Record<string, string> = {};
+  if (next.subsystem !== undefined) {
+    query.subsystem = next.subsystem;
+  }
+  if (next.technology !== undefined) {
+    query.technology = technologyParam(next.technology);
+  }
+  if (next.run !== undefined) {
+    query.run = next.run;
+  }
+  if (next.episode !== undefined) {
+    query.episode = next.episode;
+  }
+  return query;
 }

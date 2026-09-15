@@ -14,7 +14,14 @@
  *    same daily total.
  */
 
-import { ArrowRightIcon, focusRing, radius, space, usePalette } from "@wattsteer/ui";
+import {
+  ArrowRightIcon,
+  Badge,
+  focusRing,
+  radius,
+  space,
+  usePalette,
+} from "@wattsteer/ui";
 import { Platform, Pressable, Text, View } from "react-native";
 import { BandStrip } from "@/components/charts/band-figure";
 import { RiskChip } from "@/components/charts/risk-class";
@@ -30,6 +37,7 @@ export function SubsystemRow({
   selected,
   highlighted = false,
   onPress,
+  onExplain,
   onHoverChange,
 }: {
   forecast: OutlookRow;
@@ -51,7 +59,24 @@ export function SubsystemRow({
    * pointer is at.
    */
   highlighted?: boolean;
+  /**
+   * Select this subsystem. **Not** navigate to it.
+   *
+   * It used to be `router.push("/app/explain")`, so one gesture carried two
+   * plausible meanings — "show me this region here" and "go explain this
+   * region" — and silently did the second, leaving the four panels on this
+   * screen re-pointable only from the top menu.
+   */
   onPress: () => void;
+  /**
+   * Open Explain for this subsystem. Rendered only on the selected row.
+   *
+   * Only there because it answers "and now what about this one?", a question a
+   * reader only has about the row they have already picked. Four Explain
+   * buttons would be four navigations competing with the selection the rows
+   * exist to make.
+   */
+  onExplain: () => void;
   onHoverChange?: (hovered: boolean) => void;
 }) {
   const colors = usePalette();
@@ -107,10 +132,71 @@ export function SubsystemRow({
           <Text style={{ fontSize: 11, color: colors.inkFaint }}>
             {`${copy.app.technology[emphasis]} ${f.compact(splitFor(forecast.split, emphasis))} MWh · ${meta.code}`}
           </Text>
+          {/*
+            Selection needs a *persistent* mark of its own. The accent border it
+            already had is a step away from hover's `borderStrong`, and a reader
+            who clicks a region and then moves the pointer has nothing on the
+            row that says "this is the one the four panels are about".
+          */}
+          {selected ? (
+            <View style={{ marginTop: 6, alignSelf: "flex-start" }}>
+              <Badge label={copy.app.overview.selectedBadge} tone="accent" />
+            </View>
+          ) : null}
         </View>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
           <RiskChip probability={forecast.occurrenceProbability} />
-          <ArrowRightIcon size={16} color={colors.inkFaint} />
+          {/*
+            The arrow used to sit here on every row, unlabelled, promising the
+            navigation the whole row performed. It is a named control now, and
+            only on the selected row: selecting is the row's own gesture, and an
+            affordance that navigates has to say so rather than be inferred from
+            a glyph.
+          */}
+          {selected ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={fill(copy.app.overview.rowExplainLabel, {
+                subsystem: meta.onsDisplayName,
+              })}
+              onPress={(event) => {
+                // The row underneath handles a press too. Without this, one tap
+                // both navigates and re-selects on the way out — which is the
+                // double meaning this whole split exists to remove.
+                (
+                  event as unknown as { stopPropagation?: () => void }
+                ).stopPropagation?.();
+                onExplain();
+              }}
+              hitSlop={8}
+              style={(state) => {
+                const { focused = false, hovered = false } = state as {
+                  focused?: boolean;
+                  hovered?: boolean;
+                };
+                return {
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 4,
+                  borderRadius: radius.pill,
+                  borderWidth: 1,
+                  borderColor: colors.accent,
+                  backgroundColor: hovered ? colors.accentSoft : "transparent",
+                  paddingHorizontal: 10,
+                  paddingVertical: 4,
+                  ...focusRing(focused, colors.focus),
+                  ...(Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null),
+                };
+              }}
+            >
+              <Text
+                style={{ fontSize: 12, fontWeight: "600", color: colors.onAccentSoft }}
+              >
+                {copy.app.overview.rowExplain}
+              </Text>
+              <ArrowRightIcon size={14} color={colors.onAccentSoft} />
+            </Pressable>
+          ) : null}
         </View>
       </View>
 

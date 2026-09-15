@@ -474,7 +474,17 @@ describe("the region responds to a pointer, and so does its row", () => {
    */
   it("the region has onPress, not only onClick", () => {
     expect(stripped).toContain("onPress: () => onSelect(code)");
-    expect(stripped).toContain("onClick: () => onSelect(code)");
+    // Read as "the `onClick` body selects" rather than matched literally: the
+    // handler grew a line when arrow keys arrived (it clears a pending
+    // keyboard-focus request, because a pointer does not want focus moved for
+    // it), and a guard that pins the exact arrow function would have failed on
+    // a change that leaves the property it is about untouched.
+    const onClick = stripped.slice(
+      stripped.indexOf("onClick:"),
+      stripped.indexOf("onPress:"),
+    );
+    expect(onClick.length).toBeGreaterThan(10);
+    expect(onClick).toContain("onSelect(code)");
   });
 
   /**
@@ -507,5 +517,95 @@ describe("the region responds to a pointer, and so does its row", () => {
     expect(stripped).not.toMatch(/setHovered/);
     expect(stripped).toContain("const active = hovered");
     expect(stripped).toContain("const [focusedCode, setFocusedCode]");
+  });
+
+  /**
+   * Selecting and navigating are two actions, and a click makes the first one.
+   *
+   * The defect: `select` *was* the `router.push`, so a click on a region or a
+   * row carried two plausible meanings — show me this region here, and go
+   * explain this region — and silently did the second. The four panels below
+   * the map could then only be re-pointed from the menu at the top, and a
+   * reader clicking a region to change them was taken off the screen.
+   *
+   * `e2e/app-overview-selection.spec.ts` asserts the behaviour in a browser.
+   * This is the cheap version that fails in 300 ms rather than after an export,
+   * and it names the shape rather than the outcome: one handler that writes the
+   * URL, one that pushes a route, and the map and the rows wired to the first.
+   *
+   * `docs/plans/voice-copilot.md` §3.1 drew this same line for the agent —
+   * `highlight` never navigates, `explain` does — so after this the pointer and
+   * the voice mean the same thing by picking a region.
+   */
+  it("a click selects, and only a named control navigates", () => {
+    const code = overview.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+    expect(code).toContain(
+      "const select = (subsystem: SubsystemCode) => params.setParams({ subsystem });",
+    );
+    // Non-vacuity: `select` writing the URL is only half the claim. The other
+    // half is that nothing in the click path pushes a route, which is what the
+    // defect did — so the one `router.push` on this screen has to be reachable
+    // from `explain` and from nowhere else.
+    expect(code.match(/router\.push/g) ?? []).toHaveLength(1);
+    const explain = code.slice(
+      code.indexOf("const explain ="),
+      code.indexOf("const frame ="),
+    );
+    expect(explain).toContain("router.push");
+    expect(explain).toContain('pathname: "/app/explain"');
+    // And both affordances are wired to the selector, not to the navigator.
+    expect(code).toContain("onSelect={onSelect}");
+    expect(code).toContain("onPress={() => onSelect(row.subsystem)}");
+    expect(code).toContain("onExplain={() => onExplain(row.subsystem)}");
+  });
+
+  /**
+   * The selection has to be visible where the reader is, or a click that
+   * re-points four panels below the fold produces nothing they can see.
+   */
+  it("the pick is confirmed in place, and in both of the screen's states", () => {
+    const code = overview.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+    // Twice: under the map in the `read` state, and at screen level when the
+    // forecast refused and there is no map to sit under.
+    expect(code.match(/<SelectedRegion/g) ?? []).toHaveLength(2);
+    expect(code).toContain("row={null}");
+    // The settled rows are a selector too, which is the only one the refusal
+    // path has. They used to mark the selection and refuse to take one.
+    expect(code).toContain("onPress={() => onSelect(row.subsystem)}");
+    // And every panel that the selection re-points names the subsystem, or the
+    // change has nothing on screen to attribute it to.
+    for (const named of [
+      "copy.app.split.subtitle",
+      "copy.app.overview.dailyEnergy",
+      "copy.app.overview.peakPower",
+    ]) {
+      const at = code.indexOf(named);
+      expect({ named, present: at >= 0 }).toEqual({ named, present: true });
+      expect(code.slice(at, at + 120)).toContain("subsystem: meta.onsDisplayName");
+    }
+  });
+
+  /**
+   * Arrow keys move the selection, and focus has to go with them.
+   *
+   * The focus move is deliberately not a call in the key handler: writing the
+   * selection remounts this subtree, more than once, so the element the reader
+   * was on is detached and the browser drops focus to the document. The request
+   * is parked at module scope and re-asserted on every commit until it lands.
+   */
+  it("the arrow keys walk the selection, with the focus following", () => {
+    expect(stripped).toContain("const ARROW_STEP");
+    expect(stripped).toContain("const at = order.indexOf(selected)");
+    expect(stripped).toContain("pendingArrowFocus = next");
+    expect(stripped).toContain("let pendingArrowFocus");
+    // The ring wraps, or the first and last regions are dead ends.
+    expect(stripped).toContain("(at + step + order.length) % order.length");
+    // The indicator stays geometry. A CSS outline on an SVG element is drawn
+    // around its bounding box — the bug that painted a rectangle across half
+    // the country — and arrow keys make focus far more reachable than before.
+    expect(stripped).not.toContain("focusRing(");
+    expect(stripped).toContain('outlineStyle: "none"');
+    // The keyboard affordance is written down where a reader can find it.
+    expect(stripped).toContain("copy.app.overview.map.keyboardNote");
   });
 });

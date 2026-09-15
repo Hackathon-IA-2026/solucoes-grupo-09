@@ -228,6 +228,25 @@ export const SUBSYSTEMS: readonly SubsystemOutlook[] = [
 ];
 
 /**
+ * The median both rails in the showcase's band explainer share.
+ *
+ * **It was 4,180, and 4,180 is not a free number on this page: it is exactly
+ * the componentwise sum of the four subsystem P50s above.** The section whose
+ * entire argument is that a single number is dishonest was therefore
+ * illustrating itself with the one quantity `docs/specs/api-surface.md`
+ * §"The national readout" forbids constructing — "medians do not add either" —
+ * and a visitor who added the column would have found the forbidden total
+ * presented back to them as the worked example.
+ *
+ * It lives here rather than in `showcase.tsx` so `landing-band.test.ts` can
+ * hold it apart from the column without importing a React component, and so
+ * the one place it can be set is beside the figures it must not equal. The
+ * value itself is illustrative and means nothing: its only job is to be the
+ * same in both rails.
+ */
+export const SHOWCASE_MEDIAN = 3240;
+
+/**
  * National hourly profile, `valid_time` start-labelled in Brasília civil time
  * (the axis a Brazilian operator reads; storage is UTC).
  *
