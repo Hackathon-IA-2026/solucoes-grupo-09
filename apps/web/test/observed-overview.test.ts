@@ -1,0 +1,423 @@
+import { describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+// The tokens module directly, not the package entry: `@wattsteer/ui`'s index
+// pulls in `react-native`, which this suite does not run. `tokens.ts` is plain
+// TypeScript and is the module `usePalette` itself resolves to.
+import { dark } from "../../../packages/ui/src/tokens";
+import { LEGEND_STOPS, mix, observedFill } from "../src/components/charts/observed-scale";
+import { en } from "../src/i18n/copy.en";
+import { pt } from "../src/i18n/copy.pt";
+import {
+  observedDay,
+  observedHours,
+  observedRows,
+  observedSplit,
+} from "../src/lib/network";
+
+/**
+ * The Overview in the state the product is actually in: **nothing promoted**.
+ *
+ * Every panel on that screen now shows the most it can honestly show from
+ * settled data — the map, the four rows, the 24-hour profile, the wind/solar
+ * split and the two day figures — where it previously showed a sentence saying
+ * it could show nothing. That is a large gain and it buys one large risk, which
+ * is the whole subject of this file:
+ *
+ * > **an observation rendered where a forecast was, in a way a reader takes for
+ * > a forecast.**
+ *
+ * The guards are therefore of three kinds, and none of them is "it rendered":
+ *
+ *  1. **Palette disjointness.** No colour the observed ramp can produce, at any
+ *     share, is a colour the risk palette can produce. This is the one that
+ *     cannot be argued with: it holds over the whole domain rather than at the
+ *     four values some fixture happens to carry.
+ *  2. **Vocabulary separation.** No label in the observed dictionary claims a
+ *     forecast, and no component in the observed stack can express one — they
+ *     do not import the forecast vocabulary and do not read a quantile.
+ *  3. **The arithmetic is the arithmetic of measurements.** Sums over settled
+ *     hours, a largest hour that is `null` rather than zero on an empty day, and
+ *     a civil-day cut that matches the profile beside it.
+ *
+ * `e2e/app-observed-overview.spec.ts` asserts the same separation from the other
+ * end, in a browser, against a real export in both states.
+ */
+
+const SRC = join(import.meta.dir, "..", "src");
+const colors = dark;
+
+function source(...parts: string[]): string {
+  return readFileSync(join(SRC, ...parts), "utf8");
+}
+
+/** Source with comments blanked — a claim in prose is not a claim in code. */
+function code(text: string): string {
+  return text.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, (match) =>
+    match.replace(/[^\n]/g, " "),
+  );
+}
+
+/** The body of one exported function, to the next one or to the end. */
+function functionBody(text: string, name: string): string {
+  const from = text.indexOf(`export function ${name}(`);
+  expect({ name, found: from >= 0 }).toEqual({ name, found: true });
+  const rest = text.slice(from + 1);
+  const next = rest.indexOf("\nexport function ");
+  return next < 0 ? rest : rest.slice(0, next);
+}
+
+describe("the observed ramp and the risk palette cannot be confused", () => {
+  /**
+   * `riskColor`'s three pairs, named by their palette tokens rather than
+   * imported: `risk-class.tsx` is a `.tsx` and pulls in `react-native`, which
+   * this suite does not run. The assertion immediately below is what keeps the
+   * copy from drifting — if that file stops resolving these six tokens, the
+   * list here is wrong and the test says so.
+   */
+  const RISK_COLOURS = [
+    colors.inkMuted,
+    colors.surfaceSunken,
+    colors.onWarningSoft,
+    colors.warningSoft,
+    colors.onDangerSoft,
+    colors.dangerSoft,
+  ];
+
+  it("the risk palette is still the six tokens this file compares against", () => {
+    const risk = code(source("components", "charts", "risk-class.tsx"));
+    for (const token of [
+      "colors.inkMuted",
+      "colors.surfaceSunken",
+      "colors.onWarningSoft",
+      "colors.warningSoft",
+      "colors.onDangerSoft",
+      "colors.dangerSoft",
+    ]) {
+      expect({ token, named: risk.includes(token) }).toEqual({ token, named: true });
+    }
+  });
+
+  /**
+   * The guard the whole design rests on.
+   *
+   * Sampled at every whole percent of the domain rather than at the four shares
+   * a fixture happens to produce: the failure being prevented is somebody
+   * retuning one palette towards the other, which would show up at some shares
+   * long before all of them.
+   */
+  it("no observed fill is a risk colour, at any share", () => {
+    const collisions: string[] = [];
+    for (let step = 0; step <= 100; step++) {
+      const painted = observedFill(step / 100, colors).toLowerCase();
+      for (const risk of RISK_COLOURS) {
+        if (painted === risk.toLowerCase()) {
+          collisions.push(`${step}% → ${painted}`);
+        }
+      }
+    }
+    expect(collisions).toEqual([]);
+  });
+
+  it("the ramp is ordered, so a darker region is a larger settled figure", () => {
+    const blues = LEGEND_STOPS.map((stop) =>
+      Number.parseInt(observedFill(stop, colors).slice(5, 7), 16),
+    );
+    // `info` is cyan, so the blue channel rises monotonically with the share.
+    for (let i = 1; i < blues.length; i++) {
+      expect({ i, rises: blues[i] > blues[i - 1] }).toEqual({ i, rises: true });
+    }
+  });
+
+  it("the ramp never reaches the land colour, so zero still reads as painted", () => {
+    expect(observedFill(0, colors)).not.toBe(colors.surfaceSunken);
+    expect(observedFill(0, colors)).not.toBe(colors.canvas);
+  });
+
+  it("`mix` clamps rather than extrapolating past either end", () => {
+    expect(mix("#000000", "#ffffff", -1)).toBe("#000000");
+    expect(mix("#000000", "#ffffff", 2)).toBe("#ffffff");
+    expect(mix("#000000", "#ffffff", 0.5)).toBe("#808080");
+  });
+});
+
+describe("no observed label claims a forecast", () => {
+  /**
+   * The keys that *name* a figure, as against the ones that explain an absence.
+   *
+   * The footnotes are deliberately exempt and that is not a loophole: their
+   * entire job is to say the interval is missing and why, so they must be
+   * allowed to write "P10–P90" and "forecast". A label is what a reader takes
+   * the number to be; a footnote is what the screen says about it.
+   */
+  const LABELS = (dict: typeof en) => ({
+    "observed.badge": dict.app.observed.badge,
+    "observed.stamp": dict.app.observed.stamp,
+    "observed.window24h": dict.app.observed.window24h,
+    "observed.windowDay": dict.app.observed.windowDay,
+    "observed.rowEnergy": dict.app.observed.rowEnergy,
+    "observed.selectedFigure": dict.app.observed.selectedFigure,
+    "observed.dayTotal": dict.app.observed.dayTotal,
+    "observed.peakHour": dict.app.observed.peakHour,
+    "observed.peakHourWindow": dict.app.observed.peakHourWindow,
+    "observed.splitTitle": dict.app.observed.splitTitle,
+    "observed.splitSubtitle": dict.app.observed.splitSubtitle,
+    "observed.splitTotal": dict.app.observed.splitTotal,
+    "map.subtitleObserved": dict.app.overview.map.subtitleObserved,
+    "map.figureObserved": dict.app.overview.map.figureObserved,
+    "map.regionObserved": dict.app.overview.map.regionObserved,
+  });
+
+  /** Words that would make a settled figure read as a model's output. */
+  const FORECAST_WORDS: Record<"pt" | "en", string[]> = {
+    pt: ["previs", "risco", "amanhã", "p10", "p50", "p90", "esperad"],
+    en: ["forecast", "risk", "tomorrow", "p10", "p50", "p90", "expected"],
+  };
+
+  for (const [locale, dict] of [
+    ["pt", pt as unknown as typeof en],
+    ["en", en],
+  ] as const) {
+    it(`${locale}: no observed label uses the forecast vocabulary`, () => {
+      const offences: string[] = [];
+      for (const [key, value] of Object.entries(LABELS(dict))) {
+        for (const word of FORECAST_WORDS[locale]) {
+          if (value.toLowerCase().includes(word)) {
+            offences.push(`${key}: ${word}`);
+          }
+        }
+      }
+      expect(offences).toEqual([]);
+    });
+
+    it(`${locale}: the labels that head a figure say it is settled`, () => {
+      // Without this, the check above passes against a label that says nothing
+      // at all — which is the other way to mislead a reader.
+      const marker = locale === "pt" ? ["liquid", "observ"] : ["settl", "observ"];
+      const headings = [
+        dict.app.observed.badge,
+        dict.app.observed.stamp,
+        dict.app.observed.windowDay,
+        dict.app.observed.selectedFigure,
+        dict.app.observed.dayTotal,
+        dict.app.observed.peakHour,
+        dict.app.observed.splitSubtitle,
+        dict.app.observed.splitTotal,
+        dict.app.overview.map.subtitleObserved,
+        dict.app.overview.map.figureObserved,
+        dict.app.overview.map.regionObserved,
+      ];
+      const silent = headings.filter(
+        (value) => !marker.some((word) => value.toLowerCase().includes(word)),
+      );
+      expect(silent).toEqual([]);
+    });
+  }
+
+  it("the absence note no longer says the map and the totals are missing", () => {
+    // They are not missing any more — they are drawn from settled data — and a
+    // note that says otherwise is the screen contradicting itself on the same
+    // screenful. The sentence it was replaced with is asserted by shape: it
+    // still names what *is* absent, which is the model's interval.
+    for (const dict of [pt as unknown as typeof en, en]) {
+      expect(dict.app.overview.absentNote.toLowerCase()).toContain("p10");
+    }
+    expect(pt.app.overview.absentNote).not.toContain("O mapa, as classes de risco");
+    expect(en.app.overview.absentNote).not.toContain("The map, the risk classes");
+  });
+});
+
+describe("the observed components cannot express a forecast", () => {
+  /**
+   * Each observed component sits in the same file as its forecast sibling, on
+   * purpose — the two are read together and a reviewer should see both — so the
+   * guard is over the function body rather than the file.
+   *
+   * Non-vacuity: adding `<RiskChip` to `ObservedSubsystemRow`, or `band.p50` to
+   * `ObservedCard`, fails this. Both were reintroduced once to check it.
+   */
+  const OBSERVED_COMPONENTS: [string[], string][] = [
+    [["components", "app", "subsystem-row.tsx"], "ObservedSubsystemRow"],
+    [["components", "charts", "observed-profile.tsx"], "ObservedCard"],
+    [["components", "charts", "observed-profile.tsx"], "ObservedEmptyCard"],
+    [["components", "charts", "technology-split.tsx"], "ObservedSplitPanel"],
+  ];
+
+  const FORECAST_TOKENS = [
+    "RiskChip",
+    "RiskSteps",
+    "riskColor",
+    "BandStrip",
+    "BandFigure",
+    "FanChart",
+    ".p10",
+    ".p50",
+    ".p90",
+    "occurrenceProbability",
+    "riskClass",
+  ];
+
+  for (const [parts, name] of OBSERVED_COMPONENTS) {
+    it(`${name} reads no forecast quantity`, () => {
+      const body = functionBody(code(source(...parts)), name);
+      const found = FORECAST_TOKENS.filter((token) => body.includes(token));
+      expect(found).toEqual([]);
+    });
+
+    it(`${name} says it is observed`, () => {
+      const body = functionBody(code(source(...parts)), name);
+      const marked =
+        body.includes("<ObservedBadge />") || body.includes("copy.app.observed.");
+      expect({ name, marked }).toEqual({ name, marked: true });
+    });
+  }
+});
+
+describe("the map speaks two languages and keeps them apart", () => {
+  const MAP = code(source("components", "charts", "subsystem-map.tsx"));
+
+  it("the paint is a discriminated union, not a nullable row", () => {
+    expect(MAP).toContain(
+      '{ readonly kind: "forecast"; readonly rows: readonly OutlookRow[] }',
+    );
+    expect(MAP).toContain(
+      '{ readonly kind: "observed"; readonly rows: readonly ObservedRow[] }',
+    );
+    expect(MAP).toContain('paint.kind === "forecast"');
+  });
+
+  it("each mode has its own fill, its own glyph and its own spoken label", () => {
+    // The forecast side is unchanged and still reads the wire's class.
+    expect(MAP).toContain("riskColor(colors, klass)");
+    expect(MAP).toContain("copy.app.overview.map.region,");
+    expect(MAP).toContain("<Steps");
+    // The observed side paints from the ramp and prints the figure itself.
+    expect(MAP).toContain("observedFill(share, colors)");
+    expect(MAP).toContain("copy.app.overview.map.regionObserved,");
+    expect(MAP).toContain("f.compact(row.last24hMwh)");
+    // And the figure's own accessible name differs by mode, so the two maps are
+    // distinguishable with the screen turned off.
+    expect(MAP).toContain("copy.app.overview.map.figureObserved");
+  });
+
+  it("the legend is drawn for the continuous scale only", () => {
+    expect(MAP).toContain('{paint.kind === "observed" ? (');
+    expect(MAP).toContain("LEGEND_STOPS.map");
+  });
+
+  it("the focus indicator is still geometry, in both modes", () => {
+    // A CSS outline on an SVG element is drawn round its bounding box — the bug
+    // that once painted a rectangle across half the country.
+    expect(MAP).not.toContain("focusRing(");
+    expect(MAP).toContain('outlineStyle: "none"');
+  });
+});
+
+describe("the observed derivations are measurements, not estimates", () => {
+  const hour = (hourLocal: number, mwh: number) => ({
+    validTime: new Date(Date.parse("2026-09-14T00:00:00Z") + (hourLocal + 3) * 3_600_000)
+      .toISOString()
+      .slice(0, 19)
+      .concat("Z"),
+    hourLocal,
+    constrainedOffMwh: mwh,
+  });
+
+  it("the day total is the settled hours added, exactly", () => {
+    const day = observedDay([hour(1, 10.5), hour(2, 4.25), hour(3, 0)]);
+    expect(day.totalMwh).toBeCloseTo(14.75, 10);
+  });
+
+  it("an empty day has no largest hour, rather than a zero one", () => {
+    expect(observedDay([]).peakHour).toBeNull();
+    expect(observedDay([]).totalMwh).toBe(0);
+    // A day that settled at zero *does* have hours, and therefore has a peak.
+    expect(observedDay([hour(4, 0)]).peakHour?.hourLocal).toBe(4);
+  });
+
+  it("the largest hour is the largest, not the last", () => {
+    const day = observedDay([hour(1, 4), hour(2, 90), hour(3, 12)]);
+    expect(day.peakHour?.hourLocal).toBe(2);
+    expect(day.peakHour?.constrainedOffMwh).toBe(90);
+  });
+
+  const wire = {
+    subsystem: "NE",
+    technology: null,
+    from: "2026-09-14T00:00:00Z",
+    to: "2026-09-16T00:00:00Z",
+    asOf: "2026-09-15T09:00:00Z",
+    dataVersion: "ons-2026-09-15T09:00Z",
+    vintageFidelity: "point_in_time",
+    nextCursor: null,
+    rows: [
+      // Inside the Brasília civil day 2026-09-14 (03:00Z … 02:59Z next day).
+      {
+        subsystem: "NE",
+        technology: "WIND",
+        validTime: "2026-09-14T06:00:00Z",
+        hourLocal: 3,
+        constrainedOffMwh: 40,
+      },
+      {
+        subsystem: "NE",
+        technology: "SOLAR",
+        validTime: "2026-09-14T06:00:00Z",
+        hourLocal: 3,
+        constrainedOffMwh: 10,
+      },
+      {
+        subsystem: "NE",
+        technology: "SOLAR",
+        validTime: "2026-09-15T01:00:00Z",
+        hourLocal: 22,
+        constrainedOffMwh: 5,
+      },
+      // The hour before the civil day starts — a different day's row.
+      {
+        subsystem: "NE",
+        technology: "WIND",
+        validTime: "2026-09-14T02:00:00Z",
+        hourLocal: 23,
+        constrainedOffMwh: 999,
+      },
+    ],
+  } as unknown as Parameters<typeof observedSplit>[0];
+
+  it("the split is cut to the same civil day the profile draws", () => {
+    // The 999 MWh row belongs to the previous civil day and must not appear in
+    // either — this is the cut `observedHours` makes, applied to the split so
+    // the two panels beside each other cover the same hours.
+    expect(observedSplit(wire, "2026-09-14")).toEqual({ windMwh: 40, solarMwh: 15 });
+    const hours = observedHours(wire, "2026-09-14");
+    expect(hours.map((each) => each.constrainedOffMwh)).toEqual([50, 5]);
+    expect(observedDay(hours).totalMwh).toBe(55);
+    // And the split adds to the same total the profile does, or the two panels
+    // would be describing different days under one date.
+    const split = observedSplit(wire, "2026-09-14");
+    expect(split.windMwh + split.solarMwh).toBe(observedDay(hours).totalMwh);
+  });
+
+  it("the four observed rows come back in the product's display order", () => {
+    const subsystems = [
+      {
+        subsystem: "S",
+        onsDisplayName: "SUL",
+        last24hConstrainedOffMwh: 96.2,
+        latestHourConstrainedOffMwh: 3.4,
+        split: { windMwh: 88.7, solarMwh: 7.5 },
+      },
+      {
+        subsystem: "NE",
+        onsDisplayName: "NORDESTE",
+        last24hConstrainedOffMwh: 1842.6,
+        latestHourConstrainedOffMwh: 74.2,
+        split: { windMwh: 1188.4, solarMwh: 654.2 },
+      },
+    ] as unknown as Parameters<typeof observedRows>[0];
+    const rows = observedRows(subsystems, ["N", "NE", "SE", "S"]);
+    // Absent subsystems are dropped rather than padded with a zero.
+    expect(rows.map((row) => row.subsystem)).toEqual(["NE", "S"]);
+    expect(rows[0].last24hMwh).toBe(1842.6);
+  });
+});

@@ -694,6 +694,31 @@ export const pt: Copy = {
       note: "Pontos abaixo da linha de identidade tracejada são excessivamente confiantes: menos horas ultrapassaram o limiar do que a probabilidade prevista daquela faixa prometia. A área do ponto é o número de horas na faixa.",
     },
 
+    observed: {
+      badge: "Observado",
+      stamp: "Observado · liquidado até {when} BRT · {lag} h de atraso",
+      window24h: "Últimas 24 h até {hour} BRT",
+      windowDay: "Dia liquidado, {date}",
+      rowEnergy: "Energia cortada, últimas 24 h",
+      selectedFigure: "{mwh} MWh liquidados · eólica {wind} · solar {solar}",
+      noFan:
+        "Não há faixa P10–P90 sobre estas barras, e não pode haver: uma faixa é saída de modelo e estas horas estão liquidadas. O que está desenhado é o que aconteceu, megawatt-hora a megawatt-hora.",
+      dayTotal: "Energia cortada liquidada, dia inteiro · {subsystem}",
+      dayTotalNote:
+        "As horas liquidadas do dia, somadas. Observações somam exatamente — é a mesma soma que permite existir um total nacional — então este número pode ser calculado aqui, onde uma faixa de previsão nunca poderia.",
+      peakHour: "Maior hora liquidada · {subsystem}",
+      peakHourWindow: "{hour}h BRT de {date}",
+      peakHourNote:
+        "Uma energia em MWh, não uma potência em MW: o ONS publica energia por hora, e a faixa de pico de potência que uma previsão informa é uma afirmação do modelo sobre o formato dentro daquela hora. Não há modelo nenhum hoje, então nenhum número desses é mostrado.",
+      splitTitle: "Eólica e solar",
+      splitSubtitle: "{subsystem} · liquidado, duas medições",
+      splitTotal: "Energia cortada liquidada, dia inteiro",
+      splitNote:
+        "O ONS liquida as duas frotas separadamente — o grão publicado é subsistema, tecnologia e hora — então estas são duas medições e o total é a soma delas. A versão de previsão deste painel é o contrário: uma expectativa modelada, dividida em duas.",
+      emptyDay:
+        "O dia liquidou sem nenhum corte neste subsistema, o que é uma medição e não um número faltando.",
+    },
+
     overview: {
       metaTitle: "Visão da rede — WattSteer",
       title: "Visão da rede",
@@ -704,6 +729,8 @@ export const pt: Copy = {
         carried: one gesture, two plausible meanings, and it silently did the
         one that takes the reader off the screen.
       */
+      ledeObserved:
+        "O que a rede já liquidou, por subsistema. Todo número aqui é medido; nenhum é previsão, porque nenhum modelo está promovido.",
       rowFigure: "{subsystem}: selecionar",
       rowExplain: "Explicar",
       rowExplainLabel: "Explicar {subsystem}",
@@ -732,7 +759,7 @@ export const pt: Copy = {
         "Todos os painéis desta tela leem o gateway, inclusive os que não precisam de modelo, então não há o que mostrar enquanto isso. Os números não ficam guardados na página; recarregar depois que o serviço voltar é tudo o que falta.",
       absentTitle: "Sem previsão para este dia",
       absentNote:
-        "O mapa, as classes de risco, a faixa de 24 horas e os dois totais do dia são todos saída de modelo, e não há nenhuma — por isso estão ausentes, e não vazios. O que vem abaixo é observado: megawatt-hora que o ONS já liquidou, sem nenhum modelo envolvido, e portanto intactos.",
+        "As classes de risco, as faixas P10–P90 e os totais previstos do dia são saída de modelo, e não há nenhuma — por isso não aparecem. No lugar delas, cada painel responde o que os dados liquidados respondem sem modelo nenhum: megawatt-hora que o ONS já publicou, marcados como observados onde quer que apareçam.",
       settledTitle: "Liquidado nos quatro subsistemas",
       settledSubtitle: "Últimas 24 h até {hour} BRT · {lag} h de atraso",
       settledSplit: "eólica {wind} MWh · solar {solar} MWh",
@@ -760,6 +787,13 @@ export const pt: Copy = {
           "As setas percorrem as quatro regiões e trocam a seleção; Enter seleciona a região em foco.",
         boundaryNote:
           "Fronteiras elétricas, não regiões geográficas: o Maranhão está no subsistema Norte, o Acre e Rondônia estão no Sudeste/Centro-Oeste, e Mato Grosso, Mato Grosso do Sul, Goiás e o Distrito Federal também.",
+        titleObserved: "Os quatro subsistemas",
+        subtitleObserved: "Energia cortada liquidada, últimas 24 h",
+        figureObserved:
+          "Mapa do Brasil dividido nos quatro subsistemas do ONS, cada um sombreado pela energia cortada que o ONS já liquidou nas últimas 24 horas, com esse número impresso na região. As quatro regiões também aparecem como linhas ao lado.",
+        regionObserved:
+          "{subsystem}: {mwh} MWh liquidados nas últimas 24 horas. Selecionar.",
+        legendLow: "Menos",
         source: "Limites: IBGE, Malhas Territoriais (dados abertos governamentais).",
       },
     },

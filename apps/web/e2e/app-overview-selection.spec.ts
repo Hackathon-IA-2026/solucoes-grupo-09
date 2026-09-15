@@ -18,10 +18,10 @@ import { routeGateway } from "./gateway-fixtures";
  * experiences it — click, and check what moved and what did not.
  *
  * Both states are driven, because the screen has two and only one of them is
- * the one production is in. With nothing promoted the map and the forecast rows
- * are absent entirely, and the refusal path had strictly less of the screen's
- * own affordance than the success path — a list that showed a selection and
- * could not take one.
+ * the one production is in. With nothing promoted the map and the rows are
+ * drawn from settled data rather than withheld, so the selection has the same
+ * two ends in both states — and the assertions below are about *selecting*,
+ * which must behave identically whichever numbers the regions carry.
  */
 
 /** `textContent`, not `innerText`: react-native-web splits every run of text. */
@@ -154,13 +154,17 @@ test.describe("with nothing promoted, a reader can still say which region", () =
     await routeGateway(page, { forecast: false });
   });
 
-  test("the forecast panels are absent and the selection is not", async ({ page }) => {
+  test("the map is there, drawn from settled data, and the selection is not lost", async ({
+    page,
+  }) => {
     await page.goto("/app");
     await expect(page.locator('[data-testid="selected-region"]')).toBeVisible();
-    // No map and no forecast rows: they are model output and there is none.
-    await expect(region(page, "NE")).toHaveCount(0);
-    // But the screen still names the pick, and says why there are no numbers
-    // rather than showing none.
+    // The map renders — it did not, before, because it was wired to the
+    // forecast and there is none. It is the *observed* map now, and
+    // `app-observed-overview.spec.ts` is what holds the two apart.
+    await expect(region(page, "NE")).toHaveCount(1);
+    // And the screen still names the pick, and still says which figures are
+    // missing rather than quietly substituting one kind of number for another.
     expect(await textOf(page, "selected-region-name")).toContain("NORDESTE");
     expect(await textOf(page, "selected-region")).toMatch(
       /Nenhum número de previsão|No forecast figures/,

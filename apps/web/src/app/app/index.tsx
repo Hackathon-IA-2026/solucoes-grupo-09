@@ -25,19 +25,46 @@
  * that is not. It is drawn by different components from the forecast half for
  * the reason `lib/network.ts` gives — the failure being designed against is a
  * settled total in the place a forecast band was, under the label the band had.
+ *
+ * **What changed, and why the screen is no longer mostly refusal text.** Every
+ * panel here used to be one of two things: forecast, and therefore absent; or
+ * observed, and therefore present but confined to the bottom of the page. So
+ * the state production is actually in — nothing promoted, and it has been for
+ * weeks — rendered as a sentence, a second sentence, and three panels below the
+ * fold. The map, the four rows, the 24-hour profile, the wind/solar split and
+ * the two day figures were all withheld together, and a reader arriving at the
+ * product's main screen found almost nothing to look at.
+ *
+ * The question that fixes it is asked **per panel**: *what can this panel
+ * answer from data that needs no model at all?* For five of the six, the answer
+ * is a real one, and it is the settled series this screen was already reading:
+ *
+ * | Panel | With a model | With none |
+ * | --- | --- | --- |
+ * | Map | risk class per subsystem, three bins | settled MWh per subsystem, one ramp |
+ * | Rows | expectation + P10–P90 + peak band | settled MWh, split, one share bar |
+ * | 24 h | P10–P90 fan for tomorrow | the settled day's hourly bars |
+ * | Wind/solar | a division of one modelled expectation | two published settlements |
+ * | Day total | joint band from the ensemble | the settled day's sum |
+ * | Peak | peak **power** band, in MW | the largest settled hour, in MWh |
+ *
+ * The sixth thing — a P10/P50/P90 interval — has no model-free answer and is
+ * not given one. Where the forecast card draws a band, the observed card says
+ * in words that there is no band and why. **An observation is never dressed as
+ * a forecast**: the two never share a component, a colour, a badge or a
+ * sentence, and `test/observed-overview.test.ts` and
+ * `e2e/app-observed-overview.spec.ts` hold that from both ends.
  */
 
 import {
   ClockIcon,
   FadeIn,
-  focusRing,
   LayoutDashboardIcon,
   layout,
   MapIcon,
   Panel,
   PanelHeader,
   PieChartIcon,
-  radius,
   space,
   useContainerWidth,
   usePalette,
@@ -45,12 +72,18 @@ import {
 import { router } from "expo-router";
 import Head from "expo-router/head";
 import { type ReactNode, useState } from "react";
-import { Platform, Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { AppShell, ScreenTitle } from "@/components/app/app-shell";
 import { ForecastAbsent } from "@/components/app/forecast-absent";
-import { ForecastStamp, HonestyNote, VintageBadge } from "@/components/app/honesty";
+import {
+  ForecastStamp,
+  HonestyNote,
+  ObservedBadge,
+  ObservedStamp,
+  VintageBadge,
+} from "@/components/app/honesty";
 import { SelectedRegion } from "@/components/app/selected-region";
-import { SubsystemRow } from "@/components/app/subsystem-row";
+import { ObservedSubsystemRow, SubsystemRow } from "@/components/app/subsystem-row";
 import {
   gateProfileOf,
   sharedParams,
@@ -64,10 +97,17 @@ import {
 import { BandCard } from "@/components/charts/band-figure";
 import { EpisodeList } from "@/components/charts/episode-list";
 import { FanChart } from "@/components/charts/fan-chart";
-import { ObservedProfile } from "@/components/charts/observed-profile";
+import {
+  ObservedCard,
+  ObservedEmptyCard,
+  ObservedProfile,
+} from "@/components/charts/observed-profile";
 import { RiskCaveat } from "@/components/charts/risk-class";
 import { SubsystemMap } from "@/components/charts/subsystem-map";
-import { TechnologySplitPanel } from "@/components/charts/technology-split";
+import {
+  ObservedSplitPanel,
+  TechnologySplitPanel,
+} from "@/components/charts/technology-split";
 import { useVoiceHighlight } from "@/components/voice/use-voice-agent";
 import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
@@ -76,7 +116,13 @@ import {
   type SubsystemCode,
   subsystemMeta,
 } from "@/lib/fixtures";
-import { forecastHours, forecastRow, nowRows, outlookRows } from "@/lib/network";
+import {
+  forecastHours,
+  forecastRow,
+  observedDay,
+  observedRows,
+  outlookRows,
+} from "@/lib/network";
 
 export default function GridOverviewScreen() {
   const colors = usePalette();
@@ -89,6 +135,16 @@ export default function GridOverviewScreen() {
     targetDate: params.date,
     gateProfile: gateProfileOf(params.run),
   });
+  /**
+   * The screen's own sentence, which is not the same sentence in both states.
+   *
+   * The forecast lede promises "every figure is a P10/P50/P90 interval, not a
+   * point" — true of the forecast panels and flatly false of the observed ones,
+   * which are points and nothing but. A lede that describes the other state's
+   * panels is the first line a reader meets, so it is the first thing that has
+   * to be right.
+   */
+  const forecastPublished = state.status === "read";
 
   /**
    * **Selecting and navigating are two actions now, and they were one.**
@@ -137,7 +193,11 @@ export default function GridOverviewScreen() {
       <AppShell>
         <ScreenTitle
           title={copy.app.overview.title}
-          lede={fill(copy.app.overview.lede, { date: f.date(params.date) })}
+          lede={
+            forecastPublished
+              ? fill(copy.app.overview.lede, { date: f.date(params.date) })
+              : copy.app.overview.ledeObserved
+          }
           right={right}
         />
         {body}
@@ -174,7 +234,18 @@ export default function GridOverviewScreen() {
   const forecast = state.status === "read" ? state.forecast : null;
 
   return frame(
-    forecast === null ? null : (
+    /*
+      The header slot says which of the two claims the screen is making, before
+      a single number is reached. It used to be empty whenever no forecast was
+      published, which left the most prominent line on the page saying nothing
+      in the state the product is actually in.
+    */
+    forecast === null ? (
+      <ObservedStamp
+        latestSettledHour={observed.now.latestSettledHour}
+        lagHours={observed.now.lagHours}
+      />
+    ) : (
       <ForecastStamp
         origin={forecast.forecast.forecastOrigin}
         thresholdMw={forecast.forecast.thresholdMw}
@@ -190,34 +261,35 @@ export default function GridOverviewScreen() {
       ) : null}
 
       {/*
-        The selection strip renders in **both** states, and this is the only
-        place it can, because the map and the four rows live inside
-        `ForecastPanels` and there is nothing promoted for them to draw. With
-        no forecast a reader still picks a subsystem — from the chips in the
-        chrome, or from the settled rows below — and still has to see which one
-        they picked and why there are no numbers for it. `row` is `null` there
-        and the strip says so rather than showing nothing.
+        Two stacks, never interleaved, and each one whole.
 
-        In the `read` state it sits under the map instead, inside
-        `ForecastPanels`, because that is where the click that changes it
-        happens. Same component, placed where the reader's eyes are in each
-        state.
+        `ForecastPanels` is everything a promoted model pays for, unchanged.
+        `ObservedPanels` is the same six questions answered from settled data —
+        map, rows, 24-hour profile, wind and solar, day total, largest hour —
+        under the observed vocabulary throughout.
+
+        In the `read` state the settled figures keep their own section at the
+        bottom (`SettledPanels`), where they have always been: they are worth
+        the same on a day that is forecast, and moving them next to the forecast
+        panels is exactly the adjacency `lib/network.ts` refuses.
       */}
       {forecast === null ? (
-        <SelectedRegion
+        <ObservedPanels
+          observed={observed}
           subsystem={params.subsystem}
-          row={null}
-          onExplain={() => explain(params.subsystem)}
+          onSelect={select}
+          onExplain={explain}
         />
       ) : (
-        <ForecastPanels forecast={forecast} onSelect={select} onExplain={explain} />
+        <>
+          <ForecastPanels forecast={forecast} onSelect={select} onExplain={explain} />
+          <SettledPanels
+            observed={observed}
+            subsystem={params.subsystem}
+            onSelect={select}
+          />
+        </>
       )}
-
-      <ObservedPanels
-        observed={observed}
-        subsystem={params.subsystem}
-        onSelect={select}
-      />
 
       <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkFaint }}>
         {fill(copy.app.overview.grainNote, { subsystem: meta.onsDisplayName })}
@@ -302,7 +374,7 @@ function ForecastPanels({
             />
             <View style={{ marginTop: space.lg }}>
               <SubsystemMap
-                forecasts={rows}
+                paint={{ kind: "forecast", rows }}
                 selected={params.subsystem}
                 hovered={active}
                 onHoverChange={setHovered}
@@ -432,14 +504,248 @@ function ForecastPanels({
 }
 
 /**
- * The settled grid. Three panels, no model behind any of them.
+ * The settled grid, in the place the forecast panels occupy when there is one.
  *
- * Each names the day or the window it covers, because an observed figure whose
- * period is not stated is not comparable with anything — and, on a screen whose
- * other half is about *tomorrow*, a reader has to be able to tell at a glance
- * which of the two a number belongs to.
+ * Six panels, no model behind any of them, and every one of them naming the day
+ * or the window it covers — an observed figure whose period is not stated is
+ * not comparable with anything, and this screen holds two windows at once: the
+ * four-subsystem view is the **last 24 h to the latest settled hour**, which is
+ * what `GET /v1/grid/now` publishes, and the deep panels are the **last settled
+ * civil day**, which is what `GET /v1/curtailment/hours` was asked for. Both are
+ * stated; neither is inferred from the other.
+ *
+ * **Why the selected region's own figures come from a different window than the
+ * map's.** There is exactly one observed read that covers all four subsystems,
+ * and exactly one that covers a subsystem hour by hour. Forcing them onto one
+ * window would mean either summing the four civil days out of four separate
+ * requests — three more round trips for a number the gateway already
+ * publishes — or drawing the map from a window the route does not offer. Two
+ * honest windows, each labelled, beats one invented one.
  */
 function ObservedPanels({
+  observed,
+  subsystem,
+  onSelect,
+  onExplain,
+}: {
+  observed: ObservedNetwork;
+  subsystem: SubsystemCode;
+  onSelect: (subsystem: SubsystemCode) => void;
+  onExplain: (subsystem: SubsystemCode) => void;
+}) {
+  const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
+  const meta = subsystemMeta(subsystem);
+  const params = useAppParams();
+  const rows = observedRows(observed.now.subsystems, SUBSYSTEM_DISPLAY_ORDER);
+  const day = observedDay(observed.hours);
+  const [overviewWidth, onOverviewLayout] = useContainerWidth();
+  // The same one-hover-two-affordances arrangement the forecast stack has, for
+  // the same reason: hovering a region lights its row and hovering a row lights
+  // its region, and the voice agent's `highlight` is a third source for the
+  // same value. Losing it in the state production is actually in would mean the
+  // agent's first demo step lit nothing.
+  const [hovered, setHovered] = useState<SubsystemCode | null>(null);
+  const spoken = useVoiceHighlight();
+  const active = hovered ?? spoken;
+  const side = overviewWidth >= layout.desktop;
+  // One scale across all four rows and the map's ramp, so a region's colour and
+  // its row's bar are the same statement made twice.
+  const domainMax = Math.max(...rows.map((row) => row.last24hMwh), 0);
+  const window24h = fill(copy.app.observed.window24h, {
+    hour: f.dateTime(observed.now.latestSettledHour),
+  });
+  const windowDay = fill(copy.app.observed.windowDay, {
+    date: f.date(observed.hoursDate),
+  });
+  const selectedRow = rows.find((row) => row.subsystem === subsystem) ?? null;
+
+  return (
+    <>
+      <FadeIn style={{ gap: space.md }} onLayout={onOverviewLayout}>
+        <View
+          style={{
+            flexDirection: side ? "row" : "column",
+            alignItems: side ? "flex-start" : "stretch",
+            gap: space.md,
+          }}
+        >
+          <Panel style={side ? { width: 420 } : undefined}>
+            <PanelHeader
+              icon={<MapIcon size={18} color={colors.inkMuted} />}
+              title={copy.app.overview.map.titleObserved}
+              subtitle={copy.app.overview.map.subtitleObserved}
+              right={<ObservedBadge />}
+            />
+            <View style={{ marginTop: space.lg }}>
+              <SubsystemMap
+                paint={{ kind: "observed", rows }}
+                selected={subsystem}
+                hovered={active}
+                onHoverChange={setHovered}
+                onSelect={onSelect}
+              />
+            </View>
+            <Text
+              style={{
+                marginTop: space.sm,
+                fontSize: 11,
+                color: colors.info,
+                textAlign: "center",
+                fontVariant: ["tabular-nums"],
+              }}
+            >
+              {window24h}
+            </Text>
+
+            <View style={{ marginTop: space.md }}>
+              <SelectedRegion
+                subsystem={subsystem}
+                row={null}
+                observed={selectedRow}
+                observedWindow={window24h}
+                onExplain={() => onExplain(subsystem)}
+              />
+            </View>
+
+            <Text
+              style={{
+                fontSize: 11,
+                color: colors.inkFaint,
+                lineHeight: 17,
+                marginTop: space.md,
+              }}
+            >
+              {copy.app.overview.map.boundaryNote}
+            </Text>
+          </Panel>
+
+          <View style={{ flex: side ? 1 : undefined, gap: space.md }}>
+            {rows.map((row) => (
+              <ObservedSubsystemRow
+                key={row.subsystem}
+                observed={row}
+                domainMax={domainMax}
+                selected={row.subsystem === subsystem}
+                highlighted={row.subsystem === active}
+                onHoverChange={(on) => setHovered(on ? row.subsystem : null)}
+                onPress={() => onSelect(row.subsystem)}
+                onExplain={() => onExplain(row.subsystem)}
+              />
+            ))}
+            <Text
+              style={{
+                fontSize: 11,
+                lineHeight: 18,
+                color: colors.inkFaint,
+              }}
+            >
+              {fill(copy.app.overview.settledNationalNote, {
+                mwh: f.compact(observed.now.national.last24hConstrainedOffMwh),
+              })}
+            </Text>
+            <View style={{ alignSelf: "flex-start" }}>
+              <VintageBadge fidelity={observed.now.vintageFidelity} />
+            </View>
+          </View>
+        </View>
+      </FadeIn>
+
+      <SettledDayPanel observed={observed} subsystem={subsystem} bandAbsent={true} />
+
+      <FadeIn delay={140}>
+        <Panel>
+          <PanelHeader
+            icon={<PieChartIcon size={18} color={colors.inkMuted} />}
+            title={copy.app.observed.splitTitle}
+            subtitle={fill(copy.app.observed.splitSubtitle, {
+              subsystem: meta.onsDisplayName,
+            })}
+            right={<ObservedBadge />}
+          />
+          <View style={{ marginTop: space.lg }}>
+            <ObservedSplitPanel
+              split={observed.daySplit}
+              emphasis={params.technology}
+              window={windowDay}
+            />
+          </View>
+        </Panel>
+      </FadeIn>
+
+      {/*
+        The two day figures. Where the forecast stack draws two `BandCard`s,
+        this draws two `ObservedCard`s — no strip, no quantile labels, and a
+        footnote in each saying that the interval is the part a model would
+        have supplied. The peak card is an **energy** in MWh, not a power in
+        MW: see `observedDay` in `lib/network.ts`.
+
+        `peakHour === null` is the day that settled with no curtailment in it,
+        which is a different sentence from a zero and gets a different card.
+      */}
+      <FadeIn
+        delay={210}
+        style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}
+      >
+        {day.peakHour === null ? (
+          <>
+            <ObservedEmptyCard
+              label={fill(copy.app.observed.dayTotal, {
+                subsystem: meta.onsDisplayName,
+              })}
+            />
+            <ObservedEmptyCard
+              label={fill(copy.app.observed.peakHour, {
+                subsystem: meta.onsDisplayName,
+              })}
+            />
+          </>
+        ) : (
+          <>
+            <ObservedCard
+              label={fill(copy.app.observed.dayTotal, {
+                subsystem: meta.onsDisplayName,
+              })}
+              value={day.totalMwh}
+              unit="MWh"
+              window={windowDay}
+              footnote={copy.app.observed.dayTotalNote}
+            />
+            <ObservedCard
+              label={fill(copy.app.observed.peakHour, {
+                subsystem: meta.onsDisplayName,
+              })}
+              value={day.peakHour.constrainedOffMwh}
+              unit="MWh"
+              window={fill(copy.app.observed.peakHourWindow, {
+                hour: f.number(day.peakHour.hourLocal),
+                date: f.date(observed.hoursDate),
+              })}
+              footnote={copy.app.observed.peakHourNote}
+            />
+          </>
+        )}
+      </FadeIn>
+
+      <EpisodesPanel observed={observed} />
+    </>
+  );
+}
+
+/**
+ * The settled grid **beside a published forecast**, which is where it has
+ * always lived and where it stays.
+ *
+ * Three panels rather than six: with a forecast on the screen the map, the
+ * rows, the day total and the largest hour are all answered above in the
+ * forecast's own language, and repeating them in the observed one would put two
+ * numbers for the same-sounding quantity on one page — an invitation to read
+ * one as a correction of the other. What remains is what the forecast half does
+ * not say at all: what the four subsystems have settled, what the last settled
+ * day looked like hour by hour, and which episodes ran.
+ */
+function SettledPanels({
   observed,
   subsystem,
   onSelect,
@@ -449,167 +755,170 @@ function ObservedPanels({
   /**
    * The same selector the map and the forecast rows take.
    *
-   * With nothing promoted the map and the four forecast rows are absent, and
-   * these four settled rows are then the only per-subsystem list on the screen.
-   * They already marked the selected one in bold and could not change it, which
-   * is a list that shows a selection and refuses to take one — so the refusal
-   * path had strictly less of the screen's own affordance than the success
-   * path did.
+   * These four settled rows are a per-subsystem list like any other on this
+   * screen, and a list that marks a selection and refuses to take one is an
+   * affordance withheld for no reason.
    */
+  onSelect: (subsystem: SubsystemCode) => void;
+}) {
+  return (
+    <>
+      <SettledSubsystemsPanel
+        observed={observed}
+        subsystem={subsystem}
+        onSelect={onSelect}
+      />
+      <SettledDayPanel observed={observed} subsystem={subsystem} bandAbsent={false} />
+      <EpisodesPanel observed={observed} />
+    </>
+  );
+}
+
+/** The four subsystems as ONS has settled them, and a selector. */
+function SettledSubsystemsPanel({
+  observed,
+  subsystem,
+  onSelect,
+}: {
+  observed: ObservedNetwork;
+  subsystem: SubsystemCode;
   onSelect: (subsystem: SubsystemCode) => void;
 }) {
   const colors = usePalette();
   const copy = useCopy();
   const f = useFormat();
-  const meta = subsystemMeta(subsystem);
-  const rows = nowRows(observed.now.subsystems, SUBSYSTEM_DISPLAY_ORDER);
+  const rows = observedRows(observed.now.subsystems, SUBSYSTEM_DISPLAY_ORDER);
+  const domainMax = Math.max(...rows.map((row) => row.last24hMwh), 0);
 
   return (
-    <>
-      <FadeIn delay={70}>
-        <Panel>
-          <PanelHeader
-            icon={<ClockIcon size={18} color={colors.inkMuted} />}
-            title={copy.app.overview.settledTitle}
-            subtitle={fill(copy.app.overview.settledSubtitle, {
-              hour: f.dateTime(observed.now.latestSettledHour),
-              lag: f.number(observed.now.lagHours),
-            })}
-            right={<VintageBadge fidelity={observed.now.vintageFidelity} />}
-          />
-          <View style={{ marginTop: space.lg, gap: space.sm }}>
-            {rows.map((row) => (
-              <Pressable
-                key={row.subsystem}
-                accessibilityRole="button"
-                accessibilityLabel={fill(copy.app.overview.rowFigure, {
-                  subsystem: row.onsDisplayName,
-                })}
-                onPress={() => onSelect(row.subsystem)}
-                style={(state) => {
-                  const { focused = false, hovered = false } = state as {
-                    focused?: boolean;
-                    hovered?: boolean;
-                  };
-                  const isSelected = row.subsystem === subsystem;
-                  return {
-                    flexDirection: "row",
-                    flexWrap: "wrap",
-                    alignItems: "baseline",
-                    gap: 8,
-                    // The same accent-border mark the forecast row and the map
-                    // region carry, so "this one" looks the same in all three
-                    // places — including the state where the other two are not
-                    // on the screen at all.
-                    borderRadius: radius.md,
-                    borderCurve: "continuous",
-                    borderWidth: 1,
-                    borderColor: isSelected ? colors.accent : "transparent",
-                    backgroundColor: hovered ? colors.surfaceSunken : "transparent",
-                    paddingHorizontal: 10,
-                    paddingVertical: 6,
-                    ...focusRing(focused, colors.focus),
-                    ...(Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null),
-                  };
-                }}
-              >
-                <Text
-                  style={{
-                    flexGrow: 1,
-                    flexBasis: 160,
-                    fontSize: 13,
-                    fontWeight: row.subsystem === subsystem ? "700" : "500",
-                    color: row.subsystem === subsystem ? colors.ink : colors.inkMuted,
-                  }}
-                >
-                  {row.onsDisplayName}
-                </Text>
-                <Text
-                  style={{
-                    fontSize: 14,
-                    fontWeight: "700",
-                    fontVariant: ["tabular-nums"],
-                    color: colors.ink,
-                  }}
-                >
-                  {`${f.compact(row.last24hConstrainedOffMwh)} MWh`}
-                </Text>
-                <Text
-                  style={{
-                    flexBasis: "100%",
-                    fontSize: 11,
-                    color: colors.inkFaint,
-                    fontVariant: ["tabular-nums"],
-                  }}
-                >
-                  {fill(copy.app.overview.settledSplit, {
-                    wind: f.compact(row.split.windMwh),
-                    solar: f.compact(row.split.solarMwh),
-                  })}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-          <Text
-            style={{
-              marginTop: space.md,
-              fontSize: 11,
-              lineHeight: 18,
-              color: colors.inkFaint,
-            }}
-          >
-            {fill(copy.app.overview.settledNationalNote, {
-              mwh: f.compact(observed.now.national.last24hConstrainedOffMwh),
-            })}
-          </Text>
-        </Panel>
-      </FadeIn>
-
-      <FadeIn delay={140}>
-        <Panel>
-          <PanelHeader
-            icon={<LayoutDashboardIcon size={18} color={colors.inkMuted} />}
-            title={fill(copy.app.overview.settledDayTitle, {
-              subsystem: meta.onsDisplayName,
-            })}
-            subtitle={fill(copy.app.overview.settledDaySubtitle, {
-              date: f.date(observed.hoursDate),
-            })}
-          />
-          <View style={{ marginTop: space.lg }}>
-            <ObservedProfile
-              hours={observed.hours}
-              emptyLabel={copy.app.overview.settledDayEmpty}
-            />
-          </View>
-          <Text
-            style={{
-              marginTop: space.md,
-              fontSize: 11,
-              lineHeight: 18,
-              color: colors.inkFaint,
-            }}
-          >
-            {copy.app.overview.settledDayNote}
-          </Text>
-        </Panel>
-      </FadeIn>
-
-      <FadeIn delay={210}>
-        <EpisodeList
-          episodes={observed.episodes.episodes}
-          maxGapHours={observed.episodes.maxGapHours}
-          title={copy.app.overview.episodesTitle}
-          subtitle={fill(copy.app.overview.episodesSubtitle, {
-            from: f.date(observed.episodes.from.slice(0, 10)),
-            to: f.date(observed.episodes.to.slice(0, 10)),
-            mw: f.number(observed.episodes.thresholdMw),
+    <FadeIn delay={70}>
+      <Panel>
+        <PanelHeader
+          icon={<ClockIcon size={18} color={colors.inkMuted} />}
+          title={copy.app.overview.settledTitle}
+          subtitle={fill(copy.app.overview.settledSubtitle, {
+            hour: f.dateTime(observed.now.latestSettledHour),
+            lag: f.number(observed.now.lagHours),
           })}
-          row={copy.app.overview.episodeRow}
-          note={copy.app.overview.episodeNote}
-          empty={copy.app.overview.episodesEmpty}
+          right={<VintageBadge fidelity={observed.now.vintageFidelity} />}
         />
-      </FadeIn>
-    </>
+        <View style={{ marginTop: space.lg, gap: space.sm }}>
+          {rows.map((row) => (
+            <ObservedSubsystemRow
+              key={row.subsystem}
+              observed={row}
+              domainMax={domainMax}
+              selected={row.subsystem === subsystem}
+              onPress={() => onSelect(row.subsystem)}
+            />
+          ))}
+        </View>
+        <Text
+          style={{
+            marginTop: space.md,
+            fontSize: 11,
+            lineHeight: 18,
+            color: colors.inkFaint,
+          }}
+        >
+          {fill(copy.app.overview.settledNationalNote, {
+            mwh: f.compact(observed.now.national.last24hConstrainedOffMwh),
+          })}
+        </Text>
+      </Panel>
+    </FadeIn>
+  );
+}
+
+/**
+ * The selected subsystem's last settled day, hour by hour.
+ *
+ * `bandAbsent` is the one difference between its two appearances. Standing in
+ * for the forecast's 24-hour fan, it owes the reader the sentence the fan's
+ * absence would otherwise leave implicit: there is no P10–P90 ribbon here and
+ * there cannot be, because a ribbon is a model's output and these are settled
+ * hours. Beside a published fan, that sentence would be answering a question
+ * nobody has.
+ */
+function SettledDayPanel({
+  observed,
+  subsystem,
+  bandAbsent,
+}: {
+  observed: ObservedNetwork;
+  subsystem: SubsystemCode;
+  bandAbsent: boolean;
+}) {
+  const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
+  const meta = subsystemMeta(subsystem);
+
+  return (
+    <FadeIn delay={70}>
+      <Panel>
+        <PanelHeader
+          icon={<LayoutDashboardIcon size={18} color={colors.inkMuted} />}
+          title={fill(copy.app.overview.settledDayTitle, {
+            subsystem: meta.onsDisplayName,
+          })}
+          subtitle={fill(copy.app.overview.settledDaySubtitle, {
+            date: f.date(observed.hoursDate),
+          })}
+          right={<ObservedBadge />}
+        />
+        <View style={{ marginTop: space.lg }}>
+          <ObservedProfile
+            hours={observed.hours}
+            emptyLabel={copy.app.overview.settledDayEmpty}
+          />
+        </View>
+        <Text
+          style={{
+            marginTop: space.md,
+            fontSize: 11,
+            lineHeight: 18,
+            color: colors.inkFaint,
+          }}
+        >
+          {copy.app.overview.settledDayNote}
+        </Text>
+        {bandAbsent ? (
+          <Text
+            style={{
+              marginTop: space.sm,
+              fontSize: 11,
+              lineHeight: 18,
+              color: colors.inkFaint,
+            }}
+          >
+            {copy.app.observed.noFan}
+          </Text>
+        ) : null}
+      </Panel>
+    </FadeIn>
+  );
+}
+
+/** A fortnight of episodes, with the parameters that defined them. */
+function EpisodesPanel({ observed }: { observed: ObservedNetwork }) {
+  const copy = useCopy();
+  const f = useFormat();
+  return (
+    <FadeIn delay={210}>
+      <EpisodeList
+        episodes={observed.episodes.episodes}
+        maxGapHours={observed.episodes.maxGapHours}
+        title={copy.app.overview.episodesTitle}
+        subtitle={fill(copy.app.overview.episodesSubtitle, {
+          from: f.date(observed.episodes.from.slice(0, 10)),
+          to: f.date(observed.episodes.to.slice(0, 10)),
+          mw: f.number(observed.episodes.thresholdMw),
+        })}
+        row={copy.app.overview.episodeRow}
+        note={copy.app.overview.episodeNote}
+        empty={copy.app.overview.episodesEmpty}
+      />
+    </FadeIn>
   );
 }

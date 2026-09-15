@@ -15,12 +15,35 @@
  * row are the same call. See `app/app/index.tsx`, where one handler is defined
  * once and handed to both.
  *
- * **Colour is `risk-class.tsx`'s, imported not re-derived.** Three bins, no
- * ramp, low in `inkMuted` rather than lime — the reasoning is in that file's
- * header and it applies here unchanged. Colour is never the only encoding: the
- * subsystem's short code is printed on the region and the same three-step
- * glyph the chip uses is drawn under it, so the map still reads with the hues
- * removed.
+ * **One map, two languages, and they must never be mistaken for each other.**
+ * With a promoted model the four regions carry tomorrow's **risk class**; with
+ * none — the state production is in — they carry the **settled** megawatt-hours
+ * ONS has already published for the last 24 hours, which need no artifact and
+ * are true either way. Both are real; they are different claims about different
+ * days, and a reader who read one as the other would be badly misled. So the
+ * two modes differ on four channels at once, and `paint` is a discriminated
+ * union rather than a nullable row precisely so a caller cannot hand this
+ * component one kind of number under the other's label:
+ *
+ *  1. **Hue family.** Forecast is `risk-class.tsx`'s three bins — muted, amber,
+ *     red — imported and never re-derived. Observed is a single cyan ramp from
+ *     `observed-scale.ts`, a hue used nowhere else on this screen. No fill
+ *     either can produce is a fill the other can; `test/observed-overview.test.ts`
+ *     holds that as an assertion over the whole range.
+ *  2. **Scale.** Forecast is stepped, because a smooth ramp would claim the
+ *     model can tell 31 % from 33 %. Observed is continuous, because a settled
+ *     megawatt-hour is a measurement. The argument for each is the argument
+ *     against the other, which is why they cannot be swapped.
+ *  3. **What is printed inside the region.** Forecast draws the three-step risk
+ *     glyph — a class, not a quantity. Observed prints the figure itself.
+ *  4. **What the region says when read aloud.** The two `map.region*` strings
+ *     are different sentences: one names a risk class and a probability, the
+ *     other names settled energy and the window it settled over. Neither can be
+ *     rendered in the other's mode.
+ *
+ * Colour is never the only encoding in either mode: the subsystem's short code
+ * is printed on every region, and the glyph or the figure carries the magnitude
+ * with the hues removed.
  *
  * **Geometry** lives in `@/lib/geo/brazil-subsystems` — source, licence,
  * projection and the simplification trade-off are all documented there.
@@ -34,9 +57,10 @@ import {
   useReducedMotion,
   webTransition,
 } from "@wattsteer/ui";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Platform, Text, View } from "react-native";
 import Svg, { G, Path, Rect, Text as SvgText } from "react-native-svg";
+import { clamp01, LEGEND_STOPS, observedFill } from "@/components/charts/observed-scale";
 import { riskColor } from "@/components/charts/risk-class";
 import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
@@ -53,7 +77,7 @@ import {
   SUBSYSTEM_LABEL_ANCHOR,
   SUBSYSTEM_PATH,
 } from "@/lib/geo/brazil-subsystems";
-import type { OutlookRow } from "@/lib/network";
+import type { ObservedRow, OutlookRow } from "@/lib/network";
 
 const FONT =
   "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif";
@@ -190,14 +214,53 @@ function Steps({
   );
 }
 
+/**
+ * Which of the two claims this map is making, and the rows behind it.
+ *
+ * A union and not a pair of optional props: `{ forecasts?, observed? }` has two
+ * states nobody wants — neither, and both — and the second of those is a map
+ * that would have to choose silently which number it was painting.
+ */
+export type MapPaint =
+  | { readonly kind: "forecast"; readonly rows: readonly OutlookRow[] }
+  | { readonly kind: "observed"; readonly rows: readonly ObservedRow[] };
+
+/** One region, resolved to paint. Built once per render, per mode. */
+interface RegionPaint {
+  /** The region's hue. Also its outline when neither selected nor focused. */
+  readonly fill: string;
+  /** What a screen reader says about this region. Mode-specific by design. */
+  readonly label: string;
+  /** Under the short code: the risk glyph, or the settled figure. */
+  readonly glyph: ReactNode;
+}
+
+/**
+ * How far the fill lifts for hover and for selection, per mode.
+ *
+ * **Forecast** paints a categorical tint, so opacity is free to carry the
+ * interaction and does so over a wide range — three clearly separated steps.
+ *
+ * **Observed** encodes the magnitude in the hue itself, and opacity would be a
+ * second, competing magnitude channel: a small region under the pointer could
+ * out-read a large one beside it. So the observed range is deliberately narrow
+ * — enough that a pointer produces a response, not enough to reorder the map —
+ * and the figure printed on each region settles any residual ambiguity.
+ */
+const LIFT = {
+  forecast: { rest: 0.5, active: 0.72, selected: 0.88 },
+  observed: { rest: 0.8, active: 0.92, selected: 1 },
+} as const;
+
 export function SubsystemMap({
-  forecasts,
+  paint,
   selected,
   hovered = null,
   onHoverChange,
   onSelect,
 }: {
-  forecasts: readonly OutlookRow[];
+  /** The four rows and which claim they make. See {@link MapPaint}. */
+  paint: MapPaint;
   selected: SubsystemCode;
   /**
    * The subsystem the pointer is on, held by the parent rather than here.
@@ -253,7 +316,87 @@ export function SubsystemMap({
   const width = Math.min(containerWidth > 0 ? containerWidth : MAX_WIDTH, MAX_WIDTH);
   const height = (width * BRAZIL_VIEWBOX.height) / BRAZIL_VIEWBOX.width;
 
-  const byCode = new Map(forecasts.map((each) => [each.subsystem, each]));
+  /**
+   * The largest settled figure on the map, which the ramp is relative to.
+   *
+   * Relative rather than absolute because there is no absolute ceiling for a
+   * settled day — a quiet fortnight and a record one would both wash out
+   * against a fixed maximum. The legend under the map states the top of the
+   * scale in megawatt-hours, so "darkest" is never read as "large" on its own.
+   */
+  const observedMax =
+    paint.kind === "observed"
+      ? Math.max(...paint.rows.map((row) => row.last24hMwh), 0)
+      : 0;
+
+  const painted = new Map<SubsystemCode, RegionPaint>(
+    paint.kind === "forecast"
+      ? paint.rows.map((row) => {
+          // The wire's class, never recomputed. `GET /v1/grid/outlook` carries
+          // both `risk_class` and the `risk_bins` it was cut with; deriving it
+          // again here from a local copy of the cut points would be a second
+          // opinion about the same number, and the two copies are kept in step
+          // by nothing.
+          const klass = row.riskClass;
+          const tone = riskColor(colors, klass);
+          const anchor = SUBSYSTEM_LABEL_ANCHOR[row.subsystem];
+          return [
+            row.subsystem,
+            {
+              fill: tone.fg,
+              label: fill(copy.app.overview.map.region, {
+                subsystem: subsystemMeta(row.subsystem).onsDisplayName,
+                risk: copy.app.risk[klass],
+                probability: f.percentPoints(roundProbability(row.occurrenceProbability)),
+              }),
+              glyph: (
+                <Steps
+                  klass={klass}
+                  x={anchor.x}
+                  y={anchor.y + 34}
+                  color={tone.fg}
+                  dim={colors.borderStrong}
+                />
+              ),
+            },
+          ] as const;
+        })
+      : paint.rows.map((row) => {
+          const anchor = SUBSYSTEM_LABEL_ANCHOR[row.subsystem];
+          const share = observedMax === 0 ? 0 : row.last24hMwh / observedMax;
+          return [
+            row.subsystem,
+            {
+              fill: observedFill(share, colors),
+              // Settled energy and the window it settled over — and no risk
+              // class, no probability and no mention of a day that has not
+              // happened. A screen reader must be able to tell the two maps
+              // apart as surely as an eye can.
+              label: fill(copy.app.overview.map.regionObserved, {
+                subsystem: subsystemMeta(row.subsystem).onsDisplayName,
+                mwh: f.compact(row.last24hMwh),
+              }),
+              // The figure itself, where the forecast map draws a binned glyph.
+              // A number on a region is the plainest possible statement that
+              // this is a measurement rather than a class.
+              glyph: (
+                <SvgText
+                  x={anchor.x}
+                  y={anchor.y + 30}
+                  textAnchor="middle"
+                  fontSize={26}
+                  fontWeight="600"
+                  fontFamily={FONT}
+                  fill={colors.ink}
+                >
+                  {`${f.compact(row.last24hMwh)} MWh`}
+                </SvgText>
+              ),
+            },
+          ] as const;
+        }),
+  );
+  const lift = LIFT[paint.kind];
 
   return (
     <View ref={host} onLayout={onLayout} style={{ alignItems: "center" }}>
@@ -261,7 +404,11 @@ export function SubsystemMap({
         viewBox={`0 0 ${BRAZIL_VIEWBOX.width} ${BRAZIL_VIEWBOX.height}`}
         width={width}
         height={height}
-        accessibilityLabel={copy.app.overview.map.figure}
+        accessibilityLabel={
+          paint.kind === "forecast"
+            ? copy.app.overview.map.figure
+            : copy.app.overview.map.figureObserved
+        }
       >
         {/*
           The landmass, drawn once under everything. The four region fills are
@@ -278,28 +425,15 @@ export function SubsystemMap({
         ))}
 
         {SUBSYSTEM_DISPLAY_ORDER.map((code) => {
-          const forecast = byCode.get(code);
-          if (forecast === undefined) {
+          const region = painted.get(code);
+          if (region === undefined) {
             return null;
           }
           const meta = subsystemMeta(code);
-          // The wire's class, never recomputed. `GET /v1/grid/outlook` carries
-          // both `risk_class` and the `risk_bins` it was cut with; deriving it
-          // again here from a local copy of the cut points would be a second
-          // opinion about the same number, and the two copies are kept in step
-          // by nothing.
-          const klass = forecast.riskClass;
-          const tone = riskColor(colors, klass);
           const isSelected = code === selected;
           const isActive = code === active;
           const anchor = SUBSYSTEM_LABEL_ANCHOR[code];
-          const label = fill(copy.app.overview.map.region, {
-            subsystem: meta.onsDisplayName,
-            risk: copy.app.risk[klass],
-            probability: f.percentPoints(
-              roundProbability(forecast.occurrenceProbability),
-            ),
-          });
+          const label = region.label;
 
           /*
             Hover and focus are the same restrained move the rows make: the fill
@@ -418,18 +552,22 @@ export function SubsystemMap({
             <G key={code}>
               <Path
                 d={SUBSYSTEM_PATH[code]}
-                fill={tone.fg}
+                fill={region.fill}
                 // Three steps, not two. Hover and selection used to share one
                 // lift, so the moment the pointer left, the selected region
                 // dropped back to looking exactly like the other three — and
                 // clicking a region now re-points four panels rather than
                 // navigating, which makes a selection that does not persist
                 // visually a change with nothing on screen to attribute it to.
-                fillOpacity={isSelected ? 0.88 : isActive ? 0.72 : 0.5}
+                fillOpacity={
+                  isSelected ? lift.selected : isActive ? lift.active : lift.rest
+                }
                 // Focus outranks selection, because a keyboard user moving
                 // across the map has to be able to see where they are even
                 // while the selected region stays selected behind them.
-                stroke={isFocused ? colors.focus : isSelected ? colors.accent : tone.fg}
+                stroke={
+                  isFocused ? colors.focus : isSelected ? colors.accent : region.fill
+                }
                 strokeWidth={isFocused || isSelected ? 3.5 : 1.5}
                 strokeLinejoin="round"
                 {...handlers}
@@ -451,13 +589,7 @@ export function SubsystemMap({
                 >
                   {meta.short}
                 </SvgText>
-                <Steps
-                  klass={klass}
-                  x={anchor.x}
-                  y={anchor.y + 34}
-                  color={tone.fg}
-                  dim={colors.borderStrong}
-                />
+                {region.glyph}
               </G>
             </G>
           );
@@ -482,6 +614,55 @@ export function SubsystemMap({
           pointerEvents="none"
         />
       </Svg>
+
+      {/*
+        The ramp, spelled out — and only in observed mode, which makes the
+        legend itself one more thing the two maps do not share.
+
+        The forecast map needs none: its three bins are named in words on every
+        row beside it, and a legend for a categorical scale that is already
+        written out four times would be decoration. A continuous scale has no
+        such anchor, so the top of it is stated as a number — without which
+        "darker" is a comparison with nothing.
+      */}
+      {paint.kind === "observed" ? (
+        <View
+          style={{
+            flexDirection: "row",
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+            marginTop: space.sm,
+          }}
+        >
+          <Text style={{ fontSize: 10, color: colors.inkFaint }}>
+            {copy.app.overview.map.legendLow}
+          </Text>
+          <View style={{ flexDirection: "row", gap: 2 }}>
+            {LEGEND_STOPS.map((stop) => (
+              <View
+                key={stop}
+                style={{
+                  width: 22,
+                  height: 8,
+                  borderRadius: 2,
+                  backgroundColor: observedFill(clamp01(stop), colors),
+                }}
+              />
+            ))}
+          </View>
+          <Text
+            style={{
+              fontSize: 10,
+              color: colors.inkFaint,
+              fontVariant: ["tabular-nums"],
+            }}
+          >
+            {`${f.compact(observedMax)} MWh`}
+          </Text>
+        </View>
+      ) : null}
 
       {/*
         The arrow keys are a real affordance now, so they are written down.
