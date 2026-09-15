@@ -448,6 +448,8 @@ export const en = {
     openLabel: "Open the PDF",
     /** The footer link. Short: it sits in a row with the legal links. */
     footerLink: "Pitch deck",
+    /** The top-nav link. Same words as the footer's, one row apart. */
+    navLink: "Pitch deck",
   },
 
   legal: {

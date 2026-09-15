@@ -11,11 +11,16 @@ export type SectionId = "forecast" | "engines" | "showcase" | "provenance";
  * It used to be written out as `layout.page + 128` in three files, which is
  * three chances for the header, the sections and the footer to stop lining up
  * with each other — and nothing would have failed. One constant, imported by
- * all three, means the left edge of the wordmark and the left edge of the ODbL
- * notice are the same number by construction. The 128 is eight gutters of
- * `space.lg`, so the widened page is still on the 4-pt scale.
+ * all three, means the left edge of the wordmark and the left edge of the
+ * footer's links are the same number by construction.
+ *
+ * The `+ 128` is gone: `layout.page` *is* 1280 now. The landing page and the
+ * app screens had been built against two different widths, so the site
+ * narrowed by 128 px the moment a reader left the marketing page. This alias
+ * stays because the landing imports it in three places and the name says what
+ * it is for, but it no longer holds a number of its own.
  */
-export const PAGE_MAX = layout.page + space.lg * 8;
+export const PAGE_MAX = layout.page;
 
 /**
  * Vertical air above and below a section.

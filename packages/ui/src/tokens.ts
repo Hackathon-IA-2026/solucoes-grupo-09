@@ -156,7 +156,17 @@ export const motion = {
 } as const;
 
 export const layout = {
-  page: 1152,
+  /**
+   * The content column, and the one every full-width surface uses.
+   *
+   * 1280, not 1152. The landing page and the app screens were built against
+   * two different numbers — the landing capped at `1152 + space.lg * 8` and the
+   * app shell, the legal pages and `/pitch` at 1152 — so the site visibly
+   * narrowed by 128 px the moment a reader left the marketing page. One
+   * constant, because two surfaces of one product have no reason to disagree
+   * about how wide the product is.
+   */
+  page: 1280,
   prose: 680,
   desktop: 1024,
   touch: 44,

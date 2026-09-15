@@ -185,10 +185,11 @@ describe("the pitch copy", () => {
     "embedTitle",
     "fallback",
     "openLabel",
-    // Not rendered by the screen — it is the footer's link to it. In this list
-    // because the assertion below is that the block holds exactly these keys,
-    // which is what catches one added to a single locale.
+    // Not rendered by the screen — these are the two links *to* it. In this
+    // list because the assertion below is that the block holds exactly these
+    // keys, which is what catches one added to a single locale.
     "footerLink",
+    "navLink",
   ] as const;
 
   test("every string the screen renders resolves in both locales", () => {
@@ -220,8 +221,10 @@ describe("the pitch copy", () => {
     */
     const screen = code(SCREEN);
     const footer = code(join(WEB, "src", "components", "site-footer.tsx"));
+    const nav = code(join(WEB, "src", "components", "landing", "landing-nav.tsx"));
     for (const key of KEYS) {
-      const source = key === "footerLink" ? footer : screen;
+      const source =
+        key === "footerLink" ? footer : key === "navLink" ? nav : screen;
       expect([key, source.includes(`copy.pitch.${key}`)]).toEqual([key, true]);
     }
   });

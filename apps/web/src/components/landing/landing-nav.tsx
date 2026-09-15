@@ -11,6 +11,7 @@ import { Platform, Pressable, Text, View } from "react-native";
 import { LanguageSwitch } from "@/components/language-switch";
 import { useCopy, useI18n } from "@/i18n";
 import { localePath } from "@/i18n/locale";
+import { PITCH_PATH } from "@/lib/pitch";
 import { PAGE_MAX, type SectionId } from "./section";
 
 /**
@@ -86,6 +87,13 @@ export function LandingNav({ onNavigate }: { onNavigate: (section: SectionId) =>
               onPress={() => onNavigate(link.target as SectionId)}
             />
           ))}
+          {/*
+            The deck, last in the row because it leaves the page and the four
+            before it do not. `PITCH_PATH` rather than a literal: `/pitch` is
+            outside the locale tree, so a hand-written `/pt/pitch` would 404
+            while still reading correctly here.
+          */}
+          <NavLink label={copy.pitch.navLink} href={PITCH_PATH} />
         </View>
       ) : null}
 
@@ -105,9 +113,24 @@ export function LandingNav({ onNavigate }: { onNavigate: (section: SectionId) =>
  * The crawlable links out of this page are the CTA (`/app`) and the footer's
  * legal links; a fake `href="#forecast"` would add nothing a crawler can use.
  */
-function NavLink({ label, onPress }: { label: string; onPress: () => void }) {
+function NavLink({
+  label,
+  onPress,
+  href,
+}: {
+  label: string;
+  onPress?: () => void;
+  /**
+   * A route, for the one nav item that is one.
+   *
+   * The others are in-page scroll targets and are deliberately buttons — see
+   * above. `/pitch` is a real page, so it gets a real anchor: a crawler can
+   * follow it, and a reader can middle-click it.
+   */
+  href?: string;
+}) {
   const colors = usePalette();
-  return (
+  const pressable = (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
@@ -147,5 +170,12 @@ function NavLink({ label, onPress }: { label: string; onPress: () => void }) {
         );
       }}
     </Pressable>
+  );
+  return href === undefined ? (
+    pressable
+  ) : (
+    <Link href={href as never} asChild={true}>
+      {pressable}
+    </Link>
   );
 }
