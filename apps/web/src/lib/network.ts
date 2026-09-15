@@ -26,11 +26,24 @@
  * shapes and no component takes both — the failure this splits the screen to
  * avoid is an observed total drawn in the place a forecast band was, under the
  * label the forecast band had.
+ *
+ * **The observed side now answers the same questions the forecast side does**,
+ * and that is what the `observed*` functions below are for: which region, how
+ * much across the four, the shape of a day, the day's total, its largest hour,
+ * and how it divided between the two fleets. Every one of them is a reduction
+ * over settled megawatt-hours and none of them is a quantile — which is exactly
+ * why they may be computed here at all. Observations add; quantiles do not, and
+ * `test/no-summed-bands.test.ts` still forbids the second everywhere in this
+ * tree.
+ *
+ * The shapes stay **separate types**, not one type with nullable band fields.
+ * A component that took `Band | null` would have one code path for both claims
+ * and would eventually render an observation under a forecast's label — the
+ * single failure this whole split exists to prevent.
  */
 
 import type {
   Band,
-  CurtailmentHour,
   CurtailmentHours,
   ForecastDayAhead,
   GridOutlook,
@@ -181,9 +194,25 @@ export function observedHours(
   return [...byHour.values()].sort((a, b) => a.validTime.localeCompare(b.validTime));
 }
 
-/** The technologies a settled hour was curtailed across, summed. */
-export function observedTotalMwh(rows: readonly CurtailmentHour[]): number {
-  return rows.reduce((total, row) => total + row.constrainedOffMwh, 0);
+/**
+ * One subsystem on the **observed** map and in the observed rows.
+ *
+ * The sibling of {@link OutlookRow}, and deliberately not the same type: it
+ * carries a settled quantity where that one carries a band and a risk class,
+ * so a component written for one cannot be handed the other by mistake. What
+ * they do share is the shape of the job — four regions, one figure each, in the
+ * product's display order — which is why they are read by two functions with
+ * the same signature rather than by one function with a mode flag.
+ *
+ * `last24hMwh` is `GET /v1/grid/now`'s own `last_24h_constrained_off_mwh`, read
+ * and not derived: the window it covers ends at the latest settled hour, which
+ * the response also publishes, and the screen names it.
+ */
+export interface ObservedRow {
+  readonly subsystem: SubsystemCode;
+  readonly onsDisplayName: string;
+  readonly last24hMwh: number;
+  readonly split: TechnologySplit;
 }
 
 /**
@@ -193,11 +222,88 @@ export function observedTotalMwh(rows: readonly CurtailmentHour[]): number {
  * shows N, NE, SE, S beside the same four names everywhere else. Ordering a
  * response is a rendering decision and this is where it is made.
  */
-export function nowRows(
+export function observedRows(
   subsystems: readonly SubsystemNow[],
   order: readonly SubsystemCode[],
-): SubsystemNow[] {
+): ObservedRow[] {
   return order
     .map((code) => subsystems.find((each) => each.subsystem === code))
-    .filter((each): each is SubsystemNow => each !== undefined);
+    .filter((each): each is SubsystemNow => each !== undefined)
+    .map((each) => ({
+      subsystem: each.subsystem,
+      onsDisplayName: each.onsDisplayName,
+      last24hMwh: each.last24hConstrainedOffMwh,
+      split: each.split,
+    }));
+}
+
+/**
+ * A settled day reduced to the two scalars the forecast half states as bands.
+ *
+ * **This is arithmetic, and it is allowed, and the distinction matters.** The
+ * forecast's day total is a *joint* figure read off the path ensemble precisely
+ * because no quantile adds. A settled day total is a sum of exact measurements
+ * over disjoint hours, which adds exactly — the same addition that lets
+ * `GET /v1/grid/now` publish a national total where `GET /v1/grid/outlook` may
+ * not. So the observed card may compute its number, and the forecast card may
+ * never compute its band.
+ *
+ * `peakHour` is the **largest settled hour, in megawatt-hours**, and is not a
+ * power figure. ONS publishes energy per hour; calling the biggest of them a
+ * peak in MW would be an inference about the shape of generation inside the
+ * hour that nothing here has. The forecast card's "peak hourly power" is a
+ * genuine MW band from the model; its observed counterpart is an energy,
+ * labelled as one, and that is one of the ways the two cards cannot be
+ * confused.
+ *
+ * `peakHour` is `null` for an empty day, never a zero-valued hour: a day with
+ * no settled rows has no largest hour, and zero is a measurement.
+ */
+export interface ObservedDay {
+  readonly totalMwh: number;
+  readonly peakHour: CurtailmentHourObservation | null;
+}
+
+export function observedDay(hours: readonly CurtailmentHourObservation[]): ObservedDay {
+  let peak: CurtailmentHourObservation | null = null;
+  let totalMwh = 0;
+  for (const hour of hours) {
+    totalMwh += hour.constrainedOffMwh;
+    if (peak === null || hour.constrainedOffMwh > peak.constrainedOffMwh) {
+      peak = hour;
+    }
+  }
+  return { totalMwh, peakHour: peak };
+}
+
+/**
+ * The settled civil day divided between the two fleets.
+ *
+ * Read from the same rows {@link observedHours} collapses — the route's grain
+ * is (subsystem, technology, valid_time), so the division is **published**
+ * rather than modelled. That is the whole difference between this and the
+ * forecast split beside it: the forecaster has one head per subsystem and can
+ * only divide an expectation, while ONS settles wind and solar separately and
+ * this is those two settlements.
+ *
+ * The same civil-day cut as {@link observedHours}, for the same reason, and
+ * rows outside the day are dropped by their own `valid_time`.
+ */
+export function observedSplit(
+  hours: CurtailmentHours,
+  civilDate: string,
+): TechnologySplit {
+  let windMwh = 0;
+  let solarMwh = 0;
+  for (const row of hours.rows) {
+    if (civilDayOf(row.validTime) !== civilDate) {
+      continue;
+    }
+    if (row.technology === "SOLAR") {
+      solarMwh += row.constrainedOffMwh;
+    } else {
+      windMwh += row.constrainedOffMwh;
+    }
+  }
+  return { windMwh, solarMwh };
 }

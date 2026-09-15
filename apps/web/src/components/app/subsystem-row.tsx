@@ -23,12 +23,14 @@ import {
   usePalette,
 } from "@wattsteer/ui";
 import { Platform, Pressable, Text, View } from "react-native";
+import { ObservedBadge } from "@/components/app/honesty";
 import { BandStrip } from "@/components/charts/band-figure";
+import { observedFill } from "@/components/charts/observed-scale";
 import { RiskChip } from "@/components/charts/risk-class";
 import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
 import { splitFor, subsystemMeta, type Technology } from "@/lib/fixtures";
-import type { OutlookRow } from "@/lib/network";
+import type { ObservedRow, OutlookRow } from "@/lib/network";
 
 export function SubsystemRow({
   forecast,
@@ -255,6 +257,205 @@ export function SubsystemRow({
           >
             {`P90 ${f.compact(forecast.dailyEnergy.p90)}`}
           </Text>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+/**
+ * One subsystem's **settled** figures, beside the observed map.
+ *
+ * The sibling of {@link SubsystemRow}, and the reason it is a sibling rather
+ * than a mode of it: every line in that row is a forecast — a risk chip, an
+ * expectation, a P10–P90 strip, a peak band — and this row has none of those
+ * quantities to put in those places. A single component with four nullable
+ * fields would render this row as that row with holes in it, which is the exact
+ * shape of the mistake the whole split exists to prevent. Two components cannot
+ * be wired to the wrong data: `ObservedRow` has no `dailyEnergy` to pass.
+ *
+ * What it keeps from its sibling is everything that is about *selecting* rather
+ * than about forecasting: the accent border on the selected row, the
+ * `Selecionado` badge, the hover that the map lights from the other end, and
+ * the named Explain control on the selected row only. The affordance is the
+ * screen's, not the forecast's, and losing it when no model is promoted is how
+ * this screen came to have less to click on in the state it is actually in.
+ *
+ * **The bar is a share, not a band.** One track, filled to this region's share
+ * of the largest of the four, in the observed cyan and at the same value the
+ * map paints that region with — so the row and the region read as one figure
+ * seen twice. It is deliberately a *solid* bar: `BandStrip` draws an interval
+ * with a median marked inside it, and there is no interval here.
+ */
+export function ObservedSubsystemRow({
+  observed,
+  domainMax,
+  selected,
+  highlighted = false,
+  onPress,
+  onExplain,
+  onHoverChange,
+}: {
+  observed: ObservedRow;
+  /** The largest of the four, so the bars share one scale. */
+  domainMax: number;
+  selected: boolean;
+  highlighted?: boolean;
+  onPress: () => void;
+  /**
+   * Open Explain for this subsystem. Optional, and absent in the state where a
+   * forecast row is already on the screen carrying one: two Explain controls
+   * for the same region, in two lists, would be one too many.
+   */
+  onExplain?: () => void;
+  onHoverChange?: (hovered: boolean) => void;
+}) {
+  const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
+  const meta = subsystemMeta(observed.subsystem);
+  const share = domainMax <= 0 ? 0 : Math.min(1, observed.last24hMwh / domainMax);
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={fill(copy.app.overview.rowFigure, {
+        subsystem: meta.onsDisplayName,
+      })}
+      onPress={onPress}
+      onHoverIn={() => onHoverChange?.(true)}
+      onHoverOut={() => onHoverChange?.(false)}
+      style={(state) => {
+        const { focused = false, hovered: selfHovered = false } = state as {
+          focused?: boolean;
+          hovered?: boolean;
+        };
+        const hovered = selfHovered || highlighted;
+        return {
+          borderRadius: radius.lg,
+          borderCurve: "continuous",
+          borderWidth: 1,
+          borderColor: selected
+            ? colors.accent
+            : hovered
+              ? colors.borderStrong
+              : colors.border,
+          backgroundColor: hovered ? colors.surfaceSunken : colors.surface,
+          padding: 16,
+          gap: space.sm,
+          ...focusRing(focused, colors.focus),
+          ...(Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null),
+        };
+      }}
+    >
+      <View
+        style={{
+          flexDirection: "row",
+          flexWrap: "wrap",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: space.md,
+        }}
+      >
+        <View style={{ flexShrink: 1 }}>
+          <Text style={{ fontSize: 16, fontWeight: "700", color: colors.ink }}>
+            {observed.onsDisplayName}
+          </Text>
+          <Text style={{ fontSize: 11, color: colors.inkFaint }}>
+            {fill(copy.app.overview.settledSplit, {
+              wind: f.compact(observed.split.windMwh),
+              solar: f.compact(observed.split.solarMwh),
+            })}
+          </Text>
+          {selected ? (
+            <View style={{ marginTop: 6, alignSelf: "flex-start" }}>
+              <Badge label={copy.app.overview.selectedBadge} tone="accent" />
+            </View>
+          ) : null}
+        </View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <ObservedBadge />
+          {selected && onExplain !== undefined ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={fill(copy.app.overview.rowExplainLabel, {
+                subsystem: meta.onsDisplayName,
+              })}
+              onPress={(event) => {
+                // The row underneath handles a press too — without this, one tap
+                // both navigates and re-selects on the way out.
+                (
+                  event as unknown as { stopPropagation?: () => void }
+                ).stopPropagation?.();
+                onExplain();
+              }}
+              hitSlop={8}
+              style={(state) => {
+                const { focused = false, hovered = false } = state as {
+                  focused?: boolean;
+                  hovered?: boolean;
+                };
+                return {
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 4,
+                  borderRadius: radius.pill,
+                  borderWidth: 1,
+                  borderColor: colors.accent,
+                  backgroundColor: hovered ? colors.accentSoft : "transparent",
+                  paddingHorizontal: 10,
+                  paddingVertical: 4,
+                  ...focusRing(focused, colors.focus),
+                  ...(Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null),
+                };
+              }}
+            >
+              <Text
+                style={{ fontSize: 12, fontWeight: "600", color: colors.onAccentSoft }}
+              >
+                {copy.app.overview.rowExplain}
+              </Text>
+              <ArrowRightIcon size={14} color={colors.onAccentSoft} />
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+
+      <View style={{ gap: 6 }}>
+        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+          <Text style={{ fontSize: 11, color: colors.inkFaint }}>
+            {copy.app.observed.rowEnergy}
+          </Text>
+          <Text
+            style={{
+              fontSize: 13,
+              fontWeight: "700",
+              fontVariant: ["tabular-nums"],
+              color: colors.ink,
+            }}
+          >
+            {`${f.compact(observed.last24hMwh)} MWh`}
+          </Text>
+        </View>
+        <View
+          style={{
+            height: 8,
+            borderRadius: 4,
+            backgroundColor: colors.surfaceSunken,
+            overflow: "hidden",
+          }}
+        >
+          <View
+            style={{
+              height: "100%",
+              // `Math.max` so a region that settled small is still a visible
+              // sliver rather than nothing at all: an empty track would read as
+              // "no data", and this is data saying "almost none".
+              width: `${Math.max(share * 100, share > 0 ? 1.5 : 0)}%`,
+              borderRadius: 4,
+              backgroundColor: observedFill(share, colors),
+            }}
+          />
         </View>
       </View>
     </Pressable>

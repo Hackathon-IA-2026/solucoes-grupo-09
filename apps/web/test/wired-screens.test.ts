@@ -169,13 +169,14 @@ describe("a refused forecast renders no forecast", () => {
     expect(OVERVIEW_FLAT).toContain(
       'const forecast = state.status === "read" ? state.forecast : null;',
     );
-    // The branch now has a sibling: `SelectedRegion` renders on the `null`
-    // side, because a reader still picks a subsystem when nothing is promoted
-    // and still has to see which one. It takes `row={null}` there — a prop
-    // that cannot carry a band — so the property this guard is about is
-    // unchanged: no forecast figure exists outside `ForecastPanels`.
+    // The `null` side is a whole stack of its own now — the observed map, the
+    // observed rows, the settled day, the settled split and the two settled
+    // figures — rather than one strip saying the forecast is missing. The
+    // property this guard is about is unchanged, and is asserted twice below:
+    // the two stacks are exclusive, and nothing that states a forecast exists
+    // inside the observed one.
     expect(OVERVIEW_FLAT).toContain(
-      "{forecast === null ? ( <SelectedRegion subsystem={params.subsystem} row={null} onExplain={() => explain(params.subsystem)} /> ) : ( <ForecastPanels forecast={forecast} onSelect={select} onExplain={explain} /> )}",
+      "{forecast === null ? ( <ObservedPanels observed={observed} subsystem={params.subsystem} onSelect={select} onExplain={explain} /> ) : ( <> <ForecastPanels forecast={forecast} onSelect={select} onExplain={explain} /> <SettledPanels observed={observed} subsystem={params.subsystem} onSelect={select} /> </> )}",
     );
     for (const panel of ["<SubsystemMap", "<FanChart", "<BandCard", "<SubsystemRow"]) {
       const inPanels =
@@ -183,6 +184,69 @@ describe("a refused forecast renders no forecast", () => {
       expect({ panel, inForecastPanels: inPanels }).toEqual({
         panel,
         inForecastPanels: true,
+      });
+    }
+  });
+
+  /**
+   * The observed stack states no forecast, by construction.
+   *
+   * The screen now draws a full set of panels when nothing is promoted — a map,
+   * four rows, a 24-hour profile, a split and two day figures — and every one
+   * of them sits where a forecast panel sits in the other state. The failure
+   * that buys is obvious and severe: a settled number under a forecast's label.
+   *
+   * So the guard is over the *source range* of `ObservedPanels`. Nothing that
+   * can express a forecast may appear inside it: not the forecast components,
+   * not the risk vocabulary, and not a quantile member — a band read is the
+   * single clearest marker of model output, and there is no legitimate reason
+   * for one to be in this function at all.
+   *
+   * Non-vacuity: rendering `<BandCard` or reading `.p50` anywhere inside
+   * `ObservedPanels` fails this, and each was reintroduced once to check it.
+   */
+  it("the observed stack cannot state a forecast", () => {
+    const from = OVERVIEW.indexOf("function ObservedPanels");
+    const to = OVERVIEW.indexOf("function SettledPanels");
+    expect({ from: from > 0, ordered: to > from }).toEqual({
+      from: true,
+      ordered: true,
+    });
+    // Flattened, so the assertions survive the formatter wrapping a JSX line.
+    const observedStack = OVERVIEW.slice(from, to).replace(/\s+/g, " ");
+    for (const forecastOnly of [
+      "<FanChart",
+      "<BandCard",
+      "<BandStrip",
+      "<SubsystemRow",
+      "<RiskChip",
+      "<TechnologySplitPanel",
+      "<ForecastStamp",
+      "riskColor",
+      "RiskCaveat",
+      ".p10",
+      ".p50",
+      ".p90",
+      "forecast",
+    ]) {
+      expect({ forecastOnly, present: observedStack.includes(forecastOnly) }).toEqual({
+        forecastOnly,
+        present: false,
+      });
+    }
+    // And it is not empty of the observed vocabulary, or the loop above would
+    // pass against a function that renders nothing at all.
+    for (const observedOnly of [
+      '<SubsystemMap paint={{ kind: "observed", rows }}',
+      "<ObservedSubsystemRow",
+      "<ObservedCard",
+      "<ObservedSplitPanel",
+      "<ObservedBadge />",
+      "<SettledDayPanel",
+    ]) {
+      expect({ observedOnly, present: observedStack.includes(observedOnly) }).toEqual({
+        observedOnly,
+        present: true,
       });
     }
   });

@@ -28,6 +28,7 @@
 
 import { space, usePalette } from "@wattsteer/ui";
 import { Text, View } from "react-native";
+import { ObservedBadge } from "@/components/app/honesty";
 import { useCopy, useFormat } from "@/i18n";
 import type { Technology, TechnologySplit } from "@/lib/fixtures";
 import { splitFor } from "@/lib/fixtures";
@@ -146,6 +147,147 @@ export function TechnologySplitPanel({
 
       <Text style={{ fontSize: 11, color: colors.inkFaint, lineHeight: 17 }}>
         {copy.app.split.note}
+      </Text>
+    </View>
+  );
+}
+
+/**
+ * The same two fleets, **settled** — the observed counterpart of
+ * {@link TechnologySplitPanel}.
+ *
+ * The difference between the two panels is not cosmetic and the copy says so.
+ * The forecast split is a *division of one modelled expectation*: the
+ * forecaster has a single head per subsystem, so wind and solar there are two
+ * slices of one number it produced, and neither has a distribution of its own.
+ * This split is **two separate settlements**: `GET /v1/curtailment/hours`
+ * publishes at (subsystem, technology, valid_time) grain, so ONS measured the
+ * fleets apart and the total is their sum rather than their source.
+ *
+ * That makes this the one panel on the observed half that is *stronger* than
+ * its forecast counterpart, and it is worth a reader knowing which of the two
+ * they are looking at for that reason alone — quite apart from the fact that
+ * one is about a day that happened and the other about a day that has not.
+ */
+export function ObservedSplitPanel({
+  split,
+  emphasis,
+  window: windowLabel,
+}: {
+  split: TechnologySplit;
+  /** Which scalar the URL's technology selection is asking about. */
+  emphasis: Technology;
+  /** The settled day these two numbers cover. */
+  window: string;
+}) {
+  const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
+  const settled = split.windMwh + split.solarMwh;
+  const total = Math.max(settled, 1e-9);
+
+  return (
+    <View style={{ gap: space.md }}>
+      <View style={{ gap: 4 }}>
+        <View
+          style={{
+            flexDirection: "row",
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: space.sm,
+          }}
+        >
+          <Text style={{ fontSize: 13, fontWeight: "500", color: colors.inkMuted }}>
+            {copy.app.observed.splitTotal}
+          </Text>
+          <ObservedBadge />
+        </View>
+        <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6 }}>
+          <Text
+            selectable={true}
+            style={{
+              fontSize: 40,
+              lineHeight: 44,
+              fontWeight: "600",
+              letterSpacing: -0.8,
+              fontVariant: ["tabular-nums"],
+              color: colors.ink,
+            }}
+          >
+            {f.compact(settled)}
+          </Text>
+          <Text style={{ fontSize: 14, fontWeight: "500", color: colors.inkMuted }}>
+            MWh
+          </Text>
+        </View>
+        <Text style={{ fontSize: 11, color: colors.info, fontVariant: ["tabular-nums"] }}>
+          {windowLabel}
+        </Text>
+      </View>
+
+      <View style={{ gap: space.sm }}>
+        {ORDER.map((technology) => {
+          const value = splitFor(split, technology);
+          const emphasised = technology === emphasis;
+          const tone = technology === "WIND" ? colors.accent : colors.violet;
+          return (
+            <View key={technology} style={{ gap: 5 }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: space.sm,
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontWeight: emphasised ? "700" : "500",
+                    color: emphasised ? colors.ink : colors.inkMuted,
+                  }}
+                >
+                  {emphasised
+                    ? `${copy.app.technology[technology]} · ${copy.app.split.emphasised}`
+                    : copy.app.technology[technology]}
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontWeight: emphasised ? "700" : "500",
+                    fontVariant: ["tabular-nums"],
+                    color: emphasised ? colors.ink : colors.inkMuted,
+                  }}
+                >
+                  {`${f.compact(value)} MWh · ${f.percent(value / total)}`}
+                </Text>
+              </View>
+              <View
+                style={{
+                  height: 8,
+                  borderRadius: 4,
+                  backgroundColor: colors.surfaceSunken,
+                  overflow: "hidden",
+                }}
+              >
+                <View
+                  style={{
+                    height: "100%",
+                    width: `${Math.min(100, (value / total) * 100)}%`,
+                    borderRadius: 4,
+                    backgroundColor: tone,
+                    opacity: emphasised ? 0.85 : 0.28,
+                  }}
+                />
+              </View>
+            </View>
+          );
+        })}
+      </View>
+
+      <Text style={{ fontSize: 11, color: colors.inkFaint, lineHeight: 17 }}>
+        {copy.app.observed.splitNote}
       </Text>
     </View>
   );

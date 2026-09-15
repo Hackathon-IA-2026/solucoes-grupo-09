@@ -62,12 +62,13 @@ import type {
   GateProfile,
   GridNow,
   GridOutlook,
+  TechnologySplit,
 } from "@wattsteer/core/api";
 import { useEffect, useState } from "react";
 import { refusalOf } from "@/lib/absence";
 import { api } from "@/lib/api";
 import type { CurtailmentHourObservation } from "@/lib/fixtures";
-import { observedHours } from "@/lib/network";
+import { observedHours, observedSplit } from "@/lib/network";
 
 /** The settled grid — every part of it available with nothing promoted. */
 export interface ObservedNetwork {
@@ -76,6 +77,17 @@ export interface ObservedNetwork {
   readonly hours: CurtailmentHourObservation[];
   /** The local day `hours` covers — the most recent one that has settled. */
   readonly hoursDate: string;
+  /**
+   * That day's settled wind and solar, as ONS published them.
+   *
+   * Kept here rather than derived in the screen because `hours` has already had
+   * its technology dimension collapsed by `observedHours` — the profile draws
+   * one line — and re-requesting the route to get it back would be a second
+   * read of the same bytes. It is the observed counterpart of the forecast's
+   * split, and the difference between them is the point: this one is two
+   * settlements, that one is a division of a single modelled expectation.
+   */
+  readonly daySplit: TechnologySplit;
   readonly episodes: CurtailmentEpisodes;
 }
 
@@ -170,6 +182,7 @@ export function useNetwork(query: NetworkQuery): NetworkState {
         now,
         hours: observedHours(hours, settled),
         hoursDate: settled,
+        daySplit: observedSplit(hours, settled),
         episodes,
       }),
     );

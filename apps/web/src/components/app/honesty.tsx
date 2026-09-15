@@ -203,3 +203,61 @@ export function SolveStamp({
     </View>
   );
 }
+
+/**
+ * The mark that says a figure is **settled**, not forecast.
+ *
+ * The counterpart of {@link ForecastStamp} and, deliberately, the same kind of
+ * obligation: every surface showing a forecast must name its origin, and — now
+ * that the Overview draws a full set of observed panels in the place the
+ * forecast ones occupy when a model is promoted — every surface showing an
+ * observation must say that it is one. The two are never both on one panel.
+ *
+ * `info` tone, which is the cyan the observed map's ramp is drawn in and which
+ * nothing else on these screens uses. The badge and the map are then one
+ * statement rather than two: cyan means measured.
+ */
+export function ObservedBadge() {
+  const copy = useCopy();
+  return <Badge label={copy.app.observed.badge} tone="info" />;
+}
+
+/**
+ * The screen-level counterpart of {@link ForecastStamp}: what the observed
+ * panels are reading, and how far behind it is.
+ *
+ * It occupies the same slot in the screen header the forecast stamp does, so
+ * the first thing a reader meets is a line naming which of the two claims the
+ * screen is making — before any number is reached. Same instant, same BRT
+ * clock, same typography; the difference is the claim, which is the only
+ * difference there should be.
+ */
+export function ObservedStamp({
+  latestSettledHour,
+  lagHours,
+}: {
+  latestSettledHour: string;
+  lagHours: number;
+}) {
+  const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: 8,
+      }}
+    >
+      <ClockIcon size={13} color={colors.inkFaint} />
+      <Text style={{ fontSize: 11, color: colors.inkFaint }}>
+        {fill(copy.app.observed.stamp, {
+          when: f.dateTime(latestSettledHour),
+          lag: f.number(lagHours),
+        })}
+      </Text>
+    </View>
+  );
+}

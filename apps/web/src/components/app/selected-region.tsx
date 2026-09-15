@@ -19,11 +19,22 @@
  * no motion, and leaves the reader's next click exactly where their last one
  * was.
  *
- * **It carries the refusal too.** With no artifact promoted the four forecast
- * panels are absent, and a reader who picks a region then has nothing at all to
- * confirm the pick. `row` is nullable for that: the strip still names the
- * region and still offers Explain, and says why there are no numbers instead of
- * showing none.
+ * **It carries the refusal too, and no longer carries it alone.** With no
+ * artifact promoted there is no forecast row for this region — `row` is
+ * nullable for exactly that — but there *is* a settled figure, and a strip that
+ * said only "no numbers" while the same number sat in a panel below it was
+ * telling a reader less than the screen knew. So the two are separate props and
+ * the strip states whichever it has:
+ *
+ *  - `row` present → the forecast: a risk chip, the expectation, the interval.
+ *  - `row` null, `observed` present → the settlement: the badge, the figure,
+ *    the window it covers, and the sentence saying the forecast is the thing
+ *    that is missing.
+ *
+ * **Never both.** They are claims about two different days and a strip carrying
+ * both would be inviting the arithmetic nobody should do. In the state where a
+ * forecast exists the settled figures are a panel of their own, further down,
+ * under their own heading.
  */
 
 import {
@@ -35,20 +46,30 @@ import {
   usePalette,
 } from "@wattsteer/ui";
 import { Text, View } from "react-native";
+import { ObservedBadge } from "@/components/app/honesty";
 import { RiskChip } from "@/components/charts/risk-class";
 import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
 import { type SubsystemCode, subsystemMeta } from "@/lib/fixtures";
-import type { OutlookRow } from "@/lib/network";
+import type { ObservedRow, OutlookRow } from "@/lib/network";
 
 export function SelectedRegion({
   subsystem,
   row,
+  observed = null,
+  observedWindow,
   onExplain,
 }: {
   subsystem: SubsystemCode;
   /** The selected subsystem's forecast row, or `null` when none was published. */
   row: OutlookRow | null;
+  /**
+   * The selected subsystem's settled row. Read only when `row` is `null` — see
+   * this file's header on why the strip never states both.
+   */
+  observed?: ObservedRow | null;
+  /** The window `observed` covers, named. Required whenever `observed` is. */
+  observedWindow?: string;
   onExplain: () => void;
 }) {
   const colors = usePalette();
@@ -107,7 +128,13 @@ export function SelectedRegion({
             >
               {meta.onsDisplayName}
             </Text>
-            {row === null ? null : <RiskChip probability={row.occurrenceProbability} />}
+            {row === null ? (
+              observed === null ? null : (
+                <ObservedBadge />
+              )
+            ) : (
+              <RiskChip probability={row.occurrenceProbability} />
+            )}
           </View>
         </View>
 
@@ -130,9 +157,38 @@ export function SelectedRegion({
       </View>
 
       {row === null ? (
-        <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkMuted }}>
-          {copy.app.overview.selectedAbsent}
-        </Text>
+        <>
+          {observed === null ? null : (
+            <>
+              <Text
+                style={{
+                  fontSize: 13,
+                  fontWeight: "600",
+                  fontVariant: ["tabular-nums"],
+                  color: colors.ink,
+                }}
+              >
+                {fill(copy.app.observed.selectedFigure, {
+                  mwh: f.compact(observed.last24hMwh),
+                  wind: f.compact(observed.split.windMwh),
+                  solar: f.compact(observed.split.solarMwh),
+                })}
+              </Text>
+              <Text
+                style={{
+                  fontSize: 11,
+                  color: colors.info,
+                  fontVariant: ["tabular-nums"],
+                }}
+              >
+                {observedWindow}
+              </Text>
+            </>
+          )}
+          <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkMuted }}>
+            {copy.app.overview.selectedAbsent}
+          </Text>
+        </>
       ) : (
         <>
           <Text

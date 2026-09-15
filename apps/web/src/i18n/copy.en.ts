@@ -927,6 +927,47 @@ export const en = {
       note: "Dots below the dashed identity line are over-confident: fewer hours cleared the threshold than the forecast probability for that bin promised. Dot area is the number of hours in the bin.",
     },
 
+    /**
+     * The **settled** vocabulary, and the reason it is a block of its own.
+     *
+     * The Overview answers the same six questions in two states — a promoted
+     * model, and none — and the strings for the second state are not variants
+     * of the strings for the first. They name a different day, a different
+     * quantity and a different kind of claim, and every one of them says so in
+     * words rather than leaving it to a colour: "settled", "observed", the
+     * window, the date. A reader who sees only one of the two states must still
+     * be able to tell which one it is, and a screen reader user gets nothing
+     * from the cyan.
+     *
+     * Nothing in here may promise an interval. There is no P10–P90 over a
+     * measurement, and where the forecast copy names one, the observed copy
+     * says why there is none.
+     */
+    observed: {
+      badge: "Observed",
+      stamp: "Observed · settled through {when} BRT · {lag} h behind",
+      window24h: "Last 24 h to {hour} BRT",
+      windowDay: "Settled day, {date}",
+      rowEnergy: "Curtailed energy, last 24 h",
+      selectedFigure: "{mwh} MWh settled · wind {wind} · solar {solar}",
+      noFan:
+        "There is no P10–P90 ribbon over these bars and there cannot be: a ribbon is a model's output and these hours are settled. What is drawn is what happened, to the megawatt-hour.",
+      dayTotal: "Settled curtailed energy, whole day · {subsystem}",
+      dayTotalNote:
+        "The settled hours of the day, added. Observations add exactly — the same addition that lets a national total exist at all — so this figure may be computed here, where a forecast band never could be.",
+      peakHour: "Largest settled hour · {subsystem}",
+      peakHourWindow: "{hour}h BRT on {date}",
+      peakHourNote:
+        "An energy in MWh, not a power in MW: ONS publishes energy per hour, and the peak-power band a forecast states is a model's claim about the shape inside that hour. There is no such model today, so no such figure is shown.",
+      splitTitle: "Wind and solar",
+      splitSubtitle: "{subsystem} · settled, two measurements",
+      splitTotal: "Settled curtailed energy, whole day",
+      splitNote:
+        "ONS settles the two fleets separately — the published grain is subsystem, technology and hour — so these are two measurements and the total is their sum. The forecast version of this panel is the opposite: one modelled expectation, divided in two.",
+      emptyDay:
+        "The day settled with no curtailment at all in this subsystem, which is a measurement and not a missing figure.",
+    },
+
     overview: {
       metaTitle: "Grid Overview — WattSteer",
       title: "Grid Overview",
@@ -937,6 +978,8 @@ export const en = {
         gesture, two plausible meanings, and it silently did the one that takes
         the reader off the screen.
       */
+      ledeObserved:
+        "What the grid has already settled, by subsystem. Every figure here is measured; none is a forecast, because no model is promoted.",
       rowFigure: "{subsystem}: select",
       rowExplain: "Explain",
       rowExplainLabel: "Explain {subsystem}",
@@ -973,7 +1016,7 @@ export const en = {
        */
       absentTitle: "No forecast for this day",
       absentNote:
-        "The map, the risk classes, the 24-hour band and the two day totals are all model output, and there is none — so they are absent rather than empty. What follows is observed: megawatt-hours ONS has already settled, which no model was involved in and which are therefore unaffected.",
+        "The risk classes, the P10–P90 bands and the forecast day totals are model output, and there is none — so they are not shown. In their place every panel answers what the settled data can answer with no model at all: megawatt-hours ONS has already published, marked as observed wherever they appear.",
       settledTitle: "Settled across the four subsystems",
       settledSubtitle: "Last 24 h to {hour} BRT · {lag} h behind",
       settledSplit: "wind {wind} MWh · solar {solar} MWh",
@@ -1023,6 +1066,13 @@ export const en = {
          * licence notice — so the line names the publisher and the year of the
          * mesh, which is also what makes the map checkable against a newer one.
          */
+        /** The observed map's own four strings. See `app.observed`. */
+        titleObserved: "The four subsystems",
+        subtitleObserved: "Settled curtailed energy, last 24 h",
+        figureObserved:
+          "Map of Brazil divided into the four ONS subsystems, each shaded by the curtailed energy ONS has already settled for it over the last 24 hours, and with that figure printed on the region. The four regions are also listed as rows beside it.",
+        regionObserved: "{subsystem}: {mwh} MWh settled in the last 24 hours. Select.",
+        legendLow: "Less",
         source: "Boundaries: IBGE, Malhas Territoriais (open government data).",
       },
     },
