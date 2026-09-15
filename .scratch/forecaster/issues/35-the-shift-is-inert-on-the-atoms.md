@@ -301,7 +301,7 @@ not need a row.
 
 ---
 
-**Status:** decided and implemented. The spec box was stale — it was
+**Status:** done for everything but the artifact box. The spec box was stale — it was
 updated by this ticket's own merge. One box remains: no artifact minted.
 
 - [x] The mechanism is confirmed by moving `δ_lo` through `compose` and

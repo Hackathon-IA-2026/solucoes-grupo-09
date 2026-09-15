@@ -3,7 +3,7 @@
 **What to build:** the decision forecaster 33, 34, 36, 37, 38 and 40 each
 measured and each correctly declined to take.
 
-**Status:** decided and implemented. The rail is `p50_unbiasedness_in_band`,
+**Status:** done — decided and implemented. The rail is `p50_unbiasedness_in_band`,
 counted over the rows whose P50 is above `τ`.
 
 ## The decision, and why it is not "move the floor"

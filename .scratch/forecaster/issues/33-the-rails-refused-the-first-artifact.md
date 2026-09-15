@@ -410,7 +410,7 @@ computed and not yet published per cell.
 
 ---
 
-**Status:** decided, and **closed by forecaster 41** — the lower rail by
+**Status:** done — **closed by forecaster 41** — the lower rail by
 forecaster 34, the median rail by 41. Neither threshold moved; both populations
 did.
 

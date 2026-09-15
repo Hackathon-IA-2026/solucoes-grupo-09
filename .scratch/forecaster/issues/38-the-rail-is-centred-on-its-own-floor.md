@@ -357,8 +357,8 @@ effective sample does not buy a promotion — it makes the veto certain. The two
 things that would are a decision about the rail's population and a decision
 about its window, and both are the user's; the evidence for either is above.
 
-**Status:** measured across three folds in both lanes, and **acted on in
-forecaster 41** — the population was the defect, not the window. The open box
+**Status:** done — measured across three folds in both lanes, and **acted on
+in forecaster 41** — the population was the defect, not the window. The open box
 below is closed there.
 
 - [x] **Which of the two readings is true — neither, decided on evidence.**
