@@ -77,7 +77,16 @@ alone — which is a real property and a smaller claim.
 
 **Blocked by:** None. Every piece named above is merged.
 
-**Status:** landed (first half; the three card fields are not this ticket)
+**Status:** done. The first half landed here; **the second half landed in
+forecaster 31**, which is closed. This status was written before 31 existed and
+then never revisited, so it has been reading as open work for a scope split that
+completed.
+
+Verified rather than taken from 31's own status line: `driver_group_version`
+and `driver_group_hash` are produced by `DriverGroupMap.card_fields()` and by
+nothing else, and `headline_feature_check` is built in `driver_groups.py` from
+the fitted model. All three reach the card through
+`diagnosis/attribution.py`.
 
 - [x] `HurdleBundle` carries a `MatchedBackground`, required and undefaulted, so
       a bundle written before this ticket does not load
@@ -195,8 +204,8 @@ same empty argument to the same function and get opposite outcomes.
 
 ### What is left open, and why
 
-- **The three card fields** — `driver_group_version`, `driver_group_hash`,
-  `headline_feature_check` — are the second half and were scoped out.
+- ~~**The three card fields**~~ — `driver_group_version`, `driver_group_hash`,
+  `headline_feature_check`. Scoped out here and **delivered by forecaster 31**.
 - **The `null_headline_feature` gap is unchanged and now reaches the artifact.**
   Three of the eight real headline features are in the weather block, which goes
   NULL as a unit, and the frozen sample is drawn from a real base-fit window —
