@@ -27,7 +27,6 @@
  */
 
 import {
-  focusRing,
   motion,
   space,
   useContainerWidth,
@@ -35,6 +34,7 @@ import {
   useReducedMotion,
   webTransition,
 } from "@wattsteer/ui";
+import { useState } from "react";
 import { Platform, Text, View } from "react-native";
 import Svg, { G, Path, Rect, Text as SvgText } from "react-native-svg";
 import { riskColor } from "@/components/charts/risk-class";
@@ -130,6 +130,15 @@ export function SubsystemMap({
   const [containerWidth, onLayout] = useContainerWidth();
   const setActive = (code: SubsystemCode | null) => onHoverChange?.(code);
   const active = hovered;
+  /**
+   * The region the **keyboard** is on, separate from the one the pointer is on.
+   *
+   * They used to be one value, and the focus ring was drawn off it — so hovering
+   * with a mouse painted a focus indicator, which is not what a focus indicator
+   * is for. Keyboard focus needs a visible marker and a pointer does not; the
+   * pointer already has the fill lift and its own cursor.
+   */
+  const [focusedCode, setFocusedCode] = useState<SubsystemCode | null>(null);
 
   const width = Math.min(containerWidth > 0 ? containerWidth : MAX_WIDTH, MAX_WIDTH);
   const height = (width * BRAZIL_VIEWBOX.height) / BRAZIL_VIEWBOX.width;
@@ -190,6 +199,7 @@ export function SubsystemMap({
             the colour change, which it does suppress.
           */
           const raised = isActive || isSelected;
+          const isFocused = code === focusedCode;
           const handlers =
             Platform.OS === "web"
               ? ({
@@ -221,11 +231,31 @@ export function SubsystemMap({
                   },
                   onMouseEnter: () => setActive(code),
                   onMouseLeave: () => setActive(null),
-                  onFocus: () => setActive(code),
-                  onBlur: () => setActive(null),
+                  onFocus: () => {
+                    setFocusedCode(code);
+                    setActive(code);
+                  },
+                  onBlur: () => {
+                    setFocusedCode(null);
+                    setActive(null);
+                  },
                   style: {
                     cursor: "pointer",
-                    ...focusRing(isActive, colors.focus, 0),
+                    // **No `focusRing` here, and that is a bug this shipped
+                    // with.** `focusRing` sets a CSS `outline`, and a CSS
+                    // outline on an SVG element is drawn around its *bounding
+                    // box* — so focusing SE/CO painted a rectangle spanning
+                    // half the country, corner to corner, instead of tracing
+                    // the region. It was also keyed on `isActive`, which is
+                    // hover as well as focus, so a mouse produced it too.
+                    //
+                    // The indicator is the path's own `stroke` instead: it
+                    // follows the geometry, it is the same move selection
+                    // already makes, and there is nothing rectangular about it.
+                    // `outlineStyle: "none"` is explicit because the browser
+                    // draws its own ring on a focusable element otherwise, and
+                    // that ring is the same bounding box.
+                    outlineStyle: "none",
                     ...(reduced ? {} : webTransition("fill-opacity", motion.fast)),
                   },
                 } as object)
@@ -241,8 +271,11 @@ export function SubsystemMap({
                 d={SUBSYSTEM_PATH[code]}
                 fill={tone.fg}
                 fillOpacity={raised ? 0.72 : 0.5}
-                stroke={isSelected ? colors.accent : tone.fg}
-                strokeWidth={isSelected ? 3.5 : 1.5}
+                // Focus outranks selection, because a keyboard user moving
+                // across the map has to be able to see where they are even
+                // while the selected region stays selected behind them.
+                stroke={isFocused ? colors.focus : isSelected ? colors.accent : tone.fg}
+                strokeWidth={isFocused || isSelected ? 3.5 : 1.5}
                 strokeLinejoin="round"
                 {...handlers}
               />

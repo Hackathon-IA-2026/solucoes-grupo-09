@@ -182,6 +182,20 @@ class LaneOutcome:
         return self.status == "promoted"
 
     @property
+    def already_decided(self) -> bool:
+        """Whether this lane was skipped because the run was already decided.
+
+        A ``no_candidate`` that appended nothing **because there was nothing new
+        to append**, as against one that produced no artifact to decide about.
+        Both leave the log untouched; only this one means the run succeeded.
+        :func:`wattsteer_ml.retrain.main` reads it for the exit code — forecaster
+        44 — and it is a property of the outcome rather than a match on its
+        prose, because an exit code that branches on a sentence breaks the first
+        time somebody rewords it.
+        """
+        return self.no_candidate is not None and self.no_candidate.already_decided
+
+    @property
     def artifact_id(self) -> str | None:
         """The artifact this lane may serve after its turn, if it promoted one.
 

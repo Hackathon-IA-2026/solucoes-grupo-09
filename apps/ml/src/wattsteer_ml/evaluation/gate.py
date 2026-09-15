@@ -1252,6 +1252,38 @@ class NoCandidate:
     lane: Lane
     reason: str
     at: datetime
+    #: Whether this lane had **already decided this run** and was skipped, as
+    #: opposed to having produced nothing to decide about. Both append nothing,
+    #: which is why they share a class; they are opposite outcomes all the same.
+    #: A run whose every lane was already decided is an idempotent no-op and the
+    #: process must exit **zero** — forecaster 44, where it exited 1 and the
+    #: modelling service turned a correct no-op into `RETRAIN_FAILED`, HTTP 500
+    #: and three queue retries. A flag rather than a prose match on `reason`,
+    #: because an exit code branching on a sentence is a defect waiting for a
+    #: reword.
+    already_decided: bool = False
+
+    @classmethod
+    def from_decided_run(
+        cls, *, lane: Lane, run_id: str, recorded: str, at: datetime
+    ) -> NoCandidate:
+        """This lane already carries a decision line for ``run_id``.
+
+        A redelivery, a backoff retry, or an operator's catch-up that resolved
+        to a run this lane has finished. Nothing is retrained and nothing is
+        appended: the line and the card from the first pass are the run's
+        record, and writing a second pair would make "exactly one line per run"
+        false the first time a queue redelivers.
+        """
+        return cls(
+            lane=lane,
+            reason=(
+                f"{run_id} already carries a {recorded!r} line for this lane; "
+                "this run has been decided and a retry appends nothing"
+            ),
+            at=at,
+            already_decided=True,
+        )
 
     @classmethod
     def from_training_failure(
@@ -1271,6 +1303,7 @@ class NoCandidate:
             "reason": self.reason,
             "at": format_instant(self.at),
             "appended_to_promotion_log": False,
+            "already_decided": self.already_decided,
         }
 
 

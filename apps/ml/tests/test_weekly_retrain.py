@@ -38,6 +38,8 @@ from wattsteer_ml.evaluation.matrix import MATRIX_RUN_BY_NAME
 from wattsteer_ml.evaluation.serving_lanes import EARLY_LANE, LATE_LANE, SERVING_LANES
 from wattsteer_ml.lanes import Lane, is_artifact_id
 from wattsteer_ml.promotions import PROMOTION_LOG_FILENAME, PromotionRecord, append
+from wattsteer_ml.evaluation.gate import NoCandidate
+from wattsteer_ml.evaluation.serving_lanes import LaneOutcome
 from wattsteer_ml.retrain import (
     LANE_RUNS,
     RETRAIN_BLOCK_KEY,
@@ -46,6 +48,7 @@ from wattsteer_ml.retrain import (
     RetrainRequest,
     Stopwatch,
     decided_in_run,
+    main,
     run_retrain,
 )
 from wattsteer_ml.training import bundle as bundle_module
@@ -444,3 +447,81 @@ def test_a_run_already_in_flight_here_is_refused_rather_than_raced() -> None:
         app_module._RETRAINING.discard(RUN_ID)
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "RETRAIN_IN_PROGRESS"
+
+
+# --- forecaster 44: an idempotent run is not a failed one --------------------
+
+
+def test_a_fully_decided_run_exits_zero_and_a_barren_one_does_not(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The exit code the operator's catch-up turns on — forecaster 44.
+
+    `main`'s own docstring says non-zero is for the run where "*no* lane reached
+    a decision, **which is the only outcome that is unambiguously a failed
+    run**". A run whose every lane was already decided is unambiguously not one:
+    it is the idempotent no-op `gate_one`'s short-circuit exists to produce.
+
+    It exited 1. On the deployment of 2026-09-15 an operator set
+    `WATTSTEER_RETRAIN_PATTERN=5 * * * *` to catch up after forecaster 43; the
+    run id resolved to that morning's scheduled instant, both lanes
+    short-circuited, this returned 1, and the modelling service reported
+    `RETRAIN_FAILED` / HTTP 500 — which the queue retried three times, in under
+    two seconds each, against a healthy run time of ~750 s.
+
+    Both arms are here because the exit code has to keep *failing* on the
+    outcome it was written for: a run that reached no decision and had nothing
+    already decided either.
+    """
+    for lane in SERVING_LANES:
+        line(tmp_path, lane, decision="promote")
+    code = main(["--run-id", RUN_ID, "--root", str(tmp_path), "--database-url", "x"])
+    payload = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert code == 0, "a run whose every lane was already decided is not a failure"
+    assert all(one["status"] == "no_candidate" for one in payload["lanes"])
+    assert all(one["no_candidate"]["already_decided"] for one in payload["lanes"])
+
+    # The control, and the reason the line above is not simply `return 0`: a run
+    # where nothing was decided and nothing had been decided before still fails.
+    # Here the database url points nowhere and no lane carries a line, so both
+    # lanes reach `failed` — the outcome the non-zero exit was written for.
+    barren = tmp_path / "barren"
+    barren.mkdir()
+    code = main(["--run-id", RUN_ID, "--root", str(barren), "--database-url", "x"])
+    payload = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert code == 1, "a run that decided nothing and skipped nothing is a failure"
+    assert not any(
+        (one.get("no_candidate") or {}).get("already_decided") for one in payload["lanes"]
+    )
+
+
+def test_already_decided_is_a_field_and_not_a_sentence(tmp_path: Path) -> None:
+    """The flag is read off the outcome, never matched out of its prose.
+
+    An exit code that greps its own reason string breaks the first time somebody
+    rewords it, and the reword would look like a comment change. So
+    `NoCandidate.already_decided` is a field, `LaneOutcome.already_decided`
+    reads it, and `main` reads that.
+    """
+    line(tmp_path, LATE_LANE, decision="refuse")
+    report = run_retrain(request(tmp_path))
+    late, early = report.for_lane(LATE_LANE), report.for_lane(EARLY_LANE)
+    assert late.already_decided is True
+    # The other lane failed on the unreachable database: a `failed` outcome
+    # carries no `no_candidate` at all, so the property must be false rather
+    # than raise. That is the arm a prose match would have got wrong.
+    assert early.status == "failed"
+    assert early.already_decided is False
+
+    # Non-vacuity: a `no_candidate` that is *not* a retry — a lane that produced
+    # nothing to gate — must not be mistaken for one.
+    nothing = NoCandidate.from_training_failure(
+        RuntimeError("no risk bins"), lane=EARLY_LANE, at=AS_OF
+    )
+    assert nothing.already_decided is False
+    assert LaneOutcome.of(EARLY_LANE, nothing).already_decided is False
+
+    source = Path(driver.__file__).read_text(encoding="utf-8")
+    assert "already carries" not in source[source.index("def main(") :], (
+        "main matches the reason string, so a reword changes the exit code"
+    )

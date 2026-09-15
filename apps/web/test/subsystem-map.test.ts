@@ -274,7 +274,14 @@ describe("the map's wiring", () => {
     expect(map).toContain("tabIndex: 0");
     expect(map).toContain('event.key === "Enter"');
     expect(map).toContain('event.key === " "');
-    expect(map).toContain("focusRing(");
+    // The ring is the path's own stroke, not a CSS outline — forecaster's
+    // map shipped with `focusRing(...)` here, and a CSS outline on an SVG
+    // element is drawn around its *bounding box*: focusing SE/CO painted a
+    // rectangle spanning half the country instead of tracing the region.
+    expect(map).not.toContain("focusRing(");
+    expect(map).toContain('outlineStyle: "none"');
+    expect(map).toContain("isFocused ? colors.focus");
+    expect(map).toContain("strokeWidth={isFocused || isSelected ? 3.5 : 1.5}");
     // Native gets the RN affordance rather than the DOM one.
     expect(map).toContain("onPress: () => onSelect(code)");
     expect(map).toContain("accessibilityRole");
@@ -480,9 +487,15 @@ describe("the region responds to a pointer, and so does its row", () => {
     expect(overview).toContain("hovered={hovered}");
     expect(overview).toContain("onHoverChange={setHovered}");
     expect(overview).toContain("highlighted={row.subsystem === hovered}");
-    // Non-vacuity: if the map kept its own state the prop would be unused and
-    // the row would never light.
-    expect(source).not.toMatch(/useState<SubsystemCode \| null>/);
+    // Non-vacuity: if the map kept its own *hover* state the prop would be
+    // unused and the row would never light. The map does hold one piece of
+    // state — which region the keyboard is on — and that is deliberately not
+    // hover: see the focus test above. So the guard names the thing it forbids
+    // rather than forbidding `useState` outright, which would have blocked the
+    // fix that separated the two.
+    expect(source).not.toMatch(/const \[hovered/);
+    expect(source).not.toMatch(/setHovered/);
     expect(source).toContain("const active = hovered");
+    expect(source).toContain("const [focusedCode, setFocusedCode]");
   });
 });

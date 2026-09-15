@@ -983,16 +983,10 @@ def run_retrain(request: RetrainRequest) -> ServingLanesReport:
     def gate_one(lane: Lane) -> GateDecision | NoCandidate:
         recorded = decided_in_run(request.root, lane, request.run_id)
         if recorded is not None:
-            # A retry of a run this lane already finished. Nothing is retrained
-            # and nothing is appended: the line and the card from the first pass
-            # are the run's record, and writing a second pair would make
-            # "exactly one line per run" false the first time a queue redelivers.
-            return NoCandidate(
+            return NoCandidate.from_decided_run(
                 lane=lane,
-                reason=(
-                    f"{request.run_id} already carries a {recorded!r} line for this "
-                    "lane; this run has been decided and a retry appends nothing"
-                ),
+                run_id=request.run_id,
+                recorded=recorded,
                 at=request.as_of,
             )
         watch = Stopwatch()
@@ -1072,12 +1066,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         "resources": watch.read().as_dict(),
     }
     print(json.dumps(payload))
+    # Non-zero when *no* lane reached a decision, which is the only outcome that
+    # is unambiguously a failed run — and a lane that was **already decided** is
+    # not one. It is the idempotent no-op the short-circuit in `gate_one` exists
+    # to produce, and forecaster 44 is what happens when the exit code cannot
+    # tell the two apart: an operator's catch-up resolved to a run both lanes had
+    # finished, every lane short-circuited, this returned 1, and the modelling
+    # service reported `RETRAIN_FAILED` / HTTP 500 about a run that behaved
+    # exactly as designed. The queue then retried it three times.
     decided = [
         outcome
         for outcome in report.outcomes
         if outcome.status in ("promoted", "refused")
     ]
-    return 0 if decided else 1
+    already = [outcome for outcome in report.outcomes if outcome.already_decided]
+    return 0 if decided or already else 1
 
 
 if __name__ == "__main__":  # pragma: no cover - the process entry point

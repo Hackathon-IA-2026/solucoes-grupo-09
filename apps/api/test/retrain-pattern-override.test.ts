@@ -5,6 +5,7 @@ import { config } from "../src/config.js";
 import {
   RETRAIN_JOB_ID,
   RETRAIN_PATTERN,
+  retrainRunId,
   retrainSchedules,
 } from "../src/jobs/retrain.js";
 
@@ -64,5 +65,81 @@ describe("retrain · the banner reports the schedule it registered", () => {
     // the printed cadence and the registered one cannot drift.
     expect(source).toContain("for (const schedule of retrainScheduleForQueue())");
     expect(source).toContain("await runner.schedule(schedule)");
+  });
+});
+
+/**
+ * Forecaster 44. The override above registers correctly and then could not
+ * produce a run: `retrainRunId` floored to the constants `RETRAIN_PATTERN`
+ * describes rather than to the pattern in force, so a catch-up on a day the
+ * schedule had already run minted *that run's* id. Every lane short-circuited
+ * as a retry, no lane reached a decision, and the modelling service turned the
+ * idempotent no-op into an HTTP 500 the queue retried three times.
+ *
+ * Measured on the deployment of 2026-09-15: `WATTSTEER_RETRAIN_PATTERN=5 * * * *`
+ * fired at 18:05Z and asked for `2026-09-15T03:10:00Z`.
+ */
+describe("retrain · the catch-up mints an id of its own", () => {
+  it("floors to the pattern's fixed fields, so the weekly cadence is unmoved", () => {
+    // The default, asserted through the same path the override uses: three
+    // attempts of one Friday firing are one run.
+    const friday = [
+      new Date("2026-09-04T03:10:00.004Z"),
+      new Date("2026-09-04T03:12:41.900Z"),
+      new Date("2026-09-04T04:31:07.000Z"),
+    ].map((at) => retrainRunId(at, { pattern: RETRAIN_PATTERN }));
+    expect(new Set(friday).size).toBe(1);
+    expect(friday[0]).toBe("2026-09-04T03:10:00Z");
+  });
+
+  it("does not collide with the morning's run when the hour is a wildcard", () => {
+    // The defect, exactly. `5 * * * *` firing at 18:05Z must not ask for the id
+    // the 03:10 schedule already used, or the lanes short-circuit as retries.
+    const catchUp = retrainRunId(new Date("2026-09-15T18:05:02Z"), {
+      pattern: "5 * * * *",
+    });
+    expect(catchUp).toBe("2026-09-15T18:05:00Z");
+    expect(catchUp).not.toBe(
+      retrainRunId(new Date("2026-09-15T03:10:00Z"), {
+        pattern: RETRAIN_PATTERN,
+      }),
+    );
+  });
+
+  it("is still stable across the attempts of one hourly firing", () => {
+    // Idempotency is the reason the id is floored at all, and a per-hour id
+    // must keep it: a backoff retry seconds later is the same run.
+    const ids = [
+      new Date("2026-09-15T18:05:00.100Z"),
+      new Date("2026-09-15T18:05:41.900Z"),
+      new Date("2026-09-15T18:05:59.999Z"),
+    ].map((at) => retrainRunId(at, { pattern: "5 * * * *" }));
+    expect(new Set(ids).size).toBe(1);
+  });
+
+  it("belongs to the previous hour when an hourly firing is a hair early", () => {
+    // The wildcard's analogue of the weekly pattern's previous-*day* step: the
+    // run belongs to an occurrence that has happened, never to one that has not.
+    expect(
+      retrainRunId(new Date("2026-09-15T18:04:59.100Z"), {
+        pattern: "5 * * * *",
+      }),
+    ).toBe("2026-09-15T17:05:00Z");
+  });
+
+  it("falls back to the clock when a field is not a bare number", () => {
+    // A step or a list reads as "every", which floors to the firing. More
+    // granular than the schedule is safe; coarser is the defect above.
+    expect(
+      retrainRunId(new Date("2026-09-15T18:17:30Z"), { pattern: "*/15 * * * *" }),
+    ).toBe("2026-09-15T18:17:00Z");
+  });
+
+  it("survives being mapped over a list of dates", () => {
+    // Non-vacuity, and not hypothetical: a positional second parameter took
+    // `Array.prototype.map`'s index and threw on `.trim()`. An existing test
+    // in `retrain-job.test.ts` maps this function, and that is how it was found.
+    const ids = [new Date("2026-09-04T03:10:00Z")].map(retrainRunId);
+    expect(ids[0]).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
   });
 });

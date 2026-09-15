@@ -34,12 +34,17 @@ import type { Execute, JobSchedule, ReportProgress } from "./types.js";
  *    time-zone rule for no gain.
  *
  * 2. **What identifies the run.** Not the instant the handler happened to start:
- *    `retrainRunId` floors the clock to the schedule's own hour and minute, so
- *    every attempt of one firing computes the *same* id. That id is the artifact
- *    stem in both lanes, and the modelling service short-circuits a lane that
- *    already carries a decision line for it — which is what makes "appends
- *    exactly one decision line per run" survive a redelivery, a backoff retry
- *    and a hand-submitted catch-up.
+ *    `retrainRunId` floors the clock to **the pattern in force**, so every
+ *    attempt of one firing computes the *same* id. That id is the artifact stem
+ *    in both lanes, and the modelling service short-circuits a lane that already
+ *    carries a decision line for it — which is what makes "appends exactly one
+ *    decision line per run" survive a redelivery and a backoff retry.
+ *
+ *    **It reads the pattern rather than two constants — forecaster 44.** Flooring
+ *    to a pair of constants regardless of the schedule meant an
+ *    operator's catch-up pattern minted the id the morning's scheduled run had
+ *    already used, so every lane short-circuited as a retry of it and the
+ *    catch-up could not produce a run.
  *
  * 3. **What a failure means.** See `describeFailure`: a lane that *refused* is a
  *    successful run and comes back 200 with the refusal named, because a gate
@@ -52,10 +57,6 @@ export const RETRAIN_TIME_ZONE = "Etc/UTC";
 
 /** Friday, ten past three in the morning, UTC. */
 export const RETRAIN_PATTERN = "10 3 * * 5";
-
-/** The hour and minute `RETRAIN_PATTERN` fires at, for `retrainRunId`. */
-export const RETRAIN_HOUR = 3;
-export const RETRAIN_MINUTE = 10;
 
 /** The stable id of the queue's one repeatable retrain. */
 export const RETRAIN_JOB_ID = "retrain:serving-lanes";
@@ -96,33 +97,78 @@ export interface RetrainPayload {
 }
 
 /**
- * The instant a run belongs to: `now` floored to the schedule's hour and minute.
+ * The hour and minute a cron pattern fires at, or `null` where it says "every".
+ *
+ * Only the two leading fields, and only a bare number in them. That is the whole
+ * grammar `retrainRunId` needs: it is deciding what instant a firing *belongs
+ * to*, and a pattern's day fields cannot move an instant within the day. A step
+ * or a list — `*\/15`, `0,30` — reads as "every", which floors to the clock the
+ * job actually fired on and is the safe direction: a run id that tracks the
+ * firing is at worst more granular than the schedule, never coarser than it.
+ */
+function scheduledField(pattern: string, index: 0 | 1): number | null {
+  const field = pattern.trim().split(/\s+/)[index];
+  if (field === undefined || !/^\d+$/.test(field)) {
+    return null;
+  }
+  return Number(field);
+}
+
+/**
+ * The instant a run belongs to: `now` floored to **the schedule in force**.
  *
  * **Stable across attempts, which is the whole point.** BullMQ hands the same
  * job back after a failure, and a handler that read its own clock would mint a
  * new artifact id on every attempt — two bundles, two cards and two decision
- * lines for one Friday, none of them recognisable as retries of each other. The
- * floor is to the day rather than to the week so that a hand-submitted catch-up
- * on a Tuesday is still a run with a well-defined id; the *schedule* only fires
- * on Fridays.
+ * lines for one Friday, none of them recognisable as retries of each other.
+ *
+ * **Read off `config.retrainPattern`, not off two constants — forecaster 44.**
+ * It used to floor to a hardcoded 03:10 whatever the schedule
+ * said, which is right for the weekly pattern those constants describe and
+ * wrong for every other one. An operator who set `5 * * * *` to catch up after
+ * forecaster 43 got `2026-09-15T03:10:00Z` — *the id that morning's scheduled
+ * run had already used*. Every lane short-circuited as a retry, no lane reached
+ * a decision, and the catch-up `config.ts` advertises as "the operator path"
+ * could not produce a run at all. The id now tracks the pattern: a fixed field
+ * floors to it, a wildcard floors to the clock, so `10 3 * * 5` behaves exactly
+ * as before and `5 * * * *` mints one id per hour.
+ *
+ * The floor is never finer than a minute. Two firings inside one minute are the
+ * same run, which is what keeps a redelivery idempotent.
  */
-export function retrainRunId(now: Date): string {
+export function retrainRunId(
+  now: Date,
+  options: { pattern?: string } = {},
+): string {
+  // An *object* rather than a second positional string, and the reason is a
+  // test that caught it: `[...].map(retrainRunId)` hands the callback an index,
+  // which as a positional `pattern` arrived as the number 1 and threw. A caller
+  // that maps this over a list of dates is doing something reasonable, so the
+  // signature has to survive it.
+  const cron = options.pattern ?? config.retrainPattern ?? RETRAIN_PATTERN;
+  const minute = scheduledField(cron, 0);
+  const hour = scheduledField(cron, 1);
   const instant = new Date(
     Date.UTC(
       now.getUTCFullYear(),
       now.getUTCMonth(),
       now.getUTCDate(),
-      RETRAIN_HOUR,
-      RETRAIN_MINUTE,
+      hour ?? now.getUTCHours(),
+      minute ?? now.getUTCMinutes(),
       0,
       0,
     ),
   );
   // A run that fires a hair before its own scheduled minute — clock skew, or a
-  // queue that ran slightly early — belongs to the previous day's instant, not
-  // to one that has not happened yet.
+  // queue that ran slightly early — belongs to the *previous* occurrence, not to
+  // one that has not happened yet. How far back that is, is how far apart the
+  // occurrences are: a day when the hour is fixed, an hour when it is not.
   if (instant.getTime() > now.getTime()) {
-    instant.setUTCDate(instant.getUTCDate() - 1);
+    if (hour === null) {
+      instant.setUTCHours(instant.getUTCHours() - 1);
+    } else {
+      instant.setUTCDate(instant.getUTCDate() - 1);
+    }
   }
   return `${instant.toISOString().slice(0, 19)}Z`;
 }
