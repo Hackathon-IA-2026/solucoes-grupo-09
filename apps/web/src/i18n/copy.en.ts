@@ -394,6 +394,28 @@ export const en = {
     },
   },
 
+  /**
+   * The pitch deck page at `/pitch`.
+   *
+   * It has no entry under `meta` above because it is not one of the
+   * locale-prefixed routes that block describes: the deck is a single PDF, the
+   * page is `noindex,follow`, and only the chrome around the frame is copy at
+   * all. Its head strings therefore sit with the rest of the screen, the way
+   * `notFound.metaTitle` and `app.*.metaTitle` already do.
+   */
+  pitch: {
+    metaTitle: "Pitch deck — WattSteer",
+    metaDescription:
+      "The WattSteer pitch deck: what curtailment costs the Brazilian grid, and what seeing it a day ahead is worth.",
+    badge: "Pitch deck",
+    title: "The case for WattSteer, in ten slides",
+    lede: "The same argument the product makes, in the order it was first made: the curtailed energy ONS already publishes, the forecast that would have seen it coming, and what a plant could have done with a day's warning.",
+    embedTitle: "WattSteer pitch deck (PDF)",
+    fallback:
+      "The deck is a PDF. If your browser downloads PDFs rather than showing them, the frame below stays blank.",
+    openLabel: "Open the PDF",
+  },
+
   legal: {
     homeLink: "WattSteer — home",
     privacyLink: "Privacy",
