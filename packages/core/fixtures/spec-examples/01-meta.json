@@ -52,12 +52,7 @@
         "gate_profile": "gate_late",
         "published_at": "2026-08-28T22:00:00Z",
         "age_hours": 0.1,
-        "subsystems": [
-          "N",
-          "NE",
-          "S",
-          "SE"
-        ]
+        "subsystems": ["N", "NE", "S", "SE"]
       }
     ],
     "next_publication_at": "2026-08-29T12:00:00Z"
