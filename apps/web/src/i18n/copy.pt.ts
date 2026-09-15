@@ -347,6 +347,8 @@ export const pt: Copy = {
     fallback:
       "A apresentação é um PDF. Se o seu navegador baixa PDFs em vez de exibi-los, o quadro abaixo fica vazio.",
     openLabel: "Abrir o PDF",
+    /** The footer link. Short: it sits in a row with the legal links. */
+    footerLink: "Apresentação",
   },
 
   legal: {

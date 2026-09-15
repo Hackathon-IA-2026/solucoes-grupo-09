@@ -524,8 +524,24 @@ class ScoredHour:
 
     @property
     def lower_residual(self) -> float:
-        """``E_lo = q̂^0.10 − y``. Positive when the floor was above the label."""
-        return self.forecast.band.p10 - self.observed_mwh
+        """``E_lo = (q̂^0.10 − y) / spread``. Positive when the floor was too high.
+
+        **Divided by this row's own positive spread since forecaster 43**, and
+        `δ_lo` is therefore a multiple rather than MWh. The reason is measured:
+        one fold's bands run 1,691→12,700 MWh on one subsystem and 0→3,029 on
+        another, so a single MWh scalar is a rounding error on one row and most
+        of the interval on the next — and what it delivers then depends on the
+        magnitude mix of whatever period it lands on. Across a sweep of that
+        shift the flat form gave 0.8023 to 0.9504 coverage with the model
+        unchanged; normalised it gave 0.9165 throughout.
+
+        The divisor is the mixture's, not the band's, so it is a property of the
+        magnitude fit rather than of ``p`` — see
+        `HurdleMixture.positive_spread_mwh`.
+        """
+        return (
+            self.forecast.band.p10 - self.observed_mwh
+        ) / self.forecast.mixture.positive_spread_mwh
 
     @property
     def upper_residual(self) -> float:
@@ -793,7 +809,9 @@ class ConformalCorrection:
         own — into ``F_pos``'s support, strictly above ``τ`` — applied after the
         shift, exactly as it was applied after the corrected knot before.
         """
-        return TailShift(lower_mwh=self.delta_lo, upper_mwh=self.delta_hi)
+        return TailShift(
+            lower_spread_multiple=self.delta_lo, upper_mwh=self.delta_hi
+        )
 
     def card_fields(self) -> dict[str, Any]:
         population = (
@@ -814,7 +832,7 @@ class ConformalCorrection:
         return {
             "delta_lo": self.delta_lo,
             "delta_hi": self.delta_hi,
-            "conformal_method": "one_sided_split_cqr_stated_lower",
+            "conformal_method": "one_sided_split_cqr_stated_lower_spread_normalised",
             "conformal_miscoverage": self.miscoverage,
             "conformal_target_coverage": self.target_coverage,
             "conformal_calibration_rows": self.calibration_rows,

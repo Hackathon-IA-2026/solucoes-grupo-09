@@ -12,6 +12,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useI18n } from "@/i18n";
 import { fill } from "@/i18n/format";
 import { DEFAULT_LOCALE, localePath } from "@/i18n/locale";
+import { PITCH_PATH } from "@/lib/pitch";
 import { APP_HREF, CtaLink } from "./landing/cta-link";
 import { PAGE_MAX } from "./landing/section";
 
@@ -223,6 +224,31 @@ export function SiteFooter() {
             href={legalHref("/terms")}
             label={copy.legal.termsLink}
             testID="footer-terms-link"
+          />
+          <View
+            aria-hidden={true}
+            // 4 px in `inkFaint`, not 3 px in `border`. A hairline-coloured
+            // dot (white at 8% over `canvas`) resolves to ~#2A2A2C and is not
+            // visible at all in a 1x screenshot; `borderRadius: 2` on a 3 px
+            // box was not a circle either.
+            style={{
+              width: space.xs,
+              height: space.xs,
+              borderRadius: space.xs / 2,
+              backgroundColor: colors.inkFaint,
+            }}
+          />
+          {/*
+            The deck, and `PITCH_PATH` rather than a locale path: `/pitch` sits
+            outside the locale tree because it is one PDF and two locale URLs
+            for it would assert a translation that does not exist. It is here
+            because nothing linked to it — the route shipped reachable only to
+            someone who already knew the URL.
+          */}
+          <LegalLink
+            href={PITCH_PATH}
+            label={copy.pitch.footerLink}
+            testID="footer-pitch-link"
           />
         </View>
       </View>

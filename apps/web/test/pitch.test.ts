@@ -185,6 +185,10 @@ describe("the pitch copy", () => {
     "embedTitle",
     "fallback",
     "openLabel",
+    // Not rendered by the screen — it is the footer's link to it. In this list
+    // because the assertion below is that the block holds exactly these keys,
+    // which is what catches one added to a single locale.
+    "footerLink",
   ] as const;
 
   test("every string the screen renders resolves in both locales", () => {
@@ -207,11 +211,35 @@ describe("the pitch copy", () => {
     }
   });
 
-  test("the screen reads every one of them", () => {
-    // A key nothing renders is copy a translator maintains for nobody.
+  test("something renders every one of them", () => {
+    /*
+      A key nothing renders is copy a translator maintains for nobody. All but
+      one are the screen's; `footerLink` is the *footer's* link to the screen,
+      so the rule is kept and the renderer is named per key rather than the key
+      being quietly exempted.
+    */
     const screen = code(SCREEN);
+    const footer = code(join(WEB, "src", "components", "site-footer.tsx"));
     for (const key of KEYS) {
-      expect(screen).toContain(`copy.pitch.${key}`);
+      const source = key === "footerLink" ? footer : screen;
+      expect([key, source.includes(`copy.pitch.${key}`)]).toEqual([key, true]);
     }
+  });
+});
+
+describe("the deck is reachable without knowing its URL", () => {
+  test("the footer links to it", () => {
+    /*
+      The route shipped with nothing pointing at it: reachable only to someone
+      already holding the URL. It sits in the footer's link row beside the
+      legal pages, which is where a document belongs.
+    */
+    const footer = source(join(WEB, "src", "components", "site-footer.tsx"));
+    expect(footer).toContain('from "@/lib/pitch"');
+    expect(footer).toContain("href={PITCH_PATH}");
+    expect(footer).toContain("copy.pitch.footerLink");
+    // `PITCH_PATH`, not a literal: `/pitch` is outside the locale tree, and a
+    // hand-written `/pt/pitch` would 404 while still looking right here.
+    expect(footer).not.toMatch(/href="\/pitch"/);
   });
 });

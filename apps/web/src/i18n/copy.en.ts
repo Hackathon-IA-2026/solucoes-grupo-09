@@ -416,6 +416,8 @@ export const en = {
     fallback:
       "The deck is a PDF. If your browser downloads PDFs rather than showing them, the frame below stays blank.",
     openLabel: "Open the PDF",
+    /** The footer link. Short: it sits in a row with the legal links. */
+    footerLink: "Pitch deck",
   },
 
   legal: {

@@ -224,18 +224,33 @@ class TailShift:
     nothing about ``p``, an hour or a subsystem.
     """
 
-    #: ``δ_lo`` — MWh **subtracted** at ``q = 0.10``. Negative when the boosters
-    #: over-covered, in which case the correction narrows the band and is
-    #: allowed to: conformal makes coverage *equal* nominal, not at least it.
-    lower_mwh: float
-    #: ``δ_hi`` — MWh **added** at ``q = 0.90``.
+    #: ``δ_lo`` — **a multiple of the row's own positive spread**, subtracted at
+    #: ``q = 0.10``. Dimensionless since forecaster 43, and that is the whole of
+    #: that ticket: a flat MWh floor correction delivered between 0.8023 and
+    #: 0.9504 coverage depending only on how the fleet's magnitudes moved
+    #: between the calibration window and the test period, with the model
+    #: unchanged. Scaled by `HurdleMixture.positive_spread_mwh` it delivered
+    #: 0.9165 across the same sweep.
+    #:
+    #: Negative when the boosters over-covered, in which case the correction
+    #: narrows the band and is allowed to: conformal makes coverage *equal*
+    #: nominal, not at least it. Both refused artifacts had it negative and
+    #: large — which is why clamping it at zero is the wrong repair and was
+    #: rejected in writing rather than tried.
+    lower_spread_multiple: float
+    #: ``δ_hi`` — MWh **added** at ``q = 0.90``. Still MWh, deliberately: the
+    #: upper tail was covering (0.9185 marginal, `upper_correction_realised`
+    #: 0.9927) on both refused artifacts, and the heteroscedasticity argument
+    #: that carried the lower change is untested here. Changing a tail that
+    #: covers, on an argument measured somewhere else, is the move this
+    #: repository refuses.
     upper_mwh: float
 
     def __post_init__(self) -> None:
-        for name in ("lower_mwh", "upper_mwh"):
+        for name in ("lower_spread_multiple", "upper_mwh"):
             value = getattr(self, name)
             if not math.isfinite(value):
-                raise ValueError(f"{name} is {value!r}, which is not MWh")
+                raise ValueError(f"{name} is {value!r}, which is not finite")
 
     @classmethod
     def none(cls) -> TailShift:
@@ -245,18 +260,27 @@ class TailShift:
         correction exists, goes through the same arithmetic as a corrected one;
         the difference is two zeros rather than a branch.
         """
-        return cls(lower_mwh=0.0, upper_mwh=0.0)
+        return cls(lower_spread_multiple=0.0, upper_mwh=0.0)
 
     @property
     def is_neutral(self) -> bool:
         """Whether this shift moves nothing. One predicate, for the card."""
-        return self.lower_mwh == 0.0 and self.upper_mwh == 0.0
+        return self.lower_spread_multiple == 0.0 and self.upper_mwh == 0.0
 
-    def __call__(self, q: float) -> float:
-        """The MWh to add to ``Q_pos((q − (1 − p))/p)`` at this ``q``."""
+    def at(self, q: float, *, spread_mwh: float) -> float:
+        """The MWh to add to ``Q_pos((q − (1 − p))/p)`` at this ``q``.
+
+        ``spread_mwh`` is the row's own `HurdleMixture.positive_spread_mwh`, and
+        it scales the lower end only. The interpolation between the three knots
+        is unchanged — forecaster 21 put the shift at every ``q`` so the path
+        ensemble inverts the corrected distribution rather than a second one,
+        and a per-row scale enters *inside* that rule rather than beside it.
+        """
         _check_probability("q", q)
+        if not math.isfinite(spread_mwh) or spread_mwh <= 0.0:
+            raise ValueError(f"spread_mwh is {spread_mwh!r}, which is not a spread")
         knots = SERVED_QUANTILES
-        values = (-self.lower_mwh, 0.0, self.upper_mwh)
+        values = (-self.lower_spread_multiple * spread_mwh, 0.0, self.upper_mwh)
         if q <= knots[0]:
             return values[0]
         if q >= knots[-1]:
@@ -402,6 +426,26 @@ class HurdleMixture:
         """
         return _into_positive_support(self.positive_mean_mwh, self.threshold_mwh)
 
+    @property
+    def positive_spread_mwh(self) -> float:
+        """``Q_pos(0.90) − Q_pos(0.10)`` — this row's own scale, in MWh.
+
+        **What makes the lower correction proportional rather than flat**, and
+        it is deliberately read off the *positive branch* rather than off the
+        composed band: the composed width depends on ``p`` through the point
+        mass, so two rows with identical magnitude shapes and different ``p``
+        would be scaled differently and the residual would stop being a property
+        of the fit.
+
+        Floored at one MWh. A degenerate branch — every knot equal, which
+        `MagnitudeQuantiles` permits and a flat booster produces — would
+        otherwise divide by zero, and a shift of "some multiple of nothing" is
+        nothing whichever multiple it is. One MWh rather than an epsilon so the
+        floor is a quantity rather than a guard against arithmetic.
+        """
+        spread = self.positive_quantiles(0.90) - self.positive_quantiles(0.10)
+        return max(spread, 1.0)
+
     def quantile(self, q: float) -> float:
         """``Q_Y(q | x)`` — the mixture's inverse CDF at ``q``.
 
@@ -424,7 +468,14 @@ class HurdleMixture:
         # measured on. Inside the branch, so the structural zero above survives
         # untouched; at every q rather than at the two served ones, so the path
         # ensemble inverts the corrected distribution and not a second one.
-        shifted = self.positive_quantiles(u) + self.tail_shift(q)
+        # The lower half of the shift is a *multiple of this row's own spread*
+        # and the upper half is MWh, which is the asymmetry forecaster 43
+        # introduced and measured. `TailShift.at` takes the scale and applies it
+        # to the half that is dimensionless, so this line does not have to know
+        # which half is which.
+        shifted = self.positive_quantiles(u) + self.tail_shift.at(
+            q, spread_mwh=self.positive_spread_mwh
+        )
         return _into_positive_support(shifted, self.threshold_mwh)
 
 
