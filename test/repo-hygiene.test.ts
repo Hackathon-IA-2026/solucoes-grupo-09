@@ -32,7 +32,6 @@ const FORBIDDEN = [
 
 /**
  * Paths where the old name is legitimate and must survive:
- * - `reference/`      the Next.js app the design system was ported from
  * - `IDEA.md`         the historical source document
  * - `.wayfinder/`     the map, which records Zalytix as the thing removed
  * - `.scratch/`       implementation tickets that reference the same history
@@ -40,7 +39,6 @@ const FORBIDDEN = [
  * - `docs/specs/`     the spec for this very removal
  */
 const EXEMPT = new Set([
-  "reference",
   "IDEA.md",
   ".wayfinder",
   ".scratch",
