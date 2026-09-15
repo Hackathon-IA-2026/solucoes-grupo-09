@@ -17,7 +17,7 @@ import { router } from "expo-router";
 import Head from "expo-router/head";
 import { Text, View } from "react-native";
 import { AppShell, ScreenTitle } from "@/components/app/app-shell";
-import { ForecastStamp } from "@/components/app/honesty";
+import { ForecastStamp, HonestyNote } from "@/components/app/honesty";
 import { SubsystemRow } from "@/components/app/subsystem-row";
 import { sharedParams, useAppParams } from "@/components/app/use-app-params";
 import { BandCard } from "@/components/charts/band-figure";
@@ -69,6 +69,18 @@ export default function GridOverviewScreen() {
           whole page arriving at once. Each block is offset by one step, and
           `FadeIn` collapses to an instant render under prefers-reduced-motion.
         */}
+        {/*
+          The shell badge says `FIXTURE DATA` in the chrome, which is a label.
+          This screen builds every band from `@/lib/fixtures` and issues no
+          request, and no artifact is promoted for serving, so there is no
+          forecast it could be showing instead. The product states absences in
+          this component everywhere else; it owes this screen the same.
+        */}
+        <HonestyNote
+          title={copy.app.overview.fixtureTitle}
+          points={[copy.app.overview.fixtureNote]}
+        />
+
         <FadeIn style={{ gap: space.md }}>
           {all.map((forecast) => (
             <SubsystemRow

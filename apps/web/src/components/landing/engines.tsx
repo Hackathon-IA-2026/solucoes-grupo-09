@@ -11,7 +11,7 @@ import {
 import type { ComponentType } from "react";
 import { Text, View } from "react-native";
 import { useCopy } from "@/i18n";
-import { SectionHeading } from "./section";
+import { Footnote, SectionHeading } from "./section";
 
 /**
  * "Four engines, not one model" — IDEA.md §19's structure, which is the part
@@ -70,6 +70,13 @@ export function Engines({ wide }: { wide: boolean }) {
           );
         })}
       </View>
+      {/*
+        Four cards written in the present tense, and a deployment that does not
+        yet earn all of it. The line below says which of the four is answering,
+        in the same place the claim is made — a caveat a reader has to scroll
+        to find is a caveat that is not there.
+      */}
+      <Footnote>{copy.engines.status}</Footnote>
     </>
   );
 }

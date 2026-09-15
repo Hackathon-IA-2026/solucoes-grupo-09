@@ -36,7 +36,6 @@ export const en = {
       { label: "The product", target: "showcase" },
       { label: "Data", target: "provenance" },
     ],
-    cta: "Open the live grid",
   },
 
   /**
@@ -176,7 +175,7 @@ export const en = {
       accent: "WattSteer tells you it is coming.",
     },
     sub: "Brazil is adding wind and solar far faster than it is making the grid flexible, so there are hours when the clean energy is there and it has to be cut. WattSteer forecasts those hours a day ahead from ONS open data — as a range, not a guess — explains the grid conditions behind them, and sizes the storage and flexible demand that could absorb them.",
-    primaryCta: "Open the live grid",
+    primaryCta: "Open the prototype",
     secondaryCta: "How the forecast is built",
   },
 
@@ -232,6 +231,19 @@ export const en = {
   engines: {
     title: "Four engines, not one model",
     sub: "Forecasting alone is half a product. The value is in what happens after the number.",
+    /**
+     * Which of the four are answering today.
+     *
+     * The four cards are written in the present tense and the deployment does
+     * not yet earn all of it: ingestion and the data platform are live, and no
+     * model artifact has been promoted, so the forecast and diagnosis routes
+     * answer with a named refusal rather than a number. A section that
+     * describes four engines without saying which one is serving is the
+     * overclaim this page is least able to afford, because it is the page's
+     * whole argument.
+     */
+    status:
+      "Where each stands today: ingestion and the data platform are live and reading ONS, ANEEL and Open-Meteo on schedule. No model artifact is promoted for serving yet, so the Forecaster and Diagnosis routes answer with a stated refusal rather than a forecast, and every figure shown on this page is a deterministic fixture. The Flex Optimizer and Replay solve against a real gateway when one is running.",
     items: [
       {
         name: "Forecaster",
@@ -267,14 +279,6 @@ export const en = {
       panelTitle: "Diagnosis",
       panelSub: "NORDESTE · tomorrow",
       heading: "Which conditions the risk is associated with",
-      drivers: {
-        renewable_load_ratio: "Renewable / load ratio",
-        ne_se_export_utilisation: "Export stress, NE → SE",
-        residual_load: "Low residual load",
-        solar_ramp_1h: "Solar ramp",
-        is_weekend: "Weekend",
-        other: "Other features",
-      },
       note: "SHAP contribution to the model's forecast, normalised to 100%. These are the model's drivers, not a causal claim about the grid.",
     },
     mitigate: {
@@ -295,7 +299,6 @@ export const en = {
     },
     replay: {
       panelTitle: "Replay",
-      panelSub: "NORDESTE · a real day",
       heading: "How much could have been recovered",
       actualLabel: "Actually curtailed",
       optimizedLabel: "With WattSteer",
@@ -344,6 +347,14 @@ export const en = {
           label: "Data vintage is on screen",
           body: "Every forecast names the run that produced it, and every backtest says whether its window was genuinely knowable at the time or is ONS's later restatement of it.",
         },
+        // Named here rather than left to be inferred. `app.narration
+        // .flag_unmodelled_outage_regime` already states the same absence
+        // inside the product, where a driver group has no transmission
+        // feature to read; this is the public half of the same sentence.
+        {
+          label: "No transmission maintenance is read",
+          body: "ONS publishes planned maintenance and outages as prose rather than as a dataset, and WattSteer ingests none of it. So a day whose curtailment was driven by a line out of service has no feature carrying that fact, and the model reads around it. Nothing on this site is derived from maintenance data.",
+        },
       ],
     },
     odbl: "Plant registry data is derived from ANEEL SIGA, © ANEEL, made available under the Open Database License (ODbL) v1.0. WattSteer's derived plant table is a Derivative Database and is offered under the same licence.",
@@ -368,7 +379,7 @@ export const en = {
       accent: "Prevent it.",
     },
     sub: "Day-ahead curtailment risk for the Brazilian grid, from open data.",
-    button: "Open the live grid",
+    button: "Open the prototype",
   },
 
   /**
@@ -737,7 +748,10 @@ export const en = {
     reliability: {
       figure: "Reliability diagram: forecast probability against observed frequency",
       axis: "forecast probability (%)",
-      note: "Dots below the dashed identity line are over-confident forecasts: of the hours called 85%, 77% actually cleared the threshold. Dot area is the number of hours in the bin.",
+      // No promoted artifact means no reliability run, so this sentence says
+      // how to read the diagram and quotes nothing. The pair of percentages
+      // that used to stand here belonged to the fixture, not to a measurement.
+      note: "Dots below the dashed identity line are over-confident: fewer hours cleared the threshold than the forecast probability for that bin promised. Dot area is the number of hours in the bin.",
     },
 
     overview: {
@@ -756,6 +770,18 @@ export const en = {
         "The largest hour within a drawn day, over the same ensemble. Threshold in force: {mw} MW at subsystem grain.",
       grainNote:
         "Forecast grain is the subsystem. Observed curtailment is published per reporting entity — a conjunto for most of it — and restriction reasons exist only there; see Explain.",
+      /**
+       * What the figures on this screen are.
+       *
+       * The shell's badge says `FIXTURE DATA` in eleven-point grey at the top
+       * of the chrome, which is a label rather than a statement. This screen
+       * builds every band from `@/lib/fixtures` and issues no request, and a
+       * reader is owed that in the same voice the product uses everywhere
+       * else it withholds something.
+       */
+      fixtureTitle: "These figures are a fixture",
+      fixtureNote:
+        "Grid Overview renders a deterministic fixture and reads no API, which is what lets it ship in a static export. No model artifact is promoted for serving, so there is no day-ahead forecast to draw in its place — not a small one, none. The components, the units and the bands are the product's own; the numbers inside them are not a forecast of anything.",
     },
 
     split: {
