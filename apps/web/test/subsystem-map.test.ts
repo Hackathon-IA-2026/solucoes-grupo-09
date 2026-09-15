@@ -239,7 +239,10 @@ describe("the map's wiring", () => {
     // happen to agree today.
     expect(screen.match(/router\.push/g)?.length ?? 0).toBe(1);
     expect(screen).toContain("onSelect={select}");
-    expect(screen).toContain("onPress={() => select(forecast.subsystem)}");
+    // The handler is defined once on the screen and handed down as `onSelect`
+    // to the panels that draw the map and the rows, so the two affordances
+    // cannot drift apart: there is one function and both call it.
+    expect(screen).toContain("onPress={() => onSelect(row.subsystem)}");
   });
 
   test("the map renders one region per subsystem, from the shared order", () => {
@@ -476,7 +479,7 @@ describe("the region responds to a pointer, and so does its row", () => {
     expect(overview).toContain("const [hovered, setHovered]");
     expect(overview).toContain("hovered={hovered}");
     expect(overview).toContain("onHoverChange={setHovered}");
-    expect(overview).toContain("highlighted={forecast.subsystem === hovered}");
+    expect(overview).toContain("highlighted={row.subsystem === hovered}");
     // Non-vacuity: if the map kept its own state the prop would be unused and
     // the row would never light.
     expect(source).not.toMatch(/useState<SubsystemCode \| null>/);

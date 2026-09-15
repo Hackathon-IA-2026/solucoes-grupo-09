@@ -20,12 +20,8 @@ import { BandStrip } from "@/components/charts/band-figure";
 import { RiskChip } from "@/components/charts/risk-class";
 import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
-import {
-  type SubsystemDayForecast,
-  splitFor,
-  subsystemMeta,
-  type Technology,
-} from "@/lib/fixtures";
+import { splitFor, subsystemMeta, type Technology } from "@/lib/fixtures";
+import type { OutlookRow } from "@/lib/network";
 
 export function SubsystemRow({
   forecast,
@@ -36,7 +32,7 @@ export function SubsystemRow({
   onPress,
   onHoverChange,
 }: {
-  forecast: SubsystemDayForecast;
+  forecast: OutlookRow;
   /**
    * Which scalar of this row's split to name under the subsystem. The row used
    * to print `forecast.technology`, which existed because the forecast itself

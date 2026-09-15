@@ -42,6 +42,7 @@ import type {
   GridNow,
   GridOutlook,
   Meta,
+  ModelCard,
   ObservedReasons,
   OptimizationResult,
   Replay,
@@ -399,6 +400,34 @@ export class ApiClient {
         limit: query.limit,
         as_of: query.asOf,
       },
+      signal,
+    });
+  }
+
+  /**
+   * `GET /v1/model/card?lane=` — the reliability curve and the lane's identity.
+   *
+   * **Keyed by lane and by nothing else.** The same artifact serves all four
+   * subsystems, so "the curve for NE on the 29th" is a question the card cannot
+   * answer; `docs/specs/api-surface.md` §9 splits it off the per-day payload for
+   * that reason and so a weekly-changing 40 KB object does not acquire a daily
+   * cache key.
+   *
+   * `lane` is required and never defaulted here, for the same reason `replay`'s
+   * is: the lane a reader's numbers came from is a property of the deployment,
+   * discoverable on `GET /v1/meta` at `model.lanes[].lane`, and a default
+   * invented in this module would be the client deciding which artifact family
+   * a screen is describing.
+   *
+   * **It refuses whenever no artifact is promoted**, with `MODEL_UNAVAILABLE`
+   * (503) carrying `details.lane_state`. That is not an edge case: the response
+   * type's `laneState` is the constant `"promoted"` precisely because the other
+   * three states never reach this shape. A caller must have a branch for the
+   * refusal before it has one for the card.
+   */
+  modelCard(query: { lane: string }, signal?: AbortSignal): Promise<ModelCard> {
+    return this.request<ModelCard>("ModelCard", "/v1/model/card", {
+      query: { lane: query.lane },
       signal,
     });
   }

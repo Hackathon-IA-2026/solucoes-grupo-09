@@ -1,13 +1,37 @@
 /**
- * Screen 2 — Explain (IDEA.md §43).
+ * Screen 2 — Explicar (IDEA.md §43), read from the **real** gateway.
  *
- * Driver attribution, narration, reliability curve — plus one panel IDEA.md
- * does not have: the restriction reasons ONS actually observed, at the grain
- * it observes them. Without it the screen would consist entirely of model
- * output while looking like it was explaining the grid.
+ * Three of this screen's four panels need a promoted model and one does not,
+ * and today that means three of them are absent. `use-explain.ts` carries the
+ * table and the reasoning; what matters here is that the screen does not
+ * pretend otherwise.
+ *
+ * **What survives, and why it is on this screen at all.** The restriction
+ * reasons ONS observed are a settled record of a day that happened; no model
+ * was ever involved in them. This panel is the one IDEA.md does not have, and
+ * the header note that argued for it — "without it the screen would consist
+ * entirely of model output while looking like it was explaining the grid" —
+ * turns out to have been the load-bearing decision on the whole screen: it is
+ * the only reason Explain is not a blank page today. `api-surface.md` says
+ * Explain is "disabled with the same sentence" when nothing is promoted, and
+ * that is one panel too broad.
+ *
+ * **What the narration is now.** The response carries a `Narration` that is
+ * either the language model's prose, generated in the requested locale, or the
+ * deterministic template's **plan** — an ordered list of catalogue keys and the
+ * values their placeholders take. `i18n/narration.ts` renders both, so this
+ * screen no longer composes a sentence of its own: the hand-rolled paragraph
+ * and the `NARRATION_SOURCE = "template"` constant that stood in for a server
+ * that was not being called are both gone, and the footnote now names the
+ * source the response actually reported.
+ *
+ * **The reliability curve is a separate question and gets a separate answer.**
+ * A card is keyed by lane and never by day, so it can answer while this day
+ * refuses and refuse while this day answers. It carries its own refusal rather
+ * than being folded into the screen's.
  */
 
-import type { Narration as NarrationEnvelope } from "@wattsteer/core/api";
+import type { ObservedReason } from "@wattsteer/core/api";
 import {
   Badge,
   HashIcon,
@@ -21,50 +45,53 @@ import {
 } from "@wattsteer/ui";
 import { router } from "expo-router";
 import Head from "expo-router/head";
+import type { ReactNode } from "react";
 import { Text, View } from "react-native";
 import { AppShell, MiniPill, ScreenTitle } from "@/components/app/app-shell";
-import { ForecastStamp, VintageBadge } from "@/components/app/honesty";
-import { sharedParams, useAppParams } from "@/components/app/use-app-params";
+import { ForecastAbsent } from "@/components/app/forecast-absent";
+import { ForecastStamp, HonestyNote, VintageBadge } from "@/components/app/honesty";
+import {
+  gateProfileOf,
+  sharedParams,
+  useAppParams,
+} from "@/components/app/use-app-params";
+import {
+  type DiagnosedDay,
+  type ModelCardState,
+  useExplain,
+} from "@/components/app/use-explain";
 import { BandFigure } from "@/components/charts/band-figure";
 import { DriverBars } from "@/components/charts/driver-bars";
 import { ReliabilityCurve } from "@/components/charts/reliability-curve";
 import { RiskCaveat, RiskChip, RiskScale } from "@/components/charts/risk-class";
-import { type Copy, useCopy, useFormat } from "@/i18n";
-import { driverLabel, formatReading } from "@/i18n/drivers";
+import { useCopy, useFormat, useI18n } from "@/i18n";
 import { fill } from "@/i18n/format";
-import {
-  buildExplain,
-  buildForecast,
-  buildModelCard,
-  type ExplainFixture,
-  type ObservedReason,
-  subsystemMeta,
-} from "@/lib/fixtures";
+import { languageTag } from "@/i18n/locale";
+import { renderNarration } from "@/i18n/narration";
+import { attributedDrivers } from "@/lib/explain";
+import { FIXTURE_LANE, subsystemMeta } from "@/lib/fixtures";
 
 export default function ExplainScreen() {
   const colors = usePalette();
   const copy = useCopy();
   const f = useFormat();
+  const { locale } = useI18n();
   const params = useAppParams();
-  const forecast = buildForecast(params.subsystem, params.run);
-  // No technology argument, and none in the shape it returns. There is one
-  // attribution per subsystem-day because there is one forecasting head per
-  // subsystem, so a per-technology explanation would be explaining a model
-  // that does not exist (`docs/specs/api-surface.md`, contract change 4). The
-  // URL still carries `technology` — `sharedParams` still passes it on, and
-  // the Overview's observed panels still read it — it simply no longer
-  // reaches the diagnosis.
-  const explain = buildExplain(params.subsystem);
-  // Two reads, not one. The attribution is a property of the day and the
-  // reliability curve is a property of the model, so `api-surface.md` §9 puts
-  // them behind `/v1/diagnosis/day-ahead` and `/v1/model/card?lane=` — the
-  // second keyed by lane and never by subsystem or date. The screen asks the
-  // same two questions of the fixtures, so that wiring it to the two endpoints
-  // is a change of source and not a change of shape.
-  const card = buildModelCard();
   const meta = subsystemMeta(params.subsystem);
+  const state = useExplain({
+    subsystem: params.subsystem,
+    targetDate: params.date,
+    gateProfile: gateProfileOf(params.run),
+    // The lane the rest of this deployment's numbers come from. It is a
+    // published constant rather than a pick from `/v1/meta`'s list, because no
+    // rule yet says which of two served lanes a reader is looking at — the
+    // gateway refuses to default it for the same reason, and inventing the
+    // rule here would be the client deciding it.
+    lane: FIXTURE_LANE,
+    locale: languageTag(locale),
+  });
 
-  return (
+  const frame = (right: ReactNode, body: ReactNode) => (
     <>
       <Head>
         <title>{copy.app.explain.metaTitle}</title>
@@ -74,202 +101,301 @@ export default function ExplainScreen() {
         <ScreenTitle
           title={fill(copy.app.explain.title, { subsystem: meta.onsDisplayName })}
           lede={fill(copy.app.explain.lede, { date: f.date(params.date) })}
-          right={
-            <ForecastStamp
-              origin={forecast.forecastOrigin}
-              thresholdMw={forecast.thresholdMw}
-            />
-          }
+          right={right}
         />
-
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
-          <Panel style={{ flexGrow: 1, flexBasis: 300, gap: space.lg }}>
-            <PanelHeader
-              icon={<HashIcon size={18} color={colors.inkMuted} />}
-              title={copy.app.explain.riskTitle}
-              subtitle={copy.app.explain.riskSubtitle}
-            />
-            <RiskChip probability={forecast.occurrenceProbability} />
-            <RiskScale probability={forecast.occurrenceProbability} />
-            <RiskCaveat />
-          </Panel>
-          <Panel style={{ flexGrow: 1, flexBasis: 300 }}>
-            <BandFigure
-              label={copy.app.explain.magnitude}
-              band={forecast.dailyEnergy}
-              unit="MWh"
-              footnote={copy.app.explain.magnitudeNote}
-            />
-          </Panel>
-          <Panel style={{ flexGrow: 1, flexBasis: 300 }}>
-            <BandFigure
-              label={copy.app.explain.peakPower}
-              band={forecast.peakPower}
-              unit="MW"
-              tone="violet"
-            />
-          </Panel>
-        </View>
-
-        <Panel>
-          <PanelHeader
-            icon={<SparklesIcon size={18} color={colors.inkMuted} />}
-            title={copy.app.explain.narrationTitle}
-            subtitle={copy.app.explain.narrationSubtitle}
-          />
-          <Text
-            style={{
-              marginTop: space.lg,
-              fontSize: 15,
-              lineHeight: 25,
-              color: colors.inkMuted,
-            }}
-          >
-            <Narration explain={explain} thresholdMw={forecast.thresholdMw} />
-          </Text>
-          <Text style={{ marginTop: space.md, fontSize: 11, color: colors.inkFaint }}>
-            {narrationNote(copy, NARRATION_SOURCE)}
-          </Text>
-        </Panel>
-
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
-          <Panel style={{ flexGrow: 1, flexBasis: 380 }}>
-            <PanelHeader
-              icon={<LayersIcon size={18} color={colors.inkMuted} />}
-              title={copy.app.explain.driversTitle}
-              subtitle={copy.app.explain.driversSubtitle}
-            />
-            <View style={{ marginTop: space.lg }}>
-              <DriverBars drivers={explain.drivers} />
-            </View>
-          </Panel>
-
-          <Panel style={{ flexGrow: 1, flexBasis: 320 }}>
-            <PanelHeader
-              icon={<PieChartIcon size={18} color={colors.inkMuted} />}
-              title={copy.app.explain.reliabilityTitle}
-              subtitle={copy.app.explain.reliabilitySubtitle}
-              right={<VintageBadge fidelity={card.reliabilityFidelity} />}
-            />
-            <View style={{ marginTop: space.lg }}>
-              <ReliabilityCurve points={card.reliability} />
-            </View>
-            <Text style={{ marginTop: space.md, fontSize: 11, color: colors.inkFaint }}>
-              {fill(copy.app.explain.reliabilityNote, {
-                hours: f.exact(card.reliabilitySampleHours),
-                from: f.date(card.reliabilityWindowFrom),
-                to: f.date(card.reliabilityWindowTo),
-              })}
-            </Text>
-          </Panel>
-        </View>
-
-        <ObservedReasonsPanel
-          reasons={explain.observedReasons}
-          date={explain.observedReasonsDate}
-        />
-
-        <View
-          style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "center" }}
-        >
-          <Text style={{ fontSize: 12, color: colors.inkMuted }}>
-            {copy.app.explain.next}
-          </Text>
-          <MiniPill
-            label={copy.app.explain.nextMitigate}
-            active={false}
-            onPress={() =>
-              router.push({
-                pathname: "/app/mitigate" as never,
-                params: sharedParams(params),
-              })
-            }
-          />
-        </View>
+        {body}
       </AppShell>
     </>
   );
+
+  if (state.status === "reading") {
+    return frame(
+      null,
+      <HonestyNote
+        title={copy.app.explain.readingTitle}
+        tone="neutral"
+        points={[copy.app.explain.readingNote]}
+      />,
+    );
+  }
+
+  if (state.status === "refused") {
+    return frame(
+      null,
+      <HonestyNote
+        title={copy.app.explain.refusedTitle}
+        tone="warning"
+        points={[copy.error[state.code], copy.app.explain.refusedNote]}
+      />,
+    );
+  }
+
+  const day = state.status === "explained" ? state.day : null;
+
+  return frame(
+    day === null ? null : (
+      <ForecastStamp
+        origin={day.forecast.forecastOrigin}
+        thresholdMw={day.forecast.thresholdMw}
+      />
+    ),
+    <>
+      {state.status === "observedOnly" ? (
+        <ForecastAbsent
+          code={state.code}
+          title={copy.app.explain.absentTitle}
+          note={copy.app.explain.absentNote}
+        />
+      ) : null}
+
+      {day === null ? null : <DiagnosedPanels day={day} />}
+
+      <ReliabilityPanel card={state.observed.card} />
+
+      <ObservedReasonsPanel
+        reasons={state.observed.reasons.rows}
+        date={state.observed.reasons.date}
+        fidelity={state.observed.reasons.vintageFidelity}
+      />
+
+      <View
+        style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "center" }}
+      >
+        <Text style={{ fontSize: 12, color: colors.inkMuted }}>
+          {copy.app.explain.next}
+        </Text>
+        <MiniPill
+          label={copy.app.explain.nextMitigate}
+          active={false}
+          onPress={() =>
+            router.push({
+              pathname: "/app/mitigate" as never,
+              params: sharedParams(params),
+            })
+          }
+        />
+      </View>
+    </>,
+  );
 }
 
 /**
- * Which surface wrote the paragraph on this screen.
+ * The day, as the model sees it: its risk, its two bands, its drivers and the
+ * paragraph about them.
  *
- * The response carries `narration.source` so the footnote can be true in both
- * cases — a rule may withhold the model's narration, and the deterministic
- * template renders instead. This screen is still on fixtures and there is no
- * model behind a fixture, so the paragraph below genuinely is a template: it
- * is composed here, from a per-locale string and the fixture's own values.
- * Naming that rather than asserting a language model wrote it is the whole of
- * the copy change; the constant becomes `explain.narration.source` the day the
- * screen reads the endpoint.
+ * Written in full and rendered by nothing today. That is the point: "these
+ * screens light up with no further edits when a model is promoted" is only a
+ * claim if the code that lights up is already here and already type-checks
+ * against the contract.
  */
-const NARRATION_SOURCE: NarrationEnvelope["source"] = "template";
-
-function narrationNote(copy: Copy, source: NarrationEnvelope["source"]): string {
-  return source === "model"
-    ? copy.app.explain.narrationNoteModel
-    : copy.app.explain.narrationNoteTemplate;
-}
-
-/**
- * The generated narration.
- *
- * `docs/specs/i18n.md` carves this surface out of "the API returns codes, the
- * client renders the words": there is no translation key for a sentence a
- * language model writes fresh per request, so the shipped endpoint will take a
- * `locale` and generate the prose in it. There is no model behind a fixture,
- * so the prototype composes the same sentence from a per-locale template and
- * the fixture's own values — which is what keeps this panel honest in
- * Portuguese until the real narration replaces it wholesale.
- */
-function Narration({
-  explain,
-  thresholdMw,
-}: {
-  explain: ExplainFixture;
-  thresholdMw: number;
-}) {
+function DiagnosedPanels({ day }: { day: DiagnosedDay }) {
+  const colors = usePalette();
   const copy = useCopy();
   const f = useFormat();
-  const [top, second] = explain.drivers;
-  const meta = subsystemMeta(explain.subsystem);
+  const { forecast, diagnosis } = day;
+
   return (
     <>
-      {fill(copy.app.explain.narration, {
-        subsystem: meta.onsDisplayName,
-        mw: f.number(thresholdMw),
-        top: driverLabel(top.code, copy).toLowerCase(),
-        feature: top.headlineFeature,
-        observed: formatReading(top.observed, copy, f) ?? "",
-        typical: formatReading(top.typical, copy, f) ?? "",
-        second: driverLabel(second.code, copy).toLowerCase(),
-        share: f.percent(explain.narrationTopShare),
-      })}
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
+        <Panel style={{ flexGrow: 1, flexBasis: 300, gap: space.lg }}>
+          <PanelHeader
+            icon={<HashIcon size={18} color={colors.inkMuted} />}
+            title={copy.app.explain.riskTitle}
+            subtitle={copy.app.explain.riskSubtitle}
+          />
+          <RiskChip probability={forecast.dayOccurrenceProbability} />
+          <RiskScale probability={forecast.dayOccurrenceProbability} />
+          <RiskCaveat />
+        </Panel>
+        <Panel style={{ flexGrow: 1, flexBasis: 300 }}>
+          <BandFigure
+            label={copy.app.explain.magnitude}
+            band={forecast.dayEnergyMwh}
+            unit="MWh"
+            footnote={copy.app.explain.magnitudeNote}
+          />
+        </Panel>
+        <Panel style={{ flexGrow: 1, flexBasis: 300 }}>
+          <BandFigure
+            label={copy.app.explain.peakPower}
+            band={forecast.peakPowerMw}
+            unit="MW"
+            tone="violet"
+          />
+        </Panel>
+      </View>
+
+      <Panel>
+        <PanelHeader
+          icon={<SparklesIcon size={18} color={colors.inkMuted} />}
+          title={copy.app.explain.narrationTitle}
+          subtitle={copy.app.explain.narrationSubtitle}
+        />
+        <Text
+          style={{
+            marginTop: space.lg,
+            fontSize: 15,
+            lineHeight: 25,
+            color: colors.inkMuted,
+          }}
+        >
+          {/*
+            Both arms of the union, rendered by one function. The model's
+            arrives as prose already in the requested locale — the single
+            settled exception to "codes on the wire, the client renders the
+            words"; the template's arrives as a plan of catalogue keys and
+            values, and `i18n/narration.ts` formats each value through `Intl`,
+            because `412,0` and `412.0` are the same number and different
+            strings and which one a reader sees is a property of the reader.
+          */}
+          {renderNarration(diagnosis.narration, copy, f)}
+        </Text>
+        <Text style={{ marginTop: space.md, fontSize: 11, color: colors.inkFaint }}>
+          {/* The source the response reported, not a constant this file chose. */}
+          {diagnosis.narration.source === "model"
+            ? copy.app.explain.narrationNoteModel
+            : copy.app.explain.narrationNoteTemplate}
+        </Text>
+        {diagnosis.withheldBy.length === 0 ? null : (
+          <Text style={{ marginTop: space.sm, fontSize: 11, color: colors.inkFaint }}>
+            {/*
+              A `withhold` rule fired: the drivers are untouched and the
+              template narration stands in for the model's. A 200, not an
+              error, and saying so is the difference between "the model chose
+              not to speak" and "the model was not asked".
+            */}
+            {fill(copy.app.explain.narrationWithheld, {
+              // Rule codes, not prose: they are identifiers the server chose
+              // and an operator greps for, so they travel untranslated the way
+              // a lane name and a reason code do.
+              codes: diagnosis.withheldBy.join(", "),
+            })}
+          </Text>
+        )}
+      </Panel>
+
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
+        <Panel style={{ flexGrow: 1, flexBasis: 380 }}>
+          <PanelHeader
+            icon={<LayersIcon size={18} color={colors.inkMuted} />}
+            title={copy.app.explain.driversTitle}
+            subtitle={copy.app.explain.driversSubtitle}
+          />
+          <View style={{ marginTop: space.lg }}>
+            {/*
+              All eight groups, ranked by the server. `lib/driver-rows.ts`
+              applies the `share >= 0.03` cut, the six-row cap and the merge
+              into `other` — the half of the rule that is the client's, and the
+              half the server must never hold.
+            */}
+            <DriverBars drivers={attributedDrivers(diagnosis.attribution.drivers)} />
+          </View>
+        </Panel>
+      </View>
     </>
   );
 }
 
 /**
- * Observed restriction reasons.
+ * The calibration curve, or the reason there is none.
+ *
+ * `GET /v1/model/card?lane=` refuses with `MODEL_UNAVAILABLE` whenever no
+ * artifact is promoted, and the response type says so structurally: `laneState`
+ * is the constant `"promoted"`, because the other three states are never a card
+ * with empty groups. So this panel has exactly two renderings and today it is
+ * the second one.
+ *
+ * **The refused artifact's own card is not shown, and that is a decision.**
+ * `GET /v1/model/artifacts` will serve the card of an artifact the gate
+ * refused — and on these lanes the gate refused it *on calibration*, so that
+ * card's reliability curve is literally the evidence for the refusal. It is an
+ * operator's read and not a reader's: a calibration curve on a product screen
+ * is the promise "this is how well the model you are looking at is calibrated",
+ * and there is no model anyone is looking at. Drawing a refused artifact's
+ * curve under that heading would be the same failure as a fixture curve, one
+ * step subtler.
+ */
+function ReliabilityPanel({ card }: { card: ModelCardState }) {
+  const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
+
+  if (card.status === "refused") {
+    return (
+      <Panel>
+        <PanelHeader
+          icon={<PieChartIcon size={18} color={colors.inkMuted} />}
+          title={copy.app.explain.reliabilityTitle}
+          subtitle={copy.app.explain.reliabilitySubtitle}
+        />
+        <Text
+          style={{
+            marginTop: space.lg,
+            fontSize: 12,
+            lineHeight: 19,
+            color: colors.inkMuted,
+          }}
+        >
+          {copy.error[card.code]}
+        </Text>
+        <Text style={{ marginTop: space.sm, fontSize: 11, color: colors.inkFaint }}>
+          {copy.app.explain.reliabilityAbsentNote}
+        </Text>
+      </Panel>
+    );
+  }
+
+  const reliability = card.card.reliability;
+  return (
+    <Panel>
+      <PanelHeader
+        icon={<PieChartIcon size={18} color={colors.inkMuted} />}
+        title={copy.app.explain.reliabilityTitle}
+        subtitle={copy.app.explain.reliabilitySubtitle}
+        right={<VintageBadge fidelity={reliability.vintageFidelity} />}
+      />
+      <View style={{ marginTop: space.lg }}>
+        <ReliabilityCurve points={reliability.points} />
+      </View>
+      <Text style={{ marginTop: space.md, fontSize: 11, color: colors.inkFaint }}>
+        {fill(copy.app.explain.reliabilityNote, {
+          hours: f.exact(reliability.sampleHours),
+          from: f.date(reliability.window.start),
+          to: f.date(reliability.window.end),
+        })}
+      </Text>
+    </Panel>
+  );
+}
+
+/**
+ * Observed restriction reasons, at the grain ONS reports them and no finer.
  *
  * The single hardest thing on this screen to get right: a reason is a property
  * of a `ReportingEntity`, and there is no path in the type system from a plant
  * to one. Most curtailed energy belongs to a *conjunto*, where the reason
  * belongs to the settlement unit and may not be pushed down to member plants;
- * the eighteen Tipo I / II-B plants are their own reporting entities and their
- * reasons genuinely are observed at plant grain. So the panel labels the grain
- * per row rather than assuming one for the table.
+ * the Tipo I / II-B plants are their own reporting entities and their reasons
+ * genuinely are observed at plant grain. So the panel labels the grain per row
+ * rather than assuming one for the table.
  *
  * `reason.description` is `dsc_restricao` as ONS wrote it, and stays in ONS's
  * Portuguese in both locales: it is a source record, not copy, and translating
  * one would be inventing evidence.
+ *
+ * **`cause_mixed` is now on the row and is rendered.** The fixture shape had no
+ * field for it; the wire does, because the schema already records that an hour
+ * changed cause mid-way, and hiding that would make the single stored reason
+ * look like an observation rather than a simplification.
  */
 function ObservedReasonsPanel({
   reasons,
   date,
+  fidelity,
 }: {
-  reasons: ObservedReason[];
+  reasons: readonly ObservedReason[];
   date: string;
+  fidelity: Parameters<typeof VintageBadge>[0]["fidelity"];
 }) {
   const colors = usePalette();
   const copy = useCopy();
@@ -280,53 +406,65 @@ function ObservedReasonsPanel({
         icon={<HashIcon size={18} color={colors.inkMuted} />}
         title={copy.app.explain.reasonsTitle}
         subtitle={fill(copy.app.explain.reasonsSubtitle, { date: f.date(date) })}
+        right={<VintageBadge fidelity={fidelity} />}
       />
       <View style={{ marginTop: space.lg, gap: space.md }}>
-        {reasons.map((reason) => (
-          <View
-            key={reason.entityLabel}
-            style={{
-              flexDirection: "row",
-              flexWrap: "wrap",
-              alignItems: "center",
-              gap: 10,
-              paddingBottom: space.md,
-              borderBottomWidth: 1,
-              borderBottomColor: colors.border,
-            }}
-          >
-            <Badge
-              label={reason.reason}
-              tone={reason.reason === "REL" ? "danger" : "violet"}
-            />
-            <Badge label={reason.origin} tone="neutral" />
-            <View style={{ flexGrow: 1, flexBasis: 200 }}>
-              <Text style={{ fontSize: 14, fontWeight: "600", color: colors.ink }}>
-                {reason.entityLabel}
-              </Text>
-              <Text style={{ fontSize: 11, color: colors.inkFaint }}>
-                {reason.grain === "conjunto"
-                  ? copy.app.explain.grainConjunto
-                  : copy.app.explain.grainPlant}
-              </Text>
-            </View>
-            <Text
+        {reasons.length === 0 ? (
+          <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkMuted }}>
+            {copy.app.explain.reasonsEmpty}
+          </Text>
+        ) : (
+          reasons.map((reason) => (
+            <View
+              key={reason.entityCode}
               style={{
-                fontSize: 14,
-                fontWeight: "700",
-                fontVariant: ["tabular-nums"],
-                color: colors.ink,
+                flexDirection: "row",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: 10,
+                paddingBottom: space.md,
+                borderBottomWidth: 1,
+                borderBottomColor: colors.border,
               }}
             >
-              {`${f.number(reason.constrainedOffMwh, 1)} MWh`}
-            </Text>
-            {reason.description === null ? null : (
-              <Text style={{ fontSize: 11, color: colors.inkFaint, flexBasis: "100%" }}>
-                {reason.description}
+              <Badge
+                label={reason.reason}
+                tone={reason.reason === "REL" ? "danger" : "violet"}
+              />
+              <Badge label={reason.origin} tone="neutral" />
+              <View style={{ flexGrow: 1, flexBasis: 200 }}>
+                <Text style={{ fontSize: 14, fontWeight: "600", color: colors.ink }}>
+                  {reason.entityLabel}
+                </Text>
+                <Text style={{ fontSize: 11, color: colors.inkFaint }}>
+                  {reason.grain === "conjunto"
+                    ? copy.app.explain.grainConjunto
+                    : copy.app.explain.grainPlant}
+                </Text>
+              </View>
+              <Text
+                style={{
+                  fontSize: 14,
+                  fontWeight: "700",
+                  fontVariant: ["tabular-nums"],
+                  color: colors.ink,
+                }}
+              >
+                {`${f.number(reason.constrainedOffMwh, 1)} MWh`}
               </Text>
-            )}
-          </View>
-        ))}
+              {reason.causeMixed ? (
+                <Text style={{ fontSize: 11, color: colors.inkFaint, flexBasis: "100%" }}>
+                  {copy.app.explain.causeMixed}
+                </Text>
+              ) : null}
+              {reason.description === null ? null : (
+                <Text style={{ fontSize: 11, color: colors.inkFaint, flexBasis: "100%" }}>
+                  {reason.description}
+                </Text>
+              )}
+            </View>
+          ))
+        )}
         <Text style={{ fontSize: 11, lineHeight: 18, color: colors.inkFaint }}>
           {copy.app.explain.reasonLegend}
         </Text>

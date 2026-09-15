@@ -1,10 +1,34 @@
 /**
- * Screen 1 — Grid Overview (IDEA.md §42).
+ * Screen 1 — Visão da rede (IDEA.md §42), read from the **real** gateway.
  *
- * Four subsystems, their risk, and the 24-hour profile with its P10–P90 band.
+ * Two halves, and today only one of them answers.
+ *
+ * **The forecast half** — the map, the four rows, the hourly fan and the two
+ * day bands — is `GET /v1/grid/outlook` and `GET /v1/forecast/day-ahead`. Both
+ * refuse in production right now, because no artifact is promoted on either
+ * serving lane and nothing has been published; `use-network.ts` documents the
+ * exact state and the exact codes. When they refuse, these panels are
+ * **absent** — not skeletons, not zeroed bands, not a flat line at zero — and
+ * the screen says which clause refused, from the typed code, in the reader's
+ * locale.
+ *
+ * **The observed half** — the settled grid across the four subsystems, the
+ * selected subsystem's settled day, and its recent episodes — is
+ * `GET /v1/grid/now`, `GET /v1/curtailment/hours` and
+ * `GET /v1/curtailment/episodes`. None of them loads a model and all three
+ * answer today. `docs/specs/api-surface.md` names exactly these three as what
+ * the Overview shows when no artifact is promoted, and that is what it shows.
+ *
+ * **The observed half renders in both states, and stays observed in both.** It
+ * is not a fallback that disappears when a forecast arrives: what the grid has
+ * actually been doing is worth the same on a day that is forecast as on a day
+ * that is not. It is drawn by different components from the forecast half for
+ * the reason `lib/network.ts` gives — the failure being designed against is a
+ * settled total in the place a forecast band was, under the label the band had.
  */
 
 import {
+  ClockIcon,
   FadeIn,
   LayoutDashboardIcon,
   layout,
@@ -18,49 +42,49 @@ import {
 } from "@wattsteer/ui";
 import { router } from "expo-router";
 import Head from "expo-router/head";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { Text, View } from "react-native";
 import { AppShell, ScreenTitle } from "@/components/app/app-shell";
-import { ForecastStamp, HonestyNote } from "@/components/app/honesty";
+import { ForecastAbsent } from "@/components/app/forecast-absent";
+import { ForecastStamp, HonestyNote, VintageBadge } from "@/components/app/honesty";
 import { SubsystemRow } from "@/components/app/subsystem-row";
-import { sharedParams, useAppParams } from "@/components/app/use-app-params";
+import {
+  gateProfileOf,
+  sharedParams,
+  useAppParams,
+} from "@/components/app/use-app-params";
+import {
+  type ForecastNetwork,
+  type ObservedNetwork,
+  useNetwork,
+} from "@/components/app/use-network";
 import { BandCard } from "@/components/charts/band-figure";
+import { EpisodeList } from "@/components/charts/episode-list";
 import { FanChart } from "@/components/charts/fan-chart";
+import { ObservedProfile } from "@/components/charts/observed-profile";
 import { RiskCaveat } from "@/components/charts/risk-class";
 import { SubsystemMap } from "@/components/charts/subsystem-map";
 import { TechnologySplitPanel } from "@/components/charts/technology-split";
 import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
 import {
-  buildAllForecasts,
-  buildForecast,
+  SUBSYSTEM_DISPLAY_ORDER,
   type SubsystemCode,
   subsystemMeta,
 } from "@/lib/fixtures";
+import { forecastHours, forecastRow, nowRows, outlookRows } from "@/lib/network";
 
 export default function GridOverviewScreen() {
   const colors = usePalette();
   const copy = useCopy();
   const f = useFormat();
   const params = useAppParams();
-  // One forecast per subsystem-day. The technology selection does not reach
-  // either call: there is no per-technology forecast to build, so it can only
-  // choose which scalar the split panel below emphasises.
-  const all = buildAllForecasts(params.run);
-  const selected = buildForecast(params.subsystem, params.run);
   const meta = subsystemMeta(params.subsystem);
-
-  // One scale across all four rows, so "wider" and "bigger" mean what they look
-  // like. Computed from the P90s, not the P50s.
-  // Measured on the container, not the viewport: this screen is nested, and a
-  // viewport query would put the map beside the rows inside a column that
-  // cannot hold both.
-  const [overviewWidth, onOverviewLayout] = useContainerWidth();
-  // One hover, two affordances — see `SubsystemMap`'s `hovered` prop.
-  const [hovered, setHovered] = useState<SubsystemCode | null>(null);
-  const side = overviewWidth >= layout.desktop;
-
-  const domainMax = Math.max(...all.map((each) => each.dailyEnergy.p90)) * 1.05;
+  const state = useNetwork({
+    subsystem: params.subsystem,
+    targetDate: params.date,
+    gateProfile: gateProfileOf(params.run),
+  });
 
   /**
    * Choosing a subsystem, defined once.
@@ -77,7 +101,7 @@ export default function GridOverviewScreen() {
       params: { ...sharedParams(params), subsystem },
     });
 
-  return (
+  const frame = (right: ReactNode, body: ReactNode) => (
     <>
       <Head>
         <title>{copy.app.overview.metaTitle}</title>
@@ -87,154 +111,362 @@ export default function GridOverviewScreen() {
         <ScreenTitle
           title={copy.app.overview.title}
           lede={fill(copy.app.overview.lede, { date: f.date(params.date) })}
-          right={
-            <ForecastStamp
-              origin={selected.forecastOrigin}
-              thresholdMw={selected.thresholdMw}
+          right={right}
+        />
+        {body}
+      </AppShell>
+    </>
+  );
+
+  if (state.status === "reading") {
+    return frame(
+      null,
+      <HonestyNote
+        title={copy.app.overview.readingTitle}
+        tone="neutral"
+        points={[copy.app.overview.readingNote]}
+      />,
+    );
+  }
+
+  if (state.status === "refused") {
+    // Even the settled grid did not answer. There is nothing on this screen
+    // that does not depend on it, so there is nothing to draw but the sentence
+    // — and a sentence is what a reader can act on, where an empty page is not.
+    return frame(
+      null,
+      <HonestyNote
+        title={copy.app.overview.refusedTitle}
+        tone="warning"
+        points={[copy.error[state.code], copy.app.overview.refusedNote]}
+      />,
+    );
+  }
+
+  const observed = state.observed;
+  const forecast = state.status === "read" ? state.forecast : null;
+
+  return frame(
+    forecast === null ? null : (
+      <ForecastStamp
+        origin={forecast.forecast.forecastOrigin}
+        thresholdMw={forecast.forecast.thresholdMw}
+      />
+    ),
+    <>
+      {state.status === "observedOnly" ? (
+        <ForecastAbsent
+          code={state.code}
+          title={copy.app.overview.absentTitle}
+          note={copy.app.overview.absentNote}
+        />
+      ) : null}
+
+      {forecast === null ? null : (
+        <ForecastPanels forecast={forecast} onSelect={select} />
+      )}
+
+      <ObservedPanels observed={observed} subsystem={params.subsystem} />
+
+      <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkFaint }}>
+        {fill(copy.app.overview.grainNote, { subsystem: meta.onsDisplayName })}
+      </Text>
+    </>,
+  );
+}
+
+/**
+ * Everything a promoted model pays for.
+ *
+ * Rendered only in the `read` state, and therefore not rendered at all today.
+ * It is written in full rather than stubbed, because "these screens must light
+ * up with no further edits" is only true if the code that lights up already
+ * exists: the day a lane is promoted and a gate publishes, `use-network.ts`
+ * returns `read` and this component is what appears.
+ */
+function ForecastPanels({
+  forecast,
+  onSelect,
+}: {
+  forecast: ForecastNetwork;
+  onSelect: (subsystem: SubsystemCode) => void;
+}) {
+  const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
+  const params = useAppParams();
+  const meta = subsystemMeta(params.subsystem);
+  const rows = outlookRows(forecast.outlook);
+  const selected = forecastRow(forecast.forecast);
+  const [overviewWidth, onOverviewLayout] = useContainerWidth();
+  // One hover, two affordances — see `SubsystemMap`'s `hovered` prop.
+  const [hovered, setHovered] = useState<SubsystemCode | null>(null);
+  const side = overviewWidth >= layout.desktop;
+
+  // One scale across all four rows, so "wider" and "bigger" mean what they look
+  // like. Computed from the P90s, not the P50s.
+  const domainMax = Math.max(...rows.map((each) => each.dailyEnergy.p90)) * 1.05;
+
+  return (
+    <>
+      <FadeIn style={{ gap: space.md }} onLayout={onOverviewLayout}>
+        {/*
+          Map and rows side by side once there is room for both, stacked below
+          that. `side` is measured against `layout.desktop` on the *container*
+          rather than the viewport, so the pair reflows correctly inside
+          whatever it is nested in.
+        */}
+        <View
+          style={{
+            flexDirection: side ? "row" : "column",
+            alignItems: side ? "flex-start" : "stretch",
+            gap: space.md,
+          }}
+        >
+          <Panel style={side ? { width: 420 } : undefined}>
+            <PanelHeader
+              icon={<MapIcon size={18} color={colors.inkMuted} />}
+              title={copy.app.overview.map.title}
+              subtitle={copy.app.overview.map.subtitle}
             />
-          }
-        />
-
-        {/*
-          Staged entrance, borrowed from the results dashboard this screen is
-          modelled on: the eye is given an order to read the answer in —
-          subsystems, then the profile, then the day totals — instead of the
-          whole page arriving at once. Each block is offset by one step, and
-          `FadeIn` collapses to an instant render under prefers-reduced-motion.
-        */}
-        {/*
-          The shell badge says `FIXTURE DATA` in the chrome, which is a label.
-          This screen builds every band from `@/lib/fixtures` and issues no
-          request, and no artifact is promoted for serving, so there is no
-          forecast it could be showing instead. The product states absences in
-          this component everywhere else; it owes this screen the same.
-        */}
-        <HonestyNote
-          title={copy.app.overview.fixtureTitle}
-          points={[copy.app.overview.fixtureNote]}
-        />
-
-        <FadeIn style={{ gap: space.md }} onLayout={onOverviewLayout}>
-          {/*
-            Map and rows side by side once there is room for both, stacked
-            below that. `side` is measured against `layout.desktop` on the
-            *container* rather than the viewport, so the pair reflows correctly
-            inside whatever it is nested in.
-
-            The map keeps its own 380 px cap (`subsystem-map.tsx`), so on a wide
-            screen the left column is the map at its natural size and the right
-            column takes the remaining width — which is where the rows want to
-            be, since their bars are the part that benefits from length. Below
-            the breakpoint the rows would be squeezed to roughly half of a phone
-            width, so they go back under the map instead.
-          */}
-          <View
-            style={{
-              flexDirection: side ? "row" : "column",
-              alignItems: side ? "flex-start" : "stretch",
-              gap: space.md,
-            }}
-          >
-            <Panel style={side ? { width: 420 } : undefined}>
-              <PanelHeader
-                icon={<MapIcon size={18} color={colors.inkMuted} />}
-                title={copy.app.overview.map.title}
-                subtitle={copy.app.overview.map.subtitle}
+            <View style={{ marginTop: space.lg }}>
+              <SubsystemMap
+                forecasts={rows}
+                selected={params.subsystem}
+                hovered={hovered}
+                onHoverChange={setHovered}
+                onSelect={onSelect}
               />
-              <View style={{ marginTop: space.lg }}>
-                <SubsystemMap
-                  forecasts={all}
-                  selected={params.subsystem}
-                  hovered={hovered}
-                  onHoverChange={setHovered}
-                  onSelect={select}
-                />
-              </View>
-              <Text
+            </View>
+            <Text
+              style={{
+                fontSize: 11,
+                color: colors.inkFaint,
+                lineHeight: 17,
+                marginTop: space.md,
+              }}
+            >
+              {copy.app.overview.map.boundaryNote}
+            </Text>
+          </Panel>
+
+          <View style={{ flex: side ? 1 : undefined, gap: space.md }}>
+            {rows.map((row) => (
+              <SubsystemRow
+                key={row.subsystem}
+                forecast={row}
+                emphasis={params.technology}
+                domainMax={domainMax}
+                selected={row.subsystem === params.subsystem}
+                highlighted={row.subsystem === hovered}
+                onHoverChange={(on) => setHovered(on ? row.subsystem : null)}
+                onPress={() => onSelect(row.subsystem)}
+              />
+            ))}
+          </View>
+        </View>
+        <RiskCaveat />
+      </FadeIn>
+
+      <FadeIn delay={70}>
+        <Panel>
+          <PanelHeader
+            icon={<LayoutDashboardIcon size={18} color={colors.inkMuted} />}
+            title={meta.onsDisplayName}
+            subtitle={copy.app.overview.profileSubtitle}
+          />
+          <View style={{ marginTop: space.lg }}>
+            <FanChart
+              hours={forecastHours(forecast.forecast)}
+              thresholdMw={forecast.forecast.thresholdMw}
+            />
+          </View>
+        </Panel>
+      </FadeIn>
+
+      <FadeIn delay={140}>
+        <Panel>
+          <PanelHeader
+            icon={<PieChartIcon size={18} color={colors.inkMuted} />}
+            title={copy.app.split.title}
+            subtitle={copy.app.split.subtitle}
+          />
+          <View style={{ marginTop: space.lg }}>
+            <TechnologySplitPanel
+              split={selected.split}
+              expectedMwh={selected.dayExpectedMwh}
+              emphasis={params.technology}
+            />
+          </View>
+        </Panel>
+      </FadeIn>
+
+      <FadeIn
+        delay={210}
+        style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}
+      >
+        <BandCard
+          label={copy.app.overview.dailyEnergy}
+          band={selected.dailyEnergy}
+          unit="MWh"
+          footnote={copy.app.overview.dailyEnergyNote}
+        />
+        <BandCard
+          label={copy.app.overview.peakPower}
+          band={selected.peakPower}
+          unit="MW"
+          tone="violet"
+          footnote={fill(copy.app.overview.peakPowerNote, {
+            mw: f.number(forecast.forecast.thresholdMw),
+          })}
+        />
+      </FadeIn>
+    </>
+  );
+}
+
+/**
+ * The settled grid. Three panels, no model behind any of them.
+ *
+ * Each names the day or the window it covers, because an observed figure whose
+ * period is not stated is not comparable with anything — and, on a screen whose
+ * other half is about *tomorrow*, a reader has to be able to tell at a glance
+ * which of the two a number belongs to.
+ */
+function ObservedPanels({
+  observed,
+  subsystem,
+}: {
+  observed: ObservedNetwork;
+  subsystem: SubsystemCode;
+}) {
+  const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
+  const meta = subsystemMeta(subsystem);
+  const rows = nowRows(observed.now.subsystems, SUBSYSTEM_DISPLAY_ORDER);
+
+  return (
+    <>
+      <FadeIn delay={70}>
+        <Panel>
+          <PanelHeader
+            icon={<ClockIcon size={18} color={colors.inkMuted} />}
+            title={copy.app.overview.settledTitle}
+            subtitle={fill(copy.app.overview.settledSubtitle, {
+              hour: f.dateTime(observed.now.latestSettledHour),
+              lag: f.number(observed.now.lagHours),
+            })}
+            right={<VintageBadge fidelity={observed.now.vintageFidelity} />}
+          />
+          <View style={{ marginTop: space.lg, gap: space.sm }}>
+            {rows.map((row) => (
+              <View
+                key={row.subsystem}
                 style={{
-                  fontSize: 11,
-                  color: colors.inkFaint,
-                  lineHeight: 17,
-                  marginTop: space.md,
+                  flexDirection: "row",
+                  flexWrap: "wrap",
+                  alignItems: "baseline",
+                  gap: 8,
                 }}
               >
-                {copy.app.overview.map.boundaryNote}
-              </Text>
-            </Panel>
-
-            <View style={{ flex: side ? 1 : undefined, gap: space.md }}>
-              {all.map((forecast) => (
-                <SubsystemRow
-                  key={forecast.subsystem}
-                  forecast={forecast}
-                  emphasis={params.technology}
-                  domainMax={domainMax}
-                  selected={forecast.subsystem === params.subsystem}
-                  highlighted={forecast.subsystem === hovered}
-                  onHoverChange={(on) => setHovered(on ? forecast.subsystem : null)}
-                  onPress={() => select(forecast.subsystem)}
-                />
-              ))}
-            </View>
+                <Text
+                  style={{
+                    flexGrow: 1,
+                    flexBasis: 160,
+                    fontSize: 13,
+                    fontWeight: row.subsystem === subsystem ? "700" : "500",
+                    color: row.subsystem === subsystem ? colors.ink : colors.inkMuted,
+                  }}
+                >
+                  {row.onsDisplayName}
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontWeight: "700",
+                    fontVariant: ["tabular-nums"],
+                    color: colors.ink,
+                  }}
+                >
+                  {`${f.compact(row.last24hConstrainedOffMwh)} MWh`}
+                </Text>
+                <Text
+                  style={{
+                    flexBasis: "100%",
+                    fontSize: 11,
+                    color: colors.inkFaint,
+                    fontVariant: ["tabular-nums"],
+                  }}
+                >
+                  {fill(copy.app.overview.settledSplit, {
+                    wind: f.compact(row.split.windMwh),
+                    solar: f.compact(row.split.solarMwh),
+                  })}
+                </Text>
+              </View>
+            ))}
           </View>
-          <RiskCaveat />
-        </FadeIn>
+          <Text
+            style={{
+              marginTop: space.md,
+              fontSize: 11,
+              lineHeight: 18,
+              color: colors.inkFaint,
+            }}
+          >
+            {fill(copy.app.overview.settledNationalNote, {
+              mwh: f.compact(observed.now.national.last24hConstrainedOffMwh),
+            })}
+          </Text>
+        </Panel>
+      </FadeIn>
 
-        <FadeIn delay={70}>
-          <Panel>
-            <PanelHeader
-              icon={<LayoutDashboardIcon size={18} color={colors.inkMuted} />}
-              title={meta.onsDisplayName}
-              subtitle={copy.app.overview.profileSubtitle}
-            />
-            <View style={{ marginTop: space.lg }}>
-              <FanChart hours={selected.hours} thresholdMw={selected.thresholdMw} />
-            </View>
-          </Panel>
-        </FadeIn>
-
-        <FadeIn delay={140}>
-          <Panel>
-            <PanelHeader
-              icon={<PieChartIcon size={18} color={colors.inkMuted} />}
-              title={copy.app.split.title}
-              subtitle={copy.app.split.subtitle}
-            />
-            <View style={{ marginTop: space.lg }}>
-              <TechnologySplitPanel
-                split={selected.split}
-                expectedMwh={selected.dayExpectedMwh}
-                emphasis={params.technology}
-              />
-            </View>
-          </Panel>
-        </FadeIn>
-
-        <FadeIn
-          delay={210}
-          style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}
-        >
-          <BandCard
-            label={copy.app.overview.dailyEnergy}
-            band={selected.dailyEnergy}
-            unit="MWh"
-            footnote={copy.app.overview.dailyEnergyNote}
-          />
-          <BandCard
-            label={copy.app.overview.peakPower}
-            band={selected.peakPower}
-            unit="MW"
-            tone="violet"
-            footnote={fill(copy.app.overview.peakPowerNote, {
-              mw: f.number(selected.thresholdMw),
+      <FadeIn delay={140}>
+        <Panel>
+          <PanelHeader
+            icon={<LayoutDashboardIcon size={18} color={colors.inkMuted} />}
+            title={fill(copy.app.overview.settledDayTitle, {
+              subsystem: meta.onsDisplayName,
+            })}
+            subtitle={fill(copy.app.overview.settledDaySubtitle, {
+              date: f.date(observed.hoursDate),
             })}
           />
-        </FadeIn>
+          <View style={{ marginTop: space.lg }}>
+            <ObservedProfile
+              hours={observed.hours}
+              emptyLabel={copy.app.overview.settledDayEmpty}
+            />
+          </View>
+          <Text
+            style={{
+              marginTop: space.md,
+              fontSize: 11,
+              lineHeight: 18,
+              color: colors.inkFaint,
+            }}
+          >
+            {copy.app.overview.settledDayNote}
+          </Text>
+        </Panel>
+      </FadeIn>
 
-        <Text style={{ fontSize: 12, color: colors.inkFaint, lineHeight: 19 }}>
-          {copy.app.overview.grainNote}
-        </Text>
-      </AppShell>
+      <FadeIn delay={210}>
+        <EpisodeList
+          episodes={observed.episodes.episodes}
+          maxGapHours={observed.episodes.maxGapHours}
+          title={copy.app.overview.episodesTitle}
+          subtitle={fill(copy.app.overview.episodesSubtitle, {
+            from: f.date(observed.episodes.from.slice(0, 10)),
+            to: f.date(observed.episodes.to.slice(0, 10)),
+            mw: f.number(observed.episodes.thresholdMw),
+          })}
+          row={copy.app.overview.episodeRow}
+          note={copy.app.overview.episodeNote}
+          empty={copy.app.overview.episodesEmpty}
+        />
+      </FadeIn>
     </>
   );
 }

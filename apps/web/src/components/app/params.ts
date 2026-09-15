@@ -17,25 +17,63 @@
  *    the address rather than part of a provider.
  *
  * So: `subsystem`, `technology` and `run` are shared across all four screens;
- * `episode` is Time Machine's own. `date` is in the shape but pinned to the
- * fixture day — a date picker over fixtures would be furniture with nothing
- * behind it, and the parameter is here so its absence is not mistaken for a
- * decision.
+ * `episode` is Time Machine's own.
+ *
+ * **`date` used to be pinned to the fixture day and is now the real one.** The
+ * note that stood here said a date picker over fixtures would be furniture with
+ * nothing behind it, which was true while Overview and Explain built their
+ * numbers in the browser. They read `apps/api` now, so the day they ask about
+ * has to be a day the gateway has an opinion on: `latestTargetDate` — tomorrow,
+ * in Brasília — which is `@wattsteer/core`'s own function and exactly what
+ * `apps/api/src/api/params.ts` defaults `target_date` to. Pinning `2026-08-29`
+ * against a live gateway would have asked a real service about a day chosen to
+ * make a fixture look good.
+ *
+ * There is still no picker in the URL, and that is now a product decision
+ * rather than an absence: the forecast horizon is one day and the gateway
+ * refuses anything past tomorrow with `TARGET_DATE_OUT_OF_RANGE`, so the only
+ * other date a picker could offer is the past — which is the Time Machine, and
+ * it has its own.
+ *
+ * **`run` is the gate profile.** `00Z` / `12Z` are the weather runs the two
+ * gates see, and `gateProfileOf` is the one place the label becomes the
+ * `gate_early` / `gate_late` the API takes. The mapping is read off
+ * `@wattsteer/core`'s `GATES` rather than written out here, so a third gate
+ * would be a compile error and not a silently unreachable pill.
  *
  * Everything is parsed defensively: a hand-edited URL yields a default, never
  * a crash and never an empty screen. This module is deliberately free of
  * React and of expo-router so the parsing rules stay unit-testable.
  */
 
+import { GATES, latestTargetDate } from "@wattsteer/core";
+import type { GateProfile } from "@wattsteer/core/api";
 import {
   REPLAY_DAYS,
   RUN_LABELS,
   type RunLabel,
   SUBSYSTEM_DISPLAY_ORDER,
   type SubsystemCode,
-  TARGET_DATE,
   type Technology,
 } from "@/lib/fixtures";
+
+/**
+ * The gate a weather-run label names.
+ *
+ * Derived from the published gate table rather than written as a literal pair:
+ * `weatherRun` is a field on `GateSchedule`, so this stays correct if a gate's
+ * run moves and fails to compile if a `RunLabel` ever names no gate at all.
+ */
+export function gateProfileOf(run: RunLabel): GateProfile {
+  const gate = GATES.find((entry) => entry.weatherRun === run);
+  if (gate === undefined) {
+    // Unreachable through `RUN_LABELS`, and thrown rather than defaulted: a gate
+    // guessed here would send the reader a forecast from a run other than the
+    // one the pill they pressed says.
+    throw new RangeError(`No published gate sees the ${run} weather run`);
+  }
+  return gate.profile;
+}
 
 export interface AppParams {
   subsystem: SubsystemCode;
@@ -68,8 +106,16 @@ function first(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
+/**
+ * `now` is an argument so the parsing rules stay a pure function.
+ *
+ * The day being forecast is a function of the clock, and a module that read one
+ * for itself would be a module whose tests drift into next week. The caller
+ * that has a clock passes one; every test passes the instant it means.
+ */
 export function parseAppParams(
   raw: Record<string, string | string[] | undefined>,
+  now: Date = new Date(),
 ): AppParams {
   const subsystem = first(raw.subsystem);
   const technology = first(raw.technology);
@@ -81,7 +127,7 @@ export function parseAppParams(
       : "NE",
     technology: TECHNOLOGY_PARAM[technology ?? ""] ?? "WIND",
     run: RUN_LABELS.includes(run as RunLabel) ? (run as RunLabel) : "12Z",
-    date: TARGET_DATE,
+    date: latestTargetDate(now),
     episode:
       episode !== undefined && REPLAY_DAYS.some((day) => day.id === episode)
         ? episode

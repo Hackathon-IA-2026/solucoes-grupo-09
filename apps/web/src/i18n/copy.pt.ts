@@ -446,7 +446,8 @@ export const pt: Copy = {
   app: {
     shell: {
       backToLanding: "WattSteer — voltar para a página inicial",
-      prototypeBadge: "PROTÓTIPO · DADOS DE FIXTURE",
+      prototypeBadge: "PROTÓTIPO",
+      noModelBadge: "NENHUM MODELO PROMOVIDO",
       screens: {
         overview: "Visão da rede",
         explain: "Explicar",
@@ -459,6 +460,19 @@ export const pt: Copy = {
         run: "Rodada D−1",
         targetDay: "Dia alvo",
       },
+    },
+
+    lane: {
+      heading: "Lanes de atendimento:",
+      condition: {
+        no_artifact: "sem artefato",
+        present_unpromoted: "recusado pelo portão",
+        promoted: "promovido",
+        unresolvable: "indeterminável",
+      },
+      noLanes: "nenhuma reportada",
+      modelUnreachable: "não foi possível alcançar o serviço de modelagem",
+      note: "Uma lane é um conjunto de variáveis, um portão e um limiar. Uma previsão só é publicada a partir de uma lane promovida, então enquanto nenhuma das {count} acima estiver promovida não há o que publicar — o portão recusar um candidato é o portão funcionando, e o detalhe está em GET /v1/meta.",
     },
 
     technology: { WIND: "Eólica", SOLAR: "Solar" },
@@ -617,10 +631,33 @@ export const pt: Copy = {
       peakPowerNote:
         "A maior hora dentro de um dia sorteado, no mesmo ensemble. Limiar em vigor: {mw} MW no grão de subsistema.",
       grainNote:
-        "O grão da previsão é o subsistema. O curtailment observado é publicado por entidade de reporte — um conjunto, na maior parte — e os motivos de restrição só existem lá; veja Explicar.",
-      fixtureTitle: "Estes números são uma fixture",
-      fixtureNote:
-        "A Visão da rede renderiza uma fixture determinística e não lê nenhuma API, que é o que permite a ela existir numa exportação estática. Nenhum artefato de modelo está promovido para atendimento, então não há previsão do dia seguinte para desenhar no lugar — não uma pequena, nenhuma. Os componentes, as unidades e as faixas são os do próprio produto; os números dentro deles não são previsão de coisa alguma.",
+        "O grão da previsão é o subsistema. O curtailment observado é publicado por entidade de reporte — um conjunto, na maior parte de {subsystem} — e os motivos de restrição só existem lá; veja Explicar.",
+      readingTitle: "Lendo a rede",
+      readingNote:
+        "Pedindo ao gateway a rede liquidada e a previsão de amanhã. Nada é desenhado antes da resposta chegar: um esqueleto com formato de faixa seria uma faixa.",
+      refusedTitle: "O gateway não respondeu",
+      refusedNote:
+        "Todos os painéis desta tela leem o gateway, inclusive os que não precisam de modelo, então não há o que mostrar enquanto isso. Os números não ficam guardados na página; recarregar depois que o serviço voltar é tudo o que falta.",
+      absentTitle: "Sem previsão para este dia",
+      absentNote:
+        "O mapa, as classes de risco, a faixa de 24 horas e os dois totais do dia são todos saída de modelo, e não há nenhuma — por isso estão ausentes, e não vazios. O que vem abaixo é observado: megawatt-hora que o ONS já liquidou, sem nenhum modelo envolvido, e portanto intactos.",
+      settledTitle: "Liquidado nos quatro subsistemas",
+      settledSubtitle: "Últimas 24 h até {hour} BRT · {lag} h de atraso",
+      settledSplit: "eólica {wind} MWh · solar {solar} MWh",
+      settledNationalNote:
+        "Total nacional {mwh} MWh, a soma dos quatro. Observações somam exatamente, e é por isso que este total existe aqui e nenhuma faixa nacional de previsão existe.",
+      settledDayTitle: "{subsystem} — o último dia liquidado",
+      settledDaySubtitle: "Curtailment horário observado, {date}",
+      settledDayNote:
+        "Uma barra por hora local, eólica e solar somadas. Uma hora sem registro liquidado não desenha barra nenhuma: uma hora que liquidou em zero e uma hora que não liquidou são fatos diferentes.",
+      settledDayEmpty: "Nenhum curtailment liquidado neste subsistema neste dia.",
+      episodesTitle: "Episódios recentes",
+      episodesSubtitle: "{from} a {to}, acima de {mw} MW",
+      episodeRow:
+        "{from} → {to} · {hours} h · {mwh} MWh · pico {peak} MW · acima de {mw} MW, lacunas ≤ {gap} h",
+      episodeNote:
+        "Um episódio é uma sequência de horas acima do limiar, unida por lacunas de no máximo {gap} h. Os dois parâmetros vão carimbados em cada episódio, porque fazem parte do que um episódio é.",
+      episodesEmpty: "Nenhuma hora desta janela passou do limiar neste subsistema.",
       map: {
         title: "Os quatro subsistemas",
         subtitle: "Mesma classe de risco das linhas abaixo",
@@ -652,10 +689,22 @@ export const pt: Copy = {
       magnitude: "Magnitude esperada, dia inteiro",
       magnitudeNote: "Condicionada a o dia ultrapassar o limiar em alguma hora.",
       peakPower: "Pico de potência horária",
+      readingTitle: "Lendo o diagnóstico",
+      readingNote:
+        "Pedindo ao gateway a previsão do dia, a atribuição, o cartão do modelo e os motivos apurados pelo ONS. Nada é desenhado antes de responderem.",
+      refusedTitle: "O gateway não respondeu",
+      refusedNote:
+        "Nem mesmo os motivos de restrição observados, que não precisam de modelo. Não há nada nesta tela que não venha do gateway.",
+      absentTitle: "Nada a explicar neste dia",
+      absentNote:
+        "O risco, as duas faixas, a atribuição de drivers e a narrativa são todos saída de modelo, e não há nenhuma — um diagnóstico explica uma previsão, e nenhuma previsão foi publicada. Os motivos de restrição observados abaixo seguem intactos: são o que o ONS registrou sobre um dia que aconteceu.",
+      reliabilityAbsentNote:
+        "Uma curva de confiabilidade é propriedade de um modelo promovido, então não há nenhuma para desenhar. O cartão de um artefato recusado pelo portão não entra no lugar: uma curva de calibração aqui é a afirmação “é assim que está calibrado o modelo que você está lendo”, e não há modelo que alguém esteja lendo.",
+      reasonsEmpty: "O ONS não registrou restrição para este subsistema neste dia.",
+      causeMixed:
+        "O motivo registrado mudou ao longo do dia; apenas um fica armazenado, o que é uma simplificação e não uma observação.",
       narrationTitle: "Narrativa",
       narrationSubtitle: "Gerada no idioma solicitado",
-      narration:
-        "O modelo coloca o curtailment em {subsystem} acima do limiar de {mw} MW na maior parte do dia. A maior contribuição isolada é {top}, cuja variável de destaque {feature} marca {observed} contra um típico de {typical}, seguida por {second}. As duas juntas respondem por {share} do movimento atribuído. A faixa fica larga nas horas de ombro porque o classificador de ocorrência está perto de meio a meio ali — leia a P10 como “pode não ultrapassar o limiar de jeito nenhum”, e não como um número pequeno.",
       narrationNoteModel:
         "Escrita por um modelo de linguagem a partir da tabela de atribuição abaixo. Ela reapresenta os números; não acrescenta nenhum.",
       narrationNoteTemplate:

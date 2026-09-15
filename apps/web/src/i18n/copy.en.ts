@@ -570,7 +570,17 @@ export const en = {
   app: {
     shell: {
       backToLanding: "WattSteer — back to the landing page",
-      prototypeBadge: "PROTOTYPE · FIXTURE DATA",
+      /**
+       * The badge used to read `PROTOTYPE · FIXTURE DATA`, unconditionally, on
+       * all four screens. The second half stopped being true when Mitigate
+       * started solving on `POST /v1/optimize`, and it is now false everywhere:
+       * every screen reads the gateway. What is left is the half that is still
+       * true, and `noModelBadge` beside it — which is a fact read from
+       * `/v1/meta` rather than a label, and disappears on its own the day an
+       * artifact is promoted.
+       */
+      prototypeBadge: "PROTOTYPE",
+      noModelBadge: "NO MODEL PROMOTED",
       screens: {
         overview: "Grid Overview",
         explain: "Explain",
@@ -583,6 +593,30 @@ export const en = {
         run: "D−1 run",
         targetDay: "Target day",
       },
+    },
+
+    /**
+     * The serving lanes, as `/v1/meta` reports them.
+     *
+     * Codes are keys and labels are copy, exactly as for risk classes and
+     * reason codes. The modelling service also publishes an `unusable_reason`
+     * — the gate's own English prose, naming the guardrail and its numbers —
+     * and it is deliberately **not** rendered: it is developer prose in the
+     * same status as an error envelope's `message`, and an English paragraph
+     * printed to a Portuguese reader is the failure the whole i18n rule exists
+     * to prevent.
+     */
+    lane: {
+      heading: "Serving lanes:",
+      condition: {
+        no_artifact: "no artifact",
+        present_unpromoted: "refused by the gate",
+        promoted: "promoted",
+        unresolvable: "unresolvable",
+      },
+      noLanes: "none reported",
+      modelUnreachable: "the modelling service could not be reached",
+      note: "A lane is a feature set, a gate and a threshold. A forecast is published only from a promoted lane, so while none of the {count} above is promoted there is nothing to publish — the gate refusing a candidate is the gate working, and the detail is on GET /v1/meta.",
     },
 
     /** `Technology` is an enum in the API; these are its words. */
@@ -825,19 +859,41 @@ export const en = {
       peakPowerNote:
         "The largest hour within a drawn day, over the same ensemble. Threshold in force: {mw} MW at subsystem grain.",
       grainNote:
-        "Forecast grain is the subsystem. Observed curtailment is published per reporting entity — a conjunto for most of it — and restriction reasons exist only there; see Explain.",
+        "Forecast grain is the subsystem. Observed curtailment is published per reporting entity — a conjunto for most of {subsystem} — and restriction reasons exist only there; see Explain.",
+      readingTitle: "Reading the grid",
+      readingNote:
+        "Asking the gateway for the settled grid and for tomorrow's forecast. Nothing is drawn until an answer arrives: a skeleton in the shape of a band would be a band.",
+      refusedTitle: "The gateway did not answer",
+      refusedNote:
+        "Every panel on this screen reads the gateway, including the ones that need no model, so there is nothing to show in the meantime. The figures are not cached in the page; a reload once the service is back is all this needs.",
       /**
-       * What the figures on this screen are.
+       * The forecast half is absent. Two sentences and no numbers.
        *
-       * The shell's badge says `FIXTURE DATA` in eleven-point grey at the top
-       * of the chrome, which is a label rather than a statement. This screen
-       * builds every band from `@/lib/fixtures` and issues no request, and a
-       * reader is owed that in the same voice the product uses everywhere
-       * else it withholds something.
+       * The refusal code goes above this note, from the closed enum and in the
+       * reader's locale, and the lane conditions go below it. This sentence is
+       * the screen's own half: what it is showing instead, and why that is a
+       * different kind of number.
        */
-      fixtureTitle: "These figures are a fixture",
-      fixtureNote:
-        "Grid Overview renders a deterministic fixture and reads no API, which is what lets it ship in a static export. No model artifact is promoted for serving, so there is no day-ahead forecast to draw in its place — not a small one, none. The components, the units and the bands are the product's own; the numbers inside them are not a forecast of anything.",
+      absentTitle: "No forecast for this day",
+      absentNote:
+        "The map, the risk classes, the 24-hour band and the two day totals are all model output, and there is none — so they are absent rather than empty. What follows is observed: megawatt-hours ONS has already settled, which no model was involved in and which are therefore unaffected.",
+      settledTitle: "Settled across the four subsystems",
+      settledSubtitle: "Last 24 h to {hour} BRT · {lag} h behind",
+      settledSplit: "wind {wind} MWh · solar {solar} MWh",
+      settledNationalNote:
+        "National total {mwh} MWh, the sum of the four. Observations add exactly, which is why this total exists here and no national forecast band does.",
+      settledDayTitle: "{subsystem} — the last settled day",
+      settledDaySubtitle: "Observed hourly curtailment, {date}",
+      settledDayNote:
+        "One bar per local hour, wind and solar added. An hour with no settled row draws no bar at all: an hour that settled at zero and an hour that has not settled are different facts.",
+      settledDayEmpty: "No curtailment settled in this subsystem on this day.",
+      episodesTitle: "Recent episodes",
+      episodesSubtitle: "{from} to {to}, above {mw} MW",
+      episodeRow:
+        "{from} → {to} · {hours} h · {mwh} MWh · peak {peak} MW · above {mw} MW, gaps ≤ {gap} h",
+      episodeNote:
+        "An episode is a run of hours above the threshold, joined across gaps of at most {gap} h. Both parameters are stamped on every episode, because they are part of what an episode is.",
+      episodesEmpty: "No hour in this window went above the threshold in this subsystem.",
       map: {
         title: "The four subsystems",
         subtitle: "Same risk class as the rows below",
@@ -890,17 +946,22 @@ export const en = {
       magnitude: "Expected magnitude, whole day",
       magnitudeNote: "Conditional on the day clearing the threshold at all.",
       peakPower: "Peak hourly power",
+      readingTitle: "Reading the diagnosis",
+      readingNote:
+        "Asking the gateway for the day's forecast, its attribution, the model card and the reasons ONS recorded. Nothing is drawn until they answer.",
+      refusedTitle: "The gateway did not answer",
+      refusedNote:
+        "Not even the observed restriction reasons, which need no model. There is nothing on this screen that does not come from the gateway.",
+      absentTitle: "Nothing to explain for this day",
+      absentNote:
+        "The risk, the two bands, the driver attribution and the narration are all model output, and there is none — a diagnosis explains a forecast, and no forecast was published. The observed restriction reasons below are unaffected: they are what ONS recorded about a day that happened.",
+      reliabilityAbsentNote:
+        "A reliability curve is a property of a promoted model, so there is none to draw. The card of an artifact the gate refused is not shown in its place: a calibration curve here is the claim “this is how well the model you are reading is calibrated”, and there is no model anyone is reading.",
+      reasonsEmpty: "ONS recorded no restriction for this subsystem on this day.",
+      causeMixed:
+        "The recorded reason changed part-way through the day; only one is stored, which is a simplification and not an observation.",
       narrationTitle: "Narration",
       narrationSubtitle: "Generated in the requested locale",
-      /**
-       * No `{technology}`.
-       *
-       * The paragraph used to open "{subsystem} {technology} curtailment",
-       * which described one of two explanations of a prediction the model only
-       * makes once. There is one attribution per subsystem-day.
-       */
-      narration:
-        "The model puts {subsystem} curtailment above the {mw} MW threshold for most of the day. The largest single contribution is {top}, whose headline feature {feature} reads {observed} against a typical {typical}, followed by {second}. Those two together account for {share} of the attributed movement. The band is wide in the shoulder hours because the occurrence classifier is near an even chance there — read the P10 as “it may not clear the threshold at all”, not as a small number.",
       /**
        * Two footnotes, because there are two authors.
        *
