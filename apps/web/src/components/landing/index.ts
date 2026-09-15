@@ -21,6 +21,8 @@ export * from "./engines";
 export * from "./fan-chart";
 export * from "./fixtures";
 export * from "./hero";
+export * from "./hero-cards";
+export * from "./hero-metrics";
 export * from "./landing-nav";
 export * from "./mitigation-stack";
 export * from "./provenance";
