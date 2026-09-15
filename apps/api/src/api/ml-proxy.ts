@@ -43,20 +43,24 @@ import {
  * mapping. A proxy that lets upstream statuses through unexamined reports an
  * ML outage as an API bug — the caller sees a 500 from WattSteer and has no
  * way to tell whose fault it is. Every branch below is about answering that
- * question honestly, and there are six of them:
+ * question honestly, and there are seven of them:
  *
  * | branch                          | status | code                       |
  * |---------------------------------|--------|----------------------------|
  * | `mlUrl` unset                   | 502    | `OPTIMIZER_NOT_CONFIGURED` |
  * | connection refused / DNS        | 502    | `OPTIMIZER_UNAVAILABLE`    |
- * | no answer within `mlTimeoutMs`  | 503    | `OPTIMIZER_TIMEOUT`        |
+ * | aborted by the runtime, not us  | 502    | `OPTIMIZER_UNAVAILABLE`    |
+ * | no answer within `timeoutMs`    | 503    | `OPTIMIZER_TIMEOUT`        |
  * | upstream 502/503/504            | 503    | `OPTIMIZER_NOT_READY`      |
  * | upstream 4xx                    | 4xx    | the upstream code          |
  * | upstream 5xx                    | 5xx    | the upstream code          |
  *
- * The first three are three different sentences: not configured is not broken,
- * a timeout says retry, a refused connection says don't bother yet. The fourth
- * refuses to pass an ML outage on as a WattSteer bug. The last two are the
+ * The first four are four different sentences: not configured is not broken, a
+ * refused connection says don't bother yet, an abort nobody here asked for says
+ * the call never arrived, and a timeout — *ours*, against the ceiling this
+ * endpoint was given — says retry. Keeping the third and the fourth apart is
+ * forecaster 45's repair and is argued at the throw site. The fifth refuses to
+ * pass an ML outage on as a WattSteer bug. The last two are the
  * ones that make the module worth having in front of a solver: a scenario the
  * ML service re-validated and rejected (422) must not read as an outage, and
  * neither must a `SOLVER_BUG` (500) — nor may `SOLVER_GAP_UNCLOSED` (503) and
@@ -206,7 +210,11 @@ export async function callMl(
   query: URLSearchParams,
   endpoint: MlEndpoint = configuredEndpoint(),
 ): Promise<Response> {
-  return request(`${path}?${query.toString()}`, {}, endpoint);
+  // The `?` only when there is something after it: the retrain's status route
+  // takes its run id in the path and no query at all, and a bare trailing `?`
+  // in a job log is a thing somebody has to stop and think about.
+  const search = query.toString();
+  return request(search ? `${path}?${search}` : path, {}, endpoint);
 }
 
 /**
@@ -251,28 +259,53 @@ async function request(
   }
 
   const url = `${endpoint.baseUrl.replace(/\/$/, "")}${pathAndQuery}`;
-  const signal = AbortSignal.timeout(endpoint.timeoutMs);
+  // **Our own controller rather than `AbortSignal.timeout`, and the reason is
+  // forecaster 45.** Bun raises `TimeoutError` for its *own* connect and idle
+  // timeouts too, so mapping every `TimeoutError` to `OPTIMIZER_TIMEOUT` let an
+  // abort that had nothing to do with this ceiling arrive wearing its name. On
+  // 2026-09-15 that is exactly what happened: a 300-second ceiling somewhere in
+  // the platform's internal networking aborted a retrain POST, the gateway
+  // reported `OPTIMIZER_TIMEOUT`, and the retrain's own failure line read it as
+  // its forty-minute ceiling — an hour of looking for a forty-minute run that
+  // had been killed at five. A flag we set ourselves is the only thing that can
+  // tell the two apart, because the error object cannot.
+  const controller = new AbortController();
+  let weAborted = false;
+  const ceiling = setTimeout(() => {
+    weAborted = true;
+    controller.abort();
+  }, endpoint.timeoutMs);
 
   let response: Response;
   try {
     response = await fetch(url, {
       ...init,
-      signal,
+      signal: controller.signal,
       headers: { accept: "application/json", ...init.headers },
     });
   } catch (error) {
     // A timeout is not the same failure as a refused connection: one says the
     // service is overloaded, the other that it is absent. 503 tells a caller
     // to retry; 502 tells them not to bother yet.
-    if (error instanceof Error && error.name === "TimeoutError") {
+    if (weAborted) {
       throw new BusyError("The ML service did not answer in time", {
         code: "OPTIMIZER_TIMEOUT",
+        details: { timeout_source: "gateway", timeout_ms: endpoint.timeoutMs },
       });
     }
+    // Aborted, but not by us: the runtime gave up on the socket, or something
+    // between here and there did. The call never got an answer *and* never
+    // reached this ceiling, which is what `OPTIMIZER_UNAVAILABLE` means — and
+    // the `timeout_source` says which of the two kinds of silence it was, so a
+    // future ceiling cannot borrow this one's name either.
+    const runtimeTimeout = error instanceof Error && error.name === "TimeoutError";
     throw new UpstreamError("The ML service is unreachable", {
       cause: error,
       code: "OPTIMIZER_UNAVAILABLE",
+      details: { timeout_source: runtimeTimeout ? "runtime" : "transport" },
     });
+  } finally {
+    clearTimeout(ceiling);
   }
 
   if (!response.ok) {

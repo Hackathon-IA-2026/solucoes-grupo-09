@@ -100,7 +100,7 @@ import json
 import resource
 import sys
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -969,7 +969,11 @@ async def _lane_inputs(request: RetrainRequest, lane: Lane) -> LaneInputs:
         await conn.close()
 
 
-def run_retrain(request: RetrainRequest) -> ServingLanesReport:
+def run_retrain(
+    request: RetrainRequest,
+    *,
+    on_lane: Callable[[int, int], None] | None = None,
+) -> ServingLanesReport:
     """Both lanes, once each, whatever the other did.
 
     The independence is
@@ -978,7 +982,17 @@ def run_retrain(request: RetrainRequest) -> ServingLanesReport:
     :class:`~wattsteer_ml.evaluation.gate.ContractDriftError` the gate raises on
     purpose, after its refusal is already on the volume — because the morning
     view is the fallback that makes a wrong evening call recoverable.
+
+    ``on_lane`` is called with ``(lanes finished, lanes asked for)`` after each
+    lane's turn, however that turn ended. **Forecaster 45**: the worker's only
+    progress used to be one report before the call and one after, so a
+    forty-minute job showed nothing for forty minutes and the operator's only
+    window on a live run was the container's process metrics. A lane is the
+    coarsest unit that is honestly finished, and it is the unit the report is
+    already written in.
     """
+    finished = 0
+    total = len(request.lanes)
 
     def gate_one(lane: Lane) -> GateDecision | NoCandidate:
         recorded = decided_in_run(request.root, lane, request.run_id)
@@ -1011,7 +1025,19 @@ def run_retrain(request: RetrainRequest) -> ServingLanesReport:
             # not been understood.
             return NoCandidate.from_training_failure(error, lane=lane, at=request.as_of)
 
-    return run_serving_lanes(gate_one, at=request.as_of, lanes=request.lanes)
+    def gate_one_reporting(lane: Lane) -> GateDecision | NoCandidate:
+        # ``finally``, so a lane that raised still moves the count: the run's
+        # progress is how far through the lanes it is, not how many of them went
+        # well, and a bar that stuck on a failing lane would say the opposite.
+        nonlocal finished
+        try:
+            return gate_one(lane)
+        finally:
+            finished += 1
+            if on_lane is not None:
+                on_lane(finished, total)
+
+    return run_serving_lanes(gate_one_reporting, at=request.as_of, lanes=request.lanes)
 
 
 # --- the process --------------------------------------------------------------
@@ -1059,7 +1085,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         ladder=not args.no_ladder,
     )
     watch = Stopwatch()
-    report = run_retrain(request)
+
+    def announce(done: int, total: int) -> None:
+        """One progress line per lane, on stderr, flushed.
+
+        **Forecaster 45.** stdout carries exactly one thing — the JSON report the
+        service parses — so progress cannot go there without teaching the reader
+        to skip lines. stderr is already read by the service as the run goes (it
+        has to be: a child that fills a pipe nobody drains blocks on the write),
+        so a line here reaches the status route within milliseconds and the
+        queue's progress becomes the run's progress.
+        """
+        print(
+            json.dumps({"progress": {"done": done, "total": total}}),
+            file=sys.stderr,
+            flush=True,
+        )
+
+    report = run_retrain(request, on_lane=announce)
     payload = {
         **report.as_dict(),
         "run_id": request.run_id,
