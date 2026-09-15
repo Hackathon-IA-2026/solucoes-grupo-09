@@ -1,12 +1,14 @@
 import { space, useContainerWidth, usePalette } from "@wattsteer/ui";
-import { useCallback, useRef } from "react";
+import { useRef } from "react";
 import { ScrollView, View } from "react-native";
+import { Deck } from "@/components/landing/deck";
 import { Engines } from "@/components/landing/engines";
 import { Hero } from "@/components/landing/hero";
 import { LandingNav } from "@/components/landing/landing-nav";
 import { Provenance } from "@/components/landing/provenance";
-import { Section, type SectionId } from "@/components/landing/section";
+import { Section } from "@/components/landing/section";
 import { Showcase } from "@/components/landing/showcase";
+import { useSectionFragment } from "@/components/landing/use-section-fragment";
 import { SeoHead } from "@/components/seo-head";
 import { SiteFooter } from "@/components/site-footer";
 import { useI18n } from "@/i18n";
@@ -36,16 +38,12 @@ export default function Home() {
   // when copy reflows — and it works identically on native, where a URL
   // fragment would not. It also survives the copy being a different length
   // in each locale, which a hard-coded offset would not.
-  const offsets = useRef<Partial<Record<SectionId, number>>>({});
-  const onSectionLayout = useCallback((id: SectionId, y: number) => {
-    offsets.current[id] = y;
-  }, []);
-  const scrollTo = useCallback((id: SectionId) => {
-    const y = offsets.current[id];
-    if (y !== undefined) {
-      scrollRef.current?.scrollTo({ y: Math.max(0, y - 16), animated: true });
-    }
-  }, []);
+  //
+  // `goTo` additionally writes the section's fragment onto the URL, and a URL
+  // that arrives carrying one is scrolled to on first paint. See
+  // `use-section-fragment.ts` for why that is a *pending target* spent by the
+  // first layout rather than something an effect could do on mount.
+  const { onSectionLayout, goTo } = useSectionFragment(scrollRef);
 
   return (
     <>
@@ -63,7 +61,7 @@ export default function Home() {
         contentContainerStyle={{ flexGrow: 1 }}
         onLayout={onLayout}
       >
-        <LandingNav onNavigate={scrollTo} />
+        <LandingNav onNavigate={goTo} />
 
         <Section
           id="forecast"
@@ -72,7 +70,7 @@ export default function Home() {
           wide={wide}
           paddingTop={space.xxl}
         >
-          <Hero onExplain={() => scrollTo("engines")} />
+          <Hero onExplain={() => goTo("engines")} />
         </Section>
 
         <Section
@@ -104,6 +102,20 @@ export default function Home() {
           wide={wide}
         >
           <Provenance wide={wide} />
+        </Section>
+
+        {/* The deck last, and only after the page has made the argument in
+            the product's own order: it is the same case in the order it was
+            first made, which is a thing to offer a reader who has finished
+            rather than one to put in front of a reader who has not started.
+            Its own file states why the PDF is not embedded here. */}
+        <Section
+          id="deck"
+          testID="landing-deck"
+          onSectionLayout={onSectionLayout}
+          wide={wide}
+        >
+          <Deck wide={wide} />
         </Section>
 
         <SiteFooter />

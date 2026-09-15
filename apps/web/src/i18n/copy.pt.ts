@@ -355,6 +355,10 @@ export const pt: Copy = {
     footerLink: "Apresentação",
     /** The top-nav link. Same words as the footer's, one row apart. */
     navLink: "Apresentação",
+    /** The landing page's deck section — see the English dictionary. */
+    sectionCta: "Abrir a apresentação",
+    slideAlt:
+      "O primeiro slide da apresentação: R$ 6,5 bilhões em energia limpa desperdiçada em 2025, ao lado do mapa dos quatro subsistemas do Brasil.",
   },
 
   legal: {

@@ -16,6 +16,7 @@
 export * from "./band";
 export * from "./band-figure";
 export * from "./cta-link";
+export * from "./deck";
 export * from "./driver-bars";
 export * from "./engines";
 export * from "./fan-chart";
@@ -29,3 +30,4 @@ export * from "./provenance";
 export * from "./replay-compare";
 export * from "./section";
 export * from "./showcase";
+export * from "./use-section-fragment";
