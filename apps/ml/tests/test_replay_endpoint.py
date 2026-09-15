@@ -30,7 +30,7 @@ import ast
 import inspect
 import json
 from collections.abc import Iterator
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -41,7 +41,9 @@ from referencing import Registry, Resource
 
 from wattsteer_ml import app as app_module
 from wattsteer_ml.app import (
+    InvertedWindow,
     app,
+    clamped_calendar_window,
     replay,
     replay_inputs_source,
     replay_observed_only,
@@ -590,3 +592,115 @@ def test_no_database_is_a_503_rather_than_an_invented_replay() -> None:
         assert response.json()["error"]["code"] == "DATA_UNAVAILABLE"
     finally:
         app.dependency_overrides.clear()
+
+
+# --- the calendar's window is bounded, and that is a liveness property ---------
+
+
+def test_a_calendar_window_is_clamped_to_the_days_that_exist() -> None:
+    """The bounds, not the answer — and the difference is why this test exists.
+
+    A first attempt asserted that an absurd window returned the same calendar as
+    the natural one. It did, with and without the clamp: no day outside the
+    window is replayable by construction, so the *answer* is identical either
+    way and only the work differs. The test passed against the defect. The
+    property worth asserting is therefore about the range that gets walked.
+
+    What that range costs, measured on the deployment: ~7.8 ms per day inside an
+    `async def`, so `from=0001-01-01&to=9999-12-31` is 3.65 million days —
+    something over seven hours of blocked event loop and about 1.3 GB retained,
+    from one unauthenticated GET on the cheapest rate-limit tier.
+    """
+    rules = FOLD_CALENDAR_RULES
+    latest = date(2026, 9, 14)
+
+    absurd = clamped_calendar_window(date(1, 1, 1), date(9999, 12, 31), latest=latest)
+    assert absurd == (rules.window_start, latest)
+
+    # Each end clamps independently.
+    assert clamped_calendar_window(date(1, 1, 1), None, latest=latest) == (
+        rules.window_start,
+        latest,
+    )
+    assert clamped_calendar_window(None, date(9999, 12, 31), latest=latest) == (
+        rules.window_start,
+        latest,
+    )
+
+
+def test_a_window_inside_the_data_is_left_alone() -> None:
+    """Non-vacuity for the clamp: it must not be a function that returns a constant.
+
+    A clamp that always answered the full window would pass every assertion
+    above and would have quietly broken the date picker, which asks for one day
+    at a time.
+    """
+    rules = FOLD_CALENDAR_RULES
+    latest = date(2026, 9, 14)
+    inner_start = rules.window_start + timedelta(days=10)
+    inner_end = inner_start + timedelta(days=3)
+    assert clamped_calendar_window(inner_start, inner_end, latest=latest) == (
+        inner_start,
+        inner_end,
+    )
+
+
+def test_an_inverted_window_is_refused_on_what_the_caller_sent() -> None:
+    """Refused, and quoted back unclamped.
+
+    Clamping a *wider* window answers the caller's question. Clamping an
+    inverted one would invent a different question, so it is refused — and the
+    refusal carries the caller's own dates, because an operator reading
+    `REPLAY_DATE_OUT_OF_RANGE` has to see what they sent rather than what the
+    clamp made of it.
+    """
+    latest = date(2026, 9, 14)
+    inverted = clamped_calendar_window(date(2030, 1, 1), date(2020, 1, 1), latest=latest)
+    assert isinstance(inverted, InvertedWindow)
+    assert inverted.requested_start == date(2030, 1, 1)
+    assert inverted.requested_end == date(2020, 1, 1)
+
+
+def test_the_inversion_is_judged_before_the_clamp_and_not_after() -> None:
+    """The arm that makes the order matter, rather than being a style choice.
+
+    `from=9999-01-01&to=9999-01-01` is a single day far past the window. It is
+    **not** inverted as the caller wrote it, so it must be answered — as an
+    empty-but-valid range — rather than refused. Judged on the *clamped* pair it
+    would refuse, because the start clamps forward to nothing while the end
+    clamps back to `latest`.
+
+    This is the assertion the first version of these tests could not make: with
+    the check moved after the clamp, every other test here still passed.
+    """
+    latest = date(2026, 9, 14)
+    far = clamped_calendar_window(date(9999, 1, 1), date(9999, 1, 1), latest=latest)
+    assert not isinstance(far, InvertedWindow), (
+        "a well-formed single-day window past the data was refused as inverted"
+    )
+
+
+def test_an_inverted_window_is_refused_without_a_database(volume: Path) -> None:
+    """A malformed range is wrong whatever Postgres has to say.
+
+    The window check used to sit *after* the database check, so this refusal was
+    unreachable on an instance with no database — the caller got a 503 naming a
+    misconfiguration, for a request that was simply wrong. A 503 in place of a
+    422 sends an operator looking at the wrong thing, and the cheapest refusal
+    in the route was costing a connection.
+    """
+    client = TestClient(app)
+    response = client.get(
+        "/v1/replay/days",
+        params={
+            "subsystem": "SE",
+            "lane": LANE.directory_name,
+            "from": "2030-01-01",
+            "to": "2020-01-01",
+        },
+    )
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"]["code"] == "REPLAY_DATE_OUT_OF_RANGE"
+    assert body["error"]["details"]["from"] == "2030-01-01"
+    assert body["error"]["details"]["to"] == "2020-01-01"
