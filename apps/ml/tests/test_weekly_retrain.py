@@ -34,12 +34,16 @@ from database_harness import database_url, run
 from wattsteer_ml import retrain as driver
 from wattsteer_ml.app import app as ml_app
 from wattsteer_ml.artifacts import CARD_SUFFIX
+from wattsteer_ml.evaluation.gate import NoCandidate
 from wattsteer_ml.evaluation.matrix import MATRIX_RUN_BY_NAME
-from wattsteer_ml.evaluation.serving_lanes import EARLY_LANE, LATE_LANE, SERVING_LANES
+from wattsteer_ml.evaluation.serving_lanes import (
+    EARLY_LANE,
+    LATE_LANE,
+    SERVING_LANES,
+    LaneOutcome,
+)
 from wattsteer_ml.lanes import Lane, is_artifact_id
 from wattsteer_ml.promotions import PROMOTION_LOG_FILENAME, PromotionRecord, append
-from wattsteer_ml.evaluation.gate import NoCandidate
-from wattsteer_ml.evaluation.serving_lanes import LaneOutcome
 from wattsteer_ml.retrain import (
     LANE_RUNS,
     RETRAIN_BLOCK_KEY,
@@ -479,7 +483,7 @@ def test_a_fully_decided_run_exits_zero_and_a_barren_one_does_not(
     payload = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     assert code == 0, "a run whose every lane was already decided is not a failure"
     assert all(one["status"] == "no_candidate" for one in payload["lanes"])
-    assert all(one["no_candidate"]["already_decided"] for one in payload["lanes"])
+    assert all(one["already_decided"] for one in payload["lanes"])
 
     # The control, and the reason the line above is not simply `return 0`: a run
     # where nothing was decided and nothing had been decided before still fails.
@@ -490,9 +494,7 @@ def test_a_fully_decided_run_exits_zero_and_a_barren_one_does_not(
     code = main(["--run-id", RUN_ID, "--root", str(barren), "--database-url", "x"])
     payload = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     assert code == 1, "a run that decided nothing and skipped nothing is a failure"
-    assert not any(
-        (one.get("no_candidate") or {}).get("already_decided") for one in payload["lanes"]
-    )
+    assert not any(one["already_decided"] for one in payload["lanes"])
 
 
 def test_already_decided_is_a_field_and_not_a_sentence(tmp_path: Path) -> None:

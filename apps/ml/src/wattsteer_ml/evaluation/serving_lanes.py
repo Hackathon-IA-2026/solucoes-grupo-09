@@ -215,6 +215,14 @@ class LaneOutcome:
             "status": self.status,
             "artifact_id": self.artifact_id,
             "reason": _reason(self),
+            # Published because `no_candidate` covers two opposite outcomes and
+            # the operator reading a run's report has to be able to tell them
+            # apart: a lane that produced nothing to gate is a run that did not
+            # work, and a lane that had already decided this run is a retry that
+            # correctly did nothing. Forecaster 44 is what it cost to have them
+            # indistinguishable — the exit code could not tell either, so an
+            # idempotent no-op was reported as `RETRAIN_FAILED` and retried.
+            "already_decided": self.already_decided,
             "experiment": self.vector.card_fields(),
         }
 
