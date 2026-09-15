@@ -49,15 +49,34 @@ type Locale = (typeof LOCALES)[number];
 const LANG_TAG: Record<Locale, string> = { pt: "pt-BR", en: "en" };
 const DEFAULT_LOCALE: Locale = "pt";
 
-/** Every page that must exist for the export to be considered complete. */
+/**
+ * Every page that must exist for the export to be considered complete.
+ *
+ * `pitch.html` is here once, not once per locale, and that is not an omission:
+ * `/pitch` frames a single PDF and deliberately sits outside the `[locale]`
+ * tree (see `src/app/pitch.tsx`), so `generateStaticParams` never sees it and
+ * `/pt/pitch` is a path that should not exist.
+ */
 const REQUIRED = [
   "index.html",
+  "pitch.html",
   ...LOCALES.flatMap((locale) => [
     join(locale, "index.html"),
     join(locale, "privacy.html"),
     join(locale, "terms.html"),
   ]),
 ];
+
+/**
+ * Static assets that must survive the export, checked here for the reason
+ * nothing else can check them: they are not in the module graph.
+ *
+ * The pitch deck is fetched by an `<iframe src>` at runtime, so a `public/`
+ * file that stopped being copied would produce a page that renders a blank
+ * rectangle — no bundler error, no missing import, no failing render. This is
+ * the last point in the build where the difference is still visible.
+ */
+const REQUIRED_ASSETS = ["wattsteer-pitch.pdf"];
 
 function htmlFiles(dir: string): string[] {
   const out: string[] = [];
@@ -107,6 +126,22 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
+// Size as well as presence: a copy step that produced a zero-byte file would
+// pass an `isFile()` check and still ship a blank frame.
+const emptyAssets = REQUIRED_ASSETS.filter((asset) => {
+  try {
+    return statSync(join(DIST, asset)).size === 0;
+  } catch {
+    return true;
+  }
+});
+if (emptyAssets.length > 0) {
+  console.error(
+    `localize-export: dist/ is missing ${emptyAssets.length} static asset(s) that public/ should have provided:\n  ${emptyAssets.join("\n  ")}`,
+  );
+  process.exit(1);
+}
+
 let rewritten = 0;
 for (const file of htmlFiles(DIST)) {
   const rel = relative(DIST, file);
@@ -143,5 +178,5 @@ for (const file of htmlFiles(DIST)) {
 }
 
 console.log(
-  `localize-export: ${REQUIRED.length} required pages present; rewrote ${rewritten} file(s).`,
+  `localize-export: ${REQUIRED.length} required pages and ${REQUIRED_ASSETS.length} static asset(s) present; rewrote ${rewritten} file(s).`,
 );

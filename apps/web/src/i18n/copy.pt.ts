@@ -349,6 +349,19 @@ export const pt: Copy = {
     },
   },
 
+  pitch: {
+    metaTitle: "Apresentação — WattSteer",
+    metaDescription:
+      "A apresentação do WattSteer: quanto o curtailment custa à rede brasileira e o que vale enxergá-lo com um dia de antecedência.",
+    badge: "Apresentação",
+    title: "O argumento do WattSteer, em dez slides",
+    lede: "O mesmo argumento que o produto faz, na ordem em que ele foi feito pela primeira vez: a energia cortada que o ONS já publica, a previsão que a teria antecipado e o que uma usina faria com um dia de aviso.",
+    embedTitle: "Apresentação do WattSteer (PDF)",
+    fallback:
+      "A apresentação é um PDF. Se o seu navegador baixa PDFs em vez de exibi-los, o quadro abaixo fica vazio.",
+    openLabel: "Abrir o PDF",
+  },
+
   legal: {
     homeLink: "WattSteer — início",
     privacyLink: "Privacidade",
