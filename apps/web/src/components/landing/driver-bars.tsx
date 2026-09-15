@@ -47,11 +47,20 @@ export function DriverBars() {
             key={driver.code}
             style={{ flexDirection: "row", alignItems: "center", gap: space.md }}
           >
+            {/*
+              The product's own words for the product's own groups. This panel
+              used to read a second driver dictionary that named features the
+              engine never attributes to; there is one dictionary now, shared
+              with the Explain screen, so a renamed group cannot leave the
+              landing page describing the old one.
+            */}
             <Text
               numberOfLines={1}
               style={{ flex: 1, fontSize: 13, color: colors.inkMuted }}
             >
-              {copy.showcase.explain.drivers[driver.code]}
+              {driver.code === "other"
+                ? copy.app.drivers.merged
+                : copy.app.drivers.groups[driver.code]}
             </Text>
             <View
               style={{

@@ -22,7 +22,6 @@ export const pt: Copy = {
       { label: "O produto", target: "showcase" },
       { label: "Dados", target: "provenance" },
     ],
-    cta: "Ver a rede agora",
   },
 
   gate: {
@@ -143,7 +142,7 @@ export const pt: Copy = {
       accent: "O WattSteer avisa antes.",
     },
     sub: "O Brasil está adicionando solar e eólica muito mais rápido do que consegue tornar a rede flexível. Em vários momentos temos energia limpa disponível e precisamos cortá-la. O WattSteer prevê essas horas com um dia de antecedência a partir dos dados abertos do ONS — como faixa, não como chute —, explica as condições da rede por trás delas e dimensiona o armazenamento e a demanda flexível capazes de absorvê-las.",
-    primaryCta: "Ver a rede agora",
+    primaryCta: "Abrir o protótipo",
     secondaryCta: "Como a previsão é construída",
   },
 
@@ -196,6 +195,8 @@ export const pt: Copy = {
   engines: {
     title: "Quatro motores, não um modelo",
     sub: "Prever sozinho é metade do produto. O valor está no que acontece depois do número.",
+    status:
+      "Onde cada um está hoje: a ingestão e a plataforma de dados estão no ar, lendo ONS, ANEEL e Open-Meteo no horário. Nenhum artefato de modelo está promovido para atendimento ainda, então as rotas de Previsor e Diagnóstico respondem com uma recusa declarada em vez de uma previsão, e todo número mostrado nesta página é uma fixture determinística. O Otimizador de flexibilidade e o Replay resolvem contra um gateway real quando há um rodando.",
     items: [
       {
         name: "Previsor",
@@ -231,14 +232,6 @@ export const pt: Copy = {
       panelTitle: "Diagnóstico",
       panelSub: "NORDESTE · amanhã",
       heading: "A quais condições o risco está associado",
-      drivers: {
-        renewable_load_ratio: "Razão renovável / carga",
-        ne_se_export_utilisation: "Estresse de exportação, NE → SE",
-        residual_load: "Carga residual baixa",
-        solar_ramp_1h: "Rampa solar",
-        is_weekend: "Fim de semana",
-        other: "Outras variáveis",
-      },
       note: "Contribuição SHAP para a previsão do modelo, normalizada em 100%. São os drivers do modelo, não uma afirmação causal sobre a rede.",
     },
     mitigate: {
@@ -259,7 +252,6 @@ export const pt: Copy = {
     },
     replay: {
       panelTitle: "Replay",
-      panelSub: "NORDESTE · um dia real",
       heading: "Quanto poderia ter sido recuperado",
       actualLabel: "Cortado de fato",
       optimizedLabel: "Com o WattSteer",
@@ -308,6 +300,10 @@ export const pt: Copy = {
           label: "A safra do dado fica na tela",
           body: "Toda previsão nomeia a rodada que a produziu, e todo backtest diz se sua janela era de fato conhecível na época ou é a reafirmação posterior do ONS.",
         },
+        {
+          label: "Nenhuma manutenção de transmissão é lida",
+          body: "O ONS publica manutenções programadas e indisponibilidades como texto corrido, não como conjunto de dados, e o WattSteer não ingere nada disso. Então um dia cujo curtailment veio de uma linha fora de serviço não tem nenhuma variável carregando esse fato, e o modelo lê ao redor dele. Nada neste site deriva de dados de manutenção.",
+        },
       ],
     },
     odbl: "Os dados do registro de usinas derivam do ANEEL SIGA, © ANEEL, disponibilizados sob a Open Database License (ODbL) v1.0. A tabela de usinas derivada pelo WattSteer é um Banco de Dados Derivado e é oferecida sob a mesma licença.",
@@ -332,7 +328,7 @@ export const pt: Copy = {
       accent: "Evite-a.",
     },
     sub: "Risco de curtailment para o dia seguinte na rede brasileira, a partir de dados abertos.",
-    button: "Ver a rede agora",
+    button: "Abrir o protótipo",
   },
 
   meta: {
@@ -591,7 +587,7 @@ export const pt: Copy = {
       figure:
         "Diagrama de confiabilidade: probabilidade prevista contra frequência observada",
       axis: "probabilidade prevista (%)",
-      note: "Pontos abaixo da linha de identidade tracejada são previsões excessivamente confiantes: das horas anunciadas como 85%, 77% de fato ultrapassaram o limiar. A área do ponto é o número de horas na faixa.",
+      note: "Pontos abaixo da linha de identidade tracejada são excessivamente confiantes: menos horas ultrapassaram o limiar do que a probabilidade prevista daquela faixa prometia. A área do ponto é o número de horas na faixa.",
     },
 
     overview: {
@@ -610,6 +606,9 @@ export const pt: Copy = {
         "A maior hora dentro de um dia sorteado, no mesmo ensemble. Limiar em vigor: {mw} MW no grão de subsistema.",
       grainNote:
         "O grão da previsão é o subsistema. O curtailment observado é publicado por entidade de reporte — um conjunto, na maior parte — e os motivos de restrição só existem lá; veja Explicar.",
+      fixtureTitle: "Estes números são uma fixture",
+      fixtureNote:
+        "A Visão da rede renderiza uma fixture determinística e não lê nenhuma API, que é o que permite a ela existir numa exportação estática. Nenhum artefato de modelo está promovido para atendimento, então não há previsão do dia seguinte para desenhar no lugar — não uma pequena, nenhuma. Os componentes, as unidades e as faixas são os do próprio produto; os números dentro deles não são previsão de coisa alguma.",
     },
 
     split: {
@@ -700,7 +699,7 @@ export const pt: Copy = {
         battery_and_load: "+ Carga flexível",
       },
       reveal: "Revelar",
-      hidden: "Oculto — revele na ordem para ver o que o passo recupera.",
+      hidden: "Oculto — revele para ver o que este passo recupera.",
       remaining: "MWh restantes",
       baselineStep: "O dia como previsto, sem nada despachado.",
       stepRecovered: "{recovered} MWh recuperados na realização P50",
@@ -720,7 +719,7 @@ export const pt: Copy = {
         "Mexa nele e só este número se mexe. O otimizador é denominado em energia, nunca em dinheiro, então nada do que ele recomenda depende de um preço que o WattSteer inventou.",
       solvingTitle: "Resolvendo",
       solvingNote:
-        "O Flex Optimizer está montando e resolvendo o MILP para esta frota. Ele responde dentro da requisição — não há job para consultar — então isto deve sumir antes de você terminar de ler.",
+        "O Otimizador de flexibilidade está montando e resolvendo o MILP para esta frota. Ele responde dentro da requisição — não há job para consultar — então isto deve sumir antes de você terminar de ler.",
       solvingLive:
         "Esta tela lê uma API ao vivo e não pode ser pré-renderizada. O POST /v1/optimize monta e resolve o MILP, que não roda no navegador — então uma exportação estática traz esta nota e nenhum plano, e permanece nela. Para dimensionar uma frota, aponte a build para um gateway em execução com EXPO_PUBLIC_API_URL, ou suba um localmente com bun run api e recarregue. Visão da rede e Explicar não precisam de nenhum dos dois.",
       economicNoPlan:
@@ -765,7 +764,7 @@ export const pt: Copy = {
         fold_holdout: "RETIDO NO FOLD",
       },
       provenanceServedNote:
-        "A previsão nesta tela é a que a WattSteer de fato publicou, em {published} — antes de o dia que ela descreve ter começado. Nenhuma versão do modelo poderia ter visto o dia, então isto é um contrafactual no sentido estrito, e não uma reconstrução.",
+        "A previsão nesta tela é a que o WattSteer de fato publicou, em {published} — antes de o dia que ela descreve ter começado. Nenhuma versão do modelo poderia ter visto o dia, então isto é um contrafactual no sentido estrito, e não uma reconstrução.",
       provenanceFoldHoldoutNote:
         "Este dia cai no fold de teste {fold} da validação walk-forward, e a previsão vem do artefato daquele fold ({artifact}) — nunca do modelo que está em serviço hoje. Esse artefato foi treinado em {trainFrom} – {trainTo} e calibrado em {calibrationFrom} – {calibrationTo}; nenhuma das duas janelas contém este dia, e ambas são reconferidas contra o registro do próprio artefato a cada leitura, em vez de aceitas por confiança.",
       revisionOptimisticNote:
@@ -783,7 +782,7 @@ export const pt: Copy = {
         ons_programming: "a programação do ONS",
       },
       revisionPremiumUnmeasured:
-        "O tamanho dessa ressalva não foi medido. Só se torna mensurável quando o ONS reapresentar dias que a WattSteer guarda nas duas safras, e até lá nenhum número é oferecido no lugar.",
+        "O tamanho dessa ressalva não foi medido. Só se torna mensurável quando o ONS reapresentar dias que o WattSteer guarda nas duas safras, e até lá nenhum número é oferecido no lugar.",
       revisionPremiumMeasured:
         "Medida sobre os dias guardados nas duas safras, a reapresentação vale em média {mwh} MWh de energia recuperada — o quanto uma reexecução otimista quanto a revisões deve ser descontada.",
       scenarioNote:
@@ -867,7 +866,7 @@ export const pt: Copy = {
       observedOnlyTitle:
         "Este dia não pode ser reexecutado, e esta é a cláusula que ele reprovou",
       observedOnlyNote:
-        "O que é oferecido no lugar é o próprio dia: o perfil apurado, seus episódios e o limite abaixo, que não precisa de previsão e portanto não precisa de modelo. Não há valor recuperado nem fração evitada — não zero, ausente, pois a WattSteer nunca foi solicitada a planejar este dia.",
+        "O que é oferecido no lugar é o próprio dia: o perfil apurado, seus episódios e o limite abaixo, que não precisa de previsão e portanto não precisa de modelo. Não há valor recuperado nem fração evitada — não zero, ausente, pois o WattSteer nunca foi solicitado a planejar este dia.",
 
       refusalTitle: "Nenhuma reexecução para esse pedido",
       refusalNote:

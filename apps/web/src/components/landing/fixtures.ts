@@ -31,6 +31,7 @@ import {
   type Band,
   type BandUnavailableReason,
   band,
+  type DisplayDriverCode,
   type Figure,
   type ForecastOrigin,
   observed,
@@ -45,27 +46,26 @@ import type { RiskClass } from "@/lib/fixtures";
 export type { BandUnavailableReason, ForecastOrigin, SubsystemCode };
 
 /**
- * The landing page's own driver vocabulary.
+ * The landing panel's drivers are the **product's** drivers.
  *
- * Separate from `lib/domain`'s `DriverCode`, which is the *product's* set: this
- * panel is a marketing illustration of IDEA.md §43 and names features the
- * Diagnosis engine does not have. Sharing one union would force the product's
- * dictionary to carry labels for features it never attributes to.
+ * This union used to be its own: five feature names plus `other`, called a
+ * marketing illustration here and "the grain the Diagnosis engine reports"
+ * eighty lines below. Both cannot be true, and `packages/core/src/domain.ts`
+ * settles it — the eight groups are the players in the Shapley game, and no
+ * model ever produced an attribution for a single feature. A landing page that
+ * draws one bar per feature advertises an attribution the engine refuses to
+ * compute, beside a heading calling these the product's own panels.
+ *
+ * So the codes are `DisplayDriverCode`: the closed eight plus the client's
+ * merged remainder, which is exactly what the Explain screen draws. The words
+ * come from `copy.app.drivers` for the same reason — one dictionary of driver
+ * names, so the two surfaces cannot drift apart again.
  */
-export type LandingDriverCode =
-  | "renewable_load_ratio"
-  | "ne_se_export_utilisation"
-  | "residual_load"
-  | "solar_ramp_1h"
-  | "is_weekend"
-  | "other";
-
 export interface LandingDriver {
-  code: LandingDriverCode;
+  code: DisplayDriverCode;
   /**
    * Share of the attributed *movement*, 0..1 — the same quantity the product
-   * screen's `Driver.share` carries, named the same way. Illustrative here,
-   * because these are not the groups the engine attributes to.
+   * screen's `Driver.share` carries, named the same way.
    */
   share: number;
   /**
@@ -259,30 +259,36 @@ export const HOURLY_PROFILE: readonly HourlyBand[] = [
   { hour: 23, p10: 30, p50: 90, p90: 190, expectedMwh: 98.6 },
 ];
 
-/** IDEA.md §43's driver list, at the grain the Diagnosis engine reports. */
+/**
+ * An illustrative ranking, at the grain the Diagnosis engine actually reports.
+ *
+ * Five of the eight groups and the merged remainder — the shape a response
+ * takes once the client's display rule has collapsed everything below the cut.
+ * The shares are a fixture; the codes are not.
+ */
 export const DRIVERS: readonly LandingDriver[] = [
   {
-    code: "renewable_load_ratio",
+    code: "renewable_resource",
     share: 0.31,
     direction: "raises",
   },
   {
-    code: "ne_se_export_utilisation",
+    code: "export_stress",
     share: 0.25,
     direction: "raises",
   },
   {
-    code: "residual_load",
+    code: "net_surplus",
     share: 0.18,
     direction: "raises",
   },
   {
-    code: "solar_ramp_1h",
+    code: "ramp_shape",
     share: 0.14,
     direction: "raises",
   },
   {
-    code: "is_weekend",
+    code: "calendar_season",
     share: 0.07,
     direction: "raises",
   },
