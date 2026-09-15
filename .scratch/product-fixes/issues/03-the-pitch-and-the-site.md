@@ -135,3 +135,65 @@ before they infer it. Building the RAG is not this ticket's work.
 - [x] The ONS maintenance gap is named on a public page and built nowhere
 - [x] The two locales still carry the same keys, and no key is dead unexplained
 - [x] `bun run --cwd apps/web test` green
+
+---
+
+## Addendum — the deck, read
+
+The audit above was done blind: `~/Downloads` is blocked by macOS TCC, so the
+PDF could not be opened and two questions were left unanswered. The deck is now
+in the repository at `apps/web/public/wattsteer-pitch.pdf` and `poppler` is
+installed, so both are answered here.
+
+### The four modules, as the deck numbers them
+
+| # | Name | Question it answers | How |
+|---|---|---|---|
+| 1 | **PREVER** | Vai cortar? Quanto? | LightGBM (modelo hurdle) · P10/P50/P90 · 24 h antes |
+| 2 | **DIAGNOSTICAR** | Por quê? | SHAP + regras do ONS · REL · CNF · ENE |
+| 3 | **EVIDENCIAR** | O que aconteceu em dias semelhantes? | kNN sobre dias análogos |
+| 4 | **PROTEGER** | Podemos confiar? | guardrails: sem confiança, sem evidência acionável |
+
+**A numbering discrepancy worth settling before anyone quotes it.** The brief
+that commissioned this work referred to "o coração do Diagnosticar (Módulo 4) e
+do Proteger (Módulo 6)". The deck numbers them **2** and **4**, and has only
+four modules. One of the two is wrong and this ticket cannot say which — it is a
+question for the deck's author. Nothing on the site uses module numbers, so
+nothing is broken today; the risk is a future page that picks the wrong pair.
+
+The site's four engine cards correspond to modules 1–4, but **do not use the
+deck's verbs**. Aligning the two is a copy decision rather than a defect, and it
+is not taken here.
+
+### The market framing, which the site does not carry at all
+
+Page 08: **R$ 630 mi/ano** = 10% of 2025's curtailment (3,5 TWh at R$ 180/MWh),
+~160 mil tCO₂, and under **R$ 1 mil/mês** to run. The business model is named:
+generators first, then traders and free consumers, then sector associations,
+then banks/insurers/battery projects. The framing is *"O ONS se beneficia. Quem
+perde com o corte paga."*
+
+**None of this is on the site.** That is a gap rather than an overclaim, and it
+is deliberately not filled here: the landing page is a product page, and a
+pricing/market section is a separate decision.
+
+### Two things the deck states that the repository does not match
+
+1. **ERA5.** Page 05 lists "ECMWF/Copernicus ERA5" among the sources. The
+   implementation does not use ERA5 and should not: it is a *reanalysis*, so
+   training features drawn from it would be leakage — which is exactly what
+   `.wayfinder/tickets/018-weather-lead-time-fidelity.md` was written about.
+   What is actually ingested is Open-Meteo **Single Runs**, serving ECMWF IFS at
+   a true fixed lead time. The deck's line is loose rather than wrong in spirit
+   (both are ECMWF), but it should be corrected before an engineer reads it.
+2. **"102,7 milhões de registros"** against the deployment's ~6.3 M rows today.
+   The deck's figure is the Caderno's five constrained-off bases; ours is what
+   has been ingested. Different quantities, same name.
+
+### What the deck confirms the site gets right
+
+The two screenshots on pages 05 and 06 both carry `PROTÓTIPO · DADOS DE FIXTURE`,
+and page 01's stage line reads "Ideia validada · site demonstrativo". The deck
+presents the site as a demonstration. The CTA fix above — "Open the live grid"
+→ "Open the prototype" — moves the site *toward* the deck rather than away, and
+the badge the audit chose to leave was the deck's own vocabulary.
