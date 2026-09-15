@@ -1,4 +1,4 @@
-import { Badge, FadeIn, Panel, usePalette, useReducedMotion } from "@wattsteer/ui";
+import { Badge, FadeIn, Panel, space, usePalette, useReducedMotion } from "@wattsteer/ui";
 import { type PropsWithChildren, useEffect, useState } from "react";
 import { Animated, Easing, Platform, StyleSheet, Text, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
@@ -55,7 +55,10 @@ const styles = StyleSheet.create({
     bottom: 0,
     pointerEvents: "none",
   },
-  card: { width: CARD_WIDTH, padding: 14, gap: 8 },
+  // `space.md`, not the 14 the template uses: 14 is off the 4-pt scale, and
+  // `landing-layout.test.ts` is right to refuse it. At this card width the
+  // difference is invisible and the rule is worth more than the two pixels.
+  card: { width: CARD_WIDTH, padding: space.md, gap: space.sm },
   figure: {
     fontSize: 30,
     lineHeight: 34,
