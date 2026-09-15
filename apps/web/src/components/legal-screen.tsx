@@ -97,7 +97,9 @@ export function LegalScreen({
               language for them mid-visit — right only while their stored
               choice survives, and a silent reset to Portuguese when it does
               not. */}
-          <Link href={localePath(locale) as never} asChild={true}>
+          {/* `dismissTo`: pop back to the landing screen already in the stack
+              rather than push a second copy of it. See `localePath`. */}
+          <Link href={localePath(locale) as never} dismissTo={true} asChild={true}>
             <Pressable
               accessibilityRole="link"
               accessibilityLabel={copy.legal.homeLink}

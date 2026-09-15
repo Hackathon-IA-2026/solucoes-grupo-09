@@ -125,7 +125,10 @@ export function AppShell({
               // in its URL, so the one here comes from the stored choice the
               // language switch wrote; going via `/` would re-resolve it and
               // hand an English reader Portuguese whenever storage is blocked.
-              onPress={() => router.push(localePath(locale) as never)}
+              // `dismissTo`, not `push`: pop back to the landing screen that
+              // is already in the stack rather than mount a second copy of it.
+              // See `localePath`.
+              onPress={() => router.dismissTo(localePath(locale) as never)}
               style={(state) => {
                 const { focused = false } = state as { focused?: boolean };
                 return {
