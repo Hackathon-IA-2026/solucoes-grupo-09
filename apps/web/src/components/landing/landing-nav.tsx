@@ -1,6 +1,5 @@
 import {
   focusRing,
-  layout,
   radius,
   space,
   useContainerWidth,
@@ -12,7 +11,7 @@ import { Platform, Pressable, Text, View } from "react-native";
 import { LanguageSwitch } from "@/components/language-switch";
 import { useCopy, useI18n } from "@/i18n";
 import { localePath } from "@/i18n/locale";
-import type { SectionId } from "./section";
+import { PAGE_MAX, type SectionId } from "./section";
 
 /**
  * The landing page's own header.
@@ -41,7 +40,7 @@ export function LandingNav({ onNavigate }: { onNavigate: (section: SectionId) =>
       onLayout={onLayout}
       style={{
         width: "100%",
-        maxWidth: layout.page + 128,
+        maxWidth: PAGE_MAX,
         alignSelf: "center",
         paddingHorizontal: space.lg,
         paddingTop: space.xl,
@@ -68,7 +67,7 @@ export function LandingNav({ onNavigate }: { onNavigate: (section: SectionId) =>
             const { focused = false } = state as { focused?: boolean };
             return {
               borderRadius: radius.md,
-              padding: 2,
+              padding: space.xs,
               ...focusRing(focused, colors.focus),
               ...(Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null),
             };
@@ -115,22 +114,38 @@ function NavLink({ label, onPress }: { label: string; onPress: () => void }) {
       onPress={onPress}
       hitSlop={8}
       style={(state) => {
-        const { focused = false, hovered = false } = state as {
-          focused?: boolean;
-          hovered?: boolean;
-        };
+        const { focused = false } = state as { focused?: boolean };
         return {
-          paddingVertical: 6,
-          borderRadius: 8,
+          paddingVertical: space.sm,
+          paddingHorizontal: space.xs,
+          borderRadius: radius.sm,
           ...focusRing(focused, colors.focus),
           ...(Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null),
-          opacity: hovered ? 1 : 0.82,
         };
       }}
     >
-      <Text style={{ fontSize: 14, fontWeight: "500", color: colors.inkMuted }}>
-        {label}
-      </Text>
+      {/*
+        Hover moves the *colour*, not the opacity — which is why the label is
+        rendered from the press state rather than beside it. The link used to
+        sit at `inkMuted` × 0.82 opacity, which resolves to 5.1:1 on `canvas`:
+        the page's only navigation, set fainter than its own footnotes.
+        `inkMuted` is 7.33:1 and `ink` on hover is 17.31:1, so the hover reads
+        more clearly than the fade did and the resting state is legible.
+      */}
+      {(state) => {
+        const { hovered = false } = state as { hovered?: boolean };
+        return (
+          <Text
+            style={{
+              fontSize: 14,
+              fontWeight: "500",
+              color: hovered ? colors.ink : colors.inkMuted,
+            }}
+          >
+            {label}
+          </Text>
+        );
+      }}
     </Pressable>
   );
 }

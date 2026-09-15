@@ -109,7 +109,7 @@ export function MitigationStack() {
           borderWidth: 1,
           borderColor: colors.border,
           backgroundColor: colors.canvasTint,
-          padding: 12,
+          padding: space.md,
         }}
       >
         <Badge label={copy.showcase.mitigate.scenarioLabel} tone="neutral" />
@@ -128,7 +128,7 @@ export function MitigationStack() {
         </Text>
       </View>
 
-      <Footnote>{copy.showcase.mitigate.note}</Footnote>
+      <Footnote pinned={true}>{copy.showcase.mitigate.note}</Footnote>
     </Panel>
   );
 }
@@ -142,7 +142,7 @@ function StepRow({ step, max }: { step: MitigationStep; max: number }) {
   const label = stepLabel(copy, step.key);
   const detail = stepDetail(copy, f, step.key);
   return (
-    <View style={{ gap: 8 }}>
+    <View style={{ gap: space.sm }}>
       <View
         style={{
           flexDirection: "row",
@@ -194,7 +194,7 @@ function Kpi({
 }) {
   const colors = usePalette();
   return (
-    <View style={{ flexGrow: 1, flexBasis: 140, gap: 2 }}>
+    <View style={{ flexGrow: 1, flexBasis: 140, gap: space.xs }}>
       <Text style={{ fontSize: 12, color: colors.inkMuted }}>{label}</Text>
       <Text
         style={{

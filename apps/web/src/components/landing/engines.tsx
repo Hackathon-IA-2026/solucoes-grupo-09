@@ -1,6 +1,7 @@
 import {
   IconCircle,
   LayersIcon,
+  layout,
   Panel,
   PieChartIcon,
   RotateCcwIcon,
@@ -58,7 +59,10 @@ export function Engines({ wide }: { wide: boolean }) {
                   <Text style={{ fontSize: 17, fontWeight: "600", color: colors.ink }}>
                     {engine.name}
                   </Text>
-                  <Text style={{ fontSize: 13, color: colors.inkMuted }}>
+                  {/* 13/18 rather than 13/default: the question wraps to two
+                      lines at 400 px in two of the four cards, and the
+                      platform default sets those lines almost touching. */}
+                  <Text style={{ fontSize: 13, lineHeight: 18, color: colors.inkMuted }}>
                     {engine.question}
                   </Text>
                 </View>
@@ -76,7 +80,9 @@ export function Engines({ wide }: { wide: boolean }) {
         in the same place the claim is made — a caveat a reader has to scroll
         to find is a caveat that is not there.
       */}
-      <Footnote>{copy.engines.status}</Footnote>
+      <View style={{ maxWidth: layout.prose, alignSelf: "center", width: "100%" }}>
+        <Footnote>{copy.engines.status}</Footnote>
+      </View>
     </>
   );
 }

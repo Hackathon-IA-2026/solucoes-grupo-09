@@ -1,7 +1,6 @@
 import {
   ArrowRightIcon,
   gradientBg,
-  layout,
   radius,
   space,
   useContainerWidth,
@@ -14,11 +13,12 @@ import { useI18n } from "@/i18n";
 import { fill } from "@/i18n/format";
 import { DEFAULT_LOCALE, localePath } from "@/i18n/locale";
 import { APP_HREF, CtaLink } from "./landing/cta-link";
+import { PAGE_MAX } from "./landing/section";
 
 const styles = StyleSheet.create({
   wrap: {
     width: "100%",
-    maxWidth: layout.page + 128,
+    maxWidth: PAGE_MAX,
     alignSelf: "center",
     paddingHorizontal: space.lg,
     paddingBottom: space.xxxl,
@@ -28,8 +28,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.xl,
     borderCurve: "continuous",
     borderWidth: 1,
-    paddingHorizontal: space.xl,
-    paddingVertical: space.huge,
     alignItems: "center",
     gap: space.lg,
     overflow: "hidden",
@@ -38,7 +36,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
   },
 });
 
@@ -69,7 +66,7 @@ function LegalLink({
 
 /**
  * Site CTA + footer: a grape-tinted call-to-action band over the footer
- * (centered WattSteer logo, then copyright · tagline · legal links).
+ * (centered WattSteer logo, then copyright and the legal links).
  *
  * The CTA used to take an `onCtaPress` callback because it had nowhere to
  * go — on the landing page it scrolled back to the scrape input, and on the
@@ -99,6 +96,13 @@ export function SiteFooter() {
         testID="footer-cta"
         style={[
           styles.cta,
+          // `space.huge` top and bottom is right on a desktop band 265 px tall
+          // and wrong at 400 px, where it put 144 px of empty grape around
+          // three lines of text — a fifth of the phone's viewport, twice.
+          {
+            paddingHorizontal: wide ? space.xl : space.lg,
+            paddingVertical: wide ? space.huge : space.xxxl,
+          },
           // Opaque hairline (not the token's translucent white) so the
           // gradient behind can't tint it — the border stays uniform on all
           // four sides.
@@ -160,8 +164,16 @@ export function SiteFooter() {
         />
       </View>
 
-      {/* Copyright · tagline · legal links — three balanced cells so the
-          tagline stays centered on the page (desktop); stacked on mobile. */}
+      {/* Copyright and the legal links — two cells, the outer edges of the
+          page (desktop); stacked on mobile.
+
+          There used to be a third, centred cell repeating `footer.tagline`
+          ("Renewable curtailment intelligence."), 295 px below the CTA band's
+          own `footerCta.sub` ("Day-ahead curtailment risk for the Brazilian
+          grid, from open data.") — two product one-liners on one screen,
+          saying the same thing at two lengths. The one next to the button is
+          the one doing work, so the other is gone, and `footer.tagline` with
+          it rather than being left as a key nothing renders. */}
       <View
         style={{
           flexDirection: wide ? "row" : "column",
@@ -177,11 +189,6 @@ export function SiteFooter() {
         >
           <Text style={{ fontSize: 13, color: colors.inkFaint }}>
             {fill(copy.footer.rights, { year })}
-          </Text>
-        </View>
-        <View style={{ flex: wide ? 1 : undefined, alignItems: "center" }}>
-          <Text style={{ fontSize: 13, color: colors.inkFaint, textAlign: "center" }}>
-            {copy.footer.tagline}
           </Text>
         </View>
         <View
@@ -201,11 +208,15 @@ export function SiteFooter() {
           />
           <View
             aria-hidden={true}
+            // 4 px in `inkFaint`, not 3 px in `border`. A hairline-coloured
+            // dot (white at 8% over `canvas`) resolves to ~#2A2A2C and is not
+            // visible at all in a 1x screenshot; `borderRadius: 2` on a 3 px
+            // box was not a circle either.
             style={{
-              width: 3,
-              height: 3,
-              borderRadius: 2,
-              backgroundColor: colors.border,
+              width: space.xs,
+              height: space.xs,
+              borderRadius: space.xs / 2,
+              backgroundColor: colors.inkFaint,
             }}
           />
           <LegalLink

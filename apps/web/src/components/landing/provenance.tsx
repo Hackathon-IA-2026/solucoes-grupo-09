@@ -1,6 +1,7 @@
 import {
   IconCircle,
   LinkIcon,
+  layout,
   Panel,
   radius,
   space,
@@ -63,51 +64,100 @@ export function Provenance({ wide }: { wide: boolean }) {
         ))}
       </View>
 
-      <Panel style={{ gap: space.lg }}>
+      <Panel style={{ gap: space.xl }}>
         <Text style={{ fontSize: 20, fontWeight: "600", color: colors.ink }}>
           {copy.provenance.honesty.title}
         </Text>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
+        {/*
+          Two columns that stay two columns.
+
+          The list is five items and the grid was `flexBasis: 45%` with
+          `flexGrow: 1`, so the fifth — alone on its row — grew to the full
+          1,196 px of the card: 168 characters a line beside four siblings set
+          at 84. One item of five was therefore read at twice the measure of
+          the rest, and it happened to be the newest and longest one. Capping
+          the item at half the row and letting `space-between` place the pair
+          keeps every body at one measure, whichever row it lands on.
+        */}
+        <View
+          style={{
+            flexDirection: "row",
+            flexWrap: "wrap",
+            justifyContent: "space-between",
+            rowGap: space.xl,
+            columnGap: space.xl,
+          }}
+        >
           {copy.provenance.honesty.items.map((item) => (
             <View
               key={item.label}
-              style={{ flexGrow: 1, flexBasis: wide ? "45%" : "100%", gap: 8 }}
+              style={{
+                flexGrow: 1,
+                flexBasis: wide ? "46%" : "100%",
+                maxWidth: wide ? "48%" : "100%",
+                flexDirection: "row",
+                gap: space.sm,
+              }}
             >
-              <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-                <View
+              {/* 24 px across, not the 22 it was — on the 4-pt scale, and one
+                  step under `IconCircle`'s 32. Top-aligned against a 22 px
+                  label line, which is 1 px of optical drift and the reason the
+                  label carries an explicit `lineHeight` at all. */}
+              <View
+                style={{
+                  width: space.xl,
+                  height: space.xl,
+                  borderRadius: 12,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: colors.dangerSoft,
+                }}
+              >
+                <XIcon size={14} color={colors.onDangerSoft} />
+              </View>
+              {/* The body used to start at the item's left edge while the
+                  label started 30 px in, so every paragraph hung left of its
+                  own heading. One column under the mark aligns the two. */}
+              <View style={{ flex: 1, gap: space.sm }}>
+                <Text
                   style={{
-                    width: 22,
-                    height: 22,
-                    borderRadius: 11,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    backgroundColor: colors.dangerSoft,
+                    fontSize: 15,
+                    lineHeight: 22,
+                    fontWeight: "600",
+                    color: colors.ink,
                   }}
                 >
-                  <XIcon size={13} color={colors.onDangerSoft} />
-                </View>
-                <Text style={{ fontSize: 15, fontWeight: "600", color: colors.ink }}>
                   {item.label}
                 </Text>
+                <Text style={{ fontSize: 14, lineHeight: 22, color: colors.inkMuted }}>
+                  {item.body}
+                </Text>
               </View>
-              <Text style={{ fontSize: 14, lineHeight: 22, color: colors.inkMuted }}>
-                {item.body}
-              </Text>
             </View>
           ))}
         </View>
       </Panel>
 
+      {/* The box hugs its own text rather than the page.
+
+          The three notices were set across the whole 1,248 px content column
+          at 12 px — 200 characters a line, the widest measure on the site, on
+          the one block a reader is most likely to have to read carefully.
+          Capping the *text* alone left a 570 px void inside a full-bleed box,
+          so the box is capped instead: `layout.prose` plus its own two
+          gutters, which puts the notice at the same measure as every other
+          paragraph on the page and keeps the border around the words. */}
       <View
         testID="odbl-notice"
         style={{
-          gap: space.sm,
+          maxWidth: layout.prose + space.lg * 2,
+          gap: space.md,
           borderRadius: radius.lg,
           borderCurve: "continuous",
           borderWidth: 1,
           borderColor: colors.border,
           backgroundColor: colors.canvasTint,
-          padding: 16,
+          padding: space.lg,
         }}
       >
         <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkMuted }}>

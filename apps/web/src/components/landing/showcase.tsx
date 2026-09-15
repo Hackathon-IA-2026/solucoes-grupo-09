@@ -31,12 +31,14 @@ const styles = StyleSheet.create({
   badge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: space.sm,
     borderRadius: radius.pill,
     borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
   },
+  // Geometry, not spacing: a 6 px dot is the smallest mark that still reads as
+  // round at 1x, and its radius is half its width by definition.
   dot: { width: 6, height: 6, borderRadius: 3 },
 });
 
@@ -92,7 +94,7 @@ function BandExplainer({ wide }: { wide: boolean }) {
   const colors = usePalette();
   const max = 9000;
   return (
-    <Panel testID="band-explainer" style={{ gap: space.lg, padding: 20 }}>
+    <Panel testID="band-explainer" style={{ gap: space.lg }}>
       <View style={{ flexDirection: wide ? "row" : "column", gap: space.xl }}>
         <View style={{ flex: wide ? 1 : undefined, gap: space.md }}>
           <Badge label={copy.band.rangeLabel} tone="violet" />
@@ -116,7 +118,11 @@ function BandExplainer({ wide }: { wide: boolean }) {
             figure={UNCERTAIN}
             max={max}
           />
-          <Text style={{ fontSize: 12, color: colors.inkFaint }}>
+          {/* This sentence *is* the panel's argument, so it is set at 13 px in
+              `inkMuted` (6.79:1 on `surface`) rather than the 12 px `inkFaint`
+              it was (4.82:1) — the faintest type on the page was carrying the
+              point the page is making. */}
+          <Text style={{ fontSize: 13, lineHeight: 19, color: colors.inkMuted }}>
             {fill(copy.band.explainerSame, {
               value: formatMwhExact(locale, centre(CONFIDENT)),
             })}
@@ -140,7 +146,7 @@ function ExampleRail({
   const railLabel = useRailLabel();
   const colors = usePalette();
   return (
-    <View style={{ gap: 6 }}>
+    <View style={{ gap: space.sm }}>
       <View
         style={{ flexDirection: "row", justifyContent: "space-between", gap: space.md }}
       >
