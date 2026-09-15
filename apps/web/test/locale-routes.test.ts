@@ -1,6 +1,8 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { parseAppParams, sharedParams } from "@/components/app/params";
+import { RUN_LABELS, SUBSYSTEM_DISPLAY_ORDER } from "@/lib/fixtures";
 import {
   DEFAULT_LOCALE,
   isLocale,
@@ -114,5 +116,47 @@ describe("static SEO artifacts agree with the route tree", () => {
       expect(llms).toContain(`https://wattsteer.com/${locale}/`);
     }
     expect(llms).toContain("x-default");
+  });
+});
+
+describe("the selection survives a tab press", () => {
+  const AT = new Date("2026-09-15T12:00:00Z");
+
+  it("round-trips every technology, which SOLAR did not", () => {
+    // The defect: `sharedParams` emitted the domain spelling `SOLAR` and
+    // `parseAppParams` reads only the URL spelling, so selecting Solar and
+    // pressing another tab silently landed back on Wind. A fallback doing its
+    // job on a value this module wrote itself.
+    for (const spelling of ["wind", "solar"]) {
+      const selected = parseAppParams({ technology: spelling }, AT);
+      const back = parseAppParams(sharedParams(selected), AT);
+      expect(back.technology).toBe(selected.technology);
+    }
+  });
+
+  it("round-trips the whole shared selection, not just the technology", () => {
+    // Stated as a property rather than as examples, because the defect above
+    // was in the one field nobody had written an example for. Every
+    // combination the URL can hold must survive the crossing.
+    for (const subsystem of SUBSYSTEM_DISPLAY_ORDER) {
+      for (const technology of ["wind", "solar"]) {
+        for (const run of RUN_LABELS) {
+          const selected = parseAppParams({ subsystem, technology, run }, AT);
+          const back = parseAppParams(sharedParams(selected), AT);
+          expect(back.subsystem).toBe(selected.subsystem);
+          expect(back.technology).toBe(selected.technology);
+          expect(back.run).toBe(selected.run);
+        }
+      }
+    }
+  });
+
+  it("emits the URL spelling, which is what the address bar shows a reader", () => {
+    // Non-vacuity: a `sharedParams` that emitted the domain spelling and a
+    // `parseAppParams` that accepted *both* would round-trip and still put
+    // `technology=SOLAR` in a shareable URL, against a module docstring that
+    // says the transport owns its own spelling.
+    const solar = parseAppParams({ technology: "solar" }, AT);
+    expect(sharedParams(solar).technology).toBe("solar");
   });
 });

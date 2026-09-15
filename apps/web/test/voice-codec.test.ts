@@ -27,7 +27,9 @@ describe("voice codec · PCM16 survives the round trip", () => {
     const back = decodePCM16Base64(encodePCM16Base64(samples));
     expect(back.length).toBe(samples.length);
     for (let i = 0; i < samples.length; i += 1) {
-      expect(Math.abs((back[i] as number) - (samples[i] as number))).toBeLessThan(1 / 32000);
+      expect(Math.abs((back[i] as number) - (samples[i] as number))).toBeLessThan(
+        1 / 32_000,
+      );
     }
   });
 

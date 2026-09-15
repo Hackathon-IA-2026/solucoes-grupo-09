@@ -1,4 +1,4 @@
-import type { ToolCall } from "./tools";
+import type { ToolCall } from "./execute";
 
 /**
  * The realtime session: socket lifecycle and the event protocol, and nothing
@@ -218,7 +218,9 @@ export class VoiceSessionCore {
         // rather than appending many.
         if (this.assistantId === null) {
           this.assistantId =
-            asId(message.response_id) ?? asId(message.item_id) ?? `assistant-${this.turn++}`;
+            asId(message.response_id) ??
+            asId(message.item_id) ??
+            `assistant-${this.turn++}`;
         }
         this.assistantBuffer += typeof message.delta === "string" ? message.delta : "";
         if (this.assistantBuffer !== "") {
@@ -229,7 +231,9 @@ export class VoiceSessionCore {
       case "response.output_audio_transcript.done":
       case "response.audio_transcript.done": {
         const text =
-          typeof message.transcript === "string" ? message.transcript : this.assistantBuffer;
+          typeof message.transcript === "string"
+            ? message.transcript
+            : this.assistantBuffer;
         if (text !== "") {
           this.emit("assistant", text, this.assistantId ?? asId(message.response_id));
         }
@@ -278,7 +282,11 @@ export class VoiceSessionCore {
     this.send({ type: "session.update", session: { instructions: context } });
   }
 
-  private emit(role: "user" | "assistant", text: string, id: string | null | undefined): void {
+  private emit(
+    role: "user" | "assistant",
+    text: string,
+    id: string | null | undefined,
+  ): void {
     this.handlers.onTranscript?.({
       id: id ?? `${role}-${text.slice(0, 12)}`,
       role,
@@ -337,9 +345,13 @@ function errorMessageFrom(message: Record<string, unknown>): string {
  * posture `apps/api/src/api/voice.ts` takes over the minted secret's shape, and
  * for the same reason — the shape has not proved contractual.
  *
- * **Arguments are parsed, never trusted.** A call whose arguments are not an
- * object is surfaced with empty arguments rather than dropped, so `execute.ts`
- * refuses it out loud instead of the reader watching a tool silently do nothing.
+ * **The arguments are passed through raw, not parsed here.** `executeTool`
+ * already accepts `unknown` and has `malformed_arguments` in its refusal table,
+ * so parsing them on the way past would be a second opinion about the same
+ * value — and the one that is *not* tested against the twelve refusal codes. A
+ * call this function cannot read the name of is `null`; everything else is
+ * surfaced and refused out loud downstream, which is a better outcome than the
+ * reader watching a tool silently do nothing.
  */
 export function toolCallFrom(message: Record<string, unknown>): ToolCall | null {
   const item = message.item;
@@ -354,24 +366,9 @@ export function toolCallFrom(message: Record<string, unknown>): ToolCall | null 
     return null;
   }
   const callId = source.call_id ?? source.id ?? message.call_id;
-  const raw = source.arguments;
-  let args: Record<string, unknown> = {};
-  if (typeof raw === "string" && raw !== "") {
-    try {
-      const parsed: unknown = JSON.parse(raw);
-      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-        args = parsed as Record<string, unknown>;
-      }
-    } catch {
-      // Left empty on purpose. `execute.ts` refuses a call it cannot satisfy,
-      // and a spoken refusal is a better outcome than a dropped frame.
-    }
-  } else if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
-    args = raw as Record<string, unknown>;
-  }
   return {
-    id: typeof callId === "string" ? callId : "",
     name,
-    arguments: args,
+    arguments: source.arguments,
+    ...(typeof callId === "string" && callId !== "" ? { callId } : {}),
   };
 }

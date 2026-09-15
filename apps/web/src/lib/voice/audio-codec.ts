@@ -113,7 +113,7 @@ export function encodePCM16Base64(float32: Float32Array): string {
   const view = new DataView(bytes.buffer);
   for (let index = 0; index < float32.length; index += 1) {
     const clamped = Math.max(-1, Math.min(1, float32[index] as number));
-    view.setInt16(index * 2, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
+    view.setInt16(index * 2, clamped < 0 ? clamped * 0x80_00 : clamped * 0x7f_ff, true);
   }
   return bytesToBase64(bytes);
 }
@@ -125,7 +125,7 @@ export function decodePCM16Base64(base64: string): Float32Array {
   const float32 = new Float32Array(Math.floor(bytes.length / 2));
   for (let index = 0; index < float32.length; index += 1) {
     const int16 = view.getInt16(index * 2, true);
-    float32[index] = int16 / (int16 < 0 ? 0x8000 : 0x7fff);
+    float32[index] = int16 / (int16 < 0 ? 0x80_00 : 0x7f_ff);
   }
   return float32;
 }

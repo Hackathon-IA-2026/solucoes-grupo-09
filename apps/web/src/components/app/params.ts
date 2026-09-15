@@ -135,11 +135,27 @@ export function parseAppParams(
   };
 }
 
-/** The params that travel between screens when the user switches tab. */
+/**
+ * The params that travel between screens when the user switches tab.
+ *
+ * **`technology` goes through `technologyParam`, and it did not used to.** This
+ * function emitted the domain spelling `SOLAR` while `parseAppParams` reads only
+ * the URL spelling `solar`, so a reader who selected Solar and pressed another
+ * tab arrived back on Wind — the fallback did its job on a value this module had
+ * written itself. It is the exact failure the docstring above warns about:
+ *
+ * > the transport form is owned by the transport layer and never leaks inward
+ *
+ * and the leak was outward instead. `technologyParam` exists precisely for this
+ * crossing and was simply not called. Found by the voice agent's round-trip
+ * property test — for any valid selection, the params a navigation carries must
+ * parse back to the same selection — which is a stronger statement than any
+ * example-based test here was making, and is now asserted of both callers.
+ */
 export function sharedParams(params: AppParams): Record<string, string> {
   return {
     subsystem: params.subsystem,
-    technology: params.technology,
+    technology: technologyParam(params.technology),
     run: params.run,
   };
 }
