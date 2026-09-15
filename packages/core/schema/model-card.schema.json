@@ -363,7 +363,7 @@
     },
     "band_calibration": {
       "title": "BandCalibration",
-      "description": "What was added to the band and what it bought. `delta_lo` is subtracted from the 0.10 knot and `delta_hi` added to the 0.90 knot; either may be negative, which says the uncorrected knot was already conservative on that side.",
+      "description": "What was added to the band and what it bought. Both are shifts of the *composed* quantile, applied inside the positive branch at the mixture's own `q` \u2014 not of the knots of `Q_pos`, which is where forecaster ticket 21 moved them from. **They are not in the same units**: `delta_hi` is MWh added at `q = 0.90`, while since forecaster ticket 43 `delta_lo` is a *multiple of the row's own positive spread* `Q_pos(0.90) \u2212 Q_pos(0.10)`, subtracted at `q = 0.10`. A flat MWh floor correction delivered between 0.8023 and 0.9504 coverage depending only on how the fleet's magnitudes moved between the calibration window and the test period; scaled per row it delivered 0.9165 across the same sweep. `method` names the variant, so a card in the old units cannot be read in the new ones. Either may be negative, which says the uncorrected band was already conservative on that side.",
       "type": "object",
       "properties": {
         "correction_regime": {

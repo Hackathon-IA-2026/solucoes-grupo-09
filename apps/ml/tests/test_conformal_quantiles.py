@@ -209,7 +209,10 @@ def _recomposed(
 
 
 def _v1_knot_correction(
-    quantiles: MagnitudeQuantiles, correction: ConformalCorrection
+    quantiles: MagnitudeQuantiles,
+    correction: ConformalCorrection,
+    *,
+    lower_mwh: float,
 ) -> MagnitudeQuantiles:
     """``conformal_v1_partial_upper``, reconstructed here and nowhere else.
 
@@ -224,11 +227,18 @@ def _v1_knot_correction(
       not a remembered number; and
     - the served **P10** is bit-identical under v1 and v2, which is what "the
       lower tail did not move" has to mean.
+
+    ``lower_mwh`` is passed rather than read off ``correction`` because since
+    forecaster 43 ``delta_lo`` is a *multiple of the row's own positive spread*
+    and v1 had no such quantity: it shifted a knot by a fixed MWh, the same one
+    for every row. So the caller states what the multiple amounts to on its
+    fixture, and the bit-identity below is a claim about the two ways of
+    applying *one* correction rather than a coincidence of units.
     """
     low, mid, high = quantiles.values
     return MagnitudeQuantiles(
         values=(
-            max(0.0, low - correction.delta_lo),
+            max(0.0, low - lower_mwh),
             mid,
             max(0.0, high + correction.delta_hi),
         )
@@ -347,6 +357,13 @@ def test_conformal_narrows_a_band_that_was_too_wide() -> None:
 #: bites and so never flatters the measurement.
 _KNOTS = MagnitudeQuantiles.from_boosters(q10=60.0, q50=90.0, q90=140.0)
 
+#: ``Q_pos(0.90) − Q_pos(0.10)`` for :data:`_KNOTS` — the scale ``δ_lo`` is a
+#: multiple of since forecaster 43. Named because every MWh figure in this file
+#: that used to *be* a ``δ_lo`` is now that figure over this, and a reader who
+#: sees ``7.5 / _KNOT_SPREAD_MWH`` should read "7.5 MWh at this fixture's
+#: scale" rather than a tuned constant.
+_KNOT_SPREAD_MWH = 140.0 - 60.0
+
 #: The ``p`` grid the realised-fraction table is measured on. Its first five
 #: rows are the ones forecaster ticket 21 tabulates; ``0.15`` is the band the
 #: ticket collapses into "0.20 and below" and where the fix does its work; the
@@ -387,13 +404,18 @@ def _correction(*, delta_lo: float, delta_hi: float) -> ConformalCorrection:
 
 
 def test_the_lower_tail_is_corrected_exactly_at_every_occurrence_probability() -> None:
-    """``Q_Y(0.10)`` moves by exactly ``δ_lo`` wherever it is a positive number.
+    """``Q_Y(0.10)`` moves by exactly ``δ_lo × spread`` wherever it is positive.
 
     The property the module docstring claims, and the tail the product promises
     in prose. It held under ``conformal_v1_partial_upper`` and it holds now —
     the next test is the one that proves the two agree to the bit.
+
+    The ``× spread`` is forecaster 43. Every row here shares :data:`_KNOTS`, so
+    the scale is the same 80 MWh throughout and the move is a constant; the row
+    that *does* vary its scale is the flat-step test further down, which asserts
+    the move against each row's own spread rather than against a number.
     """
-    correction = _correction(delta_lo=7.5, delta_hi=3.0)
+    correction = _correction(delta_lo=7.5 / _KNOT_SPREAD_MWH, delta_hi=3.0)
     for probability in (0.91, 0.95, 0.99, 1.0):
         before = compose(
             occurrence_probability=probability,
@@ -411,7 +433,7 @@ def test_the_lower_tail_is_corrected_exactly_at_every_occurrence_probability() -
             threshold_mw=THRESHOLD_MW,
         )
         assert before.band.p10 - after.band.p10 == pytest.approx(
-            correction.delta_lo, abs=1e-9
+            correction.delta_lo * _KNOT_SPREAD_MWH, abs=1e-9
         )
         assert lower_correction_fraction(probability) == 1.0
 
@@ -432,15 +454,23 @@ def test_moving_the_correction_did_not_move_the_floor() -> None:
     applied to the knot is subsumed by the floor into ``F_pos``'s support that
     both apply afterwards. Below ``p = 0.90`` both are the structural zero.
 
+    Forecaster 43 did not weaken this. ``δ_lo`` is now a multiple rather than an
+    MWh, so what v1 is handed is what that multiple *amounts to* on this
+    fixture's scale — and the two remain bit-identical, because the per-row
+    scale is a factor applied before the same addition and every row here shares
+    :data:`_KNOTS`. What 43 changed is the number, not the path it travels.
+
     ``δ_hi`` is deliberately large here: the claim is that *the upper tail's
     correction cannot reach the lower edge*, which is the same independence
     ``fit`` guarantees, asserted on the served number rather than on the fit.
     """
-    correction = _correction(delta_lo=7.5, delta_hi=40.0)
+    correction = _correction(delta_lo=7.5 / _KNOT_SPREAD_MWH, delta_hi=40.0)
     for probability in (*_PROBABILITY_GRID, 0.95, 0.99, 0.91, 0.9001):
         v1 = compose(
             occurrence_probability=probability,
-            positive_quantiles=_v1_knot_correction(_KNOTS, correction),
+            positive_quantiles=_v1_knot_correction(
+                _KNOTS, correction, lower_mwh=correction.delta_lo * _KNOT_SPREAD_MWH
+            ),
             positive_mean_mwh=95.0,
             sub_threshold_mean_mwh=1.0,
             threshold_mw=THRESHOLD_MW,
@@ -504,7 +534,10 @@ def test_the_realised_share_of_delta_hi_is_one_wherever_the_p90_is_positive() ->
     for probability in _PROBABILITY_GRID:
         uncorrected = _composed_p90(_KNOTS, probability=probability)
         v1 = _composed_p90(
-            _v1_knot_correction(_KNOTS, correction), probability=probability
+            _v1_knot_correction(
+                _KNOTS, correction, lower_mwh=correction.delta_lo * _KNOT_SPREAD_MWH
+            ),
+            probability=probability,
         )
         v2 = _composed_p90(_KNOTS, probability=probability, tail_shift=correction.shift())
         assert (v1 - uncorrected) / correction.delta_hi == pytest.approx(
@@ -530,7 +563,7 @@ def test_the_structural_zero_survives_a_correction_that_dwarfs_the_band() -> Non
     band, which is the only way to tell "preserved" apart from "too small to
     see".
     """
-    shift = TailShift(lower_mwh=-5_000.0, upper_mwh=5_000.0)
+    shift = TailShift(lower_spread_multiple=-100.0, upper_mwh=5_000.0)
     for probability in (0.0, 0.001, 0.05, 0.10):
         assert _composed_p90(_KNOTS, probability=probability, tail_shift=shift) == 0.0
     for probability in (0.0, 0.05, 0.50, 0.85):
@@ -656,16 +689,28 @@ def test_the_median_comes_through_untouched() -> None:
 
     Its guardrail is ``p50_unbiasedness`` — the share of observations below P50,
     target 0.50 — and that is reported instead.
+
+    Forecaster 43 gave the lower end a per-row scale and the zero at the middle
+    survived it untouched, which is not automatic: the scale multiplies the knot
+    values, and a scale that had been applied to the *shift* rather than to its
+    lower knot would have made ``δ(0.50)`` a multiple of zero only by luck of
+    arithmetic. It is zero by construction, and that is asserted at every spread
+    below rather than at one.
     """
-    correction = _correction(delta_lo=11.0, delta_hi=23.0)
+    correction = _correction(delta_lo=0.25, delta_hi=23.0)
     shift = correction.shift()
-    assert shift(SERVED_QUANTILES[1]) == 0.0
-    assert shift(SERVED_QUANTILES[0]) == -11.0
-    assert shift(SERVED_QUANTILES[2]) == 23.0
-    # Flat outside the served quantiles, for the reason MagnitudeQuantiles is:
-    # nothing was fitted past them and a line drawn beyond one is invented.
-    assert shift(0.0) == shift(0.05) == -11.0
-    assert shift(0.95) == shift(1.0) == 23.0
+    for spread in (1.0, _KNOT_SPREAD_MWH, 4_000.0):
+
+        def at(q: float, spread: float = spread) -> float:
+            return shift.at(q, spread_mwh=spread)
+
+        assert at(SERVED_QUANTILES[1]) == 0.0
+        assert at(SERVED_QUANTILES[0]) == -0.25 * spread
+        assert at(SERVED_QUANTILES[2]) == 23.0
+        # Flat outside the served quantiles, for the reason MagnitudeQuantiles
+        # is: nothing was fitted past them and a line beyond one is invented.
+        assert at(0.0) == at(0.05) == -0.25 * spread
+        assert at(0.95) == at(1.0) == 23.0
 
     for probability in (0.3, 0.51, 0.75, 1.0):
         kwargs: dict[str, Any] = {
@@ -1330,8 +1375,8 @@ def test_delta_lo_is_ranked_only_over_the_rows_whose_floor_it_can_move() -> None
     assert len(lower) == len(stated) < len(upper), "the lower tail sees a strict subset"
     assert lower == tuple(hour.lower_residual for hour in stated)
 
-    here = _shifted(hours, TailShift(lower_mwh=0.0, upper_mwh=0.0))
-    there = _shifted(hours, TailShift(lower_mwh=10.0, upper_mwh=0.0))
+    here = _shifted(hours, TailShift(lower_spread_multiple=0.0, upper_mwh=0.0))
+    there = _shifted(hours, TailShift(lower_spread_multiple=0.25, upper_mwh=0.0))
     moved = {
         one.key
         for one, other in zip(here, there, strict=True)
@@ -1363,11 +1408,21 @@ def test_a_flat_step_below_the_p10_is_not_a_row_the_shift_cannot_move() -> None:
     ]
     assert flat, "the fixture has rows the old test would have called atoms"
 
-    here = _shifted(flat, TailShift(lower_mwh=0.0, upper_mwh=0.0))
-    raised = _shifted(flat, TailShift(lower_mwh=-10.0, upper_mwh=0.0))
+    here = _shifted(flat, TailShift(lower_spread_multiple=0.0, upper_mwh=0.0))
+    raised = _shifted(flat, TailShift(lower_spread_multiple=-0.25, upper_mwh=0.0))
     for one, other in zip(here, raised, strict=True):
-        assert other.forecast.band.p10 - one.forecast.band.p10 == pytest.approx(10.0)
+        # Since forecaster 43 the move is ``multiple × this row's own spread``,
+        # so the expectation is read off each row rather than being a constant.
+        # That is the whole of 43 asserted on the served number: these rows have
+        # different magnitudes and they are corrected by different MWh.
+        assert other.forecast.band.p10 - one.forecast.band.p10 == pytest.approx(
+            0.25 * one.forecast.mixture.positive_spread_mwh
+        )
     assert all(hour.states_lower_bound for hour in flat)
+    assert len({hour.forecast.mixture.positive_spread_mwh for hour in flat}) > 1, (
+        "every row here has the same scale, so the line above would also pass "
+        "against a flat MWh correction"
+    )
 
     # The ``τ`` floor *is* an atom, and this is where it actually appears: a
     # widening ``δ_lo`` can push a small ``q̂^0.10`` down into the clamp, and
@@ -1376,11 +1431,12 @@ def test_a_flat_step_below_the_p10_is_not_a_row_the_shift_cannot_move() -> None:
     # which raises the floor, it cannot arise at all. And it is conservative on
     # the scored population regardless: a clamped floor is ``τ⁺`` and every
     # scored hour has ``y > τ``, so the row is covered for free.
-    lowered = _shifted(flat, TailShift(lower_mwh=10.0, upper_mwh=0.0))
+    lowered = _shifted(flat, TailShift(lower_spread_multiple=0.25, upper_mwh=0.0))
     clamped = [
         hour
         for one, hour in zip(here, lowered, strict=True)
-        if one.forecast.band.p10 - hour.forecast.band.p10 != pytest.approx(10.0)
+        if one.forecast.band.p10 - hour.forecast.band.p10
+        != pytest.approx(0.25 * one.forecast.mixture.positive_spread_mwh)
     ]
     assert all(
         hour.forecast.band.p10 == math.nextafter(THRESHOLD_MW, math.inf)
@@ -1390,11 +1446,10 @@ def test_a_flat_step_below_the_p10_is_not_a_row_the_shift_cannot_move() -> None:
 
 
 @pytest.mark.parametrize(
-    ("magnitude_driven_p", "direction"),
-    [(False, "under"), (True, "over")],
+    "magnitude_driven_p", [False, True], ids=["p-independent", "p-tracks-magnitude"]
 )
 def test_the_floor_reaches_nominal_where_it_states_one_and_did_not_before(
-    magnitude_driven_p: bool, direction: str
+    magnitude_driven_p: bool,
 ) -> None:
     """Seam 4, on the population the guarantee is actually about.
 
@@ -1405,11 +1460,22 @@ def test_the_floor_reaches_nominal_where_it_states_one_and_did_not_before(
     stated rows, ``coverage_p10_where_stated`` is the order statistic's own
     share.
 
-    Both regimes are run because the contaminated rule misses in **both**
-    directions and a one-sided fixture would have licensed calling the defect
-    "conservative". Where ``p`` is independent of the magnitude it under-covers
-    the stated rows badly; where ``p`` rises with the magnitude — the real
-    classifier's shape — it over-covers them.
+    Both regimes are run because they are two shapes of classifier: ``p``
+    independent of the label, and ``p`` rising with the hour's magnitude, which
+    is forecaster 33's magnitude-decile table and the real one.
+
+    **Forecaster 43 collapsed the two directions into one, and that is a
+    result rather than a loosened test.** Under the additive rule the
+    contaminated ranking under-covered the stated rows in the first regime and
+    *over*-covered them in the second, and both arms existed so that a one-sided
+    fixture could not license calling the defect "conservative". With the lower
+    residual divided by each row's own positive spread the over-covering
+    direction is gone: swept across 144 settings of ``lower_scale``, ``sigma``,
+    ``stated_share`` and both regimes, the contaminated ``before`` never once
+    exceeded nominal — its maximum was 0.8996 and its minimum 0.4643. The
+    over-coverage was itself a magnitude-scale artefact, which is exactly the
+    quantity 43 divides out. So both arms now assert under-coverage, and the
+    claim that the miss is one-sided is asserted rather than assumed.
     """
     hours = _mixed(
         SYNTHETIC_ROWS,
@@ -1424,16 +1490,16 @@ def test_the_floor_reaches_nominal_where_it_states_one_and_did_not_before(
     assert fitted.lower_tail_fitted
 
     _, before, _ = _lower_coverage(
-        _shifted(hours, TailShift(lower_mwh=_contaminated_delta_lo(hours), upper_mwh=0.0))
+        _shifted(
+            hours,
+            TailShift(lower_spread_multiple=_contaminated_delta_lo(hours), upper_mwh=0.0),
+        )
     )
     after_marginal, after, stated_rows = _lower_coverage(_shifted(hours, fitted.shift()))
 
     assert stated_rows == fitted.lower_calibration_rows
     assert after == pytest.approx(TARGET_COVERAGE, abs=COVERAGE_TOLERANCE)
-    if direction == "under":
-        assert before < TARGET_COVERAGE - COVERAGE_TOLERANCE
-    else:
-        assert before > TARGET_COVERAGE + COVERAGE_TOLERANCE
+    assert before < TARGET_COVERAGE - COVERAGE_TOLERANCE
     assert abs(after - TARGET_COVERAGE) < abs(before - TARGET_COVERAGE)
     assert after_marginal >= TARGET_COVERAGE
 
@@ -1518,7 +1584,8 @@ def test_the_upper_tail_still_ranks_every_curtailed_hour() -> None:
     then = sum(
         1
         for hour in _shifted(
-            hours, TailShift(lower_mwh=fitted.delta_lo, upper_mwh=narrowed)
+            hours,
+            TailShift(lower_spread_multiple=fitted.delta_lo, upper_mwh=narrowed),
         )
         if hour.covered_upper
     ) / len(hours)
@@ -1642,7 +1709,9 @@ def test_the_card_publishes_the_population_delta_lo_was_ranked_over(
     )
     assert quantiles["conformal_lower_rank"] == correction.lower_rank
     assert quantiles["conformal_lower_tail_fitted"] == correction.lower_tail_fitted
-    assert quantiles["conformal_method"] == "one_sided_split_cqr_stated_lower"
+    assert quantiles["conformal_method"] == (
+        "one_sided_split_cqr_stated_lower_spread_normalised"
+    )
     assert (
         quantiles["conformal_lower_calibration_rows"]
         <= (quantiles["conformal_calibration_rows"])
@@ -1670,4 +1739,187 @@ def test_the_fixture_folds_own_lower_tail_is_declined(trained: TrainedFold) -> N
     quantiles = json.loads(trained.card.to_json())["quantiles"]
     assert quantiles["conformal_lower_population"] == (
         conformal_module.LOWER_TAIL_NOT_FITTED
+    )
+
+
+# --- Forecaster 43: the units, and the sweep that chose them -----------------
+
+#: The fleet-magnitude ratios forecaster 43's table sweeps — the test period's
+#: magnitudes over the calibration window's. ``1.0`` is exchangeability holding;
+#: the others are the assumption failing by the amount a growing fleet and a
+#: turning season produce, in both directions.
+_FLEET_RATIOS: tuple[float, ...] = (0.4, 0.6, 0.8, 1.0, 1.3, 1.8)
+
+#: Seeds per ratio. The ticket swept 30; twelve is enough that a coverage
+#: estimate over ~600 stated rows has a standard error near 0.012 and the
+#: additive arm's 0.80-at-ratio-0.4 is eight of those below the rail, while the
+#: suite stays under a second per arm.
+_SWEEP_SEEDS: tuple[int, ...] = tuple(range(43, 55))
+
+
+def _heteroscedastic_block(
+    count: int, *, seed: int, magnitude_scale: float
+) -> list[ScoredHour]:
+    """Rows whose magnitudes span orders of magnitude, and a ``q̂^0.10`` that over-covers.
+
+    The pathology forecaster 43 diagnosed, reproduced: log-normal labels with
+    ``σ = 1.1`` so one row's band is a rounding error against another's, an
+    occurrence probability high enough that the floor is a statement on most of
+    them, and a 0.35 shrink on ``q̂^0.10`` so the uncorrected P10 sits below the
+    labels and ``δ_lo`` comes back large and **negative** — which is the sign
+    both refused artifacts had, and the sign that makes clamping at zero the
+    wrong repair.
+
+    ``magnitude_scale`` multiplies every magnitude and every knot together, so
+    the fleet moves without the fit's *shape* changing at all. That is what
+    isolates the units question: a correction in MWh means something different
+    at a different scale, and a correction in spreads does not.
+    """
+    rng = _rng(seed)
+    z_lo, z_hi = -1.2815515655446004, 1.2815515655446004
+    sigma = 1.1
+    hours: list[ScoredHour] = []
+    for key in _keys(count):
+        mu = math.log(120.0 * magnitude_scale) + 1.5 * rng.gauss(0.0, 1.0)
+        observed = THRESHOLD_MW + math.exp(rng.gauss(mu, sigma))
+        quantiles = MagnitudeQuantiles.from_boosters(
+            q10=(THRESHOLD_MW + math.exp(mu + z_lo * sigma)) * 0.35,
+            q50=THRESHOLD_MW + math.exp(mu),
+            q90=THRESHOLD_MW + math.exp(mu + z_hi * sigma),
+        )
+        hours.append(
+            ScoredHour(
+                key=key,
+                forecast=compose(
+                    occurrence_probability=rng.uniform(0.905, 0.999),
+                    positive_quantiles=quantiles,
+                    positive_mean_mwh=THRESHOLD_MW + math.exp(mu),
+                    sub_threshold_mean_mwh=1.0,
+                    threshold_mw=THRESHOLD_MW,
+                ),
+                observed_mwh=observed,
+            )
+        )
+    return hours
+
+
+def _additive_floor_coverage(
+    calibration: Sequence[ScoredHour], test: Sequence[ScoredHour]
+) -> float:
+    """``coverage_p10_where_stated`` under the **pre-43 additive rule**.
+
+    Reconstructed here and nowhere else, for the reason
+    :func:`_v1_knot_correction` and :func:`_contaminated_delta_lo` are:
+    ``training/conformal.py`` must have exactly one rule in it, and the "before"
+    column of the sweep below has to be this repository's own arithmetic rather
+    than a number remembered from a ticket. ``δ_lo`` is ranked over the stated
+    rows' *unnormalised* ``Q_Y(0.10) − y`` and subtracted as a flat MWh from
+    every stated row's floor, with the same ``τ`` clamp the composition applies.
+    """
+    stated = [hour for hour in calibration if hour.states_lower_bound]
+    residual = sorted(hour.forecast.band.p10 - hour.observed_mwh for hour in stated)
+    delta_mwh = residual[conformal_rank(len(residual)) - 1]
+    floor = math.nextafter(THRESHOLD_MW, math.inf)
+    scored = [hour for hour in test if hour.states_lower_bound]
+    covered = sum(
+        1
+        for hour in scored
+        if max(hour.forecast.band.p10 - delta_mwh, floor) <= hour.observed_mwh
+    )
+    return covered / len(scored)
+
+
+def _sweep() -> dict[float, tuple[list[float], list[float]]]:
+    """``{ratio: (additive coverages, normalised coverages)}`` over the seeds.
+
+    One calibration block and one test block per seed, the second's magnitudes
+    scaled by ``ratio`` and nothing else changed. Both arms are fitted on the
+    same calibration block and scored on the same test block, so the only
+    difference between the two columns is the units the residual was ranked in.
+    """
+    out: dict[float, tuple[list[float], list[float]]] = {}
+    for ratio in _FLEET_RATIOS:
+        additive: list[float] = []
+        normalised: list[float] = []
+        for seed in _SWEEP_SEEDS:
+            calibration = _heteroscedastic_block(800, seed=seed, magnitude_scale=1.0)
+            test = _heteroscedastic_block(800, seed=seed + 900, magnitude_scale=ratio)
+            additive.append(_additive_floor_coverage(calibration, test))
+            fitted = conformalise(calibration, window=_window())
+            assert fitted.lower_tail_fitted
+            _, where_stated, _ = _lower_coverage(_shifted(test, fitted.shift()))
+            normalised.append(where_stated)
+        out[ratio] = (additive, normalised)
+    return out
+
+
+def test_the_normalised_floor_survives_the_fleet_moving_and_the_additive_one_does_not(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Forecaster 43's table, run rather than quoted — and its control must fail.
+
+    The whole argument for changing the units is here. A correction whose
+    realised coverage depends on next quarter's fleet size is not a 90%
+    guarantee, it is a 90% guarantee *at one fleet size*; the additive arm is
+    kept so that "the normalised one holds" is measured against something that
+    demonstrably does not, rather than against nothing.
+
+    The rail is the gate's own :data:`COVERAGE_GUARDRAIL`, not a tolerance
+    chosen here, because the question the sweep answers is whether the hot-swap
+    gate would refuse the artifact — which is what actually happened, twice.
+
+    ``δ_lo`` is large and negative in every cell, as it was on both refused
+    artifacts, so this also stands as the measurement behind refusing to clamp
+    it at zero: the fitted floor over-covers, and removing the correction sends
+    coverage up through the window's 0.97 ceiling rather than down to it.
+
+    **What the normalised arm is and is not claimed to be.** It is not flat —
+    this fixture has it drifting 0.9349 → 0.9008 across the same ratios, because
+    dividing by the positive spread removes the scale but not the shape, and a
+    log-normal whose location moves is not a pure rescaling. What is asserted is
+    the thing the gate asks: it stays inside the rail at every ratio, where the
+    additive arm swings 0.8016 → 0.9407 and leaves it at the trough. A residual
+    drift inside the rail is a smaller claim than "scale-free", and it is the
+    one the measurement supports.
+    """
+    low, high = COVERAGE_GUARDRAIL
+    sweep = _sweep()
+
+    rows = ["", "ratio   additive          normalised"]
+    for ratio, (additive, normalised) in sweep.items():
+        rows.append(
+            f"{ratio:<7.1f} {sum(additive) / len(additive):.4f} "
+            f"{sum(1 for x in additive if low <= x <= high):>2}/{len(additive)}   "
+            f"     {sum(normalised) / len(normalised):.4f} "
+            f"{sum(1 for x in normalised if low <= x <= high):>2}/{len(normalised)}"
+        )
+    with capsys.disabled():
+        print("\n".join(rows))
+
+    for ratio, (_, normalised) in sweep.items():
+        outside = [value for value in normalised if not low <= value <= high]
+        assert not outside, (
+            f"the normalised floor left the gate's rail at fleet ratio {ratio}: "
+            f"{outside} outside [{low}, {high}]"
+        )
+
+    # The control. At ratio 0.4 — the test period's fleet at 40% of the
+    # calibration window's, which a seasonal trough produces without anything
+    # being wrong — the additive correction is a large fixed MWh against bands
+    # that have shrunk with it, so it over-corrects and the floor falls through
+    # the rail. If this ever passes, the sweep above has stopped measuring
+    # anything: both arms would be surviving and the units would not matter.
+    additive_at_the_trough = sweep[0.4][0]
+    assert all(value < low for value in additive_at_the_trough), (
+        "the additive arm held the gate's rail at fleet ratio 0.4, so this "
+        f"sweep no longer distinguishes the two rules: {additive_at_the_trough}"
+    )
+
+    # And it is the *shift* that breaks it, not the fixture: at ratio 1.0 the
+    # two rules agree, because a flat MWh and a multiple of the spread are the
+    # same correction when the scale has not moved. Without this the control
+    # above would also pass against an additive rule that was simply broken.
+    assert all(low <= value <= high for value in sweep[1.0][0]), (
+        "the additive arm fails even under exchangeability, so the sweep is "
+        "measuring a broken reconstruction rather than the units"
     )

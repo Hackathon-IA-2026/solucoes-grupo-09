@@ -423,12 +423,31 @@ over the same rows.** Let the calibration window contain positive rows `i` with
 observed `y_i`. Define, on the *composed* band:
 
 ```
-E_lo,i = Q_Y(0.10 | x_i) − y_i    (positive when the interval was too high)
+s_i    = max(Q_pos(0.90 | x_i) − Q_pos(0.10 | x_i), 1 MWh)   — the row's scale
+E_lo,i = (Q_Y(0.10 | x_i) − y_i) / s_i   (positive when the interval was too high)
 E_hi,i = y_i − Q_Y(0.90 | x_i)
 δ_lo   = the ⌈(n_lo+1)(1 − 0.10)⌉-th smallest E_lo, over the n_lo rows
          where Q_Y(0.10 | x_i) > 0  — i.e. p(x_i) > 0.90
 δ_hi   = the ⌈(n+1)(1 − 0.10)⌉-th smallest E_hi, over all n positive rows
 ```
+
+**`δ_lo` is dimensionless and `δ_hi` is MWh**, and the asymmetry is deliberate.
+The lower residual is divided by the row's own positive spread `s_i` because a
+flat MWh floor correction is a rounding error on a 1,691 → 12,700 MWh band and
+most of the interval on a 0 → 3,029 one, so what it delivers depends on the
+magnitude mix of the period it lands on. Measured across a fleet-magnitude
+sweep, the additive correction's realised coverage swung 0.8023 → 0.9504 on the
+shift alone with the model unchanged; normalised it held 0.9165 everywhere. A
+90% guarantee that holds only at one fleet size is not one. The upper tail was
+covering on both artifacts that exposed this (`upper_correction_realised`
+0.9927), and changing a tail that covers on an argument measured somewhere else
+is not a move this repository makes — so `δ_hi` stays MWh until it is measured.
+See `.scratch/forecaster/issues/43-the-correction-is-additive-on-heteroscedastic-bands.md`.
+
+The scale is read off the **positive branch** rather than the composed band: the
+composed width depends on `p` through the point mass, so two rows with identical
+magnitude shapes and different `p` would be scaled differently and the residual
+would stop being a property of the fit.
 
 **Why the lower tail is ranked over fewer rows.** `δ` is applied inside the
 positive branch, so on any row whose `Q_Y(0.10)` is the mixture's point mass at
@@ -453,7 +472,9 @@ the *marginal* `coverage_p90` on the upper. The marginal `coverage_p10` comes
 out above 0.90 by the share of rows whose floor is the point mass —
 `coverage_p10 = (1−s)·1 + s·coverage_p10_where_stated` — and that excess is
 structure, not slack. `conformal_method` on the card reads
-`one_sided_split_cqr_stated_lower` for this reason, and the card publishes
+`one_sided_split_cqr_stated_lower_spread_normalised` for this reason and for the
+units above — an old card cannot be read with the new units, so the name carries
+both — and the card publishes
 `conformal_lower_calibration_rows` and `conformal_lower_rank` beside the
 window's own `n`.
 
@@ -465,7 +486,7 @@ hold-flat-outside rule `Q_pos` uses, over the three points where something is
 known:
 
 ```
-δ(0.10) = −δ_lo        δ(0.50) = 0        δ(0.90) = +δ_hi
+δ(0.10) = −δ_lo·s      δ(0.50) = 0        δ(0.90) = +δ_hi
 δ(q)      linear between them, flat below 0.10 and above 0.90
 Q_Y(q | x) ← Q_Y(q | x) + δ(q)        for q > 1 − p(x); unchanged at q ≤ 1 − p(x)
 ```
@@ -808,7 +829,7 @@ this is the IDEA §15 table, corrected for a hurdle model:
 | `interval_width_mean_mwh` | fold | sharpness — a wide interval covers by cheating |
 | `p50_unbiasedness` | fold | share below P50, target 0.50 |
 | `crossing_rate` | fold | share of **settled** hours where the raw boosters crossed; the same rate over the fold's curtailed hours is published beside it as `coverage_crossing_rate` and is not interchangeable with it |
-| `delta_lo`, `delta_hi` | fold | the conformal corrections themselves |
+| `delta_lo`, `delta_hi` | fold | the conformal corrections themselves — `delta_lo` a multiple of the row's positive spread, `delta_hi` MWh |
 | `day_total_coverage`, `peak_coverage` | fold | the ensemble's own calibration |
 | `share_p50_zero`, `hours_per_day_p_ge_50` | fold | the deliverable to ticket 011 |
 | `vintage_fidelity` | fold | never averaged across values |

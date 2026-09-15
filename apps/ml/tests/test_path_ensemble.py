@@ -383,7 +383,9 @@ def test_the_ensemble_inverts_the_corrected_mixture_and_not_a_second_one() -> No
     """
     rows = 400
     matrix = a_uniform_grid(rows)
-    shift = TailShift(lower_mwh=3.0, upper_mwh=25.0)
+    # 0.04 of `a_mixture`'s 78 MWh positive spread — about 3 MWh, the flat
+    # figure this read before forecaster 43 made the lower end a multiple.
+    shift = TailShift(lower_spread_multiple=0.04, upper_mwh=25.0)
     mixtures = [
         replace(a_mixture(p=0.7 + 0.02 * (hour % 5)), tail_shift=shift)
         for hour in range(HOURS_PER_DAY)

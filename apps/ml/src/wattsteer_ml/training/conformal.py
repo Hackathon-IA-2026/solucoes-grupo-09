@@ -101,11 +101,14 @@ comes from survives outside a fixture.
 **This still does not add a second path to a band.** Forecaster ticket 01 made
 the mixture inversion the only composition and it still is. This module produces
 a :class:`~wattsteer_ml.mixture.TailShift` — two floats and an interpolation
-rule, no ``p``, no band — and :func:`wattsteer_ml.mixture.compose` is the one
-place it is ever applied. Nothing here constructs a
-:class:`~wattsteer_ml.mixture.QuantileBand`, calls ``compose``, or adds a scalar
-to a composed quantile. Ticket 07's ensemble inverts one object, exactly as it
-did: the shift lives on the mixture the ensemble already held, so the corrected
+rule, no ``p``, no band; forecaster 43 made the lower float a *multiple* of the
+row's positive spread rather than MWh, and the scale is supplied by the mixture
+at application time, so this class still holds nothing conditional — and
+:func:`wattsteer_ml.mixture.compose` is the one place it is ever applied.
+Nothing here constructs a :class:`~wattsteer_ml.mixture.QuantileBand`, calls
+``compose``, or adds a scalar to a composed quantile. Ticket 07's ensemble
+inverts one object, exactly as it did: the shift lives on the mixture the
+ensemble already held, so the corrected
 marginals *are* the served marginals and the hour band and the day band cannot
 disagree about hour 14.
 
@@ -809,9 +812,7 @@ class ConformalCorrection:
         own — into ``F_pos``'s support, strictly above ``τ`` — applied after the
         shift, exactly as it was applied after the corrected knot before.
         """
-        return TailShift(
-            lower_spread_multiple=self.delta_lo, upper_mwh=self.delta_hi
-        )
+        return TailShift(lower_spread_multiple=self.delta_lo, upper_mwh=self.delta_hi)
 
     def card_fields(self) -> dict[str, Any]:
         population = (
@@ -824,7 +825,15 @@ class ConformalCorrection:
                 "zero. The 90% the lower tail is aimed at is therefore a "
                 "statement about coverage_p10_where_stated, and the marginal "
                 "coverage_p10 is that number blended with the rows covered by "
-                "arithmetic — necessarily higher, never lower."
+                "arithmetic — necessarily higher, never lower. delta_lo is a "
+                "multiple of the row's own positive spread, Q_pos(0.90) − "
+                "Q_pos(0.10), and not MWh: a flat MWh floor correction "
+                "delivered between 0.8023 and 0.9504 coverage depending only "
+                "on how the fleet's magnitudes moved between the calibration "
+                "window and the test period, and scaled per row it delivered "
+                "0.9165 across the same sweep. delta_hi is still MWh — the "
+                "upper tail was covering, and a tail that covers is not "
+                "changed on an argument measured somewhere else."
             )
             if self.lower_tail_fitted
             else LOWER_TAIL_NOT_FITTED

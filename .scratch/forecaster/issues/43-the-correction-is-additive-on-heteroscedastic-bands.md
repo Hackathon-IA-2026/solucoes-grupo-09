@@ -3,9 +3,9 @@
 **What to build:** a conformal correction that survives the fleet moving between
 the calibration window and the test period.
 
-**Status:** diagnosed and measured; the change is specified here and **not yet
-made**, because it overturns a documented design property and that is an
-argument to be had in writing first.
+**Status:** made. The lower residual is normalised, the units moved everywhere
+together, and the sweep below is a test with the additive arm as its control.
+The retrain's verdict is the last open box.
 
 ## What happened
 
@@ -102,16 +102,64 @@ same width per row. The correction becomes dimensionless and proportional.
 
 ## Boxes
 
-- [ ] `E_lo` is ranked normalised, and the scale is the composed band width
-- [ ] `δ` is applied per row through the same q-space path, so the ensemble's
-      marginals remain the served marginals — asserted, not assumed
-- [ ] `conformal_method` names the new variant, so an old card cannot be read
-      with the new units
-- [ ] The card, `forecaster.md`, `model-card.ts` and `types.generated.ts` agree
-      on the units
-- [ ] The sweep above is a test, with the additive arm kept as the control that
-      must fail where it failed here
+- [x] `E_lo` is ranked normalised. **The scale is the positive branch's spread,
+      `Q_pos(0.90) − Q_pos(0.10)`, not the composed band width this ticket
+      first specified.** The composed width depends on `p` through the point
+      mass, so two rows with identical magnitude shapes and different `p` would
+      be scaled differently and the residual would stop being a property of the
+      fit. Floored at 1 MWh, because `MagnitudeQuantiles` permits a degenerate
+      branch and a multiple of nothing is nothing.
+- [x] `δ` is applied per row through the same q-space path. `TailShift.at(q, *,
+      spread_mwh)` takes the row's scale and applies it *inside* the
+      interpolation, so forecaster 21's rule is unchanged and the ensemble still
+      inverts one object. Asserted by
+      `test_the_ensemble_inverts_the_corrected_mixture_and_not_a_second_one`,
+      which fails if the shift stops reaching every `q`.
+- [x] `conformal_method` reads `one_sided_split_cqr_stated_lower_spread_normalised`.
+- [x] The card, `forecaster.md`, `model-card.schema.json` and
+      `types.generated.ts` agree: `delta_lo` dimensionless, `delta_hi` MWh.
+      `TailShift.lower_spread_multiple` carries the units in its name, so a
+      caller cannot pass MWh by habit.
+- [x] The sweep is
+      `test_the_normalised_floor_survives_the_fleet_moving_and_the_additive_one_does_not`,
+      12 seeds × 6 ratios, rail `[0.85, 0.97]`. Reproduced (see below). The
+      additive arm is reconstructed in the test file — not in
+      `training/conformal.py`, which must have one rule in it — and the test
+      fails if that arm ever holds the rail at ratio 0.4, *and* if it fails the
+      rail at ratio 1.0, so a merely-broken reconstruction cannot pass for a
+      control.
 - [ ] A retrain, and the gate's verdict recorded either way
+
+### The sweep, as this repository now runs it
+
+| fleet ratio | additive | normalised |
+|---|---|---|
+| 0.4 | 0.8016 — **0/12 in band** | 0.9349 — 12/12 |
+| 0.6 | 0.8543 — 9/12 | 0.9232 — 12/12 |
+| 0.8 | 0.8826 — 12/12 | 0.9153 — 12/12 |
+| 1.0 | 0.9021 — 12/12 | 0.9122 — 12/12 |
+| 1.3 | 0.9215 — 12/12 | 0.9074 — 12/12 |
+| 1.8 | 0.9407 — 12/12 | 0.9008 — 12/12 |
+
+**One claim above is weaker than the ticket first made.** The normalised arm is
+*not* flat — it drifts 0.9349 → 0.9008 across the ratios, because dividing by
+the positive spread removes the scale but not the shape and a log-normal whose
+location moves is not a pure rescaling. It holds the rail everywhere, which is
+what the gate asks; "scale-free" is more than the measurement supports and the
+test says so.
+
+### One test lost an arm, and that is a result
+
+`test_the_floor_reaches_nominal_where_it_states_one_and_did_not_before` was
+parametrised on the contaminated rule missing in **both** directions, so that a
+one-sided fixture could not license calling forecaster 35's defect
+"conservative". Under normalised residuals the over-covering direction is gone:
+swept across 144 settings of `lower_scale`, `sigma`, `stated_share` and both
+classifier regimes, the contaminated `before` never exceeded nominal — maximum
+0.8996, minimum 0.4643. The over-coverage was itself a magnitude-scale
+artefact, which is the quantity this ticket divides out. Both arms remain, both
+now assert under-coverage, and the one-sidedness is asserted rather than
+assumed.
 
 ## What this does not claim
 
