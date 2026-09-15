@@ -85,7 +85,7 @@ export function ReplayCompare() {
           paddingTop: space.lg,
         }}
       >
-        <View style={{ flexGrow: 1, flexBasis: 140, gap: 2 }}>
+        <View style={{ flexGrow: 1, flexBasis: 140, gap: space.xs }}>
           <Text style={{ fontSize: 12, color: colors.inkMuted }}>
             {copy.showcase.replay.recoveredLabel}
           </Text>
@@ -107,7 +107,7 @@ export function ReplayCompare() {
             </Text>
           ) : null}
         </View>
-        <View style={{ flexGrow: 1, flexBasis: 140, gap: 2 }}>
+        <View style={{ flexGrow: 1, flexBasis: 140, gap: space.xs }}>
           <Text style={{ fontSize: 12, color: colors.inkMuted }}>
             {copy.showcase.replay.reductionLabel}
           </Text>
@@ -129,7 +129,7 @@ export function ReplayCompare() {
         </View>
       </View>
 
-      <Footnote>{copy.showcase.replay.vintageNote}</Footnote>
+      <Footnote pinned={true}>{copy.showcase.replay.vintageNote}</Footnote>
     </Panel>
   );
 }
@@ -150,7 +150,7 @@ function CompareRow({
   const railLabel = useRailLabel();
   const colors = usePalette();
   return (
-    <View style={{ gap: 8 }}>
+    <View style={{ gap: space.sm }}>
       <View
         style={{
           flexDirection: "row",
@@ -159,7 +159,7 @@ function CompareRow({
           gap: space.md,
         }}
       >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
           <Text style={{ fontSize: 13, fontWeight: "600", color: colors.ink }}>
             {label}
           </Text>

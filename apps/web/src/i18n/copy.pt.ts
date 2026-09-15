@@ -31,7 +31,6 @@ export const pt: Copy = {
   },
 
   footer: {
-    tagline: "Inteligência de curtailment de renováveis.",
     rights: "© WattSteer {year}. Todos os direitos reservados.",
   },
 
@@ -229,7 +228,7 @@ export const pt: Copy = {
       lead: "A previsão é onde tudo",
       accent: "começa.",
     },
-    sub: "Estes são os próprios painéis do produto, renderizados sobre uma fixture determinística. Mesmos componentes, mesmas unidades, mesmas faixas das telas ao vivo.",
+    sub: "Estes são os próprios painéis do produto, renderizados sobre uma fixture determinística. Mesmos componentes, mesmas unidades, mesmas faixas das telas do próprio protótipo.",
     explain: {
       panelTitle: "Diagnóstico",
       panelSub: "NORDESTE · amanhã",

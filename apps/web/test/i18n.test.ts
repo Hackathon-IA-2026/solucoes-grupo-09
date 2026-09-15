@@ -230,7 +230,26 @@ describe("no call to action promises more than /app serves", () => {
     // issue no request. A button reading "Open the live grid" contradicted the
     // badge on the page it opened.
     const LIVE_WORDS = [/\blive\b/i, /ao vivo/i, /\bagora\b/i, /\breal[- ]time\b/i];
-    const ctas = ["hero.primaryCta", "footerCta.button", "hero.secondaryCta"];
+    // The buttons, and the two lines that describe what the buttons open.
+    //
+    // `showcase.sub` was missed the first time round and said the landing
+    // panels carry "the same bands as the live screens" — in `pt`, "das telas
+    // ao vivo". Those screens are `/app`, which stamps `PROTOTYPE · FIXTURE
+    // DATA` and, on Overview and Explain, issues no request at all. Fixing the
+    // buttons and leaving the sentence that introduces the product would have
+    // moved the claim one paragraph rather than removed it.
+    //
+    // Scoped to these five keys rather than to the whole dictionary on
+    // purpose: `engines.status` says "ingestion and the data platform are live
+    // and reading ONS", which is true, is the page's own admission of what is
+    // *not* live beside it, and must not be caught here.
+    const ctas = [
+      "hero.primaryCta",
+      "footerCta.button",
+      "hero.secondaryCta",
+      "showcase.sub",
+      "showcase.badge",
+    ];
     for (const key of ctas) {
       for (const dict of [EN, PT]) {
         const label = dict.get(key);

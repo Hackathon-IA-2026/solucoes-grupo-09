@@ -96,7 +96,7 @@ export function DriverBars() {
         ))}
       </View>
 
-      <Footnote>{copy.showcase.explain.note}</Footnote>
+      <Footnote pinned={true}>{copy.showcase.explain.note}</Footnote>
     </Panel>
   );
 }

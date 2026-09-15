@@ -69,12 +69,18 @@ export default function Home() {
           id="forecast"
           testID="landing-hero"
           onSectionLayout={onSectionLayout}
+          wide={wide}
           paddingTop={space.xxl}
         >
           <Hero onExplain={() => scrollTo("engines")} />
         </Section>
 
-        <Section id="engines" testID="landing-engines" onSectionLayout={onSectionLayout}>
+        <Section
+          id="engines"
+          testID="landing-engines"
+          onSectionLayout={onSectionLayout}
+          wide={wide}
+        >
           <Engines wide={wide} />
         </Section>
 
@@ -86,7 +92,7 @@ export default function Home() {
           style={{ width: "100%", backgroundColor: colors.canvasTint }}
           onLayout={(event) => onSectionLayout("showcase", event.nativeEvent.layout.y)}
         >
-          <Section id="showcase" testID="landing-showcase">
+          <Section id="showcase" testID="landing-showcase" wide={wide}>
             <Showcase wide={wide} />
           </Section>
         </View>
@@ -95,6 +101,7 @@ export default function Home() {
           id="provenance"
           testID="landing-provenance"
           onSectionLayout={onSectionLayout}
+          wide={wide}
         >
           <Provenance wide={wide} />
         </Section>

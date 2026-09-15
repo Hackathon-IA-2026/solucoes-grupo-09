@@ -58,7 +58,6 @@ export const en = {
   },
 
   footer: {
-    tagline: "Renewable curtailment intelligence.",
     rights: "© WattSteer {year}. All rights reserved.",
   },
 
@@ -280,7 +279,7 @@ export const en = {
       lead: "The forecast is where it",
       accent: "starts.",
     },
-    sub: "These are the product's own panels, rendered over a deterministic fixture. Same components, same units, same bands as the live screens.",
+    sub: "These are the product's own panels, rendered over a deterministic fixture. Same components, same units, same bands as the prototype's own screens.",
     explain: {
       panelTitle: "Diagnosis",
       panelSub: "NORDESTE · tomorrow",
