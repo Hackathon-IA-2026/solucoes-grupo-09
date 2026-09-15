@@ -120,6 +120,8 @@ export const en = {
     OPTIMIZER_NOT_CONFIGURED:
       "The optimizer isn't configured in this deployment, so scenarios can't be solved here.",
     OPTIMIZER_UNAVAILABLE: "The optimizer couldn't be reached.",
+    VOICE_NOT_CONFIGURED: "Voice isn't configured in this deployment.",
+    VOICE_UNAVAILABLE: "The voice session couldn't be started.",
     OPTIMIZER_TIMEOUT: "The optimizer didn't answer in time.",
     OPTIMIZER_NOT_READY: "The optimizer is starting up and can't solve yet.",
     UPSTREAM_REJECTED: "The optimizer refused that request.",

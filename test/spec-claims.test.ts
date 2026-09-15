@@ -341,7 +341,13 @@ describe("the endpoint list is the surface, in both directions", () => {
     bind("header route count", /One gateway, ([\w-]+) routes/g, served.length);
     bind(
       "out-of-scope route count",
-      /The surface is ([\w-]+) read-shaped routes/g,
+      // The sentence gained a clause when row 19 arrived — it mints a
+      // credential and reads nothing, so "read-shaped" stopped describing the
+      // whole surface. The binder tracks the count, not the adjective, and the
+      // `atLeast` check above is what caught the reword: a sentence quietly
+      // rephrased out of this pattern fails as "the binder matched nothing"
+      // rather than passing as "no drift".
+      /The surface is ([\w-]+) routes/g,
       served.length,
     );
   });

@@ -58,6 +58,20 @@ export const config = {
    */
   rateLimitSolveBurst: int(process.env.WATTSTEER_RATE_LIMIT_SOLVE_BURST, 10, 1, 10_000),
   /**
+   * Voice tier: ephemeral realtime credentials per window, per client.
+   *
+   * Six, against the read tier's 120, and the gap is the point. This product is
+   * **public and unauthenticated** — `params.ts` records that as a product
+   * decision, not an oversight — so anybody who can load the page can ask for a
+   * credential that opens a live audio session billed by the minute. A reader
+   * having one conversation needs one session, and re-mints only when the
+   * 300-second token is about to lapse mid-sentence; six an minute covers that
+   * with room and covers nothing else.
+   *
+   * 0 disables the tier's budget, which is how a test asks for many.
+   */
+  voiceSessionMax: int(process.env.WATTSTEER_RATE_LIMIT_VOICE, 6, 0, 10_000),
+  /**
    * How many proxies sit in front of this process.
    *
    * The client a budget is charged to is the `n`-th `X-Forwarded-For` hop from
@@ -162,6 +176,36 @@ export const config = {
    * produce one are kept indefinitely and this does not apply to them.
    */
   archiveRetentionDays: int(process.env.WATTSTEER_ARCHIVE_RETENTION_DAYS, 90, 1, 36_500),
+
+  // --- the voice copilot (docs/plans/voice-copilot.md) ---
+  /**
+   * The xAI key, held **here and only here**.
+   *
+   * The browser cannot hold it and cannot be given it: a WebSocket opened from
+   * a browser can set no `Authorization` header, so the realtime API is reached
+   * with a short-lived *ephemeral* credential that `GET /v1/voice/session`
+   * mints on the caller's behalf. This value must never appear in a response
+   * body, in a log line, or in an error's detail — `voice.ts` has a guard for
+   * each, because ioredis once put a Redis password in a log and that is the
+   * same mistake with a longer blast radius.
+   *
+   * Unset → `VOICE_NOT_CONFIGURED`, and the web app renders no dock at all. An
+   * instance without a key is a product without voice, never a broken one.
+   */
+  xaiApiKey: process.env.XAI_API_KEY || undefined,
+  /** The realtime model. Pinned in one place so a rename is one edit. */
+  grokVoiceModel: process.env.GROK_VOICE_MODEL || "grok-voice-latest",
+  /** The voice xAI speaks in. */
+  grokVoice: process.env.GROK_VOICE || "eve",
+  /**
+   * How long a minted credential lives.
+   *
+   * Short, because it travels to the browser and is the only thing standing
+   * between a page view and a billable audio stream. Long enough that a reader
+   * is not re-minting mid-sentence: the client re-mints on expiry, and the
+   * response echoes `expires_at` so it can.
+   */
+  voiceSessionTtlSec: int(process.env.WATTSTEER_VOICE_TTL_SEC, 300, 30, 3600),
 
   // --- the ML service ---
   /**

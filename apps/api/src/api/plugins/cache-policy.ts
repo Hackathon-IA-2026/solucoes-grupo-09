@@ -405,6 +405,21 @@ export const CACHE_POLICIES = {
    * stop.
    */
   error: { name: "error", directive: NO_STORE },
+
+  /**
+   * `GET /v1/voice/session`. **The one response on this surface that is a
+   * credential**, and the only row whose `no-store` is a security property
+   * rather than a freshness one.
+   *
+   * Every other `NO_STORE` here says "this changes too often to be worth
+   * keeping". This one says a stored copy would hand one reader's ephemeral
+   * token to the next reader out of a shared cache — Railway's edge, a
+   * corporate proxy, a browser's own disk. `no-store` and not `no-cache`,
+   * because the second still permits a stored copy that is merely revalidated,
+   * and a revalidated credential is still a credential somebody else's disk
+   * held.
+   */
+  voiceSession: { name: "voice-session", directive: NO_STORE },
 } as const satisfies Record<string, CachePolicy>;
 
 /** Every row of the table, for the assertions that must hold of all of them. */

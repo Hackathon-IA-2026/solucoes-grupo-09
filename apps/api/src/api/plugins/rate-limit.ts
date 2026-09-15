@@ -83,8 +83,8 @@ export {
   sweepBuckets,
 } from "./limit-store.js";
 
-/** The three tiers. `null` is the unmetered one — it spends nothing. */
-export type Tier = "read" | "solve";
+/** The tiers. `null` is the unmetered one — it spends nothing. */
+export type Tier = "read" | "solve" | "voice";
 
 /** Paths that are never metered: cheap probes a monitor must never be throttled on. */
 export const UNMETERED_PATHS: ReadonlySet<string> = new Set(["/", "/health", "/ready"]);
@@ -94,6 +94,20 @@ export const UNMETERED_PATHS: ReadonlySet<string> = new Set(["/", "/health", "/r
  * shareable `GET ?s=` form alike — the budget is on the solver, not on the verb.
  */
 export const SOLVE_PATHS: readonly string[] = ["/v1/optimize", "/v1/replay"];
+
+/**
+ * The voice tier's route: minting an ephemeral realtime credential.
+ *
+ * Its own tier because it is neither of the other two and is cheaper than both
+ * to *serve* and far more expensive to *spend*. A read is a cached row; a solve
+ * is 3 ms of branch-and-bound on our own CPU. This is one HTTPS round trip to
+ * xAI that hands the caller a credential good for a live audio session billed
+ * by the minute — and this product is **public and unauthenticated**, so anyone
+ * who can load the page can ask for one. The budget is therefore small, and it
+ * is not shared with the read tier where a generous allowance is correct
+ * because almost every hit is a shared-cache hit.
+ */
+export const VOICE_PATHS: readonly string[] = ["/v1/voice/session"];
 
 /** Pure: is this path one the solver answers (including sub-paths like `/v1/replay/days`)? */
 export function isSolvePath(pathname: string): boolean {
@@ -120,6 +134,9 @@ export function classifyTier(_method: string, pathname: string): Tier | null {
   }
   if (pathname === "/v1/replay/days" || pathname.startsWith("/v1/replay/days/")) {
     return "read";
+  }
+  if (VOICE_PATHS.includes(pathname)) {
+    return "voice";
   }
   return isSolvePath(pathname) ? "solve" : "read";
 }
@@ -171,6 +188,7 @@ export function tiersFrom(limits: {
   windowMs: number;
   solveMax: number;
   solveBurst: number;
+  voiceMax: number;
 }): Record<Tier, LimitPolicy> {
   return {
     read: { kind: "fixed-window", max: limits.readMax, windowMs: limits.windowMs },
@@ -180,6 +198,10 @@ export function tiersFrom(limits: {
       windowMs: limits.windowMs,
       burst: limits.solveBurst,
     },
+    // A fixed window rather than a bucket, and deliberately no burst: a reader
+    // opens one voice session at a time and a burst of them is not a slider
+    // being dragged, it is somebody minting credentials.
+    voice: { kind: "fixed-window", max: limits.voiceMax, windowMs: limits.windowMs },
   };
 }
 

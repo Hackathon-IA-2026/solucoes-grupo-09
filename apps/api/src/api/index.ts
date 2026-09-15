@@ -28,6 +28,7 @@ import { rateLimit, tiersFrom } from "./plugins/rate-limit.js";
 import { requestContext } from "./plugins/request-context.js";
 import { securityHeaders } from "./plugins/security.js";
 import { replayRoutes } from "./replay.js";
+import { voiceRoutes } from "./voice.js";
 
 const isProd = config.isProd;
 
@@ -100,6 +101,7 @@ export const app = new Elysia()
         windowMs: config.rateLimitWindowMs,
         solveMax: config.rateLimitSolveMax,
         solveBurst: config.rateLimitSolveBurst,
+        voiceMax: config.voiceSessionMax,
       }),
       store: limitStore,
       trustedProxyDepth: config.trustedProxyDepth,
@@ -201,6 +203,7 @@ export const app = new Elysia()
   .use(optimizeRoutes)
   .use(replayRoutes)
   .use(modelCardRoutes)
+  .use(voiceRoutes)
   .use(diagnosisRoutes)
   .use(metaRoutes);
 

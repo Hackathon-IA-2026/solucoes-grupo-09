@@ -33,6 +33,8 @@
             "RATE_LIMITED",
             "OPTIMIZER_NOT_CONFIGURED",
             "OPTIMIZER_UNAVAILABLE",
+            "VOICE_NOT_CONFIGURED",
+            "VOICE_UNAVAILABLE",
             "OPTIMIZER_TIMEOUT",
             "OPTIMIZER_NOT_READY",
             "UPSTREAM_REJECTED",

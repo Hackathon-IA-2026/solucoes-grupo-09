@@ -136,10 +136,7 @@ function scheduledField(pattern: string, index: 0 | 1): number | null {
  * The floor is never finer than a minute. Two firings inside one minute are the
  * same run, which is what keeps a redelivery idempotent.
  */
-export function retrainRunId(
-  now: Date,
-  options: { pattern?: string } = {},
-): string {
+export function retrainRunId(now: Date, options: { pattern?: string } = {}): string {
   // An *object* rather than a second positional string, and the reason is a
   // test that caught it: `[...].map(retrainRunId)` hands the callback an index,
   // which as a positional `pattern` arrived as the number 1 and threw. A caller

@@ -9,7 +9,7 @@ import {
   REPLAY_REFRESH_TIME_ZONE,
   replayRefreshTargets,
 } from "./jobs/replay-refresh.js";
-import { RETRAIN_JOB_ID, RETRAIN_PATTERN, RETRAIN_TIME_ZONE } from "./jobs/retrain.js";
+import { RETRAIN_TIME_ZONE } from "./jobs/retrain.js";
 import {
   createWorkerDispatch,
   forecastPublicationSchedules,

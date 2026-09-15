@@ -139,6 +139,21 @@ export const ERROR_STATUS = {
   /** The modelling service failed (5xx) with a code this enum has no room for. */
   UPSTREAM_FAILED: 502,
 
+  // --- the voice copilot (docs/plans/voice-copilot.md) ---
+  /**
+   * `XAI_API_KEY` is unset: the capability is absent, not broken.
+   *
+   * The same distinction `OPTIMIZER_NOT_CONFIGURED` draws, and drawn again
+   * rather than folded into one voice code, because the two answers call for
+   * two different behaviours on screen. An instance deployed without a key must
+   * look like **a product without voice** — no dock, no microphone prompt, no
+   * session minted — and never like a product whose voice is broken. A single
+   * code would leave the web app unable to tell those apart.
+   */
+  VOICE_NOT_CONFIGURED: 502,
+  /** xAI could not be reached, or refused to mint an ephemeral token. */
+  VOICE_UNAVAILABLE: 502,
+
   // --- the solve (docs/specs/flex-optimizer.md) ---
   SOLVER_GAP_UNCLOSED: 503,
   SOLVER_TIMEOUT: 504,

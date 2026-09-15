@@ -1,6 +1,6 @@
 # Spec — WattSteer Public API Surface
 
-> One gateway, eighteen routes, and a boundary drawn so that the ML service
+> One gateway, nineteen routes, and a boundary drawn so that the ML service
 > being down is a stale timestamp rather than an outage.
 >
 > **Upstream specs.** [`forecaster.md`](forecaster.md) fixes the content of a
@@ -482,6 +482,7 @@ Four unversioned probes survive unchanged: `GET /`, `/health`, `/ready`,
 | 16 | `GET /v1/model/card/raw` | the `*.card.json` verbatim, for auditing | not a screen — an auditor |
 | 17 | `POST /v1/replay/observed-only` | a pre-F1 day: what happened, and the bound | Time Machine |
 | 18 | `GET /v1/model/artifacts` | every artifact on a lane, promoted or **refused**, and any one card verbatim | not a screen — an operator reading a refusal |
+| 19 | `GET /v1/voice/session` | nothing — it **mints** an ephemeral credential for xAI's realtime API | the voice copilot, across all four `/app` screens |
 
 > **Corrected in api-surface 27: this list was fourteen rows over seventeen
 > served paths.** The three added above are all in `apps/api/src/api`, mounted,
@@ -501,6 +502,14 @@ Four unversioned probes survive unchanged: `GET /`, `/health`, `/ready`,
 > fourteen. It now says eighteen, and `test/spec-claims.test.ts` derives both
 > directions from the route registrations: a path served with no row here fails,
 > and a row here naming a path nothing serves fails too.
+>
+> **Row 19 is the first that reads nothing.** `GET /v1/voice/session` is the
+> only route on this surface that is not a view of the domain: it mints a
+> short-lived credential so the browser can open xAI's realtime WebSocket
+> without ever holding the account key. It is here because the web app is a
+> static export with no server-side runtime of its own, so there is exactly one
+> process in this system that can keep a secret. See
+> `docs/plans/voice-copilot.md` §2.1.
 
 **Three things that are deliberately *not* endpoints.**
 
@@ -1424,6 +1433,7 @@ key built from those has no manual invalidation path to forget to call.
 | `/health` | `no-store` | — | A liveness answer's information is *who* answered, which a stored copy cannot carry |
 | `/ready` | `no-store` | — | It answers 503 when the database is unreachable; a cached 200 is the outage silenced |
 | `/docs`, `/docs/json` | `public, max-age=300` | — | A build constant this gateway holds no digest of, so the window is the whole guarantee and is short |
+| `/v1/voice/session` | `no-store` | — | **A credential, not a figure.** A stored copy hands one reader's ephemeral token to the next out of a shared cache; `no-store` and not `no-cache`, because the second still permits a stored copy that is merely revalidated |
 
 **The ticket's premise, corrected.** "Forecasts change daily, replays never
 change" is half right and half a trap.
@@ -1832,6 +1842,8 @@ Plus, verbatim: `SCENARIO_VERSION_UNSUPPORTED`, `SCENARIO_TOO_LARGE`,
 > | `SERVICE_BUSY` | 503 | the gateway itself is at capacity |
 > | `UPSTREAM_UNAVAILABLE` | 502 | a data source outside WattSteer failed or was unreachable |
 > | `OPTIMIZER_NOT_CONFIGURED` | 502 | `WATTSTEER_ML_URL` unset: the capability is absent, not broken |
+> | `VOICE_NOT_CONFIGURED` | 502 | `XAI_API_KEY` unset: the capability is absent, not broken. The web app renders no dock at all, rather than a broken one |
+> | `VOICE_UNAVAILABLE` | 502 | The voice provider could not be reached, or answered without a credential. Never carries the upstream body — see row 19 |
 > | `OPTIMIZER_TIMEOUT` | 503 | no answer within `mlTimeoutMs` |
 > | `OPTIMIZER_NOT_READY` | 503 | the ML service answered 502/503/504: up, but cannot serve yet |
 > | `UPSTREAM_REJECTED` | 400 | ML refused (4xx) with a code this enum has no room for; it travels in `details.upstream_code` |
@@ -2164,12 +2176,21 @@ validates against the schema.
   v1 and the whole caching and rate-limiting posture above depends on their
   absence. Adding them later is additive: a `Vary: Authorization` and a per-key
   budget tier.
-- **GraphQL, tRPC, gRPC.** The surface is eighteen read-shaped routes with
+- **GraphQL, tRPC, gRPC.** The surface is nineteen routes — eighteen of them read-shaped, plus row 19, which mints a credential rather than reading anything — with
   three fixed-by-spec POST contracts and a static-exported client. REST plus a
   generated typed client is the shape with the least machinery.
-- **Webhooks, subscriptions, SSE, WebSockets.** Nothing here is push-shaped:
-  the data changes twice a day at known instants, which is what
+- **Webhooks, subscriptions, SSE, WebSockets.** Nothing *this gateway serves*
+  is push-shaped: the data changes twice a day at known instants, which is what
   `/v1/meta.next_publication_at` is for.
+
+  **The voice copilot does open a WebSocket, and it is not one of ours.** Row 19
+  mints an ephemeral credential and the browser then holds a realtime socket
+  directly to xAI — see `docs/plans/voice-copilot.md` §2.1, which records why
+  relaying that audio through this gateway was rejected: it would put a
+  per-listener socket and a per-frame copy on a service whose every other route
+  is a cached read, and the ephemeral token exists precisely so it does not have
+  to. So this exclusion still holds of the surface; it no longer holds of the
+  product, and the difference is worth stating rather than discovering.
 - **Pagination beyond a cursor on the one paged endpoint.** Everything else is
   bounded by four subsystems and twenty-four hours.
 - **A public write surface of any kind.** The product is read-only; the Scenario
