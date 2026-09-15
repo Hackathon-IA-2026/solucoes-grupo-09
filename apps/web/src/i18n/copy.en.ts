@@ -39,16 +39,22 @@ export const en = {
   },
 
   /**
-   * The gate page and the footer.
+   * The loading screen at bare `/`, and the footer.
    *
-   * `gate.tagline` is the one string the site renders in *both* locales at
-   * once: the gate is bilingual by construction, because a chooser that picks
-   * a language to address the reader in has already made the choice for them.
-   * It reads `pt.gate.tagline` and `en.gate.tagline` side by side rather than
-   * hardcoding two sentences.
+   * `splash.tagline` used to be `gate.tagline`, and used to be rendered in
+   * **both** locales at once, side by side, because the screen it belonged to
+   * was a chooser and a chooser that addresses the reader in one language has
+   * already chosen for them. There is no chooser any more: the screen resolves
+   * the locale itself (stored choice, then browser, then Portuguese) and says
+   * one sentence, in that locale. So this now goes through `copy` like every
+   * other string.
    */
-  gate: {
+  splash: {
     tagline: "Curtailment intelligence for the Brazilian grid.",
+    /** Screen-reader name for the progress indicator; never drawn as text. */
+    loading: "Loading WattSteer",
+    /** Only reachable with scripting off — see `app/index.tsx`. */
+    continue: "Continue to WattSteer",
   },
 
   footer: {

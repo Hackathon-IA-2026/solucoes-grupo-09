@@ -30,7 +30,10 @@ export default function LocaleLayout() {
   // export. It can fire on the client: the production server falls back to
   // index.html for an unknown path, which hands `/de/privacy` to the router.
   // Rendering *something* in a locale we do not have would be worse than
-  // sending the visitor back to the chooser.
+  // handing the visitor back to the resolver at `/`, which will send them to
+  // a locale that exists. That path is client-side, so it never re-runs the
+  // shell's pre-hydration script — which is why `app/index.tsx` keeps an
+  // effect of its own rather than leaving the redirect to `+html.tsx`.
   if (!isLocale(locale)) {
     return <Redirect href="/" />;
   }

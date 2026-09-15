@@ -93,7 +93,7 @@ function htmlFiles(dir: string): string[] {
 
 /**
  * Which locale tree a file sits in, or `null` for the pages that live outside
- * one: the gate, `/app`, the 404. The path is the source of truth here too —
+ * one: the loading screen at `/`, `/app`, the 404. The path is the source of truth here too —
  * this script never inspects content to guess a language.
  */
 function treeOf(relPath: string): Locale | null {
@@ -150,8 +150,8 @@ for (const file of htmlFiles(DIST)) {
   const before = readFileSync(file, "utf8");
 
   let after = before.replace(/<html([^>]*?)\slang="[^"]*"/, `<html$1 lang="${lang}"`);
-  // Only the locale trees get a locale-specific manifest. The gate and /app
-  // are not in one, and pointing them at a manifest whose `start_url` is a
+  // Only the locale trees get a locale-specific manifest. `/` and /app are
+  // not in one, and pointing them at a manifest whose `start_url` is a
   // language they did not choose would be a worse answer than the neutral
   // file the shell already links.
   if (tree) {

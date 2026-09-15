@@ -28,7 +28,8 @@ export interface Alternate {
  *
  * `x-default` points at Portuguese. Brazil is the primary market, so a crawler
  * or user-agent that expresses no preference gets pt-BR rather than English —
- * the same rule the gate page applies to a first-time human visitor.
+ * the same rule the loading screen at `/` applies to a human visitor who has
+ * never chosen.
  */
 export function alternatesFor(path: LocalizedPath = ""): Alternate[] {
   const entries: Alternate[] = LOCALES.map((locale) => ({
@@ -39,5 +40,7 @@ export function alternatesFor(path: LocalizedPath = ""): Alternate[] {
   return entries;
 }
 
-/** The gate page's own URL. It is `noindex`, so it never gets a canonical. */
-export const GATE_URL = `${SITE_URL}/`;
+// `GATE_URL` used to be exported here — the bare `/` URL, for a page that is
+// `noindex` and therefore never gets a canonical. Nothing ever imported it,
+// and the page it named is now the loading screen, so it is gone rather than
+// renamed: a constant with no reader is a claim nothing checks.

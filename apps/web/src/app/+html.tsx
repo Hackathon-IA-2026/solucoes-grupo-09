@@ -39,12 +39,20 @@ export default function Root({ children }: PropsWithChildren) {
         />
         <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131522" />
         <ScrollViewStyleReset />
-        {/* The gate's redirect, fired before hydration so a returning visitor
-            never sees the chooser flash. Guarded on the pathname because this
-            shell is global: on any other page it is a no-op, including on the
-            server's SPA fallback, which answers unknown paths with the gate's
-            HTML. With scripting off nothing happens and the gate's two real
-            links do the job — which is the point of the gate being a page. */}
+        {/* `/`'s redirect into the reader's locale, fired before hydration so
+            the loading screen behind it is never painted. Guarded on the
+            pathname because this shell is global: on any other page it is a
+            no-op, including on the server's SPA fallback, which answers
+            unknown paths with `/`'s HTML.
+
+            The order — stored choice, then browser languages, then `pt` — is
+            the persistence rule. A reader who switched to English on any page
+            wrote `wattsteer.locale` doing it (see `language-switch.tsx`), and
+            it is read here *before* `navigator.languages`, so a pt-BR browser
+            never pulls them back out of English.
+
+            With scripting off nothing happens, and the loading screen's
+            continue link is revealed by the `<noscript>` rule below. */}
         <script
           // biome-ignore lint/security/noDangerouslySetInnerHtml: inline pre-hydration redirect
           dangerouslySetInnerHTML={{
@@ -60,6 +68,21 @@ export default function Root({ children }: PropsWithChildren) {
 }catch(e){}})();`,
           }}
         />
+        {/* The one thing a scriptless browser needs and cannot be given any
+            other way: a way off the loading screen. The link is in every
+            page's HTML with `display:none`, and this rule — which a browser
+            only applies when scripting is disabled — reveals it. `!important`
+            because react-native-web writes that `display:none` as a class,
+            and an author `!important` outranks both a class and an inline
+            style. */}
+        <noscript>
+          <style
+            // biome-ignore lint/security/noDangerouslySetInnerHtml: static critical CSS
+            dangerouslySetInnerHTML={{
+              __html: `[data-noscript-only]{display:flex!important}`,
+            }}
+          />
+        </noscript>
         {/* Match the page background before hydration to avoid a white flash. */}
         <style
           // biome-ignore lint/security/noDangerouslySetInnerHtml: static critical CSS

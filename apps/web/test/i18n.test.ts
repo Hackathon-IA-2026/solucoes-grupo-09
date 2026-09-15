@@ -128,7 +128,6 @@ const SOURCE = (() => {
  * fifth `noForecast` state fails here instead of arriving unrendered.
  */
 const UNRENDERED: ReadonlyMap<string, string> = new Map([
-  ["gate.tagline", "read as `pt.gate.tagline` / `en.gate.tagline`, not through `copy`"],
   ["noForecast.notYetPublished", "needs a /v1/forecast read; Overview is fixture-only"],
   ["noForecast.noPromotedArtifact", "same — and it is this deployment's own state"],
   ["noForecast.stale", "same"],

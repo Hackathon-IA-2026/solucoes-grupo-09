@@ -1,14 +1,17 @@
 import {
   focusRing,
   layout,
+  radius,
   space,
   useContainerWidth,
   usePalette,
   WattSteerWordmark,
 } from "@wattsteer/ui";
+import { Link } from "expo-router";
 import { Platform, Pressable, Text, View } from "react-native";
 import { LanguageSwitch } from "@/components/language-switch";
-import { useCopy } from "@/i18n";
+import { useCopy, useI18n } from "@/i18n";
+import { localePath } from "@/i18n/locale";
 import type { SectionId } from "./section";
 
 /**
@@ -27,6 +30,8 @@ import type { SectionId } from "./section";
  */
 export function LandingNav({ onNavigate }: { onNavigate: (section: SectionId) => void }) {
   const copy = useCopy();
+  const colors = usePalette();
+  const { locale } = useI18n();
   const [width, onLayout] = useContainerWidth();
   const wide = width >= 860;
 
@@ -47,9 +52,31 @@ export function LandingNav({ onNavigate }: { onNavigate: (section: SectionId) =>
         gap: space.lg,
       }}
     >
-      <View accessibilityLabel={copy.nav.home}>
-        <WattSteerWordmark />
-      </View>
+      {/* The wordmark is a link, and it points at *this locale's* root rather
+          than at `/`. Sending it to `/` would bounce an English reader through
+          the resolver there, which is only correct for as long as their stored
+          choice survives — and is a silent reset to Portuguese the moment it
+          does not. `localePath` keeps the trailing slash, so the logo and the
+          sitemap name one URL rather than two. */}
+      <Link href={localePath(locale) as never} asChild={true}>
+        <Pressable
+          testID="nav-home-link"
+          accessibilityRole="link"
+          accessibilityLabel={copy.nav.home}
+          hitSlop={8}
+          style={(state) => {
+            const { focused = false } = state as { focused?: boolean };
+            return {
+              borderRadius: radius.md,
+              padding: 2,
+              ...focusRing(focused, colors.focus),
+              ...(Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null),
+            };
+          }}
+        >
+          <WattSteerWordmark />
+        </Pressable>
+      </Link>
 
       {wide ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: space.xl }}>

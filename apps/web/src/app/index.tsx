@@ -1,53 +1,76 @@
-import { focusRing, radius, space, usePalette } from "@wattsteer/ui";
-import { Image } from "expo-image";
+import {
+  focusRing,
+  radius,
+  space,
+  type,
+  usePalette,
+  useReducedMotion,
+  WattSteerWordmark,
+} from "@wattsteer/ui";
 import { Link, useRouter } from "expo-router";
 import Head from "expo-router/head";
-import { useEffect } from "react";
-import { Platform, Pressable, Text, View } from "react-native";
-import { en, pt, readStoredLocale } from "@/i18n";
-import {
-  DEFAULT_LOCALE,
-  LOCALE_NAME,
-  LOCALES,
-  type Locale,
-  localePath,
-  matchLocale,
-} from "@/i18n/locale";
+import { useEffect, useState } from "react";
+import { Animated, Platform, Pressable, Text, View } from "react-native";
+import { readStoredLocale, useCopy, useI18n } from "@/i18n";
+import { DEFAULT_LOCALE, localePath, matchLocale } from "@/i18n/locale";
 import { alternatesFor } from "@/lib/seo";
 
 /**
- * The gate at bare `/`.
+ * The loading screen at bare `/`.
  *
- * Not a blank redirect. It is a real, prerendered page that ships visible
- * links to `/pt/` and `/en/`, so it works with JavaScript disabled and gives a
- * crawler an immediate path into both locale trees. That is the concrete
- * difference from client-side switching: even the page that exists only to
- * route people degrades to something readable.
+ * This slot used to hold a language chooser — two taglines, two buttons, and a
+ * decision demanded of a reader who had not yet seen a single sentence of the
+ * product. It is gone. `/` now resolves the locale itself and goes straight to
+ * the landing page: the stored choice first, then the browser's languages,
+ * then Portuguese. Nothing is asked and nothing is clicked.
  *
- * Two SEO decisions, both from `docs/specs/i18n.md`:
+ * What is left is the screen a visitor sees *while* that resolution happens —
+ * the brand lockup and one sentence, in the locale being resolved to. Its
+ * layout is the chooser's, deliberately: the same centred 420px column, the
+ * same vertical rhythm, so the frame that precedes the landing page is the one
+ * this site has always shown at `/`.
  *
- * - `robots` is `noindex,follow`. The gate has no unique content worth
- *   ranking, but `follow` lets crawl equity reach the two locale roots.
- * - `robots.txt` deliberately still says `Allow: /`. Pairing a `Disallow`
- *   with a `noindex` meta is self-defeating — a disallowed URL is never
- *   crawled, so the `noindex` is never read, and the URL can still be indexed
- *   from external links with an empty snippet. `noindex` alone is the whole
- *   signal.
+ * ## How long it is actually on screen
  *
- * The redirect for a real visitor is fired pre-hydration by a small guarded
- * script in `+html.tsx`, so nobody sees this page flash on the web. The effect
- * below is the native path, where there is no HTML shell to carry that script.
+ * On web, essentially never. `+html.tsx` fires the redirect from an inline
+ * script in `<head>`, before the bundle is fetched and before React hydrates,
+ * so a scripted browser leaves this document without painting this component.
+ * That is the point of putting the decision there rather than here: a redirect
+ * that waits for hydration is a redirect the visitor watches happen.
+ *
+ * It is on screen in the two cases that remain, and both are real:
+ *
+ *  - **Native**, where there is no HTML shell to carry that script. The
+ *    `expo-splash-screen` plugin's image hands over to this component, which
+ *    holds the frame until the effect below has navigated.
+ *  - **Client-side navigation into `/`**, which never re-runs the shell's
+ *    script — `[locale]/_layout.tsx` sends an unknown locale here.
+ *
+ * ## Scripting off
+ *
+ * Then nothing redirects, and a screen that says "loading" forever is a dead
+ * end. So the continue link below is rendered into the HTML on every page and
+ * shown **only when scripting is off**, by the `<noscript>` stylesheet in
+ * `+html.tsx`. The chooser earned its no-JS pass by being two links; this
+ * earns it by being one, to the locale the site defaults to, with both locale
+ * roots still declared to crawlers in the `hreflang` set above it.
+ *
+ * `robots` stays `noindex,follow` for the same reason it always was: no unique
+ * content worth ranking, but crawl equity should still reach both locale
+ * roots. `robots.txt` deliberately still says `Allow: /` — a `Disallow` would
+ * mean this `noindex` is never fetched and therefore never obeyed.
  */
-export default function Gate() {
+export default function LoadingScreen() {
   const colors = usePalette();
+  const copy = useCopy();
+  const { locale } = useI18n();
   const router = useRouter();
 
   useEffect(() => {
-    // Web is handled before hydration — see `+html.tsx`. Running it here too
-    // would only add a second, later navigation.
-    if (Platform.OS === "web") {
-      return;
-    }
+    // Unlike the chooser this replaces, this runs on web too. The shell's
+    // pre-hydration script only sees a full document load, so a client-side
+    // navigation into `/` — the redirect out of an unknown locale — would
+    // otherwise sit here with nothing to move it on.
     const target =
       readStoredLocale() ??
       matchLocale(
@@ -56,20 +79,16 @@ export default function Gate() {
           : [],
       ) ??
       DEFAULT_LOCALE;
-    // `replace`, not `push`: the gate must never sit in the history stack, or
-    // Back from `/pt/` lands here and bounces the visitor straight forward
-    // again.
+    // `replace`, not `push`: this must never sit in the history stack, or Back
+    // from `/pt/` lands here and bounces the visitor straight forward again.
     router.replace(localePath(target) as never);
   }, [router]);
 
   return (
     <>
       <Head>
-        <title>WattSteer — Português (Brasil) / English</title>
-        <meta
-          name="description"
-          content="WattSteer — curtailment intelligence for the Brazilian grid. Choose a language: Português (Brasil) or English."
-        />
+        <title>WattSteer</title>
+        <meta name="description" content={copy.splash.tagline} />
         <meta name="robots" content="noindex,follow" />
         {alternatesFor("").map((alternate) => (
           <link
@@ -83,7 +102,7 @@ export default function Gate() {
       </Head>
 
       <View
-        testID="locale-gate"
+        testID="loading-screen"
         style={{
           flex: 1,
           alignItems: "center",
@@ -100,41 +119,51 @@ export default function Gate() {
             gap: space.lg,
           }}
         >
-          <Image
-            source={require("../../assets/images/logo.png")}
-            style={{ width: 48, height: 34 }}
-            contentFit="contain"
-            accessibilityLabel="WattSteer"
-          />
+          {/* The lockup already carries the mark, so this does not stack a
+              second copy of it above the word: one brand geometry, one source
+              (`packages/ui/src/lib/mark.ts`). */}
+          <WattSteerWordmark />
 
-          {/* Bilingual by construction: a language chooser that picks a
-              language to address the reader in has already made the choice
-              for them. */}
           <Text
-            accessibilityRole="header"
-            aria-level={1}
+            testID="loading-tagline"
             style={{
-              fontSize: 22,
-              fontWeight: "600",
-              letterSpacing: -0.4,
+              ...type.bodySmall,
               textAlign: "center",
-              color: colors.ink,
+              color: colors.inkMuted,
             }}
           >
-            WattSteer
+            {copy.splash.tagline}
           </Text>
-          <View style={{ gap: 2, maxWidth: 400 }}>
-            <Text style={tagline(colors.inkMuted)}>{pt.gate.tagline}</Text>
-            <Text style={tagline(colors.inkMuted)}>{en.gate.tagline}</Text>
-          </View>
 
-          <View
-            testID="gate-links"
-            style={{ width: "100%", gap: space.sm, paddingTop: space.sm }}
-          >
-            {LOCALES.map((locale) => (
-              <LocaleLink key={locale} locale={locale} />
-            ))}
+          <ProgressTrack label={copy.splash.loading} />
+
+          {/* Hidden unless scripting is off — see the header, and the
+              `<noscript>` rule in `+html.tsx` that reveals it. */}
+          <View {...NOSCRIPT_ONLY} style={{ display: "none" }}>
+            <Link href={localePath(locale) as never} asChild={true}>
+              <Pressable
+                testID="loading-continue"
+                accessibilityRole="link"
+                accessibilityLabel={copy.splash.continue}
+                hitSlop={4}
+                style={(state) => {
+                  const { focused = false } = state as { focused?: boolean };
+                  return {
+                    borderRadius: radius.pill,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    paddingHorizontal: space.lg,
+                    paddingVertical: space.sm,
+                    ...focusRing(focused, colors.focus),
+                    ...(Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null),
+                  };
+                }}
+              >
+                <Text style={{ ...type.label, color: colors.ink }}>
+                  {copy.splash.continue}
+                </Text>
+              </Pressable>
+            </Link>
           </View>
         </View>
       </View>
@@ -142,71 +171,87 @@ export default function Gate() {
   );
 }
 
-/** One line of the bilingual tagline. */
-const tagline = (color: string) => ({
-  fontSize: 14,
-  lineHeight: 21,
-  textAlign: "center" as const,
-  color,
-});
+/**
+ * The marker `+html.tsx`'s `<noscript>` rule selects on.
+ *
+ * `dataSet` is react-native-web's way to emit a `data-` attribute and has no
+ * type on React Native's `ViewProps`, hence the cast; on native it spreads
+ * nothing, where there is no stylesheet to reveal anything anyway and the
+ * effect above always runs.
+ */
+const NOSCRIPT_ONLY =
+  Platform.OS === "web" ? ({ dataSet: { noscriptOnly: "" } } as object) : {};
+
+/** Track and segment widths in px — the translation below is measured in px,
+ * so the two cannot be percentages. Both fit inside the 420px column at the
+ * narrowest phone width this site supports. */
+const TRACK = 160;
+const SEGMENT = 56;
 
 /**
- * A real `<a href>` on web (via `Link asChild`), so the chooser is usable with
- * scripting off and walkable by a crawler.
+ * An indeterminate progress bar, on React Native's core `Animated` rather than
+ * Reanimated — the same call `FadeIn` makes, and for the same reason: half a
+ * megabyte of web bundle is not worth a sliding rectangle.
+ *
+ * Under `prefers-reduced-motion` it does not slide. It stays put, centred and
+ * dimmed, because the thing it communicates ("something is happening, briefly")
+ * survives being still, and a looping animation is exactly what that setting
+ * asks us not to run.
  */
-function LocaleLink({ locale }: { locale: Locale }) {
+function ProgressTrack({ label }: { label: string }) {
   const colors = usePalette();
-  const href = localePath(locale);
+  const reducedMotion = useReducedMotion();
+  const [progress] = useState(() => new Animated.Value(0));
+
+  useEffect(() => {
+    if (reducedMotion) {
+      return;
+    }
+    const animation = Animated.loop(
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: 1100,
+        // No native driver on web; RNW animates on the JS thread.
+        useNativeDriver: Platform.OS !== "web",
+      }),
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [progress, reducedMotion]);
+
   return (
-    <Link href={href as never} asChild={true}>
-      <Pressable
-        testID={`gate-link-${locale}`}
-        accessibilityRole="link"
-        accessibilityLabel={LOCALE_NAME[locale]}
-        hitSlop={4}
-        style={(state) => {
-          const { pressed } = state;
-          const { focused = false, hovered = false } = state as {
-            focused?: boolean;
-            hovered?: boolean;
-          };
-          return {
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: space.md,
-            borderRadius: radius.lg,
-            borderWidth: 1,
-            borderColor: hovered ? colors.borderStrong : colors.border,
-            backgroundColor: hovered ? colors.surfaceSunken : colors.surface,
-            paddingHorizontal: space.lg,
-            paddingVertical: 14,
-            transform: [{ scale: pressed ? 0.98 : 1 }],
-            ...focusRing(focused, colors.focus),
-            ...(Platform.OS === "web"
-              ? ({
-                  cursor: "pointer",
-                  transitionProperty: "background-color, border-color",
-                  transitionDuration: "150ms",
-                } as object)
-              : null),
-          };
+    <View
+      testID="loading-progress"
+      accessibilityRole="progressbar"
+      accessibilityLabel={label}
+      style={{
+        width: TRACK,
+        maxWidth: "100%",
+        height: 3,
+        borderRadius: radius.pill,
+        backgroundColor: colors.surfaceSunken,
+        overflow: "hidden",
+      }}
+    >
+      <Animated.View
+        style={{
+          width: SEGMENT,
+          height: 3,
+          borderRadius: radius.pill,
+          backgroundColor: colors.accent,
+          opacity: reducedMotion ? 0.6 : 1,
+          transform: [
+            {
+              translateX: reducedMotion
+                ? (TRACK - SEGMENT) / 2
+                : progress.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-SEGMENT, TRACK],
+                  }),
+            },
+          ],
         }}
-      >
-        <Text style={{ fontSize: 15, fontWeight: "600", color: colors.ink }}>
-          {LOCALE_NAME[locale]}
-        </Text>
-        <Text
-          style={{
-            fontSize: 13,
-            fontWeight: "600",
-            letterSpacing: 0.4,
-            color: colors.inkFaint,
-          }}
-        >
-          {href}
-        </Text>
-      </Pressable>
-    </Link>
+      />
+    </View>
   );
 }
