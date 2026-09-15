@@ -362,20 +362,6 @@ export const en = {
         },
       ],
     },
-    odbl: "Plant registry data is derived from ANEEL SIGA, © ANEEL, made available under the Open Database License (ODbL) v1.0. WattSteer's derived plant table is a Derivative Database and is offered under the same licence.",
-    /**
-     * ODbL §4.6, on a public surface.
-     *
-     * §4.3's notice above says the data is available under ODbL; §4.6 obliges
-     * an actual *offer* of a machine-readable copy, free of charge, over the
-     * internet. A notice that names the licence without saying where the file
-     * is discharges half the clause, so the endpoint is named here in body
-     * text rather than left to a developer to find in the API docs.
-     */
-    registryAccess:
-      "The registry itself is downloadable, as ODbL §4.6 requires: GET /v1/plants returns every plant WattSteer holds — code, name, subsystem, technology, municipality, coordinates and installed capacity at a date — as JSON or CSV, free of charge and without an account.",
-    disclaimer:
-      "WattSteer is not affiliated with ONS or ANEEL. Forecasts are modelled estimates, not operating instructions, trading signals or advice.",
   },
 
   footerCta: {

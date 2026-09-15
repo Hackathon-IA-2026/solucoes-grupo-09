@@ -139,12 +139,21 @@ describe("the landing page below the hero keeps to the design system", () => {
     expect(offenders).toEqual([]);
   });
 
-  test("the three blocks that ran too wide are still capped", () => {
-    // Measured on the exported build at 1280: `engines.status` ran 1,248 px at
-    // 12 px (196 characters a line), the three ODbL notices the same, and the
-    // section lede was capped at a bare 620. Deleting a cap has to fail here,
-    // because nothing else in the suite can see it.
-    for (const file of ["section.tsx", "engines.tsx", "provenance.tsx"]) {
+  test("the blocks that ran too wide are still capped", () => {
+    /*
+      Measured on the exported build at 1280: `engines.status` ran 1,248 px at
+      12 px (196 characters a line) and the section lede was capped at a bare
+      620. Deleting a cap has to fail here, because nothing else in the suite
+      can see it.
+
+      `provenance.tsx` was the third, for its ODbL notice — which has since been
+      removed from the landing page. The licence obligation it carried is not
+      gone: the Terms page's `attribution` section states the ODbL v1.0
+      share-alike and names `GET /v1/plants` for §4.6. With the notice gone the
+      file has no 12 px prose left to cap, so asserting a cap in it would be
+      asserting against nothing.
+    */
+    for (const file of ["section.tsx", "engines.tsx"]) {
       const source = readFileSync(join(LANDING, file), "utf8");
       expect([file, source.includes("layout.prose")]).toEqual([file, true]);
     }

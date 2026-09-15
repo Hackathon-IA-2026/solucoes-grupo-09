@@ -307,20 +307,6 @@ export const pt: Copy = {
         },
       ],
     },
-    odbl: "Os dados do registro de usinas derivam do ANEEL SIGA, © ANEEL, disponibilizados sob a Open Database License (ODbL) v1.0. A tabela de usinas derivada pelo WattSteer é um Banco de Dados Derivado e é oferecida sob a mesma licença.",
-    /**
-     * A §4.6 da ODbL, numa superfície pública.
-     *
-     * O aviso da §4.3 acima diz que o dado está disponível sob ODbL; a §4.6
-     * obriga a *oferta* efetiva de uma cópia legível por máquina, gratuita e
-     * pela internet. Um aviso que nomeia a licença sem dizer onde está o
-     * arquivo cumpre metade da cláusula, então o endpoint aparece aqui no
-     * corpo do texto e não escondido na documentação da API.
-     */
-    registryAccess:
-      "O próprio registro pode ser baixado, como exige a §4.6 da ODbL: GET /v1/plants devolve todas as usinas que o WattSteer mantém — código, nome, subsistema, tecnologia, município, coordenadas e potência instalada numa data — em JSON ou CSV, gratuitamente e sem conta.",
-    disclaimer:
-      "O WattSteer não é afiliado ao ONS nem à ANEEL. As previsões são estimativas modeladas, não instruções de operação, sinais de negociação ou recomendação.",
   },
 
   footerCta: {

@@ -137,45 +137,6 @@ export function Provenance({ wide }: { wide: boolean }) {
           ))}
         </View>
       </Panel>
-
-      {/* The box hugs its own text rather than the page.
-
-          The three notices were set across the whole 1,248 px content column
-          at 12 px — 200 characters a line, the widest measure on the site, on
-          the one block a reader is most likely to have to read carefully.
-          Capping the *text* alone left a 570 px void inside a full-bleed box,
-          so the box is capped instead: `layout.prose` plus its own two
-          gutters, which puts the notice at the same measure as every other
-          paragraph on the page and keeps the border around the words. */}
-      <View
-        testID="odbl-notice"
-        style={{
-          maxWidth: layout.prose + space.lg * 2,
-          gap: space.md,
-          borderRadius: radius.lg,
-          borderCurve: "continuous",
-          borderWidth: 1,
-          borderColor: colors.border,
-          backgroundColor: colors.canvasTint,
-          padding: space.lg,
-        }}
-      >
-        <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkMuted }}>
-          {copy.provenance.odbl}
-        </Text>
-        {/*
-          §4.3 says the data is available under ODbL; §4.6 obliges the actual
-          offer of a machine-readable copy. Naming the endpoint in body text —
-          beside the notice, on the same public surface — is what turns the
-          second clause from a claim into an offer a reader can act on.
-        */}
-        <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkMuted }}>
-          {copy.provenance.registryAccess}
-        </Text>
-        <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkFaint }}>
-          {copy.provenance.disclaimer}
-        </Text>
-      </View>
     </>
   );
 }
