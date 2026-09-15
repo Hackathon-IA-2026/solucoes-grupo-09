@@ -265,3 +265,86 @@ describe("no call to action promises more than /app serves", () => {
     }
   });
 });
+
+/**
+ * The hero's two lines of copy, after they were cut to the deck's register.
+ *
+ * Both budgets are read off the exported build at 400px rather than chosen:
+ * the failure each guards against is a sentence that renders correctly and is
+ * simply too long, which nothing else in this suite can see.
+ */
+describe("the hero says it in the deck's voice", () => {
+  /**
+   * The eyebrow's character budget.
+   *
+   * At 400px the pill's label has ~314px: 400 less the 20px page gutters
+   * either side, less the pill's 24px of horizontal padding, less the 14px
+   * mark and the 8px gap beside it. The label is 12px/500 in the system
+   * stack, ~6.2px a character on this copy, so ~50 characters reach the edge.
+   * 46 is that with air. The string this replaced was 60 in `pt` and wrapped
+   * the pill into a rounded two-line paragraph at that width.
+   */
+  const EYEBROW_BUDGET = 46;
+
+  /**
+   * The subtitle's.
+   *
+   * The version this replaced ran 411 characters in `pt` — nine lines at
+   * 400px, which pushed both calls to action out of the first screenful that
+   * `hero-metrics.ts` exists to guarantee. At 200 the longest of the two
+   * locales renders five lines at 400px and two at 1280px, measured on the
+   * export, and both buttons sit above the fold at either width.
+   */
+  const SUB_BUDGET = 200;
+
+  for (const [name, dict] of [
+    ["pt", PT],
+    ["en", EN],
+  ] as const) {
+    test(`${name}: the eyebrow fits the pill on one line at 400px`, () => {
+      const eyebrow = dict.get("hero.eyebrow") ?? "";
+      expect([name, eyebrow.length, eyebrow.length <= EYEBROW_BUDGET]).toEqual([
+        name,
+        eyebrow.length,
+        true,
+      ]);
+    });
+
+    test(`${name}: the subtitle is a subtitle, not the page's argument`, () => {
+      const sub = dict.get("hero.sub") ?? "";
+      expect([name, sub.length, sub.length <= SUB_BUDGET]).toEqual([
+        name,
+        sub.length,
+        true,
+      ]);
+    });
+  }
+
+  test("the hero never promises a forecast this deployment can serve", () => {
+    // No artifact is promoted, so every forecasting surface answers `pending`
+    // or a named refusal. The hero may say what the product is; it may not
+    // tell a visitor that a forecast is waiting for them. A present-tense
+    // verb of delivery with the product as its subject is the form that claim
+    // takes, and the old subtitle carried one — "WattSteer forecasts those
+    // hours a day ahead" — while the deployment forecast nothing.
+    //
+    // Every pattern closes on a Unicode letter lookahead rather than on `\b`.
+    // `\b` is ASCII-only in JavaScript, so `/prevê\b/` never matches "prevê o
+    // corte" — the boundary is looked for *after* a character the engine does
+    // not consider a word character, and there is none. The Portuguese half of
+    // this guard was vacuous for exactly that reason until a planted "O
+    // WattSteer prevê o corte de amanhã" walked straight through it.
+    const PROMISES = [
+      /\bwattsteer (forecasts|predicts|tells you|shows you)(?!\p{L})/iu,
+      /\bo wattsteer (prev[êe]|mostra|avisa)(?!\p{L})/iu,
+      /\bsee (tomorrow|the forecast)(?!\p{L})/iu,
+      /\bveja (a previsão|amanhã)(?!\p{L})/iu,
+    ];
+    for (const dict of [EN, PT]) {
+      const line = `${dict.get("hero.eyebrow") ?? ""} ${dict.get("hero.sub") ?? ""}`;
+      for (const promise of PROMISES) {
+        expect([promise.source, promise.test(line)]).toEqual([promise.source, false]);
+      }
+    }
+  });
+});

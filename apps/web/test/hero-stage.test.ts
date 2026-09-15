@@ -70,6 +70,29 @@ describe("the hero stage is one screenful", () => {
   });
 });
 
+describe("the eyebrow pill is a pill, not a status light", () => {
+  it("carries the mark rather than a filled dot", () => {
+    // The 6px accent-filled circle that used to sit here is the shape a live
+    // indicator uses, at the top of a page whose readout is a fixture and
+    // says so two panels below — the one element in the hero a visitor could
+    // read as a connection state. It is replaced by the mark the template
+    // puts on its own kicker pill, at the same 14px in the same accent role.
+    expect(HERO).toContain("<SparklesIcon size={14} color={colors.accent} />");
+    expect(HERO).not.toMatch(/dot: \{/);
+    expect(HERO).not.toContain("styles.dot");
+  });
+
+  it("keeps the label on one line", () => {
+    // 314px of room at 400px (400 less 20px gutters either side, less 24px of
+    // pill padding, less the 14px mark and its 8px gap). A wrapped eyebrow is
+    // a rounded paragraph, and it pushes the headline down the fold. The
+    // dictionary budget in `test/i18n.test.ts` keeps the copy clear of this;
+    // this is the floor under a future string that is not.
+    const pill = /styles\.eyebrow,[\s\S]*?<\/View>/.exec(HERO)?.[0] ?? "";
+    expect(pill).toMatch(/numberOfLines=\{1\}/);
+  });
+});
+
 describe("the floating cards stay out of the hero column", () => {
   it("only renders where the gutter can hold a card", () => {
     // Redone rather than copied from the template, whose column is narrower.

@@ -9,6 +9,7 @@ import {
   PanelHeader,
   PillButton,
   radius,
+  SparklesIcon,
   space,
   useContainerWidth,
   usePalette,
@@ -66,7 +67,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
-  dot: { width: 6, height: 6, borderRadius: 3 },
   stage: {
     width: "100%",
     justifyContent: "center",
@@ -141,8 +141,28 @@ export function Hero({ onExplain }: { onExplain: () => void }) {
               { borderColor: colors.border, backgroundColor: colors.surface },
             ]}
           >
-            <View style={[styles.dot, { backgroundColor: colors.accent }]} />
-            <Text style={{ fontSize: 12, fontWeight: "500", color: colors.inkMuted }}>
+            {/*
+              A 14px mark, not the 6px filled dot that was here. The dot read
+              as a status light — the shape a live indicator uses — at the top
+              of a page whose readout is a fixture and says so two panels
+              below. It was the one element in the hero a visitor could take
+              for a connection state. The template puts this same mark at 14px
+              in the accent on its own kicker pill, which is the size a 12px
+              label sits beside without raising the pill's height.
+            */}
+            <SparklesIcon size={14} color={colors.accent} />
+            {/*
+              One line, always. At 400px the pill has ~314px for the label:
+              400 less the 20px page gutters, less 24px of pill padding, less
+              the 14px mark and the 8px gap. A wrapped eyebrow turns the pill
+              into a rounded paragraph and pushes the headline down the fold.
+              `numberOfLines` is the floor under that; the character budget in
+              `test/i18n.test.ts` is what keeps the copy from reaching it.
+            */}
+            <Text
+              numberOfLines={1}
+              style={{ fontSize: 12, fontWeight: "500", color: colors.inkMuted }}
+            >
               {copy.hero.eyebrow}
             </Text>
           </View>
