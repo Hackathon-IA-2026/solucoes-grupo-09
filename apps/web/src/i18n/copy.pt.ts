@@ -610,6 +610,16 @@ export const pt: Copy = {
         "A maior hora dentro de um dia sorteado, no mesmo ensemble. Limiar em vigor: {mw} MW no grão de subsistema.",
       grainNote:
         "O grão da previsão é o subsistema. O curtailment observado é publicado por entidade de reporte — um conjunto, na maior parte — e os motivos de restrição só existem lá; veja Explicar.",
+      map: {
+        title: "Os quatro subsistemas",
+        subtitle: "Mesma classe de risco das linhas abaixo",
+        figure:
+          "Mapa do Brasil dividido nos quatro subsistemas do ONS, cada um sombreado pela sua classe de risco de curtailment. As quatro regiões também aparecem como linhas logo abaixo.",
+        region: "{subsystem}: risco {risk}, cerca de {probability}. Abrir Explicar.",
+        boundaryNote:
+          "Fronteiras elétricas, não regiões geográficas: o Maranhão está no subsistema Norte, o Acre e Rondônia estão no Sudeste/Centro-Oeste, e Mato Grosso, Mato Grosso do Sul, Goiás e o Distrito Federal também.",
+        source: "Limites: IBGE, Malhas Territoriais (dados abertos governamentais).",
+      },
     },
 
     split: {
