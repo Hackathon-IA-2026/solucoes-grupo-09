@@ -253,7 +253,7 @@ describe("model card · the correction caveat survives to the wire", () => {
     delete stale.quantiles.coverage_crossing_rate;
     serves(envelope(stale));
     const response = await card();
-    expect(response.status).toBe(502);
+    expect(response.status).toBe(503);
     const body = await wire(response);
     expect(body.error.code).toBe("UPSTREAM_FAILED");
     expect(body.error.details.field).toBe("coverage_crossing_rate");
@@ -275,7 +275,7 @@ describe("model card · the correction caveat survives to the wire", () => {
     // the strength of not recognising its name.
     serves(envelope(CARD, "conformal_v9_unknown"));
     const response = await card();
-    expect(response.status).toBe(502);
+    expect(response.status).toBe(503);
     const body = await wire(response);
     expect(body.error.code).toBe("UPSTREAM_FAILED");
     expect(body.error.details.correction_regime).toBe("conformal_v9_unknown");
@@ -434,7 +434,7 @@ describe("model card · the refusals stay four different sentences", () => {
   it("reports an unreadable card as an upstream failure, not as an empty one", async () => {
     reply = () => Response.json({ lane: LANE, artifact_id: ARTIFACT });
     const response = await card();
-    expect(response.status).toBe(502);
+    expect(response.status).toBe(503);
     expect((await wire(response)).error.code).toBe("UPSTREAM_FAILED");
   });
 
@@ -442,7 +442,7 @@ describe("model card · the refusals stay four different sentences", () => {
     const partial = structuredClone(CARD) as Wire;
     delete partial.quantiles;
     serves(envelope(partial));
-    expect((await card()).status).toBe(502);
+    expect((await card()).status).toBe(503);
   });
 });
 

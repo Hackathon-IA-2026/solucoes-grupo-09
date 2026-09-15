@@ -1798,7 +1798,7 @@ Replay's five refusals, and the eleven this spec adds:
 | `FORECAST_UNAVAILABLE` | 404 | the gate passed and no rows exist — a publication failure |
 | `MODEL_UNAVAILABLE` | 503 | no promoted artifact in the requested lane |
 | `DIAGNOSIS_UNAVAILABLE` | 404 | forecast exists, attribution row does not |
-| `OPTIMIZER_UNAVAILABLE` | 502 | ML service unreachable |
+| `OPTIMIZER_UNAVAILABLE` | 503 | ML service unreachable |
 | `DATA_UNAVAILABLE` | 503 | Postgres unreachable |
 | `RATE_LIMITED` | 429 | with `Retry-After` |
 | `PAYLOAD_TOO_LARGE` | 413 | body over the route's limit |
@@ -1840,14 +1840,26 @@ Plus, verbatim: `SCENARIO_VERSION_UNSUPPORTED`, `SCENARIO_TOO_LARGE`,
 > | `ROUTE_NOT_FOUND` | 404 | no route matched — the envelope, not Elysia's string shape |
 > | `INTERNAL` | 500 | unexpected, and never carrying detail to the client |
 > | `SERVICE_BUSY` | 503 | the gateway itself is at capacity |
-> | `UPSTREAM_UNAVAILABLE` | 502 | a data source outside WattSteer failed or was unreachable |
-> | `OPTIMIZER_NOT_CONFIGURED` | 502 | `WATTSTEER_ML_URL` unset: the capability is absent, not broken |
-> | `VOICE_NOT_CONFIGURED` | 502 | `XAI_API_KEY` unset: the capability is absent, not broken. The web app renders no dock at all, rather than a broken one |
-> | `VOICE_UNAVAILABLE` | 502 | The voice provider could not be reached, or answered without a credential. Never carries the upstream body — see row 19 |
+> | `UPSTREAM_UNAVAILABLE` | 503 | a data source outside WattSteer failed or was unreachable |
+> | `OPTIMIZER_NOT_CONFIGURED` | 503 | `WATTSTEER_ML_URL` unset: the capability is absent, not broken |
+> | `VOICE_NOT_CONFIGURED` | 503 | `XAI_API_KEY` unset: the capability is absent, not broken. The web app renders no dock at all, rather than a broken one |
+> | `VOICE_UNAVAILABLE` | 503 | The voice provider could not be reached, or answered without a credential. Never carries the upstream body — see row 19 |
 > | `OPTIMIZER_TIMEOUT` | 503 | no answer within `mlTimeoutMs` |
 > | `OPTIMIZER_NOT_READY` | 503 | the ML service answered 502/503/504: up, but cannot serve yet |
 > | `UPSTREAM_REJECTED` | 400 | ML refused (4xx) with a code this enum has no room for; it travels in `details.upstream_code` |
-> | `UPSTREAM_FAILED` | 502 | ML failed (5xx) with a code this enum has no room for |
+> | `UPSTREAM_FAILED` | 503 | ML failed (5xx) with a code this enum has no room for |
+>
+> **Nothing on this surface answers 502, and that is a deployment fact.**
+> Measured on 2026-09-15 against `api.wattsteer.com`: a 503 or a 404 reaches the
+> client with its JSON envelope intact, and a **502 does not** — the edge
+> replaces the body with its own `error code: 502` in `text/plain`. The status
+> survives; `error.code` does not, and the code is the only field a client is
+> allowed to branch on. Six codes were 502, so six refusals were arriving as
+> sixteen bytes of English plain text that no screen could render —
+> `OPTIMIZER_NOT_CONFIGURED` among them, silently, for as long as the edge has
+> been in front of this gateway. 503 is not a consolation: every other "cannot
+> serve right now" here is already 503, and for the `*_NOT_CONFIGURED` pair it
+> is strictly more accurate, because no upstream is contacted at all.
 >
 > With these, the document names all 49. `test/spec-claims.test.ts` derives the
 > enum from `errors.ts` and fails when a code is added without reaching this
@@ -2059,7 +2071,7 @@ inference is a two-line change that nothing else would notice.
 **Seam 2 — degradation, as behaviour.** With the ML service returning 503 for
 everything: `/v1/grid/outlook`, `/v1/forecast/day-ahead`, `/v1/diagnosis`,
 `/v1/curtailment/*` and `/v1/replay/days` all return 200; `/v1/optimize` and
-`/v1/replay` return 502 `OPTIMIZER_UNAVAILABLE`; `/v1/meta` returns 200 with
+`/v1/replay` return 503 `OPTIMIZER_UNAVAILABLE`; `/v1/meta` returns 200 with
 `model.reachable: false`. One test, one table, and it is the whole product
 promise of the boundary decision.
 

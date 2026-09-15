@@ -49,7 +49,7 @@ function routeFiles(): string[] {
  * Every `applyCachePolicy(..., [ ... ])` provenance in a file, as source text.
  *
  * Text rather than evaluation, because what is being asserted is that the
- * *author named the axis* — a provenance that happens to contain the right
+ * **author named the axis** — a provenance that happens to contain the right
  * value at runtime through some other binding is still a route whose next
  * editor cannot see the rule.
  */

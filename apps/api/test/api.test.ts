@@ -126,7 +126,7 @@ describe("api · error mapping (global handler)", () => {
 
   it("maps domain errors to their status", async () => {
     expect((await hit("/bad")).status).toBe(400);
-    expect((await hit("/up")).status).toBe(502);
+    expect((await hit("/up")).status).toBe(503);
   });
 
   it("maps unknown errors to 500 without leaking the message", async () => {

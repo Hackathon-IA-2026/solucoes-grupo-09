@@ -75,6 +75,34 @@ export function asErrorStatus(status: number): ErrorStatus | null {
  * the single sanctioned exception: it carries the modelling service's own
  * status, because upstream knows more than we do about its own failure.
  */
+/**
+ * **No code on this surface uses 502, and that is a deployment fact rather than
+ * a taste.**
+ *
+ * Measured on 2026-09-15 against `api.wattsteer.com`: a 503 or a 404 from this
+ * gateway reaches the client with its JSON envelope intact, and a **502 does
+ * not** — the edge replaces the body with its own `error code: 502` in
+ * `text/plain`. The status survives; the envelope does not, so `error.code`
+ * never arrives.
+ *
+ * That is fatal to the thing this enum is for. `ErrorCode` is a *closed set the
+ * client branches on* — `copy.error[code]` is how every refusal becomes a
+ * sentence in the reader's language — and a refusal that arrives as sixteen
+ * bytes of English plain text is a refusal the product cannot render. Six codes
+ * were 502: both `VOICE_*`, both `OPTIMIZER_*_CONFIGURED`/`UNAVAILABLE`, and
+ * the two `UPSTREAM_*`. `OPTIMIZER_NOT_CONFIGURED` had therefore been
+ * unrenderable on the Mitigate screen for as long as the edge has been in front
+ * of it, silently, because nothing tests a status through the CDN.
+ *
+ * 503 is not a consolation prize here. Every other "this capability cannot serve
+ * right now" in this table is already 503 — `SERVICE_BUSY`, `MODEL_UNAVAILABLE`,
+ * `DATA_UNAVAILABLE`, `OPTIMIZER_TIMEOUT`, `OPTIMIZER_NOT_READY` — and for the
+ * `*_NOT_CONFIGURED` pair it is strictly *more* accurate: no upstream is
+ * contacted at all, so "bad gateway" was describing a gateway that was never
+ * used. The two `UPSTREAM_*` codes are the ones that genuinely mean "an upstream
+ * answered badly", and they give up a little precision in the status to keep
+ * their precision in the body — which is the half a client can act on.
+ */
 export const ERROR_STATUS = {
   // --- the gateway's own ---
   /** Caller's input was wrong in a way no more specific code covers. */
@@ -90,7 +118,7 @@ export const ERROR_STATUS = {
   /** Anything unexpected. Never carries detail to the client. */
   INTERNAL: 500,
   /** A data source outside WattSteer failed or was unreachable. */
-  UPSTREAM_UNAVAILABLE: 502,
+  UPSTREAM_UNAVAILABLE: 503,
   /** The gateway itself is at capacity. */
   SERVICE_BUSY: 503,
   /** Body over the route's limit, refused on `Content-Length`. */
@@ -124,9 +152,9 @@ export const ERROR_STATUS = {
 
   // --- the modelling service, admitted rather than smuggled ---
   /** `WATTSTEER_ML_URL` is unset: the capability is absent, not broken. */
-  OPTIMIZER_NOT_CONFIGURED: 502,
+  OPTIMIZER_NOT_CONFIGURED: 503,
   /** The modelling service could not be reached at all. */
-  OPTIMIZER_UNAVAILABLE: 502,
+  OPTIMIZER_UNAVAILABLE: 503,
   /** The modelling service did not answer within `mlTimeoutMs`. */
   OPTIMIZER_TIMEOUT: 503,
   /** The modelling service answered 502/503/504: up, but cannot serve yet. */
@@ -137,7 +165,7 @@ export const ERROR_STATUS = {
    */
   UPSTREAM_REJECTED: 400,
   /** The modelling service failed (5xx) with a code this enum has no room for. */
-  UPSTREAM_FAILED: 502,
+  UPSTREAM_FAILED: 503,
 
   // --- the voice copilot (docs/plans/voice-copilot.md) ---
   /**
@@ -150,9 +178,9 @@ export const ERROR_STATUS = {
    * session minted — and never like a product whose voice is broken. A single
    * code would leave the web app unable to tell those apart.
    */
-  VOICE_NOT_CONFIGURED: 502,
+  VOICE_NOT_CONFIGURED: 503,
   /** xAI could not be reached, or refused to mint an ephemeral token. */
-  VOICE_UNAVAILABLE: 502,
+  VOICE_UNAVAILABLE: 503,
 
   // --- the solve (docs/specs/flex-optimizer.md) ---
   SOLVER_GAP_UNCLOSED: 503,

@@ -62,7 +62,7 @@ describe("ml-proxy · failure mapping", () => {
     // Dialling `undefined` and reporting the fetch error would file a missing
     // capability as an upstream fault.
     expect(await outcome(endpoint({ baseUrl: undefined }))).toMatchObject({
-      status: 502,
+      status: 503,
       code: "OPTIMIZER_NOT_CONFIGURED",
     });
   });
@@ -70,7 +70,7 @@ describe("ml-proxy · failure mapping", () => {
   it("a refused connection says 'don't bother yet'", async () => {
     expect(
       await outcome(endpoint({ baseUrl: `http://127.0.0.1:${closedPort}` })),
-    ).toMatchObject({ status: 502, code: "OPTIMIZER_UNAVAILABLE" });
+    ).toMatchObject({ status: 503, code: "OPTIMIZER_UNAVAILABLE" });
   });
 
   it("a timeout says 'retry', which a refused connection does not", async () => {
@@ -155,7 +155,7 @@ describe("ml-proxy · failure mapping", () => {
   it("a status this API cannot represent is an upstream failure, not a guess", async () => {
     answers(418);
     expect(await outcome(endpoint())).toMatchObject({
-      status: 502,
+      status: 503,
       code: "UPSTREAM_FAILED",
       details: { upstream_status: 418 },
     });
