@@ -95,15 +95,23 @@ describe("the floating cards stay out of the hero column", () => {
 });
 
 describe("nothing floating in the hero is presented as live", () => {
-  it("every card carries the readout's own sample badge", () => {
-    // One `SampleMark`, rendered by every card, from the same dictionary key
-    // the readout's badge uses — so a rename cannot leave the cards saying
-    // something softer than the panel beneath them.
+  it("the layer carries the readout's own caveat, exactly once", () => {
+    /*
+      It used to be a badge on every card — four copies of the same six words
+      in one screenful, which reads as chrome rather than as a caveat. It is
+      now one caption under the layer, still from the dictionary key the
+      readout's badge uses, so a rename cannot leave the cards saying something
+      softer than the panel beneath them.
+
+      Exactly once is the assertion. Zero is a floating "89%" with no marker —
+      the shape of the claim this page must not make — and four is what was
+      wrong with the first version.
+    */
     expect(CARDS).toContain("copy.readout.sampleBadge");
     const cards = [...CARDS.matchAll(/<Panel style=\{styles\.card\}>/g)].length;
-    const marks = [...CARDS.matchAll(/<SampleMark \/>/g)].length;
-    expect(cards).toBeGreaterThan(0);
-    expect(marks).toBe(cards);
+    expect(cards).toBeGreaterThan(1);
+    expect([...CARDS.matchAll(/copy\.readout\.sampleBadge/g)]).toHaveLength(1);
+    expect([...CARDS.matchAll(/<SampleCaption \/>/g)]).toHaveLength(1);
   });
 
   it("takes every figure from the landing fixture, not from a literal", () => {

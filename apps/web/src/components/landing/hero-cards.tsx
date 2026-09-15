@@ -38,12 +38,19 @@ const INSET = `${CARD_INSET_PERCENT}%` as const;
  * ## Why every one of them is labelled
  *
  * Because they are not live and this product's entire claim is that it says
- * so. The readout below carries `Badge "Sample data"` and the `sampleNote`
- * footnote; these carry the same badge, from the same key, rather than a
- * softer word — a floating "89%" with no marker on it is precisely the shape
- * of the claim the page must not make. They are also `aria-hidden`: a screen
- * reader gets these figures from the readout, where the badge and the
- * footnote are adjacent to them in the reading order.
+ * so. A floating "89%" with no marker on it is precisely the shape of the claim
+ * the page must not make.
+ *
+ * **One marker for the layer, not one per card.** The first version put the
+ * readout's `Badge "Sample data"` on all four, which is the same six words
+ * repeated four times inside one screenful — it read as chrome rather than as a
+ * caveat, which is the failure mode a caveat has. The layer now carries a
+ * single line beneath it, in the register of a figure caption, and the cards
+ * carry the figures.
+ *
+ * The layer is `aria-hidden` either way: a screen reader gets these numbers
+ * from the readout below, where the badge and the `sampleNote` footnote are
+ * adjacent to them in the reading order.
  */
 
 const styles = StyleSheet.create({
@@ -67,6 +74,13 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   caption: { fontSize: 12, lineHeight: 17, fontVariant: ["tabular-nums"] },
+  captionRow: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: space.lg,
+    alignItems: "center",
+  },
 });
 
 /**
@@ -131,13 +145,14 @@ function Floaty({
   );
 }
 
-/** The marker every card carries. One key, shared with the readout's badge. */
-function SampleMark() {
+/** The layer's one caveat, captioning all four cards rather than each of them. */
+function SampleCaption() {
   const copy = useCopy();
+  const colors = usePalette();
   return (
-    <View style={{ alignSelf: "flex-start" }}>
-      <Badge label={copy.readout.sampleBadge} tone="warning" />
-    </View>
+    <Text style={[styles.caption, { color: colors.inkFaint }]}>
+      {copy.readout.sampleBadge}
+    </Text>
   );
 }
 
@@ -164,7 +179,6 @@ function RiskCard() {
           {copy.app.risk[outlook.riskClass]}
         </Text>
       </View>
-      <SampleMark />
     </Panel>
   );
 }
@@ -213,7 +227,6 @@ function BandCard() {
           </Text>
         </>
       ) : null}
-      <SampleMark />
     </Panel>
   );
 }
@@ -234,7 +247,6 @@ function ExpectedCard() {
           MWh
         </Text>
       </Text>
-      <SampleMark />
     </Panel>
   );
 }
@@ -291,7 +303,6 @@ function ProfileCard() {
       <Text style={[styles.caption, { color: colors.inkMuted }]}>
         {copy.band.rangeLabel}
       </Text>
-      <SampleMark />
     </Panel>
   );
 }
@@ -376,6 +387,14 @@ export function HeroCards() {
           </FadeIn>
         </View>
       ))}
+      {/*
+        Centred under the stage rather than attached to a card: it captions all
+        four, and a caveat that appears once reads as a caveat. Fading in behind
+        the last card so it is not the first thing that resolves.
+      */}
+      <FadeIn duration={600} delay={520} distance={8} style={styles.captionRow}>
+        <SampleCaption />
+      </FadeIn>
     </View>
   );
 }
