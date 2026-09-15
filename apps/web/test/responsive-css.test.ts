@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
@@ -63,7 +63,7 @@ function camel(attribute: string): string {
 }
 
 describe("the shell's stylesheet and the components it steers agree", () => {
-  test("every `data-` attribute the stylesheet selects is emitted somewhere", () => {
+  it("every `data-` attribute the stylesheet selects is emitted somewhere", () => {
     const selected = [...shell.matchAll(/\[data-([a-z0-9-]+)\]/g)].map((m) => m[1]);
     expect(selected.length).toBeGreaterThan(0);
 
@@ -80,7 +80,7 @@ describe("the shell's stylesheet and the components it steers agree", () => {
     expect(dead).toEqual([]);
   });
 
-  test("every breakpoint in the stylesheet is a breakpoint a component exports", () => {
+  it("every breakpoint in the stylesheet is a breakpoint a component exports", () => {
     const breakpoints = [
       ...shell.matchAll(/@(?:media|container)[^{]*\(min-width:\s*(\d+)px\)/g),
     ].map((m) => Number(m[1]));

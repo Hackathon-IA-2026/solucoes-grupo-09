@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { LOCALES } from "../src/i18n/locale";
@@ -35,12 +35,12 @@ function pngSize(path: string): { width: number; height: number } {
 }
 
 describe("the share card", () => {
-  test("is the size the head says it is", () => {
+  it("is the size the head says it is", () => {
     const actual = pngSize(join(WEB, "public", OG_IMAGE_PATH.replace(/^\//, "")));
     expect(actual).toEqual({ width: OG_IMAGE_WIDTH, height: OG_IMAGE_HEIGHT });
   });
 
-  test("is declared as an absolute URL", () => {
+  it("is declared as an absolute URL", () => {
     // A crawler fetches `og:image` without a base. A relative path is simply
     // not fetched, and the share renders with no image at all.
     expect(OG_IMAGE_URL.startsWith("https://")).toBe(true);
@@ -56,7 +56,7 @@ describe("the structured data", () => {
         "@graph": Record<string, unknown>[];
       };
 
-      test("declares the three entities the site is", () => {
+      it("declares the three entities the site is", () => {
         expect(graph["@context"]).toBe("https://schema.org");
         expect(graph["@graph"].map((node) => node["@type"])).toEqual([
           "Organization",
@@ -65,7 +65,7 @@ describe("the structured data", () => {
         ]);
       });
 
-      test("every `@id` referenced is a node in the same graph", () => {
+      it("every `@id` referenced is a node in the same graph", () => {
         const declared = new Set(graph["@graph"].map((node) => node["@id"] as string));
         const referenced: string[] = [];
         const walk = (value: unknown): void => {
@@ -95,7 +95,7 @@ describe("the structured data", () => {
         expect(referenced.filter((id) => !declared.has(id))).toEqual([]);
       });
 
-      test("every URL in it is absolute", () => {
+      it("every URL in it is absolute", () => {
         const urls: string[] = [];
         const walk = (value: unknown): void => {
           if (Array.isArray(value)) {
