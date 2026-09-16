@@ -1032,6 +1032,25 @@ class CoverageReport:
     crossing_rate: float
     by_subsystem: tuple[CoverageCell, ...]
     by_local_hour: tuple[CoverageCell, ...]
+    #: The same split, over **only the rows that state a floor** — the subset
+    #: :attr:`coverage_p10_where_stated` is counted on.
+    #:
+    #: :attr:`by_subsystem` reads ``coverage_p10`` over every scored hour, and
+    #: on the rows where the served P10 is the point mass at zero that number is
+    #: true for free. The share of free rows differs by subsystem — a subsystem
+    #: the classifier is confident about states more floors — so the aggregate
+    #: split is inflated by a different amount in each cell and the cells are
+    #: not comparable with each other.
+    #:
+    #: They were compared anyway, on the production cards, and NE came out
+    #: three to five points below its neighbours on both lanes while carrying
+    #: half the sample. That reading is what decides whether ``δ_lo`` should be
+    #: fitted per subsystem, and it cannot be trusted off the inflated split.
+    #: This one is the population the question is actually about.
+    #:
+    #: Defaulted so a fixture built before this existed still constructs;
+    #: `of()` always supplies it.
+    by_subsystem_where_stated: tuple[CoverageCell, ...] = ()
 
     def __post_init__(self) -> None:
         if self.rows <= 0:
@@ -1189,6 +1208,10 @@ class CoverageReport:
             _cell(code, [one for one in scored if one.key.subsystem == code])
             for code in SUBSYSTEM_CODES
         ]
+        by_subsystem_where_stated = [
+            _cell(code, [one for one in lower_stated if one.key.subsystem == code])
+            for code in SUBSYSTEM_CODES
+        ]
         by_local_hour = [
             _cell(
                 f"{index:02d}",
@@ -1221,6 +1244,9 @@ class CoverageReport:
             p50_unbiasedness=_share(scored, lambda hour: hour.below_median),
             crossing_rate=crossing_rate(hour.forecast for hour in scored),
             by_subsystem=tuple(cell for cell in by_subsystem if cell is not None),
+            by_subsystem_where_stated=tuple(
+                cell for cell in by_subsystem_where_stated if cell is not None
+            ),
             by_local_hour=tuple(cell for cell in by_local_hour if cell is not None),
         )
 
@@ -1284,6 +1310,9 @@ class CoverageReport:
             # here carries is what states the population, so it carries it too.
             "coverage_crossing_rate": self.crossing_rate,
             "coverage_by_subsystem": [cell.as_card_entry() for cell in self.by_subsystem],
+            "coverage_by_subsystem_where_stated": [
+                cell.as_card_entry() for cell in self.by_subsystem_where_stated
+            ],
             "coverage_by_local_hour": [
                 cell.as_card_entry() for cell in self.by_local_hour
             ],

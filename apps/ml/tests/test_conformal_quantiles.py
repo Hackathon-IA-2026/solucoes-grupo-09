@@ -2146,3 +2146,61 @@ def test_no_scale_holds_the_rail_when_the_dispersion_moves(
             f"at {multiplier}, which is the other half of that measurement: "
             f"{inside[multiplier]}"
         )
+
+
+def test_the_subsystem_split_where_stated_is_not_the_inflated_one() -> None:
+    """``by_subsystem`` and ``by_subsystem_where_stated`` measure different rows.
+
+    ``coverage_p10`` over every scored hour counts the rows whose served P10 is
+    the point mass at zero, where the floor holds for free — the hour is scored,
+    so ``y > τ > 0``, and ``y ≥ 0`` needs no fit. The share of such rows is a
+    property of the **classifier**, so it differs by subsystem: one the model is
+    confident about states more floors and is inflated less.
+
+    That makes the aggregate split's cells incomparable with each other, and
+    they were compared anyway — off the production cards, where NE read three to
+    five points below its neighbours while carrying half the sample. The reading
+    decides whether ``δ_lo`` should be fitted per subsystem, so it has to come
+    from the population the question is about.
+
+    Here the two populations are forced apart: every row is drawn at ``p = 0.5``,
+    below the ``p > 0.90`` a stated floor needs, so the inflated split is full
+    and the stated-only split is **empty**. A breakdown that read the same rows
+    as ``by_subsystem`` would show four cells in both.
+    """
+    rng = _rng(20260916)
+    free = _draw(rng, SYNTHETIC_ROWS, lower_scale=1.0, upper_scale=1.0, occurrence=0.5)
+    report = CoverageReport.of(free, fold_id="synthetic-free-floor")
+
+    assert report.lower_stated_rows == 0, (
+        "at p = 0.5 the mixture puts the served P10 on the point mass at zero, "
+        "so no row states a floor"
+    )
+    assert len(report.by_subsystem) == len(SUBSYSTEM_CODES)
+    assert report.by_subsystem_where_stated == ()
+
+    # And the inflated split is exactly the free coverage it warns about.
+    for cell in report.by_subsystem:
+        assert cell.coverage_p10 == 1.0, (
+            "every scored hour clears a 0 MWh floor by arithmetic; this is the "
+            "number that must not be read as a floor that held"
+        )
+
+
+def test_the_stated_split_counts_only_the_rows_that_state_a_floor() -> None:
+    """The complement: at ``p = 1`` every row states a floor and both agree.
+
+    Non-vacuity for the test above — an implementation that always returned an
+    empty tuple would pass it.
+    """
+    rng = _rng(20260917)
+    stated = _draw(rng, SYNTHETIC_ROWS, lower_scale=1.0, upper_scale=1.0)
+    report = CoverageReport.of(stated, fold_id="synthetic-stated-floor")
+
+    assert report.lower_stated_rows == len(stated)
+    assert len(report.by_subsystem_where_stated) == len(SUBSYSTEM_CODES)
+    inflated = {cell.label: cell for cell in report.by_subsystem}
+    honest = {cell.label: cell for cell in report.by_subsystem_where_stated}
+    for label, cell in honest.items():
+        assert cell.rows == inflated[label].rows
+        assert cell.coverage_p10 == inflated[label].coverage_p10
