@@ -88,6 +88,7 @@ import {
   withBattery,
   withLoad,
 } from "@/components/app/scenario";
+import { ReadingState } from "@/components/app/thinking-orb";
 import { useAppParams } from "@/components/app/use-app-params";
 import { useReplay } from "@/components/app/use-replay";
 import { useScenario } from "@/components/app/use-scenario";
@@ -301,11 +302,26 @@ export default function TimeMachineScreen() {
   if (state.status === "replaying") {
     return frame(
       null,
-      <HonestyNote
-        title={copy.app.replay.replayingTitle}
-        tone="neutral"
-        points={[copy.app.replay.replayingNote, copy.app.replay.replayingLive]}
-      />,
+      <>
+        {/*
+          The orb, which this screen was the only waiting screen without.
+          Visão da rede and Explicar both answer a wait with `ReadingState`;
+          this one answered with a paragraph, and a replay is the *longest*
+          wait in the product — it re-scores a past day rather than reading a
+          published row. The screen with the most to wait for had the least
+          to look at.
+
+          The note stays underneath. It says which day is being re-scored and
+          what it takes to see it, which a spinner cannot, and that pairing is
+          the point: the orb says "working", the note says "on what".
+        */}
+        <ReadingState title={copy.app.replay.replayingTitle} />
+        <HonestyNote
+          title={copy.app.replay.replayingTitle}
+          tone="neutral"
+          points={[copy.app.replay.replayingNote, copy.app.replay.replayingLive]}
+        />
+      </>,
     );
   }
 
