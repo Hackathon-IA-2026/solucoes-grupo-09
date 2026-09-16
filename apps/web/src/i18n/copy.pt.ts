@@ -463,6 +463,7 @@ export const pt: Copy = {
         subsystem: "Subsistema",
         technology: "Tecnologia",
         run: "Rodada D−1",
+        runUnavailable: "Nenhum modelo promovido — a rodada D−1 ainda não muda nada",
         targetDay: "Dia alvo",
       },
     },

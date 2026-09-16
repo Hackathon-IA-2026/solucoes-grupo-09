@@ -218,6 +218,52 @@ describe("the chrome badge is a fact, not a label", () => {
   });
 });
 
+describe("a selector that cannot move anything says so", () => {
+  it("the D−1 run pills go inert when no lane is promoted", () => {
+    /*
+      `subsystem` and `technology` steer the observed panels as well as the
+      forecast ones, so they always change something. The run does not: it is
+      read in exactly two places, the Overview's and Explain's forecast half,
+      and with nothing promoted both refuse whatever it is set to. So every
+      choice drew the same screen, on all four tabs, from a control that stayed
+      bright and pressable.
+
+      That is the one dishonesty this product cannot afford. Every panel on
+      these screens withholds itself and names the clause that refused; a live
+      control that moves nothing contradicts all of them at once, and the reader
+      has no way to tell it from one that works.
+    */
+    expect(SHELL).toContain(
+      'const runInert = serving.status === "known" && !serving.serving',
+    );
+    expect(SHELL).toContain("disabled={runInert}");
+    expect(SHELL).toContain("disabledHint={copy.app.shell.selection.runUnavailable}");
+  });
+
+  it("only the run group is gated — the other two always move something", () => {
+    // Non-vacuity: `disabled` must not have been sprinkled across the bar.
+    expect(SHELL.match(/disabled=\{runInert\}/g)?.length).toBe(1);
+  });
+
+  it("inert is announced, not merely dimmed", () => {
+    // Opacity alone says nothing to a screen reader, and `aria-disabled`
+    // without a reason says only "no". The hint carries the why.
+    expect(SHELL).toContain("aria-disabled={disabled || undefined}");
+    expect(SHELL).toContain("accessibilityHint={disabled ? disabledHint : undefined}");
+  });
+
+  it("both dictionaries explain it, and differently", () => {
+    const en = read("i18n", "copy.en.ts");
+    const pt = read("i18n", "copy.pt.ts");
+    expect(en).toContain("runUnavailable:");
+    expect(pt).toContain("runUnavailable:");
+    // Translated, not copy-pasted.
+    const line = (dict: string) =>
+      dict.split("\n").find((row) => row.includes("runUnavailable:")) ?? "";
+    expect(line(en)).not.toBe(line(pt));
+  });
+});
+
 describe("a refused forecast renders no forecast", () => {
   it("the Overview's forecast panels are behind the `read` state alone", () => {
     // `forecast` is `null` in every state but `read`, and each forecast panel

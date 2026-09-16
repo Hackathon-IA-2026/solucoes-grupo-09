@@ -341,6 +341,14 @@ export function SelectionBar() {
   const copy = useCopy();
   const f = useFormat();
   const params = useAppParams();
+  const serving = useServing();
+  /*
+    Only once `/v1/meta` has answered. While it is in flight the pills stay
+    live, for the same reason the chrome badge stays blank: guessing produces a
+    control that dims and then brightens, which is worse than one that was
+    briefly honest about nothing.
+  */
+  const runInert = serving.status === "known" && !serving.serving;
   return (
     <View
       style={{
@@ -395,12 +403,31 @@ export function SelectionBar() {
               />
             ))}
           </Group>
+          {/*
+            The run is the only selector here that can go inert.
+
+            `subsystem` and `technology` steer the observed panels as well as
+            the forecast ones, so they always move something. The run chooses
+            which D−1 forecast to read, and it is read in exactly two places —
+            the Overview's and Explain's forecast half. With no lane promoted
+            both refuse whatever it is set to, so every choice draws the same
+            screen, on all four tabs.
+
+            `useServing` is the right question to ask and it is already asked
+            once before first paint for the chrome badge. It is also the stable
+            one: a forecast can refuse for the hour as well (the gate not having
+            passed yet), and gating on that would have these pills flicker
+            through the day. "No model is promoted" holds for weeks at a time,
+            which is what a reader can actually act on.
+          */}
           <Group label={copy.app.shell.selection.run}>
             {RUN_LABELS.map((run) => (
               <MiniPill
                 key={run}
                 label={run}
                 active={params.run === run}
+                disabled={runInert}
+                disabledHint={copy.app.shell.selection.runUnavailable}
                 onPress={() => params.setParams({ run: run as RunLabel })}
               />
             ))}
@@ -435,10 +462,24 @@ export function MiniPill({
   label,
   active,
   onPress,
+  disabled = false,
+  disabledHint,
 }: {
   label: string;
   active: boolean;
   onPress: () => void;
+  /**
+   * The control cannot change what the screen shows.
+   *
+   * Not a styling flag: it is the same statement every panel on these screens
+   * already makes when it withholds itself, made by a control instead. A pill
+   * that stays bright and pressable while moving nothing is the one dishonesty
+   * this product cannot afford, because the reader has no way to tell it apart
+   * from one that works.
+   */
+  disabled?: boolean;
+  /** Why, in the reader's locale. Announced, and shown on hover. */
+  disabledHint?: string;
 }) {
   const colors = usePalette();
   return (
@@ -446,6 +487,11 @@ export function MiniPill({
       accessibilityRole="radio"
       aria-checked={active}
       accessibilityLabel={label}
+      // The hint rides on the label rather than replacing it: a screen reader
+      // should still hear which run this pill is, then why it cannot be taken.
+      accessibilityHint={disabled ? disabledHint : undefined}
+      aria-disabled={disabled || undefined}
+      disabled={disabled}
       onPress={onPress}
       hitSlop={8}
       style={(state) => {
@@ -456,24 +502,32 @@ export function MiniPill({
         return {
           borderRadius: radius.pill,
           borderWidth: 1,
-          borderColor: active ? colors.accent : colors.border,
-          backgroundColor: active
-            ? colors.accentSoft
-            : hovered
-              ? colors.surfaceSunken
-              : "transparent",
+          borderColor: active && !disabled ? colors.accent : colors.border,
+          backgroundColor:
+            active && !disabled
+              ? colors.accentSoft
+              : hovered && !disabled
+                ? colors.surfaceSunken
+                : "transparent",
           paddingHorizontal: 12,
           paddingVertical: 5,
+          // Dimmed rather than hidden. The run still *has* a value, and it is
+          // still carried across screens by `sharedParams`; what has gone is
+          // the ability to change what is drawn. Removing the group would hide
+          // a selection the reader still owns.
+          opacity: disabled ? 0.45 : 1,
           ...focusRing(focused, colors.focus, 1),
-          ...(Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null),
+          ...(Platform.OS === "web"
+            ? ({ cursor: disabled ? "not-allowed" : "pointer" } as object)
+            : null),
         };
       }}
     >
       <Text
         style={{
           fontSize: 13,
-          fontWeight: active ? "700" : "500",
-          color: active ? colors.onAccentSoft : colors.inkMuted,
+          fontWeight: active && !disabled ? "700" : "500",
+          color: active && !disabled ? colors.onAccentSoft : colors.inkMuted,
         }}
       >
         {label}

@@ -596,6 +596,16 @@ export const en = {
         subsystem: "Subsystem",
         technology: "Technology",
         run: "D−1 run",
+        /*
+          Shown on the run pills when they cannot change anything.
+
+          The run chooses which D−1 forecast to read, so with no model promoted
+          every choice reads the same refusal. A live control that moves nothing
+          is the one kind of dishonesty this product cannot afford: every other
+          panel here withholds itself and says why, and a selector that stays
+          bright while doing nothing contradicts all of them.
+        */
+        runUnavailable: "No model promoted — the D−1 run changes nothing yet",
         targetDay: "Target day",
       },
     },
