@@ -52,7 +52,7 @@ async def cmd_doctor(_args) -> int:
         print(
             f"provider {name:<14} kind={provider.kind:<18} keys={len(provider.keys)} enabled={provider.enabled}"
         )
-    for task in ("parse", "embed", "generate_small", "generate_strong"):
+    for task in ("parse", "embed", "generate_strong"):
         links = gw.usable_links(task)
         labels = [f"{provider.name}:{link.model}" for link, provider in links]
         print(f"task {task:<15} links={labels or 'NONE'}")

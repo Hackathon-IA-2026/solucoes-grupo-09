@@ -179,8 +179,6 @@ services:
       WATTSTEER_RAG_STORE_DIR: /data/rag-store
       NVIDIA_API_KEYS: ${NVIDIA_API_KEYS:-}
       GROQ_API_KEYS: ${GROQ_API_KEYS:-}
-      OPENROUTER_API_KEYS: ${OPENROUTER_API_KEYS:-}
-      SAMBANOVA_API_KEYS: ${SAMBANOVA_API_KEYS:-}
     env_file:
       - path: .env
         required: false

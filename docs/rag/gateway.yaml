@@ -1,132 +1,78 @@
-# WattSteer LLM gateway: provedores, limites e cadeias por tarefa (F0, 15/09/2026)
-# Validado por docs/rag/llm-gateway-config.schema.json. Chaves nunca ficam aqui: só o nome da env var.
-# Limites: quando o provedor não publica (NVIDIA), começar conservador e ajustar pelos 429 observados no teste da AWS (18 a 20/09).
+# WattSteer LLM gateway: providers, limits and the fallback chain per task.
+# Validated by docs/rag/llm-gateway-config.schema.json. Keys never live here,
+# only the name of the environment variable that carries them.
+#
+# Two providers, both free and neither asks for a card. NVIDIA does all the work;
+# Groq is the fallback for generation when every NVIDIA key is out of quota. One
+# key is enough. Several keys in the same variable, separated by commas, are
+# treated as independent quotas: the router uses the key with the most room and
+# only moves to the next provider when every key of the current one is spent.
 version: 1
 
 providers:
-  # POOL DE CHAVES (opcional): cada integrante cria a própria chave em cada provedor; a env var recebe todas, separadas por vírgula.
-  # FUNCIONA COM UMA CHAVE SÓ: "NVIDIA_API_KEYS=nvapi-x" ou a variável no singular (NVIDIA_API_KEY) são aceitas; o pool de 1
-  # se comporta exatamente como chave única. Provedor sem nenhuma chave fica "disabled" e a cadeia pula para o próximo elo.
-  # Limites valem por chave (contas independentes); o roteador usa a chave com mais folga e só troca de provedor
-  # quando todas esgotam. Chave nunca aparece em log (só key_id = 8 hex do sha256).
   nvidia:
     kind: openai_compatible
     base_url: https://integrate.api.nvidia.com/v1
-    api_keys_env: NVIDIA_API_KEYS                           # "nvapi-...,nvapi-...,..." (5 chaves = 5 cotas)
-    key_selection: least_loaded
-    limits_scope: per_key
+    api_keys_env: NVIDIA_API_KEYS # "nvapi-...,nvapi-..." or a single key
     timeout_s: 60
-    limits: { rpm: 30, tpm: 60000, rpd: 4000 }          # não publicado; relatos de ~40 RPM por conta
+    # NVIDIA does not publish limits. Measured on 15/09/2026: the request rate is
+    # what limits a run, not tokens; a 429 is handled by the router's cooling.
+    limits: { rpm: 30, tpm: 60000, rpd: 4000 }
     limits_per_model:
-      # Medido em 15/09: o teto de tokens por minuto acima travava a indexação em
-      # três lotes por rodada, e nenhum 429 apareceu. Aqui o que limita é a taxa
-      # de requisições; se vier 429, o cooling do roteador cuida.
       nvidia/nemotron-3-embed-1b: { rpm: 30, rpd: 4000 }
-      nvidia/nemotron-parse:      { rpm: 30, rpd: 4000 }
+      nvidia/nemotron-parse: { rpm: 30, rpd: 4000 }
     extra:
-      thinking_toggle: true            # NVIDIA aceita chat_template_kwargs; Groq responde 400
-      rerank_base_url: https://ai.api.nvidia.com/v1/retrieval   # rerankers usam outra raiz
+      # Nemotron reasons out loud unless told not to, and the knob is NVIDIA's
+      # own (chat_template_kwargs). Groq answers 400 to it, so it stays here.
+      thinking_toggle: true
   groq:
     kind: openai_compatible
     base_url: https://api.groq.com/openai/v1
-    api_keys_env: GROQ_API_KEYS                             # limites do Groq são por ORGANIZAÇÃO: uma chave por org de cada integrante
-    key_selection: least_loaded
-    limits_scope: per_key
+    api_keys_env: GROQ_API_KEYS # Groq meters per organisation: one key per member's org
     timeout_s: 45
-    limits_per_model:                                       # tabela free oficial (15/09/2026), por org
+    limits_per_model: # official free tier table, 15/09/2026, per organisation
       openai/gpt-oss-120b: { rpm: 30, rpd: 1000, tpm: 8000, tpd: 200000 }
-      openai/gpt-oss-20b:  { rpm: 30, rpd: 1000, tpm: 8000, tpd: 200000 }
-  openrouter:
-    kind: openai_compatible
-    base_url: https://openrouter.ai/api/v1
-    api_keys_env: OPENROUTER_API_KEYS
-    limits_scope: per_key
-    timeout_s: 60
-    limits: { rpm: 20, rpd: 50 }                            # 1000/dia se a conta já comprou US$ 10
-  sambanova:
-    kind: openai_compatible
-    base_url: https://api.sambanova.ai/v1
-    api_keys_env: SAMBANOVA_API_KEYS
-    limits_scope: per_key
-    timeout_s: 60
-    limits: { rpm: 20, rpd: 20, tpd: 200000 }
   local:
-    kind: local                                             # executor OpenAI-compatível na LAN ou no próprio host
-    base_url: ${WATTSTEER_RAG_LOCAL_URL:-http://127.0.0.1:8081/v1}   # text-embeddings-inference / infinity
+    kind: local # poppler's text layer: no network, no quota, worse on scans
     api_key_env: null
-    timeout_s: 120
     limits: { rpm: 600 }
-  bedrock:                                                  # créditos AWS da organização; SÓ modelos abertos (Nemotron, Llama, DeepSeek, gpt-oss, Kimi K2.5)
-    kind: bedrock
-    region: us-east-1
-    enabled: false                                          # ligar quando os créditos chegarem; ids dos modelos a confirmar no console
-    budget_usd_day: 5                                       # teto do "elo de emergência" (recomendação do Bisogno)
-  template:
-    kind: template                                          # texto-padrão determinístico, nunca falha
 
 tasks:
-  # Só modelos abertos, em NVIDIA, Groq e AWS. Ids do NIM confirmados em 15/09/2026 via GET /v1/models (82 modelos):
-  # nvidia/nemotron-3-super-120b-a12b, nvidia/nemotron-3-ultra-550b-a55b, nvidia/nemotron-3.5-lightning-30b-a3b,
-  # moonshotai/kimi-k3, moonshotai/kimi-k2.6, deepseek-ai/deepseek-v4-flash-0731, z-ai/glm-5.3(-flash), openai/gpt-oss-20b.
-  generate_strong:          # Evidence Builder (JSON estrito, temperatura 0)
+  # Open models only. NIM ids confirmed on 15/09/2026 via GET /v1/models.
+  generate_strong: # the evidence builder: strict JSON, temperature 0
     chain:
-      - { provider: nvidia,     model: nvidia/nemotron-3-super-120b-a12b, max_input_tokens: 24000 }
-      - { provider: nvidia,     model: moonshotai/kimi-k3,                max_input_tokens: 24000 }   # forte, pesado: 2o elo, nao o padrao
-      - { provider: groq,       model: openai/gpt-oss-120b,               max_input_tokens: 6000 }    # TPM 8k
-      - { provider: openrouter, model: nvidia/nemotron-3-super-120b-a12b:free, max_input_tokens: 24000 }
-      - { provider: sambanova,  model: DeepSeek-V3.1,                      max_input_tokens: 24000 }
-      - { provider: bedrock,    model: nvidia.nemotron-3-super-120b,       max_input_tokens: 24000 }   # ignorado enquanto enabled=false
+      - { provider: nvidia, model: nvidia/nemotron-3-super-120b-a12b, max_input_tokens: 24000 }
+      - { provider: nvidia, model: moonshotai/kimi-k3, max_input_tokens: 24000 }
+      - { provider: groq, model: openai/gpt-oss-120b, max_input_tokens: 6000 } # TPM 8k
     require: { json_schema: true }
     temperature: 0
     max_output_tokens: 1500
-    on_exhausted: waiting_quota           # job espera; nunca erro
-  generate_small:           # metadados de documento, reescrita de consulta, classificação
-    chain:
-      - { provider: groq,   model: openai/gpt-oss-20b,                 max_input_tokens: 6000 }
-      - { provider: nvidia, model: nvidia/nemotron-3.5-lightning-30b-a3b, max_input_tokens: 16000 }
-      - { provider: nvidia, model: moonshotai/kimi-k2.6,                max_input_tokens: 16000 }
-      - { provider: nvidia, model: openai/gpt-oss-20b,                 max_input_tokens: 16000 }
-    require: { json_schema: true }
-    temperature: 0
-    max_output_tokens: 800
-    on_exhausted: waiting_quota
-  embed:                    # NUNCA troca de modelo em runtime (mesmo espaço vetorial).
-    # bge-m3, llama-nemotron-embed-1b-v2 e nv-embedqa-e5-v5 foram aposentados pelo NIM em 25/08/2026 (410 Gone).
-    # nemotron-3-embed-1b: 2048 dims cortáveis para 1024 (renormalizar), 34 idiomas com PT, contexto 32k, pesos abertos.
-    # Sem fallback no mesmo espaço: se o modelo sumir, roda-se o job `reindex` com bge-m3 local (procedimento declarado).
+    on_exhausted: waiting_quota # the job waits; never an error
+  embed: # NEVER changes model at runtime: one vector space per index.
+    # bge-m3, llama-nemotron-embed-1b-v2 and nv-embedqa-e5-v5 were retired by NIM
+    # on 25/08/2026 (410 Gone). nemotron-3-embed-1b: 2048 dims, sliced to 1024 and
+    # re-normalised, 34 languages including Portuguese, 32k context, open weights.
+    # There is no fallback in the same vector space: if the model disappears the
+    # answer is a re-index with another model, which is a declared procedure.
     model: nvidia/nemotron-3-embed-1b
     dimensions: 1024
     chain:
       - { provider: nvidia, model: nvidia/nemotron-3-embed-1b }
     batch_size: 32
     on_exhausted: waiting_quota
-  rerank:                   # o NIM não expõe mais reranker (410/404 em ai.api.nvidia.com/v1/retrieval): só local
+  parse: # a PDF page as an image -> typed blocks with tables. 2.2 s/page measured on a real BDO.
+    # The answer arrives as a `markdown_bbox` tool call: blocks (Page-header, Text,
+    # Table, Page-footer) with a normalised bbox; tables in LaTeX tabular.
     chain:
-      - { provider: local,  model: BAAI/bge-reranker-v2-m3 }
-    top_n: 8
-    on_exhausted: skip_rerank             # degrada para a ordem do RRF, declara no trace
-  parse:                    # extração de página de PDF (texto + tabelas). Validado em 15/09 num BDO real: 2,2 s/página.
-    # Resposta vem como tool_call `markdown_bbox`: blocos tipados (Page-header, Text, Table, Page-footer) com bbox
-    # normalizado; tabelas em LaTeX tabular (converter). O bbox vira o locator da citação.
-    chain:
-      - { provider: nvidia, model: nvidia/nemotron-parse }          # VLM: página como imagem -> blocos + tabelas
-      - { provider: local,  model: docling }                        # Docling em CPU: sempre disponível, mais lento
-    on_exhausted: waiting_quota           # nunca perde documento: espera a cota ou usa o Docling
-  narrate:                  # redação do card. Hoje o apps/api chama a Anthropic direto: migração OBRIGATÓRIA (não há Claude na nuvem)
-    chain:
-      - { provider: nvidia, model: nvidia/nemotron-3-super-120b-a12b, max_input_tokens: 8000 }
-      - { provider: nvidia, model: moonshotai/kimi-k2.6,              max_input_tokens: 8000 }
-      - { provider: groq,   model: openai/gpt-oss-120b,               max_input_tokens: 6000 }
-      - { provider: template }
-    temperature: 0
-    max_output_tokens: 700
-    on_exhausted: template
+      - { provider: nvidia, model: nvidia/nemotron-parse }
+      - { provider: local, model: pdftotext } # the text layer, when the page has one
+    on_exhausted: waiting_quota # a document is never lost: wait for quota or take the text layer
 
 behaviour:
-  counters: redis                          # janelas deslizantes por (provider, model): rpm, tpm, rpd, tpd
-  preflight: true                          # estima tokens antes de escolher o elo
-  cooling_s_default: 60                    # após 429/5xx/timeout sem Retry-After
-  retry_same_link: 0                       # não repete no mesmo elo; passa ao próximo com o MESMO payload
+  counters: memory # fixed windows per (provider, key, model): rpm, tpm, rpd, tpd
+  preflight: true # estimates tokens before choosing the link
+  cooling_s_default: 60 # after a 429/5xx/timeout without Retry-After
+  retry_same_link: 0 # never retries the same link; moves on with the SAME payload
   invalid_json_counts_as_failure: true
-  log_table: rag.llm_call                  # provider, model, attempt, latency_ms, tokens_in/out, status, trace_id
+  log_table: rag.llm_call # provider, model, attempt, latency_ms, tokens_in/out, error, trace_id
   quota_endpoint: /internal/llm/quota
