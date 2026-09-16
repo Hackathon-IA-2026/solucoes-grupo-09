@@ -140,8 +140,26 @@ describe("no refusal uses a status the edge will eat", () => {
       has been in front of it, silently, because no test asserts a status
       *through* the CDN.
     */
-    const eaten = Object.entries(ERROR_STATUS).filter(([, status]) => status === 502);
-    expect(eaten).toEqual([]);
+    /*
+      **Widened on purpose, and the widening is the interesting part.**
+
+      This assertion worked so well that it stopped compiling. With no code
+      mapped to 502 any more, `ERROR_STATUS`'s value type narrowed to the eight
+      statuses that remain, and `status === 502` became a comparison TypeScript
+      can prove is always false — `TS2367`, which failed `bun run typecheck` at
+      the first of its four packages and therefore stopped `packages/ui`,
+      `apps/api` and `apps/web` from being typechecked at all.
+
+      Deleting the runtime check would be the wrong repair. The two guards
+      answer different questions: the compiler refuses a 502 written into the
+      table *here*, and this refuses one that arrives some other way — a
+      generated table, a merge that widens the type back, a status computed
+      rather than literal. Keeping both costs one cast.
+    */
+    const statuses: readonly number[] = Object.values(ERROR_STATUS);
+    expect(statuses.filter((status) => status === 502)).toEqual([]);
+    // And the table is not empty, or the line above would be true of nothing.
+    expect(statuses.length).toBeGreaterThan(0);
   });
 
   it("still uses the statuses that do survive, so this is not a blanket rule", () => {

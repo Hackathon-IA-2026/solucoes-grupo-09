@@ -186,8 +186,19 @@ describe("the display rule: a shared predicate and a client-only merge", () => {
     const demoted = named.filter((row) => row.demoted);
     expect(demoted).toHaveLength(1);
     // Below every group that was not demoted, whatever their shares say.
-    expect(named.at(-1)?.code).toBe(demoted[0].code);
-    expect(demoted[0].share).toBeGreaterThan(named.at(-2).share);
+    //
+    // Narrowed before use rather than asserted through `?.`: a row that is not
+    // there would make `toBeGreaterThan(undefined)` a comparison that passes
+    // for the wrong reason, which is how this assertion would stop meaning
+    // anything without failing.
+    const last = named.at(-1);
+    const penultimate = named.at(-2);
+    const first = demoted[0];
+    if (last === undefined || penultimate === undefined || first === undefined) {
+      throw new Error("the fixture needs two named rows and one demoted");
+    }
+    expect(last.code).toBe(first.code);
+    expect(first.share).toBeGreaterThan(penultimate.share);
     // And nothing else about the row moved. A rule may annotate, demote or
     // withhold; it may never change a φ, a sign or a share.
     expect(demoted[0].phiMwh).toBe(source.phiMwh);

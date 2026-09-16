@@ -128,7 +128,14 @@ const SCREENS: { path: string; ready: string; minChars: number }[] = [
   presentation a real reader can select, which makes it the right one to hold to
   the standard.
 */
-test.use({ reducedMotion: "reduce" });
+/*
+  Through `contextOptions`, which is where this version puts it. Written as a
+  bare `test.use({ reducedMotion })` it is not an option Playwright's types know
+  at all — so the setting this block exists for was never reaching the browser,
+  and the flake described above was only being hidden by FadeIn usually winning
+  the race. The typecheck that would have said so was red at another package.
+*/
+test.use({ contextOptions: { reducedMotion: "reduce" } });
 
 for (const screen of SCREENS) {
   test(`${screen.path} has no WCAG A or AA violations`, async ({ page }) => {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import type { SubsystemCode } from "@wattsteer/core";
 import type { Band } from "@wattsteer/core/api";
 import { SUBSYSTEM_DISPLAY_ORDER } from "../src/lib/fixtures";
 import {
@@ -47,7 +48,11 @@ describe("order is a decision, and the two readers make opposite ones", () => {
   it("the outlook keeps the gateway's ranking, untouched", () => {
     // "in the order the gateway ranked them" — a ranked list re-sorted into
     // display order would silently discard the ranking the gateway computed.
-    const scrambled = ["S", "NE", "N", "SE"];
+    // Typed as the enum rather than `string[]`: the assertion below compares
+    // against `row.subsystem`, so an untyped literal made the comparison
+    // `string[]` vs `SubsystemCode[]` and a typo here would have been a type
+    // error nobody saw while the gate was red at another package.
+    const scrambled: SubsystemCode[] = ["S", "NE", "N", "SE"];
     const rows = outlookRows({
       subsystems: scrambled.map((code, i) => outlookSubsystem(code, 0.9 - i * 0.2)),
     } as never);

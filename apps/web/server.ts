@@ -48,14 +48,25 @@ const IMMUTABLE = /^\/(?:_expo|assets)\//;
  * reason: their input is the caller's path, and the probe is a stat against a
  * directory the kernel has long since cached.
  */
-const gzipCache = new Map<string, Uint8Array>();
+const gzipCache = new Map<string, Uint8Array<ArrayBuffer>>();
 
-async function gzipOnce(candidate: string, file: Bun.BunFile): Promise<Uint8Array> {
+/*
+  `Uint8Array<ArrayBuffer>`, not a bare `Uint8Array`. `Bun.gzipSync` is typed as
+  `Uint8Array<ArrayBufferLike>`, and `BodyInit` accepts only the `ArrayBuffer`
+  instantiation — a `SharedArrayBuffer`-backed view cannot be a response body.
+  The copy below is what makes that true rather than asserted.
+*/
+async function gzipOnce(
+  candidate: string,
+  file: Bun.BunFile,
+): Promise<Uint8Array<ArrayBuffer>> {
   const cached = gzipCache.get(candidate);
   if (cached !== undefined) {
     return cached;
   }
-  const compressed = Bun.gzipSync(new Uint8Array(await file.arrayBuffer()));
+  const compressed = new Uint8Array(
+    Bun.gzipSync(new Uint8Array(await file.arrayBuffer())),
+  );
   gzipCache.set(candidate, compressed);
   return compressed;
 }

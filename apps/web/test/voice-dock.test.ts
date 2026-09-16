@@ -387,7 +387,7 @@ describe("an intent reads as two lines, from one dispatch", () => {
     { kind: "params", params: { subsystem: "S" } },
     { kind: "highlight", subsystem: "NE" },
     { kind: "highlight", subsystem: null },
-    { kind: "refused", reason: { code: "unknown_subsystem", argument: "x", value: "x" } },
+    { kind: "refused", reason: { code: "unknown_subsystem", field: "x", value: "x" } },
   ];
 
   it("every arm yields a non-empty headline, in both locales", () => {
@@ -427,7 +427,7 @@ describe("an intent reads as two lines, from one dispatch", () => {
    */
   const refusalLines = (refusal: (typeof TOOL_REFUSAL_CODES)[number]) =>
     intentLines(
-      { kind: "refused", reason: { code: refusal, argument: "a", value: "b" } },
+      { kind: "refused", reason: { code: refusal, field: "a", value: "b" } },
       en,
     );
 

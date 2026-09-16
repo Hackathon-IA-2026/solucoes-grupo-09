@@ -48,6 +48,12 @@ const NOTHING_PROMOTED: ServingState = {
   ],
   modelReachable: true,
   serving: false,
+  // `/v1/meta` gained this after these fixtures were written, and the gate that
+  // would have said so was red at another package. Voice being configured is
+  // independent of whether a model is promoted — the trigger renders on a
+  // deployment with a key and no artifact — so `true` here is the honest value
+  // for "two lanes, both refused", not a convenience.
+  voiceConfigured: true,
 };
 
 const PROMOTED: ServingState = {
@@ -58,6 +64,7 @@ const PROMOTED: ServingState = {
   ],
   modelReachable: true,
   serving: true,
+  voiceConfigured: true,
 };
 
 const EPISODES = { episodes: [] } as unknown as CurtailmentEpisodes;
@@ -70,6 +77,10 @@ const OBSERVED = {
   ],
   hoursDate: "2026-09-14",
   episodes: EPISODES,
+  // Added when the Overview grew its wind/solar split. Two published
+  // settlements summing to the hours above, so a fixture that is read rather
+  // than merely type-satisfying stays coherent.
+  daySplit: { windMwh: 150, solarMwh: 50 },
 };
 
 const FORECAST = {
@@ -227,6 +238,10 @@ describe("with nothing promoted, the absence is stated", () => {
       lanes: [],
       modelReachable: false,
       serving: false,
+      // The modelling service being unreachable says nothing about whether a
+      // voice key is configured: they are different dependencies of the same
+      // `/v1/meta` read.
+      voiceConfigured: true,
     };
     expect(contextSentence(input({ serving: unreachable }))).toContain(
       "could not be reached",

@@ -849,7 +849,15 @@ describe("the demo script (plan §6), driven as one conversation", () => {
     const transcript: { step: number; kind: string; where: string }[] = [];
     let params: AppParams = NE;
     let scenario: Scenario | undefined;
-    let highlighted: SubsystemCode | null = null;
+    /*
+      A holder rather than a `let`, because the only assignment happens inside
+      `turn` and TypeScript's flow analysis cannot see through the closure: it
+      narrows the variable to `null` at the assertion and then rejects `"NE"` as
+      the expected value. The property is what the script claims — step 1
+      highlights without navigating — so the fix is to keep the assertion and
+      stop narrowing it away.
+    */
+    const highlighted: { current: SubsystemCode | null } = { current: null };
 
     /** Apply an intent the way the provider does, and record what happened. */
     const turn = (step: number, name: string, args: Record<string, unknown>) => {
@@ -874,7 +882,7 @@ describe("the demo script (plan §6), driven as one conversation", () => {
         }
       }
       if (intent.kind === "highlight") {
-        highlighted = intent.subsystem;
+        highlighted.current = intent.subsystem;
       }
       transcript.push({
         step,
@@ -887,7 +895,7 @@ describe("the demo script (plan §6), driven as one conversation", () => {
     // 1 — "Qual região devo me preocupar mais amanhã?"
     //     The step that proves the thesis: it must NOT navigate.
     turn(1, "highlight", { subsystem: "NE" });
-    expect(highlighted).toBe("NE");
+    expect(highlighted.current).toBe("NE");
 
     // 2 — "Por quê?"  → Explicar, the subsystem carried.
     turn(2, "explain", { subsystem: "NE" });
