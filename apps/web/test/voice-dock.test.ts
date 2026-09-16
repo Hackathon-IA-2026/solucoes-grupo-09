@@ -50,7 +50,6 @@ const code = (text: string) =>
 
 const DOCK = code(read("components", "voice", "voice-dock.tsx"));
 const ORB = code(read("components", "voice", "voice-orb.tsx"));
-const TRIGGER = code(read("components", "voice", "voice-trigger.tsx"));
 const TRANSCRIPT = code(read("components", "voice", "voice-transcript.tsx"));
 const SHELL = code(read("components", "app", "app-shell.tsx"));
 /**
@@ -198,11 +197,14 @@ describe("the three sizes", () => {
   it("no key means no dock — not a spinner and not a disabled control", () => {
     // §2.1 non-negotiable 4. This is the whole reason `VOICE_NOT_CONFIGURED` is
     // a separate code from `VOICE_UNAVAILABLE`.
-    expect(DOCK).toMatch(/availability !== "present"[\s\S]{0,80}return null/);
-  });
-
-  it("the trigger disappears on a deployment with no key", () => {
-    expect(TRIGGER).toMatch(/availability === "absent"[\s\S]{0,60}return null/);
+    //
+    // The gate used to be `availability !== "present"`, which is only knowable
+    // by minting — survivable while the header's `Falar` trigger existed to
+    // make that first mint, and not survivable once it did not. It reads the
+    // meta flag now and still honours the provider's `absent` latch.
+    expect(DOCK).toMatch(
+      /availability === "absent" \|\| !configuredByMeta[\s\S]{0,120}return null/,
+    );
   });
 
   it("the transcript is only in the expanded size", () => {
@@ -250,7 +252,6 @@ describe("keyboard and accessibility", () => {
 
   it("every control shows focus, and the focus is on a View", () => {
     expect(DOCK).toContain("focusRing(focused");
-    expect(TRIGGER).toContain("focusRing(focused");
   });
 
   it("the transcript announces the agent's answer to a screen reader", () => {
@@ -299,23 +300,19 @@ describe("the action card says what happened", () => {
   });
 });
 
-describe("the trigger and the map", () => {
-  it("the trigger lives in the header, before the language switch", () => {
-    // The plan sketched it to the *right* of `PT / EN`. In the built header that
-    // put the product's most distinctive control last in a row of chrome, where
-    // it read as an afterthought beside a toggle nobody uses twice. It comes
-    // first now.
-    //
-    // Unchanged, and the half this assertion is really protecting: not a nav
-    // item and not a route. A `/voice` route would put voice *beside* the four
-    // modes when its whole value is sitting *across* them.
-    const language = SHELL.indexOf("<LanguageSwitch");
-    const trigger = SHELL.indexOf("<VoiceTrigger");
-    expect(trigger).toBeGreaterThan(0);
-    expect(language).toBeGreaterThan(trigger);
+describe("the dock and the map", () => {
+  it("the header carries no voice control of its own", () => {
+    // It used to, before `PT / EN`, and on a phone the two would not fit beside
+    // the badge — which reserves its width unconditionally — so the header grew
+    // a second row that said nothing new. One entry point, in the corner, where
+    // it competes with nothing for width.
+    expect(SHELL).not.toContain("VoiceTrigger");
   });
 
-  it("the trigger is not a fifth screen in the tab row", () => {
+  it("voice is not a fifth screen in the tab row", () => {
+    // The half of the old assertion that was never about placement: a `/voice`
+    // route would put voice *beside* the modes when its whole value is sitting
+    // *across* them, and it would break `sharedParams`.
     expect(SHELL).not.toMatch(/\{ key: "voice"/);
     expect(SHELL).not.toContain('path: "/app/voice"');
   });
@@ -353,10 +350,7 @@ describe("the trigger is absent on an instance that cannot honour it", () => {
       branch and there is no DOM in this suite; the e2e spec drives the
       rendered case.
     */
-    const source = readFileSync(
-      join(import.meta.dir, "../src/components/voice/voice-trigger.tsx"),
-      "utf8",
-    );
+    const source = DOCK;
     // It consults the meta read...
     expect(source).toContain("useServing()");
     expect(source).toContain("voiceConfigured");
@@ -365,15 +359,11 @@ describe("the trigger is absent on an instance that cannot honour it", () => {
     expect(source).toContain('agent.availability === "absent"');
   });
 
-  it("renders the trigger while the meta read is still in flight", () => {
+  it("renders the dock while the meta read is still in flight", () => {
     // A flash of a control that then disappears is better than a reader who
     // never learns the feature exists because the meta read was slow. The
     // guard is that `reading` is not treated as `not configured`.
-    const source = readFileSync(
-      join(import.meta.dir, "../src/components/voice/voice-trigger.tsx"),
-      "utf8",
-    );
-    expect(source).toContain('serving.status !== "known" || serving.voiceConfigured');
+    expect(DOCK).toContain('serving.status !== "known" || serving.voiceConfigured');
   });
 });
 

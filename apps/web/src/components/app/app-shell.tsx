@@ -27,7 +27,6 @@ import { router, usePathname } from "expo-router";
 import type { ReactNode } from "react";
 import { Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { LanguageSwitch } from "@/components/language-switch";
-import { VoiceTrigger } from "@/components/voice/voice-trigger";
 import { type Copy, useCopy, useFormat, useI18n } from "@/i18n";
 import { localePath } from "@/i18n/locale";
 import {
@@ -35,7 +34,6 @@ import {
   type RunLabel,
   SUBSYSTEMS,
   type SubsystemCode,
-  type Technology,
 } from "@/lib/fixtures";
 import { sharedParams, useAppParams } from "./use-app-params";
 import { useServing } from "./use-serving";
@@ -164,18 +162,22 @@ export function AppShell({
             {/* Pushes the switch to the far edge of the header row. */}
             <View style={{ flex: 1 }} />
             {/*
-              **Before `PT / EN`, not after it.** The plan sketched it to the
-              right; in the built header that put the product's most distinctive
-              control last in a row of chrome, reading as an afterthought beside
-              a language toggle nobody uses twice.
+              **The voice control is not here any more, and this is the row it
+              kept breaking.**
 
-              Still deliberately **not** a fifth item in the tab row below: a
-              route for voice would put it *beside* the four modes when its whole
-              value is sitting *across* them, and it would break `sharedParams`,
-              which is built on the four screens being four views of one
-              selection. It renders nothing at all on a deployment with no key.
+              `Falar` sat between the badge and `PT / EN`. On a phone the three
+              did not fit: the badge below reserves its width unconditionally
+              (deliberately — see the note on it), so with a model promoted the
+              trigger and the language switch wrapped onto a second line and the
+              header grew a row that said nothing new.
+
+              Nothing is lost by dropping it. The dock in the bottom-right
+              corner says "Pergunte ao WattSteer", is the same `agent.open`, and
+              is in a corner that is not competing with anything for width. Two
+              entry points to one session were one more than the feature needed,
+              and the one that survived is the one that reads as the product
+              rather than as chrome.
             */}
-            <VoiceTrigger />
             <LanguageSwitch testID="app-language-switch" />
           </View>
 
@@ -408,16 +410,28 @@ export function SelectionBar() {
               />
             ))}
           </Group>
-          <Group label={copy.app.shell.selection.technology}>
-            {(["WIND", "SOLAR"] as Technology[]).map((tech) => (
-              <MiniPill
-                key={tech}
-                label={copy.app.technology[tech]}
-                active={params.technology === tech}
-                onPress={() => params.setParams({ technology: tech })}
-              />
-            ))}
-          </Group>
+          {/*
+            **Technology used to be a third group here, and it was feedback with
+            no visible effect.**
+
+            It was never inert — it flips which fleet the "Eólica e solar" panel
+            emphasises, bold and 0.85 opacity against 0.28. The problem was
+            distance: measured at 400px, the pills sat at y=197 and the panel
+            they re-weight at **y=2719**, which is nearly three phone screens
+            below. A reader pressed `Solar`, the page did exactly what it was
+            asked, and nothing they could see changed. A control whose whole
+            feedback is off-screen teaches a reader that the app ignores them.
+
+            Nor was it a filter, which is the other half of why it does not
+            belong in the chrome: both fleets are always drawn, in every panel
+            that draws either. It re-weights; it never selects.
+
+            `params.technology` stays. The voice agent sets it — "destaque a
+            solar" — and `context.ts` reports it, and there the distance problem
+            does not exist because the agent scrolls to what it is talking
+            about. What is gone is the claim that this is one of the two axes a
+            reader steers the whole product by.
+          */}
           {/*
             The run is the only selector here that can go inert.
 

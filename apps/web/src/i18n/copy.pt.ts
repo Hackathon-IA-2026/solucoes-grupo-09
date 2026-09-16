@@ -485,7 +485,6 @@ export const pt: Copy = {
       },
       selection: {
         subsystem: "Subsistema",
-        technology: "Tecnologia",
         run: "Rodada D−1",
         runUnavailable: "Nenhum modelo promovido — a rodada D−1 ainda não muda nada",
         targetDay: "Dia alvo",
@@ -521,8 +520,6 @@ export const pt: Copy = {
      * ouvir, e escrevê-los na terceira pessoa gastaria essa separação à toa.
      */
     voice: {
-      trigger: "Falar",
-      triggerHint: "Pergunte à WattSteer sobre esta tela, em voz alta.",
       idle: "Pergunte ao WattSteer",
       panelTitle: "WATTSTEER AI",
       expand: "Abrir o painel de voz",

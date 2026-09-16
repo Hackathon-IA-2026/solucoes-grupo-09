@@ -126,26 +126,29 @@ export default function ExplainScreen({ embedded = false }: { embedded?: boolean
     would leave the host holding the previous screen's subject.
   */
   const diagnosedDay = state.status === "explained" ? state.day : null;
-  usePublishBriefingSubject({
-    context: { locale, screen: "explain", params, serving, explain: state },
-    data: {
-      ...NO_BRIEFING_DATA,
-      drivers:
-        diagnosedDay === null
-          ? null
-          : attributedDrivers(diagnosedDay.diagnosis.attribution.drivers),
-      // `reading` has no observed half yet and `refused` never will; both
-      // publish nothing rather than an empty list, because "no reasons" and
-      // "not read" are different facts and the scene says so.
-      reasons:
-        state.status === "explained" || state.status === "observedOnly"
-          ? state.observed.reasons.rows
-          : null,
-      dayEnergy: diagnosedDay === null ? null : diagnosedDay.forecast.dayEnergyMwh,
-      peakPower: diagnosedDay === null ? null : diagnosedDay.forecast.peakPowerMw,
+  usePublishBriefingSubject(
+    {
+      context: { locale, screen: "explain", params, serving, explain: state },
+      data: {
+        ...NO_BRIEFING_DATA,
+        drivers:
+          diagnosedDay === null
+            ? null
+            : attributedDrivers(diagnosedDay.diagnosis.attribution.drivers),
+        // `reading` has no observed half yet and `refused` never will; both
+        // publish nothing rather than an empty list, because "no reasons" and
+        // "not read" are different facts and the scene says so.
+        reasons:
+          state.status === "explained" || state.status === "observedOnly"
+            ? state.observed.reasons.rows
+            : null,
+        dayEnergy: diagnosedDay === null ? null : diagnosedDay.forecast.dayEnergyMwh,
+        peakPower: diagnosedDay === null ? null : diagnosedDay.forecast.peakPowerMw,
+      },
+      counterfactual: undefined,
     },
-    counterfactual: undefined,
-  }, !embedded);
+    !embedded,
+  );
 
   /**
    * Whether there is a diagnosis to describe, which the lede turns on.

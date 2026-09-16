@@ -70,11 +70,11 @@
 */
 
 import { SUBSYSTEM_DISPLAY_ORDER } from "@wattsteer/core";
-import { space, usePalette } from "@wattsteer/ui";
+import { usePalette } from "@wattsteer/ui";
 import { router } from "expo-router";
 import Head from "expo-router/head";
 import type { ReactNode } from "react";
-import { Text, View } from "react-native";
+import { Text } from "react-native";
 import ExplainScreen from "@/app/app/explain";
 import MitigateScreen from "@/app/app/mitigate";
 import { AppShell, ScreenTitle } from "@/components/app/app-shell";

@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { routeGateway } from "./gateway-fixtures";
 
 /**
  * The selection bar writes a URL it can read back.
@@ -21,7 +22,7 @@ import { expect, type Page, test } from "@playwright/test";
  */
 
 /** `?` and the query, as the address bar shows it. */
-function query(page: Page): string {
+function _query(page: Page): string {
   return new URL(page.url()).search;
 }
 
@@ -47,26 +48,45 @@ async function expectChecked(
  * screen picks its locale from the browser. "Solar" is the same word in both
  * dictionaries; the wind pill is matched against either.
  */
-const WIND = /^(Eólica|Wind)$/;
+const _WIND = /^(Eólica|Wind)$/;
 
 test.describe("the selection bar writes a URL it can read back", () => {
-  test("the technology chip survives its own round trip", async ({ page }) => {
-    await page.goto("/app");
-    await expect(page.getByRole("radio", { name: "Solar", exact: true })).toBeVisible();
+  /*
+    **There are no technology pills any more, and the parameter is still real.**
 
-    await press(page, "Solar");
-    // The URL spelling, in the address bar a reader may copy. `SOLAR` here is
-    // the whole defect: `parseAppParams` does not read it.
-    await expect(page).toHaveURL(/[?&]technology=solar(&|$)/);
-    expect(query(page)).not.toContain("technology=SOLAR");
-    // And the selection the app read back out of that URL is the one pressed.
-    await expectChecked(page, "Solar", true);
-    await expectChecked(page, WIND, false);
+    The toggle came out of the chrome because its effect was three phone screens
+    below it — measured, the pills at y=197 and the panel they re-weight at
+    y=2719 — so a reader pressed `Solar`, the page did exactly as asked, and
+    nothing they could see changed. The voice agent still sets it, and
+    `context.ts` still reports it, so the round trip this test was written for
+    is worth keeping. It is driven through the URL now, which is the surface
+    that still has it, and asserted where the effect actually lands.
+  */
+  test("the technology parameter survives its own round trip", async ({ page }) => {
+    // The rest of this file asserts chrome, which renders without data. This
+    // one asserts a panel, so it needs figures to draw.
+    await routeGateway(page, { forecast: true });
+    await page.goto("/app?technology=solar");
+    // The emphasis is the whole of what the parameter buys: one fleet bold and
+    // named `em destaque`, the other dimmed. Both are always drawn.
+    await expect(page.getByText(/Solar · (em destaque|emphasised)/)).toBeVisible();
+    await expect(page.getByText(/(Eólica|Wind) · (em destaque|emphasised)/)).toHaveCount(
+      0,
+    );
 
-    await press(page, WIND);
-    await expect(page).toHaveURL(/[?&]technology=wind(&|$)/);
-    await expectChecked(page, WIND, true);
-    await expectChecked(page, "Solar", false);
+    await page.goto("/app?technology=wind");
+    await expect(
+      page.getByText(/(Eólica|Wind) · (em destaque|emphasised)/),
+    ).toBeVisible();
+    await expect(page.getByText(/Solar · (em destaque|emphasised)/)).toHaveCount(0);
+
+    // The casing this test was written against: `parseAppParams` reads the
+    // lowercase spelling only, so `SOLAR` in a copied address must not silently
+    // become a selection nobody made.
+    await page.goto("/app?technology=SOLAR");
+    await expect(
+      page.getByText(/(Eólica|Wind) · (em destaque|emphasised)/),
+    ).toBeVisible();
   });
 
   /*
@@ -128,11 +148,13 @@ test.describe("a deep link is the selection", () => {
       );
 
     await page.goto("/app?subsystem=S&run=00Z&technology=solar");
-    await expect.poll(checked).toEqual(["S", "Solar", "00Z"]);
+    // Two radios, not three: `technology` is still in the URL and still read,
+    // but it no longer has pills in the chrome.
+    await expect.poll(checked).toEqual(["S", "00Z"]);
 
     // Non-vacuity: the defaults must still be the defaults, or the assertion
     // above would hold of a page that simply echoed whatever it was asked for.
     await page.goto("/app");
-    await expect.poll(checked).toEqual(["NE", "Eólica", "12Z"]);
+    await expect.poll(checked).toEqual(["NE", "12Z"]);
   });
 });

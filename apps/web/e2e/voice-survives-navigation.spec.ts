@@ -125,7 +125,10 @@ function mintedResponse() {
  * capture device, through `encodePCM16Base64`, to `send`.
  */
 async function startSession(page: Page): Promise<void> {
-  await page.getByTestId("voice-trigger").click();
+  // The dock's own idle pill, which is the only entry point now: the header's
+  // `Falar` trigger wrapped onto a second line beside `PT / EN` on a phone and
+  // was removed. Same `agent.open`, same `getUserMedia`, one control.
+  await page.getByTestId("voice-dock-label").click();
   await expect(page.getByTestId("voice-dock-active")).toBeVisible({ timeout: 15_000 });
   await page.waitForFunction(
     () =>
@@ -243,7 +246,7 @@ test.describe("the voice session outlives a tool-call navigation", () => {
 });
 
 test.describe("a deployment with no key looks like a product without voice", () => {
-  test("VOICE_NOT_CONFIGURED leaves no dock and no trigger behind", async ({ page }) => {
+  test("VOICE_NOT_CONFIGURED leaves no dock behind", async ({ page }) => {
     await armVoice(page, {
       status: 502,
       contentType: "application/json",
@@ -253,12 +256,14 @@ test.describe("a deployment with no key looks like a product without voice", () 
     });
 
     await page.goto("/app");
-    // The trigger is offered once, because that press is how the app finds out
-    // which of the two refusals this deployment is.
-    await page.getByTestId("voice-trigger").click();
+    // The dock is offered once, because that press is how the app finds out
+    // which of the two refusals this deployment is. `/v1/meta` can say a key is
+    // configured and the mint still fail — a key revoked between page load and
+    // the press is exactly the case the provider's `absent` latch is the late
+    // authority for.
+    await page.getByTestId("voice-dock-label").click();
 
-    await expect(page.getByTestId("voice-trigger")).toHaveCount(0, { timeout: 10_000 });
-    await expect(page.getByTestId("voice-dock")).toHaveCount(0);
+    await expect(page.getByTestId("voice-dock")).toHaveCount(0, { timeout: 10_000 });
     // No socket was ever opened: the credential refused before one could be.
     expect(await page.evaluate(() => globalThis.__voiceStats.opened)).toBe(0);
   });
@@ -266,13 +271,12 @@ test.describe("a deployment with no key looks like a product without voice", () 
 
 test.describe("there is no voice outside /app", () => {
   for (const path of ["/pt/", "/pitch", "/pt/privacy"]) {
-    test(`no dock and no trigger on ${path}`, async ({ page }) => {
+    test(`no dock on ${path}`, async ({ page }) => {
       await armVoice(page);
       await page.goto(path);
       // §9: "A microphone on the marketing page is a gimmick with nothing
       // behind it." The provider mounts on the `/app` layout only.
       await expect(page.getByTestId("voice-dock")).toHaveCount(0);
-      await expect(page.getByTestId("voice-trigger")).toHaveCount(0);
       expect(await page.evaluate(() => globalThis.__voiceStats.opened)).toBe(0);
     });
   }

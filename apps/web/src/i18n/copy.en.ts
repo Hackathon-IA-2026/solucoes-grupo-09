@@ -618,7 +618,6 @@ export const en = {
       },
       selection: {
         subsystem: "Subsystem",
-        technology: "Technology",
         run: "D−1 run",
         /*
           Shown on the run pills when they cannot change anything.
@@ -679,8 +678,6 @@ export const en = {
      */
     voice: {
       /** The header control. Short, because it sits beside `PT / EN`. */
-      trigger: "Speak",
-      triggerHint: "Ask WattSteer about this screen, out loud.",
       /** The IDLE pill — the invitation, written out in full exactly once. */
       idle: "Ask WattSteer",
       panelTitle: "WATTSTEER AI",

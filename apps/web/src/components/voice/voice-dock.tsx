@@ -60,6 +60,7 @@ import {
   View,
   type ViewStyle,
 } from "react-native";
+import { useServing } from "@/components/app/use-serving";
 import { useCopy } from "@/i18n";
 import {
   DOCK_NARROW_BREAKPOINT,
@@ -77,7 +78,35 @@ const DOCK_INSET = 20;
 
 export function VoiceDock() {
   const agent = useVoiceAgent();
-  if (agent.availability !== "present") {
+  const serving = useServing();
+
+  /*
+    **Who decides the dock exists, now that nothing else does.**
+
+    This read `agent.availability !== "present"`, and `availability` is
+    `"unknown"` until a session has actually been minted. That was survivable
+    only because the header carried a `Falar` trigger whose whole job was to
+    make that first mint — press it once and the dock appeared. The trigger is
+    gone (it wrapped onto a second line beside `PT / EN` on a phone, and the
+    dock says the same thing in a place that does not fight the header for
+    width), so keeping this gate would have left the dock waiting for a mint
+    that nothing could ask for. Voice would have been unreachable.
+
+    So the dock inherits the gate the trigger was already using, and the
+    reasoning that came with it: `/v1/meta` says whether this deployment can
+    mint a session at all, and the app reads that document once before first
+    paint anyway. Discovering it by minting means spending a credential to find
+    out there is no key to mint one with — on an instance with no `XAI_API_KEY`
+    that was a dead control that cost a rate-limit token to stay dead.
+
+    `absent` still wins when it is known, because it is the late authority for
+    the case the flag cannot cover: a key that exists at page load and is
+    revoked before the reader presses. And `reading` renders the dock — a
+    control that flashes and leaves beats a reader who never learns the feature
+    is there because the meta read was slow.
+  */
+  const configuredByMeta = serving.status !== "known" || serving.voiceConfigured;
+  if (agent.availability === "absent" || !configuredByMeta) {
     // Not a spinner and not a disabled button. See the header comment.
     return null;
   }
