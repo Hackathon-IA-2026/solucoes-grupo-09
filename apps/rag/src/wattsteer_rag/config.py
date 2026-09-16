@@ -30,7 +30,6 @@ class Settings(BaseSettings):
     # The corpus, the chunks and the evidence live here. Own database, own schema:
     # the gateway's Postgres has no pgvector and apps/api owns every table in `public`.
     database_url: str = "postgres://wattsteer:wattsteer@localhost:5439/wattsteer_rag"
-    redis_url: str | None = None
 
     # Where raw documents are kept after download, addressed by sha256.
     store_dir: Path = REPO_ROOT / ".rag-store"
@@ -43,7 +42,7 @@ class Settings(BaseSettings):
     # Retrieval shape. Kept here because the evaluation harness sweeps them.
     hybrid_vector_k: int = 40
     hybrid_text_k: int = 40
-    rerank_top_n: int = 8
+    top_hits: int = 8
     embedding_dimensions: int = 1024
 
     user_agent: str = "WattSteer-RAG/0.1 (+https://www.wattsteer.com)"

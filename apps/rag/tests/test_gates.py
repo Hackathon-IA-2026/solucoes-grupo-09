@@ -154,7 +154,8 @@ def test_or_tsquery_keeps_codes_and_drops_noise():
 
 
 TABLE_CHUNK = (
-    "| 1 | COSR-NE | Controlar a tensão de 230 kV da SE Senhor do Bonfim II, de acordo com os limites abaixo: "
+    "| 1 | COSR-NE | Controlar a tensão de 230 kV da SE Senhor do Bonfim II, "
+    "de acordo com os limites abaixo: "
     "| - Evitar colapso de tensão |\n| | | PSNB | Tensão | QSNB |\n| | | PSNB ≤ 260 MW | VSNB ≥ 230 kV | - |"
 )
 
@@ -162,7 +163,10 @@ TABLE_CHUNK = (
 def test_a_table_citation_may_skip_cells_but_not_reorder_them():
     """The row that names the control and the row that carries the limit are the
     citation a person would point at, and they are never adjacent in a table."""
-    quote = "Controlar a tensão de 230 kV da SE Senhor do Bonfim II, de acordo com os limites abaixo: | PSNB ≤ 260 MW | VSNB ≥ 230 kV"
+    quote = (
+        "Controlar a tensão de 230 kV da SE Senhor do Bonfim II, de acordo com os limites abaixo:"
+        " | PSNB ≤ 260 MW | VSNB ≥ 230 kV"
+    )
     accepted, failures = check_claim(
         claim_with(quote, "O documento estabelece VSNB ≥ 230 kV para PSNB ≤ 260 MW"),
         {"c1": hit(text=TABLE_CHUNK, locator={"page": 6, "section": "5.1", "table": "table"})},
@@ -182,7 +186,10 @@ def test_reordering_the_cells_is_still_refused():
 
 
 def test_prose_still_requires_a_contiguous_span():
-    prose = "O procedimento estabelece o controle de tensão na área. Outra frase qualquer no meio. E o limite de 260 MW."
+    prose = (
+        "O procedimento estabelece o controle de tensão na área."
+        " Outra frase qualquer no meio. E o limite de 260 MW."
+    )
     quote = "O procedimento estabelece o controle de tensão na área. E o limite de 260 MW."
     accepted, failures = check_claim(
         claim_with(quote, "O documento estabelece controle de tensão com limite de 260 MW"),

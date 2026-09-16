@@ -10,9 +10,7 @@ from __future__ import annotations
 import base64
 import json
 import re
-import subprocess
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 import httpx
@@ -196,29 +194,3 @@ class OpenAICompatibleAdapter:
             if item.get("text")
         ]
         return blocks, (data.get("usage") or {})
-
-
-class PopplerAdapter:
-    """The local link: no network, no quota, no cost, worse on scans.
-
-    It reads the text layer a PDF already carries. A page with no text layer
-    comes back empty, and the router treats that as a failure so the next link
-    gets a chance.
-    """
-
-    name = "local"
-
-    async def parse_page(self, _client, _secret, *, model: str, image: bytes) -> tuple[list[Block], dict]:
-        raise ProviderError("local parser works on files, not images")
-
-    def parse_pdf_page(self, path: Path, page: int) -> list[Block]:
-        result = subprocess.run(
-            ["pdftotext", "-layout", "-f", str(page), "-l", str(page), str(path), "-"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        text = (result.stdout or "").strip()
-        if not text:
-            raise ProviderError("local: page has no text layer")
-        return [Block(type="Text", text=text)]

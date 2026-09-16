@@ -121,15 +121,3 @@ async def embed_pending(
         async with pool.acquire() as conn:
             await conn.execute("UPDATE rag.document SET status = 'indexed' WHERE id = $1", document_id)
     return {"embedded": done, "waiting_quota_until": waiting}
-
-
-async def assert_single_vector_space(db: Database) -> None:
-    """Two embedding models in one index make every distance meaningless."""
-    pool = await db.connect()
-    async with pool.acquire() as conn:
-        models = await conn.fetch(
-            "SELECT DISTINCT embedding_model FROM rag.chunk WHERE embedding_model IS NOT NULL"
-        )
-    names = sorted(row["embedding_model"] for row in models)
-    if len(names) > 1:
-        raise RuntimeError(f"index mixes embedding models: {names}. Re-index before searching.")

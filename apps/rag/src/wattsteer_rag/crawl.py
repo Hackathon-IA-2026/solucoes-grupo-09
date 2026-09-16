@@ -29,6 +29,7 @@ import httpx
 
 from .config import settings
 from .db import Database
+from .parse import pdf_text
 
 MPO_BASE = "https://www.ons.org.br/MPO/Documento Normativo"
 IO_DIR = f"{MPO_BASE}/3. Instruções de Operação - SM 5.12/3.1. Controle da Transmissão/3.1.1. Operação Normal"
@@ -434,7 +435,7 @@ class Crawler:
                 fetched,
                 source="RAP",
                 external_id=label,
-                title=f"Relatório de Análise de Perturbação - {published.strftime('%d/%m/%Y') if published else 'sem data'}",
+                title=f"Relatório de Análise de Perturbação - {published.strftime('%d/%m/%Y') if published else '?'}",
                 revision=None,
                 published_at=published,
                 meta={"source_url": url},
@@ -453,17 +454,10 @@ DATE_IN_PDF = re.compile(r"\b(\d{2})/(\d{2})/(\d{4})\b")
 
 def _published_date(pdf: Path) -> datetime | None:
     """Operating instructions carry their validity date in the header of page 1."""
-    import subprocess
-
-    text = subprocess.run(
-        ["pdftotext", "-layout", "-f", "1", "-l", "2", str(pdf), "-"],
-        capture_output=True,
-        text=True,
-        check=False,
-    ).stdout
+    text = pdf_text(pdf, 1, 2)
     dates = [
         datetime(int(year), int(month), int(day), tzinfo=UTC)
-        for day, month, year in DATE_IN_PDF.findall(text or "")
+        for day, month, year in DATE_IN_PDF.findall(text)
         if 2000 < int(year) < 2100 and 1 <= int(month) <= 12 and 1 <= int(day) <= 31
     ]
     return max(dates) if dates else None

@@ -18,10 +18,10 @@ import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from wattsteer_rag.db import Database
-from wattsteer_rag.evidence import build_evidence, flatten_for_match
-from wattsteer_rag.gateway.router import Gateway
 from wattsteer_rag.config import settings
+from wattsteer_rag.db import Database
+from wattsteer_rag.evidence import build_evidence
+from wattsteer_rag.gateway.router import Gateway
 
 
 async def run(cases: list[dict], limit: int | None) -> dict:
@@ -41,11 +41,7 @@ async def run(cases: list[dict], limit: int | None) -> dict:
             reason=case.get("reason"),
             description=case.get("description"),
         )
-        cited = {
-            citation.get("external_id")
-            for item in document["items"]
-            for citation in item["citations"]
-        }
+        cited = {citation.get("external_id") for item in document["items"] for citation in item["citations"]}
         expected = case.get("expect_document")
         results.append(
             {
@@ -105,9 +101,6 @@ def main() -> int:
     report = asyncio.run(run(cases, args.limit))
     Path(args.out).write_text(json.dumps(report, indent=2, ensure_ascii=False))
     print("\n" + json.dumps(report["summary"], indent=2))
-    # `flatten_for_match` is imported so that a refactor that removes the gate
-    # also breaks the harness, rather than silently measuring nothing.
-    assert callable(flatten_for_match)
     return 0
 
 

@@ -147,7 +147,10 @@ def test_chunks_carry_a_locator_and_never_split_a_table():
     pages = [
         {
             "page_no": 6,
-            "markdown": f"5.1 LIMITACAO DO FLUXO\n\nTexto do procedimento com detalhes suficientes para virar um chunk de corpo.\n\n{table}",
+            "markdown": (
+                "5.1 LIMITACAO DO FLUXO\n\nTexto do procedimento com detalhes suficientes"
+                f" para virar um chunk de corpo.\n\n{table}"
+            ),
             "blocks": [],
         }
     ]

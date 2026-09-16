@@ -49,9 +49,7 @@ async def cmd_doctor(_args) -> int:
     checks = await db.ready()
     print("database:", json.dumps(checks, default=str))
     for name, provider in gw.providers.items():
-        print(
-            f"provider {name:<14} kind={provider.kind:<18} keys={len(provider.keys)} enabled={provider.enabled}"
-        )
+        print(f"provider {name:<14} keys={len(provider.keys)} enabled={provider.enabled}")
     for task in ("parse", "embed", "generate_strong"):
         links = gw.usable_links(task)
         labels = [f"{provider.name}:{link.model}" for link, provider in links]
@@ -88,7 +86,9 @@ async def cmd_crawl(args) -> int:
             for back in range(args.days):
                 report.append(await crawler.fetch_ipdo(client, date.today() - timedelta(days=back)))
         if args.what == "ipdo-archive":
-            report += await crawler.fetch_ipdo_archive(client, limit=args.limit, attempts=args.attempts, sample=args.sample)
+            report += await crawler.fetch_ipdo_archive(
+                client, limit=args.limit, attempts=args.attempts, sample=args.sample
+            )
         if args.what in {"rap", "all"}:
             report += await crawler.fetch_rap(client, args.urls or [])
     print(json.dumps(report, indent=2, ensure_ascii=False))
@@ -246,7 +246,8 @@ async def cmd_search(args) -> int:
     hits = await search(db, gw, args.question, published_before=before, limit=args.limit)
     for position, hit in enumerate(hits, start=1):
         marks = f"v{hit.vector_rank or '-'} t{hit.text_rank or '-'}"
-        where = hit.locator.get("section") or hit.section_path or f"p.{hit.locator.get('page')}"
+        page = hit.locator.get("page")
+        where = hit.locator.get("section") or hit.section_path or f"p.{page}"
         print(
             f"\n{position}. [{marks} rrf={hit.score:.4f}] {hit.external_id or hit.source} {hit.revision or ''}"
             f" | {where}"
@@ -287,9 +288,12 @@ def _print_evidence(document: dict) -> None:
     generation = document["trace"]["generation"]
     print(f"\nQuestion: {document['question']}")
     print(f"Verdict: {document['verdict']}" + (f" ({document['reason']})" if document["reason"] else ""))
-    print(f"Model: {generation['provider']}:{generation['model']} attempts={generation['attempts']}")
+    model = f"{generation['provider']}:{generation['model']}"
+    print(f"Model: {model} attempts={generation['attempts']}")
     for item in document["items"]:
-        print(f"\n  [{item['supports']} {item['confidence']} weight={item['evidence_weight']}] {item['claim']}")
+        print(
+            f"\n  [{item['supports']} {item['confidence']} weight={item['evidence_weight']}] {item['claim']}"
+        )
         for citation in item["citations"]:
             locator = citation["locator"]
             where = locator.get("section") or (f"page {locator['page']}" if locator.get("page") else "")

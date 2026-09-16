@@ -397,9 +397,10 @@ async def build_evidence(
 
     passages = "\n\n".join(
         f"[chunk_id: {hit.chunk_id}]\n"
-        f"Document: {hit.title} ({hit.external_id or hit.source}{' ' + hit.revision if hit.revision else ''}),"
+        f"Document: {hit.title} ({hit.external_id or hit.source} {hit.revision or ''}".rstrip()
+        + "),"
         f" published {hit.published_at.date().isoformat() if hit.published_at else 'on an undeclared date'},"
-        f" {('page ' + str(hit.locator.get('page'))) if hit.locator.get('page') else hit.section_path or ''}\n"
+        f" {'page ' + str(hit.locator['page']) if hit.locator.get('page') else hit.section_path or ''}\n"
         f"{hit.text[:2200]}"
         for hit in hits
     )

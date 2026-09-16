@@ -1,6 +1,7 @@
 # WattSteer LLM gateway: providers, limits and the fallback chain per task.
 # Validated by docs/rag/llm-gateway-config.schema.json. Keys never live here,
-# only the name of the environment variable that carries them.
+# only the name of the environment variable that carries them. When every key of
+# every link is spent, the caller gets `waiting_quota` with the instant to retry.
 #
 # Two providers, both free and neither asks for a card. NVIDIA does all the work;
 # Groq is the fallback for generation when every NVIDIA key is out of quota. One
@@ -32,10 +33,6 @@ providers:
     timeout_s: 45
     limits_per_model: # official free tier table, 15/09/2026, per organisation
       openai/gpt-oss-120b: { rpm: 30, rpd: 1000, tpm: 8000, tpd: 200000 }
-  local:
-    kind: local # poppler's text layer: no network, no quota, worse on scans
-    api_key_env: null
-    limits: { rpm: 600 }
 
 tasks:
   # Open models only. NIM ids confirmed on 15/09/2026 via GET /v1/models.
@@ -47,7 +44,6 @@ tasks:
     require: { json_schema: true }
     temperature: 0
     max_output_tokens: 1500
-    on_exhausted: waiting_quota # the job waits; never an error
   embed: # NEVER changes model at runtime: one vector space per index.
     # bge-m3, llama-nemotron-embed-1b-v2 and nv-embedqa-e5-v5 were retired by NIM
     # on 25/08/2026 (410 Gone). nemotron-3-embed-1b: 2048 dims, sliced to 1024 and
@@ -59,20 +55,11 @@ tasks:
     chain:
       - { provider: nvidia, model: nvidia/nemotron-3-embed-1b }
     batch_size: 32
-    on_exhausted: waiting_quota
   parse: # a PDF page as an image -> typed blocks with tables. 2.2 s/page measured on a real BDO.
     # The answer arrives as a `markdown_bbox` tool call: blocks (Page-header, Text,
     # Table, Page-footer) with a normalised bbox; tables in LaTeX tabular.
     chain:
       - { provider: nvidia, model: nvidia/nemotron-parse }
-      - { provider: local, model: pdftotext } # the text layer, when the page has one
-    on_exhausted: waiting_quota # a document is never lost: wait for quota or take the text layer
+    # A document is never lost: when no link can read a page, the parser keeps
+    # the page's text layer and records that it did.
 
-behaviour:
-  counters: memory # fixed windows per (provider, key, model): rpm, tpm, rpd, tpd
-  preflight: true # estimates tokens before choosing the link
-  cooling_s_default: 60 # after a 429/5xx/timeout without Retry-After
-  retry_same_link: 0 # never retries the same link; moves on with the SAME payload
-  invalid_json_counts_as_failure: true
-  log_table: rag.llm_call # provider, model, attempt, latency_ms, tokens_in/out, error, trace_id
-  quota_endpoint: /internal/llm/quota

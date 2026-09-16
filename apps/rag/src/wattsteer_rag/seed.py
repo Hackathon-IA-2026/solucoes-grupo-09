@@ -93,7 +93,8 @@ async def load(db: Database, path: Path = SEED_PATH, *, replace: bool = False) -
                     inserted = await conn.fetchval(
                         "INSERT INTO rag.document (id, source, external_id, revision, title, url,"
                         " published_at, fetched_at, sha256, bytes, mime, pages, status, needs_review, meta)"
-                        " VALUES ($1::uuid,$2,$3,$4,$5,$6,$7::timestamptz,$8::timestamptz,$9,$10,$11,$12,$13,$14,$15::jsonb)"
+                        " VALUES ($1::uuid,$2,$3,$4,$5,$6,$7::timestamptz,$8::timestamptz,"
+                        "$9,$10,$11,$12,$13,$14,$15::jsonb)"
                         " ON CONFLICT (source, sha256) DO NOTHING RETURNING 1",
                         record["id"],
                         record["source"],

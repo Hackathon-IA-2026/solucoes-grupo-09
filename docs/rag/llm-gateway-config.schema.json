@@ -5,7 +5,7 @@
   "description": "Configuration of the WattSteer model gateway (docs/rag/gateway.yaml): pluggable adapters, limits per provider and per model, a fallback chain per task. The application orchestrates the quotas; a free tier running out is never an error.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "providers", "tasks", "behaviour"],
+  "required": ["version", "providers", "tasks"],
   "properties": {
     "version": {
       "type": "integer",
@@ -21,7 +21,7 @@
         "properties": {
           "kind": {
             "type": "string",
-            "enum": ["openai_compatible", "local", "bedrock", "template"]
+            "enum": ["openai_compatible"]
           },
           "base_url": {
             "type": "string"
@@ -34,20 +34,6 @@
             "type": ["string", "null"],
             "description": "Name of the variable holding a POOL of comma separated keys (one per team member). Optional: a single key (or api_key_env) behaves the same, a pool of one is the base case. Resolution: api_keys_env, else api_key_env, else the provider is disabled and the chain skips to the next link. Every key has its own counters and cooling; the router picks the key with the most room and only moves to the next provider when every key is spent. Logs show a key only as key_id (first 8 hex of its sha256)."
           },
-          "key_selection": {
-            "type": "string",
-            "enum": ["least_loaded", "round_robin"],
-            "default": "least_loaded"
-          },
-          "limits_scope": {
-            "type": "string",
-            "enum": ["per_key", "per_provider"],
-            "default": "per_key",
-            "description": "per_key: the limits apply to each key of the pool (independent accounts). per_provider: the limit is shared (same account or organisation; Groq meters per organisation)."
-          },
-          "region": {
-            "type": "string"
-          },
           "timeout_s": {
             "type": "integer",
             "minimum": 1,
@@ -57,11 +43,6 @@
           "enabled": {
             "type": "boolean",
             "default": true
-          },
-          "budget_usd_day": {
-            "type": "number",
-            "minimum": 0,
-            "description": "Daily ceiling for paid links; once reached the link is exhausted until the reset (America/Sao_Paulo)."
           },
           "limits": {
             "$ref": "#/definitions/limits"
@@ -73,7 +54,8 @@
             }
           },
           "extra": {
-            "type": "object"
+            "type": "object",
+            "description": "Provider specific switches the adapter understands, for example thinking_toggle for NVIDIA."
           }
         }
       }
@@ -119,18 +101,11 @@
             "type": "integer",
             "minimum": 1
           },
-          "top_n": {
-            "type": "integer",
-            "minimum": 1
-          },
           "require": {
             "type": "object",
             "additionalProperties": false,
             "properties": {
               "json_schema": {
-                "type": "boolean"
-              },
-              "tools": {
                 "type": "boolean"
               }
             }
@@ -143,52 +118,7 @@
           "max_output_tokens": {
             "type": "integer",
             "minimum": 1
-          },
-          "on_exhausted": {
-            "type": "string",
-            "enum": ["waiting_quota", "template", "skip_rerank", "fail"],
-            "default": "waiting_quota"
           }
-        }
-      }
-    },
-    "behaviour": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "counters",
-        "preflight",
-        "cooling_s_default",
-        "retry_same_link",
-        "invalid_json_counts_as_failure",
-        "log_table",
-        "quota_endpoint"
-      ],
-      "properties": {
-        "counters": {
-          "type": "string",
-          "enum": ["redis", "memory"]
-        },
-        "preflight": {
-          "type": "boolean"
-        },
-        "cooling_s_default": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "retry_same_link": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 2
-        },
-        "invalid_json_counts_as_failure": {
-          "type": "boolean"
-        },
-        "log_table": {
-          "type": "string"
-        },
-        "quota_endpoint": {
-          "type": "string"
         }
       }
     }
