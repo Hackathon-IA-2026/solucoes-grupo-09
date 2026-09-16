@@ -186,3 +186,33 @@ def test_a_flattened_table_page_is_sent_to_the_vision_model():
     )
     assert looks_tabular(tabular)
     assert not looks_tabular(prose)
+
+
+def test_a_table_keeps_the_heading_that_names_it():
+    """The limits of section 5.4 are a table, and the only sentence that says
+    which line they belong to is the heading right above it. Split apart, the
+    heading is too short to stand and gets glued to the previous section, and
+    the table becomes numbers nobody can attribute."""
+    from wattsteer_rag.chunk import chunk_pages
+
+    table = "| Limite | Valor |\n| --- | --- |\n| Normal | 1200 MW |"
+    pages = [
+        {
+            "page_no": 7,
+            "markdown": (
+                "## 5.3. LIMITACAO ANTERIOR\n\nTexto da secao anterior, longo o bastante"
+                " para virar um chunk de corpo por si so, com mais de duzentos e oitenta"
+                " caracteres de conteudo real para nao ser absorvido por ninguem e assim"
+                " exercitar exatamente o caminho que interessa aqui.\n\n"
+                "## 5.4. LIMITACAO DA TRANSMISSAO NA LT 500 KV ACU III\n\n" + table
+            ),
+            "blocks": [],
+        }
+    ]
+    chunks = chunk_pages(pages)
+    with_table = [c for c in chunks if c.locator.get("table") == "table"]
+    assert with_table, "the table must still be locatable as a table"
+    assert "5.4. LIMITACAO DA TRANSMISSAO" in with_table[0].text
+    assert not any(
+        "5.4. LIMITACAO DA TRANSMISSAO" in c.text and "5.3. LIMITACAO ANTERIOR" in c.text for c in chunks
+    ), "the heading of 5.4 must not end up inside the chunk of 5.3"

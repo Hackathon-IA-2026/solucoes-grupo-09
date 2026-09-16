@@ -12,14 +12,16 @@ the model tried to say, and which gate refused it.
 from __future__ import annotations
 
 import logging
+import secrets
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from .config import settings
+from .console import page
 from .db import Database
 from .evidence import build_evidence, question_for
 from .gateway.router import Gateway, QuotaExhausted
@@ -43,12 +45,35 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(title="WattSteer RAG", version="0.1.0", lifespan=lifespan)
 
 
+@app.middleware("http")
+async def require_token(request, call_next):
+    """A shared secret, for when the service is not on the loopback address.
+
+    These routes run models and read the corpus, and none of them asks who is
+    calling. On 127.0.0.1 that is fine. Reachable from a network it is not, so
+    binding wider means setting WATTSTEER_RAG_ACCESS_TOKEN, and then nothing but
+    the health check answers without it.
+    """
+    token = settings().access_token
+    if token and request.url.path != "/health":
+        given = request.query_params.get("k") or request.headers.get("x-access-token") or ""
+        if not secrets.compare_digest(given, token):
+            return error("unauthorised", "This service needs an access token.", 401)
+    return await call_next(request)
+
+
 def error(code: str, message: str, status: int, **details) -> JSONResponse:
     """The gateway's envelope, so a client never has to learn a second shape."""
     return JSONResponse(
         status_code=status,
         content={"error": {"code": code, "message": message, "details": details or None}},
     )
+
+
+@app.get("/", response_class=HTMLResponse)
+async def console() -> str:
+    """The same debug routes, arranged so a person can use them."""
+    return page()
 
 
 @app.get("/health")
@@ -165,14 +190,23 @@ async def evidence(
 
 @app.get("/internal/rag/evidence")
 async def read_evidence(subsystem: str, target_date: str, limit: int = 10) -> dict:
-    """Published evidence, read from the table. No model runs here."""
+    """Published evidence, read from the table. No model runs here.
+
+    This is the route that matters for the product: `apps/api` reads what a job
+    wrote, and never calls a model to serve a page. It is also the only way to
+    look at an answer when the free tier has nothing left this minute.
+    """
+    try:
+        day = date.fromisoformat(target_date)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="target_date must be YYYY-MM-DD") from None
     pool = await state["db"].connect()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             "SELECT verdict, reason, payload, corpus_version, sha256, created_at FROM rag.evidence"
-            " WHERE subsystem = $1 AND target_date = $2::date ORDER BY created_at DESC LIMIT $3",
+            " WHERE subsystem = $1 AND target_date = $2 ORDER BY created_at DESC LIMIT $3",
             subsystem,
-            target_date,
+            day,
             limit,
         )
     return {"subsystem": subsystem, "target_date": target_date, "rows": [dict(row) for row in rows]}
