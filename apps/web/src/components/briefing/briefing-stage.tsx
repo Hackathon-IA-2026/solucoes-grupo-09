@@ -21,8 +21,8 @@ import {
   useReducedMotion,
 } from "@wattsteer/ui";
 import { Platform, Pressable, Text, View } from "react-native";
+import type { BriefingData } from "@/components/briefing/briefing-data";
 import { SceneRenderer } from "@/components/briefing/scene-renderer";
-import type { MapPaint } from "@/components/charts/subsystem-map";
 import { useCopy } from "@/i18n";
 import { fill } from "@/i18n/format";
 import type { BriefingCursor } from "@/lib/voice/briefing/clock";
@@ -41,7 +41,7 @@ export interface BriefingStageProps {
   readonly narration: string;
   /** True when no audio is playing, so the stage says why it is silent. */
   readonly silent: boolean;
-  readonly paint: MapPaint | null;
+  readonly data: BriefingData;
   readonly onDismiss: () => void;
 }
 
@@ -50,7 +50,7 @@ export function BriefingStage({
   cursor,
   narration,
   silent,
-  paint,
+  data,
   onDismiss,
 }: BriefingStageProps) {
   const colors = usePalette();
@@ -145,7 +145,7 @@ export function BriefingStage({
           key={reduced ? "static" : cursor.index}
           style={{ minHeight: 240, justifyContent: "center" }}
         >
-          <SceneRenderer scene={timed.scene} paint={paint} />
+          <SceneRenderer scene={timed.scene} data={data} />
         </View>
 
         {silent ? (

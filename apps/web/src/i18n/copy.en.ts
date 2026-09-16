@@ -578,9 +578,18 @@ export const en = {
     position: "Scene {index} of {total}",
     /** Shown when the browser refused to play audio, or the reader has it off. */
     silent: "No audio — the narration is written below.",
+    refusalTitle: "Nothing to present",
+    recommendationBody:
+      "Pre-position the flexibility across the window above. The plan is on Mitigate, against the fleet you described.",
     scenes: {
       title: "Briefing",
       mapFocus: "Where",
+      forecastCurve: "Hour by hour",
+      observedCurve: "What settled",
+      constraint: "Registered reasons",
+      counterfactual: "What if?",
+      recommendation: "Suggested action",
+      sources: "Sources",
     },
   },
   app: {

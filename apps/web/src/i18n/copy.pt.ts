@@ -454,9 +454,18 @@ export const pt: Copy = {
     position: "Cena {index} de {total}",
     /** Shown when the browser refused to play audio, or the reader has it off. */
     silent: "Sem áudio — a narração está escrita abaixo.",
+    refusalTitle: "Nada para apresentar",
+    recommendationBody:
+      "Pré-posicione a flexibilidade na janela acima. O plano está em Mitigar, com a frota que você descreveu.",
     scenes: {
       title: "Briefing",
       mapFocus: "Onde",
+      forecastCurve: "Hora a hora",
+      observedCurve: "O que foi liquidado",
+      constraint: "Motivos registrados",
+      counterfactual: "E se?",
+      recommendation: "Ação sugerida",
+      sources: "Fontes",
     },
   },
   app: {
