@@ -154,6 +154,10 @@ Status: `[ ]` not started · `[~]` in progress · `[x]` done
       · `8f159a5` + `89ab9c5` three of four ledes promised panels that were not
         there. ADR-0008 records it, because the Overview had already written the
         argument down and nobody had read it from the other three screens.
+- [ ] **19.** Máquina do tempo: no loading orb while the day loads, and the
+      data takes a long time to appear. Add the orb the other screens use and
+      profile the read. Queued after the landing/internal UI parity.
+
 - [ ] **16.** `better-ui` skill — apply to the project.
       ⛔ **Blocked on you.** No skill by that name exists publicly: not in
       `~/.claude/skills/`, not in `.claude/skills/`, and not found by GitHub

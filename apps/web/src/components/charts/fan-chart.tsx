@@ -134,9 +134,11 @@ export function FanChart({
         ))}
 
         <Path d={bandPath} fill="url(#fan-band)" />
+        {/* Lime on a violet band, as the landing draws it. Violet-on-violet
+            put the P50 inside its own band and left it barely readable. */}
         <Path
           d={medianPath}
-          stroke={colors.violet}
+          stroke={colors.accent}
           strokeWidth={2.5}
           fill="none"
           strokeLinejoin="round"
@@ -144,7 +146,7 @@ export function FanChart({
         {observedPath === null ? null : (
           <Path
             d={observedPath}
-            stroke={colors.accent}
+            stroke={colors.ink}
             strokeWidth={2.5}
             fill="none"
             strokeLinejoin="round"
@@ -285,9 +287,9 @@ function Legend({
         marginTop: 10,
       }}
     >
-      <Swatch color={colors.violet} label={copy.app.fan.medianLegend} />
+      <Swatch color={colors.accent} label={copy.app.fan.medianLegend} />
       <Swatch color={colors.violet} label={copy.app.fan.bandLegend} faded={true} />
-      {hasObserved ? <Swatch color={colors.accent} label={observedLabel} /> : null}
+      {hasObserved ? <Swatch color={colors.ink} label={observedLabel} /> : null}
       <RnText style={{ fontSize: 11, color: colors.inkFaint }}>
         {copy.app.fan.hint}
       </RnText>
