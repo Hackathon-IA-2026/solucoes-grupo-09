@@ -92,6 +92,24 @@ export default function ExplainScreen() {
     locale: languageTag(locale),
   });
 
+  /**
+   * Whether there is a diagnosis to describe, which the lede turns on.
+   *
+   * The Overview draws this same line and says why: its forecast lede promises
+   * "every figure is a P10/P50/P90 interval", which is true of the forecast
+   * panels and flatly false of the observed ones. This screen had the identical
+   * problem and only half the fix — `absentNote` says there is nothing to
+   * explain, but it says it three panels down, while the lede at the top went on
+   * promising "what the model is reading" on a deployment where nothing is
+   * promoted.
+   *
+   * Non-diagnosed covers `reading` and `refused` as well as an answered day
+   * with no forecast in it, which is the same reading the Overview takes: the
+   * specific statement is the body's job, and the lede's job is not to promise
+   * a panel that is not there.
+   */
+  const diagnosed = state.status === "explained" && state.day !== null;
+
   const frame = (right: ReactNode, body: ReactNode) => (
     <>
       <Head>
@@ -101,7 +119,9 @@ export default function ExplainScreen() {
       <AppShell>
         <ScreenTitle
           title={fill(copy.app.explain.title, { subsystem: meta.onsDisplayName })}
-          lede={fill(copy.app.explain.lede, { date: f.date(params.date) })}
+          lede={fill(diagnosed ? copy.app.explain.lede : copy.app.explain.ledeAbsent, {
+            date: f.date(params.date),
+          })}
           right={right}
         />
         {body}

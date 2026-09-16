@@ -824,6 +824,8 @@ export const pt: Copy = {
       metaTitle: "Explicar — WattSteer",
       title: "Por que {subsystem}?",
       lede: "O que o modelo está lendo em {date}, e quanto disso vale acreditar.",
+      ledeAbsent:
+        "O que o ONS registrou em {date}. Nenhum modelo está promovido, então não há diagnóstico — apenas o que foi observado.",
       riskTitle: "Risco de curtailment",
       riskSubtitle: "P(qualquer hora acima do limiar)",
       magnitude: "Magnitude esperada, dia inteiro",

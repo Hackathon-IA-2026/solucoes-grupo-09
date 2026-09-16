@@ -218,6 +218,51 @@ describe("the chrome badge is a fact, not a label", () => {
   });
 });
 
+describe("a lede never promises a panel that is not there", () => {
+  it("Explain switches its lede on whether there is a diagnosis", () => {
+    /*
+      The Overview already draws this line and its copy says why: a forecast
+      lede promising "every figure is a P10/P50/P90 interval" is true of the
+      forecast panels and flatly false of the observed ones, and it is the
+      first line a reader meets.
+
+      Explain had the identical problem and only half the fix. `absentNote`
+      says there is nothing to explain — three panels down — while the lede at
+      the top went on promising "what the model is reading" on a deployment
+      where nothing has been promoted for weeks. Two sibling screens in the
+      same state, disagreeing about whether to admit it.
+    */
+    expect(EXPLAIN).toContain(
+      'const diagnosed = state.status === "explained" && state.day !== null',
+    );
+    expect(EXPLAIN).toContain(
+      "diagnosed ? copy.app.explain.lede : copy.app.explain.ledeAbsent",
+    );
+  });
+
+  it("both screens carry both ledes, in both locales", () => {
+    for (const locale of ["copy.en.ts", "copy.pt.ts"] as const) {
+      const dict = read("i18n", locale);
+      // The Overview's pair, which is the precedent.
+      expect(dict).toContain("ledeObserved:");
+      // Explain's, which now matches it.
+      expect(dict).toContain("ledeAbsent:");
+    }
+  });
+
+  it("the absent lede does not itself claim a model", () => {
+    // Non-vacuity: a fallback that still says "the model" would have fixed
+    // nothing. Checked against the rendered strings, comments stripped.
+    for (const locale of ["copy.en.ts", "copy.pt.ts"] as const) {
+      const dict = code(read("i18n", locale));
+      const line = dict.split("\n").find((row) => row.includes("ledeAbsent:")) ?? "";
+      const value = dict.slice(dict.indexOf(line)).split("\n").slice(0, 3).join(" ");
+      expect(value).not.toContain("the model is reading");
+      expect(value).not.toContain("o modelo está lendo");
+    }
+  });
+});
+
 describe("a selector that cannot move anything says so", () => {
   it("the D−1 run pills go inert when no lane is promoted", () => {
     /*

@@ -1118,6 +1118,19 @@ export const en = {
       metaTitle: "Explain — WattSteer",
       title: "Why {subsystem}?",
       lede: "What the model is reading on {date}, and how much of it to believe.",
+      /*
+        The lede when there is no diagnosis, for the reason
+        `overview.ledeObserved` gives about its own pair: the lede above
+        promises "what the model is reading", which is flatly false on a
+        deployment where nothing is promoted — and it is the first line a reader
+        meets, so it is the first thing that has to be right.
+
+        The body already says this in `absentNote`, three panels down. Saying it
+        in the lede is not a repetition: it is the difference between a reader
+        learning it before they start reading and learning it after.
+      */
+      ledeAbsent:
+        "What ONS recorded for {date}. No model is promoted, so there is no diagnosis — only what was observed.",
       riskTitle: "Curtailment risk",
       riskSubtitle: "P(any hour above threshold)",
       magnitude: "Expected magnitude, whole day",
