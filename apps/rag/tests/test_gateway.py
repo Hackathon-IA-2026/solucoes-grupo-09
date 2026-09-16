@@ -85,9 +85,7 @@ def test_the_router_moves_to_the_next_key_then_the_next_provider(config):
     import asyncio
 
     with pytest.raises(QuotaExhausted):
-        asyncio.run(
-            gateway.run("generate_strong", tokens=10, messages=[{"role": "user", "content": "x"}])
-        )
+        asyncio.run(gateway.run("generate_strong", tokens=10, messages=[{"role": "user", "content": "x"}]))
     tried = [(call["provider"], call["key_id"]) for call in gateway.calls]
     assert len({key for _, key in tried if key}) == 3  # two alpha keys, one beta
     assert [provider for provider, _ in tried][:2] == ["alpha", "alpha"]
@@ -99,9 +97,7 @@ def test_an_embed_chain_may_not_mix_models(tmp_path, monkeypatch):
     monkeypatch.setenv("K", "k")
     path = tmp_path / "bad.yaml"
     path.write_text(
-        CONFIG.replace(
-            "      - { provider: beta, model: e-1 }", "      - { provider: beta, model: e-2 }"
-        )
+        CONFIG.replace("      - { provider: beta, model: e-1 }", "      - { provider: beta, model: e-2 }")
     )
     with pytest.raises(ValueError, match="vector spaces"):
         Gateway(path)
@@ -142,9 +138,7 @@ def test_latex_tables_become_readable_rows():
 
 
 def test_a_table_of_contents_is_recognised():
-    assert is_table_of_contents(
-        "1. OBJETIVO ..... 3\n2. CONCEITOS ..... 3\n3. PROCEDIMENTOS ..... 4"
-    )
+    assert is_table_of_contents("1. OBJETIVO ..... 3\n2. CONCEITOS ..... 3\n3. PROCEDIMENTOS ..... 4")
     assert not is_table_of_contents("Controlar a tensão de 230 kV conforme os limites da tabela")
 
 
@@ -161,3 +155,31 @@ def test_chunks_carry_a_locator_and_never_split_a_table():
     assert any(chunk.locator.get("table") == "table" for chunk in chunks)
     assert all(chunk.locator.get("page") == 6 for chunk in chunks)
     assert any((chunk.section_path or "").startswith("5.1") for chunk in chunks)
+
+
+def test_a_flattened_table_page_is_sent_to_the_vision_model():
+    """The text layer of an operating instruction is columns, not rows."""
+    from wattsteer_rag.parse import looks_tabular
+
+    tabular = "\n".join(
+        [
+            "Passo     Coordenação      Controle        Procedimento",
+            "1         COSR-NE          COSR-NE         Controlar a tensão de 230 kV",
+            "          PSNB ≤ 260 MW    VSNB ≥ 230 kV   -",
+            "2         COSR-NE          COSR-NE         Monitorar a inequação",
+            "          PSNB ≤ 280 MW    VSNB ≥ 237 kV   -",
+            "3         COSR-NE          COSR-NE         Acionar o esquema",
+        ]
+    )
+    prose = "\n".join(
+        [
+            "A perturbação teve início às 08h30min do dia 15 de agosto de 2023.",
+            "O relatório descreve a sequência de eventos registrada pelos agentes.",
+            "As providências foram encaminhadas aos agentes envolvidos na análise.",
+            "O documento consolida as contribuições recebidas no prazo estabelecido.",
+            "A metodologia segue o submódulo aplicável dos Procedimentos de Rede.",
+            "As conclusões constam do capítulo final deste relatório.",
+        ]
+    )
+    assert looks_tabular(tabular)
+    assert not looks_tabular(prose)

@@ -202,3 +202,7 @@ def main() -> None:
 
     conf = settings()
     uvicorn.run(app, host=conf.host, port=conf.port)
+
+
+if __name__ == "__main__":  # `python -m wattsteer_rag.app`
+    main()

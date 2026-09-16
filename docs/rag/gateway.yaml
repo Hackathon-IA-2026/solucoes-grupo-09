@@ -17,7 +17,14 @@ providers:
     limits_scope: per_key
     timeout_s: 60
     limits: { rpm: 30, tpm: 60000, rpd: 4000 }          # não publicado; relatos de ~40 RPM por conta
+    limits_per_model:
+      # Medido em 15/09: o teto de tokens por minuto acima travava a indexação em
+      # três lotes por rodada, e nenhum 429 apareceu. Aqui o que limita é a taxa
+      # de requisições; se vier 429, o cooling do roteador cuida.
+      nvidia/nemotron-3-embed-1b: { rpm: 30, rpd: 4000 }
+      nvidia/nemotron-parse:      { rpm: 30, rpd: 4000 }
     extra:
+      thinking_toggle: true            # NVIDIA aceita chat_template_kwargs; Groq responde 400
       rerank_base_url: https://ai.api.nvidia.com/v1/retrieval   # rerankers usam outra raiz
   groq:
     kind: openai_compatible

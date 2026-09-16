@@ -79,6 +79,16 @@ class Database:
             out["error"] = f"{type(exc).__name__}: {exc}"
         return out
 
+    async def counts(self) -> dict[str, int]:
+        pool = await self.connect()
+        async with pool.acquire() as conn:
+            return {
+                "documents": await conn.fetchval("SELECT count(*) FROM rag.document"),
+                "pages": await conn.fetchval("SELECT count(*) FROM rag.page"),
+                "chunks": await conn.fetchval("SELECT count(*) FROM rag.chunk"),
+                "embedded": await conn.fetchval("SELECT count(*) FROM rag.chunk WHERE embedding IS NOT NULL"),
+            }
+
     async def corpus_version(self) -> str:
         """Identifies the corpus a piece of evidence was built from."""
         pool = await self.connect()

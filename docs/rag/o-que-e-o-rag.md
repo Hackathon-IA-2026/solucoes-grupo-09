@@ -60,16 +60,32 @@ Toda resposta passa por estas travas antes de existir:
 | Um título de seção sozinho não vale | citação que não diz nada |
 | Só documentos publicados antes da decisão | explicar o passado com papel do futuro |
 
+## 4.1 Uma observação honesta sobre citação em tabela
+
+As instruções de operação guardam os limites em tabelas grandes. Ali, a evidência
+que uma pessoa apontaria são duas partes da mesma tabela: a célula que nomeia o
+controle e a linha que traz os números, que quase nunca ficam lado a lado. Exigir
+um trecho contínuo seria recusar praticamente toda citação de tabela.
+
+Então a regra é: em texto corrido, a citação tem de ser contínua; em tabela, ela
+pode pular células, **desde que os pedaços apareçam na mesma ordem do documento**,
+e a citação sai marcada como montada, para a tela poder dizer isso a quem lê.
+Inverter a ordem continua sendo recusado, porque inverter muda o que a tabela diz.
+
 ## 5. O que já existe hoje
 
 | Fonte | O que é | Quanto |
 | --- | --- | --- |
-| Instruções de Operação | onde os limites estão escritos | 2 documentos, 20 páginas |
-| Boletim Diário da Operação | os números do dia, em tabelas | 26 tabelas do dia 14/09 |
-| IPDO | o informativo preliminar do dia | 2 edições |
-| Relatório de Análise de Perturbação | a análise de um evento grande | 1 documento (572 páginas) |
+| Instruções de Operação | onde os limites estão escritos | 6 documentos, 93 páginas |
+| Procedimentos de Rede | as regras gerais que citamos | 4 submódulos, 40 páginas |
+| Boletim Diário da Operação | os números do dia, em tabelas | 10 dias, 250 tabelas |
+| IPDO | o informativo preliminar do dia | 19 edições |
+| Relatório de Análise de Perturbação | a análise de um evento grande | 1 documento |
 
-São 349 trechos indexados e pesquisáveis.
+São 281 documentos, 816 páginas e **2.786 trechos** indexados e pesquisáveis.
+
+Nada disso viaja dentro do repositório: quem instala constrói o acervo na própria
+máquina, com um comando, e pode parar e retomar quando quiser.
 
 **Teste com registros reais.** Montamos a avaliação a partir dos próprios
 registros de corte publicados pelo ONS, não de perguntas inventadas. Resultado:
@@ -85,9 +101,12 @@ registros de corte publicados pelo ONS, não de perguntas inventadas. Resultado:
 
 O sistema só usa modelos de inteligência artificial abertos, nas infraestruturas
 da NVIDIA, da Groq e da AWS, todos em planos gratuitos. E ele evita gastar quando
-não precisa: das 112 páginas lidas até agora, 90 foram lidas de graça (o texto já
-estava no arquivo) e só 22 precisaram do modelo de visão, que são justamente as
-páginas publicadas como imagem.
+não precisa: das 816 páginas lidas, 788 foram lidas de graça (o texto já estava
+no arquivo) e só 28 precisaram do modelo de visão, que são justamente as páginas
+publicadas como imagem.
+
+Para funcionar, alguém precisa cadastrar uma chave gratuita da NVIDIA ou do Groq.
+Isso é obrigatório e o instalador avisa em letras grandes se a chave faltar.
 
 Quando a cota gratuita acaba, o serviço não quebra: ele registra "aguardando
 cota" com a hora em que pode continuar, e retoma sozinho. Isso aconteceu de

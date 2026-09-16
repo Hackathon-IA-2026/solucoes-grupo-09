@@ -105,6 +105,9 @@ def to_or_tsquery(question: str) -> str:
     return " | ".join(term for term in escaped if term) or "restricao"
 
 
+_VECTOR_SPACE_CHECKED = False
+
+
 async def search(
     db: Database,
     gateway: Gateway,
@@ -114,9 +117,17 @@ async def search(
     sources: list[str] | None = None,
     limit: int | None = None,
 ) -> list[Hit]:
+    global _VECTOR_SPACE_CHECKED
     pool = await db.connect()
     conf = settings()
     limit = limit or conf.rerank_top_n
+    if not _VECTOR_SPACE_CHECKED:
+        # Comparing a query vector against chunks embedded by another model
+        # produces distances that mean nothing, so this fails closed, once.
+        from .index import assert_single_vector_space
+
+        await assert_single_vector_space(db)
+        _VECTOR_SPACE_CHECKED = True
 
     # The index of a document is not evidence, and it beats the body on keywords.
     filters = ["coalesce(c.locator->>'kind', 'body') <> 'toc'"]

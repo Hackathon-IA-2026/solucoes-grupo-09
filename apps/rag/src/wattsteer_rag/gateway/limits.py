@@ -8,8 +8,10 @@ which is what keeps a five person team from being limited to one person's quota.
 A pool of one key behaves exactly like a single key. That is deliberate: nobody
 should be blocked from developing because the rest of the team has not signed up.
 
-Counters are fixed windows in Redis when a Redis URL is configured, and in
-process memory otherwise. Fixed windows can let a burst through at a boundary;
+Counters are fixed windows in process memory. That is honest only for a single
+replica: two processes each start their own count, so the pool can exceed the
+provider's real limit. Sharing them in Redis is the next step and the reason the
+configuration already carries a Redis URL. Fixed windows can let a burst through at a boundary;
 the alternative costs a sorted set per call and buys us nothing here, because
 the providers themselves reset on the minute.
 """
@@ -68,6 +70,7 @@ class Window:
     seconds: int
     used: int = 0
     resets_at: float = 0.0
+    daily: bool = False  # a daily window resets at midnight, not every 24h
 
     def room(self, cost: int, now: float) -> bool:
         if now >= self.resets_at:
@@ -77,7 +80,9 @@ class Window:
     def take(self, cost: int, now: float) -> None:
         if now >= self.resets_at:
             self.used = 0
-            self.resets_at = now + self.seconds
+            # Recomputed rather than reused: keeping the original span would make
+            # a window created at noon reset at noon forever.
+            self.resets_at = now + (_day_seconds(now) if self.daily else self.seconds)
         self.used += cost
 
     def next_reset(self, now: float) -> float:
@@ -150,10 +155,10 @@ class Ledger:
             self.state[key] = SlotState(
                 rpm=Window(limits["rpm"], 60, resets_at=now + 60) if limits.get("rpm") else None,
                 tpm=Window(limits["tpm"], 60, resets_at=now + 60) if limits.get("tpm") else None,
-                rpd=Window(limits["rpd"], _day_seconds(now), resets_at=now + _day_seconds(now))
+                rpd=Window(limits["rpd"], _day_seconds(now), resets_at=now + _day_seconds(now), daily=True)
                 if limits.get("rpd")
                 else None,
-                tpd=Window(limits["tpd"], _day_seconds(now), resets_at=now + _day_seconds(now))
+                tpd=Window(limits["tpd"], _day_seconds(now), resets_at=now + _day_seconds(now), daily=True)
                 if limits.get("tpd")
                 else None,
             )

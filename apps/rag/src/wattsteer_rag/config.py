@@ -11,7 +11,17 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
+
+def _repo_root() -> Path:
+    """Works from the checkout (apps/rag/src/wattsteer_rag) and from the image (/app/src/...)."""
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        if (parent / "docs" / "rag" / "gateway.yaml").exists() or (parent / "apps" / "rag").is_dir():
+            return parent
+    return here.parents[min(2, len(here.parents) - 1)]
+
+
+REPO_ROOT = _repo_root()
 
 
 class Settings(BaseSettings):

@@ -61,7 +61,13 @@ async def index_document(
             "INSERT INTO rag.chunk (document_id, ordinal, page_start, page_end, section_path, locator,"
             " text, tokens) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8)"
             " ON CONFLICT (document_id, ordinal) DO UPDATE SET text = excluded.text,"
-            " locator = excluded.locator, section_path = excluded.section_path",
+            " locator = excluded.locator, section_path = excluded.section_path,"
+            # A vector describes the text it was made from. When the text changes
+            # the old vector is not stale, it is wrong, so it goes back in the queue.
+            " embedding = CASE WHEN rag.chunk.text IS DISTINCT FROM excluded.text"
+            "   THEN NULL ELSE rag.chunk.embedding END,"
+            " embedding_model = CASE WHEN rag.chunk.text IS DISTINCT FROM excluded.text"
+            "   THEN NULL ELSE rag.chunk.embedding_model END",
             [
                 (
                     document_id,
@@ -106,19 +112,14 @@ async def embed_pending(
         async with pool.acquire() as conn:
             await conn.executemany(
                 "UPDATE rag.chunk SET embedding = $2::vector, embedding_model = $3 WHERE id = $1",
-                [
-                    (row["id"], to_pgvector(vector), model)
-                    for row, vector in zip(rows, vectors, strict=True)
-                ],
+                [(row["id"], to_pgvector(vector), model) for row, vector in zip(rows, vectors, strict=True)],
             )
         done += len(rows)
         if limit and done >= limit:
             break
     if document_id and waiting is None:
         async with pool.acquire() as conn:
-            await conn.execute(
-                "UPDATE rag.document SET status = 'indexed' WHERE id = $1", document_id
-            )
+            await conn.execute("UPDATE rag.document SET status = 'indexed' WHERE id = $1", document_id)
     return {"embedded": done, "waiting_quota_until": waiting}
 
 

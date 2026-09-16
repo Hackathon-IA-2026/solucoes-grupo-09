@@ -24,6 +24,17 @@ from .limits import KeySlot, Ledger, load_keys
 log = logging.getLogger("wattsteer_rag.gateway")
 
 DEFAULT_COOLING_S = 60.0
+# A quota answers 429 and recovers; these say the request itself is wrong.
+NON_RETRYABLE = {400, 401, 403, 404, 405, 410, 422}
+
+
+class ProviderRefused(Exception):
+    """A link that will keep refusing: a bad key, an unknown model, a bad request.
+
+    Telling this apart from a spent quota matters. A wrong model name that is
+    treated as "no quota left" burns every key in the pool and then reports a
+    delay, when the honest answer is that the configuration is wrong.
+    """
 
 
 class QuotaExhausted(Exception):
@@ -99,9 +110,15 @@ class Gateway:
             if kind == "openai_compatible":
                 base = _expand(spec.get("base_url", ""))
                 adapter: Any = OpenAICompatibleAdapter(
-                    name, base, float(spec.get("timeout_s", 60)), self.user_agent
+                    name,
+                    base,
+                    float(spec.get("timeout_s", 60)),
+                    self.user_agent,
+                    thinking_toggle=bool((spec.get("extra") or {}).get("thinking_toggle")),
                 )
             elif kind == "local":
+                # Poppler, not Docling. The chain used to name a dependency that
+                # was never installed, which is a promise the fallback cannot keep.
                 adapter = PopplerAdapter()
                 keys = keys or [KeySlot(provider=name, secret="local")]
             else:
@@ -184,6 +201,7 @@ class Gateway:
         task = self.tasks[task_name]
         attempts = 0
         soonest = float("inf")
+        refusals: list[str] = []
         client = await self.client()
 
         for link, provider in self.usable_links(task_name):
@@ -202,10 +220,15 @@ class Gateway:
                 try:
                     value, usage = await self._invoke(task, link, provider, slot, client, **kwargs)
                 except ProviderError as exc:
-                    state = self.ledger.slot(provider.name, slot.id, model)
-                    state.cool(exc.retry_after or DEFAULT_COOLING_S, time.time())
                     self._record(task_name, provider.name, slot.id, model, attempts, 0, 0, str(exc))
                     log.warning("gateway %s %s key=%s: %s", task_name, model, slot.id, exc)
+                    if exc.status in NON_RETRYABLE:
+                        # Not a quota problem: the same request will fail on every
+                        # key. Disable the link for this run and move on.
+                        refusals.append(f"{provider.name}:{model} HTTP {exc.status}")
+                        break
+                    state = self.ledger.slot(provider.name, slot.id, model)
+                    state.cool(exc.retry_after or DEFAULT_COOLING_S, time.time())
                     continue  # another key of the same link, then the next link
                 latency = int((time.perf_counter() - started) * 1000)
                 tokens_in = int(usage.get("prompt_tokens") or 0)
@@ -213,9 +236,7 @@ class Gateway:
                 self.ledger.slot(provider.name, slot.id, model).record(
                     max(tokens, tokens_in + tokens_out), time.time()
                 )
-                self._record(
-                    task_name, provider.name, slot.id, model, attempts, tokens_in, tokens_out, None
-                )
+                self._record(task_name, provider.name, slot.id, model, attempts, tokens_in, tokens_out, None)
                 return Result(
                     value=value,
                     provider=provider.name,
@@ -227,11 +248,18 @@ class Gateway:
                     tokens_out=tokens_out,
                 )
 
-        raise QuotaExhausted(task_name, soonest if soonest != float("inf") else time.time() + 60)
+        retry_at = soonest if soonest != float("inf") else time.time() + 60
+        if task.on_exhausted == "skip_rerank":
+            return Result(None, "none", "", "", attempts, 0, source="skipped")
+        if task.on_exhausted == "template":
+            return Result(None, "template", "", "", attempts, 0, source="template")
+        if task.on_exhausted == "fail" or (refusals and soonest == float("inf")):
+            raise ProviderRefused(
+                f"{task_name}: every link refused ({'; '.join(refusals) or 'no link usable'})"
+            )
+        raise QuotaExhausted(task_name, retry_at)
 
-    async def _invoke(
-        self, task: Task, link: Link, provider: Provider, slot: KeySlot, client, **kwargs
-    ):
+    async def _invoke(self, task: Task, link: Link, provider: Provider, slot: KeySlot, client, **kwargs):
         model = link.model or task.model or ""
         if task.name == "embed":
             return await provider.adapter.embed(
@@ -244,9 +272,7 @@ class Gateway:
         if task.name == "parse":
             if provider.kind == "local":
                 return provider.adapter.parse_pdf_page(kwargs["pdf_path"], kwargs["page"]), {}
-            return await provider.adapter.parse_page(
-                client, slot.secret, model=model, image=kwargs["image"]
-            )
+            return await provider.adapter.parse_page(client, slot.secret, model=model, image=kwargs["image"])
         return await provider.adapter.chat(
             client,
             slot.secret,
@@ -300,4 +326,4 @@ def _expand(value: str) -> str:
     return _re.sub(r"\$\{([^}]+)\}", replace, value)
 
 
-__all__ = ["Gateway", "QuotaExhausted", "Result", "Block", "ProviderError"]
+__all__ = ["Gateway", "QuotaExhausted", "ProviderRefused", "Result", "Block", "ProviderError"]

@@ -95,10 +95,7 @@ def chunk_pages(pages: list[dict]) -> list[Chunk]:
                     # Too small to stand alone: attach to the previous chunk of
                     # the same page rather than emit a citation nobody can use.
                     previous = chunks[-1]
-                    if (
-                        previous.page_end == page["page_no"]
-                        and len(previous.text) + len(piece) < MAX_CHARS
-                    ):
+                    if previous.page_end == page["page_no"] and len(previous.text) + len(piece) < MAX_CHARS:
                         previous.text = f"{previous.text}\n\n{piece}"
                         continue
                 ordinal += 1

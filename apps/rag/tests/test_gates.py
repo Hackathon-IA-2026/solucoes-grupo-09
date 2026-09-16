@@ -61,13 +61,9 @@ def test_quote_must_exist_in_the_chunk():
 
 
 def test_table_syntax_does_not_break_a_real_quote():
-    quote = (
-        "Controlar a tensão de 230 kV da SE Senhor do Bonfim II, de acordo com os limites abaixo"
-    )
+    quote = "Controlar a tensão de 230 kV da SE Senhor do Bonfim II, de acordo com os limites abaixo"
     accepted, failures = check_claim(
-        claim_with(
-            quote, "O documento manda controlar a tensão de 230 kV da SE Senhor do Bonfim II"
-        ),
+        claim_with(quote, "O documento manda controlar a tensão de 230 kV da SE Senhor do Bonfim II"),
         {"c1": hit()},
     )
     assert accepted is not None, failures
@@ -75,9 +71,7 @@ def test_table_syntax_does_not_break_a_real_quote():
 
 
 def test_a_number_the_quote_does_not_carry_is_refused():
-    quote = (
-        "Controlar a tensão de 230 kV da SE Senhor do Bonfim II, de acordo com os limites abaixo"
-    )
+    quote = "Controlar a tensão de 230 kV da SE Senhor do Bonfim II, de acordo com os limites abaixo"
     accepted, failures = check_claim(
         claim_with(quote, "O limite e de 999 MW na SE Senhor do Bonfim II conforme o documento"),
         {"c1": hit()},
@@ -87,9 +81,7 @@ def test_a_number_the_quote_does_not_carry_is_refused():
 
 
 def test_causal_language_is_refused():
-    quote = (
-        "Controlar a tensão de 230 kV da SE Senhor do Bonfim II, de acordo com os limites abaixo"
-    )
+    quote = "Controlar a tensão de 230 kV da SE Senhor do Bonfim II, de acordo com os limites abaixo"
     accepted, failures = check_claim(
         claim_with(quote, "A restrição foi causada por limitação na SE Senhor do Bonfim II"),
         {"c1": hit()},
@@ -100,9 +92,7 @@ def test_causal_language_is_refused():
 
 def test_a_heading_alone_is_not_evidence():
     accepted, failures = check_claim(
-        claim_with(
-            "5.1. Limitação do Fluxo Senhor do Bonfim II", "O documento traz a seção de limitação"
-        ),
+        claim_with("5.1. Limitação do Fluxo Senhor do Bonfim II", "O documento traz a seção de limitação"),
         {"c1": hit(text="5.1. Limitação do Fluxo Senhor do Bonfim II")},
     )
     assert accepted is None
@@ -110,9 +100,7 @@ def test_a_heading_alone_is_not_evidence():
 
 
 def test_a_citation_with_no_locator_is_refused():
-    quote = (
-        "Controlar a tensão de 230 kV da SE Senhor do Bonfim II, de acordo com os limites abaixo"
-    )
+    quote = "Controlar a tensão de 230 kV da SE Senhor do Bonfim II, de acordo com os limites abaixo"
     accepted, failures = check_claim(claim_with(quote), {"c1": hit(locator={})})
     assert accepted is None
     assert any(failure.code == "locator_missing" for failure in failures)
@@ -120,12 +108,8 @@ def test_a_citation_with_no_locator_is_refused():
 
 def test_rel_never_claims_high_confidence():
     """No public intervention schedule exists, so REL cannot be settled by a document."""
-    quote = (
-        "Controlar a tensão de 230 kV da SE Senhor do Bonfim II, de acordo com os limites abaixo"
-    )
-    item = claim_with(
-        quote, "O documento registra o procedimento de controle na SE Senhor do Bonfim II"
-    )
+    quote = "Controlar a tensão de 230 kV da SE Senhor do Bonfim II, de acordo com os limites abaixo"
+    item = claim_with(quote, "O documento registra o procedimento de controle na SE Senhor do Bonfim II")
     item["supports"] = "REL"
     accepted, _ = check_claim(item, {"c1": hit()})
     assert accepted is not None
@@ -157,9 +141,7 @@ def test_has_substance():
 
 
 def test_question_carries_the_cited_codes():
-    question = question_for(
-        "NE", "2026-09-14", "CNF", "Controle de inequação: LIMITE - IO-ON.NE.2SO"
-    )
+    question = question_for("NE", "2026-09-14", "CNF", "Controle de inequação: LIMITE - IO-ON.NE.2SO")
     assert "IO-ON.NE.2SO" in question
     assert "CNF" in question
 
@@ -169,3 +151,42 @@ def test_or_tsquery_keeps_codes_and_drops_noise():
     assert "IO-ON.NE.2SO" in query
     assert " | " in query
     assert "que" not in query.split(" | ")
+
+
+TABLE_CHUNK = (
+    "| 1 | COSR-NE | Controlar a tensão de 230 kV da SE Senhor do Bonfim II, de acordo com os limites abaixo: "
+    "| - Evitar colapso de tensão |\n| | | PSNB | Tensão | QSNB |\n| | | PSNB ≤ 260 MW | VSNB ≥ 230 kV | - |"
+)
+
+
+def test_a_table_citation_may_skip_cells_but_not_reorder_them():
+    """The row that names the control and the row that carries the limit are the
+    citation a person would point at, and they are never adjacent in a table."""
+    quote = "Controlar a tensão de 230 kV da SE Senhor do Bonfim II, de acordo com os limites abaixo: | PSNB ≤ 260 MW | VSNB ≥ 230 kV"
+    accepted, failures = check_claim(
+        claim_with(quote, "O documento estabelece VSNB ≥ 230 kV para PSNB ≤ 260 MW"),
+        {"c1": hit(text=TABLE_CHUNK, locator={"page": 6, "section": "5.1", "table": "table"})},
+    )
+    assert accepted is not None, failures
+    assert accepted["citations"][0]["assembled"] is True
+
+
+def test_reordering_the_cells_is_still_refused():
+    quote = "PSNB ≤ 260 MW | VSNB ≥ 230 kV | Controlar a tensão de 230 kV da SE Senhor do Bonfim II"
+    accepted, failures = check_claim(
+        claim_with(quote, "O documento estabelece o controle de tensão na SE Senhor do Bonfim II"),
+        {"c1": hit(text=TABLE_CHUNK, locator={"page": 6, "table": "table"})},
+    )
+    assert accepted is None
+    assert any(failure.code == "quote_not_in_chunk" for failure in failures)
+
+
+def test_prose_still_requires_a_contiguous_span():
+    prose = "O procedimento estabelece o controle de tensão na área. Outra frase qualquer no meio. E o limite de 260 MW."
+    quote = "O procedimento estabelece o controle de tensão na área. E o limite de 260 MW."
+    accepted, failures = check_claim(
+        claim_with(quote, "O documento estabelece controle de tensão com limite de 260 MW"),
+        {"c1": hit(text=prose, locator={"page": 3, "section": "5"})},
+    )
+    assert accepted is None
+    assert any(failure.code == "quote_not_in_chunk" for failure in failures)

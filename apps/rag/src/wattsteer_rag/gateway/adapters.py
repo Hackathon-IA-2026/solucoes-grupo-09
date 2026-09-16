@@ -21,9 +21,7 @@ import httpx
 class ProviderError(Exception):
     """A call that failed in a way the router can react to."""
 
-    def __init__(
-        self, message: str, *, status: int | None = None, retry_after: float | None = None
-    ):
+    def __init__(self, message: str, *, status: int | None = None, retry_after: float | None = None):
         super().__init__(message)
         self.status = status
         self.retry_after = retry_after
@@ -65,12 +63,21 @@ class OpenAICompatibleAdapter:
     """Anything that speaks /v1/chat/completions and /v1/embeddings."""
 
     def __init__(
-        self, name: str, base_url: str, timeout_s: float = 60.0, user_agent: str = "wattsteer-rag"
+        self,
+        name: str,
+        base_url: str,
+        timeout_s: float = 60.0,
+        user_agent: str = "wattsteer-rag",
+        thinking_toggle: bool = False,
     ):
         self.name = name
         self.base_url = base_url.rstrip("/")
         self.timeout_s = timeout_s
         self.user_agent = user_agent
+        # Nemotron reasons out loud unless told not to, and the knob to tell it is
+        # NVIDIA's own. Groq answers 400 to a body it does not recognise, so a
+        # parameter that helps one provider must never be sent to another.
+        self.thinking_toggle = thinking_toggle
 
     async def _post(self, client: httpx.AsyncClient, path: str, secret: str, body: dict) -> dict:
         try:
@@ -114,9 +121,7 @@ class OpenAICompatibleAdapter:
             "max_tokens": max_tokens,
             "temperature": temperature,
         }
-        if want_json:
-            # Nemotron reasons out loud unless asked not to; both knobs are ignored
-            # by providers that do not know them, and _json_from_text covers the rest.
+        if want_json and self.thinking_toggle:
             body["chat_template_kwargs"] = {"thinking": False}
         data = await self._post(client, "/chat/completions", secret, body)
         choice = (data.get("choices") or [{}])[0]
@@ -176,14 +181,17 @@ class OpenAICompatibleAdapter:
         message = (data.get("choices") or [{}])[0].get("message") or {}
         calls = message.get("tool_calls") or []
         if not calls:
+            # nemotron-parse answers with a `markdown_bbox` tool call, but a
+            # provider that returns the page as plain text is still usable.
+            content = (message.get("content") or "").strip()
+            if content:
+                return [Block(type="Text", text=content)], (data.get("usage") or {})
             raise ProviderError(f"{self.name}: parse returned no blocks")
         raw = json.loads(calls[0]["function"]["arguments"])
         if raw and isinstance(raw[0], list):  # the payload arrives wrapped once
             raw = raw[0]
         blocks = [
-            Block(
-                type=item.get("type") or "Text", text=item.get("text") or "", bbox=item.get("bbox")
-            )
+            Block(type=item.get("type") or "Text", text=item.get("text") or "", bbox=item.get("bbox"))
             for item in raw
             if item.get("text")
         ]
@@ -200,9 +208,7 @@ class PopplerAdapter:
 
     name = "local"
 
-    async def parse_page(
-        self, _client, _secret, *, model: str, image: bytes
-    ) -> tuple[list[Block], dict]:
+    async def parse_page(self, _client, _secret, *, model: str, image: bytes) -> tuple[list[Block], dict]:
         raise ProviderError("local parser works on files, not images")
 
     def parse_pdf_page(self, path: Path, page: int) -> list[Block]:

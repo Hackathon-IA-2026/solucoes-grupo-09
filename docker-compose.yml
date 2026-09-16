@@ -184,8 +184,11 @@ services:
     env_file:
       - path: .env
         required: false
-    ports:
-      - "8082:8082"
+    # No published port on purpose: every route under /internal is unauthenticated
+    # and would let anyone on the host spend the team's model quota. Reach it from
+    # another service on this network, or publish it behind something that checks.
+    expose:
+      - "8082"
     volumes:
       - rag-store:/data/rag-store
     profiles: ["rag"]

@@ -13,4 +13,13 @@ if [ "${WATTSTEER_RAG_MIGRATE_ON_BOOT:-1}" = "1" ]; then
     echo "migration failed; /ready will say why"
 fi
 
+# A container that comes up with an empty corpus is a container nobody can use,
+# so it builds one where it runs. Off by default in production, where a job or a
+# packed corpus is the better answer; on for a machine that has nothing yet.
+if [ "${WATTSTEER_RAG_INDEX_ON_BOOT:-0}" = "1" ]; then
+  setpriv --reuid=wattsteer --regid=wattsteer --init-groups sh -c \
+    'wattsteer-rag seed load || true; wattsteer-rag crawl instructions; wattsteer-rag crawl procedures; wattsteer-rag ingest --limit 400' || \
+    echo "index on boot failed; /internal/rag/status will show what is there"
+fi
+
 exec setpriv --reuid=wattsteer --regid=wattsteer --init-groups "$@"

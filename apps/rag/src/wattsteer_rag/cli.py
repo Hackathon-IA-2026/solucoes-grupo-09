@@ -25,6 +25,8 @@ from .gateway.router import Gateway, QuotaExhausted
 from .index import embed_pending, index_document
 from .parse import blocks_to_markdown, parse_html_tables, parse_pdf
 from .retrieve import search
+from .seed import dump as seed_dump
+from .seed import load as seed_load
 
 
 def gateway() -> Gateway:
@@ -55,9 +57,7 @@ async def cmd_doctor(_args) -> int:
         labels = [f"{provider.name}:{link.model}" for link, provider in links]
         print(f"task {task:<15} links={labels or 'NONE'}")
     try:
-        result = await gw.run(
-            "embed", tokens=8, texts=["teste de conectividade"], input_type="query"
-        )
+        result = await gw.run("embed", tokens=8, texts=["teste de conectividade"], input_type="query")
         print(
             f"embed live: {result.model} dims={len(result.value[0])} via key {result.key_id} "
             f"in {result.latency_ms}ms"
@@ -88,7 +88,7 @@ async def cmd_crawl(args) -> int:
             for back in range(args.days):
                 report.append(await crawler.fetch_ipdo(client, date.today() - timedelta(days=back)))
         if args.what == "ipdo-archive":
-            report += await crawler.fetch_ipdo_archive(client, limit=args.limit)
+            report += await crawler.fetch_ipdo_archive(client, limit=args.limit, attempts=args.attempts)
         if args.what in {"rap", "all"}:
             report += await crawler.fetch_rap(client, args.urls or [])
     print(json.dumps(report, indent=2, ensure_ascii=False))
@@ -192,12 +192,8 @@ async def cmd_rechunk(args) -> int:
                 Block(type=b.get("type", "Text"), text=b.get("text", ""), bbox=b.get("bbox"))
                 for b in (page["blocks"] or [])
             ]
-            markdown, has_tables = (
-                blocks_to_markdown(blocks) if blocks else (page["markdown"], False)
-            )
-            rebuilt.append(
-                {"page_no": page["page_no"], "markdown": markdown, "blocks": page["blocks"]}
-            )
+            markdown, has_tables = blocks_to_markdown(blocks) if blocks else (page["markdown"], False)
+            rebuilt.append({"page_no": page["page_no"], "markdown": markdown, "blocks": page["blocks"]})
             if blocks:
                 async with pool.acquire() as conn:
                     await conn.execute(
@@ -223,6 +219,21 @@ async def cmd_embed(args) -> int:
     db, gw = Database(), gateway()
     print(json.dumps(await embed_pending(db, gw, limit=args.limit), indent=2, default=str))
     await gw.aclose()
+    await db.close()
+    return 0
+
+
+async def cmd_seed(args) -> int:
+    """Load the packed corpus, or pack the current one."""
+    db = Database()
+    if args.action == "dump":
+        print(json.dumps(await seed_dump(db), indent=2, default=str))
+    else:
+        before = await db.counts() if args.action == "load" else {}
+        result = await seed_load(db, replace=args.replace)
+        print(json.dumps(result, indent=2, default=str))
+        if result.get("loaded"):
+            print(json.dumps({"before": before, "after": await db.counts()}, indent=2, default=str))
     await db.close()
     return 0
 
@@ -275,22 +286,13 @@ async def cmd_evidence(args) -> int:
 def _print_evidence(document: dict) -> None:
     generation = document["trace"]["generation"]
     print(f"\nPergunta: {document['question']}")
-    print(
-        f"Veredito: {document['verdict']}"
-        + (f" ({document['reason']})" if document["reason"] else "")
-    )
-    print(
-        f"Modelo: {generation['provider']}:{generation['model']} tentativas={generation['attempts']}"
-    )
+    print(f"Veredito: {document['verdict']}" + (f" ({document['reason']})" if document["reason"] else ""))
+    print(f"Modelo: {generation['provider']}:{generation['model']} tentativas={generation['attempts']}")
     for item in document["items"]:
-        print(
-            f"\n  [{item['supports']} {item['confidence']} peso={item['evidence_weight']}] {item['claim']}"
-        )
+        print(f"\n  [{item['supports']} {item['confidence']} peso={item['evidence_weight']}] {item['claim']}")
         for citation in item["citations"]:
             locator = citation["locator"]
-            where = locator.get("section") or (
-                f"página {locator['page']}" if locator.get("page") else ""
-            )
+            where = locator.get("section") or (f"página {locator['page']}" if locator.get("page") else "")
             print(
                 f"    fonte: {citation['title']} {citation.get('revision') or ''} | {where}"
                 f" | publicado {citation['published_at'] or 'sem data'}"
@@ -335,12 +337,20 @@ def main() -> int:
     crawl.add_argument("--days", type=int, default=1, help="bdo and ipdo: how many days back")
     crawl.add_argument("--limit", type=int, default=20, help="ipdo-archive: how many editions")
     crawl.add_argument("--urls", nargs="*", help="rap: published URLs")
+    crawl.add_argument(
+        "--attempts", type=int, default=4, help="how many times to retry a document that fails"
+    )
     crawl.set_defaults(run=cmd_crawl)
 
     ingest = sub.add_parser("ingest", help="parse, chunk and embed pending documents")
     ingest.add_argument("--limit", type=int, default=5)
     ingest.add_argument("--max-pages", type=int, default=None)
     ingest.set_defaults(run=cmd_ingest)
+
+    seed = sub.add_parser("seed", help="load the packed corpus, or pack the current one")
+    seed.add_argument("action", choices=["load", "dump"], nargs="?", default="load")
+    seed.add_argument("--replace", action="store_true", help="wipe the corpus before loading")
+    seed.set_defaults(run=cmd_seed)
 
     rechunk = sub.add_parser("rechunk", help="re-chunk stored pages without re-parsing")
     rechunk.add_argument("--document", default=None, help="external id, for example IO-ON.NE.2SO")

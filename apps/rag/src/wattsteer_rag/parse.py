@@ -117,6 +117,23 @@ def blocks_to_markdown(blocks: list[Block]) -> tuple[str, bool]:
 
 
 TEXT_LAYER_MIN_CHARS = 350  # below this a page is a scan with a header on top
+COLUMN_GAP = re.compile(r"\S {3,}\S")
+
+
+def looks_tabular(text: str) -> bool:
+    """Is this page a table that the text layer has flattened into columns?
+
+    An operating instruction carries a text layer, but its pages are six column
+    tables, and `pdftotext` returns them as lines of words separated by runs of
+    spaces: the rows and the cells are gone, and with them the ability to quote a
+    limit next to the control it belongs to. Those pages are worth the vision
+    model. Prose pages, which is most of a disturbance report, are not.
+    """
+    lines = [line for line in text.split("\n") if line.strip()]
+    if len(lines) < 6:
+        return False
+    columnar = sum(1 for line in lines if COLUMN_GAP.search(line))
+    return columnar / len(lines) > 0.35
 
 
 def text_layer(pdf: Path, page: int) -> str:
@@ -157,9 +174,7 @@ def parse_html_tables(path: Path) -> list[ParsedPage]:
     markdown = "\n\n".join(parts).strip()
     if not markdown:
         return []
-    return [
-        ParsedPage(page_no=1, markdown=markdown, blocks=[], has_tables=True, parser="local:html")
-    ]
+    return [ParsedPage(page_no=1, markdown=markdown, blocks=[], has_tables=True, parser="local:html")]
 
 
 async def parse_pdf(
@@ -167,10 +182,12 @@ async def parse_pdf(
 ) -> list[ParsedPage]:
     """Parse every page, and spend the vision model only where it is needed.
 
-    A disturbance report carries a text layer for all of its 572 pages; an
-    operating instruction carries none. Reading the text layer first turns the
-    first case into a free, instant parse and leaves the quota for the pages that
-    are genuinely images.
+    A disturbance report carries a text layer that reads like prose, and reading
+    it costs nothing. An operating instruction also carries one, but its pages
+    are tables, and the text layer returns them as columns of words with the rows
+    dissolved. Those pages go to the vision model, which returns the table as a
+    table. So the rule is not "text layer first": it is "text layer when the text
+    layer is good enough".
     """
     total = page_count(pdf)
     if max_pages:
@@ -179,7 +196,7 @@ async def parse_pdf(
     for page_no in range(1, total + 1):
         if not force_vision:
             existing = text_layer(pdf, page_no)
-            if len(existing) >= TEXT_LAYER_MIN_CHARS:
+            if len(existing) >= TEXT_LAYER_MIN_CHARS and not looks_tabular(existing):
                 pages.append(
                     ParsedPage(
                         page_no=page_no,

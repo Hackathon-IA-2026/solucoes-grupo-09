@@ -23,7 +23,7 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 import httpx
 
@@ -42,9 +42,7 @@ WAYBACK_CDX = (
     "https://web.archive.org/cdx/search/cdx?url=ons.org.br%2FAcervoDigitalDocumentosEPublicacoes%2F*"
     "&output=json&fl=timestamp,original&filter=original:.*IPDO.*&collapse=original&limit=3000"
 )
-RAP_2023_08_15 = (
-    f"{ACERVO}/RAP%202023.08.15%2008h030min%20vers%C3%A3o%20final.pdf"
-)
+RAP_2023_08_15 = f"{ACERVO}/RAP%202023.08.15%2008h030min%20vers%C3%A3o%20final.pdf"
 
 # The instructions the curtailment records actually cite, with the revision that
 # was current when this list was written. `revision=None` asks the crawler to
@@ -113,21 +111,55 @@ class Crawler:
         self.store.mkdir(parents=True, exist_ok=True)
         self._last_fetch = 0.0
 
-    async def _get(self, client: httpx.AsyncClient, url: str, suffix: str = ".pdf") -> Fetched | None:
-        wait = self.conf.fetch_interval_s - (time.monotonic() - self._last_fetch)
-        if wait > 0:
-            await asyncio.sleep(wait)
-        self._last_fetch = time.monotonic()
-        try:
-            response = await client.get(
-                url,
-                headers={"user-agent": self.conf.user_agent},
-                timeout=90.0,
-                follow_redirects=True,
-            )
-        except httpx.RequestError:
-            return None
-        if response.status_code != 200 or not response.content:
+    async def _get(
+        self,
+        client: httpx.AsyncClient,
+        url: str,
+        suffix: str = ".pdf",
+        *,
+        attempts: int = 1,
+        minimum_bytes: int = 0,
+    ) -> Fetched | None:
+        """Fetch a document, with as much patience as the caller asks for.
+
+        The Internet Archive throttles and goes down for maintenance, and the ONS
+        portal times out under load. Both recover, so a transient failure should
+        cost a wait, not a missing document. A 404 is not transient and is not
+        retried: the file is simply not there.
+        """
+        response = None
+        for attempt in range(1, max(1, attempts) + 1):
+            wait = self.conf.fetch_interval_s - (time.monotonic() - self._last_fetch)
+            if wait > 0:
+                await asyncio.sleep(wait)
+            self._last_fetch = time.monotonic()
+            try:
+                response = await client.get(
+                    url,
+                    headers={"user-agent": self.conf.user_agent},
+                    timeout=90.0,
+                    follow_redirects=True,
+                )
+            except httpx.RequestError:
+                response = None
+            if (
+                response is not None
+                and response.status_code == 200
+                and len(response.content) >= minimum_bytes
+            ):
+                break
+            if response is not None and response.status_code in {400, 401, 403, 404, 410}:
+                return None  # the archive does not have it, and never will
+            if attempt == attempts:
+                return None
+            # 1s, 4s, 9s, 16s: long enough for a throttle to clear, short enough
+            # that a full backfill still finishes in one sitting.
+            retry_after = 0.0
+            if response is not None:
+                header = response.headers.get("retry-after", "")
+                retry_after = float(header) if header.isdigit() else 0.0
+            await asyncio.sleep(max(retry_after, attempt * attempt))
+        if response is None or response.status_code != 200 or not response.content:
             return None
         digest = hashlib.sha256(response.content).hexdigest()
         path = self.store / f"{digest}{suffix}"
@@ -183,7 +215,7 @@ class Crawler:
             if codes and code not in codes:
                 continue
             url = f"{IO_DIR}/{area}/{code}_{revision}.pdf"
-            fetched = await self._get(client, quote(url, safe=":/?=&"))
+            fetched = await self._get(client, quote(url, safe=":/?=&"), attempts=3)
             if fetched is None:
                 out.append({"external_id": code, "ok": False, "error": "fetch failed"})
                 continue
@@ -212,7 +244,7 @@ class Crawler:
     async def fetch_procedures(self, client: httpx.AsyncClient) -> list[dict]:
         out = []
         for external_id, filename, title in PROCEDURES:
-            fetched = await self._get(client, PROC_PROXY + quote(filename))
+            fetched = await self._get(client, PROC_PROXY + quote(filename), attempts=3)
             if fetched is None:
                 out.append({"external_id": external_id, "ok": False, "error": "fetch failed"})
                 continue
@@ -224,11 +256,8 @@ class Crawler:
                 revision=_revision_from(filename),
                 published_at=_published_from_filename(filename),
             )
-            out.append(
-                {"external_id": external_id, "ok": True, "document_id": document_id, "new": is_new}
-            )
+            out.append({"external_id": external_id, "ok": True, "document_id": document_id, "new": is_new})
         return out
-
 
     # The daily record --------------------------------------------------
 
@@ -245,9 +274,13 @@ class Crawler:
         index = await self._get(client, f"{base}/index.htm", suffix=".html")
         if index is None:
             return [{"source": "BDO", "day": day.isoformat(), "ok": False, "error": "no folder for that day"}]
-        names = sorted(set(re.findall(r'href="HTML/([0-9]{2}_[A-Za-z_]+\.html)"', index.path.read_text("latin-1"))))
+        names = sorted(
+            set(re.findall(r'href="HTML/([0-9]{2}_[A-Za-z_]+\.html)"', index.path.read_text("latin-1")))
+        )
         out = []
-        published = datetime(day.year, day.month, day.day, tzinfo=UTC)
+        # The folder is published from about 15:00 in Brasilia. Recording midnight
+        # would let a same-day gate admit a document that did not exist yet.
+        published = datetime(day.year, day.month, day.day, 18, 0, tzinfo=UTC)
         for name in names:
             fetched = await self._get(client, f"{base}/HTML/{name}", suffix=".html")
             if fetched is None:
@@ -273,9 +306,14 @@ class Crawler:
         archive, which is why this runs every day.
         """
         url = f"{ACERVO}/IPDO-{day.strftime('%d-%m-%Y')}.pdf"
-        fetched = await self._get(client, url)
+        fetched = await self._get(client, url, attempts=2, minimum_bytes=50_000)
         if fetched is None:
-            return {"source": "IPDO", "day": day.isoformat(), "ok": False, "error": "not published (or already replaced)"}
+            return {
+                "source": "IPDO",
+                "day": day.isoformat(),
+                "ok": False,
+                "error": "not published (or already replaced)",
+            }
         document_id, is_new = await self.register(
             fetched,
             source="IPDO",
@@ -285,18 +323,35 @@ class Crawler:
             published_at=datetime(day.year, day.month, day.day, tzinfo=UTC),
             meta={"day": day.isoformat()},
         )
-        return {"source": "IPDO", "day": day.isoformat(), "ok": True, "document_id": document_id, "new": is_new}
+        return {
+            "source": "IPDO",
+            "day": day.isoformat(),
+            "ok": True,
+            "document_id": document_id,
+            "new": is_new,
+        }
 
-    async def fetch_ipdo_archive(self, client: httpx.AsyncClient, limit: int = 40) -> list[dict]:
+    async def known_days(self, source: str) -> set[str]:
+        """Which editions are already here, so a rerun only fetches what is missing."""
+        pool = await self.db.connect()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("SELECT external_id FROM rag.document WHERE source = $1", source)
+        return {row["external_id"].split()[-1] for row in rows if row["external_id"]}
+
+    async def fetch_ipdo_archive(
+        self, client: httpx.AsyncClient, limit: int = 40, *, attempts: int = 4
+    ) -> list[dict]:
         """Backfill old editions from the Internet Archive.
 
         The ONS overwrites the IPDO every day, so the only history that exists is
         the one somebody else kept: 218 editions between 2017 and 2025 at the time
         of writing. Sparse, but real, and it costs nobody anything.
         """
-        index = await self._get(client, WAYBACK_CDX, suffix=".json")
+        # The index itself is the flakiest request of the lot, so it gets the
+        # most patience: without it there is nothing to backfill.
+        index = await self._get(client, WAYBACK_CDX, suffix=".json", attempts=max(attempts, 5))
         if index is None:
-            return [{"source": "IPDO", "ok": False, "error": "archive index unavailable"}]
+            return [{"source": "IPDO", "ok": False, "error": "archive index unavailable, try again later"}]
         try:
             rows = json.loads(index.path.read_text())[1:]
         except json.JSONDecodeError:
@@ -307,15 +362,21 @@ class Crawler:
             if match:
                 day = f"{match.group(3)}-{match.group(2)}-{match.group(1)}"
                 seen.setdefault(day, f"https://web.archive.org/web/{stamp}id_/{original}")
-        out = []
-        for day, url in sorted(seen.items(), reverse=True)[:limit]:
-            # The archive throttles, and a throttled reply is a small HTML page.
-            # One patient retry turns most of those into the document.
-            fetched = await self._get(client, url)
-            if fetched is None or fetched.bytes < 50_000:
-                await asyncio.sleep(6)
-                fetched = await self._get(client, url)
-            if fetched is None or fetched.bytes < 50_000:
+        already = await self.known_days("IPDO")
+        pending = [(day, url) for day, url in sorted(seen.items(), reverse=True) if day not in already]
+        out: list[dict] = [
+            {
+                "source": "IPDO",
+                "archive_index": len(seen),
+                "already_here": len(already),
+                "pending": len(pending),
+            }
+        ]
+        for day, url in pending[:limit]:
+            # A throttled reply from the archive is a small HTML page, not a PDF,
+            # so size is part of what counts as success.
+            fetched = await self._get(client, url, attempts=attempts, minimum_bytes=50_000)
+            if fetched is None:
                 out.append({"day": day, "ok": False, "error": "archive did not serve the file"})
                 continue
             parsed = date.fromisoformat(day)
@@ -329,6 +390,9 @@ class Crawler:
                 meta={"day": day, "via": "web.archive.org"},
             )
             out.append({"day": day, "ok": True, "document_id": document_id, "new": is_new})
+        remaining = len(pending) - min(limit, len(pending))
+        if remaining > 0:
+            out.append({"note": f"{remaining} editions still missing; run again to continue"})
         return out
 
     async def fetch_rap(self, client: httpx.AsyncClient, urls: list[str]) -> list[dict]:
@@ -340,11 +404,11 @@ class Crawler:
         """
         out = []
         for url in urls or [RAP_2023_08_15]:
-            fetched = await self._get(client, url)
+            fetched = await self._get(client, url, attempts=3)
             if fetched is None:
                 out.append({"url": url[:80], "ok": False})
                 continue
-            match = re.search(r"RAP[ _](\d{4})\.(\d{2})\.(\d{2})", url)
+            match = re.search(r"RAP[ _](\d{4})\.(\d{2})\.(\d{2})", unquote(url))
             published = (
                 datetime(int(match.group(1)), int(match.group(2)), int(match.group(3)), tzinfo=UTC)
                 if match
