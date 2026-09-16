@@ -12,6 +12,7 @@ the model tried to say, and which gate refused it.
 from __future__ import annotations
 
 import logging
+import secrets
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any
@@ -42,6 +43,23 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="WattSteer RAG", version="0.1.0", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def require_token(request, call_next):
+    """A shared secret, for when the service is not on the loopback address.
+
+    These routes run models and read the corpus, and none of them asks who is
+    calling. On 127.0.0.1 that is fine. Reachable from a network it is not, so
+    binding wider means setting WATTSTEER_RAG_ACCESS_TOKEN, and then nothing but
+    the health check answers without it.
+    """
+    token = settings().access_token
+    if token and request.url.path != "/health":
+        given = request.query_params.get("k") or request.headers.get("x-access-token") or ""
+        if not secrets.compare_digest(given, token):
+            return error("unauthorised", "This service needs an access token.", 401)
+    return await call_next(request)
 
 
 def error(code: str, message: str, status: int, **details) -> JSONResponse:

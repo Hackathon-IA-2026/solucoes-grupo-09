@@ -98,7 +98,8 @@ the free tier runs in batches and pauses when the minute's tokens are spent.
 ### Trying it by hand
 
 ```bash
-cd apps/rag && ./serve.sh     # http://127.0.0.1:8082
+cd apps/rag && ./serve.sh          # this machine only, http://127.0.0.1:8082
+cd apps/rag && ./serve.sh --lan    # the same Wi-Fi, with a token in the address
 ```
 
 The page there takes a record — the evaluation set is offered as a dropdown, or
@@ -107,8 +108,12 @@ passages the search returned with both ranks, and either the claim with its
 literal quote, page and publication date, or the refusal with the gate that
 produced it and what the model had tried to say.
 
-It binds to the loopback address. The routes are internal and unauthenticated,
-so nothing here belongs on a network interface.
+The routes run models and read the corpus, and none of them asks who is
+calling, so the default is the loopback address. `--lan` is for handing the page
+to someone on the same network: it binds to every interface and generates a
+token for that run, printed once as part of the address to send. Without the
+token nothing but `/health` answers, and stopping the process ends the access.
+`WATTSTEER_RAG_ACCESS_TOKEN` sets it explicitly if it has to survive a restart.
 
 ```bash
 ./.venv/bin/wattsteer-rag doctor          # is every link of every chain alive?

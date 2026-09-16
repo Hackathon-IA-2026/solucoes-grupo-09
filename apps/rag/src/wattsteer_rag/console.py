@@ -147,6 +147,10 @@ PAGE = """<!doctype html>
 <script>
 const RECORDS = __RECORDS__;
 const $ = (id) => document.getElementById(id);
+// When the service is reachable from the network it wants a token, and the page
+// was opened with it in the address. Every call carries it back.
+const KEY = new URLSearchParams(location.search).get("k");
+const url = (path) => path + (KEY ? (path.includes("?") ? "&" : "?") + "k=" + encodeURIComponent(KEY) : "");
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
 function fill(i) {
@@ -175,7 +179,7 @@ function gateAt() {
 
 async function preview() {
   try {
-    const r = await fetch("/internal/rag/question?" + params());
+    const r = await fetch(url("/internal/rag/question?" + params()));
     const j = await r.json();
     $("question").textContent = "The question this becomes:\\n" + (j.question || "");
   } catch { $("question").textContent = ""; }
@@ -256,9 +260,9 @@ async function call(url, options, button) {
 }
 
 $("build").onclick = (e) =>
-  call("/internal/rag/evidence?" + params() + "&gate_at=" + encodeURIComponent(gateAt()), { method: "POST" }, e.target);
+  call(url("/internal/rag/evidence?" + params() + "&gate_at=" + encodeURIComponent(gateAt())), { method: "POST" }, e.target);
 $("look").onclick = (e) =>
-  call("/internal/rag/search?q=" + encodeURIComponent($("description").value.trim() || "limitação"), {}, e.target);
+  call(url("/internal/rag/search?q=" + encodeURIComponent($("description").value.trim() || "limitação")), {}, e.target);
 
 for (const el of ["subsystem", "date", "reason", "description"]) $(el).oninput = preview;
 $("sample").onchange = (e) => fill(e.target.value);
@@ -280,8 +284,8 @@ if (!RECORDS.length) {
 (async () => {
   try {
     const [s, q] = await Promise.all([
-      fetch("/internal/rag/status").then((r) => r.json()),
-      fetch("/internal/llm/quota").then((r) => r.json()),
+      fetch(url("/internal/rag/status")).then((r) => r.json()),
+      fetch(url("/internal/llm/quota")).then((r) => r.json()),
     ]);
     const keys = Object.entries(q.providers || {})
       .map(([name, v]) => `${name}: ${v.keys} key(s)${v.enabled ? "" : ", disabled"}`).join(" · ");
