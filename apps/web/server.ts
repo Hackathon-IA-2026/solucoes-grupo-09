@@ -15,6 +15,7 @@
  * export is fixed for the life of the process and visitors are waiting.
  */
 import { join, normalize } from "node:path";
+import { candidatesFor, statusFor } from "./scripts/static-routing";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const ROOT = join(import.meta.dir, "dist");
@@ -86,22 +87,20 @@ Bun.serve({
       });
     }
 
-    // Prevent path traversal; map "/" and route paths to their HTML files.
-    // `${path}/index.html` is what makes the locale roots work: the export
-    // writes `/pt/` as dist/pt/index.html, and a request for a directory has
-    // to find it. Trailing slashes are trimmed so `/pt` and `/pt/` are the
-    // same lookup.
+    // Prevent path traversal, then hand the cleaned path to the one place that
+    // decides which file answers it and with what status —
+    // `scripts/static-routing.ts`, which `e2e/serve-dist.ts` reads too.
+    // Trailing slashes are trimmed so `/pt` and `/pt/` are the same lookup.
     const clean = normalize(url.pathname).replace(/^(\.\.[/\\])+/, "");
     const path = clean.replace(/^\/+/, "").replace(/\/+$/, "");
-    const candidates =
-      path === ""
-        ? ["index.html"]
-        : [path, `${path}.html`, `${path}/index.html`, "index.html"];
+    const candidates = candidatesFor(path);
     for (const candidate of candidates) {
       const file = Bun.file(join(ROOT, candidate));
       if (await file.exists()) {
         const type = file.type || "application/octet-stream";
         const headers = new Headers({ "content-type": type });
+        // Decided from the file that matched, never from the request path.
+        const status = statusFor(path, candidate);
         headers.set(
           "cache-control",
           // Key off the file actually served, NOT the request path — the SPA
@@ -119,9 +118,9 @@ Bun.serve({
         if (acceptsGzip && COMPRESSIBLE.test(type)) {
           headers.set("content-encoding", "gzip");
           headers.set("vary", "accept-encoding");
-          return new Response(await gzipOnce(candidate, file), { headers });
+          return new Response(await gzipOnce(candidate, file), { headers, status });
         }
-        return new Response(file, { headers });
+        return new Response(file, { headers, status });
       }
     }
     return new Response("not found", { status: 404 });

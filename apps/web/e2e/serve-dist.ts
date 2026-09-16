@@ -4,6 +4,7 @@
  * responses and long-lived immutable caching for hashed build assets.
  */
 import { join, normalize } from "node:path";
+import { candidatesFor, statusFor } from "../scripts/static-routing";
 
 const PORT = Number(process.env.DIST_PORT ?? 4173);
 const ROOT = join(import.meta.dir, "..", "dist");
@@ -19,20 +20,21 @@ Bun.serve({
   port: PORT,
   async fetch(request) {
     const url = new URL(request.url);
-    // Prevent path traversal; map "/" and route paths to their HTML files.
-    // Mirrors server.ts, including the `${path}/index.html` candidate that
-    // makes the locale roots (/pt/, /en/) resolve.
+    // Prevent path traversal, then ask `scripts/static-routing.ts`. This file
+    // used to mirror `server.ts` by hand, which is how the suite ends up
+    // testing a server the deployment is not.
     const clean = normalize(url.pathname).replace(/^(\.\.[/\\])+/, "");
     const path = clean.replace(/^\/+/, "").replace(/\/+$/, "");
-    const candidates =
-      path === ""
-        ? ["index.html"]
-        : [path, `${path}.html`, `${path}/index.html`, "index.html"];
+    // `candidatesFor` and `statusFor`, not a second copy of them: this file
+    // used to mirror `server.ts` by hand, which is how the suite would end up
+    // testing a server the deployment is not.
+    const candidates = candidatesFor(path);
     for (const candidate of candidates) {
       const file = Bun.file(join(ROOT, candidate));
       if (await file.exists()) {
         const type = file.type || "application/octet-stream";
         const headers = new Headers({ "content-type": type });
+        const status = statusFor(path, candidate);
         headers.set(
           "cache-control",
           // Key off the file actually served, NOT the request path — the SPA
@@ -48,9 +50,10 @@ Bun.serve({
           headers.set("vary", "accept-encoding");
           return new Response(Bun.gzipSync(new Uint8Array(await file.arrayBuffer())), {
             headers,
+            status,
           });
         }
-        return new Response(file, { headers });
+        return new Response(file, { headers, status });
       }
     }
     return new Response("not found", { status: 404 });
