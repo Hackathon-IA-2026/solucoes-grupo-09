@@ -54,7 +54,13 @@ export function MitigationStack() {
   return (
     <Panel
       testID="showcase-mitigate"
-      style={{ flexGrow: 1, flexBasis: 320, gap: space.lg }}
+      /*
+        `flexShrink: 1` beside the grow, because react-native-web defaults
+        `flexShrink` to 0 (ADR-0001). A 320px basis in a narrower box then
+        overflows instead of giving width back: measured at 320px, these three
+        cards each wanted 320 in a 288 box and the remainder was clipped.
+      */
+      style={{ flexGrow: 1, flexShrink: 1, flexBasis: 320, gap: space.lg }}
     >
       <PanelHeader
         icon={<SlidersHorizontalIcon size={18} color={colors.inkMuted} />}
@@ -196,7 +202,7 @@ function Kpi({
 }) {
   const colors = usePalette();
   return (
-    <View style={{ flexGrow: 1, flexBasis: 140, gap: space.xs }}>
+    <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 140, gap: space.xs }}>
       <Text style={{ fontSize: 12, color: colors.inkMuted }}>{label}</Text>
       <Text
         style={{

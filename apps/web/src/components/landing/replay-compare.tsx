@@ -48,7 +48,13 @@ export function ReplayCompare() {
   return (
     <Panel
       testID="showcase-replay"
-      style={{ flexGrow: 1, flexBasis: 320, gap: space.lg }}
+      /*
+        `flexShrink: 1` beside the grow, because react-native-web defaults
+        `flexShrink` to 0 (ADR-0001). A 320px basis in a narrower box then
+        overflows instead of giving width back: measured at 320px, these three
+        cards each wanted 320 in a 288 box and the remainder was clipped.
+      */
+      style={{ flexGrow: 1, flexShrink: 1, flexBasis: 320, gap: space.lg }}
     >
       <PanelHeader
         icon={<RotateCcwIcon size={18} color={colors.inkMuted} />}
@@ -85,7 +91,7 @@ export function ReplayCompare() {
           paddingTop: space.lg,
         }}
       >
-        <View style={{ flexGrow: 1, flexBasis: 140, gap: space.xs }}>
+        <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 140, gap: space.xs }}>
           <Text style={{ fontSize: 12, color: colors.inkMuted }}>
             {copy.showcase.replay.recoveredLabel}
           </Text>
@@ -107,7 +113,7 @@ export function ReplayCompare() {
             </Text>
           ) : null}
         </View>
-        <View style={{ flexGrow: 1, flexBasis: 140, gap: space.xs }}>
+        <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 140, gap: space.xs }}>
           <Text style={{ fontSize: 12, color: colors.inkMuted }}>
             {copy.showcase.replay.reductionLabel}
           </Text>
@@ -159,8 +165,24 @@ function CompareRow({
           gap: space.md,
         }}
       >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-          <Text style={{ fontSize: 13, fontWeight: "600", color: colors.ink }}>
+        {/*
+          `flexShrink: 1` on the row and on its label, per ADR-0001. The label
+          and its `Observado` badge sit beside a figure, and at 320px the pair
+          wanted 252px in a 246px box — the badge clipped, which is the one
+          part of this row that says the number is a measurement rather than a
+          forecast.
+        */}
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: space.sm,
+            flexShrink: 1,
+          }}
+        >
+          <Text
+            style={{ fontSize: 13, fontWeight: "600", color: colors.ink, flexShrink: 1 }}
+          >
             {label}
           </Text>
           {figure.kind === "observed" ? (

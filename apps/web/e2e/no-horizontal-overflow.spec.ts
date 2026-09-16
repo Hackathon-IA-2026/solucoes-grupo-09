@@ -38,37 +38,31 @@ const PAGES: { path: string; gateway: boolean }[] = [
 ];
 
 /**
- * **400 and 360, not 320 — and the difference is a claim, not an oversight.**
+ * **320, 360 and 400 — and 320 is asserted now because it passes.**
  *
  * 400px is the width this product is written against: it is the number in
  * `hero.tsx`'s comment about a sub-line that would not break, in
  * `app-shell.tsx`'s about a truncated word at the viewport edge, and in the
  * `PanelHeader` fix these tests were written after. 360px is the narrowest
- * width in common use (a Galaxy A-series, a Pixel in display-size mode) and is
- * inside what the layout was designed for.
+ * width in common use.
  *
- * 320px is **not** asserted, and the reason is now specific rather than a
- * shrug. Three things overflowed there; they are not the same kind of thing:
+ * 320px was excluded when this spec was written, with three failures recorded
+ * as an honest gap rather than a silent one. All three are fixed, and the
+ * fixes were the same fix — `flexShrink: 1`, which react-native-web defaults
+ * to 0 (ADR-0001):
  *
- *  - The footer's link row wanted 248px in 224 and clipped the *terms* link.
- *    That was a plain bug with no design behind it — nothing about the footer
- *    wants a link invisible — and it is fixed: the row wraps.
- *  - The hero's eyebrow wants 301px in 288, and that is **deliberate**. It
- *    carries `numberOfLines={1}` and a comment budgeting the label against a
- *    400px viewport, with `test/i18n.test.ts` enforcing the character count
- *    that keeps it there: *"a wrapped eyebrow turns the pill into a rounded
- *    paragraph and pushes the headline down the fold."* Making it wrap at 320
- *    would overrule a decision that was made, measured and tested. Supporting
- *    320 means re-budgeting that copy, which is a product call.
- *  - The Engines cards want 320px in 288 — a `flexBasis: "100%"` card whose
- *    padding is landing outside the basis. Probably a real bug, and not
- *    diagnosed far enough to fix responsibly here.
- *
- * So the array stays at 360/400: that is the width the product is written
- * against, and a green suite that quietly means "we support 320" would be
- * worse than an honest gap. Widen it the day the eyebrow's budget is rewritten.
+ *  - The footer's link row clipped the *terms* link. It wraps.
+ *  - The three Showcase cards each wanted a 320px basis in a 288px box, and
+ *    one row inside them clipped the `Observado` badge — the one part of that
+ *    row that says the figure is a measurement rather than a forecast.
+ *  - The hero's eyebrow wanted 301px in 288. It carries `numberOfLines={1}`
+ *    by design, and the pill around it could not shrink, so the label never
+ *    got the chance to truncate. With the pill shrinking, that `numberOfLines`
+ *    does what it is for: one line, visibly truncated, at a width narrower
+ *    than the copy budget was written for. The budget still targets 400 and
+ *    `test/i18n.test.ts` still enforces it there.
  */
-const WIDTHS = [360, 400];
+const WIDTHS = [320, 360, 400];
 
 /**
  * Does the *page* scroll sideways, and if so, what is sticking out?

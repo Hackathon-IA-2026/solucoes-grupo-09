@@ -62,6 +62,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     alignSelf: "center",
+    // The pill shrinks, so the label inside it can. `alignSelf: "center"` sizes
+    // this box to its content and `flexShrink` defaults to 0 (ADR-0001), so
+    // without both of these the `numberOfLines={1}` on the label never gets the
+    // chance to truncate — the pill simply grows past its column and is clipped
+    // by an ancestor. `maxWidth` is what bounds it at the column rather than at
+    // the content.
+    flexShrink: 1,
+    maxWidth: "100%",
     borderRadius: radius.pill,
     borderWidth: 1,
     paddingHorizontal: 12,
@@ -177,9 +185,26 @@ export function Hero({ onExplain }: { onExplain: () => void }) {
               `numberOfLines` is the floor under that; the character budget in
               `test/i18n.test.ts` is what keeps the copy from reaching it.
             */}
+            {/*
+              `flexShrink: 1` so the *budget* above is about 400px and nothing
+              below it clips. The character budget is sized for 400 and the
+              `i18n` test enforces it there; at 320 — narrower than this product
+              is written for — the label used to want 294px in a 288px box and
+              the last word was cut by an ancestor with no ellipsis and no
+              gesture to reveal it.
+              With the shrink, `numberOfLines={1}` does what it is for: one
+              line, truncated visibly. The pill stays a pill, the headline stays
+              above the fold, and the only thing that changes at a width nobody
+              designed for is that the truncation says so.
+            */}
             <Text
               numberOfLines={1}
-              style={{ fontSize: 12, fontWeight: "500", color: colors.inkMuted }}
+              style={{
+                fontSize: 12,
+                fontWeight: "500",
+                color: colors.inkMuted,
+                flexShrink: 1,
+              }}
             >
               {copy.hero.eyebrow}
             </Text>
