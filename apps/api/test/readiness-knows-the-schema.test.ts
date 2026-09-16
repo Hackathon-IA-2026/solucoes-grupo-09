@@ -23,6 +23,13 @@ import { createDatabase } from "../src/database/connection.js";
  *     remembers a list.
  *  2. Dropping a view is **detected**. A guard that only ever runs against a
  *     correct database proves that a correct database is correct.
+ *
+ * Gated on a real Postgres, like the rest of the database suite: the `test:db`
+ * script supplies `WATTSTEER_TEST_DATABASE_URL` and migrates first, and a plain
+ * `bun test` skips this file. `test/database-gated-suite.test.ts` holds that
+ * every gated file says so here rather than only in a README — the moment
+ * anybody needs the instruction is the moment they are looking at a skipped
+ * file wondering why, which is exactly how this line came to be missing.
  */
 const URL = process.env.WATTSTEER_TEST_DATABASE_URL;
 const suite = URL ? describe : describe.skip;
