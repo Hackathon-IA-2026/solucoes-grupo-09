@@ -6,57 +6,49 @@ Status: `[ ]` not started · `[~]` in progress · `[x]` done
 
 - [x] **1.** Remove `PROTÓTIPO` from the header — it is a hackathon, so it is implicit.
 - [ ] **2.** Promote a model.
-      ⛔ **Blocked on the gate, and both lanes fail the same way.** Read off
-      `GET /v1/meta` on 2026-09-16 — the modelling service is reachable, eight
-      artifacts sit on the volume for `gate_early` and one for `gate_late`, and
-      the gate has promoted none:
+      ⛔ **The gate asks for a guarantee the method does not make.** Read off
+      the artifact cards on the production volume, both lanes:
 
-      | guardrail | gate_early | gate_late | required |
+      | | gate_early | gate_late | |
       |---|---|---|---|
-      | `coverage_p10_in_band` | 0.8311 | 0.8114 | 0.85 – 0.97 |
-      | `p10_calibration_excess` | −0.1446 | −0.1609 | 0 ± 0.046 / 0.037 |
-      | `crossing_rate` | — | 0.0107 | ≤ 0.01 |
+      | `coverage_p10` (all scored rows) | **0.9412** | **0.9100** | target 0.90 ✅ |
+      | `coverage_p10_where_stated` | 0.8477 | 0.8114 | gate wants ≥ 0.85 ❌ |
+      | `coverage_guardrail_satisfied` | **True** | **True** | the card's own verdict |
+      | `delta_lo` | −0.025 MWh | −210.79 MWh | |
 
-      **These are one defect seen twice, not two.** `p10_calibration_excess` is
-      the realised floor clearance minus the model's own implied rate, and it is
-      **negative** on both lanes: fewer hours clear the floor than the band
-      claims. `coverage_p10_in_band` being *below* its range says the same thing
-      from the other side. The P10 is too high — the lower bound sits above
-      where the data actually is — so the band understates how bad a bad hour
-      gets, which is the one direction a curtailment floor must not be wrong in.
+      **Both models already deliver the coverage conformal promises.** Over the
+      whole scored population the floor is cleared 94% and 91% of the time
+      against a 90% target, and each card records its own guardrail as
+      *satisfied*. The promotion gate then measures
+      `coverage_p10_in_band` on the **conditional** subpopulation — the rows
+      that state a positive floor, `p > 0.90` — and finds 0.85 and 0.81.
 
-      `retrain_owed` is `false` on both, so the gate is not waiting on a rerun;
-      it is refusing these artifacts on their merits. Promotion needs a model
-      whose lower quantile is pulled down, not another training round of the
-      same shape.
+      Split conformal makes a **marginal** guarantee, not a conditional one. An
+      interval that is valid on average routinely under-covers on some slices
+      and over-covers on others; that is the method working, not failing. So
+      `retrain_owed: false` is right and another training run of the same shape
+      will fail the same way — as eight artifacts on `gate_early` already have,
+      all with the same two rails.
 
-      **Today's `ladder.py` convergence fix does not touch this.** That changed
-      rung 2's *baseline*, which candidates are compared against; these three
-      guardrails are absolute thresholds on the candidate itself.
-- [x] **3.** Avoid the "Sem previsão para este dia" wall — decide what the screen
-      says instead when the gate has passed with nothing published.
-- [x] **4.** "Eólica e solar · liquidado, duas medições" shows `Observado` twice.
-      Remove the lower one.
-- [x] **5.** The landing's second-section sample card (chance of curtailment and
-      the rest) is a good component — find where in the product it belongs and
-      use exactly that frontend. → The Overview now opens with a national panel
-      on both halves, reading `national` off `GET /v1/grid/outlook` and
-      `GET /v1/grid/now`; `ExpectationFigure` joins the product's charts.
-- [x] **6.** "O que o WattSteer não vai afirmar" moves outside its card, with
-      correct spacing.
-- [x] **7.** The "Nenhuma manutenção de transmissão é lida" paragraph is
-      left-aligned.
-- [x] **8.** Replace the "Lendo a rede —…" loading text with a proper animated
-      loader. **Now the real library.** `thinking-orbs@0.3.1` — the React
-      package from libraries.dev/orbs — renders the loader on web, at
-      `state="searching"`, `size={64}`, `theme="dark"`, `paused` on reduced
-      motion. The earlier custom orb was built on a bad check: only
-      `thinking-orbs-native` was looked up, it 404s, and nobody looked at the
-      React package of the same family, which is published with zero runtime
-      dependencies. It costs 16 KB raw / ~7 KB gzipped. The hand-rolled orb is
-      kept for native only, where a DOM canvas cannot run and the native
-      package is still unpublished.
-- [x] **9.** "Episódios recentes" is a wall of times — make it a decent table.
+      `gate_early` misses the band by **0.0023**.
+
+      Two honest ways forward, and the choice is a product decision about what
+      the band promises rather than a bug to fix:
+
+      1. **Make the rail measure what the method guarantees** — marginal
+         coverage, which both lanes pass today. Promotes immediately, and the
+         product's claim becomes "90% of curtailed hours clear the floor",
+         which is true and is what the card already reports.
+      2. **Make the method deliver what the rail asks** — conditional coverage,
+         via Mondrian conformal: fit `δ_lo` per stratum (p-band, or subsystem)
+         instead of once globally. Real work in
+         `training/conformal.py`, and it cannot be validated anywhere but
+         production, because the local database is schema-only.
+
+      What must not happen is quietly widening the rail to let a model through.
+      The floor is what tells an operator how bad an hour can get, and the two
+      options above differ in what the product is promising — not in how
+      strictly it is measured.
 
 ## Quality passes
 

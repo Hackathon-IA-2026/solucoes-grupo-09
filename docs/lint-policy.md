@@ -17,6 +17,7 @@ reason — so the config stays at zero warnings without hiding real signal.
 | `performance/noAwaitInLoops` | Upstream pagination and job polling are sequential by design (rate-limit friendliness). |
 | `performance/useTopLevelRegex` | Format/parse helpers run at human scale; locality beats micro-optimization. |
 | `performance/noReExportAll`, `noBarrelFile`, `noNamespaceImport` | `@wattsteer/core` / `@wattsteer/ui` expose deliberate public-API barrels. (The `import * as Haptics` half of this rationale is gone: `expo-haptics` was never imported anywhere and has been removed from `apps/web/package.json`.) |
+| `nursery/useIframeSandbox` | `app/pitch.tsx` only. Chrome's built-in PDF viewer is an extension that must run scripts in the frame, and **any** `sandbox` value denies it — `allow-scripts` included. Measured headed: no sandbox renders the deck, both sandboxed spellings abort the request and paint white. The framed content is `/wattsteer-pitch.pdf`, our own static asset on our own origin. |
 | `style/noDefaultExport` | expo-router requires default exports for routes. |
 | `style/useExportsLast`, `noNestedTernary`, `useNamingConvention`, `noParameterProperties`, `noImplicitBoolean` | Conflict with established codebase idiom (tone ternaries, RN prop style). |
 | `style/noCommonJs` | React Native asset loading requires `require()`. |

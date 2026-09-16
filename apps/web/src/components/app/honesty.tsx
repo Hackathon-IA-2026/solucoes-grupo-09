@@ -11,6 +11,7 @@ import { producerLabel } from "@wattsteer/core";
 import { Badge, ClockIcon, radius, space, usePalette } from "@wattsteer/ui";
 import type { ReactNode } from "react";
 import { Text, View } from "react-native";
+import { useServing } from "@/components/app/use-serving";
 import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
 import type { ForecastOrigin, ReplayIntegrity, VintageFidelity } from "@/lib/fixtures";
@@ -227,13 +228,29 @@ export function SolveStamp({
 }
 
 /**
- * The mark that says a figure is **settled**, not forecast.
+ * The mark that says a figure is **settled**, not forecast — when that is a
+ * distinction the screen is actually making.
  *
- * The counterpart of {@link ForecastStamp} and, deliberately, the same kind of
- * obligation: every surface showing a forecast must name its origin, and — now
- * that the Overview draws a full set of observed panels in the place the
- * forecast ones occupy when a model is promoted — every surface showing an
- * observation must say that it is one. The two are never both on one panel.
+ * The counterpart of {@link ForecastStamp}, and it was over-applied. The rule
+ * it was written for is a *mixed* screen: once a model is promoted the Overview
+ * draws forecast panels beside observed ones, and then a reader needs to know
+ * which is which on every panel. That rule was implemented unconditionally, so
+ * on a deployment with nothing promoted — which production has been for weeks —
+ * every panel is observed and the badge appeared **eleven times on one screen**:
+ * once on the national panel, once on the map, once on the selected region,
+ * once per subsystem row, and again on each settled panel.
+ *
+ * Eleven identical badges do not distinguish anything. They repeat, in a chip,
+ * what the lede has already said in a sentence: *"Todo número aqui é medido;
+ * nenhum é previsão, porque nenhum modelo está promovido."* A mark that is on
+ * everything carries the same information as a mark that is on nothing, and it
+ * costs a row of visual noise on every panel to say it.
+ *
+ * So it is gated on the same question the D−1 run pills ask: can a forecast
+ * exist here at all? With no lane promoted the answer is no, nothing on this
+ * screen is a forecast, the lede says so once, and the badge stands down. The
+ * moment a model is promoted every one of them comes back, which is exactly
+ * when they start meaning something.
  *
  * `info` tone, which is the cyan the observed map's ramp is drawn in and which
  * nothing else on these screens uses. The badge and the map are then one
@@ -241,6 +258,10 @@ export function SolveStamp({
  */
 export function ObservedBadge() {
   const copy = useCopy();
+  const serving = useServing();
+  if (serving.status === "known" && !serving.serving) {
+    return null;
+  }
   return <Badge label={copy.app.observed.badge} tone="info" />;
 }
 

@@ -275,6 +275,7 @@ function PitchEmbed({ wide, title }: { wide: boolean; title: string }) {
         sandbox was closing a door onto our own hallway, and it was closing it
         on the deck.
       */}
+      {/* biome-ignore lint/nursery/useIframeSandbox: measured above — any sandbox value blanks Chrome's PDF viewer, and the framed content is our own static asset */}
       <iframe
         title={title}
         src={`${PITCH_PDF_PATH}#view=FitH`}
