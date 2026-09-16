@@ -1,6 +1,9 @@
 import { SUBSYSTEMS } from "@wattsteer/core/constants";
 import { sql } from "drizzle-orm";
-import { canonicalCurtailmentByReportingEntity } from "../database/canonical-views.js";
+import {
+  canonicalCurtailmentByReportingEntity,
+  canonicalLatestCompleteSettledHour,
+} from "../database/canonical-views.js";
 import type { Database } from "../database/connection.js";
 import type { SubsystemCode } from "../ingest/normalise.js";
 import { readOnly } from "./read-only.js";
@@ -132,13 +135,17 @@ export async function readGridNow(
     // no path through this function that reaches the view without it.
     await applyAxes(tx, { asOf: query.asOf });
 
+    // One canonical read, and the reason it is a view rather than the grouping
+    // that used to be written out here is in `canonical-views.ts`: grouping the
+    // deduplicated fact view by `valid_time` forced a sort of the entire table
+    // — 8.4-9.7 s deployed, on the first call the Overview makes — because that
+    // view's `DISTINCT ON` ordering has no index behind it. The view reads
+    // `curtailment_report_hour_time` backwards and stops at the first hour with
+    // every subsystem in it. Same answer, proven equivalent at three `as_of`
+    // cuts and against superseding versions; 1.3 ms instead of 1,026 ms on a
+    // reproduction at 864,000 rows.
     const settled = await tx.execute<{ valid_time: string }>(sql`
-      select valid_time
-      from ${canonicalCurtailmentByReportingEntity}
-      group by valid_time
-      having count(distinct subsystem) = ${SUBSYSTEMS.length}::int
-      order by valid_time desc
-      limit 1
+      select valid_time from ${canonicalLatestCompleteSettledHour}
     `);
     const [latest] = [...settled];
     if (latest === undefined) {

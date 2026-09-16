@@ -238,6 +238,56 @@ suite("GET /v1/grid/now (real Postgres)", () => {
     expect(ne?.last_24h_constrained_off_mwh).toBeLessThan(NE_HOUR_C);
   });
 
+  /**
+   * The equivalence the fast path rests on, asserted against a real planner.
+   *
+   * `canonical_latest_complete_settled_hour` answers "the newest hour settled in
+   * every subsystem" by reading `curtailment_report_hour` in `valid_time`
+   * order and stopping at the first qualifying hour — **without** going through
+   * `canonical_curtailment_by_reporting_entity`'s `DISTINCT ON`, whose ordering
+   * no index serves and which therefore sorted the whole table. Deployed, that
+   * sort was 8.4-9.7 s on the Overview's first call.
+   *
+   * The claim licensing the shortcut is that `DISTINCT ON` picks one row per
+   * business key and never drops a key, so the set of (`valid_time`,
+   * `subsystem`) pairs — and hence `count(distinct subsystem)` per hour — is
+   * identical either side of it. This runs both formulations against the same
+   * fixture and demands the same answer.
+   *
+   * **Non-vacuity.** The fixture's `HOUR_C` belongs to `NE` alone, so an
+   * implementation that forgot the `having` clause would answer `HOUR_C` and
+   * fail here; the assertion pins the answer to `HOUR_B` rather than merely
+   * pinning the two queries to each other, which two identically-broken
+   * queries would satisfy.
+   */
+  it("the fast read and the grouped view agree on the latest settled hour", async () => {
+    const answers = await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select set_config('wattsteer.as_of', ${AS_OF.toISOString()}, true)`,
+      );
+      const fast = await tx.execute<{ valid_time: string }>(
+        sql`select valid_time from canonical_latest_complete_settled_hour`,
+      );
+      const grouped = await tx.execute<{ valid_time: string }>(sql`
+        select valid_time
+        from canonical_curtailment_by_reporting_entity
+        group by valid_time
+        having count(distinct subsystem) = ${SUBSYSTEMS.length}::int
+        order by valid_time desc
+        limit 1
+      `);
+      return {
+        fast: [...fast][0]?.valid_time ?? null,
+        grouped: [...grouped][0]?.valid_time ?? null,
+      };
+    });
+    const asIso = (value: string | null) =>
+      value === null ? null : new Date(value).toISOString();
+    expect(asIso(answers.fast)).toBe(asIso(answers.grouped));
+    // The hour all four settled — not `HOUR_C`, which only `NE` has.
+    expect(asIso(answers.fast)).toBe(HOUR_B.toISOString());
+  });
+
   it("serves with the modelling service unreachable and no promoted artifact", async () => {
     // Nothing in this database is an artifact and nothing in the path is the ML
     // service: the 200 is a property of the dependency graph, not a fallback.

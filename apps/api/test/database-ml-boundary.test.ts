@@ -49,9 +49,18 @@ import {
  * the solver, which the mapping in the *same spec* (and `ml-proxy.ts`, and
  * `ml-proxy.test.ts`) contradicts: an upstream 502/503/504 maps to **`503
  * OPTIMIZER_NOT_READY`**, deliberately, so that "up but not serving" is not
- * filed as "unreachable". `502 OPTIMIZER_UNAVAILABLE` is the *unreachable*
- * answer and `502 OPTIMIZER_NOT_CONFIGURED` the *unset* one. Rather than pick a
- * side of the spec's own contradiction, the table runs both columns:
+ * filed as "unreachable". `OPTIMIZER_UNAVAILABLE` is the *unreachable* answer
+ * and `OPTIMIZER_NOT_CONFIGURED` the *unset* one. Rather than pick a side of
+ * the spec's own contradiction, the table runs both columns:
+ *
+ * **The unset column moved 502 → 503, and this table was the stale half.** Six
+ * codes were 502 and are not any more: behind a CDN a 502 is replaced wholesale
+ * with the edge's own `text/plain` page, so the JSON envelope never arrives and
+ * `error.code` never reaches the client — which is fatal to a closed set the
+ * product branches on to render a sentence in the reader's language.
+ * `packages/core/src/errors.ts` carries that argument in full and
+ * `docs/specs/api-surface.md` records the mapping. The expectations below were
+ * simply left behind; nothing about the boundary changed with them.
  *
  * | route                       | ML up, answering 503 | ML unconfigured        |
  * |-----------------------------|----------------------|------------------------|
@@ -62,10 +71,10 @@ import {
  * | `GET /v1/curtailment/episodes`| 200                | 200                    |
  * | `GET /v1/curtailment/reasons`| 200                 | 200                    |
  * | `GET /v1/meta`              | 200, model unreachable| 200, model unreachable|
- * | `GET /v1/model/card`        | 503 NOT_READY        | 502 NOT_CONFIGURED     |
- * | `GET /v1/replay/days`       | 503 NOT_READY        | 502 NOT_CONFIGURED     |
- * | `POST /v1/optimize`         | 503 NOT_READY        | 502 NOT_CONFIGURED     |
- * | `POST /v1/replay`           | 503 NOT_READY        | 502 NOT_CONFIGURED     |
+ * | `GET /v1/model/card`        | 503 NOT_READY        | 503 NOT_CONFIGURED     |
+ * | `GET /v1/replay/days`       | 503 NOT_READY        | 503 NOT_CONFIGURED     |
+ * | `POST /v1/optimize`         | 503 NOT_READY        | 503 NOT_CONFIGURED     |
+ * | `POST /v1/replay`           | 503 NOT_READY        | 503 NOT_CONFIGURED     |
  *
  * **`/v1/replay/days` is in the wrong half of the spec's table.** Seam 2 lists
  * it with the routes that serve, and api-surface 17 built it as a *pure proxy*
@@ -367,28 +376,28 @@ suite("the boundary, as behaviour · a modelling outage against real Postgres", 
       route: "GET /v1/model/card",
       request: GET(`/v1/model/card?lane=${LANE}`),
       down: { status: 503, code: "OPTIMIZER_NOT_READY" },
-      unset: { status: 502, code: "OPTIMIZER_NOT_CONFIGURED" },
+      unset: { status: 503, code: "OPTIMIZER_NOT_CONFIGURED" },
       why: "the card is a file on the modelling service's volume; Explain loses its curve, not its attribution",
     },
     {
       route: "GET /v1/replay/days",
       request: GET(`/v1/replay/days?subsystem=${SUBSYSTEM}&lane=${LANE}`),
       down: { status: 503, code: "OPTIMIZER_NOT_READY" },
-      unset: { status: 502, code: "OPTIMIZER_NOT_CONFIGURED" },
+      unset: { status: 503, code: "OPTIMIZER_NOT_CONFIGURED" },
       why: "which days are replayable is a property of the holdout artifacts on that volume",
     },
     {
       route: "POST /v1/optimize",
       request: POST("/v1/optimize"),
       down: { status: 503, code: "OPTIMIZER_NOT_READY" },
-      unset: { status: 502, code: "OPTIMIZER_NOT_CONFIGURED" },
+      unset: { status: 503, code: "OPTIMIZER_NOT_CONFIGURED" },
       why: "a MILP over user input cannot be precomputed",
     },
     {
       route: "POST /v1/replay",
       request: POST(`/v1/replay?lane=${LANE}`),
       down: { status: 503, code: "OPTIMIZER_NOT_READY" },
-      unset: { status: 502, code: "OPTIMIZER_NOT_CONFIGURED" },
+      unset: { status: 503, code: "OPTIMIZER_NOT_CONFIGURED" },
       why: "the replay solve runs the same simulator, per request",
     },
   ];

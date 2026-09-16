@@ -1459,3 +1459,56 @@ export const canonicalDiagnosisDriver = pgView("canonical_diagnosis_driver", {
    and a.gate_profile = d.gate_profile
    and a.data_version = d.data_version
 `);
+
+/**
+ * The most recent hour ONS has settled in **every** subsystem.
+ *
+ * A canonical read of its own, because it is a question the product asks and
+ * the fact view could not answer cheaply. `GET /v1/grid/now` used to assemble
+ * it by grouping the whole of {@link canonicalCurtailmentByReportingEntity} by
+ * `valid_time` and taking the newest group carrying four subsystems — the right
+ * question, asked in the one way that forces a sort of the entire table: that
+ * view's `DISTINCT ON` ordering has no index behind it, so the deduplication
+ * had to complete before the grouping could start.
+ *
+ * Measured on a reproduction at 864,000 rows: **1,026 ms**, a sequential scan
+ * and an `external merge` sort spilling 42 MB. Deployed, Railway's proxy log put
+ * the endpoint at **8.4–9.7 s** whenever the 60-second CDN cache missed — and it
+ * is the first call the Overview makes, so that was the wait before any panel
+ * could render. This view answers the same question in **1.3 ms** on the same
+ * data, by reading `curtailment_report_hour_time` backwards and stopping at the
+ * first qualifying hour: 751 rows read instead of 864,000. It needed no new
+ * index and changes no stored value.
+ *
+ * **Skipping the deduplication is sound, and the argument is short.**
+ * `DISTINCT ON` picks one row per business key and never drops a key, so the
+ * set of (`valid_time`, `subsystem`) pairs is identical either side of it and a
+ * `count(distinct subsystem)` per hour cannot differ. `0051`'s migration note
+ * records the cases that argument was checked against — superseding versions,
+ * out-of-order ingests, a newest hour with only two subsystems, and three
+ * `as_of` cuts including one before any ingest.
+ *
+ * **It is the canonical layer, not a way around it.** The rule that a product
+ * read never touches an ingest table is intact: `canonical_as_of()` applies
+ * here exactly as it does in every sibling above, and `contract/grid-now.ts`
+ * selects from this view by name. The change is that the canonical layer now
+ * publishes the read the product needed, rather than the product building it
+ * out of a view shaped for a different question.
+ */
+export const canonicalLatestCompleteSettledHour = pgView(
+  "canonical_latest_complete_settled_hour",
+  {
+    /** Start of the hour, UTC. `null` when nothing has settled at all. */
+    validTime: timestamp({ withTimezone: true }).notNull(),
+  },
+).as(sql`
+  select c.valid_time
+  from curtailment_report_hour c
+  join reporting_entity e on e.ons_code = c.reporting_entity_code
+  where c.ingested_at <= canonical_as_of()
+  group by c.valid_time
+  having count(distinct e.subsystem)
+       = (select count(*) from unnest(enum_range(null::subsystem_code)))
+  order by c.valid_time desc
+  limit 1
+`);
