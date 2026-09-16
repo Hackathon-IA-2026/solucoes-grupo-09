@@ -79,6 +79,7 @@ failure a silent substitution would have hidden.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
@@ -89,6 +90,10 @@ import numpy.typing as npt
 import statsmodels.api as sm
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.linear_model import LogisticRegression
+from statsmodels.tools.sm_exceptions import (
+    ConvergenceWarning,
+    IterationLimitWarning,
+)
 
 from wattsteer_ml.constants import Subsystem
 from wattsteer_ml.evaluation.folds import Fold, FoldBlocks
@@ -1096,10 +1101,41 @@ def _quantile_regression(
     curtailed hours are too few to identify every coefficient. The fallback is
     stated here rather than hidden as a NaN coefficient that would compose into
     a band nobody can read.
+
+    **The most common non-convergence raises nothing**, which is why the
+    warnings are caught rather than the exceptions alone. ``statsmodels``
+    signals both of its failures — the iteration cap and a detected convergence
+    cycle — with ``warnings.warn`` and nothing else: no exception, no flag on
+    the result, and finite coefficients taken from whatever the last iterate
+    happened to be. So the fallback above was documented and unreachable for the
+    case that actually occurs, and rung 2 was taking an unconverged iterate as
+    its baseline band. The test suite had been printing
+    ``IterationLimitWarning: Maximum number of iterations (1000) reached`` all
+    along, in a run that reported 1,817 passes.
+
+    That baseline is what a candidate model is scored against before promotion,
+    so "whatever the solver held at iteration 1000" is not a number this may
+    quietly stand on. A least-squares fit is a worse quantile estimate and an
+    honest one, which is the trade the docstring already chose.
+
+    Unrelated warnings are re-emitted, so catching these two never silences a
+    third.
     """
-    try:
-        fitted = sm.QuantReg(endogenous, exogenous).fit(q=alpha)
-    except (ValueError, np.linalg.LinAlgError):
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        try:
+            fitted = sm.QuantReg(endogenous, exogenous).fit(q=alpha)
+        except (ValueError, np.linalg.LinAlgError):
+            return _least_squares(exogenous, endogenous)
+    unconverged = False
+    for entry in caught:
+        if issubclass(entry.category, (IterationLimitWarning, ConvergenceWarning)):
+            unconverged = True
+        else:
+            warnings.warn_explicit(
+                entry.message, entry.category, entry.filename, entry.lineno
+            )
+    if unconverged:
         return _least_squares(exogenous, endogenous)
     parameters = np.asarray(fitted.params, dtype=np.float64).reshape(-1)
     if not np.all(np.isfinite(parameters)):
