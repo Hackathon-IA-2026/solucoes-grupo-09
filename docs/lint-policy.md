@@ -16,7 +16,7 @@ reason — so the config stays at zero warnings without hiding real signal.
 | `suspicious/noBitwiseOperators` | Seeded RNG (mulberry32) and FNV hashing require bitwise math. |
 | `performance/noAwaitInLoops` | Upstream pagination and job polling are sequential by design (rate-limit friendliness). |
 | `performance/useTopLevelRegex` | Format/parse helpers run at human scale; locality beats micro-optimization. |
-| `performance/noReExportAll`, `noBarrelFile`, `noNamespaceImport` | `@wattsteer/core` / `@wattsteer/ui` expose deliberate public-API barrels; `import * as Haptics` is the expo-haptics contract. |
+| `performance/noReExportAll`, `noBarrelFile`, `noNamespaceImport` | `@wattsteer/core` / `@wattsteer/ui` expose deliberate public-API barrels. (The `import * as Haptics` half of this rationale is gone: `expo-haptics` was never imported anywhere and has been removed from `apps/web/package.json`.) |
 | `style/noDefaultExport` | expo-router requires default exports for routes. |
 | `style/useExportsLast`, `noNestedTernary`, `useNamingConvention`, `noParameterProperties`, `noImplicitBoolean` | Conflict with established codebase idiom (tone ternaries, RN prop style). |
 | `style/noCommonJs` | React Native asset loading requires `require()`. |

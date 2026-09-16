@@ -93,8 +93,30 @@ The attribution above is reproducible: `expo export --platform web
 --source-maps`, then decode `mappings` and sum each segment's generated span
 against its source. Re-run it before claiming anything about this bundle.
 
-Dependencies with no source imports (`react-native-gesture-handler`,
-`react-native-worklets`, `expo-haptics`, `expo-web-browser`, `expo-font`) are
-left in `package.json` deliberately — they are Expo peer requirements pulled by
-`expo-router` and friends, and removing them costs nothing in bundle bytes
-because they are already absent from it.
+Several dependencies have no source imports and no bundle presence. That
+sentence originally said all of them were left in place deliberately, as Expo
+peer requirements — **which was asserted rather than checked, and was wrong for
+two of them.** Resolved against the installed tree:
+
+| Package | Required by | Verdict |
+| --- | --- | --- |
+| `react-native-reanimated` | `expo-router`, `react-native-screens` | keep |
+| `react-native-worklets` | `expo-modules-core`, reanimated | keep |
+| `react-native-gesture-handler` | `expo-router`, `react-native-screens` | keep |
+| `react-native-screens` | `expo-router` | keep |
+| `expo-font` | `expo`, `@expo/router-server` | keep |
+| `expo-haptics` | nothing but itself | **removed** |
+| `expo-web-browser` | nothing but itself | **removed** |
+
+The last two were direct dependencies that nothing imported and nothing
+required. Removing them changes no bundle bytes — they were never in it — but
+they are install weight and dependency surface for a product that never called
+them. Verified after removal: typecheck, 762 unit tests, 229 e2e, and a clean
+`expo export`.
+
+The `react-native-reanimated` line is worth keeping straight: nothing in this
+repo imports it. The single grep hit is a *comment* in `thinking-orb.tsx`
+explaining why the orb uses RN's built-in `Animated` instead, which is the same
+reason `docs/lint-policy.md` gives for silencing
+`react-doctor/rn-prefer-reanimated`. The package is present only because
+`expo-router` pulls it.
