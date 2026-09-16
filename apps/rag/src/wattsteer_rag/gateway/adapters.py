@@ -57,6 +57,27 @@ def _json_from_text(text: str) -> Any:
     raise ProviderError("model did not return JSON")
 
 
+def _blocks_from_message(message: dict) -> list[Block]:
+    """nemotron-parse answers with a `markdown_bbox` tool call, but a provider
+    that returns the page as plain text is still usable."""
+    calls = message.get("tool_calls") or []
+    if calls:
+        return _blocks_from_tool_call(calls[0])
+    content = (message.get("content") or "").strip()
+    return [Block(type="Text", text=content)] if content else []
+
+
+def _blocks_from_tool_call(call: dict) -> list[Block]:
+    raw = json.loads(call["function"]["arguments"])
+    if raw and isinstance(raw[0], list):  # the payload arrives wrapped once
+        raw = raw[0]
+    return [
+        Block(type=item.get("type") or "Text", text=item.get("text") or "", bbox=item.get("bbox"))
+        for item in raw
+        if item.get("text")
+    ]
+
+
 class OpenAICompatibleAdapter:
     """Anything that speaks /v1/chat/completions and /v1/embeddings."""
 
@@ -177,20 +198,7 @@ class OpenAICompatibleAdapter:
             },
         )
         message = (data.get("choices") or [{}])[0].get("message") or {}
-        calls = message.get("tool_calls") or []
-        if not calls:
-            # nemotron-parse answers with a `markdown_bbox` tool call, but a
-            # provider that returns the page as plain text is still usable.
-            content = (message.get("content") or "").strip()
-            if content:
-                return [Block(type="Text", text=content)], (data.get("usage") or {})
+        blocks = _blocks_from_message(message)
+        if not blocks:
             raise ProviderError(f"{self.name}: parse returned no blocks")
-        raw = json.loads(calls[0]["function"]["arguments"])
-        if raw and isinstance(raw[0], list):  # the payload arrives wrapped once
-            raw = raw[0]
-        blocks = [
-            Block(type=item.get("type") or "Text", text=item.get("text") or "", bbox=item.get("bbox"))
-            for item in raw
-            if item.get("text")
-        ]
         return blocks, (data.get("usage") or {})

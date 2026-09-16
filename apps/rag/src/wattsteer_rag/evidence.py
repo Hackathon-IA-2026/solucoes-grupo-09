@@ -169,118 +169,152 @@ def causal_hits(text: str) -> list[str]:
     return [lemma for lemma in CAUSALITY_BANNED_LEMMAS if f" {lemma} " in haystack]
 
 
+EVIDENCE_WEIGHT = {"REL": 0.8, "CNF": 0.5, "ENE": 0.3, "NONE": 0.0}
+CONFIDENCES = {"high", "medium", "low"}
+MAX_ITEMS = 12
+MAX_CITATIONS = 4
+
+
+def _is_table(hit: Hit) -> bool:
+    return bool((hit.locator or {}).get("table")) or hit.text.lstrip().startswith("|")
+
+
+def _check_citation(citation: Any, by_chunk: dict[str, Hit]) -> tuple[dict | None, GateFailure | None]:
+    """One citation through the quote gates: exists, says something, can be located."""
+    if not isinstance(citation, dict):
+        return None, GateFailure("schema_invalid", f"citation is {type(citation).__name__}")
+    chunk_id, quote = _citation_shape(citation)
+    hit = by_chunk.get(chunk_id)
+    if hit is None:
+        return None, GateFailure("quote_not_in_chunk", f"unknown chunk {chunk_id[:8]}")
+    if len(quote) < 20:
+        return None, GateFailure("quote_not_in_chunk", f"quote too short for {chunk_id[:8]}")
+    assembled = _quote_is_assembled(quote, hit)
+    if assembled is None:
+        return None, GateFailure("quote_not_in_chunk", f"quote absent from {chunk_id[:8]}")
+    if not has_substance(quote):
+        # A section title quoted on its own proves the section exists and
+        # nothing else. The operator needs the sentence that states the rule.
+        return None, GateFailure("quote_without_substance", quote[:60])
+    locator = dict(hit.locator or {})
+    if not any(locator.get(key) for key in ("page", "section", "table")):
+        return None, GateFailure("locator_missing", chunk_id[:8])
+    return _accepted_citation(hit, chunk_id, quote, assembled, locator), None
+
+
+def _quote_is_assembled(quote: str, hit: Hit) -> bool | None:
+    """False when the quote is a contiguous span of the chunk, True when it was
+    assembled from the cells of a table in order, None when it is not there."""
+    if flatten_for_match(quote) in flatten_for_match(hit.text):
+        return False
+    if _is_table(hit) and assembled_match(quote, hit.text):
+        return True
+    return None
+
+
+def _citation_shape(citation: dict) -> tuple[str, str]:
+    quote = citation.get("quote")
+    return str(citation.get("chunk_id") or ""), quote.strip() if isinstance(quote, str) else ""
+
+
+def _accepted_citation(hit: Hit, chunk_id: str, quote: str, assembled: bool, locator: dict) -> dict:
+    return {
+        "document_id": hit.document_id,
+        "source": hit.source,
+        "title": hit.title,
+        "published_at": hit.published_at.isoformat() if hit.published_at else None,
+        "locator": {
+            "page": locator.get("page"),
+            "section": locator.get("section") or hit.section_path,
+            "table": locator.get("table"),
+            "row": locator.get("row"),
+        },
+        "quote": quote[:300],
+        "assembled": assembled,
+        "url": hit.url,
+        "sha256": hit.sha256,
+        "chunk_id": chunk_id,
+        "external_id": hit.external_id,
+        "revision": hit.revision,
+    }
+
+
+def _numbers_not_quoted(claim: str, citations: list[dict]) -> list[GateFailure]:
+    """Token comparison, not substring: a claim saying 26 must not be accepted
+    because the quote happens to contain 260."""
+    quoted = {_number_key(number) for citation in citations for number in numbers_in(citation["quote"])}
+    return [
+        GateFailure("number_not_in_quote", number)
+        for number in numbers_in(claim)
+        if _number_key(number) not in quoted
+    ]
+
+
+def _support_and_confidence(item: dict) -> tuple[str, str]:
+    supports = (item.get("supports") or "NONE").upper()
+    if supports not in EVIDENCE_WEIGHT:
+        supports = "NONE"
+    confidence = (item.get("confidence") or "low").lower()
+    if confidence not in CONFIDENCES:
+        confidence = "low"
+    # REL without a published intervention schedule can never be high: the
+    # document that would settle it is not public.
+    if supports == "REL" and confidence == "high":
+        confidence = "medium"
+    return supports, confidence
+
+
+def _item_shape(item: Any) -> tuple[str, list, GateFailure | None]:
+    """The claim text and the citation list, or why the item has neither."""
+    if not isinstance(item, dict):
+        return "", [], GateFailure("schema_invalid", f"item is {type(item).__name__}")
+    claim = (item.get("claim") or "").strip() if isinstance(item.get("claim"), str) else ""
+    if len(claim) < 10:
+        return "", [], GateFailure("schema_invalid", "claim too short")
+    citations = item.get("citations")
+    if not isinstance(citations, list):
+        return "", [], GateFailure("schema_invalid", "citations is not a list")
+    return claim, citations, None
+
+
 def check_claim(item: Any, by_chunk: dict[str, Hit]) -> tuple[dict | None, list[GateFailure]]:
     """Run the gates. Returns the accepted claim, or the reasons it failed.
 
     The model's output is untrusted input: a string where an object was asked
     for is a rejected claim, never an exception.
     """
+    claim, citations, shape_failure = _item_shape(item)
+    if shape_failure:
+        return None, [shape_failure]
+
+    accepted: list[dict] = []
     failures: list[GateFailure] = []
-    if not isinstance(item, dict):
-        return None, [GateFailure("schema_invalid", f"item is {type(item).__name__}")]
-    claim = (item.get("claim") or "").strip() if isinstance(item.get("claim"), str) else ""
-    if len(claim) < 10:
-        return None, [GateFailure("schema_invalid", "claim too short")]
-
-    accepted_citations = []
-    citations = item.get("citations")
-    if not isinstance(citations, list):
-        return None, [GateFailure("schema_invalid", "citations is not a list")]
     for citation in citations:
-        if not isinstance(citation, dict):
-            failures.append(GateFailure("schema_invalid", f"citation is {type(citation).__name__}"))
-            continue
-        chunk_id = str(citation.get("chunk_id") or "")
-        quote = citation.get("quote")
-        quote = quote.strip() if isinstance(quote, str) else ""
-        hit = by_chunk.get(chunk_id)
-        if hit is None:
-            failures.append(GateFailure("quote_not_in_chunk", f"unknown chunk {chunk_id[:8]}"))
-            continue
-        assembled = False
-        if len(quote) < 20:
-            failures.append(GateFailure("quote_not_in_chunk", f"quote too short for {chunk_id[:8]}"))
-            continue
-        if flatten_for_match(quote) not in flatten_for_match(hit.text):
-            is_table = bool((hit.locator or {}).get("table")) or hit.text.lstrip().startswith("|")
-            if not (is_table and assembled_match(quote, hit.text)):
-                failures.append(GateFailure("quote_not_in_chunk", f"quote absent from {chunk_id[:8]}"))
-                continue
-            assembled = True
-        if not has_substance(quote):
-            # A section title quoted on its own proves the section exists and
-            # nothing else. The operator needs the sentence that states the rule.
-            failures.append(GateFailure("quote_without_substance", quote[:60]))
-            continue
-        locator = dict(hit.locator or {})
-        if not any(locator.get(key) for key in ("page", "section", "table")):
-            failures.append(GateFailure("locator_missing", chunk_id[:8]))
-            continue
-        accepted_citations.append(
-            {
-                "document_id": hit.document_id,
-                "source": hit.source,
-                "title": hit.title,
-                "published_at": hit.published_at.isoformat() if hit.published_at else None,
-                "locator": {
-                    "page": locator.get("page"),
-                    "section": locator.get("section") or hit.section_path,
-                    "table": locator.get("table"),
-                    "row": locator.get("row"),
-                },
-                "quote": quote[:300],
-                "assembled": assembled,
-                "url": hit.url,
-                "sha256": hit.sha256,
-                "chunk_id": chunk_id,
-                "external_id": hit.external_id,
-                "revision": hit.revision,
-            }
-        )
-
-    if not accepted_citations:
+        ok, failure = _check_citation(citation, by_chunk)
+        if ok:
+            accepted.append(ok)
+        elif failure:
+            failures.append(failure)
+    if not accepted:
         return None, failures or [GateFailure("quote_not_in_chunk", "no citation survived")]
 
-    quoted_numbers = {
-        _number_key(number) for citation in accepted_citations for number in numbers_in(citation["quote"])
+    missing = _numbers_not_quoted(claim, accepted)
+    if missing:
+        return None, [*failures, *missing]
+    causal = causal_hits(claim)
+    if causal:
+        return None, [*failures, GateFailure("causal_vocabulary", ", ".join(causal))]
+
+    supports, confidence = _support_and_confidence(item)
+    claim_document = {
+        "claim": claim[:400],
+        "supports": supports,
+        "confidence": confidence,
+        "evidence_weight": EVIDENCE_WEIGHT[supports],
+        "period": None,
+        "citations": accepted[:MAX_CITATIONS],
     }
-    for number in numbers_in(claim):
-        # Token comparison, not substring: a claim saying 26 must not be accepted
-        # because the quote happens to contain 260.
-        if _number_key(number) not in quoted_numbers:
-            failures.append(GateFailure("number_not_in_quote", number))
-    if any(failure.code == "number_not_in_quote" for failure in failures):
-        return None, failures
-
-    hits = causal_hits(claim)
-    if hits:
-        return None, [*failures, GateFailure("causal_vocabulary", ", ".join(hits))]
-
-    supports = (item.get("supports") or "NONE").upper()
-    if supports not in {"REL", "CNF", "ENE", "NONE"}:
-        supports = "NONE"
-    confidence = (item.get("confidence") or "low").lower()
-    if confidence not in {"high", "medium", "low"}:
-        confidence = "low"
-    # REL without a published intervention schedule can never be high: the
-    # document that would settle it is not public (D09).
-    if supports == "REL" and confidence == "high":
-        confidence = "medium"
-
-    return (
-        {
-            "claim": claim[:400],
-            "supports": supports,
-            "confidence": confidence,
-            "evidence_weight": EVIDENCE_WEIGHT[supports],
-            "period": None,
-            "citations": accepted_citations[:4],
-        },
-        failures,
-    )
-
-
-EVIDENCE_WEIGHT = {"REL": 0.8, "CNF": 0.5, "ENE": 0.3, "NONE": 0.0}
+    return claim_document, failures
 
 
 def quotable_spans(text: str, *, minimum: int = 60, maximum: int = 280) -> list[str]:
@@ -339,26 +373,21 @@ async def build_evidence(
     """Retrieve, ask, gate, and return a RagEvidence document."""
     question = question or question_for(subsystem, target_date, reason, description)
     trace_id = trace_id or hashlib.sha256(f"{subsystem}{target_date}{question}".encode()).hexdigest()[:12]
-
     hits = await search(db, gateway, question, published_before=gate_at)
-    by_chunk = {hit.chunk_id: hit for hit in hits}
-    rerank_provider = None
-    candidates = [
-        {
-            "chunk_id": hit.chunk_id,
-            "document": f"{hit.external_id or hit.source} {hit.revision or ''}".strip(),
-            "title": hit.title[:80],
-            "published_at": hit.published_at.date().isoformat() if hit.published_at else None,
-            "locator": hit.locator,
-            "vector_rank": hit.vector_rank,
-            "text_rank": hit.text_rank,
-            "rrf": round(hit.score, 5),
-            "preview": hit.text[:160].replace("\n", " "),
-        }
-        for hit in hits
-    ]
+    document = _empty_document(subsystem, target_date, gate_at, question, trace_id, hits)
+    document["corpus_version"] = await db.corpus_version()
+    if hits:
+        await _draft(gateway, document, question, hits)
+    else:
+        document["reason"] = "corpus_no_coverage_for_date"
+    await _persist(db, document, gateway, trace_id)
+    return document
 
-    document: dict[str, Any] = {
+
+def _empty_document(
+    subsystem: str, target_date: str, gate_at: datetime, question: str, trace_id: str, hits: list[Hit]
+) -> dict[str, Any]:
+    return {
         "schema_version": SCHEMA_VERSION,
         "subsystem": subsystem,
         "target_date": target_date,
@@ -369,16 +398,16 @@ async def build_evidence(
         "items": [],
         "rule_disagreement": None,
         "numbers_whitelist": [],
-        "corpus_version": await db.corpus_version(),
+        "corpus_version": "",
         "generated_at": datetime.now(UTC).isoformat(),
         "trace": {
             "trace_id": trace_id,
             "retrieval": {
                 "hybrid_candidates": len(hits),
                 "reranked": len(hits),
-                "rerank_provider": rerank_provider,
+                "rerank_provider": None,
                 "filters": {"published_before": gate_at.isoformat()},
-                "candidates": candidates,
+                "candidates": [_candidate(hit) for hit in hits],
             },
             "generation": {
                 "provider": None,
@@ -390,32 +419,58 @@ async def build_evidence(
         },
     }
 
-    if not hits:
-        document["reason"] = "corpus_no_coverage_for_date"
-        await _persist(db, document, gateway, trace_id)
-        return document
 
-    passages = "\n\n".join(
-        f"[chunk_id: {hit.chunk_id}]\n"
-        f"Document: {hit.title} ({hit.external_id or hit.source} {hit.revision or ''}".rstrip()
-        + "),"
-        f" published {hit.published_at.date().isoformat() if hit.published_at else 'on an undeclared date'},"
-        f" {'page ' + str(hit.locator['page']) if hit.locator.get('page') else hit.section_path or ''}\n"
-        f"{hit.text[:2200]}"
-        for hit in hits
-    )
+def _candidate(hit: Hit) -> dict:
+    return {
+        "chunk_id": hit.chunk_id,
+        "document": f"{hit.external_id or hit.source} {hit.revision or ''}".strip(),
+        "title": hit.title[:80],
+        "published_at": hit.published_at.date().isoformat() if hit.published_at else None,
+        "locator": hit.locator,
+        "vector_rank": hit.vector_rank,
+        "text_rank": hit.text_rank,
+        "rrf": round(hit.score, 5),
+        "preview": hit.text[:160].replace("\n", " "),
+    }
 
-    # Spans that would pass the quote gate if copied. Offered only after a
-    # refusal: on the first attempt they nudge the model into quoting the sample
-    # instead of reading the document, and the point is the document.
+
+def _passage(hit: Hit) -> str:
+    document = f"{hit.external_id or hit.source} {hit.revision or ''}".strip()
+    published = hit.published_at.date().isoformat() if hit.published_at else "on an undeclared date"
+    where = f"page {hit.locator['page']}" if hit.locator.get("page") else hit.section_path or ""
+    header = f"Document: {hit.title} ({document}), published {published}, {where}"
+    return f"[chunk_id: {hit.chunk_id}]\n{header}\n{hit.text[:2200]}"
+
+
+def _guidance(hits: list[Hit]) -> str:
+    """Spans that would pass the quote gate if copied. Offered only after a
+    refusal: on the first attempt they nudge the model into quoting the sample
+    instead of reading the document, and the point is the document."""
     spans = "\n".join(
         f'- [{hit.chunk_id}] "{span}"' for hit in hits[:3] for span in quotable_spans(hit.text)[:2]
     )
-    guidance = (
-        "\n\nContiguous spans that exist in the documents and can be copied as citations:\n" + spans
-        if spans
-        else ""
+    if not spans:
+        return ""
+    return "\n\nContiguous spans that exist in the documents and can be copied as citations:\n" + spans
+
+
+def _complaint(guidance: str, failures: list[GateFailure]) -> str:
+    refused = "; ".join(f"{failure.code} ({failure.detail})" for failure in failures[:4])
+    return (
+        f"{guidance}\n\nThe previous answer was refused on these points: {refused}."
+        " Rules for the new attempt: copy the contiguous span exactly as it appears"
+        " above, including inside the span every number you cite in the claim; use only"
+        " the chunk_id values listed; if the span is inside a table, copy the cells'"
+        " content in sequence, without inventing punctuation."
     )
+
+
+async def _draft(gateway: Gateway, document: dict, question: str, hits: list[Hit]) -> None:
+    """Ask the model, gate the answer, retry with the refusals, settle the verdict."""
+    by_chunk = {hit.chunk_id: hit for hit in hits}
+    passages = "\n\n".join(_passage(hit) for hit in hits)
+    guidance = _guidance(hits)
+    generation = document["trace"]["generation"]
     complaint = ""
     accepted: list[dict] = []
     failures: list[GateFailure] = []
@@ -429,82 +484,77 @@ async def build_evidence(
         ]
         try:
             result = await gateway.run(
-                "generate_strong",
-                tokens=max(1, len(passages) // 4),
-                messages=messages,
-                want_json=True,
+                "generate_strong", tokens=max(1, len(passages) // 4), messages=messages, want_json=True
             )
         except QuotaExhausted as exc:
             document["verdict"] = "insufficient"
             document["reason"] = "quota_exhausted_partial"
-            document["trace"]["generation"]["attempts"] = attempt - 1
+            generation["attempts"] = attempt - 1
             document["trace"]["retry_at"] = exc.retry_at
-            await _persist(db, document, gateway, trace_id)
-            return document
-
-        document["trace"]["generation"].update(
-            {
-                "provider": result.provider,
-                "model": result.model,
-                "attempts": attempt,
-                "source": "model",
-            }
+            return
+        generation.update(
+            {"provider": result.provider, "model": result.model, "attempts": attempt, "source": "model"}
         )
-        payload = result.value if isinstance(result.value, dict) else {"items": result.value}
-        accepted, failures = [], []
-        rejected: list[dict] = []
-        for item in (payload.get("items") or [])[:12]:
-            claim, item_failures = check_claim(item, by_chunk)
-            failures.extend(item_failures)
-            if claim:
-                accepted.append(claim)
-            else:
-                # Keeping what the model tried to say, and why it was refused, is
-                # the difference between "the RAG found nothing" and knowing which
-                # of the three gates to argue with.
-                rejected.append(
-                    {
-                        "claim": (item.get("claim") or "")[:300],
-                        "supports": item.get("supports"),
-                        "cited_chunks": [c.get("chunk_id") for c in (item.get("citations") or [])],
-                        "quotes": [(c.get("quote") or "")[:160] for c in (item.get("citations") or [])],
-                        "failures": [{"code": f.code, "detail": f.detail} for f in item_failures],
-                        "attempt": attempt,
-                    }
-                )
-        document["trace"]["generation"].setdefault("rejected", []).extend(rejected)
-        if accepted or attempt == 3:
+        accepted, failures = _gate_answer(result.value, by_chunk, attempt, generation)
+        if accepted:
             break
-        complaint = (
-            guidance
-            + "\n\nThe previous answer was refused on these points: "
-            + "; ".join(f"{failure.code} ({failure.detail})" for failure in failures[:4])
-            + ". Rules for the new attempt: copy the contiguous span exactly as it appears"
-            " above, including inside the span every number you cite in the claim; use only"
-            " the chunk_id values listed; if the span is inside a table, copy the cells'"
-            " content in sequence, without inventing punctuation."
-        )
+        complaint = _complaint(guidance, failures)
+    generation["gate_failures"] = sorted({failure.code for failure in failures})
+    _settle(document, accepted)
 
-    document["trace"]["generation"]["gate_failures"] = sorted({failure.code for failure in failures})
-    if accepted:
-        order = {"REL": 0, "CNF": 1, "ENE": 2, "NONE": 3}
-        accepted.sort(key=lambda claim: (order[claim["supports"]], -claim["evidence_weight"]))
-        document["items"] = accepted
-        document["verdict"] = "found"
-        document["numbers_whitelist"] = sorted(
-            {
-                number
-                for claim in accepted
-                for citation in claim["citations"]
-                for number in numbers_in(citation["quote"])
-            }
-        )
-    else:
+
+def _gate_answer(
+    value: Any, by_chunk: dict[str, Hit], attempt: int, generation: dict
+) -> tuple[list[dict], list[GateFailure]]:
+    payload = value if isinstance(value, dict) else {"items": value}
+    accepted: list[dict] = []
+    failures: list[GateFailure] = []
+    rejected: list[dict] = []
+    for item in (payload.get("items") or [])[:MAX_ITEMS]:
+        claim, item_failures = check_claim(item, by_chunk)
+        failures.extend(item_failures)
+        if claim:
+            accepted.append(claim)
+        else:
+            rejected.append(_rejected(item, item_failures, attempt))
+    # Keeping what the model tried to say, and why it was refused, is the
+    # difference between "the RAG found nothing" and knowing which gate to argue with.
+    generation.setdefault("rejected", []).extend(rejected)
+    return accepted, failures
+
+
+def _rejected(item: Any, failures: list[GateFailure], attempt: int) -> dict:
+    item = item if isinstance(item, dict) else {}
+    citations = [c for c in (item.get("citations") or []) if isinstance(c, dict)]
+    return {
+        "claim": str(item.get("claim") or "")[:300],
+        "supports": item.get("supports"),
+        "cited_chunks": [c.get("chunk_id") for c in citations],
+        "quotes": [str(c.get("quote") or "")[:160] for c in citations],
+        "failures": [{"code": f.code, "detail": f.detail} for f in failures],
+        "attempt": attempt,
+    }
+
+
+SUPPORT_ORDER = {"REL": 0, "CNF": 1, "ENE": 2, "NONE": 3}
+
+
+def _settle(document: dict, accepted: list[dict]) -> None:
+    if not accepted:
         document["verdict"] = "insufficient"
         document["reason"] = "gates_rejected_all_claims"
-
-    await _persist(db, document, gateway, trace_id)
-    return document
+        return
+    accepted.sort(key=lambda claim: (SUPPORT_ORDER[claim["supports"]], -claim["evidence_weight"]))
+    document["items"] = accepted
+    document["verdict"] = "found"
+    document["numbers_whitelist"] = sorted(
+        {
+            number
+            for claim in accepted
+            for citation in claim["citations"]
+            for number in numbers_in(citation["quote"])
+        }
+    )
 
 
 async def _persist(db: Database, document: dict, gateway: Gateway, trace_id: str) -> None:

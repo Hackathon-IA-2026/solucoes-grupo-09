@@ -89,19 +89,14 @@ async def index_document(
 async def embed_pending(
     db: Database, gateway: Gateway, *, document_id: str | None = None, limit: int | None = None
 ) -> dict:
+    """Embed chunks that have no vector yet, batch by batch, until none is left,
+    the limit is reached, or the quota is spent."""
     pool = await db.connect()
-    task = gateway.tasks["embed"]
+    batch_size = gateway.tasks["embed"].batch_size
     done = 0
     waiting: float | None = None
-    while True:
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                "SELECT id, text FROM rag.chunk WHERE embedding IS NULL"
-                + (" AND document_id = $2" if document_id else "")
-                + " ORDER BY document_id, ordinal LIMIT $1",
-                task.batch_size,
-                *([document_id] if document_id else []),
-            )
+    while limit is None or done < limit:
+        rows = await _chunks_without_vector(pool, document_id, batch_size)
         if not rows:
             break
         try:
@@ -109,15 +104,28 @@ async def embed_pending(
         except QuotaExhausted as exc:
             waiting = exc.retry_at
             break
-        async with pool.acquire() as conn:
-            await conn.executemany(
-                "UPDATE rag.chunk SET embedding = $2::vector, embedding_model = $3 WHERE id = $1",
-                [(row["id"], to_pgvector(vector), model) for row, vector in zip(rows, vectors, strict=True)],
-            )
+        await _store_vectors(pool, rows, vectors, model)
         done += len(rows)
-        if limit and done >= limit:
-            break
     if document_id and waiting is None:
         async with pool.acquire() as conn:
             await conn.execute("UPDATE rag.document SET status = 'indexed' WHERE id = $1", document_id)
     return {"embedded": done, "waiting_quota_until": waiting}
+
+
+async def _chunks_without_vector(pool, document_id: str | None, batch_size: int) -> list:
+    async with pool.acquire() as conn:
+        return await conn.fetch(
+            "SELECT id, text FROM rag.chunk WHERE embedding IS NULL"
+            + (" AND document_id = $2" if document_id else "")
+            + " ORDER BY document_id, ordinal LIMIT $1",
+            batch_size,
+            *([document_id] if document_id else []),
+        )
+
+
+async def _store_vectors(pool, rows: list, vectors: list[list[float]], model: str) -> None:
+    async with pool.acquire() as conn:
+        await conn.executemany(
+            "UPDATE rag.chunk SET embedding = $2::vector, embedding_model = $3 WHERE id = $1",
+            [(row["id"], to_pgvector(vector), model) for row, vector in zip(rows, vectors, strict=True)],
+        )

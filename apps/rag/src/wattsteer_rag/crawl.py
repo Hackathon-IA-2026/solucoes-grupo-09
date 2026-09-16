@@ -134,40 +134,32 @@ class Crawler:
         cost a wait, not a missing document. A 404 is not transient and is not
         retried: the file is simply not there.
         """
-        response = None
-        for attempt in range(1, max(1, attempts) + 1):
-            wait = self.conf.fetch_interval_s - (time.monotonic() - self._last_fetch)
-            if wait > 0:
-                await asyncio.sleep(wait)
-            self._last_fetch = time.monotonic()
-            try:
-                response = await client.get(
-                    url,
-                    headers={"user-agent": self.conf.user_agent},
-                    timeout=90.0,
-                    follow_redirects=True,
-                )
-            except httpx.RequestError:
-                response = None
-            if (
-                response is not None
-                and response.status_code == 200
-                and len(response.content) >= minimum_bytes
-            ):
-                break
-            if response is not None and response.status_code in {400, 401, 403, 404, 410}:
-                return None  # the archive does not have it, and never will
-            if attempt == attempts:
+        last = max(1, attempts)
+        for attempt in range(1, last + 1):
+            response = await self._request(client, url)
+            if _is_document(response, minimum_bytes):
+                return self._keep(response, url, suffix)
+            if _is_gone(response) or attempt == last:
                 return None
             # 1s, 4s, 9s, 16s: long enough for a throttle to clear, short enough
             # that a full backfill still finishes in one sitting.
-            retry_after = 0.0
-            if response is not None:
-                header = response.headers.get("retry-after", "")
-                retry_after = float(header) if header.isdigit() else 0.0
-            await asyncio.sleep(max(retry_after, attempt * attempt))
-        if response is None or response.status_code != 200 or not response.content:
+            await asyncio.sleep(max(_retry_after(response), attempt * attempt))
+        return None
+
+    async def _request(self, client: httpx.AsyncClient, url: str) -> httpx.Response | None:
+        """One polite request: never faster than the configured interval."""
+        wait = self.conf.fetch_interval_s - (time.monotonic() - self._last_fetch)
+        if wait > 0:
+            await asyncio.sleep(wait)
+        self._last_fetch = time.monotonic()
+        try:
+            return await client.get(
+                url, headers={"user-agent": self.conf.user_agent}, timeout=90.0, follow_redirects=True
+            )
+        except httpx.RequestError:
             return None
+
+    def _keep(self, response: httpx.Response, url: str, suffix: str) -> Fetched:
         digest = hashlib.sha256(response.content).hexdigest()
         path = self.store / f"{digest}{suffix}"
         if not path.exists():
@@ -360,17 +352,11 @@ class Crawler:
         if index is None:
             return [{"source": "IPDO", "ok": False, "error": "archive index unavailable, try again later"}]
         try:
-            rows = json.loads(index.path.read_text())[1:]
+            editions = _archived_editions(json.loads(index.path.read_text())[1:])
         except json.JSONDecodeError:
             return [{"source": "IPDO", "ok": False, "error": "archive returned no index"}]
-        seen: dict[str, str] = {}
-        for stamp, original in rows:
-            match = re.search(r"IPDO-(\d{2})-(\d{2})-(\d{4})", original, re.I)
-            if match:
-                day = f"{match.group(3)}-{match.group(2)}-{match.group(1)}"
-                seen.setdefault(day, f"https://web.archive.org/web/{stamp}id_/{original}")
         already = await self.known_days("IPDO")
-        pending = [(day, url) for day, url in sorted(seen.items(), reverse=True) if day not in already]
+        pending = [(day, url) for day, url in sorted(editions.items(), reverse=True) if day not in already]
         total_pending = len(pending)
         if sample and len(pending) >= 3:
             # Backfilling 218 editions takes a long time and the archive throttles.
@@ -381,7 +367,7 @@ class Crawler:
         out: list[dict] = [
             {
                 "source": "IPDO",
-                "archive_index": len(seen),
+                "archive_index": len(editions),
                 "mode": "sample" if sample else "sequential",
                 "fetching_now": min(limit, len(pending)),
                 "already_here": len(already),
@@ -389,27 +375,31 @@ class Crawler:
             }
         ]
         for day, url in pending[:limit]:
-            # A throttled reply from the archive is a small HTML page, not a PDF,
-            # so size is part of what counts as success.
-            fetched = await self._get(client, url, attempts=attempts, minimum_bytes=50_000)
-            if fetched is None:
-                out.append({"day": day, "ok": False, "error": "archive did not serve the file"})
-                continue
-            parsed = date.fromisoformat(day)
-            document_id, is_new = await self.register(
-                fetched,
-                source="IPDO",
-                external_id=f"IPDO {day}",
-                title=f"IPDO - Informativo Preliminar Diário da Operação {parsed.strftime('%d/%m/%Y')}",
-                revision=None,
-                published_at=datetime(parsed.year, parsed.month, parsed.day, tzinfo=UTC),
-                meta={"day": day, "via": "web.archive.org"},
-            )
-            out.append({"day": day, "ok": True, "document_id": document_id, "new": is_new})
+            out.append(await self._fetch_archived_ipdo(client, day, url, attempts))
         remaining = total_pending - min(limit, len(pending))
         if remaining > 0:
             out.append({"note": f"{remaining} editions still missing; run again to continue"})
         return out
+
+    async def _fetch_archived_ipdo(
+        self, client: httpx.AsyncClient, day: str, url: str, attempts: int
+    ) -> dict:
+        # A throttled reply from the archive is a small HTML page, not a PDF,
+        # so size is part of what counts as success.
+        fetched = await self._get(client, url, attempts=attempts, minimum_bytes=50_000)
+        if fetched is None:
+            return {"day": day, "ok": False, "error": "archive did not serve the file"}
+        parsed = date.fromisoformat(day)
+        document_id, is_new = await self.register(
+            fetched,
+            source="IPDO",
+            external_id=f"IPDO {day}",
+            title=f"IPDO - Informativo Preliminar Diário da Operação {parsed.strftime('%d/%m/%Y')}",
+            revision=None,
+            published_at=datetime(parsed.year, parsed.month, parsed.day, tzinfo=UTC),
+            meta={"day": day, "via": "web.archive.org"},
+        )
+        return {"day": day, "ok": True, "document_id": document_id, "new": is_new}
 
     async def fetch_rap(self, client: httpx.AsyncClient, urls: list[str]) -> list[dict]:
         """Disturbance reports. Public, but with no listing worth crawling.
@@ -443,6 +433,37 @@ class Crawler:
             )
             out.append({"external_id": label, "ok": True, "document_id": document_id, "new": is_new})
         return out
+
+
+GONE = {400, 401, 403, 404, 410}  # the server does not have it, and never will
+
+
+def _is_document(response: httpx.Response | None, minimum_bytes: int) -> bool:
+    return (
+        response is not None
+        and response.status_code == 200
+        and len(response.content) >= max(1, minimum_bytes)
+    )
+
+
+def _is_gone(response: httpx.Response | None) -> bool:
+    return response is not None and response.status_code in GONE
+
+
+def _retry_after(response: httpx.Response | None) -> float:
+    header = response.headers.get("retry-after", "") if response is not None else ""
+    return float(header) if header.isdigit() else 0.0
+
+
+def _archived_editions(rows: list) -> dict[str, str]:
+    """One archive URL per edition day, the earliest capture of each."""
+    editions: dict[str, str] = {}
+    for stamp, original in rows:
+        match = re.search(r"IPDO-(\d{2})-(\d{2})-(\d{4})", original, re.I)
+        if match:
+            day = f"{match.group(3)}-{match.group(2)}-{match.group(1)}"
+            editions.setdefault(day, f"https://web.archive.org/web/{stamp}id_/{original}")
+    return editions
 
 
 def _bdo_title(name: str) -> str:

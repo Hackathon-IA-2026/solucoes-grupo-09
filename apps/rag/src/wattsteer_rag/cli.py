@@ -180,8 +180,9 @@ async def cmd_evidence(args) -> int:
 
 def _print_evidence(document: dict) -> None:
     generation = document["trace"]["generation"]
+    reason = f" ({document['reason']})" if document["reason"] else ""
     print(f"\nQuestion: {document['question']}")
-    print(f"Verdict: {document['verdict']}" + (f" ({document['reason']})" if document["reason"] else ""))
+    print(f"Verdict: {document['verdict']}{reason}")
     print(f"Model: {generation['provider']}:{generation['model']} attempts={generation['attempts']}")
     for item in document["items"]:
         print(
@@ -189,19 +190,8 @@ def _print_evidence(document: dict) -> None:
         )
         for citation in item["citations"]:
             _print_citation(citation)
-    rejected = generation.get("rejected") or []
-    if rejected:
-        print(f"\n  rejected ({len(rejected)}):")
-        for item in rejected:
-            codes = ", ".join(failure["code"] for failure in item["failures"])
-            print(f"    - {item['claim'][:110]}  [{codes}]")
-    candidates = document["trace"]["retrieval"].get("candidates") or []
-    if candidates:
-        print(f"\n  candidates ({len(candidates)}):")
-        for candidate in candidates[:8]:
-            ranks = f"v{candidate['vector_rank'] or '-'} t{candidate['text_rank'] or '-'}"
-            section = candidate["locator"].get("section") or ""
-            print(f"    {candidate['rrf']:.4f} {ranks} {candidate['document']} {section}")
+    _print_rejected(generation.get("rejected") or [])
+    _print_candidates(document["trace"]["retrieval"].get("candidates") or [])
 
 
 def _print_citation(citation: dict) -> None:
@@ -212,6 +202,25 @@ def _print_citation(citation: dict) -> None:
         f"    source: {citation['title']} {citation.get('revision') or ''} | {where} | published {published}"
     )
     print(f'    quote: "{citation["quote"][:200]}"')
+
+
+def _print_rejected(rejected: list[dict]) -> None:
+    if not rejected:
+        return
+    print(f"\n  rejected ({len(rejected)}):")
+    for item in rejected:
+        codes = ", ".join(failure["code"] for failure in item["failures"])
+        print(f"    - {item['claim'][:110]}  [{codes}]")
+
+
+def _print_candidates(candidates: list[dict]) -> None:
+    if not candidates:
+        return
+    print(f"\n  candidates ({len(candidates)}):")
+    for candidate in candidates[:8]:
+        ranks = f"v{candidate['vector_rank'] or '-'} t{candidate['text_rank'] or '-'}"
+        section = candidate["locator"].get("section") or ""
+        print(f"    {candidate['rrf']:.4f} {ranks} {candidate['document']} {section}")
 
 
 async def cmd_question(args) -> int:
