@@ -35,6 +35,16 @@
  *    rails carry the detail. Whether that reads as spacious or as empty is
  *    exactly what this is for.
  *
+ * ## What it shows, which is everything `/app` shows
+ *
+ * The map and its satellites are the console's own layout; **Explicar and
+ * Mitigar are the same sections `/app` renders**, through the same `embedded`
+ * switch. The first cut of this file left them out — it was built as a
+ * replacement for the Overview's panels and stopped there, which quietly
+ * dropped two thirds of what the product knows about a selected region. "A big
+ * map with statistics around it" is a layout for the top of a screen, not a
+ * reason to publish less.
+ *
  * Nothing else imports this file, and the voice provider and briefing host are
  * untouched — it mounts under the same `/app` layout, so the dock and the
  * agent work here as they do everywhere else.
@@ -45,6 +55,8 @@ import { layout, Panel, space, type, usePalette } from "@wattsteer/ui";
 import Head from "expo-router/head";
 import { useState } from "react";
 import { Text, View } from "react-native";
+import ExplainScreen from "@/app/app/explain";
+import MitigateScreen from "@/app/app/mitigate";
 import { AppShell, ScreenTitle } from "@/components/app/app-shell";
 import { CONSOLE_COPY } from "@/components/app/console/console-copy";
 import { ConsoleRegion, ConsoleStat } from "@/components/app/console/console-stat";
@@ -52,6 +64,8 @@ import { ForecastStamp, HonestyNote, ObservedStamp } from "@/components/app/hone
 import { ReadingState } from "@/components/app/thinking-orb";
 import { gateProfileOf, useAppParams } from "@/components/app/use-app-params";
 import { useNetwork } from "@/components/app/use-network";
+import { useServing } from "@/components/app/use-serving";
+import { usePublishBriefingSubject } from "@/components/briefing/briefing-subject";
 import { ObservedProfile } from "@/components/charts/observed-profile";
 import { RiskChip } from "@/components/charts/risk-class";
 import { SubsystemMap } from "@/components/charts/subsystem-map";
@@ -59,7 +73,13 @@ import { ObservedSplitPanel } from "@/components/charts/technology-split";
 import { useCopy, useFormat, useI18n } from "@/i18n";
 import type { SubsystemCode } from "@/lib/fixtures";
 import { subsystemMeta } from "@/lib/fixtures";
-import { forecastRow, observedDay, observedRows, outlookRows } from "@/lib/network";
+import {
+  forecastHours,
+  forecastRow,
+  observedDay,
+  observedRows,
+  outlookRows,
+} from "@/lib/network";
 
 /**
  * The width at which the rails move beside the map rather than under it.
@@ -77,6 +97,7 @@ export default function GridConsoleScreen() {
   const f = useFormat();
   const { locale } = useI18n();
   const params = useAppParams();
+  const serving = useServing();
   const text = CONSOLE_COPY[locale === "en" ? "en" : "pt"];
   const state = useNetwork({
     subsystem: params.subsystem,
@@ -86,6 +107,54 @@ export default function GridConsoleScreen() {
   const [hovered, setHovered] = useState<SubsystemCode | null>(null);
   const [width, setWidth] = useState(0);
   const wide = width >= RAILS_BESIDE_MAP;
+
+  /*
+    **What a briefing may draw here, and why this screen has to be the one
+    saying it.**
+
+    The channel is last-writer-wins, so the two embedded sections below stand
+    down — `usePublishBriefingSubject(subject, false)` — exactly as they do on
+    `/app`. Which means that without this call nobody on the console publishes
+    at all, and asking the agent for a briefing would have described whichever
+    screen the reader was on before. Silently: the dock is there, the agent
+    answers, and the scenes are about the wrong page.
+
+    Above the early returns, because a hook cannot sit behind one, and because
+    `reading` and `refused` are subjects too — a briefing asked in either state
+    should compose from what is true then.
+  */
+  const settledFor =
+    state.status === "reading" || state.status === "refused" ? null : state.observed;
+  const publishedFor = state.status === "read" ? state.forecast : null;
+  usePublishBriefingSubject({
+    context: { locale, screen: "overview", params, serving, network: state },
+    data: {
+      paint:
+        publishedFor === null
+          ? {
+              kind: "observed",
+              rows:
+                settledFor === null
+                  ? []
+                  : observedRows(settledFor.now.subsystems, SUBSYSTEM_DISPLAY_ORDER),
+            }
+          : { kind: "forecast", rows: outlookRows(publishedFor.outlook) },
+      forecastHours: publishedFor === null ? null : forecastHours(publishedFor.forecast),
+      thresholdMw: publishedFor === null ? null : publishedFor.forecast.thresholdMw,
+      observedHours: settledFor === null ? null : settledFor.hours,
+      // Explicar is a section here, but it reads its own gateway and this
+      // screen does not — so the same rule the Overview states applies: no
+      // `cause` scene rather than an invented one.
+      drivers: null,
+      reasons: null,
+      dayEnergy:
+        publishedFor === null ? null : forecastRow(publishedFor.forecast).dailyEnergy,
+      peakPower:
+        publishedFor === null ? null : forecastRow(publishedFor.forecast).peakPower,
+      comparison: null,
+    },
+    counterfactual: undefined,
+  });
 
   const frame = (right: React.ReactNode, body: React.ReactNode) => (
     <>
@@ -279,57 +348,75 @@ export default function GridConsoleScreen() {
         thresholdMw={forecast.forecast.thresholdMw}
       />
     ),
-    <View
-      style={{
-        flexDirection: wide ? "row" : "column",
-        alignItems: "stretch",
-        gap: space.xl,
-      }}
-    >
-      {/*
+    <View style={{ gap: space.xl }}>
+      <View
+        style={{
+          flexDirection: wide ? "row" : "column",
+          alignItems: "stretch",
+          gap: space.xl,
+        }}
+      >
+        {/*
         Left rail, then map, then right rail on a wide screen; map first when
         stacked. The map leads on a phone because it is the thing that makes
         the rest legible — a list of four numbers with no map above it is the
         Overview's rows without the Overview's map.
       */}
-      {wide ? (
-        <View style={{ flexBasis: 300, flexGrow: 1, flexShrink: 1, gap: space.xl }}>
-          {headline}
-          {profile}
-          {split}
-        </View>
-      ) : null}
+        {wide ? (
+          <View style={{ flexBasis: 300, flexGrow: 1, flexShrink: 1, gap: space.xl }}>
+            {headline}
+            {profile}
+            {split}
+          </View>
+        ) : null}
 
-      <View
-        style={{
-          flexBasis: wide ? 520 : "auto",
-          flexGrow: 1.4,
-          flexShrink: 1,
-          gap: space.lg,
-        }}
-      >
-        <Panel style={{ gap: space.md, alignItems: "stretch" }}>
-          <SubsystemMap
-            paint={paint}
-            selected={params.subsystem}
-            hovered={hovered}
-            onHoverChange={setHovered}
-            onSelect={(code) => params.setParams({ subsystem: code })}
-            // The point of the layout: a map with room to be looked at. 380 is
-            // what it takes in a column beside four panels; here it is the
-            // subject rather than a figure.
-            maxWidth={wide ? 680 : 440}
-          />
-        </Panel>
-        {wide ? null : headline}
-        {wide ? null : rail}
-        {wide ? null : profile}
-        {wide ? null : split}
+        <View
+          style={{
+            flexBasis: wide ? 520 : "auto",
+            flexGrow: 1.4,
+            flexShrink: 1,
+            gap: space.lg,
+          }}
+        >
+          <Panel style={{ gap: space.md, alignItems: "stretch" }}>
+            <SubsystemMap
+              paint={paint}
+              selected={params.subsystem}
+              hovered={hovered}
+              onHoverChange={setHovered}
+              onSelect={(code) => params.setParams({ subsystem: code })}
+              // The point of the layout: a map with room to be looked at. 380 is
+              // what it takes in a column beside four panels; here it is the
+              // subject rather than a figure.
+              maxWidth={wide ? 680 : 440}
+            />
+          </Panel>
+          {wide ? null : headline}
+          {wide ? null : rail}
+          {wide ? null : profile}
+          {wide ? null : split}
+        </View>
+
+        {wide ? (
+          <View style={{ flexBasis: 300, flexGrow: 1, flexShrink: 1 }}>{rail}</View>
+        ) : null}
       </View>
 
-      {wide ? (
-        <View style={{ flexBasis: 300, flexGrow: 1, flexShrink: 1 }}>{rail}</View>
-      ) : null}
+      {/*
+        **Explicar and Mitigar, which the first cut of this left out.**
+
+        The console was built as a replacement for the Overview's *panels* and
+        stopped there, which quietly dropped two thirds of what the product
+        knows about a selected region: why the day looks like this, and what
+        flexibility would absorb it. "A big map with the statistics around it"
+        is a layout for the top of a screen, not a reason to publish less.
+
+        Same components and the same `embedded` switch `/app` uses, so a panel
+        added to Explicar appears in three places and drifts in none: its own
+        route, the Overview, and here.
+      */}
+      <ExplainScreen embedded />
+      <MitigateScreen embedded />
     </View>,
   );
 }
