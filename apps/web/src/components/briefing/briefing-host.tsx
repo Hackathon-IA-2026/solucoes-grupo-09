@@ -14,7 +14,7 @@
  * fetched here.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 import { BriefingStage } from "@/components/briefing/briefing-stage";
 import { useBriefingSubject } from "@/components/briefing/briefing-subject";
@@ -36,11 +36,26 @@ export function BriefingHost() {
   const { briefing, dismissBriefing, narrationClock, transcript } = useVoiceAgent();
   const { context, data, counterfactual } = useBriefingSubject();
   const [tick, setTick] = useState(0);
+  /**
+   * The last elapsed the *audio* reported, held across a barge-in.
+   *
+   * When the reader speaks over the agent the session cancels the turn and
+   * `endNarration` drops the clock, so the backend goes back to reporting
+   * zeros. Without this the stage would fall through to the wall clock —
+   * which has been running the whole time — and snap to the last scene at the
+   * exact moment the reader interrupted. Plan §4.1 says hold, and this is how.
+   */
+  const heldMs = useRef(0);
 
   useEffect(() => {
     if (briefing === null) {
       return;
     }
+    // **Reset, not just start.** `tick` is component state and a second
+    // briefing in the same visit would otherwise inherit the first one's
+    // count and open already finished.
+    setTick(0);
+    heldMs.current = 0;
     const id = setInterval(() => setTick((value) => value + 1), TICK_MS);
     return () => clearInterval(id);
   }, [briefing]);
@@ -68,11 +83,27 @@ export function BriefingHost() {
   }
 
   const clock = narrationClock();
-  // Both zero means nothing is playing — which is also exactly what a blocked
-  // autoplay policy looks like. The sequence falls back to a wall clock so the
-  // briefing still advances, and says so on screen.
-  const silent = clock.bufferedMs === 0;
-  const elapsed = silent ? tick * TICK_MS : clock.elapsedMs;
+  /*
+    Which clock, and why it is three cases rather than two.
+
+    - **Audio is playing.** Lock to it. A scene has to change on the sentence
+      it illustrates.
+    - **Audio played and has stopped** — the turn ended, or the reader barged in
+      and the session cancelled it. Hold where the audio left off rather than
+      falling through to the wall clock, which has been running since the
+      briefing opened and would jump the stage to its last scene.
+    - **Audio never played.** A blocked autoplay policy buffers frames that
+      never sound: `bufferedMs` grows while `currentTime` does not move, so
+      "queued" and "playing" are indistinguishable without `running`. The wall
+      clock drives the sequence and the stage says it is silent.
+  */
+  const audible = clock.bufferedMs > 0 && clock.running;
+  if (audible) {
+    heldMs.current = clock.elapsedMs;
+  }
+  const started = heldMs.current > 0;
+  const silent = !(audible || started);
+  const elapsed = audible ? clock.elapsedMs : started ? heldMs.current : tick * TICK_MS;
 
   return (
     <BriefingStage

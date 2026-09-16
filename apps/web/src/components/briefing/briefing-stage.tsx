@@ -130,6 +130,11 @@ export function BriefingStage({
             // which is the only way a non-sighted reader can tell that it is
             // moving at all.
             accessibilityRole="progressbar"
+            accessibilityValue={{
+              min: 1,
+              max: cursor.scenes.length,
+              now: cursor.index + 1,
+            }}
             style={{ fontSize: 12, color: colors.inkFaint }}
           >
             {fill(copy.briefing.position, {
@@ -181,7 +186,17 @@ export function BriefingStage({
           </Text>
         ) : null}
 
-        <Text style={{ fontSize: 13, lineHeight: 20, color: colors.inkMuted }}>
+        {/*
+          **Announced, not just printed.** A briefing changes scene under a
+          reader who cannot see it and says nothing; the transcript beside it
+          already gets this right. `polite` rather than `assertive` because the
+          agent is usually speaking the same words aloud at the same moment.
+        */}
+        <Text
+          accessibilityLiveRegion="polite"
+          {...(Platform.OS === "web" ? ({ "aria-live": "polite" } as object) : null)}
+          style={{ fontSize: 13, lineHeight: 20, color: colors.inkMuted }}
+        >
           {narration}
         </Text>
 
@@ -192,9 +207,25 @@ export function BriefingStage({
           on the screens.
         */}
         {plan.sources.length === 0 ? null : (
-          <Text style={{ fontSize: 11, lineHeight: 17, color: colors.inkFaint }}>
-            {plan.sources.map((source) => source.read).join(" · ")}
-          </Text>
+          <View style={{ gap: 2 }}>
+            {plan.sources.map((source) => (
+              <Text
+                key={source.read}
+                style={{ fontSize: 11, lineHeight: 17, color: colors.inkFaint }}
+              >
+                {/*
+                  The read *and* what dates it. `compose.ts` collects `asOf` and
+                  the vintage fidelity for exactly this line, and printing the
+                  endpoint alone threw away the half that makes a source a
+                  source — the same vocabulary `ForecastStamp` and
+                  `VintageBadge` carry on the screens.
+                */}
+                {[source.read, source.asOf, source.fidelity]
+                  .filter((part) => part !== null && part !== "")
+                  .join(" · ")}
+              </Text>
+            ))}
+          </View>
         )}
       </Panel>
     </View>

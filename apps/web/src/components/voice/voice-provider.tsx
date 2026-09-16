@@ -215,6 +215,9 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const close = useCallback(() => {
     session.stop();
     setHighlighted(null);
+    // A briefing outlives nothing. Left standing it would run on a wall clock
+    // over a dead session, narrating a turn that has been torn down.
+    setBriefing(null);
     setExpandedByReader(false);
   }, [session]);
 

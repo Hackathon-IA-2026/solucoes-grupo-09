@@ -112,7 +112,11 @@ export interface VoiceAgentState {
    * publishing it as state would re-render every consumer of this context on
    * every audio frame to carry a number only the briefing reads.
    */
-  readonly narrationClock: () => { elapsedMs: number; bufferedMs: number };
+  readonly narrationClock: () => {
+    elapsedMs: number;
+    bufferedMs: number;
+    running: boolean;
+  };
   /** The typed fallback — a turn with no microphone in it. */
   readonly say: (text: string) => void;
 }
@@ -143,7 +147,7 @@ export const VOICE_ABSENT: VoiceAgentState = {
   highlighted: null,
   briefing: null,
   dismissBriefing: () => {},
-  narrationClock: () => ({ elapsedMs: 0, bufferedMs: 0 }),
+  narrationClock: () => ({ elapsedMs: 0, bufferedMs: 0, running: false }),
   error: null,
   open: () => {},
   close: () => {},

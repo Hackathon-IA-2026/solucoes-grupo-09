@@ -26,6 +26,7 @@ const ONE_SECOND = encodePCM16Base64(new Float32Array(SAMPLE_RATE));
  */
 class FakeAudioContext {
   currentTime = 0;
+  state = "running";
   destination = {};
   // biome-ignore lint/nursery/useThisInClassMethods: it stands in for a browser object whose factories take no instance state; `currentTime` above is the only field a test touches
   createBuffer = (_channels: number, length: number, sampleRate: number) => ({
@@ -72,7 +73,11 @@ describe("before anything has played", () => {
   it("reads zero rather than guessing", async () => {
     // Zero is also what a blocked autoplay policy looks like, which is the
     // signal the director needs to fall back to a wall clock.
-    expect((await backend()).narrationClock()).toEqual({ elapsedMs: 0, bufferedMs: 0 });
+    expect((await backend()).narrationClock()).toEqual({
+      elapsedMs: 0,
+      bufferedMs: 0,
+      running: false,
+    });
   });
 });
 
@@ -82,7 +87,11 @@ describe("while a response streams", () => {
     audio.playChunk(ONE_SECOND);
 
     // A second is queued; none of it has played yet.
-    expect(audio.narrationClock()).toEqual({ elapsedMs: 0, bufferedMs: 1000 });
+    expect(audio.narrationClock()).toEqual({
+      elapsedMs: 0,
+      bufferedMs: 1000,
+      running: true,
+    });
   });
 
   it("advances elapsed with the context's own clock", async () => {
@@ -126,7 +135,11 @@ describe("between responses", () => {
     audio.endNarration();
 
     // The abandoned turn's elapsed time must not be inherited by the next one.
-    expect(audio.narrationClock()).toEqual({ elapsedMs: 0, bufferedMs: 0 });
+    expect(audio.narrationClock()).toEqual({
+      elapsedMs: 0,
+      bufferedMs: 0,
+      running: false,
+    });
   });
 
   it("keeps the queue intact across a barge-in, then reopens on the next chunk", async () => {
@@ -147,6 +160,10 @@ describe("teardown", () => {
     audio.playChunk(ONE_SECOND);
     audio.teardown();
 
-    expect(audio.narrationClock()).toEqual({ elapsedMs: 0, bufferedMs: 0 });
+    expect(audio.narrationClock()).toEqual({
+      elapsedMs: 0,
+      bufferedMs: 0,
+      running: false,
+    });
   });
 });

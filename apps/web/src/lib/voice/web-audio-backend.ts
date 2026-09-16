@@ -151,15 +151,20 @@ export class WebAudioBackend implements AudioBackend {
    * signal the caller needs to fall back to a wall clock when audio never
    * plays at all — a blocked autoplay policy looks exactly like silence here.
    */
-  narrationClock(): { elapsedMs: number; bufferedMs: number } {
+  narrationClock(): { elapsedMs: number; bufferedMs: number; running: boolean } {
     const context = this.playbackContext;
     const start = this.narrationStart;
     if (context === null || start === null) {
-      return { elapsedMs: 0, bufferedMs: 0 };
+      return { elapsedMs: 0, bufferedMs: 0, running: false };
     }
     return {
       elapsedMs: Math.max(0, (context.currentTime - start) * 1000),
       bufferedMs: Math.max(0, (this.playCursor - start) * 1000),
+      // A context an autoplay policy has suspended still *buffers* — frames are
+      // scheduled and `playCursor` advances — but `currentTime` does not move.
+      // Without this the caller cannot tell "playing" from "queued and frozen",
+      // and a briefing sits on its first scene forever.
+      running: context.state === "running",
     };
   }
 

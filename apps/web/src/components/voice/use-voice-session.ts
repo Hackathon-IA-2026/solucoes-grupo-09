@@ -116,7 +116,11 @@ export interface VoiceSession {
    * Both zero when nothing is playing — which is also what a blocked autoplay
    * policy looks like, and the signal a briefing falls back to a wall clock on.
    */
-  readonly narrationClock: () => { elapsedMs: number; bufferedMs: number };
+  readonly narrationClock: () => {
+    elapsedMs: number;
+    bufferedMs: number;
+    running: boolean;
+  };
   /** Mint, connect and open the microphone. Safe to call while already open. */
   readonly open: () => void;
   /** Close the socket and the microphone. Safe to call when already closed. */
@@ -393,7 +397,12 @@ export function useVoiceSession({
    * briefing reads would be a re-render for everything else on the screen.
    */
   const narrationClock = useCallback(
-    () => audioRef.current?.narrationClock() ?? { elapsedMs: 0, bufferedMs: 0 },
+    () =>
+      audioRef.current?.narrationClock() ?? {
+        elapsedMs: 0,
+        bufferedMs: 0,
+        running: false,
+      },
     [],
   );
 
