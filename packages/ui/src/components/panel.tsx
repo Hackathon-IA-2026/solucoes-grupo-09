@@ -61,9 +61,31 @@ export function PanelHeader({
         gap: 12,
       }}
     >
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+      {/*
+        **`flexShrink` here and `flex` on the column, both load-bearing at
+        400px.** The outer row already wrapped, which made this look solved: the
+        `right` slot dropped to a second line and the header stopped *pushing*.
+        The title and subtitle still could not, because this inner row had
+        nothing telling it to give up width and the text column had nothing
+        telling it to take what was left — so the two `Text`s sized to their
+        content and never wrapped.
+
+        Measured at 400px on the exported build, before this: every
+        `PanelHeader` on every app screen overflowed its panel — 630px of
+        content in a 318px box on the widest, 340px on the narrowest — with the
+        remainder *clipped* by an ancestor rather than scrolled. Clipped is the
+        bad half: a reader on a phone loses the right-hand end of every panel
+        subtitle and has no gesture that brings it back.
+
+        `landing/hero.tsx` carries the same fix for one row of its own and calls
+        the pair load-bearing in the same words. It was right about its row and
+        the shared component had the defect.
+      */}
+      <View
+        style={{ flexDirection: "row", alignItems: "center", gap: 12, flexShrink: 1 }}
+      >
         <IconCircle>{icon}</IconCircle>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 14, fontWeight: "500", color: colors.inkMuted }}>
             {title}
           </Text>
