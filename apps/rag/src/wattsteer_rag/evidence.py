@@ -53,26 +53,31 @@ CAUSALITY_BANNED_LEMMAS = (
 NUMBER = re.compile(r"\d[\d.,]*")
 WORD_BOUNDARY = re.compile(r"[^\wÀ-ÿ]+")
 
-SYSTEM_PROMPT = """Você recupera evidência documental do registro público do ONS.
+# The documents are Portuguese and the quotes are literal copies of them, so the
+# claims are written in Portuguese too: that is the language of the operator who
+# reads them and of the judges who check them against the PDF.
+SYSTEM_PROMPT = """You retrieve documentary evidence from the public record of the ONS, the
+Brazilian power system operator. The passages are in Portuguese. Write every
+claim in Portuguese.
 
-Regras absolutas:
-- Use somente os trechos fornecidos. Não use conhecimento próprio.
-- Cada afirmação precisa de pelo menos uma citação, e a citação tem de ser um
-  trecho copiado literalmente do documento, entre 20 e 300 caracteres.
-- Não escreva nenhum número que não apareça no trecho citado.
-- Descreva o que o documento registra ou estabelece. Nunca escreva que algo
-  causou, provocou ou explicou outra coisa.
-- Se os trechos não sustentarem nenhuma afirmação, devolva a lista vazia.
+Absolute rules:
+- Use only the passages provided. Do not use your own knowledge.
+- Every claim needs at least one citation, and the citation must be a span
+  copied literally from the document, between 20 and 300 characters.
+- Do not write any number that does not appear in the quoted span.
+- Describe what the document records or establishes. Never write that something
+  caused, provoked or explained something else.
+- If the passages support no claim, return an empty list.
 
-Prefira o trecho que enuncia o procedimento, o limite ou a condição, com os
-valores e as grandezas. Um título de seção sozinho não é evidência.
+Prefer the span that states the procedure, the limit or the condition, with its
+values and quantities. A section title on its own is not evidence.
 
-Muitos trechos são tabelas. Nelas, cada citação tem de ser um pedaço contínuo:
-uma linha inteira ou uma sequência de linhas vizinhas, copiadas na ordem em que
-aparecem. Não junte uma célula do começo com outra do fim. Se precisar de duas
-partes distintas da tabela, use duas citações no mesmo item.
+Many passages are tables. There, every citation must be a contiguous piece: a
+whole row, or a run of neighbouring rows, copied in the order they appear. Do
+not join a cell from the beginning with one from the end. If you need two
+distinct parts of the table, use two citations in the same item.
 
-Responda apenas com JSON no formato:
+Answer only with JSON in this shape:
 {"items":[{"claim":"...","supports":"REL|CNF|ENE|NONE","confidence":"high|medium|low",
 "citations":[{"chunk_id":"...","quote":"..."}]}]}"""
 
@@ -305,6 +310,8 @@ def question_for(subsystem: str, date: str, reason: str | None, description: str
     with the code of the operating instruction. The job is not to guess the
     reason: it is to find where that control is written down.
     """
+    # Portuguese on purpose: this text is the full text query against a
+    # Portuguese index, and the words it carries are the words the corpus uses.
     parts = [f"Subsistema {subsystem}, dia {date}."]
     if description:
         parts.append(f"Registro do ONS: {description}")
@@ -390,9 +397,9 @@ async def build_evidence(
 
     passages = "\n\n".join(
         f"[chunk_id: {hit.chunk_id}]\n"
-        f"Documento: {hit.title} ({hit.external_id or hit.source}{' ' + hit.revision if hit.revision else ''}),"
-        f" publicado em {hit.published_at.date().isoformat() if hit.published_at else 'data não declarada'},"
-        f" {('página ' + str(hit.locator.get('page'))) if hit.locator.get('page') else hit.section_path or ''}\n"
+        f"Document: {hit.title} ({hit.external_id or hit.source}{' ' + hit.revision if hit.revision else ''}),"
+        f" published {hit.published_at.date().isoformat() if hit.published_at else 'on an undeclared date'},"
+        f" {('page ' + str(hit.locator.get('page'))) if hit.locator.get('page') else hit.section_path or ''}\n"
         f"{hit.text[:2200]}"
         for hit in hits
     )
@@ -404,7 +411,7 @@ async def build_evidence(
         f'- [{hit.chunk_id}] "{span}"' for hit in hits[:3] for span in quotable_spans(hit.text)[:2]
     )
     guidance = (
-        "\n\nTrechos contínuos que existem nos documentos e podem ser copiados como citação:\n" + spans
+        "\n\nContiguous spans that exist in the documents and can be copied as citations:\n" + spans
         if spans
         else ""
     )
@@ -416,7 +423,7 @@ async def build_evidence(
             {"role": "system", "content": SYSTEM_PROMPT},
             {
                 "role": "user",
-                "content": f"Pergunta: {question}\n\nTrechos disponíveis:\n\n{passages}{complaint}",
+                "content": f"Question: {question}\n\nAvailable passages:\n\n{passages}{complaint}",
             },
         ]
         try:
@@ -469,12 +476,12 @@ async def build_evidence(
             break
         complaint = (
             guidance
-            + "\n\nA resposta anterior foi recusada nestes pontos: "
+            + "\n\nThe previous answer was refused on these points: "
             + "; ".join(f"{failure.code} ({failure.detail})" for failure in failures[:4])
-            + ". Regras para a nova tentativa: copie o trecho contínuo exatamente como aparece"
-            " acima, incluindo dentro do trecho todos os números que você citar na afirmação;"
-            " use apenas os chunk_id listados; se o trecho estiver dentro de uma tabela, copie"
-            " o conteúdo das células em sequência, sem inventar pontuação."
+            + ". Rules for the new attempt: copy the contiguous span exactly as it appears"
+            " above, including inside the span every number you cite in the claim; use only"
+            " the chunk_id values listed; if the span is inside a table, copy the cells'"
+            " content in sequence, without inventing punctuation."
         )
 
     document["trace"]["generation"]["gate_failures"] = sorted({failure.code for failure in failures})

@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://wattsteer.com/schema/rag-evidence.schema.json",
   "title": "RagEvidence",
-  "description": "Evidência documental recuperada do corpus público do ONS/ANEEL para um subsistema e uma data. O RAG busca, recupera e cita; nunca classifica. Toda afirmação (claim) carrega ao menos uma citação cujo trecho existe literalmente no chunk indexado. Campo `evidencia_documental` do alerta (L-03 do Bisogno).",
+  "description": "Documentary evidence retrieved from the public ONS/ANEEL record for one subsystem and one date. The service finds, quotes and cites; it never classifies. Every claim carries at least one citation whose quote exists literally in the indexed chunk. Becomes the `documentary_evidence` field of the alert.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -28,22 +28,22 @@
     "target_date": {
       "type": "string",
       "format": "date",
-      "description": "Dia D do alerta (D-1 é a rodada)."
+      "description": "Day D of the alert (D-1 is the run)."
     },
     "gate_at": {
       "type": "string",
       "format": "date-time",
-      "description": "Instante de corte: só documentos com published_at <= gate_at entram (mesma disciplina do gate_at do modelo)."
+      "description": "Cut-off instant: only documents with published_at <= gate_at are eligible, the same discipline as the model's gate_at."
     },
     "question": {
       "type": "string",
       "maxLength": 600,
-      "description": "Pergunta efetivamente enviada ao retrieval (após reescrita)."
+      "description": "The question actually sent to retrieval."
     },
     "verdict": {
       "type": "string",
       "enum": ["found", "insufficient", "not_found"],
-      "description": "found = ao menos um claim com citação válida; insufficient = houve trechos mas nenhum claim passou nos gates; not_found = nada aplicável (NA-01), ver reason."
+      "description": "found = at least one claim with a valid citation; insufficient = passages existed but no claim passed the gates; not_found = nothing applicable, see reason."
     },
     "reason": {
       "type": ["string", "null"],
@@ -55,7 +55,7 @@
         "rag_not_configured",
         null
       ],
-      "description": "Obrigatório quando verdict != found."
+      "description": "Required when verdict != found."
     },
     "items": {
       "type": "array",
@@ -69,23 +69,23 @@
             "type": "string",
             "minLength": 10,
             "maxLength": 400,
-            "description": "Afirmação em linguagem de operador (T17): 'o documento registra', nunca 'causou'. Todo número precisa aparecer em alguma citation.quote."
+            "description": "A statement in the operator's language: 'the document records', never 'caused'. Every number must appear in one of the citation quotes."
           },
           "supports": {
             "type": "string",
             "enum": ["REL", "CNF", "ENE", "NONE"],
-            "description": "Que causa a evidência apoia. É informação para a regra, não decisão."
+            "description": "Which reason the evidence supports. Information for the rule, not a decision."
           },
           "confidence": {
             "type": "string",
             "enum": ["high", "medium", "low"],
-            "description": "REL sem cronograma público nunca passa de medium (D09/NA-01)."
+            "description": "REL without a public intervention schedule never exceeds medium."
           },
           "evidence_weight": {
             "type": "number",
             "minimum": 0,
             "maximum": 1,
-            "description": "Peso de exibição definido pelo Bisogno (REL 0,7-0,9; CNF 0,4-0,6; ENE 0,2-0,4). Nunca entra no classificador."
+            "description": "Display weight (REL 0.7-0.9; CNF 0.4-0.6; ENE 0.2-0.4). Never an input to the classifier."
           },
           "period": {
             "type": ["object", "null"],
@@ -100,7 +100,7 @@
                 "format": "date-time"
               }
             },
-            "description": "Janela que o documento cobre, quando extraível (usada no desempate por duração)."
+            "description": "The window the document covers, when it can be extracted (used to break ties by duration)."
           },
           "citations": {
             "type": "array",
@@ -155,12 +155,12 @@
                     "section": {
                       "type": ["string", "null"],
                       "maxLength": 120,
-                      "description": "Ex.: '§7.1', 'Submódulo 4.2 item 5.3'."
+                      "description": "For example '§7.1' or 'Submódulo 4.2 item 5.3'."
                     },
                     "table": {
                       "type": ["string", "null"],
                       "maxLength": 120,
-                      "description": "Ex.: 'BDO 12_MotivoDespachoTermico' para tabelas do BDO."
+                      "description": "For example 'BDO 12_MotivoDespachoTermico' for a BDO table."
                     },
                     "row": {
                       "type": ["integer", "null"],
@@ -168,19 +168,19 @@
                     },
                     "bbox": {
                       "type": ["object", "null"],
-                      "description": "Coordenadas normalizadas do bloco na página, quando o parser as devolve."
+                      "description": "Normalised coordinates of the block on the page, when the parser returns them."
                     },
                     "kind": {
                       "type": ["string", "null"]
                     }
                   },
-                  "description": "Ao menos um de page, section ou table precisa ser não nulo (validado no gate)."
+                  "description": "At least one of page, section or table must be non-null (enforced by the gate)."
                 },
                 "quote": {
                   "type": "string",
                   "minLength": 20,
                   "maxLength": 300,
-                  "description": "Trecho literal do chunk. Gate 1: precisa existir byte a byte no chunk indexado."
+                  "description": "Literal span of the chunk. Gate 1: it must exist in the indexed chunk."
                 },
                 "url": {
                   "type": "string",
@@ -189,23 +189,23 @@
                 "sha256": {
                   "type": "string",
                   "pattern": "^[a-f0-9]{64}$",
-                  "description": "sha256 do documento bruto, para o replay reproduzir a mesma evidência."
+                  "description": "sha256 of the raw document, so a replay reproduces the same evidence."
                 },
                 "chunk_id": {
                   "type": ["string", "null"]
                 },
                 "external_id": {
                   "type": ["string", "null"],
-                  "description": "Código do documento, por exemplo IO-ON.NE.2SO."
+                  "description": "Document code, for example IO-ON.NE.2SO."
                 },
                 "revision": {
                   "type": ["string", "null"],
-                  "description": "Revisão publicada, por exemplo Rev.146."
+                  "description": "Published revision, for example Rev.146."
                 },
                 "assembled": {
                   "type": "boolean",
                   "default": false,
-                  "description": "true quando o trecho foi montado a partir de células da mesma tabela, em ordem, com células intermediárias omitidas. Prosa exige trecho contínuo."
+                  "description": "true when the quote was assembled from cells of the same table, in order, with cells in between skipped. Prose requires a contiguous span."
                 }
               }
             }
@@ -230,18 +230,18 @@
           "maxLength": 300
         }
       },
-      "description": "Preenchido pelo Decision Engine quando a evidência contradiz a regra: publicam-se as duas e declara-se a divergência; a classificação continua pela regra + SHAP."
+      "description": "Filled by the decision engine when the evidence contradicts the rule: both are published and the disagreement is declared; the classification still comes from the rule and SHAP."
     },
     "numbers_whitelist": {
       "type": "array",
       "items": {
         "type": "string"
       },
-      "description": "Todos os números presentes nas citações (gate 2 da narração)."
+      "description": "Every number present in the citations (the narration's number gate)."
     },
     "corpus_version": {
       "type": "string",
-      "description": "Identificador do snapshot do corpus (data + contagem de documentos + hash do manifesto)."
+      "description": "Identifier of the corpus snapshot (date + document count + manifest hash)."
     },
     "generated_at": {
       "type": "string",
@@ -270,14 +270,14 @@
             },
             "rerank_provider": {
               "type": ["string", "null"],
-              "description": "null quando o rerank foi pulado por cota (on_exhausted: skip_rerank)."
+              "description": "null when no reranker ran."
             },
             "filters": {
               "type": "object"
             },
             "candidates": {
               "type": "array",
-              "description": "Todos os candidatos com os dois ranks e o escore fundido. É o que permite depurar uma resposta ruim.",
+              "description": "Every candidate with both ranks and the fused score. This is what makes a bad answer debuggable.",
               "items": {
                 "type": "object"
               }
@@ -319,7 +319,7 @@
             },
             "rejected": {
               "type": "array",
-              "description": "O que o modelo tentou afirmar e qual gate recusou.",
+              "description": "What the model tried to claim, and which gate refused it.",
               "items": {
                 "type": "object"
               }
@@ -328,13 +328,13 @@
         },
         "retry_at": {
           "type": ["number", "null"],
-          "description": "Instante em que o trabalho pode continuar, quando a cota acabou."
+          "description": "The instant the work can resume, when the quota ran out."
         }
       }
     },
     "sha256": {
       "type": "string",
-      "description": "Hash do documento publicado."
+      "description": "Hash of the published document."
     }
   }
 }

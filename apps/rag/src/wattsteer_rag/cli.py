@@ -57,7 +57,7 @@ async def cmd_doctor(_args) -> int:
         labels = [f"{provider.name}:{link.model}" for link, provider in links]
         print(f"task {task:<15} links={labels or 'NONE'}")
     try:
-        result = await gw.run("embed", tokens=8, texts=["teste de conectividade"], input_type="query")
+        result = await gw.run("embed", tokens=8, texts=["connectivity check"], input_type="query")
         print(
             f"embed live: {result.model} dims={len(result.value[0])} via key {result.key_id} "
             f"in {result.latency_ms}ms"
@@ -285,28 +285,28 @@ async def cmd_evidence(args) -> int:
 
 def _print_evidence(document: dict) -> None:
     generation = document["trace"]["generation"]
-    print(f"\nPergunta: {document['question']}")
-    print(f"Veredito: {document['verdict']}" + (f" ({document['reason']})" if document["reason"] else ""))
-    print(f"Modelo: {generation['provider']}:{generation['model']} tentativas={generation['attempts']}")
+    print(f"\nQuestion: {document['question']}")
+    print(f"Verdict: {document['verdict']}" + (f" ({document['reason']})" if document["reason"] else ""))
+    print(f"Model: {generation['provider']}:{generation['model']} attempts={generation['attempts']}")
     for item in document["items"]:
-        print(f"\n  [{item['supports']} {item['confidence']} peso={item['evidence_weight']}] {item['claim']}")
+        print(f"\n  [{item['supports']} {item['confidence']} weight={item['evidence_weight']}] {item['claim']}")
         for citation in item["citations"]:
             locator = citation["locator"]
-            where = locator.get("section") or (f"página {locator['page']}" if locator.get("page") else "")
+            where = locator.get("section") or (f"page {locator['page']}" if locator.get("page") else "")
             print(
-                f"    fonte: {citation['title']} {citation.get('revision') or ''} | {where}"
-                f" | publicado {citation['published_at'] or 'sem data'}"
+                f"    source: {citation['title']} {citation.get('revision') or ''} | {where}"
+                f" | published {citation['published_at'] or 'undated'}"
             )
-            print(f'    trecho: "{citation["quote"][:200]}"')
+            print(f'    quote: "{citation["quote"][:200]}"')
     rejected = generation.get("rejected") or []
     if rejected:
-        print(f"\n  recusadas ({len(rejected)}):")
+        print(f"\n  rejected ({len(rejected)}):")
         for item in rejected:
             codes = ", ".join(failure["code"] for failure in item["failures"])
             print(f"    - {item['claim'][:110]}  [{codes}]")
     candidates = document["trace"]["retrieval"].get("candidates") or []
     if candidates:
-        print(f"\n  candidatos ({len(candidates)}):")
+        print(f"\n  candidates ({len(candidates)}):")
         for candidate in candidates[:8]:
             print(
                 f"    {candidate['rrf']:.4f} v{candidate['vector_rank'] or '-'} t{candidate['text_rank'] or '-'}"

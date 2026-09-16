@@ -5,7 +5,7 @@ a rule, quotes it, and cites where the quote came from. **It never classifies a
 curtailment**: REL, CNF and ENE stay with the rule and with SHAP.
 
 > For what this does and why, in plain language and with diagrams, read
-> [docs/rag/o-que-e-o-rag.md](../../docs/rag/o-que-e-o-rag.md). This file is the
+> [docs/rag/evidence-layer.md](../../docs/rag/evidence-layer.md). This file is the
 > operational half: how to install it, and how to find out why an answer is
 > wrong.
 
@@ -107,7 +107,7 @@ A retrieval failure is invisible unless the service is built to show its work.
 | --- | --- |
 | Is every provider reachable, and with how many keys? | `wattsteer-rag doctor`, or `GET /internal/llm/quota` |
 | What did the search return, and in which rank? | `wattsteer-rag search "..."`, or `GET /internal/rag/search?q=` (both ranks and the fused score) |
-| What did the model try to say, and which gate refused it? | the `recusadas` block of `wattsteer-rag evidence`, or `trace.generation.rejected` in the JSON |
+| What did the model try to say, and which gate refused it? | the `rejected` block of `wattsteer-rag evidence`, or `trace.generation.rejected` in the JSON |
 | What question did a record turn into? | `wattsteer-rag question NE 2026-09-14 --description "..."` |
 | Why is a document missing from an answer? | `GET /internal/rag/status`, then check `published_at` against the gate |
 | Did the chunking change the answer? | `wattsteer-rag rechunk`, which re-chunks from stored pages and costs no parsing quota |

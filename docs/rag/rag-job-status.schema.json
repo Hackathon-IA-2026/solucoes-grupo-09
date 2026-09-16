@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://wattsteer.com/schema/rag-job-status.schema.json",
   "title": "RagJobStatus",
-  "description": "Estado de um job de background do apps/rag (crawl, parse, index, evidence). Padrão do retrain assíncrono do apps/ml (202 + polling), mas com estado durável em rag.job. Nunca bloqueia a interface: a UI mostra o estado e segue.",
+  "description": "State of an apps/rag background job (crawl, parse, index, evidence). Same pattern as the asynchronous retrain of apps/ml (202 + polling), with durable state in rag.job. It never blocks the interface: the UI shows the state and moves on.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -17,7 +17,7 @@
   "properties": {
     "job_id": {
       "type": "string",
-      "description": "Idempotente: sha256(kind + params). Mesmo id em voo = 409 attach; concluído = 200 com o resultado gravado."
+      "description": "Idempotent: sha256(kind + params). Same id in flight = 409 attach; finished = 200 with the stored result."
     },
     "kind": {
       "type": "string",
@@ -25,7 +25,7 @@
     },
     "params": {
       "type": "object",
-      "description": "Parâmetros normalizados do job (fonte, intervalo de datas, subsistema...)."
+      "description": "Normalised job parameters (source, date range, subsystem...)."
     },
     "status": {
       "type": "string",
@@ -38,35 +38,56 @@
         "failed",
         "cancelled"
       ],
-      "description": "waiting_quota = todas as cotas do gateway esgotadas para a tarefa; retry_at diz quando volta. partial = terminou com falhas em itens individuais (ver feedback.errors)."
+      "description": "waiting_quota = every gateway quota for the task is spent; retry_at says when it resumes. partial = finished with failures on individual items (see feedback.errors)."
     },
-    "created_at": { "type": "string", "format": "date-time" },
-    "updated_at": { "type": "string", "format": "date-time" },
-    "started_at": { "type": ["string", "null"], "format": "date-time" },
-    "finished_at": { "type": ["string", "null"], "format": "date-time" },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "started_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
     "retry_at": {
       "type": ["string", "null"],
       "format": "date-time",
-      "description": "Obrigatório quando status = waiting_quota."
+      "description": "Required when status = waiting_quota."
     },
     "progress": {
       "type": "object",
       "additionalProperties": false,
       "required": ["done", "total", "failed"],
       "properties": {
-        "done": { "type": "integer", "minimum": 0 },
+        "done": {
+          "type": "integer",
+          "minimum": 0
+        },
         "total": {
           "type": ["integer", "null"],
           "minimum": 0,
-          "description": "null enquanto o total ainda é desconhecido (crawler descobrindo páginas)."
+          "description": "null while the total is still unknown (the crawler is discovering pages)."
         },
-        "failed": { "type": "integer", "minimum": 0 },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        },
         "current": {
           "type": ["string", "null"],
           "maxLength": 200,
-          "description": "Item em processamento, para a UI."
+          "description": "The item being processed, for the UI."
         },
-        "eta_seconds": { "type": ["integer", "null"], "minimum": 0 }
+        "eta_seconds": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        }
       }
     },
     "feedback": {
@@ -77,7 +98,7 @@
         "message": {
           "type": "string",
           "maxLength": 300,
-          "description": "Frase para humano, em PT-BR, sempre presente: 'Indexando BDO: 412 de 730 dias' / 'Aguardando cota do NVIDIA até 21:05'."
+          "description": "A sentence for a person, always present, in the interface language: 'Indexing BDO: 412 of 730 days' / 'Waiting for NVIDIA quota until 21:05'."
         },
         "errors": {
           "type": "array",
@@ -89,24 +110,34 @@
             "properties": {
               "code": {
                 "type": "string",
-                "description": "Ex.: FETCH_403, PARSE_FAILED, EMBED_QUOTA, SCHEMA_INVALID."
+                "description": "For example FETCH_403, PARSE_FAILED, EMBED_QUOTA, SCHEMA_INVALID."
               },
-              "message": { "type": "string", "maxLength": 300 },
-              "item": { "type": ["string", "null"], "maxLength": 200 },
-              "retryable": { "type": "boolean" }
+              "message": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "item": {
+                "type": ["string", "null"],
+                "maxLength": 200
+              },
+              "retryable": {
+                "type": "boolean"
+              }
             }
           }
         },
         "quota": {
           "type": ["object", "null"],
-          "description": "Espelho de /internal/llm/quota para a tarefa do job: por elo, usado/limite e estado (ok, cooling, exhausted)."
+          "description": "Mirror of /internal/llm/quota for the job's task: per link, used/limit and state (ok, cooling, exhausted)."
         }
       }
     },
     "result": {
       "type": ["object", "null"],
-      "description": "Resultado quando succeeded/partial: para index, contagens; para evidence_*, o objeto RagEvidence."
+      "description": "Result when succeeded/partial: counts for index; the RagEvidence object for evidence_*."
     },
-    "request_id": { "type": ["string", "null"] }
+    "request_id": {
+      "type": ["string", "null"]
+    }
   }
 }

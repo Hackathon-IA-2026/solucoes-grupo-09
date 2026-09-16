@@ -40,24 +40,24 @@ if [ -f ../../.env ]; then set -a; . ../../.env; set +a; fi
 if [ -z "${NVIDIA_API_KEYS:-}${NVIDIA_API_KEY:-}${GROQ_API_KEYS:-}${GROQ_API_KEY:-}" ]; then
   cat <<'MSG'
 
-  ATENÇÃO: falta a chave de API, e sem ela o índice não pode ser construído.
+  MISSING: an API key. Without one the index cannot be built.
 
-  Pegue uma gratuita, leva dois minutos e não pede cartão:
-    NVIDIA   https://build.nvidia.com     entrar, "Get API Key", começa com nvapi-
-    Groq     https://console.groq.com     "API Keys", começa com gsk_
+  Get a free one, it takes two minutes and asks for no card:
+    NVIDIA   https://build.nvidia.com     sign in, "Get API Key", starts with nvapi-
+    Groq     https://console.groq.com     "API Keys", starts with gsk_
 
-  Escreva no arquivo WattSteer/.env (o git já ignora esse arquivo):
+  Write it in WattSteer/.env (git already ignores that file):
     NVIDIA_API_KEYS=nvapi-...
     GROQ_API_KEYS=gsk_...
 
-  Com várias chaves, separadas por vírgula, as cotas somam. Com uma só, funciona
-  igual. Depois rode ./setup.sh de novo: ele continua de onde parou.
+  Several keys separated by commas add their quotas up. One alone works the
+  same. Then run ./setup.sh again: it continues where it stopped.
 
 MSG
   if [ "${MODE}" != "none" ]; then
-    printf 'Continuar mesmo assim, instalando e criando o banco sem indexar? [s/N] '
-    read -r answer </dev/tty 2>/dev/null || answer="s"
-    case "$answer" in [sSyY]*) MODE="none" ;; *) exit 1 ;; esac
+    printf 'Continue anyway, installing and creating the database without indexing? [y/N] '
+    read -r answer </dev/tty 2>/dev/null || answer="y"
+    case "$answer" in [yY]*) MODE="none" ;; *) exit 1 ;; esac
   fi
 fi
 
