@@ -40,9 +40,8 @@ import {
 } from "@wattsteer/ui";
 import { Platform, Pressable, Text, View } from "react-native";
 import { useCopy } from "@/i18n";
-import { fill } from "@/i18n/format";
 import type { NavigationIntent } from "@/lib/voice/execute";
-import { screenKeyFor, selectionLine } from "./use-voice-agent";
+import { intentLines } from "./use-voice-agent";
 
 export function VoiceActionCard({
   intent,
@@ -53,28 +52,9 @@ export function VoiceActionCard({
 }) {
   const colors = usePalette();
   const copy = useCopy();
-  const voice = copy.app.voice;
 
   const refused = intent.kind === "refused";
-  const headline =
-    intent.kind === "navigate"
-      ? fill(voice.action.navigate, {
-          screen: copy.app.shell.screens[screenKeyFor(intent.pathname)],
-        })
-      : intent.kind === "params"
-        ? voice.action.focused
-        : intent.kind === "highlight"
-          ? intent.subsystem === null
-            ? voice.action.highlightCleared
-            : fill(voice.action.highlighted, { subsystem: intent.subsystem })
-          : voice.action.refused;
-
-  const detail =
-    intent.kind === "navigate" || intent.kind === "params"
-      ? selectionLine(intent.params, copy)
-      : intent.kind === "highlight"
-        ? voice.action.noScreenChange
-        : voice.refusal[intent.reason.code];
+  const { headline, detail } = intentLines(intent, copy);
 
   const body = (
     <View

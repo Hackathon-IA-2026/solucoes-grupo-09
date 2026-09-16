@@ -25,6 +25,7 @@
 import type { SubsystemCode } from "@wattsteer/core";
 import { createContext, useContext } from "react";
 import type { Copy } from "@/i18n/copy.en";
+import { fill } from "@/i18n/format";
 import type { NavigationIntent, ToolRefusalCode } from "@/lib/voice/execute";
 import { SCREEN_PATHS } from "@/lib/voice/execute";
 import type { TranscriptEntry, VoiceStatus } from "@/lib/voice/session";
@@ -450,3 +451,67 @@ export const DOCK_WIDTH = 380;
  * truncated word at the viewport edge, with the page not scrolling sideways.
  */
 export const DOCK_NARROW_BREAKPOINT = 460;
+
+/**
+ * The two lines an intent reads as: what happened, and what it did.
+ *
+ * **One dispatch over `intent.kind`, not two.** These were a pair of nested
+ * ternary chains, four levels deep each, computing the headline and the detail
+ * separately from the same discriminant — and the failure that shape invites is
+ * not a crash. A fifth `NavigationIntent` arm added to one chain and not the
+ * other yields a card whose two lines describe different things, which reads as
+ * a working card saying something false. react-doctor measured the component at
+ * cognitive complexity 22 and nesting depth 4; almost all of it was here.
+ *
+ * A `switch` also makes exhaustiveness the compiler's problem: the `never` in
+ * the default arm fails to typecheck the moment `NavigationIntent` grows an arm
+ * nothing here handles, which is the check the ternaries could not express —
+ * their final `else` silently absorbed anything new as a refusal.
+ *
+ * Extracted rather than inlined so it can be read, and tested, without a
+ * renderer: it is two strings out of a discriminated union and a dictionary.
+ */
+export function intentLines(
+  intent: NavigationIntent,
+  copy: Copy,
+): { headline: string; detail: string } {
+  const voice = copy.app.voice;
+  switch (intent.kind) {
+    case "navigate":
+      return {
+        headline: fill(voice.action.navigate, {
+          screen: copy.app.shell.screens[screenKeyFor(intent.pathname)],
+        }),
+        detail: selectionLine(intent.params, copy),
+      };
+    case "params":
+      return {
+        headline: voice.action.focused,
+        detail: selectionLine(intent.params, copy),
+      };
+    case "highlight":
+      return {
+        headline:
+          intent.subsystem === null
+            ? voice.action.highlightCleared
+            : fill(voice.action.highlighted, { subsystem: intent.subsystem }),
+        // The line that makes the demo's first step legible: the agent
+        // answered and the reader did not move.
+        detail: voice.action.noScreenChange,
+      };
+    case "refused":
+      return {
+        headline: voice.action.refused,
+        detail: voice.refusal[intent.reason.code],
+      };
+    default:
+      // The same `unreachable` the intent *performer* above uses, for the same
+      // reason: a fifth `NavigationIntent` arm has to be a compile error rather
+      // than a card rendering two lines about nothing. It is also the check the
+      // nested ternaries this replaced could not express — their final `else`
+      // absorbed anything new as a refusal. Reusing the helper keeps one
+      // statement of what exhaustive means in this file.
+      unreachable(intent);
+      return { headline: "", detail: "" };
+  }
+}

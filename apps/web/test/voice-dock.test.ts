@@ -5,6 +5,7 @@ import { SUBSYSTEM_DISPLAY_ORDER } from "@wattsteer/core";
 import {
   DOCK_NARROW_BREAKPOINT,
   DOCK_WIDTH,
+  intentLines,
   readsLevel,
   ringScale,
   screenKeyFor,
@@ -14,6 +15,7 @@ import {
 import { en } from "../src/i18n/copy.en";
 import { pt } from "../src/i18n/copy.pt";
 import { LOCALES } from "../src/i18n/locale";
+import type { NavigationIntent } from "../src/lib/voice/execute";
 import { SCREEN_PATHS, TOOL_REFUSAL_CODES } from "../src/lib/voice/execute";
 
 /**
@@ -366,5 +368,81 @@ describe("the trigger is absent on an instance that cannot honour it", () => {
       "utf8",
     );
     expect(source).toContain('serving.status !== "known" || serving.voiceConfigured');
+  });
+});
+
+describe("an intent reads as two lines, from one dispatch", () => {
+  /**
+   * `intentLines` replaced a pair of nested ternary chains — four levels deep
+   * each, computing the headline and the detail separately from the same
+   * discriminant. The failure that shape invites is not a crash: a fifth
+   * `NavigationIntent` arm added to one chain and not the other yields a card
+   * whose two lines describe different things, which reads as a working card
+   * saying something false.
+   *
+   * So the test is over the *pair*, for every arm of the union.
+   */
+  const INTENTS: NavigationIntent[] = [
+    { kind: "navigate", pathname: SCREEN_PATHS.explain, params: { subsystem: "NE" } },
+    { kind: "params", params: { subsystem: "S" } },
+    { kind: "highlight", subsystem: "NE" },
+    { kind: "highlight", subsystem: null },
+    { kind: "refused", reason: { code: "unknown_subsystem", argument: "x", value: "x" } },
+  ];
+
+  it("every arm yields a non-empty headline, in both locales", () => {
+    for (const locale of LOCALES) {
+      for (const intent of INTENTS) {
+        const { headline } = intentLines(intent, DICTIONARIES[locale]);
+        expect({ locale, kind: intent.kind, spoken: headline.trim() !== "" }).toEqual({
+          locale,
+          kind: intent.kind,
+          spoken: true,
+        });
+        // The `never` arm returns empty strings by construction; reaching it
+        // would show up here rather than as a blank card in production.
+        expect(headline).not.toBe("");
+      }
+    }
+  });
+
+  it("a highlight says the screen did not change — the demo's first step", () => {
+    for (const locale of LOCALES) {
+      const lines = intentLines(
+        { kind: "highlight", subsystem: "NE" },
+        DICTIONARIES[locale],
+      );
+      expect(lines.detail).toBe(DICTIONARIES[locale].app.voice.action.noScreenChange);
+      // And it names the region, or the card is an emphasis about nothing.
+      expect(lines.headline).toContain("NE");
+    }
+  });
+
+  /**
+   * One refusal card's two lines, for a given code.
+   *
+   * The parameter is `refusal` and not `code`: this file already has a
+   * top-level `code()` that strips comments from a source string, and a shadow
+   * there would make two very different things share a name in one file.
+   */
+  const refusalLines = (refusal: (typeof TOOL_REFUSAL_CODES)[number]) =>
+    intentLines(
+      { kind: "refused", reason: { code: refusal, argument: "a", value: "b" } },
+      en,
+    );
+
+  it("a refusal's detail is the refusal's own sentence, not a generic one", () => {
+    for (const refusal of TOOL_REFUSAL_CODES) {
+      const lines = refusalLines(refusal);
+      expect(lines.detail).toBe(en.app.voice.refusal[refusal]);
+      // Non-vacuity: the thirteen codes are deliberately different sentences,
+      // so a dispatch returning one of them for all thirteen would pass a
+      // per-code check that only asserted "non-empty".
+      expect(lines.detail.trim()).not.toBe("");
+    }
+    const distinct = new Set(
+      TOOL_REFUSAL_CODES.map((refusal) => refusalLines(refusal).detail),
+    );
+    expect(distinct.size).toBe(TOOL_REFUSAL_CODES.length);
   });
 });
