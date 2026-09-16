@@ -52,6 +52,12 @@ async def run(cases: list[dict], limit: int | None) -> dict:
                 "description": case["description"][:70],
                 "reason": case["reason"],
                 "verdict": document["verdict"],
+                # Without this a run that ran out of quota looks exactly like a
+                # run whose claims were refused, and they need different fixes.
+                "verdict_reason": document.get("reason"),
+                "provider": document["trace"]["generation"].get("provider"),
+                "gate_failures": document["trace"]["generation"].get("gate_failures") or [],
+                "candidates": document["trace"]["retrieval"]["hybrid_candidates"],
                 "expected": expected,
                 "cited": sorted(code for code in cited if code),
                 "cited_expected": bool(expected and expected in cited),
@@ -61,8 +67,9 @@ async def run(cases: list[dict], limit: int | None) -> dict:
         )
         print(
             f"{results[-1]['verdict']:<12} {case['reason']:<4} "
+            f"{(results[-1]['verdict_reason'] or ''):<26} "
             f"expected={expected or '-':<14} cited={results[-1]['cited'] or '-'} "
-            f"| {case['description'][:60]}"
+            f"| {case['description'][:46]}"
         )
 
     await gateway.aclose()
@@ -81,6 +88,8 @@ async def run(cases: list[dict], limit: int | None) -> dict:
         ),
         "claims_total": sum(row["claims"] for row in results),
         "rejected_total": sum(row["rejected"] for row in results),
+        "quota_exhausted": sum(1 for row in results if row["verdict_reason"] == "quota_exhausted_partial"),
+        "no_coverage": sum(1 for row in results if row["verdict_reason"] == "corpus_no_coverage_for_date"),
     }
     return {"summary": summary, "results": results}
 
