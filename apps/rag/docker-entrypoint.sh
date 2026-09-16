@@ -1,6 +1,14 @@
 #!/bin/sh
 set -e
 
+# `setpriv` changes the uid and nothing else, so HOME stays whatever the image
+# had — `/root`. libpq then looks for client certificates under
+# `/root/.postgresql/`, which the unprivileged user cannot read, and every
+# connection fails with `PermissionError: /root/.postgresql/postgresql.key`
+# before it has even reached the server. Same lesson as the volume ownership
+# below: dropping privileges means bringing the environment down with them.
+export HOME=/home/wattsteer
+
 # The volume arrives owned by root, which would make every download fail with a
 # permission error long after the image was built. Same lesson as apps/ml.
 if [ -n "${WATTSTEER_RAG_STORE_DIR}" ]; then

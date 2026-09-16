@@ -203,6 +203,14 @@ README.md
 APIDOC.md
 USAGE.md
 docs/
+# ...except the LLM gateway's config, which `apps/rag/Dockerfile` copies into the
+# image. The file lives under `docs/` because it is documentation of the provider
+# chain as much as configuration of it, and a negation here is cheaper than
+# moving it and breaking every link that points at it. Without this line the RAG
+# image cannot build: buildkit warns `CopyIgnoredFile` and then fails on the
+# missing path.
+!docs/rag/
+!docs/rag/gateway.yaml
 *.md
 
 # CI/CD files
