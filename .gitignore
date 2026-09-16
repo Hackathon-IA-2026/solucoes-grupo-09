@@ -25,3 +25,7 @@ __pycache__/
 # Playwright
 test-results/
 playwright-report/
+
+# apps/rag: raw corpus and evaluation output, both reproducible
+.rag-store/
+apps/rag/eval/last-run.json

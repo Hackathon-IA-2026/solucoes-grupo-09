@@ -145,8 +145,55 @@ services:
       retries: 3
       start_period: 20s
 
+  # The evidence service. Behind a profile because it is not needed to run the
+  # product: `docker compose --profile rag up rag`. It owns its own Postgres
+  # because pgvector is not in postgres:17-alpine and apps/api owns `public`.
+  rag-postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: wattsteer
+      POSTGRES_PASSWORD: wattsteer
+      POSTGRES_DB: wattsteer_rag
+    ports:
+      - "5439:5432"
+    volumes:
+      - rag-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wattsteer -d wattsteer_rag"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    profiles: ["rag"]
+
+  rag:
+    build:
+      context: .
+      dockerfile: apps/rag/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      rag-postgres:
+        condition: service_healthy
+    environment:
+      WATTSTEER_RAG_DATABASE_URL: postgres://wattsteer:wattsteer@rag-postgres:5432/wattsteer_rag
+      WATTSTEER_RAG_STORE_DIR: /data/rag-store
+      NVIDIA_API_KEYS: ${NVIDIA_API_KEYS:-}
+      GROQ_API_KEYS: ${GROQ_API_KEYS:-}
+      OPENROUTER_API_KEYS: ${OPENROUTER_API_KEYS:-}
+      SAMBANOVA_API_KEYS: ${SAMBANOVA_API_KEYS:-}
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "8082:8082"
+    volumes:
+      - rag-store:/data/rag-store
+    profiles: ["rag"]
+
 volumes:
   raw-payloads:
   redis-data:
   postgres-data:
   ml-artifacts:
+  rag-postgres-data:
+  rag-store:
