@@ -281,7 +281,17 @@ describe("the observed components cannot express a forecast", () => {
 });
 
 describe("the map speaks two languages and keeps them apart", () => {
-  const MAP = code(source("components", "charts", "subsystem-map.tsx"));
+  /*
+  The map *and* its interaction policy. `subsystem-map.tsx` was decomposed and
+  the platform branch — which is where both of the lines below live — moved to
+  `region-handlers.ts`. A guard reading only the component would have gone
+  quiet: `not.toContain("focusRing(")` is satisfied by a file that no longer
+  contains the code it is about.
+*/
+  const MAP = [
+    code(source("components", "charts", "subsystem-map.tsx")),
+    code(source("components", "charts", "region-handlers.ts")),
+  ].join("\n");
 
   it("the paint is a discriminated union, not a nullable row", () => {
     expect(MAP).toContain(

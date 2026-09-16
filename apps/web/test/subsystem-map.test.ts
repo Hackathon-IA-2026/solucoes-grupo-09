@@ -46,6 +46,32 @@ import {
 const ROOT = join(import.meta.dir, "..", "..", "..");
 const SCREEN = join(ROOT, "apps", "web", "src", "app", "app", "index.tsx");
 const MAP = join(ROOT, "apps", "web", "src", "components", "charts", "subsystem-map.tsx");
+
+/**
+ * **The map is two files now, and these guards read both.**
+ *
+ * `SubsystemMap` was 490 lines in one component and about a hundred of them
+ * were its interaction policy — the platform branch, the keyboard ring, the
+ * hover and focus pairs, and a `style` whose two lines each exist because of a
+ * bug that shipped. That moved to `region-handlers.ts`, and eight guards in
+ * this file went red at once: every one of them was about behaviour that had
+ * simply left the file they were reading.
+ *
+ * Going red is the good outcome. The failure worth naming is the other one —
+ * a guard whose subject moves out from under it and which keeps passing,
+ * asserting nothing about a file that no longer contains the thing it names.
+ * `MAP_SOURCE` is the pair, concatenated, so a future move between these two
+ * files cannot quietly empty them.
+ */
+const REGION_HANDLERS = join(
+  ROOT,
+  "apps",
+  "web",
+  "src",
+  "components",
+  "charts",
+  "region-handlers.ts",
+);
 const PANELS = join(ROOT, "apps", "web", "src", "components", "app", "overview");
 
 /**
@@ -78,6 +104,11 @@ function source(path: string): string {
 }
 
 /** The file with comments blanked, as `replay-screen.test.ts` does it. */
+/** The map and its interaction policy, as one string. See `REGION_HANDLERS`. */
+function mapSource(): string {
+  return [MAP, REGION_HANDLERS].map(sourceWithoutComments).join("\n");
+}
+
 function sourceWithoutComments(path: string): string {
   return source(path).replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, (match) =>
     match.replace(/[^\n]/g, " "),
@@ -289,7 +320,7 @@ describe("the map's wiring", () => {
   });
 
   it("the map renders one region per subsystem, from the shared order", () => {
-    const map = sourceWithoutComments(MAP);
+    const map = mapSource();
     // Not four literals: the list the rest of the app iterates.
     expect(map).toContain("SUBSYSTEM_DISPLAY_ORDER.map");
     expect(map).not.toMatch(/\["N", "NE", "SE", "S"\]/);
@@ -298,14 +329,14 @@ describe("the map's wiring", () => {
   it("the geometry's publisher is credited on the figure, not only in a comment", () => {
     // IBGE's mesh is open data, and open data still has a publisher. The
     // credit is rendered, so it survives a reader who never opens the source.
-    expect(sourceWithoutComments(MAP)).toContain("copy.app.overview.map.source");
+    expect(mapSource()).toContain("copy.app.overview.map.source");
     for (const dict of [PT, EN]) {
       expect(dict.app.overview.map.source).toContain("IBGE");
     }
   });
 
   it("the map colours regions with the risk palette, not its own", () => {
-    const map = sourceWithoutComments(MAP);
+    const map = mapSource();
     expect(map).toContain('from "@/components/charts/risk-class"');
     expect(map).toContain("riskColor(colors, klass)");
     // No raw hex anywhere: every colour comes from the palette.
@@ -313,7 +344,7 @@ describe("the map's wiring", () => {
   });
 
   it("a region is focusable, activates on Enter and Space, and rings", () => {
-    const map = sourceWithoutComments(MAP);
+    const map = mapSource();
     expect(map).toContain("tabIndex: 0");
     expect(map).toContain('event.key === "Enter"');
     expect(map).toContain('event.key === " "');
@@ -331,7 +362,7 @@ describe("the map's wiring", () => {
   });
 
   it("motion is asked about before it is applied", () => {
-    const map = sourceWithoutComments(MAP);
+    const map = mapSource();
     expect(map).toContain("useReducedMotion()");
     expect(map).toContain("reduced ? {} : webTransition(");
   });
@@ -387,7 +418,7 @@ describe("the map's labels", () => {
 
 describe("the map is legible without colour", () => {
   it("each region prints its own short code and the three-step glyph", () => {
-    const map = sourceWithoutComments(MAP);
+    const map = mapSource();
     // `risk-class.tsx` argues that hue alone fails colour-vision-deficient
     // readers. The same argument binds the map: the class has to be readable
     // with the fills removed.
@@ -452,10 +483,9 @@ describe("the regions are drawn, not turned into buttons", () => {
    * component computes: a render test would need the whole RNW host layer to
    * reproduce it, and the export assertion below covers the rendered side.
    */
-  const raw = readFileSync(
-    join(import.meta.dir, "..", "src/components/charts/subsystem-map.tsx"),
-    "utf8",
-  );
+  // Both files: the interaction policy these guards are about lives in
+  // `region-handlers.ts` now. See `REGION_HANDLERS` above.
+  const raw = [MAP, REGION_HANDLERS].map((path) => readFileSync(path, "utf8")).join("\n");
   /*
     Comments stripped first. The guard is about what the component *passes*,
     and the fix's own comment necessarily quotes the string being banned — so a
@@ -484,7 +514,12 @@ describe("the regions are drawn, not turned into buttons", () => {
     // satisfied by deleting it.
     expect(stripped).toContain("tabIndex: 0");
     expect(stripped).toContain('"aria-label": label');
-    expect(stripped).toContain('"aria-pressed": isSelected');
+    // The *binding*, not one spelling of it. This read `isSelected` while the
+    // handlers were inline in the component and that local was in scope; they
+    // are a function of their own now and compare against the prop. A guard
+    // pinned to the old identifier would have failed on a move that changed
+    // nothing about what the attribute says.
+    expect(stripped).toMatch(/"aria-pressed":\s*(isSelected|code === selected)/);
   });
 
   it("keeps the native branch on accessibilityRole, which is correct there", () => {
@@ -495,10 +530,9 @@ describe("the regions are drawn, not turned into buttons", () => {
 });
 
 describe("the region responds to a pointer, and so does its row", () => {
-  const raw = readFileSync(
-    join(import.meta.dir, "..", "src/components/charts/subsystem-map.tsx"),
-    "utf8",
-  );
+  // Both files: the interaction policy these guards are about lives in
+  // `region-handlers.ts` now. See `REGION_HANDLERS` above.
+  const raw = [MAP, REGION_HANDLERS].map((path) => readFileSync(path, "utf8")).join("\n");
   const stripped = raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
   const overview = overviewSource();
 
