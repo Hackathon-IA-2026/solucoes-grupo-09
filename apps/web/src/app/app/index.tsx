@@ -75,6 +75,8 @@ import { router } from "expo-router";
 import Head from "expo-router/head";
 import type { ReactNode } from "react";
 import { Text, View } from "react-native";
+import ExplainScreen from "@/app/app/explain";
+import MitigateScreen from "@/app/app/mitigate";
 import { AppShell, ScreenTitle } from "@/components/app/app-shell";
 import { ForecastAbsent } from "@/components/app/forecast-absent";
 import {
@@ -222,6 +224,25 @@ export default function GridOverviewScreen() {
           right={right}
         />
         {body}
+
+        {/*
+          Three questions about one selection, on one page.
+
+          Visão da rede, Explicar and Mitigar all read the same subsystem, the
+          same day and the same run. They were three routes, so asking "why?"
+          about the region just clicked meant leaving the page that framed the
+          question — and the map already had to stop navigating for exactly this
+          reason: a click selects, it does not travel. Máquina do tempo keeps
+          its own route, because it is a different mode rather than a different
+          view of this selection.
+
+          Below `{body}` and therefore below the refusal branches too: Explicar
+          reads its own gateway and Mitigar solves its own scenario, so neither
+          has any business disappearing because the Overview's forecast half
+          refused. Each section says what it knows.
+        */}
+        <ExplainScreen embedded />
+        <MitigateScreen embedded />
       </AppShell>
     </>
   );
@@ -259,7 +280,17 @@ export default function GridOverviewScreen() {
       below are the previous region's until the new ones land, and this says so
       in the one place a reader is already looking.
     */
-    <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+    /*
+      Two children of `ScreenTitle`'s own row, not a `<View>` wrapping them.
+
+      The wrapper was the cheaper-looking fix and it cost more: react-native-web
+      defaults `flexShrink` to 0, so it sat at its content width, pushed the
+      heading column past the page and clipped the map's legend 71px off the
+      right edge at every width `no-horizontal-overflow.spec.ts` measures. The
+      row it was sitting in already wraps and already gives width back. It
+      needed one less box, not more flex properties on this one.
+    */
+    <>
       {forecast === null ? (
         <ObservedStamp
           latestSettledHour={observed.now.latestSettledHour}
@@ -274,7 +305,7 @@ export default function GridOverviewScreen() {
       {state.refreshing ? (
         <ThinkingOrb size={18} accessibilityLabel={copy.app.overview.refreshingLabel} />
       ) : null}
-    </View>,
+    </>,
     // What the badges below need to know, stated once by the screen that knows
     // it. `forecast === null` is exactly "nothing here is a forecast", which is
     // when `Observado` distinguishes nothing and stands down.

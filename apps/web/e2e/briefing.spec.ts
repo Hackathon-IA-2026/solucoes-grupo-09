@@ -70,7 +70,10 @@ test.describe("mounting the host does not disturb the screens under it", () => {
     // cannot mint a session and the dock correctly renders nothing. Asserting
     // it would be asserting the stub.
     await expect(page.getByRole("tablist")).toHaveCount(1);
-    await expect(page.getByRole("tab")).toHaveCount(4);
+    // Two, and it was four. Explicar and Mitigar are sections of this page now
+    // rather than destinations — they are two more things to say about the
+    // selection already on screen, not places to go.
+    await expect(page.getByRole("tab")).toHaveCount(2);
   });
 });
 

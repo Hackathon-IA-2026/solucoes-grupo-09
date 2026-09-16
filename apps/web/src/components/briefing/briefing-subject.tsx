@@ -85,10 +85,20 @@ export function useBriefingSubject(): BriefingSubject {
  * Called from a screen's render with a freshly-built object every time, so the
  * effect compares by *content* rather than identity — otherwise every render
  * would publish, set state on the provider, and re-render the whole subtree.
+ *
+ * **One publisher per page.** The channel is last-writer-wins, so two callers
+ * mounted together do not merge — they race, and a briefing describes whichever
+ * effect happened to run second. `enabled` is how a component that is being
+ * shown *inside* another screen stands down: it still renders its panels, and
+ * the screen that owns the page speaks for all of them. It is an argument
+ * rather than a conditional call because a hook cannot sit behind one.
  */
-export function usePublishBriefingSubject(subject: BriefingSubject): void {
+export function usePublishBriefingSubject(
+  subject: BriefingSubject,
+  enabled = true,
+): void {
   const { publish } = useContext(SubjectContext);
-  const signature = subjectSignature(subject);
+  const signature = `${enabled}|${subjectSignature(subject)}`;
   /*
     The latest subject, held in a ref so the effect can publish it without
     depending on its identity.
@@ -102,8 +112,11 @@ export function usePublishBriefingSubject(subject: BriefingSubject): void {
   latest.current = subject;
   // biome-ignore lint/correctness/useExhaustiveDependencies: `signature` is the intended trigger and `latest.current` deliberately is not — depending on the ref's contents would publish on every render, set state on the provider, and re-render the screen that published
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
     publish(latest.current);
-  }, [signature, publish]);
+  }, [signature, publish, enabled]);
 }
 
 /**

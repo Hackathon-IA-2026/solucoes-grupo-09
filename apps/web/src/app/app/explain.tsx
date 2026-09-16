@@ -47,7 +47,12 @@ import { router } from "expo-router";
 import Head from "expo-router/head";
 import type { ReactNode } from "react";
 import { Text, View } from "react-native";
-import { AppShell, MiniPill, ScreenTitle } from "@/components/app/app-shell";
+import {
+  AppShell,
+  MiniPill,
+  ScreenTitle,
+  SectionBlock,
+} from "@/components/app/app-shell";
 import { ForecastAbsent } from "@/components/app/forecast-absent";
 import { ForecastStamp, HonestyNote, VintageBadge } from "@/components/app/honesty";
 import { ReadingState } from "@/components/app/thinking-orb";
@@ -75,7 +80,21 @@ import { renderNarration } from "@/i18n/narration";
 import { attributedDrivers } from "@/lib/explain";
 import { FIXTURE_LANE, subsystemMeta } from "@/lib/fixtures";
 
-export default function ExplainScreen() {
+/**
+ * Explicar, as a route and as a section of `/app`.
+ *
+ * `embedded` is the whole of the difference. Standing alone it is a page: its
+ * own `Head`, its own `AppShell`, its own title. Inside the Overview it is a
+ * `SectionBlock` under the same shell, reading the same selection, and it does
+ * not publish a briefing subject — the page that owns the scroll speaks for
+ * every section on it, because that channel is last-writer-wins and two
+ * publishers do not merge, they race.
+ *
+ * One implementation rather than two so the section cannot drift from the page:
+ * a panel added here appears in both, and `/app/explain` stays a URL that works
+ * for anyone who has one.
+ */
+export default function ExplainScreen({ embedded = false }: { embedded?: boolean }) {
   const colors = usePalette();
   const copy = useCopy();
   const f = useFormat();
@@ -126,7 +145,7 @@ export default function ExplainScreen() {
       peakPower: diagnosedDay === null ? null : diagnosedDay.forecast.peakPowerMw,
     },
     counterfactual: undefined,
-  });
+  }, !embedded);
 
   /**
    * Whether there is a diagnosis to describe, which the lede turns on.
@@ -146,24 +165,28 @@ export default function ExplainScreen() {
    */
   const diagnosed = state.status === "explained" && state.day !== null;
 
-  const frame = (right: ReactNode, body: ReactNode) => (
-    <>
-      <Head>
-        <title>{copy.app.explain.metaTitle}</title>
-        <meta name="robots" content="noindex,follow" />
-      </Head>
-      <AppShell>
-        <ScreenTitle
-          title={fill(copy.app.explain.title, { subsystem: meta.onsDisplayName })}
-          lede={fill(diagnosed ? copy.app.explain.lede : copy.app.explain.ledeAbsent, {
-            date: f.date(params.date),
-          })}
-          right={right}
-        />
+  const title = fill(copy.app.explain.title, { subsystem: meta.onsDisplayName });
+  const lede = fill(diagnosed ? copy.app.explain.lede : copy.app.explain.ledeAbsent, {
+    date: f.date(params.date),
+  });
+
+  const frame = (right: ReactNode, body: ReactNode) =>
+    embedded ? (
+      <SectionBlock id="explain" title={title} lede={lede} right={right}>
         {body}
-      </AppShell>
-    </>
-  );
+      </SectionBlock>
+    ) : (
+      <>
+        <Head>
+          <title>{copy.app.explain.metaTitle}</title>
+          <meta name="robots" content="noindex,follow" />
+        </Head>
+        <AppShell>
+          <ScreenTitle title={title} lede={lede} right={right} />
+          {body}
+        </AppShell>
+      </>
+    );
 
   if (state.status === "reading") {
     return frame(null, <ReadingState title={copy.app.explain.readingTitle} />);

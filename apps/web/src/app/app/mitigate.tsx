@@ -42,9 +42,14 @@
 
 import { Panel, Pill, radius, space, usePalette } from "@wattsteer/ui";
 import Head from "expo-router/head";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { Text, View } from "react-native";
-import { AppShell, MiniPill, ScreenTitle } from "@/components/app/app-shell";
+import {
+  AppShell,
+  MiniPill,
+  ScreenTitle,
+  SectionBlock,
+} from "@/components/app/app-shell";
 import { Stepper } from "@/components/app/asset-editor";
 import { HonestyNote, SolveStamp } from "@/components/app/honesty";
 import {
@@ -86,7 +91,11 @@ function percentBand(band: Band): Band {
   return { p10: band.p10 * 100, p50: band.p50 * 100, p90: band.p90 * 100 };
 }
 
-export default function MitigateScreen() {
+/**
+ * Mitigar, as a route and as a section of `/app`. See `explain.tsx` for what
+ * `embedded` buys and why the section does not publish its own briefing.
+ */
+export default function MitigateScreen({ embedded = false }: { embedded?: boolean }) {
   const colors = usePalette();
   const copy = useCopy();
   const f = useFormat();
@@ -111,21 +120,24 @@ export default function MitigateScreen() {
   */
   const solved = optimization.status === "solved" ? optimization.steps : null;
   const lastStep = solved?.at(-1) ?? null;
-  usePublishBriefingSubject({
-    context: { locale, screen: "mitigate", params, serving },
-    data: NO_BRIEFING_DATA,
-    counterfactual:
-      solved === null ||
-      lastStep === undefined ||
-      lastStep === null ||
-      solved[0] === undefined
-        ? undefined
-        : {
-            action: lastStep.key === "battery" ? "battery" : "shiftable_load",
-            baselineMwh: solved[0].remaining.p50,
-            optimizedMwh: lastStep.remaining.p50,
-          },
-  });
+  usePublishBriefingSubject(
+    {
+      context: { locale, screen: "mitigate", params, serving },
+      data: NO_BRIEFING_DATA,
+      counterfactual:
+        solved === null ||
+        lastStep === undefined ||
+        lastStep === null ||
+        solved[0] === undefined
+          ? undefined
+          : {
+              action: lastStep.key === "battery" ? "battery" : "shiftable_load",
+              baselineMwh: solved[0].remaining.p50,
+              optimizedMwh: lastStep.remaining.p50,
+            },
+    },
+    !embedded,
+  );
   const [revealed, setRevealed] = useState(2);
 
   // The stamp is read off the answer, never off the request: the threshold and
@@ -145,41 +157,48 @@ export default function MitigateScreen() {
    */
   const planned = optimization.status === "solved";
 
-  const header = (
-    <ScreenTitle
-      title={copy.app.mitigate.title}
-      lede={fill(planned ? copy.app.mitigate.lede : copy.app.mitigate.ledeAbsent, {
-        subsystem: meta.onsDisplayName,
-        date: f.date(params.date),
-      })}
-      right={
-        stamped === null ? null : (
-          <SolveStamp
-            forecastOrigin={stamped.forecastOrigin}
-            thresholdMw={stamped.thresholdMw}
-          />
-        )
-      }
-    />
-  );
+  const title = copy.app.mitigate.title;
+  const lede = fill(planned ? copy.app.mitigate.lede : copy.app.mitigate.ledeAbsent, {
+    subsystem: meta.onsDisplayName,
+    date: f.date(params.date),
+  });
+  const right =
+    stamped === null ? null : (
+      <SolveStamp
+        forecastOrigin={stamped.forecastOrigin}
+        thresholdMw={stamped.thresholdMw}
+      />
+    );
 
-  // A scenario the refusal table would not let near a solver never gets a plan
-  // drawn for it. The code is rendered from the dictionaries; the gateway's own
-  // developer prose is not on this screen and never reaches a reader.
-  if (scenarioState.scenario === null) {
-    const code = scenarioState.readout.ok ? "BAD_INPUT" : scenarioState.readout.code;
-    return (
+  /*
+    One frame for four returns. This screen wrote the `Head` + `AppShell` +
+    header preamble out four times — once per branch — which is four places to
+    forget the same line, and adding the embedded form would have made it eight.
+  */
+  const frame = (body: ReactNode) =>
+    embedded ? (
+      <SectionBlock id="mitigate" title={title} lede={lede} right={right}>
+        {body}
+      </SectionBlock>
+    ) : (
       <>
         <Head>
           <title>{copy.app.mitigate.metaTitle}</title>
           <meta name="robots" content="noindex,follow" />
         </Head>
         <AppShell>
-          {header}
-          <Refusal code={code} onReset={scenarioState.reset} />
+          <ScreenTitle title={title} lede={lede} right={right} />
+          {body}
         </AppShell>
       </>
     );
+
+  // A scenario the refusal table would not let near a solver never gets a plan
+  // drawn for it. The code is rendered from the dictionaries; the gateway's own
+  // developer prose is not on this screen and never reaches a reader.
+  if (scenarioState.scenario === null) {
+    const code = scenarioState.readout.ok ? "BAD_INPUT" : scenarioState.readout.code;
+    return frame(<Refusal code={code} onReset={scenarioState.reset} />);
   }
 
   const scenario = scenarioState.scenario;
@@ -190,37 +209,17 @@ export default function MitigateScreen() {
   // The solver refused, or could not be reached. Same treatment as a refused
   // link: the code, in the reader's language, and no plan drawn beside it.
   if (optimization.status === "refused") {
-    return (
-      <>
-        <Head>
-          <title>{copy.app.mitigate.metaTitle}</title>
-          <meta name="robots" content="noindex,follow" />
-        </Head>
-        <AppShell>
-          {header}
-          <Refusal code={optimization.code} onReset={scenarioState.reset} />
-        </AppShell>
-      </>
-    );
+    return frame(<Refusal code={optimization.code} onReset={scenarioState.reset} />);
   }
 
   // Solving. An absence, not a skeleton of numbers that are not there yet.
   if (optimization.status !== "solved") {
-    return (
-      <>
-        <Head>
-          <title>{copy.app.mitigate.metaTitle}</title>
-          <meta name="robots" content="noindex,follow" />
-        </Head>
-        <AppShell>
-          {header}
-          <HonestyNote
-            title={copy.app.mitigate.solvingTitle}
-            tone="neutral"
-            points={[copy.app.mitigate.solvingNote, copy.app.mitigate.solvingLive]}
-          />
-        </AppShell>
-      </>
+    return frame(
+      <HonestyNote
+        title={copy.app.mitigate.solvingTitle}
+        tone="neutral"
+        points={[copy.app.mitigate.solvingNote, copy.app.mitigate.solvingLive]}
+      />,
     );
   }
 
@@ -229,153 +228,145 @@ export default function MitigateScreen() {
   const baseline = steps[0].remaining;
   const domainMax = baseline.p90 * 1.05;
 
-  return (
+  return frame(
     <>
-      <Head>
-        <title>{copy.app.mitigate.metaTitle}</title>
-        <meta name="robots" content="noindex,follow" />
-      </Head>
-      <AppShell>
-        {header}
+      {/*
+            The execution rule, above every number it makes honest. Not a tooltip
+            and not collapsible: a caveat behind an interaction is a caveat nobody
+            reads, and this one changes what "planned against the median" means.
+          */}
+      <HonestyNote
+        title={copy.app.mitigate.postureTitle}
+        tone="neutral"
+        points={[copy.app.mitigate.postureRule, copy.app.mitigate.postureWhy]}
+        right={
+          <Text style={{ fontSize: 11, color: colors.inkFaint }}>
+            {copy.app.mitigate.postureSubtitle}
+          </Text>
+        }
+      />
 
-        {/*
-          The execution rule, above every number it makes honest. Not a tooltip
-          and not collapsible: a caveat behind an interaction is a caveat nobody
-          reads, and this one changes what "planned against the median" means.
-        */}
-        <HonestyNote
-          title={copy.app.mitigate.postureTitle}
-          tone="neutral"
-          points={[copy.app.mitigate.postureRule, copy.app.mitigate.postureWhy]}
-          right={
-            <Text style={{ fontSize: 11, color: colors.inkFaint }}>
-              {copy.app.mitigate.postureSubtitle}
-            </Text>
+      <FloorPanel active={active} domainMax={domainMax} />
+
+      {/* Quantiles do not add, and the floor is not a day-level claim. */}
+      <HonestyNote
+        title={copy.app.mitigate.notJointTitle}
+        tone="warning"
+        points={[copy.app.mitigate.notJointBody]}
+      />
+
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
+        <Panel style={{ flexGrow: 1, flexShrink: 1, flexBasis: 300 }}>
+          {active.avoidability === null ? (
+            <View style={{ gap: space.sm }}>
+              <Text style={{ fontSize: 13, color: colors.inkMuted }}>
+                {copy.app.mitigate.avoided}
+              </Text>
+              <Text
+                style={{ fontSize: 40, fontWeight: "600", color: colors.inkFaint }}
+                accessibilityLabel={copy.app.mitigate.avoidedUndefined}
+              >
+                —
+              </Text>
+              <Text style={{ fontSize: 11, lineHeight: 18, color: colors.inkFaint }}>
+                {copy.app.mitigate.avoidedUndefined}
+              </Text>
+            </View>
+          ) : (
+            <Avoidability shares={active.avoidability} />
+          )}
+        </Panel>
+
+        {/* R$ once, with its assumption on screen and editable. */}
+        <Panel style={{ flexGrow: 1, flexShrink: 1, flexBasis: 320, gap: space.sm }}>
+          <Text style={{ fontSize: 13, color: colors.inkMuted }}>
+            {copy.app.mitigate.economicTitle}
+          </Text>
+          {/*
+                The solver's own figure — recovered energy on the planning
+                envelope at the assumed rate — rather than a second multiplication
+                on this screen. `no_action` dispatched nothing and is priced at
+                nothing, which is an absence and is drawn as one.
+              */}
+          <Text
+            style={{
+              fontSize: 32,
+              fontWeight: "600",
+              fontVariant: ["tabular-nums"],
+              color: active.brl === null ? colors.inkFaint : colors.ink,
+            }}
+            accessibilityLabel={
+              active.brl === null ? copy.app.mitigate.economicNoPlan : undefined
+            }
+          >
+            {active.brl === null ? "—" : f.brlThousands(active.brl)}
+          </Text>
+          <View style={{ marginTop: space.xs }}>
+            <Stepper
+              label={copy.app.mitigate.economicRate}
+              value={brlPerMwh}
+              limit={ASSET_LIMITS.brlPerMwh}
+              format={(v) => `${f.brl(v)}/MWh`}
+              onChange={(next) => scenarioState.update(withBrlPerMwh(scenario, next))}
+            />
+          </View>
+          <Text style={{ fontSize: 11, lineHeight: 18, color: colors.inkFaint }}>
+            {fill(copy.app.mitigate.economicNote, { rate: f.brl(brlPerMwh) })}
+          </Text>
+          <Text style={{ fontSize: 11, lineHeight: 18, color: colors.inkFaint }}>
+            {copy.app.mitigate.economicOnlyMoney}
+          </Text>
+        </Panel>
+      </View>
+
+      <DeliveredPanel active={active} />
+
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
+        {steps.map((step, index) => (
+          <StepCard
+            key={step.key}
+            step={step}
+            domainMax={domainMax}
+            revealed={index <= revealed}
+            onReveal={() => setRevealed(index)}
+            isActive={index === revealed}
+          />
+        ))}
+      </View>
+
+      <DispatchPanel active={active} battery={battery} />
+
+      <FleetEditors
+        scenario={scenario}
+        battery={battery}
+        load={load}
+        update={scenarioState.update}
+      />
+
+      <View style={{ flexDirection: "row", gap: space.md, flexWrap: "wrap" }}>
+        <Pill
+          label={fill(copy.app.mitigate.reset, {
+            power: f.number(DEFAULT_BATTERY.maxPowerMw),
+            energy: f.number(DEFAULT_BATTERY.energyCapacityMwh),
+            shift: f.number(DEFAULT_LOAD.maxShiftMw),
+          })}
+          tone="secondary"
+          onPress={() =>
+            scenarioState.commit(
+              withLoad(withBattery(scenario, DEFAULT_BATTERY), DEFAULT_LOAD),
+            )
           }
         />
+      </View>
 
-        <FloorPanel active={active} domainMax={domainMax} />
+      <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkFaint }}>
+        {copy.app.mitigate.shareNote}
+      </Text>
 
-        {/* Quantiles do not add, and the floor is not a day-level claim. */}
-        <HonestyNote
-          title={copy.app.mitigate.notJointTitle}
-          tone="warning"
-          points={[copy.app.mitigate.notJointBody]}
-        />
-
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
-          <Panel style={{ flexGrow: 1, flexShrink: 1, flexBasis: 300 }}>
-            {active.avoidability === null ? (
-              <View style={{ gap: space.sm }}>
-                <Text style={{ fontSize: 13, color: colors.inkMuted }}>
-                  {copy.app.mitigate.avoided}
-                </Text>
-                <Text
-                  style={{ fontSize: 40, fontWeight: "600", color: colors.inkFaint }}
-                  accessibilityLabel={copy.app.mitigate.avoidedUndefined}
-                >
-                  —
-                </Text>
-                <Text style={{ fontSize: 11, lineHeight: 18, color: colors.inkFaint }}>
-                  {copy.app.mitigate.avoidedUndefined}
-                </Text>
-              </View>
-            ) : (
-              <Avoidability shares={active.avoidability} />
-            )}
-          </Panel>
-
-          {/* R$ once, with its assumption on screen and editable. */}
-          <Panel style={{ flexGrow: 1, flexShrink: 1, flexBasis: 320, gap: space.sm }}>
-            <Text style={{ fontSize: 13, color: colors.inkMuted }}>
-              {copy.app.mitigate.economicTitle}
-            </Text>
-            {/*
-              The solver's own figure — recovered energy on the planning
-              envelope at the assumed rate — rather than a second multiplication
-              on this screen. `no_action` dispatched nothing and is priced at
-              nothing, which is an absence and is drawn as one.
-            */}
-            <Text
-              style={{
-                fontSize: 32,
-                fontWeight: "600",
-                fontVariant: ["tabular-nums"],
-                color: active.brl === null ? colors.inkFaint : colors.ink,
-              }}
-              accessibilityLabel={
-                active.brl === null ? copy.app.mitigate.economicNoPlan : undefined
-              }
-            >
-              {active.brl === null ? "—" : f.brlThousands(active.brl)}
-            </Text>
-            <View style={{ marginTop: space.xs }}>
-              <Stepper
-                label={copy.app.mitigate.economicRate}
-                value={brlPerMwh}
-                limit={ASSET_LIMITS.brlPerMwh}
-                format={(v) => `${f.brl(v)}/MWh`}
-                onChange={(next) => scenarioState.update(withBrlPerMwh(scenario, next))}
-              />
-            </View>
-            <Text style={{ fontSize: 11, lineHeight: 18, color: colors.inkFaint }}>
-              {fill(copy.app.mitigate.economicNote, { rate: f.brl(brlPerMwh) })}
-            </Text>
-            <Text style={{ fontSize: 11, lineHeight: 18, color: colors.inkFaint }}>
-              {copy.app.mitigate.economicOnlyMoney}
-            </Text>
-          </Panel>
-        </View>
-
-        <DeliveredPanel active={active} />
-
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
-          {steps.map((step, index) => (
-            <StepCard
-              key={step.key}
-              step={step}
-              domainMax={domainMax}
-              revealed={index <= revealed}
-              onReveal={() => setRevealed(index)}
-              isActive={index === revealed}
-            />
-          ))}
-        </View>
-
-        <DispatchPanel active={active} battery={battery} />
-
-        <FleetEditors
-          scenario={scenario}
-          battery={battery}
-          load={load}
-          update={scenarioState.update}
-        />
-
-        <View style={{ flexDirection: "row", gap: space.md, flexWrap: "wrap" }}>
-          <Pill
-            label={fill(copy.app.mitigate.reset, {
-              power: f.number(DEFAULT_BATTERY.maxPowerMw),
-              energy: f.number(DEFAULT_BATTERY.energyCapacityMwh),
-              shift: f.number(DEFAULT_LOAD.maxShiftMw),
-            })}
-            tone="secondary"
-            onPress={() =>
-              scenarioState.commit(
-                withLoad(withBattery(scenario, DEFAULT_BATTERY), DEFAULT_LOAD),
-              )
-            }
-          />
-        </View>
-
-        <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkFaint }}>
-          {copy.app.mitigate.shareNote}
-        </Text>
-
-        <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkFaint }}>
-          {copy.app.mitigate.footnote}
-        </Text>
-      </AppShell>
-    </>
+      <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkFaint }}>
+        {copy.app.mitigate.footnote}
+      </Text>
+    </>,
   );
 }
 

@@ -51,10 +51,22 @@ interface ScreenDef {
   path: string;
 }
 
+/*
+  Two, and it used to be four.
+
+  Explicar and Mitigar are not places; they are two more things to say about the
+  selection Visão da rede is already showing, and putting them behind tabs made
+  "why is the NE at risk?" a navigation away from the map that raised the
+  question. They are sections of `/app` now. Máquina do tempo stays, because it
+  is a different mode — another day, another axis, another question — and not
+  another view of this selection.
+
+  Their routes still exist and still render standalone, for a link somebody
+  already has and for the voice agent's `explain` tool. What went away is the
+  menu that implied they were somewhere else.
+*/
 const SCREENS: ScreenDef[] = [
   { key: "overview", path: "/app" },
-  { key: "explain", path: "/app/explain" },
-  { key: "mitigate", path: "/app/mitigate" },
   { key: "replay", path: "/app/replay" },
 ];
 
@@ -584,6 +596,61 @@ export function ScreenTitle({
         </Text>
       </View>
       {right}
+    </View>
+  );
+}
+
+/**
+ * One concern of the page, under its own heading.
+ *
+ * Visão da rede, Explicar and Mitigar are three questions about **one**
+ * selection — the same subsystem, the same day, the same run — and they were
+ * three routes. Clicking a region on the map to ask "why?" meant a navigation,
+ * a fresh read and a page that rebuilt itself around the answer to a question
+ * the reader had already framed. Máquina do tempo is genuinely a different
+ * mode and keeps its own route; these three do not.
+ *
+ * `nativeID` gives each section an anchor, so `/app#explain` still lands where
+ * `/app/explain` used to and the voice agent's `explain` tool has somewhere to
+ * send a reader without leaving the page.
+ */
+export function SectionBlock({
+  id,
+  title,
+  lede,
+  right,
+  children,
+}: {
+  id: string;
+  title: string;
+  lede: string;
+  right?: ReactNode;
+  children: ReactNode;
+}) {
+  const colors = usePalette();
+  return (
+    <View
+      nativeID={id}
+      /*
+        A landmark, so a screen reader can jump between the three sections the
+        way the three routes used to let a reader jump between pages. `region`
+        is not in react-native's `AccessibilityRole` union — that enum is the
+        intersection of what iOS, Android and the web can express — so it goes
+        on as a web prop, which is the same escape hatch this file already uses
+        for `cursor: "pointer"`.
+      */
+      {...(Platform.OS === "web"
+        ? ({ role: "region", "aria-label": title } as object)
+        : { accessibilityLabel: title })}
+      style={{
+        gap: space.lg,
+        paddingTop: space.xl,
+        borderTopWidth: 1,
+        borderTopColor: colors.border,
+      }}
+    >
+      <ScreenTitle title={title} lede={lede} right={right} />
+      {children}
     </View>
   );
 }
