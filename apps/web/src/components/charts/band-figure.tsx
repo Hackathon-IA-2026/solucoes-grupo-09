@@ -65,12 +65,38 @@ export function BandStrip({
   const left = clamp01(band.p10 / max);
   const right = clamp01(band.p90 / max);
   const mid = clamp01(band.p50 / max);
+  /*
+    **The landing page's rail, drawn here.** `landing/band-figure.tsx` draws an
+    interval as a *bordered* span with a median tick that overhangs the track;
+    this drew a borderless wash at 0.32 opacity with the tick clipped inside it,
+    in the same hue as the wash. Side by side — and they are side by side, since
+    the landing renders these product's own panels over a fixture — the two read
+    as two different charts of the same quantity: the internal one has no edges
+    to read a P10 or a P90 off, and its median is a slightly-more-opaque smudge.
+    The strip a visitor is shown and the strip a user gets are one drawing now.
+
+    What does *not* come across from the landing is the hue. The landing has one
+    quantity on screen and paints every rail violet; this app puts energy (MWh)
+    beside peak power (MW) in adjacent panels and separates them by tone, which
+    is a distinction the landing never has to make. So `tone` survives, and only
+    the construction is shared.
+  */
   const fillColor =
     tone === "accent"
       ? colors.accent
       : tone === "violet"
         ? colors.violet
         : colors.inkMuted;
+  const spanFill =
+    tone === "accent"
+      ? colors.accentSoft
+      : tone === "violet"
+        ? colors.violetSoft
+        : colors.borderStrong;
+  // The tick has to contrast with the span it sits on, so it cannot be the
+  // span's own hue: on an accent band the landing's lime tick is invisible.
+  const tickColor = tone === "accent" ? colors.ink : colors.accent;
+  const overhang = 3;
 
   return (
     <View
@@ -84,7 +110,9 @@ export function BandStrip({
         height,
         borderRadius: height / 2,
         backgroundColor: colors.surfaceSunken,
-        overflow: "hidden",
+        // **Not** `overflow: "hidden"`: the median tick overhangs the track by
+        // design, which is how the landing's rail makes a median legible on a
+        // 10 px bar. Clipping it is what reduced it to a smudge inside the span.
         justifyContent: "center",
       }}
     >
@@ -92,24 +120,26 @@ export function BandStrip({
         style={{
           position: "absolute",
           left: `${left * 100}%`,
+          // A zero-width span would vanish; a hairline still reads as "here".
           width: `${Math.max(1.5, (right - left) * 100)}%`,
           top: 0,
           bottom: 0,
           borderRadius: height / 2,
-          backgroundColor: fillColor,
-          opacity: 0.32,
+          backgroundColor: spanFill,
+          borderWidth: 1,
+          borderColor: fillColor,
         }}
       />
       <View
         style={{
           position: "absolute",
           left: `${mid * 100}%`,
-          top: 0,
-          bottom: 0,
+          top: -overhang,
+          height: height + overhang * 2,
           width: 3,
           marginLeft: -1.5,
           borderRadius: 2,
-          backgroundColor: fillColor,
+          backgroundColor: tickColor,
         }}
       />
     </View>
