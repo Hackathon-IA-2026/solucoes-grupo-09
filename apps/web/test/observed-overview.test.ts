@@ -446,3 +446,36 @@ describe("the observed derivations are measurements, not estimates", () => {
     expect(rows[0].last24hMwh).toBe(1842.6);
   });
 });
+
+describe("`Observado` marks a contrast, and only where there is one", () => {
+  /*
+    The badge's gate used to be `anyLaneServing` — a global fact. The day a lane
+    was promoted it flipped, and every badge returned to screens drawing nothing
+    but settled data, because the date in question still had no forecast. Seven
+    chips saying "observed" on a page where everything was.
+
+    The gate is local now: the screen states whether it is drawing a forecast at
+    all, and the badges under it read that. These are source-text checks in the
+    style of the rest of this file — the rule is one boolean and it is worth
+    holding at the two ends that have to agree.
+  */
+  const HONESTY = code(source("components", "app", "honesty.tsx"));
+  const OVERVIEW = code(source("app", "app", "index.tsx"));
+
+  it("the badge reads the screen's own answer first", () => {
+    const body = functionBody(HONESTY, "ObservedBadge");
+    expect(body).toContain("useContext(ForecastOnScreen)");
+    expect(body).toContain("onScreen ??");
+  });
+
+  it("no provider is not the same as no forecast", () => {
+    // `null` falls back to the serving rule. Dropping the mark off a screen
+    // that *is* mixed is the failure worth avoiding, and it is the opposite of
+    // the one being fixed.
+    expect(HONESTY).toContain("createContext<boolean | null>(null)");
+  });
+
+  it("the overview states it from its own state", () => {
+    expect(OVERVIEW).toContain("<ForecastPresence present={forecast !== null}>");
+  });
+});

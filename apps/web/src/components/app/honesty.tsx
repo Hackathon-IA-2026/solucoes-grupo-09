@@ -9,7 +9,7 @@
 
 import { producerLabel } from "@wattsteer/core";
 import { Badge, ClockIcon, radius, space, usePalette } from "@wattsteer/ui";
-import type { ReactNode } from "react";
+import { createContext, type ReactNode, useContext } from "react";
 import { Text, View } from "react-native";
 import { useServing } from "@/components/app/use-serving";
 import { useCopy, useFormat } from "@/i18n";
@@ -246,20 +246,54 @@ export function SolveStamp({
  * everything carries the same information as a mark that is on nothing, and it
  * costs a row of visual noise on every panel to say it.
  *
- * So it is gated on the same question the D−1 run pills ask: can a forecast
- * exist here at all? With no lane promoted the answer is no, nothing on this
- * screen is a forecast, the lede says so once, and the badge stands down. The
- * moment a model is promoted every one of them comes back, which is exactly
- * when they start meaning something.
+ * So it is gated on the question the badge is actually for: **is there a
+ * forecast on this screen to be told apart from?**
+ *
+ * That gate used to read a global fact — whether any lane was serving — and a
+ * lane promoting somewhere is not a forecast appearing here. The two came apart
+ * the day a model was promoted: `gate_early` started serving, `anyLaneServing`
+ * flipped, and all seven badges returned to screens still drawing nothing but
+ * settled data, because the date in question had no published forecast. The
+ * screen was in `observedOnly` — every panel observed, nothing to confuse — and
+ * it wore seven chips saying so. The ambiguity is local; the gate now is too.
+ *
+ * A screen states it with {@link ForecastPresence}. Where none does, the old
+ * serving rule still answers: a screen that has not said whether it draws a
+ * forecast is not one to silently drop the distinction on.
  *
  * `info` tone, which is the cyan the observed map's ramp is drawn in and which
  * nothing else on these screens uses. The badge and the map are then one
  * statement rather than two: cyan means measured.
  */
+const ForecastOnScreen = createContext<boolean | null>(null);
+
+/**
+ * A screen stating whether it is drawing a forecast at all, for the badges
+ * below it.
+ *
+ * `null` — no provider — is not `false`. It means nobody has said, and the
+ * badge falls back to the serving rule rather than assuming the safe-looking
+ * answer: dropping the mark off a screen that *is* mixed is the failure worth
+ * avoiding, and it is the opposite of the one being fixed here.
+ */
+export function ForecastPresence({
+  present,
+  children,
+}: {
+  present: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <ForecastOnScreen.Provider value={present}>{children}</ForecastOnScreen.Provider>
+  );
+}
+
 export function ObservedBadge() {
   const copy = useCopy();
   const serving = useServing();
-  if (serving.status === "known" && !serving.serving) {
+  const onScreen = useContext(ForecastOnScreen);
+  const contrasts = onScreen ?? !(serving.status === "known" && !serving.serving);
+  if (!contrasts) {
     return null;
   }
   return <Badge label={copy.app.observed.badge} tone="info" />;

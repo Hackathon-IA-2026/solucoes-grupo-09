@@ -77,7 +77,12 @@ import type { ReactNode } from "react";
 import { Text } from "react-native";
 import { AppShell, ScreenTitle } from "@/components/app/app-shell";
 import { ForecastAbsent } from "@/components/app/forecast-absent";
-import { ForecastStamp, HonestyNote, ObservedStamp } from "@/components/app/honesty";
+import {
+  ForecastPresence,
+  ForecastStamp,
+  HonestyNote,
+  ObservedStamp,
+} from "@/components/app/honesty";
 import { ForecastPanels } from "@/components/app/overview/forecast-panels";
 import { ObservedPanels } from "@/components/app/overview/observed-panels";
 import { SettledPanels } from "@/components/app/overview/settled-panels";
@@ -260,7 +265,10 @@ export default function GridOverviewScreen() {
         thresholdMw={forecast.forecast.thresholdMw}
       />
     ),
-    <>
+    // What the badges below need to know, stated once by the screen that knows
+    // it. `forecast === null` is exactly "nothing here is a forecast", which is
+    // when `Observado` distinguishes nothing and stands down.
+    <ForecastPresence present={forecast !== null}>
       {/*
         Two stacks, never interleaved, and each one whole.
 
@@ -317,6 +325,6 @@ export default function GridOverviewScreen() {
       <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkFaint }}>
         {fill(copy.app.overview.grainNote, { subsystem: meta.onsDisplayName })}
       </Text>
-    </>,
+    </ForecastPresence>,
   );
 }
