@@ -95,8 +95,24 @@ export interface VoiceAgentState {
   readonly close: () => void;
   readonly expand: () => void;
   readonly collapse: () => void;
+  /**
+   * The briefing the agent asked for, as a *question* rather than a plan.
+   *
+   * The screens compose and render it, not this provider: a briefing draws what
+   * the screen has already read, and lifting that state up here would mean the
+   * briefing and the screen under it could disagree about the same day.
+   */
+  readonly briefing: BriefingRequest | null;
+  /** Close the briefing and leave the reader on the screen it overlaid. */
+  readonly dismissBriefing: () => void;
   /** The typed fallback — a turn with no microphone in it. */
   readonly say: (text: string) => void;
+}
+
+/** What the agent asked to be briefed about. */
+export interface BriefingRequest {
+  readonly questionKind: QuestionKind;
+  readonly subsystem: SubsystemCode | null;
 }
 
 /**
@@ -117,6 +133,8 @@ export const VOICE_ABSENT: VoiceAgentState = {
   mic: "unasked",
   action: null,
   highlighted: null,
+  briefing: null,
+  dismissBriefing: () => {},
   error: null,
   open: () => {},
   close: () => {},

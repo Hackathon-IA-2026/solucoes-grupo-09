@@ -52,9 +52,9 @@ import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { parseAppParams } from "@/components/app/params";
 import { defaultScenario, readScenario, SCENARIO_PARAM } from "@/components/app/scenario";
 import { useServing } from "@/components/app/use-serving";
+import type { BriefingRequest } from "@/components/voice/use-voice-agent";
 import { useI18n } from "@/i18n";
 import { useLatest } from "@/lib/use-latest";
-import type { QuestionKind } from "@/lib/voice/briefing/types";
 import { contextSentence, screenFor } from "@/lib/voice/context";
 import { executeTool, type ToolCall } from "@/lib/voice/execute";
 import { voiceInstructions } from "@/lib/voice/instructions";
@@ -86,10 +86,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
    * holding the question rather than the scenes means a briefing can never be
    * staler than the state it is drawn from.
    */
-  const [briefing, setBriefing] = useState<{
-    questionKind: QuestionKind;
-    subsystem: SubsystemCode | null;
-  } | null>(null);
+  const [briefing, setBriefing] = useState<BriefingRequest | null>(null);
   const [expandedByReader, setExpandedByReader] = useState(false);
 
   const params = useMemo(() => parseAppParams(rawParams), [rawParams]);
@@ -223,6 +220,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   // Stable identities: the expanded panel installs a `keydown` listener keyed
   // on `collapse`, and a new function per render would tear the listener down
   // and rebuild it on every audio level frame.
+  const dismissBriefing = useCallback(() => setBriefing(null), []);
   const expand = useCallback(() => setExpandedByReader(true), []);
   const collapse = useCallback(() => setExpandedByReader(false), []);
 
@@ -235,6 +233,8 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       level,
       mic,
       action,
+      briefing,
+      dismissBriefing,
       highlighted,
       error,
       open,
@@ -251,6 +251,8 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       level,
       mic,
       action,
+      briefing,
+      dismissBriefing,
       highlighted,
       error,
       open,
