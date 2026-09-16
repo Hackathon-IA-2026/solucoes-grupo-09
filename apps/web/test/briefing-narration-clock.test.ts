@@ -167,3 +167,39 @@ describe("teardown", () => {
     });
   });
 });
+
+describe("when the narration has finished", () => {
+  it("stops reporting a running clock once the queue has played out", async () => {
+    const audio = await backend();
+    audio.playChunk(ONE_SECOND);
+    // The second sounded, and the reader has been looking at the last scene
+    // for nine more.
+    contextOf(audio).currentTime = 10;
+
+    // The context is still `"running"` — it always is — but there is nothing
+    // left queued, and a finished narration is not a playing one.
+    expect(audio.narrationClock().running).toBe(false);
+  });
+
+  it("is still running on the last frame, and not one after", async () => {
+    const audio = await backend();
+    audio.playChunk(ONE_SECOND);
+
+    contextOf(audio).currentTime = 0.999;
+    expect(audio.narrationClock().running).toBe(true);
+    contextOf(audio).currentTime = 1;
+    expect(audio.narrationClock().running).toBe(false);
+  });
+
+  it("runs again when the next chunk of the same run arrives", async () => {
+    const audio = await backend();
+    audio.playChunk(ONE_SECOND);
+    // The model paused mid-response for longer than it had buffered: playback
+    // genuinely stopped, so the stage should hold rather than race ahead.
+    contextOf(audio).currentTime = 1.5;
+    expect(audio.narrationClock().running).toBe(false);
+
+    audio.playChunk(ONE_SECOND);
+    expect(audio.narrationClock().running).toBe(true);
+  });
+});

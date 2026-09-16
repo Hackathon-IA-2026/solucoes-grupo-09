@@ -164,7 +164,18 @@ export class WebAudioBackend implements AudioBackend {
       // scheduled and `playCursor` advances — but `currentTime` does not move.
       // Without this the caller cannot tell "playing" from "queued and frozen",
       // and a briefing sits on its first scene forever.
-      running: context.state === "running",
+      //
+      // **And it has to stop.** An `AudioContext` stays `"running"` long after
+      // the last scheduled frame has sounded, so this used to report a narration
+      // still playing forever, with `elapsedMs` climbing past the end of the
+      // audio without limit. Two things downstream were broken by that and both
+      // are documented as working in `briefing-host`: the barge-in hold never
+      // held, because the clock it was meant to freeze never stopped moving; and
+      // Rever did nothing at all — it reset the host's clocks, then the next
+      // render read this one, found it past the end again, and put the stage
+      // straight back on its last scene. Playback is over when the clock has
+      // caught up with everything queued.
+      running: context.state === "running" && context.currentTime < this.playCursor,
     };
   }
 
