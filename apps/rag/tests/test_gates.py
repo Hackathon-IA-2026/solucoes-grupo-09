@@ -197,3 +197,55 @@ def test_prose_still_requires_a_contiguous_span():
     )
     assert accepted is None
     assert any(failure.code == "quote_not_in_chunk" for failure in failures)
+
+
+def test_a_stack_of_section_titles_is_not_a_statement():
+    """Two headings quoted together read like an answer and state nothing. A
+    numbered clause starts the same way and is evidence, so the gate has to tell
+    them apart."""
+    from wattsteer_rag.evidence import has_substance
+
+    assert not has_substance(
+        "5. LIMITACOES DA TRANSMISSAO E/OU DA GERACAO E PROCEDIMENTOS ASSOCIADOS\n"
+        "## 5.1. LIMITACAO DA TRANSMISSAO NAS LTS 500 KV ACU III / QUIXADA - C1(V2)"
+    )
+    assert has_substance(
+        "1.1. Os centros de operacao do ONS, em atendimento ao Programa Diario da"
+        " Operacao, controlam a geracao do SIN em tempo real."
+    )
+
+
+def test_the_citation_has_to_be_about_the_record():
+    """A quote can be literal, located and still be about somewhere else."""
+    from datetime import UTC, datetime
+
+    from wattsteer_rag.evidence import Record, _relevance_failure
+    from wattsteer_rag.retrieve import Hit
+
+    def hit(source, external_id, published):
+        return Hit(
+            chunk_id="c",
+            document_id="d",
+            text="",
+            locator={},
+            section_path=None,
+            source=source,
+            title="",
+            url="",
+            external_id=external_id,
+            revision=None,
+            published_at=published,
+            sha256="",
+            score=0.0,
+        )
+
+    record = Record.of("pergunta", "Controle de inequação: ... - IO-ON.NE.5NE", "2026-08-25")
+    assert record.named_documents == ("IO-ON.NE.5NE",)
+    assert _relevance_failure(hit("INSTRUCAO_OPERACAO", "IO-ON.NE.2LE", None), record)
+    assert _relevance_failure(hit("INSTRUCAO_OPERACAO", "IO-ON.NE.5NE", None), record) is None
+    assert _relevance_failure(hit("PROCEDIMENTOS_REDE", "Submódulo 5.3", None), record) is None
+
+    old_event = datetime(2023, 8, 15, tzinfo=UTC)
+    flow = Record.of("pergunta", "Controle do fluxo: FNESE - Conforme SGI 46.480-26", "2026-08-10")
+    assert flow.named_documents == ()
+    assert _relevance_failure(hit("RAP", "RAP 2023-08-15", old_event), flow)

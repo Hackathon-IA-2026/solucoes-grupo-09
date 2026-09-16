@@ -36,6 +36,19 @@ def _is_table(block: str) -> bool:
     return block.lstrip().startswith("|")
 
 
+def _is_heading(block: str) -> bool:
+    """A section title and nothing else: one line, and that line is the title."""
+    stripped = block.strip()
+    if "\n" in stripped:
+        return False
+    return bool(SECTION.match(stripped.replace("## ", "", 1)))
+
+
+def _has_table(block: str) -> bool:
+    """A table is in here somewhere, even if the chunk opens with its heading."""
+    return any(line.lstrip().startswith("|") for line in block.split("\n"))
+
+
 LEADER = re.compile(r"\.{4,}")
 
 
@@ -76,6 +89,17 @@ def split_page(markdown: str) -> list[tuple[str | None, str]]:
             buffer.append(block.replace("## ", "", 1))
             continue
         if _is_table(block):
+            # A table that follows its own heading keeps it. Flushing here left
+            # "## 5.4. LIMITAÇÃO DA TRANSMISSÃO NA LT 500 KV AÇU III /
+            # JAGUARUANA II - C1(V7)" alone, too short to be a chunk, so it was
+            # glued to the end of section 5.3 and the limits of 5.4 became a
+            # table nobody could name. The only quotable thing left was the
+            # heading, which is not evidence.
+            pending = "\n\n".join(buffer).strip()
+            if pending and _is_heading(pending):
+                buffer.clear()
+                out.append((current_section, f"{pending}\n\n{block}"))
+                continue
             flush()
             out.append((current_section, block))
             continue
@@ -93,13 +117,52 @@ def chunk_pages(pages: list[dict]) -> list[Chunk]:
                 if _absorbed(chunks, piece, page["page_no"]):
                     continue
                 chunks.append(_chunk(len(chunks) + 1, page, section, piece))
+    _mark_page_furniture(chunks)
     return chunks
+
+
+FURNITURE_PAGES = 3
+FURNITURE_MAX_CHARS = 700
+
+
+def _mark_page_furniture(chunks: list[Chunk]) -> None:
+    """The header that is on every page is not a passage.
+
+    Every page of an operating instruction repeats the same band: "Alterado
+    pela(s) MOP(s): ... Manual de Procedimentos da Operação - Módulo 5 -
+    Submódulo 5.12", and it carries the document's own code. A search for
+    IO-ON.NE.5NE therefore ranks the running header above the section that
+    states the limit, and once retrieval is restricted to the named document the
+    header fills every slot. Repetition across pages is what identifies it, so
+    it can only be seen here, with the whole document in hand.
+    """
+    pages_by_text: dict[str, set[int]] = {}
+    for chunk in chunks:
+        # Tables are included: the band that identifies the document is laid
+        # out as one, and a table of real content does not repeat unchanged
+        # on three pages.
+        if len(chunk.text) > FURNITURE_MAX_CHARS:
+            continue
+        pages_by_text.setdefault(_furniture_key(chunk.text), set()).add(chunk.page_start)
+    for chunk in chunks:
+        if chunk.locator.get("kind") != "body":
+            continue
+        pages = pages_by_text.get(_furniture_key(chunk.text))
+        if pages and len(pages) >= FURNITURE_PAGES:
+            chunk.locator["kind"] = "furniture"
+
+
+def _furniture_key(text: str) -> str:
+    return re.sub(r"[\s|-]+", " ", text).strip().lower()[:160]
 
 
 def _absorbed(chunks: list[Chunk], piece: str, page_no: int) -> bool:
     """Too small to stand alone: attach to the previous chunk of the same page
     rather than emit a citation nobody can use."""
-    if len(piece) >= MIN_CHARS or not chunks or _is_table(piece):
+    # A heading opens a section, so it never joins the one before it, and a short
+    # table is still a table: absorbing it buries the rows inside the previous
+    # section and loses the locator that says they are rows.
+    if len(piece) >= MIN_CHARS or not chunks or _has_table(piece) or _is_heading(piece):
         return False
     previous = chunks[-1]
     if previous.page_end != page_no or len(previous.text) + len(piece) >= MAX_CHARS:
@@ -118,7 +181,7 @@ def _chunk(ordinal: int, page: dict, section: str | None, piece: str) -> Chunk:
         locator={
             "page": page["page_no"],
             "section": section,
-            "table": "table" if _is_table(piece) else None,
+            "table": "table" if _has_table(piece) else None,
             "kind": "toc" if is_table_of_contents(piece) else "body",
             "bbox": _bbox_for(page, piece),
         },
@@ -126,7 +189,9 @@ def _chunk(ordinal: int, page: dict, section: str | None, piece: str) -> Chunk:
 
 
 def _slice(text: str) -> list[str]:
-    if len(text) <= MAX_CHARS or _is_table(text):
+    # Half a table is a number without its heading, and that stays true when
+    # the chunk opens with the section title the table belongs to.
+    if len(text) <= MAX_CHARS or _has_table(text):
         return [text]
     pieces: list[str] = []
     start = 0

@@ -112,6 +112,7 @@ async def search(
     *,
     published_before: datetime | None = None,
     sources: list[str] | None = None,
+    named_documents: list[str] | None = None,
     limit: int | None = None,
 ) -> list[Hit]:
     pool = await db.connect()
@@ -120,7 +121,12 @@ async def search(
     await db.assert_single_vector_space()
 
     # The index of a document is not evidence, and it beats the body on keywords.
-    filters = ["coalesce(c.locator->>'kind', 'body') <> 'toc'"]
+    # A withdrawn revision is not evidence either, and reads exactly like the one
+    # that replaced it.
+    filters = [
+        "coalesce(c.locator->>'kind', 'body') NOT IN ('toc', 'furniture')",
+        "d.status <> 'superseded'",
+    ]
     params: list = []
     if published_before is not None:
         params.append(published_before)
@@ -128,6 +134,15 @@ async def search(
     if sources:
         params.append(sources)
         filters.append(f"d.source = ANY(${len(params)})")
+    if named_documents:
+        # The record says which operating instruction it is about, so no other
+        # one is a candidate. IO-ON.NE.2LE and IO-ON.NE.5NE cover neighbouring
+        # areas of the Northeast in the same sentences, and without this the
+        # search ranks the wrong area's text above the right one and the answer
+        # cites a real document about somewhere else. Other sources stay open:
+        # the general rules are never named by a record and are still evidence.
+        params.append(named_documents)
+        filters.append(f"(d.source <> 'INSTRUCAO_OPERACAO' OR d.external_id = ANY(${len(params)}))")
     where = " AND ".join(filters)
 
     text_query = to_or_tsquery(question)

@@ -59,11 +59,20 @@ the code, so that nobody reverses one without knowing why it was taken.
 - **Temporal cut.** Only documents with `published_at <= gate_at` are eligible,
   the same discipline the forecasting model applies to its inputs.
 - **A table of contents is excluded** from retrieval: it repeats every title and
-  wins a keyword search against the section that states the rule.
-- **Five gates, all mechanical:** the quote exists in the chunk, every number in
-  the claim is in a quote, no causal vocabulary (same lemma list as
-  `packages/core/src/causality.ts`), a heading alone is not evidence, and a
-  citation has a locator. In a table the quote may skip cells in order and is
+  wins a keyword search against the section that states the rule. So is the
+  running header: it repeats on every page and carries the document's own code,
+  so a search for `IO-ON.NE.5NE` ranked it above the section that states the
+  limit. A passage that repeats on three or more pages of the same document is
+  marked `furniture` and never retrieved.
+- **Retrieval is restricted to the instruction the record names.** `IO-ON.NE.2LE`
+  and `IO-ON.NE.5NE` describe neighbouring areas in nearly the same sentences,
+  and without this the search ranked the wrong area above the right one.
+- **Six gates, all mechanical:** the quote exists in the chunk, the cited
+  document is the one the record names (and a disturbance report only counts for
+  the day it analyses), every number in the claim is in a quote or in the record
+  itself, no causal vocabulary (same lemma list as
+  `packages/core/src/causality.ts`), a heading alone is not evidence — nor are
+  two headings stacked — and a citation has a locator. In a table the quote may skip cells in order and is
   marked `assembled`; prose requires a contiguous span.
 - **The service never classifies.** `supports` and `evidence_weight` are
   information for the rule, not a decision. REL is never `high`: the

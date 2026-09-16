@@ -155,9 +155,33 @@ def assembled_match(quote: str, chunk_text: str, *, max_fragments: int = 8) -> b
     return True
 
 
+def _is_title_line(line: str) -> bool:
+    """A numbered line that is a title, not a numbered clause.
+
+    Both start with "5.1.". The operating instructions write their titles in
+    capitals and their rules in sentences, and that is the difference a reader
+    uses too.
+    """
+    if line.startswith("#"):
+        return True
+    body = line.lstrip("#").strip()
+    if not HEADING.match(body):
+        return False
+    letters = [char for char in body if char.isalpha()]
+    return bool(letters) and sum(char.isupper() for char in letters) / len(letters) >= 0.8
+
+
 def has_substance(quote: str) -> bool:
     """Is this a statement, or just a heading that happens to match the query?"""
     stripped = quote.strip()
+    # A section title is not evidence however long it is, and stacking two of
+    # them does not make a sentence. "5. LIMITACOES DA TRANSMISSAO" followed by
+    # "5.1. LIMITACAO DA TRANSMISSAO NAS LTS 500 KV ACU III / QUIXADA" names the
+    # limit the record is about and states none of it, which is exactly the
+    # answer that looks right and proves nothing.
+    lines = [line.strip() for line in stripped.split("\n") if line.strip()]
+    if lines and all(_is_title_line(line) for line in lines):
+        return False
     words = len(re.findall(r"[\wÀ-ÿ]+", stripped))
     if HEADING.match(stripped) and words <= 10:
         return False
@@ -175,11 +199,71 @@ MAX_ITEMS = 12
 MAX_CITATIONS = 4
 
 
+DOCUMENT_CODE = re.compile(r"^(?:IO|IT|RT|NT)-", re.I)
+
+
+@dataclass(frozen=True)
+class Record:
+    """What the ONS published, as far as the gates are concerned.
+
+    A quote can be literal, substantial and located, and still be evidence for
+    something else. The record is what tells the difference.
+    """
+
+    question: str = ""
+    named_documents: tuple[str, ...] = ()
+    target_date: str | None = None
+
+    @classmethod
+    def of(cls, question: str, description: str | None, target_date: str | None) -> Record:
+        # `codes_in` also returns the line and the intervention number, which are
+        # things to search for, not documents to open.
+        return cls(
+            question=question,
+            named_documents=tuple(code for code in codes_in(description or "") if DOCUMENT_CODE.match(code)),
+            target_date=target_date,
+        )
+
+
+def _relevance_failure(hit: Hit, record: Record) -> GateFailure | None:
+    """Is this document about the record at all?
+
+    Two ways a perfectly literal quote is still the wrong evidence, both seen in
+    a measured run:
+
+    The record names an operating instruction and the answer quotes a different
+    one. IO-ON.NE.2LE and IO-ON.NE.5NE describe neighbouring areas in the same
+    words, so the quote reads right and points at the wrong area of the grid.
+
+    The answer quotes the disturbance report of 15/08/2023 to explain a flow
+    control of August 2026. A report analyses one event on one date, and outside
+    that date it supports nothing.
+    """
+    if (
+        hit.source == "INSTRUCAO_OPERACAO"
+        and record.named_documents
+        and hit.external_id not in record.named_documents
+    ):
+        return GateFailure(
+            "citation_not_the_named_document",
+            f"{hit.external_id} for a record naming {', '.join(record.named_documents)}",
+        )
+    if hit.source == "RAP" and record.target_date and hit.published_at:
+        if hit.published_at.date().isoformat() != record.target_date:
+            return GateFailure(
+                "citation_from_another_event",
+                f"{hit.external_id} analyses {hit.published_at.date()}, record is {record.target_date}",
+            )
+    return None
+
+
 def _is_table(hit: Hit) -> bool:
     return bool((hit.locator or {}).get("table")) or hit.text.lstrip().startswith("|")
 
 
-def _check_citation(citation: Any, by_chunk: dict[str, Hit]) -> tuple[dict | None, GateFailure | None]:
+def _check_citation(
+    citation: Any, by_chunk: dict[str, Hit], record: Record
+) -> tuple[dict | None, GateFailure | None]:
     """One citation through the quote gates: exists, says something, can be located."""
     if not isinstance(citation, dict):
         return None, GateFailure("schema_invalid", f"citation is {type(citation).__name__}")
@@ -187,6 +271,9 @@ def _check_citation(citation: Any, by_chunk: dict[str, Hit]) -> tuple[dict | Non
     hit = by_chunk.get(chunk_id)
     if hit is None:
         return None, GateFailure("quote_not_in_chunk", f"unknown chunk {chunk_id[:8]}")
+    off_topic = _relevance_failure(hit, record)
+    if off_topic:
+        return None, off_topic
     if len(quote) < 20:
         return None, GateFailure("quote_not_in_chunk", f"quote too short for {chunk_id[:8]}")
     assembled = _quote_is_assembled(quote, hit)
@@ -239,10 +326,20 @@ def _accepted_citation(hit: Hit, chunk_id: str, quote: str, assembled: bool, loc
     }
 
 
-def _numbers_not_quoted(claim: str, citations: list[dict]) -> list[GateFailure]:
+def _numbers_not_quoted(claim: str, citations: list[dict], restated: str = "") -> list[GateFailure]:
     """Token comparison, not substring: a claim saying 26 must not be accepted
-    because the quote happens to contain 260."""
+    because the quote happens to contain 260.
+
+    A number the question already carries is not an invention. The record being
+    explained is itself full of numbers — "LT 500 kV Açu III / Jaguaruana II –
+    C1(V7)", "SGI N° 46.066-26" — and a claim that names the line it is about is
+    repeating the record, not asserting a measurement. Requiring the document to
+    contain them refused every claim about a line whose voltage the operating
+    instruction writes in a heading. What the gate exists for is unchanged: a
+    number that appears in neither the record nor the quoted text is refused.
+    """
     quoted = {_number_key(number) for citation in citations for number in numbers_in(citation["quote"])}
+    quoted |= {_number_key(number) for number in numbers_in(restated)}
     return [
         GateFailure("number_not_in_quote", number)
         for number in numbers_in(claim)
@@ -277,12 +374,15 @@ def _item_shape(item: Any) -> tuple[str, list, GateFailure | None]:
     return claim, citations, None
 
 
-def check_claim(item: Any, by_chunk: dict[str, Hit]) -> tuple[dict | None, list[GateFailure]]:
+def check_claim(
+    item: Any, by_chunk: dict[str, Hit], record: Record | None = None
+) -> tuple[dict | None, list[GateFailure]]:
     """Run the gates. Returns the accepted claim, or the reasons it failed.
 
     The model's output is untrusted input: a string where an object was asked
     for is a rejected claim, never an exception.
     """
+    record = record or Record()
     claim, citations, shape_failure = _item_shape(item)
     if shape_failure:
         return None, [shape_failure]
@@ -290,7 +390,7 @@ def check_claim(item: Any, by_chunk: dict[str, Hit]) -> tuple[dict | None, list[
     accepted: list[dict] = []
     failures: list[GateFailure] = []
     for citation in citations:
-        ok, failure = _check_citation(citation, by_chunk)
+        ok, failure = _check_citation(citation, by_chunk, record)
         if ok:
             accepted.append(ok)
         elif failure:
@@ -298,7 +398,7 @@ def check_claim(item: Any, by_chunk: dict[str, Hit]) -> tuple[dict | None, list[
     if not accepted:
         return None, failures or [GateFailure("quote_not_in_chunk", "no citation survived")]
 
-    missing = _numbers_not_quoted(claim, accepted)
+    missing = _numbers_not_quoted(claim, accepted, record.question)
     if missing:
         return None, [*failures, *missing]
     causal = causal_hits(claim)
@@ -373,11 +473,18 @@ async def build_evidence(
     """Retrieve, ask, gate, and return a RagEvidence document."""
     question = question or question_for(subsystem, target_date, reason, description)
     trace_id = trace_id or hashlib.sha256(f"{subsystem}{target_date}{question}".encode()).hexdigest()[:12]
-    hits = await search(db, gateway, question, published_before=gate_at)
+    record = Record.of(question, description, target_date)
+    hits = await search(
+        db,
+        gateway,
+        question,
+        published_before=gate_at,
+        named_documents=list(record.named_documents) or None,
+    )
     document = _empty_document(subsystem, target_date, gate_at, question, trace_id, hits)
     document["corpus_version"] = await db.corpus_version()
     if hits:
-        await _draft(gateway, document, question, hits)
+        await _draft(gateway, document, record, hits)
     else:
         document["reason"] = "corpus_no_coverage_for_date"
     await _persist(db, document, gateway, trace_id)
@@ -465,7 +572,7 @@ def _complaint(guidance: str, failures: list[GateFailure]) -> str:
     )
 
 
-async def _draft(gateway: Gateway, document: dict, question: str, hits: list[Hit]) -> None:
+async def _draft(gateway: Gateway, document: dict, record: Record, hits: list[Hit]) -> None:
     """Ask the model, gate the answer, retry with the refusals, settle the verdict."""
     by_chunk = {hit.chunk_id: hit for hit in hits}
     passages = "\n\n".join(_passage(hit) for hit in hits)
@@ -479,7 +586,7 @@ async def _draft(gateway: Gateway, document: dict, question: str, hits: list[Hit
             {"role": "system", "content": SYSTEM_PROMPT},
             {
                 "role": "user",
-                "content": f"Question: {question}\n\nAvailable passages:\n\n{passages}{complaint}",
+                "content": f"Question: {record.question}\n\nAvailable passages:\n\n{passages}{complaint}",
             },
         ]
         try:
@@ -488,30 +595,38 @@ async def _draft(gateway: Gateway, document: dict, question: str, hits: list[Hit
             )
         except QuotaExhausted as exc:
             document["verdict"] = "insufficient"
-            document["reason"] = "quota_exhausted_partial"
+            # Running out on the first attempt and running out after the gates
+            # refused two drafts are different problems, and only the first is
+            # solved by waiting. Saying "no quota" about a run that was actually
+            # refused sends the reader to the provider's dashboard instead of to
+            # the gate that rejected the claim.
+            document["reason"] = (
+                "quota_exhausted_before_answer" if attempt == 1 else "quota_exhausted_partial"
+            )
             generation["attempts"] = attempt - 1
+            generation["gate_failures"] = sorted({failure.code for failure in failures})
             document["trace"]["retry_at"] = exc.retry_at
             return
         generation.update(
             {"provider": result.provider, "model": result.model, "attempts": attempt, "source": "model"}
         )
-        accepted, failures = _gate_answer(result.value, by_chunk, attempt, generation)
+        accepted, failures = _gate_answer(result.value, by_chunk, attempt, generation, record)
         if accepted:
             break
         complaint = _complaint(guidance, failures)
     generation["gate_failures"] = sorted({failure.code for failure in failures})
-    _settle(document, accepted)
+    _settle(document, accepted, record.question)
 
 
 def _gate_answer(
-    value: Any, by_chunk: dict[str, Hit], attempt: int, generation: dict
+    value: Any, by_chunk: dict[str, Hit], attempt: int, generation: dict, record: Record
 ) -> tuple[list[dict], list[GateFailure]]:
     payload = value if isinstance(value, dict) else {"items": value}
     accepted: list[dict] = []
     failures: list[GateFailure] = []
     rejected: list[dict] = []
     for item in (payload.get("items") or [])[:MAX_ITEMS]:
-        claim, item_failures = check_claim(item, by_chunk)
+        claim, item_failures = check_claim(item, by_chunk, record)
         failures.extend(item_failures)
         if claim:
             accepted.append(claim)
@@ -539,7 +654,7 @@ def _rejected(item: Any, failures: list[GateFailure], attempt: int) -> dict:
 SUPPORT_ORDER = {"REL": 0, "CNF": 1, "ENE": 2, "NONE": 3}
 
 
-def _settle(document: dict, accepted: list[dict]) -> None:
+def _settle(document: dict, accepted: list[dict], restated: str = "") -> None:
     if not accepted:
         document["verdict"] = "insufficient"
         document["reason"] = "gates_rejected_all_claims"
@@ -547,6 +662,9 @@ def _settle(document: dict, accepted: list[dict]) -> None:
     accepted.sort(key=lambda claim: (SUPPORT_ORDER[claim["supports"]], -claim["evidence_weight"]))
     document["items"] = accepted
     document["verdict"] = "found"
+    # The same rule the gate applies, so that whoever narrates this downstream
+    # refuses exactly what was refused here: numbers from the quoted text, plus
+    # the ones the record itself already stated.
     document["numbers_whitelist"] = sorted(
         {
             number
@@ -554,6 +672,7 @@ def _settle(document: dict, accepted: list[dict]) -> None:
             for citation in claim["citations"]
             for number in numbers_in(citation["quote"])
         }
+        | set(numbers_in(restated))
     )
 
 

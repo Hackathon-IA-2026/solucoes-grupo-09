@@ -15,7 +15,10 @@ providers:
     kind: openai_compatible
     base_url: https://integrate.api.nvidia.com/v1
     api_keys_env: NVIDIA_API_KEYS # "nvapi-...,nvapi-..." or a single key
-    timeout_s: 60
+    # Measured on 16/09/2026: kimi-k3 on the free tier answered a 143-token
+    # prompt in 90 s. At 60 s every call to it was a read timeout, so the only
+    # NVIDIA model that was answering at all never got used.
+    timeout_s: 120
     # NVIDIA does not publish limits. Measured on 15/09/2026: the request rate is
     # what limits a run, not tokens; a 429 is handled by the router's cooling.
     limits: { rpm: 30, tpm: 60000, rpd: 4000 }
@@ -38,6 +41,10 @@ tasks:
   # Open models only. NIM ids confirmed on 15/09/2026 via GET /v1/models.
   generate_strong: # the evidence builder: strict JSON, temperature 0
     chain:
+      # nemotron-3-super answered "Service temporarily overloaded" (503) to every
+      # request on the morning of 16/09/2026 while the other two worked, which is
+      # the whole reason the chain exists. It stays first: it is the best of the
+      # three and the failure is the provider's load, not the model.
       - { provider: nvidia, model: nvidia/nemotron-3-super-120b-a12b, max_input_tokens: 24000 }
       - { provider: nvidia, model: moonshotai/kimi-k3, max_input_tokens: 24000 }
       - { provider: groq, model: openai/gpt-oss-120b, max_input_tokens: 6000 } # TPM 8k
