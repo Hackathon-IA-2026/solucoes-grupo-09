@@ -83,20 +83,28 @@ tasks:
     temperature: 0
     max_output_tokens: 800
     on_exhausted: waiting_quota
-  embed:                    # NUNCA troca de modelo, só de executor (mesmo espaço vetorial)
-    model: BAAI/bge-m3
+  embed:                    # NUNCA troca de modelo em runtime (mesmo espaço vetorial).
+    # bge-m3, llama-nemotron-embed-1b-v2 e nv-embedqa-e5-v5 foram aposentados pelo NIM em 25/08/2026 (410 Gone).
+    # nemotron-3-embed-1b: 2048 dims cortáveis para 1024 (renormalizar), 34 idiomas com PT, contexto 32k, pesos abertos.
+    # Sem fallback no mesmo espaço: se o modelo sumir, roda-se o job `reindex` com bge-m3 local (procedimento declarado).
+    model: nvidia/nemotron-3-embed-1b
     dimensions: 1024
     chain:
-      - { provider: nvidia, model: baai/bge-m3 }
-      - { provider: local,  model: BAAI/bge-m3 }
+      - { provider: nvidia, model: nvidia/nemotron-3-embed-1b }
     batch_size: 32
     on_exhausted: waiting_quota
-  rerank:
+  rerank:                   # o NIM não expõe mais reranker (410/404 em ai.api.nvidia.com/v1/retrieval): só local
     chain:
-      - { provider: nvidia, model: nvidia/llama-3.2-nv-rerankqa-1b-v2 }
       - { provider: local,  model: BAAI/bge-reranker-v2-m3 }
     top_n: 8
     on_exhausted: skip_rerank             # degrada para a ordem do RRF, declara no trace
+  parse:                    # extração de página de PDF (texto + tabelas). Validado em 15/09 num BDO real: 2,2 s/página.
+    # Resposta vem como tool_call `markdown_bbox`: blocos tipados (Page-header, Text, Table, Page-footer) com bbox
+    # normalizado; tabelas em LaTeX tabular (converter). O bbox vira o locator da citação.
+    chain:
+      - { provider: nvidia, model: nvidia/nemotron-parse }          # VLM: página como imagem -> blocos + tabelas
+      - { provider: local,  model: docling }                        # Docling em CPU: sempre disponível, mais lento
+    on_exhausted: waiting_quota           # nunca perde documento: espera a cota ou usa o Docling
   narrate:                  # redação do card. Hoje o apps/api chama a Anthropic direto: migração OBRIGATÓRIA (não há Claude na nuvem)
     chain:
       - { provider: nvidia, model: nvidia/nemotron-3-super-120b-a12b, max_input_tokens: 8000 }

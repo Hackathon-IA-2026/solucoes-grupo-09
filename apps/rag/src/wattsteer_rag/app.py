@@ -1,0 +1,204 @@
+"""The HTTP surface.
+
+Everything here is internal. The public product never calls this service to
+answer a request: a job writes evidence into Postgres and the product reads the
+table, which is the same boundary apps/ml lives behind.
+
+The debug routes exist because a retrieval failure is otherwise invisible. They
+answer three questions: what came back from the search and in which order, what
+the model tried to say, and which gate refused it.
+"""
+
+from __future__ import annotations
+
+import logging
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
+from typing import Any
+
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import JSONResponse
+
+from .config import settings
+from .db import Database
+from .evidence import build_evidence, question_for
+from .gateway.router import Gateway, QuotaExhausted
+from .retrieve import search
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+log = logging.getLogger("wattsteer_rag")
+
+state: dict[str, Any] = {}
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    conf = settings()
+    state["db"] = Database()
+    state["gateway"] = Gateway(conf.gateway_config, user_agent=conf.user_agent)
+    yield
+    await state["gateway"].aclose()
+    await state["db"].close()
+
+
+app = FastAPI(title="WattSteer RAG", version="0.1.0", lifespan=lifespan)
+
+
+def error(code: str, message: str, status: int, **details) -> JSONResponse:
+    """The gateway's envelope, so a client never has to learn a second shape."""
+    return JSONResponse(
+        status_code=status,
+        content={"error": {"code": code, "message": message, "details": details or None}},
+    )
+
+
+@app.get("/health")
+async def health() -> dict:
+    return {"status": "ok", "service": "wattsteer-rag"}
+
+
+@app.get("/ready")
+async def ready() -> Any:
+    db: Database = state["db"]
+    gateway: Gateway = state["gateway"]
+    checks = await db.ready()
+    providers = {
+        name: {"enabled": provider.enabled, "keys": len(provider.keys)}
+        for name, provider in gateway.providers.items()
+    }
+    usable_tasks = {task: len(gateway.usable_links(task)) for task in gateway.tasks}
+    ok = checks.get("database") and checks.get("pgvector") and checks.get("schema")
+    body = {"ready": bool(ok), "database": checks, "providers": providers, "tasks": usable_tasks}
+    return body if ok else JSONResponse(status_code=503, content=body)
+
+
+@app.get("/internal/llm/quota")
+async def quota() -> dict:
+    return state["gateway"].quota()
+
+
+@app.get("/internal/rag/status")
+async def status() -> dict:
+    db: Database = state["db"]
+    pool = await db.connect()
+    async with pool.acquire() as conn:
+        by_source = await conn.fetch(
+            "SELECT source, count(*) AS documents, sum(pages) AS pages, max(fetched_at) AS last_fetch"
+            " FROM rag.document GROUP BY source ORDER BY source"
+        )
+        chunks = await conn.fetchrow(
+            "SELECT count(*) AS total, count(embedding) AS embedded,"
+            " count(DISTINCT embedding_model) AS models FROM rag.chunk"
+        )
+        evidence = await conn.fetchrow(
+            "SELECT count(*) AS total, count(*) FILTER (WHERE verdict = 'found') AS found FROM rag.evidence"
+        )
+    return {
+        "corpus_version": await db.corpus_version(),
+        "sources": [dict(row) for row in by_source],
+        "chunks": dict(chunks) if chunks else {},
+        "evidence": dict(evidence) if evidence else {},
+    }
+
+
+@app.get("/internal/rag/search")
+async def debug_search(
+    q: str = Query(..., min_length=3),
+    published_before: str | None = None,
+    limit: int = 8,
+) -> Any:
+    """What the retrieval saw, with both ranks and the fused score."""
+    before = _parse_instant(published_before) or datetime.now(UTC)
+    try:
+        hits = await search(state["db"], state["gateway"], q, published_before=before, limit=limit)
+    except QuotaExhausted as exc:
+        return error(
+            "RAG_QUOTA_EXHAUSTED",
+            "no provider has quota for the query embedding",
+            503,
+            retry_at=exc.retry_at,
+        )
+    return {
+        "question": q,
+        "published_before": before.isoformat(),
+        "hits": [
+            {
+                "chunk_id": hit.chunk_id,
+                "document": f"{hit.external_id or hit.source} {hit.revision or ''}".strip(),
+                "title": hit.title,
+                "published_at": hit.published_at.isoformat() if hit.published_at else None,
+                "locator": hit.locator,
+                "vector_rank": hit.vector_rank,
+                "text_rank": hit.text_rank,
+                "rrf": round(hit.score, 5),
+                "text": hit.text[:600],
+                "url": hit.url,
+            }
+            for hit in hits
+        ],
+    }
+
+
+@app.post("/internal/rag/evidence")
+async def evidence(
+    subsystem: str,
+    target_date: str,
+    gate_at: str | None = None,
+    reason: str | None = None,
+    description: str | None = None,
+    question: str | None = None,
+) -> Any:
+    if subsystem not in {"N", "NE", "SE", "S"}:
+        raise HTTPException(status_code=422, detail="subsystem must be one of N, NE, SE, S")
+    instant = _parse_instant(gate_at) or datetime.now(UTC)
+    document = await build_evidence(
+        state["db"],
+        state["gateway"],
+        subsystem=subsystem,
+        target_date=target_date,
+        gate_at=instant,
+        reason=reason,
+        description=description,
+        question=question,
+    )
+    return document
+
+
+@app.get("/internal/rag/evidence")
+async def read_evidence(subsystem: str, target_date: str, limit: int = 10) -> dict:
+    """Published evidence, read from the table. No model runs here."""
+    pool = await state["db"].connect()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT verdict, reason, payload, corpus_version, sha256, created_at FROM rag.evidence"
+            " WHERE subsystem = $1 AND target_date = $2::date ORDER BY created_at DESC LIMIT $3",
+            subsystem,
+            target_date,
+            limit,
+        )
+    return {"subsystem": subsystem, "target_date": target_date, "rows": [dict(row) for row in rows]}
+
+
+@app.get("/internal/rag/question")
+async def preview_question(
+    subsystem: str, target_date: str, reason: str | None = None, description: str | None = None
+) -> dict:
+    """The question the record turns into, before anything is retrieved."""
+    return {"question": question_for(subsystem, target_date, reason, description)}
+
+
+def _parse_instant(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+def main() -> None:
+    import uvicorn
+
+    conf = settings()
+    uvicorn.run(app, host=conf.host, port=conf.port)
