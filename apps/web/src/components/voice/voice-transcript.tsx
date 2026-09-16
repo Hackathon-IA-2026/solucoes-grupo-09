@@ -64,6 +64,23 @@ export function VoiceTranscript({ entries }: { entries: readonly TranscriptEntry
       style={{ maxHeight: MAX_HEIGHT }}
       contentContainerStyle={{ gap: space.sm }}
     >
+      {/*
+        **A `ScrollView` and a `map`, on a list that is bounded to twenty.**
+
+        The rule this suppresses is about a mapped list building every row at
+        once, which is a real cost on a list that can grow without limit. This
+        one cannot: `voice-provider.tsx` trims the transcript to
+        `TRANSCRIPT_TURNS` on every append, for the reason stated there — the
+        provider outlives every screen, so its state is the visit's and the
+        transcript was the one piece of it that only grew.
+
+        Twenty short rows is not a virtualisation problem, and a `FlatList`
+        here would cost the two things this panel is built on: the live region
+        that announces the agent's answer to a screen reader, and `maxHeight`
+        letting the panel size itself to its content below the cap. Bounding the
+        data was the fix; the container was never the defect.
+      */}
+      {/* react-doctor-disable-next-line react-doctor/rn-no-scrollview-mapped-list */}
       {entries.map((entry) => (
         <View key={entry.id} style={{ gap: 2 }}>
           <Text

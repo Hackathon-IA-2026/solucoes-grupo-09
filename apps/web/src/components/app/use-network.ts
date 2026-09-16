@@ -155,6 +155,9 @@ export function useNetwork(query: NetworkQuery): NetworkState {
   useEffect(() => {
     const controller = new AbortController();
     const signal = controller.signal;
+    // See `use-explain.ts`: the opening statement of a fetch effect, which
+    // is where a reading state can honestly be set and nowhere else.
+    // react-doctor-disable-next-line react-hooks-js/set-state-in-effect
     setState({ status: "reading" });
 
     const settled = daysFrom(targetDate, -2);

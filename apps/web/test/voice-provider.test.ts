@@ -335,3 +335,49 @@ describe("outside the provider, voice is absent rather than pending", () => {
     expect(() => VOICE_ABSENT.say("hello")).not.toThrow();
   });
 });
+
+describe("the transcript is bounded, because the provider is not", () => {
+  /**
+   * `VoiceProvider` sits above the `Stack`, so its state lives for the visit
+   * rather than for a route — and `transcript` was the one piece of it that
+   * only grew. Every entry is rendered: `voice-transcript.tsx` maps the array
+   * into a `ScrollView`, which virtualises nothing, so a long session paid for
+   * every turn it had ever had. The height was bounded and the list was not.
+   */
+  const SOURCE = readFileSync(
+    join(import.meta.dir, "../src/components/voice/voice-provider.tsx"),
+    "utf8",
+  );
+  /** Comments blanked once, not per test — and named so nothing shadows it. */
+  const providerCode = SOURCE.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, "");
+
+  it("every append goes through the trim, and the streaming update does not", () => {
+    // Two appends — the agent's first line of a turn, and a typed line — and
+    // both must be bounded. The in-place rewrite of a streaming entry must
+    // *not* be, or the window shifts under a reader mid-sentence.
+    expect(providerCode).toContain("trimTranscript([...current, entry])");
+    expect(providerCode.match(/trimTranscript\(/g)?.length ?? 0).toBeGreaterThanOrEqual(
+      3,
+    );
+    // The rewrite path returns the array it built, untrimmed.
+    expect(providerCode).toContain("next[at] = entry;");
+  });
+
+  it("drops from the front, so what survives is the recent end", () => {
+    expect(providerCode).toContain("entries.slice(entries.length - TRANSCRIPT_TURNS)");
+    // Non-vacuity: a `slice(0, N)` would also compile, also bound the list, and
+    // keep exactly the wrong end — the opening of a conversation nobody is
+    // looking for instead of the sentence just spoken.
+    expect(providerCode).not.toMatch(/slice\(0,\s*TRANSCRIPT_TURNS\)/);
+  });
+
+  it("the bound is a number a reader could reach, not a token gesture", () => {
+    const declared = /const TRANSCRIPT_TURNS = (\d+);/.exec(SOURCE)?.[1];
+    expect(declared).toBeDefined();
+    const turns = Number(declared);
+    // `MAX_HEIGHT` shows about four turns, so the window has to hold several
+    // screenfuls of scrollback to be worth scrolling. Too small loses
+    // something a reader might reach for; too large keeps it for nobody.
+    expect({ turns, sane: turns >= 8 && turns <= 100 }).toEqual({ turns, sane: true });
+  });
+});

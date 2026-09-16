@@ -119,6 +119,10 @@ function Dock({ agent }: { agent: VoiceAgentState }) {
       return;
     }
     const query = window.matchMedia(`(max-width: ${DOCK_NARROW_BREAKPOINT}px)`);
+    // Reading a browser API after mount, which this rule's own message names
+    // as the case to suppress: there is no `matchMedia` during the static
+    // export, so the first value has to arrive on the client.
+    // react-doctor-disable-next-line react-hooks-js/set-state-in-effect
     setNarrow(query.matches);
     const onChange = (event: MediaQueryListEvent) => setNarrow(event.matches);
     query.addEventListener("change", onChange);

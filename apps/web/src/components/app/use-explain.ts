@@ -137,6 +137,11 @@ export function useExplain(query: ExplainQuery): ExplainState {
   useEffect(() => {
     const controller = new AbortController();
     const signal = controller.signal;
+    // The first statement of a fetch effect, not a cascade: the key changed,
+    // so the answer on screen is about a question nobody is asking any more
+    // and saying so is the point. Deriving it before render cannot work —
+    // "reading" is a fact about a request that render did not make.
+    // react-doctor-disable-next-line react-hooks-js/set-state-in-effect
     setState({ status: "reading" });
 
     // The most recent local day that can have settled. ONS publishes the

@@ -100,6 +100,10 @@ Bun.serve({
             ? "public, max-age=31536000, immutable"
             : "public, max-age=0, must-revalidate",
         );
+        // `String.prototype.includes` on one header value, not an array scan
+        // in a loop — the rule is about `array.includes()` inside iteration and
+        // this is neither an array nor in one. A `Set` has nothing to index.
+        // react-doctor-disable-next-line react-doctor/js-set-map-lookups
         const acceptsGzip = request.headers.get("accept-encoding")?.includes("gzip");
         if (acceptsGzip && COMPRESSIBLE.test(type)) {
           headers.set("content-encoding", "gzip");

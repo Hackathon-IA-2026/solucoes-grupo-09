@@ -137,6 +137,11 @@ function ClientI18nProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     const saved = readStoredLocale();
     if (saved && saved !== DEFAULT_LOCALE) {
+      // `localStorage` after mount — the same browser-API case the rule says
+      // to suppress, and the same hydration rule `use-app-params.ts` spends
+      // seventy lines on: the first client render has to agree with the
+      // export, which knows nothing about this reader.
+      // react-doctor-disable-next-line react-hooks-js/set-state-in-effect
       setLocaleState(saved);
     }
     if (routeOwnedLangs === 0) {

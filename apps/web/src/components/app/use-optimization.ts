@@ -66,6 +66,9 @@ export function useOptimization(scenario: Scenario | null): OptimizationState {
       return;
     }
     const controller = new AbortController();
+    // The same shape as `use-network.ts`: the solve has just been asked for,
+    // and the previous result is about a scenario the reader has left.
+    // react-doctor-disable-next-line react-hooks-js/set-state-in-effect
     setState({ status: "solving" });
     Promise.all(
       SOLVED_STEPS.map((step) =>
@@ -91,6 +94,11 @@ export function useOptimization(scenario: Scenario | null): OptimizationState {
         setState({ status: "refused", code: refusalOf(cause) });
       });
     return () => controller.abort();
+    // Keyed on the canonical bytes and nothing else — the paragraph above says
+    // why, and `useLatest` is what makes the scenario an input rather than a
+    // trigger. Listing `latest` here would re-solve on every keystroke of a
+    // stepper, which is the behaviour the key exists to prevent.
+    // react-doctor-disable-next-line react-doctor/exhaustive-deps
   }, [key]);
 
   return state;

@@ -84,12 +84,18 @@ export function useReplay(scenario: Scenario | null): ReplayState {
   // is an input to the effect, not a trigger for it. The bytes are the trigger.
   const latest = useLatest(scenario);
 
+  // The `setState` after the await is guarded by `controller.signal.aborted`
+  // on every branch below — which is the check this rule is asking for, made
+  // against the abort the effect's own teardown fires.
+  // react-doctor-disable-next-line react-doctor/no-set-state-after-await-in-effect
   useEffect(() => {
     const asked = latest.current;
     if (key === null || asked === null) {
       return;
     }
     const controller = new AbortController();
+    // The opening statement of a fetch effect — see `use-explain.ts`.
+    // react-doctor-disable-next-line react-hooks-js/set-state-in-effect
     setState({ status: "replaying" });
     api
       .replay({ d: asked.targetDate, s: key, lane: REPLAY_LANE }, controller.signal)
@@ -126,6 +132,9 @@ export function useReplay(scenario: Scenario | null): ReplayState {
         }
       });
     return () => controller.abort();
+    // Same rule as `use-optimization.ts`: the bytes are the trigger, the
+    // scenario is an input, and `useLatest` keeps the two apart.
+    // react-doctor-disable-next-line react-doctor/exhaustive-deps
   }, [key]);
 
   return state;

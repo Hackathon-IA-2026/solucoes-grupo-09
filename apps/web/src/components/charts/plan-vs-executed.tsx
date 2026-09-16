@@ -115,19 +115,33 @@ export function PlanVsExecuted({
 
         {actualHours.map((mwh, i) => {
           const height = Math.max(0, (mwh / top) * chartH);
-          // `h${hour}` or `i${index}`, never a bare number that could be
-          // either. The fallback was `executed[i]?.hourLocal ?? i`, so a row
-          // with no executed entry keyed on its index — and an index collides
-          // with another row's *hour* the moment the two namespaces overlap,
-          // which for a 24-hour day is every index. Prefixing separates them.
-          const hour = executed[i]?.hourLocal;
-          const key = hour === undefined ? `i${i}` : `h${hour}`;
-          // The label still wants a number, and still falls back to the index —
-          // which is correct *for an axis tick*, where the position is the
-          // meaning. It was only wrong as a React key, where the value has to
-          // be unique across siblings rather than merely plausible.
-          const hourLocal = hour ?? i;
+          /*
+            **One namespace, and it is the position.**
+
+            This carried two: `h${hourLocal}` where `executed[i]` existed and
+            `i${i}` where it did not. That was a fix for a real collision — an
+            index collides with another row's *hour* the moment the two
+            namespaces overlap, which for a 24-hour day is every index — but it
+            fixed the symptom. The cause was having two namespaces at all.
+
+            `actualHours` is **positional by contract**: it is `ReplayActual.
+            hours`, one settled figure per hour of the replayed civil day, in
+            order. Index `i` *is* hour `i`. So the key is the position, spelled
+            once, and it is unique across siblings by construction rather than
+            by a prefix keeping two numbering schemes apart.
+
+            The bars never reorder — an hour cannot become a different hour —
+            which is the reordering hazard the index-as-key rule exists for, and
+            the reason the suppression below is a statement rather than a shrug.
+          */
+          const key = `h${i}`;
+          // The axis label still wants the *reported* hour where there is one:
+          // it is the same number in every case the contract allows, and
+          // reading it from the series rather than assuming it is what would
+          // show up if that ever stopped being true.
+          const hourLocal = executed[i]?.hourLocal ?? i;
           return (
+            // react-doctor-disable-next-line react-doctor/no-array-index-as-key
             <G key={key}>
               {height > 0 ? (
                 <Rect

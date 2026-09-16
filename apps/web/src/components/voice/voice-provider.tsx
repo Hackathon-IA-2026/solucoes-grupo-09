@@ -81,6 +81,35 @@ import {
 } from "./use-voice-agent";
 
 /**
+ * How many turns the transcript keeps.
+ *
+ * **A bound, because this provider outlives every screen.** It sits above the
+ * `Stack` — §2.2's whole argument — so its state lives for the visit, not for a
+ * route, and `transcript` was the one piece of it that only ever grew. A long
+ * session accumulated an entry per turn for as long as the tab stayed open, and
+ * every one of them was rendered: `voice-transcript.tsx` maps the array into a
+ * `ScrollView`, which virtualises nothing. Bounded height, unbounded list.
+ *
+ * Twenty is chosen against what the panel is *for*, which its own header says:
+ * "the replay of the last thing said". `MAX_HEIGHT` shows about four turns
+ * and the rest scrolls, so twenty is five screenfuls of scrollback behind a
+ * question nobody asks more than a turn or two later. Trimming below that would
+ * be losing something a reader might reach for; keeping more is keeping it for
+ * nobody.
+ *
+ * Dropping from the front, so what survives is the *recent* end. And only on
+ * append — a streaming update rewrites an entry in place and must not shift the
+ * window under a reader mid-sentence.
+ */
+const TRANSCRIPT_TURNS = 20;
+
+function trimTranscript(entries: readonly TranscriptEntry[]): readonly TranscriptEntry[] {
+  return entries.length <= TRANSCRIPT_TURNS
+    ? entries
+    : entries.slice(entries.length - TRANSCRIPT_TURNS);
+}
+
+/**
  * How often a level frame is allowed to become a render.
  *
  * The capture worklet emits a frame per 128 samples at 24 kHz — 187 a second —
@@ -220,6 +249,11 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
         setStatus("listening");
       }
     },
+    // `liveRef` and `scenarioRef` are read inside, deliberately: the handler
+    // is installed once and a tool call arriving three navigations later must
+    // execute against the URL the reader is on now. Listing them would rebuild
+    // the handler on every navigation, which is the closure bug inverted.
+    // react-doctor-disable-next-line react-doctor/exhaustive-deps
     [navigator],
   );
 
@@ -233,6 +267,8 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     setStatus("idle");
     setLevel(0);
     setHighlighted(null);
+    // Teardown only. Nothing read here changes what unmount has to do.
+    // react-doctor-disable-next-line react-doctor/exhaustive-deps
   }, []);
 
   /**
@@ -291,7 +327,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
           setTranscript((current) => {
             const at = current.findIndex((item) => item.id === entry.id);
             if (at === -1) {
-              return [...current, entry];
+              return trimTranscript([...current, entry]);
             }
             const next = [...current];
             next[at] = entry;
@@ -329,6 +365,10 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     );
     sessionRef.current = session;
     void session.start();
+    // `contextRef` is read at session start, on purpose — the prompt the model
+    // is handed is whatever the screen says at the moment it connects. Adding
+    // it would tear down and re-mint the session on every selection change.
+    // react-doctor-disable-next-line react-doctor/exhaustive-deps
   }, [mint, onToolCall]);
 
   const close = useCallback(() => {
@@ -385,13 +425,20 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     if (trimmed === "") {
       return;
     }
-    setTranscript((current) => [
-      ...current,
-      { id: `typed-${current.length}`, role: "user", text: trimmed },
-    ]);
+    setTranscript((current) =>
+      trimTranscript([
+        ...current,
+        { id: `typed-${current.length}`, role: "user", text: trimmed },
+      ]),
+    );
     sessionRef.current?.updateContext(
       `${contextRef.current}\nThe reader typed, rather than said: ${trimmed}`,
     );
+    // `contextRef` is read at the moment the reader presses send, which is the
+    // whole reason it is a ref: a `say` rebuilt on every context change would
+    // be a new function identity on every selection, and the dock's panel would
+    // tear down its handler under a half-typed line.
+    // react-doctor-disable-next-line react-doctor/exhaustive-deps
   }, []);
 
   // Stable identities: the expanded panel installs a `keydown` listener keyed
