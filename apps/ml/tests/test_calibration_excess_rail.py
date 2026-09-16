@@ -21,7 +21,11 @@ from __future__ import annotations
 
 import random
 
-from wattsteer_ml.evaluation.gate import COVERAGE_GUARDRAIL, NOMINAL_MISCOVERAGE
+# From `training.conformal`, which defines them, rather than through
+# `evaluation.gate`, which only imports them to use. Reaching a constant through
+# a module that happens to have imported it is the kind of coupling that breaks
+# when that module stops needing it, and mypy refuses the implicit re-export.
+from wattsteer_ml.training.conformal import COVERAGE_GUARDRAIL, NOMINAL_MISCOVERAGE
 
 #: Forecaster 34's measured mean ``p`` over qualifying rows: 0.9772 and 0.9795.
 #: The window rail fails *because* of this number, so a null drawn anywhere else

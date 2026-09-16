@@ -70,7 +70,13 @@ def _expected_least_squares() -> np.ndarray:
 def test_a_warned_non_convergence_falls_back_to_least_squares(
     monkeypatch: pytest.MonkeyPatch, category: type[Warning]
 ) -> None:
-    monkeypatch.setattr(ladder.sm, "QuantReg", _Warns(category, "did not converge"))
+    # Patched by dotted path rather than through `ladder.sm`: `sm` is an
+    # implementation detail of that module, not part of its interface, and
+    # reaching through it is an attribute mypy is right to refuse.
+    monkeypatch.setattr(
+        "wattsteer_ml.evaluation.ladder.sm.QuantReg",
+        _Warns(category, "did not converge"),
+    )
     parameters = ladder._quantile_regression(EXOGENOUS, ENDOGENOUS, 0.1)
     # Non-vacuity: the fake's own answer is finite and would have been returned
     # by the previous implementation, which checked only for exceptions and NaN.
@@ -89,7 +95,7 @@ def test_a_converged_fit_is_kept(monkeypatch: pytest.MonkeyPatch) -> None:
         def fit(self, q: float) -> Any:
             return type("Result", (), {"params": SENTINEL})()
 
-    monkeypatch.setattr(ladder.sm, "QuantReg", _Quiet())
+    monkeypatch.setattr("wattsteer_ml.evaluation.ladder.sm.QuantReg", _Quiet())
     parameters = ladder._quantile_regression(EXOGENOUS, ENDOGENOUS, 0.1)
     assert np.allclose(parameters, SENTINEL)
 
@@ -102,7 +108,8 @@ def test_an_unrelated_warning_is_not_swallowed(monkeypatch: pytest.MonkeyPatch) 
     come back out, or a future deprecation from ``statsmodels`` disappears here.
     """
     monkeypatch.setattr(
-        ladder.sm, "QuantReg", _Warns(DeprecationWarning, "something else entirely")
+        "wattsteer_ml.evaluation.ladder.sm.QuantReg",
+        _Warns(DeprecationWarning, "something else entirely"),
     )
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")

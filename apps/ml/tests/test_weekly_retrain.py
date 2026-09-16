@@ -531,7 +531,10 @@ def _stub_child(monkeypatch: pytest.MonkeyPatch, script: str, exit_code: int = 0
 
 def _startable(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """The two settings the POST refuses without, neither of them under test."""
-    from wattsteer_ml.app import settings as app_settings
+    # From `config`, which defines it, rather than through `app`, which imports
+    # it to use. `app` re-exporting it is incidental, and mypy refuses to treat
+    # an incidental re-export as interface.
+    from wattsteer_ml.config import settings as app_settings
 
     monkeypatch.setattr(app_settings, "database_url", "postgresql://stub/stub")
     monkeypatch.setattr(app_settings, "artifact_dir", tmp_path)
@@ -542,7 +545,9 @@ def _poll_until(client: TestClient, run_id: str, *, deadline: float) -> dict[str
     running: list[dict[str, Any]] = []
     while time.monotonic() < deadline:
         response = client.get(f"/internal/retrain/{run_id}")
-        body = response.json()
+        # Annotated because `response.json()` is `Any`, and a function that
+        # promises a typed dict should not quietly hand one back untyped.
+        body: dict[str, Any] = response.json()
         if response.status_code != 200 or body.get("status") != "running":
             body["_running_polls"] = running
             return body
