@@ -277,6 +277,36 @@ export class VoiceSessionCore {
     this.send({ type: "response.create" });
   }
 
+  /**
+   * A line the reader **typed**, as a turn the model answers out loud.
+   *
+   * The plan's §10.5 recorded this as the one thing the implementation did not
+   * do: `say` pushed the text in as *context*, so the agent knew what had been
+   * typed and had no reason to reply. A reader without a microphone could be
+   * heard and not answered, which is half an interface.
+   *
+   * Two frames, and both are required. `conversation.item.create` of an
+   * `input_text` item puts the line in the conversation where a spoken turn
+   * would have gone; `response.create` is what asks for an answer. Sending only
+   * the first is exactly the old behaviour wearing a better name — the item
+   * lands and nothing speaks.
+   *
+   * The same shape as {@link respondToTool}, deliberately: that method already
+   * had to create an item and then ask for a response, and a second way of
+   * doing it would be a second thing to keep in step with the protocol.
+   */
+  sayAsUser(text: string): void {
+    this.send({
+      type: "conversation.item.create",
+      item: {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text }],
+      },
+    });
+    this.send({ type: "response.create" });
+  }
+
   /** Push the reader's current screen into the session, between turns. */
   updateContext(context: string): void {
     this.send({ type: "session.update", session: { instructions: context } });

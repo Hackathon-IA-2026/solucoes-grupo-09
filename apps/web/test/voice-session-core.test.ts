@@ -442,3 +442,57 @@ describe("stop closes everything it opened", () => {
     expect(h.transcript.length).toBe(before);
   });
 });
+
+describe("a typed line is a turn the model answers, not a note it reads", () => {
+  /**
+   * The plan's §10.5, closed. `say` used to push the text in as *context*, so
+   * the agent knew what had been typed and had no reason to reply — a reader
+   * without a microphone could be heard and not answered, which is half an
+   * interface.
+   */
+  it("creates a user message item carrying the text", async () => {
+    const h = await connected();
+    h.session.sayAsUser("qual região devo me preocupar?");
+    const item = h.socket.sent.find((m) => m.type === "conversation.item.create") as
+      | { item?: Record<string, unknown> }
+      | undefined;
+    expect(item?.item?.type).toBe("message");
+    expect(item?.item?.role).toBe("user");
+    expect(item?.item?.content).toEqual([
+      { type: "input_text", text: "qual região devo me preocupar?" },
+    ]);
+  });
+
+  it("asks for a response — without which the item lands and nothing speaks", () => {
+    // The half that makes it a turn. Sending only the item is the old
+    // behaviour wearing a better name, and it fails silently: the
+    // conversation grows and the dock stays quiet.
+    return connected().then((h) => {
+      h.session.sayAsUser("e se eu tivesse uma bateria?");
+      const order = h.socket.sent.map((m) => m.type);
+      const create = order.lastIndexOf("conversation.item.create");
+      const respond = order.lastIndexOf("response.create");
+      expect(create).toBeGreaterThanOrEqual(0);
+      expect(respond).toBeGreaterThan(create);
+    });
+  });
+
+  it("is the same two-frame shape `respondToTool` uses", async () => {
+    // Deliberately, so there is one way of creating an item and asking for an
+    // answer rather than two to keep in step with the protocol.
+    const h = await connected();
+    h.session.respondToTool("c1", "opened Explain");
+    const afterTool = h.socket.sent.length;
+    h.session.sayAsUser("por quê?");
+    const frames = h.socket.sent.slice(afterTool).map((m) => m.type);
+    expect(frames).toEqual(["conversation.item.create", "response.create"]);
+  });
+
+  it("does nothing on a closed socket, like every other send", async () => {
+    const h = await connected();
+    h.session.stop();
+    const before = h.socket.sent.length;
+    expect(() => h.session.sayAsUser("too late")).not.toThrow();
+    expect(h.socket.sent.length).toBe(before);
+  });
+});
