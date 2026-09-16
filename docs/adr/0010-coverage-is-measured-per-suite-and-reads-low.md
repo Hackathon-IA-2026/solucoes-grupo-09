@@ -34,15 +34,22 @@ which read 50% everywhere because it genuinely was.
 Postgres. `bun test` skips those, so the default number is not a measurement of
 the code, it is a measurement of how much of it needs a database:
 
+There are **two** gates, not one. `WATTSTEER_TEST_DATABASE_URL` opens the
+database half; `WATTSTEER_TEST_REDIS_URL` opens the queue and the Redis-backed
+rate limiter.
+
 | run | tests | functions | lines |
 | --- | ---: | ---: | ---: |
 | `bun test` | 1,395 pass, 600 skip | 67.55% | 64.72% |
-| `bun run test:db` | **1,852 pass, 50 skip** | **93.24%** | **91.55%** |
+| `bun run test:db` | 1,852 pass, 50 skip | 93.24% | 91.55% |
+| both gates open | **1,872 pass, 33 skip** | **93.70%** | **92.19%** |
 
 Twenty-six points of functions and twenty-seven of lines, from the same code on
 the same day. Read without the database, `src/contract/*`, `src/database/*`,
 `src/diagnosis/reads.ts` and `src/features/*` all look abandoned; every one of
-them is exercised.
+them is exercised. `src/jobs/bullmq.ts` reads 30.77% without Redis and 85.71%
+with it, and the rate limiter — the API's only defence against abuse — is not
+exercised against a real store at all until that second variable is set.
 
 ## Decision
 
@@ -51,8 +58,10 @@ this repo is meaningless without its run:
 
 - `packages/core` — run all three suites; the truth is the union, and no single
   one of them is it.
-- `apps/api` — `bun run test:db`, with the compose Postgres on 5434. `bun test`
-  alone is a lower bound and a misleading one.
+- `apps/api` — `bun run test:db`, with the compose Postgres on 5434, and
+  `WATTSTEER_TEST_REDIS_URL` set at a Redis of its own (`docker run -d -p
+  6380:6379 redis:7-alpine`; 6379 is often another project's). `bun test` alone
+  is a lower bound and a misleading one.
 - `apps/web` — `bun test test`; it has no gated half.
 
 What remains genuinely low after that is small and explicable: `src/api/index.ts`
@@ -72,3 +81,8 @@ to run it. This is the other half: how to read what comes back when you do.
 Before quoting coverage anywhere — a README, a ticket, a commit message — state
 the command. "89% of functions in `packages/core`, from its own suite" is a
 fact. "89% of functions" is not.
+
+And check the command ran as written. Measuring the row above, a collapsed
+`env $VARS bun test` reported 60.38% because the variables never reached the
+process — a number low enough to look like a finding and high enough not to look
+like an error.
