@@ -24,6 +24,7 @@ reason — so the config stays at zero warnings without hiding real signal.
 | `complexity/noExcessiveLinesPerFunction`, `noExcessiveCognitiveComplexity`, `useMaxParams` | React component render bodies; splitting hurts cohesion. |
 | `complexity/noVoid` | `void promise` is the codebase's fire-and-forget marker. |
 | Tests/e2e: `noMisplacedAssertion`, `noSecrets` | Assertion helpers and fixture URLs/payloads are the point of test code. |
+| `nursery/useThisInClassMethods` | `test/briefing-narration-clock.test.ts` only. The `AudioContext` stub stands in for a browser object whose factory methods take no instance state; the one field a test touches is `currentTime`. Suppressed per member with the reason, not disabled. |
 
 ## React Doctor (`apps/web/doctor.config.json`, `packages/ui/doctor.config.json`)
 

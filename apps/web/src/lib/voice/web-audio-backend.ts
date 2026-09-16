@@ -56,6 +56,15 @@ export class WebAudioBackend implements AudioBackend {
   private captureNode: AudioWorkletNode | null = null;
   private playbackContext: AudioContext | null = null;
   private playCursor = 0;
+  /**
+   * When the current run of narration began, on the playback context's own
+   * clock. `null` between responses.
+   *
+   * The briefing director reads its elapsed time from here rather than from a
+   * timer, because a scene has to change on the sentence it illustrates. See
+   * `lib/voice/briefing/clock.ts`.
+   */
+  private narrationStart: number | null = null;
   private onLevel: ((level: number) => void) | null = null;
 
   // biome-ignore lint/nursery/useThisInClassMethods: it implements `AudioBackend.openSocket`; a static would not satisfy the interface
@@ -120,10 +129,49 @@ export class WebAudioBackend implements AudioBackend {
 
     const now = context.currentTime;
     if (this.playCursor < now) {
+      // The cursor fell behind the clock, so nothing of the previous response
+      // is still queued: this chunk opens a new run of narration.
       this.playCursor = now;
+      this.narrationStart = now;
     }
+    this.narrationStart ??= now;
     source.start(this.playCursor);
     this.playCursor += buffer.duration;
+  }
+
+  /**
+   * How much narration has played, and how much is queued, in milliseconds.
+   *
+   * `elapsedMs` is what the director locks scenes to. `bufferedMs` is the whole
+   * run the model has sent so far — it grows while the response streams, which
+   * is why a plan is fitted continuously rather than once: the true narration
+   * length is not known until the response ends.
+   *
+   * Both are zero before a response starts and after `teardown`, which is the
+   * signal the caller needs to fall back to a wall clock when audio never
+   * plays at all — a blocked autoplay policy looks exactly like silence here.
+   */
+  narrationClock(): { elapsedMs: number; bufferedMs: number } {
+    const context = this.playbackContext;
+    const start = this.narrationStart;
+    if (context === null || start === null) {
+      return { elapsedMs: 0, bufferedMs: 0 };
+    }
+    return {
+      elapsedMs: Math.max(0, (context.currentTime - start) * 1000),
+      bufferedMs: Math.max(0, (this.playCursor - start) * 1000),
+    };
+  }
+
+  /**
+   * Barge-in, and the end of a response.
+   *
+   * The session already cancels the model's turn when the reader speaks over
+   * it; this drops the clock so the next response starts its own run rather
+   * than inheriting the abandoned one's elapsed time.
+   */
+  endNarration(): void {
+    this.narrationStart = null;
   }
 
   teardown(): void {
@@ -141,6 +189,7 @@ export class WebAudioBackend implements AudioBackend {
     void this.playbackContext?.close().catch(() => {});
     this.playbackContext = null;
     this.playCursor = 0;
+    this.narrationStart = null;
     this.onLevel = null;
   }
 }
