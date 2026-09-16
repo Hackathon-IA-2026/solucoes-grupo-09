@@ -685,6 +685,20 @@ seam made the lifecycle testable without a socket.
 
 ### 10.2 The claims, checked
 
+**Re-checked 2026-09-16, and every one still holds** — against the code, not
+against the last reading of it: six tools and exactly those six, thirteen
+refusal codes, a seven-member status union, zero `expo-router` or `react`
+imports in `execute.ts`, zero `fetch` / `api.` / `await` in `context.ts`, both
+audio flags in the `session.update`, and `grokVoiceModel` present in
+`apps/api/src/config.ts` and in no file under `apps/web/src`.
+
+Worth noticing which half of this audit went stale and which did not. The
+**counts in 10.1 drifted** and the **claims here did not**, and the reason is
+structural rather than lucky: every row below is a property some test holds, so
+the code could not move without a suite going red. The line counts were prose —
+true when typed, checked by nothing after. That is the argument for writing an
+audit as assertions wherever it can be, and for dating it wherever it cannot.
+
 | § | claim | verdict |
 |---|---|---|
 | 2.1 | ephemeral tokens only; key never leaves `apps/api` | **holds** — five of the fourteen API tests are leak guards, including one that greps this file's own source for interpolation of the upstream body |
