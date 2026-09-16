@@ -242,36 +242,41 @@ function PitchEmbed({ wide, title }: { wide: boolean; title: string }) {
       }}
     >
       {/*
-        `sandbox="allow-same-origin"`, and the value is the whole of the
-        decision — measured, not assumed.
+        **No `sandbox`, and the attribute's absence is the fix.**
 
-        This frame used to carry no `sandbox` at all, with a note saying that a
-        sandbox attribute disables the browser's built-in PDF viewer. Half of
-        that is true and the conclusion drawn from it was not. Driven in
-        headless Chromium against this app's own `dist`, with the four
-        interesting values:
+        This frame carried `sandbox="allow-same-origin"` and rendered a white
+        rectangle in production. The comment that added it presented a measured
+        table — four values, two of them "document loads" — and the table was
+        wrong, because of how it was measured rather than what it claimed.
 
-          (no sandbox)                    → document loads
-          sandbox=""                      → contentDocument is null; frame inert
-          sandbox="allow-scripts"         → contentDocument is null; frame inert
-          sandbox="allow-same-origin"     → document loads, identical to none
+        It was driven in **headless** Chromium, which has no PDF viewer at all:
+        every variant fails there, including no sandbox. The check used
+        `contentDocument !== null` as the proxy for success, and with
+        `allow-same-origin` that is trivially true — the frame is same-origin,
+        so the document is reachable. It is also **empty**. A non-null handle to
+        a blank document was read as a rendered deck.
 
-        So the viewer needs `allow-same-origin` and needs nothing else. Granting
-        only that is a real restriction rather than a gesture: scripts, forms,
-        popups, downloads, pointer lock and top-level navigation are all denied,
-        and the frame keeps working. The combination to avoid is
-        `allow-scripts allow-same-origin`, which the spec notes lets framed
-        content remove its own sandbox — it also renders here, and it is exactly
-        the value not chosen.
+        Re-measured in a **headed** browser, counting pixels that are not white
+        rather than asking whether an object exists:
 
-        The deck is our own static asset on our own origin, so the threat this
-        closes is small. It is closed anyway because it costs one attribute, and
-        because the next person to add an `<iframe>` to this app should find a
-        sandboxed one to copy.
+          (no sandbox)                     → request ok, 104,499 non-white bytes
+          sandbox="allow-same-origin"      → request ABORTED, 2,144 — blank
+          sandbox="allow-scripts allow-same-origin" → ABORTED, 2,144 — blank
+
+        Chrome's built-in viewer is an extension that needs to run scripts in
+        the frame, and a `sandbox` attribute denies it whatever tokens are
+        listed — `allow-scripts` does not bring it back. So there is no
+        sandboxed spelling of this that also shows the deck, and the honest
+        choice is the one that works.
+
+        What is given up is small and worth naming: the frame's only content is
+        `/wattsteer-pitch.pdf`, a static asset on our own origin that we build
+        and ship. It is not user content, not third-party, and not a route. The
+        sandbox was closing a door onto our own hallway, and it was closing it
+        on the deck.
       */}
       <iframe
         title={title}
-        sandbox="allow-same-origin"
         src={`${PITCH_PDF_PATH}#view=FitH`}
         // `FitH` in the fragment, not a viewer parameter this app controls:
         // PDF fragment directives are honoured by Chrome's and Firefox's
