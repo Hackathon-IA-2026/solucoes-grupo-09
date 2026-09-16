@@ -11,6 +11,7 @@ import { database } from "../database/connection.js";
 import { loggableError } from "../errors.js";
 import { canonicalReads } from "./canonical.js";
 import { curtailmentRoutes } from "./curtailment.js";
+import { dashboardAuthorized, dashboardDecision } from "./dashboard-guard.js";
 import { diagnosisRoutes } from "./diagnosis.js";
 import { forecastRoutes } from "./forecast.js";
 import { gridRoutes } from "./grid.js";
@@ -265,10 +266,51 @@ export const app = new Elysia()
   .use(diagnosisRoutes)
   .use(metaRoutes);
 
-// Opt-in BullMQ dashboard at /jobs (requires Redis). Protect it in production.
-if (config.dashboard && config.redisUrl) {
+/*
+  Opt-in BullMQ dashboard at /jobs (requires Redis).
+
+  This block used to end with the comment "Protect it in production." and no
+  code that did. `dashboard-guard.ts` makes the decision and says why in a
+  sentence the operator reads at boot; everything here is carrying it out.
+
+  The guard runs as `onRequest` on the parent app rather than inside the mount:
+  `app.mount` hands the subtree to another handler, and a check that lives
+  inside the thing being protected is one refactor away from being skipped.
+*/
+const dashboard = dashboardDecision({
+  dashboard: config.dashboard,
+  redisUrl: config.redisUrl,
+  isProd: config.isProd,
+  token: config.dashboardToken,
+});
+
+if (dashboard.mount) {
   const { jobsDashboard } = await import("./jobs-dashboard.js");
-  app.mount("/jobs", jobsDashboard(config.redisUrl));
+  const dashboardToken = dashboard.token;
+  app.onRequest(({ request }) => {
+    const { pathname } = new URL(request.url);
+    if (pathname !== "/jobs" && !pathname.startsWith("/jobs/")) {
+      // A bare `return` is "carry on", so every other route is untouched.
+      return;
+    }
+    if (dashboardAuthorized(request.headers.get("authorization"), dashboardToken)) {
+      return;
+    }
+    // Returning a `Response` from `onRequest` short-circuits before the mounted
+    // subtree is reached — verified against this Elysia version rather than
+    // assumed, because a guard that silently falls through is worse than none.
+    //
+    // `WWW-Authenticate` so a human holding the token knows where to put it,
+    // and nothing beyond that: a 401 that explains itself helps whoever is
+    // guessing more than whoever forgot.
+    return new Response("Unauthorized", {
+      status: 401,
+      headers: { "www-authenticate": 'Bearer realm="jobs"' },
+    });
+  });
+  app.mount("/jobs", jobsDashboard(config.redisUrl as string));
+} else if (dashboard.warn) {
+  console.warn(`⚠️  jobs dashboard: ${dashboard.reason}`);
 }
 
 export type App = typeof app;

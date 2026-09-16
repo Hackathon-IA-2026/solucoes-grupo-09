@@ -261,10 +261,20 @@ export const config = {
   databaseUrl: process.env.DATABASE_URL || undefined,
   /**
    * Mount the BullMQ Workbench dashboard at /jobs (requires Redis). Off by
-   * default — it exposes queue data/controls, so enable only behind your own
-   * auth/network protection.
+   * default — it exposes queue data/controls.
+   *
+   * This used to read "enable only behind your own auth/network protection",
+   * which was a request rather than a control. `api/dashboard-guard.ts` now
+   * enforces it: in production the dashboard refuses to mount at all without
+   * `WATTSTEER_DASHBOARD_TOKEN`, and requires it on every request when it does.
    */
   dashboard: bool(process.env.WATTSTEER_DASHBOARD),
+  /**
+   * Bearer token guarding `/jobs`. Required in production whenever
+   * `WATTSTEER_DASHBOARD` is on; optional elsewhere, where the flag exists for
+   * a local queue one operator is looking at.
+   */
+  dashboardToken: process.env.WATTSTEER_DASHBOARD_TOKEN || undefined,
 
   // --- weather (Open-Meteo Single Runs) ---
   /**
