@@ -127,6 +127,7 @@ export function SubsystemMap({
   hovered = null,
   onHoverChange,
   onSelect,
+  maxWidth = MAX_WIDTH,
 }: {
   /** The four rows and which claim they make. See {@link MapPaint}. */
   paint: MapPaint;
@@ -142,6 +143,11 @@ export function SubsystemMap({
   onHoverChange?: (subsystem: SubsystemCode | null) => void;
   /** The overview's own row handler. Not a map-specific one. */
   onSelect: (subsystem: SubsystemCode) => void;
+  /**
+   * The widest this map may draw, when a layout wants it larger than the
+   * column it was designed for. The default is the 380px the Overview uses.
+   */
+  maxWidth?: number;
 }) {
   const colors = usePalette();
   const copy = useCopy();
@@ -239,7 +245,7 @@ export function SubsystemMap({
     stretching Brazil, so the one frame before the measurement is narrower than
     the real map instead of wider than the page.
   */
-  const width = Math.min(containerWidth > 0 ? containerWidth : MAX_WIDTH, MAX_WIDTH);
+  const width = Math.min(containerWidth > 0 ? containerWidth : maxWidth, maxWidth);
   const height = (width * BRAZIL_VIEWBOX.height) / BRAZIL_VIEWBOX.width;
 
   const { observedMax, painted } = useRegionPaint(paint);
