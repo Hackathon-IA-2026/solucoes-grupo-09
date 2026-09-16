@@ -16,12 +16,22 @@ import { createDatabase } from "../src/database/connection.js";
  * the database side.
  *
  * It has already gone wrong once: a ledger with **53 rows for 52 files**, the
- * extra one carrying an empty hash. Drizzle decides what to apply by comparing
- * the journal against that table, so a corrupt ledger either skips a migration
- * the schema needs or re-applies one it has already run, and both fail later
- * and somewhere else — the first as a missing relation at request time, which
- * is the failure `readiness-knows-the-schema.test.ts` exists to catch one layer
- * up.
+ * extra one carrying an empty hash.
+ *
+ * **What this does and does not claim.** Drizzle decides what to apply by
+ * comparing the journal's timestamps against `created_at`, *not* by hash —
+ * measured, not assumed: setting a row's hash to `deadbeef` and running
+ * `drizzle-kit migrate` reports success and re-applies nothing. So a hash that
+ * disagrees with its file is **not** a reason to expect the next migrate to
+ * break, and nobody should rebuild a database over one.
+ *
+ * What it is, is the only signal that the record of what was applied has
+ * stopped matching what is on disk — a file edited after it shipped, a database
+ * carrying a migration from a branch where it still differed. The *count* half
+ * is the one with teeth: a row missing or doubled does change what drizzle
+ * applies, and that failure lands later and somewhere else, as a missing
+ * relation at request time, which is what `readiness-knows-the-schema.test.ts`
+ * catches one layer up.
  *
  * Four properties, and the second is the one that was actually violated:
  *
