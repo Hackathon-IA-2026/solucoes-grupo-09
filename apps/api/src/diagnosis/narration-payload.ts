@@ -12,6 +12,7 @@ import { encodeWire, shapeOf } from "@wattsteer/core/wire";
 import { UpstreamError } from "../errors.js";
 import type { ForecastDayRow } from "../forecast/reads.js";
 import { riskClass } from "../forecast/risk-class.js";
+import { isRecord } from "../json/shape.js";
 import type { AttributionDriverRow, PublishedAttributionRow } from "./reads.js";
 
 /**
@@ -406,10 +407,6 @@ function assertQuantileOrder(forecast: ForecastDayRow): void {
       `the day band is ${p10} / ${p50} / ${p90}; a band whose quantiles are out of order is a bug, not a wide forecast`,
     );
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**

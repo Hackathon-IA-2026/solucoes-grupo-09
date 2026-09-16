@@ -13,6 +13,7 @@ import { MODEL_CARD_DECLINES } from "@wattsteer/core/declines";
 import { encodeWire } from "@wattsteer/core/wire";
 import { Elysia, t } from "elysia";
 import { UpstreamError } from "../errors.js";
+import { isRecord } from "../json/shape.js";
 import { callMl, type MlEndpoint } from "./ml-proxy.js";
 import { laneName } from "./params.js";
 import { applyCachePolicy, CACHE_POLICIES } from "./plugins/cache-policy.js";
@@ -174,10 +175,6 @@ interface CardEnvelope {
   artifact_id: string;
   correction_regime: string;
   card: Record<string, unknown>;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** A card group, or the refusal that says the document is not one. */

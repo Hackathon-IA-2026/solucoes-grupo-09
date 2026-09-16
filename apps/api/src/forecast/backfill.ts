@@ -1,5 +1,6 @@
 import type { Database } from "../database/connection.js";
 import { UpstreamError } from "../errors.js";
+import { isRecord } from "../json/shape.js";
 import {
   type ForecastOriginKind,
   type ForecastPublication,
@@ -76,10 +77,6 @@ export interface HoldoutBackfillResult extends PublicationWriteResult {
   artifactId: string;
   /** How many held-out days were written. */
   days: number;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function text(source: Record<string, unknown>, field: string): string {
