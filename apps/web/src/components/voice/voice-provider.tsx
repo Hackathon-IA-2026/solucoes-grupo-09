@@ -225,6 +225,16 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   // on `collapse`, and a new function per render would tear the listener down
   // and rebuild it on every audio level frame.
   const dismissBriefing = useCallback(() => setBriefing(null), []);
+  /*
+    Re-perform the last action, through the same `performIntent` the tool call
+    went through. Not a second code path: a repeat that navigated by its own
+    route would be a place for the two to disagree about what the agent did.
+  */
+  const repeatAction = useCallback(() => {
+    if (action !== null) {
+      performIntent(action.intent, navigator);
+    }
+  }, [action, navigator]);
   const expand = useCallback(() => setExpandedByReader(true), []);
   const collapse = useCallback(() => setExpandedByReader(false), []);
 
@@ -237,6 +247,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       level,
       mic,
       action,
+      repeatAction,
       briefing,
       dismissBriefing,
       narrationClock,
@@ -256,6 +267,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       level,
       mic,
       action,
+      repeatAction,
       briefing,
       dismissBriefing,
       narrationClock,

@@ -86,6 +86,16 @@ export interface VoiceAgentState {
   readonly level: number;
   readonly mic: VoiceMicState;
   readonly action: VoiceAction | null;
+  /**
+   * Do the last action again.
+   *
+   * The action card has always been able to take a press —
+   * `voice-action-card.tsx` implements it, and refuses it for a refusal — and
+   * nothing ever passed one, so a documented affordance shipped inert. A reader
+   * who navigates away from where the agent put them needs a way back that is
+   * not "ask again".
+   */
+  readonly repeatAction: () => void;
   /** The subsystem the agent asked to light, if any. `highlight` never navigates. */
   readonly highlighted: SubsystemCode | null;
   readonly error: string | null;
@@ -144,6 +154,7 @@ export const VOICE_ABSENT: VoiceAgentState = {
   level: 0,
   mic: "unasked",
   action: null,
+  repeatAction: () => {},
   highlighted: null,
   briefing: null,
   dismissBriefing: () => {},

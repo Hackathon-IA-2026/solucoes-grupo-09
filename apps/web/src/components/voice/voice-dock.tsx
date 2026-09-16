@@ -311,68 +311,80 @@ function ExpandedPanel({ agent }: { agent: VoiceAgentState }) {
 
       <VoiceTranscript entries={agent.transcript} />
 
-      {agent.action === null ? null : <VoiceActionCard intent={agent.action.intent} />}
+      {agent.action === null ? null : (
+        <VoiceActionCard intent={agent.action.intent} onPress={agent.repeatAction} />
+      )}
 
-      {denied ? (
-        <View testID="voice-dock-typed" style={{ gap: space.sm }}>
-          <Text style={{ ...type.caption, color: colors.onWarningSoft }}>
-            {voice.mic.deniedTitle}
-          </Text>
-          <Text style={{ ...type.bodySmall, color: colors.inkMuted }}>
-            {voice.mic.deniedBody}
-          </Text>
-          <View style={{ flexDirection: "row", gap: space.sm, alignItems: "center" }}>
-            <TextInput
-              testID="voice-dock-typed-input"
-              value={typed}
-              onChangeText={setTyped}
-              placeholder={voice.typed.placeholder}
-              placeholderTextColor={colors.inkFaint}
-              accessibilityLabel={voice.typed.label}
-              onSubmitEditing={() => {
-                agent.say(typed);
-                setTyped("");
-              }}
-              style={{
-                flex: 1,
+      {/*
+        **Typing is a way in, not a consolation prize.** This whole block was
+        gated on `mic === "denied"`, so a reader in an open-plan office, on a
+        call, or simply unwilling to talk to their laptop had no way to ask
+        anything — `say()` was fully wired and unreachable. It is always here
+        now; only the denial *explanation* above it is conditional, because
+        that is the part that is actually about the microphone.
+      */}
+      <View testID="voice-dock-typed" style={{ gap: space.sm }}>
+        {denied ? (
+          <>
+            <Text style={{ ...type.caption, color: colors.onWarningSoft }}>
+              {voice.mic.deniedTitle}
+            </Text>
+            <Text style={{ ...type.bodySmall, color: colors.inkMuted }}>
+              {voice.mic.deniedBody}
+            </Text>
+          </>
+        ) : null}
+        <View style={{ flexDirection: "row", gap: space.sm, alignItems: "center" }}>
+          <TextInput
+            testID="voice-dock-typed-input"
+            value={typed}
+            onChangeText={setTyped}
+            placeholder={voice.typed.placeholder}
+            placeholderTextColor={colors.inkFaint}
+            accessibilityLabel={voice.typed.label}
+            onSubmitEditing={() => {
+              agent.say(typed);
+              setTyped("");
+            }}
+            style={{
+              flex: 1,
+              minHeight: 36,
+              paddingHorizontal: space.sm,
+              borderRadius: radius.sm,
+              borderWidth: 1,
+              borderColor: colors.border,
+              backgroundColor: colors.surfaceSunken,
+              color: colors.ink,
+              ...type.bodySmall,
+            }}
+          />
+          <Pressable
+            testID="voice-dock-typed-send"
+            accessibilityRole="button"
+            accessibilityLabel={voice.typed.send}
+            onPress={() => {
+              agent.say(typed);
+              setTyped("");
+            }}
+            style={(state) => {
+              const { focused = false } = state as { focused?: boolean };
+              return {
                 minHeight: 36,
-                paddingHorizontal: space.sm,
+                justifyContent: "center",
+                paddingHorizontal: space.md,
                 borderRadius: radius.sm,
-                borderWidth: 1,
-                borderColor: colors.border,
-                backgroundColor: colors.surfaceSunken,
-                color: colors.ink,
-                ...type.bodySmall,
-              }}
-            />
-            <Pressable
-              testID="voice-dock-typed-send"
-              accessibilityRole="button"
-              accessibilityLabel={voice.typed.send}
-              onPress={() => {
-                agent.say(typed);
-                setTyped("");
-              }}
-              style={(state) => {
-                const { focused = false } = state as { focused?: boolean };
-                return {
-                  minHeight: 36,
-                  justifyContent: "center",
-                  paddingHorizontal: space.md,
-                  borderRadius: radius.sm,
-                  backgroundColor: colors.accentSoft,
-                  ...focusRing(focused, colors.focus, 2),
-                  ...(Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null),
-                };
-              }}
-            >
-              <Text style={{ ...type.label, color: colors.onAccentSoft }}>
-                {voice.typed.send}
-              </Text>
-            </Pressable>
-          </View>
+                backgroundColor: colors.accentSoft,
+                ...focusRing(focused, colors.focus, 2),
+                ...(Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null),
+              };
+            }}
+          >
+            <Text style={{ ...type.label, color: colors.onAccentSoft }}>
+              {voice.typed.send}
+            </Text>
+          </Pressable>
         </View>
-      ) : null}
+      </View>
 
       {agent.error !== null && !denied ? (
         <Text
