@@ -118,14 +118,17 @@ the provider and model that answered, the attempts, and the gate failures.
 ## Layout
 
 ```
-gateway/   provider adapters, key pools, quota accounting, the fallback router
-crawl.py   the documents the records cite: operating instructions, procedures
-parse.py   page to blocks, via nvidia/nemotron-parse, falling back to poppler
-chunk.py   sections and tables, never split; tables of contents marked and excluded
-index.py   embeddings and the single vector space rule
+gateway/    provider adapters, key pools, quota accounting, the fallback router
+runtime.py  the database and the gateway, opened and closed in one place
+crawl.py    the documents the records cite: operating instructions, procedures, bulletins
+parse.py    page to blocks: the text layer when it is good, nvidia/nemotron-parse when it is not
+chunk.py    sections and tables, never split; tables of contents marked and excluded
+index.py    embeddings and the single vector space rule
+ingest.py   the one door from a fetched file to searchable chunks, for a first parse or a re-chunk
 retrieve.py hybrid search: pgvector plus Portuguese full text, fused with RRF
 evidence.py the builder and the gates
-app.py     the internal HTTP surface
+app.py      the internal HTTP surface
+cli.py      the commands setup.sh runs
 ```
 
 ## Integration
