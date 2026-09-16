@@ -34,6 +34,7 @@ import { refusalOf } from "@/lib/absence";
 import { api } from "@/lib/api";
 import type { MitigationStep } from "@/lib/fixtures";
 import { mitigationSteps, SOLVED_STEPS, stepScenario } from "@/lib/optimization";
+import { settleWith } from "@/lib/settle";
 import { useLatest } from "@/lib/use-latest";
 
 export type OptimizationState =
@@ -66,6 +67,10 @@ export function useOptimization(scenario: Scenario | null): OptimizationState {
       return;
     }
     const controller = new AbortController();
+    const settle = settleWith(controller.signal, setState);
+    // The same shape as `use-network.ts`: the solve has just been asked for,
+    // and the previous result is about a scenario the reader has left.
+    // react-doctor-disable-next-line react-hooks-js/set-state-in-effect
     setState({ status: "solving" });
     Promise.all(
       SOLVED_STEPS.map((step) =>
@@ -73,10 +78,7 @@ export function useOptimization(scenario: Scenario | null): OptimizationState {
       ),
     )
       .then(([battery, batteryAndLoad]) => {
-        if (controller.signal.aborted) {
-          return;
-        }
-        setState({
+        settle({
           status: "solved",
           steps: mitigationSteps({
             battery,
@@ -85,12 +87,14 @@ export function useOptimization(scenario: Scenario | null): OptimizationState {
         });
       })
       .catch((cause: unknown) => {
-        if (controller.signal.aborted) {
-          return;
-        }
-        setState({ status: "refused", code: refusalOf(cause) });
+        settle({ status: "refused", code: refusalOf(cause) });
       });
     return () => controller.abort();
+    // Keyed on the canonical bytes and nothing else — the paragraph above says
+    // why, and `useLatest` is what makes the scenario an input rather than a
+    // trigger. Listing `latest` here would re-solve on every keystroke of a
+    // stepper, which is the behaviour the key exists to prevent.
+    // react-doctor-disable-next-line react-doctor/exhaustive-deps
   }, [key]);
 
   return state;

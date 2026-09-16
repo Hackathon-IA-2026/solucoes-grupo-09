@@ -69,6 +69,7 @@ import { refusalOf } from "@/lib/absence";
 import { api } from "@/lib/api";
 import type { CurtailmentHourObservation } from "@/lib/fixtures";
 import { observedHours, observedSplit } from "@/lib/network";
+import { settleWith } from "@/lib/settle";
 
 /** The settled grid — every part of it available with nothing promoted. */
 export interface ObservedNetwork {
@@ -154,7 +155,11 @@ export function useNetwork(query: NetworkQuery): NetworkState {
 
   useEffect(() => {
     const controller = new AbortController();
+    const settle = settleWith(controller.signal, setState);
     const signal = controller.signal;
+    // See `use-explain.ts`: the opening statement of a fetch effect, which
+    // is where a reading state can honestly be set and nowhere else.
+    // react-doctor-disable-next-line react-hooks-js/set-state-in-effect
     setState({ status: "reading" });
 
     const settled = daysFrom(targetDate, -2);
@@ -204,23 +209,17 @@ export function useNetwork(query: NetworkQuery): NetworkState {
         try {
           forecastNetwork = await forecast;
         } catch (cause: unknown) {
-          if (!signal.aborted) {
-            setState({
-              status: "observedOnly",
-              observed: settledGrid,
-              code: refusalOf(cause),
-            });
-          }
+          settle({
+            status: "observedOnly",
+            observed: settledGrid,
+            code: refusalOf(cause),
+          });
           return;
         }
-        if (!signal.aborted) {
-          setState({ status: "read", observed: settledGrid, forecast: forecastNetwork });
-        }
+        settle({ status: "read", observed: settledGrid, forecast: forecastNetwork });
       })
       .catch((cause: unknown) => {
-        if (!signal.aborted) {
-          setState({ status: "refused", code: refusalOf(cause) });
-        }
+        settle({ status: "refused", code: refusalOf(cause) });
       });
 
     // Both halves are awaited, so neither can reject unobserved — but the

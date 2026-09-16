@@ -43,7 +43,17 @@ function Heading({
   );
 }
 
-/** One cell. `tabular-nums` everywhere, including the period, which is dates. */
+/**
+ * One cell. `tabular-nums` everywhere, including the period, which is dates.
+ *
+ * **`role="cell"` is not decoration here, it is what makes the row legal.** The
+ * rows above declare `role="row"`, and a `row` whose children have no role is
+ * an `aria-required-children` violation — axe rates it *critical*, WCAG 2 A,
+ * and it fired three times on this panel: the header row was fine because
+ * `Heading` already carried `columnheader`, and the three body rows announced
+ * themselves as rows containing nothing a row may contain. A screen reader in
+ * table mode finds no cells to move between.
+ */
 function Cell({
   children,
   style,
@@ -55,6 +65,7 @@ function Cell({
 }) {
   return (
     <Text
+      role="cell"
       style={[
         { fontSize: 12, lineHeight: 20, color, fontVariant: ["tabular-nums"] },
         style,

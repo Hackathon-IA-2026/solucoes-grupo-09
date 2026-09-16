@@ -16,18 +16,43 @@
         "additionalProperties": false,
         "required": ["kind"],
         "properties": {
-          "kind": { "type": "string", "enum": ["openai_compatible", "local", "bedrock", "template"] },
+          "kind": {
+            "type": "string",
+            "enum": ["openai_compatible", "local", "bedrock", "template"]
+          },
           "base_url": { "type": "string" },
-          "api_key_env": { "type": ["string", "null"], "description": "Nome da variável de ambiente com UMA chave. Nunca a chave." },
-          "api_keys_env": { "type": ["string", "null"], "description": "Nome da variável com um POOL de chaves separadas por vírgula (uma por integrante do time). Opcional: uma chave só (ou api_key_env) funciona igual, o pool de 1 é o caso base. Resolução: api_keys_env, senão api_key_env, senão o provedor fica disabled e a cadeia pula para o próximo elo. Cada chave tem contadores e cooling próprios; o roteador escolhe a chave com mais folga e só troca de provedor quando todas as chaves esgotam. Nos logs a chave aparece só como key_id (8 primeiros hex do sha256)." },
-          "key_selection": { "type": "string", "enum": ["least_loaded", "round_robin"], "default": "least_loaded" },
-          "limits_scope": { "type": "string", "enum": ["per_key", "per_provider"], "default": "per_key", "description": "per_key: os limites valem para cada chave do pool (contas independentes). per_provider: o limite é compartilhado (mesma conta/org, ex. Groq limita por organização)." },
+          "api_key_env": {
+            "type": ["string", "null"],
+            "description": "Nome da variável de ambiente com UMA chave. Nunca a chave."
+          },
+          "api_keys_env": {
+            "type": ["string", "null"],
+            "description": "Nome da variável com um POOL de chaves separadas por vírgula (uma por integrante do time). Opcional: uma chave só (ou api_key_env) funciona igual, o pool de 1 é o caso base. Resolução: api_keys_env, senão api_key_env, senão o provedor fica disabled e a cadeia pula para o próximo elo. Cada chave tem contadores e cooling próprios; o roteador escolhe a chave com mais folga e só troca de provedor quando todas as chaves esgotam. Nos logs a chave aparece só como key_id (8 primeiros hex do sha256)."
+          },
+          "key_selection": {
+            "type": "string",
+            "enum": ["least_loaded", "round_robin"],
+            "default": "least_loaded"
+          },
+          "limits_scope": {
+            "type": "string",
+            "enum": ["per_key", "per_provider"],
+            "default": "per_key",
+            "description": "per_key: os limites valem para cada chave do pool (contas independentes). per_provider: o limite é compartilhado (mesma conta/org, ex. Groq limita por organização)."
+          },
           "region": { "type": "string" },
           "timeout_s": { "type": "integer", "minimum": 1, "maximum": 600, "default": 60 },
           "enabled": { "type": "boolean", "default": true },
-          "budget_usd_day": { "type": "number", "minimum": 0, "description": "Teto diário para elos pagos; ao atingir, o elo fica exhausted até o reset (fuso America/Sao_Paulo)." },
+          "budget_usd_day": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Teto diário para elos pagos; ao atingir, o elo fica exhausted até o reset (fuso America/Sao_Paulo)."
+          },
           "limits": { "$ref": "#/definitions/limits" },
-          "limits_per_model": { "type": "object", "additionalProperties": { "$ref": "#/definitions/limits" } },
+          "limits_per_model": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#/definitions/limits" }
+          },
           "extra": { "type": "object" }
         }
       }
@@ -54,25 +79,43 @@
               }
             }
           },
-          "model": { "type": "string", "description": "Para embed: o único modelo permitido em toda a cadeia (mesmo espaço vetorial). Validação: todo elo de embed precisa ter model equivalente." },
+          "model": {
+            "type": "string",
+            "description": "Para embed: o único modelo permitido em toda a cadeia (mesmo espaço vetorial). Validação: todo elo de embed precisa ter model equivalente."
+          },
           "dimensions": { "type": "integer", "minimum": 64 },
           "batch_size": { "type": "integer", "minimum": 1 },
           "top_n": { "type": "integer", "minimum": 1 },
           "require": {
             "type": "object",
             "additionalProperties": false,
-            "properties": { "json_schema": { "type": "boolean" }, "tools": { "type": "boolean" } }
+            "properties": {
+              "json_schema": { "type": "boolean" },
+              "tools": { "type": "boolean" }
+            }
           },
           "temperature": { "type": "number", "minimum": 0, "maximum": 2 },
           "max_output_tokens": { "type": "integer", "minimum": 1 },
-          "on_exhausted": { "type": "string", "enum": ["waiting_quota", "template", "skip_rerank", "fail"], "default": "waiting_quota" }
+          "on_exhausted": {
+            "type": "string",
+            "enum": ["waiting_quota", "template", "skip_rerank", "fail"],
+            "default": "waiting_quota"
+          }
         }
       }
     },
     "behaviour": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["counters", "preflight", "cooling_s_default", "retry_same_link", "invalid_json_counts_as_failure", "log_table", "quota_endpoint"],
+      "required": [
+        "counters",
+        "preflight",
+        "cooling_s_default",
+        "retry_same_link",
+        "invalid_json_counts_as_failure",
+        "log_table",
+        "quota_endpoint"
+      ],
       "properties": {
         "counters": { "type": "string", "enum": ["redis", "memory"] },
         "preflight": { "type": "boolean" },
@@ -90,7 +133,11 @@
       "additionalProperties": false,
       "properties": {
         "rpm": { "type": "integer", "minimum": 1, "description": "requests por minuto" },
-        "tpm": { "type": "integer", "minimum": 1, "description": "tokens (entrada + saída) por minuto" },
+        "tpm": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "tokens (entrada + saída) por minuto"
+        },
         "rpd": { "type": "integer", "minimum": 1, "description": "requests por dia" },
         "tpd": { "type": "integer", "minimum": 1, "description": "tokens por dia" }
       }

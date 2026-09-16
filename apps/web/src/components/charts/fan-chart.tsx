@@ -27,30 +27,21 @@ import Svg, {
   Stop,
   Text as SvgText,
 } from "react-native-svg";
+import {
+  CHART_H,
+  CHART_W,
+  FONT,
+  fanGeometry,
+  GRID,
+  PAD,
+} from "@/components/charts/fan-geometry";
 import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
 import type { CurtailmentHourForecast, CurtailmentHourObservation } from "@/lib/fixtures";
 
+/** The viewBox the geometry module lays out inside. */
 const W = 640;
 const H = 260;
-const PAD = { top: 18, right: 14, bottom: 30, left: 46 };
-const FONT =
-  "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif";
-const GRID = [1, 0.75, 0.5, 0.25, 0];
-
-function niceMax(value: number): number {
-  if (value <= 0) {
-    return 10;
-  }
-  const magnitude = 10 ** Math.floor(Math.log10(value));
-  const steps = [1, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10];
-  for (const step of steps) {
-    if (step * magnitude >= value) {
-      return step * magnitude;
-    }
-  }
-  return 10 * magnitude;
-}
 
 export function FanChart({
   hours,
@@ -77,35 +68,12 @@ export function FanChart({
     return null;
   }
 
-  const observedPeak =
-    observed === undefined ? 0 : Math.max(...observed.map((o) => o.constrainedOffMwh));
-  const max = niceMax(
-    Math.max(observedPeak, ...hours.map((h) => h.constrainedOff.p90), thresholdMw * 2),
+  const { max, slot, x, y, bandPath, medianPath, observedPath } = fanGeometry(
+    hours,
+    observed,
+    thresholdMw,
   );
-  const chartW = W - PAD.left - PAD.right;
-  const chartH = H - PAD.top - PAD.bottom;
-  const slot = chartW / hours.length;
   const scale = containerWidth > 0 ? containerWidth / W : 0;
-
-  const x = (i: number) => PAD.left + i * slot + slot / 2;
-  const y = (v: number) => PAD.top + chartH - (v / max) * chartH;
-
-  const upper = hours.map(
-    (h, i) => `${x(i).toFixed(1)},${y(h.constrainedOff.p90).toFixed(1)}`,
-  );
-  const lower = hours
-    .map((h, i) => `${x(i).toFixed(1)},${y(h.constrainedOff.p10).toFixed(1)}`)
-    .reverse();
-  const bandPath = `M${upper.join(" L")} L${lower.join(" L")} Z`;
-  const medianPath = `M${hours
-    .map((h, i) => `${x(i).toFixed(1)},${y(h.constrainedOff.p50).toFixed(1)}`)
-    .join(" L")}`;
-  const observedPath =
-    observed === undefined
-      ? null
-      : `M${observed
-          .map((o, i) => `${x(i).toFixed(1)},${y(o.constrainedOffMwh).toFixed(1)}`)
-          .join(" L")}`;
 
   const active = activeSel === null ? null : Math.min(activeSel, hours.length - 1);
   const activeHour = active === null ? null : hours[active];
@@ -126,7 +94,7 @@ export function FanChart({
         </Defs>
 
         {GRID.map((g) => {
-          const gy = PAD.top + chartH * (1 - g);
+          const gy = PAD.top + CHART_H * (1 - g);
           return (
             <G key={g}>
               <Line
@@ -158,7 +126,7 @@ export function FanChart({
             x1={x(i)}
             x2={x(i)}
             y1={PAD.top}
-            y2={PAD.top + chartH}
+            y2={PAD.top + CHART_H}
             stroke={colors.violet}
             strokeWidth={slot}
             opacity={0.05 + 0.1 * h.occurrenceProbability}
@@ -226,7 +194,7 @@ export function FanChart({
               x1={x(active)}
               x2={x(active)}
               y1={PAD.top}
-              y2={PAD.top + chartH}
+              y2={PAD.top + CHART_H}
               stroke={colors.ink}
               strokeWidth={1}
               opacity={0.5}
@@ -259,8 +227,8 @@ export function FanChart({
             position: "absolute",
             left: PAD.left * scale,
             top: PAD.top * scale,
-            width: chartW * scale,
-            height: chartH * scale,
+            width: CHART_W * scale,
+            height: CHART_H * scale,
             flexDirection: "row",
           }}
         >

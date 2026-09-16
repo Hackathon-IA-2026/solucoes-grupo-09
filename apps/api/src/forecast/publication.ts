@@ -9,6 +9,7 @@ import {
 import { UpstreamError } from "../errors.js";
 import type { SubsystemCode } from "../ingest/normalise.js";
 import { digestValues } from "../ingest/versioned-write.js";
+import { isRecord } from "../json/shape.js";
 
 /**
  * A publication, on its way into Postgres.
@@ -181,10 +182,6 @@ export class PublicationPayloadError extends UpstreamError {
     super(`publication payload: ${message}`);
     this.name = "PublicationPayloadError";
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function num(source: Record<string, unknown>, field: string, where: string): number {

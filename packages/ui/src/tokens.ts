@@ -79,7 +79,23 @@ const dark: Palette = {
   surfaceSunken: "#26262B",
   ink: "#F7F7F7",
   inkMuted: "#A2A2AC",
-  inkFaint: "#87878F",
+  /*
+    `#87878F` until the palette was measured against WCAG AA rather than
+    eyeballed. On `surfaceSunken` — the sunken card the honesty notes, the
+    split tracks and most footnotes sit on — it was **4.23:1**, under the 4.5
+    floor for body text, and footnotes are the smallest text this product sets.
+    It passed on the other three surfaces (5.20, 4.97, 4.82), which is why it
+    survived: the failure needed the faintest ink and the lightest card at the
+    same time, and nothing rendered that pair on a screen an automated check
+    was looking at.
+
+    `#8F8F97` is the smallest change with margin: 4.69 on `surfaceSunken`, 5.78
+    / 5.52 / 5.35 on the rest. It stays plainly below `inkMuted` — the three
+    inks are still three steps — so nothing about the hierarchy moves.
+    `test/contrast.test.ts` measures every ink against every surface and would
+    have caught this on the day the token was written.
+  */
+  inkFaint: "#8F8F97",
   border: "rgba(255, 255, 255, 0.08)",
   borderStrong: "rgba(255, 255, 255, 0.14)",
   accent: "#D0F244",

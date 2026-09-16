@@ -62,6 +62,7 @@ import type {
 import { useEffect, useState } from "react";
 import { refusalOf } from "@/lib/absence";
 import { api } from "@/lib/api";
+import { settleWith } from "@/lib/settle";
 
 /** The reliability curve, or the reason there is none. */
 export type ModelCardState =
@@ -136,7 +137,13 @@ export function useExplain(query: ExplainQuery): ExplainState {
 
   useEffect(() => {
     const controller = new AbortController();
+    const settle = settleWith(controller.signal, setState);
     const signal = controller.signal;
+    // The first statement of a fetch effect, not a cascade: the key changed,
+    // so the answer on screen is about a question nobody is asking any more
+    // and saying so is the point. Deriving it before render cannot work —
+    // "reading" is a fact about a request that render did not make.
+    // react-doctor-disable-next-line react-hooks-js/set-state-in-effect
     setState({ status: "reading" });
 
     // The most recent local day that can have settled. ONS publishes the
@@ -179,23 +186,17 @@ export function useExplain(query: ExplainQuery): ExplainState {
         try {
           diagnosed = await day;
         } catch (cause: unknown) {
-          if (!signal.aborted) {
-            setState({
-              status: "observedOnly",
-              observed: settledExplain,
-              code: refusalOf(cause),
-            });
-          }
+          settle({
+            status: "observedOnly",
+            observed: settledExplain,
+            code: refusalOf(cause),
+          });
           return;
         }
-        if (!signal.aborted) {
-          setState({ status: "explained", observed: settledExplain, day: diagnosed });
-        }
+        settle({ status: "explained", observed: settledExplain, day: diagnosed });
       })
       .catch((cause: unknown) => {
-        if (!signal.aborted) {
-          setState({ status: "refused", code: refusalOf(cause) });
-        }
+        settle({ status: "refused", code: refusalOf(cause) });
       });
 
     // Handled inside the chain above, but only on a later tick — see the same

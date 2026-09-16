@@ -26,6 +26,7 @@ import type { Database } from "../database/connection.js";
 import { database } from "../database/connection.js";
 import { type PublishedOrigin, readLatestPublished } from "../forecast/reads.js";
 import { readSourceFreshness } from "../ingest/index.js";
+import { isRecord } from "../json/shape.js";
 import { callMl, type MlEndpoint } from "./ml-proxy.js";
 import { applyCachePolicy, CACHE_POLICIES } from "./plugins/cache-policy.js";
 
@@ -182,10 +183,6 @@ interface MlMeta {
   };
   declines?: unknown;
   caveats?: unknown;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** A field the modelling service reports as prose, or nothing at all. */

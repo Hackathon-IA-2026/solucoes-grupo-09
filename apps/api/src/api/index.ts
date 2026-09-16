@@ -2,8 +2,11 @@ import { createHash } from "node:crypto";
 import { cors } from "@elysiajs/cors";
 import { serverTiming } from "@elysiajs/server-timing";
 import { swagger } from "@elysiajs/swagger";
+import { sql } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { config } from "../config.js";
+import { canonicalViewNames } from "../database/canonical-views.js";
+import type { Database } from "../database/connection.js";
 import { database } from "../database/connection.js";
 import { loggableError } from "../errors.js";
 import { canonicalReads } from "./canonical.js";
@@ -69,14 +72,63 @@ const BANNER_VERSION = createHash("sha256")
   .slice(0, 16);
 
 /**
- * Readiness: when a database is configured it must answer before we accept
- * traffic. With no database configured there is nothing to warm up.
+ * Readiness: when a database is configured it must answer **and** carry the
+ * schema this build reads. With no database configured there is nothing to warm
+ * up.
+ *
+ * Returns the missing views rather than a boolean, because "not ready" is a
+ * question an operator then has to go and answer and the process already knows
+ * which migration has not run. One function so the handler cannot compute the
+ * verdict and the explanation by two different routes.
  */
-async function ready(): Promise<boolean> {
+async function readiness(): Promise<{ ready: boolean; missing: string[] }> {
   if (!database) {
-    return true;
+    return { ready: true, missing: [] };
   }
-  return database.ping();
+  if (!(await database.ping())) {
+    return { ready: false, missing: [] };
+  }
+  const missing = await missingCanonicalViews(database.db);
+  return { ready: missing.length === 0, missing };
+}
+
+/**
+ * The canonical views this build selects from that the database does not have.
+ *
+ * **Readiness is not "the database answered".** It was, and that left one
+ * ordering unguarded: this repo applies migrations out of band — nothing in
+ * `apps/api/Dockerfile` runs `db:migrate`, the `CMD` starts the server — so a
+ * deploy can reach production ahead of the schema it needs. A process in that
+ * state pings fine and then 500s every request that touches the missing view.
+ * That is not hypothetical here: `0051` adds
+ * `canonical_latest_complete_settled_hour` and `GET /v1/grid/now` selects from
+ * it, so the API shipping first would take the Overview's first call down.
+ *
+ * Asking the catalogue is cheap, runs on `/ready` rather than per request, and
+ * is derived from the schema module — see `canonicalViewNames`. A view added
+ * tomorrow is covered the day it is declared, and a *name* returned here is
+ * worth more than a boolean: an operator reading the body is told which
+ * migration has not run.
+ *
+ * **It is not wired to the platform healthcheck, and that is a decision for
+ * whoever owns the deploy.** Railway is pointed at `/health`, which is liveness
+ * — "this process answered" — so a schema-behind deploy currently goes live and
+ * fails at request time rather than failing the check and leaving the previous
+ * version serving. Pointing `healthcheckPath` at `/ready` closes that, and is
+ * an infrastructure change rather than a code one.
+ */
+async function missingCanonicalViews(db: Database): Promise<string[]> {
+  const declared = canonicalViewNames();
+  // Every view in the schema, then the difference taken here — rather than
+  // binding the expected names as a parameter. The array form is one round
+  // trip either way, `information_schema.views` in this schema is a list of
+  // twenty-odd rows, and passing a string array through the driver as a
+  // `text[]` is the kind of cast that works until a driver version changes.
+  const rows = await db.execute<{ table_name: string }>(sql`
+    select table_name from information_schema.views where table_schema = 'public'
+  `);
+  const present = new Set([...rows].map((row) => row.table_name));
+  return declared.filter((name) => !present.has(name));
 }
 
 /**
@@ -188,11 +240,15 @@ export const app = new Elysia()
       // 503 is set here on its own body and never passes through `errors.ts`,
       // so the error row's `refuseToCache` never sees this route.
       applyCachePolicy({ set, request }, CACHE_POLICIES.readiness);
-      const isReady = await ready();
+      const { ready: isReady, missing } = await readiness();
       if (!isReady) {
         set.status = 503;
       }
-      return { ready: isReady };
+      // The names, not a boolean: "not ready" is a question an operator then
+      // has to go and answer, and the process already knows which migration
+      // has not run. Absent when there is nothing missing, so the healthy body
+      // stays the one shape every caller already parses.
+      return missing.length === 0 ? { ready: isReady } : { ready: isReady, missing };
     },
     { detail: { summary: "Readiness — database reachable when configured" } },
   )

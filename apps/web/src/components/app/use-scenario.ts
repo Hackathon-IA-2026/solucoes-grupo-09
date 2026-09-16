@@ -120,6 +120,10 @@ export function useScenario(
   const write = useCallback((next: Scenario) => {
     try {
       router.setParams({ [SCENARIO_PARAM]: writeScenario(next) });
+      // Clearing a refusal the reader has just superseded by editing. A
+      // response to an event, not state adjusted to a prop: the only thing that
+      // reaches this line is `write` being called.
+      // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change
       setWriteRefusal(null);
     } catch (cause) {
       // The one refusal an *edit* can produce: a scenario too large to be a
@@ -155,6 +159,10 @@ export function useScenario(
   // per scenario is `SUBSYSTEM_MISMATCH`, so the assets move with it.
   useEffect(() => {
     if (raw === undefined) {
+      // Writing the default scenario into the URL when the link carries
+      // none, because on these screens the address bar *is* the scenario —
+      // a URL with no `s=` is a screen whose state cannot be shared.
+      // react-doctor-disable-next-line react-hooks-js/set-state-in-effect
       write(fallback);
       return;
     }

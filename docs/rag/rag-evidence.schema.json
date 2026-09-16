@@ -23,12 +23,7 @@
     },
     "subsystem": {
       "type": "string",
-      "enum": [
-        "N",
-        "NE",
-        "SE",
-        "S"
-      ]
+      "enum": ["N", "NE", "SE", "S"]
     },
     "target_date": {
       "type": "string",
@@ -47,18 +42,11 @@
     },
     "verdict": {
       "type": "string",
-      "enum": [
-        "found",
-        "insufficient",
-        "not_found"
-      ],
+      "enum": ["found", "insufficient", "not_found"],
       "description": "found = ao menos um claim com citação válida; insufficient = houve trechos mas nenhum claim passou nos gates; not_found = nada aplicável (NA-01), ver reason."
     },
     "reason": {
-      "type": [
-        "string",
-        "null"
-      ],
+      "type": ["string", "null"],
       "enum": [
         "no_public_intervention_schedule",
         "corpus_no_coverage_for_date",
@@ -75,13 +63,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "claim",
-          "supports",
-          "confidence",
-          "evidence_weight",
-          "citations"
-        ],
+        "required": ["claim", "supports", "confidence", "evidence_weight", "citations"],
         "properties": {
           "claim": {
             "type": "string",
@@ -91,21 +73,12 @@
           },
           "supports": {
             "type": "string",
-            "enum": [
-              "REL",
-              "CNF",
-              "ENE",
-              "NONE"
-            ],
+            "enum": ["REL", "CNF", "ENE", "NONE"],
             "description": "Que causa a evidência apoia. É informação para a regra, não decisão."
           },
           "confidence": {
             "type": "string",
-            "enum": [
-              "high",
-              "medium",
-              "low"
-            ],
+            "enum": ["high", "medium", "low"],
             "description": "REL sem cronograma público nunca passa de medium (D09/NA-01)."
           },
           "evidence_weight": {
@@ -115,10 +88,7 @@
             "description": "Peso de exibição definido pelo Bisogno (REL 0,7-0,9; CNF 0,4-0,6; ENE 0,2-0,4). Nunca entra no classificador."
           },
           "period": {
-            "type": [
-              "object",
-              "null"
-            ],
+            "type": ["object", "null"],
             "additionalProperties": false,
             "properties": {
               "start": {
@@ -179,47 +149,29 @@
                   "additionalProperties": false,
                   "properties": {
                     "page": {
-                      "type": [
-                        "integer",
-                        "null"
-                      ],
+                      "type": ["integer", "null"],
                       "minimum": 1
                     },
                     "section": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
+                      "type": ["string", "null"],
                       "maxLength": 120,
                       "description": "Ex.: '§7.1', 'Submódulo 4.2 item 5.3'."
                     },
                     "table": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
+                      "type": ["string", "null"],
                       "maxLength": 120,
                       "description": "Ex.: 'BDO 12_MotivoDespachoTermico' para tabelas do BDO."
                     },
                     "row": {
-                      "type": [
-                        "integer",
-                        "null"
-                      ],
+                      "type": ["integer", "null"],
                       "minimum": 0
                     },
                     "bbox": {
-                      "type": [
-                        "object",
-                        "null"
-                      ],
+                      "type": ["object", "null"],
                       "description": "Coordenadas normalizadas do bloco na página, quando o parser as devolve."
                     },
                     "kind": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     }
                   },
                   "description": "Ao menos um de page, section ou table precisa ser não nulo (validado no gate)."
@@ -240,23 +192,14 @@
                   "description": "sha256 do documento bruto, para o replay reproduzir a mesma evidência."
                 },
                 "chunk_id": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
+                  "type": ["string", "null"]
                 },
                 "external_id": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
+                  "type": ["string", "null"],
                   "description": "Código do documento, por exemplo IO-ON.NE.2SO."
                 },
                 "revision": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
+                  "type": ["string", "null"],
                   "description": "Revisão publicada, por exemplo Rev.146."
                 },
                 "assembled": {
@@ -271,29 +214,16 @@
       }
     },
     "rule_disagreement": {
-      "type": [
-        "object",
-        "null"
-      ],
+      "type": ["object", "null"],
       "additionalProperties": false,
       "properties": {
         "rule_cause": {
           "type": "string",
-          "enum": [
-            "REL",
-            "CNF",
-            "ENE",
-            "NA"
-          ]
+          "enum": ["REL", "CNF", "ENE", "NA"]
         },
         "evidence_cause": {
           "type": "string",
-          "enum": [
-            "REL",
-            "CNF",
-            "ENE",
-            "NONE"
-          ]
+          "enum": ["REL", "CNF", "ENE", "NONE"]
         },
         "note": {
           "type": "string",
@@ -320,11 +250,7 @@
     "trace": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "trace_id",
-        "retrieval",
-        "generation"
-      ],
+      "required": ["trace_id", "retrieval", "generation"],
       "properties": {
         "trace_id": {
           "type": "string"
@@ -332,11 +258,7 @@
         "retrieval": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "hybrid_candidates",
-            "reranked",
-            "rerank_provider"
-          ],
+          "required": ["hybrid_candidates", "reranked", "rerank_provider"],
           "properties": {
             "hybrid_candidates": {
               "type": "integer",
@@ -347,10 +269,7 @@
               "minimum": 0
             },
             "rerank_provider": {
-              "type": [
-                "string",
-                "null"
-              ],
+              "type": ["string", "null"],
               "description": "null quando o rerank foi pulado por cota (on_exhausted: skip_rerank)."
             },
             "filters": {
@@ -368,24 +287,13 @@
         "generation": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "provider",
-            "model",
-            "attempts",
-            "source"
-          ],
+          "required": ["provider", "model", "attempts", "source"],
           "properties": {
             "provider": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
             },
             "model": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
             },
             "attempts": {
               "type": "integer",
@@ -393,11 +301,7 @@
             },
             "source": {
               "type": "string",
-              "enum": [
-                "model",
-                "template",
-                "none"
-              ]
+              "enum": ["model", "template", "none"]
             },
             "gate_failures": {
               "type": "array",
@@ -423,10 +327,7 @@
           }
         },
         "retry_at": {
-          "type": [
-            "number",
-            "null"
-          ],
+          "type": ["number", "null"],
           "description": "Instante em que o trabalho pode continuar, quando a cota acabou."
         }
       }

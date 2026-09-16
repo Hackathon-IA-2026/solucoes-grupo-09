@@ -475,7 +475,14 @@ export function ScreenTitle({
         gap: space.lg,
       }}
     >
-      <View style={{ gap: 6, flexGrow: 1, flexBasis: 320 }}>
+      {/*
+        `flexShrink: 1` beside the grow, because react-native-web defaults
+        `flexShrink` to **0** where CSS defaults it to 1. Without it this column
+        sits at its `flexBasis` or wider and never gives width back, so at 400px
+        the lede ran to 609px inside a 360px box and the remainder was clipped —
+        the same defect `PanelHeader` carried, from the same default.
+      */}
+      <View style={{ gap: 6, flexGrow: 1, flexShrink: 1, flexBasis: 320 }}>
         <Text
           style={{
             fontSize: 28,

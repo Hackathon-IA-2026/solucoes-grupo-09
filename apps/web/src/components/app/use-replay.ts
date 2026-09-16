@@ -54,6 +54,7 @@ import { useEffect, useState } from "react";
 import { refusalOf } from "@/lib/absence";
 import { api } from "@/lib/api";
 import { REPLAY_LANE } from "@/lib/replay";
+import { settleWith } from "@/lib/settle";
 import { useLatest } from "@/lib/use-latest";
 
 export type ReplayState =
@@ -84,19 +85,24 @@ export function useReplay(scenario: Scenario | null): ReplayState {
   // is an input to the effect, not a trigger for it. The bytes are the trigger.
   const latest = useLatest(scenario);
 
+  // The `setState` after the await is guarded by `controller.signal.aborted`
+  // on every branch below — which is the check this rule is asking for, made
+  // against the abort the effect's own teardown fires.
+  // react-doctor-disable-next-line react-doctor/no-set-state-after-await-in-effect
   useEffect(() => {
     const asked = latest.current;
     if (key === null || asked === null) {
       return;
     }
     const controller = new AbortController();
+    const settle = settleWith(controller.signal, setState);
+    // The opening statement of a fetch effect — see `use-explain.ts`.
+    // react-doctor-disable-next-line react-hooks-js/set-state-in-effect
     setState({ status: "replaying" });
     api
       .replay({ d: asked.targetDate, s: key, lane: REPLAY_LANE }, controller.signal)
       .then((replay) => {
-        if (!controller.signal.aborted) {
-          setState({ status: "replayed", replay });
-        }
+        settle({ status: "replayed", replay });
       })
       .catch(async (cause: unknown) => {
         if (controller.signal.aborted) {
@@ -116,16 +122,15 @@ export function useReplay(scenario: Scenario | null): ReplayState {
             { lane: REPLAY_LANE },
             controller.signal,
           );
-          if (!controller.signal.aborted) {
-            setState({ status: "observedOnly", view });
-          }
+          settle({ status: "observedOnly", view });
         } catch (second: unknown) {
-          if (!controller.signal.aborted) {
-            setState({ status: "refused", code: refusalOf(second) });
-          }
+          settle({ status: "refused", code: refusalOf(second) });
         }
       });
     return () => controller.abort();
+    // Same rule as `use-optimization.ts`: the bytes are the trigger, the
+    // scenario is an input, and `useLatest` keeps the two apart.
+    // react-doctor-disable-next-line react-doctor/exhaustive-deps
   }, [key]);
 
   return state;

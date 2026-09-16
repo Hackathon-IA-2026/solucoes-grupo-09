@@ -6,6 +6,7 @@ import { UpstreamError } from "../errors.js";
 import type { ForecastGateProfile, ForecastOriginKind } from "../forecast/publication.js";
 import type { SubsystemCode } from "../ingest/normalise.js";
 import { digestValues } from "../ingest/versioned-write.js";
+import { isRecord } from "../json/shape.js";
 
 /**
  * A published attribution, on its way into Postgres.
@@ -271,10 +272,6 @@ export class AttributionPayloadError extends UpstreamError {
     super(`attribution payload: ${message}`);
     this.name = "AttributionPayloadError";
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function num(source: Record<string, unknown>, field: string, where: string): number {

@@ -77,8 +77,16 @@ export function useAppParams(): AppParams & {
   // below then produces a second render whose values genuinely differ — which
   // React does apply. The cost is one frame of default selection on a deep link,
   // which is what an export with no server-side URL can honestly offer.
+  // Both rules below describe exactly what the seventy lines above explain
+  // this hook is *for*: a first client render that agrees with the export,
+  // and a second one that does not. Deriving the value before render is the
+  // version that was measured and shipped broken — React diffs a re-render
+  // against its own tree, not the DOM, so the correction never lands.
+  // react-doctor-disable-next-line react-doctor/rendering-hydration-no-flicker
   const [hydrated, setHydrated] = useState(false);
+  // react-doctor-disable-next-line react-doctor/rendering-hydration-no-flicker
   useEffect(() => {
+    // react-doctor-disable-next-line react-doctor/no-initialize-state, react-hooks-js/set-state-in-effect
     setHydrated(true);
   }, []);
   const params = parseAppParams(

@@ -45,10 +45,21 @@ export function ForecastStamp({
         flexWrap: "wrap",
         alignItems: "center",
         gap: 8,
+        // The row shrinks as well as its `Text`. Shrinking only the child is
+        // not enough: this box sizes to content first, so the child is never
+        // asked to give anything up.
+        flexShrink: 1,
       }}
     >
       <ClockIcon size={13} color={colors.inkFaint} />
-      <Text style={{ fontSize: 11, color: colors.inkFaint }}>
+      {/*
+        `flexShrink: 1`, because react-native-web defaults it to **0** where CSS
+        defaults it to 1. Without it this line sizes to its content and never
+        wraps: measured at 400px, the forecast stamp ran to 609px inside a 360px
+        column and the remainder was clipped — and the remainder is the weather
+        run, which is half of what the stamp exists to name.
+      */}
+      <Text style={{ fontSize: 11, color: colors.inkFaint, flexShrink: 1 }}>
         {fill(copy.app.stamp.published, {
           producer: producerLabel[origin.producer],
           run: origin.runLabel,
@@ -193,10 +204,21 @@ export function SolveStamp({
         flexWrap: "wrap",
         alignItems: "center",
         gap: 8,
+        // The row shrinks as well as its `Text`. Shrinking only the child is
+        // not enough: this box sizes to content first, so the child is never
+        // asked to give anything up.
+        flexShrink: 1,
       }}
     >
       <ClockIcon size={13} color={colors.inkFaint} />
-      <Text style={{ fontSize: 11, color: colors.inkFaint }}>
+      {/*
+        `flexShrink: 1`, because react-native-web defaults it to **0** where CSS
+        defaults it to 1. Without it this line sizes to its content and never
+        wraps: measured at 400px, the forecast stamp ran to 609px inside a 360px
+        column and the remainder was clipped — and the remainder is the weather
+        run, which is half of what the stamp exists to name.
+      */}
+      <Text style={{ fontSize: 11, color: colors.inkFaint, flexShrink: 1 }}>
         {fill(copy.app.stamp.optimisedAgainst, { when: f.dateTime(forecastOrigin) })}
         {fill(copy.app.stamp.threshold, { mw: f.number(thresholdMw) })}
       </Text>
@@ -249,10 +271,21 @@ export function ObservedStamp({
         flexWrap: "wrap",
         alignItems: "center",
         gap: 8,
+        // The row shrinks as well as its `Text`. Shrinking only the child is
+        // not enough: this box sizes to content first, so the child is never
+        // asked to give anything up.
+        flexShrink: 1,
       }}
     >
       <ClockIcon size={13} color={colors.inkFaint} />
-      <Text style={{ fontSize: 11, color: colors.inkFaint }}>
+      {/*
+        `flexShrink: 1`, because react-native-web defaults it to **0** where CSS
+        defaults it to 1. Without it this line sizes to its content and never
+        wraps: measured at 400px, the forecast stamp ran to 609px inside a 360px
+        column and the remainder was clipped — and the remainder is the weather
+        run, which is half of what the stamp exists to name.
+      */}
+      <Text style={{ fontSize: 11, color: colors.inkFaint, flexShrink: 1 }}>
         {fill(copy.app.observed.stamp, {
           when: f.dateTime(latestSettledHour),
           lag: f.number(lagHours),

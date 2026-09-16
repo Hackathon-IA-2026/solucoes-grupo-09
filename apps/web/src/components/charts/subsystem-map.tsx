@@ -49,24 +49,14 @@
  * projection and the simplification trade-off are all documented there.
  */
 
-import {
-  motion,
-  space,
-  useContainerWidth,
-  usePalette,
-  useReducedMotion,
-  webTransition,
-} from "@wattsteer/ui";
+import { space, useContainerWidth, usePalette, useReducedMotion } from "@wattsteer/ui";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { Platform, Text, View } from "react-native";
-import Svg, { G, Path, Rect, Text as SvgText } from "react-native-svg";
-import { clamp01, LEGEND_STOPS, observedFill } from "@/components/charts/observed-scale";
-import { riskColor } from "@/components/charts/risk-class";
-import { useCopy, useFormat } from "@/i18n";
-import { fill } from "@/i18n/format";
+import { Text, View } from "react-native";
+import Svg, { G, Path, Text as SvgText } from "react-native-svg";
+import { regionHandlers, settleArrowFocus } from "@/components/charts/region-handlers";
+import { MapLegend, useRegionPaint } from "@/components/charts/region-paint";
+import { useCopy } from "@/i18n";
 import {
-  type RiskClass,
-  roundProbability,
   SUBSYSTEM_DISPLAY_ORDER,
   type SubsystemCode,
   subsystemMeta,
@@ -94,127 +84,6 @@ const FONT =
 const MAX_WIDTH = 380;
 
 /**
- * Which way each arrow key walks the four regions.
- *
- * One ring in `SUBSYSTEM_DISPLAY_ORDER` rather than a true 2-D adjacency graph.
- * Four regions do not form a grid — N is north-west, NE is north-east, SE/CO is
- * the middle and S is the tail — so a geographic mapping would have to answer
- * "what is east of S?" with something invented, and a reader pressing the same
- * key twice would arrive somewhere that depends on where they started. A ring
- * is learnable in two presses and is the order the rows beside the map are
- * already in, so the keyboard walks the list the eye walks.
- */
-const ARROW_STEP: Record<string, number> = {
-  ArrowRight: 1,
-  ArrowDown: 1,
-  ArrowLeft: -1,
-  ArrowUp: -1,
-};
-
-/**
- * Move the browser's focus to another region's path.
- *
- * Arrow keys change the selection, and a selection the keyboard has moved to
- * without taking focus with it leaves the focus ring on the region the reader
- * has left — so the visible marker and the live selection would disagree, which
- * is precisely the confusion this screen is being fixed for.
- *
- * Scoped to the map's own container rather than found by document id: the
- * landing page has already been bitten once by a document-wide
- * `getElementById` resolving to a stale duplicate of a screen that was still
- * mounted (`e2e/landing-scroll.spec.ts` documents it), and a second Overview in
- * the stack would give this the same two candidates.
- *
- * Called from an effect and never from the key handler — see `keyboardTarget`
- * below for why.
- */
-/**
- * Put focus on a region's path, and say whether it is already there.
- *
- * Scoped to the map's own container rather than found by document id: the
- * landing page has already been bitten once by a document-wide
- * `getElementById` resolving to a stale duplicate of a screen that was still
- * mounted (`e2e/landing-scroll.spec.ts` documents it), and a second Overview in
- * the stack would give this the same two candidates.
- */
-function focusRegion(host: unknown, code: SubsystemCode): "held" | "asked" | "absent" {
-  const container = host as { querySelector?: (s: string) => unknown } | null;
-  const target = container?.querySelector?.(`[data-region="${code}"]`) as
-    | { focus?: () => void; matches?: (selector: string) => boolean }
-    | null
-    | undefined;
-  if (target === null || target === undefined) {
-    return "absent";
-  }
-  if (target.matches?.(":focus") === true) {
-    return "held";
-  }
-  target.focus?.();
-  return "asked";
-}
-
-/**
- * The region an arrow key asked for, parked **outside the component** on
- * purpose, and held until focus actually lands there.
- *
- * Writing the selection goes through `router.setParams`, and measured in
- * chromium against the real export that **remounts this whole subtree, more
- * than once**: the four `<path>` elements are replaced, the element the reader
- * was on is detached, and the browser drops focus to the document. Component
- * state and refs go with it, and a single `focus()` — however well timed — is
- * undone by the next remount.
- *
- * So the request outlives the instance that made it (module scope) *and*
- * outlives one commit (cleared only once the element reports it holds focus).
- * It terminates on its own: the re-focus happens on every commit until one of
- * them sticks, and commits stop.
- *
- * Every simpler shape of this looked like it worked and did not. Focusing
- * inside the key handler focuses the node about to be detached; an effect on
- * component state never runs on the new instance; clearing the request on the
- * first attempt loses it to the remount that follows. All three land the first
- * arrow press and silently drop the second, after which the arrows do nothing
- * at all because focus is on `<body>`.
- *
- * Read back only when it names the region actually selected, so two maps
- * mounted at once cannot steal each other's focus.
- */
-let pendingArrowFocus: SubsystemCode | null = null;
-
-/** The three-step glyph from the risk chip, in SVG. Never colour alone. */
-function Steps({
-  klass,
-  x,
-  y,
-  color,
-  dim,
-}: {
-  klass: RiskClass;
-  x: number;
-  y: number;
-  color: string;
-  dim: string;
-}) {
-  const level = { low: 1, elevated: 2, high: 3 }[klass];
-  const unit = 9;
-  return (
-    <G>
-      {[1, 2, 3].map((step) => (
-        <Rect
-          key={step}
-          x={x - 17 + (step - 1) * 12}
-          y={y - unit * step}
-          width={7}
-          height={unit * step}
-          rx={2}
-          fill={step <= level ? color : dim}
-        />
-      ))}
-    </G>
-  );
-}
-
-/**
  * Which of the two claims this map is making, and the rows behind it.
  *
  * A union and not a pair of optional props: `{ forecasts?, observed? }` has two
@@ -226,7 +95,7 @@ export type MapPaint =
   | { readonly kind: "observed"; readonly rows: readonly ObservedRow[] };
 
 /** One region, resolved to paint. Built once per render, per mode. */
-interface RegionPaint {
+export interface RegionPaint {
   /** The region's hue. Also its outline when neither selected nor focused. */
   readonly fill: string;
   /** What a screen reader says about this region. Mode-specific by design. */
@@ -276,7 +145,6 @@ export function SubsystemMap({
 }) {
   const colors = usePalette();
   const copy = useCopy();
-  const f = useFormat();
   const reduced = useReducedMotion();
   const [containerWidth, onLayout] = useContainerWidth();
   const setActive = (code: SubsystemCode | null) => onHoverChange?.(code);
@@ -305,97 +173,61 @@ export function SubsystemMap({
     asked for, and keeps a second mounted map out of it.
   */
   useEffect(() => {
-    if (
-      pendingArrowFocus === selected &&
-      focusRegion(host.current, selected) === "held"
-    ) {
-      pendingArrowFocus = null;
+    settleArrowFocus(selected, host);
+  });
+
+  /*
+    **`role="button"`, stamped on after mount, because it cannot be a prop.**
+
+    The four region paths already carry `aria-label`, `aria-pressed` and
+    `tabIndex` — and an SVG `<path>` has **no implicit ARIA role**, which makes
+    both of those attributes invalid where they sit: `aria-pressed` is only
+    allowed on a role that supports it, and `aria-label` is prohibited outright
+    on a roleless element. Lighthouse reports it as `aria-allowed-attr` plus
+    `aria-prohibited-attr` and it cost the Overview its perfect accessibility
+    score; a screen reader meeting these paths is told a label it is not
+    supposed to be told, on something with no role to act on.
+
+    It could not be fixed where the problem is. The comment on `handlers` below
+    records that `accessibilityRole: "button"` makes `react-native-web`'s
+    `propsToAccessibilityComponent` swap the host element for a real `<button>`,
+    which draws no geometry — all four regions vanish and the map is a grey
+    outline. That was re-checked here rather than taken on trust, and the raw
+    DOM spelling `role: "button"` was checked too, in case only the React Native
+    prop went through the mapping. **It does not**: with `role` passed as a
+    prop, `[data-region]` never appears in the document at all. Both spellings
+    are intercepted; the attribute has to arrive after React is finished.
+
+    So it arrives here, through the same `host` ref and the same
+    `[data-region]` query `focusRegion` above already uses — scoped to this
+    map's own subtree for the reason that function documents, because a second
+    Overview in the stack would otherwise be two candidates. No dependency
+    array, for the same reason the effect above has none: `setParams` remounts
+    this component, and the stamp has to survive onto the new instance.
+
+    Native is untouched. There the `accessibilityRole` in `handlers` is the
+    right prop and does the right thing; this runs only where there is a
+    document to query.
+  */
+  useEffect(() => {
+    const container = host.current as {
+      querySelectorAll?: (s: string) => unknown;
+    } | null;
+    const found = container?.querySelectorAll?.("[data-region]");
+    if (found === undefined || found === null) {
+      return;
+    }
+    for (const node of found as Iterable<{
+      setAttribute?: (k: string, v: string) => void;
+    }>) {
+      node.setAttribute?.("role", "button");
     }
   });
 
   const width = Math.min(containerWidth > 0 ? containerWidth : MAX_WIDTH, MAX_WIDTH);
   const height = (width * BRAZIL_VIEWBOX.height) / BRAZIL_VIEWBOX.width;
 
-  /**
-   * The largest settled figure on the map, which the ramp is relative to.
-   *
-   * Relative rather than absolute because there is no absolute ceiling for a
-   * settled day — a quiet fortnight and a record one would both wash out
-   * against a fixed maximum. The legend under the map states the top of the
-   * scale in megawatt-hours, so "darkest" is never read as "large" on its own.
-   */
-  const observedMax =
-    paint.kind === "observed"
-      ? Math.max(...paint.rows.map((row) => row.last24hMwh), 0)
-      : 0;
-
-  const painted = new Map<SubsystemCode, RegionPaint>(
-    paint.kind === "forecast"
-      ? paint.rows.map((row) => {
-          // The wire's class, never recomputed. `GET /v1/grid/outlook` carries
-          // both `risk_class` and the `risk_bins` it was cut with; deriving it
-          // again here from a local copy of the cut points would be a second
-          // opinion about the same number, and the two copies are kept in step
-          // by nothing.
-          const klass = row.riskClass;
-          const tone = riskColor(colors, klass);
-          const anchor = SUBSYSTEM_LABEL_ANCHOR[row.subsystem];
-          return [
-            row.subsystem,
-            {
-              fill: tone.fg,
-              label: fill(copy.app.overview.map.region, {
-                subsystem: subsystemMeta(row.subsystem).onsDisplayName,
-                risk: copy.app.risk[klass],
-                probability: f.percentPoints(roundProbability(row.occurrenceProbability)),
-              }),
-              glyph: (
-                <Steps
-                  klass={klass}
-                  x={anchor.x}
-                  y={anchor.y + 34}
-                  color={tone.fg}
-                  dim={colors.borderStrong}
-                />
-              ),
-            },
-          ] as const;
-        })
-      : paint.rows.map((row) => {
-          const anchor = SUBSYSTEM_LABEL_ANCHOR[row.subsystem];
-          const share = observedMax === 0 ? 0 : row.last24hMwh / observedMax;
-          return [
-            row.subsystem,
-            {
-              fill: observedFill(share, colors),
-              // Settled energy and the window it settled over — and no risk
-              // class, no probability and no mention of a day that has not
-              // happened. A screen reader must be able to tell the two maps
-              // apart as surely as an eye can.
-              label: fill(copy.app.overview.map.regionObserved, {
-                subsystem: subsystemMeta(row.subsystem).onsDisplayName,
-                mwh: f.compact(row.last24hMwh),
-              }),
-              // The figure itself, where the forecast map draws a binned glyph.
-              // A number on a region is the plainest possible statement that
-              // this is a measurement rather than a class.
-              glyph: (
-                <SvgText
-                  x={anchor.x}
-                  y={anchor.y + 30}
-                  textAnchor="middle"
-                  fontSize={26}
-                  fontWeight="600"
-                  fontFamily={FONT}
-                  fill={colors.ink}
-                >
-                  {`${f.compact(row.last24hMwh)} MWh`}
-                </SvgText>
-              ),
-            },
-          ] as const;
-        }),
-  );
+  const { observedMax, painted } = useRegionPaint(paint);
   const lift = LIFT[paint.kind];
 
   return (
@@ -433,7 +265,6 @@ export function SubsystemMap({
           const isSelected = code === selected;
           const isActive = code === active;
           const anchor = SUBSYSTEM_LABEL_ANCHOR[code];
-          const label = region.label;
 
           /*
             Hover and focus are the same restrained move the rows make: the fill
@@ -449,105 +280,6 @@ export function SubsystemMap({
             selection is what the four panels underneath are about.
           */
           const isFocused = code === focusedCode;
-          const handlers =
-            Platform.OS === "web"
-              ? ({
-                  tabIndex: 0,
-                  // **No `role: "button"` here, and that is the whole of a bug
-                  // this shipped with.** `react-native-svg` renders `Path`
-                  // through react-native-web's `createElement`, and
-                  // `propsToAccessibilityComponent` turns `role`/
-                  // `accessibilityRole` into the *host element*: `"button"`
-                  // produced a real `<button>` carrying `d`, `fill` and
-                  // `stroke` as unknown attributes. A `<button>` draws no
-                  // geometry, so all four regions vanished and the map showed
-                  // only its non-interactive interior-borders path — dark grey,
-                  // uncolourable and unclickable.
-                  //
-                  // `aria-*` and `tabIndex` do not go through that mapping, so
-                  // the path stays a path and is still focusable and announced.
-                  // The role is carried by `aria-pressed` plus the label, which
-                  // is what a screen reader reads either way.
-                  "aria-label": label,
-                  "aria-pressed": isSelected,
-                  // Queried by `focusRegion`, and not an `id`: ids are
-                  // document-wide and this map can be mounted twice.
-                  "data-region": code,
-                  onClick: () => {
-                    // A pointer already shows where it is, so a click never
-                    // asks for focus to be moved — and clears a request an
-                    // arrow left unconsumed.
-                    pendingArrowFocus = null;
-                    onSelect(code);
-                  },
-                  onPress: () => onSelect(code),
-                  onKeyDown: (event: {
-                    key: string;
-                    preventDefault: () => void;
-                    currentTarget?: unknown;
-                  }) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      onSelect(code);
-                      return;
-                    }
-                    const step = ARROW_STEP[event.key];
-                    if (step === undefined) {
-                      return;
-                    }
-                    // `preventDefault` because the map is inside the screen's
-                    // scroll view and an unhandled arrow scrolls the page —
-                    // which would move the map out from under the reader on the
-                    // very gesture meant to walk across it.
-                    event.preventDefault();
-                    const order = SUBSYSTEM_DISPLAY_ORDER;
-                    const at = order.indexOf(selected);
-                    const next = order[(at + step + order.length) % order.length];
-                    // Selection follows focus, deliberately. The panels below
-                    // are the answer to "which region", so a keyboard reader
-                    // who has to press Enter at every stop is being asked to
-                    // confirm a question they answered by arriving. It is also
-                    // what makes the arrow key *live*, which is the point.
-                    pendingArrowFocus = next;
-                    onSelect(next);
-                    setFocusedCode(next);
-                  },
-                  onMouseEnter: () => setActive(code),
-                  onMouseLeave: () => setActive(null),
-                  onFocus: () => {
-                    setFocusedCode(code);
-                    setActive(code);
-                  },
-                  onBlur: () => {
-                    setFocusedCode(null);
-                    setActive(null);
-                  },
-                  style: {
-                    cursor: "pointer",
-                    // **No `focusRing` here, and that is a bug this shipped
-                    // with.** `focusRing` sets a CSS `outline`, and a CSS
-                    // outline on an SVG element is drawn around its *bounding
-                    // box* — so focusing SE/CO painted a rectangle spanning
-                    // half the country, corner to corner, instead of tracing
-                    // the region. It was also keyed on `isActive`, which is
-                    // hover as well as focus, so a mouse produced it too.
-                    //
-                    // The indicator is the path's own `stroke` instead: it
-                    // follows the geometry, it is the same move selection
-                    // already makes, and there is nothing rectangular about it.
-                    // `outlineStyle: "none"` is explicit because the browser
-                    // draws its own ring on a focusable element otherwise, and
-                    // that ring is the same bounding box.
-                    outlineStyle: "none",
-                    ...(reduced ? {} : webTransition("fill-opacity", motion.fast)),
-                  },
-                } as object)
-              : ({
-                  onPress: () => onSelect(code),
-                  accessibilityRole: "button",
-                  accessibilityLabel: label,
-                } as object);
-
           return (
             <G key={code}>
               <Path
@@ -570,7 +302,15 @@ export function SubsystemMap({
                 }
                 strokeWidth={isFocused || isSelected ? 3.5 : 1.5}
                 strokeLinejoin="round"
-                {...handlers}
+                {...regionHandlers({
+                  code,
+                  label: region.label,
+                  selected,
+                  reduced,
+                  onSelect,
+                  setActive,
+                  setFocusedCode,
+                })}
               />
               {/*
                 The label and glyph sit above the hit path and take no events of
@@ -615,54 +355,7 @@ export function SubsystemMap({
         />
       </Svg>
 
-      {/*
-        The ramp, spelled out — and only in observed mode, which makes the
-        legend itself one more thing the two maps do not share.
-
-        The forecast map needs none: its three bins are named in words on every
-        row beside it, and a legend for a categorical scale that is already
-        written out four times would be decoration. A continuous scale has no
-        such anchor, so the top of it is stated as a number — without which
-        "darker" is a comparison with nothing.
-      */}
-      {paint.kind === "observed" ? (
-        <View
-          style={{
-            flexDirection: "row",
-            flexWrap: "wrap",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8,
-            marginTop: space.sm,
-          }}
-        >
-          <Text style={{ fontSize: 10, color: colors.inkFaint }}>
-            {copy.app.overview.map.legendLow}
-          </Text>
-          <View style={{ flexDirection: "row", gap: 2 }}>
-            {LEGEND_STOPS.map((stop) => (
-              <View
-                key={stop}
-                style={{
-                  width: 22,
-                  height: 8,
-                  borderRadius: 2,
-                  backgroundColor: observedFill(clamp01(stop), colors),
-                }}
-              />
-            ))}
-          </View>
-          <Text
-            style={{
-              fontSize: 10,
-              color: colors.inkFaint,
-              fontVariant: ["tabular-nums"],
-            }}
-          >
-            {`${f.compact(observedMax)} MWh`}
-          </Text>
-        </View>
-      ) : null}
+      <MapLegend paint={paint} observedMax={observedMax} />
 
       {/*
         The arrow keys are a real affordance now, so they are written down.
