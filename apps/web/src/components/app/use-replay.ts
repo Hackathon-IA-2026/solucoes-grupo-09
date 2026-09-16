@@ -50,10 +50,11 @@
 
 import { canonicalScenarioJson, type ErrorCode, encodeScenario } from "@wattsteer/core";
 import type { Replay, ReplayObservedOnly, Scenario } from "@wattsteer/core/api";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { refusalOf } from "@/lib/absence";
 import { api } from "@/lib/api";
 import { REPLAY_LANE } from "@/lib/replay";
+import { useLatest } from "@/lib/use-latest";
 
 export type ReplayState =
   | { readonly status: "replaying" }
@@ -81,8 +82,7 @@ export function useReplay(scenario: Scenario | null): ReplayState {
 
   // Read through a ref for the reason `use-optimization.ts` does: the scenario
   // is an input to the effect, not a trigger for it. The bytes are the trigger.
-  const latest = useRef(scenario);
-  latest.current = scenario;
+  const latest = useLatest(scenario);
 
   useEffect(() => {
     const asked = latest.current;

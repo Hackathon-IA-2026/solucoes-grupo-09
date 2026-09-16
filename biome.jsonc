@@ -61,6 +61,27 @@
   },
   "overrides": [
     {
+      // `useLatest` (apps/web/src/lib/use-latest.ts) returns a ref object, and a
+      // ref object's identity is stable for the life of the component — that is
+      // the entire point of it. Biome can see that for `useRef` because the name
+      // is built in; it cannot see it through a custom hook, so without this it
+      // asks every effect that reads `someRef.current` to list it as a
+      // dependency. Doing that would make the effect re-run on a value it was
+      // written specifically *not* to re-run on, which is the stale-closure bug
+      // the hook exists to avoid, inverted.
+      "includes": ["**"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "useExhaustiveDependencies": {
+              "level": "on",
+              "options": { "hooks": [{ "name": "useLatest", "stableResult": true }] }
+            }
+          }
+        }
+      }
+    },
+    {
       // The declined rules. Each one was enabled, its findings read, and turned
       // off here because the fix it wanted was worse than the finding — either
       // it fights a decision this codebase has already made on purpose, or the

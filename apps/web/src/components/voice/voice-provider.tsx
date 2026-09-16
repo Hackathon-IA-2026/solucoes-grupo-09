@@ -55,6 +55,7 @@ import { defaultScenario, readScenario, SCENARIO_PARAM } from "@/components/app/
 import { useServing } from "@/components/app/use-serving";
 import { useI18n } from "@/i18n";
 import { api } from "@/lib/api";
+import { useLatest } from "@/lib/use-latest";
 import { contextSentence, type VoiceScreen } from "@/lib/voice/context";
 import { executeTool, SCREEN_PATHS, type ToolCall } from "@/lib/voice/execute";
 import { voiceInstructions } from "@/lib/voice/instructions";
@@ -142,8 +143,11 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
    * is the same "the feature breaks when it works" failure §2.2 is about — one
    * layer down, and invisible, because every intent would still be a valid URL.
    */
-  const liveRef = useRef({ params, screen, locale, serving });
-  liveRef.current = { params, screen, locale, serving };
+  const liveSelection = useMemo(
+    () => ({ params, screen, locale, serving }),
+    [params, screen, locale, serving],
+  );
+  const liveRef = useLatest(liveSelection);
 
   /**
    * The prompt the model is holding right now: the standing rules with this
@@ -161,17 +165,16 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     locale,
     contextSentence({ locale, screen, params, serving }),
   );
-  const contextRef = useRef(context);
-  contextRef.current = context;
+  const contextRef = useLatest(context);
   /** The last block the session was actually told. See the effect below. */
   const sentContextRef = useRef<string | null>(null);
 
   const scenarioRaw = firstValue(rawParams[SCENARIO_PARAM]);
-  const scenarioRef = useRef<ReturnType<typeof readScenario> | null>(null);
-  scenarioRef.current = readScenario(
-    scenarioRaw,
-    defaultScenario(params.subsystem, params.date),
+  const scenarioReadout = useMemo(
+    () => readScenario(scenarioRaw, defaultScenario(params.subsystem, params.date)),
+    [scenarioRaw, params.subsystem, params.date],
   );
+  const scenarioRef = useLatest(scenarioReadout);
 
   const navigator: VoiceNavigator = useMemo(
     () => ({
@@ -207,7 +210,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       const intent = executeTool(
         call,
         live.params,
-        scenario?.ok === true ? scenario.scenario : undefined,
+        scenario.ok === true ? scenario.scenario : undefined,
       );
       performIntent(intent, navigator);
       setAction({ intent, at: Date.now() });

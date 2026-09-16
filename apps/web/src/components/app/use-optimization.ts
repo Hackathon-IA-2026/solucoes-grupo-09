@@ -29,11 +29,12 @@
 
 import { type ErrorCode, encodeScenario } from "@wattsteer/core";
 import type { Scenario } from "@wattsteer/core/api";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { refusalOf } from "@/lib/absence";
 import { api } from "@/lib/api";
 import type { MitigationStep } from "@/lib/fixtures";
 import { mitigationSteps, SOLVED_STEPS, stepScenario } from "@/lib/optimization";
+import { useLatest } from "@/lib/use-latest";
 
 export type OptimizationState =
   | { readonly status: "solving" }
@@ -57,8 +58,7 @@ export function useOptimization(scenario: Scenario | null): OptimizationState {
   // the solver actually answers, so an object rebuilt with identical contents
   // is the same question and must not re-solve. The scenario is read through a
   // ref for that reason — it is an input to the effect, not a trigger for it.
-  const latest = useRef(scenario);
-  latest.current = scenario;
+  const latest = useLatest(scenario);
 
   useEffect(() => {
     const asked = latest.current;
