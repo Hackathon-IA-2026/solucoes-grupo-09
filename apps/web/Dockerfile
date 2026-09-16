@@ -60,12 +60,25 @@ RUN bunx expo export --platform web && bun scripts/localize-export.ts
 
 # --- runtime stage: serve dist/ ---
 FROM oven/bun:1.3-slim AS runtime
+
+LABEL org.opencontainers.image.title="wattsteer-web" \
+      org.opencontainers.image.description="The static export and the server that routes it." \
+      org.opencontainers.image.source="https://github.com/vtorres/WattSteer" \
+      org.opencontainers.image.licenses="AGPL-3.0-or-later"
 WORKDIR /app
 ENV NODE_ENV=production \
     PORT=8080
-COPY --from=build /app/apps/web/dist ./dist
-COPY --from=build /app/apps/web/server.ts ./server.ts
-COPY --from=build /app/apps/web/scripts ./scripts
+COPY --from=build --chown=10001:10001 /app/apps/web/dist ./dist
+COPY --from=build --chown=10001:10001 /app/apps/web/server.ts ./server.ts
+COPY --from=build --chown=10001:10001 /app/apps/web/scripts ./scripts
+
+# **Not root.** This server reads a directory and writes nothing, which is the
+# easiest possible case for dropping privileges and therefore the least
+# defensible one to skip. Same uid as the other three images so one ECS or
+# Kubernetes policy covers all of them — `runAsNonRoot` checks a number.
+RUN groupadd --gid 10001 wattsteer \
+ && useradd --uid 10001 --gid 10001 --create-home wattsteer
+USER 10001:10001
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \

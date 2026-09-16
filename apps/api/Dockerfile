@@ -2,6 +2,14 @@
 # plain Bun base image rather than the browser image the template used.
 FROM oven/bun:1.3 AS base
 
+# Who built this, from what, and under which licence — read by registries, by
+# `docker scout`, and by ECR's image scanning. An image with no provenance is one
+# nobody can trace back to a commit when it misbehaves at 3am.
+LABEL org.opencontainers.image.title="wattsteer-api" \
+      org.opencontainers.image.description="The gateway: every published figure passes through it." \
+      org.opencontainers.image.source="https://github.com/vtorres/WattSteer" \
+      org.opencontainers.image.licenses="AGPL-3.0-or-later"
+
 ARG PORT=3000
 
 WORKDIR /app
@@ -32,6 +40,20 @@ COPY apps/api/src ./src
 
 ENV NODE_ENV=production \
     PORT=$PORT
+
+# **Not root.** `oven/bun` runs as root by default, and this service reaches a
+# database and an object store with credentials from the environment: a process
+# that does not need to write to the image should not be able to. `apps/ml` and
+# `apps/rag` drop to the same uid from their entrypoints; these two had no
+# equivalent, so they ran as root everywhere they were deployed.
+#
+# 10001 rather than a name, and the same number in all four images: AWS ECS task
+# definitions and Kubernetes `runAsUser` name a uid, not a user, and a
+# `runAsNonRoot` policy can only check the number.
+RUN groupadd --gid 10001 wattsteer \
+ && useradd --uid 10001 --gid 10001 --create-home wattsteer \
+ && chown -R wattsteer:wattsteer /app
+USER 10001:10001
 
 EXPOSE $PORT
 

@@ -8,6 +8,11 @@
 # Two stages so the runtime image carries no uv, no compilers and no dev group.
 FROM ghcr.io/astral-sh/uv:0.9.30-python3.12-bookworm-slim AS build
 
+LABEL org.opencontainers.image.title="wattsteer-ml" \
+      org.opencontainers.image.description="The forecaster: fits, gates and serves the hurdle mixture." \
+      org.opencontainers.image.source="https://github.com/vtorres/WattSteer" \
+      org.opencontainers.image.licenses="AGPL-3.0-or-later"
+
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never
@@ -29,12 +34,12 @@ WORKDIR /app
 # cold cache on the next dependency change. Locally the id is arbitrary, so the
 # same line builds under plain BuildKit and docker-compose.
 COPY pyproject.toml uv.lock ./
-RUN --mount=type=cache,id=s/f94e0b64-4a8a-4f2f-9b75-7d1af25cc10f-/root/.cache/uv,target=/root/.cache/uv \
+RUN --mount=type=cache,id=wattsteer-ml-uv,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev
 
 COPY src ./src
 COPY README.md ./
-RUN --mount=type=cache,id=s/f94e0b64-4a8a-4f2f-9b75-7d1af25cc10f-/root/.cache/uv,target=/root/.cache/uv \
+RUN --mount=type=cache,id=wattsteer-ml-uv,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
 

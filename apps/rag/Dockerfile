@@ -2,6 +2,11 @@
 # vision model and falls back to the text layer, and both are poppler.
 FROM python:3.12-slim
 
+LABEL org.opencontainers.image.title="wattsteer-rag" \
+      org.opencontainers.image.description="Evidence retrieval over the ONS public record." \
+      org.opencontainers.image.source="https://github.com/vtorres/WattSteer" \
+      org.opencontainers.image.licenses="AGPL-3.0-or-later"
+
 RUN apt-get update \
  && apt-get install -y --no-install-recommends poppler-utils ca-certificates \
  && rm -rf /var/lib/apt/lists/*
