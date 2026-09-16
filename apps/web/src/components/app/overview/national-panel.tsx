@@ -55,18 +55,13 @@ import { fill } from "@/i18n/format";
  * data, identical on both surfaces. Restating them under `copy.app.*` would be
  * two wordings of one claim, free to drift apart.
  */
-export function NationalPanel({ national }: { national: NationalOutlook }) {
+export function NationalFigureBlock({ national }: { national: NationalOutlook }) {
   const colors = usePalette();
   const copy = useCopy();
   const f = useFormat();
   return (
-    <Panel style={gradientBg(READOUT_WASH, colors.surface)}>
-      <PanelHeader
-        icon={<CalendarDaysIcon size={18} color={colors.inkMuted} />}
-        title={copy.app.overview.nationalTitle}
-        subtitle={copy.app.overview.nationalSubtitle}
-      />
-      <View style={{ marginTop: space.lg, gap: space.md }}>
+    <>
+      <View style={{ gap: space.md }}>
         {national.band === null ? (
           <ExpectationFigure
             label={copy.readout.nationalLabel}
@@ -92,7 +87,7 @@ export function NationalPanel({ national }: { national: NationalOutlook }) {
           {copy.readout.nationalGrainNote}
         </Text>
       </View>
-    </Panel>
+    </>
   );
 }
 

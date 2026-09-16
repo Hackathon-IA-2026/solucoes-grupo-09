@@ -16,20 +16,23 @@
  */
 
 import {
+  CalendarDaysIcon,
   FadeIn,
+  gradientBg,
   LayoutDashboardIcon,
   layout,
   MapIcon,
   Panel,
   PanelHeader,
   PieChartIcon,
+  READOUT_WASH,
   space,
   useContainerWidth,
   usePalette,
 } from "@wattsteer/ui";
 import { useState } from "react";
 import { Text, View } from "react-native";
-import { NationalPanel } from "@/components/app/overview/national-panel";
+import { NationalFigureBlock } from "@/components/app/overview/national-panel";
 import { SelectedRegion } from "@/components/app/selected-region";
 import { SubsystemRow } from "@/components/app/subsystem-row";
 import { useAppParams } from "@/components/app/use-app-params";
@@ -100,7 +103,82 @@ export function ForecastPanels({
   return (
     <>
       <FadeIn style={{ gap: space.md }}>
-        <NationalPanel national={forecast.outlook.national} />
+        {/* The landing's readout card: figure and subsystem list side by side,
+            a rule, then the hourly fan — one object, not four panels. */}
+        <Panel style={gradientBg(READOUT_WASH, colors.surface)}>
+          <PanelHeader
+            icon={<CalendarDaysIcon size={18} color={colors.inkMuted} />}
+            title={copy.app.overview.nationalTitle}
+            subtitle={copy.app.overview.nationalSubtitle}
+          />
+
+          <View
+            style={{
+              flexDirection: side ? "row" : "column",
+              gap: space.lg,
+              marginTop: space.lg,
+            }}
+          >
+            <View style={{ flex: side ? 1 : undefined, gap: space.md }}>
+              <NationalFigureBlock national={forecast.outlook.national} />
+            </View>
+
+            <View style={{ flex: side ? 1.15 : undefined, gap: space.md }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  flexWrap: "wrap",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: space.sm,
+                }}
+              >
+                <Text style={{ fontSize: 14, fontWeight: "600", color: colors.ink }}>
+                  {copy.readout.subsystemsTitle}
+                </Text>
+                <Text style={{ fontSize: 12, color: colors.inkFaint }}>
+                  {copy.readout.columnProbability}
+                </Text>
+              </View>
+              {rows.map((row) => (
+                <SubsystemRow
+                  key={row.subsystem}
+                  forecast={row}
+                  emphasis={params.technology}
+                  domainMax={domainMax}
+                  selected={row.subsystem === params.subsystem}
+                  highlighted={row.subsystem === active}
+                  onHoverChange={(on) => setHovered(on ? row.subsystem : null)}
+                  onPress={() => onSelect(row.subsystem)}
+                  onExplain={() => onExplain(row.subsystem)}
+                />
+              ))}
+              <Text style={{ fontSize: 11, lineHeight: 17, color: colors.inkFaint }}>
+                {copy.readout.additivityNote}
+              </Text>
+            </View>
+          </View>
+
+          <View
+            style={{
+              height: 1,
+              backgroundColor: colors.border,
+              marginVertical: space.lg,
+            }}
+          />
+
+          <View style={{ gap: space.md }}>
+            <PanelHeader
+              icon={<LayoutDashboardIcon size={18} color={colors.inkMuted} />}
+              title={meta.onsDisplayName}
+              subtitle={copy.app.overview.profileSubtitle}
+            />
+            <FanChart
+              hours={forecastHours(forecast.forecast)}
+              thresholdMw={forecast.forecast.thresholdMw}
+            />
+          </View>
+        </Panel>
       </FadeIn>
 
       <FadeIn delay={70} style={{ gap: space.md }} onLayout={onOverviewLayout}>
@@ -168,40 +246,8 @@ export function ForecastPanels({
               {copy.app.overview.map.boundaryNote}
             </Text>
           </Panel>
-
-          <View style={{ flex: side ? 1 : undefined, gap: space.md }}>
-            {rows.map((row) => (
-              <SubsystemRow
-                key={row.subsystem}
-                forecast={row}
-                emphasis={params.technology}
-                domainMax={domainMax}
-                selected={row.subsystem === params.subsystem}
-                highlighted={row.subsystem === active}
-                onHoverChange={(on) => setHovered(on ? row.subsystem : null)}
-                onPress={() => onSelect(row.subsystem)}
-                onExplain={() => onExplain(row.subsystem)}
-              />
-            ))}
-          </View>
         </View>
         <RiskCaveat />
-      </FadeIn>
-
-      <FadeIn delay={140}>
-        <Panel>
-          <PanelHeader
-            icon={<LayoutDashboardIcon size={18} color={colors.inkMuted} />}
-            title={meta.onsDisplayName}
-            subtitle={copy.app.overview.profileSubtitle}
-          />
-          <View style={{ marginTop: space.lg }}>
-            <FanChart
-              hours={forecastHours(forecast.forecast)}
-              thresholdMw={forecast.forecast.thresholdMw}
-            />
-          </View>
-        </Panel>
       </FadeIn>
 
       <FadeIn delay={210}>
