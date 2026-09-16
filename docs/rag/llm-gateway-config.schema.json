@@ -2,12 +2,15 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://wattsteer.com/schema/llm-gateway-config.schema.json",
   "title": "LlmGatewayConfig",
-  "description": "Configuração do gateway de provedores de LLM/embeddings/rerank do WattSteer (docs/rag/gateway.yaml). Adapters plugáveis, limites por provedor e por modelo, cadeias de fallback por tarefa. A aplicação orquestra as cotas; nunca quebra por limite de tier gratuito.",
+  "description": "Configuration of the WattSteer model gateway (docs/rag/gateway.yaml): pluggable adapters, limits per provider and per model, a fallback chain per task. The application orchestrates the quotas; a free tier running out is never an error.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "providers", "tasks", "behaviour"],
+  "required": ["version", "providers", "tasks"],
   "properties": {
-    "version": { "type": "integer", "const": 1 },
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
     "providers": {
       "type": "object",
       "minProperties": 1,
@@ -18,48 +21,48 @@
         "properties": {
           "kind": {
             "type": "string",
-            "enum": ["openai_compatible", "local", "bedrock", "template"]
+            "enum": ["openai_compatible"]
           },
-          "base_url": { "type": "string" },
+          "base_url": {
+            "type": "string"
+          },
           "api_key_env": {
             "type": ["string", "null"],
-            "description": "Nome da variável de ambiente com UMA chave. Nunca a chave."
+            "description": "Name of the environment variable holding ONE key. Never the key itself."
           },
           "api_keys_env": {
             "type": ["string", "null"],
-            "description": "Nome da variável com um POOL de chaves separadas por vírgula (uma por integrante do time). Opcional: uma chave só (ou api_key_env) funciona igual, o pool de 1 é o caso base. Resolução: api_keys_env, senão api_key_env, senão o provedor fica disabled e a cadeia pula para o próximo elo. Cada chave tem contadores e cooling próprios; o roteador escolhe a chave com mais folga e só troca de provedor quando todas as chaves esgotam. Nos logs a chave aparece só como key_id (8 primeiros hex do sha256)."
+            "description": "Name of the variable holding a POOL of comma separated keys (one per team member). Optional: a single key (or api_key_env) behaves the same, a pool of one is the base case. Resolution: api_keys_env, else api_key_env, else the provider is disabled and the chain skips to the next link. Every key has its own counters and cooling; the router picks the key with the most room and only moves to the next provider when every key is spent. Logs show a key only as key_id (first 8 hex of its sha256)."
           },
-          "key_selection": {
-            "type": "string",
-            "enum": ["least_loaded", "round_robin"],
-            "default": "least_loaded"
+          "timeout_s": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 600,
+            "default": 60
           },
-          "limits_scope": {
-            "type": "string",
-            "enum": ["per_key", "per_provider"],
-            "default": "per_key",
-            "description": "per_key: os limites valem para cada chave do pool (contas independentes). per_provider: o limite é compartilhado (mesma conta/org, ex. Groq limita por organização)."
+          "enabled": {
+            "type": "boolean",
+            "default": true
           },
-          "region": { "type": "string" },
-          "timeout_s": { "type": "integer", "minimum": 1, "maximum": 600, "default": 60 },
-          "enabled": { "type": "boolean", "default": true },
-          "budget_usd_day": {
-            "type": "number",
-            "minimum": 0,
-            "description": "Teto diário para elos pagos; ao atingir, o elo fica exhausted até o reset (fuso America/Sao_Paulo)."
+          "limits": {
+            "$ref": "#/definitions/limits"
           },
-          "limits": { "$ref": "#/definitions/limits" },
           "limits_per_model": {
             "type": "object",
-            "additionalProperties": { "$ref": "#/definitions/limits" }
+            "additionalProperties": {
+              "$ref": "#/definitions/limits"
+            }
           },
-          "extra": { "type": "object" }
+          "extra": {
+            "type": "object",
+            "description": "Provider specific switches the adapter understands, for example thinking_toggle for NVIDIA."
+          }
         }
       }
     },
     "tasks": {
       "type": "object",
-      "required": ["generate_strong", "generate_small", "embed", "rerank"],
+      "required": ["generate_strong", "embed", "parse"],
       "additionalProperties": {
         "type": "object",
         "additionalProperties": false,
@@ -73,57 +76,50 @@
               "additionalProperties": false,
               "required": ["provider"],
               "properties": {
-                "provider": { "type": "string" },
-                "model": { "type": "string" },
-                "max_input_tokens": { "type": "integer", "minimum": 256 }
+                "provider": {
+                  "type": "string"
+                },
+                "model": {
+                  "type": "string"
+                },
+                "max_input_tokens": {
+                  "type": "integer",
+                  "minimum": 256
+                }
               }
             }
           },
           "model": {
             "type": "string",
-            "description": "Para embed: o único modelo permitido em toda a cadeia (mesmo espaço vetorial). Validação: todo elo de embed precisa ter model equivalente."
+            "description": "For embed: the only model allowed in the whole chain (one vector space). Every embed link must name the same model."
           },
-          "dimensions": { "type": "integer", "minimum": 64 },
-          "batch_size": { "type": "integer", "minimum": 1 },
-          "top_n": { "type": "integer", "minimum": 1 },
+          "dimensions": {
+            "type": "integer",
+            "minimum": 64
+          },
+          "batch_size": {
+            "type": "integer",
+            "minimum": 1
+          },
           "require": {
             "type": "object",
             "additionalProperties": false,
             "properties": {
-              "json_schema": { "type": "boolean" },
-              "tools": { "type": "boolean" }
+              "json_schema": {
+                "type": "boolean"
+              }
             }
           },
-          "temperature": { "type": "number", "minimum": 0, "maximum": 2 },
-          "max_output_tokens": { "type": "integer", "minimum": 1 },
-          "on_exhausted": {
-            "type": "string",
-            "enum": ["waiting_quota", "template", "skip_rerank", "fail"],
-            "default": "waiting_quota"
+          "temperature": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 2
+          },
+          "max_output_tokens": {
+            "type": "integer",
+            "minimum": 1
           }
         }
-      }
-    },
-    "behaviour": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "counters",
-        "preflight",
-        "cooling_s_default",
-        "retry_same_link",
-        "invalid_json_counts_as_failure",
-        "log_table",
-        "quota_endpoint"
-      ],
-      "properties": {
-        "counters": { "type": "string", "enum": ["redis", "memory"] },
-        "preflight": { "type": "boolean" },
-        "cooling_s_default": { "type": "integer", "minimum": 1 },
-        "retry_same_link": { "type": "integer", "minimum": 0, "maximum": 2 },
-        "invalid_json_counts_as_failure": { "type": "boolean" },
-        "log_table": { "type": "string" },
-        "quota_endpoint": { "type": "string" }
       }
     }
   },
@@ -132,14 +128,26 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "rpm": { "type": "integer", "minimum": 1, "description": "requests por minuto" },
+        "rpm": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "requests per minute"
+        },
         "tpm": {
           "type": "integer",
           "minimum": 1,
-          "description": "tokens (entrada + saída) por minuto"
+          "description": "tokens (input + output) per minute"
         },
-        "rpd": { "type": "integer", "minimum": 1, "description": "requests por dia" },
-        "tpd": { "type": "integer", "minimum": 1, "description": "tokens por dia" }
+        "rpd": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "requests per day"
+        },
+        "tpd": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "tokens per day"
+        }
       }
     }
   }

@@ -2,8 +2,8 @@
 when none of them can.
 
 The rule the rest of the service depends on: a call either returns a result, or
-returns a `waiting_quota` outcome with the instant the work can resume. It never
-raises because a free tier ran out, and it never silently changes the model that
+raises `QuotaExhausted` with the instant the work can resume. It never fails
+because a free tier ran out, and it never silently changes the model that
 produced an embedding.
 """
 
@@ -18,12 +18,24 @@ from typing import Any
 import httpx
 import yaml
 
-from .adapters import Block, OpenAICompatibleAdapter, PopplerAdapter, ProviderError
+from .adapters import OpenAICompatibleAdapter, ProviderError
 from .limits import KeySlot, Ledger, load_keys
 
 log = logging.getLogger("wattsteer_rag.gateway")
 
 DEFAULT_COOLING_S = 60.0
+# A quota answers 429 and recovers; these say the request itself is wrong.
+NON_RETRYABLE = {400, 401, 403, 404, 405, 410, 422}
+CALLS_KEPT = 500
+
+
+class ProviderRefused(Exception):
+    """A link that will keep refusing: a bad key, an unknown model, a bad request.
+
+    Telling this apart from a spent quota matters. A wrong model name that is
+    treated as "no quota left" burns every key in the pool and then reports a
+    delay, when the honest answer is that the configuration is wrong.
+    """
 
 
 class QuotaExhausted(Exception):
@@ -45,7 +57,6 @@ class Result:
     latency_ms: int
     tokens_in: int = 0
     tokens_out: int = 0
-    source: str = "model"
 
 
 @dataclass
@@ -62,20 +73,26 @@ class Task:
     model: str | None = None
     dimensions: int | None = None
     batch_size: int = 32
-    top_n: int = 8
     temperature: float = 0.0
     max_output_tokens: int = 1000
     want_json: bool = False
-    on_exhausted: str = "waiting_quota"
 
 
 @dataclass
 class Provider:
     name: str
-    kind: str
-    adapter: Any
+    adapter: OpenAICompatibleAdapter
     keys: list[KeySlot] = field(default_factory=list)
     enabled: bool = True
+
+
+@dataclass
+class _Walk:
+    """What one `run` has learned so far, across links."""
+
+    attempts: int = 0
+    soonest: float = float("inf")
+    refusals: list[str] = field(default_factory=list)
 
 
 class Gateway:
@@ -94,41 +111,39 @@ class Gateway:
     def _load(self) -> None:
         raw = yaml.safe_load(self.config_path.read_text())
         for name, spec in (raw.get("providers") or {}).items():
-            kind = spec.get("kind", "openai_compatible")
-            keys = load_keys(name, spec.get("api_keys_env"), spec.get("api_key_env"))
-            if kind == "openai_compatible":
-                base = _expand(spec.get("base_url", ""))
-                adapter: Any = OpenAICompatibleAdapter(
-                    name, base, float(spec.get("timeout_s", 60)), self.user_agent
-                )
-            elif kind == "local":
-                adapter = PopplerAdapter()
-                keys = keys or [KeySlot(provider=name, secret="local")]
-            else:
-                # bedrock and template are declared in the config before they exist.
-                adapter = None
-            enabled = bool(spec.get("enabled", True)) and (adapter is not None) and bool(keys)
-            self.providers[name] = Provider(name, kind, adapter, keys, enabled)
+            self.providers[name] = self._provider(name, spec)
             self.ledger.configure(name, spec.get("limits"), spec.get("limits_per_model"))
-
         for name, spec in (raw.get("tasks") or {}).items():
-            chain = [
+            self.tasks[name] = self._task(name, spec)
+        self._check_embedding_identity()
+
+    def _provider(self, name: str, spec: dict) -> Provider:
+        adapter = OpenAICompatibleAdapter(
+            name,
+            spec.get("base_url", ""),
+            float(spec.get("timeout_s", 60)),
+            self.user_agent,
+            thinking_toggle=bool((spec.get("extra") or {}).get("thinking_toggle")),
+        )
+        keys = load_keys(name, spec.get("api_keys_env"), spec.get("api_key_env"))
+        # A provider without a key is not an error: it is a link the chain skips.
+        return Provider(name, adapter, keys, enabled=bool(spec.get("enabled", True)) and bool(keys))
+
+    @staticmethod
+    def _task(name: str, spec: dict) -> Task:
+        return Task(
+            name=name,
+            chain=[
                 Link(link["provider"], link.get("model", ""), link.get("max_input_tokens"))
                 for link in spec.get("chain", [])
-            ]
-            self.tasks[name] = Task(
-                name=name,
-                chain=chain,
-                model=spec.get("model"),
-                dimensions=spec.get("dimensions"),
-                batch_size=int(spec.get("batch_size", 32)),
-                top_n=int(spec.get("top_n", 8)),
-                temperature=float(spec.get("temperature", 0.0)),
-                max_output_tokens=int(spec.get("max_output_tokens", 1000)),
-                want_json=bool((spec.get("require") or {}).get("json_schema")),
-                on_exhausted=spec.get("on_exhausted", "waiting_quota"),
-            )
-        self._check_embedding_identity()
+            ],
+            model=spec.get("model"),
+            dimensions=spec.get("dimensions"),
+            batch_size=int(spec.get("batch_size", 32)),
+            temperature=float(spec.get("temperature", 0.0)),
+            max_output_tokens=int(spec.get("max_output_tokens", 1000)),
+            want_json=bool((spec.get("require") or {}).get("json_schema")),
+        )
 
     def _check_embedding_identity(self) -> None:
         """One embedding model per chain, always. Two would mean two vector spaces
@@ -153,9 +168,8 @@ class Gateway:
             self._client = None
 
     def usable_links(self, task_name: str) -> list[tuple[Link, Provider]]:
-        task = self.tasks[task_name]
         out = []
-        for link in task.chain:
+        for link in self.tasks[task_name].chain:
             provider = self.providers.get(link.provider)
             if provider and provider.enabled:
                 out.append((link, provider))
@@ -169,11 +183,7 @@ class Gateway:
             state = self.ledger.slot(provider.name, slot.id, model)
             if not state.room(tokens, now):
                 continue
-            headroom = 0.0
-            for window in (state.rpm, state.tpm, state.rpd, state.tpd):
-                if window is not None and window.limit:
-                    used = 0 if now >= window.resets_at else window.used
-                    headroom += (window.limit - used) / window.limit
+            headroom = state.headroom(now)
             if best is None or headroom > best[0]:
                 best = (headroom, slot)
         return best[1] if best else None
@@ -182,59 +192,64 @@ class Gateway:
 
     async def run(self, task_name: str, *, tokens: int = 0, **kwargs) -> Result:
         task = self.tasks[task_name]
-        attempts = 0
-        soonest = float("inf")
-        client = await self.client()
-
+        walk = _Walk()
         for link, provider in self.usable_links(task_name):
-            model = link.model or task.model or ""
             if link.max_input_tokens and tokens > link.max_input_tokens:
                 continue  # this link cannot hold the payload; not a failure
-            while True:
-                slot = self._pick_key(provider, model, tokens)
-                if slot is None:
-                    for key in provider.keys:
-                        state = self.ledger.slot(provider.name, key.id, model)
-                        soonest = min(soonest, state.next_free(time.time()))
-                    break
-                attempts += 1
-                started = time.perf_counter()
-                try:
-                    value, usage = await self._invoke(task, link, provider, slot, client, **kwargs)
-                except ProviderError as exc:
-                    state = self.ledger.slot(provider.name, slot.id, model)
-                    state.cool(exc.retry_after or DEFAULT_COOLING_S, time.time())
-                    self._record(task_name, provider.name, slot.id, model, attempts, 0, 0, str(exc))
-                    log.warning("gateway %s %s key=%s: %s", task_name, model, slot.id, exc)
-                    continue  # another key of the same link, then the next link
-                latency = int((time.perf_counter() - started) * 1000)
-                tokens_in = int(usage.get("prompt_tokens") or 0)
-                tokens_out = int(usage.get("completion_tokens") or 0)
-                self.ledger.slot(provider.name, slot.id, model).record(
-                    max(tokens, tokens_in + tokens_out), time.time()
-                )
-                self._record(
-                    task_name, provider.name, slot.id, model, attempts, tokens_in, tokens_out, None
-                )
-                return Result(
-                    value=value,
-                    provider=provider.name,
-                    model=model,
-                    key_id=slot.id,
-                    attempts=attempts,
-                    latency_ms=latency,
-                    tokens_in=tokens_in,
-                    tokens_out=tokens_out,
-                )
+            result = await self._run_link(task, link, provider, tokens, kwargs, walk)
+            if result is not None:
+                return result
+        if walk.refusals and walk.soonest == float("inf"):
+            raise ProviderRefused(f"{task_name}: every link refused ({'; '.join(walk.refusals)})")
+        retry_at = walk.soonest if walk.soonest != float("inf") else time.time() + DEFAULT_COOLING_S
+        raise QuotaExhausted(task_name, retry_at)
 
-        raise QuotaExhausted(task_name, soonest if soonest != float("inf") else time.time() + 60)
-
-    async def _invoke(
-        self, task: Task, link: Link, provider: Provider, slot: KeySlot, client, **kwargs
-    ):
+    async def _run_link(
+        self, task: Task, link: Link, provider: Provider, tokens: int, kwargs: dict, walk: _Walk
+    ) -> Result | None:
+        """Every key of one link, most room first. None means the link is spent or refused."""
         model = link.model or task.model or ""
+        while (slot := self._pick_key(provider, model, tokens)) is not None:
+            walk.attempts += 1
+            started = time.perf_counter()
+            try:
+                value, usage = await self._invoke(task, provider, model, slot, kwargs)
+            except ProviderError as exc:
+                self._record(task.name, provider.name, slot.id, model, walk.attempts, 0, 0, str(exc))
+                log.warning("gateway %s %s key=%s: %s", task.name, model, slot.id, exc)
+                if exc.status in NON_RETRYABLE:
+                    # Not a quota problem: the same request fails on every key.
+                    walk.refusals.append(f"{provider.name}:{model} HTTP {exc.status}")
+                    return None
+                state = self.ledger.slot(provider.name, slot.id, model)
+                state.cool(exc.retry_after or DEFAULT_COOLING_S, time.time())
+                continue  # another key of the same link, then the next link
+            tokens_in = int(usage.get("prompt_tokens") or 0)
+            tokens_out = int(usage.get("completion_tokens") or 0)
+            state = self.ledger.slot(provider.name, slot.id, model)
+            state.record(max(tokens, tokens_in + tokens_out), time.time())
+            self._record(task.name, provider.name, slot.id, model, walk.attempts, tokens_in, tokens_out, None)
+            return Result(
+                value=value,
+                provider=provider.name,
+                model=model,
+                key_id=slot.id,
+                attempts=walk.attempts,
+                latency_ms=int((time.perf_counter() - started) * 1000),
+                tokens_in=tokens_in,
+                tokens_out=tokens_out,
+            )
+        now = time.time()
+        for key in provider.keys:
+            walk.soonest = min(walk.soonest, self.ledger.slot(provider.name, key.id, model).next_free(now))
+        return None
+
+    async def _invoke(self, task: Task, provider: Provider, model: str, slot: KeySlot, kwargs: dict):
+        """Three verbs, chosen by the task: `embed`, `parse`, and everything else chats."""
+        client = await self.client()
+        adapter = provider.adapter
         if task.name == "embed":
-            return await provider.adapter.embed(
+            return await adapter.embed(
                 client,
                 slot.secret,
                 model=model,
@@ -242,12 +257,8 @@ class Gateway:
                 input_type=kwargs.get("input_type", "passage"),
             )
         if task.name == "parse":
-            if provider.kind == "local":
-                return provider.adapter.parse_pdf_page(kwargs["pdf_path"], kwargs["page"]), {}
-            return await provider.adapter.parse_page(
-                client, slot.secret, model=model, image=kwargs["image"]
-            )
-        return await provider.adapter.chat(
+            return await adapter.parse_page(client, slot.secret, model=model, image=kwargs["image"])
+        return await adapter.chat(
             client,
             slot.secret,
             model=model,
@@ -271,33 +282,14 @@ class Gateway:
                 "at": time.time(),
             }
         )
-        del self.calls[:-500]
+        del self.calls[:-CALLS_KEPT]
 
     def quota(self) -> dict:
         return {
             "providers": {
-                name: {
-                    "enabled": provider.enabled,
-                    "keys": len(provider.keys),
-                    "kind": provider.kind,
-                }
+                name: {"enabled": provider.enabled, "keys": len(provider.keys)}
                 for name, provider in self.providers.items()
             },
             "slots": self.ledger.snapshot(),
             "recent_calls": self.calls[-20:],
         }
-
-
-def _expand(value: str) -> str:
-    """Support ${VAR:-default} in the config without pulling in a template engine."""
-    import os
-    import re as _re
-
-    def replace(match: _re.Match[str]) -> str:
-        name, _, default = match.group(1).partition(":-")
-        return os.environ.get(name, default)
-
-    return _re.sub(r"\$\{([^}]+)\}", replace, value)
-
-
-__all__ = ["Gateway", "QuotaExhausted", "Result", "Block", "ProviderError"]

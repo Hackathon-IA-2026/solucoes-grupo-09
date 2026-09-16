@@ -87,38 +87,42 @@ def split_page(markdown: str) -> list[tuple[str | None, str]]:
 def chunk_pages(pages: list[dict]) -> list[Chunk]:
     """`pages` are dicts with page_no, markdown and the parser's blocks."""
     chunks: list[Chunk] = []
-    ordinal = 0
     for page in pages:
         for section, text in split_page(page["markdown"]):
             for piece in _slice(text):
-                if len(piece) < MIN_CHARS and chunks and not _is_table(piece):
-                    # Too small to stand alone: attach to the previous chunk of
-                    # the same page rather than emit a citation nobody can use.
-                    previous = chunks[-1]
-                    if (
-                        previous.page_end == page["page_no"]
-                        and len(previous.text) + len(piece) < MAX_CHARS
-                    ):
-                        previous.text = f"{previous.text}\n\n{piece}"
-                        continue
-                ordinal += 1
-                chunks.append(
-                    Chunk(
-                        ordinal=ordinal,
-                        text=piece,
-                        page_start=page["page_no"],
-                        page_end=page["page_no"],
-                        section_path=section,
-                        locator={
-                            "page": page["page_no"],
-                            "section": section,
-                            "table": "table" if _is_table(piece) else None,
-                            "kind": "toc" if is_table_of_contents(piece) else "body",
-                            "bbox": _bbox_for(page, piece),
-                        },
-                    )
-                )
+                if _absorbed(chunks, piece, page["page_no"]):
+                    continue
+                chunks.append(_chunk(len(chunks) + 1, page, section, piece))
     return chunks
+
+
+def _absorbed(chunks: list[Chunk], piece: str, page_no: int) -> bool:
+    """Too small to stand alone: attach to the previous chunk of the same page
+    rather than emit a citation nobody can use."""
+    if len(piece) >= MIN_CHARS or not chunks or _is_table(piece):
+        return False
+    previous = chunks[-1]
+    if previous.page_end != page_no or len(previous.text) + len(piece) >= MAX_CHARS:
+        return False
+    previous.text = f"{previous.text}\n\n{piece}"
+    return True
+
+
+def _chunk(ordinal: int, page: dict, section: str | None, piece: str) -> Chunk:
+    return Chunk(
+        ordinal=ordinal,
+        text=piece,
+        page_start=page["page_no"],
+        page_end=page["page_no"],
+        section_path=section,
+        locator={
+            "page": page["page_no"],
+            "section": section,
+            "table": "table" if _is_table(piece) else None,
+            "kind": "toc" if is_table_of_contents(piece) else "body",
+            "bbox": _bbox_for(page, piece),
+        },
+    )
 
 
 def _slice(text: str) -> list[str]:

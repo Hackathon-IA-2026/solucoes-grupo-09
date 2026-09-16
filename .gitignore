@@ -29,3 +29,6 @@ playwright-report/
 # apps/rag: raw corpus and evaluation output, both reproducible
 .rag-store/
 apps/rag/eval/last-run.json
+
+# The packed corpus is built where it is installed, not carried in git.
+apps/rag/seed/*.jsonl.gz

@@ -61,7 +61,13 @@ async def index_document(
             "INSERT INTO rag.chunk (document_id, ordinal, page_start, page_end, section_path, locator,"
             " text, tokens) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8)"
             " ON CONFLICT (document_id, ordinal) DO UPDATE SET text = excluded.text,"
-            " locator = excluded.locator, section_path = excluded.section_path",
+            " locator = excluded.locator, section_path = excluded.section_path,"
+            # A vector describes the text it was made from. When the text changes
+            # the old vector is not stale, it is wrong, so it goes back in the queue.
+            " embedding = CASE WHEN rag.chunk.text IS DISTINCT FROM excluded.text"
+            "   THEN NULL ELSE rag.chunk.embedding END,"
+            " embedding_model = CASE WHEN rag.chunk.text IS DISTINCT FROM excluded.text"
+            "   THEN NULL ELSE rag.chunk.embedding_model END",
             [
                 (
                     document_id,
@@ -83,19 +89,14 @@ async def index_document(
 async def embed_pending(
     db: Database, gateway: Gateway, *, document_id: str | None = None, limit: int | None = None
 ) -> dict:
+    """Embed chunks that have no vector yet, batch by batch, until none is left,
+    the limit is reached, or the quota is spent."""
     pool = await db.connect()
-    task = gateway.tasks["embed"]
+    batch_size = gateway.tasks["embed"].batch_size
     done = 0
     waiting: float | None = None
-    while True:
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                "SELECT id, text FROM rag.chunk WHERE embedding IS NULL"
-                + (" AND document_id = $2" if document_id else "")
-                + " ORDER BY document_id, ordinal LIMIT $1",
-                task.batch_size,
-                *([document_id] if document_id else []),
-            )
+    while limit is None or done < limit:
+        rows = await _chunks_without_vector(pool, document_id, batch_size)
         if not rows:
             break
         try:
@@ -103,32 +104,28 @@ async def embed_pending(
         except QuotaExhausted as exc:
             waiting = exc.retry_at
             break
-        async with pool.acquire() as conn:
-            await conn.executemany(
-                "UPDATE rag.chunk SET embedding = $2::vector, embedding_model = $3 WHERE id = $1",
-                [
-                    (row["id"], to_pgvector(vector), model)
-                    for row, vector in zip(rows, vectors, strict=True)
-                ],
-            )
+        await _store_vectors(pool, rows, vectors, model)
         done += len(rows)
-        if limit and done >= limit:
-            break
     if document_id and waiting is None:
         async with pool.acquire() as conn:
-            await conn.execute(
-                "UPDATE rag.document SET status = 'indexed' WHERE id = $1", document_id
-            )
+            await conn.execute("UPDATE rag.document SET status = 'indexed' WHERE id = $1", document_id)
     return {"embedded": done, "waiting_quota_until": waiting}
 
 
-async def assert_single_vector_space(db: Database) -> None:
-    """Two embedding models in one index make every distance meaningless."""
-    pool = await db.connect()
+async def _chunks_without_vector(pool, document_id: str | None, batch_size: int) -> list:
     async with pool.acquire() as conn:
-        models = await conn.fetch(
-            "SELECT DISTINCT embedding_model FROM rag.chunk WHERE embedding_model IS NOT NULL"
+        return await conn.fetch(
+            "SELECT id, text FROM rag.chunk WHERE embedding IS NULL"
+            + (" AND document_id = $2" if document_id else "")
+            + " ORDER BY document_id, ordinal LIMIT $1",
+            batch_size,
+            *([document_id] if document_id else []),
         )
-    names = sorted(row["embedding_model"] for row in models)
-    if len(names) > 1:
-        raise RuntimeError(f"index mixes embedding models: {names}. Re-index before searching.")
+
+
+async def _store_vectors(pool, rows: list, vectors: list[list[float]], model: str) -> None:
+    async with pool.acquire() as conn:
+        await conn.executemany(
+            "UPDATE rag.chunk SET embedding = $2::vector, embedding_model = $3 WHERE id = $1",
+            [(row["id"], to_pgvector(vector), model) for row, vector in zip(rows, vectors, strict=True)],
+        )

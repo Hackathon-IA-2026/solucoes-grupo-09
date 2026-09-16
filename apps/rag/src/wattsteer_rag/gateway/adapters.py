@@ -10,9 +10,7 @@ from __future__ import annotations
 import base64
 import json
 import re
-import subprocess
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 import httpx
@@ -21,9 +19,7 @@ import httpx
 class ProviderError(Exception):
     """A call that failed in a way the router can react to."""
 
-    def __init__(
-        self, message: str, *, status: int | None = None, retry_after: float | None = None
-    ):
+    def __init__(self, message: str, *, status: int | None = None, retry_after: float | None = None):
         super().__init__(message)
         self.status = status
         self.retry_after = retry_after
@@ -61,16 +57,46 @@ def _json_from_text(text: str) -> Any:
     raise ProviderError("model did not return JSON")
 
 
+def _blocks_from_message(message: dict) -> list[Block]:
+    """nemotron-parse answers with a `markdown_bbox` tool call, but a provider
+    that returns the page as plain text is still usable."""
+    calls = message.get("tool_calls") or []
+    if calls:
+        return _blocks_from_tool_call(calls[0])
+    content = (message.get("content") or "").strip()
+    return [Block(type="Text", text=content)] if content else []
+
+
+def _blocks_from_tool_call(call: dict) -> list[Block]:
+    raw = json.loads(call["function"]["arguments"])
+    if raw and isinstance(raw[0], list):  # the payload arrives wrapped once
+        raw = raw[0]
+    return [
+        Block(type=item.get("type") or "Text", text=item.get("text") or "", bbox=item.get("bbox"))
+        for item in raw
+        if item.get("text")
+    ]
+
+
 class OpenAICompatibleAdapter:
     """Anything that speaks /v1/chat/completions and /v1/embeddings."""
 
     def __init__(
-        self, name: str, base_url: str, timeout_s: float = 60.0, user_agent: str = "wattsteer-rag"
+        self,
+        name: str,
+        base_url: str,
+        timeout_s: float = 60.0,
+        user_agent: str = "wattsteer-rag",
+        thinking_toggle: bool = False,
     ):
         self.name = name
         self.base_url = base_url.rstrip("/")
         self.timeout_s = timeout_s
         self.user_agent = user_agent
+        # Nemotron reasons out loud unless told not to, and the knob to tell it is
+        # NVIDIA's own. Groq answers 400 to a body it does not recognise, so a
+        # parameter that helps one provider must never be sent to another.
+        self.thinking_toggle = thinking_toggle
 
     async def _post(self, client: httpx.AsyncClient, path: str, secret: str, body: dict) -> dict:
         try:
@@ -114,9 +140,7 @@ class OpenAICompatibleAdapter:
             "max_tokens": max_tokens,
             "temperature": temperature,
         }
-        if want_json:
-            # Nemotron reasons out loud unless asked not to; both knobs are ignored
-            # by providers that do not know them, and _json_from_text covers the rest.
+        if want_json and self.thinking_toggle:
             body["chat_template_kwargs"] = {"thinking": False}
         data = await self._post(client, "/chat/completions", secret, body)
         choice = (data.get("choices") or [{}])[0]
@@ -174,45 +198,7 @@ class OpenAICompatibleAdapter:
             },
         )
         message = (data.get("choices") or [{}])[0].get("message") or {}
-        calls = message.get("tool_calls") or []
-        if not calls:
+        blocks = _blocks_from_message(message)
+        if not blocks:
             raise ProviderError(f"{self.name}: parse returned no blocks")
-        raw = json.loads(calls[0]["function"]["arguments"])
-        if raw and isinstance(raw[0], list):  # the payload arrives wrapped once
-            raw = raw[0]
-        blocks = [
-            Block(
-                type=item.get("type") or "Text", text=item.get("text") or "", bbox=item.get("bbox")
-            )
-            for item in raw
-            if item.get("text")
-        ]
         return blocks, (data.get("usage") or {})
-
-
-class PopplerAdapter:
-    """The local link: no network, no quota, no cost, worse on scans.
-
-    It reads the text layer a PDF already carries. A page with no text layer
-    comes back empty, and the router treats that as a failure so the next link
-    gets a chance.
-    """
-
-    name = "local"
-
-    async def parse_page(
-        self, _client, _secret, *, model: str, image: bytes
-    ) -> tuple[list[Block], dict]:
-        raise ProviderError("local parser works on files, not images")
-
-    def parse_pdf_page(self, path: Path, page: int) -> list[Block]:
-        result = subprocess.run(
-            ["pdftotext", "-layout", "-f", str(page), "-l", str(page), str(path), "-"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        text = (result.stdout or "").strip()
-        if not text:
-            raise ProviderError("local: page has no text layer")
-        return [Block(type="Text", text=text)]
