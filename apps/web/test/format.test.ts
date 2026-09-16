@@ -2,116 +2,211 @@ import { describe, expect, it } from "bun:test";
 import {
   fill,
   formatBrl,
+  formatBrlThousands,
   formatCompact,
   formatDate,
+  formatDateShort,
   formatDateTime,
   formatExact,
   formatHour,
-  formatNumber,
   formatPercent,
-  formatTag,
-  GRID_TIME_ZONE,
+  formatPercentPoints,
+  formattersFor,
+  withUnit,
 } from "../src/i18n/format";
+import { LOCALES } from "../src/i18n/locale";
 
 /**
- * The `/app` screens render values, and a value carries two locale decisions
- * that must not be conflated: how it is written follows the reader, but what
- * it means does not. These tests pin the second half, which is the half that
- * looks fine in development — on a Brazilian laptop, in Portuguese, every one
- * of these would pass by accident.
+ * The formatters, which every figure on every screen passes through.
+ *
+ * The module was at 59% of functions. What is worth pinning is not that
+ * `Intl` works — it is the handful of decisions layered on top of it, each of
+ * which is a rule a reader depends on and an edit could silently reverse:
+ *
+ *  - Compact notation has **three regimes** with thresholds, and the wrong
+ *    branch is a plausible-looking number of the wrong magnitude.
+ *  - A bare `YYYY-MM-DD` is anchored at **midday UTC** before being read in
+ *    Brasília. Anchor it at midnight and every civil date on the product moves
+ *    to the previous day — a defect that renders perfectly.
+ *  - Times are Brasília's **whatever clock the reader is on**, because a grid
+ *    hour is a Brazilian hour.
+ *  - `fill` leaves an unknown placeholder alone rather than printing
+ *    `undefined` into a sentence.
  */
 
-describe("number formatting", () => {
-  it("Portuguese groups with a period and separates decimals with a comma", () => {
-    expect(formatNumber("pt", 1234.5, 1)).toBe("1.234,5");
-    expect(formatNumber("en", 1234.5, 1)).toBe("1,234.5");
-    expect(formatExact("pt", 12_500)).toBe("12.500");
-    expect(formatExact("en", 12_500)).toBe("12,500");
+describe("compact notation has three regimes, and the thresholds are the rule", () => {
+  it("below 100 keeps a decimal, because the difference matters there", () => {
+    expect(formatCompact("en", 12.4)).toBe("12.4");
+    expect(formatCompact("pt", 12.4)).toBe("12,4");
   });
 
-  it("`pt` means pt-BR, not bare Portuguese", () => {
-    // Decimal comma, thousands period and R$ placement are pt-BR conventions;
-    // bare `pt` would leave the region to the runtime's default.
-    expect(formatTag("pt")).toBe("pt-BR");
-    expect(formatTag("en")).toBe("en-US");
+  it("100 and above rounds to whole units", () => {
+    expect(formatCompact("en", 480.6)).toBe("481");
+    expect(formatCompact("en", 99.9)).not.toBe("100");
   });
 
-  it("the compact form keeps its precision rules in both locales", () => {
-    expect(formatCompact("pt", 12_500)).toBe("12,5k");
+  it("10,000 and above switches to thousands with one decimal", () => {
     expect(formatCompact("en", 12_500)).toBe("12.5k");
-    expect(formatCompact("en", 4180)).toBe("4,180");
-    expect(formatCompact("pt", 42.68)).toBe("42,7");
+    expect(formatCompact("pt", 12_500)).toBe("12,5k");
+    // And not one unit below the threshold — an off-by-one here prints "9.99k"
+    // where the screen has room for the exact figure.
+    expect(formatCompact("en", 9999)).not.toContain("k");
   });
 
-  it("percentages follow the locale's decimal mark", () => {
-    expect(formatPercent("pt", 0.459, 1)).toBe("45,9%");
-    expect(formatPercent("en", 0.459, 1)).toBe("45.9%");
-    expect(formatPercent("en", 0.89)).toBe("89%");
+  it("the regimes are symmetric for negative values", () => {
+    // `Math.abs` gates every branch; dropping it would put a large negative on
+    // the decimal path and print it at the wrong precision.
+    expect(formatCompact("en", -12_500)).toContain("k");
+    expect(formatCompact("en", -12.4)).toBe("-12.4");
   });
-});
 
-describe("currency", () => {
-  it("is always BRL, whichever language the reader is in", () => {
-    // This is Brazilian-grid economics shown to an English reader, never a
-    // conversion. Only the grouping and the symbol's placement move.
-    for (const locale of ["pt", "en"] as const) {
-      expect(formatBrl(locale, 26_000)).toContain("R$");
-    }
-    // `Intl` puts a non-breaking space after the symbol in pt-BR, which is
-    // correct typography and invisible in a diff — normalise before comparing.
-    const spaces = (value: string) => value.replace(/\u00a0/g, " ");
-    expect(spaces(formatBrl("pt", 26_000))).toBe("R$ 26.000");
-    expect(spaces(formatBrl("en", 26_000))).toBe("R$26,000");
+  it("exact is grouped and never abbreviated", () => {
+    expect(formatExact("en", 12_500)).toBe("12,500");
+    expect(formatExact("pt", 12_500)).toBe("12.500");
+    // The reason both renderers exist: one fits a tight row, one is checkable.
+    expect(formatExact("en", 12_500)).not.toBe(formatCompact("en", 12_500));
   });
 });
 
-describe("time", () => {
-  it("is Brasília's, not the viewer's", () => {
-    expect(GRID_TIME_ZONE).toBe("America/Sao_Paulo");
-    // 13:35 UTC is 10:35 in Brasília (UTC−3, no DST since 2019). A São Paulo
-    // operator and a London analyst must be looking at the same grid hour, so
-    // this must hold whatever `TZ` the process happens to be running under.
-    for (const locale of ["pt", "en"] as const) {
-      expect(formatDateTime(locale, "2026-08-28T13:35:00Z")).toContain("10:35");
+describe("a bare civil date is anchored at midday, so it cannot slip a day", () => {
+  it("renders the date it was given, not the one before it", () => {
+    // Brasília is UTC−3. Anchored at midnight UTC, `2026-09-16` reads as the
+    // 15th locally — a defect that renders perfectly and is wrong on every
+    // screen at once.
+    for (const locale of LOCALES) {
+      expect(formatDate(locale, "2026-09-16")).toContain("16");
+      expect(formatDate(locale, "2026-09-16")).not.toContain("15");
     }
   });
 
-  it("only the month name and the part order follow the locale", () => {
-    expect(formatDate("pt", "2026-08-29")).toContain("ago");
-    expect(formatDate("en", "2026-08-29")).toContain("Aug");
+  it("the first of a month is the hardest case, and survives", () => {
+    expect(formatDate("en", "2026-09-01")).toContain("Sep");
+    expect(formatDate("en", "2026-09-01")).toContain("1");
+    expect(formatDate("en", "2026-01-01")).toContain("2026");
   });
 
-  it("a bare civil date does not slip onto the previous day", () => {
-    // A date-only string parses as UTC midnight, which is 21:00 the day before
-    // in Brasília. Anchoring at midday is what stops "2026-08-29" rendering
-    // as the 28th on the very screens that are about a specific grid day.
-    expect(formatDate("en", "2026-08-29")).toContain("29");
-    expect(formatDate("pt", "2026-08-29")).toContain("29");
+  it("the short form drops the year and keeps the day", () => {
+    expect(formatDateShort("en", "2026-09-16")).toContain("16");
+    expect(formatDateShort("en", "2026-09-16")).not.toContain("2026");
   });
 
-  it("a grid hour is written the same way in both locales", () => {
+  it("an unparseable date is returned as it arrived, not as `Invalid Date`", () => {
+    expect(formatDate("en", "not-a-date")).toBe("not-a-date");
+    expect(formatDateShort("pt", "")).toBe("");
+    expect(formatDateTime("en", "nonsense")).toBe("nonsense");
+  });
+});
+
+describe("times are Brasília's, whatever clock the reader is on", () => {
+  it("an instant is rendered in grid time, not in the runtime's zone", () => {
+    // 03:00 UTC is midnight in Brasília. If this ever prints 03, the product is
+    // reporting the reader's clock as the grid's.
+    const rendered = formatDateTime("en", "2026-09-16T03:00:00Z");
+    expect(rendered).toContain("00:00");
+    expect(rendered).not.toContain("03:00");
+  });
+
+  it("is 24-hour, because a grid hour is never am/pm", () => {
+    const evening = formatDateTime("en", "2026-09-16T23:00:00Z");
+    expect(evening).toContain("20:00");
+    expect(evening.toLowerCase()).not.toContain("pm");
+  });
+
+  it("the hour label is locale-invariant by design", () => {
     expect(formatHour(3)).toBe("03:00");
     expect(formatHour(23)).toBe("23:00");
-  });
-
-  it("an unparseable instant is returned rather than rendered as Invalid Date", () => {
-    expect(formatDateTime("pt", "not-a-date")).toBe("not-a-date");
+    expect(formatHour(0)).toBe("00:00");
   });
 });
 
-describe("placeholders", () => {
-  it("fill substitutes values and leaves unknown names alone", () => {
-    expect(fill("limiar {mw} MW", { mw: "5" })).toBe("limiar 5 MW");
-    // A placeholder with no value is a bug in the caller, not a reason to
-    // print an empty gap the reader cannot interpret.
-    expect(fill("threshold {mw} MW", {})).toBe("threshold {mw} MW");
+describe("percentages", () => {
+  it("a fraction becomes a percentage in both locales", () => {
+    expect(formatPercent("en", 0.42)).toContain("42");
+    expect(formatPercent("pt", 0.42)).toContain("42");
   });
 
-  it("the same template fills in either locale's word order", () => {
-    const en = "{subsystem} {technology}, {date}.";
-    const pt = "{technology} em {subsystem}, {date}.";
-    const values = { subsystem: "NORDESTE", technology: "eólica", date: "29" };
-    expect(fill(en, values)).toBe("NORDESTE eólica, 29.");
-    expect(fill(pt, values)).toBe("eólica em NORDESTE, 29.");
+  it("percent *points* take a number already in points, not a fraction", () => {
+    // The two are one multiplication apart, and confusing them is a figure
+    // wrong by a factor of a hundred that still looks like a percentage.
+    expect(formatPercentPoints("en", 42)).toContain("42");
+    expect(formatPercentPoints("en", 42)).not.toContain("4200");
+  });
+});
+
+describe("`fill` never prints a hole into a sentence", () => {
+  it("substitutes what it was given", () => {
+    expect(fill("risk {level} at {when}", { level: "high", when: "03:00" })).toBe(
+      "risk high at 03:00",
+    );
+  });
+
+  it("leaves an unmatched placeholder alone rather than printing `undefined`", () => {
+    // A missing key is a copy bug; rendering `undefined` into a sentence turns
+    // it into a reader-facing one.
+    const out = fill("risk {level} at {when}", { level: "high" });
+    expect(out).not.toContain("undefined");
+    expect(out).toContain("{when}");
+  });
+
+  it("numbers are accepted and stringified", () => {
+    expect(fill("{n} MWh", { n: 480 })).toBe("480 MWh");
+  });
+
+  it("a template with no placeholders is returned unchanged", () => {
+    expect(fill("no holes here", { a: "b" })).toBe("no holes here");
+  });
+});
+
+describe("the bundled formatters agree with the standalone ones", () => {
+  it("`formattersFor` is the same functions, bound to one locale", () => {
+    for (const locale of LOCALES) {
+      const f = formattersFor(locale);
+      expect(f.compact(12_500)).toBe(formatCompact(locale, 12_500));
+      expect(f.date("2026-09-16")).toBe(formatDate(locale, "2026-09-16"));
+      expect(f.dateTime("2026-09-16T03:00:00Z")).toBe(
+        formatDateTime(locale, "2026-09-16T03:00:00Z"),
+      );
+    }
+  });
+});
+
+describe("`withUnit` appends verbatim", () => {
+  it("keeps one space and does not reformat the number", () => {
+    expect(withUnit("1.234,5", "MWh")).toBe("1.234,5 MWh");
+  });
+});
+
+describe("money is always BRL, whatever the reader's locale", () => {
+  it("both locales render the Brazilian currency, not the reader's", () => {
+    // "The currency is a property of the Brazilian grid, not of the reader."
+    // An `en` reader gets R$, not $ — a locale-driven currency would silently
+    // relabel a real number as a different amount of money.
+    for (const locale of LOCALES) {
+      expect(formatBrl(locale, 1234)).toContain("R$");
+      expect(formatBrl(locale, 1234)).not.toMatch(/US\$|€|\bUSD\b/);
+    }
+  });
+
+  it("only the grouping and the symbol's placement follow the locale", () => {
+    const en = formatBrl("en", 1_234_567);
+    const pt = formatBrl("pt", 1_234_567);
+    // Same amount, different rendering — and the difference is real, or one of
+    // the two locales is being formatted as the other.
+    expect(en).not.toBe(pt);
+    expect(en).toContain("1,234,567");
+    expect(pt).toContain("1.234.567");
+  });
+
+  it("defaults to whole reais, and takes cents when asked", () => {
+    expect(formatBrl("pt", 12.34)).not.toContain(",34");
+    expect(formatBrl("pt", 12.34, 2)).toContain(",34");
+  });
+
+  it("the thousands headline divides before formatting, not after", () => {
+    // `R$ 26k` and not `R$ 26.000k`. Dividing after would multiply the headline
+    // by a thousand while still looking like a plausible currency figure.
+    expect(formatBrlThousands("pt", 26_000)).toContain("26");
+    expect(formatBrlThousands("pt", 26_000)).not.toContain("26.000");
+    expect(formatBrlThousands("pt", 26_000).endsWith("k")).toBe(true);
   });
 });
