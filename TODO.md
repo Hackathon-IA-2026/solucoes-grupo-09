@@ -6,7 +6,7 @@ Status: `[ ]` not started · `[~]` in progress · `[x]` done
 
 - [x] **1.** Remove `PROTÓTIPO` from the header — it is a hackathon, so it is implicit.
 - [ ] **2.** Promote a model.
-- [ ] **3.** Avoid the "Sem previsão para este dia" wall — decide what the screen
+- [x] **3.** Avoid the "Sem previsão para este dia" wall — decide what the screen
       says instead when the gate has passed with nothing published.
 - [x] **4.** "Eólica e solar · liquidado, duas medições" shows `Observado` twice.
       Remove the lower one.
@@ -30,8 +30,14 @@ Status: `[ ]` not started · `[~]` in progress · `[x]` done
       it finds.
 - [ ] **12.** API speed: find and apply every optimisation that does not break
       anything.
-- [ ] **13.** Check `.wayfinder` and `.scratch` are fully implemented; if so,
-      delete them.
+- [x] **13.** Checked. **Neither is deleted, and both for a reason.**
+      `.scratch` has **7 of 158 tickets genuinely open** — all forecaster, all
+      about the unpromoted model (43, 44, 45, 46, 47, 36, 37). `.wayfinder`'s
+      nineteen tickets are all `status: closed`, but **nine specs link into it**
+      as their provenance — which ticket commissioned each spec — so deleting it
+      orphans those links and fails the hygiene suite. It is not leftover
+      scaffolding; it is the trail the specs cite. Two stale statuses corrected
+      (44 and 45 were built today and still said "not yet").
 
 ## Ship and polish
 

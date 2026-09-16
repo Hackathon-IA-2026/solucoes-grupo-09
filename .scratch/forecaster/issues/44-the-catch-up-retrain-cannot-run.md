@@ -3,8 +3,17 @@
 **What to build:** a hand-submitted retrain that reaches a decision on a day the
 schedule has already run.
 
-**Status:** diagnosed on the live deployment, both defects reproduced from the
-logs. Not yet fixed.
+**Status:** done, and deployed. Both defects were fixed the day they were found:
+`retrainRunId` derives the instant from the schedule in force, and an
+all-short-circuited run exits zero. The original text of this ticket follows,
+because the diagnosis is what makes the fix legible.
+
+**Superseded in part by forecaster 45:** the catch-up now mints a distinct run
+id as this ticket asked, and the run it starts is bounded by a poll loop rather
+than by one long request.
+
+<!-- original: diagnosed on the live deployment, both defects reproduced from the
+logs. Not yet fixed. -->
 
 ## What happened
 

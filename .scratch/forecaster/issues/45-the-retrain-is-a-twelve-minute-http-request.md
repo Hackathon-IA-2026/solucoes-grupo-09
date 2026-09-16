@@ -3,8 +3,15 @@
 **What to build:** a retrain the worker can start, observe and conclude without
 holding a socket open for the length of the run.
 
-**Status:** diagnosed on the live deployment, with the measurement below. Not
-yet built.
+**Status:** built and deployed. `POST /internal/retrain` answers 202 with the
+run id, `GET /internal/retrain/{run_id}` reports `running` / `decided` /
+`failed`, and the worker polls with backoff bounded by `RETRAIN_TIMEOUT_MS` —
+which now bounds a sequence of short requests rather than one long one.
+
+**The measured ceiling was 300 seconds**, against a run of roughly 750. The
+diagnosis below is kept in full: three separate things made it look like
+something else, and each was a defect in what the system *said* rather than in
+what it did.
 
 ## What happens
 

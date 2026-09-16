@@ -134,14 +134,6 @@ export default function ExplainScreen() {
       />
     ),
     <>
-      {state.status === "observedOnly" ? (
-        <ForecastAbsent
-          code={state.code}
-          title={copy.app.explain.absentTitle}
-          note={copy.app.explain.absentNote}
-        />
-      ) : null}
-
       {day === null ? null : <DiagnosedPanels day={day} />}
 
       <ReliabilityPanel card={state.observed.card} />
@@ -151,6 +143,21 @@ export default function ExplainScreen() {
         date={state.observed.reasons.date}
         fidelity={state.observed.reasons.vintageFidelity}
       />
+
+      {/*
+        The absence sits below the answers, for the reason the Overview gives:
+        opening on "no forecast for this day" makes a screen that is full of
+        real settled reasons look empty. Everything above is observed and says
+        so; this says why the modelled half is missing, which is what a reader
+        wants *after* seeing what is there.
+      */}
+      {state.status === "observedOnly" ? (
+        <ForecastAbsent
+          code={state.code}
+          title={copy.app.explain.absentTitle}
+          note={copy.app.explain.absentNote}
+        />
+      ) : null}
 
       <View
         style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "center" }}

@@ -246,14 +246,6 @@ export default function GridOverviewScreen() {
       />
     ),
     <>
-      {state.status === "observedOnly" ? (
-        <ForecastAbsent
-          code={state.code}
-          title={copy.app.overview.absentTitle}
-          note={copy.app.overview.absentNote}
-        />
-      ) : null}
-
       {/*
         Two stacks, never interleaved, and each one whole.
 
@@ -284,6 +276,28 @@ export default function GridOverviewScreen() {
           />
         </>
       )}
+
+      {/*
+        **The absence sits below the answers, not above them.**
+
+        It used to open the screen: a reader arrived at "Sem previsão para este
+        dia" and three paragraphs of explanation before reaching a single
+        figure, on a page that was in fact full of real settled megawatt-hours.
+        That ordering made the product look empty when it was not, and it made
+        the most prominent line on the page a statement about what is missing.
+
+        Nothing is withheld by moving it. Every panel above already carries
+        `Observado` and says what it is; this says why the forecast half is not
+        there, which is the right thing to read *after* seeing what is. The
+        claim is the same claim — it has stopped being the headline.
+      */}
+      {state.status === "observedOnly" ? (
+        <ForecastAbsent
+          code={state.code}
+          title={copy.app.overview.absentTitle}
+          note={copy.app.overview.absentNote}
+        />
+      ) : null}
 
       <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkFaint }}>
         {fill(copy.app.overview.grainNote, { subsystem: meta.onsDisplayName })}
