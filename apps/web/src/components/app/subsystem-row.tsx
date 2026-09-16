@@ -86,12 +86,40 @@ export function SubsystemRow({
   const f = useFormat();
   const meta = subsystemMeta(forecast.subsystem);
 
+  /*
+    **The selected row is not a button, and the unselected rows are.**
+
+    Every row was a `<button>`, and the selected one also contains one — the
+    named Explain control, which is rendered only there. A button inside a
+    button is invalid HTML and a WCAG 4.1.2 failure; axe rates
+    `nested-interactive` *serious* and it fired on exactly one row at a time,
+    which is why it survived: whichever row you happened to look at was
+    usually fine.
+
+    The fix costs nothing because the outer press on that row does nothing.
+    `onPress` is `onSelect(subsystem)` and the row is already the selection, so
+    activating it writes the value it already holds. A control whose only
+    behaviour is a no-op has no claim on a tab stop, and taking it away leaves
+    the selected row with exactly one focusable thing in it — Explain, which is
+    the only action that row still has to offer.
+
+    Pointer behaviour is untouched: the `Pressable` still handles the click and
+    still draws hover, so a mouse user sees and gets what they always did.
+    `focusable={false}` is what keeps `react-native-web` from giving a
+    role-less pressable a `tabIndex` of its own; without it the element stays in
+    the tab order as an unlabelled stop, which is a worse outcome than the
+    violation it replaces.
+  */
+  const nestsExplainButton = selected;
   return (
     <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={fill(copy.app.overview.rowFigure, {
-        subsystem: meta.onsDisplayName,
-      })}
+      accessibilityRole={nestsExplainButton ? undefined : "button"}
+      focusable={!nestsExplainButton}
+      accessibilityLabel={
+        nestsExplainButton
+          ? undefined
+          : fill(copy.app.overview.rowFigure, { subsystem: meta.onsDisplayName })
+      }
       onPress={onPress}
       onHoverIn={() => onHoverChange?.(true)}
       onHoverOut={() => onHoverChange?.(false)}

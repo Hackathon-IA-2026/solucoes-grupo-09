@@ -313,6 +313,54 @@ export function SubsystemMap({
     }
   });
 
+  /*
+    **`role="button"`, stamped on after mount, because it cannot be a prop.**
+
+    The four region paths already carry `aria-label`, `aria-pressed` and
+    `tabIndex` — and an SVG `<path>` has **no implicit ARIA role**, which makes
+    both of those attributes invalid where they sit: `aria-pressed` is only
+    allowed on a role that supports it, and `aria-label` is prohibited outright
+    on a roleless element. Lighthouse reports it as `aria-allowed-attr` plus
+    `aria-prohibited-attr` and it cost the Overview its perfect accessibility
+    score; a screen reader meeting these paths is told a label it is not
+    supposed to be told, on something with no role to act on.
+
+    It could not be fixed where the problem is. The comment on `handlers` below
+    records that `accessibilityRole: "button"` makes `react-native-web`'s
+    `propsToAccessibilityComponent` swap the host element for a real `<button>`,
+    which draws no geometry — all four regions vanish and the map is a grey
+    outline. That was re-checked here rather than taken on trust, and the raw
+    DOM spelling `role: "button"` was checked too, in case only the React Native
+    prop went through the mapping. **It does not**: with `role` passed as a
+    prop, `[data-region]` never appears in the document at all. Both spellings
+    are intercepted; the attribute has to arrive after React is finished.
+
+    So it arrives here, through the same `host` ref and the same
+    `[data-region]` query `focusRegion` above already uses — scoped to this
+    map's own subtree for the reason that function documents, because a second
+    Overview in the stack would otherwise be two candidates. No dependency
+    array, for the same reason the effect above has none: `setParams` remounts
+    this component, and the stamp has to survive onto the new instance.
+
+    Native is untouched. There the `accessibilityRole` in `handlers` is the
+    right prop and does the right thing; this runs only where there is a
+    document to query.
+  */
+  useEffect(() => {
+    const container = host.current as {
+      querySelectorAll?: (s: string) => unknown;
+    } | null;
+    const found = container?.querySelectorAll?.("[data-region]");
+    if (found === undefined || found === null) {
+      return;
+    }
+    for (const node of found as Iterable<{
+      setAttribute?: (k: string, v: string) => void;
+    }>) {
+      node.setAttribute?.("role", "button");
+    }
+  });
+
   const width = Math.min(containerWidth > 0 ? containerWidth : MAX_WIDTH, MAX_WIDTH);
   const height = (width * BRAZIL_VIEWBOX.height) / BRAZIL_VIEWBOX.width;
 

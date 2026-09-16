@@ -110,7 +110,21 @@ export function RiskChip({ probability }: { probability: number }) {
       <Text style={{ fontSize: 13, fontWeight: "700", color: fg }}>
         {copy.app.risk[klass]}
       </Text>
-      <Text style={{ fontSize: 13, fontWeight: "500", color: fg, opacity: 0.8 }}>
+      {/*
+        **No `opacity` on this number, and the reason is measured.** It carried
+        `opacity: 0.8` to sit a step behind the class word beside it. Computed
+        against the real tokens, over the real card, that took the `low` chip to
+        **4.35:1** — under WCAG AA's 4.5 floor for body text, which axe reports
+        as a serious `color-contrast` violation. The other two chips survived
+        it (elevated 5.95, high 4.94), which is exactly how this kind of defect
+        stays hidden: it is one of three states, on the calmest one.
+
+        At full opacity the three are 5.95, 8.40 and 6.90. The hierarchy it was
+        buying is still here and costs nothing — `500` against the label's
+        `700`, on the same hue. Weight was always doing that work; the opacity
+        was doing it twice and paying for it in contrast.
+      */}
+      <Text style={{ fontSize: 13, fontWeight: "500", color: fg }}>
         {`≈${f.percentPoints(roundProbability(probability))}`}
       </Text>
     </View>
