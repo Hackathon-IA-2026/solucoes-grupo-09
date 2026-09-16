@@ -446,3 +446,63 @@ describe("an intent reads as two lines, from one dispatch", () => {
     expect(distinct.size).toBe(TOOL_REFUSAL_CODES.length);
   });
 });
+
+describe("the selection line names what actually changed", () => {
+  /**
+   * `selectionLine` is the action card's second row — what the agent did to
+   * the URL. Every field it can name has a branch, and a branch that is never
+   * exercised is a field that can silently stop being mentioned: the card
+   * would still render, still look right, and no longer say that the run
+   * moved.
+   */
+  it("names each field the agent can write", () => {
+    const cases: [Record<string, string>, string][] = [
+      [{ subsystem: "NE" }, "NE"],
+      [{ run: "00Z" }, "00Z"],
+      [{ technology: "solar" }, ""],
+      [{ episode: "2026-09-14" }, "2026-09-14"],
+    ];
+    for (const [params, expected] of cases) {
+      const line = selectionLine(params, en);
+      expect({ params, empty: line.trim() === "" }).toEqual({ params, empty: false });
+      if (expected !== "") {
+        expect({ params, line, has: line.includes(expected) }).toEqual({
+          params,
+          line,
+          has: true,
+        });
+      }
+    }
+  });
+
+  it("a scenario write is named as one, not printed as a blob", () => {
+    // `?s=` is a base64 codec payload. Printing it would be a card whose
+    // second line is forty characters of noise; naming it is the only useful
+    // thing to say about it.
+    const line = selectionLine({ s: "eyJhc3NldHMiOltdfQ" }, en);
+    expect(line).toBe(en.app.voice.action.scenarioChanged);
+    expect(line).not.toContain("eyJ");
+  });
+
+  it("several fields at once are all named, in one line", () => {
+    const line = selectionLine({ subsystem: "S", run: "00Z", episode: "2026-09-14" }, en);
+    for (const part of ["S", "00Z", "2026-09-14"]) {
+      expect({ part, present: line.includes(part) }).toEqual({ part, present: true });
+    }
+  });
+
+  it("an empty write returns the empty string, which means *omit the row*", () => {
+    // I assumed a blank second line would read as a card that failed to load,
+    // and asserted a sentence. Wrong: `VoiceActionCard` renders
+    // `detail === "" ? null : <Text>`, so empty is the omit signal — the same
+    // contract `formatReading` uses when it returns `null` for a reading that
+    // does not exist. `show_grid{}` navigates with nothing to say about the
+    // selection, and saying nothing is the correct card.
+    expect(selectionLine({}, en)).toBe("");
+    // The card's half of that contract, so the pair cannot drift: a change
+    // here that started returning a placeholder would render it.
+    expect(code(read("components", "voice", "voice-action-card.tsx"))).toContain(
+      'detail === ""',
+    );
+  });
+});
