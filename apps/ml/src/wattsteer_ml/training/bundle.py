@@ -161,10 +161,11 @@ HOURS_PER_DAY = 24
 #: predicts identically and carries the same sample bit for bit.
 BUNDLE_COMPRESSION: tuple[str, int] = ("zlib", 3)
 
-#: The six estimators, in the order the card lists them. Named here so the
-#: loader's completeness check and the card's inventory cannot drift apart.
+#: The estimators, in the order the card lists them. Named here so the loader's
+#: completeness check and the card's inventory cannot drift apart.
 ESTIMATOR_FIELDS: tuple[str, ...] = (
     "occurrence",
+    "magnitude_p02",
     "magnitude_p10",
     "magnitude_p50",
     "magnitude_p90",
@@ -295,6 +296,9 @@ class HurdleBundle:
     #: inferred from somewhere else.
     threshold_mw: float
     occurrence: Booster
+    #: ``q̂_pos^0.02``. The knot that makes the composed P10 an interpolated
+    #: quantile rather than the flat below the first one — see `FITTED_ALPHAS`.
+    magnitude_p02: Booster
     magnitude_p10: Booster
     magnitude_p50: Booster
     magnitude_p90: Booster

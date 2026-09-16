@@ -95,7 +95,7 @@ def a_mixture(
     """One hour's marginal, with no model in the room."""
     return HurdleMixture(
         occurrence_probability=p,
-        positive_quantiles=MagnitudeQuantiles(values=knots),
+        positive_quantiles=MagnitudeQuantiles(values=(knots[0] * 0.9, *knots)),
         positive_mean_mwh=50.0,
         sub_threshold_mean_mwh=1.0,
         threshold_mw=THRESHOLD_MW,
@@ -264,7 +264,12 @@ def _synthetic_matrix(*, days: int, seed: int, ceiling_scale: float = 1.0) -> Pi
         cell: replace(
             mixture,
             positive_quantiles=MagnitudeQuantiles(
-                values=(knots[0], knots[1], knots[2] * ceiling_scale)
+                values=(
+                    knots[0] * 0.9,
+                    knots[0],
+                    knots[1],
+                    knots[2] * ceiling_scale,
+                )
             ),
         )
         for cell, mixture, knots in (

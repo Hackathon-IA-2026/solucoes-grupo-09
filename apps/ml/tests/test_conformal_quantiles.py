@@ -162,6 +162,7 @@ def _draw(
         true_50 = THRESHOLD_MW + math.exp(mu + z_50 * sigma)
         true_hi = THRESHOLD_MW + math.exp(mu + z_hi * sigma)
         quantiles = MagnitudeQuantiles.from_boosters(
+            q02=true_lo * lower_scale * 0.9,
             q10=true_lo * lower_scale,
             q50=true_50,
             q90=true_hi * upper_scale,
@@ -240,12 +241,24 @@ def _v1_knot_correction(
     fixture, and the bit-identity below is a claim about the two ways of
     applying *one* correction rather than a coincidence of units.
     """
-    low, mid, high = quantiles.values
+    # **Every knot the composed P10 can read takes the lower move.** v1 shifted
+    # "the bottom of `Q_pos`", and with three knots that was one number, because
+    # the composed P10 always rested on the flat below the first. With the 0.02
+    # knot it interpolates between the first two instead, so shifting only one
+    # of them would tilt the segment rather than move it — and the identity this
+    # helper exists to measure, that the served P10 is the same under both
+    # regimes, would fail for a reason that is about arity rather than about the
+    # two regimes.
+    #
+    # The upper end stays a single knot, and that asymmetry is real:
+    # ``u_hi = (0.90 − (1 − p))/p ≥ 0.90``, so the P90 reads the last knot or the
+    # flat above it, never an interior segment.
+    *lower, mid, last = quantiles.values
     return MagnitudeQuantiles(
         values=(
-            max(0.0, low - lower_mwh),
+            *(max(0.0, knot - lower_mwh) for knot in lower),
             mid,
-            max(0.0, high + correction.delta_hi),
+            max(0.0, last + correction.delta_hi),
         )
     )
 
@@ -360,7 +373,7 @@ def test_conformal_narrows_a_band_that_was_too_wide() -> None:
 #: enough apart that the interpolant has room to attenuate a shift, and far
 #: enough above ``τ`` that the mixture's floor into ``F_pos``'s support never
 #: bites and so never flatters the measurement.
-_KNOTS = MagnitudeQuantiles.from_boosters(q10=60.0, q50=90.0, q90=140.0)
+_KNOTS = MagnitudeQuantiles.from_boosters(q02=60.0 * 0.9, q10=60.0, q50=90.0, q90=140.0)
 
 #: ``Q_pos(0.90) − Q_pos(0.10)`` for :data:`_KNOTS` — the scale ``δ_lo`` is a
 #: multiple of since forecaster 43. Named because every MWh figure in this file
@@ -1308,6 +1321,7 @@ def _mixed(
                 else rng.uniform(0.05, 0.895)
             )
         quantiles = MagnitudeQuantiles.from_boosters(
+            q02=(THRESHOLD_MW + math.exp(mu + z_lo * sigma)) * lower_scale * 0.9,
             q10=(THRESHOLD_MW + math.exp(mu + z_lo * sigma)) * lower_scale,
             q50=THRESHOLD_MW + math.exp(mu),
             q90=THRESHOLD_MW + math.exp(mu + z_hi * sigma),
@@ -1402,25 +1416,38 @@ def test_delta_lo_is_ranked_only_over_the_rows_whose_floor_it_can_move() -> None
 
 
 def test_a_flat_step_below_the_p10_is_not_a_row_the_shift_cannot_move() -> None:
-    """``Q_Y(0.05) == Q_Y(0.10)`` is not evidence of an inert shift.
+    """A stated floor receives ``δ_lo`` in full, and the move scales with spread.
 
+    **What this test used to be about, and why its selector is now empty.**
     Forecaster 33 counted rows whose served band is flat between ``q = 0.05``
-    and ``q = 0.10`` and read them as sitting on the ``τ`` floor, where the
-    shift would indeed do nothing. They are not. Composition asks ``Q_pos`` for
-    ``u = (q − (1 − p))/p`` and ``u_lo ≤ 0.10`` for **every** ``p ≤ 1``, so both
-    reads land in ``MagnitudeQuantiles``' flat region below its first knot and
-    the two agree for every row with ``p > 0.95`` whatever the ``τ`` floor is
-    doing. ``TailShift`` is likewise flat below ``q = 0.10``, so those rows
-    receive ``δ_lo`` in full. The measurement, not the argument:
+    and ``q = 0.10`` and read them as sitting on the ``τ`` floor, where the shift
+    would do nothing. They were not: with 0.10 as ``MagnitudeQuantiles``' first
+    knot, ``u = (q − (1 − p))/p`` put *both* reads in the flat below it, so the
+    two agreed on essentially every stated row.
+
+    `FITTED_ALPHAS` now carries a knot at 0.02, so that flat begins lower and
+    those rows interpolate — ``u > 0.02 ⟺ p > 0.918``, which is most of them.
+    The phenomenon the old selector looked for is therefore gone by design, and
+    looking for it here would assert the defect rather than the fix.
+
+    The property it was protecting survives untouched and is asserted on every
+    stated row instead: ``TailShift`` is flat below ``q = 0.10``, so a stated
+    floor receives ``δ_lo`` whole, and since forecaster 43 the move is a
+    multiple of *that row's own spread*.
     """
     hours = _mixed(SYNTHETIC_ROWS, stated_share=0.34, lower_scale=0.85, seed=35)
-    flat = [
+    flat = [hour for hour in hours if hour.forecast.band.p10 > 0.0]
+    assert flat, "the fixture states no floors at all, so it tests nothing"
+    # The old selector, kept as a measurement: the finer knot is why it is empty.
+    assert not [
         hour
-        for hour in hours
+        for hour in flat
         if hour.forecast.mixture.quantile(0.05) == hour.forecast.mixture.quantile(0.10)
-        and hour.forecast.band.p10 > 0.0
-    ]
-    assert flat, "the fixture has rows the old test would have called atoms"
+        and hour.forecast.mixture.occurrence_probability > 0.918
+    ], (
+        "a row above p = 0.918 is still flat between 0.05 and 0.10; "
+        "the 0.02 knot is not reaching the composed P10"
+    )
 
     here = _shifted(flat, TailShift(lower_spread_multiple=0.0, upper_mwh=0.0))
     raised = _shifted(flat, TailShift(lower_spread_multiple=-0.25, upper_mwh=0.0))
@@ -1804,6 +1831,7 @@ def _heteroscedastic_block(
         mu = math.log(120.0 * magnitude_scale) + 1.5 * rng.gauss(0.0, 1.0)
         observed = THRESHOLD_MW + math.exp(rng.gauss(mu, sigma))
         quantiles = MagnitudeQuantiles.from_boosters(
+            q02=(THRESHOLD_MW + math.exp(mu + z_lo * sigma)) * 0.35 * 0.9,
             q10=(THRESHOLD_MW + math.exp(mu + z_lo * sigma)) * 0.35,
             q50=THRESHOLD_MW + math.exp(mu),
             q90=THRESHOLD_MW + math.exp(mu + z_hi * sigma),

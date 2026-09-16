@@ -70,12 +70,27 @@ from itertools import pairwise
 #: ``u`` — and this tuple is only what the served band is made of.
 SERVED_QUANTILES: tuple[float, float, float] = (0.10, 0.50, 0.90)
 
-#: The alphas the three magnitude boosters are fitted at
+#: The alphas the magnitude boosters are fitted at
 #: (`docs/specs/forecaster.md`, "Model B"). Knots of
 #: :class:`MagnitudeQuantiles`, and not the same thing as
 #: :data:`SERVED_QUANTILES`: composition asks ``Q_pos`` for
 #: ``(q − (1 − p)) / p``, which equals ``q`` only when ``p = 1``.
-FITTED_ALPHAS: tuple[float, float, float] = (0.10, 0.50, 0.90)
+#:
+#: **Why there is a knot at 0.02.** Composition evaluates ``Q_pos`` at
+#: ``u = (0.10 − (1 − p)) / p``, and a floor is only *stated* where ``p > 0.90``,
+#: so ``u < 0.10`` on every stated row — algebraically ``u < 0.10 ⟺ 0.9p < 0.9``.
+#: With 0.10 as the first knot the served P10 was therefore *always* the flat
+#: value below it, never an interpolated quantile. That put probability mass
+#: exactly at the served floor, made ``P(y ≥ P10) = p`` rather than 0.90, and left
+#: `p10_calibration_excess` and `coverage_p10_in_band` asking for numbers that
+#: cannot both be delivered — measured in `tests/test_lower_tail_target.py`.
+#:
+#: A knot at 0.02 makes the floor interpolate for every ``p > 0.90 / 0.98 =
+#: 0.918``, which on the 2026-09-16 artifacts is the large majority of stated
+#: rows (mean ``p`` = 0.976). Below that the flat still applies and the mixture
+#: still says so; the fix moves where "we have not fitted this far" begins, it
+#: does not pretend to know the tail.
+FITTED_ALPHAS: tuple[float, ...] = (0.02, 0.10, 0.50, 0.90)
 
 #: A positive-magnitude quantile function: ``u ∈ [0, 1] → MWh``, conditional on
 #: ``Y > τ``. :class:`MagnitudeQuantiles` is the implementation the boosters
@@ -129,8 +144,9 @@ class MagnitudeQuantiles:
     stays visible as a measured rate.
     """
 
-    #: ``q̂_pos^0.10``, ``q̂_pos^0.50``, ``q̂_pos^0.90`` — MWh, as fitted.
-    values: tuple[float, float, float]
+    #: ``q̂_pos^0.02``, ``q̂_pos^0.10``, ``q̂_pos^0.50``, ``q̂_pos^0.90`` — MWh, as
+    #: fitted, one per :data:`FITTED_ALPHAS` and in that order.
+    values: tuple[float, ...]
 
     def __post_init__(self) -> None:
         if len(self.values) != len(FITTED_ALPHAS):
@@ -141,9 +157,11 @@ class MagnitudeQuantiles:
             _check_mwh(f"q_pos^{alpha:.2f}", value)
 
     @classmethod
-    def from_boosters(cls, q10: float, q50: float, q90: float) -> MagnitudeQuantiles:
-        """Name the three boosters at the call site, so they cannot swap."""
-        return cls(values=(q10, q50, q90))
+    def from_boosters(
+        cls, q02: float, q10: float, q50: float, q90: float
+    ) -> MagnitudeQuantiles:
+        """Name the boosters at the call site, so they cannot swap."""
+        return cls(values=(q02, q10, q50, q90))
 
     @property
     def crosses(self) -> bool:

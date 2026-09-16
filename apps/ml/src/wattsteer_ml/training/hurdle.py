@@ -312,9 +312,13 @@ def train_fold(
         incumbent_risk_bins=incumbent_risk_bins,
     )
 
-    magnitude_p10 = _fit_quantile(config, positives, monitor_positives, FITTED_ALPHAS[0])
-    magnitude_p50 = _fit_quantile(config, positives, monitor_positives, FITTED_ALPHAS[1])
-    magnitude_p90 = _fit_quantile(config, positives, monitor_positives, FITTED_ALPHAS[2])
+    # `FITTED_ALPHAS` is (0.02, 0.10, 0.50, 0.90) — the 0.02 knot is why the
+    # composed P10 interpolates instead of resting on a flat. See the constant's
+    # own note in `mixture.py`.
+    magnitude_p02 = _fit_quantile(config, positives, monitor_positives, FITTED_ALPHAS[0])
+    magnitude_p10 = _fit_quantile(config, positives, monitor_positives, FITTED_ALPHAS[1])
+    magnitude_p50 = _fit_quantile(config, positives, monitor_positives, FITTED_ALPHAS[2])
+    magnitude_p90 = _fit_quantile(config, positives, monitor_positives, FITTED_ALPHAS[3])
     magnitude_mean = _fit(
         config=config,
         params=config.params(objective="l2", role="magnitude_mean"),
@@ -338,6 +342,7 @@ def train_fold(
         fold=fold,
         occurrence=occurrence,
         isotonic=fitted_calibration.isotonic,
+        magnitude_p02=magnitude_p02,
         magnitude_p10=magnitude_p10,
         magnitude_p50=magnitude_p50,
         magnitude_p90=magnitude_p90,
@@ -352,6 +357,7 @@ def train_fold(
         fold=fold,
         occurrence=occurrence,
         isotonic=fitted_calibration.isotonic,
+        magnitude_p02=magnitude_p02,
         magnitude_p10=magnitude_p10,
         magnitude_p50=magnitude_p50,
         magnitude_p90=magnitude_p90,
@@ -393,6 +399,7 @@ def train_fold(
         model_config_version=config.version,
         threshold_mw=stamp.threshold_mw,
         occurrence=occurrence,
+        magnitude_p02=magnitude_p02,
         magnitude_p10=magnitude_p10,
         magnitude_p50=magnitude_p50,
         magnitude_p90=magnitude_p90,
@@ -638,6 +645,7 @@ def _compose_with(bundle: HurdleBundle, block: FeatureBlock) -> tuple[HourForeca
         block,
         occurrence=bundle.occurrence,
         isotonic=bundle.calibration.isotonic,
+        magnitude_p02=bundle.magnitude_p02,
         magnitude_p10=bundle.magnitude_p10,
         magnitude_p50=bundle.magnitude_p50,
         magnitude_p90=bundle.magnitude_p90,
@@ -654,6 +662,7 @@ def _compose_block(
     *,
     occurrence: lgb.Booster,
     isotonic: IsotonicCalibrator,
+    magnitude_p02: lgb.Booster,
     magnitude_p10: lgb.Booster,
     magnitude_p50: lgb.Booster,
     magnitude_p90: lgb.Booster,
@@ -680,6 +689,7 @@ def _compose_block(
     matrix = block.matrix
     raw = np.clip(_predict(occurrence, matrix), 0.0, 1.0)
     probability = [isotonic(float(value)) for value in raw]
+    q02 = _predict(magnitude_p02, matrix)
     q10 = _predict(magnitude_p10, matrix)
     q50 = _predict(magnitude_p50, matrix)
     q90 = _predict(magnitude_p90, matrix)
@@ -695,6 +705,7 @@ def _compose_block(
                 q90=float(q90[index]),
                 positive_mean_mwh=float(mean[index]),
                 wind_share=float(share[index]),
+                q02=float(q02[index]),
             )
             for index in range(len(block.keys))
         ],
@@ -735,6 +746,15 @@ class HourEstimates:
     #: composed forecast carries no technology split at all rather than a
     #: fabricated one.
     wind_share: float | None = None
+    #: ``q̂_pos^0.02``, where the estimator fitted one.
+    #:
+    #: ``None`` on every rung of the baseline ladder, which fits three knots and
+    #: not four. A rung that did not fit a 2nd percentile must not be given one:
+    #: :func:`compose_estimates` repeats ``q10`` there, which reproduces exactly
+    #: the flat-below-the-first-knot shape those rungs have always had. The
+    #: served model fills it, and that is the only place the composed P10 stops
+    #: sitting on a flat.
+    q02: float | None = None
 
 
 def compose_estimates(
@@ -770,6 +790,10 @@ def compose_estimates(
     forecasts: list[HourForecast] = []
     for key, estimate in zip(keys, estimates, strict=True):
         quantiles = MagnitudeQuantiles.from_boosters(
+            # Repeating `q10` where no finer knot was fitted is what keeps the
+            # baseline ladder comparing models rather than compositions: a rung
+            # with three knots gets the three-knot shape, flat below 0.10.
+            q02=max(floor, estimate.q10 if estimate.q02 is None else estimate.q02),
             q10=max(floor, estimate.q10),
             q50=max(floor, estimate.q50),
             q90=max(floor, estimate.q90),
@@ -826,6 +850,7 @@ def _fit_conformal(
     fold: Fold,
     occurrence: lgb.Booster,
     isotonic: IsotonicCalibrator,
+    magnitude_p02: lgb.Booster,
     magnitude_p10: lgb.Booster,
     magnitude_p50: lgb.Booster,
     magnitude_p90: lgb.Booster,
@@ -866,6 +891,7 @@ def _fit_conformal(
         monitor_positives,
         occurrence=occurrence,
         isotonic=isotonic,
+        magnitude_p02=magnitude_p02,
         magnitude_p10=magnitude_p10,
         magnitude_p50=magnitude_p50,
         magnitude_p90=magnitude_p90,
@@ -888,6 +914,7 @@ def _fit_pit(
     fold: Fold,
     occurrence: lgb.Booster,
     isotonic: IsotonicCalibrator,
+    magnitude_p02: lgb.Booster,
     magnitude_p10: lgb.Booster,
     magnitude_p50: lgb.Booster,
     magnitude_p90: lgb.Booster,
@@ -933,6 +960,7 @@ def _fit_pit(
         monitor,
         occurrence=occurrence,
         isotonic=isotonic,
+        magnitude_p02=magnitude_p02,
         magnitude_p10=magnitude_p10,
         magnitude_p50=magnitude_p50,
         magnitude_p90=magnitude_p90,

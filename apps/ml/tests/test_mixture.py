@@ -43,7 +43,7 @@ from wattsteer_ml.mixture import (
 TAU = float(SUBSYSTEM_THRESHOLD_MW)
 
 #: A well-behaved magnitude fit: rises with the alpha, comfortably above τ.
-POSITIVE = MagnitudeQuantiles.from_boosters(q10=40.0, q50=90.0, q90=200.0)
+POSITIVE = MagnitudeQuantiles.from_boosters(q02=40.0 * 0.9, q10=40.0, q50=90.0, q90=200.0)
 
 #: A dense sweep of q, including both served endpoints and the exact
 #: breakpoints ``1 − p`` used below.
@@ -101,7 +101,7 @@ def test_quantile_exceeds_tau_above_the_breakpoint(p: float) -> None:
 
 def test_a_magnitude_fit_below_tau_is_still_above_tau_after_composition() -> None:
     """The support floor holds even when the boosters undershoot the threshold."""
-    undershooting = MagnitudeQuantiles.from_boosters(q10=0.0, q50=2.0, q90=4.0)
+    undershooting = MagnitudeQuantiles.from_boosters(q02=0.0, q10=0.0, q50=2.0, q90=4.0)
     mixture = composed(0.99, positive=undershooting).mixture
     for q in Q_SWEEP:
         if q > 0.01:
@@ -135,7 +135,7 @@ def test_a_band_cannot_be_constructed_out_of_order() -> None:
 
 def test_crossing_boosters_are_sorted_after_composition_and_reported() -> None:
     """Independently-fitted boosters cross; the band is sorted and says so."""
-    crossing = MagnitudeQuantiles.from_boosters(q10=140.0, q50=90.0, q90=200.0)
+    crossing = MagnitudeQuantiles.from_boosters(q02=126.0, q10=140.0, q50=90.0, q90=200.0)
     assert crossing.crosses
 
     forecast = composed(1.0, positive=crossing)
@@ -152,7 +152,7 @@ def test_a_well_ordered_fit_is_not_reported_as_crossing() -> None:
 
 
 def test_crossing_rate_is_a_measured_share_of_hours() -> None:
-    crossing = MagnitudeQuantiles.from_boosters(q10=140.0, q50=90.0, q90=200.0)
+    crossing = MagnitudeQuantiles.from_boosters(q02=126.0, q10=140.0, q50=90.0, q90=200.0)
     fold = [composed(1.0, positive=crossing)] + [composed(1.0) for _ in range(9)]
     assert crossing_rate(fold) == pytest.approx(0.10)
     assert crossing_rate([]) == 0.0
@@ -346,17 +346,25 @@ def test_the_magnitude_function_interpolates_between_its_fitted_alphas() -> None
 
 
 def test_the_magnitude_function_is_flat_outside_its_fitted_alphas() -> None:
-    """No invented tail: a quantile fit says nothing past its outermost alpha."""
-    assert POSITIVE(0.0) == 40.0
-    assert POSITIVE(0.05) == 40.0
+    """No invented tail: a quantile fit says nothing past its outermost alpha.
+
+    The flat is still there and still refuses to extrapolate; the fourth knot
+    only moved where it *begins*. `POSITIVE` is fitted at 0.02 now, so 0.05
+    interpolates where it used to rest on 40.0 — which is the whole point of the
+    knot, because composition asks for a ``u`` below 0.10 on every stated row.
+    """
+    assert POSITIVE(0.0) == 36.0
+    assert POSITIVE(0.02) == 36.0
+    # Between the first two knots, so a real interpolation rather than a flat.
+    assert 36.0 < POSITIVE(0.05) < 40.0
     assert POSITIVE(0.95) == 200.0
     assert POSITIVE(1.0) == 200.0
 
 
 def test_the_magnitude_function_stores_its_knots_as_fitted() -> None:
     """Sorting before composition would hide the disagreement inside a curve."""
-    crossing = MagnitudeQuantiles.from_boosters(q10=140.0, q50=90.0, q90=200.0)
-    assert crossing.values == (140.0, 90.0, 200.0)
+    crossing = MagnitudeQuantiles.from_boosters(q02=126.0, q10=140.0, q50=90.0, q90=200.0)
+    assert crossing.values == (126.0, 140.0, 90.0, 200.0)
     assert crossing(0.10) == 140.0
     assert crossing(0.50) == 90.0
 
@@ -384,7 +392,7 @@ def test_a_non_positive_threshold_is_refused(threshold: float) -> None:
 
 def test_a_negative_magnitude_is_refused() -> None:
     with pytest.raises(ValueError, match="non-negative"):
-        MagnitudeQuantiles.from_boosters(q10=-1.0, q50=90.0, q90=200.0)
+        MagnitudeQuantiles.from_boosters(q02=-0.9, q10=-1.0, q50=90.0, q90=200.0)
 
 
 def test_a_wind_share_outside_zero_one_is_refused() -> None:

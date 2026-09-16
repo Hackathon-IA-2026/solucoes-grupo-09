@@ -234,7 +234,10 @@ class FixtureComposition:
             score = float(np.dot(row, weights))
             centre = self.threshold_mw + abs(score)
             quantiles = MagnitudeQuantiles.from_boosters(
-                q10=max(0.0, centre - 3.0), q50=centre, q90=centre + 5.0
+                q02=max(0.0, centre - 4.0),
+                q10=max(0.0, centre - 3.0),
+                q50=centre,
+                q90=centre + 5.0,
             )
             out[index] = compose(
                 occurrence_probability=self.occurrence(row),
