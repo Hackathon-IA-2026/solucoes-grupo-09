@@ -571,6 +571,18 @@ export const en = {
    *    driver codes, reason codes and vintage fidelities arrive from the
    *    fixtures (and later the API) as codes; their words live here.
    */
+  briefing: {
+    label: "Visual briefing",
+    dismiss: "Close",
+    /** Read out to a screen reader as the sequence advances. */
+    position: "Scene {index} of {total}",
+    /** Shown when the browser refused to play audio, or the reader has it off. */
+    silent: "No audio — the narration is written below.",
+    scenes: {
+      title: "Briefing",
+      mapFocus: "Where",
+    },
+  },
   app: {
     shell: {
       backToLanding: "WattSteer — back to the landing page",

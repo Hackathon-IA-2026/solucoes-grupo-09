@@ -447,6 +447,18 @@ export const pt: Copy = {
     },
   },
 
+  briefing: {
+    label: "Briefing visual",
+    dismiss: "Fechar",
+    /** Read out to a screen reader as the sequence advances. */
+    position: "Cena {index} de {total}",
+    /** Shown when the browser refused to play audio, or the reader has it off. */
+    silent: "Sem áudio — a narração está escrita abaixo.",
+    scenes: {
+      title: "Briefing",
+      mapFocus: "Onde",
+    },
+  },
   app: {
     shell: {
       backToLanding: "WattSteer — voltar para a página inicial",
