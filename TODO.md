@@ -25,20 +25,29 @@ Status: `[ ]` not started · `[~]` in progress · `[x]` done
       be optimistic — a floor that is too high understates how bad a bad hour
       gets, which is the direction that costs money.
 
-      **The rail is also mis-centred, and that is a second defect.** A correct
-      band reads `excess = 0.90/p − p` — **−0.047** and **−0.085** — against a
-      tolerance of `0 ± 0.037` and `0 ± 0.046`. *A correct model fails this rail
-      on both lanes.* That is the same failure the codebase already found and
-      documented in `p50_unbiasedness`: "a rail a correct model fails harder
-      than the candidate is not measuring the candidate." Fixing it will not
-      promote anything — the under-coverage above is independent — but it must
-      be fixed or it will refuse the model that finally deserves promotion.
+      **A claim of mine, withdrawn.** I wrote that the rail is mis-centred —
+      that a correct band reads `0.90/p − p` rather than `0`, and therefore
+      fails on both lanes. That derivation assumes the band is **continuous at
+      the P10**, and this mixture is not: `MagnitudeQuantiles` is flat below its
+      first knot, so probability mass sits *exactly at* the served P10. With an
+      atom there, `P(Y ≥ P10) = p` is what the rail's own comment claims and
+      forecaster 34 measured, and zero is the right centre. I do not have the
+      data locally to settle which regime these rows are in, and a rail that
+      decides promotions is not something to re-centre on a derivation I am not
+      sure of — particularly not on the day I already took the site down by
+      moving fast.
+
+      **It does not change the conclusion.** Stated-floor coverage is 0.8114
+      and 0.8477 against a band that claims 0.90. That is below 0.90 under
+      either reading, so the under-coverage is real and promotion is still
+      wrong.
 
       **The work, in order:**
 
-      1. Re-centre `p10_calibration_excess` on `0.90/p − p` rather than `0`,
-         which is what a correct band reads on this population. Small, and
-         `test_calibration_excess_rail.py` already exists to hold it.
+      1. **Settle the rail's centre with data, not algebra.** Measure
+         `P(Y ≥ P10)` on the qualifying rows directly: if the atom at the P10
+         holds, zero is right and the rail stands. Needs the production
+         dataset.
       2. Mondrian conformal for the lower tail: fit `δ_lo` per stratum instead
          of once globally. `δ_lo` is a published scalar with the card, the
          metrics table and the lead-time A/B all reading it, so it needs to
