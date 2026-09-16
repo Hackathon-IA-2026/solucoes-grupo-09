@@ -30,15 +30,27 @@ def fetch(subsystem: str, day: str) -> list[dict]:
         return json.loads(response.read().decode()).get("rows", [])
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--days", nargs="+", required=True)
-    parser.add_argument("--out", default="eval/goldset.jsonl")
-    args = parser.parse_args()
+def _case(row: dict, subsystem: str, day: str, description: str) -> dict:
+    # What a correct answer must cite. A record naming an operating
+    # instruction has an exact expected document; the others only require
+    # that nothing is invented.
+    match = CODE.search(description)
+    return {
+        "subsystem": subsystem,
+        "date": day,
+        "reason": row["reason"],
+        "origin": row.get("origin"),
+        "description": description,
+        "expect_document": match.group(0) if match else None,
+        "entity": row.get("entity_label"),
+    }
 
+
+def collect(days: list[str]) -> tuple[dict[tuple[str, str], dict], Counter[str]]:
+    """Distinct (reason, description) records across the days, and the volume behind each."""
     seen: dict[tuple[str, str], dict] = {}
     volume: Counter[str] = Counter()
-    for day in args.days:
+    for day in days:
         for subsystem in SUBSYSTEMS:
             try:
                 rows = fetch(subsystem, day)
@@ -49,25 +61,18 @@ def main() -> int:
                 description = (row.get("description") or "").strip()
                 if not description:
                     continue
-                key = (row["reason"], description)
                 volume[description] += row.get("constrained_off_mwh") or 0
-                seen.setdefault(
-                    key,
-                    {
-                        "subsystem": subsystem,
-                        "date": day,
-                        "reason": row["reason"],
-                        "origin": row.get("origin"),
-                        "description": description,
-                        # What a correct answer must cite. A record naming an
-                        # operating instruction has an exact expected document;
-                        # the others only require that nothing is invented.
-                        "expect_document": (CODE.search(description) or [None])
-                        and (CODE.search(description).group(0) if CODE.search(description) else None),
-                        "entity": row.get("entity_label"),
-                    },
-                )
+                seen.setdefault((row["reason"], description), _case(row, subsystem, day, description))
+    return seen, volume
 
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--days", nargs="+", required=True)
+    parser.add_argument("--out", default="eval/goldset.jsonl")
+    args = parser.parse_args()
+
+    seen, volume = collect(args.days)
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("w") as handle:

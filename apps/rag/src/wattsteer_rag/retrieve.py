@@ -116,7 +116,8 @@ async def search(
 ) -> list[Hit]:
     pool = await db.connect()
     conf = settings()
-    limit = limit or conf.rerank_top_n
+    limit = limit or conf.top_hits
+    await db.assert_single_vector_space()
 
     # The index of a document is not evidence, and it beats the body on keywords.
     filters = ["coalesce(c.locator->>'kind', 'body') <> 'toc'"]

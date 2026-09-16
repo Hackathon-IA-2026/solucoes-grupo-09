@@ -7,8 +7,8 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY pyproject.toml README.md ./
-COPY src ./src
+COPY apps/rag/pyproject.toml apps/rag/README.md ./
+COPY apps/rag/src ./src
 RUN pip install --no-cache-dir . && useradd --create-home --uid 10001 wattsteer
 
 # The store holds the raw documents, addressed by hash. A volume keeps them

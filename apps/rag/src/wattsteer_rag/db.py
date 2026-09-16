@@ -18,6 +18,7 @@ class Database:
     def __init__(self, dsn: str | None = None):
         self.dsn = dsn or settings().dsn
         self.pool: asyncpg.Pool | None = None
+        self._vector_space_checked = False
 
     async def connect(self) -> asyncpg.Pool:
         if self.pool is None:
@@ -42,7 +43,8 @@ class Database:
         applied = []
         async with pool.acquire() as conn:
             await conn.execute(
-                "CREATE TABLE IF NOT EXISTS rag_migration (name text PRIMARY KEY, at timestamptz DEFAULT now())"
+                "CREATE TABLE IF NOT EXISTS rag_migration"
+                " (name text PRIMARY KEY, at timestamptz DEFAULT now())"
             )
             for path in sorted(MIGRATIONS.glob("*.sql")):
                 done = await conn.fetchval("SELECT 1 FROM rag_migration WHERE name = $1", path.name)
@@ -79,6 +81,16 @@ class Database:
             out["error"] = f"{type(exc).__name__}: {exc}"
         return out
 
+    async def counts(self) -> dict[str, int]:
+        pool = await self.connect()
+        async with pool.acquire() as conn:
+            return {
+                "documents": await conn.fetchval("SELECT count(*) FROM rag.document"),
+                "pages": await conn.fetchval("SELECT count(*) FROM rag.page"),
+                "chunks": await conn.fetchval("SELECT count(*) FROM rag.chunk"),
+                "embedded": await conn.fetchval("SELECT count(*) FROM rag.chunk WHERE embedding IS NOT NULL"),
+            }
+
     async def corpus_version(self) -> str:
         """Identifies the corpus a piece of evidence was built from."""
         pool = await self.connect()
@@ -89,6 +101,23 @@ class Database:
             )
         digest = hashlib.sha256((row["hashes"] or "").encode()).hexdigest()[:12]
         return f"{row['n']}docs+{(row['last'] or '')[:10]}+{digest}"
+
+    async def assert_single_vector_space(self) -> None:
+        """Two embedding models in one index make every distance meaningless.
+
+        Checked once per process, before the first search, and it fails closed.
+        """
+        if self._vector_space_checked:
+            return
+        pool = await self.connect()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT DISTINCT embedding_model FROM rag.chunk WHERE embedding_model IS NOT NULL"
+            )
+        names = sorted(row["embedding_model"] for row in rows)
+        if len(names) > 1:
+            raise RuntimeError(f"index mixes embedding models: {names}. Re-index before searching.")
+        self._vector_space_checked = True
 
     async def log_calls(self, calls: list[dict], trace_id: str | None = None) -> None:
         if not calls:
@@ -113,7 +142,3 @@ class Database:
                     for c in calls
                 ],
             )
-
-
-def jsonb(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False)
