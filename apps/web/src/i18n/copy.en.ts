@@ -628,7 +628,7 @@ export const en = {
           panel here withholds itself and says why, and a selector that stays
           bright while doing nothing contradicts all of them.
         */
-        runUnavailable: "No model promoted — the D−1 run changes nothing yet",
+        runUnavailable: "This run has no promoted model — picking it changes nothing",
         targetDay: "Target day",
       },
     },

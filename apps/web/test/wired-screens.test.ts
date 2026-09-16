@@ -290,30 +290,46 @@ describe("a lede never promises a panel that is not there", () => {
 });
 
 describe("a selector that cannot move anything says so", () => {
-  it("the D−1 run pills go inert when no lane is promoted", () => {
+  it("each D−1 run pill goes inert on its own lane's condition", () => {
     /*
-      `subsystem` and `technology` steer the observed panels as well as the
-      forecast ones, so they always change something. The run does not: it is
-      read in exactly two places, the Overview's and Explain's forecast half,
-      and with nothing promoted both refuse whatever it is set to. So every
-      choice drew the same screen, on all four tabs, from a control that stayed
-      bright and pressable.
+      `subsystem` steers the observed panels as well as the forecast ones, so it
+      always changes something. The run does not: it is read in exactly two
+      places, the Overview's and Explicar's forecast half, and a lane that
+      cannot answer refuses whatever it is set to. So a choice draws the same
+      screen from a control that stayed bright and pressable.
 
       That is the one dishonesty this product cannot afford. Every panel on
       these screens withholds itself and names the clause that refused; a live
       control that moves nothing contradicts all of them at once, and the reader
       has no way to tell it from one that works.
+
+      **Per lane, and it was per deployment.** The rule asked `!serving.serving`
+      — is *any* lane promoted — which dimmed both pills together. Right while
+      nothing was promoted anywhere; wrong the moment one lane was, because
+      `gate_early` promoted and `gate_late` refused by its serving smoke left
+      both pills live and `12Z` drawing exactly what `00Z` drew.
     */
-    expect(SHELL).toContain(
-      'const runInert = serving.status === "known" && !serving.serving',
+    expect(flat(SHELL)).toContain("const profile = gateProfileOf(run);");
+    expect(flat(SHELL)).toContain(
+      "serving.lanes.find((lane) => lane.name.includes(profile))",
     );
-    expect(SHELL).toContain("disabled={runInert}");
+    expect(flat(SHELL)).toContain(
+      'lane !== undefined && (lane.condition !== "promoted" || lane.usable === false)',
+    );
+    expect(SHELL).toContain("disabled={runInertFor(run as RunLabel)}");
     expect(SHELL).toContain("disabledHint={copy.app.shell.selection.runUnavailable}");
   });
 
-  it("only the run group is gated — the other two always move something", () => {
+  it("`undefined` usable is unknown, never rounded down to a refusal", () => {
+    // `absence.ts` states the rule where the field is defined: a modelling
+    // service too old to report `usable` is not a service reporting `false`.
+    // `=== false` rather than `!lane.usable` is the whole of it.
+    expect(SHELL).not.toMatch(/!lane\.usable\b/);
+  });
+
+  it("only the run group is gated — the others always move something", () => {
     // Non-vacuity: `disabled` must not have been sprinkled across the bar.
-    expect(SHELL.match(/disabled=\{runInert\}/g)?.length).toBe(1);
+    expect(SHELL.match(/disabled=\{runInertFor/g)?.length).toBe(1);
   });
 
   it("inert is announced, not merely dimmed", () => {

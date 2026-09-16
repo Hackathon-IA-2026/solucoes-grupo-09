@@ -36,7 +36,7 @@ import {
   SUBSYSTEMS,
   type SubsystemCode,
 } from "@/lib/fixtures";
-import { sharedParams, useAppParams } from "./use-app-params";
+import { gateProfileOf, sharedParams, useAppParams } from "./use-app-params";
 import { useServing } from "./use-serving";
 
 /**
@@ -440,7 +440,39 @@ export function SelectionBar() {
     control that dims and then brightens, which is worse than one that was
     briefly honest about nothing.
   */
-  const runInert = serving.status === "known" && !serving.serving;
+  /*
+    **Per lane, and it used to be per deployment.**
+
+    This asked `!serving.serving` — is *any* lane promoted? — and dimmed both
+    pills together. That was right while nothing was promoted anywhere and
+    became wrong the moment one lane was: `gate_early` promoted, `gate_late`
+    refused by its serving smoke because an upstream ONS feed went quiet, and
+    both pills went live. Pressing `12Z` then drew exactly the same screen as
+    `00Z`, with nothing saying why, which is how a reader learns that a control
+    is decoration.
+
+    Each label names one gate — `00Z` is `gate_early`, `12Z` is `gate_late`,
+    from the published gate table — so each pill can ask about its own lane.
+    `usable` is tri-state and `undefined` means the modelling service is too old
+    to report it: read as unknown and never rounded down to a refusal, which is
+    the same rule `absence.ts` states where the field is defined.
+
+    Note what this deliberately does *not* dim: a lane that is promoted but has
+    published nothing for the day in question. That pill is live — tomorrow
+    morning's gate will fill it — and the absence of today's forecast is stated
+    by `ForecastAbsent` on the screen, where the reason belongs.
+  */
+  const laneFor = (run: RunLabel) => {
+    if (serving.status !== "known") {
+      return;
+    }
+    const profile = gateProfileOf(run);
+    return serving.lanes.find((lane) => lane.name.includes(profile));
+  };
+  const runInertFor = (run: RunLabel) => {
+    const lane = laneFor(run);
+    return lane !== undefined && (lane.condition !== "promoted" || lane.usable === false);
+  };
   return (
     <View
       style={{
@@ -530,7 +562,7 @@ export function SelectionBar() {
                 key={run}
                 label={run}
                 active={params.run === run}
-                disabled={runInert}
+                disabled={runInertFor(run as RunLabel)}
                 disabledHint={copy.app.shell.selection.runUnavailable}
                 onPress={() => params.setParams({ run: run as RunLabel })}
               />

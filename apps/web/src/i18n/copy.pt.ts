@@ -486,7 +486,9 @@ export const pt: Copy = {
       selection: {
         subsystem: "Subsistema",
         run: "Rodada D−1",
-        runUnavailable: "Nenhum modelo promovido — a rodada D−1 ainda não muda nada",
+        /* Per lane now, so the sentence names this run rather than the
+           deployment: one gate can be promoted while the other is refused. */
+        runUnavailable: "Esta rodada não tem modelo promovido — escolhê-la não muda nada",
         targetDay: "Dia alvo",
       },
     },
