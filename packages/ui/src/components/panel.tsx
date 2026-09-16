@@ -86,7 +86,20 @@ export function PanelHeader({
       >
         <IconCircle>{icon}</IconCircle>
         <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 14, fontWeight: "500", color: colors.inkMuted }}>
+          {/*
+            A heading, at level 3 under the page (1) and its sections (2).
+
+            These ~18 titles are the only outline inside a section, and before
+            `/app` became one page there were no headings on it at all — a
+            screen-reader user's way through 13 000px was 45 tab stops or
+            linear reading. `aria-level` rather than an `<h3>` because
+            react-native has no heading element; `legal.tsx` set this idiom.
+          */}
+          <Text
+            accessibilityRole="header"
+            aria-level={3}
+            style={{ fontSize: 14, fontWeight: "500", color: colors.inkMuted }}
+          >
             {title}
           </Text>
           <Text style={{ fontSize: 16, fontWeight: "600", color: colors.ink }}>

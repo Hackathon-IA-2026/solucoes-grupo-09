@@ -238,26 +238,41 @@ export default function ExplainScreen({ embedded = false }: { embedded?: boolean
           code={state.code}
           title={copy.app.explain.absentTitle}
           note={copy.app.explain.absentNote}
+          // Embedded, Visão da rede has already printed the lane directory a
+          // few thousand pixels up. This section's own sentence still differs
+          // and still shows.
+          lanes={!embedded}
         />
       ) : null}
 
-      <View
-        style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "center" }}
-      >
-        <Text style={{ fontSize: 12, color: colors.inkMuted }}>
-          {copy.app.explain.next}
-        </Text>
-        <MiniPill
-          label={copy.app.explain.nextMitigate}
-          active={false}
-          onPress={() =>
-            router.push({
-              pathname: "/app/mitigate" as never,
-              params: sharedParams(params),
-            })
-          }
-        />
-      </View>
+      {/*
+        **"A seguir" only means something when there is an elsewhere.**
+
+        Standing alone as a route this pill is the whole reason a reader finds
+        Mitigar. Embedded in `/app` it points at a section roughly 640px further
+        down the same scroll, under a heading that says the same words — an
+        invitation to go somewhere the reader is already on their way to. That
+        is the deletion rule: a control that space already carries.
+      */}
+      {embedded ? null : (
+        <View
+          style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "center" }}
+        >
+          <Text style={{ fontSize: 12, color: colors.inkMuted }}>
+            {copy.app.explain.next}
+          </Text>
+          <MiniPill
+            label={copy.app.explain.nextMitigate}
+            active={false}
+            onPress={() =>
+              router.push({
+                pathname: "/app/mitigate" as never,
+                params: sharedParams(params),
+              })
+            }
+          />
+        </View>
+      )}
     </>,
   );
 }

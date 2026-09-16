@@ -73,6 +73,25 @@ import { settleWith } from "@/lib/settle";
 
 /** The settled grid — every part of it available with nothing promoted. */
 export interface ObservedNetwork {
+  /**
+   * **Whose figures these are** — the subsystem the request was made with, not
+   * the one currently selected.
+   *
+   * The two come apart for the length of a network round trip, and that gap
+   * became visible the moment a re-read stopped blanking the page. `params`
+   * flips on the click; `hours`, `daySplit` and `episodes` are still the
+   * previous subsystem's response until the new one lands. A panel labelled
+   * from `params` therefore spends a round trip putting one subsystem's name
+   * over another's numbers — and the worst case is not a wrong megawatt-hour,
+   * it is the *absence*: "Nenhum curtailment liquidado neste subsistema neste
+   * dia" attributed to a subsystem that was never asked about. Stating an
+   * absence honestly is the one thing this product promises it never fakes.
+   *
+   * So the data carries its own subject, and the panels that draw it say whose
+   * it is. Selection highlighting still follows `params`, because that is the
+   * reader's click and it should answer instantly.
+   */
+  readonly subsystem: string;
   readonly now: GridNow;
   /** The selected subsystem's settled day, one series, technologies summed. */
   readonly hours: CurtailmentHourObservation[];
@@ -205,6 +224,7 @@ export function useNetwork(query: NetworkQuery): NetworkState {
       api.curtailmentEpisodes({ subsystem, from, to: settled }, signal),
     ]).then(
       ([now, hours, episodes]): ObservedNetwork => ({
+        subsystem,
         now,
         hours: observedHours(hours, settled),
         hoursDate: settled,

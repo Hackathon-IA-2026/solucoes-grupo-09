@@ -69,11 +69,17 @@ test.describe("mounting the host does not disturb the screens under it", () => {
     // reads and not `/v1/voice/session`, so the deployment reads as one that
     // cannot mint a session and the dock correctly renders nothing. Asserting
     // it would be asserting the stub.
-    await expect(page.getByRole("tablist")).toHaveCount(1);
-    // Two, and it was four. Explicar and Mitigar are sections of this page now
-    // rather than destinations — they are two more things to say about the
-    // selection already on screen, not places to go.
-    await expect(page.getByRole("tab")).toHaveCount(2);
+    /*
+      Four pills, and none of them a tab. Two navigate to other documents and
+      two are anchors into this one; a tab promises a panel it controls in the
+      same document and none of them has one, so they are links carrying
+      `aria-current`. The chrome surviving the overlay is still what is being
+      asserted.
+    */
+    await expect(page.getByRole("tablist")).toHaveCount(0);
+    await expect(page.getByRole("link").filter({ hasNotText: "WattSteer" })).toHaveCount(
+      4,
+    );
   });
 });
 

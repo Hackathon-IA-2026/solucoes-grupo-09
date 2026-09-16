@@ -92,7 +92,7 @@ test.describe("a click on the map selects, and does not navigate", () => {
     }
   });
 
-  test("Explain is a control with a name on it, and it is the thing that navigates", async ({
+  test("Explain is a control with a name on it, and it takes you to the section", async ({
     page,
   }) => {
     await page.goto("/app");
@@ -102,11 +102,20 @@ test.describe("a click on the map selects, and does not navigate", () => {
       /SUDESTE/,
     );
 
+    /*
+      **It used to push `/app/explain`, and Explicar is a section of this page
+      now.** The distinction this file is about is unchanged and is the reason
+      the control still exists: a click on the map *selects*, and only a control
+      with "Explicar" written on it takes the reader to the explanation. What
+      changed is that the explanation is six hundred pixels down rather than one
+      document away, so the control scrolls instead of navigating — and the
+      reader keeps the map that raised the question.
+    */
     await page.locator('[data-testid="selected-region-explain"]').click();
-    await expect(page).toHaveURL(/\/app\/explain/);
-    // `sharedParams` still travels — the point of the split is that navigation
-    // keeps carrying the selection, not that it stops happening.
+    await expect(page).toHaveURL(/\/app(\?|$)/);
+    // The selection still travels with it, which was always the point.
     await expect(page).toHaveURL(/[?&]subsystem=SE(&|$)/);
+    await expect(page.locator("#explain")).toBeVisible();
   });
 
   test("arrow keys walk the four regions and move the selection live", async ({
@@ -183,11 +192,14 @@ test.describe("with nothing promoted, a reader can still say which region", () =
     await expect(page.locator('[data-testid="selected-region-name"]')).toHaveText(/SUL/);
   });
 
-  test("Explain still navigates, carrying the region with it", async ({ page }) => {
+  test("Explain still carries the region, to the section on this page", async ({
+    page,
+  }) => {
     await page.goto("/app");
     await expect(page.locator('[data-testid="selected-region-explain"]')).toBeVisible();
     await page.locator('[data-testid="selected-region-explain"]').click();
-    await expect(page).toHaveURL(/\/app\/explain/);
+    await expect(page).toHaveURL(/\/app(\?|$)/);
     await expect(page).toHaveURL(/[?&]subsystem=NE(&|$)/);
+    await expect(page.locator("#explain")).toBeVisible();
   });
 });

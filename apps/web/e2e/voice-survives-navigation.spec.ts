@@ -173,14 +173,47 @@ test.describe("the voice session outlives a tool-call navigation", () => {
       }),
     );
 
-    await expect(page).toHaveURL(/\/app\/explain/);
+    /*
+      **`explain` no longer leaves `/app`, and that is the change, not a
+      regression.** Explicar is a section of this page, so the agent sets the
+      selection and scrolls to it — the reader keeps the map that raised the
+      question. The agent's vocabulary is untouched: it still calls `explain`
+      and `SCREEN_PATHS.explain` is still what it names.
+    */
+    await expect(page).toHaveURL(/\/app(\?|$)/);
     await expect(page).toHaveURL(/subsystem=NE/);
+    await expect(page.locator("#explain")).toBeVisible();
 
-    // **The assertion the whole spec exists for.** Same socket, still open,
-    // after a route change the agent itself caused.
     const after = await page.evaluate(() => ({ ...globalThis.__voiceStats }));
     expect(after.opened).toBe(1);
     expect(after.closed).toBe(0);
+
+    /*
+      **And now a tool call that really does navigate**, which is what this spec
+      exists to protect: Máquina do tempo is still its own route, because it is
+      a different mode rather than another view of this selection. Losing the
+      `explain` case would have left the socket-survives-a-route-change claim
+      asserted by nothing.
+    */
+    await page.evaluate(() =>
+      globalThis.__voiceEmit({
+        type: "response.output_item.done",
+        item: {
+          type: "function_call",
+          name: "replay",
+          call_id: "call-2",
+          arguments: '{"relative_day":-7}',
+        },
+      }),
+    );
+
+    await expect(page).toHaveURL(/\/app\/replay/);
+
+    // **The assertion the whole spec exists for.** Same socket, still open,
+    // after a route change the agent itself caused.
+    const afterRoute = await page.evaluate(() => ({ ...globalThis.__voiceStats }));
+    expect(afterRoute.opened).toBe(1);
+    expect(afterRoute.closed).toBe(0);
 
     // And the dock is still there, on the new screen, still live.
     await expect(page.getByTestId("voice-dock")).toBeVisible();

@@ -20,6 +20,7 @@ import {
   Pill,
   radius,
   space,
+  type as typeTokens,
   usePalette,
   WattSteerMark,
 } from "@wattsteer/ui";
@@ -60,13 +61,50 @@ interface ScreenDef {
   another view of this selection.
 
   Their routes still exist and still render standalone, for a link somebody
-  already has and for the voice agent's `explain` tool. What went away is the
-  menu that implied they were somewhere else.
+  already has and for the voice agent's `explain` tool.
+
+  **But the row still names all three, because deleting them was a mistake.**
+  The first cut of this dropped `explain` and `mitigate` from the row entirely,
+  on the grounds that they are not destinations any more. They are not — and
+  the row was also the only thing on screen that said they exist. Measured
+  after that change: on a 360px viewport with a forecast published, `/app` is
+  13 472px tall, `#explain` starts at 5643px and `#mitigate` at **8532px**, with
+  nothing above the fold hinting at either. Two of the product's three questions
+  became reachable only by scrolling most of a very long page on the chance
+  something was down there.
+
+  So they are anchors rather than routes: same row, same words, and `go` scrolls
+  to the section instead of pushing. `SectionBlock`'s `nativeID` is what they
+  land on.
 */
 const SCREENS: ScreenDef[] = [
   { key: "overview", path: "/app" },
+  { key: "explain", path: "/app#explain" },
+  { key: "mitigate", path: "/app#mitigate" },
   { key: "replay", path: "/app/replay" },
 ];
+
+/**
+ * Scroll to a section, waiting for it to exist.
+ *
+ * A jump that follows a navigation cannot assume the target is laid out yet —
+ * the page it belongs to may not have rendered. Polling a few frames is the
+ * honest version of a `setTimeout` guess, and it gives up rather than
+ * scrolling to whatever has appeared by the time it runs out.
+ */
+export function scrollToSection(id: string, attempt = 0): void {
+  if (Platform.OS !== "web" || typeof document === "undefined") {
+    return;
+  }
+  const node = document.getElementById(id);
+  if (node !== null) {
+    node.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+  if (attempt < 40) {
+    requestAnimationFrame(() => scrollToSection(id, attempt + 1));
+  }
+}
 
 export function AppShell({
   children,
@@ -82,10 +120,19 @@ export function AppShell({
   const params = useAppParams();
 
   const go = (path: string) => {
+    const [route, anchor] = path.split("#");
+    if (anchor !== undefined && (pathname === route || pathname === `${route}/`)) {
+      // Already on the page that holds it. Nothing to navigate.
+      scrollToSection(anchor);
+      return;
+    }
     router.push({
-      pathname: path as never,
+      pathname: (route ?? path) as never,
       params: sharedParams(params),
     });
+    if (anchor !== undefined) {
+      scrollToSection(anchor);
+    }
   };
 
   return (
@@ -195,33 +242,46 @@ export function AppShell({
               paddingBottom: 16,
             }}
           >
-            {/* `role="tab"` requires a `tablist` ancestor, and the horizontal
-                ScrollView is not one — axe's `aria-required-parent` failed on
-                all four pills. The wrapper carries the role rather than the
-                ScrollView because the scroller's own element is not the tabs'
-                parent (react-native-web nests a content container inside it),
-                and it repeats the row's `flexDirection`/`gap` so the rendered
-                geometry is byte-for-byte what the content container produced
-                on its own. */}
-            <View
-              accessibilityRole="tablist"
-              accessibilityLabel={copy.app.shell.screensLabel}
-              style={{ flexDirection: "row", gap: 8 }}
-            >
-              {SCREENS.map((screen) => (
-                <Pill
-                  key={screen.key}
-                  accessibilityRole="tab"
-                  label={copy.app.shell.screens[screen.key]}
-                  tone="secondary"
-                  active={
-                    screen.path === "/app"
-                      ? pathname === "/app" || pathname === "/app/"
-                      : pathname.startsWith(screen.path)
-                  }
-                  onPress={() => go(screen.path)}
-                />
-              ))}
+            {/*
+              **Links, not tabs, and the `tablist` around them is gone.**
+
+              A tab promises a panel in the same document that it controls. Two
+              of these four are jumps to sections on this page and two are
+              navigations to other documents, and none of them controls a
+              tabpanel — there was no `aria-controls` on any of them and never
+              could be. The role was here only because `role="tab"` demands a
+              `tablist` parent and axe's `aria-required-parent` said so; once
+              the wrong role goes the wrapper it required goes with it.
+
+              The unification made it plainly wrong rather than merely loose:
+              the two things on this page that *are* regions are marked
+              `role="region"`, while the two things that are not on this page
+              were the ones calling themselves tabs. On `/app/explain` neither
+              pill reported `aria-selected`, so a reader landed on a page whose
+              nav claimed neither destination.
+
+              `aria-current="page"` carries what `aria-selected` was being asked
+              to carry, and carries it correctly: it marks the document the
+              reader is on, and an anchor into the current page is not one.
+            */}
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              {SCREENS.map((screen) => {
+                const current =
+                  screen.path === "/app"
+                    ? pathname === "/app" || pathname === "/app/"
+                    : !screen.path.includes("#") && pathname.startsWith(screen.path);
+                return (
+                  <Pill
+                    key={screen.key}
+                    accessibilityRole="link"
+                    ariaCurrent={current ? "page" : undefined}
+                    label={copy.app.shell.screens[screen.key]}
+                    tone="secondary"
+                    active={current}
+                    onPress={() => go(screen.path)}
+                  />
+                );
+              })}
             </View>
           </ScrollView>
         </View>
@@ -229,7 +289,22 @@ export function AppShell({
 
       {showSelection ? <SelectionBar /> : null}
 
+      {/*
+        **The page's main landmark, which it did not have.**
+
+        A rendered landmark dump of `/app` found exactly two: the `region` on
+        Explicar and the `region` on Mitigar. The Overview — the page's primary
+        content, and 70–88% of its height — had none, so landmark navigation
+        offered a reader the two smallest parts of the page and not the largest.
+        `role="main"` here makes the two sections nest inside it, which is the
+        structure the unification actually created.
+
+        Web-only, via the same escape hatch `SectionBlock` uses: react-native's
+        `AccessibilityRole` union is the intersection of three platforms and has
+        no `main`.
+      */}
       <View
+        {...(Platform.OS === "web" ? ({ role: "main" } as object) : null)}
         style={{
           width: "100%",
           maxWidth: layout.page,
@@ -462,7 +537,11 @@ export function SelectionBar() {
             ))}
           </Group>
           <View>
-            <Text style={{ fontSize: 10, color: colors.inkFaint, marginBottom: 4 }}>
+            {/* 11px, the size every other caption on these screens uses. At
+                10px these four were the smallest text in the product and the
+                only 10px on the page, for the labels of its primary controls —
+                a deviation that bought nothing. */}
+            <Text style={{ fontSize: 11, color: colors.inkFaint, marginBottom: 4 }}>
               {copy.app.shell.selection.targetDay}
             </Text>
             <Text style={{ fontSize: 13, fontWeight: "600", color: colors.ink }}>
@@ -479,7 +558,7 @@ function Group({ label, children }: { label: string; children: ReactNode }) {
   const colors = usePalette();
   return (
     <View>
-      <Text style={{ fontSize: 10, color: colors.inkFaint, marginBottom: 4 }}>
+      <Text style={{ fontSize: 11, color: colors.inkFaint, marginBottom: 4 }}>
         {label}
       </Text>
       <View style={{ flexDirection: "row", gap: 6 }}>{children}</View>
@@ -566,14 +645,37 @@ export function MiniPill({
 }
 
 /** Page title block, used at the top of each screen's content. */
+/**
+ * A page's or a section's top line.
+ *
+ * `level` does two jobs that have to agree, and until the unification neither
+ * was being done. It picks the size — `type.h2` for the page, `type.h3` for a
+ * section — and it sets `aria-level`, so the outline a screen reader walks is
+ * the one an eye sees.
+ *
+ * Both mattered more the moment three routes became one page. A rendered dump
+ * of `/app` returned **no headings at all** — `querySelectorAll("h1,…,h6,
+ * [role=heading]")` was empty across 13 472px — and the three titles that had
+ * been three page titles were now one page title and two section titles, all
+ * still at 28px. Three peers at the same size claim a document with three tops;
+ * with no heading semantics, size was the only hierarchy signal there was, and
+ * it was saying the wrong thing.
+ *
+ * `packages/ui/src/components/legal.tsx` already had the idiom — react-native
+ * has no `<h2>`, and `accessibilityRole="header"` plus `aria-level` is how the
+ * web pass emits one.
+ */
 export function ScreenTitle({
   title,
   lede,
   right,
+  level = 1,
 }: {
   title: string;
   lede: string;
   right?: ReactNode;
+  /** 1 for the page's own title, 2 for a section under it. */
+  level?: 1 | 2;
 }) {
   const colors = usePalette();
   return (
@@ -595,10 +697,10 @@ export function ScreenTitle({
       */}
       <View style={{ gap: 6, flexGrow: 1, flexShrink: 1, flexBasis: 320 }}>
         <Text
+          accessibilityRole="header"
+          aria-level={level}
           style={{
-            fontSize: 28,
-            lineHeight: 34,
-            fontWeight: "600",
+            ...(level === 1 ? typeTokens.h2 : typeTokens.h3),
             letterSpacing: -0.5,
             color: colors.ink,
           }}
@@ -663,7 +765,7 @@ export function SectionBlock({
         borderTopColor: colors.border,
       }}
     >
-      <ScreenTitle title={title} lede={lede} right={right} />
+      <ScreenTitle title={title} lede={lede} right={right} level={2} />
       {children}
     </View>
   );

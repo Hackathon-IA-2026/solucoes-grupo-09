@@ -164,7 +164,14 @@ export function SettledDayPanel({
   const colors = usePalette();
   const copy = useCopy();
   const f = useFormat();
-  const meta = subsystemMeta(subsystem);
+  /*
+    Labelled from the data, not from the selection. `observed.subsystem` is the
+    subsystem this response was requested for; `params.subsystem` is wherever
+    the reader has clicked since. They are the same except during a re-read —
+    and during a re-read this panel is showing the previous subsystem's figures,
+    so it has to say the previous subsystem's name. See `ObservedNetwork`.
+  */
+  const meta = subsystemMeta(observed.subsystem as SubsystemCode);
 
   return (
     <FadeIn delay={delay}>

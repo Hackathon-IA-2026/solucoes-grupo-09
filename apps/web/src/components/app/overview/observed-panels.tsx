@@ -79,7 +79,14 @@ export function ObservedPanels({
   const colors = usePalette();
   const copy = useCopy();
   const f = useFormat();
-  const meta = subsystemMeta(subsystem);
+  /*
+    Labelled from the data, not from the selection. `observed.subsystem` is the
+    subsystem this response was requested for; `params.subsystem` is wherever
+    the reader has clicked since. They are the same except during a re-read —
+    and during a re-read this panel is showing the previous subsystem's figures,
+    so it has to say the previous subsystem's name. See `ObservedNetwork`.
+  */
+  const meta = subsystemMeta(observed.subsystem as SubsystemCode);
   const params = useAppParams();
   const rows = observedRows(observed.now.subsystems, SUBSYSTEM_DISPLAY_ORDER);
   const day = observedDay(observed.hours);
@@ -178,7 +185,22 @@ export function ObservedPanels({
                 highlighted={row.subsystem === active}
                 onHoverChange={(on) => setHovered(on ? row.subsystem : null)}
                 onPress={() => onSelect(row.subsystem)}
-                onExplain={() => onExplain(row.subsystem)}
+                /*
+                  **No `onExplain` here, and axe says why.**
+
+                  The row is already a button — "NORDESTE: selecionar" — so an
+                  Explain button inside it is a control nested in a control:
+                  `nested-interactive`, a WCAG 2 A violation, live in the exact
+                  state production has been in for weeks. `accessibility.spec.ts`
+                  believed it covered this screen and audited only the state with
+                  a forecast, which is the one path where this prop was already
+                  absent.
+
+                  Deleting it is also what `ObservedSubsystemRow`'s own docstring
+                  asks for — "two Explain controls for the same region, in two
+                  lists, would be one too many" — and `SelectedRegion` above is
+                  the other one. One fix, two defects.
+                */
               />
             ))}
             <Text

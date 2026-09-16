@@ -17,6 +17,7 @@ export function Pill({
   icon,
   trailing,
   size = "md",
+  ariaCurrent,
   tone = "card",
   accessibilityRole = "button",
   testID,
@@ -30,7 +31,15 @@ export function Pill({
   size?: "md" | "sm";
   /** Inactive background: raised card or sunken secondary. */
   tone?: "card" | "secondary";
-  accessibilityRole?: "button" | "radio" | "tab";
+  accessibilityRole?: "button" | "radio" | "tab" | "link";
+  /**
+   * `page` when this pill is the document the reader is on.
+   *
+   * A nav pill is a link, and a link says "you are here" with `aria-current`,
+   * not with `aria-selected` — that one belongs to a tab, and a tab promises a
+   * panel it controls in the same document. The app's row has neither.
+   */
+  ariaCurrent?: "page";
   testID?: string;
 }) {
   const colors = usePalette();
@@ -44,6 +53,7 @@ export function Pill({
       // not rendered by the static-web pass).
       aria-checked={accessibilityRole === "radio" ? active : undefined}
       aria-selected={accessibilityRole === "tab" ? active : undefined}
+      aria-current={ariaCurrent}
       accessibilityLabel={label}
       onPress={onPress}
       disabled={!onPress}

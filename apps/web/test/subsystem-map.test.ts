@@ -319,9 +319,11 @@ describe("the map's wiring", () => {
 
   it("the overview defines its selection once and hands it to both", () => {
     const screen = overviewWithoutComments();
-    // One navigation call in the file. Two would be two selection models that
-    // happen to agree today.
-    expect(screen.match(/router\.push/g)?.length ?? 0).toBe(1);
+    // **Zero** navigation calls in the file, and it used to be one. Explicar is
+    // a section of this page now, so the explicit control scrolls to it rather
+    // than pushing a route — a control named after content six hundred pixels
+    // below should not throw away the map that raised the question.
+    expect(screen.match(/router\.push/g)?.length ?? 0).toBe(0);
     expect(screen).toContain("onSelect={select}");
     // The handler is defined once on the screen and handed down as `onSelect`
     // to the panels that draw the map and the rows, so the two affordances
@@ -637,20 +639,25 @@ describe("the region responds to a pointer, and so does its row", () => {
       "const select = (subsystem: SubsystemCode) => params.setParams({ subsystem });",
     );
     // Non-vacuity: `select` writing the URL is only half the claim. The other
-    // half is that nothing in the click path pushes a route, which is what the
-    // defect did — so the one `router.push` on this screen has to be reachable
-    // from `explain` and from nowhere else.
-    expect(code.match(/router\.push/g) ?? []).toHaveLength(1);
+    // half is that nothing in the click path leaves the page — and now nothing
+    // on this screen does at all, because the named control travels the length
+    // of the page instead of off it.
+    expect(code.match(/router\.push/g) ?? []).toHaveLength(0);
     const explain = code.slice(
       code.indexOf("const explain ="),
       code.indexOf("const frame ="),
     );
-    expect(explain).toContain("router.push");
-    expect(explain).toContain('pathname: "/app/explain"');
+    expect(explain).toContain("params.setParams({ subsystem })");
+    expect(explain).toContain('scrollToSection("explain")');
     // And both affordances are wired to the selector, not to the navigator.
     expect(code).toContain("onSelect={onSelect}");
     expect(code).toContain("onPress={() => onSelect(row.subsystem)}");
-    expect(code).toContain("onExplain={() => onExplain(row.subsystem)}");
+    // The observed rows no longer carry one: the row is itself a button, so an
+    // Explain button inside it was `nested-interactive` — a WCAG 2 A failure
+    // live in the state production is in. `SelectedRegion` carries the single
+    // Explain control, which is what `ObservedSubsystemRow`'s docstring always
+    // asked for.
+    expect(code).toContain("onExplain={() => onExplain(subsystem)}");
   });
 
   /**

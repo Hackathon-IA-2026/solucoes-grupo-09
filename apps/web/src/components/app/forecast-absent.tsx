@@ -42,12 +42,29 @@ export function ForecastAbsent({
   code,
   title,
   note,
+  lanes = true,
 }: {
   /** The clause that refused, from the closed enum. */
   code: ErrorCode;
   title: string;
   /** What the screen is showing instead. The screen's own sentence. */
   note: string;
+  /**
+   * Whether to print the serving-lane directory under the sentence.
+   *
+   * It is a property of the **deployment**, not of this panel, and it was
+   * rendered once per panel. On the unified `/app` that meant a reader in the
+   * state production is in met the same fact five times before the fold:
+   * the chrome badge, the lede, the run pills' disabled hint, and then two full
+   * copies of the directory and its paragraph — Visão da rede's and Explicar's.
+   *
+   * Five statements of one fact teach a reader to skip all five, including the
+   * one that will someday say something different. The same argument
+   * `ObservedBadge` already won: a mark that is on everything carries what a
+   * mark on nothing carries. Each section keeps its own one-line sentence,
+   * which is the part that differs; the directory is printed once.
+   */
+  lanes?: boolean;
 }) {
   const colors = usePalette();
   const copy = useCopy();
@@ -65,7 +82,7 @@ export function ForecastAbsent({
           note,
         ]}
       />
-      {serving.status === "known" ? (
+      {lanes && serving.status === "known" ? (
         <View
           style={{
             flexDirection: "row",
@@ -116,7 +133,7 @@ export function ForecastAbsent({
           )}
         </View>
       ) : null}
-      {serving.status === "known" && serving.lanes.length > 0 ? (
+      {lanes && serving.status === "known" && serving.lanes.length > 0 ? (
         <Text style={{ fontSize: 11, lineHeight: 18, color: colors.inkFaint }}>
           {fill(copy.app.lane.note, { count: String(serving.lanes.length) })}
         </Text>

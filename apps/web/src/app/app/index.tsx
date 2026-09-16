@@ -77,7 +77,7 @@ import type { ReactNode } from "react";
 import { Text } from "react-native";
 import ExplainScreen from "@/app/app/explain";
 import MitigateScreen from "@/app/app/mitigate";
-import { AppShell, ScreenTitle } from "@/components/app/app-shell";
+import { AppShell, ScreenTitle, scrollToSection } from "@/components/app/app-shell";
 import { ForecastAbsent } from "@/components/app/forecast-absent";
 import {
   ForecastPresence,
@@ -109,7 +109,7 @@ export default function GridOverviewScreen() {
   const { locale } = useI18n();
   const serving = useServing();
   const params = useAppParams();
-  const meta = subsystemMeta(params.subsystem);
+  const _meta = subsystemMeta(params.subsystem);
   const state = useNetwork({
     subsystem: params.subsystem,
     targetDate: params.date,
@@ -194,11 +194,26 @@ export default function GridOverviewScreen() {
   const select = (subsystem: SubsystemCode) => params.setParams({ subsystem });
 
   /** The explicit affordance. Carries the rest of the selection with it. */
-  const explain = (subsystem: SubsystemCode) =>
-    router.push({
-      pathname: "/app/explain" as never,
-      params: { ...sharedParams(params), subsystem },
-    });
+  /**
+   * The explicit affordance — and it no longer leaves the page.
+   *
+   * It used to `router.push("/app/explain")`, which was right when Explicar was
+   * a route and became wrong the moment it became a section of this one. A
+   * control named "Explicar NORDESTE", on a page that already contains "Por que
+   * NORDESTE?", was abandoning the page — losing the map, the selection framing
+   * and the reader's scroll position — to show content that was six hundred
+   * pixels below it. And it landed on a document where neither nav pill
+   * reported itself as current.
+   *
+   * It carries the selection with it exactly as before; what changed is that
+   * "carrying" is now `setParams` plus a scroll rather than a navigation. The
+   * comment above about a click selecting rather than travelling applies to the
+   * explicit control too — it should travel the length of the page, not off it.
+   */
+  const explain = (subsystem: SubsystemCode) => {
+    params.setParams({ subsystem });
+    scrollToSection("explain");
+  };
 
   const frame = (right: ReactNode, body: ReactNode) => (
     <>
@@ -364,7 +379,11 @@ export default function GridOverviewScreen() {
       ) : null}
 
       <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkFaint }}>
-        {fill(copy.app.overview.grainNote, { subsystem: meta.onsDisplayName })}
+        {/* The data's subject, not the selection's — same reason the panels
+            above it changed. This sentence is about those panels. */}
+        {fill(copy.app.overview.grainNote, {
+          subsystem: subsystemMeta(observed.subsystem as SubsystemCode).onsDisplayName,
+        })}
       </Text>
     </ForecastPresence>,
   );

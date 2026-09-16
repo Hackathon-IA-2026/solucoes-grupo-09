@@ -49,6 +49,7 @@
 import type { SubsystemCode } from "@wattsteer/core";
 import { router, useGlobalSearchParams, usePathname } from "expo-router";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
+import { scrollToSection } from "@/components/app/app-shell";
 import { parseAppParams } from "@/components/app/params";
 import { defaultScenario, readScenario, SCENARIO_PARAM } from "@/components/app/scenario";
 import { useServing } from "@/components/app/use-serving";
@@ -56,8 +57,20 @@ import type { BriefingRequest } from "@/components/voice/use-voice-agent";
 import { useI18n } from "@/i18n";
 import { useLatest } from "@/lib/use-latest";
 import { contextSentence, screenFor } from "@/lib/voice/context";
-import { executeTool, type ToolCall } from "@/lib/voice/execute";
+import { executeTool, SCREEN_PATHS, type ToolCall } from "@/lib/voice/execute";
 import { voiceInstructions } from "@/lib/voice/instructions";
+
+/**
+ * The agent's paths that are sections of `/app` rather than documents.
+ *
+ * Keyed by the path the agent names, so adding a section is one entry and
+ * nothing in `execute.ts` or `instructions.ts` has to know.
+ */
+const SECTION_OF: Record<string, string | undefined> = {
+  [SCREEN_PATHS.explain]: "explain",
+  [SCREEN_PATHS.mitigate]: "mitigate",
+};
+
 import {
   dockSizeFor,
   performIntent,
@@ -135,6 +148,30 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const navigator: VoiceNavigator = useMemo(
     () => ({
       navigate: (pathname_, next) => {
+        /*
+          **Two of the four destinations are no longer elsewhere.**
+
+          Explicar and Mitigar are sections of `/app` now. The agent still names
+          their paths — `SCREEN_PATHS` is the vocabulary it was taught and
+          `context.ts` reads the same constants — but performing `explain` as a
+          navigation would throw away the map the reader is looking at to reach
+          content six hundred pixels below it. `SectionBlock` was given anchors
+          for exactly this and nothing was using them.
+
+          So the intent is unchanged and its performance is not: set the
+          selection, then scroll. This is the file whose whole job is "how an
+          intent is performed", which is why the two sections' paths are decided
+          here rather than in `execute.ts`, where what the agent *means* lives.
+        */
+        const section = SECTION_OF[pathname_];
+        if (section !== undefined) {
+          router.setParams({ ...next });
+          scrollToSection(section);
+          // The highlight survives, unlike below: the map is still on this page,
+          // a few thousand pixels up, and the region the agent lit is still the
+          // region it is talking about.
+          return;
+        }
         // `push`, so browser Back reverses what the agent did. §0: *"undoable —
         // browser Back reverses it"* is one of the four properties that make
         // this shippable rather than a demo, and it is a property of `push`.

@@ -101,11 +101,29 @@ async function violations(page: Page): Promise<{ id: string; nodes: number }[]> 
  * its assertion green rather than red. The numbers are the measured content
  * minus a margin, not round guesses.
  */
-const SCREENS: { path: string; ready: string; minChars: number }[] = [
+const SCREENS: {
+  path: string;
+  ready: string;
+  minChars: number;
+  forecast?: boolean;
+}[] = [
   // The map is the readiness signal, not `load`: it is the last thing to
   // arrive and half the rules this file was written against are about
   // elements inside it.
   { path: "/app", ready: "[data-region]", minChars: 600 },
+  /*
+    **The same page with nothing published, which is the state production is
+    actually in and the one this file was not auditing.**
+
+    Every screen here ran with `forecast: true`, so the observed stack — a
+    different map, different rows, different panels — was never audited at all.
+    A `nested-interactive` violation lived on it: the observed row is a button
+    and carried an Explain button inside it, which is one of the four defects
+    named at the top of this file, returned through the path the audit did not
+    walk. Auditing the happy path only is how a suite reports green on the state
+    no reader is in.
+  */
+  { path: "/app", ready: "[data-region]", minChars: 600, forecast: false },
   { path: "/app/explain", ready: "text=/./", minChars: 300 },
   { path: "/app/mitigate", ready: "text=/./", minChars: 600 },
   { path: "/app/replay", ready: "text=/./", minChars: 500 },
@@ -138,8 +156,11 @@ const SCREENS: { path: string; ready: string; minChars: number }[] = [
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
 for (const screen of SCREENS) {
-  test(`${screen.path} has no WCAG A or AA violations`, async ({ page }) => {
-    await routeGateway(page, { forecast: true });
+  const forecast = screen.forecast ?? true;
+  test(`${screen.path} has no WCAG A or AA violations${
+    forecast ? "" : " with nothing promoted"
+  }`, async ({ page }) => {
+    await routeGateway(page, { forecast });
     await page.goto(screen.path);
     await page.locator(screen.ready).first().waitFor({ timeout: 20_000 });
     /*
