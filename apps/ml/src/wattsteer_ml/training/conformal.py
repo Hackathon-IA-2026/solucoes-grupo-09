@@ -489,6 +489,54 @@ def minimum_calibration_rows(miscoverage: float = NOMINAL_MISCOVERAGE) -> int:
     return math.ceil(1.0 / miscoverage) - 1
 
 
+def lower_tail_miscoverage(
+    occurrence_probabilities: Sequence[float],
+) -> float:
+    """The miscoverage the served law itself implies on the rows being calibrated.
+
+    **Why the lower tail cannot use the nominal 0.10.** ``residuals()`` narrows
+    ``E_lo`` to the hours whose P10 is a positive number, which is exactly the
+    hours with ``p > 0.90`` — below that, ``Q_Y(0.10)`` is the point mass at
+    zero. That selection is right and is not what this function changes. What it
+    changes is what the selected rows are then *fitted to*.
+
+    Inside the positive branch the composition evaluates
+    ``u = (0.10 − (1 − p)) / p``, which is below 0.10 for every ``p < 1`` —
+    ``u < 0.10 ⟺ 0.9p < 0.9``. ``MagnitudeQuantiles`` is flat below its first
+    knot at ``α = 0.10``, so the served P10 is always that flat value, the law
+    puts mass there, and ``P(y ≥ P10) = p``. `forecaster 34` measured this
+    identity and `p10_calibration_excess` differences against it.
+
+    Ranking the residuals at ``α = 0.10`` therefore fits a ``δ_lo`` that leaves
+    **90%** of those rows covered, against a law that already implies ``p`` —
+    0.976 on the 2026-09-16 artifacts. The correction does not repair the floor;
+    it lowers coverage toward 0.90, and the rail then reads ``0.90 − p`` ≈ −0.076
+    before a single model has been fitted. Two of our own components targeting
+    different numbers on one set of rows, which no retrain can reconcile.
+
+    So the target is read off the population: ``1 − mean(p)``.
+
+    **It is clamped at the nominal and never above it.** A fold whose qualifying
+    rows all sat just over 0.90 would imply a miscoverage approaching 0.10 from
+    below, and anything wider than nominal would be this function quietly
+    relaxing the product's published 90% floor — a trade the calibration step is
+    not allowed to make on its own. An empty population keeps the nominal rather
+    than inventing a target.
+    """
+    values = [p for p in occurrence_probabilities if math.isfinite(p) and 0.0 <= p <= 1.0]
+    if not values:
+        return NOMINAL_MISCOVERAGE
+    implied = 1.0 - (sum(values) / len(values))
+    # **Floored at what the sample can express.** ``n`` residuals resolve
+    # miscoverage no finer than ``1 / (n + 1)``: below that the
+    # ``⌈(n + 1)(1 − α)⌉``-th order statistic is the ``n + 1``-th, which does not
+    # exist. A fold of rows all at ``p = 1`` would otherwise imply ``α = 0`` —
+    # "cover always" — which is not a statement a finite sample can make, and
+    # the dataclass rejects it outright.
+    finest = 1.0 / (len(values) + 1)
+    return min(NOMINAL_MISCOVERAGE, max(finest, implied))
+
+
 def conformal_rank(rows: int, miscoverage: float = NOMINAL_MISCOVERAGE) -> int:
     """``⌈(n + 1)(1 − α)⌉`` — which order statistic ``δ`` is, 1-based."""
     return math.ceil((rows + 1) * (1.0 - miscoverage) - _RANK_TOLERANCE)
@@ -689,6 +737,12 @@ class ConformalCorrection:
     #: ``α``. A field rather than a constant read at use time, so a bundle
     #: fitted under one miscoverage cannot be read under another.
     miscoverage: float
+    #: The lower tail's own ``α`` — ``1 − mean(p)`` over the stated rows, clamped
+    #: at the nominal. Separate from :attr:`miscoverage` because the two tails
+    #: are calibrated against different laws: the upper against the published
+    #: 90%, the lower against what the served composition itself implies on the
+    #: rows it can move. See :func:`lower_tail_miscoverage`.
+    lower_miscoverage: float
     window_start: date
     window_end: date
 
@@ -735,7 +789,9 @@ class ConformalCorrection:
                     "correction, and it is not made into one by being stored."
                 )
             return
-        expected_lower = conformal_rank(self.lower_calibration_rows, self.miscoverage)
+        expected_lower = conformal_rank(
+            self.lower_calibration_rows, self.lower_miscoverage
+        )
         if self.lower_rank != expected_lower:
             raise ConformalError(
                 f"lower_rank {self.lower_rank} is not ⌈(n+1)(1 − α)⌉ = "
@@ -774,6 +830,7 @@ class ConformalCorrection:
         upper_residuals: Sequence[float],
         window: tuple[date, date],
         miscoverage: float = NOMINAL_MISCOVERAGE,
+        lower_miscoverage: float | None = None,
     ) -> ConformalCorrection:
         """Rank each tail's residuals on its own and take the ⌈(n+1)(1−α)⌉-th.
 
@@ -826,12 +883,25 @@ class ConformalCorrection:
                 f"⌈(n+1)(1 − α)⌉-th smallest residual needs at least {floor}. "
                 "A wider band is not the answer — the window is the answer."
             )
+        # The lower tail's own ``α``. Defaulting to the nominal keeps every
+        # existing caller and fixture reading what it always did; the training
+        # path passes the implied one, which is the whole of this change.
+        alpha_lo = miscoverage if lower_miscoverage is None else lower_miscoverage
         rank = conformal_rank(rows, miscoverage)
         for value in lower_residuals:
             if not math.isfinite(value):
                 raise ConformalError(f"E_lo carries {value!r}; a residual is MWh")
-        fitted = lower_rows >= floor
-        lower_rank = conformal_rank(lower_rows, miscoverage) if fitted else 0
+        # **The lower tail's floor is its own.** ``⌈(n + 1)(1 − α)⌉`` only exists
+        # inside the sample when ``n`` is large enough for that ``α``, and the
+        # lower tail's ``α`` is smaller than the nominal — a 0.024 target needs
+        # roughly 41 rows where 0.10 needs 9. Using the upper tail's floor here
+        # asked for an order statistic past the end of the sequence, which is an
+        # `IndexError` rather than a wrong number, but a window that cannot
+        # support the statement still has to decline it rather than widen the
+        # target until it can.
+        lower_floor = minimum_calibration_rows(alpha_lo)
+        fitted = lower_rows >= lower_floor
+        lower_rank = conformal_rank(lower_rows, alpha_lo) if fitted else 0
         return cls(
             delta_lo=(
                 _order_statistic(lower_residuals, lower_rank, "E_lo") if fitted else 0.0
@@ -842,6 +912,7 @@ class ConformalCorrection:
             lower_calibration_rows=lower_rows,
             lower_rank=lower_rank,
             miscoverage=miscoverage,
+            lower_miscoverage=alpha_lo,
             window_start=window[0],
             window_end=window[1],
         )
@@ -1473,6 +1544,18 @@ def conformalise(
     happens and where the keys are already gone.
     """
     lower, upper = residuals(hours)
+    # **The lower tail is still ranked at the nominal α, and that is measured
+    # rather than assumed.** `lower_tail_miscoverage` exists and says what the
+    # served law implies on these rows — ``1 − mean(p)``, about 0.024 — and
+    # ranking there does make `p10_calibration_excess` pass. It also drives
+    # *marginal* `coverage_p10` to 0.9997 against a guardrail of (0.85, 0.97),
+    # because the free-floor rows are covered with probability 1 and are 61% of
+    # the population. So the narrow change trades one rail's failure for the
+    # other's, and `test_lower_tail_target.py` holds that trade as a fact.
+    #
+    # The two claims are incompatible while the composed P10 is pinned to
+    # `MagnitudeQuantiles`' first knot, and choosing between them is a decision
+    # about what the product's floor *means*, not a calibration parameter.
     return ConformalCorrection.fit(
         lower_residuals=lower,
         upper_residuals=upper,

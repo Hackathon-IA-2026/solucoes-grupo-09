@@ -403,6 +403,7 @@ def _correction(*, delta_lo: float, delta_hi: float) -> ConformalCorrection:
         lower_calibration_rows=40,
         lower_rank=conformal_rank(40),
         miscoverage=NOMINAL_MISCOVERAGE,
+        lower_miscoverage=NOMINAL_MISCOVERAGE,
         window_start=_window()[0],
         window_end=_window()[1],
     )
@@ -623,11 +624,16 @@ def test_the_fit_never_sees_a_key_to_condition_on() -> None:
             "global and has nothing to condition on"
         )
     parameters = inspect.signature(ConformalCorrection.fit).parameters
+    # `lower_miscoverage` is a scalar target, not a conditioning variable. The
+    # invariant this test holds is that no *row-level* fact reaches the fit —
+    # no key, no subsystem, no hour — and an ``α`` computed by the caller over
+    # the whole calibration population is as global as the ``α`` beside it.
     assert set(parameters) == {
         "lower_residuals",
         "upper_residuals",
         "window",
         "miscoverage",
+        "lower_miscoverage",
     }
 
 
@@ -921,6 +927,7 @@ def test_a_served_band_is_never_the_uncorrected_one(
         lower_calibration_rows=correction.lower_calibration_rows,
         lower_rank=correction.lower_rank,
         miscoverage=correction.miscoverage,
+        lower_miscoverage=correction.lower_miscoverage,
         window_start=correction.window_start,
         window_end=correction.window_end,
     )
@@ -958,6 +965,7 @@ def test_delta_drift_reports_the_signal_and_changes_nothing() -> None:
             lower_calibration_rows=40,
             lower_rank=conformal_rank(40),
             miscoverage=NOMINAL_MISCOVERAGE,
+            lower_miscoverage=NOMINAL_MISCOVERAGE,
             window_start=_window()[0],
             window_end=_window()[1],
         )
@@ -986,6 +994,7 @@ def test_delta_drift_keeps_the_walk_forward_order_rather_than_sorting() -> None:
         lower_calibration_rows=40,
         lower_rank=conformal_rank(40),
         miscoverage=NOMINAL_MISCOVERAGE,
+        lower_miscoverage=NOMINAL_MISCOVERAGE,
         window_start=_window()[0],
         window_end=_window()[1],
     )
@@ -1677,6 +1686,7 @@ def test_a_declined_lower_tail_may_not_carry_a_correction() -> None:
             lower_calibration_rows=3,
             lower_rank=0,
             miscoverage=NOMINAL_MISCOVERAGE,
+            lower_miscoverage=NOMINAL_MISCOVERAGE,
             window_start=_window()[0],
             window_end=_window()[1],
         )
@@ -1691,6 +1701,7 @@ def test_a_declined_lower_tail_may_not_carry_a_correction() -> None:
             lower_calibration_rows=101,
             lower_rank=conformal_rank(101),
             miscoverage=NOMINAL_MISCOVERAGE,
+            lower_miscoverage=NOMINAL_MISCOVERAGE,
             window_start=_window()[0],
             window_end=_window()[1],
         )
