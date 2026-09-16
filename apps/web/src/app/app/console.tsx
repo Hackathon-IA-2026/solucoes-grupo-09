@@ -57,20 +57,28 @@ import { useState } from "react";
 import { Text, View } from "react-native";
 import ExplainScreen from "@/app/app/explain";
 import MitigateScreen from "@/app/app/mitigate";
-import { AppShell, ScreenTitle } from "@/components/app/app-shell";
+import { AppShell, ScreenTitle, scrollToSection } from "@/components/app/app-shell";
 import { CONSOLE_COPY } from "@/components/app/console/console-copy";
 import { ConsoleRegion, ConsoleStat } from "@/components/app/console/console-stat";
 import { ForecastStamp, HonestyNote, ObservedStamp } from "@/components/app/honesty";
+import {
+  NationalFigureBlock,
+  ObservedNationalPanel,
+} from "@/components/app/overview/national-panel";
+import { EpisodesPanel } from "@/components/app/overview/settled-panels";
+import { SelectedRegion } from "@/components/app/selected-region";
 import { ReadingState } from "@/components/app/thinking-orb";
 import { gateProfileOf, useAppParams } from "@/components/app/use-app-params";
 import { useNetwork } from "@/components/app/use-network";
 import { useServing } from "@/components/app/use-serving";
 import { usePublishBriefingSubject } from "@/components/briefing/briefing-subject";
+import { FanChart } from "@/components/charts/fan-chart";
 import { ObservedProfile } from "@/components/charts/observed-profile";
 import { RiskChip } from "@/components/charts/risk-class";
 import { SubsystemMap } from "@/components/charts/subsystem-map";
 import { ObservedSplitPanel } from "@/components/charts/technology-split";
 import { useCopy, useFormat, useI18n } from "@/i18n";
+import { fill } from "@/i18n/format";
 import type { SubsystemCode } from "@/lib/fixtures";
 import { subsystemMeta } from "@/lib/fixtures";
 import {
@@ -299,6 +307,39 @@ export default function GridConsoleScreen() {
     />
   );
 
+  /*
+    **What the first cut of this screen was missing, found by comparing it
+    panel by panel against `/app` rather than by eye.**
+
+    The console was built as a map with satellites and stopped when the
+    satellites looked right, which is how a layout experiment quietly becomes a
+    smaller product. Four things the Overview publishes were absent: the
+    national total and its exactness claim, the selected-region strip that
+    carries Explicar, the recent episodes, and — in the forecast state — the
+    P10–P90 hourly fan, the single most important figure a promoted model
+    produces.
+
+    None of them are rebuilt here. They are the Overview's own components, so
+    the console cannot drift from it: a change to the fan changes both.
+  */
+  const window24h = fill(copy.app.observed.window24h, {
+    hour: f.dateTime(observed.now.latestSettledHour),
+  });
+
+  /*
+    The national total, across the top. The one figure on the screen that is
+    about the whole country rather than the selection, and the sentence under it
+    — "a sum of four measurements, and it is exact" — is a claim the product
+    makes on purpose: observations sum, quantiles do not, which is why there is
+    no national *band* beside it in the forecast state either.
+  */
+  const nationalPanel =
+    forecast === null ? (
+      <ObservedNationalPanel national={observed.now.national} window={window24h} />
+    ) : (
+      <NationalFigureBlock national={forecast.outlook.national} />
+    );
+
   const rail = (
     <Panel style={{ gap: space.sm }}>
       <Text style={{ ...type.caption, color: colors.inkFaint }}>{text.regionsLabel}</Text>
@@ -349,6 +390,7 @@ export default function GridConsoleScreen() {
       />
     ),
     <View style={{ gap: space.xl }}>
+      {nationalPanel}
       <View
         style={{
           flexDirection: wide ? "row" : "column",
@@ -390,6 +432,25 @@ export default function GridConsoleScreen() {
               // subject rather than a figure.
               maxWidth={wide ? 680 : 440}
             />
+            {/*
+              The selection, named under the map that changes it. `/app` puts it
+              in the same place and for the reason its own docstring gives: the
+              selection moves from four places, and this is the element that
+              speaks the new one to a screen reader.
+            */}
+            <SelectedRegion
+              subsystem={params.subsystem}
+              row={selectedRow}
+              observed={
+                forecast === null
+                  ? (observedRows(observed.now.subsystems, SUBSYSTEM_DISPLAY_ORDER).find(
+                      (row) => row.subsystem === params.subsystem,
+                    ) ?? null)
+                  : null
+              }
+              observedWindow={window24h}
+              onExplain={() => scrollToSection("explain")}
+            />
           </Panel>
           {wide ? null : headline}
           {wide ? null : rail}
@@ -401,6 +462,26 @@ export default function GridConsoleScreen() {
           <View style={{ flexBasis: 300, flexGrow: 1, flexShrink: 1 }}>{rail}</View>
         ) : null}
       </View>
+
+      {/*
+        The fan, full width and below the block, because it is an hourly series
+        and an hourly series in a 300px rail is a smear. Absent rather than
+        empty where nothing was published — the rule every other forecast panel
+        follows.
+      */}
+      {forecast === null ? null : (
+        <Panel style={{ gap: space.md }}>
+          <Text style={{ ...type.caption, color: colors.inkFaint }}>
+            {`${meta.onsDisplayName} · ${copy.app.overview.profileSubtitle}`}
+          </Text>
+          <FanChart
+            hours={forecastHours(forecast.forecast)}
+            thresholdMw={forecast.forecast.thresholdMw}
+          />
+        </Panel>
+      )}
+
+      <EpisodesPanel observed={observed} />
 
       {/*
         **Explicar and Mitigar, which the first cut of this left out.**
