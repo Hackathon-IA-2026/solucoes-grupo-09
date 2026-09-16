@@ -81,6 +81,31 @@ Status: `[ ]` not started · `[~]` in progress · `[x]` done
       is the half that is left, and it is yours to authorise: everything is
       committed on `clauge/development-gridflex-7e0ba196` and I will pull,
       push and verify on your word.
+
+      **What the deploy would actually change in production**, checked against
+      the live services rather than inferred:
+
+      | change | production today | after |
+      |---|---|---|
+      | unknown paths | `/nope` → **200** (soft 404) | **404** |
+      | `/app` layout shift | CLS **0.215** | **0** |
+      | jobs dashboard guard | `WATTSTEER_DASHBOARD=false`, `/jobs` 404 | **no-op** |
+      | everything else | — | no behaviour change |
+
+      The first two are the fixes. The third is worth stating because it looks
+      like a risk and is not: the guard fails closed in production without
+      `WATTSTEER_DASHBOARD_TOKEN`, and production has the flag off, so it takes
+      the same silent branch it takes today. Read off the container, not
+      guessed — and `config.ts`'s `bool` only accepts `1` and `true`, so the
+      string `"false"` is false rather than truthy.
+
+      `apps/web/Dockerfile`'s `CMD` is `bun run server.ts`, so the 404 change
+      does reach the deployment; that was confirmed rather than assumed.
+
+      Production is otherwise sound for it: six services `SUCCESS`, no staged
+      changes, ledger 52/52 with no empty hashes, schema identical to the
+      current migration set (59 tables, 842 columns, 92 indexes), `/ready`
+      true, ML reachable.
 - [x] **15.** Reviewed all four `/app` screens at 1440 and 412, against the real
       gateway. Three defects, all one species — a rule the product states
       clearly, applied unevenly:
