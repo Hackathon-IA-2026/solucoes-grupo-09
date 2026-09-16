@@ -84,6 +84,7 @@ import {
 } from "@/components/app/honesty";
 import { SelectedRegion } from "@/components/app/selected-region";
 import { ObservedSubsystemRow, SubsystemRow } from "@/components/app/subsystem-row";
+import { ReadingState } from "@/components/app/thinking-orb";
 import {
   gateProfileOf,
   sharedParams,
@@ -206,14 +207,7 @@ export default function GridOverviewScreen() {
   );
 
   if (state.status === "reading") {
-    return frame(
-      null,
-      <HonestyNote
-        title={copy.app.overview.readingTitle}
-        tone="neutral"
-        points={[copy.app.overview.readingNote]}
-      />,
-    );
+    return frame(null, <ReadingState title={copy.app.overview.readingTitle} />);
   }
 
   if (state.status === "refused") {

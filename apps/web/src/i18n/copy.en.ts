@@ -1000,8 +1000,6 @@ export const en = {
       grainNote:
         "Forecast grain is the subsystem. Observed curtailment is published per reporting entity — a conjunto for most of {subsystem} — and restriction reasons exist only there; see Explain.",
       readingTitle: "Reading the grid",
-      readingNote:
-        "Asking the gateway for the settled grid and for tomorrow's forecast. Nothing is drawn until an answer arrives: a skeleton in the shape of a band would be a band.",
       refusedTitle: "The gateway did not answer",
       refusedNote:
         "Every panel on this screen reads the gateway, including the ones that need no model, so there is nothing to show in the meantime. The figures are not cached in the page; a reload once the service is back is all this needs.",
@@ -1108,8 +1106,6 @@ export const en = {
       magnitudeNote: "Conditional on the day clearing the threshold at all.",
       peakPower: "Peak hourly power",
       readingTitle: "Reading the diagnosis",
-      readingNote:
-        "Asking the gateway for the day's forecast, its attribution, the model card and the reasons ONS recorded. Nothing is drawn until they answer.",
       refusedTitle: "The gateway did not answer",
       refusedNote:
         "Not even the observed restriction reasons, which need no model. There is nothing on this screen that does not come from the gateway.",

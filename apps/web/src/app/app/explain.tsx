@@ -50,6 +50,7 @@ import { Text, View } from "react-native";
 import { AppShell, MiniPill, ScreenTitle } from "@/components/app/app-shell";
 import { ForecastAbsent } from "@/components/app/forecast-absent";
 import { ForecastStamp, HonestyNote, VintageBadge } from "@/components/app/honesty";
+import { ReadingState } from "@/components/app/thinking-orb";
 import {
   gateProfileOf,
   sharedParams,
@@ -109,14 +110,7 @@ export default function ExplainScreen() {
   );
 
   if (state.status === "reading") {
-    return frame(
-      null,
-      <HonestyNote
-        title={copy.app.explain.readingTitle}
-        tone="neutral"
-        points={[copy.app.explain.readingNote]}
-      />,
-    );
+    return frame(null, <ReadingState title={copy.app.explain.readingTitle} />);
   }
 
   if (state.status === "refused") {

@@ -4,23 +4,23 @@ Status: `[ ]` not started · `[~]` in progress · `[x]` done
 
 ## Screens and copy
 
-- [ ] **1.** Remove `PROTÓTIPO` from the header — it is a hackathon, so it is implicit.
+- [x] **1.** Remove `PROTÓTIPO` from the header — it is a hackathon, so it is implicit.
 - [ ] **2.** Promote a model.
 - [ ] **3.** Avoid the "Sem previsão para este dia" wall — decide what the screen
       says instead when the gate has passed with nothing published.
-- [ ] **4.** "Eólica e solar · liquidado, duas medições" shows `Observado` twice.
+- [x] **4.** "Eólica e solar · liquidado, duas medições" shows `Observado` twice.
       Remove the lower one.
 - [ ] **5.** The landing's second-section sample card (chance of curtailment and
       the rest) is a good component — find where in the product it belongs and
       use exactly that frontend.
-- [ ] **6.** "O que o WattSteer não vai afirmar" moves outside its card, with
+- [x] **6.** "O que o WattSteer não vai afirmar" moves outside its card, with
       correct spacing.
-- [ ] **7.** The "Nenhuma manutenção de transmissão é lida" paragraph is
+- [x] **7.** The "Nenhuma manutenção de transmissão é lida" paragraph is
       left-aligned.
-- [ ] **8.** Replace the "Lendo a rede —…" loading text with a proper animated
+- [x] **8.** Replace the "Lendo a rede —…" loading text with a proper animated
       loader: `thinking-orbs-native` (+ Skia, Reanimated) or a very light
       skeleton. Perfect the UI/UX around it.
-- [ ] **9.** "Episódios recentes" is a wall of times — make it a decent table.
+- [x] **9.** "Episódios recentes" is a wall of times — make it a decent table.
 
 ## Quality passes
 

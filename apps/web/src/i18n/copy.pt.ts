@@ -751,8 +751,6 @@ export const pt: Copy = {
       grainNote:
         "O grão da previsão é o subsistema. O curtailment observado é publicado por entidade de reporte — um conjunto, na maior parte de {subsystem} — e os motivos de restrição só existem lá; veja Explicar.",
       readingTitle: "Lendo a rede",
-      readingNote:
-        "Pedindo ao gateway a rede liquidada e a previsão de amanhã. Nada é desenhado antes da resposta chegar: um esqueleto com formato de faixa seria uma faixa.",
       refusedTitle: "O gateway não respondeu",
       refusedNote:
         "Todos os painéis desta tela leem o gateway, inclusive os que não precisam de modelo, então não há o que mostrar enquanto isso. Os números não ficam guardados na página; recarregar depois que o serviço voltar é tudo o que falta.",
@@ -823,8 +821,6 @@ export const pt: Copy = {
       magnitudeNote: "Condicionada ao dia ultrapassar o limiar em alguma hora.",
       peakPower: "Pico de potência horária",
       readingTitle: "Lendo o diagnóstico",
-      readingNote:
-        "Pedindo ao gateway a previsão do dia, a atribuição, o cartão do modelo e os motivos apurados pelo ONS. Nada é desenhado antes de responderem.",
       refusedTitle: "O gateway não respondeu",
       refusedNote:
         "Nem mesmo os motivos de restrição observados, que não precisam de modelo. Não há nada nesta tela que não venha do gateway.",
