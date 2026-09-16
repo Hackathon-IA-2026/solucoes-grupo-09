@@ -95,6 +95,21 @@ chunks. Only a few dozen of those pages needed the vision model, because
 everything else carries a text layer; the rest of the time is embedding, which on
 the free tier runs in batches and pauses when the minute's tokens are spent.
 
+### Trying it by hand
+
+```bash
+cd apps/rag && ./serve.sh     # http://127.0.0.1:8082
+```
+
+The page there takes a record — the evaluation set is offered as a dropdown, or
+type your own description — and shows what it becomes: the question, the
+passages the search returned with both ranks, and either the claim with its
+literal quote, page and publication date, or the refusal with the gate that
+produced it and what the model had tried to say.
+
+It binds to the loopback address. The routes are internal and unauthenticated,
+so nothing here belongs on a network interface.
+
 ```bash
 ./.venv/bin/wattsteer-rag doctor          # is every link of every chain alive?
 ./.venv/bin/wattsteer-rag search "limitação do fluxo Senhor do Bonfim"
@@ -139,6 +154,7 @@ ingest.py   the one door from a fetched file to searchable chunks, for a first p
 retrieve.py hybrid search: pgvector plus Portuguese full text, fused with RRF
 evidence.py the builder and the gates
 app.py      the internal HTTP surface
+console.py  the page at /, which is those routes made usable by hand
 cli.py      the commands setup.sh runs
 ```
 

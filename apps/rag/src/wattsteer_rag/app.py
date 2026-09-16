@@ -17,9 +17,10 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from .config import settings
+from .console import page
 from .db import Database
 from .evidence import build_evidence, question_for
 from .gateway.router import Gateway, QuotaExhausted
@@ -49,6 +50,12 @@ def error(code: str, message: str, status: int, **details) -> JSONResponse:
         status_code=status,
         content={"error": {"code": code, "message": message, "details": details or None}},
     )
+
+
+@app.get("/", response_class=HTMLResponse)
+async def console() -> str:
+    """The same debug routes, arranged so a person can use them."""
+    return page()
 
 
 @app.get("/health")
