@@ -10,6 +10,7 @@ contains only the running header.
 
 from __future__ import annotations
 
+import html
 import re
 import subprocess
 import tempfile
@@ -115,15 +116,80 @@ def blocks_to_markdown(blocks: list[Block]) -> tuple[str, bool]:
     return "\n\n".join(parts).strip(), has_tables
 
 
+TEXT_LAYER_MIN_CHARS = 350  # below this a page is a scan with a header on top
+
+
+def text_layer(pdf: Path, page: int) -> str:
+    return subprocess.run(
+        ["pdftotext", "-layout", "-f", str(page), "-l", str(page), str(pdf), "-"],
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout.strip()
+
+
+def parse_html_tables(path: Path) -> list[ParsedPage]:
+    """The Boletim Diario, which publishes the same numbers as plain HTML.
+
+    No model is involved and none is needed: the tables are already structured,
+    and reading them costs nothing. The files are latin-1, which is why decoding
+    is explicit.
+    """
+    raw = path.read_text("latin-1", errors="ignore")
+    parts: list[str] = []
+    for table in re.findall(r"<table[^>]*>(.*?)</table>", raw, re.S | re.I):
+        rows: list[list[str]] = []
+        for row in re.findall(r"<tr[^>]*>(.*?)</tr>", table, re.S | re.I):
+            cells = [
+                html.unescape(re.sub(r"<[^>]+>", " ", cell)).strip()
+                for cell in re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", row, re.S | re.I)
+            ]
+            cells = [re.sub(r"\s+", " ", cell) for cell in cells]
+            if any(cells):
+                rows.append(cells)
+        if not rows:
+            continue
+        width = max(len(row) for row in rows)
+        rows = [row + [""] * (width - len(row)) for row in rows]
+        head = "| " + " | ".join(rows[0]) + " |"
+        rule = "| " + " | ".join("---" for _ in range(width)) + " |"
+        parts.append("\n".join([head, rule, *["| " + " | ".join(row) + " |" for row in rows[1:]]]))
+    markdown = "\n\n".join(parts).strip()
+    if not markdown:
+        return []
+    return [
+        ParsedPage(page_no=1, markdown=markdown, blocks=[], has_tables=True, parser="local:html")
+    ]
+
+
 async def parse_pdf(
-    gateway: Gateway, pdf: Path, *, max_pages: int | None = None
+    gateway: Gateway, pdf: Path, *, max_pages: int | None = None, force_vision: bool = False
 ) -> list[ParsedPage]:
-    """Parse every page, preferring the vision model, never losing a page."""
+    """Parse every page, and spend the vision model only where it is needed.
+
+    A disturbance report carries a text layer for all of its 572 pages; an
+    operating instruction carries none. Reading the text layer first turns the
+    first case into a free, instant parse and leaves the quota for the pages that
+    are genuinely images.
+    """
     total = page_count(pdf)
     if max_pages:
         total = min(total, max_pages)
     pages: list[ParsedPage] = []
     for page_no in range(1, total + 1):
+        if not force_vision:
+            existing = text_layer(pdf, page_no)
+            if len(existing) >= TEXT_LAYER_MIN_CHARS:
+                pages.append(
+                    ParsedPage(
+                        page_no=page_no,
+                        markdown=existing,
+                        blocks=[],
+                        has_tables=False,
+                        parser="local:pdftotext",
+                    )
+                )
+                continue
         try:
             image = rasterize(pdf, page_no)
             result = await gateway.run("parse", tokens=1, image=image, pdf_path=pdf, page=page_no)

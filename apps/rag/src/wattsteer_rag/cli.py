@@ -11,7 +11,7 @@ import argparse
 import asyncio
 import json
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import httpx
 
@@ -23,7 +23,7 @@ from .evidence import build_evidence, question_for
 from .gateway.adapters import Block
 from .gateway.router import Gateway, QuotaExhausted
 from .index import embed_pending, index_document
-from .parse import blocks_to_markdown, parse_pdf
+from .parse import blocks_to_markdown, parse_html_tables, parse_pdf
 from .retrieve import search
 
 
@@ -81,6 +81,16 @@ async def cmd_crawl(args) -> int:
             report += await crawler.fetch_instructions(client, args.codes)
         if args.what in {"procedures", "all"}:
             report += await crawler.fetch_procedures(client)
+        if args.what in {"bdo", "all"}:
+            for back in range(args.days):
+                report += await crawler.fetch_bdo(client, date.today() - timedelta(days=back + 1))
+        if args.what in {"ipdo", "all"}:
+            for back in range(args.days):
+                report.append(await crawler.fetch_ipdo(client, date.today() - timedelta(days=back)))
+        if args.what == "ipdo-archive":
+            report += await crawler.fetch_ipdo_archive(client, limit=args.limit)
+        if args.what in {"rap", "all"}:
+            report += await crawler.fetch_rap(client, args.urls or [])
     print(json.dumps(report, indent=2, ensure_ascii=False))
     await db.close()
     return 0
@@ -93,18 +103,23 @@ async def cmd_ingest(args) -> int:
     pool = await db.connect()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT id, sha256, title, external_id FROM rag.document"
+            "SELECT id, sha256, title, external_id, mime FROM rag.document"
             " WHERE status IN ('fetched','parsed') ORDER BY fetched_at LIMIT $1",
             args.limit,
         )
     if not rows:
         print("nothing pending")
     for row in rows:
-        pdf = settings().store_dir / f"{row['sha256']}.pdf"
-        if not pdf.exists():
+        store = settings().store_dir
+        suffix = ".html" if (row["mime"] or "").startswith("text/html") else ".pdf"
+        path = store / f"{row['sha256']}{suffix}"
+        if not path.exists():
             print(f"{row['external_id']}: file missing, skipping")
             continue
-        pages = await parse_pdf(gw, pdf, max_pages=args.max_pages)
+        if suffix == ".html":
+            pages = parse_html_tables(path)
+        else:
+            pages = await parse_pdf(gw, path, max_pages=args.max_pages)
         async with pool.acquire() as conn:
             await conn.executemany(
                 "INSERT INTO rag.page (document_id, page_no, markdown, blocks, has_tables, parser)"
@@ -311,9 +326,15 @@ def main() -> int:
 
     crawl = sub.add_parser("crawl", help="fetch the documents the records cite")
     crawl.add_argument(
-        "what", choices=["instructions", "procedures", "all"], default="all", nargs="?"
+        "what",
+        choices=["instructions", "procedures", "bdo", "ipdo", "ipdo-archive", "rap", "all"],
+        default="all",
+        nargs="?",
     )
     crawl.add_argument("--codes", nargs="*")
+    crawl.add_argument("--days", type=int, default=1, help="bdo and ipdo: how many days back")
+    crawl.add_argument("--limit", type=int, default=20, help="ipdo-archive: how many editions")
+    crawl.add_argument("--urls", nargs="*", help="rap: published URLs")
     crawl.set_defaults(run=cmd_crawl)
 
     ingest = sub.add_parser("ingest", help="parse, chunk and embed pending documents")
