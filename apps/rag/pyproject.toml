@@ -36,6 +36,11 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
+[tool.ruff.lint.per-file-ignores]
+# console.py is one page of HTML held in a string; a Python line-length rule
+# would only make the markup harder to read.
+"src/wattsteer_rag/console.py" = ["E501"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

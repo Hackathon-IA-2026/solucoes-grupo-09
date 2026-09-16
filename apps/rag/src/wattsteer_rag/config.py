@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     port: int = 8082
     host: str = "0.0.0.0"
 
+    # Empty means the service trusts whoever reaches it, which is only true on
+    # the loopback address. Anything wider sets this, and then every route but
+    # /health needs it, as ?k= or as the X-Access-Token header.
+    access_token: str = ""
+
     # Retrieval shape. Kept here because the evaluation harness sweeps them.
     hybrid_vector_k: int = 40
     hybrid_text_k: int = 40

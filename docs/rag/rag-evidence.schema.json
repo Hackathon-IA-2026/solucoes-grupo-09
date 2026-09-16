@@ -51,6 +51,7 @@
         "no_public_intervention_schedule",
         "corpus_no_coverage_for_date",
         "gates_rejected_all_claims",
+        "quota_exhausted_before_answer",
         "quota_exhausted_partial",
         "rag_not_configured",
         null
@@ -237,7 +238,7 @@
       "items": {
         "type": "string"
       },
-      "description": "Every number present in the citations (the narration's number gate)."
+      "description": "Every number present in the citations, plus the numbers the ONS record itself stated (the narration's number gate)."
     },
     "corpus_version": {
       "type": "string",
@@ -313,7 +314,9 @@
                   "causal_vocabulary",
                   "schema_invalid",
                   "locator_missing",
-                  "quote_without_substance"
+                  "quote_without_substance",
+                  "citation_not_the_named_document",
+                  "citation_from_another_event"
                 ]
               }
             },

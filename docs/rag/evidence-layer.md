@@ -34,7 +34,7 @@ flowchart LR
     B --> C["Search the corpus<br/>meaning + exact words<br/>only what was published<br/>before the decision"]
     C --> D["Candidate passages<br/>from the operating instruction"]
     D --> E["Draft with citations<br/>open model on NVIDIA NIM"]
-    E --> F{"Five gates"}
+    E --> F{"Six gates"}
     F -- passes --> G["Evidence<br/>literal quote, page,<br/>date and link"]
     F -- fails --> H["Insufficient evidence<br/>with the reason"]
 ```
@@ -50,14 +50,15 @@ This is not a matter of style. A system that opines on the cause of a cut
 without being able to show where it is written does not enter a control room,
 and does not survive an audit.
 
-## Five gates, all mechanical
+## Six gates, all mechanical
 
 No claim exists before it passes these checks:
 
 | Check | What it prevents |
 | --- | --- |
 | The quoted span must exist in the document, word for word | an invented quote |
-| Every number in the sentence must be in the quoted span | an invented number |
+| Every number in the sentence must be in the quoted span or in the record | an invented number |
+| The cited document must be the one the record names | the right words about the wrong place |
 | Causal vocabulary is forbidden | the AI ruling in place of the model |
 | A section title on its own does not count | a citation that says nothing |
 | Only documents published before the decision | explaining the past with future paper |
@@ -66,7 +67,9 @@ No claim exists before it passes these checks:
 flowchart TD
     A["Claim written by the model"] --> B{"Does the quoted span<br/>exist in the document?"}
     B -- no --> X["Refused"]
-    B -- yes --> C{"Is every number in the<br/>sentence inside the span?"}
+    B -- yes --> N{"Is the cited document<br/>the one the record names?"}
+    N -- no --> X
+    N -- yes --> C{"Is every number in the sentence<br/>inside the span or in the record?"}
     C -- no --> X
     C -- yes --> D{"Does it use a<br/>causal word?"}
     D -- yes --> X
@@ -92,19 +95,19 @@ because reversing changes what the table says.
 
 | Source | What it is | How much |
 | --- | --- | --- |
-| Operating instructions | where the limits are written | 6 documents, 93 pages |
-| Grid procedures | the general rules the records cite | 4 submodules, 40 pages |
-| Daily operation bulletin (BDO) | the day's numbers, as tables | 10 days, 250 tables |
-| IPDO | the day's preliminary report | 19 editions |
+| Operating instructions | where the limits are written | 6 documents, 116 pages |
+| Grid procedures | the general rules the records cite | 8 submodules, 60 pages |
+| Daily operation bulletin (BDO) | the day's numbers, as tables | 251 days, as HTML tables |
+| IPDO | the day's preliminary report | 26 editions |
 | Disturbance analysis report (RAP) | the analysis of one large event | 1 document |
 
-That is 281 documents, 816 pages and 2,786 searchable passages.
+That is 292 documents, 1,022 pages and 3,101 searchable passages.
 
-The modest size is an informed choice. Ten days sampled across the four
-subsystems produced 857 curtailment records and only 17 distinct descriptions,
-which point at three operating instructions. The universe of documents that
-explains most cuts is small and closed, and each new document covers many
-records at once.
+The modest size is an informed choice, and the record says how modest it can be.
+August 2026 alone holds 227,664 constrained-off rows for wind, and they use 61
+distinct descriptions. One operating instruction, IO-ON.NE.5NE, accounts for
+39,985 of those rows. The universe of documents that explains most cuts is small
+and closed, and each new document covers many records at once.
 
 ```mermaid
 flowchart TB
@@ -145,17 +148,35 @@ flowchart TB
 ## What the measurement shows
 
 The test cases were not invented: each one is a curtailment record published by
-the ONS, with the reason the operator declared. Out of seven records, four
-received evidence, and 75% of those that named a document received a citation
-from that document.
+the ONS, with the reason the operator declared, taken from the open
+constrained-off record and ordered by the energy behind it.
 
-The variation has two known causes: how much of the corpus is indexed on the
-machine where the measurement runs, and the fact that the model does not always
-manage to copy a valid span from a table on the first attempt.
+Fourteen records of August 2026, measured on 16/09/2026:
 
-One refusal repeats in every run, and it is correct. The record "Controle de
-frequência do SIN" has no document in this corpus that supports it, and the
-honest answer for it is that there is insufficient evidence.
+| | |
+| --- | --- |
+| Records naming no document, all refused | 10 |
+| Records naming an operating instruction | 4 |
+| Of those, answered with a citation from that instruction | 1 |
+| Answers citing a document the record did not name | 0 |
+
+The ten refusals are the correct answer. Those records name an intervention
+number, which is not public, or say "Controle de frequência do SIN", which names
+nothing; there is no document to cite and the service says so.
+
+The three refusals among the four that do name a document are the current
+weakness, and they share a shape: the section is a step table — column headings
+"Passo", "Coordenação", "Comando / execução", "Procedimento" — where the
+sentence that states the rule is spread across cells, and a quote that survives
+the literal check is hard to cut out of it.
+
+The number that must not move is the last row. Before the relevance check
+existed, a run reported six answers, and among them a record about the 500 kV
+area of the Northeast was answered with the operating instruction for the
+neighbouring area, written in almost the same words, and a flow control of
+August 2026 was answered with the disturbance report of 15 August 2023. Both
+quotes were literal, located and dated. Six wrong answers are worse than one
+right one.
 
 ## The cost
 

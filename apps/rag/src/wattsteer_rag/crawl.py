@@ -93,12 +93,24 @@ INSTRUCTIONS = [
     ),
 ]
 
-# Network procedures, for the rules a claim has to be able to cite.
+# Network procedures, for the rules a claim has to be able to cite. The filenames
+# are the ones the ONS listing of documents in force serves today; the listing is
+# rendered by JavaScript, so it cannot be crawled from here, and a revision that
+# moves has to move here too.
+#
+# `Controle da geração` is in this list because of the numbers, not the topic:
+# "Controle de frequência do SIN" is the single most frequent description in the
+# constrained-off record — 71,534 of the 227,664 rows of August 2026 — and it
+# names no document. Section 1.1 of Submódulo 5.3 is where keeping the frequency
+# is assigned to the operation centres, which is the rule behind those records.
 PROCEDURES = [
     ("Submódulo 4.2", "Submódulo 4.2-RS_2024.07.pdf", "Programação de intervenções"),
-    ("Submódulo 6.7", "Submódulo 6.7-RS_2026.04.pdf", "Apuração de indisponibilidade"),
+    ("Submódulo 6.7", "Submódulo 6.7-RS_2026.04_Retificado.pdf", "Apuração de indisponibilidade"),
     ("Submódulo 6.9", "Submódulo 6.9-RS_2025.02.pdf", "Acompanhamento de manutenção"),
     ("Submódulo 4.5", "Submódulo 4.5-PR_2025.02.pdf", "Programação diária da operação"),
+    ("Submódulo 5.3", "Submódulo 5.3-OP_2020.12.pdf", "Controle da geração"),
+    ("Submódulo 5.2", "Submódulo 5.2-OP_2020.12.pdf", "Execução de intervenções"),
+    ("Submódulo 6.3", "Submódulo 6.3-RS_2021.06.pdf", "Elaboração do Relatório de Análise de Perturbação"),
 ]
 
 
@@ -202,6 +214,20 @@ class Crawler:
                 fetched.bytes,
                 mime,
                 meta or {},
+            )
+            # A document that gets a corrected text keeps its identity: the ONS
+            # published `Submódulo 6.7-RS_2026.04_Retificado.pdf` next to the
+            # file it corrects, and both are listed as in force. Leaving the
+            # older copy searchable means an answer can quote the text that was
+            # withdrawn, so the earlier copy stops being retrievable here and
+            # stays in the table, because evidence already published points at
+            # it.
+            await conn.execute(
+                "UPDATE rag.document SET status = 'superseded'"
+                " WHERE source = $1 AND external_id = $2 AND id <> $3 AND status <> 'superseded'",
+                source,
+                external_id,
+                row["id"],
             )
         return str(row["id"]), True
 
