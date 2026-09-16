@@ -56,7 +56,23 @@ function flat(text: string): string {
 const APP_LAYOUT = code(read("app", "app", "_layout.tsx"));
 const APP_LAYOUT_FLAT = flat(read("app", "app", "_layout.tsx"));
 const ROOT_LAYOUT = code(read("app", "_layout.tsx"));
-const PROVIDER = code(read("components", "voice", "voice-provider.tsx"));
+/**
+ * **The provider is two files now, and these guards read both.**
+ *
+ * `VoiceProvider` was over the size threshold by doing two jobs: coordinating
+ * what the agent is told and what its answers do to the URL, *and* owning the
+ * credential, the socket and the state they produce. The second is
+ * `use-voice-session.ts`.
+ *
+ * Every guard below is about the pair — the session survives navigation, every
+ * tool call is answered, the context is pushed and nothing is fetched — and a
+ * guard reading only the coordinator would have gone *quiet* rather than red
+ * the moment its subject moved one file over.
+ */
+const PROVIDER = [
+  code(read("components", "voice", "voice-provider.tsx")),
+  code(read("components", "voice", "use-voice-session.ts")),
+].join("\n");
 const HOOK = code(read("components", "voice", "use-voice-agent.ts"));
 
 /** A recording port. The provider's is the one that calls `router`. */
@@ -344,8 +360,9 @@ describe("the transcript is bounded, because the provider is not", () => {
    * into a `ScrollView`, which virtualises nothing, so a long session paid for
    * every turn it had ever had. The height was bounded and the list was not.
    */
+  // The trim lives with the state it bounds, in `use-voice-session.ts`.
   const SOURCE = readFileSync(
-    join(import.meta.dir, "../src/components/voice/voice-provider.tsx"),
+    join(import.meta.dir, "../src/components/voice/use-voice-session.ts"),
     "utf8",
   );
   /** Comments blanked once, not per test — and named so nothing shadows it. */
