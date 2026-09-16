@@ -965,6 +965,11 @@ export const en = {
         "ONS settles the two fleets separately — the published grain is subsystem, technology and hour — so these are two measurements and the total is their sum. The forecast version of this panel is the opposite: one modelled expectation, divided in two.",
       emptyDay:
         "The day settled with no curtailment at all in this subsystem, which is a measurement and not a missing figure.",
+      nationalTitle: "The last 24 hours, across all four subsystems",
+      nationalSubtitle: "A sum of four measurements, and it is exact",
+      nationalLabel: "Settled constrained-off energy, all four subsystems",
+      nationalNote:
+        "This figure is the four subsystem rows of the same window, added — the gateway says so in a field of its own, `derived: sum_of_four`. It is not the ONS `SIN` line, which WattSteer never uses because it would double-count what the four rows already carry. Measurements add exactly; no forecast quantile does.",
     },
 
     overview: {
@@ -991,6 +996,9 @@ export const en = {
       rowEnergy: "Expected curtailed energy",
       rowPeak: "peak {low}–{high} MW",
       profileSubtitle: "24-hour profile, P10–P90",
+      nationalTitle: "The day, across all four subsystems",
+      nationalSubtitle:
+        "Expected value — the one forecast quantity that adds across subsystems",
       dailyEnergy: "Curtailed energy, whole day · {subsystem}",
       dailyEnergyNote:
         "A day total is a joint forecast read from the path ensemble. It is neither the sum of the hourly P90s nor the sum of the hourly P50s — no quantile adds, medians included.",

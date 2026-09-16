@@ -31,7 +31,8 @@
  * which is the visual form of "this may not happen".
  */
 
-import { radius, space, usePalette } from "@wattsteer/ui";
+import type { BandUnavailableReason } from "@wattsteer/core";
+import { Badge, radius, space, usePalette } from "@wattsteer/ui";
 import type { ReactNode } from "react";
 import { Text, View } from "react-native";
 import { useCopy, useFormat } from "@/i18n";
@@ -230,6 +231,104 @@ export function BandCard({
         tone={tone}
         footnote={footnote}
       />
+    </View>
+  );
+}
+
+/**
+ * The same headline, for a figure that is an **expectation** rather than a
+ * quantile.
+ *
+ * The product's counterpart of the landing page's `ExpectationFigure`, and
+ * deliberately a sibling of {@link BandFigure} rather than a `band?: Band`
+ * option on it. A band and an expectation are not the same claim rendered two
+ * ways: `E[Y]` is the one quantity here that survives aggregation, and the
+ * space a strip and its two bounds would occupy is spent on the reason there is
+ * no strip. That reason is a `BandUnavailableReason` and not a string, so a
+ * missing band always reads as a statement about what the forecaster can
+ * honestly publish and never as an omission — the same rule `ObservedBadge`
+ * follows for a figure that has no forecast at all.
+ *
+ * The copy is `copy.band.*`, which the landing page also reads. That is reuse
+ * and not a leak: the claim "this is an expectation, and it has no band because
+ * the ensemble is drawn one subsystem at a time" is a fact about the
+ * forecaster, identical on both surfaces, and restating it under a second key
+ * would be two sentences that can drift apart while describing one thing.
+ */
+export function ExpectationFigure({
+  label,
+  value,
+  unit,
+  reason,
+  size = "lg",
+}: {
+  label: string;
+  value: number;
+  unit: string;
+  /**
+   * Why there is no band. Keyed copy, so the figure cannot fail to say — and
+   * mandatory in spirit even though the type admits `null`.
+   *
+   * `null` is **unrepresentable at the boundary**: `apps/api/src/api/grid.ts`
+   * states that the schema makes a null `band` without a stated
+   * `band_unavailable_reason` impossible, and the generated types simply carry
+   * the two fields independently because JSON Schema's pairing constraint has
+   * no TypeScript form. It is drawn as *nothing* rather than as a default
+   * reason — inventing "no joint ensemble" for a payload that did not say so
+   * would put a claim about the forecaster on screen that no artifact made,
+   * which is the one failure this component exists to prevent.
+   */
+  reason: BandUnavailableReason | null;
+  size?: "lg" | "md";
+}) {
+  const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
+  const figureSize = size === "lg" ? 40 : 28;
+  return (
+    <View style={{ gap: space.sm }}>
+      <View
+        style={{
+          flexDirection: "row",
+          flexWrap: "wrap",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: space.sm,
+        }}
+      >
+        <Text style={{ fontSize: 13, fontWeight: "500", color: colors.inkMuted }}>
+          {label}
+        </Text>
+        <Badge label={copy.band.expectedLabel} tone="info" />
+      </View>
+      <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6 }}>
+        <Text
+          selectable={true}
+          accessibilityLabel={fill(copy.band.figureExpected, {
+            label,
+            value: f.number(value),
+            unit,
+          })}
+          style={{
+            fontSize: figureSize,
+            lineHeight: figureSize + 4,
+            fontWeight: "600",
+            letterSpacing: -0.8,
+            fontVariant: ["tabular-nums"],
+            color: colors.ink,
+          }}
+        >
+          {f.compact(value)}
+        </Text>
+        <Text style={{ fontSize: 14, fontWeight: "500", color: colors.inkMuted }}>
+          {unit}
+        </Text>
+      </View>
+      {reason === null ? null : (
+        <Text style={{ fontSize: 11, lineHeight: 17, color: colors.inkFaint }}>
+          {copy.band.noBand[reason]}
+        </Text>
+      )}
     </View>
   );
 }

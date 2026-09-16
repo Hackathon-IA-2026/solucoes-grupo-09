@@ -716,6 +716,11 @@ export const pt: Copy = {
         "O ONS liquida as duas frotas separadamente — o grão publicado é subsistema, tecnologia e hora — então estas são duas medições e o total é a soma delas. A versão de previsão deste painel é o contrário: uma expectativa modelada, dividida em duas.",
       emptyDay:
         "O dia liquidou sem nenhum corte neste subsistema, o que é uma medição e não um número faltando.",
+      nationalTitle: "As últimas 24 horas, nos quatro subsistemas",
+      nationalSubtitle: "Uma soma de quatro medições, e ela é exata",
+      nationalLabel: "Energia liquidada em constrained-off, os quatro subsistemas",
+      nationalNote:
+        "Este número é a soma das quatro linhas de subsistema da mesma janela — o gateway diz isso no próprio campo, `derived: sum_of_four`. Não é a linha SIN do ONS, que o WattSteer nunca usa porque ela contaria em dobro o que já está nas quatro. Medições somam exatamente; nenhum quantil de previsão soma.",
     },
 
     overview: {
@@ -742,6 +747,9 @@ export const pt: Copy = {
       rowEnergy: "Energia cortada esperada",
       rowPeak: "pico {low}–{high} MW",
       profileSubtitle: "Perfil de 24 horas, P10–P90",
+      nationalTitle: "O dia, nos quatro subsistemas",
+      nationalSubtitle:
+        "Valor esperado — a única grandeza de previsão que soma entre subsistemas",
       dailyEnergy: "Energia cortada, dia inteiro · {subsystem}",
       dailyEnergyNote:
         "O total do dia é uma previsão conjunta lida do ensemble de trajetórias. Não é a soma das P90 horárias nem a soma das P50 — nenhum quantil soma, medianas incluídas.",

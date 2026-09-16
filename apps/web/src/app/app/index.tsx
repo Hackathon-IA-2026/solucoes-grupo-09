@@ -56,7 +56,9 @@
  * `e2e/app-observed-overview.spec.ts` hold that from both ends.
  */
 
+import type { GridNow, NationalOutlook } from "@wattsteer/core/api";
 import {
+  CalendarDaysIcon,
   ClockIcon,
   FadeIn,
   LayoutDashboardIcon,
@@ -95,7 +97,7 @@ import {
   type ObservedNetwork,
   useNetwork,
 } from "@/components/app/use-network";
-import { BandCard } from "@/components/charts/band-figure";
+import { BandCard, BandFigure, ExpectationFigure } from "@/components/charts/band-figure";
 import { EpisodeList } from "@/components/charts/episode-list";
 import { FanChart } from "@/components/charts/fan-chart";
 import {
@@ -360,7 +362,11 @@ function ForecastPanels({
 
   return (
     <>
-      <FadeIn style={{ gap: space.md }} onLayout={onOverviewLayout}>
+      <FadeIn style={{ gap: space.md }}>
+        <NationalPanel national={forecast.outlook.national} />
+      </FadeIn>
+
+      <FadeIn delay={70} style={{ gap: space.md }} onLayout={onOverviewLayout}>
         {/*
           Map and rows side by side once there is room for both, stacked below
           that. `side` is measured against `layout.desktop` on the *container*
@@ -445,7 +451,7 @@ function ForecastPanels({
         <RiskCaveat />
       </FadeIn>
 
-      <FadeIn delay={70}>
+      <FadeIn delay={140}>
         <Panel>
           <PanelHeader
             icon={<LayoutDashboardIcon size={18} color={colors.inkMuted} />}
@@ -461,7 +467,7 @@ function ForecastPanels({
         </Panel>
       </FadeIn>
 
-      <FadeIn delay={140}>
+      <FadeIn delay={210}>
         <Panel>
           <PanelHeader
             icon={<PieChartIcon size={18} color={colors.inkMuted} />}
@@ -508,6 +514,147 @@ function ForecastPanels({
         />
       </FadeIn>
     </>
+  );
+}
+
+/**
+ * The day, summed over the four subsystems — the landing page's headline
+ * readout, in the product, on the gateway's own numbers.
+ *
+ * It is the answer to "we show this to a visitor and then never again": the
+ * landing's big sample card opens with a national figure, a risk census and the
+ * additivity argument, and the Overview went straight to the map without ever
+ * stating the total the four rows are parts of. `GET /v1/grid/outlook` has
+ * published `national` all along — `apps/api/src/api/grid.ts` computes it — so
+ * this panel reads it rather than deriving anything.
+ *
+ * **Nothing here is added by this screen, and the distinction is the panel's
+ * whole point.** `expectedMwh` is the gateway's sum of the four
+ * `day_expected_mwh`, which is exact under any dependence between subsystems
+ * because expectations add. `band` is the *persisted joint* band — quantiles
+ * over four day totals drawn on one shared ensemble index — and is `null` with
+ * a stated reason when no such row exists. What the panel must never do is
+ * assemble a band by adding the four subsystems' quantiles, and it cannot: it
+ * is handed one `Band | null` and has no quantiles to add.
+ *
+ * The copy is `copy.readout.*`, shared with the landing page. The three
+ * sentences it borrows — what the figure is, the risk census, and why the ONS
+ * `SIN` line is never used — are facts about the forecaster and the source
+ * data, identical on both surfaces. Restating them under `copy.app.*` would be
+ * two wordings of one claim, free to drift apart.
+ */
+function NationalPanel({ national }: { national: NationalOutlook }) {
+  const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
+  return (
+    <Panel>
+      <PanelHeader
+        icon={<CalendarDaysIcon size={18} color={colors.inkMuted} />}
+        title={copy.app.overview.nationalTitle}
+        subtitle={copy.app.overview.nationalSubtitle}
+      />
+      <View style={{ marginTop: space.lg, gap: space.md }}>
+        {national.band === null ? (
+          <ExpectationFigure
+            label={copy.readout.nationalLabel}
+            value={national.expectedMwh}
+            unit="MWh"
+            reason={national.bandUnavailableReason}
+          />
+        ) : (
+          <BandFigure
+            label={copy.readout.nationalLabel}
+            band={national.band}
+            unit="MWh"
+          />
+        )}
+        <Text style={{ fontSize: 12, color: colors.inkMuted }}>
+          {fill(copy.readout.riskCounts, {
+            high: f.number(national.riskClassCounts.high),
+            elevated: f.number(national.riskClassCounts.elevated),
+            low: f.number(national.riskClassCounts.low),
+          })}
+        </Text>
+        <Text style={{ fontSize: 11, lineHeight: 17, color: colors.inkFaint }}>
+          {copy.readout.nationalGrainNote}
+        </Text>
+      </View>
+    </Panel>
+  );
+}
+
+/**
+ * The settled counterpart of {@link NationalPanel}, and the one that is on
+ * screen today.
+ *
+ * Same finding, other half: `GET /v1/grid/now` publishes `national` and the
+ * Overview never drew it, so a reader who had just been shown a national
+ * headline on the landing page arrived at the product and found four regions
+ * and no total.
+ *
+ * `derived: "sum_of_four"` is a **field** on that object rather than a comment
+ * — `packages/core` says so in as many words: *"it says which four rows were
+ * added, so a reader cannot mistake it for an ONS `SIN` row"* — and the note
+ * under the figure is that field, read out. The panel carries an
+ * `ObservedBadge` for the same reason every other settled panel does: the two
+ * national figures on this screen are never both present, and the one that is
+ * has to say which of the two claims it is making.
+ *
+ * No `ExpectationFigure` and no band here, and there could not be one. This is
+ * a measurement, and the sentence a missing band would need — *why* the
+ * forecaster cannot publish one — is not a sentence about settled megawatt
+ * hours at all.
+ */
+function ObservedNationalPanel({
+  national,
+  window: windowLabel,
+}: {
+  national: GridNow["national"];
+  /** The 24-hour window these four measurements cover. */
+  window: string;
+}) {
+  const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
+  return (
+    <Panel>
+      <PanelHeader
+        icon={<CalendarDaysIcon size={18} color={colors.inkMuted} />}
+        title={copy.app.observed.nationalTitle}
+        subtitle={copy.app.observed.nationalSubtitle}
+        right={<ObservedBadge />}
+      />
+      <View style={{ marginTop: space.lg, gap: space.sm }}>
+        <Text style={{ fontSize: 13, fontWeight: "500", color: colors.inkMuted }}>
+          {copy.app.observed.nationalLabel}
+        </Text>
+        <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6 }}>
+          <Text
+            selectable={true}
+            style={{
+              fontSize: 40,
+              lineHeight: 44,
+              fontWeight: "600",
+              letterSpacing: -0.8,
+              fontVariant: ["tabular-nums"],
+              color: colors.ink,
+            }}
+          >
+            {f.compact(national.last24hConstrainedOffMwh)}
+          </Text>
+          <Text style={{ fontSize: 14, fontWeight: "500", color: colors.inkMuted }}>
+            MWh
+          </Text>
+        </View>
+        <Text style={{ fontSize: 11, color: colors.info, fontVariant: ["tabular-nums"] }}>
+          {windowLabel}
+        </Text>
+        <Text style={{ fontSize: 11, lineHeight: 17, color: colors.inkFaint }}>
+          {copy.app.observed.nationalNote}
+        </Text>
+      </View>
+    </Panel>
   );
 }
 
@@ -571,7 +718,11 @@ function ObservedPanels({
 
   return (
     <>
-      <FadeIn style={{ gap: space.md }} onLayout={onOverviewLayout}>
+      <FadeIn style={{ gap: space.md }}>
+        <ObservedNationalPanel national={observed.now.national} window={window24h} />
+      </FadeIn>
+
+      <FadeIn delay={70} style={{ gap: space.md }} onLayout={onOverviewLayout}>
         <View
           style={{
             flexDirection: side ? "row" : "column",
@@ -660,9 +811,14 @@ function ObservedPanels({
         </View>
       </FadeIn>
 
-      <SettledDayPanel observed={observed} subsystem={subsystem} bandAbsent={true} />
+      <SettledDayPanel
+        observed={observed}
+        subsystem={subsystem}
+        bandAbsent={true}
+        delay={140}
+      />
 
-      <FadeIn delay={140}>
+      <FadeIn delay={210}>
         <Panel>
           <PanelHeader
             icon={<PieChartIcon size={18} color={colors.inkMuted} />}
@@ -693,7 +849,7 @@ function ObservedPanels({
         which is a different sentence from a zero and gets a different card.
       */}
       <FadeIn
-        delay={210}
+        delay={280}
         style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}
       >
         {day.peakHour === null ? (
@@ -852,10 +1008,17 @@ function SettledDayPanel({
   observed,
   subsystem,
   bandAbsent,
+  delay = 70,
 }: {
   observed: ObservedNetwork;
   subsystem: SubsystemCode;
   bandAbsent: boolean;
+  /**
+   * Where this panel sits in its stack's cascade. A prop and not a constant
+   * because the two stacks that render it have different lengths: in
+   * `SettledPanels` it is the second panel, in `ObservedPanels` the fourth.
+   */
+  delay?: number;
 }) {
   const colors = usePalette();
   const copy = useCopy();
@@ -863,7 +1026,7 @@ function SettledDayPanel({
   const meta = subsystemMeta(subsystem);
 
   return (
-    <FadeIn delay={70}>
+    <FadeIn delay={delay}>
       <Panel>
         <PanelHeader
           icon={<LayoutDashboardIcon size={18} color={colors.inkMuted} />}
