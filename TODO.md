@@ -6,49 +6,47 @@ Status: `[ ]` not started · `[~]` in progress · `[x]` done
 
 - [x] **1.** Remove `PROTÓTIPO` from the header — it is a hackathon, so it is implicit.
 - [ ] **2.** Promote a model.
-      ⛔ **The gate asks for a guarantee the method does not make.** Read off
-      the artifact cards on the production volume, both lanes:
+      ⛔ **I will not promote these. The floor is genuinely missed more often
+      than the band claims**, and derived from the gate's own numbers rather
+      than argued:
 
-      | | gate_early | gate_late | |
+      `mean(p)` on the rows that state a floor is `coverage + |excess|` —
+      **0.9723** on `gate_late`, **0.9923** on `gate_early`. A correctly
+      calibrated band, conditioned on curtailed hours, covers `0.90 / p`:
+
+      | | correct band | observed | shortfall |
       |---|---|---|---|
-      | `coverage_p10` (all scored rows) | **0.9412** | **0.9100** | target 0.90 ✅ |
-      | `coverage_p10_where_stated` | 0.8477 | 0.8114 | gate wants ≥ 0.85 ❌ |
-      | `coverage_guardrail_satisfied` | **True** | **True** | the card's own verdict |
-      | `delta_lo` | −0.025 MWh | −210.79 MWh | |
+      | `gate_late` | 0.9256 | 0.8114 | **11.4 pts** |
+      | `gate_early` | 0.9070 | 0.8477 | **5.9 pts** |
 
-      **Both models already deliver the coverage conformal promises.** Over the
-      whole scored population the floor is cleared 94% and 91% of the time
-      against a 90% target, and each card records its own guardrail as
-      *satisfied*. The promotion gate then measures
-      `coverage_p10_in_band` on the **conditional** subpopulation — the rows
-      that state a positive floor, `p > 0.90` — and finds 0.85 and 0.81.
+      Promoting either puts a floor in front of an operator that is breached
+      about one hour in six while implying one in thirteen. On a product whose
+      entire claim is honest uncertainty, that is the one number that must not
+      be optimistic — a floor that is too high understates how bad a bad hour
+      gets, which is the direction that costs money.
 
-      Split conformal makes a **marginal** guarantee, not a conditional one. An
-      interval that is valid on average routinely under-covers on some slices
-      and over-covers on others; that is the method working, not failing. So
-      `retrain_owed: false` is right and another training run of the same shape
-      will fail the same way — as eight artifacts on `gate_early` already have,
-      all with the same two rails.
+      **The rail is also mis-centred, and that is a second defect.** A correct
+      band reads `excess = 0.90/p − p` — **−0.047** and **−0.085** — against a
+      tolerance of `0 ± 0.037` and `0 ± 0.046`. *A correct model fails this rail
+      on both lanes.* That is the same failure the codebase already found and
+      documented in `p50_unbiasedness`: "a rail a correct model fails harder
+      than the candidate is not measuring the candidate." Fixing it will not
+      promote anything — the under-coverage above is independent — but it must
+      be fixed or it will refuse the model that finally deserves promotion.
 
-      `gate_early` misses the band by **0.0023**.
+      **The work, in order:**
 
-      Two honest ways forward, and the choice is a product decision about what
-      the band promises rather than a bug to fix:
+      1. Re-centre `p10_calibration_excess` on `0.90/p − p` rather than `0`,
+         which is what a correct band reads on this population. Small, and
+         `test_calibration_excess_rail.py` already exists to hold it.
+      2. Mondrian conformal for the lower tail: fit `δ_lo` per stratum instead
+         of once globally. `δ_lo` is a published scalar with the card, the
+         metrics table and the lead-time A/B all reading it, so it needs to
+         arrive alongside the scalar rather than replacing it.
+      3. Retrain, and let the gate judge.
 
-      1. **Make the rail measure what the method guarantees** — marginal
-         coverage, which both lanes pass today. Promotes immediately, and the
-         product's claim becomes "90% of curtailed hours clear the floor",
-         which is true and is what the card already reports.
-      2. **Make the method deliver what the rail asks** — conditional coverage,
-         via Mondrian conformal: fit `δ_lo` per stratum (p-band, or subsystem)
-         instead of once globally. Real work in
-         `training/conformal.py`, and it cannot be validated anywhere but
-         production, because the local database is schema-only.
-
-      What must not happen is quietly widening the rail to let a model through.
-      The floor is what tells an operator how bad an hour can get, and the two
-      options above differ in what the product is promising — not in how
-      strictly it is measured.
+      Step 2 cannot be validated anywhere but production: the local database is
+      nine rows.
 
 ## Quality passes
 
