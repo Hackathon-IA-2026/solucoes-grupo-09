@@ -88,6 +88,46 @@ Status: `[ ]` not started · `[~]` in progress · `[x]` done
          optimistic even though the ordering is what matters here.
       3. Retrain, and let the gate judge.
 
+      **Done — 2026-09-16, run `2026-09-16T14:00:00Z`. Both lanes refused**, and
+      the stated-only split reverses my last conclusion a third time.
+
+      Gate: `p10_calibration_excess` −0.1285 (early, 1346 rows) and −0.1447
+      (late, 1665 rows), against 0 ± ~0.04. Refused. The rail's own reason also
+      settles the thing I withdrew in `1dc4618`: *"Zero is what a correctly
+      calibrated band reads here, whatever the point mass at the P10 does,
+      because the atom is in both terms."* The centre is right; the withdrawal
+      was right; the under-coverage is real.
+
+      **The split, both ways:**
+
+      | | all scored rows | stated rows | stated / all |
+      |---|---:|---:|---:|
+      | N | 535 · **0.955** | 47 · **0.489** | 8.8% |
+      | NE | 1706 · **0.923** | 800 · **0.836** | 46.9% |
+      | SE | 698 · **0.950** | 457 · **0.923** | 65.5% |
+      | S | 548 · **0.973** | 42 · **0.643** | 7.7% |
+
+      **NE was never the outlier.** It read worst on the left column only
+      because it is the *least inflated* — half its rows state a floor. On the
+      rows that actually make a claim, NE (0.836) and SE (0.923) are the two
+      healthy subsystems, and **N (0.489) and S (0.643) are broken**: they state
+      a floor on fewer than one row in eleven, and when they do it holds about
+      half the time.
+
+      So per-subsystem `δ_lo`, which I had twice talked myself into, would have
+      been fitted against the wrong target. The pooled residual is dominated by
+      NE and SE — 1257 of the 1346 stated rows — and is then applied to N and S,
+      whose stated rows behave nothing like it. That is the defect, and it is a
+      *sample* problem before it is a stratification one: 47 and 42 rows are too
+      few to fit a per-subsystem correction on at all.
+
+      **Next, and not before another measurement:** find out why N and S almost
+      never state a floor. If the classifier is pinning their P10 at zero on
+      nearly every hour, the fix is in the hurdle, not in the conformal step —
+      and no amount of recalibrating `δ_lo` touches it.
+
+      Still not promoting anything.
+
       Step 2 cannot be validated anywhere but production: the local database is
       nine rows.
 
