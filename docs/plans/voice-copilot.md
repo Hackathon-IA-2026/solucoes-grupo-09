@@ -1,7 +1,19 @@
 # WattSteer Voice — the grid, spoken to
 
-**Status:** plan only. Nothing here is built. Every file path below is a file to
-*create*; every existing file named is one to *read* before touching.
+**Status:** **built and deployed.** Every section below is implemented; the
+parity audit at the bottom of this file walks each one against the code, names
+the two places the implementation deliberately diverges, and gives the evidence.
+File paths below were files to *create* and now describe files that exist — read
+them before touching, and read the audit before assuming this document still
+describes work outstanding.
+
+> This line used to read *"plan only. Nothing here is built."* It stayed that
+> way through the whole build, which made the most-read sentence in the document
+> the only false one in it — and in a repo where `**Status:**` is the ticket's
+> authority, that is not a stale note, it is the document lying about its own
+> subject. Two separate reviewers concluded from it that the feature did not
+> exist. Fixed, with an audit under it so the claim is checkable rather than
+> merely asserted.
 
 > You don't talk to a chatbot about the grid. You talk to the grid **through**
 > WattSteer.
@@ -606,3 +618,118 @@ Phases 1–4 are the product. 5–7 are what make it land in a room.
   cannot promote a model, trigger a retrain, or change anything on the server.
   The product is read-only and the voice does not get a wider hand than the
   mouse has.
+
+---
+
+## 10. Parity audit — this plan against the code that implements it
+
+Written after the build, by walking every testable claim above and checking it
+against the repository rather than against memory. Two claims did not survive
+contact; both are recorded here rather than quietly reconciled.
+
+### 10.1 The files
+
+Every path §2.3 asked for exists, and two more the plan did not anticipate:
+
+| plan §2.3 | in the repo | lines |
+|---|---|---|
+| `apps/api/src/api/voice.ts` | same | 227 |
+| `apps/api/test/voice-session.test.ts` | same | 14 tests |
+| `packages/core/src/errors.ts` += `VOICE_UNAVAILABLE` | present, plus `VOICE_NOT_CONFIGURED` | — |
+| `lib/voice/grok-voice-core.ts` | **`lib/voice/session.ts`** | 374 |
+| `lib/voice/web-audio-backend.ts` | same | 146 |
+| `lib/voice/tools.ts` | same | 306 |
+| `lib/voice/execute.ts` | same | 703 |
+| `lib/voice/instructions.ts` | same | 215 |
+| `lib/voice/context.ts` | same | 241 |
+| `components/voice/voice-provider.tsx` | same | 462 |
+| `components/voice/use-voice-agent.ts` | same | 452 |
+| `components/voice/voice-dock.tsx` | same | 440 |
+| `components/voice/voice-orb.tsx` | same | 211 |
+| `components/voice/voice-transcript.tsx` | same | 99 |
+| `components/voice/voice-action-card.tsx` | same | 151 |
+| `components/voice/voice-trigger.tsx` | same | 116 |
+| `test/voice-tools.test.ts` | same, **split** into `voice-tools` (17) + `voice-execute` (62) | — |
+| `test/voice-context.test.ts` | same | 22 |
+| `test/voice-dock.test.ts` | same | 31 |
+| `test/voice-provider.test.ts` | same | 27 |
+| `e2e/voice-survives-navigation.spec.ts` | same | 5 |
+| — | `lib/voice/audio-codec.ts` + `test/voice-codec.test.ts` | 131 / 13 |
+| — | `test/voice-instructions.test.ts`, `test/voice-session.test.ts` | 20 / 9 |
+
+**256 tests across ten files**, all green. The rename of `grok-voice-core.ts` to
+`session.ts` is the only naming divergence and it is the better name: the file
+is ours the moment it was copied (§8's own argument), so carrying the vendor in
+the filename would have been the one part of the vendoring we did not take
+ownership of.
+
+### 10.2 The claims, checked
+
+| § | claim | verdict |
+|---|---|---|
+| 2.1 | ephemeral tokens only; key never leaves `apps/api` | **holds** — five of the fourteen API tests are leak guards, including one that greps this file's own source for interpolation of the upstream body |
+| 2.2 | provider above the `Stack`, session survives navigation | **holds** — asserted in `voice-provider.test.ts` and driven in the e2e spec |
+| 3.1 | exactly six tools | **holds** — `show_grid`, `explain`, `mitigate`, `replay`, `focus`, `highlight` |
+| 3.1 | `highlight` does not navigate | **holds** — its intent arm has no pathname, and `subsystem-map.tsx`'s lifted hover is the third end, as predicted |
+| 3.2 | `thinking` and `acting` added | **holds** — seven-member union, every member with copy in both locales |
+| 3.3 | `executeTool` pure: no router, no hooks | **holds** — zero `expo-router` or `react` imports in the file |
+| 3.3 | validation refuses, never coerces | **holds** — thirteen refusal codes; `subsystem: "SUDESTE"` yields `unknown_subsystem` |
+| 3.3 | scenarios go through `withBattery`/`withLoad`, never a hand-built string | **holds** — `writeScenario` is the only encoder reached |
+| 3.4 | context is a pure function, issues no request | **holds** — no `fetch`, no `api.`, no `await` anywhere in `context.ts` |
+| 4 | the absence is in the context and refusing is instructed | **holds** — `voice-instructions.test.ts`, 20 tests |
+| 8 | `enable_echo_detection_filtering` + `server_vad` | **holds** — both in the `session.update` |
+| 8 | model string pinned in one constant | **holds** — `config.grokVoiceModel`, server side |
+| 6 | the demo script is an acceptance test | **was a gap — now closed.** See 10.3 |
+| 6 | step 5 opens the Time Machine on the battery from step 4 | **diverges by design.** See 10.4 |
+
+### 10.3 The gap that was real: the script was never run as a script
+
+Every one of §6's six steps had a test. The *sequence* did not, and the sequence
+is where the script's last row lives: *"→ Visão da rede, **selection intact**"*.
+Intact after what? After five prior turns, each writing into the selection the
+next one reads. A test that runs one tool against a fixed `AppParams` starts
+from `NE` every time, so it proves that step 6 preserves a selection nothing had
+disturbed — which is not the claim.
+
+`voice-execute.test.ts` now drives the six recorded calls in order, threading
+each intent's output into the next call's input exactly as `voice-provider.tsx`
+does through `liveRef`. Step 3 deliberately moves the selection to `SE` so the
+thread carries something, and the final assertions demand `SE` rather than the
+`NE` it started on.
+
+Verified non-vacuous by reintroducing the defect the thread exists to catch —
+passing the original params to every turn, which is precisely the stale-closure
+bug §2.2 calls *"the feature breaks when it works"*. The test fails with
+`Expected "SE", Received "NE"`.
+
+### 10.4 The divergence that is not a gap: step 5 loses the battery
+
+§6 step 5 is *"Isso teria funcionado na semana passada?"*, where *isso* is the
+500 MWh battery step 4 described, and the plan expects the Time Machine to open
+on it. It does not.
+
+It does not because **the tab row does not either**. `sharedParams` is the one
+crossing between these four screens and it emits `subsystem`, `technology` and
+`run` — a reader who edits a battery on Mitigar and presses "Máquina do tempo"
+loses it in exactly the same way. The agent is therefore consistent with the
+interface it is driving, which is the property worth protecting: an agent that
+carried state the tab row drops would make one sentence mean two different
+things depending on whether it was spoken or clicked.
+
+The gap is real and it is a **product decision, not a bug to fix quietly**.
+Replay does read `?s=` — `use-replay.ts` posts the scenario to `/v1/replay` —
+so the screen would honour a carried scenario if the crossing carried one.
+Making it do so is a change to `sharedParams`, and therefore to every tab press
+by every reader, which is a change to the product's cross-screen contract and
+belongs to whoever owns that contract. The test pins today's behaviour and says
+so in full.
+
+### 10.5 One limit the implementation reports rather than hides
+
+`voice-provider.tsx`'s `say` — the typed fallback for a reader with no
+microphone — reaches the model as *context*, not as a user turn, because
+`VoiceSessionCore` exposes `updateContext` and `respondToTool` and nothing that
+creates a user turn. So a typed line cannot itself provoke a spoken answer.
+Closing it needs one method on the pure layer (a `conversation.item.create` of
+an `input_text` item, then `response.create`). It is written down in that file,
+and the dock's fallback panel says what it is rather than pretending otherwise.

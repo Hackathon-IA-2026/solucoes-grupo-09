@@ -8,7 +8,11 @@ import {
   SUBSYSTEM_DISPLAY_ORDER,
 } from "@wattsteer/core";
 import type { Scenario } from "@wattsteer/core/api";
-import { type AppParams, parseAppParams } from "../src/components/app/params";
+import {
+  type AppParams,
+  parseAppParams,
+  writeParams,
+} from "../src/components/app/params";
 import {
   defaultScenario,
   readScenario,
@@ -814,4 +818,143 @@ describe("the demo script (plan §6), as gherkin", () => {
       }
     });
   }
+});
+
+/**
+ * **The demo script, walked end to end.** Plan §6, as one sequence.
+ *
+ * Every step below is already covered somewhere in this file — the highlight
+ * that does not navigate, the relative day that resolves to an episode, the
+ * battery that reaches the scenario codec. What none of those tests can assert
+ * is the property the script's last row actually claims: *"→ Visão da rede,
+ * **selection intact**"*. Intact after what? After five prior turns, each of
+ * which wrote into the selection the next one reads. That is a fact about the
+ * accumulated state, and a test that runs one tool against a fixed `AppParams`
+ * cannot see it — it starts from `NE` every time and therefore proves that the
+ * sixth step preserves a selection nothing had disturbed.
+ *
+ * So this threads the params through: each intent's output becomes the next
+ * call's input, exactly as `voice-provider.tsx` does it via `liveRef`, and the
+ * script is driven in the order a person would speak it.
+ *
+ * **Non-vacuity.** The thread has to actually carry something, or the final
+ * assertion is trivially true. Step 3 moves the subsystem to `SE` — a departure
+ * from the starting selection that every later step must preserve — and the
+ * assertions demand `SE` at the end rather than `NE`. An `executeTool` that
+ * dropped the incoming params and rebuilt defaults would answer `NE` and fail
+ * here while passing every other test in this file.
+ */
+describe("the demo script (plan §6), driven as one conversation", () => {
+  it("six turns, each reading the selection the last one left", () => {
+    const transcript: { step: number; kind: string; where: string }[] = [];
+    let params: AppParams = NE;
+    let scenario: Scenario | undefined;
+    let highlighted: SubsystemCode | null = null;
+
+    /** Apply an intent the way the provider does, and record what happened. */
+    const turn = (step: number, name: string, args: Record<string, unknown>) => {
+      const intent = executeTool({ name, arguments: args } as ToolCall, params, scenario);
+      if (intent.kind === "navigate" || intent.kind === "params") {
+        params = parseAppParams({ ...writeParams(params), ...intent.params }, NOW);
+        const blob = intent.params[SCENARIO_PARAM];
+        if (blob !== undefined) {
+          const readout = readScenario(
+            blob,
+            defaultScenario(params.subsystem, params.date),
+            {
+              now: NOW,
+            },
+          );
+          if (!readout.ok) {
+            throw new Error(
+              `step ${step} wrote a link the screen refuses: ${readout.code}`,
+            );
+          }
+          scenario = readout.scenario;
+        }
+      }
+      if (intent.kind === "highlight") {
+        highlighted = intent.subsystem;
+      }
+      transcript.push({
+        step,
+        kind: intent.kind,
+        where: intent.kind === "navigate" ? intent.pathname : "(no navigation)",
+      });
+      return intent;
+    };
+
+    // 1 — "Qual região devo me preocupar mais amanhã?"
+    //     The step that proves the thesis: it must NOT navigate.
+    turn(1, "highlight", { subsystem: "NE" });
+    expect(highlighted).toBe("NE");
+
+    // 2 — "Por quê?"  → Explicar, the subsystem carried.
+    turn(2, "explain", { subsystem: "NE" });
+    expect(params.subsystem).toBe("NE");
+
+    // 3 — "O que eu poderia fazer?" → Mitigar. Moved to SE deliberately: the
+    //     rest of the script has to carry a selection that is not the default.
+    turn(3, "mitigate", { subsystem: "SE" });
+    expect(params.subsystem).toBe("SE");
+
+    // 4 — "E se eu tivesse uma bateria de 500 MWh?"  The step to demo: the
+    //     agent writes a query parameter and the real codec reads it back.
+    turn(4, "mitigate", { battery_mwh: 500 });
+    expect(scenario).toBeDefined();
+    expect(scenarioBattery(scenario as Scenario).energyCapacityMwh).toBe(500);
+
+    // 5 — "Isso teria funcionado na semana passada?" → the Time Machine.
+    turn(5, "replay", { relative_day: -7 });
+
+    // 6 — "Volta pra visão geral" → Visão da rede, selection intact.
+    const last = turn(6, "show_grid", {});
+    expect(navigation(last).pathname).toBe(SCREEN_PATHS.overview);
+
+    // The claim the script's last row makes, and the reason this test exists:
+    // `SE` survived four turns after the one that chose it.
+    expect(params.subsystem).toBe("SE");
+
+    /*
+      **The scenario does not survive the crossing, and that is the product's
+      rule rather than this agent's omission.**
+
+      Plan §6 step 5 is *"Isso teria funcionado na semana passada?"* — where
+      "isso" is the 500 MWh battery step 4 just described — and the plan expects
+      the Time Machine to open on it. It does not, and neither does the tab row:
+      `sharedParams` is the one crossing between these four screens and it emits
+      `subsystem`, `technology` and `run`. A reader pressing "Máquina do tempo"
+      after editing a battery loses it in exactly the same way.
+
+      So the agent is *consistent with the interface it is driving*, which is
+      the property worth protecting: an agent that carried state the tab row
+      drops would make the same sentence mean two different things depending on
+      whether it was spoken or clicked. The assertion below pins that, rather
+      than pinning the plan's wish.
+
+      The gap is real and it is a product decision, not a bug to be fixed
+      quietly here: Replay *does* read `?s=` (`use-replay.ts` posts the scenario
+      to `/v1/replay`), so the screen would honour a carried scenario if the
+      crossing carried one. Making it do so is a change to `sharedParams` and
+      therefore to every tab press, which is a decision about the product's
+      cross-screen contract and is recorded as one.
+    */
+    expect(navigation(last).params[SCENARIO_PARAM]).toBeUndefined();
+    // Non-vacuity for the sentence above: the scenario *was* written, by the
+    // step that had something to say about it. It is the crossing that drops
+    // it, not the agent that never built it.
+    expect(scenario).toBeDefined();
+    expect(scenarioBattery(scenario as Scenario).energyCapacityMwh).toBe(500);
+
+    // The shape of the whole run, in one assertion: step 1 is the only turn
+    // that does not move the reader, and every other step lands somewhere.
+    expect(transcript).toEqual([
+      { step: 1, kind: "highlight", where: "(no navigation)" },
+      { step: 2, kind: "navigate", where: SCREEN_PATHS.explain },
+      { step: 3, kind: "navigate", where: SCREEN_PATHS.mitigate },
+      { step: 4, kind: "navigate", where: SCREEN_PATHS.mitigate },
+      { step: 5, kind: "navigate", where: SCREEN_PATHS.replay },
+      { step: 6, kind: "navigate", where: SCREEN_PATHS.overview },
+    ]);
+  });
 });
