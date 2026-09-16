@@ -28,8 +28,16 @@ Status: `[ ]` not started · `[~]` in progress · `[x]` done
 
 - [ ] **10.** Apply the `thermo-nuclear-code-quality-review` skill and fix
       everything it finds.
+      ⛔ **Blocked on you.** `thermo-nuclear-code-quality-review` is marked
+      `disable-model-invocation: true` and its tool refuses to run it, with
+      instructions not to replicate the workflow by other means. Run
+      `/thermo-nuclear-code-quality-review` yourself and I will act on the findings.
 - [ ] **11.** Apply the `improve-codebase-architecture` skill and fix everything
       it finds.
+      ⛔ **Blocked on you.** `improve-codebase-architecture` is marked
+      `disable-model-invocation: true` and its tool refuses to run it, with
+      instructions not to replicate the workflow by other means. Run
+      `/improve-codebase-architecture` yourself and I will act on the findings.
 - [ ] **12.** API speed: find and apply every optimisation that does not break
       anything.
 - [x] **13.** Checked. **Neither is deleted, and both for a reason.**

@@ -51,7 +51,18 @@ const ORB = code(read("components", "voice", "voice-orb.tsx"));
 const TRIGGER = code(read("components", "voice", "voice-trigger.tsx"));
 const TRANSCRIPT = code(read("components", "voice", "voice-transcript.tsx"));
 const SHELL = code(read("components", "app", "app-shell.tsx"));
-const OVERVIEW = code(read("app", "app", "index.tsx"));
+/**
+ * The two Overview stacks that own the map's highlight.
+ *
+ * This used to read `app/app/index.tsx`, which held both of them until the
+ * screen was decomposed at 1095 lines. Naming the two files rather than
+ * concatenating the directory is the point: the agent's emphasis has to reach
+ * the map in **both** states of this screen — the forecast one and the settled
+ * one — and a guard over the joined source would pass on a build where only one
+ * of them was wired, which is exactly the half-fix worth catching.
+ */
+const FORECAST_STACK = code(read("components", "app", "overview", "forecast-panels.tsx"));
+const OBSERVED_STACK = code(read("components", "app", "overview", "observed-panels.tsx"));
 
 const DICTIONARIES = { pt, en };
 
@@ -304,8 +315,19 @@ describe("the trigger and the map", () => {
   it("the agent lights the map through the highlight the map already had", () => {
     // §3.1: "a one-line change to who can call `setHovered`, and no new
     // highlight mechanism at all". The pointer wins where there is one.
-    expect(OVERVIEW).toContain("useVoiceHighlight");
-    expect(OVERVIEW).toContain("hovered ?? spoken");
+    for (const [name, stack] of [
+      ["forecast", FORECAST_STACK],
+      ["observed", OBSERVED_STACK],
+    ] as const) {
+      expect({ stack: name, reads: stack.includes("useVoiceHighlight") }).toEqual({
+        stack: name,
+        reads: true,
+      });
+      expect({ stack: name, pointerWins: stack.includes("hovered ?? spoken") }).toEqual({
+        stack: name,
+        pointerWins: true,
+      });
+    }
   });
 });
 

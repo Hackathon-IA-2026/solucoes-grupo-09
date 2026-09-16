@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { SUBSYSTEM_DISPLAY_ORDER, type SubsystemCode } from "@wattsteer/core";
 import { en as EN } from "../src/i18n/copy.en";
@@ -46,6 +46,32 @@ import {
 const ROOT = join(import.meta.dir, "..", "..", "..");
 const SCREEN = join(ROOT, "apps", "web", "src", "app", "app", "index.tsx");
 const MAP = join(ROOT, "apps", "web", "src", "components", "charts", "subsystem-map.tsx");
+const PANELS = join(ROOT, "apps", "web", "src", "components", "app", "overview");
+
+/**
+ * **The Overview, as source — the route and the panels it arranges.**
+ *
+ * These guards are about one screen, and that screen is no longer one file: at
+ * 1095 lines it was decomposed, and the panels that draw the map and the rows
+ * moved to `components/app/overview/`. A guard pinned to `index.tsx` alone
+ * would have gone quiet at exactly that moment — still green, still asserting
+ * nothing, because the props it looks for had left the file it was reading.
+ *
+ * So the unit is the directory plus the route, discovered rather than listed.
+ * A panel split out tomorrow is covered the day it is written, and the
+ * assertion below makes the discovery itself non-vacuous: an empty or renamed
+ * directory fails here rather than silently narrowing every guard in this file
+ * to the route's own two hundred lines.
+ */
+const OVERVIEW_FILES = [SCREEN, ...readdirSync(PANELS).map((name) => join(PANELS, name))];
+
+function overviewSource(): string {
+  return OVERVIEW_FILES.map(source).join("\n");
+}
+
+function overviewWithoutComments(): string {
+  return OVERVIEW_FILES.map(sourceWithoutComments).join("\n");
+}
 
 function source(path: string): string {
   return readFileSync(path, "utf8");
@@ -233,8 +259,25 @@ describe("the geometry", () => {
 });
 
 describe("the map's wiring", () => {
+  /**
+   * The guard on the guards. Every structural assertion below reads
+   * `OVERVIEW_FILES`, and a list that discovers its own members is only as
+   * honest as the discovery: a renamed directory would make `readdirSync`
+   * throw, but a directory that merely stopped holding the panels would leave
+   * every one of them reading the route's two hundred lines and passing.
+   */
+  it("the Overview's panels are where these guards look for them", () => {
+    const names = readdirSync(PANELS);
+    expect(names.length).toBeGreaterThanOrEqual(4);
+    expect(names).toContain("forecast-panels.tsx");
+    expect(names).toContain("observed-panels.tsx");
+    // The props the wiring guards match on have to actually be in there, or
+    // the concatenation is a longer string that says nothing more.
+    expect(overviewWithoutComments()).toContain("hovered={active}");
+  });
+
   it("the overview defines its selection once and hands it to both", () => {
-    const screen = sourceWithoutComments(SCREEN);
+    const screen = overviewWithoutComments();
     // One navigation call in the file. Two would be two selection models that
     // happen to agree today.
     expect(screen.match(/router\.push/g)?.length ?? 0).toBe(1);
@@ -457,10 +500,7 @@ describe("the region responds to a pointer, and so does its row", () => {
     "utf8",
   );
   const stripped = raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
-  const overview = readFileSync(
-    join(import.meta.dir, "..", "src/app/app/index.tsx"),
-    "utf8",
-  );
+  const overview = overviewSource();
 
   /**
    * `onClick` alone did not fire. It was attached — the rendered path carries

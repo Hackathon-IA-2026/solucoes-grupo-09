@@ -20,7 +20,7 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const SRC = join(import.meta.dir, "..", "src");
@@ -45,8 +45,43 @@ function flat(text: string): string {
   return code(text).replace(/\s+/g, " ");
 }
 
-const OVERVIEW = code(read("app", "app", "index.tsx"));
-const OVERVIEW_FLAT = flat(read("app", "app", "index.tsx"));
+/**
+ * **The Overview is a directory now, and these guards follow it there.**
+ *
+ * `app/app/index.tsx` reached 1095 lines and was decomposed: the route kept the
+ * decision it makes — settled or forecast, and in which order — and the eight
+ * panel components moved to `components/app/overview/`. Every structural guard
+ * below is about the screen as a whole, so the screen as a whole is what they
+ * read: the route concatenated with the panels, discovered from the directory
+ * rather than listed, so a panel split out tomorrow is covered on the day it is
+ * written.
+ *
+ * The concatenation is deliberate and is *not* a loosening. Three of these
+ * guards are `not.toContain` assertions — the Overview calls no fixture
+ * builder, and reads its own hook and not Explain's — and a `not` over a larger
+ * string is a strictly stronger claim. The one guard that genuinely needs a
+ * single component's boundary reads that component's own file instead, which
+ * the split made possible: see `OBSERVED_STACK`.
+ */
+const OVERVIEW_PARTS = [
+  read("app", "app", "index.tsx"),
+  ...readdirSync(join(SRC, "components", "app", "overview"))
+    .filter((name) => name.endsWith(".tsx"))
+    .map((name) => read("components", "app", "overview", name)),
+];
+const OVERVIEW = OVERVIEW_PARTS.map(code).join("\n");
+const OVERVIEW_FLAT = OVERVIEW_PARTS.map(flat).join(" ");
+
+/**
+ * The observed stack, alone, as its own file.
+ *
+ * Before the split this was a `slice` between two `indexOf` calls into one big
+ * string — a range that was correct only while the two functions stayed
+ * adjacent and in that order, and that would have gone quietly wrong the moment
+ * either moved. The file boundary is the same claim with nothing to get wrong.
+ */
+const OBSERVED_STACK = code(read("components", "app", "overview", "observed-panels.tsx"));
+const FORECAST_STACK = code(read("components", "app", "overview", "forecast-panels.tsx"));
 const EXPLAIN_FLAT = flat(read("app", "app", "explain.tsx"));
 const EXPLAIN = code(read("app", "app", "explain.tsx"));
 const SHELL = code(read("components", "app", "app-shell.tsx"));
@@ -178,10 +213,13 @@ describe("a refused forecast renders no forecast", () => {
     expect(OVERVIEW_FLAT).toContain(
       "{forecast === null ? ( <ObservedPanels observed={observed} subsystem={params.subsystem} onSelect={select} onExplain={explain} /> ) : ( <> <ForecastPanels forecast={forecast} onSelect={select} onExplain={explain} /> <SettledPanels observed={observed} subsystem={params.subsystem} onSelect={select} /> </> )}",
     );
+    // Each forecast panel is inside `ForecastPanels`, which is now a file of
+    // its own — so this is a containment check rather than the `indexOf`
+    // ordering comparison it used to be. That comparison was true only while
+    // the two functions stayed adjacent and in that order in one string; a
+    // reordering would have silently inverted it while still passing.
     for (const panel of ["<SubsystemMap", "<FanChart", "<BandCard", "<SubsystemRow"]) {
-      const inPanels =
-        OVERVIEW.indexOf(panel) > OVERVIEW.indexOf("function ForecastPanels");
-      expect({ panel, inForecastPanels: inPanels }).toEqual({
+      expect({ panel, inForecastPanels: FORECAST_STACK.includes(panel) }).toEqual({
         panel,
         inForecastPanels: true,
       });
@@ -206,14 +244,14 @@ describe("a refused forecast renders no forecast", () => {
    * `ObservedPanels` fails this, and each was reintroduced once to check it.
    */
   it("the observed stack cannot state a forecast", () => {
-    const from = OVERVIEW.indexOf("function ObservedPanels");
-    const to = OVERVIEW.indexOf("function SettledPanels");
-    expect({ from: from > 0, ordered: to > from }).toEqual({
-      from: true,
-      ordered: true,
-    });
+    // The whole file, not a slice of a bigger one: `ObservedPanels` has its own
+    // module now, so the boundary this guard is about is the boundary the
+    // filesystem enforces. Non-vacuity is asserted first — an empty or renamed
+    // file would make every `not.toContain` below trivially true.
+    expect(OBSERVED_STACK).toContain("export function ObservedPanels");
+    expect(OBSERVED_STACK).toContain("<SubsystemMap");
     // Flattened, so the assertions survive the formatter wrapping a JSX line.
-    const observedStack = OVERVIEW.slice(from, to).replace(/\s+/g, " ");
+    const observedStack = OBSERVED_STACK.replace(/\s+/g, " ");
     for (const forecastOnly of [
       "<FanChart",
       "<BandCard",
