@@ -1,6 +1,7 @@
 import {
   focusRing,
   layout,
+  motion,
   Panel,
   radius,
   space,
@@ -8,6 +9,7 @@ import {
   useContainerWidth,
   usePalette,
   WattSteerWordmark,
+  webTransition,
 } from "@wattsteer/ui";
 import { Link } from "expo-router";
 import Head from "expo-router/head";
@@ -325,8 +327,12 @@ function PitchPdfLink({ label }: { label: string }) {
           ...(Platform.OS === "web"
             ? ({
                 cursor: "pointer",
-                transitionProperty: "background-color, border-color",
-                transitionDuration: "150ms",
+                // Colour only — `ease`, per `motion.ease`.
+                ...webTransition(
+                  "background-color, border-color",
+                  motion.fast,
+                  motion.ease.color,
+                ),
               } as object)
             : null),
         };

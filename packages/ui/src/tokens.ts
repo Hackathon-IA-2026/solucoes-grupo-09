@@ -169,6 +169,34 @@ export const motion = {
   fast: 150,
   base: 220,
   slow: 300,
+
+  /**
+   * Easing curves. The durations above were already right; these were missing,
+   * so every transition in the product ran on the CSS default.
+   *
+   * The built-in keywords are deliberately weak — they were chosen to be
+   * inoffensive across every possible use, which makes them read as *nothing
+   * in particular*. A curve with a steep start is what makes a press feel like
+   * the interface heard you rather than like it is catching up.
+   *
+   * Which one is not a matter of taste, it follows from what is moving:
+   *
+   * - `out` — anything entering, leaving, or responding to a press. Starts
+   *   fast, so the reader sees movement at the instant they are watching most
+   *   closely. Never `ease-in` for this: the same duration *feels* slower,
+   *   because the delay lands exactly where attention is.
+   * - `inOut` — something travelling across the screen, which needs to
+   *   accelerate and settle at both ends.
+   * - `color` — a hover or a colour change, where there is no movement to give
+   *   momentum to and the plain keyword is genuinely the right answer.
+   *
+   * Values from Emil Kowalski's design-engineering notes.
+   */
+  ease: {
+    out: "cubic-bezier(0.23, 1, 0.32, 1)",
+    inOut: "cubic-bezier(0.77, 0, 0.175, 1)",
+    color: "ease",
+  },
 } as const;
 
 export const layout = {

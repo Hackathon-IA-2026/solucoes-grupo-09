@@ -1,4 +1,4 @@
-import { focusRing, radius, usePalette } from "@wattsteer/ui";
+import { focusRing, motion, radius, usePalette, webTransition } from "@wattsteer/ui";
 import { Link, usePathname } from "expo-router";
 import type { ReactNode } from "react";
 import {
@@ -178,8 +178,8 @@ function Option({
           ...(Platform.OS === "web"
             ? ({
                 cursor: "pointer",
-                transitionProperty: "background-color",
-                transitionDuration: "150ms",
+                // Colour only — `ease`, per `motion.ease`.
+                ...webTransition("background-color", motion.fast, motion.ease.color),
               } as object)
             : null),
         };

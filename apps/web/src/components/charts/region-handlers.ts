@@ -212,7 +212,11 @@ export function regionHandlers({
           // draws its own ring on a focusable element otherwise, and
           // that ring is the same bounding box.
           outlineStyle: "none",
-          ...(reduced ? {} : webTransition("fill-opacity", motion.fast)),
+          // Opacity alone — `ease`, not the ease-out default. Nothing moves,
+          // so there is no momentum for a steep curve to express.
+          ...(reduced
+            ? {}
+            : webTransition("fill-opacity", motion.fast, motion.ease.color)),
         },
       } as object)
     : ({

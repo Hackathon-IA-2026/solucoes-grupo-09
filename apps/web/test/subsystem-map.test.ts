@@ -376,7 +376,11 @@ describe("the map's wiring", () => {
   it("motion is asked about before it is applied", () => {
     const map = mapSource();
     expect(map).toContain("useReducedMotion()");
-    expect(map).toContain("reduced ? {} : webTransition(");
+    // Matched loosely across whitespace rather than as one line: the call now
+    // carries an easing argument and the formatter wraps it, and what this
+    // test is about is that `reduced` gates the transition — not where the
+    // line breaks fall.
+    expect(map.replace(/\s+/g, " ")).toContain("reduced ? {} : webTransition(");
   });
 });
 

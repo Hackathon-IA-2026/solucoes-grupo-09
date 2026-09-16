@@ -3,6 +3,7 @@ import { Animated, Platform, View } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { usePalette } from "../hooks/use-palette";
 import { useReducedMotion } from "../hooks/use-reduced-motion";
+import { webNoTransition } from "../lib/focus-ring";
 
 /**
  * Risk indicator: a green→yellow→red gradient track with a marker positioned
@@ -67,9 +68,7 @@ export function RiskBar({ value, height = 6 }: { value: number; height?: number 
           bottom: 0,
           justifyContent: "center",
           transform: [{ translateX: -6 }],
-          ...(Platform.OS === "web"
-            ? ({ transitionProperty: "left", transitionDuration: "0ms" } as object)
-            : null),
+          ...(Platform.OS === "web" ? (webNoTransition("left") as object) : null),
         }}
       >
         <View

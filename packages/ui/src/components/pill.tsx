@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
 import { usePalette } from "../hooks/use-palette";
-import { focusRing } from "../lib/focus-ring";
-import { radius } from "../tokens";
+import { focusRing, webTransition } from "../lib/focus-ring";
+import { motion, radius } from "../tokens";
 
 /**
  * Pill primitives — the reference's recurring control language:
@@ -75,8 +75,13 @@ export function Pill({
           ...(Platform.OS === "web" && onPress
             ? ({
                 cursor: "pointer",
-                transitionProperty: "background-color, opacity",
-                transitionDuration: "150ms",
+                // Colour and opacity only, so `ease` rather than the ease-out
+                // default: there is no movement here to carry momentum.
+                ...webTransition(
+                  "background-color, opacity",
+                  motion.fast,
+                  motion.ease.color,
+                ),
               } as object)
             : null),
         };
@@ -154,8 +159,9 @@ export function PillButton({
           ...(Platform.OS === "web"
             ? ({
                 cursor: "pointer",
-                transitionProperty: "transform, background-color",
-                transitionDuration: "150ms",
+                // Carries a `scale` on press, so this takes the ease-out
+                // default — the press has to register at the instant it lands.
+                ...webTransition("transform, background-color", motion.fast),
               } as object)
             : null),
         };
@@ -263,8 +269,9 @@ export function IconCircleButton({
           ...(Platform.OS === "web" && onPress
             ? ({
                 cursor: "pointer",
-                transitionProperty: "transform, background-color",
-                transitionDuration: "150ms",
+                // Carries a `scale` on press, so this takes the ease-out
+                // default — the press has to register at the instant it lands.
+                ...webTransition("transform, background-color", motion.fast),
               } as object)
             : null),
         };

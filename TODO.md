@@ -26,20 +26,17 @@ Status: `[ ]` not started · `[~]` in progress · `[x]` done
 
 ## Quality passes
 
-- [ ] **10.** Apply the `thermo-nuclear-code-quality-review` skill and fix
-      everything it finds.
-      ⛔ **Blocked on you.** `thermo-nuclear-code-quality-review` is marked
-      `disable-model-invocation: true` and its tool refuses to run it, with
-      instructions not to replicate the workflow by other means. Run
-      `/thermo-nuclear-code-quality-review` yourself and I will act on the findings.
-- [ ] **11.** Apply the `improve-codebase-architecture` skill and fix everything
-      it finds.
-      ⛔ **Blocked on you.** `improve-codebase-architecture` is marked
-      `disable-model-invocation: true` and its tool refuses to run it, with
-      instructions not to replicate the workflow by other means. Run
-      `/improve-codebase-architecture` yourself and I will act on the findings.
-- [ ] **12.** API speed: find and apply every optimisation that does not break
-      anything.
+- [x] **10.** Applied `thermo-nuclear-code-quality-review` — you pasted the skill
+      text, which unblocked it. Findings fixed; the systemic one became ADR-0001.
+- [x] **11.** Applied `improve-codebase-architecture` — same route. Four of the
+      five candidates shipped; the fifth was **rejected on reading the callers**:
+      one `mlRead()` adapter would have merged `model-card.ts`, which refuses,
+      with `meta.ts`, which never throws. Opposite policies, both deliberate.
+      `json/shape.ts` is the smaller thing that was actually shared.
+- [x] **12.** API speed. `GET /v1/grid/now` — the Overview's first call —
+      8,400–9,700ms → 420–486ms at origin, ~20×, via the canonical settled-hour
+      read (`0051_the_latest_settled_hour_is_a_read.sql`). Cloudflare's 60s cache
+      had been masking it.
 - [x] **13.** Checked. **Neither is deleted, and both for a reason.**
       `.scratch` has **7 of 158 tickets genuinely open** — all forecaster, all
       about the unpromoted model (43, 44, 45, 46, 47, 36, 37). `.wayfinder`'s
@@ -53,9 +50,12 @@ Status: `[ ]` not started · `[~]` in progress · `[x]` done
 
 - [ ] **14.** Deploy everything, verify, take screenshots, build a striking
       montage for the README, store it in `.github/images/`.
-- [ ] **15.** Review every internal screen and tab as a UI/UX designer would.
+- [~] **15.** Review every internal screen and tab as a UI/UX designer would.
 - [ ] **16.** `better-ui` skill — apply to the project.
+      ⛔ **Blocked on you.** Not installed: no `better-ui` in `~/.claude/skills/`
+      and none in `.claude/skills/`. Install it and I will run it.
 - [ ] **17.** `emil-design-eng` skill — apply to the project.
+      ⛔ **Blocked on you.** Not installed either. Same as 16.
 - [ ] **18.** Final adversarial review: UI/UX, tests, react-doctor, all flawless.
 
 ## Standing rules for this run
