@@ -42,6 +42,10 @@ COPY apps/web/public ./apps/web/public
 # it rather than shipping a Portuguese `lang` on the English pages.
 COPY apps/web/scripts/localize-export.ts ./apps/web/scripts/
 COPY apps/web/server.ts ./apps/web/
+# `server.ts` imports `scripts/static-routing.ts`; without it the container
+# starts and dies on "Cannot find module". `e2e/serve-dist.ts` reads the same
+# module, which is the point of it — one rule, two servers.
+COPY apps/web/scripts ./apps/web/scripts
 
 # EXPO_PUBLIC_* values are inlined at build time (static export), so the API
 # origin and canonical site URL must be set here. Override via Railway build
@@ -61,6 +65,7 @@ ENV NODE_ENV=production \
     PORT=8080
 COPY --from=build /app/apps/web/dist ./dist
 COPY --from=build /app/apps/web/server.ts ./server.ts
+COPY --from=build /app/apps/web/scripts ./scripts
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
