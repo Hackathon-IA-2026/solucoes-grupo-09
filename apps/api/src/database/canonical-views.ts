@@ -9,6 +9,9 @@ import {
   text,
   timestamp,
 } from "drizzle-orm/pg-core";
+// The module importing itself, so `canonicalViewNames` walks the exports
+// rather than a list that can fall behind them. Resolved once, at load.
+import * as canonicalViewModule from "./canonical-views.js";
 import {
   diagnosisAttributionGrain,
   diagnosisDriverDirection,
@@ -1512,3 +1515,40 @@ export const canonicalLatestCompleteSettledHour = pgView(
   order by c.valid_time desc
   limit 1
 `);
+
+/**
+ * Every canonical view this build selects from, by its SQL name.
+ *
+ * **Derived from the module, not listed beside it.** A hand-written list is a
+ * second statement of which views exist, and the failure it would produce is
+ * the one this function is for: a view added to the schema, forgotten here, and
+ * therefore never checked. Reading the exports means a new `pgView` is covered
+ * on the line it is declared.
+ *
+ * Drizzle keeps the SQL name on `Symbol(drizzle:ViewBaseConfig)`; the symbol is
+ * looked up by description rather than imported, because the exported symbol
+ * lives in a `drizzle-orm` subpath this package does not otherwise depend on
+ * and a name is all that is wanted from it.
+ */
+export function canonicalViewNames(): readonly string[] {
+  const names: string[] = [];
+  for (const exported of Object.values(canonicalViewModule as Record<string, unknown>)) {
+    if (typeof exported !== "object" || exported === null) {
+      continue;
+    }
+    for (const symbol of Object.getOwnPropertySymbols(exported)) {
+      if (symbol.description !== "drizzle:ViewBaseConfig") {
+        continue;
+      }
+      const config = (exported as Record<symbol, unknown>)[symbol];
+      if (
+        typeof config === "object" &&
+        config !== null &&
+        typeof (config as { name?: unknown }).name === "string"
+      ) {
+        names.push((config as { name: string }).name);
+      }
+    }
+  }
+  return names.sort();
+}
