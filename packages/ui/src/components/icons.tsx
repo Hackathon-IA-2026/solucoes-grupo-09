@@ -70,6 +70,23 @@ export function ZapIcon(props: IconProps) {
   );
 }
 
+/**
+ * A microphone, for the control that opens the voice session.
+ *
+ * The trigger read `Falar` / `Speak` in 12 px text beside `PT / EN`, which is
+ * two words of chrome among other chrome — nothing about it said *talk to this*.
+ * A microphone is the one glyph nobody has to be taught.
+ */
+export function MicIcon(props: IconProps) {
+  return (
+    <Base {...props}>
+      <Path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+      <Path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+      <Path d="M12 19v3" />
+    </Base>
+  );
+}
+
 export function SparklesIcon(props: IconProps) {
   return (
     <Base {...props}>

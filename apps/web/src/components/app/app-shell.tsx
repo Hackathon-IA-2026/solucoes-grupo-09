@@ -151,17 +151,20 @@ export function AppShell({
             <ChromeBadge />
             {/* Pushes the switch to the far edge of the header row. */}
             <View style={{ flex: 1 }} />
-            <LanguageSwitch testID="app-language-switch" />
             {/*
-              Right of `PT / EN`, exactly as `docs/plans/voice-copilot.md` §5.2
-              sketches it, and deliberately **not** a fifth item in the tab row
-              below: a route for voice would put it *beside* the four modes when
-              its whole value is sitting *across* them, and it would break
-              `sharedParams`, which is built on the four screens being four
-              views of one selection. It renders nothing at all on a deployment
-              with no key.
+              **Before `PT / EN`, not after it.** The plan sketched it to the
+              right; in the built header that put the product's most distinctive
+              control last in a row of chrome, reading as an afterthought beside
+              a language toggle nobody uses twice.
+
+              Still deliberately **not** a fifth item in the tab row below: a
+              route for voice would put it *beside* the four modes when its whole
+              value is sitting *across* them, and it would break `sharedParams`,
+              which is built on the four screens being four views of one
+              selection. It renders nothing at all on a deployment with no key.
             */}
             <VoiceTrigger />
+            <LanguageSwitch testID="app-language-switch" />
           </View>
 
           <ScrollView

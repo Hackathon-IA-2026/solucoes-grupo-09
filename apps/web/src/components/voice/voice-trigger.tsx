@@ -25,7 +25,7 @@
  * app to find out which of the two this deployment is.
  */
 
-import { focusRing, radius, space, type, usePalette } from "@wattsteer/ui";
+import { focusRing, MicIcon, radius, space, type, usePalette } from "@wattsteer/ui";
 import { Platform, Pressable, Text, View } from "react-native";
 import { useServing } from "@/components/app/use-serving";
 import { useCopy } from "@/i18n";
@@ -103,7 +103,21 @@ export function VoiceTrigger({ compact = false }: { compact?: boolean }) {
         };
       }}
     >
-      <VoiceOrb status={agent.status} level={agent.level} size={16} />
+      {/*
+        **A microphone at rest, the orb once it is live.**
+
+        The orb is a beautiful thing to watch while the agent listens and a
+        meaningless dot before it starts: at `idle` it says nothing about what
+        the control does, and the label beside it — two words of 12 px chrome
+        next to `PT / EN` — was carrying the whole explanation. A microphone is
+        the one glyph nobody has to be taught. It hands over to the orb the
+        moment there is motion worth showing.
+      */}
+      {live ? (
+        <VoiceOrb status={agent.status} level={agent.level} size={16} />
+      ) : (
+        <MicIcon size={15} color={colors.ink} />
+      )}
       {compact ? null : (
         <Text style={{ ...type.caption, color: live ? colors.onAccentSoft : colors.ink }}>
           {copy.app.voice.trigger}

@@ -300,13 +300,19 @@ describe("the action card says what happened", () => {
 });
 
 describe("the trigger and the map", () => {
-  it("the trigger lives in the header, right of the language switch", () => {
-    // §5.2. Not a nav item and not a route: a `/voice` route would put voice
-    // *beside* the four modes when its whole value is sitting *across* them.
+  it("the trigger lives in the header, before the language switch", () => {
+    // The plan sketched it to the *right* of `PT / EN`. In the built header that
+    // put the product's most distinctive control last in a row of chrome, where
+    // it read as an afterthought beside a toggle nobody uses twice. It comes
+    // first now.
+    //
+    // Unchanged, and the half this assertion is really protecting: not a nav
+    // item and not a route. A `/voice` route would put voice *beside* the four
+    // modes when its whole value is sitting *across* them.
     const language = SHELL.indexOf("<LanguageSwitch");
     const trigger = SHELL.indexOf("<VoiceTrigger");
-    expect(language).toBeGreaterThan(0);
-    expect(trigger).toBeGreaterThan(language);
+    expect(trigger).toBeGreaterThan(0);
+    expect(language).toBeGreaterThan(trigger);
   });
 
   it("the trigger is not a fifth screen in the tab row", () => {
