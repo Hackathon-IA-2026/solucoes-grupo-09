@@ -4,32 +4,43 @@
 version: 1
 
 providers:
+  # POOL DE CHAVES (opcional): cada integrante cria a própria chave em cada provedor; a env var recebe todas, separadas por vírgula.
+  # FUNCIONA COM UMA CHAVE SÓ: "NVIDIA_API_KEYS=nvapi-x" ou a variável no singular (NVIDIA_API_KEY) são aceitas; o pool de 1
+  # se comporta exatamente como chave única. Provedor sem nenhuma chave fica "disabled" e a cadeia pula para o próximo elo.
+  # Limites valem por chave (contas independentes); o roteador usa a chave com mais folga e só troca de provedor
+  # quando todas esgotam. Chave nunca aparece em log (só key_id = 8 hex do sha256).
   nvidia:
     kind: openai_compatible
     base_url: https://integrate.api.nvidia.com/v1
-    api_key_env: NVIDIA_API_KEY
+    api_keys_env: NVIDIA_API_KEYS                           # "nvapi-...,nvapi-...,..." (5 chaves = 5 cotas)
+    key_selection: least_loaded
+    limits_scope: per_key
     timeout_s: 60
-    limits: { rpm: 30, tpm: 60000, rpd: 4000 }          # não publicado; relatos de ~40 RPM
+    limits: { rpm: 30, tpm: 60000, rpd: 4000 }          # não publicado; relatos de ~40 RPM por conta
     extra:
       rerank_base_url: https://ai.api.nvidia.com/v1/retrieval   # rerankers usam outra raiz
   groq:
     kind: openai_compatible
     base_url: https://api.groq.com/openai/v1
-    api_key_env: GROQ_API_KEY
+    api_keys_env: GROQ_API_KEYS                             # limites do Groq são por ORGANIZAÇÃO: uma chave por org de cada integrante
+    key_selection: least_loaded
+    limits_scope: per_key
     timeout_s: 45
-    limits_per_model:                                       # tabela free oficial (15/09/2026)
+    limits_per_model:                                       # tabela free oficial (15/09/2026), por org
       openai/gpt-oss-120b: { rpm: 30, rpd: 1000, tpm: 8000, tpd: 200000 }
       openai/gpt-oss-20b:  { rpm: 30, rpd: 1000, tpm: 8000, tpd: 200000 }
   openrouter:
     kind: openai_compatible
     base_url: https://openrouter.ai/api/v1
-    api_key_env: OPENROUTER_API_KEY
+    api_keys_env: OPENROUTER_API_KEYS
+    limits_scope: per_key
     timeout_s: 60
     limits: { rpm: 20, rpd: 50 }                            # 1000/dia se a conta já comprou US$ 10
   sambanova:
     kind: openai_compatible
     base_url: https://api.sambanova.ai/v1
-    api_key_env: SAMBANOVA_API_KEY
+    api_keys_env: SAMBANOVA_API_KEYS
+    limits_scope: per_key
     timeout_s: 60
     limits: { rpm: 20, rpd: 20, tpd: 200000 }
   local:
@@ -38,27 +49,26 @@ providers:
     api_key_env: null
     timeout_s: 120
     limits: { rpm: 600 }
-  bedrock:                                                  # só quando os créditos AWS existirem (D-RAG-06)
+  bedrock:                                                  # créditos AWS da organização; SÓ modelos abertos (Nemotron, Llama, DeepSeek, gpt-oss, Kimi K2.5)
     kind: bedrock
     region: us-east-1
-    enabled: false
-  emergency_paid:                                           # elo pago (Bisogno recomenda US$ 5/dia); desligado até decisão
-    kind: openai_compatible
-    base_url: https://api.openai.com/v1
-    api_key_env: OPENAI_API_KEY
-    enabled: false
-    budget_usd_day: 5
+    enabled: false                                          # ligar quando os créditos chegarem; ids dos modelos a confirmar no console
+    budget_usd_day: 5                                       # teto do "elo de emergência" (recomendação do Bisogno)
   template:
     kind: template                                          # texto-padrão determinístico, nunca falha
 
 tasks:
+  # Só modelos abertos, em NVIDIA, Groq e AWS. Ids do NIM confirmados em 15/09/2026 via GET /v1/models (82 modelos):
+  # nvidia/nemotron-3-super-120b-a12b, nvidia/nemotron-3-ultra-550b-a55b, nvidia/nemotron-3.5-lightning-30b-a3b,
+  # moonshotai/kimi-k3, moonshotai/kimi-k2.6, deepseek-ai/deepseek-v4-flash-0731, z-ai/glm-5.3(-flash), openai/gpt-oss-20b.
   generate_strong:          # Evidence Builder (JSON estrito, temperatura 0)
     chain:
       - { provider: nvidia,     model: nvidia/nemotron-3-super-120b-a12b, max_input_tokens: 24000 }
-      - { provider: groq,       model: openai/gpt-oss-120b,               max_input_tokens: 6000 }   # TPM 8k
+      - { provider: nvidia,     model: moonshotai/kimi-k3,                max_input_tokens: 24000 }   # forte, pesado: 2o elo, nao o padrao
+      - { provider: groq,       model: openai/gpt-oss-120b,               max_input_tokens: 6000 }    # TPM 8k
       - { provider: openrouter, model: nvidia/nemotron-3-super-120b-a12b:free, max_input_tokens: 24000 }
       - { provider: sambanova,  model: DeepSeek-V3.1,                      max_input_tokens: 24000 }
-      - { provider: emergency_paid, model: gpt-5-mini, max_input_tokens: 24000 }   # ignorado enquanto enabled=false
+      - { provider: bedrock,    model: nvidia.nemotron-3-super-120b,       max_input_tokens: 24000 }   # ignorado enquanto enabled=false
     require: { json_schema: true }
     temperature: 0
     max_output_tokens: 1500
@@ -67,6 +77,7 @@ tasks:
     chain:
       - { provider: groq,   model: openai/gpt-oss-20b,                 max_input_tokens: 6000 }
       - { provider: nvidia, model: nvidia/nemotron-3.5-lightning-30b-a3b, max_input_tokens: 16000 }
+      - { provider: nvidia, model: moonshotai/kimi-k2.6,                max_input_tokens: 16000 }
       - { provider: nvidia, model: openai/gpt-oss-20b,                 max_input_tokens: 16000 }
     require: { json_schema: true }
     temperature: 0
@@ -86,9 +97,10 @@ tasks:
       - { provider: local,  model: BAAI/bge-reranker-v2-m3 }
     top_n: 8
     on_exhausted: skip_rerank             # degrada para a ordem do RRF, declara no trace
-  narrate:                  # redação do card (F3; hoje o apps/api chama a Anthropic direto)
+  narrate:                  # redação do card. Hoje o apps/api chama a Anthropic direto: migração OBRIGATÓRIA (não há Claude na nuvem)
     chain:
       - { provider: nvidia, model: nvidia/nemotron-3-super-120b-a12b, max_input_tokens: 8000 }
+      - { provider: nvidia, model: moonshotai/kimi-k2.6,              max_input_tokens: 8000 }
       - { provider: groq,   model: openai/gpt-oss-120b,               max_input_tokens: 6000 }
       - { provider: template }
     temperature: 0
