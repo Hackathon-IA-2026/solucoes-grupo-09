@@ -126,6 +126,53 @@ Status: `[ ]` not started · `[~]` in progress · `[x]` done
       nearly every hour, the fix is in the hurdle, not in the conformal step —
       and no amount of recalibrating `δ_lo` touches it.
 
+      **Measured 2026-09-16: why no retrain can pass this rail.**
+
+      Asked whether we could train locally and push only a promoted artifact.
+      Training locally is not the obstacle — the data is not local and the gate
+      runs in the retrain either way. The obstacle is that **two of our own
+      components target different numbers on the same rows**, and the rail sits
+      between them.
+
+      1. A floor is *stated* only when `p > 0.90`; below that the mixture's 10th
+         percentile falls in the point mass at zero. So stated rows are a
+         selected population and `mean(p)` on them is 0.9762, not ~0.5.
+      2. Inside the positive branch the composition evaluates
+         `u = (0.10 − (1 − p)) / p`. That is **below 0.10 for every `p < 1`** —
+         algebraically, `u < 0.10 ⟺ 0.9p < 0.9`. `MagnitudeQuantiles` is flat
+         below its first knot (α = 0.10), so **the served P10 is always the flat
+         knot value**, never an interpolated quantile.
+      3. Flat there means an atom: `P(Y < P10) = 1 − p`, so the composition
+         implies `P(Y ≥ P10) = p = 0.9762`. The rail reads exactly this, and
+         `1dc4618` was right to withdraw the claim that it is mis-centred. It is
+         not. Twice now that has been checked; it is settled.
+      4. But `δ_lo` is fitted by split conformal **on those same stated rows**
+         (`residuals()` narrows `E_lo` to them) targeting **0.90**.
+
+      0.90 against 0.9762 on one set of rows. So the rail reads −0.0762 *even
+      with a perfect conformal fit*, against a band of ±0.0417. The failure is
+      structural, and the decomposition of the measured −0.1285 is:
+
+      | | |
+      |---|---:|
+      | target mismatch (mixture implies `p`, conformal fits 0.90) | **−0.0762** |
+      | fit / generalisation gap on the test fold | −0.0523 |
+      | measured | −0.1285 |
+
+      Neither half is a bad model and neither is fixed by retraining.
+
+      **The two halves need different fixes.** The −0.0523 is the exchangeability
+      gap between the calibration window and a later fold — the thing I wrote
+      down in `98a35f5` and then twice talked myself out of. The −0.0762 is a
+      design decision to make: either the lower tail is fitted to `p` per row
+      rather than to a fixed 0.90, or the mixture stops claiming `p` by flattening
+      below its first knot — which it does deliberately, "flat rather than
+      extrapolated because a quantile fit says nothing beyond its outermost
+      alpha".
+
+      That second one is a change to the served floor and is not mine to make
+      alone. Nothing promoted, and now for a reason with a number on it.
+
       Still not promoting anything.
 
       Step 2 cannot be validated anywhere but production: the local database is
