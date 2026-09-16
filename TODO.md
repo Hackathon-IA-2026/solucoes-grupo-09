@@ -6,6 +6,33 @@ Status: `[ ]` not started · `[~]` in progress · `[x]` done
 
 - [x] **1.** Remove `PROTÓTIPO` from the header — it is a hackathon, so it is implicit.
 - [ ] **2.** Promote a model.
+      ⛔ **Blocked on the gate, and both lanes fail the same way.** Read off
+      `GET /v1/meta` on 2026-09-16 — the modelling service is reachable, eight
+      artifacts sit on the volume for `gate_early` and one for `gate_late`, and
+      the gate has promoted none:
+
+      | guardrail | gate_early | gate_late | required |
+      |---|---|---|---|
+      | `coverage_p10_in_band` | 0.8311 | 0.8114 | 0.85 – 0.97 |
+      | `p10_calibration_excess` | −0.1446 | −0.1609 | 0 ± 0.046 / 0.037 |
+      | `crossing_rate` | — | 0.0107 | ≤ 0.01 |
+
+      **These are one defect seen twice, not two.** `p10_calibration_excess` is
+      the realised floor clearance minus the model's own implied rate, and it is
+      **negative** on both lanes: fewer hours clear the floor than the band
+      claims. `coverage_p10_in_band` being *below* its range says the same thing
+      from the other side. The P10 is too high — the lower bound sits above
+      where the data actually is — so the band understates how bad a bad hour
+      gets, which is the one direction a curtailment floor must not be wrong in.
+
+      `retrain_owed` is `false` on both, so the gate is not waiting on a rerun;
+      it is refusing these artifacts on their merits. Promotion needs a model
+      whose lower quantile is pulled down, not another training round of the
+      same shape.
+
+      **Today's `ladder.py` convergence fix does not touch this.** That changed
+      rung 2's *baseline*, which candidates are compared against; these three
+      guardrails are absolute thresholds on the candidate itself.
 - [x] **3.** Avoid the "Sem previsão para este dia" wall — decide what the screen
       says instead when the gate has passed with nothing published.
 - [x] **4.** "Eólica e solar · liquidado, duas medições" shows `Observado` twice.
