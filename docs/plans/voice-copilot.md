@@ -724,12 +724,39 @@ by every reader, which is a change to the product's cross-screen contract and
 belongs to whoever owns that contract. The test pins today's behaviour and says
 so in full.
 
-### 10.5 One limit the implementation reports rather than hides
+### 10.5 The one limit this audit reported — since closed
 
-`voice-provider.tsx`'s `say` — the typed fallback for a reader with no
-microphone — reaches the model as *context*, not as a user turn, because
-`VoiceSessionCore` exposes `updateContext` and `respondToTool` and nothing that
-creates a user turn. So a typed line cannot itself provoke a spoken answer.
-Closing it needs one method on the pure layer (a `conversation.item.create` of
-an `input_text` item, then `response.create`). It is written down in that file,
-and the dock's fallback panel says what it is rather than pretending otherwise.
+The audit above originally ended here, with a limit stated rather than hidden:
+
+> `voice-provider.tsx`'s `say` — the typed fallback for a reader with no
+> microphone — reaches the model as *context*, not as a user turn, because
+> `VoiceSessionCore` exposes `updateContext` and `respondToTool` and nothing
+> that creates a user turn. So a typed line cannot itself provoke a spoken
+> answer. Closing it needs one method on the pure layer (a
+> `conversation.item.create` of an `input_text` item, then `response.create`).
+
+That was the right thing to write down and the wrong place to stop. A reader
+without a microphone could be *heard and not answered*, which is half an
+interface — and the dock's own fallback panel exists precisely so that reader
+has a way in.
+
+`VoiceSessionCore.sayAsUser(text)` is the method the note predicted, in the
+shape it predicted: the `input_text` item, then `response.create`. Both frames
+are required and the second is the one that makes it a turn — sending only the
+item is the old behaviour wearing a better name, and it fails *silently*, with
+the conversation growing and the dock staying quiet.
+
+Two details are worth keeping:
+
+- **`say` pushes the context first, then the turn.** The model must be holding
+  the reader's current screen before it is asked to answer, or a typed question
+  is answered against the previous turn's screen — the stale-context failure
+  §2.2 is about, arriving by the one path that does not go through the socket's
+  own message handler.
+- **It is deliberately the same two-frame shape as `respondToTool`.** That
+  method already had to create an item and ask for a response; a second way of
+  doing it would be a second thing to keep in step with the protocol.
+
+Four tests in `test/voice-session-core.test.ts` hold it, including the ordering
+— `response.create` must follow the item — and the closed-socket case, where it
+must do nothing rather than throw.

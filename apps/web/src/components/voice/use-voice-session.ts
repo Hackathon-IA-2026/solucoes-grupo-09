@@ -355,9 +355,18 @@ export function useVoiceSession({
         { id: `typed-${current.length}`, role: "user", text: trimmed },
       ]),
     );
+    // The context first, then the turn. Order matters: the model must be
+    // holding the reader's current screen *before* it is asked to answer, or a
+    // typed question gets answered against the screen of the previous turn —
+    // which is the stale-context failure §2.2 is about, arriving through the
+    // one path that does not go through the socket's own message handler.
     sessionRef.current?.updateContext(
       `${contextRef.current}\nThe reader typed, rather than said: ${trimmed}`,
     );
+    // And then the line as a user turn, so the agent answers out loud. Before
+    // this, `say` put the text in as context and nothing asked for a reply: a
+    // reader without a microphone could be heard and not answered.
+    sessionRef.current?.sayAsUser(trimmed);
     // `contextRef` is read at the moment the reader presses send, which is the
     // whole reason it is a ref: a `say` rebuilt on every context change would
     // be a new function identity on every selection, and the dock's panel would
