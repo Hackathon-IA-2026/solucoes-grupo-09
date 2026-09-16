@@ -286,23 +286,51 @@ function ChromeBadge() {
         that will never show it. If this chrome is ever needed somewhere the
         context is not implicit, the word is four characters to retype.
       */}
-      {absent ? (
-        <View
-          testID="app-no-model-badge"
-          style={{
-            borderRadius: radius.pill,
-            borderWidth: 1,
-            borderColor: colors.warning,
-            backgroundColor: colors.warningSoft,
-            paddingHorizontal: 10,
-            paddingVertical: 4,
-          }}
-        >
-          <Text style={{ fontSize: 11, fontWeight: "600", color: colors.onWarningSoft }}>
-            {copy.app.shell.noModelBadge}
-          </Text>
-        </View>
-      ) : null}
+      {/*
+        **Always occupies its width; only sometimes says anything.**
+
+        The rule above — withhold the claim until `/v1/meta` has answered — is
+        right and is kept. What was wrong was withholding the *space*. This
+        badge sits in a `flexWrap` row, so appearing at ~4s did not merely add a
+        pill: it pushed `PT / EN` and the voice trigger onto a second line and
+        moved every pixel of the screen below down by 42. Measured on
+        production at 412px, that one reflow was the whole of `/app`'s
+        cumulative layout shift — **0.215**, against Lighthouse's 0.1 threshold
+        — and it landed four seconds in, which is exactly when a reader has
+        started reading.
+
+        So the pill is always rendered and always measured; `opacity` is what
+        the meta read controls. A transparent box makes no claim, which is what
+        the rule actually asks for, and `aria-hidden` keeps it out of the
+        accessibility tree so a screen reader is told no more than an eye is.
+
+        The `testID` stays conditional on the fact rather than on the box: the
+        reserved copy is not the badge, and nothing should be able to assert it
+        is. `test/wired-screens.test.ts` holds the `absent` expression itself.
+
+        The cost is one wrapped header line on a narrow viewport in the state
+        where a model *is* promoted. That is the right way round: reserving
+        space that is sometimes blank is a fixed, invisible cost, where
+        collapsing it is a visible jump under the reader's eye. Stability is
+        the thing being bought.
+      */}
+      <View
+        testID={absent ? "app-no-model-badge" : undefined}
+        aria-hidden={absent ? undefined : true}
+        style={{
+          borderRadius: radius.pill,
+          borderWidth: 1,
+          borderColor: colors.warning,
+          backgroundColor: colors.warningSoft,
+          paddingHorizontal: 10,
+          paddingVertical: 4,
+          opacity: absent ? 1 : 0,
+        }}
+      >
+        <Text style={{ fontSize: 11, fontWeight: "600", color: colors.onWarningSoft }}>
+          {copy.app.shell.noModelBadge}
+        </Text>
+      </View>
     </View>
   );
 }

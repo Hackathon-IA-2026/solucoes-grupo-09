@@ -188,6 +188,28 @@ describe("the chrome badge is a fact, not a label", () => {
     expect(SERVING).toContain("serving: anyLaneServing(lanes)");
   });
 
+  it("the badge reserves its width in every state, and shows in only one", () => {
+    /*
+      The regression this guards is a layout shift, not a wrong label.
+
+      The badge used to be mounted behind `absent ?`, so it appeared when
+      `/v1/meta` answered and pushed `PT / EN` and the voice trigger onto a
+      second line of a `flexWrap` header — moving the whole screen below it down
+      by 42px, about four seconds in. Measured on production at 412px that was
+      the entirety of `/app`'s CLS: 0.215, against a 0.1 threshold.
+
+      So the box is unconditional and `opacity` carries the fact. Asserting
+      that pairing is what keeps someone from "simplifying" it back to a
+      conditional mount, which would look tidier and reintroduce the jump.
+    */
+    expect(SHELL).toContain("opacity: absent ? 1 : 0");
+    expect(SHELL).toContain('testID={absent ? "app-no-model-badge" : undefined}');
+    // Reserved, therefore silent: a transparent pill must not be announced.
+    expect(SHELL).toContain("aria-hidden={absent ? undefined : true}");
+    // And never mounted conditionally again.
+    expect(SHELL).not.toContain("{absent ? (");
+  });
+
   it("a lane counts as serving only when promoted and not reported unusable", () => {
     const absence = code(read("lib", "absence.ts"));
     expect(absence).toContain(
