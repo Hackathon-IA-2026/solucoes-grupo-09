@@ -47,13 +47,26 @@ const PAGES: { path: string; gateway: boolean }[] = [
  * width in common use (a Galaxy A-series, a Pixel in display-size mode) and is
  * inside what the layout was designed for.
  *
- * 320px is **not** asserted, and it does not pass today. Measured: the footer's
- * link row wants 248px in a 224px box, the landing's hero heading 294 in 288,
- * and the Diagnosis card 320 in 288. Those are real and small, and fixing them
- * is the same `flexShrink` treatment applied three times over. They are left
- * out because asserting 320 would claim a width nobody designed for, and a
- * green suite that quietly means "we support 320" is worse than an honest gap.
- * Widen this array the day somebody decides 320 is supported.
+ * 320px is **not** asserted, and the reason is now specific rather than a
+ * shrug. Three things overflowed there; they are not the same kind of thing:
+ *
+ *  - The footer's link row wanted 248px in 224 and clipped the *terms* link.
+ *    That was a plain bug with no design behind it — nothing about the footer
+ *    wants a link invisible — and it is fixed: the row wraps.
+ *  - The hero's eyebrow wants 301px in 288, and that is **deliberate**. It
+ *    carries `numberOfLines={1}` and a comment budgeting the label against a
+ *    400px viewport, with `test/i18n.test.ts` enforcing the character count
+ *    that keeps it there: *"a wrapped eyebrow turns the pill into a rounded
+ *    paragraph and pushes the headline down the fold."* Making it wrap at 320
+ *    would overrule a decision that was made, measured and tested. Supporting
+ *    320 means re-budgeting that copy, which is a product call.
+ *  - The Engines cards want 320px in 288 — a `flexBasis: "100%"` card whose
+ *    padding is landing outside the basis. Probably a real bug, and not
+ *    diagnosed far enough to fix responsibly here.
+ *
+ * So the array stays at 360/400: that is the width the product is written
+ * against, and a green suite that quietly means "we support 320" would be
+ * worse than an honest gap. Widen it the day the eyebrow's budget is rewritten.
  */
 const WIDTHS = [360, 400];
 

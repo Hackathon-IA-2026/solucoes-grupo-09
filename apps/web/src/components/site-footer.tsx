@@ -234,6 +234,11 @@ export function SiteFooter() {
           style={{
             flex: wide ? 1 : undefined,
             flexDirection: "row",
+            // Wraps at the narrowest widths. Three links and two `space.lg`
+            // gaps want 248px; a 320px phone gives this row 224 after the
+            // page's gutters, so without this the third link is clipped — and
+            // the third link is the one to the terms.
+            flexWrap: "wrap",
             alignItems: "center",
             justifyContent: wide ? "flex-end" : "center",
             gap: space.lg,
