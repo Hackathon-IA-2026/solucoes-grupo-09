@@ -54,6 +54,7 @@ import { useEffect, useState } from "react";
 import { refusalOf } from "@/lib/absence";
 import { api } from "@/lib/api";
 import { REPLAY_LANE } from "@/lib/replay";
+import { settleWith } from "@/lib/settle";
 import { useLatest } from "@/lib/use-latest";
 
 export type ReplayState =
@@ -94,15 +95,14 @@ export function useReplay(scenario: Scenario | null): ReplayState {
       return;
     }
     const controller = new AbortController();
+    const settle = settleWith(controller.signal, setState);
     // The opening statement of a fetch effect — see `use-explain.ts`.
     // react-doctor-disable-next-line react-hooks-js/set-state-in-effect
     setState({ status: "replaying" });
     api
       .replay({ d: asked.targetDate, s: key, lane: REPLAY_LANE }, controller.signal)
       .then((replay) => {
-        if (!controller.signal.aborted) {
-          setState({ status: "replayed", replay });
-        }
+        settle({ status: "replayed", replay });
       })
       .catch(async (cause: unknown) => {
         if (controller.signal.aborted) {
@@ -122,13 +122,9 @@ export function useReplay(scenario: Scenario | null): ReplayState {
             { lane: REPLAY_LANE },
             controller.signal,
           );
-          if (!controller.signal.aborted) {
-            setState({ status: "observedOnly", view });
-          }
+          settle({ status: "observedOnly", view });
         } catch (second: unknown) {
-          if (!controller.signal.aborted) {
-            setState({ status: "refused", code: refusalOf(second) });
-          }
+          settle({ status: "refused", code: refusalOf(second) });
         }
       });
     return () => controller.abort();
