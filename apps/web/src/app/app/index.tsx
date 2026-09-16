@@ -87,7 +87,11 @@ import {
   useAppParams,
 } from "@/components/app/use-app-params";
 import { useNetwork } from "@/components/app/use-network";
-import { useCopy, useFormat } from "@/i18n";
+import { useServing } from "@/components/app/use-serving";
+import { NO_BRIEFING_DATA } from "@/components/briefing/briefing-data";
+import { BriefingStage } from "@/components/briefing/briefing-stage";
+import { useBriefing } from "@/components/briefing/use-briefing";
+import { useCopy, useFormat, useI18n } from "@/i18n";
 import { fill } from "@/i18n/format";
 import { type SubsystemCode, subsystemMeta } from "@/lib/fixtures";
 
@@ -95,6 +99,8 @@ export default function GridOverviewScreen() {
   const colors = usePalette();
   const copy = useCopy();
   const f = useFormat();
+  const { locale } = useI18n();
+  const serving = useServing();
   const params = useAppParams();
   const meta = subsystemMeta(params.subsystem);
   const state = useNetwork({
@@ -112,6 +118,29 @@ export default function GridOverviewScreen() {
    * to be right.
    */
   const forecastPublished = state.status === "read";
+
+  /*
+    The briefing overlays this screen, and it is composed *here* rather than in
+    `VoiceProvider` because the provider's context has no network state in it —
+    `contextSentence` only ever needed locale, screen, params and serving. A
+    briefing needs to know whether a forecast exists, and this is the component
+    that knows.
+
+    The clock is zeroed for now: the audio backend keeps the real one and it is
+    not yet threaded through the provider, so a briefing runs on the wall clock
+    and says it is silent. Wrong in one direction only — a briefing that reads
+    as silent while audio plays is a caption too many, not a missing scene.
+  */
+  const briefing = useBriefing(
+    {
+      locale,
+      screen: "overview",
+      params,
+      serving,
+      network: state,
+    },
+    { elapsedMs: 0, bufferedMs: 0 },
+  );
 
   /**
    * **Selecting and navigating are two actions now, and they were one.**
@@ -225,6 +254,21 @@ export default function GridOverviewScreen() {
         the same on a day that is forecast, and moving them next to the forecast
         panels is exactly the adjacency `lib/network.ts` refuses.
       */}
+      {briefing === null ? null : (
+        // Over everything on this screen, and dismissing back onto it. The data
+        // it draws is this screen's own — `NO_BRIEFING_DATA` until each field is
+        // threaded through, so a scene with nothing to show draws its heading
+        // and the sequence moves on rather than stalling.
+        <BriefingStage
+          plan={briefing.plan}
+          cursor={briefing.cursor}
+          narration=""
+          silent={briefing.silent}
+          data={NO_BRIEFING_DATA}
+          onDismiss={briefing.dismiss}
+        />
+      )}
+
       {forecast === null ? (
         <ObservedPanels
           observed={observed}
