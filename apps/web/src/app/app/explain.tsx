@@ -218,7 +218,7 @@ function DiagnosedPanels({ day }: { day: DiagnosedDay }) {
   return (
     <>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
-        <Panel style={{ flexGrow: 1, flexBasis: 300, gap: space.lg }}>
+        <Panel style={{ flexGrow: 1, flexShrink: 1, flexBasis: 300, gap: space.lg }}>
           <PanelHeader
             icon={<HashIcon size={18} color={colors.inkMuted} />}
             title={copy.app.explain.riskTitle}
@@ -228,7 +228,7 @@ function DiagnosedPanels({ day }: { day: DiagnosedDay }) {
           <RiskScale probability={forecast.dayOccurrenceProbability} />
           <RiskCaveat />
         </Panel>
-        <Panel style={{ flexGrow: 1, flexBasis: 300 }}>
+        <Panel style={{ flexGrow: 1, flexShrink: 1, flexBasis: 300 }}>
           <BandFigure
             label={copy.app.explain.magnitude}
             band={forecast.dayEnergyMwh}
@@ -236,7 +236,7 @@ function DiagnosedPanels({ day }: { day: DiagnosedDay }) {
             footnote={copy.app.explain.magnitudeNote}
           />
         </Panel>
-        <Panel style={{ flexGrow: 1, flexBasis: 300 }}>
+        <Panel style={{ flexGrow: 1, flexShrink: 1, flexBasis: 300 }}>
           <BandFigure
             label={copy.app.explain.peakPower}
             band={forecast.peakPowerMw}
@@ -296,7 +296,7 @@ function DiagnosedPanels({ day }: { day: DiagnosedDay }) {
       </Panel>
 
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
-        <Panel style={{ flexGrow: 1, flexBasis: 380 }}>
+        <Panel style={{ flexGrow: 1, flexShrink: 1, flexBasis: 380 }}>
           <PanelHeader
             icon={<LayersIcon size={18} color={colors.inkMuted} />}
             title={copy.app.explain.driversTitle}
@@ -453,7 +453,7 @@ function ObservedReasonsPanel({
                 tone={reason.reason === "REL" ? "danger" : "violet"}
               />
               <Badge label={reason.origin} tone="neutral" />
-              <View style={{ flexGrow: 1, flexBasis: 200 }}>
+              <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 200 }}>
                 <Text style={{ fontSize: 14, fontWeight: "600", color: colors.ink }}>
                   {reason.entityLabel}
                 </Text>

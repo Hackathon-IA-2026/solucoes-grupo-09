@@ -70,7 +70,7 @@ export function FloorPanel({
           gap: space.xl,
         }}
       >
-        <View style={{ flexGrow: 1, flexBasis: 320, gap: space.sm }}>
+        <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 320, gap: space.sm }}>
           <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8 }}>
             <Text
               selectable={true}
@@ -101,7 +101,7 @@ export function FloorPanel({
         a fraction of the type size, with the band they belong to drawn
         under them on the shared scale.
       */}
-        <View style={{ flexGrow: 1, flexBasis: 260, gap: space.md }}>
+        <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 260, gap: space.md }}>
           <Beside
             label={copy.app.mitigate.floorMedian}
             value={`${f.compact(active.recovered.p50)} MWh`}
@@ -229,7 +229,7 @@ export function FleetEditors({
   const copy = useCopy();
   return (
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
-      <Panel style={{ flexGrow: 1, flexBasis: 380 }}>
+      <Panel style={{ flexGrow: 1, flexShrink: 1, flexBasis: 380 }}>
         <PanelHeader
           icon={<ZapIcon size={18} color={colors.inkMuted} />}
           title={copy.app.mitigate.batteryTitle}
@@ -242,7 +242,7 @@ export function FleetEditors({
           />
         </View>
       </Panel>
-      <Panel style={{ flexGrow: 1, flexBasis: 380 }}>
+      <Panel style={{ flexGrow: 1, flexShrink: 1, flexBasis: 380 }}>
         <PanelHeader
           icon={<SlidersHorizontalIcon size={18} color={colors.inkMuted} />}
           title={copy.app.mitigate.loadTitle}
@@ -287,7 +287,7 @@ export function Beside({ label, value }: { label: string; value: string }) {
 export function Scalar({ label, value }: { label: string; value: string }) {
   const colors = usePalette();
   return (
-    <View style={{ flexGrow: 1, flexBasis: 220, gap: 4 }}>
+    <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 220, gap: 4 }}>
       <Text style={{ fontSize: 12, color: colors.inkMuted }}>{label}</Text>
       <Text
         style={{

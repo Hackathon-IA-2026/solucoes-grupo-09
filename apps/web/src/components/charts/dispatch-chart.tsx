@@ -245,7 +245,10 @@ function Key({
 }) {
   const colors = usePalette();
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+    // Shrinks and wraps: the longest key — "Carga deslocada para dentro da hora
+    // (MW)" — is wider on its own than the panel is at 320px, so the wrapping
+    // row above could not help it.
+    <View style={{ flexDirection: "row", alignItems: "center", flexShrink: 1, gap: 6 }}>
       <View
         style={{
           width: 12,
@@ -255,7 +258,7 @@ function Key({
           opacity: faded ? 0.4 : 1,
         }}
       />
-      <Text style={{ fontSize: 11, color: colors.inkMuted }}>{label}</Text>
+      <Text style={{ flexShrink: 1, fontSize: 11, color: colors.inkMuted }}>{label}</Text>
     </View>
   );
 }

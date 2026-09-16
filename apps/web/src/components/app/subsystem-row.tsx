@@ -174,7 +174,17 @@ export function SubsystemRow({
             </View>
           ) : null}
         </View>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+        {/* Wraps and shrinks: inside the readout card this row is ~204px at
+            320px, and a fixed chip-plus-button cluster clipped the name. */}
+        <View
+          style={{
+            flexDirection: "row",
+            flexWrap: "wrap",
+            alignItems: "center",
+            flexShrink: 1,
+            gap: 10,
+          }}
+        >
           <RiskChip probability={forecast.occurrenceProbability} />
           {/*
             The arrow used to sit here on every row, unlabelled, promising the

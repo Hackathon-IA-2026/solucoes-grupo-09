@@ -60,34 +60,28 @@ export function NationalFigureBlock({ national }: { national: NationalOutlook })
   const copy = useCopy();
   const f = useFormat();
   return (
-    <>
-      <View style={{ gap: space.md }}>
-        {national.band === null ? (
-          <ExpectationFigure
-            label={copy.readout.nationalLabel}
-            value={national.expectedMwh}
-            unit="MWh"
-            reason={national.bandUnavailableReason}
-          />
-        ) : (
-          <BandFigure
-            label={copy.readout.nationalLabel}
-            band={national.band}
-            unit="MWh"
-          />
-        )}
-        <Text style={{ fontSize: 12, color: colors.inkMuted }}>
-          {fill(copy.readout.riskCounts, {
-            high: f.number(national.riskClassCounts.high),
-            elevated: f.number(national.riskClassCounts.elevated),
-            low: f.number(national.riskClassCounts.low),
-          })}
-        </Text>
-        <Text style={{ fontSize: 11, lineHeight: 17, color: colors.inkFaint }}>
-          {copy.readout.nationalGrainNote}
-        </Text>
-      </View>
-    </>
+    <View style={{ gap: space.md }}>
+      {national.band === null ? (
+        <ExpectationFigure
+          label={copy.readout.nationalLabel}
+          value={national.expectedMwh}
+          unit="MWh"
+          reason={national.bandUnavailableReason}
+        />
+      ) : (
+        <BandFigure label={copy.readout.nationalLabel} band={national.band} unit="MWh" />
+      )}
+      <Text style={{ fontSize: 12, color: colors.inkMuted }}>
+        {fill(copy.readout.riskCounts, {
+          high: f.number(national.riskClassCounts.high),
+          elevated: f.number(national.riskClassCounts.elevated),
+          low: f.number(national.riskClassCounts.low),
+        })}
+      </Text>
+      <Text style={{ fontSize: 11, lineHeight: 17, color: colors.inkFaint }}>
+        {copy.readout.nationalGrainNote}
+      </Text>
+    </View>
   );
 }
 

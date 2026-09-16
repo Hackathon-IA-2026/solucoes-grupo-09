@@ -30,6 +30,8 @@
  * passed and the publication job wrote no rows.
  */
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Page } from "@playwright/test";
 
 /**
@@ -465,17 +467,201 @@ const ROUTE_NOT_FOUND = {
   error: { code: "ROUTE_NOT_FOUND", message: "No route matched.", request_id: "e2e" },
 };
 
+/**
+ * `GET /v1/curtailment/reasons` — the observed causes Explain shows beside the
+ * diagnosis, and the one read on that screen a model is *not* a precondition
+ * for. Empty `rows` is the state the screen has to draw on most days: the ONS
+ * registered no restriction for this subsystem on this date, which is a fact
+ * and not an absence of data.
+ */
+const CURTAILMENT_REASONS = {
+  subsystem: SUBSYSTEM,
+  date: TARGET_DATE,
+  as_of: AS_OF,
+  data_version: "ons-2026.09.1",
+  vintage_fidelity: "point_in_time",
+  rows: [],
+};
+
+/** Every card window in this fixture, so the folds cannot disagree by accident. */
+const CARD_WINDOW = { start: "2024-04-01", end: "2026-08-27" };
+
+/**
+ * `GET /v1/model/card?lane=` — the reliability curve on Explain.
+ *
+ * Hand-written in the wire's own `snake_case` for the reason this file exists:
+ * `packages/core/src/wire.ts` owns the only rename table, and a fixture written
+ * in `camelCase` would be a body the real client has never seen. The eight
+ * groups are all required — a card missing one is not a partially valid card,
+ * and `apps/api/src/api/model-card.ts` refuses it — so they are all here.
+ *
+ * The reliability points are the shape a calibrated classifier actually has:
+ * `mean_predicted` tracks `observed_frequency` within a few points, with the
+ * top bin thinner than the rest and marked `merged`, which is what the curve is
+ * drawn to show.
+ */
+const MODEL_CARD = {
+  lane: "dessem_free_v1__gate_late__thr5",
+  lane_state: "promoted",
+  artifact: {
+    artifact_id: "2026-09-11T03:11:07Z",
+    created_at: "2026-09-11T03:44:02Z",
+    estimator_family: "lightgbm",
+    model_config_version: "hurdle-v0.4",
+    feature_set: "ws-curtail",
+    feature_set_version: "2026.09.1",
+    gate_profile: "gate_late",
+    threshold_mw: THRESHOLD_MW,
+    feature_hash: "f4c1a9e2b7d05386",
+    git_sha_ml: "0ac31d9",
+    git_sha_api: "0ac31d9",
+  },
+  fold: {
+    fold_id: "2026Q3",
+    fold_hash: "9b2e71c4",
+    rules_digest: "3f8a01de",
+  },
+  windows: {
+    training: { start: "2024-04-01", end: "2026-05-31" },
+    base_fit: { start: "2024-04-01", end: "2026-04-30" },
+    calibration: { start: "2026-05-01", end: "2026-05-31" },
+    test: { start: "2026-06-01", end: "2026-08-27" },
+    rows_by_vintage_fidelity: { point_in_time: 1843, revision_optimistic: 17_206 },
+  },
+  reliability: {
+    points: [
+      {
+        bin_lower: 0,
+        bin_upper: 0.2,
+        bin_centre: 0.1,
+        mean_predicted: 0.08,
+        observed_frequency: 0.07,
+        hour_count: 6120,
+        merged: false,
+      },
+      {
+        bin_lower: 0.2,
+        bin_upper: 0.4,
+        bin_centre: 0.3,
+        mean_predicted: 0.29,
+        observed_frequency: 0.32,
+        hour_count: 2980,
+        merged: false,
+      },
+      {
+        bin_lower: 0.4,
+        bin_upper: 0.6,
+        bin_centre: 0.5,
+        mean_predicted: 0.5,
+        observed_frequency: 0.47,
+        hour_count: 1760,
+        merged: false,
+      },
+      {
+        bin_lower: 0.6,
+        bin_upper: 0.8,
+        bin_centre: 0.7,
+        mean_predicted: 0.69,
+        observed_frequency: 0.73,
+        hour_count: 1145,
+        merged: false,
+      },
+      {
+        bin_lower: 0.8,
+        bin_upper: 1,
+        bin_centre: 0.9,
+        mean_predicted: 0.88,
+        observed_frequency: 0.84,
+        hour_count: 612,
+        merged: true,
+      },
+    ],
+    sample_hours: 12_617,
+    window: CARD_WINDOW,
+    vintage_fidelity: "revision_optimistic",
+    folds: ["2026Q3"],
+    excluded_calibration_hours: 744,
+    ece: 0.021,
+    mce: 0.043,
+    top_bin_gap: 0.04,
+  },
+  risk_bins: { low: [0, 0.25], elevated: [0.25, 0.66], high: [0.66, 1] },
+  band: {
+    correction_regime: "spread_normalised",
+    delta_lo: 0.184,
+    delta_hi: 0.212,
+    method: "split_conformal",
+    miscoverage: 0.1,
+    target_coverage: 0.9,
+    calibration_rows: 3487,
+    rank: 3140,
+    window: { start: "2026-05-01", end: "2026-05-31" },
+    guarantee: "marginal",
+    coverage: null,
+    coverage_absent_reason: "Coverage is written by the gate, not by the fit.",
+  },
+  ensemble: {
+    ensemble_draws: 500,
+    pit_rows: 11_904,
+    pit_dropped_days: 6,
+    pit_columns: 24,
+    pit_window: { start: "2026-06-01", end: "2026-08-27" },
+    pit_dropped_days_rule: "a day with any missing hour is dropped whole",
+    pit_max_ks: 0.011,
+    pit_ks_tolerance: 0.0125,
+    pit_uniform_within_tolerance: true,
+    day_grain: null,
+    day_grain_absent_reason: "Day-grain coverage is a gate measurement.",
+  },
+  metrics: null,
+  metrics_absent_reason: "No metrics group on this card.",
+  decision: null,
+  card_url: "/v1/model/card.json?lane=dessem_free_v1__gate_late__thr5",
+};
+
+/**
+ * The spec's own published bodies, read rather than restated.
+ *
+ * `packages/core/fixtures/spec-examples/` is the set `spec-examples.test.ts`
+ * validates against the schema on every run, so these two are wire-correct by
+ * construction and cannot drift from the contract without that suite failing
+ * first. Writing a second copy here would be a second thing to keep in step.
+ */
+const SPEC_EXAMPLES = join(
+  // `process.cwd()`, not `import.meta.dir`: Playwright transpiles this file to
+  // CommonJS, where `import.meta` is a syntax error, and the runner already
+  // starts in `apps/web`. `bun` reads it from there too.
+  process.cwd(),
+  "..",
+  "..",
+  "packages",
+  "core",
+  "fixtures",
+  "spec-examples",
+);
+
+function specExample(file: string): unknown {
+  return JSON.parse(readFileSync(join(SPEC_EXAMPLES, file), "utf8"));
+}
+
+const DIAGNOSIS_DAY_AHEAD = specExample("05-diagnosis-day-ahead.json");
+const OPTIMIZATION_RESULT = specExample("11-optimization-result.json");
+
 /** The three reads that need no model, by the pathname they are served at. */
 const OBSERVED_BY_PATH: Record<string, unknown> = {
   "/v1/grid/now": GRID_NOW,
   "/v1/curtailment/hours": CURTAILMENT_HOURS,
   "/v1/curtailment/episodes": CURTAILMENT_EPISODES,
+  "/v1/curtailment/reasons": CURTAILMENT_REASONS,
 };
 
 /** The two reads a promoted artifact is a precondition for. */
 const FORECAST_BY_PATH: Record<string, unknown> = {
   "/v1/grid/outlook": GRID_OUTLOOK,
   "/v1/forecast/day-ahead": FORECAST_DAY_AHEAD,
+  "/v1/model/card": MODEL_CARD,
+  "/v1/diagnosis/day-ahead": DIAGNOSIS_DAY_AHEAD,
+  "/v1/optimize": OPTIMIZATION_RESULT,
 };
 
 /**

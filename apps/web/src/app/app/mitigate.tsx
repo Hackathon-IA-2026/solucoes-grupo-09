@@ -231,7 +231,7 @@ export default function MitigateScreen() {
         />
 
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
-          <Panel style={{ flexGrow: 1, flexBasis: 300 }}>
+          <Panel style={{ flexGrow: 1, flexShrink: 1, flexBasis: 300 }}>
             {active.avoidability === null ? (
               <View style={{ gap: space.sm }}>
                 <Text style={{ fontSize: 13, color: colors.inkMuted }}>
@@ -253,7 +253,7 @@ export default function MitigateScreen() {
           </Panel>
 
           {/* R$ once, with its assumption on screen and editable. */}
-          <Panel style={{ flexGrow: 1, flexBasis: 320, gap: space.sm }}>
+          <Panel style={{ flexGrow: 1, flexShrink: 1, flexBasis: 320, gap: space.sm }}>
             <Text style={{ fontSize: 13, color: colors.inkMuted }}>
               {copy.app.mitigate.economicTitle}
             </Text>
@@ -484,6 +484,7 @@ function StepCard({
     <View
       style={{
         flexGrow: 1,
+        flexShrink: 1,
         flexBasis: 260,
         borderRadius: radius.xl,
         borderCurve: "continuous",
@@ -528,7 +529,7 @@ function StepCard({
               {copy.app.mitigate.remaining}
             </Text>
           </View>
-          <BandStrip band={step.remaining} domainMax={domainMax} tone="muted" />
+          <BandStrip band={step.remaining} domainMax={domainMax} />
           <Text
             style={{
               fontSize: 11,

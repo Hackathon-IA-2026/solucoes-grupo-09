@@ -59,6 +59,10 @@ export function Pill({
         return {
           flexDirection: "row",
           alignItems: "center",
+          // A pill with a long label — the mitigate reset spells out the whole
+          // reference fleet — is 301px wide against a 280px panel at 320px.
+          // Shrinking beats clipping: the label wraps inside the pill.
+          flexShrink: 1,
           gap: 8,
           borderRadius: radius.pill,
           paddingHorizontal: 16,
@@ -90,6 +94,7 @@ export function Pill({
       {icon}
       <Text
         style={{
+          flexShrink: 1,
           fontSize: 14,
           fontWeight: active ? "600" : "500",
           color: active ? colors.onAccent : colors.inkMuted,
