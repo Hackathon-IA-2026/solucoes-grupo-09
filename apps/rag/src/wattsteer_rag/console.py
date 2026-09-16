@@ -133,6 +133,7 @@ PAGE = """<!doctype html>
 
     <button id="build">Build the evidence</button>
     <button id="look" class="ghost">Only search</button>
+    <button id="stored" class="ghost">What is already published</button>
     <p class="note">Building calls a model on a free tier. It takes a few seconds, and can answer “waiting for quota”, which is not an error: it says when it can resume.</p>
     <div class="q" id="question"></div>
   </div>
@@ -237,6 +238,20 @@ function table(hits) {
       <td><code>${(h.rrf ?? h.score ?? 0).toFixed(4)}</code></td></tr>`).join("") + `</table>`;
 }
 
+function published(j) {
+  if (!j.rows.length) {
+    $("out").innerHTML = `<div class="card"><div class="verdict">nothing published for ${esc(j.subsystem)} on ${esc(j.target_date)}</div>
+      <p class="note">Build one above, and it lands in the table.</p></div>`;
+    return;
+  }
+  const best = j.rows.find((r) => r.verdict === "found") || j.rows[0];
+  render(best.payload);
+  $("out").insertAdjacentHTML("beforeend",
+    `<div class="card"><p class="note">Read from <code>rag.evidence</code>, written ${esc(String(best.created_at).slice(0, 19).replace("T", " "))},
+     corpus <code>${esc(best.corpus_version || "?")}</code> · ${j.rows.length} version(s) kept for this day.
+     No model ran to show this — it is the same row the product reads.</p></div>`);
+}
+
 async function call(url, options, button) {
   button.disabled = true;
   $("out").innerHTML = `<div class="card"><span class="q">asking…</span></div>`;
@@ -248,6 +263,8 @@ async function call(url, options, button) {
         <p class="note">${esc(j.error.message)}</p></div>`;
     } else if (j.hits) {
       $("out").innerHTML = `<div class="card"><div class="verdict">${j.hits.length} passages</div>${table(j.hits)}</div>`;
+    } else if (j.rows) {
+      published(j);
     } else {
       render(j);
     }
@@ -263,6 +280,11 @@ $("build").onclick = (e) =>
   call(url("/internal/rag/evidence?" + params() + "&gate_at=" + encodeURIComponent(gateAt())), { method: "POST" }, e.target);
 $("look").onclick = (e) =>
   call(url("/internal/rag/search?q=" + encodeURIComponent($("description").value.trim() || "limitação")), {}, e.target);
+// The table apps/api reads. No model runs, so this answers even when the free
+// tier has nothing left this minute.
+$("stored").onclick = (e) => call(
+  url(`/internal/rag/evidence?subsystem=${$("subsystem").value}&target_date=${$("date").value}&limit=10`),
+  {}, e.target);
 
 for (const el of ["subsystem", "date", "reason", "description"]) $(el).oninput = preview;
 $("sample").onchange = (e) => fill(e.target.value);

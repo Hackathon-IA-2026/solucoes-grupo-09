@@ -108,6 +108,12 @@ passages the search returned with both ranks, and either the claim with its
 literal quote, page and publication date, or the refusal with the gate that
 produced it and what the model had tried to say.
 
+Three buttons, and only the first spends quota. **Build the evidence** runs the
+model. **Only search** shows the retrieval alone. **What is already published**
+reads `rag.evidence`, which is the row `apps/api` will read: no model runs, so
+it answers on a spent free tier, and it is the honest thing to show someone who
+asks what the product will display.
+
 The routes run models and read the corpus, and none of them asks who is
 calling, so the default is the loopback address. `--lan` is for handing the page
 to someone on the same network: it binds to every interface and generates a

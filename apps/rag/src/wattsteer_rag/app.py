@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 import secrets
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
@@ -190,14 +190,23 @@ async def evidence(
 
 @app.get("/internal/rag/evidence")
 async def read_evidence(subsystem: str, target_date: str, limit: int = 10) -> dict:
-    """Published evidence, read from the table. No model runs here."""
+    """Published evidence, read from the table. No model runs here.
+
+    This is the route that matters for the product: `apps/api` reads what a job
+    wrote, and never calls a model to serve a page. It is also the only way to
+    look at an answer when the free tier has nothing left this minute.
+    """
+    try:
+        day = date.fromisoformat(target_date)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="target_date must be YYYY-MM-DD") from None
     pool = await state["db"].connect()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             "SELECT verdict, reason, payload, corpus_version, sha256, created_at FROM rag.evidence"
-            " WHERE subsystem = $1 AND target_date = $2::date ORDER BY created_at DESC LIMIT $3",
+            " WHERE subsystem = $1 AND target_date = $2 ORDER BY created_at DESC LIMIT $3",
             subsystem,
-            target_date,
+            day,
             limit,
         )
     return {"subsystem": subsystem, "target_date": target_date, "rows": [dict(row) for row in rows]}
