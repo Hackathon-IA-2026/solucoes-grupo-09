@@ -88,14 +88,25 @@ Nada disso viaja dentro do repositório: quem instala constrói o acervo na pró
 máquina, com um comando, e pode parar e retomar quando quiser.
 
 **Teste com registros reais.** Montamos a avaliação a partir dos próprios
-registros de corte publicados pelo ONS, não de perguntas inventadas. Resultado:
+registros de corte publicados pelo ONS, não de perguntas inventadas: cada caso é
+uma linha que o operador registrou, com a razão que ele declarou.
 
-- 6 registros testados
-- 5 responderam com evidência, 1 recusou
-- **100% dos registros que citavam um documento receberam a citação daquele
-  documento certo**
-- a recusa foi no registro "Controle de frequência do SIN", para o qual ainda não
-  temos documento no acervo. Recusar ali é o comportamento correto.
+Em seis registros, medimos entre 4 e 5 respostas com evidência e 1 a 2 recusas,
+com 75% a 100% dos registros que citam um documento recebendo a citação daquele
+documento. O resultado varia com duas coisas, e as duas são honestas: quanto do
+acervo está indexado na máquina onde se roda, e o fato de o modelo nem sempre
+conseguir copiar um trecho válido de uma tabela na primeira tentativa.
+
+Uma recusa se repete em todas as rodadas e está certa: o registro "Controle de
+frequência do SIN" não tem, no nosso acervo, documento que o sustente. Recusar
+ali é o comportamento desejado, não uma falha.
+
+Qualquer pessoa pode repetir a medição na própria máquina:
+
+```
+python eval/build_goldset.py --days 2026-09-14 2026-08-20
+python eval/run_eval.py
+```
 
 ## 6. Como isso custa quase nada
 
@@ -117,9 +128,11 @@ as cotas de todas e alterna entre elas. Com uma chave só, funciona igual.
 
 ## 7. Limitações que assumimos
 
-- **O IPDO não tem histórico.** O ONS publica apenas a edição do dia e substitui
-  a anterior. Só conseguimos acumular a partir de agora, mais o que existir no
-  arquivo público da internet.
+- **O IPDO não tem histórico no ONS.** O órgão publica apenas a edição do dia e
+  substitui a anterior. A história só existe no arquivo público da internet, e
+  nem tudo que está lá serve: das 218 capturas encontradas, 173 são o documento
+  e o resto é a página de erro que o arquivo gravou quando o arquivo já tinha
+  sido trocado. Ficamos com as 173, de janeiro de 2018 a outubro de 2025.
 - **REL raramente terá prova documental.** O cronograma de intervenções não é
   público, então a evidência para indisponibilidade externa fica limitada ao que
   os boletins mencionam, e a confiança nunca é declarada como alta.
