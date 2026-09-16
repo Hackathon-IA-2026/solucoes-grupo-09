@@ -130,11 +130,24 @@ suite("the migration ledger matches the files on disk", () => {
   });
 
   it("was applied in journal order", async () => {
-    // `id` is 1-based and `idx` is 0-based; the pairing above relies on that,
-    // so it is asserted rather than assumed.
+    /*
+      **Increasing, not contiguous.** The first version of this assertion
+      required `id === idx + 1`, and production disproved it: its ledger runs
+      1–51 and then 53, because repairing the 53-rows-for-52-files corruption
+      deleted a row and the sequence does not go back. Nothing is wrong with
+      that database — drizzle matches on hash, not on id — and an assertion that
+      failed on it would have been the test wrong rather than the ledger.
+
+      What actually has to hold is that the rows are in the journal's order, so
+      the positional pairing the hash check above depends on is sound. Strictly
+      increasing ids and non-decreasing timestamps say exactly that and nothing
+      more.
+    */
     const rows = await ledger();
-    const entries = journal();
-    expect(rows.map((row) => row.id)).toEqual(entries.map((entry) => entry.idx + 1));
+    const ids = rows.map((row) => row.id);
+    expect([...ids].sort((a, b) => a - b)).toEqual(ids);
+    expect(new Set(ids).size).toBe(ids.length);
+
     const applied = rows.map((row) => Number(row.created_at));
     expect([...applied].sort((a, b) => a - b)).toEqual(applied);
   });
