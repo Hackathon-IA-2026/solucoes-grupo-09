@@ -11,6 +11,13 @@ COPY apps/rag/pyproject.toml apps/rag/README.md ./
 COPY apps/rag/src ./src
 RUN pip install --no-cache-dir . && useradd --create-home --uid 10001 wattsteer
 
+# The evaluation set travels with the image. It is the list of real curtailment
+# records the console offers, so leaving it out is what makes a perfectly healthy
+# deployment tell every visitor there is no evaluation set to choose from. It is
+# also what `eval/run_eval.py` measures against, so the image can be scored
+# without a checkout.
+COPY apps/rag/eval ./eval
+
 # The store holds the raw documents, addressed by hash. A volume keeps them
 # across deploys so a re-ingest does not re-download the corpus.
 ENV WATTSTEER_RAG_STORE_DIR=/data/rag-store \

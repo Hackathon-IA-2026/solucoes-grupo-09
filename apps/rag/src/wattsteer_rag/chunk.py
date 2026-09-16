@@ -168,6 +168,14 @@ def _absorbed(chunks: list[Chunk], piece: str, page_no: int) -> bool:
     if previous.page_end != page_no or len(previous.text) + len(piece) >= MAX_CHARS:
         return False
     previous.text = f"{previous.text}\n\n{piece}"
+    # An index page arrives one entry at a time, and a single entry carries one
+    # dotted leader, which is not enough to look like an index. The page only
+    # becomes recognisable once the entries are back together, so the kind is
+    # decided again on the text as it now stands. Without this the index of
+    # IO-ON.NE.5NE is stored as body, outranks the section that states the limit
+    # on every keyword the record carries, and the answer cites a line of the
+    # table of contents.
+    previous.locator["kind"] = "toc" if is_table_of_contents(previous.text) else previous.locator["kind"]
     return True
 
 

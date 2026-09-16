@@ -13,7 +13,23 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-GOLDSET = Path("eval/goldset.jsonl")
+from .config import REPO_ROOT
+
+# Where the evaluation set can be. The relative path is the one a developer gets
+# from `apps/rag`, and it stays first so an experiment in the working tree wins.
+# The other two are the checkout and the image, which is a flat `/app` with no
+# `apps/` above it: without that last candidate the deployed console has no
+# records at all and offers "no evaluation set built" to every visitor, which is
+# what it did until this list existed.
+GOLDSETS = (
+    Path("eval/goldset.jsonl"),
+    REPO_ROOT / "apps" / "rag" / "eval" / "goldset.jsonl",
+    REPO_ROOT / "eval" / "goldset.jsonl",
+)
+
+
+def goldset_path() -> Path | None:
+    return next((path for path in GOLDSETS if path.exists()), None)
 
 
 def sample_records() -> list[dict]:
@@ -23,10 +39,11 @@ def sample_records() -> list[dict]:
     If it has not been built yet the page still works, with an empty list and a
     free-text field.
     """
-    if not GOLDSET.exists():
+    path = goldset_path()
+    if path is None:
         return []
     records = []
-    for line in GOLDSET.read_text().splitlines():
+    for line in path.read_text().splitlines():
         if not line.strip():
             continue
         case = json.loads(line)
