@@ -1,5 +1,6 @@
 import { Panel, PanelHeader, PieChartIcon, space, usePalette } from "@wattsteer/ui";
 import { Text, View } from "react-native";
+import { driverBarColor } from "@/components/charts/driver-bars";
 import { useCopy } from "@/i18n";
 import { DRIVERS } from "./fixtures";
 import { Footnote } from "./section";
@@ -48,7 +49,7 @@ export function DriverBars() {
       </Text>
 
       <View style={{ gap: space.md }}>
-        {DRIVERS.map((driver, index) => (
+        {DRIVERS.map((driver) => (
           <View
             key={driver.code}
             style={{ flexDirection: "row", alignItems: "center", gap: space.md }}
@@ -82,7 +83,15 @@ export function DriverBars() {
                   width: `${(driver.share / max) * 100}%`,
                   height: "100%",
                   borderRadius: 5,
-                  backgroundColor: index === 0 ? colors.accent : colors.violet,
+                  /*
+                    The Explain screen's own rule, imported rather than
+                    restated. This was `index === 0 ? accent : violet` — colour
+                    by position, which on a panel where every driver raises the
+                    risk painted the top bar in the hue the product uses for
+                    "lowers". The landing shows the product's components; it has
+                    to show the product's encodings too.
+                  */
+                  backgroundColor: driverBarColor(driver.direction, colors),
                 }}
               />
             </View>

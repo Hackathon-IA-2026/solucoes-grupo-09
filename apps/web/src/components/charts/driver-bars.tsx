@@ -58,6 +58,27 @@ export function DriverBars({ drivers }: { drivers: readonly AttributedDriver[] }
   );
 }
 
+/**
+ * What a driver bar's colour means: violet raises the risk, accent lowers it,
+ * faint declines to say.
+ *
+ * Exported because the landing page draws this panel too, and was colouring it
+ * by *position* — first bar accent, the rest violet. Every driver in its
+ * fixture raises, so the landing was painting a "lowers" bar on a driver that
+ * raises: one hue, two meanings, on two pages of one product. The rule lives
+ * here rather than in `lib/driver-rows.ts` because it needs the palette, and
+ * that module is the part of the row logic `bun test` imports without one.
+ */
+export function driverBarColor(
+  direction: DriverRow["direction"],
+  colors: ReturnType<typeof usePalette>,
+): string {
+  if (direction === "mixed") {
+    return colors.inkFaint;
+  }
+  return direction === "raises" ? colors.violet : colors.accent;
+}
+
 function DriverBar({ row, max }: { row: DriverRow; max: number }) {
   const colors = usePalette();
   const copy = useCopy();
@@ -65,12 +86,7 @@ function DriverBar({ row, max }: { row: DriverRow; max: number }) {
   const label = driverLabel(row.code, copy);
   const observed = formatReading(row.observed, copy, f);
   const typical = formatReading(row.typical, copy, f);
-  const barColor =
-    row.direction === "mixed"
-      ? colors.inkFaint
-      : row.direction === "raises"
-        ? colors.violet
-        : colors.accent;
+  const barColor = driverBarColor(row.direction, colors);
   const disagrees =
     row.hourDisagreement !== null && row.hourDisagreement >= HOUR_DISAGREEMENT_NOTABLE;
 
