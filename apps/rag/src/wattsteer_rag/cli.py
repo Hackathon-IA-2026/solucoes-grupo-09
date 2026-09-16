@@ -88,7 +88,7 @@ async def cmd_crawl(args) -> int:
             for back in range(args.days):
                 report.append(await crawler.fetch_ipdo(client, date.today() - timedelta(days=back)))
         if args.what == "ipdo-archive":
-            report += await crawler.fetch_ipdo_archive(client, limit=args.limit, attempts=args.attempts)
+            report += await crawler.fetch_ipdo_archive(client, limit=args.limit, attempts=args.attempts, sample=args.sample)
         if args.what in {"rap", "all"}:
             report += await crawler.fetch_rap(client, args.urls or [])
     print(json.dumps(report, indent=2, ensure_ascii=False))
@@ -339,6 +339,11 @@ def main() -> int:
     crawl.add_argument("--urls", nargs="*", help="rap: published URLs")
     crawl.add_argument(
         "--attempts", type=int, default=4, help="how many times to retry a document that fails"
+    )
+    crawl.add_argument(
+        "--sample",
+        action="store_true",
+        help="ipdo-archive: fetch only the oldest, the newest and one in the middle",
     )
     crawl.set_defaults(run=cmd_crawl)
 

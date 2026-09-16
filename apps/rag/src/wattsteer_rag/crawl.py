@@ -38,9 +38,15 @@ PROC_PROXY = (
 )
 ACERVO = "https://www.ons.org.br/AcervoDigitalDocumentosEPublicacoes"
 BDO_BASE = "https://sdro.ons.org.br/SDRO/DIARIO"
+# The archive also keeps what it found when the file was already gone: a 404 page
+# of nine hundred bytes, recorded under the same URL. Filtering on the captured
+# status and type is the difference between 218 entries, 45 of which can never be
+# fetched, and 173 that are actually the document.
 WAYBACK_CDX = (
     "https://web.archive.org/cdx/search/cdx?url=ons.org.br%2FAcervoDigitalDocumentosEPublicacoes%2F*"
-    "&output=json&fl=timestamp,original&filter=original:.*IPDO.*&collapse=original&limit=3000"
+    "&output=json&fl=timestamp,original&filter=original:.*IPDO.*"
+    "&filter=statuscode:200&filter=mimetype:application/pdf"
+    "&collapse=original&limit=3000"
 )
 RAP_2023_08_15 = f"{ACERVO}/RAP%202023.08.15%2008h030min%20vers%C3%A3o%20final.pdf"
 
@@ -339,7 +345,7 @@ class Crawler:
         return {row["external_id"].split()[-1] for row in rows if row["external_id"]}
 
     async def fetch_ipdo_archive(
-        self, client: httpx.AsyncClient, limit: int = 40, *, attempts: int = 4
+        self, client: httpx.AsyncClient, limit: int = 40, *, attempts: int = 4, sample: bool = False
     ) -> list[dict]:
         """Backfill old editions from the Internet Archive.
 
@@ -364,12 +370,21 @@ class Crawler:
                 seen.setdefault(day, f"https://web.archive.org/web/{stamp}id_/{original}")
         already = await self.known_days("IPDO")
         pending = [(day, url) for day, url in sorted(seen.items(), reverse=True) if day not in already]
+        total_pending = len(pending)
+        if sample and len(pending) >= 3:
+            # Backfilling 218 editions takes a long time and the archive throttles.
+            # The oldest, the newest and one in the middle answer the only question
+            # that matters before committing to the whole run: does this path work
+            # across the range, or only for what was archived recently?
+            pending = [pending[0], pending[len(pending) // 2], pending[-1]]
         out: list[dict] = [
             {
                 "source": "IPDO",
                 "archive_index": len(seen),
+                "mode": "sample" if sample else "sequential",
+                "fetching_now": min(limit, len(pending)),
                 "already_here": len(already),
-                "pending": len(pending),
+                "pending": total_pending,
             }
         ]
         for day, url in pending[:limit]:
@@ -390,7 +405,7 @@ class Crawler:
                 meta={"day": day, "via": "web.archive.org"},
             )
             out.append({"day": day, "ok": True, "document_id": document_id, "new": is_new})
-        remaining = len(pending) - min(limit, len(pending))
+        remaining = total_pending - min(limit, len(pending))
         if remaining > 0:
             out.append({"note": f"{remaining} editions still missing; run again to continue"})
         return out
