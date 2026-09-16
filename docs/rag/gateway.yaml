@@ -4,7 +4,9 @@
 version: 1
 
 providers:
-  # POOL DE CHAVES: cada integrante cria a própria chave em cada provedor; a env var recebe todas, separadas por vírgula.
+  # POOL DE CHAVES (opcional): cada integrante cria a própria chave em cada provedor; a env var recebe todas, separadas por vírgula.
+  # FUNCIONA COM UMA CHAVE SÓ: "NVIDIA_API_KEYS=nvapi-x" ou a variável no singular (NVIDIA_API_KEY) são aceitas; o pool de 1
+  # se comporta exatamente como chave única. Provedor sem nenhuma chave fica "disabled" e a cadeia pula para o próximo elo.
   # Limites valem por chave (contas independentes); o roteador usa a chave com mais folga e só troca de provedor
   # quando todas esgotam. Chave nunca aparece em log (só key_id = 8 hex do sha256).
   nvidia:
