@@ -587,6 +587,7 @@ export const en = {
       forecastCurve: "Hour by hour",
       observedCurve: "What settled",
       constraint: "Registered reasons",
+      comparison: "Plan vs executed",
       counterfactual: "What if?",
       recommendation: "Suggested action",
       sources: "Sources",

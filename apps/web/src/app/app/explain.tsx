@@ -61,6 +61,9 @@ import {
   type ModelCardState,
   useExplain,
 } from "@/components/app/use-explain";
+import { useServing } from "@/components/app/use-serving";
+import { NO_BRIEFING_DATA } from "@/components/briefing/briefing-data";
+import { usePublishBriefingSubject } from "@/components/briefing/briefing-subject";
 import { BandFigure } from "@/components/charts/band-figure";
 import { DriverBars } from "@/components/charts/driver-bars";
 import { ReliabilityCurve } from "@/components/charts/reliability-curve";
@@ -77,6 +80,7 @@ export default function ExplainScreen() {
   const copy = useCopy();
   const f = useFormat();
   const { locale } = useI18n();
+  const serving = useServing();
   const params = useAppParams();
   const meta = subsystemMeta(params.subsystem);
   const state = useExplain({
@@ -90,6 +94,38 @@ export default function ExplainScreen() {
     // rule here would be the client deciding it.
     lane: FIXTURE_LANE,
     locale: languageTag(locale),
+  });
+
+  /*
+    Published for the briefing host beside the dock. This screen is the only one
+    holding a diagnosis and the ONS reasons, so it is the only one whose briefing
+    can carry a `cause` or a `constraint` scene — and on a refused day both are
+    `null` here and `compose.ts` never emits them.
+
+    At the top level rather than inside a render branch: the branches have
+    already narrowed `state`, and a publish that only runs on the happy path
+    would leave the host holding the previous screen's subject.
+  */
+  const diagnosedDay = state.status === "explained" ? state.day : null;
+  usePublishBriefingSubject({
+    context: { locale, screen: "explain", params, serving, explain: state },
+    data: {
+      ...NO_BRIEFING_DATA,
+      drivers:
+        diagnosedDay === null
+          ? null
+          : attributedDrivers(diagnosedDay.diagnosis.attribution.drivers),
+      // `reading` has no observed half yet and `refused` never will; both
+      // publish nothing rather than an empty list, because "no reasons" and
+      // "not read" are different facts and the scene says so.
+      reasons:
+        state.status === "explained" || state.status === "observedOnly"
+          ? state.observed.reasons.rows
+          : null,
+      dayEnergy: diagnosedDay === null ? null : diagnosedDay.forecast.dayEnergyMwh,
+      peakPower: diagnosedDay === null ? null : diagnosedDay.forecast.peakPowerMw,
+    },
+    counterfactual: undefined,
   });
 
   /**

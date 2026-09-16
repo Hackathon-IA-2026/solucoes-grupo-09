@@ -200,7 +200,8 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
    * front of it.
    */
   const session = useVoiceSession({ context, onToolCall });
-  const { availability, status, transcript, level, mic, error, say } = session;
+  const { availability, status, transcript, level, mic, error, say, narrationClock } =
+    session;
 
   /**
    * `stop` is the session's; `close` is the screen's.
@@ -235,6 +236,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       action,
       briefing,
       dismissBriefing,
+      narrationClock,
       highlighted,
       error,
       open,
@@ -253,6 +255,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       action,
       briefing,
       dismissBriefing,
+      narrationClock,
       highlighted,
       error,
       open,

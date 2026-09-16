@@ -20,6 +20,7 @@ import {
   usePalette,
   useReducedMotion,
 } from "@wattsteer/ui";
+import { useEffect } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
 import type { BriefingData } from "@/components/briefing/briefing-data";
 import { SceneRenderer } from "@/components/briefing/scene-renderer";
@@ -43,6 +44,8 @@ export interface BriefingStageProps {
   readonly silent: boolean;
   readonly data: BriefingData;
   readonly onDismiss: () => void;
+  /** Close on Escape. Web only — the native build has no `document`. */
+  readonly escapeToDismiss?: boolean;
 }
 
 export function BriefingStage({
@@ -52,11 +55,32 @@ export function BriefingStage({
   silent,
   data,
   onDismiss,
+  escapeToDismiss = false,
 }: BriefingStageProps) {
   const colors = usePalette();
   const copy = useCopy();
   const reduced = useReducedMotion();
   const timed = cursor.index < 0 ? undefined : cursor.scenes[cursor.index];
+
+  /*
+    Escape closes it, which is what a reader expects of anything covering the
+    screen — and the only way out for someone on a keyboard who has not yet
+    reached the close control. Registered on the document rather than on the
+    overlay because the overlay is not focused: nothing here steals focus, so a
+    key handler bound to it would never fire.
+  */
+  useEffect(() => {
+    if (!escapeToDismiss) {
+      return;
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onDismiss();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [escapeToDismiss, onDismiss]);
 
   if (timed === undefined) {
     return null;
@@ -74,7 +98,10 @@ export function BriefingStage({
         ? ({ role: "dialog", "aria-modal": true } as object)
         : null)}
       style={{
-        ...(Platform.OS === "web" ? ({ position: "fixed" } as object) : null),
+        // `fixed` on web so a briefing stays put while the screen under it
+        // scrolls; `absolute` on native, which has no fixed positioning — and
+        // without either, the four offsets below do nothing at all.
+        position: Platform.OS === "web" ? ("fixed" as "absolute") : "absolute",
         top: 0,
         right: 0,
         bottom: 0,

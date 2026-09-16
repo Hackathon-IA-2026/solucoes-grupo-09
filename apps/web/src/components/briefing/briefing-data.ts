@@ -19,6 +19,7 @@
 
 import type { Band } from "@wattsteer/core";
 import type { ObservedReason } from "@wattsteer/core/api";
+import type { CompareRow } from "@/components/charts/compare-bars";
 import type { MapPaint } from "@/components/charts/subsystem-map";
 import type {
   AttributedDriver,
@@ -42,6 +43,15 @@ export interface BriefingData {
   readonly peakPower: Band | null;
   /** What the ONS registered, at reporting-entity grain. */
   readonly reasons: readonly ObservedReason[] | null;
+  /**
+   * Rows for the `comparison` scene — what was planned beside what happened.
+   *
+   * Built by the screen that owns the comparison (Máquina do tempo knows what
+   * it re-scored; the briefing does not) and handed over whole. The scene still
+   * carries no figures of its own: it names *that* a comparison is shown, and
+   * these are the screen's rows.
+   */
+  readonly comparison: readonly CompareRow[] | null;
 }
 
 /** A briefing with nothing behind it. Every scene must survive this. */
@@ -54,4 +64,5 @@ export const NO_BRIEFING_DATA: BriefingData = {
   dayEnergy: null,
   peakPower: null,
   reasons: null,
+  comparison: null,
 };

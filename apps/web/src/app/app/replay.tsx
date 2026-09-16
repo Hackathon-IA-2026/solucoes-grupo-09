@@ -92,11 +92,14 @@ import { ReadingState } from "@/components/app/thinking-orb";
 import { useAppParams } from "@/components/app/use-app-params";
 import { useReplay } from "@/components/app/use-replay";
 import { useScenario } from "@/components/app/use-scenario";
+import { useServing } from "@/components/app/use-serving";
+import { NO_BRIEFING_DATA } from "@/components/briefing/briefing-data";
+import { usePublishBriefingSubject } from "@/components/briefing/briefing-subject";
 import { CompareBars, type CompareRow } from "@/components/charts/compare-bars";
 import { EpisodeList } from "@/components/charts/episode-list";
 import { FanChart } from "@/components/charts/fan-chart";
 import { PlanVsExecuted } from "@/components/charts/plan-vs-executed";
-import { type Copy, type Formatters, useCopy, useFormat } from "@/i18n";
+import { type Copy, type Formatters, useCopy, useFormat, useI18n } from "@/i18n";
 import { fill } from "@/i18n/format";
 import {
   type BatteryAsset,
@@ -215,6 +218,8 @@ function vintageNote(
 export default function TimeMachineScreen() {
   const copy = useCopy();
   const f = useFormat();
+  const { locale } = useI18n();
+  const serving = useServing();
   const params = useAppParams();
   const day = replayDay(params.episode);
   // The replayed day is the selection, so the scenario in the address bar
@@ -230,6 +235,21 @@ export default function TimeMachineScreen() {
   // Before the refusal branch below, because a hook cannot be called
   // conditionally. It parks itself on a `null` scenario.
   const state = useReplay(scenarioState.scenario);
+
+  /*
+    Published for the briefing host. Máquina do tempo is the screen that
+    re-scored the day, so it is the only one that can hand over a
+    plan-beside-what-happened comparison — `compose.ts` emits the `comparison`
+    scene only where these rows exist, which is here and nowhere else.
+  */
+  usePublishBriefingSubject({
+    context: { locale, screen: "replay", params, serving },
+    data: {
+      ...NO_BRIEFING_DATA,
+      comparison: state.status === "replayed" ? compareRows(state.replay, copy, f) : null,
+    },
+    counterfactual: undefined,
+  });
 
   const picker = (
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
@@ -355,12 +375,19 @@ export default function TimeMachineScreen() {
  * recovered energy with the promised floor beside it, then the comparison, then
  * the two profiles, then the fenced upper bound, then the episodes, then the
  * fleet. Nothing above the honesty block, and nothing collapsible in it.
+ *
+ * The comparison rows are built by `compareRows` above, so this screen and any
+ * briefing over it quote the same three figures.
  */
-function Replayed({ replay, fleet }: { replay: Replay; fleet: ReactNode }) {
-  const colors = usePalette();
-  const copy = useCopy();
-  const f = useFormat();
-
+/**
+ * What was forecast, what happened and what a plan would have left — one list,
+ * built once.
+ *
+ * Extracted so the screen and the briefing read the *same* rows. Two builders
+ * for one comparison is two things to drift, and a briefing quoting different
+ * figures from the screen it overlays is the worst version of that.
+ */
+function compareRows(replay: Replay, copy: Copy, f: Formatters): CompareRow[] {
   const episode = replay.episodes[0];
   const rows: CompareRow[] = [
     {
@@ -403,6 +430,15 @@ function Replayed({ replay, fleet }: { replay: Replay; fleet: ReactNode }) {
       note: copy.app.replay.rowRemainingNote,
     },
   ];
+  return rows;
+}
+
+function Replayed({ replay, fleet }: { replay: Replay; fleet: ReactNode }) {
+  const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
+
+  const rows = compareRows(replay, copy, f);
 
   return (
     <>

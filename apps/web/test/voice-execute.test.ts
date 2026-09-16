@@ -689,6 +689,32 @@ describe("the demo script (plan §6), as gherkin", () => {
       },
     ],
     [
+      /^the refusal code is "(\w+)"$/,
+      (world, code) => {
+        const intent = world.intent;
+        expect(intent?.kind).toBe("refused");
+        expect(String(intent?.kind === "refused" ? intent.reason.code : null)).toBe(code);
+      },
+    ],
+    [
+      /^the briefed question kind is "(\w+)"$/,
+      (world, kind) => {
+        const intent = world.intent;
+        expect(intent?.kind).toBe("brief");
+        expect(String(intent?.kind === "brief" ? intent.questionKind : null)).toBe(kind);
+      },
+    ],
+    [
+      /^the briefed subsystem is "(\w+)"$/,
+      (world, subsystem) => {
+        const intent = world.intent;
+        expect(intent?.kind).toBe("brief");
+        expect(String(intent?.kind === "brief" ? intent.subsystem : null)).toBe(
+          subsystem,
+        );
+      },
+    ],
+    [
       /^the model calls (\w+) with (.+)$/,
       (world, name, args) => {
         world.intent = executeTool({ name, arguments: JSON.parse(args) }, world.params);
@@ -807,9 +833,12 @@ describe("the demo script (plan §6), as gherkin", () => {
     parseFeature(readFileSync(join(FEATURES, file), "utf8")),
   );
 
-  it("the feature files carry the six steps of the script", () => {
-    expect(files.length).toBeGreaterThan(0);
-    expect(scenarios.length).toBe(6);
+  it("the feature files carry every scenario, and each one runs", () => {
+    // Two features now: the demo script's six steps and the briefing's four.
+    // The count is asserted so a file that stops parsing — or one added without
+    // step definitions — cannot pass by contributing nothing.
+    expect(files.length).toBe(2);
+    expect(scenarios.length).toBe(10);
   });
 
   for (const scenario of scenarios) {

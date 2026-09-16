@@ -463,6 +463,7 @@ export const pt: Copy = {
       forecastCurve: "Hora a hora",
       observedCurve: "O que foi liquidado",
       constraint: "Motivos registrados",
+      comparison: "Plano x executado",
       counterfactual: "E se?",
       recommendation: "Ação sugerida",
       sources: "Fontes",

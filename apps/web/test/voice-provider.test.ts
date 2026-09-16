@@ -96,14 +96,32 @@ describe("the provider sits above the Stack, inside ServingProvider", () => {
     // screen, or below the `Stack`, tears down the socket on every navigation —
     // and navigation is the agent's primary action, so it would break at the
     // moment a tool call succeeded.
-    expect(APP_LAYOUT_FLAT).toContain("<VoiceProvider> <Stack");
+    // Ordering, not adjacency. The invariant is that the provider *encloses*
+    // the stack; asserting the two tags touch also forbids anything else being
+    // wrapped around the stack, which is a different and much smaller claim —
+    // `BriefingSubjectProvider` sits between them and breaks nothing.
+    const voice = APP_LAYOUT_FLAT.indexOf("<VoiceProvider>");
+    const stack = APP_LAYOUT_FLAT.indexOf("<Stack");
+    const closed = APP_LAYOUT_FLAT.indexOf("</VoiceProvider>");
+    expect(voice).toBeGreaterThanOrEqual(0);
+    expect(stack).toBeGreaterThan(voice);
+    expect(closed).toBeGreaterThan(stack);
   });
 
   it("`VoiceDock` is a sibling of the `Stack`, not a child of a screen", () => {
     // `animation: "fade"` re-animates everything inside the stack. The dock has
     // to be the still thing while the screen behind it changes — that is what
     // makes an automatic navigation read as the assistant acting.
-    expect(APP_LAYOUT_FLAT).toContain("/> <VoiceDock /> </VoiceProvider>");
+    // Again the property rather than the spelling: the dock is *outside* the
+    // stack element and *inside* the provider. Both of the overlays mounted
+    // here — the dock and the briefing — have to satisfy it.
+    const stackEnd = APP_LAYOUT_FLAT.indexOf("/>", APP_LAYOUT_FLAT.indexOf("<Stack"));
+    const closed = APP_LAYOUT_FLAT.indexOf("</VoiceProvider>");
+    for (const overlay of ["<VoiceDock />", "<BriefingHost />"]) {
+      const at = APP_LAYOUT_FLAT.indexOf(overlay);
+      expect(at).toBeGreaterThan(stackEnd);
+      expect(at).toBeLessThan(closed);
+    }
   });
 
   it("the voice provider is inside `ServingProvider`, never outside it", () => {

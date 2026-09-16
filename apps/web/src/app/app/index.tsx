@@ -69,6 +69,7 @@
   move. The files it now points at are where each half of it is implemented.
 */
 
+import { SUBSYSTEM_DISPLAY_ORDER } from "@wattsteer/core";
 import { usePalette } from "@wattsteer/ui";
 import { router } from "expo-router";
 import Head from "expo-router/head";
@@ -88,12 +89,11 @@ import {
 } from "@/components/app/use-app-params";
 import { useNetwork } from "@/components/app/use-network";
 import { useServing } from "@/components/app/use-serving";
-import { NO_BRIEFING_DATA } from "@/components/briefing/briefing-data";
-import { BriefingStage } from "@/components/briefing/briefing-stage";
-import { useBriefing } from "@/components/briefing/use-briefing";
+import { usePublishBriefingSubject } from "@/components/briefing/briefing-subject";
 import { useCopy, useFormat, useI18n } from "@/i18n";
 import { fill } from "@/i18n/format";
 import { type SubsystemCode, subsystemMeta } from "@/lib/fixtures";
+import { forecastHours, forecastRow, observedRows, outlookRows } from "@/lib/network";
 
 export default function GridOverviewScreen() {
   const colors = usePalette();
@@ -117,30 +117,50 @@ export default function GridOverviewScreen() {
    * panels is the first line a reader meets, so it is the first thing that has
    * to be right.
    */
-  const forecastPublished = state.status === "read";
+  // Read before the early returns below, because a hook cannot sit behind one —
+  // and because `reading` and `refused` are subjects too: a briefing asked in
+  // either state should compose from what is true then.
+  const settled =
+    state.status === "reading" || state.status === "refused" ? null : state.observed;
+  const published = state.status === "read" ? state.forecast : null;
 
   /*
-    The briefing overlays this screen, and it is composed *here* rather than in
-    `VoiceProvider` because the provider's context has no network state in it —
-    `contextSentence` only ever needed locale, screen, params and serving. A
-    briefing needs to know whether a forecast exists, and this is the component
-    that knows.
+    What a briefing may draw, published for the host mounted beside the dock.
 
-    The clock is zeroed for now: the audio backend keeps the real one and it is
-    not yet threaded through the provider, so a briefing runs on the wall clock
-    and says it is silent. Wrong in one direction only — a briefing that reads
-    as silent while audio plays is a caption too many, not a missing scene.
+    Read off this screen's own state and nothing else — the briefing never
+    fetches, so a scene cannot show a forecast this screen does not have. In
+    `observedOnly` the forecast slices are `null` and `compose.ts` omits their
+    scenes; both fences hold the same line from two directions.
   */
-  const briefing = useBriefing(
-    {
-      locale,
-      screen: "overview",
-      params,
-      serving,
-      network: state,
+  usePublishBriefingSubject({
+    context: { locale, screen: "overview", params, serving, network: state },
+    data: {
+      paint:
+        published === null
+          ? {
+              kind: "observed",
+              rows:
+                settled === null
+                  ? []
+                  : observedRows(settled.now.subsystems, SUBSYSTEM_DISPLAY_ORDER),
+            }
+          : { kind: "forecast", rows: outlookRows(published.outlook) },
+      forecastHours: published === null ? null : forecastHours(published.forecast),
+      thresholdMw: published === null ? null : published.forecast.thresholdMw,
+      observedHours: settled === null ? null : settled.hours,
+      // Explicar reads the diagnosis and the ONS reasons; this screen does not,
+      // so it publishes neither. A briefing here has no `cause` scene to draw
+      // and `compose.ts` will have emitted one only where the data exists.
+      drivers: null,
+      reasons: null,
+      dayEnergy: published === null ? null : forecastRow(published.forecast).dailyEnergy,
+      peakPower: published === null ? null : forecastRow(published.forecast).peakPower,
+      comparison: null,
     },
-    { elapsedMs: 0, bufferedMs: 0 },
-  );
+    counterfactual: undefined,
+  });
+
+  const forecastPublished = state.status === "read";
 
   /**
    * **Selecting and navigating are two actions now, and they were one.**
@@ -254,21 +274,6 @@ export default function GridOverviewScreen() {
         the same on a day that is forecast, and moving them next to the forecast
         panels is exactly the adjacency `lib/network.ts` refuses.
       */}
-      {briefing === null ? null : (
-        // Over everything on this screen, and dismissing back onto it. The data
-        // it draws is this screen's own — `NO_BRIEFING_DATA` until each field is
-        // threaded through, so a scene with nothing to show draws its heading
-        // and the sequence moves on rather than stalling.
-        <BriefingStage
-          plan={briefing.plan}
-          cursor={briefing.cursor}
-          narration=""
-          silent={briefing.silent}
-          data={NO_BRIEFING_DATA}
-          onDismiss={briefing.dismiss}
-        />
-      )}
-
       {forecast === null ? (
         <ObservedPanels
           observed={observed}

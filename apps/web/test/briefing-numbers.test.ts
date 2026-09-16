@@ -16,7 +16,6 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import type { OptimizationResult } from "@wattsteer/core/api";
 import type { AppParams } from "@/components/app/params";
 import type { NetworkState } from "@/components/app/use-network";
 import type { ServingState } from "@/components/app/use-serving";
@@ -61,10 +60,12 @@ const CONTEXT: VoiceContextInput = {
   network: READ,
 };
 
-const SOLVE = {
-  baselineCurtailmentMwh: 423,
-  optimizedCurtailmentMwh: 240,
-} as unknown as OptimizationResult;
+/** Two figures a solve scored. Mitigar holds a pair like this; nothing else does. */
+const SOLVED_PAIR = {
+  action: "battery",
+  baselineMwh: 423,
+  optimizedMwh: 240,
+} as const;
 
 function counterfactual(scenes: readonly { scene: Scene }[]): Scene | undefined {
   return scenes
@@ -83,7 +84,7 @@ describe("the counterfactual scene", () => {
     const plan = composeBriefing({
       context: CONTEXT,
       kind: "what_if",
-      optimization: SOLVE,
+      counterfactual: SOLVED_PAIR,
     });
 
     expect(counterfactual(plan.scenes)).toEqual({
@@ -102,7 +103,7 @@ describe("the counterfactual scene", () => {
     const plan = composeBriefing({
       context: CONTEXT,
       kind: "what_if",
-      optimization: SOLVE,
+      counterfactual: SOLVED_PAIR,
     });
     const scene = counterfactual(plan.scenes);
 
@@ -113,7 +114,7 @@ describe("the counterfactual scene", () => {
     const withSolve = composeBriefing({
       context: CONTEXT,
       kind: "what_if",
-      optimization: SOLVE,
+      counterfactual: SOLVED_PAIR,
     });
     const without = composeBriefing({ context: CONTEXT, kind: "what_if" });
 
@@ -130,7 +131,7 @@ describe("the counterfactual scene", () => {
     const withSolve = composeBriefing({
       context: CONTEXT,
       kind: "what_if",
-      optimization: SOLVE,
+      counterfactual: SOLVED_PAIR,
     });
     const without = composeBriefing({ context: CONTEXT, kind: "what_if" });
 

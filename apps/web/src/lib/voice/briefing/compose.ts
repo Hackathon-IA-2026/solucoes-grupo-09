@@ -23,7 +23,6 @@
  * See `VISUAL_PLAN.md` §3.
  */
 
-import type { OptimizationResult } from "@wattsteer/core/api";
 import {
   type BriefingPlan,
   type BriefingSource,
@@ -46,7 +45,31 @@ import { forecastRefusal, hasForecast } from "@/lib/voice/context";
 export interface ComposeInput {
   readonly context: VoiceContextInput;
   readonly kind: QuestionKind;
-  readonly optimization?: OptimizationResult;
+  /**
+   * Two figures the optimizer scored, from a screen that has solved something.
+   *
+   * **The only route by which a `counterfactual` scene can exist.** It is a
+   * pair rather than a whole `OptimizationResult` because that is not the shape
+   * any screen holds: Mitigar keeps `MitigationStep[]`, each step its own solve
+   * against the same three envelopes, and the two figures here are two of those
+   * scored quantities. The fence is unchanged in substance — no solve, no scene
+   * — and now it fits what the product actually has.
+   */
+  readonly counterfactual?: {
+    readonly action: "battery" | "shiftable_load";
+    readonly baselineMwh: number;
+    readonly optimizedMwh: number;
+  };
+  /**
+   * Whether the screen is holding a plan-beside-what-happened comparison.
+   *
+   * A boolean, not the rows: the composer decides *whether* the scene exists,
+   * and the rows stay in `BriefingData` where every other figure lives. Máquina
+   * do tempo is the screen that has one — it re-scored the day — so a
+   * `what_happened` briefing there earns the scene and the same question
+   * elsewhere does not.
+   */
+  readonly hasComparison?: boolean;
 }
 
 /** Lay scenes end to end, each at the default length. */
@@ -93,7 +116,7 @@ function sourcesFor(input: ComposeInput): readonly BriefingSource[] {
   if (context.explain?.status === "explained") {
     out.push({ read: "GET /v1/diagnosis/day-ahead", asOf: null, fidelity: null });
   }
-  if (input.optimization !== undefined) {
+  if (input.counterfactual !== undefined) {
     out.push({ read: "POST /v1/optimize", asOf: null, fidelity: null });
   }
   return out;
@@ -108,15 +131,15 @@ function sourcesFor(input: ComposeInput): readonly BriefingSource[] {
  * whole design exists to prevent.
  */
 function counterfactualScene(input: ComposeInput): Scene | null {
-  const result = input.optimization;
-  if (result === undefined) {
+  const pair = input.counterfactual;
+  if (pair === undefined) {
     return null;
   }
   return {
     type: "counterfactual",
-    action: "battery",
-    baselineMwh: result.baselineCurtailmentMwh,
-    optimizedMwh: result.optimizedCurtailmentMwh,
+    action: pair.action,
+    baselineMwh: pair.baselineMwh,
+    optimizedMwh: pair.optimizedMwh,
   };
 }
 
@@ -130,6 +153,9 @@ function forecastScenes(input: ComposeInput): readonly Scene[] {
   ];
   if (input.kind === "why" || input.kind === "what_happened") {
     scenes.push({ type: "cause", subsystem });
+  }
+  if (input.kind === "what_happened" && input.hasComparison === true) {
+    scenes.push({ type: "comparison", left: "plan", right: "executed" });
   }
   if (input.kind === "tomorrow") {
     scenes.push({ type: "kpi", figure: "day_energy" });
@@ -152,13 +178,19 @@ function forecastScenes(input: ComposeInput): readonly Scene[] {
  */
 function observedScenes(input: ComposeInput): readonly Scene[] {
   const subsystem = input.context.params.subsystem;
-  return [
+  const scenes: Scene[] = [
     { type: "title", subsystem },
     { type: "map_focus", subsystem, emphasis: "energy" },
     { type: "observed_curve", subsystem },
     { type: "constraint", subsystem },
-    { type: "sources" },
   ];
+  // A settled day can still be compared against what a plan would have done —
+  // that is exactly what Máquina do tempo re-scores, and it needs no forecast.
+  if (input.hasComparison === true) {
+    scenes.push({ type: "comparison", left: "plan", right: "executed" });
+  }
+  scenes.push({ type: "sources" });
+  return scenes;
 }
 
 export function composeBriefing(input: ComposeInput): BriefingPlan {

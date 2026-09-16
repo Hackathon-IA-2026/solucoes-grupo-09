@@ -230,6 +230,26 @@ function CounterfactualScene({
   );
 }
 
+/**
+ * What was planned, beside what happened.
+ *
+ * The rows are the screen's — Máquina do tempo built them when it re-scored the
+ * day — and the scene names only *that* a comparison is shown. With no rows it
+ * draws its heading, which is the same rule every other scene follows.
+ */
+function ComparisonScene({ data }: { data: BriefingData }) {
+  const copy = useCopy();
+  if (data.comparison === null || data.comparison.length === 0) {
+    return <SceneLabel>{copy.briefing.scenes.comparison}</SceneLabel>;
+  }
+  return (
+    <View style={{ gap: space.md }}>
+      <SceneLabel>{copy.briefing.scenes.comparison}</SceneLabel>
+      <CompareBars rows={[...data.comparison]} />
+    </View>
+  );
+}
+
 function RecommendationScene() {
   const colors = usePalette();
   const copy = useCopy();
@@ -282,6 +302,8 @@ export function SceneRenderer({ scene, data }: SceneProps) {
       return <CauseScene data={data} />;
     case "constraint":
       return <ConstraintScene data={data} />;
+    case "comparison":
+      return <ComparisonScene data={data} />;
     case "counterfactual":
       return <CounterfactualScene scene={scene} />;
     case "recommendation":
@@ -291,8 +313,8 @@ export function SceneRenderer({ scene, data }: SceneProps) {
     case "refusal":
       return <RefusalScene scene={scene} />;
     default:
-      // `comparison` is composed by nothing yet. Rendering nothing is the
-      // honest withholding: the sequence moves on rather than showing a gap.
+      // Unreachable: every member of the union has an arm above. Kept so a new
+      // scene type is a visible gap here rather than a blank stage.
       return null;
   }
 }

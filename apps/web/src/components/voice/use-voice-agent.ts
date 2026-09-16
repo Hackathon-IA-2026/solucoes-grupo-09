@@ -105,6 +105,14 @@ export interface VoiceAgentState {
   readonly briefing: BriefingRequest | null;
   /** Close the briefing and leave the reader on the screen it overlaid. */
   readonly dismissBriefing: () => void;
+  /**
+   * How far the narration has played, and how much is queued, in milliseconds.
+   *
+   * A function, not a value: it moves continuously while audio plays, and
+   * publishing it as state would re-render every consumer of this context on
+   * every audio frame to carry a number only the briefing reads.
+   */
+  readonly narrationClock: () => { elapsedMs: number; bufferedMs: number };
   /** The typed fallback — a turn with no microphone in it. */
   readonly say: (text: string) => void;
 }
@@ -135,6 +143,7 @@ export const VOICE_ABSENT: VoiceAgentState = {
   highlighted: null,
   briefing: null,
   dismissBriefing: () => {},
+  narrationClock: () => ({ elapsedMs: 0, bufferedMs: 0 }),
   error: null,
   open: () => {},
   close: () => {},

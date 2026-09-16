@@ -111,6 +111,12 @@ export interface VoiceSession {
   readonly mic: VoiceMicState;
   readonly transcript: readonly TranscriptEntry[];
   readonly error: string | null;
+  /**
+   * How far the narration has played, and how much is queued, in milliseconds.
+   * Both zero when nothing is playing — which is also what a blocked autoplay
+   * policy looks like, and the signal a briefing falls back to a wall clock on.
+   */
+  readonly narrationClock: () => { elapsedMs: number; bufferedMs: number };
   /** Mint, connect and open the microphone. Safe to call while already open. */
   readonly open: () => void;
   /** Close the socket and the microphone. Safe to call when already closed. */
@@ -156,6 +162,7 @@ export function useVoiceSession({
   const [mic, setMic] = useState<VoiceMicState>("unasked");
   const [error, setError] = useState<string | null>(null);
   const sessionRef = useRef<VoiceSessionCore | null>(null);
+  const audioRef = useRef<WebAudioBackend | null>(null);
   const remintRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const levelAtRef = useRef(0);
   /** The last block the session was actually told. See the effect below. */
@@ -219,6 +226,10 @@ export function useVoiceSession({
     }
     setError(null);
     setTranscript([]);
+    // Held, so the briefing can read the narration clock off it. The scenes are
+    // locked to audio position, and this is the only object that knows it.
+    const audio = new WebAudioBackend();
+    audioRef.current = audio;
     const session = new VoiceSessionCore(
       {
         onStatus: (next) => {
@@ -282,7 +293,7 @@ export function useVoiceSession({
           sessionRef.current = null;
         },
       },
-      new WebAudioBackend(),
+      audio,
       {
         mint,
         // The block as it is *now*, read through the ref: `open` is a stable
@@ -374,5 +385,28 @@ export function useVoiceSession({
     // react-doctor-disable-next-line react-doctor/exhaustive-deps
   }, []);
 
-  return { status, availability, level, mic, transcript, error, open, stop, say };
+  /**
+   * How far the narration has played, and how much is queued.
+   *
+   * A function rather than state: it changes continuously while audio plays, and
+   * rendering the provider on every audio frame to publish a number that only a
+   * briefing reads would be a re-render for everything else on the screen.
+   */
+  const narrationClock = useCallback(
+    () => audioRef.current?.narrationClock() ?? { elapsedMs: 0, bufferedMs: 0 },
+    [],
+  );
+
+  return {
+    status,
+    availability,
+    level,
+    mic,
+    transcript,
+    error,
+    open,
+    stop,
+    say,
+    narrationClock,
+  };
 }

@@ -11,7 +11,6 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import type { OptimizationResult } from "@wattsteer/core/api";
 import type { AppParams } from "@/components/app/params";
 import type { ExplainState } from "@/components/app/use-explain";
 import type { NetworkState } from "@/components/app/use-network";
@@ -84,10 +83,12 @@ const EXPLAIN_REFUSED = {
   code: "MODEL_UNAVAILABLE",
 } as unknown as ExplainState;
 
-const OPTIMIZATION = {
-  baselineCurtailmentMwh: 423,
-  optimizedCurtailmentMwh: 240,
-} as unknown as OptimizationResult;
+/** Two figures a solve scored. Mitigar holds a pair like this; nothing else does. */
+const SOLVED_PAIR = {
+  action: "battery",
+  baselineMwh: 423,
+  optimizedMwh: 240,
+} as const;
 
 function types(plan: { scenes: readonly { scene: { type: SceneType } }[] }): SceneType[] {
   return plan.scenes.map((timed) => timed.scene.type);
@@ -171,7 +172,7 @@ describe("observedOnly — the state production is in", () => {
     const plan = composeBriefing({
       context: context({ network: OBSERVED_ONLY }),
       kind: "what_if",
-      optimization: OPTIMIZATION,
+      counterfactual: SOLVED_PAIR,
     });
 
     expect(types(plan)).not.toContain("counterfactual");
@@ -230,7 +231,7 @@ describe("the plan itself", () => {
     const plan = composeBriefing({
       context: context({ network: READ }),
       kind: "why",
-      optimization: OPTIMIZATION,
+      counterfactual: SOLVED_PAIR,
     });
 
     let expected = 0;

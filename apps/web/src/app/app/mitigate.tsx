@@ -67,8 +67,11 @@ import {
 import { useAppParams } from "@/components/app/use-app-params";
 import { useOptimization } from "@/components/app/use-optimization";
 import { useScenario } from "@/components/app/use-scenario";
+import { useServing } from "@/components/app/use-serving";
+import { NO_BRIEFING_DATA } from "@/components/briefing/briefing-data";
+import { usePublishBriefingSubject } from "@/components/briefing/briefing-subject";
 import { BandStrip } from "@/components/charts/band-figure";
-import { type Copy, useCopy, useFormat } from "@/i18n";
+import { type Copy, useCopy, useFormat, useI18n } from "@/i18n";
 import { fill } from "@/i18n/format";
 import {
   ASSET_LIMITS,
@@ -87,12 +90,42 @@ export default function MitigateScreen() {
   const colors = usePalette();
   const copy = useCopy();
   const f = useFormat();
+  const { locale } = useI18n();
+  const serving = useServing();
   const params = useAppParams();
   const meta = subsystemMeta(params.subsystem);
   const scenarioState = useScenario(params.subsystem, params.date);
   // Before the refusal branch below, because a hook cannot be called
   // conditionally. It parks itself on a `null` scenario.
   const optimization = useOptimization(scenarioState.scenario);
+
+  /*
+    Published for the briefing host. Mitigar is the only screen that solves a
+    plan, so it is the only one whose briefing can carry a `counterfactual`.
+
+    The pair is two *scored* figures — the baseline step's remaining median and
+    the last step's — never a difference between them. Each step is a solve of
+    its own against the same three envelopes, so both numbers are quantities the
+    optimizer reported. Subtracting them here would manufacture a marginal the
+    solver never scored, which `test/no-summed-bands.test.ts` exists to forbid.
+  */
+  const solved = optimization.status === "solved" ? optimization.steps : null;
+  const lastStep = solved?.at(-1) ?? null;
+  usePublishBriefingSubject({
+    context: { locale, screen: "mitigate", params, serving },
+    data: NO_BRIEFING_DATA,
+    counterfactual:
+      solved === null ||
+      lastStep === undefined ||
+      lastStep === null ||
+      solved[0] === undefined
+        ? undefined
+        : {
+            action: lastStep.key === "battery" ? "battery" : "shiftable_load",
+            baselineMwh: solved[0].remaining.p50,
+            optimizedMwh: lastStep.remaining.p50,
+          },
+  });
   const [revealed, setRevealed] = useState(2);
 
   // The stamp is read off the answer, never off the request: the threshold and
