@@ -1,23 +1,29 @@
 /**
  * The orb a screen shows while it is waiting for the gateway.
  *
- * ## Why this exists rather than a package
+ * ## The package ships it; this file only picks the platform
  *
- * `thinking-orbs-native` was the suggestion, and it is not on npm — the name
- * 404s. Reaching for the nearest published substitute would have brought
- * `@shopify/react-native-skia` and `react-native-reanimated` with it: a native
- * canvas and a worklet runtime, added to an app whose entire web delivery is a
- * **static export** already carrying 500 KB of gzipped JavaScript to a landing
- * page. Two heavy dependencies for a loading indicator is the wrong trade on a
- * surface where total blocking time is the one thing keeping mobile Lighthouse
- * off 100.
+ * **`thinking-orbs` is used, and the earlier refusal to use it was wrong.**
+ * This docstring used to argue that the library was unavailable, on the
+ * strength of `thinking-orbs-native` 404ing on npm. That much is true — the
+ * native package is unpublished and would drag in `@shopify/react-native-skia`
+ * and `react-native-reanimated` besides. What the argument never did was check
+ * the **React** package of the same family, which is published, is
+ * `thinking-orbs@0.3.1`, declares `react >= 18` as its only peer and carries
+ * **zero runtime dependencies**. Checking the native name and stopping there
+ * was the mistake; a 404 on one entry point is not a fact about the library.
  *
- * So the orb is ours, and it is not a reimplementation from scratch either: it
- * is `components/voice/voice-orb.tsx`'s visual language — concentric rings, a
- * core, one sweeping arc — reduced to the single state a loading indicator has.
- * The product gains a consistent idiom instead of a second one: the shape that
- * means "WattSteer is working on it" is the same shape whether the work is a
- * voice turn or a gateway read.
+ * It renders a `<canvas>`, so it belongs to the web build — which is the build
+ * that ships. `web.output` is `static`, wattsteer.com is the product, and every
+ * reader who sees this orb sees it in a browser.
+ *
+ * ## The local orb survives for native, and only for native
+ *
+ * React Native has no DOM canvas, and `thinking-orbs-native` cannot be
+ * installed, so the fallback below is what a native build gets. It is
+ * `components/voice/voice-orb.tsx`'s visual language — concentric rings, a
+ * core, one sweeping arc — so that platform keeps a consistent idiom rather
+ * than gaining a second one.
  *
  * ## Views, not SVG, for the reason the voice orb gives
  *
@@ -37,7 +43,8 @@
 
 import { motion, space, usePalette, useReducedMotion } from "@wattsteer/ui";
 import { useEffect, useState } from "react";
-import { Animated, Easing, Text, View } from "react-native";
+import { Animated, Easing, Platform, Text, View } from "react-native";
+import { ThinkingOrb as ThinkingOrbsCanvas } from "thinking-orbs";
 
 /** The three rings, as a fraction of the orb's size. */
 const RINGS = [1, 0.72, 0.46] as const;
@@ -228,6 +235,7 @@ export function SkeletonLine({
  */
 export function ReadingState({ title }: { title: string }) {
   const colors = usePalette();
+  const reduced = useReducedMotion();
   return (
     <View
       testID="reading-state"
@@ -235,7 +243,31 @@ export function ReadingState({ title }: { title: string }) {
       accessibilityLabel={title}
       style={{ alignItems: "center", gap: space.lg, paddingVertical: space.xxl }}
     >
-      <ThinkingOrb size={56} />
+      {/*
+        `searching` of the nine shipped states, at the 64 preset.
+
+        The states are separate designs rather than one animation with a label,
+        and `searching` is the one whose description matches what this screen is
+        actually doing: *"a scan meridian sweeps a dotted globe"*. A grid product
+        reading four subsystems off a gateway is a scan, and the globe is not a
+        coincidence worth throwing away. `64` is the chat-avatar preset; the
+        library is explicit that 64 and 20 carry their own dot counts and speeds
+        and are "separate designs, not a scale factor", so 56 — what the local
+        orb used — is not one of the things it offers.
+
+        `theme="dark"` rather than the default `auto`: `usePalette` returns the dark palette
+        unconditionally and `app.json` pins `userInterfaceStyle`, so the theme
+        is known here and letting the library sniff `prefers-color-scheme` would
+        hand a light-mode reader an orb the rest of the screen disagrees with.
+
+        `paused` on reduced motion, which is the library's own affordance for
+        it — the same rule `risk-bar` and the map already follow.
+      */}
+      {Platform.OS === "web" ? (
+        <ThinkingOrbsCanvas state="searching" size={64} theme="dark" paused={reduced} />
+      ) : (
+        <ThinkingOrb size={56} />
+      )}
       <Text style={{ fontSize: 13, fontWeight: "600", color: colors.inkMuted }}>
         {title}
       </Text>

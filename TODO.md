@@ -47,8 +47,15 @@ Status: `[ ]` not started · `[~]` in progress · `[x]` done
 - [x] **7.** The "Nenhuma manutenção de transmissão é lida" paragraph is
       left-aligned.
 - [x] **8.** Replace the "Lendo a rede —…" loading text with a proper animated
-      loader: `thinking-orbs-native` (+ Skia, Reanimated) or a very light
-      skeleton. Perfect the UI/UX around it.
+      loader. **Now the real library.** `thinking-orbs@0.3.1` — the React
+      package from libraries.dev/orbs — renders the loader on web, at
+      `state="searching"`, `size={64}`, `theme="dark"`, `paused` on reduced
+      motion. The earlier custom orb was built on a bad check: only
+      `thinking-orbs-native` was looked up, it 404s, and nobody looked at the
+      React package of the same family, which is published with zero runtime
+      dependencies. It costs 16 KB raw / ~7 KB gzipped. The hand-rolled orb is
+      kept for native only, where a DOM canvas cannot run and the native
+      package is still unpublished.
 - [x] **9.** "Episódios recentes" is a wall of times — make it a decent table.
 
 ## Quality passes
