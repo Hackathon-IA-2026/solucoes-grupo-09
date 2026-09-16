@@ -70,11 +70,11 @@
 */
 
 import { SUBSYSTEM_DISPLAY_ORDER } from "@wattsteer/core";
-import { usePalette } from "@wattsteer/ui";
+import { space, usePalette } from "@wattsteer/ui";
 import { router } from "expo-router";
 import Head from "expo-router/head";
 import type { ReactNode } from "react";
-import { Text } from "react-native";
+import { Text, View } from "react-native";
 import { AppShell, ScreenTitle } from "@/components/app/app-shell";
 import { ForecastAbsent } from "@/components/app/forecast-absent";
 import {
@@ -86,7 +86,7 @@ import {
 import { ForecastPanels } from "@/components/app/overview/forecast-panels";
 import { ObservedPanels } from "@/components/app/overview/observed-panels";
 import { SettledPanels } from "@/components/app/overview/settled-panels";
-import { ReadingState } from "@/components/app/thinking-orb";
+import { ReadingState, ThinkingOrb } from "@/components/app/thinking-orb";
 import {
   gateProfileOf,
   sharedParams,
@@ -253,18 +253,28 @@ export default function GridOverviewScreen() {
       a single number is reached. It used to be empty whenever no forecast was
       published, which left the most prominent line on the page saying nothing
       in the state the product is actually in.
+
+      The orb beside it is the whole of what a re-read shows now. Selecting a
+      region used to replace this entire page with `ReadingState`; the figures
+      below are the previous region's until the new ones land, and this says so
+      in the one place a reader is already looking.
     */
-    forecast === null ? (
-      <ObservedStamp
-        latestSettledHour={observed.now.latestSettledHour}
-        lagHours={observed.now.lagHours}
-      />
-    ) : (
-      <ForecastStamp
-        origin={forecast.forecast.forecastOrigin}
-        thresholdMw={forecast.forecast.thresholdMw}
-      />
-    ),
+    <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+      {forecast === null ? (
+        <ObservedStamp
+          latestSettledHour={observed.now.latestSettledHour}
+          lagHours={observed.now.lagHours}
+        />
+      ) : (
+        <ForecastStamp
+          origin={forecast.forecast.forecastOrigin}
+          thresholdMw={forecast.forecast.thresholdMw}
+        />
+      )}
+      {state.refreshing ? (
+        <ThinkingOrb size={18} accessibilityLabel={copy.app.overview.refreshingLabel} />
+      ) : null}
+    </View>,
     // What the badges below need to know, stated once by the screen that knows
     // it. `forecast === null` is exactly "nothing here is a forecast", which is
     // when `Observado` distinguishes nothing and stands down.

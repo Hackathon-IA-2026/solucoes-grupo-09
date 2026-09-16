@@ -529,3 +529,41 @@ describe("the observed half needs no model", () => {
     ]);
   });
 });
+
+describe("changing the region re-reads without emptying the page", () => {
+  /*
+    Selecting a region used to blank the whole screen. The effect in
+    `use-network.ts` set `{ status: "reading" }` on every re-run, and the
+    Overview answers `reading` by replacing its body with the orb — so a click
+    on the map took away the map, the title, the rows and every panel, and
+    rebuilt them from figures that were largely the same: `gridNow` and
+    `gridOutlook` do not take a subsystem at all.
+
+    Source-text guards, in this file's style. The property is small and the way
+    it breaks is smaller: one `setState({ status: "reading" })` put back.
+  */
+  const NETWORK = code(read("components", "app", "use-network.ts"));
+  const SCREEN = flat(code(read("app", "app", "index.tsx")));
+
+  it("a re-read keeps the previous answer instead of dropping to `reading`", () => {
+    expect(NETWORK).not.toContain('setState({ status: "reading" })');
+    expect(flat(NETWORK)).toContain(
+      '? { ...previous, refreshing: true } : { status: "reading" }',
+    );
+  });
+
+  it("both answered states carry the flag, so neither can silently lose it", () => {
+    for (const settled of ['status: "read"', 'status: "observedOnly"']) {
+      expect(flat(NETWORK)).toContain(`${settled}, observed: settledGrid`);
+    }
+    // Set false on arrival, not left over from the state it replaced.
+    expect(NETWORK.match(/refreshing: false/g)?.length).toBe(2);
+  });
+
+  it("the screen marks the re-read rather than hiding behind it", () => {
+    expect(SCREEN).toContain("{state.refreshing ? (");
+    expect(SCREEN).toContain("copy.app.overview.refreshingLabel");
+    // `ReadingState` is still the answer to a *first* read, and only that.
+    expect(SCREEN).toContain('if (state.status === "reading") {');
+  });
+});

@@ -1045,6 +1045,8 @@ export const en = {
       grainNote:
         "Forecast grain is the subsystem. Observed curtailment is published per reporting entity — a conjunto for most of {subsystem} — and restriction reasons exist only there; see Explain.",
       readingTitle: "Reading the grid",
+      /** Screen-reader name for the mark that a re-read is in flight. */
+      refreshingLabel: "Updating the figures for the selected region",
       refusedTitle: "The gateway did not answer",
       refusedNote:
         "Every panel on this screen reads the gateway, including the ones that need no model, so there is nothing to show in the meantime. The figures are not cached in the page; a reload once the service is back is all this needs.",

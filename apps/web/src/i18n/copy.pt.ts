@@ -787,6 +787,8 @@ export const pt: Copy = {
       grainNote:
         "O grão da previsão é o subsistema. O curtailment observado é publicado por entidade de reporte — um conjunto, na maior parte de {subsystem} — e os motivos de restrição só existem lá; veja Explicar.",
       readingTitle: "Lendo a rede",
+      /** Screen-reader name for the mark that a re-read is in flight. */
+      refreshingLabel: "Atualizando os números da região selecionada",
       refusedTitle: "O gateway não respondeu",
       refusedNote:
         "Todos os painéis desta tela leem o gateway, inclusive os que não precisam de modelo, então não há o que mostrar enquanto isso. Os números não ficam guardados na página; recarregar depois que o serviço voltar é tudo o que falta.",

@@ -104,12 +104,16 @@ export type NetworkState =
       readonly status: "read";
       readonly observed: ObservedNetwork;
       readonly forecast: ForecastNetwork;
+      /** A newer question is in flight; these figures are the previous answer. */
+      readonly refreshing: boolean;
     }
   | {
       readonly status: "observedOnly";
       readonly observed: ObservedNetwork;
       /** The clause that refused the forecast, from the closed enum. */
       readonly code: ErrorCode;
+      /** A newer question is in flight; these figures are the previous answer. */
+      readonly refreshing: boolean;
     }
   | { readonly status: "refused"; readonly code: ErrorCode };
 
@@ -157,10 +161,27 @@ export function useNetwork(query: NetworkQuery): NetworkState {
     const controller = new AbortController();
     const settle = settleWith(controller.signal, setState);
     const signal = controller.signal;
-    // See `use-explain.ts`: the opening statement of a fetch effect, which
-    // is where a reading state can honestly be set and nowhere else.
+    /*
+      **A re-read is not a first read, and it used to be drawn as one.**
+
+      This said `setState({ status: "reading" })` unconditionally, and the
+      screen answers `reading` by replacing its whole body with the orb. So
+      selecting a region on the map — which changes `subsystem` — blanked the
+      map, the title, the four rows and every panel, and rebuilt them a moment
+      later from figures that were mostly identical: of the five reads below,
+      `gridNow` and `gridOutlook` do not take a subsystem at all. A reader
+      clicked NE and watched the page they were reading disappear.
+
+      `reading` is honest only when there is nothing to show. When there is a
+      previous answer it stays on screen and says it is being refreshed, which
+      is what the reader asked for: the numbers change, the page does not.
+    */
     // react-doctor-disable-next-line react-hooks-js/set-state-in-effect
-    setState({ status: "reading" });
+    setState((previous) =>
+      previous.status === "read" || previous.status === "observedOnly"
+        ? { ...previous, refreshing: true }
+        : { status: "reading" },
+    );
 
     const settled = daysFrom(targetDate, -2);
     const from = daysFrom(settled, -EPISODE_WINDOW_DAYS);
@@ -213,10 +234,16 @@ export function useNetwork(query: NetworkQuery): NetworkState {
             status: "observedOnly",
             observed: settledGrid,
             code: refusalOf(cause),
+            refreshing: false,
           });
           return;
         }
-        settle({ status: "read", observed: settledGrid, forecast: forecastNetwork });
+        settle({
+          status: "read",
+          observed: settledGrid,
+          forecast: forecastNetwork,
+          refreshing: false,
+        });
       })
       .catch((cause: unknown) => {
         settle({ status: "refused", code: refusalOf(cause) });
