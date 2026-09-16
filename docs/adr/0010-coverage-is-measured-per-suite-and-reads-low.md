@@ -51,6 +51,26 @@ them is exercised. `src/jobs/bullmq.ts` reads 30.77% without Redis and 85.71%
 with it, and the rate limiter — the API's only defence against abuse — is not
 exercised against a real store at all until that second variable is set.
 
+### `apps/ml` is gated the same way, and nobody had run it either
+
+The Python suite reads `WATTSTEER_TEST_DATABASE_URL` through
+`tests/database_harness.py` and skips 94 tests without it:
+
+| run | tests | statements covered |
+| --- | ---: | ---: |
+| `uv run pytest` | 1,821 pass, 94 skip | 90% |
+| with the database | **1,908 pass, 7 skip** | **93%** |
+
+`weather_reads.py` reads **41%** without it and **95%** with it — and weather is
+a model input, so the module that looked least tested is one of the ones a
+forecast depends on most. `canonical_reads.py`, `database.py`, `replay/inputs.py`
+and `replay/reads.py` all move the same way. Every module that looked abandoned
+was a module that reads Postgres.
+
+Note that `pytest-cov` is **not** a dependency of this project and does not need
+to be: `uv run --with pytest-cov pytest --cov=src/wattsteer_ml` installs it for
+the one run and leaves `pyproject.toml` alone.
+
 ## Decision
 
 **Quote the gated number, and say which run produced it.** A coverage figure in
@@ -63,6 +83,8 @@ this repo is meaningless without its run:
   6380:6379 redis:7-alpine`; 6379 is often another project's). `bun test` alone
   is a lower bound and a misleading one.
 - `apps/web` — `bun test test`; it has no gated half.
+- `apps/ml` — `WATTSTEER_TEST_DATABASE_URL` at the same Postgres, and
+  `--with pytest-cov` for the measurement.
 
 What remains genuinely low after that is small and explicable: `src/api/index.ts`
 is application wiring reached through HTTP rather than called, and
