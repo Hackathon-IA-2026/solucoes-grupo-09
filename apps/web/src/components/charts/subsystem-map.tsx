@@ -224,6 +224,21 @@ export function SubsystemMap({
     }
   });
 
+  /*
+    `containerWidth` is 0 until `onLayout` has fired, and the fallback is
+    `MAX_WIDTH` — 380px, which is wider than the box on every phone. For that
+    first frame the map drew at 380 inside a 318px column and, being centred,
+    hung 31px off each edge: `no-horizontal-overflow.spec.ts` caught it on /app
+    at 320, 360 and 400. It is not a new bug, only a newly reachable one — the
+    page got longer, so the gap between "there is text to measure" and "layout
+    has settled" got wide enough to land in.
+
+    The arithmetic is still the right arithmetic; what was missing is a floor
+    under the guess. `maxWidth` caps the element at whatever the box actually
+    is, and `preserveAspectRatio` letterboxes the viewBox inside it rather than
+    stretching Brazil, so the one frame before the measurement is narrower than
+    the real map instead of wider than the page.
+  */
   const width = Math.min(containerWidth > 0 ? containerWidth : MAX_WIDTH, MAX_WIDTH);
   const height = (width * BRAZIL_VIEWBOX.height) / BRAZIL_VIEWBOX.width;
 
@@ -236,6 +251,7 @@ export function SubsystemMap({
         viewBox={`0 0 ${BRAZIL_VIEWBOX.width} ${BRAZIL_VIEWBOX.height}`}
         width={width}
         height={height}
+        style={{ maxWidth: "100%" }}
         accessibilityLabel={
           paint.kind === "forecast"
             ? copy.app.overview.map.figure
