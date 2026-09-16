@@ -50,7 +50,14 @@ Status: `[ ]` not started · `[~]` in progress · `[x]` done
 
 - [ ] **14.** Deploy everything, verify, take screenshots, build a striking
       montage for the README, store it in `.github/images/`.
-- [~] **15.** Review every internal screen and tab as a UI/UX designer would.
+- [x] **15.** Reviewed all four `/app` screens at 1440 and 412, against the real
+      gateway. Three defects, all one species — a rule the product states
+      clearly, applied unevenly:
+      · `845eace` the header reflowed 42px at ~4s; `/app` CLS 0.215 → 0.
+      · `db730af` the D−1 run pills were live and inert with no model promoted.
+      · `8f159a5` + `89ab9c5` three of four ledes promised panels that were not
+        there. ADR-0008 records it, because the Overview had already written the
+        argument down and nobody had read it from the other three screens.
 - [ ] **16.** `better-ui` skill — apply to the project.
       ⛔ **Blocked on you.** Not installed: no `better-ui` in `~/.claude/skills/`
       and none in `.claude/skills/`. Install it and I will run it.
