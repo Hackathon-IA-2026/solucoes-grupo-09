@@ -9,6 +9,7 @@ import {
   formatDateTime,
   formatExact,
   formatHour,
+  formatNumber,
   formatPercent,
   formatPercentPoints,
   formattersFor,
@@ -158,14 +159,69 @@ describe("`fill` never prints a hole into a sentence", () => {
 });
 
 describe("the bundled formatters agree with the standalone ones", () => {
-  it("`formattersFor` is the same functions, bound to one locale", () => {
+  /*
+    **Every method, not a sample of three.**
+
+    `formattersFor` is what the product actually calls — `useFormat()` is a
+    memoised call to it and adds nothing — so the bound closures are the code
+    path every figure on every screen goes through. The standalone functions
+    below were all tested and eight of the eleven bindings were not, which
+    leaves the one mistake this shape invites completely uncovered: a binding
+    that passes the wrong locale, or the wrong argument, on one method. The
+    result is a single figure formatted in the other convention, on a screen
+    where every other number is right — the hardest kind to notice and the
+    easiest to make, because the file is eleven near-identical lines.
+
+    Each row is asserted against its standalone counterpart rather than a
+    literal, so this stays a statement about the *binding* and does not become a
+    second, drifting copy of what each formatter should produce.
+  */
+  it("`formattersFor` binds every method to the locale it was given", () => {
     for (const locale of LOCALES) {
       const f = formattersFor(locale);
+      expect(f.locale).toBe(locale);
+      expect(f.number(1234.5, 1)).toBe(formatNumber(locale, 1234.5, 1));
       expect(f.compact(12_500)).toBe(formatCompact(locale, 12_500));
+      expect(f.exact(12_500)).toBe(formatExact(locale, 12_500));
+      expect(f.percent(0.425)).toBe(formatPercent(locale, 0.425));
+      expect(f.percentPoints(42.5, 1)).toBe(formatPercentPoints(locale, 42.5, 1));
+      expect(f.brl(26_400)).toBe(formatBrl(locale, 26_400));
+      expect(f.brlThousands(26_400)).toBe(formatBrlThousands(locale, 26_400));
       expect(f.date("2026-09-16")).toBe(formatDate(locale, "2026-09-16"));
+      expect(f.dateShort("2026-09-16")).toBe(formatDateShort(locale, "2026-09-16"));
       expect(f.dateTime("2026-09-16T03:00:00Z")).toBe(
         formatDateTime(locale, "2026-09-16T03:00:00Z"),
       );
+      expect(f.hour(3)).toBe(formatHour(3));
+    }
+  });
+
+  it("the optional fraction digits reach the bound call", () => {
+    // Non-vacuity for the two methods that take a second argument: a binding
+    // that dropped it would still match its counterpart above if that were
+    // called with the default too.
+    const f = formattersFor("pt");
+    expect(f.number(1234.5, 1)).not.toBe(f.number(1234.5));
+    expect(f.percentPoints(42.5, 1)).not.toBe(f.percentPoints(42.5));
+  });
+
+  it("the two locales disagree, or the comparison above proves nothing", () => {
+    // Non-vacuity for the loop: if `formattersFor` ignored its argument, every
+    // assertion above would still hold — both sides would be wrong together.
+    const [pt, en] = [formattersFor("pt"), formattersFor("en")];
+    expect(pt.number(1234.5, 1)).not.toBe(en.number(1234.5, 1));
+    expect(pt.date("2026-09-16")).not.toBe(en.date("2026-09-16"));
+  });
+
+  it("the bound money and clock carry the invariants, not the reader's locale", () => {
+    // The two things that deliberately do not follow the reader, asserted
+    // through the binding because that is what a screen holds.
+    for (const locale of LOCALES) {
+      const f = formattersFor(locale);
+      expect(f.brl(1234)).toContain("R$");
+      // 03:00 UTC is 00:00 in São Paulo. A formatter that used the runner's
+      // timezone would answer something else here.
+      expect(f.dateTime("2026-09-16T03:00:00Z")).toContain("00:00");
     }
   });
 });
