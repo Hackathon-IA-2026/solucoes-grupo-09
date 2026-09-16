@@ -26,6 +26,7 @@ import type { SubsystemCode } from "@wattsteer/core";
 import { createContext, useContext } from "react";
 import type { Copy } from "@/i18n/copy.en";
 import { fill } from "@/i18n/format";
+import type { QuestionKind } from "@/lib/voice/briefing/types";
 import type { NavigationIntent, ToolRefusalCode } from "@/lib/voice/execute";
 import { SCREEN_PATHS } from "@/lib/voice/execute";
 import type { TranscriptEntry, VoiceStatus } from "@/lib/voice/session";
@@ -158,6 +159,13 @@ export interface VoiceNavigator {
   setParams: (params: Readonly<Record<string, string>>) => void;
   highlight: (subsystem: SubsystemCode | null) => void;
   refuse: (code: ToolRefusalCode) => void;
+  /**
+   * Open a briefing about one region.
+   *
+   * Takes the *question*, not a plan: the scenes are composed from what the
+   * screen has read, so an agent cannot widen a briefing by asking for more.
+   */
+  brief: (questionKind: QuestionKind, subsystem: SubsystemCode | null) => void;
 }
 
 /**
@@ -182,11 +190,16 @@ export function performIntent(intent: NavigationIntent, nav: VoiceNavigator): vo
       // are already looking at, not a screen change they did not ask for.
       nav.highlight(intent.subsystem);
       return;
+    case "brief":
+      // Also no navigation. A briefing overlays the screen the reader is on and
+      // dismisses back onto it, for the same reason `highlight` stays put.
+      nav.brief(intent.questionKind, intent.subsystem);
+      return;
     case "refused":
       nav.refuse(intent.reason.code);
       return;
     default:
-      // Unreachable: the four cases above exhaust the union, and `unreachable`
+      // Unreachable: the five cases above exhaust the union, and `unreachable`
       // is what makes that a *compile* error rather than a comment. A fifth
       // intent kind added without a branch here would otherwise be a tool call
       // that silently does nothing — for an agent whose whole job is to act,
@@ -228,6 +241,13 @@ export function toolResult(intent: NavigationIntent): string {
       return intent.subsystem === null
         ? "ok: highlight cleared, no screen change"
         : `ok: highlighted ${intent.subsystem} on the current screen, no screen change`;
+    case "brief":
+      return (
+        `ok: briefing opened about ${intent.subsystem ?? "the selected subsystem"} ` +
+        `(${intent.questionKind}), no screen change. Its scenes were composed from ` +
+        "what this screen has actually read, so it may contain fewer than you " +
+        "expect — narrate what is there, not what you asked for."
+      );
     case "refused":
       return `refused: ${intent.reason.code}${
         intent.reason.value === undefined
@@ -497,6 +517,11 @@ export function intentLines(
             : fill(voice.action.highlighted, { subsystem: intent.subsystem }),
         // The line that makes the demo's first step legible: the agent
         // answered and the reader did not move.
+        detail: voice.action.noScreenChange,
+      };
+    case "brief":
+      return {
+        headline: voice.action.briefing,
         detail: voice.action.noScreenChange,
       };
     case "refused":

@@ -20,6 +20,7 @@ import {
   scenarioLoad,
 } from "../src/components/app/scenario";
 import { ASSET_LIMITS, REPLAY_DAYS, RUN_LABELS } from "../src/lib/fixtures";
+import { QUESTION_KINDS } from "../src/lib/voice/briefing/types";
 import {
   executeTool,
   type NavigationIntent,
@@ -149,6 +150,9 @@ describe("executeTool is total", () => {
       { name: "replay", arguments: { episode: REPLAY_DAYS[0].id, relative_day: -1 } },
       { name: "replay", arguments: { relative_day: -3000 } },
       { name: "mitigate", arguments: { load_mwh: 100 } },
+      // A question kind the composer does not branch on. The model can
+      // name one; `compose.ts` would have nothing to do with it.
+      { name: "brief", arguments: { question_kind: "vibes" } },
     ];
     for (const call of calls) {
       seen.add(refusal(executeTool(call, NE)));
@@ -578,6 +582,11 @@ describe("property: any valid call leaves the URL parseable", () => {
       arguments: { subsystem },
     })),
     { name: "focus", arguments: { technology: "solar" } },
+    ...QUESTION_KINDS.map((question_kind) => ({
+      name: "brief",
+      arguments: { question_kind },
+    })),
+    { name: "brief", arguments: { question_kind: "why", subsystem: "S" } },
     { name: "focus", arguments: { run: "00Z" } },
     ...SUBSYSTEM_DISPLAY_ORDER.map((subsystem) => ({
       name: "highlight",

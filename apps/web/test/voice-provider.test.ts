@@ -84,6 +84,8 @@ function recorder() {
     setParams: (params) => calls.push(`setParams ${JSON.stringify(params)}`),
     highlight: (subsystem) => calls.push(`highlight ${String(subsystem)}`),
     refuse: (reason) => calls.push(`refuse ${reason}`),
+    brief: (questionKind, subsystem) =>
+      calls.push(`brief ${questionKind} ${String(subsystem)}`),
   };
   return { calls, nav };
 }

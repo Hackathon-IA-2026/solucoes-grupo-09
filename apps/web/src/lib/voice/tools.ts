@@ -34,6 +34,7 @@
 
 import { SUBSYSTEM_DISPLAY_ORDER } from "@wattsteer/core";
 import { ASSET_LIMITS, REPLAY_DAYS, RUN_LABELS } from "@/lib/fixtures";
+import { QUESTION_KINDS } from "@/lib/voice/briefing/types";
 
 /** The six. Order is the order they are offered to the model. */
 export const TOOL_NAMES = [
@@ -43,6 +44,7 @@ export const TOOL_NAMES = [
   "replay",
   "focus",
   "highlight",
+  "brief",
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
@@ -295,6 +297,44 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
         },
       },
       required: ["subsystem"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function",
+    name: "brief",
+    description:
+      "Present the answer instead of only saying it: a short narrated sequence " +
+      "over this product's own panels. The right tool when the question is " +
+      "'why', 'what happens tomorrow', 'what happened' or 'what if' — the " +
+      "questions whose answer is a sequence rather than a sentence. For a " +
+      "question with a one-line answer, speak it and use `highlight` or " +
+      "`focus` instead; a briefing for 'which subsystem is selected' would be " +
+      "theatre. You choose THAT a briefing is owed and what it is about. You " +
+      "do not choose what is in it: the scenes are composed from what the " +
+      "screen has actually read, and a briefing will silently contain less " +
+      "when less is available.",
+    parameters: {
+      type: "object",
+      properties: {
+        question_kind: {
+          type: "string",
+          enum: [...QUESTION_KINDS],
+          description:
+            "Which shape of question this is. `why` and `what_happened` earn " +
+            "the driver attribution; `tomorrow` earns the day's magnitude; " +
+            "`what_if` earns the counterfactual, but only where a plan has " +
+            "actually been solved.",
+        },
+        subsystem: {
+          type: "string",
+          enum: SUBSYSTEM_DISPLAY_ORDER,
+          description:
+            "The ONS subsystem the briefing is about. Omit to brief on the " +
+            "one already selected.",
+        },
+      },
+      required: ["question_kind"],
       additionalProperties: false,
     },
   },

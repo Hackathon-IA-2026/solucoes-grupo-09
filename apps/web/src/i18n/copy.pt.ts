@@ -545,6 +545,7 @@ export const pt: Copy = {
         focused: "Mudei a seleção para você",
         highlighted: "Destaquei {subsystem}",
         highlightCleared: "Tirei o destaque",
+        briefing: "Briefing aberto",
         refused: "Isso eu não fiz",
         noScreenChange: "Sem mudar de tela — a resposta está onde você já está.",
         scenarioChanged: "cenário atualizado",
@@ -559,6 +560,8 @@ export const pt: Copy = {
         unknown_run: "São duas rodadas de D−1: 00Z e 12Z.",
         unknown_driver: "Esse não é um dos grupos de fatores que a atribuição ordena.",
         unknown_episode: "Esse dia não está no catálogo da Máquina do tempo.",
+        unknown_question_kind:
+          "Não entendi que tipo de pergunta era essa, então não abri um briefing.",
         value_out_of_range: "Esse valor está fora do que os próprios controles aceitam.",
         ambiguous_replay: "Me diga um dia ou quantos dias atrás — não os dois.",
         no_episode_for_relative_day: "Não há nada tão antigo assim no catálogo.",

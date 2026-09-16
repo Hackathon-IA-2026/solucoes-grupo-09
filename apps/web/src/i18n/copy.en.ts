@@ -704,6 +704,7 @@ export const en = {
         focused: "Changed the selection for you",
         highlighted: "Highlighted {subsystem}",
         highlightCleared: "Cleared the highlight",
+        briefing: "Briefing opened",
         refused: "I didn't do that",
         noScreenChange: "No screen change — you're already where the answer is.",
         scenarioChanged: "scenario updated",
@@ -718,6 +719,8 @@ export const en = {
         unknown_run: "There are two D−1 runs: 00Z and 12Z.",
         unknown_driver: "That isn't one of the driver groups the attribution ranks.",
         unknown_episode: "That day isn't in the Time Machine's catalogue.",
+        unknown_question_kind:
+          "I couldn't tell what kind of question that was, so I didn't open a briefing.",
         value_out_of_range: "That value is outside what the editors themselves accept.",
         ambiguous_replay: "Tell me either a day or how far back — not both.",
         no_episode_for_relative_day: "Nothing that far back is in the catalogue.",

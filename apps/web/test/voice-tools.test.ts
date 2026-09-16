@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { SUBSYSTEM_DISPLAY_ORDER } from "@wattsteer/core";
 import { ASSET_LIMITS, REPLAY_DAYS, RUN_LABELS } from "../src/lib/fixtures";
+import { QUESTION_KINDS } from "../src/lib/voice/briefing/types";
 import {
   DRIVER_CODES,
   isToolName,
@@ -168,8 +169,8 @@ describe("the pure layer is pure", () => {
   });
 });
 
-describe("the six tools", () => {
-  it("there are exactly six, in the order the plan fixes", () => {
+describe("the seven tools", () => {
+  it("there are exactly seven, in the order the plan fixes", () => {
     expect(TOOL_NAMES).toEqual([
       "show_grid",
       "explain",
@@ -177,6 +178,9 @@ describe("the six tools", () => {
       "replay",
       "focus",
       "highlight",
+      // `brief` is newest and goes last. `VISUAL_PLAN.md` §3: the model decides
+      // *that* a briefing is owed; `compose.ts` decides what is in it.
+      "brief",
     ]);
     expect(VOICE_TOOLS.map((tool) => tool.name)).toEqual([...TOOL_NAMES]);
   });
@@ -209,12 +213,30 @@ describe("the six tools", () => {
     }
   });
 
-  it("highlight is the only tool with a required argument", () => {
+  it("only the two tools that cannot guess demand an argument", () => {
+    // Every other tool can fall back on the current selection. These two
+    // cannot: a highlight with no region lights nothing, and a briefing with
+    // no question kind has no shape — `compose.ts` branches on it.
     const withRequired = VOICE_TOOLS.filter(
       (tool) => tool.parameters.required.length > 0,
     );
-    expect(withRequired.map((tool) => tool.name)).toEqual(["highlight"]);
+    expect(withRequired.map((tool) => tool.name)).toEqual(["highlight", "brief"]);
     expect(toolNamed("highlight")?.parameters.required).toEqual(["subsystem"]);
+    expect(toolNamed("brief")?.parameters.required).toEqual(["question_kind"]);
+  });
+
+  it("brief offers exactly the question kinds the composer branches on", () => {
+    // The enum is `QUESTION_KINDS` itself, not a copy: a kind the model could
+    // name but the composer does not know would be a silent no-op.
+    const kinds = toolNamed("brief")?.parameters.properties.question_kind?.enum;
+    expect(kinds).toEqual([...QUESTION_KINDS]);
+  });
+
+  it("brief may be asked without a subsystem, and briefs on the selected one", () => {
+    expect(toolNamed("brief")?.parameters.required).not.toContain("subsystem");
+    expect(Object.keys(toolNamed("brief")?.parameters.properties ?? {})).toContain(
+      "subsystem",
+    );
   });
 
   it("show_grid takes nothing at all", () => {
@@ -223,7 +245,7 @@ describe("the six tools", () => {
     expect(tool?.parameters.required).toEqual([]);
   });
 
-  it("toolNamed answers for the six and for nothing else", () => {
+  it("toolNamed answers for the seven and for nothing else", () => {
     for (const name of TOOL_NAMES) {
       expect(toolNamed(name)?.name).toBe(name);
     }
@@ -239,7 +261,9 @@ describe("the enums are the app's, not a second opinion", () => {
   );
 
   it("every subsystem enum is SUBSYSTEM_DISPLAY_ORDER", () => {
-    expect(subsystemEnums.length).toBe(4);
+    // explain, mitigate, replay, highlight, brief — every tool that can be
+    // pointed at one region reads the same enum.
+    expect(subsystemEnums.length).toBe(5);
     for (const values of subsystemEnums) {
       expect(values).toEqual([...SUBSYSTEM_DISPLAY_ORDER]);
     }

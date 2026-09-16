@@ -81,6 +81,7 @@ import {
   type RunLabel,
   type Technology,
 } from "@/lib/fixtures";
+import { isQuestionKind, type QuestionKind } from "@/lib/voice/briefing/types";
 import {
   DRIVER_CODES,
   isToolName,
@@ -137,6 +138,8 @@ export const TOOL_REFUSAL_CODES = [
   "unknown_run",
   "unknown_driver",
   "unknown_episode",
+  /** A question kind the composer does not branch on. */
+  "unknown_question_kind",
   /** A number outside the range the editors themselves accept. */
   "value_out_of_range",
   /** `replay` was given both an episode and a relative day. */
@@ -193,6 +196,19 @@ export type NavigationIntent =
     }
   | { readonly kind: "params"; readonly params: Readonly<Record<string, string>> }
   | { readonly kind: "highlight"; readonly subsystem: SubsystemCode | null }
+  | {
+      /**
+       * Present the answer rather than only speak it.
+       *
+       * Carries the *question*, never the plan. `compose.ts` builds the scenes
+       * from what the screen has actually read, so the model cannot widen a
+       * briefing by asking for more — which is the property that keeps a
+       * briefing from showing a forecast the product does not have.
+       */
+      readonly kind: "brief";
+      readonly questionKind: QuestionKind;
+      readonly subsystem: SubsystemCode | null;
+    }
   | { readonly kind: "refused"; readonly reason: ToolRefusal };
 
 function refuse(
@@ -442,6 +458,37 @@ function scenarioFor(current: AppParams, supplied: Scenario | undefined): Scenar
  * screen's default fleet is edited — which is what the reader would have been
  * looking at had they navigated first.
  */
+/**
+ * `brief` — the seventh tool, and the only one whose outcome is not a change to
+ * the URL.
+ *
+ * `subsystem` is optional and falls back to the selection, which is the same
+ * courtesy `focus` extends: a reader who says "why?" while looking at the
+ * Northeast means the Northeast.
+ */
+function runBrief(args: Record<string, unknown>, current: AppParams): NavigationIntent {
+  const stray = unexpected(args, ["question_kind", "subsystem"]);
+  if (stray !== undefined) {
+    return refuse("unexpected_argument", stray, args[stray]);
+  }
+  const kind = args.question_kind;
+  if (typeof kind !== "string" || !isQuestionKind(kind)) {
+    return refuse("unknown_question_kind", "question_kind", kind);
+  }
+  if (args.subsystem === undefined || args.subsystem === null) {
+    return { kind: "brief", questionKind: kind, subsystem: current.subsystem };
+  }
+  const subsystem = checkSubsystem(args);
+  if (!subsystem.ok) {
+    return subsystem.intent;
+  }
+  return {
+    kind: "brief",
+    questionKind: kind,
+    subsystem: subsystem.value as SubsystemCode,
+  };
+}
+
 export function executeTool(
   call: ToolCall,
   current: AppParams,
@@ -468,6 +515,8 @@ export function executeTool(
       return runFocus(args);
     case "highlight":
       return runHighlight(args);
+    case "brief":
+      return runBrief(args, current);
     default:
       // Unreachable through `isToolName`, which narrowed `name` to the six
       // above — and still written, because `executeTool` is total by contract

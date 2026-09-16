@@ -112,7 +112,12 @@ const pt: Instructions = {
     "Ferramentas: show_grid abre a Visão da rede; explain abre Explicar; mitigate abre Mitigar " +
     "e pode redimensionar a bateria ou a carga flexível; replay abre a Máquina do tempo; " +
     "focus troca a seleção sem trocar de tela; highlight acende um subsistema no mapa SEM " +
-    "navegar. Se o leitor está na Visão da rede e pergunta sobre uma região, use highlight e " +
+    "navegar; brief apresenta a resposta em vez de só falá-la, numa sequência curta sobre os " +
+    "painéis do próprio produto. Use brief para 'por quê', 'amanhã', 'o que aconteceu' e 'e " +
+    "se' — perguntas cuja resposta é uma sequência, não uma frase; para uma pergunta de uma " +
+    "linha, responda falando. As cenas são montadas a partir do que a tela já leu, então um " +
+    "briefing pode conter menos do que você pediu: narre o que está lá. " +
+    "Se o leitor está na Visão da rede e pergunta sobre uma região, use highlight e " +
     "responda ali mesmo — não abra uma tela para responder algo que cabe onde ele já está. " +
     "Nunca invente um subsistema: só existem N, NE, SE e S.",
   refusals:
@@ -125,6 +130,8 @@ const pt: Instructions = {
     "value_out_of_range — 'esse tamanho está fora da faixa que o produto aceita'; " +
     "scenario_refused — a frota descrita não passa na tabela de recusa do otimizador; " +
     "diga qual regra recusou e proponha um tamanho que passe; " +
+    "unknown_question_kind — não entendi que tipo de pergunta era; responda falando em " +
+    "vez de abrir um briefing; " +
     "missing_argument, ambiguous_replay, unexpected_argument, unknown_tool, " +
     "malformed_arguments — refaça a chamada corretamente, sem contar isso ao leitor. " +
     "Uma recusa nunca vira uma resposta inventada e nunca vira silêncio.",
@@ -164,7 +171,12 @@ const en: Instructions = {
     "Tools: show_grid opens Grid Overview; explain opens Explain; mitigate opens Mitigate and " +
     "can resize the battery or the shiftable load; replay opens the Time Machine; focus " +
     "changes the selection without changing screen; highlight lights a subsystem on the map " +
-    "WITHOUT navigating. If the reader is on Grid Overview and asks about a region, use " +
+    "WITHOUT navigating; brief presents the answer instead of only speaking it, as a short " +
+    "sequence over the product's own panels. Use brief for 'why', 'tomorrow', 'what happened' " +
+    "and 'what if' — questions whose answer is a sequence rather than a sentence; for a " +
+    "one-line answer, just say it. The scenes are composed from what the screen has actually " +
+    "read, so a briefing may contain less than you asked for: narrate what is there. " +
+    "If the reader is on Grid Overview and asks about a region, use " +
     "highlight and answer where they are — do not open a screen to answer something that fits " +
     "where they already are. Never invent a subsystem: there are only N, NE, SE and S.",
   refusals:
@@ -177,6 +189,8 @@ const en: Instructions = {
     "value_out_of_range — 'that size is outside the range the product accepts'; " +
     "scenario_refused — the fleet described does not pass the optimizer's refusal " +
     "table; name the rule that refused and offer a size that would pass; " +
+    "unknown_question_kind — I could not tell what kind of question it was; answer by " +
+    "speaking instead of opening a briefing; " +
     "missing_argument, ambiguous_replay, unexpected_argument, unknown_tool, " +
     "malformed_arguments — make the call again correctly, without telling the reader. " +
     "A refusal never becomes an invented answer and it never becomes silence.",

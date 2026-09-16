@@ -54,6 +54,7 @@ import { defaultScenario, readScenario, SCENARIO_PARAM } from "@/components/app/
 import { useServing } from "@/components/app/use-serving";
 import { useI18n } from "@/i18n";
 import { useLatest } from "@/lib/use-latest";
+import type { QuestionKind } from "@/lib/voice/briefing/types";
 import { contextSentence, screenFor } from "@/lib/voice/context";
 import { executeTool, type ToolCall } from "@/lib/voice/execute";
 import { voiceInstructions } from "@/lib/voice/instructions";
@@ -78,6 +79,17 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
   const [action, setAction] = useState<VoiceAction | null>(null);
   const [highlighted, setHighlighted] = useState<SubsystemCode | null>(null);
+  /**
+   * The briefing the agent asked for, or `null`.
+   *
+   * The *question*, not a plan: composing needs the screen's own reads, and
+   * holding the question rather than the scenes means a briefing can never be
+   * staler than the state it is drawn from.
+   */
+  const [briefing, setBriefing] = useState<{
+    questionKind: QuestionKind;
+    subsystem: SubsystemCode | null;
+  } | null>(null);
   const [expandedByReader, setExpandedByReader] = useState(false);
 
   const params = useMemo(() => parseAppParams(rawParams), [rawParams]);
@@ -137,6 +149,12 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       },
       setParams: (next) => {
         router.setParams({ ...next });
+      },
+      brief: (questionKind, subsystem) => {
+        // Held, not performed. The provider owns the plan because the stage
+        // overlays whatever screen the reader is on, and composing it needs the
+        // network and explain state this component already holds.
+        setBriefing({ questionKind, subsystem });
       },
       highlight: (subsystem) => {
         setHighlighted(subsystem);
