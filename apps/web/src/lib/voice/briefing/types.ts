@@ -120,8 +120,32 @@ export interface BriefingPlan {
 /** The floor a scene may be compressed to before the sequence gives up on fitting. */
 export const MIN_SCENE_MS = 1200;
 
-/** What a scene gets when nothing shortens it. */
+/** What a scene gets when its type has no opinion. */
 export const DEFAULT_SCENE_MS = 3500;
+
+/**
+ * How long each kind of scene wants, before the narration is fitted to it.
+ *
+ * A briefing read at one length throughout has no rhythm: a title card holding
+ * as long as a fan chart makes the fan feel rushed and the title feel like a
+ * stall. These are how long each scene takes to *read* — a headline is a
+ * glance, a chart is a study — and `clock.ts` scales them together against the
+ * narration that actually plays, so the proportions survive a short answer.
+ */
+export const SCENE_MS: Readonly<Record<SceneType, number>> = {
+  title: 2200,
+  map_focus: 3200,
+  forecast_curve: 4800,
+  observed_curve: 4200,
+  kpi: 2800,
+  comparison: 4200,
+  cause: 4200,
+  constraint: 3000,
+  counterfactual: 4200,
+  recommendation: 3400,
+  sources: 3000,
+  refusal: 4000,
+};
 
 /** Total of a plan's scene durations. */
 export function planDuration(plan: BriefingPlan): number {

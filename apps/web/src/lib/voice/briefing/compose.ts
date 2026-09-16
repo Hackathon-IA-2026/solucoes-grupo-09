@@ -28,6 +28,7 @@ import {
   type BriefingSource,
   DEFAULT_SCENE_MS,
   type QuestionKind,
+  SCENE_MS,
   type Scene,
   type TimedScene,
 } from "@/lib/voice/briefing/types";
@@ -72,13 +73,14 @@ export interface ComposeInput {
   readonly hasComparison?: boolean;
 }
 
-/** Lay scenes end to end, each at the default length. */
+/** Lay scenes end to end, each for as long as its kind takes to read. */
 function sequence(scenes: readonly Scene[]): readonly TimedScene[] {
   let start = 0;
   const timed: TimedScene[] = [];
   for (const scene of scenes) {
-    timed.push({ scene, start, duration: DEFAULT_SCENE_MS });
-    start += DEFAULT_SCENE_MS;
+    const duration = SCENE_MS[scene.type] ?? DEFAULT_SCENE_MS;
+    timed.push({ scene, start, duration });
+    start += duration;
   }
   return timed;
 }

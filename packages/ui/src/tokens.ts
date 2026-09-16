@@ -22,6 +22,8 @@ export interface Palette {
   canvas: string;
   /** Slightly lifted wash for glows/zebra zones. */
   canvasTint: string;
+  /** What a full-screen surface dims the app behind it with. */
+  scrim: string;
   /** Raised cards (ref `--card`). */
   surface: string;
   /** Inset panels, chips, input fields (ref `--secondary`/`--muted`). */
@@ -75,6 +77,10 @@ export interface Palette {
 const dark: Palette = {
   canvas: "#131316",
   canvasTint: "#18181C",
+  // Dark enough that a panel over it reads as the foreground, light enough that
+  // the screen being explained is still visible behind — a briefing is about
+  // that screen, so hiding it entirely would be the wrong object.
+  scrim: "rgba(0, 0, 0, 0.72)",
   surface: "#1B1B1F",
   surfaceSunken: "#26262B",
   ink: "#F7F7F7",

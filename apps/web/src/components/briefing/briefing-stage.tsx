@@ -6,28 +6,45 @@
  * exactly where they were, and a route change would cost them the selection,
  * the scroll position and the back button.
  *
- * The stage is deliberately passive: it is handed a plan and a cursor and it
- * draws them. Everything about *when* a scene changes lives in
+ * The stage is deliberately passive about *time*: it is handed a plan and a
+ * cursor and it draws them. Everything about when a scene changes lives in
  * `lib/voice/briefing/clock.ts`, which owns no timer of its own and can be
- * tested with three numbers. This file has no timing logic to get wrong.
+ * tested with three numbers. What this file owns is how a scene *arrives*.
  */
 
 import {
   focusRing,
+  motion,
   Panel,
   radius,
   space,
+  type as typography,
   usePalette,
   useReducedMotion,
 } from "@wattsteer/ui";
-import { useEffect } from "react";
-import { Platform, Pressable, Text, View } from "react-native";
+import type { ReactNode } from "react";
+import { useEffect, useRef } from "react";
+import { Animated, Platform, Pressable, Text, View } from "react-native";
 import type { BriefingData } from "@/components/briefing/briefing-data";
 import { SceneRenderer } from "@/components/briefing/scene-renderer";
 import { useCopy } from "@/i18n";
 import { fill } from "@/i18n/format";
 import type { BriefingCursor } from "@/lib/voice/briefing/clock";
 import type { BriefingPlan } from "@/lib/voice/briefing/types";
+
+/** How far a scene rises as it arrives. The plan's figure (§5.2). */
+const RISE_PX = 8;
+
+/**
+ * The fraction of a scene spent arriving.
+ *
+ * A proportion rather than a duration, because scenes are not all the same
+ * length and `clock.ts` may compress them further against a short narration. At
+ * 0.12 a 2,200 ms title spends ~260 ms arriving and a 4,800 ms fan chart ~575 —
+ * both near `motion.base`, without either being pinned to it while the other
+ * drifts.
+ */
+const ENTER_FRACTION = 0.12;
 
 export interface BriefingStageProps {
   readonly plan: BriefingPlan;
@@ -109,7 +126,7 @@ export function BriefingStage({
         // Dimmed rather than opaque: the screen underneath is the thing being
         // explained, and keeping it faintly visible is what makes the briefing
         // read as the product presenting itself rather than as a modal.
-        backgroundColor: "rgba(0, 0, 0, 0.72)",
+        backgroundColor: colors.scrim,
         alignItems: "center",
         justifyContent: "center",
         padding: space.lg,
@@ -135,7 +152,7 @@ export function BriefingStage({
               max: cursor.scenes.length,
               now: cursor.index + 1,
             }}
-            style={{ fontSize: 12, color: colors.inkFaint }}
+            style={{ ...typography.caption, color: colors.inkFaint }}
           >
             {fill(copy.briefing.position, {
               index: String(cursor.index + 1),
@@ -164,24 +181,20 @@ export function BriefingStage({
               };
             }}
           >
-            <Text style={{ fontSize: 12, fontWeight: "600", color: colors.inkMuted }}>
+            <Text style={{ ...typography.caption, color: colors.inkMuted }}>
               {copy.briefing.dismiss}
             </Text>
           </Pressable>
         </View>
 
-        <View
-          // `key` on the scene index, so a scene mounts fresh rather than
-          // morphing into the next one. Under reduced motion the mount is a
-          // cut, which is the same rule the map and the orb already follow.
-          key={reduced ? "static" : cursor.index}
-          style={{ minHeight: 240, justifyContent: "center" }}
-        >
+        <SceneFrame index={cursor.index} progress={cursor.progress} reduced={reduced}>
           <SceneRenderer scene={timed.scene} data={data} />
-        </View>
+        </SceneFrame>
+
+        <ProgressRail cursor={cursor} />
 
         {silent ? (
-          <Text style={{ fontSize: 11, color: colors.inkFaint }}>
+          <Text style={{ ...typography.caption, color: colors.inkFaint }}>
             {copy.briefing.silent}
           </Text>
         ) : null}
@@ -195,7 +208,7 @@ export function BriefingStage({
         <Text
           accessibilityLiveRegion="polite"
           {...(Platform.OS === "web" ? ({ "aria-live": "polite" } as object) : null)}
-          style={{ fontSize: 13, lineHeight: 20, color: colors.inkMuted }}
+          style={{ ...typography.bodySmall, color: colors.inkMuted }}
         >
           {narration}
         </Text>
@@ -211,15 +224,8 @@ export function BriefingStage({
             {plan.sources.map((source) => (
               <Text
                 key={source.read}
-                style={{ fontSize: 11, lineHeight: 17, color: colors.inkFaint }}
+                style={{ ...typography.caption, color: colors.inkFaint }}
               >
-                {/*
-                  The read *and* what dates it. `compose.ts` collects `asOf` and
-                  the vintage fidelity for exactly this line, and printing the
-                  endpoint alone threw away the half that makes a source a
-                  source — the same vocabulary `ForecastStamp` and
-                  `VintageBadge` carry on the screens.
-                */}
                 {[source.read, source.asOf, source.fidelity]
                   .filter((part) => part !== null && part !== "")
                   .join(" · ")}
@@ -228,6 +234,117 @@ export function BriefingStage({
           </View>
         )}
       </Panel>
+    </View>
+  );
+}
+
+/**
+ * One scene, arriving.
+ *
+ * **The rise is driven by the cursor, not by a timer of its own.** `clock.ts`
+ * already computes how far through the current scene the narration has reached,
+ * and a second clock here would run at its own rate and drift from the sentence
+ * being spoken. So the travel is a pure function of `progress` — the same number
+ * the scene change is decided from, and therefore unable to disagree with it.
+ *
+ * The opacity is a one-shot on the scene index instead, because a fade driven
+ * from `progress` would run backwards when the last scene is *held* past its own
+ * duration and `progress` is pinned at 1.
+ *
+ * Under reduced motion the scene simply appears — the rule the map, the risk bar
+ * and the orb already follow.
+ */
+function SceneFrame({
+  index,
+  progress,
+  reduced,
+  children,
+}: {
+  index: number;
+  progress: number;
+  reduced: boolean;
+  children: ReactNode;
+}) {
+  const entering = Math.min(1, progress / ENTER_FRACTION);
+  const opacity = useRef(new Animated.Value(1)).current;
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `index` is the re-run key, not a value the body reads — the fade runs once per scene, and dropping it would leave the first scene's fade to stand for all of them
+  useEffect(() => {
+    if (reduced) {
+      opacity.setValue(1);
+      return;
+    }
+    opacity.setValue(0);
+    Animated.timing(opacity, {
+      toValue: 1,
+      duration: motion.base,
+      // `false` on web: react-native-web's native driver cannot animate
+      // opacity off the JS thread, and asking for it logs a warning per scene.
+      useNativeDriver: Platform.OS !== "web",
+    }).start();
+    // Keyed on the scene, not on `progress`: the fade runs once per scene, and
+    // re-running it every tick would strobe.
+  }, [index, reduced, opacity]);
+
+  return (
+    <Animated.View
+      style={{
+        minHeight: 240,
+        justifyContent: "center",
+        opacity: reduced ? 1 : opacity,
+        transform: [{ translateY: reduced ? 0 : RISE_PX * (1 - entering) }],
+      }}
+    >
+      {children}
+    </Animated.View>
+  );
+}
+
+/**
+ * Where the briefing has got to, as a rail rather than a number.
+ *
+ * One segment per scene, filled for those that have played and part-filled for
+ * the one playing — so a reader sees both how far in they are and how much is
+ * left, which "scene 2 of 5" alone cannot say. Lime on a sunken track, the same
+ * pairing every band rail in the product uses.
+ *
+ * Hidden from assistive technology on purpose: the position line above it
+ * already carries this as a `progressbar` with a real value, and announcing the
+ * same fact twice per tick would make the live region unusable.
+ */
+function ProgressRail({ cursor }: { cursor: BriefingCursor }) {
+  const colors = usePalette();
+  return (
+    <View
+      accessibilityElementsHidden={true}
+      importantForAccessibility="no-hide-descendants"
+      style={{ flexDirection: "row", gap: 3 }}
+    >
+      {cursor.scenes.map((timed, index) => {
+        const filled =
+          index < cursor.index ? 1 : index === cursor.index ? cursor.progress : 0;
+        return (
+          <View
+            key={`${timed.scene.type}-${timed.start}`}
+            style={{
+              flex: 1,
+              height: 3,
+              borderRadius: 2,
+              backgroundColor: colors.surfaceSunken,
+              overflow: "hidden",
+            }}
+          >
+            <View
+              style={{
+                width: `${Math.round(filled * 100)}%`,
+                height: "100%",
+                borderRadius: 2,
+                backgroundColor: colors.accent,
+              }}
+            />
+          </View>
+        );
+      })}
     </View>
   );
 }

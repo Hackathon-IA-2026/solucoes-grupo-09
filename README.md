@@ -162,5 +162,16 @@ ODbL requires is published on the application's own terms page.
 
 ## License
 
-This project is released under the MIT License — see [LICENSE](LICENSE) for the
-full text.
+This project is released under the **GNU Affero General Public License v3.0** —
+see [LICENSE](LICENSE) for the full text.
+
+AGPL-3.0 is a copyleft licence with one clause that matters more than the rest
+for a product like this one. **Section 13**: if you run a modified version of
+WattSteer where people can reach it over a network, you have to offer those
+users the source of *your* version. Running it privately, unmodified, costs you
+nothing; running a modified fork as a public service means publishing the fork.
+
+Third-party components keep their own licences, which are unchanged and
+documented where they are used — the solver comparison in
+`docs/research/optimizer-formulation.md`, and the ONS and IBGE data terms on the
+application's own terms page.

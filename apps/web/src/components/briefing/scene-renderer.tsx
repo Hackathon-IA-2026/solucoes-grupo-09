@@ -13,7 +13,7 @@
  * mid-answer is worse than a sequence that moves on.
  */
 
-import { Badge, space, usePalette } from "@wattsteer/ui";
+import { Badge, space, type as typography, usePalette } from "@wattsteer/ui";
 import { Text, View } from "react-native";
 import { HonestyNote } from "@/components/app/honesty";
 import type { BriefingData } from "@/components/briefing/briefing-data";
@@ -35,11 +35,7 @@ export interface SceneProps {
 /** The small muted line every scene opens with, so a reader knows what they are looking at. */
 function SceneLabel({ children }: { children: string }) {
   const colors = usePalette();
-  return (
-    <Text style={{ fontSize: 13, fontWeight: "600", color: colors.inkMuted }}>
-      {children}
-    </Text>
-  );
+  return <Text style={{ ...typography.label, color: colors.inkMuted }}>{children}</Text>;
 }
 
 function TitleScene({ scene }: { scene: Extract<Scene, { type: "title" }> }) {
@@ -52,9 +48,7 @@ function TitleScene({ scene }: { scene: Extract<Scene, { type: "title" }> }) {
       <Text
         accessibilityRole="header"
         style={{
-          fontSize: 34,
-          lineHeight: 40,
-          fontWeight: "600",
+          ...typography.h2,
           letterSpacing: -0.8,
           textAlign: "center",
           color: colors.ink,
@@ -82,9 +76,7 @@ function MapFocusScene({
       {data.paint === null ? (
         // No rows to paint. The region still gets named, because "where" is the
         // one thing this scene is for and the name answers it without a map.
-        <Text style={{ fontSize: 28, fontWeight: "600", color: colors.ink }}>
-          {meta.onsDisplayName}
-        </Text>
+        <Text style={{ ...typography.h2, color: colors.ink }}>{meta.onsDisplayName}</Text>
       ) : (
         <SubsystemMap
           paint={data.paint}
@@ -179,7 +171,7 @@ function ConstraintScene({ data }: { data: BriefingData }) {
     <View style={{ gap: space.md }}>
       <SceneLabel>{copy.briefing.scenes.constraint}</SceneLabel>
       {codes.length === 0 ? (
-        <Text style={{ fontSize: 14, color: colors.inkMuted }}>
+        <Text style={{ ...typography.bodySmall, color: colors.inkMuted }}>
           {copy.app.explain.reasonsEmpty}
         </Text>
       ) : (
@@ -256,7 +248,7 @@ function RecommendationScene() {
   return (
     <View style={{ gap: space.sm }}>
       <SceneLabel>{copy.briefing.scenes.recommendation}</SceneLabel>
-      <Text style={{ fontSize: 15, lineHeight: 22, color: colors.ink }}>
+      <Text style={{ ...typography.body, color: colors.ink }}>
         {copy.briefing.recommendationBody}
       </Text>
     </View>

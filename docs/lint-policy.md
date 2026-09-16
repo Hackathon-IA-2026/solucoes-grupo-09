@@ -24,6 +24,7 @@ reason — so the config stays at zero warnings without hiding real signal.
 | `complexity/noExcessiveLinesPerFunction`, `noExcessiveCognitiveComplexity`, `useMaxParams` | React component render bodies; splitting hurts cohesion. |
 | `complexity/noVoid` | `void promise` is the codebase's fire-and-forget marker. |
 | Tests/e2e: `noMisplacedAssertion`, `noSecrets` | Assertion helpers and fixture URLs/payloads are the point of test code. |
+| `correctness/useExhaustiveDependencies` | `components/briefing/briefing-stage.tsx`: `index` is a re-run key for the per-scene fade, not a value the effect body reads. Suppressed with the reason. |
 | `correctness/useExhaustiveDependencies` | `components/briefing/briefing-subject.tsx` only. A screen builds its subject fresh every render, so the effect is keyed on a *signature* of what could change a briefing. Depending on the object itself publishes on every render and loops; the rule cannot see that the signature is the trigger. Suppressed with the reason, not disabled. |
 | `nursery/useThisInClassMethods` | `test/briefing-narration-clock.test.ts` only. The `AudioContext` stub stands in for a browser object whose factory methods take no instance state; the one field a test touches is `currentTime`. Suppressed per member with the reason, not disabled. |
 
