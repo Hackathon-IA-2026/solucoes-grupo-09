@@ -2,11 +2,6 @@
 # vision model and falls back to the text layer, and both are poppler.
 FROM python:3.12-slim
 
-LABEL org.opencontainers.image.title="wattsteer-rag" \
-      org.opencontainers.image.description="Evidence retrieval over the ONS public record." \
-      org.opencontainers.image.source="https://github.com/vtorres/WattSteer" \
-      org.opencontainers.image.licenses="AGPL-3.0-or-later"
-
 RUN apt-get update \
  && apt-get install -y --no-install-recommends poppler-utils ca-certificates \
  && rm -rf /var/lib/apt/lists/*
@@ -32,3 +27,22 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
 
 ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["python", "-m", "wattsteer_rag.app"]
+
+# Who built this, from what, and under which licence — read by registries, by
+# `docker scout`, and by ECR's image scanning. An image with no provenance is one
+# nobody can trace back to a commit when it misbehaves at 3am.
+#
+# Last in the file on purpose: these args change every commit, and a LABEL high
+# up would invalidate every layer beneath it — a full dependency install to write
+# eight strings. Every field naming a project is set rather than inherited, or
+# the base image's `revision` sends that 3am search to oven-sh/bun's history.
+ARG GIT_SHA=unknown
+ARG BUILD_DATE=unknown
+LABEL org.opencontainers.image.title="wattsteer-rag" \
+      org.opencontainers.image.description="Evidence retrieval over the ONS public record." \
+      org.opencontainers.image.source="https://github.com/vtorres/WattSteer" \
+      org.opencontainers.image.url="https://github.com/vtorres/WattSteer" \
+      org.opencontainers.image.licenses="AGPL-3.0-or-later" \
+      org.opencontainers.image.version="${GIT_SHA}" \
+      org.opencontainers.image.revision="${GIT_SHA}" \
+      org.opencontainers.image.created="${BUILD_DATE}"

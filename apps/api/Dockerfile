@@ -2,14 +2,6 @@
 # plain Bun base image rather than the browser image the template used.
 FROM oven/bun:1.3 AS base
 
-# Who built this, from what, and under which licence — read by registries, by
-# `docker scout`, and by ECR's image scanning. An image with no provenance is one
-# nobody can trace back to a commit when it misbehaves at 3am.
-LABEL org.opencontainers.image.title="wattsteer-api" \
-      org.opencontainers.image.description="The gateway: every published figure passes through it." \
-      org.opencontainers.image.source="https://github.com/vtorres/WattSteer" \
-      org.opencontainers.image.licenses="AGPL-3.0-or-later"
-
 ARG PORT=3000
 
 WORKDIR /app
@@ -61,3 +53,22 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD bun -e 'await fetch("http://localhost:"+(process.env.PORT??3000)+"/health").then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))'
 
 CMD ["bun", "run", "src/api/index.ts"]
+
+# Who built this, from what, and under which licence — read by registries, by
+# `docker scout`, and by ECR's image scanning. An image with no provenance is one
+# nobody can trace back to a commit when it misbehaves at 3am.
+#
+# Last in the file on purpose: these args change every commit, and a LABEL high
+# up would invalidate every layer beneath it — a full dependency install to write
+# eight strings. Every field naming a project is set rather than inherited, or
+# the base image's `revision` sends that 3am search to oven-sh/bun's history.
+ARG GIT_SHA=unknown
+ARG BUILD_DATE=unknown
+LABEL org.opencontainers.image.title="wattsteer-api" \
+      org.opencontainers.image.description="The gateway: every published figure passes through it." \
+      org.opencontainers.image.source="https://github.com/vtorres/WattSteer" \
+      org.opencontainers.image.url="https://github.com/vtorres/WattSteer" \
+      org.opencontainers.image.licenses="AGPL-3.0-or-later" \
+      org.opencontainers.image.version="${GIT_SHA}" \
+      org.opencontainers.image.revision="${GIT_SHA}" \
+      org.opencontainers.image.created="${BUILD_DATE}"

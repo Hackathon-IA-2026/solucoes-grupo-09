@@ -61,10 +61,6 @@ RUN bunx expo export --platform web && bun scripts/localize-export.ts
 # --- runtime stage: serve dist/ ---
 FROM oven/bun:1.3-slim AS runtime
 
-LABEL org.opencontainers.image.title="wattsteer-web" \
-      org.opencontainers.image.description="The static export and the server that routes it." \
-      org.opencontainers.image.source="https://github.com/vtorres/WattSteer" \
-      org.opencontainers.image.licenses="AGPL-3.0-or-later"
 WORKDIR /app
 ENV NODE_ENV=production \
     PORT=8080
@@ -85,3 +81,22 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD bun -e 'await fetch("http://localhost:"+(process.env.PORT??8080)+"/healthz").then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))'
 
 CMD ["bun", "run", "server.ts"]
+
+# Who built this, from what, and under which licence — read by registries, by
+# `docker scout`, and by ECR's image scanning. An image with no provenance is one
+# nobody can trace back to a commit when it misbehaves at 3am.
+#
+# Last in the file on purpose: these args change every commit, and a LABEL high
+# up would invalidate every layer beneath it — a full dependency install to write
+# eight strings. Every field naming a project is set rather than inherited, or
+# the base image's `revision` sends that 3am search to oven-sh/bun's history.
+ARG GIT_SHA=unknown
+ARG BUILD_DATE=unknown
+LABEL org.opencontainers.image.title="wattsteer-web" \
+      org.opencontainers.image.description="The static export and the server that routes it." \
+      org.opencontainers.image.source="https://github.com/vtorres/WattSteer" \
+      org.opencontainers.image.url="https://github.com/vtorres/WattSteer" \
+      org.opencontainers.image.licenses="AGPL-3.0-or-later" \
+      org.opencontainers.image.version="${GIT_SHA}" \
+      org.opencontainers.image.revision="${GIT_SHA}" \
+      org.opencontainers.image.created="${BUILD_DATE}"
