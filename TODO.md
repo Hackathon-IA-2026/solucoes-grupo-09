@@ -48,8 +48,12 @@ Status: `[ ]` not started · `[~]` in progress · `[x]` done
 
 ## Ship and polish
 
-- [ ] **14.** Deploy everything, verify, take screenshots, build a striking
-      montage for the README, store it in `.github/images/`.
+- [~] **14.** Screenshots and montage **done** — `.github/images/wattsteer.png`,
+      four retina captures of a real build reading the live gateway, composed
+      into one 1800×1097 frame and placed at the top of the README. Deploy
+      is the half that is left, and it is yours to authorise: everything is
+      committed on `clauge/development-gridflex-7e0ba196` and I will pull,
+      push and verify on your word.
 - [x] **15.** Reviewed all four `/app` screens at 1440 and 412, against the real
       gateway. Three defects, all one species — a rule the product states
       clearly, applied unevenly:

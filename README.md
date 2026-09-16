@@ -11,6 +11,13 @@ the grid could not take it. Brazil curtails a great deal of it, the data is
 public, and nobody was turning that data into a number an operator could act on
 the day before.
 
+![WattSteer: the landing page beside Visão da rede, Explicar and Mitigar](.github/images/wattsteer.png)
+
+The screens above are a real build reading the live gateway, which is why three
+of them say no model is promoted. That is the product working: a forecast panel
+is **absent** when there is nothing to forecast with, and the screen names the
+clause that refused rather than drawing a zero.
+
 ## Demo
 
 - **Live application:** https://www.wattsteer.com
