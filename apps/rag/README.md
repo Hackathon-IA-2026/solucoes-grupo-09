@@ -4,6 +4,11 @@ Evidence retrieval over the ONS public record. It finds the document that states
 a rule, quotes it, and cites where the quote came from. **It never classifies a
 curtailment**: REL, CNF and ENE stay with the rule and with SHAP.
 
+> For what this does and why, in plain language and with diagrams, read
+> [docs/rag/o-que-e-o-rag.md](../../docs/rag/o-que-e-o-rag.md). This file is the
+> operational half: how to install it, and how to find out why an answer is
+> wrong.
+
 ## Why it exists
 
 The ONS already declares the reason for a curtailment and names the control it

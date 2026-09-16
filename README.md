@@ -71,6 +71,17 @@ uv run wattsteer-ml
   up the whole stack if you would rather not run the services by hand.
 - **Node.js 20+** — only for Playwright, which drives the end-to-end suite.
 
+## Documentation
+
+| Read this | If you want |
+| --- | --- |
+| [docs/rag/o-que-e-o-rag.md](docs/rag/o-que-e-o-rag.md) | **What the evidence layer does, in plain language, with diagrams.** Written for the whole team and for a reader who is not a developer: the real curtailment record, the document it cites, the five checks a claim has to pass, what the service refuses to do, and the limitations we accept |
+| [docs/rag/por-que-nao-o-blueprint.md](docs/rag/por-que-nao-o-blueprint.md) | Why the evidence layer is ours and the models are NVIDIA's, and the answers to the three questions that follow from that |
+| [apps/rag/README.md](apps/rag/README.md) | Installing and debugging the evidence service |
+| [docs/domain-model.md](docs/domain-model.md) | The vocabulary: what a reporting entity is, and why a forecast and an observation are different shapes |
+| `docs/research/` | The primary sources, with their traps and their licences |
+| `docs/specs/` | The specifications, including the endpoint list every route has to appear in |
+
 ## Monorepo layout
 
 Bun workspaces, split by responsibility:

@@ -18,6 +18,22 @@ auditoria, é uma sigla. `IO-ON.NE.2SO` é uma Instrução de Operação do ONS,
 público de 18 páginas cuja seção 5.1 é exatamente "Limitação do Fluxo Senhor do
 Bonfim II". É ali que está escrito o limite que motivou o corte.
 
+## 1.1 O caminho de um registro, do corte à citação
+
+```mermaid
+flowchart LR
+    A["Registro do ONS<br/>14/09, Nordeste, CNF<br/>'LIMITAÇÃO DO FLUXO SENHOR<br/>DO BONFIM II - IO-ON.NE.2SO'"] --> B["Pergunta<br/>onde esse limite<br/>está escrito?"]
+    B --> C["Busca no acervo<br/>significado + palavras exatas<br/>só o que foi publicado<br/>antes da decisão"]
+    C --> D["Trechos candidatos<br/>da instrução de operação"]
+    D --> E["Redação com citação<br/>modelo aberto no NVIDIA NIM"]
+    E --> F{"Cinco travas"}
+    F -- passa --> G["Evidência<br/>trecho literal, página,<br/>data e link"]
+    F -- não passa --> H["Sem evidência suficiente<br/>com o motivo"]
+```
+
+O documento citado no exemplo, `IO-ON.NE.2SO`, é público e tem a seção 5.1
+chamada exatamente "Limitação do Fluxo Senhor do Bonfim II".
+
 ## 2. O que a nossa camada de evidência faz
 
 Ela pega o registro, encontra o documento que ele cita, e devolve **o trecho
@@ -59,6 +75,24 @@ Toda resposta passa por estas travas antes de existir:
 | Vocabulário de causa é proibido | a IA dar veredito no lugar do modelo |
 | Um título de seção sozinho não vale | citação que não diz nada |
 | Só documentos publicados antes da decisão | explicar o passado com papel do futuro |
+
+E a mesma coisa vista como decisão, uma afirmação de cada vez:
+
+```mermaid
+flowchart TD
+    A["Afirmação escrita pelo modelo"] --> B{"O trecho citado existe<br/>no documento?"}
+    B -- não --> X["Recusada"]
+    B -- sim --> C{"Todo número da frase<br/>está no trecho?"}
+    C -- não --> X
+    C -- sim --> D{"Usa palavra de causa?"}
+    D -- sim --> X
+    D -- não --> E{"O trecho diz algo,<br/>ou é só um título?"}
+    E -- só título --> X
+    E -- diz algo --> F{"O documento foi publicado<br/>antes da decisão?"}
+    F -- não --> X
+    F -- sim --> G["Publicada com a fonte"]
+    X --> Y["Nenhuma sobreviveu:<br/>sem evidência suficiente,<br/>com o motivo registrado"]
+```
 
 ## 4.1 Uma observação honesta sobre citação em tabela
 
@@ -107,6 +141,51 @@ Qualquer pessoa pode repetir a medição na própria máquina:
 python eval/build_goldset.py --days 2026-09-14 2026-08-20
 python eval/run_eval.py
 ```
+
+## 5.1 As peças, e por que elas estão onde estão
+
+```mermaid
+flowchart TB
+    subgraph FONTES["Fontes públicas do ONS e da ANEEL"]
+        S1["Instruções de Operação<br/>onde os limites são definidos"]
+        S2["Boletim Diário<br/>tabelas HTML do dia"]
+        S3["IPDO e relatórios<br/>de perturbação"]
+        S4["Procedimentos de Rede"]
+    end
+
+    subgraph SERVICO["Serviço de evidência (apps/rag)"]
+        C["Coleta<br/>guarda o arquivo pelo hash,<br/>nunca baixa duas vezes"]
+        P["Leitura da página<br/>texto quando serve,<br/>visão quando é tabela"]
+        T["Trechos<br/>por seção, tabela inteira"]
+        R["Busca híbrida<br/>significado + palavra exata"]
+        E["Redação com travas"]
+    end
+
+    subgraph BANCO["Postgres do RAG"]
+        D1["documentos, páginas e trechos<br/>com vetores"]
+        D2["evidência publicada<br/>e registro de cada busca"]
+    end
+
+    subgraph MODELOS["Modelos abertos, planos gratuitos"]
+        M1["NVIDIA NIM"]
+        M2["Groq"]
+        M3["AWS Bedrock<br/>quando houver crédito"]
+    end
+
+    FONTES --> C --> P --> T --> D1
+    D1 --> R --> E --> D2
+    P -. "páginas que são imagem" .-> M1
+    T -. "vetores" .-> M1
+    E -. "redige" .-> M1
+    M1 -. "sem cota" .-> M2
+    M2 -. "sem cota" .-> M3
+    D2 --> PROD["Produto WattSteer<br/>lê a tabela, nunca o modelo"]
+```
+
+A seta pontilhada entre os modelos é o ponto que costuma passar despercebido: se
+a cota gratuita de um acaba, o pedido vai para o próximo com o mesmo conteúdo, e
+se todos acabarem o trabalho fica registrado como "aguardando cota" com a hora em
+que pode continuar. Nada quebra, nada se perde.
 
 ## 6. Como isso custa quase nada
 
