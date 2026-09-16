@@ -48,10 +48,27 @@ Status: `[ ]` not started · `[~]` in progress · `[x]` done
          `P(Y ≥ P10)` on the qualifying rows directly: if the atom at the P10
          holds, zero is right and the rail stands. Needs the production
          dataset.
-      2. Mondrian conformal for the lower tail: fit `δ_lo` per stratum instead
-         of once globally. `δ_lo` is a published scalar with the card, the
-         metrics table and the lead-time A/B all reading it, so it needs to
-         arrive alongside the scalar rather than replacing it.
+      2. **Find where the shortfall concentrates before choosing a remedy.**
+         I started implementing Mondrian conformal stratified by subsystem and
+         stopped on reading `lower_residual`: it is already
+         `(q̂^0.10 − y) / spread`, normalised by each row's own positive spread
+         since forecaster 43, *for exactly the reason one would stratify by
+         subsystem* — "one fold's bands run 1,691→12,700 MWh on one subsystem
+         and 0→3,029 on another". Cross-subsystem scale is already handled, so
+         that stratum is likely inert and I would have shipped a change that
+         bought nothing.
+
+         What is left after scale is normalised out is **temporal**: `δ_lo` is
+         fitted on a calibration window and evaluated on a later walk-forward
+         fold, and split conformal's guarantee needs exchangeability the folds
+         do not have. The candidate remedies are a calibration window nearer the
+         test fold, or weighted/shift-robust conformal — not Mondrian by
+         subsystem.
+
+         So the next step is a measurement, not a refactor: break the
+         stated-floor coverage down by fold recency, by subsystem and by
+         magnitude, and let the shape of the shortfall pick the method. Needs
+         the production dataset.
       3. Retrain, and let the gate judge.
 
       Step 2 cannot be validated anywhere but production: the local database is
