@@ -370,6 +370,19 @@ const ABSENCE_MARKERS = [
   "emitted",
   "throwaway",
   "scratch copy",
+  // The prospective case, and it is the opposite of rot. `docs/rag/` plans a
+  // service that does not exist yet and draws its directory tree, including the
+  // `migrations/` it would own — a different service's ledger, not this one's.
+  // A name that has not been created is as true a sentence as a name that was
+  // deleted, and the guard cannot tell them apart from the tag alone.
+  //
+  // Spelt in both languages because the plans are written in both, and a marker
+  // that only matched English would excuse a plan in English while failing the
+  // same plan in Portuguese.
+  "plano",
+  "planned",
+  "proposto",
+  "proposed",
 ];
 
 export interface MigrationReference {
@@ -421,7 +434,13 @@ export function migrationReferences(
     let offset = 0;
     for (const paragraph of text.split(/\n\s*\n/)) {
       const lower = paragraph.toLowerCase();
-      const marked = ABSENCE_MARKERS.some((marker) => lower.includes(marker));
+      // The document's own name counts, not only the paragraph's prose. A plan
+      // draws its proposed directory tree inside a code fence, and a fence is
+      // its own paragraph with no prose in it at all — so `plano-rag-v0.2.md`
+      // named a migration it proposes and was read as rot. A file that says in
+      // its name what it is has said it for every paragraph in it.
+      const context = `${lower} ${file.toLowerCase()}`;
+      const marked = ABSENCE_MARKERS.some((marker) => context.includes(marker));
       for (const match of paragraph.matchAll(REFERENCE)) {
         const tag = `${match[1]}_${match[2]}`;
         // `meta/0046_snapshot.json` has the migration shape and is not a
