@@ -99,6 +99,54 @@ FITTED_ALPHAS: tuple[float, ...] = (0.02, 0.10, 0.50, 0.90)
 PositiveQuantileFn = Callable[[float], float]
 
 
+def implied_lower_clearance(
+    occurrence_probability: float,
+    positive_quantiles: PositiveQuantileFn,
+    served: float = 0.10,
+) -> float:
+    """``P(Y ≥ Q_Y(served))`` under the served law itself, for one row.
+
+    The number a correctly calibrated floor clears at, and therefore the one
+    `p10_calibration_excess` must difference against. It is **not** a constant
+    and **not** a function of ``p`` alone — it depends on whether the served
+    quantile has probability mass sitting on it:
+
+    - Where ``Q_pos`` is **flat** across the neighbourhood of ``u``, a range of
+      ``u`` maps to one value, so the law puts mass *at* the served quantile.
+      Nothing is below it but the point mass at zero, and ``P(Y ≥ Q_Y) = p``.
+    - Where ``Q_pos`` rises, there is no atom and ``Q_Y(served)`` is a genuine
+      ``served``-th percentile, so ``P(Y ≥ Q_Y) = 1 − served``.
+
+    **Flatness is read off the curve, not guessed from ``u``.** With three knots
+    the first case was the only one that happened — ``u < 0.10`` for every
+    ``p < 1`` — which is why forecaster 34 could measure ``P(Y ≥ P10) = p`` and
+    why the rail could difference against ``p`` unconditionally. `FITTED_ALPHAS`
+    now carries a knot at 0.02, so a *fitted* model interpolates above
+    ``p = 0.918``. But every rung of the baseline ladder still repeats ``q10``
+    into the 0.02 slot, and a repeated knot is a flat segment: those rows keep
+    the old law exactly. Deciding this from ``u`` alone would score the ladder
+    against a law it does not serve, which is the mirror of the defect being
+    fixed.
+    """
+    _check_probability("occurrence_probability", occurrence_probability)
+    _check_probability("served", served)
+    if in_point_mass(served, occurrence_probability):
+        # The served quantile *is* the point mass at zero, which every
+        # non-negative label clears. Not a row this rail scores, but the
+        # arithmetic should not lie about it either.
+        return 1.0
+    u = (served - (1.0 - occurrence_probability)) / occurrence_probability
+    u = min(1.0, max(0.0, u))
+    # A hair either side, small enough to stay inside one interpolation segment
+    # at the tightest knot spacing `FITTED_ALPHAS` has (0.02 → 0.10).
+    probe = 1e-4
+    below = positive_quantiles(max(0.0, u - probe))
+    above = positive_quantiles(min(1.0, u + probe))
+    if below == above:
+        return occurrence_probability
+    return 1.0 - served
+
+
 def in_point_mass(q: float, occurrence_probability: float) -> bool:
     """Whether ``Q_Y(q)`` is the mixture's point at zero rather than a magnitude.
 

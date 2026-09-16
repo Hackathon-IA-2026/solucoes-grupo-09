@@ -120,7 +120,7 @@ from wattsteer_ml.evaluation.matrix import HOURS_PER_DAY
 from wattsteer_ml.evaluation.metrics import MetricsRow, MetricsTable, pinball
 from wattsteer_ml.evaluation.vintage import FoldSegment
 from wattsteer_ml.lanes import Lane, format_instant
-from wattsteer_ml.mixture import SERVED_QUANTILES
+from wattsteer_ml.mixture import SERVED_QUANTILES, implied_lower_clearance
 from wattsteer_ml.promotions import (
     PROMOTION_LOG_FILENAME,
     Decision,
@@ -923,14 +923,25 @@ def p10_calibration_excess(hours: Sequence[ScoredHour]) -> P10CalibrationExcess:
             standard_error=None,
         )
 
-    # d_i = realised − implied. `occurrence_probability` is the model's own
-    # P(Y ≥ P10) on a qualifying row, which is forecaster 34's measured identity
-    # rather than an assumption: the atom at the P10 carries mass p − 0.90 and
-    # coverage counts it, so the served law clears its own floor with
-    # probability exactly p.
+    # d_i = realised − implied, where "implied" is what the *served law* says
+    # this row's floor clears at. `implied_lower_clearance` decides that per row
+    # rather than assuming it, and the distinction is new:
+    #
+    # Forecaster 34 measured `P(Y ≥ P10) = p` and it was right for every row,
+    # because with 0.10 as `MagnitudeQuantiles`' first knot the composed P10
+    # always landed on the flat below it — `u = (0.10 − (1 − p)) / p` is under
+    # 0.10 for every `p < 1`. Mass sat at the served floor and coverage counted
+    # it. `FITTED_ALPHAS` now carries a knot at 0.02, so above `p = 0.918` the
+    # floor interpolates, there is no atom, and a correct band clears it at
+    # 0.90. Differencing against `p` there would score the band against a law
+    # the product stopped serving.
     by_day: dict[object, list[float]] = {}
     for hour in qualifying:
-        d = (1.0 if hour.covered_lower else 0.0) - hour.forecast.occurrence_probability
+        implied = implied_lower_clearance(
+            hour.forecast.occurrence_probability,
+            hour.forecast.mixture.positive_quantiles,
+        )
+        d = (1.0 if hour.covered_lower else 0.0) - implied
         by_day.setdefault(hour.key.target_date, []).append(d)
 
     n = len(qualifying)

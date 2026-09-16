@@ -33,6 +33,7 @@ from statistics import NormalDist
 
 import pytest
 
+from wattsteer_ml.mixture import MagnitudeQuantiles, implied_lower_clearance
 from wattsteer_ml.training.conformal import (
     COVERAGE_GUARDRAIL,
     NOMINAL_MISCOVERAGE,
@@ -210,3 +211,59 @@ def test_the_window_rail_still_reads_what_it_always_did() -> None:
     """
     low, high = COVERAGE_GUARDRAIL
     assert low <= 0.90 <= high
+
+
+def test_the_rail_now_expects_what_the_served_law_actually_implies() -> None:
+    """The rail's premise follows the knot that changed under it.
+
+    Forecaster 34's identity — a stated floor clears at ``p`` — was a
+    consequence of `MagnitudeQuantiles` being flat below 0.10, not a property of
+    hurdle mixtures in general. With the 0.02 knot the composed P10 interpolates
+    above ``p = 0.918`` and a correct band clears it at 0.90, so a rail still
+    differencing against ``p`` would score the band against a law the product no
+    longer serves — and would keep refusing every artifact for a reason that had
+    been fixed.
+    """
+    fitted = MagnitudeQuantiles.from_boosters(q02=30.0, q10=40.0, q50=90.0, q90=200.0)
+
+    # Still on the flat below the first knot: mass sits at the floor.
+    assert implied_lower_clearance(0.905, fitted) == pytest.approx(0.905)
+    # Interpolating: a genuine 10th percentile, so 0.90 whatever `p` is.
+    assert implied_lower_clearance(0.95, fitted) == pytest.approx(0.90)
+    assert implied_lower_clearance(0.999, fitted) == pytest.approx(0.90)
+
+    # The boundary is where u crosses the first knot, and it is 0.90 / 0.98.
+    boundary = 0.90 / (1.0 - 0.02)
+    assert implied_lower_clearance(boundary - 0.001, fitted) > 0.90
+    assert implied_lower_clearance(boundary + 0.001, fitted) == pytest.approx(0.90)
+
+
+def test_a_repeated_knot_keeps_the_old_law_because_it_is_still_flat() -> None:
+    """Every rung of the baseline ladder, and why `u` alone cannot decide this.
+
+    A rung fits three knots, so `compose_estimates` repeats ``q10`` into the
+    0.02 slot. A repeated knot is a flat segment: the mass is still at the
+    served floor and the row still clears at ``p``. Reading flatness off ``u``
+    would have scored the whole ladder against a law it does not serve — the
+    mirror of the defect this change fixes.
+    """
+    repeated = MagnitudeQuantiles.from_boosters(q02=40.0, q10=40.0, q50=90.0, q90=200.0)
+
+    for p in (0.93, 0.95, 0.976, 0.99):
+        assert implied_lower_clearance(p, repeated) == pytest.approx(p)
+
+
+def test_the_two_targets_now_agree_on_the_rows_that_interpolate() -> None:
+    """Why this is the fix and the lower-tail retarget was not.
+
+    Split conformal ranks `E_lo` at the nominal 0.10, so it fits a floor that
+    leaves 90% of the stated rows covered. Above p = 0.918 the served law now
+    implies exactly that. The two components want the same number, and the
+    marginal guardrail is untouched because the floor did not move — what moved
+    is what the law claims about it.
+    """
+    fitted = MagnitudeQuantiles.from_boosters(q02=30.0, q10=40.0, q50=90.0, q90=200.0)
+    for p in (0.93, 0.95, 0.976, 0.99):
+        assert implied_lower_clearance(p, fitted) == pytest.approx(
+            1.0 - NOMINAL_MISCOVERAGE
+        )
