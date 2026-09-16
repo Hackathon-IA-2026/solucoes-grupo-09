@@ -1,6 +1,4 @@
-# Por que construímos a camada de evidência em vez de subir o blueprint de RAG da NVIDIA
-
-Material para o pitch e para a arguição. Todos os números abaixo foram medidos por nós em 15/09/2026 com chave real do NVIDIA NIM.
+# Por que a camada de evidência é nossa e os modelos são da NVIDIA
 
 ## A resposta curta
 
@@ -51,6 +49,6 @@ Medimos o outro lado do risco. O blueprint sobe com Elasticsearch, armazenamento
 **"Vocês não estão usando a NVIDIA, então?"**
 Estamos, e nas partes em que ela é melhor. O `nemotron-parse` leu uma página do Boletim Diário da Operação do ONS, que é um PDF sem camada de texto, em 2,2 segundos, devolvendo a tabela de balanço de energia com os valores corretos e a posição de cada bloco na página. O modelo que redige o texto do operador é Nemotron. O que não terceirizamos é o critério do que pode virar evidência.
 
-## Uma frase para o slide
+A NVIDIA fornece os modelos que leem o documento. A evidência que o operador pode citar, com trecho literal, com data de publicação anterior à decisão e reproduzível no dia seguinte, é o que o WattSteer acrescenta.
 
-"A NVIDIA nos dá os modelos que leem o documento. Nós damos ao operador a evidência que ele pode citar: com trecho literal, com data de publicação anterior à decisão, e reproduzível no dia seguinte."
+Números medidos em 15 de setembro de 2026, com chave real do NVIDIA NIM.

@@ -1,24 +1,32 @@
-# A camada de evidência do WattSteer, explicada para qualquer pessoa
+# A evidência por trás de um corte de geração
 
-Este documento é para o time inteiro e para quem for avaliar o projeto. Não é
-preciso saber programar para ler. Os números todos foram medidos em 15/09/2026 e
-podem ser conferidos por quem quiser, com os comandos do fim.
-
-## 1. O problema, em uma frase
-
-Quando o operador do sistema elétrico corta geração eólica ou solar, ele registra
-a razão em um texto curto. Esse texto cita documentos que quase ninguém abre.
-
-Um registro real do dia 14/09/2026, no Nordeste:
+No dia 14 de setembro de 2026, no Nordeste, o Operador Nacional do Sistema
+Elétrico cortou geração eólica e registrou a razão assim:
 
 > `Controle de inequação: LIMITAÇÃO DO FLUXO SENHOR DO BONFIM II - IO-ON.NE.2SO`
 
-Para quem opera, isso é claro. Para qualquer outra pessoa, e para qualquer
-auditoria, é uma sigla. `IO-ON.NE.2SO` é uma Instrução de Operação do ONS, um PDF
-público de 18 páginas cuja seção 5.1 é exatamente "Limitação do Fluxo Senhor do
-Bonfim II". É ali que está escrito o limite que motivou o corte.
+`IO-ON.NE.2SO` é uma Instrução de Operação: um documento público de 18 páginas
+que diz como operar a área 230 kV Sudoeste da região Nordeste. A seção 5.1 dele
+chama-se "Limitação do Fluxo Senhor do Bonfim II" e é onde está escrito o limite
+que motivou aquele corte.
 
-## 1.1 O caminho de um registro, do corte à citação
+Entre o registro e o documento existe uma distância que ninguém percorre. Quem
+acompanha o setor lê a sigla e segue adiante; quem precisa auditar, contestar ou
+explicar o corte precisa saber onde aquilo está escrito.
+
+Esta é a camada do WattSteer que percorre essa distância. Para o registro acima,
+ela devolve:
+
+> **Afirmação.** O documento manda "Controlar a tensão de 230 kV da SE Senhor do
+> Bonfim II, de acordo com os limites abaixo", para evitar colapso de tensão em
+> cenários de elevada geração e carga reduzida, em caso de contingência simples
+> das LT 230 kV Juazeiro da Bahia II ou Jaguarari.
+>
+> **Fonte.** IO-ON.NE.2SO, revisão 146, seção 5, publicada em 09/09/2026.
+
+Duas propriedades dessa resposta importam mais do que ela parecer correta. O
+documento foi publicado cinco dias antes do corte, então quem decidiu podia
+conhecê-lo. E a frase entre aspas existe no PDF: é cópia, não resumo.
 
 ```mermaid
 flowchart LR
@@ -31,42 +39,20 @@ flowchart LR
     F -- não passa --> H["Sem evidência suficiente<br/>com o motivo"]
 ```
 
-O documento citado no exemplo, `IO-ON.NE.2SO`, é público e tem a seção 5.1
-chamada exatamente "Limitação do Fluxo Senhor do Bonfim II".
+## A inteligência artificial não decide nada aqui
 
-## 2. O que a nossa camada de evidência faz
+A classificação de um corte entre indisponibilidade externa (REL),
+confiabilidade elétrica (CNF) e razão energética (ENE) é feita por regra e por
+modelo estatístico, e continua sendo. A camada de evidência entra depois, e o seu
+trabalho inteiro é achar o documento e copiar o trecho certo.
 
-Ela pega o registro, encontra o documento que ele cita, e devolve **o trecho
-exato, com página, data de publicação e link**. Nada além disso.
+Isso não é uma escolha de estilo. Um sistema que opina sobre a causa de um corte
+sem poder mostrar onde aquilo está escrito não entra numa sala de operação, e não
+sobrevive a uma auditoria.
 
-O que ela devolveu para o registro acima:
+## Cinco travas, todas mecânicas
 
-> **Afirmação:** o documento manda "Controlar a tensão de 230 kV da SE Senhor do
-> Bonfim II, de acordo com os limites abaixo", para evitar colapso de tensão em
-> cenários de elevada geração e carga reduzida, em caso de contingência simples
-> das LT 230 kV Juazeiro da Bahia II ou Jaguarari.
->
-> **Fonte:** IO-ON.NE.2SO, revisão 146, seção 5, publicada em 09/09/2026.
-
-Repare em duas coisas. O documento foi publicado **antes** do dia do corte, então
-era possível conhecê-lo na hora da decisão. E a frase citada existe no PDF: não é
-um resumo, é uma cópia.
-
-## 3. O que ela não faz, de propósito
-
-- **Não decide a causa.** A classificação entre indisponibilidade externa (REL),
-  confiabilidade elétrica (CNF) e razão energética (ENE) continua sendo da regra
-  e do modelo. A evidência entra como apoio, com um peso declarado.
-- **Não inventa número.** Todo número que aparece numa afirmação tem de estar
-  dentro do trecho citado. Se não estiver, a afirmação é jogada fora.
-- **Não explica o que aconteceu.** Ela diz o que o documento registra ou
-  estabelece. Palavras de causa são proibidas por verificação automática.
-- **Não responde sem prova.** Se nada passar nas verificações, a resposta é
-  "sem evidência suficiente", com o motivo. O silêncio é o modo de falhar.
-
-## 4. As cinco verificações, em linguagem simples
-
-Toda resposta passa por estas travas antes de existir:
+Nenhuma afirmação existe antes de passar por estas verificações:
 
 | Verificação | O que ela impede |
 | --- | --- |
@@ -75,8 +61,6 @@ Toda resposta passa por estas travas antes de existir:
 | Vocabulário de causa é proibido | a IA dar veredito no lugar do modelo |
 | Um título de seção sozinho não vale | citação que não diz nada |
 | Só documentos publicados antes da decisão | explicar o passado com papel do futuro |
-
-E a mesma coisa vista como decisão, uma afirmação de cada vez:
 
 ```mermaid
 flowchart TD
@@ -94,55 +78,33 @@ flowchart TD
     X --> Y["Nenhuma sobreviveu:<br/>sem evidência suficiente,<br/>com o motivo registrado"]
 ```
 
-## 4.1 Uma observação honesta sobre citação em tabela
+Quando nada sobrevive, a resposta é "sem evidência suficiente", acompanhada do
+motivo. O sistema erra calando, não inventando.
 
-As instruções de operação guardam os limites em tabelas grandes. Ali, a evidência
-que uma pessoa apontaria são duas partes da mesma tabela: a célula que nomeia o
-controle e a linha que traz os números, que quase nunca ficam lado a lado. Exigir
-um trecho contínuo seria recusar praticamente toda citação de tabela.
+Há uma exceção, e ela é declarada na própria resposta. As instruções de operação
+guardam os limites em tabelas de seis colunas, onde a célula que nomeia o
+controle e a linha que traz os números nunca ficam lado a lado. Ali a citação
+pode pular células, desde que os pedaços apareçam na mesma ordem do documento, e
+sai marcada como montada. Inverter a ordem continua recusado, porque inverter
+muda o que a tabela diz.
 
-Então a regra é: em texto corrido, a citação tem de ser contínua; em tabela, ela
-pode pular células, **desde que os pedaços apareçam na mesma ordem do documento**,
-e a citação sai marcada como montada, para a tela poder dizer isso a quem lê.
-Inverter a ordem continua sendo recusado, porque inverter muda o que a tabela diz.
-
-## 5. O que já existe hoje
+## O acervo
 
 | Fonte | O que é | Quanto |
 | --- | --- | --- |
 | Instruções de Operação | onde os limites estão escritos | 6 documentos, 93 páginas |
-| Procedimentos de Rede | as regras gerais que citamos | 4 submódulos, 40 páginas |
+| Procedimentos de Rede | as regras gerais que os registros citam | 4 submódulos, 40 páginas |
 | Boletim Diário da Operação | os números do dia, em tabelas | 10 dias, 250 tabelas |
 | IPDO | o informativo preliminar do dia | 19 edições |
 | Relatório de Análise de Perturbação | a análise de um evento grande | 1 documento |
 
-São 281 documentos, 816 páginas e **2.786 trechos** indexados e pesquisáveis.
+São 281 documentos, 816 páginas e 2.786 trechos pesquisáveis.
 
-Nada disso viaja dentro do repositório: quem instala constrói o acervo na própria
-máquina, com um comando, e pode parar e retomar quando quiser.
-
-**Teste com registros reais.** Montamos a avaliação a partir dos próprios
-registros de corte publicados pelo ONS, não de perguntas inventadas: cada caso é
-uma linha que o operador registrou, com a razão que ele declarou.
-
-Em seis registros, medimos entre 4 e 5 respostas com evidência e 1 a 2 recusas,
-com 75% a 100% dos registros que citam um documento recebendo a citação daquele
-documento. O resultado varia com duas coisas, e as duas são honestas: quanto do
-acervo está indexado na máquina onde se roda, e o fato de o modelo nem sempre
-conseguir copiar um trecho válido de uma tabela na primeira tentativa.
-
-Uma recusa se repete em todas as rodadas e está certa: o registro "Controle de
-frequência do SIN" não tem, no nosso acervo, documento que o sustente. Recusar
-ali é o comportamento desejado, não uma falha.
-
-Qualquer pessoa pode repetir a medição na própria máquina:
-
-```
-python eval/build_goldset.py --days 2026-09-14 2026-08-20
-python eval/run_eval.py
-```
-
-## 5.1 As peças, e por que elas estão onde estão
+O tamanho modesto é uma escolha informada. Dez dias amostrados nos quatro
+subsistemas produziram 857 registros de corte e apenas 17 descrições distintas,
+que apontam para três instruções de operação. O universo de documentos que
+explica a maior parte dos cortes é pequeno e fechado, e cada documento novo cobre
+muitos registros de uma vez.
 
 ```mermaid
 flowchart TB
@@ -182,58 +144,64 @@ flowchart TB
     D2 --> PROD["Produto WattSteer<br/>lê a tabela, nunca o modelo"]
 ```
 
-A seta pontilhada entre os modelos é o ponto que costuma passar despercebido: se
-a cota gratuita de um acaba, o pedido vai para o próximo com o mesmo conteúdo, e
-se todos acabarem o trabalho fica registrado como "aguardando cota" com a hora em
-que pode continuar. Nada quebra, nada se perde.
+## O que a medição mostra
 
-## 6. Como isso custa quase nada
+Os casos de teste não foram inventados: cada um é um registro de corte publicado
+pelo ONS, com a razão que o operador declarou. Em seis registros, entre quatro e
+cinco receberam evidência, e de 75% a 100% dos que citavam um documento
+receberam a citação daquele documento.
 
-O sistema só usa modelos de inteligência artificial abertos, nas infraestruturas
-da NVIDIA, da Groq e da AWS, todos em planos gratuitos. E ele evita gastar quando
-não precisa: das 816 páginas lidas, 788 foram lidas de graça (o texto já estava
-no arquivo) e só 28 precisaram do modelo de visão, que são justamente as páginas
-publicadas como imagem.
+A variação tem duas causas conhecidas: quanto do acervo está indexado na máquina
+onde a medição roda, e o fato de o modelo nem sempre conseguir copiar um trecho
+válido de uma tabela na primeira tentativa.
 
-Para funcionar, alguém precisa cadastrar uma chave gratuita da NVIDIA ou do Groq.
-Isso é obrigatório e o instalador avisa em letras grandes se a chave faltar.
+Uma recusa se repete em todas as rodadas, e está correta. O registro "Controle de
+frequência do SIN" não tem, neste acervo, documento que o sustente, e a resposta
+honesta para ele é dizer que não há evidência suficiente.
 
-Quando a cota gratuita acaba, o serviço não quebra: ele registra "aguardando
-cota" com a hora em que pode continuar, e retoma sozinho. Isso aconteceu de
-verdade durante a construção, e a indexação terminou na rodada seguinte.
+## O custo
 
-Cada integrante do time pode cadastrar a própria chave gratuita. O sistema soma
-as cotas de todas e alterna entre elas. Com uma chave só, funciona igual.
+Toda a inteligência artificial usada é de modelos abertos, em planos gratuitos da
+NVIDIA, do Groq e da AWS. O sistema também evita gastar onde não precisa: das 816
+páginas lidas, 788 vieram da camada de texto do próprio arquivo, e apenas 28
+precisaram do modelo de visão, justamente as páginas publicadas como imagem.
 
-## 7. Limitações que assumimos
+Cada integrante da equipe pode cadastrar uma chave gratuita, e as cotas somam. Ao
+esgotar a cota de um provedor, o pedido segue para o próximo com o mesmo
+conteúdo; esgotadas todas, o trabalho fica registrado como "aguardando cota" com
+a hora em que pode continuar, e retoma sozinho. Isso aconteceu durante a
+construção do acervo, e a indexação terminou na rodada seguinte.
 
-- **O IPDO não tem histórico no ONS.** O órgão publica apenas a edição do dia e
-  substitui a anterior. A história só existe no arquivo público da internet, e
-  nem tudo que está lá serve: das 218 capturas encontradas, 173 são o documento
-  e o resto é a página de erro que o arquivo gravou quando o arquivo já tinha
-  sido trocado. Ficamos com as 173, de janeiro de 2018 a outubro de 2025.
-- **REL raramente terá prova documental.** O cronograma de intervenções não é
-  público, então a evidência para indisponibilidade externa fica limitada ao que
-  os boletins mencionam, e a confiança nunca é declarada como alta.
-- **O acervo ainda é pequeno.** Dois documentos normativos cobrem parte do
-  Nordeste. A boa notícia é que dez dias amostrados nos quatro subsistemas
-  tiveram 857 registros e apenas 17 descrições distintas: é um universo pequeno
-  e fechado, e cada documento novo cobre muitos registros de uma vez.
+## Os limites
 
-## 8. Como conferir você mesmo
+**O IPDO não tem histórico oficial.** O ONS publica apenas a edição do dia e
+substitui a anterior. A história só existe no arquivo público da internet, e nem
+tudo que está lá serve: das 218 capturas, 173 são o documento e as demais são a
+página de erro registrada quando o arquivo já havia sido trocado.
 
-Sem instalar nada, qualquer pessoa pode abrir:
+**REL raramente terá prova documental.** O cronograma de intervenções não é
+público. A evidência para indisponibilidade externa fica limitada ao que os
+boletins mencionam, e a confiança nunca é declarada como alta.
 
-1. O registro do ONS, na nossa própria API:
+**O acervo cobre parte do Nordeste.** É onde está a maior parte do curtailment
+brasileiro, e é por onde a expansão continua.
+
+## Conferindo sem instalar nada
+
+1. O registro, na API pública do WattSteer:
    `https://api.wattsteer.com/v1/curtailment/reasons?subsystem=NE&date=2026-09-14`
-2. O documento citado:
-   a Instrução de Operação IO-ON.NE.2SO está publicada no site do ONS, no Manual
-   de Procedimentos da Operação.
-3. Comparar o trecho que mostramos com a seção 5 do PDF.
+2. O documento citado: a Instrução de Operação IO-ON.NE.2SO, publicada no Manual
+   de Procedimentos da Operação, no site do ONS.
+3. A seção 5 do PDF, comparada com o trecho da resposta.
 
-Quem quiser rodar o sistema encontra os comandos em `apps/rag/README.md`.
+Para reproduzir a medição, os comandos estão em `apps/rag/README.md`:
 
-## 9. Glossário
+```
+python eval/build_goldset.py --days 2026-09-14 2026-08-20
+python eval/run_eval.py
+```
+
+## Glossário
 
 - **Curtailment:** energia renovável que foi gerada e não pôde ser usada.
 - **REL, CNF, ENE:** as razões que o ONS declara para um corte: indisponibilidade
@@ -243,5 +211,7 @@ Quem quiser rodar o sistema encontra os comandos em `apps/rag/README.md`.
 - **SGI:** número do registro de uma intervenção programada.
 - **BDO e IPDO:** boletim diário e informativo preliminar da operação.
 - **RAP:** relatório que analisa uma perturbação relevante.
-- **RAG:** técnica em que a IA primeiro busca trechos de documentos reais e só
-  depois escreve, usando apenas aqueles trechos.
+- **RAG:** técnica em que a máquina primeiro busca trechos de documentos reais e
+  só depois escreve, usando apenas aqueles trechos.
+
+Números medidos em 15 de setembro de 2026.
