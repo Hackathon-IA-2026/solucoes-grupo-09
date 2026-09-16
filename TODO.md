@@ -65,10 +65,27 @@ Status: `[ ]` not started · `[~]` in progress · `[x]` done
          test fold, or weighted/shift-robust conformal — not Mondrian by
          subsystem.
 
-         So the next step is a measurement, not a refactor: break the
-         stated-floor coverage down by fold recency, by subsystem and by
-         magnitude, and let the shape of the shortfall pick the method. Needs
-         the production dataset.
+         **Measured, and it reverses that.** The cards already carry
+         `coverage_by_subsystem`, read off the production volume:
+
+         | | rows | `gate_late` | `gate_early` |
+         |---|---:|---:|---:|
+         | N | 535 | 0.9215 | 0.9551 |
+         | **NE** | **1706** | **0.8851** | **0.9232** |
+         | SE | 698 | 0.9413 | 0.9499 |
+         | S | 548 | 0.9361 | 0.9726 |
+
+         NE is the worst on both lanes, by 3–5 points against its neighbours,
+         and it is **49% of the sample** — so it sets the aggregate almost on
+         its own. Normalising the residual by each row's spread fixes the
+         *scale* difference between subsystems; it does not fix a difference in
+         the *shape* of the residual distribution, and NE evidently has one.
+
+         So per-subsystem `δ_lo` is back on the table, now on evidence rather
+         than on the guess I withdrew. The caveat to carry: these are
+         `coverage_p10` over all scored rows, free rows included — the card does
+         not break the stated-only figure down this way, so the levels are
+         optimistic even though the ordering is what matters here.
       3. Retrain, and let the gate judge.
 
       Step 2 cannot be validated anywhere but production: the local database is
