@@ -445,13 +445,19 @@ def test_a_run_already_in_flight_here_is_refused_rather_than_raced() -> None:
     this, the second attempt would spawn a second child writing the *same*
     artifact id into the same directory and the two would race over one bundle.
     """
-    from wattsteer_ml import app as app_module
+    # The supervisor's own registry, not the app's internals. That module owns
+    # the in-flight set now, and a test that reached through `app` to touch it
+    # was asserting on where the state happened to live rather than on what it
+    # means.
+    from wattsteer_ml import retrain_supervisor as supervisor
 
-    app_module._RETRAINING.add(RUN_ID)
+    supervisor._RETRAINING.add(RUN_ID)
     try:
         response = app_client.post("/internal/retrain", json={"run_id": RUN_ID})
     finally:
-        app_module._RETRAINING.discard(RUN_ID)
+        supervisor._RETRAINING.discard(RUN_ID)
+    # The public reading of the same fact, which is what the route uses.
+    assert not supervisor.is_running(RUN_ID)
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "RETRAIN_IN_PROGRESS"
 
@@ -667,22 +673,22 @@ def test_a_run_still_in_flight_is_never_forgotten(
     Forgetting a live run would make the status route answer 404 about a child
     that is alive — this ticket's defect, reintroduced from the other end.
     """
-    from wattsteer_ml import app as app_module
+    from wattsteer_ml import retrain_supervisor as supervisor
 
-    monkeypatch.setattr(app_module, "_RETRAIN_HISTORY", 1)
-    monkeypatch.setattr(app_module, "_RETRAIN_RUNS", {})
-    runs: dict[str, Any] = app_module._RETRAIN_RUNS
+    monkeypatch.setattr(supervisor, "_RETRAIN_HISTORY", 1)
+    monkeypatch.setattr(supervisor, "_RETRAIN_RUNS", {})
+    runs: dict[str, Any] = supervisor._RETRAIN_RUNS
     for index in range(4):
-        finished = app_module._RetrainRun(
+        finished = supervisor.RetrainRun(
             run_id=f"2026-01-0{index + 1}T03:10:00Z", started_at=time.monotonic()
         )
         finished.status = "decided"
         finished.report = {"lanes": []}
         runs[finished.run_id] = finished
-    live = app_module._RetrainRun(run_id=RUN_ID, started_at=time.monotonic())
+    live = supervisor.RetrainRun(run_id=RUN_ID, started_at=time.monotonic())
     runs[live.run_id] = live
 
-    app_module._forget_old_runs()
+    supervisor._forget_old_runs()
 
     assert RUN_ID in runs
     assert len([one for one in runs.values() if one.finished]) == 1
