@@ -243,6 +243,17 @@ export default function TimeMachineScreen() {
     </View>
   );
 
+  /**
+   * Whether a replay was scored, which the lede turns on.
+   *
+   * The same rule the other three screens now follow. `observedOnly` is the
+   * pointed case: that branch deliberately offers the settled day *instead* of
+   * a replay, and its own copy says there is "no recovered figure and no share
+   * avoided — not zero, absent". A lede above it still promising a day "scored
+   * against what ONS settled" contradicts the panel it introduces.
+   */
+  const scored = state.status === "replayed";
+
   const frame = (right: ReactNode, body: ReactNode) => (
     <>
       <Head>
@@ -252,7 +263,7 @@ export default function TimeMachineScreen() {
       <AppShell showSelection={false}>
         <ScreenTitle
           title={copy.app.replay.title}
-          lede={copy.app.replay.lede}
+          lede={scored ? copy.app.replay.lede : copy.app.replay.ledeAbsent}
           right={right}
         />
         {picker}

@@ -240,6 +240,32 @@ describe("a lede never promises a panel that is not there", () => {
     );
   });
 
+  it("Mitigate switches its lede on whether a plan was drawn", () => {
+    const mitigate = code(read("app", "app", "mitigate.tsx"));
+    expect(mitigate).toContain('const planned = optimization.status === "solved"');
+    expect(mitigate).toContain(
+      "planned ? copy.app.mitigate.lede : copy.app.mitigate.ledeAbsent",
+    );
+  });
+
+  it("Replay switches its lede on whether anything was scored", () => {
+    const replay = code(read("app", "app", "replay.tsx"));
+    expect(replay).toContain('const scored = state.status === "replayed"');
+    expect(replay).toContain(
+      "scored ? copy.app.replay.lede : copy.app.replay.ledeAbsent",
+    );
+  });
+
+  it("all four screens pair a lede with an absent one", () => {
+    // ADR-0008. The Overview names its pair differently because it got there
+    // first and the state it falls back to is observed rather than absent.
+    for (const locale of ["copy.en.ts", "copy.pt.ts"] as const) {
+      const dict = read("i18n", locale);
+      expect(dict).toContain("ledeObserved:");
+      expect((dict.match(/ledeAbsent:/g) ?? []).length).toBe(3);
+    }
+  });
+
   it("both screens carry both ledes, in both locales", () => {
     for (const locale of ["copy.en.ts", "copy.pt.ts"] as const) {
       const dict = read("i18n", locale);

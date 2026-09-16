@@ -874,6 +874,8 @@ export const pt: Copy = {
       metaTitle: "Mitigar — WattSteer",
       title: "O que dá para fazer?",
       lede: "{subsystem}, {date}. Armazenamento e demanda flexível dimensionados contra a previsão do dia seguinte.",
+      ledeAbsent:
+        "{subsystem}, {date}. Nenhum plano é desenhado — dimensionar flexibilidade exige uma previsão do dia seguinte, e não há nenhuma.",
       // --- flex-optimizer 08: a postura, declarada em vez de oferecida -------
       postureTitle: "Um plano, uma promessa",
       postureSubtitle: "Planejado na mediana · prometido na borda inferior",
@@ -968,6 +970,8 @@ export const pt: Copy = {
       metaTitle: "Máquina do tempo — WattSteer",
       title: "E se o WattSteer estivesse rodando?",
       lede: "Um dia passado, reexecutado contra a safra de previsão disponível em D−1 e avaliado contra o que o ONS apurou.",
+      ledeAbsent:
+        "Um dia passado, e o que o ONS apurou sobre ele. Não há nada reexecutado para avaliar ao lado.",
       dayLabel: "{date} · {subsystem}",
       honestyTitle: "O que esta reexecução é, e o que ela não é",
       provenance: {

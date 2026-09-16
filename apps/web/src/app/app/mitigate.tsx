@@ -100,10 +100,22 @@ export default function MitigateScreen() {
   // screen that sourced them from anywhere else could label a plan with a
   // forecast it was not built on.
   const stamped = optimization.status === "solved" ? optimization.steps[0] : null;
+  /**
+   * Whether a plan was actually drawn, which the lede turns on.
+   *
+   * Same rule as the Overview and Explain: the lede must describe the panels
+   * that are on the screen, not the ones that would be there in the other
+   * state. "Storage and flexible demand sized against the day-ahead forecast"
+   * is the first line a reader meets, and on every branch below except the last
+   * it describes a plan that was never drawn — most visibly in the refusal
+   * branch, where the sentence under it says the scenario was refused.
+   */
+  const planned = optimization.status === "solved";
+
   const header = (
     <ScreenTitle
       title={copy.app.mitigate.title}
-      lede={fill(copy.app.mitigate.lede, {
+      lede={fill(planned ? copy.app.mitigate.lede : copy.app.mitigate.ledeAbsent, {
         subsystem: meta.onsDisplayName,
         date: f.date(params.date),
       })}

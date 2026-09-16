@@ -1207,6 +1207,9 @@ export const en = {
       metaTitle: "Mitigate — WattSteer",
       title: "What can we do?",
       lede: "{subsystem}, {date}. Storage and flexible demand sized against the day-ahead forecast.",
+      /* The lede when no plan was drawn. See `overview.ledeObserved`. */
+      ledeAbsent:
+        "{subsystem}, {date}. No plan is drawn — sizing flexibility needs a day-ahead forecast, and there is none.",
       // --- flex-optimizer 08: the posture, stated rather than offered -------
       //
       // The basis toggle used to sit here. `docs/specs/flex-optimizer.md` calls
@@ -1309,6 +1312,9 @@ export const en = {
       metaTitle: "Time Machine — WattSteer",
       title: "What if WattSteer had been running?",
       lede: "A past day, replayed against the forecast vintage available at D−1 and scored against what ONS settled.",
+      /* The lede when nothing was replayed. See `overview.ledeObserved`. */
+      ledeAbsent:
+        "A past day, and what ONS settled about it. There is nothing replayed to score beside it.",
       dayLabel: "{date} · {subsystem}",
       honestyTitle: "What this replay is, and what it is not",
       // `integrity.provenance` — a statement, not a warning. There is no
