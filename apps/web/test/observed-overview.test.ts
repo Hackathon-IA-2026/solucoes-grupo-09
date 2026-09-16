@@ -291,6 +291,7 @@ describe("the map speaks two languages and keeps them apart", () => {
   const MAP = [
     code(source("components", "charts", "subsystem-map.tsx")),
     code(source("components", "charts", "region-handlers.ts")),
+    code(source("components", "charts", "region-paint.tsx")),
   ].join("\n");
 
   it("the paint is a discriminated union, not a nullable row", () => {
@@ -318,8 +319,15 @@ describe("the map speaks two languages and keeps them apart", () => {
   });
 
   it("the legend is drawn for the continuous scale only", () => {
-    expect(MAP).toContain('{paint.kind === "observed" ? (');
+    // The *property*, not one spelling of it. This pinned the inline ternary
+    // `{paint.kind === "observed" ? (`; `MapLegend` is its own component now
+    // and says the same thing as an early return, which the ternary match
+    // would have failed on while nothing about the behaviour moved.
+    expect(MAP).toMatch(/paint\.kind !== "observed"|paint\.kind === "observed" \? \(/);
     expect(MAP).toContain("LEGEND_STOPS.map");
+    // And it is still conditional at all — a legend drawn on the forecast half
+    // would be a key to a scale that is not there.
+    expect(MAP).toContain("return null;");
   });
 
   it("the focus indicator is still geometry, in both modes", () => {

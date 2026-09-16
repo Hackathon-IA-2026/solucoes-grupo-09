@@ -63,6 +63,16 @@ const MAP = join(ROOT, "apps", "web", "src", "components", "charts", "subsystem-
  * `MAP_SOURCE` is the pair, concatenated, so a future move between these two
  * files cannot quietly empty them.
  */
+const REGION_PAINT = join(
+  ROOT,
+  "apps",
+  "web",
+  "src",
+  "components",
+  "charts",
+  "region-paint.tsx",
+);
+
 const REGION_HANDLERS = join(
   ROOT,
   "apps",
@@ -106,7 +116,7 @@ function source(path: string): string {
 /** The file with comments blanked, as `replay-screen.test.ts` does it. */
 /** The map and its interaction policy, as one string. See `REGION_HANDLERS`. */
 function mapSource(): string {
-  return [MAP, REGION_HANDLERS].map(sourceWithoutComments).join("\n");
+  return [MAP, REGION_HANDLERS, REGION_PAINT].map(sourceWithoutComments).join("\n");
 }
 
 function sourceWithoutComments(path: string): string {
@@ -337,7 +347,9 @@ describe("the map's wiring", () => {
 
   it("the map colours regions with the risk palette, not its own", () => {
     const map = mapSource();
-    expect(map).toContain('from "@/components/charts/risk-class"');
+    // `risk-color` since the palette was split from the chip that argues for
+    // it — the map imported the re-export from `risk-class` before that.
+    expect(map).toMatch(/from "@\/components\/charts\/risk-colou?r"/);
     expect(map).toContain("riskColor(colors, klass)");
     // No raw hex anywhere: every colour comes from the palette.
     expect(map).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
@@ -485,7 +497,9 @@ describe("the regions are drawn, not turned into buttons", () => {
    */
   // Both files: the interaction policy these guards are about lives in
   // `region-handlers.ts` now. See `REGION_HANDLERS` above.
-  const raw = [MAP, REGION_HANDLERS].map((path) => readFileSync(path, "utf8")).join("\n");
+  const raw = [MAP, REGION_HANDLERS, REGION_PAINT]
+    .map((path) => readFileSync(path, "utf8"))
+    .join("\n");
   /*
     Comments stripped first. The guard is about what the component *passes*,
     and the fix's own comment necessarily quotes the string being banned — so a
@@ -532,7 +546,9 @@ describe("the regions are drawn, not turned into buttons", () => {
 describe("the region responds to a pointer, and so does its row", () => {
   // Both files: the interaction policy these guards are about lives in
   // `region-handlers.ts` now. See `REGION_HANDLERS` above.
-  const raw = [MAP, REGION_HANDLERS].map((path) => readFileSync(path, "utf8")).join("\n");
+  const raw = [MAP, REGION_HANDLERS, REGION_PAINT]
+    .map((path) => readFileSync(path, "utf8"))
+    .join("\n");
   const stripped = raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
   const overview = overviewSource();
 

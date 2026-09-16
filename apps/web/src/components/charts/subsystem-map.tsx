@@ -52,15 +52,11 @@
 import { space, useContainerWidth, usePalette, useReducedMotion } from "@wattsteer/ui";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
-import Svg, { G, Path, Rect, Text as SvgText } from "react-native-svg";
-import { clamp01, LEGEND_STOPS, observedFill } from "@/components/charts/observed-scale";
+import Svg, { G, Path, Text as SvgText } from "react-native-svg";
 import { regionHandlers, settleArrowFocus } from "@/components/charts/region-handlers";
-import { riskColor } from "@/components/charts/risk-class";
-import { useCopy, useFormat } from "@/i18n";
-import { fill } from "@/i18n/format";
+import { MapLegend, useRegionPaint } from "@/components/charts/region-paint";
+import { useCopy } from "@/i18n";
 import {
-  type RiskClass,
-  roundProbability,
   SUBSYSTEM_DISPLAY_ORDER,
   type SubsystemCode,
   subsystemMeta,
@@ -88,57 +84,6 @@ const FONT =
 const MAX_WIDTH = 380;
 
 /**
- * Move the browser's focus to another region's path.
- *
- * Arrow keys change the selection, and a selection the keyboard has moved to
- * without taking focus with it leaves the focus ring on the region the reader
- * has left — so the visible marker and the live selection would disagree, which
- * is precisely the confusion this screen is being fixed for.
- *
- * Scoped to the map's own container rather than found by document id: the
- * landing page has already been bitten once by a document-wide
- * `getElementById` resolving to a stale duplicate of a screen that was still
- * mounted (`e2e/landing-scroll.spec.ts` documents it), and a second Overview in
- * the stack would give this the same two candidates.
- *
- * Called from an effect and never from the key handler — see `keyboardTarget`
- * below for why.
- */
-
-/** The three-step glyph from the risk chip, in SVG. Never colour alone. */
-function Steps({
-  klass,
-  x,
-  y,
-  color,
-  dim,
-}: {
-  klass: RiskClass;
-  x: number;
-  y: number;
-  color: string;
-  dim: string;
-}) {
-  const level = { low: 1, elevated: 2, high: 3 }[klass];
-  const unit = 9;
-  return (
-    <G>
-      {[1, 2, 3].map((step) => (
-        <Rect
-          key={step}
-          x={x - 17 + (step - 1) * 12}
-          y={y - unit * step}
-          width={7}
-          height={unit * step}
-          rx={2}
-          fill={step <= level ? color : dim}
-        />
-      ))}
-    </G>
-  );
-}
-
-/**
  * Which of the two claims this map is making, and the rows behind it.
  *
  * A union and not a pair of optional props: `{ forecasts?, observed? }` has two
@@ -150,7 +95,7 @@ export type MapPaint =
   | { readonly kind: "observed"; readonly rows: readonly ObservedRow[] };
 
 /** One region, resolved to paint. Built once per render, per mode. */
-interface RegionPaint {
+export interface RegionPaint {
   /** The region's hue. Also its outline when neither selected nor focused. */
   readonly fill: string;
   /** What a screen reader says about this region. Mode-specific by design. */
@@ -200,7 +145,6 @@ export function SubsystemMap({
 }) {
   const colors = usePalette();
   const copy = useCopy();
-  const f = useFormat();
   const reduced = useReducedMotion();
   const [containerWidth, onLayout] = useContainerWidth();
   const setActive = (code: SubsystemCode | null) => onHoverChange?.(code);
@@ -283,86 +227,7 @@ export function SubsystemMap({
   const width = Math.min(containerWidth > 0 ? containerWidth : MAX_WIDTH, MAX_WIDTH);
   const height = (width * BRAZIL_VIEWBOX.height) / BRAZIL_VIEWBOX.width;
 
-  /**
-   * The largest settled figure on the map, which the ramp is relative to.
-   *
-   * Relative rather than absolute because there is no absolute ceiling for a
-   * settled day — a quiet fortnight and a record one would both wash out
-   * against a fixed maximum. The legend under the map states the top of the
-   * scale in megawatt-hours, so "darkest" is never read as "large" on its own.
-   */
-  const observedMax =
-    paint.kind === "observed"
-      ? Math.max(...paint.rows.map((row) => row.last24hMwh), 0)
-      : 0;
-
-  const painted = new Map<SubsystemCode, RegionPaint>(
-    paint.kind === "forecast"
-      ? paint.rows.map((row) => {
-          // The wire's class, never recomputed. `GET /v1/grid/outlook` carries
-          // both `risk_class` and the `risk_bins` it was cut with; deriving it
-          // again here from a local copy of the cut points would be a second
-          // opinion about the same number, and the two copies are kept in step
-          // by nothing.
-          const klass = row.riskClass;
-          const tone = riskColor(colors, klass);
-          const anchor = SUBSYSTEM_LABEL_ANCHOR[row.subsystem];
-          return [
-            row.subsystem,
-            {
-              fill: tone.fg,
-              label: fill(copy.app.overview.map.region, {
-                subsystem: subsystemMeta(row.subsystem).onsDisplayName,
-                risk: copy.app.risk[klass],
-                probability: f.percentPoints(roundProbability(row.occurrenceProbability)),
-              }),
-              glyph: (
-                <Steps
-                  klass={klass}
-                  x={anchor.x}
-                  y={anchor.y + 34}
-                  color={tone.fg}
-                  dim={colors.borderStrong}
-                />
-              ),
-            },
-          ] as const;
-        })
-      : paint.rows.map((row) => {
-          const anchor = SUBSYSTEM_LABEL_ANCHOR[row.subsystem];
-          const share = observedMax === 0 ? 0 : row.last24hMwh / observedMax;
-          return [
-            row.subsystem,
-            {
-              fill: observedFill(share, colors),
-              // Settled energy and the window it settled over — and no risk
-              // class, no probability and no mention of a day that has not
-              // happened. A screen reader must be able to tell the two maps
-              // apart as surely as an eye can.
-              label: fill(copy.app.overview.map.regionObserved, {
-                subsystem: subsystemMeta(row.subsystem).onsDisplayName,
-                mwh: f.compact(row.last24hMwh),
-              }),
-              // The figure itself, where the forecast map draws a binned glyph.
-              // A number on a region is the plainest possible statement that
-              // this is a measurement rather than a class.
-              glyph: (
-                <SvgText
-                  x={anchor.x}
-                  y={anchor.y + 30}
-                  textAnchor="middle"
-                  fontSize={26}
-                  fontWeight="600"
-                  fontFamily={FONT}
-                  fill={colors.ink}
-                >
-                  {`${f.compact(row.last24hMwh)} MWh`}
-                </SvgText>
-              ),
-            },
-          ] as const;
-        }),
-  );
+  const { observedMax, painted } = useRegionPaint(paint);
   const lift = LIFT[paint.kind];
 
   return (
@@ -490,54 +355,7 @@ export function SubsystemMap({
         />
       </Svg>
 
-      {/*
-        The ramp, spelled out — and only in observed mode, which makes the
-        legend itself one more thing the two maps do not share.
-
-        The forecast map needs none: its three bins are named in words on every
-        row beside it, and a legend for a categorical scale that is already
-        written out four times would be decoration. A continuous scale has no
-        such anchor, so the top of it is stated as a number — without which
-        "darker" is a comparison with nothing.
-      */}
-      {paint.kind === "observed" ? (
-        <View
-          style={{
-            flexDirection: "row",
-            flexWrap: "wrap",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8,
-            marginTop: space.sm,
-          }}
-        >
-          <Text style={{ fontSize: 10, color: colors.inkFaint }}>
-            {copy.app.overview.map.legendLow}
-          </Text>
-          <View style={{ flexDirection: "row", gap: 2 }}>
-            {LEGEND_STOPS.map((stop) => (
-              <View
-                key={stop}
-                style={{
-                  width: 22,
-                  height: 8,
-                  borderRadius: 2,
-                  backgroundColor: observedFill(clamp01(stop), colors),
-                }}
-              />
-            ))}
-          </View>
-          <Text
-            style={{
-              fontSize: 10,
-              color: colors.inkFaint,
-              fontVariant: ["tabular-nums"],
-            }}
-          >
-            {`${f.compact(observedMax)} MWh`}
-          </Text>
-        </View>
-      ) : null}
+      <MapLegend paint={paint} observedMax={observedMax} />
 
       {/*
         The arrow keys are a real affordance now, so they are written down.
