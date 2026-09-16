@@ -581,6 +581,8 @@ export const en = {
     refusalTitle: "Nothing to present",
     recommendationBody:
       "Pre-position the flexibility across the window above. The plan is on Mitigate, against the fleet you described.",
+    done: "End of briefing",
+    again: "Replay",
     scenes: {
       title: "Briefing",
       mapFocus: "Where",

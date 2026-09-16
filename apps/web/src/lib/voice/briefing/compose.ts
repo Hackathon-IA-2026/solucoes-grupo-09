@@ -19,8 +19,7 @@
  * | forecast present | the full sequence |
  * | `observedOnly` | observed scenes only — no `forecast_curve`, no `counterfactual` |
  * | refused | exactly one `refusal` scene |
- *
- * See `VISUAL_PLAN.md` §3.
+
  */
 
 import {

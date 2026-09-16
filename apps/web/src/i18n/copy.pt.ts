@@ -457,6 +457,8 @@ export const pt: Copy = {
     refusalTitle: "Nada para apresentar",
     recommendationBody:
       "Pré-posicione a flexibilidade na janela acima. O plano está em Mitigar, com a frota que você descreveu.",
+    done: "Fim do briefing",
+    again: "Rever",
     scenes: {
       title: "Briefing",
       mapFocus: "Onde",

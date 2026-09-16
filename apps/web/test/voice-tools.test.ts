@@ -178,8 +178,8 @@ describe("the seven tools", () => {
       "replay",
       "focus",
       "highlight",
-      // `brief` is newest and goes last. `VISUAL_PLAN.md` §3: the model decides
-      // *that* a briefing is owed; `compose.ts` decides what is in it.
+      // `brief` is newest and goes last. The model decides *that* a briefing is
+      // owed; `compose.ts` decides what is in it.
       "brief",
     ]);
     expect(VOICE_TOOLS.map((tool) => tool.name)).toEqual([...TOOL_NAMES]);

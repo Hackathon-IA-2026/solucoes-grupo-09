@@ -12,7 +12,6 @@
  * not exist.** Not zero, not a placeholder, not a value the narration mentioned
  * — absent.
  *
- * `VISUAL_PLAN.md` §5.3.
  */
 
 import { describe, expect, it } from "bun:test";

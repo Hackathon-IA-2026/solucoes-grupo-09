@@ -1,4 +1,4 @@
-# The Visual Briefing, as executable prose. `VISUAL_PLAN.md` §3.
+# The Visual Briefing, as executable prose.
 #
 # What these scenarios pin is the *contract between the model and the product*,
 # which is the half a screenshot cannot check: the model says that a briefing is

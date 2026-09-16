@@ -32,7 +32,7 @@ import { fill } from "@/i18n/format";
 import type { BriefingCursor } from "@/lib/voice/briefing/clock";
 import type { BriefingPlan } from "@/lib/voice/briefing/types";
 
-/** How far a scene rises as it arrives. The plan's figure (§5.2). */
+/** How far a scene rises as it arrives. */
 const RISE_PX = 8;
 
 /**
@@ -61,6 +61,15 @@ export interface BriefingStageProps {
   readonly silent: boolean;
   readonly data: BriefingData;
   readonly onDismiss: () => void;
+  /**
+   * Play the sequence again from its first scene.
+   *
+   * A briefing that has run out of scenes previously just sat on the last one
+   * forever with no way to see what it said — the reader's only option was to
+   * dismiss it and ask again, which costs another model turn and another
+   * answer that may not match the one they missed.
+   */
+  readonly onReplay?: () => void;
   /** Close on Escape. Web only — the native build has no `document`. */
   readonly escapeToDismiss?: boolean;
 }
@@ -72,12 +81,40 @@ export function BriefingStage({
   silent,
   data,
   onDismiss,
+  onReplay,
   escapeToDismiss = false,
 }: BriefingStageProps) {
   const colors = usePalette();
   const copy = useCopy();
   const reduced = useReducedMotion();
   const timed = cursor.index < 0 ? undefined : cursor.scenes[cursor.index];
+  const closeRef = useRef<View | null>(null);
+
+  /*
+    **Focus moves in, and comes back out.**
+
+    A surface with `aria-modal` that never takes focus is worse than one without
+    it: a screen reader is told the rest of the page is inert while a keyboard
+    user is still tabbing through it, behind a scrim, invisibly. Focus goes to
+    the close control — the one action that is always correct — and returns to
+    wherever it was when the briefing closes, so a reader who asked from the
+    dock lands back on the dock.
+
+    Web only. `focus()` is a DOM method; react-native-web puts it on the host
+    node and the native build has no equivalent to restore to.
+  */
+  useEffect(() => {
+    if (Platform.OS !== "web") {
+      return;
+    }
+    const previous = document.activeElement;
+    const node = closeRef.current as unknown as { focus?: () => void } | null;
+    node?.focus?.();
+    return () => {
+      const back = previous as { focus?: () => void } | null;
+      back?.focus?.();
+    };
+  }, []);
 
   /*
     Escape closes it, which is what a reader expects of anything covering the
@@ -160,6 +197,7 @@ export function BriefingStage({
             })}
           </Text>
           <Pressable
+            ref={closeRef}
             accessibilityRole="button"
             accessibilityLabel={copy.briefing.dismiss}
             onPress={onDismiss}
@@ -192,6 +230,47 @@ export function BriefingStage({
         </SceneFrame>
 
         <ProgressRail cursor={cursor} />
+
+        {/*
+          The end, said rather than implied. A held last scene and a finished
+          briefing look identical otherwise, so a reader cannot tell whether
+          more is coming.
+        */}
+        {cursor.complete ? (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+            <Text style={{ ...typography.caption, color: colors.inkFaint }}>
+              {copy.briefing.done}
+            </Text>
+            {onReplay === undefined ? null : (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={copy.briefing.again}
+                onPress={onReplay}
+                hitSlop={8}
+                style={(state) => {
+                  const { focused = false, hovered = false } = state as {
+                    focused?: boolean;
+                    hovered?: boolean;
+                  };
+                  return {
+                    borderRadius: radius.pill,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    backgroundColor: hovered ? colors.surfaceSunken : "transparent",
+                    paddingHorizontal: 10,
+                    paddingVertical: 2,
+                    ...focusRing(focused, colors.focus),
+                    ...(Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null),
+                  };
+                }}
+              >
+                <Text style={{ ...typography.caption, color: colors.inkMuted }}>
+                  {copy.briefing.again}
+                </Text>
+              </Pressable>
+            )}
+          </View>
+        ) : null}
 
         {silent ? (
           <Text style={{ ...typography.caption, color: colors.inkFaint }}>

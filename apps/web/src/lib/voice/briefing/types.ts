@@ -10,8 +10,7 @@
  *
  * `counterfactual` is the one exception and it is fenced in `compose.ts` — it
  * may only be built from an `OptimizationResult` the composer is holding.
- *
- * See `VISUAL_PLAN.md` §2.
+
  */
 
 import type { ErrorCode, SubsystemCode } from "@wattsteer/core";

@@ -116,6 +116,13 @@ export function BriefingHost() {
       silent={silent}
       data={data}
       onDismiss={dismissBriefing}
+      // Replay restarts this host's clocks rather than re-asking the model: the
+      // plan and the narration are already here, and a second turn would answer
+      // a question the reader did not ask twice.
+      onReplay={() => {
+        heldMs.current = 0;
+        setTick(0);
+      }}
       // Escape closes it on web, which is what a reader expects of anything
       // that covers the screen. `Platform` rather than a bare `document` guard
       // so the native build never reaches for a DOM listener.

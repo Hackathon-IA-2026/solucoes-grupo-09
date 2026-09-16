@@ -20,8 +20,7 @@
  *    caller falls back to a wall clock and the narration is shown as text; this
  *    module does not care which clock it is handed, which is what makes that
  *    fallback a two-line change rather than a second code path.
- *
- * `VISUAL_PLAN.md` §4.
+
  */
 
 import { type BriefingPlan, MIN_SCENE_MS, type TimedScene } from "./types";
