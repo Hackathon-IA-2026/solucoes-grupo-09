@@ -629,39 +629,59 @@ contact; both are recorded here rather than quietly reconciled.
 
 ### 10.1 The files
 
-Every path §2.3 asked for exists, and two more the plan did not anticipate:
+Every path §2.3 asked for exists, and four more the plan did not anticipate.
 
-| plan §2.3 | in the repo | lines |
-|---|---|---|
-| `apps/api/src/api/voice.ts` | same | 227 |
-| `apps/api/test/voice-session.test.ts` | same | 14 tests |
-| `packages/core/src/errors.ts` += `VOICE_UNAVAILABLE` | present, plus `VOICE_NOT_CONFIGURED` | — |
-| `lib/voice/grok-voice-core.ts` | **`lib/voice/session.ts`** | 374 |
-| `lib/voice/web-audio-backend.ts` | same | 146 |
-| `lib/voice/tools.ts` | same | 306 |
-| `lib/voice/execute.ts` | same | 703 |
-| `lib/voice/instructions.ts` | same | 215 |
-| `lib/voice/context.ts` | same | 241 |
-| `components/voice/voice-provider.tsx` | same | 462 |
-| `components/voice/use-voice-agent.ts` | same | 452 |
-| `components/voice/voice-dock.tsx` | same | 440 |
-| `components/voice/voice-orb.tsx` | same | 211 |
-| `components/voice/voice-transcript.tsx` | same | 99 |
-| `components/voice/voice-action-card.tsx` | same | 151 |
-| `components/voice/voice-trigger.tsx` | same | 116 |
-| `test/voice-tools.test.ts` | same, **split** into `voice-tools` (17) + `voice-execute` (62) | — |
-| `test/voice-context.test.ts` | same | 22 |
-| `test/voice-dock.test.ts` | same | 31 |
-| `test/voice-provider.test.ts` | same | 27 |
-| `e2e/voice-survives-navigation.spec.ts` | same | 5 |
-| — | `lib/voice/audio-codec.ts` + `test/voice-codec.test.ts` | 131 / 13 |
-| — | `test/voice-instructions.test.ts`, `test/voice-session.test.ts` | 20 / 9 |
+**Re-counted 2026-09-16**, and the re-count is the point of the section. The
+first version of this table was taken the day the audit was written and had
+since drifted in every column — most of it harmless movement, one of it not:
+`voice-provider.tsx` had lost 210 lines to an extraction this table never
+learned about, so a reader checking the audit against the repo would have found
+its largest file two fifths the size it claimed. This document's own header
+records what a stale line does to a reader; an audit with stale numbers is that
+same defect one level down, in the place the claim is meant to be checkable.
 
-**256 tests across ten files**, all green. The rename of `grok-voice-core.ts` to
-`session.ts` is the only naming divergence and it is the better name: the file
-is ours the moment it was copied (§8's own argument), so carrying the vendor in
-the filename would have been the one part of the vendoring we did not take
+| plan §2.3 | in the repo | lines | tests |
+|---|---|---|---|
+| `apps/api/src/api/voice.ts` | same | 227 | 14 |
+| `apps/api/test/voice-session.test.ts` | same | — | 14 |
+| `packages/core/src/errors.ts` += `VOICE_UNAVAILABLE` | present, plus `VOICE_NOT_CONFIGURED` | — | — |
+| `lib/voice/grok-voice-core.ts` | **`lib/voice/session.ts`** | 404 | 9 + 28 |
+| `lib/voice/web-audio-backend.ts` | same | 146 | — |
+| `lib/voice/tools.ts` | same | 306 | 20 |
+| `lib/voice/execute.ts` | same | 703 | 84 |
+| `lib/voice/instructions.ts` | same | 215 | 20 |
+| `lib/voice/context.ts` | same | 241 | 25 |
+| `components/voice/voice-provider.tsx` | same, **split** (see below) | 252 | 30 |
+| `components/voice/use-voice-agent.ts` | same | 517 | — |
+| `components/voice/voice-dock.tsx` | same | 444 | 38 |
+| `components/voice/voice-orb.tsx` | same | 211 | — |
+| `components/voice/voice-transcript.tsx` | same | 116 | — |
+| `components/voice/voice-action-card.tsx` | same | 131 | — |
+| `components/voice/voice-trigger.tsx` | same | 116 | — |
+| `e2e/voice-survives-navigation.spec.ts` | same | — | 14 |
+| — | `components/voice/use-voice-session.ts` | 378 | — |
+| — | `lib/voice/audio-codec.ts` + `test/voice-codec.test.ts` | 131 | 13 |
+| — | `test/voice-session-core.test.ts` | — | 28 |
+
+**295 tests, all green** — 281 unit (267 in `apps/web`, 14 in `apps/api`) and
+14 end-to-end. Counted by running them, not by adding the column up: the first
+arithmetic here was wrong, in the section being rewritten for having had wrong
+numbers.
+
+Two divergences from §2.3, both deliberate:
+
+**`grok-voice-core.ts` became `session.ts`.** The better name: the file is ours
+the moment it was copied (§8's own argument), so carrying the vendor in the
+filename would have been the one part of the vendoring we did not take
 ownership of.
+
+**`voice-provider.tsx` became two files.** The socket lifecycle — connect,
+retry, remint, tear down — moved to `use-voice-session.ts`, leaving the provider
+holding the thing a provider is for: the context value and the four actions on
+it. 462 lines became 252 + 378, which is more lines in total and one job each.
+The interface between them is one string in and one callback in, state and three
+actions out; `test/voice-session-core.test.ts`'s 28 tests exist because that
+seam made the lifecycle testable without a socket.
 
 ### 10.2 The claims, checked
 
