@@ -10,9 +10,11 @@ Status: `[ ]` not started · `[~]` in progress · `[x]` done
       says instead when the gate has passed with nothing published.
 - [x] **4.** "Eólica e solar · liquidado, duas medições" shows `Observado` twice.
       Remove the lower one.
-- [ ] **5.** The landing's second-section sample card (chance of curtailment and
+- [x] **5.** The landing's second-section sample card (chance of curtailment and
       the rest) is a good component — find where in the product it belongs and
-      use exactly that frontend.
+      use exactly that frontend. → The Overview now opens with a national panel
+      on both halves, reading `national` off `GET /v1/grid/outlook` and
+      `GET /v1/grid/now`; `ExpectationFigure` joins the product's charts.
 - [x] **6.** "O que o WattSteer não vai afirmar" moves outside its card, with
       correct spacing.
 - [x] **7.** The "Nenhuma manutenção de transmissão é lida" paragraph is
