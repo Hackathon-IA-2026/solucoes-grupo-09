@@ -59,10 +59,16 @@ Status: `[ ]` not started · `[~]` in progress · `[x]` done
         there. ADR-0008 records it, because the Overview had already written the
         argument down and nobody had read it from the other three screens.
 - [ ] **16.** `better-ui` skill — apply to the project.
-      ⛔ **Blocked on you.** Not installed: no `better-ui` in `~/.claude/skills/`
-      and none in `.claude/skills/`. Install it and I will run it.
-- [ ] **17.** `emil-design-eng` skill — apply to the project.
-      ⛔ **Blocked on you.** Not installed either. Same as 16.
+      ⛔ **Blocked on you.** No skill by that name exists publicly: not in
+      `~/.claude/skills/`, not in `.claude/skills/`, and not found by GitHub
+      repo/code search or the skill registries. Send me the URL and I will
+      fetch and run it the same way `emil-design-eng` was run.
+- [x] **17.** `emil-design-eng` — fetched from `emilkowalski/skills` on GitHub
+      and run without installing, as you asked. Most of its checklist already
+      passed: no `transition: all`, no `ease-in`, nothing over 300ms. One real
+      gap — **no easing curve anywhere**, so every transition ran on the CSS
+      default. `95f14ec` adds `motion.ease`, routes the five hand-written call
+      sites through `webTransition`, and names the one deliberate suppression.
 - [ ] **18.** Final adversarial review: UI/UX, tests, react-doctor, all flawless.
 
 ## Standing rules for this run
