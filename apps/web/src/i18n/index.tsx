@@ -11,7 +11,8 @@ import { Platform } from "react-native";
 import { type Copy, en } from "./copy.en";
 import { pt } from "./copy.pt";
 import { type Formatters, formattersFor } from "./format";
-import { DEFAULT_LOCALE, LOCALE_STORAGE_KEY, type Locale, languageTag } from "./locale";
+import { DEFAULT_LOCALE, type Locale, languageTag } from "./locale";
+import { readStoredLocale, writeStoredLocale } from "./storage";
 
 /**
  * Locale state for the app.
@@ -43,38 +44,16 @@ import { DEFAULT_LOCALE, LOCALE_STORAGE_KEY, type Locale, languageTag } from "./
 
 export type { Locale } from "./locale";
 export { DEFAULT_LOCALE, LOCALES, languageTag } from "./locale";
+/*
+  Re-exported, not moved away from: `readStoredLocale` was part of this
+  module's public surface and `app/index.tsx` reads it. The definition moved
+  to `i18n/storage.ts` so this file exports only components and hooks — a file
+  that mixes the two cannot be hot-replaced, and every copy edit was reloading
+  the whole app. A re-export costs nothing and keeps one import path.
+*/
+export { readStoredLocale, writeStoredLocale } from "./storage";
 
 const dictionaries: Record<Locale, Copy> = { pt, en };
-
-/**
- * Read the stored locale without ever throwing.
- *
- * With cookies and site data blocked, Chrome's `window.localStorage` *getter*
- * itself throws `SecurityError` — an optional chain does not protect against
- * that, only a try/catch does.
- */
-export function readStoredLocale(): Locale | null {
-  if (Platform.OS !== "web" || typeof window === "undefined") {
-    return null;
-  }
-  try {
-    const saved = window.localStorage.getItem(LOCALE_STORAGE_KEY);
-    return saved === "pt" || saved === "en" ? saved : null;
-  } catch {
-    return null;
-  }
-}
-
-export function writeStoredLocale(locale: Locale): void {
-  if (Platform.OS !== "web" || typeof window === "undefined") {
-    return;
-  }
-  try {
-    window.localStorage.setItem(LOCALE_STORAGE_KEY, locale);
-  } catch {
-    // Storage blocked — the choice simply will not survive a reload.
-  }
-}
 
 /** Keep the document language honest, for screen readers and for crawlers. */
 function setDocumentLang(locale: Locale): void {

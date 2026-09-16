@@ -39,36 +39,25 @@
  * `RiskBar` once a human has signed off the bin edges.
  */
 
-import { type Palette, radius, space, usePalette } from "@wattsteer/ui";
+import { radius, space, usePalette } from "@wattsteer/ui";
 import { Text, View } from "react-native";
+import { riskColor } from "@/components/charts/risk-color";
 import { useCopy, useFormat } from "@/i18n";
 import type { RiskClass } from "@/lib/fixtures";
 import { RISK_BINS, riskClass, roundProbability } from "@/lib/fixtures";
 
-const LEVEL: Record<RiskClass, number> = { low: 1, elevated: 2, high: 3 };
+/*
+  Re-exported rather than relocated silently: the subsystem map imports
+  `riskColor` from this module and `test/observed-overview.test.ts` names it
+  here. The definition moved to `risk-color.ts` so this file exports only
+  components — a component file with a plain export cannot be hot-replaced —
+  and the argument for why the three-step palette exists at all stays in the
+  header above, where a reader reaching for `@wattsteer/ui`'s gradient will
+  meet it.
+*/
+export { riskColor } from "@/components/charts/risk-color";
 
-/**
- * The three-step risk palette, exported because the subsystem map colours its
- * four regions with it.
- *
- * Exported rather than re-derived there: a map that picked its own red would
- * be a second colour language for the same three bins, and the argument in
- * this file's header — no ramp, no traffic light, lime reserved for the
- * product's positive accent — would hold for the chip and not for the map.
- * `fg` is the readable-on-dark hue; `bg` is the same hue at 15 %.
- *
- * A plain function of the palette rather than a hook, because the map resolves
- * four of these inside one render pass and a hook cannot be called in a loop.
- */
-export function riskColor(colors: Palette, klass: RiskClass): { fg: string; bg: string } {
-  if (klass === "high") {
-    return { fg: colors.onDangerSoft, bg: colors.dangerSoft };
-  }
-  if (klass === "elevated") {
-    return { fg: colors.onWarningSoft, bg: colors.warningSoft };
-  }
-  return { fg: colors.inkMuted, bg: colors.surfaceSunken };
-}
+const LEVEL: Record<RiskClass, number> = { low: 1, elevated: 2, high: 3 };
 
 function useRiskColor(klass: RiskClass): { fg: string; bg: string } {
   return riskColor(usePalette(), klass);

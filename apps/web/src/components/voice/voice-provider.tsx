@@ -56,8 +56,8 @@ import { useServing } from "@/components/app/use-serving";
 import { useI18n } from "@/i18n";
 import { api } from "@/lib/api";
 import { useLatest } from "@/lib/use-latest";
-import { contextSentence, type VoiceScreen } from "@/lib/voice/context";
-import { executeTool, SCREEN_PATHS, type ToolCall } from "@/lib/voice/execute";
+import { contextSentence, screenFor } from "@/lib/voice/context";
+import { executeTool, type ToolCall } from "@/lib/voice/execute";
 import { voiceInstructions } from "@/lib/voice/instructions";
 import {
   type MintedSession,
@@ -79,20 +79,6 @@ import {
   type VoiceMicState,
   type VoiceNavigator,
 } from "./use-voice-agent";
-
-/** Which of the four modes a pathname is. The agent addresses no other route. */
-export function screenFor(pathname: string): VoiceScreen {
-  if (pathname.startsWith(SCREEN_PATHS.explain)) {
-    return "explain";
-  }
-  if (pathname.startsWith(SCREEN_PATHS.mitigate)) {
-    return "mitigate";
-  }
-  if (pathname.startsWith(SCREEN_PATHS.replay)) {
-    return "replay";
-  }
-  return "overview";
-}
 
 /**
  * How often a level frame is allowed to become a render.

@@ -6,6 +6,7 @@ import { join } from "node:path";
 // TypeScript and is the module `usePalette` itself resolves to.
 import { dark } from "../../../packages/ui/src/tokens";
 import { LEGEND_STOPS, mix, observedFill } from "../src/components/charts/observed-scale";
+import { riskColor } from "../src/components/charts/risk-color";
 import { en } from "../src/i18n/copy.en";
 import { pt } from "../src/i18n/copy.pt";
 import {
@@ -69,32 +70,38 @@ function functionBody(text: string, name: string): string {
 
 describe("the observed ramp and the risk palette cannot be confused", () => {
   /**
-   * `riskColor`'s three pairs, named by their palette tokens rather than
-   * imported: `risk-class.tsx` is a `.tsx` and pulls in `react-native`, which
-   * this suite does not run. The assertion immediately below is what keeps the
-   * copy from drifting — if that file stops resolving these six tokens, the
-   * list here is wrong and the test says so.
+   * `riskColor`'s three pairs — **called, not transcribed.**
+   *
+   * This used to be a hand-written list of six palette tokens, kept honest by a
+   * second test that grepped `risk-class.tsx` for those same six names. The
+   * reason was real: that file is a `.tsx` and pulls in `react-native`, which
+   * this suite does not run, so the function could not be imported and the
+   * duplicate list was the least-bad substitute.
+   *
+   * `riskColor` now lives in `risk-color.ts`, which imports two types and
+   * nothing else, so the substitute is gone and so is the test that policed it.
+   * The colours below are the colours the app paints, by construction — a
+   * retuned palette moves this list on the same commit, with nothing to drift.
    */
-  const RISK_COLOURS = [
-    colors.inkMuted,
-    colors.surfaceSunken,
-    colors.onWarningSoft,
-    colors.warningSoft,
-    colors.onDangerSoft,
-    colors.dangerSoft,
-  ];
+  const RISK_COLOURS = (["low", "elevated", "high"] as const).flatMap((klass) => {
+    const pair = riskColor(colors, klass);
+    return [pair.fg, pair.bg];
+  });
 
-  it("the risk palette is still the six tokens this file compares against", () => {
-    const risk = code(source("components", "charts", "risk-class.tsx"));
-    for (const token of [
-      "colors.inkMuted",
-      "colors.surfaceSunken",
-      "colors.onWarningSoft",
-      "colors.warningSoft",
-      "colors.onDangerSoft",
-      "colors.dangerSoft",
-    ]) {
-      expect({ token, named: risk.includes(token) }).toEqual({ token, named: true });
+  it("the three classes resolve to six distinct colours", () => {
+    // Non-vacuity for every assertion below: a `riskColor` that returned one
+    // colour six times would make the collision check trivially satisfiable
+    // against a single hue, and an all-`undefined` return would make it pass
+    // against nothing at all.
+    expect(new Set(RISK_COLOURS).size).toBe(6);
+    // Hex or `rgba()` — the three `fg` hues are hex and the three `bg` tints
+    // are the same hue at 15 %, which the palette expresses as `rgba`. The
+    // assertion is that each is a colour at all, not that it is one notation:
+    // the `bg` tints being `rgba` is precisely why the collision check below
+    // can never trip on them, and pinning the notation would turn a change of
+    // representation into a failure about nothing.
+    for (const value of RISK_COLOURS) {
+      expect(value).toMatch(/^(#[0-9a-fA-F]{6}|rgba?\([\d\s.,]+\))$/);
     }
   });
 

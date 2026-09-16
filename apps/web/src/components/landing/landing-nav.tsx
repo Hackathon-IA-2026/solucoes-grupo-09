@@ -20,7 +20,7 @@ import { useCopy, useI18n } from "@/i18n";
 import { localePath } from "@/i18n/locale";
 import { PITCH_PATH } from "@/lib/pitch";
 import { fragmentHref, type SectionId } from "@/lib/section-fragment";
-import { PAGE_MAX } from "./section";
+import { PAGE_MAX } from "./layout";
 
 /**
  * The landing page's own header.

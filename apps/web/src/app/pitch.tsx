@@ -239,9 +239,37 @@ function PitchEmbed({ wide, title }: { wide: boolean; title: string }) {
         ...(wide ? { aspectRatio: SLIDE_ASPECT } : { height: NARROW_EMBED_HEIGHT }),
       }}
     >
-      {/* biome-ignore lint/nursery/useIframeSandbox: a sandbox attribute disables the browser's own PDF viewer, which is the entire content of this frame */}
+      {/*
+        `sandbox="allow-same-origin"`, and the value is the whole of the
+        decision — measured, not assumed.
+
+        This frame used to carry no `sandbox` at all, with a note saying that a
+        sandbox attribute disables the browser's built-in PDF viewer. Half of
+        that is true and the conclusion drawn from it was not. Driven in
+        headless Chromium against this app's own `dist`, with the four
+        interesting values:
+
+          (no sandbox)                    → document loads
+          sandbox=""                      → contentDocument is null; frame inert
+          sandbox="allow-scripts"         → contentDocument is null; frame inert
+          sandbox="allow-same-origin"     → document loads, identical to none
+
+        So the viewer needs `allow-same-origin` and needs nothing else. Granting
+        only that is a real restriction rather than a gesture: scripts, forms,
+        popups, downloads, pointer lock and top-level navigation are all denied,
+        and the frame keeps working. The combination to avoid is
+        `allow-scripts allow-same-origin`, which the spec notes lets framed
+        content remove its own sandbox — it also renders here, and it is exactly
+        the value not chosen.
+
+        The deck is our own static asset on our own origin, so the threat this
+        closes is small. It is closed anyway because it costs one attribute, and
+        because the next person to add an `<iframe>` to this app should find a
+        sandboxed one to copy.
+      */}
       <iframe
         title={title}
+        sandbox="allow-same-origin"
         src={`${PITCH_PDF_PATH}#view=FitH`}
         // `FitH` in the fragment, not a viewer parameter this app controls:
         // PDF fragment directives are honoured by Chrome's and Firefox's

@@ -14,7 +14,7 @@ import { fill } from "@/i18n/format";
 import { DEFAULT_LOCALE, localePath } from "@/i18n/locale";
 import { PITCH_PATH } from "@/lib/pitch";
 import { APP_HREF, CtaLink } from "./landing/cta-link";
-import { PAGE_MAX } from "./landing/section";
+import { PAGE_MAX } from "./landing/layout";
 
 const styles = StyleSheet.create({
   wrap: {

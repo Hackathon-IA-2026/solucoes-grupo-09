@@ -58,6 +58,7 @@ import type { ExplainState } from "@/components/app/use-explain";
 import type { NetworkState } from "@/components/app/use-network";
 import type { ServingState } from "@/components/app/use-serving";
 import { type Locale, languageTag } from "@/i18n/locale";
+import { SCREEN_PATHS } from "@/lib/voice/execute";
 
 /** Which of the four modes the reader is on. Keys, not labels. */
 export type VoiceScreen = "overview" | "explain" | "mitigate" | "replay";
@@ -214,4 +215,27 @@ export function contextLines(input: VoiceContextInput): string[] {
 /** The same block, as the one string the socket takes. */
 export function contextSentence(input: VoiceContextInput): string {
   return contextLines(input).join("\n");
+}
+
+/**
+ * Which of the four modes a pathname is. The agent addresses no other route.
+ *
+ * Here rather than in `voice-provider.tsx`, where it was the provider's only
+ * non-component export. Two reasons and both point the same way: a file that
+ * mixes components with plain functions cannot be hot-replaced, and this is
+ * the module that owns `VoiceScreen` — the type it returns, and the type every
+ * sentence in this file is keyed on. The mapping from a route to that type
+ * belongs beside the type, not beside the socket.
+ */
+export function screenFor(pathname: string): VoiceScreen {
+  if (pathname.startsWith(SCREEN_PATHS.explain)) {
+    return "explain";
+  }
+  if (pathname.startsWith(SCREEN_PATHS.mitigate)) {
+    return "mitigate";
+  }
+  if (pathname.startsWith(SCREEN_PATHS.replay)) {
+    return "replay";
+  }
+  return "overview";
 }

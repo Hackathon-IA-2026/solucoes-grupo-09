@@ -79,70 +79,7 @@ export function TechnologySplitPanel({
         </Text>
       </View>
 
-      <View style={{ gap: space.sm }}>
-        {ORDER.map((technology) => {
-          const value = splitFor(split, technology);
-          const emphasised = technology === emphasis;
-          const tone = technology === "WIND" ? colors.accent : colors.violet;
-          return (
-            <View key={technology} style={{ gap: 5 }}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: space.sm,
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: 12,
-                    fontWeight: emphasised ? "700" : "500",
-                    color: emphasised ? colors.ink : colors.inkMuted,
-                  }}
-                >
-                  {emphasised
-                    ? `${copy.app.technology[technology]} · ${copy.app.split.emphasised}`
-                    : copy.app.technology[technology]}
-                </Text>
-                <Text
-                  style={{
-                    fontSize: 13,
-                    fontWeight: emphasised ? "700" : "500",
-                    fontVariant: ["tabular-nums"],
-                    color: emphasised ? colors.ink : colors.inkMuted,
-                  }}
-                >
-                  {`${f.compact(value)} MWh · ${f.percent(value / total)}`}
-                </Text>
-              </View>
-              {/*
-                A share of one expectation, on one track — not an interval.
-                The unemphasised fleet is dimmed rather than hidden: a split
-                whose other half you cannot see is a filter again.
-              */}
-              <View
-                style={{
-                  height: 8,
-                  borderRadius: 4,
-                  backgroundColor: colors.surfaceSunken,
-                  overflow: "hidden",
-                }}
-              >
-                <View
-                  style={{
-                    height: "100%",
-                    width: `${Math.min(100, (value / total) * 100)}%`,
-                    borderRadius: 4,
-                    backgroundColor: tone,
-                    opacity: emphasised ? 0.85 : 0.28,
-                  }}
-                />
-              </View>
-            </View>
-          );
-        })}
-      </View>
+      <SplitTracks split={split} emphasis={emphasis} total={total} />
 
       <Text style={{ fontSize: 11, color: colors.inkFaint, lineHeight: 17 }}>
         {copy.app.split.note}
@@ -238,69 +175,115 @@ export function ObservedSplitPanel({
         </Text>
       </View>
 
-      <View style={{ gap: space.sm }}>
-        {ORDER.map((technology) => {
-          const value = splitFor(split, technology);
-          const emphasised = technology === emphasis;
-          const tone = technology === "WIND" ? colors.accent : colors.violet;
-          return (
-            <View key={technology} style={{ gap: 5 }}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: space.sm,
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: 12,
-                    fontWeight: emphasised ? "700" : "500",
-                    color: emphasised ? colors.ink : colors.inkMuted,
-                  }}
-                >
-                  {emphasised
-                    ? `${copy.app.technology[technology]} · ${copy.app.split.emphasised}`
-                    : copy.app.technology[technology]}
-                </Text>
-                <Text
-                  style={{
-                    fontSize: 13,
-                    fontWeight: emphasised ? "700" : "500",
-                    fontVariant: ["tabular-nums"],
-                    color: emphasised ? colors.ink : colors.inkMuted,
-                  }}
-                >
-                  {`${f.compact(value)} MWh · ${f.percent(value / total)}`}
-                </Text>
-              </View>
-              <View
-                style={{
-                  height: 8,
-                  borderRadius: 4,
-                  backgroundColor: colors.surfaceSunken,
-                  overflow: "hidden",
-                }}
-              >
-                <View
-                  style={{
-                    height: "100%",
-                    width: `${Math.min(100, (value / total) * 100)}%`,
-                    borderRadius: 4,
-                    backgroundColor: tone,
-                    opacity: emphasised ? 0.85 : 0.28,
-                  }}
-                />
-              </View>
-            </View>
-          );
-        })}
-      </View>
+      <SplitTracks split={split} emphasis={emphasis} total={total} />
 
       <Text style={{ fontSize: 11, color: colors.inkFaint, lineHeight: 17 }}>
         {copy.app.observed.splitNote}
       </Text>
+    </View>
+  );
+}
+
+/**
+ * The two fleets as shares of one total, on two tracks.
+ *
+ * **The one thing both panels above genuinely share.** The blocks they drew
+ * were byte-identical — fifty-seven lines each, differing only in a comment —
+ * which is the shape of a copy-paste rather than of a coincidence: the same
+ * pair of labelled rows, the same tabular figures, the same dimming of the
+ * fleet the URL did not ask about.
+ *
+ * Extracting it does **not** merge the two panels, and that distinction is the
+ * whole reason this is a third component rather than a `variant` prop on a
+ * single one. The panels differ in what their total *means* — a division of one
+ * modelled expectation on one side, two separate ONS settlements on the other —
+ * and this component has no opinion about that. It is handed a total and two
+ * scalars and draws their proportion. Everything that makes the two claims
+ * different is in the headline, the badge and the footnote, which stay where
+ * they are and stay distinct.
+ *
+ * `total` is a parameter rather than `windMwh + solarMwh` computed here, for
+ * exactly that reason: the forecast panel's denominator is the expectation the
+ * two scalars divide, and re-deriving it would be this component forming an
+ * opinion about a quantity it was told.
+ */
+function SplitTracks({
+  split,
+  emphasis,
+  /** The denominator. Its meaning belongs to the caller; see above. */
+  total,
+}: {
+  split: TechnologySplit;
+  emphasis: Technology;
+  total: number;
+}) {
+  const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
+  return (
+    <View style={{ gap: space.sm }}>
+      {ORDER.map((technology) => {
+        const value = splitFor(split, technology);
+        const emphasised = technology === emphasis;
+        const tone = technology === "WIND" ? colors.accent : colors.violet;
+        return (
+          <View key={technology} style={{ gap: 5 }}>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: space.sm,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 12,
+                  fontWeight: emphasised ? "700" : "500",
+                  color: emphasised ? colors.ink : colors.inkMuted,
+                }}
+              >
+                {emphasised
+                  ? `${copy.app.technology[technology]} · ${copy.app.split.emphasised}`
+                  : copy.app.technology[technology]}
+              </Text>
+              <Text
+                style={{
+                  fontSize: 13,
+                  fontWeight: emphasised ? "700" : "500",
+                  fontVariant: ["tabular-nums"],
+                  color: emphasised ? colors.ink : colors.inkMuted,
+                }}
+              >
+                {`${f.compact(value)} MWh · ${f.percent(value / total)}`}
+              </Text>
+            </View>
+            {/*
+              A share of one expectation, on one track — not an interval.
+              The unemphasised fleet is dimmed rather than hidden: a split
+              whose other half you cannot see is a filter again.
+            */}
+            <View
+              style={{
+                height: 8,
+                borderRadius: 4,
+                backgroundColor: colors.surfaceSunken,
+                overflow: "hidden",
+              }}
+            >
+              <View
+                style={{
+                  height: "100%",
+                  width: `${Math.min(100, (value / total) * 100)}%`,
+                  borderRadius: 4,
+                  backgroundColor: tone,
+                  opacity: emphasised ? 0.85 : 0.28,
+                }}
+              />
+            </View>
+          </View>
+        );
+      })}
     </View>
   );
 }
