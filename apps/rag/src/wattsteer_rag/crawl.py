@@ -431,11 +431,12 @@ class Crawler:
                 else None
             )
             label = f"RAP {published.date().isoformat()}" if published else f"RAP {fetched.sha256[:8]}"
+            when = published.strftime("%d/%m/%Y") if published else "?"
             document_id, is_new = await self.register(
                 fetched,
                 source="RAP",
                 external_id=label,
-                title=f"Relatório de Análise de Perturbação - {published.strftime('%d/%m/%Y') if published else '?'}",
+                title=f"Relatório de Análise de Perturbação - {when}",
                 revision=None,
                 published_at=published,
                 meta={"source_url": url},

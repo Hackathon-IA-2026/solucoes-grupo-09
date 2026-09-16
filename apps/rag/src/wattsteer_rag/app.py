@@ -24,6 +24,7 @@ from .db import Database
 from .evidence import build_evidence, question_for
 from .gateway.router import Gateway, QuotaExhausted
 from .retrieve import search
+from .runtime import open_runtime
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger("wattsteer_rag")
@@ -33,12 +34,10 @@ state: dict[str, Any] = {}
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    conf = settings()
-    state["db"] = Database()
-    state["gateway"] = Gateway(conf.gateway_config, user_agent=conf.user_agent)
-    yield
-    await state["gateway"].aclose()
-    await state["db"].close()
+    async with open_runtime() as runtime:
+        state["db"] = runtime.db
+        state["gateway"] = runtime.gateway
+        yield
 
 
 app = FastAPI(title="WattSteer RAG", version="0.1.0", lifespan=lifespan)
