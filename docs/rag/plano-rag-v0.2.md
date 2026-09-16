@@ -54,6 +54,21 @@ Como usar (decisão):
 2. **Runtime do produto, não.** Nada do caminho D-1 depende do MCP (latência variável, 504 em varreduras, sem garantia). O gateway pode registrar o TIAGO como `provider.kind: mcp` para consultas ad hoc na demo (tool `consultar_dados_ons` do Evidence Builder e, na fase 4, da voz), sempre com fallback para as tabelas locais.
 3. **Posicionamento no pitch:** o próprio ONS agora responde "o que aconteceu" sobre os dados abertos; o WattSteer diz "o que vem amanhã, por quê e com que evidência". Citar o TIAGO como fonte oficial reforça a credibilidade e evita a pergunta "por que não usar o do ONS?".
 
+### 2.2 Blueprints da NVIDIA (avaliados em 15/09, 21h)
+
+`build.nvidia.com/blueprints` tem 32 blueprints; quatro tocam o nosso problema. Todos os repositórios são abertos (`github.com/NVIDIA-AI-Blueprints/*`).
+
+| Blueprint | Licença | Roda sem GPU? | Decisão |
+|---|---|---|---|
+| **rag** (766 estrelas) | Apache-2.0 | Sim, no modo "NVIDIA hosted endpoints" (só chave `nvapi-`) | **Aproveitar as peças, não o produto.** Traz Elasticsearch (padrão) ou Milvus, servidor de ingestão, servidor de RAG e UI próprios: colide com a fronteira "Postgres é a única fonte de verdade" e com o nosso contrato de evidência. O que vale ouro são os **NIMs de extração de PDF** que ele usa (ver abaixo). |
+| **aiq** (866 estrelas) | Apache-2.0 | Sim: "usando o NVIDIA API Catalog (padrão), não há requisito de GPU local" | **Referência, não adoção.** É um agente de pesquisa profunda com relatório citado; a documentação registra que ele "falha fechado" quando o modelo devolve rascunho com citação incompleta, exatamente a disciplina dos nossos gates. Ler a implementação da verificação de citação. |
+| **nemotron-voice-agent** (225 estrelas) | BSD-2-Clause | Sim: perfil **Cloud = apenas CPU**, modelos pela nuvem da NVIDIA | **Candidato a substituir a voz do xAI**, que é fechada e não pode ir para a nuvem. ASR Parakeet/Nemotron streaming, TTS Magpie Multilingual ou Chatterbox Multilingual, LLM "qualquer OpenAI-compatível". Decisão do Vitor, dono da tela de voz. |
+| **llm-router** (349 estrelas) | Apache-2.0 | Parcial (a parte multimodal quer um servidor CLIP com GPU) | **Só referência.** Roteia por complexidade da tarefa, não por cota; não faz pool de chaves nem fallback por limite, que é o nosso diferencial. |
+
+**O que entra no nosso plano agora: os NIMs de extração de documento.** O blueprint de RAG usa, todos hospedados e no tier gratuito: `nvidia/nemotron-parse` (VLM de extração de texto e tabela de imagem de página), `nvidia/nemotron-ocr`, `nvidia/nemotron-page-elements-v3`, `nvidia/nemotron-table-structure-v1`, `nvidia/nemotron-graphic-elements-v1` e `baidu/paddleocr`. Para os PDFs do ONS (RAP escaneado, tabelas do BDO) isso resolve o ponto mais caro da ingestão sem consumir CPU da instância. Fica como **tarefa `parse` do gateway**, com cadeia `nemotron-parse (NIM) → Docling local`: se a cota acabar ou a página falhar, cai para o Docling e a ingestão continua. Mesma regra de sempre, adapter e fallback.
+
+**Embeddings: mantido bge-m3.** O blueprint usa `llama-nemotron-embed-1b-v2` (26 idiomas, inclusive português, dimensão configurável até 2048, contexto 131k) e `llama-nemotron-rerank-1b-v2`, ambos melhores em MIRACL multilíngue. Não adotamos como primário porque **não há fallback local no mesmo espaço vetorial** (são NIM-only), e trocar de modelo de embedding no meio é proibido. Ficam anotados como alternativa se aceitarmos depender só do NIM. O reranker da NVIDIA já é o nosso primário.
+
 Consequência para o REL: sem cronograma público, **REL fica "não avaliável" por padrão (D09 / NA-01)** e o RAG entrega o que existir em texto (IPDO/BDO/RAP mencionando intervenção, desligamento, restrição na região) com `confidence` no máximo `medium`. Os pesos do Bisogno (REL 0,7 a 0,9; CNF 0,4 a 0,6; ENE 0,2 a 0,4) entram como **campo de exibição/confiança** (`evidence_weight`) no JSON, nunca como entrada do classificador ("Nenhuma regra muda um número").
 
 Prioridade de ingestão: (1) BDO 24 meses (HTML estruturado, mais barato e mais útil), (2) Procedimentos de Rede vigentes, (3) RAP 2023 a 2026, (4) IPDO diário daqui para frente, (5) normas locais.

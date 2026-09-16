@@ -97,6 +97,12 @@ tasks:
       - { provider: local,  model: BAAI/bge-reranker-v2-m3 }
     top_n: 8
     on_exhausted: skip_rerank             # degrada para a ordem do RRF, declara no trace
+  parse:                    # extração de página de PDF (texto + tabelas). NIMs usados pelo blueprint de RAG da NVIDIA.
+    chain:
+      - { provider: nvidia, model: nvidia/nemotron-parse }          # VLM: página como imagem -> markdown + tabelas
+      - { provider: nvidia, model: baidu/paddleocr }                # OCR puro, para página sem camada de texto
+      - { provider: local,  model: docling }                        # Docling em CPU: sempre disponível, mais lento
+    on_exhausted: waiting_quota           # nunca perde documento: espera a cota ou usa o Docling
   narrate:                  # redação do card. Hoje o apps/api chama a Anthropic direto: migração OBRIGATÓRIA (não há Claude na nuvem)
     chain:
       - { provider: nvidia, model: nvidia/nemotron-3-super-120b-a12b, max_input_tokens: 8000 }

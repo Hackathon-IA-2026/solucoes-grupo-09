@@ -47,7 +47,7 @@ Roteiro autocontido para implementar a fase F1 do RAG de evidência do ONS dentr
 - Job `crawl` com progresso por fonte e por item; `partial` quando houve 4xx/5xx em itens individuais.
 
 ### T1.5 Parser e chunker
-- `parse/docling_parser.py`: PDF → Markdown por página com tabelas; OCR (RapidOCR, `pt`) só se a página não tiver texto extraível. `parse/bdo_html.py`: as 17 tabelas HTML → linhas nas tabelas `rag.bdo_*` (pandas `read_html` é aceitável) + um chunk por tabela com cabeçalho e as linhas em Markdown (para o retrieval textual).
+- `parse/page_parser.py`: PDF → Markdown por página com tabelas, **pela tarefa `parse` do gateway**: `nvidia/nemotron-parse` (NIM hospedado, gratuito, usado pelo blueprint de RAG da NVIDIA) → `baidu/paddleocr` para página sem camada de texto → `local/docling` (Docling em CPU) quando a cota acabar ou a página falhar. O resultado é sempre o mesmo formato (`markdown`, `has_tables`, `ocr_used`, `parser` com quem produziu), e `rag.page.parser` registra a procedência. `parse/docling_parser.py` implementa o elo local. `parse/bdo_html.py`: as 17 tabelas HTML → linhas nas tabelas `rag.bdo_*` (pandas `read_html` é aceitável) + um chunk por tabela com cabeçalho e as linhas em Markdown (para o retrieval textual).
 - `chunk/chunker.py`: por cabeçalho de seção, 400 a 800 tokens, overlap 10 %, tabelas nunca partidas; `locator` = `{page, section, table, row}`; `section_path` derivado dos headings.
 - `chunk/metadata.py`: por documento, `generate_small` com schema `{tipo_documento, data_evento, subsistemas[], estados[], equipamentos[], agentes[], causa_declarada, janela_horaria}`; duas tentativas; falha → `needs_review=true` e meta vazia, nunca bloqueia.
 
