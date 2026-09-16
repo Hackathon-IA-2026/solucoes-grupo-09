@@ -51,7 +51,7 @@ export function BandStrip({
   band,
   domainMax,
   height = 8,
-  tone = "accent",
+  tone = "violet",
 }: {
   band: Band;
   domainMax?: number;
@@ -65,22 +65,7 @@ export function BandStrip({
   const left = clamp01(band.p10 / max);
   const right = clamp01(band.p90 / max);
   const mid = clamp01(band.p50 / max);
-  /*
-    **The landing page's rail, drawn here.** `landing/band-figure.tsx` draws an
-    interval as a *bordered* span with a median tick that overhangs the track;
-    this drew a borderless wash at 0.32 opacity with the tick clipped inside it,
-    in the same hue as the wash. Side by side — and they are side by side, since
-    the landing renders these product's own panels over a fixture — the two read
-    as two different charts of the same quantity: the internal one has no edges
-    to read a P10 or a P90 off, and its median is a slightly-more-opaque smudge.
-    The strip a visitor is shown and the strip a user gets are one drawing now.
-
-    What does *not* come across from the landing is the hue. The landing has one
-    quantity on screen and paints every rail violet; this app puts energy (MWh)
-    beside peak power (MW) in adjacent panels and separates them by tone, which
-    is a distinction the landing never has to make. So `tone` survives, and only
-    the construction is shared.
-  */
+  // The landing's rail: bordered span, violet, overhanging lime tick.
   const fillColor =
     tone === "accent"
       ? colors.accent
@@ -110,9 +95,7 @@ export function BandStrip({
         height,
         borderRadius: height / 2,
         backgroundColor: colors.surfaceSunken,
-        // **Not** `overflow: "hidden"`: the median tick overhangs the track by
-        // design, which is how the landing's rail makes a median legible on a
-        // 10 px bar. Clipping it is what reduced it to a smudge inside the span.
+        // No `overflow: hidden` — the median tick overhangs by design.
         justifyContent: "center",
       }}
     >
@@ -156,7 +139,7 @@ export function BandFigure({
   unit,
   domainMax,
   size = "lg",
-  tone = "accent",
+  tone = "violet",
   footnote,
 }: {
   label: string;
@@ -225,7 +208,7 @@ export function BandCard({
   domainMax,
   icon,
   footnote,
-  tone = "accent",
+  tone = "violet",
   basis,
 }: {
   label: string;

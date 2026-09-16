@@ -8,6 +8,7 @@ import {
   Panel,
   PanelHeader,
   PillButton,
+  READOUT_WASH,
   radius,
   SparklesIcon,
   space,
@@ -279,10 +280,7 @@ function Readout({ wide, subsystemMax }: { wide: boolean; subsystemMax: number }
       <Panel
         style={[
           { gap: space.xl, padding: wide ? 24 : 18 },
-          gradientBg(
-            "radial-gradient(120% 90% at 8% -10%, rgba(141, 93, 246, 0.22) 0%, transparent 60%)",
-            colors.surface,
-          ),
+          gradientBg(READOUT_WASH, colors.surface),
         ]}
       >
         <PanelHeader

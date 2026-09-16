@@ -83,14 +83,6 @@ export function DriverBars() {
                   width: `${(driver.share / max) * 100}%`,
                   height: "100%",
                   borderRadius: 5,
-                  /*
-                    The Explain screen's own rule, imported rather than
-                    restated. This was `index === 0 ? accent : violet` — colour
-                    by position, which on a panel where every driver raises the
-                    risk painted the top bar in the hue the product uses for
-                    "lowers". The landing shows the product's components; it has
-                    to show the product's encodings too.
-                  */
                   backgroundColor: driverBarColor(driver.direction, colors),
                 }}
               />

@@ -14,7 +14,15 @@
  */
 
 import type { GridNow, NationalOutlook } from "@wattsteer/core/api";
-import { CalendarDaysIcon, Panel, PanelHeader, space, usePalette } from "@wattsteer/ui";
+import {
+  CalendarDaysIcon,
+  gradientBg,
+  Panel,
+  PanelHeader,
+  READOUT_WASH,
+  space,
+  usePalette,
+} from "@wattsteer/ui";
 import { Text, View } from "react-native";
 import { ObservedBadge } from "@/components/app/honesty";
 import { BandFigure, ExpectationFigure } from "@/components/charts/band-figure";
@@ -52,7 +60,7 @@ export function NationalPanel({ national }: { national: NationalOutlook }) {
   const copy = useCopy();
   const f = useFormat();
   return (
-    <Panel>
+    <Panel style={gradientBg(READOUT_WASH, colors.surface)}>
       <PanelHeader
         icon={<CalendarDaysIcon size={18} color={colors.inkMuted} />}
         title={copy.app.overview.nationalTitle}
@@ -122,7 +130,7 @@ export function ObservedNationalPanel({
   const copy = useCopy();
   const f = useFormat();
   return (
-    <Panel>
+    <Panel style={gradientBg(READOUT_WASH, colors.surface)}>
       <PanelHeader
         icon={<CalendarDaysIcon size={18} color={colors.inkMuted} />}
         title={copy.app.observed.nationalTitle}

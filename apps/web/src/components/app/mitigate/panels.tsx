@@ -110,7 +110,7 @@ export function FloorPanel({
             label={copy.app.mitigate.floorHigh}
             value={`${f.compact(active.recovered.p90)} MWh`}
           />
-          <BandStrip band={active.recovered} domainMax={domainMax} tone="accent" />
+          <BandStrip band={active.recovered} domainMax={domainMax} />
           <Text style={{ fontSize: 11, lineHeight: 18, color: colors.inkFaint }}>
             {copy.app.mitigate.floorBesideNote}
           </Text>

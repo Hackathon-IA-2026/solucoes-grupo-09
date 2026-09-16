@@ -231,42 +231,30 @@ export function SubsystemRow({
       </View>
 
       <View style={{ gap: 6 }}>
-        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-          <Text style={{ fontSize: 11, color: colors.inkFaint }}>
-            {copy.app.overview.rowEnergy}
-          </Text>
+        {/* No headline figure: `Valor esperado` below carries it, as on the landing. */}
+        <Text style={{ fontSize: 11, color: colors.inkFaint }}>
+          {copy.app.overview.rowEnergy}
+        </Text>
+        <BandStrip band={forecast.dailyEnergy} domainMax={domainMax} />
+        {/* The landing readout's two lines. The peak band keeps its own. */}
+        <View style={{ gap: 2 }}>
           <Text
             style={{
-              fontSize: 13,
-              fontWeight: "700",
-              fontVariant: ["tabular-nums"],
-              color: colors.ink,
-            }}
-          >
-            {/*
-              The **expectation**, not the median. The label says "expected"
-              and now means it: on a subsystem under an even chance to curtail
-              at all, the median is flatly zero, and a row headlined with it
-              reads as "nothing happening" for a day that carries real expected
-              energy. The strip underneath still shows where the median sits.
-            */}
-            {`${f.compact(forecast.dayExpectedMwh)} MWh`}
-          </Text>
-        </View>
-        <BandStrip band={forecast.dailyEnergy} domainMax={domainMax} tone="accent" />
-        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-          <Text
-            style={{
-              fontSize: 10,
-              color: colors.inkFaint,
+              fontSize: 12,
+              color: colors.inkMuted,
               fontVariant: ["tabular-nums"],
             }}
           >
-            {`P10 ${f.compact(forecast.dailyEnergy.p10)}`}
+            {`${copy.band.medianLabel} ${f.compact(forecast.dailyEnergy.p50)} MWh · ${copy.band.rangeLabel} ${f.compact(forecast.dailyEnergy.p10)}–${f.compact(forecast.dailyEnergy.p90)}`}
+          </Text>
+          <Text
+            style={{ fontSize: 12, color: colors.ink, fontVariant: ["tabular-nums"] }}
+          >
+            {`${copy.band.expectedLabel} ${f.compact(forecast.dayExpectedMwh)} MWh`}
           </Text>
           <Text
             style={{
-              fontSize: 10,
+              fontSize: 11,
               color: colors.inkFaint,
               fontVariant: ["tabular-nums"],
             }}
@@ -275,15 +263,6 @@ export function SubsystemRow({
               low: f.compact(forecast.peakPower.p10),
               high: f.compact(forecast.peakPower.p90),
             })}
-          </Text>
-          <Text
-            style={{
-              fontSize: 10,
-              color: colors.inkFaint,
-              fontVariant: ["tabular-nums"],
-            }}
-          >
-            {`P90 ${f.compact(forecast.dailyEnergy.p90)}`}
           </Text>
         </View>
       </View>

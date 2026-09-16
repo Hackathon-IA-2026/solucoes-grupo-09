@@ -1,5 +1,9 @@
 import { Platform } from "react-native";
 
+/** The landing readout card's violet wash. `NationalPanel` wears the same one. */
+export const READOUT_WASH =
+  "radial-gradient(120% 90% at 8% -10%, rgba(141, 93, 246, 0.22) 0%, transparent 60%)";
+
 /**
  * Brand-gradient background, cross-platform: RN Web wants CSS `backgroundImage`,
  * native (new arch) wants `experimental_backgroundImage`. A solid fallback
