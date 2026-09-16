@@ -47,7 +47,7 @@
  */
 
 import { motion, usePalette, useReducedMotion } from "@wattsteer/ui";
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import { Animated, Easing, View } from "react-native";
 import type { VoiceStatus } from "@/lib/voice/session";
 import { ringScale } from "./use-voice-agent";
@@ -69,7 +69,7 @@ export function VoiceOrb({
 }: VoiceOrbProps) {
   const colors = usePalette();
   const reduced = useReducedMotion();
-  const sweep = useRef(new Animated.Value(0)).current;
+  const [sweep] = useState(() => new Animated.Value(0));
 
   const sweeping = status === "thinking" || status === "connecting";
   const travelling = status === "acting";

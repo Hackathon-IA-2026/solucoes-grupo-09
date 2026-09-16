@@ -36,7 +36,7 @@
  */
 
 import { motion, space, usePalette, useReducedMotion } from "@wattsteer/ui";
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import { Animated, Easing, Text, View } from "react-native";
 
 /** The three rings, as a fraction of the orb's size. */
@@ -52,7 +52,13 @@ export function ThinkingOrb({
 }) {
   const colors = usePalette();
   const reduced = useReducedMotion();
-  const sweep = useRef(new Animated.Value(0)).current;
+  // Lazy `useState`, not `useRef(new Animated.Value(0))`. The ref form
+  // *constructs* an `Animated.Value` on every render and throws all but the
+  // first away — cheap individually, and this orb renders on every state change
+  // of a screen that is mid-request. `hero-cards.tsx` already made this choice
+  // and said why; react-doctor's `rerender-lazy-ref-init` found the two I wrote
+  // an hour ago without it.
+  const [sweep] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     if (reduced) {
@@ -160,7 +166,7 @@ export function SkeletonLine({
 }) {
   const colors = usePalette();
   const reduced = useReducedMotion();
-  const pulse = useRef(new Animated.Value(0)).current;
+  const [pulse] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     if (reduced) {

@@ -49,7 +49,7 @@ import {
   useReducedMotion,
   XIcon,
 } from "@wattsteer/ui";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Animated,
   Platform,
@@ -96,7 +96,12 @@ function Dock({ agent }: { agent: VoiceAgentState }) {
    * and fade on the expanded panel and nothing on the pills, which are already
    * on screen and would only flicker.
    */
-  const rise = useRef(new Animated.Value(agent.size === "expanded" ? 1 : 0)).current;
+  // Lazy, so the `Animated.Value` is constructed once rather than on every
+  // render and discarded. The initialiser reads `agent.size` at mount, which is
+  // exactly the semantics the `useRef` form had — the eager version simply paid
+  // for a throwaway object each time the dock re-rendered, which it does on
+  // every status change and every audio frame that clears the level throttle.
+  const [rise] = useState(() => new Animated.Value(agent.size === "expanded" ? 1 : 0));
   useEffect(() => {
     if (reduced) {
       rise.setValue(1);

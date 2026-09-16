@@ -115,9 +115,20 @@ export function PlanVsExecuted({
 
         {actualHours.map((mwh, i) => {
           const height = Math.max(0, (mwh / top) * chartH);
-          const hourLocal = executed[i]?.hourLocal ?? i;
+          // `h${hour}` or `i${index}`, never a bare number that could be
+          // either. The fallback was `executed[i]?.hourLocal ?? i`, so a row
+          // with no executed entry keyed on its index — and an index collides
+          // with another row's *hour* the moment the two namespaces overlap,
+          // which for a 24-hour day is every index. Prefixing separates them.
+          const hour = executed[i]?.hourLocal;
+          const key = hour === undefined ? `i${i}` : `h${hour}`;
+          // The label still wants a number, and still falls back to the index —
+          // which is correct *for an axis tick*, where the position is the
+          // meaning. It was only wrong as a React key, where the value has to
+          // be unique across siblings rather than merely plausible.
+          const hourLocal = hour ?? i;
           return (
-            <G key={hourLocal}>
+            <G key={key}>
               {height > 0 ? (
                 <Rect
                   x={x(i) - barW / 2}

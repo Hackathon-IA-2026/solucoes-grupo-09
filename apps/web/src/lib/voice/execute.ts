@@ -277,7 +277,14 @@ function unexpected(
   args: Record<string, unknown>,
   allowed: readonly string[],
 ): string | undefined {
-  return Object.keys(args).find((key) => !allowed.includes(key));
+  // A `Set`, not `allowed.includes` inside the `find`. The allowed list is at
+  // most four names and the args at most four, so this is nanoseconds either
+  // way — it is here because the shape is the thing worth being right: a linear
+  // scan nested in a linear scan is the pattern that becomes a problem when
+  // somebody later gives a tool twenty arguments, and the `Set` costs nothing
+  // to write now and nothing to notice then.
+  const permitted = new Set(allowed);
+  return Object.keys(args).find((key) => !permitted.has(key));
 }
 
 /** Present means "the model said something about it" — `null` is not absent. */
