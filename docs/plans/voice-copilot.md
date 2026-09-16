@@ -683,6 +683,28 @@ The interface between them is one string in and one callback in, state and three
 actions out; `test/voice-session-core.test.ts`'s 28 tests exist because that
 seam made the lifecycle testable without a socket.
 
+### 10.1a The one claim only production can answer
+
+Everything in 10.2 is checked against the source or a test. §2.1 — *ephemeral
+tokens only; the key never leaves `apps/api`* — is the one whose real subject is
+a running deployment, and the fourteen API tests can only show that **this**
+code does not leak it.
+
+Measured against `https://api.wattsteer.com/v1/voice/session` on 2026-09-16:
+
+| property | observed |
+|---|---|
+| status, warm latency | `200`, **244 ms** (1.5 s cold) |
+| fields | exactly `client_secret`, `expires_at`, `model`, `voice` |
+| two consecutive mints | **different secrets** — sha256 `86a4903767…` vs `e5343db004…` |
+| lifetime | **5 minutes** |
+| caching | `no-store` on the response |
+
+Two mints returning different values is the property that matters: a route
+handing back the upstream key would return the same string every time. It is
+ephemeral, short-lived, and never cached — which is the claim, observed rather
+than argued.
+
 ### 10.2 The claims, checked
 
 **Re-checked 2026-09-16, and every one still holds** — against the code, not
