@@ -477,6 +477,9 @@ export const pt: Copy = {
       noModelBadge: "NENHUM MODELO PROMOVIDO",
       /** Names the `tablist` around the four screen pills for a screen reader. */
       screensLabel: "Telas",
+      /** The accordion control on a collapsed section, and on an open one. */
+      expand: "Abrir",
+      collapse: "Recolher",
       screens: {
         overview: "Visão da rede",
         explain: "Explicar",

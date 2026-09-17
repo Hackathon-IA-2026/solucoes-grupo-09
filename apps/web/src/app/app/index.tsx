@@ -87,6 +87,7 @@ import {
 } from "@/components/app/honesty";
 import { ForecastPanels } from "@/components/app/overview/forecast-panels";
 import { ObservedPanels } from "@/components/app/overview/observed-panels";
+import { OverviewHero } from "@/components/app/overview/overview-hero";
 import { SettledPanels } from "@/components/app/overview/settled-panels";
 import { ReadingState, ThinkingOrb } from "@/components/app/thinking-orb";
 import {
@@ -326,6 +327,28 @@ export default function GridOverviewScreen() {
     // when `Observado` distinguishes nothing and stands down.
     <ForecastPresence present={forecast !== null}>
       {/*
+        **The hero, promoted out of the `/app/console` mockup.**
+
+        The mockup asked whether a map-centred layout suits a product with four
+        regions rather than four hundred cities. It does, so it is the top of
+        this screen and the mockup route is gone.
+
+        It is the *top*, not the whole. `heroElsewhere` tells the stacks below
+        to skip the national figure, the map, the rows, the selection and the
+        fan — which the hero draws — and to keep everything else they drew: the
+        P10–P90 bands for the day and the peak, the technology split, the risk
+        caveat, the settled section. A layout that reads better is not a reason
+        to publish less, and this screen has lost panels twice to somebody
+        promoting a nicer top and not checking the bottom.
+      */}
+      <OverviewHero
+        observed={observed}
+        forecast={forecast}
+        params={params}
+        onExplain={explain}
+      />
+
+      {/*
         Two stacks, never interleaved, and each one whole.
 
         `ForecastPanels` is everything a promoted model pays for, unchanged.
@@ -344,10 +367,16 @@ export default function GridOverviewScreen() {
           subsystem={params.subsystem}
           onSelect={select}
           onExplain={explain}
+          heroElsewhere={true}
         />
       ) : (
         <>
-          <ForecastPanels forecast={forecast} onSelect={select} onExplain={explain} />
+          <ForecastPanels
+            forecast={forecast}
+            onSelect={select}
+            onExplain={explain}
+            heroElsewhere={true}
+          />
           <SettledPanels
             observed={observed}
             subsystem={params.subsystem}

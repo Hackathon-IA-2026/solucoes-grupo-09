@@ -365,8 +365,13 @@ describe("a refused forecast renders no forecast", () => {
     // property this guard is about is unchanged, and is asserted twice below:
     // the two stacks are exclusive, and nothing that states a forecast exists
     // inside the observed one.
+    //
+    // `heroElsewhere` does not weaken it. It tells both stacks to skip what
+    // `OverviewHero` already drew — the national figure, the map, the rows, the
+    // selection, the fan — and the hero is itself behind the same `forecast`
+    // ternary, taking it as a prop rather than reading a state of its own.
     expect(OVERVIEW_FLAT).toContain(
-      "{forecast === null ? ( <ObservedPanels observed={observed} subsystem={params.subsystem} onSelect={select} onExplain={explain} /> ) : ( <> <ForecastPanels forecast={forecast} onSelect={select} onExplain={explain} /> <SettledPanels observed={observed} subsystem={params.subsystem} onSelect={select} /> </> )}",
+      "{forecast === null ? ( <ObservedPanels observed={observed} subsystem={params.subsystem} onSelect={select} onExplain={explain} heroElsewhere={true} /> ) : ( <> <ForecastPanels forecast={forecast} onSelect={select} onExplain={explain} heroElsewhere={true} /> <SettledPanels observed={observed} subsystem={params.subsystem} onSelect={select} /> </> )}",
     );
     // Each forecast panel is inside `ForecastPanels`, which is now a file of
     // its own — so this is a containment check rather than the `indexOf`

@@ -70,11 +70,22 @@ export function ObservedPanels({
   subsystem,
   onSelect,
   onExplain,
+  heroElsewhere = false,
 }: {
   observed: ObservedNetwork;
   subsystem: SubsystemCode;
   onSelect: (subsystem: SubsystemCode) => void;
   onExplain: (subsystem: SubsystemCode) => void;
+  /**
+   * Whether the screen already drew the national figure, the map, the rows and
+   * the selection above this stack.
+   *
+   * `OverviewHero` does, so these panels must not draw them twice. It is a prop
+   * rather than a split component because the alternative — two near-copies of
+   * this file — is how the panels below would drift from the ones above, and
+   * this stack has already lost panels twice to somebody not noticing.
+   */
+  heroElsewhere?: boolean;
 }) {
   const colors = usePalette();
   const copy = useCopy();
@@ -113,113 +124,117 @@ export function ObservedPanels({
 
   return (
     <>
-      <FadeIn style={{ gap: space.md }}>
-        <ObservedNationalPanel national={observed.now.national} window={window24h} />
-      </FadeIn>
+      {heroElsewhere ? null : (
+        <FadeIn style={{ gap: space.md }}>
+          <ObservedNationalPanel national={observed.now.national} window={window24h} />
+        </FadeIn>
+      )}
 
-      <FadeIn delay={70} style={{ gap: space.md }} onLayout={onOverviewLayout}>
-        <View
-          style={{
-            flexDirection: side ? "row" : "column",
-            alignItems: side ? "flex-start" : "stretch",
-            gap: space.md,
-          }}
-        >
-          <Panel style={side ? { width: 420 } : undefined}>
-            <PanelHeader
-              icon={<MapIcon size={18} color={colors.inkMuted} />}
-              title={copy.app.overview.map.titleObserved}
-              subtitle={copy.app.overview.map.subtitleObserved}
-              right={<ObservedBadge />}
-            />
-            <View style={{ marginTop: space.lg }}>
-              <SubsystemMap
-                paint={{ kind: "observed", rows }}
-                selected={subsystem}
-                hovered={active}
-                onHoverChange={setHovered}
-                onSelect={onSelect}
+      {heroElsewhere ? null : (
+        <FadeIn delay={70} style={{ gap: space.md }} onLayout={onOverviewLayout}>
+          <View
+            style={{
+              flexDirection: side ? "row" : "column",
+              alignItems: side ? "flex-start" : "stretch",
+              gap: space.md,
+            }}
+          >
+            <Panel style={side ? { width: 420 } : undefined}>
+              <PanelHeader
+                icon={<MapIcon size={18} color={colors.inkMuted} />}
+                title={copy.app.overview.map.titleObserved}
+                subtitle={copy.app.overview.map.subtitleObserved}
+                right={<ObservedBadge />}
               />
-            </View>
-            <Text
-              style={{
-                marginTop: space.sm,
-                fontSize: 11,
-                color: colors.info,
-                textAlign: "center",
-                fontVariant: ["tabular-nums"],
-              }}
-            >
-              {window24h}
-            </Text>
+              <View style={{ marginTop: space.lg }}>
+                <SubsystemMap
+                  paint={{ kind: "observed", rows }}
+                  selected={subsystem}
+                  hovered={active}
+                  onHoverChange={setHovered}
+                  onSelect={onSelect}
+                />
+              </View>
+              <Text
+                style={{
+                  marginTop: space.sm,
+                  fontSize: 11,
+                  color: colors.info,
+                  textAlign: "center",
+                  fontVariant: ["tabular-nums"],
+                }}
+              >
+                {window24h}
+              </Text>
 
-            <View style={{ marginTop: space.md }}>
-              <SelectedRegion
-                subsystem={subsystem}
-                row={null}
-                observed={selectedRow}
-                observedWindow={window24h}
-                onExplain={() => onExplain(subsystem)}
-              />
-            </View>
+              <View style={{ marginTop: space.md }}>
+                <SelectedRegion
+                  subsystem={subsystem}
+                  row={null}
+                  observed={selectedRow}
+                  observedWindow={window24h}
+                  onExplain={() => onExplain(subsystem)}
+                />
+              </View>
 
-            <Text
-              style={{
-                fontSize: 11,
-                color: colors.inkFaint,
-                lineHeight: 17,
-                marginTop: space.md,
-              }}
-            >
-              {copy.app.overview.map.boundaryNote}
-            </Text>
-          </Panel>
+              <Text
+                style={{
+                  fontSize: 11,
+                  color: colors.inkFaint,
+                  lineHeight: 17,
+                  marginTop: space.md,
+                }}
+              >
+                {copy.app.overview.map.boundaryNote}
+              </Text>
+            </Panel>
 
-          <View style={{ flex: side ? 1 : undefined, gap: space.md }}>
-            {rows.map((row) => (
-              <ObservedSubsystemRow
-                key={row.subsystem}
-                observed={row}
-                domainMax={domainMax}
-                selected={row.subsystem === subsystem}
-                highlighted={row.subsystem === active}
-                onHoverChange={(on) => setHovered(on ? row.subsystem : null)}
-                onPress={() => onSelect(row.subsystem)}
-                /*
-                  **No `onExplain` here, and axe says why.**
+            <View style={{ flex: side ? 1 : undefined, gap: space.md }}>
+              {rows.map((row) => (
+                <ObservedSubsystemRow
+                  key={row.subsystem}
+                  observed={row}
+                  domainMax={domainMax}
+                  selected={row.subsystem === subsystem}
+                  highlighted={row.subsystem === active}
+                  onHoverChange={(on) => setHovered(on ? row.subsystem : null)}
+                  onPress={() => onSelect(row.subsystem)}
+                  /*
+                    **No `onExplain` here, and axe says why.**
 
-                  The row is already a button — "NORDESTE: selecionar" — so an
-                  Explain button inside it is a control nested in a control:
-                  `nested-interactive`, a WCAG 2 A violation, live in the exact
-                  state production has been in for weeks. `accessibility.spec.ts`
-                  believed it covered this screen and audited only the state with
-                  a forecast, which is the one path where this prop was already
-                  absent.
+                    The row is already a button — "NORDESTE: selecionar" — so an
+                    Explain button inside it is a control nested in a control:
+                    `nested-interactive`, a WCAG 2 A violation, live in the exact
+                    state production has been in for weeks. `accessibility.spec.ts`
+                    believed it covered this screen and audited only the state with
+                    a forecast, which is the one path where this prop was already
+                    absent.
 
-                  Deleting it is also what `ObservedSubsystemRow`'s own docstring
-                  asks for — "two Explain controls for the same region, in two
-                  lists, would be one too many" — and `SelectedRegion` above is
-                  the other one. One fix, two defects.
-                */
-              />
-            ))}
-            <Text
-              style={{
-                fontSize: 11,
-                lineHeight: 18,
-                color: colors.inkFaint,
-              }}
-            >
-              {fill(copy.app.overview.settledNationalNote, {
-                mwh: f.compact(observed.now.national.last24hConstrainedOffMwh),
-              })}
-            </Text>
-            <View style={{ alignSelf: "flex-start" }}>
-              <VintageBadge fidelity={observed.now.vintageFidelity} />
+                    Deleting it is also what `ObservedSubsystemRow`'s own docstring
+                    asks for — "two Explain controls for the same region, in two
+                    lists, would be one too many" — and `SelectedRegion` above is
+                    the other one. One fix, two defects.
+                  */
+                />
+              ))}
+              <Text
+                style={{
+                  fontSize: 11,
+                  lineHeight: 18,
+                  color: colors.inkFaint,
+                }}
+              >
+                {fill(copy.app.overview.settledNationalNote, {
+                  mwh: f.compact(observed.now.national.last24hConstrainedOffMwh),
+                })}
+              </Text>
+              <View style={{ alignSelf: "flex-start" }}>
+                <VintageBadge fidelity={observed.now.vintageFidelity} />
+              </View>
             </View>
           </View>
-        </View>
-      </FadeIn>
+        </FadeIn>
+      )}
 
       <SettledDayPanel
         observed={observed}

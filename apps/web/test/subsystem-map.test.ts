@@ -666,9 +666,18 @@ describe("the region responds to a pointer, and so does its row", () => {
    */
   it("the pick is confirmed in place, and in both of the screen's states", () => {
     const code = overview.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
-    // Twice: under the map in the `read` state, and at screen level when the
-    // forecast refused and there is no map to sit under.
-    expect(code.match(/<SelectedRegion/g) ?? []).toHaveLength(2);
+    /*
+      Three in the source, one on the screen — and the difference is why this
+      assertion cannot be the whole guard any more.
+
+      The two old ones are still where they were: under the map in `read`, and
+      at screen level when the forecast refused. The third is the hero's, which
+      is the one that actually renders now, because `heroElsewhere` skips the
+      blocks the other two live in. Source counting cannot tell those apart, so
+      `e2e/app-overview-selection.spec.ts` asserts the property that matters —
+      exactly one `selected-region` in the rendered DOM, in both states.
+    */
+    expect(code.match(/<SelectedRegion/g) ?? []).toHaveLength(3);
     expect(code).toContain("row={null}");
     // The settled rows are a selector too, which is the only one the refusal
     // path has. They used to mark the selection and refuse to take one.

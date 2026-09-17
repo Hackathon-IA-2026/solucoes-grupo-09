@@ -610,6 +610,9 @@ export const en = {
       noModelBadge: "NO MODEL PROMOTED",
       /** Names the `tablist` around the four screen pills for a screen reader. */
       screensLabel: "Screens",
+      /** The accordion control on a collapsed section, and on an open one. */
+      expand: "Open",
+      collapse: "Collapse",
       screens: {
         overview: "Grid Overview",
         explain: "Explain",

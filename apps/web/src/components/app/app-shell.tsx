@@ -25,7 +25,7 @@ import {
   WattSteerMark,
 } from "@wattsteer/ui";
 import { router, usePathname } from "expo-router";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { LanguageSwitch } from "@/components/language-switch";
 import { type Copy, useCopy, useFormat, useI18n } from "@/i18n";
@@ -63,24 +63,20 @@ interface ScreenDef {
   Their routes still exist and still render standalone, for a link somebody
   already has and for the voice agent's `explain` tool.
 
-  **But the row still names all three, because deleting them was a mistake.**
-  The first cut of this dropped `explain` and `mitigate` from the row entirely,
-  on the grounds that they are not destinations any more. They are not — and
-  the row was also the only thing on screen that said they exist. Measured
-  after that change: on a 360px viewport with a forecast published, `/app` is
-  13 472px tall, `#explain` starts at 5643px and `#mitigate` at **8532px**, with
-  nothing above the fold hinting at either. Two of the product's three questions
-  became reachable only by scrolling most of a very long page on the chance
-  something was down there.
+  **Two, and the middle pair went through anchors on the way out.** Dropping
+  them from the row the first time was wrong for a measured reason: `/app` at
+  360px with a forecast was 13 472px tall, `#mitigate` started at 8532px, and
+  nothing above the fold said either existed. So they came back as anchors.
 
-  So they are anchors rather than routes: same row, same words, and `go` scrolls
-  to the section instead of pushing. `SectionBlock`'s `nativeID` is what they
-  land on.
+  They are gone again now, and this time the page answers the same objection
+  without them: `SectionBlock` is a collapsed accordion, so both headings sit a
+  few hundred pixels under the map with a control that says there is more
+  behind it. The cue is on the screen instead of in the chrome, which is where
+  it belonged — the row is for places a reader goes, and these are two more
+  things to say about the selection they are already looking at.
 */
 const SCREENS: ScreenDef[] = [
   { key: "overview", path: "/app" },
-  { key: "explain", path: "/app#explain" },
-  { key: "mitigate", path: "/app#mitigate" },
   { key: "replay", path: "/app/replay" },
 ];
 
@@ -776,29 +772,92 @@ export function SectionBlock({
   children: ReactNode;
 }) {
   const colors = usePalette();
+  const copy = useCopy();
+  /*
+    **Collapsed by default, and that is the discoverability fix.**
+
+    These two sections used to be routes, then anchors in the nav row, and the
+    nav row is two destinations again — Visão da rede and Máquina do tempo,
+    which are the only two places a reader actually goes. That left the problem
+    the review named: two of the product's three questions eight thousand
+    pixels down a page with nothing above the fold saying they exist.
+
+    A collapsed accordion answers it better than an anchor did. The heading is
+    *on the screen*, a few hundred pixels under the map, with a control that
+    says there is more behind it — which is precisely the "visible cue" whose
+    absence made this a blocker. And the page is short again: a reader who
+    wants the map gets the map, and a reader who wants the diagnosis opens it.
+
+    `aria-expanded` and a rotating chevron, not colour: a state change that is
+    only an animation is a state change a stopped animation loses.
+  */
+  const [open, setOpen] = useState(false);
   return (
     <View
       nativeID={id}
       /*
-        A landmark, so a screen reader can jump between the three sections the
-        way the three routes used to let a reader jump between pages. `region`
-        is not in react-native's `AccessibilityRole` union — that enum is the
-        intersection of what iOS, Android and the web can express — so it goes
-        on as a web prop, which is the same escape hatch this file already uses
-        for `cursor: "pointer"`.
+        A landmark, so a screen reader can jump between the sections the way the
+        routes used to let a reader jump between pages. `region` is not in
+        react-native's `AccessibilityRole` union — that enum is the intersection
+        of what iOS, Android and the web can express — so it goes on as a web
+        prop, the same escape hatch this file uses for `cursor: "pointer"`.
       */
       {...(Platform.OS === "web"
         ? ({ role: "region", "aria-label": title } as object)
         : { accessibilityLabel: title })}
       style={{
-        gap: space.lg,
+        gap: open ? space.lg : space.md,
         paddingTop: space.xl,
         borderTopWidth: 1,
         borderTopColor: colors.border,
       }}
     >
-      <ScreenTitle title={title} lede={lede} right={right} level={2} />
-      {children}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={title}
+        aria-expanded={open}
+        aria-controls={`${id}-body`}
+        onPress={() => setOpen((value) => !value)}
+        style={(state) => {
+          const { focused = false } = state as { focused?: boolean };
+          return {
+            borderRadius: radius.md,
+            ...focusRing(focused, colors.focus),
+            ...(Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null),
+          };
+        }}
+      >
+        <ScreenTitle
+          title={title}
+          lede={lede}
+          level={2}
+          right={
+            <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+              {open ? right : null}
+              <Text style={{ ...typeTokens.label, color: colors.inkMuted }}>
+                {open ? copy.app.shell.collapse : copy.app.shell.expand}
+              </Text>
+              {/* A caret, drawn rather than imported: one glyph, two rotations,
+                  and it is the static cue that survives reduced motion. */}
+              <Text
+                style={{
+                  fontSize: 13,
+                  lineHeight: 18,
+                  color: colors.inkMuted,
+                  transform: [{ rotate: open ? "180deg" : "0deg" }],
+                }}
+              >
+                {"\u25BE"}
+              </Text>
+            </View>
+          }
+        />
+      </Pressable>
+      {open ? (
+        <View nativeID={`${id}-body`} style={{ gap: space.xl }}>
+          {children}
+        </View>
+      ) : null}
     </View>
   );
 }

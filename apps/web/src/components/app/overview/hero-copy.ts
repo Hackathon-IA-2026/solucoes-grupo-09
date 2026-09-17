@@ -1,5 +1,5 @@
 /**
- * The console mockup's own strings, in one file.
+ * The hero's own strings.
  *
  * ADR-0006 puts copy in the two central dictionaries, and this deliberately
  * does not go there. The console is a mockup on its own branch, meant to be
@@ -13,7 +13,7 @@
  * look at it.
  */
 
-export interface ConsoleCopy {
+export interface HeroCopy {
   readonly title: string;
   readonly ledeForecast: string;
   readonly ledeObserved: string;
@@ -33,7 +33,7 @@ export interface ConsoleCopy {
   readonly windowObserved: string;
 }
 
-export const CONSOLE_COPY: Record<"pt" | "en", ConsoleCopy> = {
+export const HERO_COPY: Record<"pt" | "en", HeroCopy> = {
   pt: {
     title: "Console da rede",
     ledeForecast:

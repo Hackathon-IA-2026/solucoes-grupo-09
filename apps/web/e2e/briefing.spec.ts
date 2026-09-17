@@ -77,8 +77,11 @@ test.describe("mounting the host does not disturb the screens under it", () => {
       asserted.
     */
     await expect(page.getByRole("tablist")).toHaveCount(0);
+    // Two destinations. Explicar and Mitigar are collapsed accordions on this
+    // page now, not places to go, so the row names only what a reader travels
+    // to: this screen and Máquina do tempo.
     await expect(page.getByRole("link").filter({ hasNotText: "WattSteer" })).toHaveCount(
-      4,
+      2,
     );
   });
 });

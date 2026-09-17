@@ -1,5 +1,5 @@
 /**
- * The satellite readouts that sit around the console's map.
+ * The satellite readouts that sit around the Overview hero's map.
  *
  * Deliberately small components rather than new panels: the console is a
  * *layout* experiment, not a new vocabulary. Every figure it draws is drawn by

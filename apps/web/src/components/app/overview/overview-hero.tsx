@@ -1,77 +1,36 @@
 /**
- * **A mockup.** The four subsystems as one screen, with the map at the centre
- * and everything the product knows about the selected region arranged around
- * it. Reachable at `/app/console`, linked from nothing, and on its own branch.
+ * The Overview's hero: the four subsystems as one block, with the map at the
+ * centre and the selection's figures around it.
  *
- * ## What it is trying to settle
+ * ## Where it came from
  *
- * `/app` answers three questions down a single 13 000px scroll. That is honest
- * and it is also a lot of scrolling for a screen whose subject — four regions
- * of one grid — is small enough to fit in a glance. The reference dashboards
- * this is modelled on put a map in the middle and read everything else off the
- * edges, and the question worth answering is whether that shape suits a
- * product with **four** regions rather than four hundred cities.
+ * A mockup at `/app/console`, built to answer whether a map-centred layout
+ * suits a product with four regions rather than four hundred cities. It does,
+ * so it is the Overview now and the mockup route is gone.
  *
- * ## Where it departs from the reference, deliberately
+ * ## What it is, and what it deliberately is not
  *
- * Those dashboards are beautiful and they are lying. Eight-digit readouts over
- * invented geography, glowing arcs between cities that have no relationship,
- * hexbins whose density means nothing. Every number on them is a single
- * confident figure.
+ * It is the **top** of the screen, not the whole of it. The panels below still
+ * draw everything they drew — the P10–P90 bands for the day and the peak, the
+ * technology split, the risk caveat, the settled section — because a layout
+ * that reads better is not a reason to publish less. Promoting this mockup
+ * twice dropped panels nobody was thinking about, and the fix both times was to
+ * compare component lists rather than to look at the screen.
  *
- * This product's whole claim is the opposite: a forecast is an interval and a
- * settlement is a measurement, and neither is ever dressed as the other. So
- * the console borrows the *layout* and none of the certainty. Every figure it
- * draws is drawn by a component the product already ships — `BandStrip` for an
- * interval, `ObservedProfile` for a settled day, `RiskChip` for a risk class —
- * and where there is no band it says why rather than drawing one.
- *
- * Two consequences worth seeing before judging the idea:
- *
- *  - **With nothing published it is mostly settled data**, because that is what
- *    production has. A console that only looks good with a forecast is a demo.
- *  - **Four regions is not a lot of marks.** The reference's density comes from
- *    hundreds of points; ours has four, so the map is larger and calmer and the
- *    rails carry the detail. Whether that reads as spacious or as empty is
- *    exactly what this is for.
- *
- * ## What it shows, which is everything `/app` shows
- *
- * The map and its satellites are the console's own layout; **Explicar and
- * Mitigar are the same sections `/app` renders**, through the same `embedded`
- * switch. The first cut of this file left them out — it was built as a
- * replacement for the Overview's panels and stopped there, which quietly
- * dropped two thirds of what the product knows about a selected region. "A big
- * map with statistics around it" is a layout for the top of a screen, not a
- * reason to publish less.
- *
- * Nothing else imports this file, and the voice provider and briefing host are
- * untouched — it mounts under the same `/app` layout, so the dock and the
- * agent work here as they do everywhere else.
+ * The reference dashboards it borrows from are beautiful and they lie: eight
+ * digits of precision over invented geography, every number a single confident
+ * figure. This borrows the layout and none of the certainty. Every figure is
+ * drawn by a component the product already ships, and where there is no band it
+ * says why rather than drawing one.
  */
 
 import { SUBSYSTEM_DISPLAY_ORDER } from "@wattsteer/core";
-import { layout, Panel, space, type, usePalette } from "@wattsteer/ui";
-import Head from "expo-router/head";
+import { Panel, space, type, usePalette } from "@wattsteer/ui";
 import { useState } from "react";
 import { Text, View } from "react-native";
-import ExplainScreen from "@/app/app/explain";
-import MitigateScreen from "@/app/app/mitigate";
-import { AppShell, ScreenTitle, scrollToSection } from "@/components/app/app-shell";
-import { CONSOLE_COPY } from "@/components/app/console/console-copy";
-import { ConsoleRegion, ConsoleStat } from "@/components/app/console/console-stat";
-import { ForecastStamp, HonestyNote, ObservedStamp } from "@/components/app/honesty";
-import {
-  NationalFigureBlock,
-  ObservedNationalPanel,
-} from "@/components/app/overview/national-panel";
-import { EpisodesPanel } from "@/components/app/overview/settled-panels";
+import type { AppParams } from "@/components/app/params";
 import { SelectedRegion } from "@/components/app/selected-region";
-import { ReadingState } from "@/components/app/thinking-orb";
-import { gateProfileOf, useAppParams } from "@/components/app/use-app-params";
-import { useNetwork } from "@/components/app/use-network";
-import { useServing } from "@/components/app/use-serving";
-import { usePublishBriefingSubject } from "@/components/briefing/briefing-subject";
+import type { ForecastNetwork, ObservedNetwork } from "@/components/app/use-network";
 import { FanChart } from "@/components/charts/fan-chart";
 import { ObservedProfile } from "@/components/charts/observed-profile";
 import { RiskChip } from "@/components/charts/risk-class";
@@ -88,118 +47,52 @@ import {
   observedRows,
   outlookRows,
 } from "@/lib/network";
+import { HERO_COPY } from "./hero-copy";
+import { NationalFigureBlock, ObservedNationalPanel } from "./national-panel";
+import { ConsoleRegion, ConsoleStat } from "./region-rail";
 
 /**
  * The width at which the rails move beside the map rather than under it.
  *
- * Read from the content column rather than the window: the shell centres its
- * page at `layout.page`, so a window query would put rails beside a map on a
- * 1200px viewport whose content column is 1160 and not on a 1100px one whose
- * column is the same. The map is the thing that must not be squeezed.
+ * Measured on the content column rather than the window: the shell centres its
+ * page, so a window query would put rails beside a map on a 1200px viewport
+ * whose column is 1160 and not on a 1100px one whose column is the same. The
+ * map is the thing that must not be squeezed.
  */
 const RAILS_BESIDE_MAP = 980;
 
-export default function GridConsoleScreen() {
+export function OverviewHero({
+  observed,
+  forecast,
+  params,
+  onExplain,
+}: {
+  observed: ObservedNetwork;
+  forecast: ForecastNetwork | null;
+  /**
+   * The screen's own Explain handler.
+   *
+   * Not `scrollToSection` called from here, which is what the first cut did and
+   * what `app-overview-selection.spec.ts` caught within the hour: the control
+   * scrolled but stopped carrying the selection, so pressing "Explicar
+   * NORDESTE" opened the section pointed at whatever was selected before. The
+   * screen owns "select **and** go", and always did.
+   */
+  onExplain: (subsystem: SubsystemCode) => void;
+  /** The live selection, with its writer — the map and the rail set it. */
+  params: AppParams & {
+    setParams: (next: Partial<Omit<AppParams, "date">>) => void;
+  };
+}) {
   const colors = usePalette();
   const copy = useCopy();
   const f = useFormat();
   const { locale } = useI18n();
-  const params = useAppParams();
-  const serving = useServing();
-  const text = CONSOLE_COPY[locale === "en" ? "en" : "pt"];
-  const state = useNetwork({
-    subsystem: params.subsystem,
-    targetDate: params.date,
-    gateProfile: gateProfileOf(params.run),
-  });
+  const text = HERO_COPY[locale === "en" ? "en" : "pt"];
   const [hovered, setHovered] = useState<SubsystemCode | null>(null);
   const [width, setWidth] = useState(0);
   const wide = width >= RAILS_BESIDE_MAP;
 
-  /*
-    **What a briefing may draw here, and why this screen has to be the one
-    saying it.**
-
-    The channel is last-writer-wins, so the two embedded sections below stand
-    down — `usePublishBriefingSubject(subject, false)` — exactly as they do on
-    `/app`. Which means that without this call nobody on the console publishes
-    at all, and asking the agent for a briefing would have described whichever
-    screen the reader was on before. Silently: the dock is there, the agent
-    answers, and the scenes are about the wrong page.
-
-    Above the early returns, because a hook cannot sit behind one, and because
-    `reading` and `refused` are subjects too — a briefing asked in either state
-    should compose from what is true then.
-  */
-  const settledFor =
-    state.status === "reading" || state.status === "refused" ? null : state.observed;
-  const publishedFor = state.status === "read" ? state.forecast : null;
-  usePublishBriefingSubject({
-    context: { locale, screen: "overview", params, serving, network: state },
-    data: {
-      paint:
-        publishedFor === null
-          ? {
-              kind: "observed",
-              rows:
-                settledFor === null
-                  ? []
-                  : observedRows(settledFor.now.subsystems, SUBSYSTEM_DISPLAY_ORDER),
-            }
-          : { kind: "forecast", rows: outlookRows(publishedFor.outlook) },
-      forecastHours: publishedFor === null ? null : forecastHours(publishedFor.forecast),
-      thresholdMw: publishedFor === null ? null : publishedFor.forecast.thresholdMw,
-      observedHours: settledFor === null ? null : settledFor.hours,
-      // Explicar is a section here, but it reads its own gateway and this
-      // screen does not — so the same rule the Overview states applies: no
-      // `cause` scene rather than an invented one.
-      drivers: null,
-      reasons: null,
-      dayEnergy:
-        publishedFor === null ? null : forecastRow(publishedFor.forecast).dailyEnergy,
-      peakPower:
-        publishedFor === null ? null : forecastRow(publishedFor.forecast).peakPower,
-      comparison: null,
-    },
-    counterfactual: undefined,
-  });
-
-  const frame = (right: React.ReactNode, body: React.ReactNode) => (
-    <>
-      <Head>
-        <title>{`${text.title} — WattSteer`}</title>
-        <meta name="robots" content="noindex,follow" />
-      </Head>
-      <AppShell>
-        <View onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
-          <ScreenTitle
-            title={text.title}
-            lede={state.status === "read" ? text.ledeForecast : text.ledeObserved}
-            right={right}
-          />
-        </View>
-        {body}
-      </AppShell>
-    </>
-  );
-
-  if (state.status === "reading") {
-    return frame(null, <ReadingState title={copy.app.overview.readingTitle} />);
-  }
-
-  if (state.status === "refused") {
-    return frame(
-      null,
-      <HonestyNote
-        title={text.refusedTitle}
-        tone="warning"
-        points={[copy.error[state.code], copy.app.overview.refusedNote]}
-      />,
-    );
-  }
-
-  const observed = state.observed;
-  const forecast = state.status === "read" ? state.forecast : null;
   const meta = subsystemMeta(observed.subsystem as SubsystemCode);
   const day = observedDay(observed.hours);
 
@@ -296,16 +189,26 @@ export default function GridConsoleScreen() {
     Overview's own component — two settlements, never a division of one
     modelled expectation — and it fills the column the profile left half empty.
   */
-  const split = (
-    <ObservedSplitPanel
-      split={observed.daySplit}
-      // The settled day's two settlements, always — `daySplit` is that day's
-      // wind and solar, not the rail's rolling 24 hours. Passing the rail's
-      // window here would have put the wrong one under the right numbers.
-      window={text.totalNoteObserved}
-      emphasis={params.technology}
-    />
-  );
+  /*
+    The observed split, and only where it is the only one.
+
+    In the `read` state the stack below draws `TechnologySplitPanel` — a
+    division of one modelled expectation — and this is two published
+    settlements. Drawing both puts two wind/solar panels on one screen with
+    nothing between them saying which is which, which is the adjacency
+    `lib/network.ts` refuses in so many words.
+  */
+  const split =
+    forecast === null ? (
+      <ObservedSplitPanel
+        split={observed.daySplit}
+        // The settled day's two settlements, always — `daySplit` is that day's
+        // wind and solar, not the rail's rolling 24 hours. Passing the rail's
+        // window here would have put the wrong one under the right numbers.
+        window={text.totalNoteObserved}
+        emphasis={params.technology}
+      />
+    ) : null;
 
   /*
     **What the first cut of this screen was missing, found by comparing it
@@ -377,19 +280,16 @@ export default function GridConsoleScreen() {
     </Panel>
   );
 
-  return frame(
-    forecast === null ? (
-      <ObservedStamp
-        latestSettledHour={observed.now.latestSettledHour}
-        lagHours={observed.now.lagHours}
-      />
-    ) : (
-      <ForecastStamp
-        origin={forecast.forecast.forecastOrigin}
-        thresholdMw={forecast.forecast.thresholdMw}
-      />
-    ),
-    <View style={{ gap: space.xl }}>
+  return (
+    /*
+      One `View`, and it measures itself. `wide` is read from this element's own
+      width rather than the window's, so the rails move beside the map when
+      *this column* has room — which is the thing that must not be squeezed.
+    */
+    <View
+      onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
+      style={{ gap: space.xl }}
+    >
       {nationalPanel}
       <View
         style={{
@@ -449,7 +349,7 @@ export default function GridConsoleScreen() {
                   : null
               }
               observedWindow={window24h}
-              onExplain={() => scrollToSection("explain")}
+              onExplain={() => onExplain(params.subsystem)}
             />
           </Panel>
           {wide ? null : headline}
@@ -480,24 +380,6 @@ export default function GridConsoleScreen() {
           />
         </Panel>
       )}
-
-      <EpisodesPanel observed={observed} />
-
-      {/*
-        **Explicar and Mitigar, which the first cut of this left out.**
-
-        The console was built as a replacement for the Overview's *panels* and
-        stopped there, which quietly dropped two thirds of what the product
-        knows about a selected region: why the day looks like this, and what
-        flexibility would absorb it. "A big map with the statistics around it"
-        is a layout for the top of a screen, not a reason to publish less.
-
-        Same components and the same `embedded` switch `/app` uses, so a panel
-        added to Explicar appears in three places and drifts in none: its own
-        route, the Overview, and here.
-      */}
-      <ExplainScreen embedded />
-      <MitigateScreen embedded />
-    </View>,
+    </View>
   );
 }

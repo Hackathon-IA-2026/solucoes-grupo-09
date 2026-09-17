@@ -92,6 +92,28 @@ test.describe("a click on the map selects, and does not navigate", () => {
     }
   });
 
+  test("exactly one selection strip renders, in either state", async ({ page }) => {
+    /*
+      **The guard the source-text count can no longer be.**
+
+      Three `<SelectedRegion` live in the Overview's sources — the hero's, the
+      one under the observed stack's map, and the one at screen level for the
+      refusal path — and `heroElsewhere` means only the hero's is reached. A
+      grep cannot tell a rendered component from a skipped one, so the property
+      is asserted where it is true: in the DOM.
+
+      Two of them on one page would be two things claiming to name the
+      selection, which is the defect `SelectedRegion`'s own docstring is about.
+    */
+    for (const forecast of [true, false]) {
+      await routeGateway(page, { forecast });
+      await page.goto("/app");
+      await expect(page.getByTestId("selected-region")).toHaveCount(1, {
+        timeout: 15_000,
+      });
+    }
+  });
+
   test("Explain is a control with a name on it, and it takes you to the section", async ({
     page,
   }) => {

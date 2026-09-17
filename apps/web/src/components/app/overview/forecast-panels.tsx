@@ -61,10 +61,21 @@ export function ForecastPanels({
   forecast,
   onSelect,
   onExplain,
+  heroElsewhere = false,
 }: {
   forecast: ForecastNetwork;
   onSelect: (subsystem: SubsystemCode) => void;
   onExplain: (subsystem: SubsystemCode) => void;
+  /**
+   * Whether the screen already drew the national figure, the map, the rows, the
+   * selection and the fan above this stack.
+   *
+   * `OverviewHero` does, so these panels must not draw them twice. A prop
+   * rather than a second component because the alternative is two near-copies
+   * of this file, which is how the panels below would drift from the ones
+   * above — and this stack has already lost panels twice to nobody noticing.
+   */
+  heroElsewhere?: boolean;
 }) {
   const colors = usePalette();
   const copy = useCopy();
@@ -102,153 +113,161 @@ export function ForecastPanels({
 
   return (
     <>
-      <FadeIn style={{ gap: space.md }}>
-        {/* The landing's readout card: figure and subsystem list side by side,
-            a rule, then the hourly fan — one object, not four panels. */}
-        <Panel style={gradientBg(READOUT_WASH, colors.surface)}>
-          <PanelHeader
-            icon={<CalendarDaysIcon size={18} color={colors.inkMuted} />}
-            title={copy.app.overview.nationalTitle}
-            subtitle={copy.app.overview.nationalSubtitle}
-          />
+      {heroElsewhere ? null : (
+        <FadeIn style={{ gap: space.md }}>
+          {/* The landing's readout card: figure and subsystem list side by side,
+              a rule, then the hourly fan — one object, not four panels. */}
+          <Panel style={gradientBg(READOUT_WASH, colors.surface)}>
+            <PanelHeader
+              icon={<CalendarDaysIcon size={18} color={colors.inkMuted} />}
+              title={copy.app.overview.nationalTitle}
+              subtitle={copy.app.overview.nationalSubtitle}
+            />
 
+            <View
+              style={{
+                flexDirection: side ? "row" : "column",
+                gap: space.lg,
+                marginTop: space.lg,
+              }}
+            >
+              <View style={{ flex: side ? 1 : undefined, gap: space.md }}>
+                <NationalFigureBlock national={forecast.outlook.national} />
+              </View>
+
+              <View style={{ flex: side ? 1.15 : undefined, gap: space.md }}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    flexWrap: "wrap",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: space.sm,
+                  }}
+                >
+                  <Text style={{ fontSize: 14, fontWeight: "600", color: colors.ink }}>
+                    {copy.readout.subsystemsTitle}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: colors.inkFaint }}>
+                    {copy.readout.columnProbability}
+                  </Text>
+                </View>
+                {rows.map((row) => (
+                  <SubsystemRow
+                    key={row.subsystem}
+                    forecast={row}
+                    emphasis={params.technology}
+                    domainMax={domainMax}
+                    selected={row.subsystem === params.subsystem}
+                    highlighted={row.subsystem === active}
+                    onHoverChange={(on) => setHovered(on ? row.subsystem : null)}
+                    onPress={() => onSelect(row.subsystem)}
+                    onExplain={() => onExplain(row.subsystem)}
+                  />
+                ))}
+                <Text style={{ fontSize: 11, lineHeight: 17, color: colors.inkFaint }}>
+                  {copy.readout.additivityNote}
+                </Text>
+              </View>
+            </View>
+
+            <View
+              style={{
+                height: 1,
+                backgroundColor: colors.border,
+                marginVertical: space.lg,
+              }}
+            />
+
+            <View style={{ gap: space.md }}>
+              <PanelHeader
+                icon={<LayoutDashboardIcon size={18} color={colors.inkMuted} />}
+                title={meta.onsDisplayName}
+                subtitle={copy.app.overview.profileSubtitle}
+              />
+              <FanChart
+                hours={forecastHours(forecast.forecast)}
+                thresholdMw={forecast.forecast.thresholdMw}
+              />
+            </View>
+          </Panel>
+        </FadeIn>
+      )}
+
+      {heroElsewhere ? (
+        <FadeIn delay={70}>
+          <RiskCaveat />
+        </FadeIn>
+      ) : (
+        <FadeIn delay={70} style={{ gap: space.md }} onLayout={onOverviewLayout}>
+          {/*
+            Map and rows side by side once there is room for both, stacked below
+            that. `side` is measured against `layout.desktop` on the *container*
+            rather than the viewport, so the pair reflows correctly inside
+            whatever it is nested in.
+          */}
           <View
             style={{
               flexDirection: side ? "row" : "column",
-              gap: space.lg,
-              marginTop: space.lg,
+              alignItems: side ? "flex-start" : "stretch",
+              gap: space.md,
             }}
           >
-            <View style={{ flex: side ? 1 : undefined, gap: space.md }}>
-              <NationalFigureBlock national={forecast.outlook.national} />
-            </View>
+            <Panel style={side ? { width: 420 } : undefined}>
+              <PanelHeader
+                icon={<MapIcon size={18} color={colors.inkMuted} />}
+                title={copy.app.overview.map.title}
+                subtitle={copy.app.overview.map.subtitle}
+              />
+              <View style={{ marginTop: space.lg }}>
+                <SubsystemMap
+                  paint={{ kind: "forecast", rows }}
+                  selected={params.subsystem}
+                  hovered={active}
+                  onHoverChange={setHovered}
+                  onSelect={onSelect}
+                />
+              </View>
+              {/*
+                Directly under the map graphic and above its own footnotes, and
+                this is choice (3) of the ticket: something must visibly respond
+                inside the viewport. The panels this selection re-points are below
+                the fold on a laptop and far below it on a phone, so a click could
+                otherwise produce no visible change at all — and placed after the
+                boundary note and the attribution, the strip was itself at the
+                edge of the fold at 1440, measured on the export.
 
-            <View style={{ flex: side ? 1.15 : undefined, gap: space.md }}>
-              <View
+                The alternative was to scroll the panel block into view on every
+                selection. Rejected: this is a comparison screen, and scrolling
+                takes the map — the thing a reader is comparing from — off the
+                screen, so every comparison costs a scroll back. It is worse still
+                on the keyboard, where an arrow key would fling the page. A strip
+                in place costs no motion and leaves the next click where the last
+                one was.
+              */}
+              <View style={{ marginTop: space.md }}>
+                <SelectedRegion
+                  subsystem={params.subsystem}
+                  row={rows.find((row) => row.subsystem === params.subsystem) ?? null}
+                  onExplain={() => onExplain(params.subsystem)}
+                />
+              </View>
+
+              <Text
                 style={{
-                  flexDirection: "row",
-                  flexWrap: "wrap",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: space.sm,
+                  fontSize: 11,
+                  color: colors.inkFaint,
+                  lineHeight: 17,
+                  marginTop: space.md,
                 }}
               >
-                <Text style={{ fontSize: 14, fontWeight: "600", color: colors.ink }}>
-                  {copy.readout.subsystemsTitle}
-                </Text>
-                <Text style={{ fontSize: 12, color: colors.inkFaint }}>
-                  {copy.readout.columnProbability}
-                </Text>
-              </View>
-              {rows.map((row) => (
-                <SubsystemRow
-                  key={row.subsystem}
-                  forecast={row}
-                  emphasis={params.technology}
-                  domainMax={domainMax}
-                  selected={row.subsystem === params.subsystem}
-                  highlighted={row.subsystem === active}
-                  onHoverChange={(on) => setHovered(on ? row.subsystem : null)}
-                  onPress={() => onSelect(row.subsystem)}
-                  onExplain={() => onExplain(row.subsystem)}
-                />
-              ))}
-              <Text style={{ fontSize: 11, lineHeight: 17, color: colors.inkFaint }}>
-                {copy.readout.additivityNote}
+                {copy.app.overview.map.boundaryNote}
               </Text>
-            </View>
+            </Panel>
           </View>
-
-          <View
-            style={{
-              height: 1,
-              backgroundColor: colors.border,
-              marginVertical: space.lg,
-            }}
-          />
-
-          <View style={{ gap: space.md }}>
-            <PanelHeader
-              icon={<LayoutDashboardIcon size={18} color={colors.inkMuted} />}
-              title={meta.onsDisplayName}
-              subtitle={copy.app.overview.profileSubtitle}
-            />
-            <FanChart
-              hours={forecastHours(forecast.forecast)}
-              thresholdMw={forecast.forecast.thresholdMw}
-            />
-          </View>
-        </Panel>
-      </FadeIn>
-
-      <FadeIn delay={70} style={{ gap: space.md }} onLayout={onOverviewLayout}>
-        {/*
-          Map and rows side by side once there is room for both, stacked below
-          that. `side` is measured against `layout.desktop` on the *container*
-          rather than the viewport, so the pair reflows correctly inside
-          whatever it is nested in.
-        */}
-        <View
-          style={{
-            flexDirection: side ? "row" : "column",
-            alignItems: side ? "flex-start" : "stretch",
-            gap: space.md,
-          }}
-        >
-          <Panel style={side ? { width: 420 } : undefined}>
-            <PanelHeader
-              icon={<MapIcon size={18} color={colors.inkMuted} />}
-              title={copy.app.overview.map.title}
-              subtitle={copy.app.overview.map.subtitle}
-            />
-            <View style={{ marginTop: space.lg }}>
-              <SubsystemMap
-                paint={{ kind: "forecast", rows }}
-                selected={params.subsystem}
-                hovered={active}
-                onHoverChange={setHovered}
-                onSelect={onSelect}
-              />
-            </View>
-            {/*
-              Directly under the map graphic and above its own footnotes, and
-              this is choice (3) of the ticket: something must visibly respond
-              inside the viewport. The panels this selection re-points are below
-              the fold on a laptop and far below it on a phone, so a click could
-              otherwise produce no visible change at all — and placed after the
-              boundary note and the attribution, the strip was itself at the
-              edge of the fold at 1440, measured on the export.
-
-              The alternative was to scroll the panel block into view on every
-              selection. Rejected: this is a comparison screen, and scrolling
-              takes the map — the thing a reader is comparing from — off the
-              screen, so every comparison costs a scroll back. It is worse still
-              on the keyboard, where an arrow key would fling the page. A strip
-              in place costs no motion and leaves the next click where the last
-              one was.
-            */}
-            <View style={{ marginTop: space.md }}>
-              <SelectedRegion
-                subsystem={params.subsystem}
-                row={rows.find((row) => row.subsystem === params.subsystem) ?? null}
-                onExplain={() => onExplain(params.subsystem)}
-              />
-            </View>
-
-            <Text
-              style={{
-                fontSize: 11,
-                color: colors.inkFaint,
-                lineHeight: 17,
-                marginTop: space.md,
-              }}
-            >
-              {copy.app.overview.map.boundaryNote}
-            </Text>
-          </Panel>
-        </View>
-        <RiskCaveat />
-      </FadeIn>
+          <RiskCaveat />
+        </FadeIn>
+      )}
 
       <FadeIn delay={210}>
         <Panel>
