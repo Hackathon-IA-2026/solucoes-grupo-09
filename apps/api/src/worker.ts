@@ -258,6 +258,18 @@ if (config.refreshSchedules) {
 } else {
   console.log("   refresh: schedules disabled (WATTSTEER_REFRESH=off)");
 }
+/*
+  Printed for the reason every other schedule here is: a registered job that
+  says nothing at boot is a job an operator can only discover by noticing its
+  absence, and the absence of this one is silent by construction — the corpus
+  simply stops moving while `/ready` stays green.
+*/
+if (config.refreshSchedules && config.ragUrl) {
+  console.log(
+    `   rag: ${RAG_REFRESH_SCHEDULE.id} ${RAG_REFRESH_SCHEDULE.pattern} ` +
+      `(${RAG_REFRESH_SCHEDULE.timeZone})`,
+  );
+}
 if (config.refreshSchedules && config.mlUrl) {
   console.log(
     `   publication: ${FORECAST_PUBLICATIONS.map(
