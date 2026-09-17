@@ -458,6 +458,12 @@ function ReliabilityPanel({ card }: { card: ModelCardState }) {
   }
 
   const reliability = card.card.reliability;
+  /*
+    Optional on the wire: a card written before the coverage group existed
+    carries none, and `coverage_absent_reason` says why. Absent is drawn as
+    absent rather than as zero.
+  */
+  const coverage = card.card.band?.coverage ?? null;
   return (
     <Panel>
       <PanelHeader
@@ -476,6 +482,48 @@ function ReliabilityPanel({ card }: { card: ModelCardState }) {
           to: f.date(reliability.window.end),
         })}
       </Text>
+
+      {/*
+        **The measured coverage, which the gate has always computed and no
+        screen has ever shown.**
+
+        The reliability curve above is about the *occurrence* probability — did
+        an hour called 30% likely curtail 30% of the time. This is about the
+        **band**: did the P10–P90 interval contain what happened, as often as it
+        said it would. Two different promises, and only one of them was on a
+        screen.
+
+        `nominalClaim` decides which sentence, because the contract says in so
+        many words that a client rendering a coverage claim without reading it
+        has a bug: a band whose upper marginal falls short, or whose
+        `coverage_p10` is a vacuous 1.0, is not a 90% band and must not be
+        described as one. And never `claimNote`, which the same contract calls
+        auditor prose in the status of an error `message` — it is there for
+        somebody reading the card, not for a reader of this page.
+      */}
+      {coverage === null ? null : (
+        <View style={{ marginTop: space.lg, gap: 6 }}>
+          <Text style={{ fontSize: 13, fontWeight: "600", color: colors.ink }}>
+            {copy.app.explain.coverageTitle}
+          </Text>
+          <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkMuted }}>
+            {coverage.nominalClaim
+              ? fill(copy.app.explain.coverageClaim, {
+                  rows: f.exact(coverage.rows),
+                  fold: coverage.foldId,
+                  p10: f.percent(coverage.lower.coverageP10, 1),
+                  p90: f.percent(coverage.upper.coverageP90, 1),
+                  target: f.percent(coverage.target, 0),
+                })
+              : fill(copy.app.explain.coverageWithheld, {
+                  target: f.percent(coverage.target, 0),
+                })}
+          </Text>
+          <Text style={{ fontSize: 11, lineHeight: 17, color: colors.inkFaint }}>
+            {copy.app.explain.coverageNote}
+          </Text>
+        </View>
+      )}
     </Panel>
   );
 }

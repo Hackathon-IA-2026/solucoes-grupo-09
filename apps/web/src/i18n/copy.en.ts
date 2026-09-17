@@ -1030,6 +1030,8 @@ export const en = {
         reason. REL/CNF/ENE are ONS's record of days that have happened, so the
         sentence carries the date and never sits unlabelled beside a forecast.
       */
+      causeEvidence: "Rule: {document} {revision}, p. {page}",
+      causeEvidenceNoPage: "Rule: {document} {revision}",
       causeLabel: "Dominant reason",
       causeSentence: "{reason} accounted for {share} of the energy curtailed on {date}.",
       causeNote:
@@ -1038,7 +1040,8 @@ export const en = {
       windowLabel: "Critical window",
       windowRange: "{from}h–{to}h BRT",
       windowPeak: "Peak at {peak}h · {mwh} MWh",
-      windowScattered: "{hours} hours of the day expect curtailment; this is the longest run.",
+      windowScattered:
+        "{hours} hours of the day expect curtailment; this is the longest run.",
       windowNone: "No hour of the day is more likely to curtail than not.",
       metaTitle: "Grid Overview — WattSteer",
       title: "Grid Overview",
@@ -1247,6 +1250,23 @@ export const en = {
       narrationSourceTemplate: "Source: fixed template",
       driversTitle: "Driver attribution",
       driversSubtitle: "SHAP, at subsystem grain",
+      /**
+        The band's measured coverage — the figure the gate computes at every
+        gate and that no screen was showing.
+
+        Never from `claim_note`: the contract says that is auditor prose in the
+        same status as an error `message` and never reaches a reader. These
+        sentences are assembled from the numbers, and the withheld one exists
+        because the type warns that a client rendering a coverage claim without
+        reading `nominal_claim` has a bug.
+      */
+      coverageTitle: "Did the band cover what it promises?",
+      coverageClaim:
+        "Over the {rows} curtailed hours of fold {fold}, the lower edge covered {p10} and the upper {p90}, against a target of {target}.",
+      coverageWithheld:
+        "This band may not be described as a {target} band over this fold's curtailed hours. The numbers are above; the claim is withheld.",
+      coverageNote:
+        "Measured over a whole fold, not over a day. A day lands inside its band or outside it; the fraction of days that land inside is what this figure is — and it is what the Time Machine names when it refuses to grade a single day.",
       reliabilityTitle: "Reliability",
       reliabilitySubtitle: "Forecast vs observed frequency",
       reliabilityNote:

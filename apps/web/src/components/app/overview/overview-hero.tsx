@@ -26,8 +26,9 @@
 
 import { SUBSYSTEM_DISPLAY_ORDER } from "@wattsteer/core";
 import { Panel, space, type, usePalette } from "@wattsteer/ui";
+import { Link } from "expo-router";
 import { useState } from "react";
-import { Text, View } from "react-native";
+import { Platform, Text, View } from "react-native";
 import type { AppParams } from "@/components/app/params";
 import { SelectedRegion } from "@/components/app/selected-region";
 import type { ForecastNetwork, ObservedNetwork } from "@/components/app/use-network";
@@ -246,6 +247,41 @@ export function OverviewHero({
               date: f.date(observed.hoursDate),
             })}
           </Text>
+          {/*
+            **The norm behind the reason, when the corpus has it.**
+
+            This is the half the reason code alone cannot carry: `ENE` says
+            what ONS classified the restriction as, and the citation says which
+            operating instruction states the limit that produced it. A schedule
+            retrieved it against the published corpus; most days have none, and
+            a reason without a document is still a reason.
+          */}
+          {observed.evidence === null ? null : (
+            // `Link` + `asChild`, the idiom `site-footer.tsx` uses: a react-native
+            // `Text` takes no `href`, and expo-router's `Link` is what renders a
+            // real anchor on web while staying a navigation on native.
+            <Link
+              href={observed.evidence.url as never}
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                ...type.caption,
+                color: colors.accent,
+                ...(Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null),
+              }}
+            >
+              {fill(
+                observed.evidence.page === null
+                  ? copy.app.overview.causeEvidenceNoPage
+                  : copy.app.overview.causeEvidence,
+                {
+                  document: observed.evidence.documentCode,
+                  revision: observed.evidence.revision ?? "",
+                  page: String(observed.evidence.page ?? ""),
+                },
+              )}
+            </Link>
+          )}
           <Text style={{ ...type.caption, color: colors.inkFaint, lineHeight: 17 }}>
             {copy.app.overview.causeNote}
           </Text>

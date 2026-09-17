@@ -498,6 +498,41 @@ const CURTAILMENT_REASONS = {
  * conjunto ONS also reported would be counted twice. `dominant-reason.test.ts`
  * holds that rule as arithmetic; this holds it as a rendered screen.
  */
+/**
+ * `GET /v1/curtailment/evidence` — the passage a schedule retrieved for that
+ * day's restriction.
+ *
+ * Served only with `reasons`, because a citation annotates a reason and there
+ * is nothing to annotate on a day that had none. The shape is the retrieval
+ * service's audit record, narrowed by `lib/evidence.ts` to the one line a card
+ * states; the fields here are the ones measured off production.
+ */
+const CURTAILMENT_EVIDENCE = {
+  subsystem: SUBSYSTEM,
+  target_date: TARGET_DATE,
+  rows: [
+    {
+      verdict: "found",
+      payload: {
+        items: [
+          {
+            supports: "ENE",
+            citations: [
+              {
+                external_id: "IO-ON.NE.5NE",
+                revision: "Rev.61",
+                title: "IO-ON.NE.5NE - Operação Normal da Área 500 kV da Região Nordeste",
+                url: "https://www.ons.org.br/MPO/IO-ON.NE.5NE_Rev.61.pdf",
+                locator: { page: 12, row: null, table: null, section: "5.2" },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+};
+
 const CURTAILMENT_REASONS_WITH_ROWS = {
   ...CURTAILMENT_REASONS,
   rows: [
@@ -642,8 +677,33 @@ const MODEL_CARD = {
     rank: 3140,
     window: { start: "2026-05-01", end: "2026-05-31" },
     guarantee: "marginal",
-    coverage: null,
-    coverage_absent_reason: "Coverage is written by the gate, not by the fit.",
+    /*
+      Measured, and shaped as production's is.
+
+      This was `null` with "coverage is written by the gate, not by the fit" —
+      true of the *fit* and no longer true of the card, which now carries what
+      the gate wrote. A fixture that modelled a card predating the group left
+      the one screen showing coverage asserting only its absence.
+
+      `nominal_claim: true` with both marginals inside the guardrail is the
+      case a reader meets; the withheld branch is driven by this flag and a
+      fixture cannot hold both at once.
+    */
+    coverage: {
+      fold_id: "F6",
+      population: "curtailed_hours",
+      rows: 3541,
+      target: 0.9,
+      guardrail: [0.85, 0.97],
+      guardrail_satisfied: true,
+      nominal_claim: true,
+      claim_note: "Auditor prose. Never rendered — asserted by the spec below.",
+      lower: { coverage_p10: 0.9548, coverage_p10_where_stated: 0.8836 },
+      upper: { coverage_p90: 0.9189, coverage_p90_where_stated: 0.9255 },
+      p50_unbiasedness: 0.5082,
+      crossing_rate: 0,
+    },
+    coverage_absent_reason: null,
   },
   ensemble: {
     ensemble_draws: 500,
@@ -762,6 +822,15 @@ export async function routeGateway(
     const path = new URL(route.request().url()).pathname;
     if (reasons && path === "/v1/curtailment/reasons") {
       await route.fulfill({ json: CURTAILMENT_REASONS_WITH_ROWS });
+      return;
+    }
+    if (path === "/v1/curtailment/evidence") {
+      // Empty unless the day had restrictions: a citation annotates a reason,
+      // and `firstCitation` treats an empty list as "no citation" rather than
+      // as a failure, which is the case most days are.
+      await route.fulfill({
+        json: reasons ? CURTAILMENT_EVIDENCE : { ...CURTAILMENT_EVIDENCE, rows: [] },
+      });
       return;
     }
     const observed = OBSERVED_BY_PATH[path];

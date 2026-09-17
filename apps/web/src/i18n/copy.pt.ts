@@ -774,6 +774,8 @@ export const pt: Copy = {
         REL/CNF/ENE são o registro do ONS sobre dias que já aconteceram, então
         a frase carrega a data e nunca fica solta ao lado de uma previsão.
       */
+      causeEvidence: "Regra: {document} {revision}, p. {page}",
+      causeEvidenceNoPage: "Regra: {document} {revision}",
       causeLabel: "Motivo dominante",
       causeSentence: "{reason} respondeu por {share} da energia cortada em {date}.",
       causeNote:
@@ -916,6 +918,23 @@ export const pt: Copy = {
       narrationSourceTemplate: "Fonte: template fixo",
       driversTitle: "Atribuição de drivers",
       driversSubtitle: "SHAP, no grão de subsistema",
+      /**
+        A cobertura medida da faixa — o número que o gate já apura a cada portão
+        e que nenhuma tela mostrava.
+
+        Nunca a partir de `claim_note`: o contrato diz que aquilo é prosa de
+        auditor, no mesmo estatuto de uma `message` de erro, e não vai para um
+        leitor. Estas frases são montadas dos números, e a de recusa existe
+        porque o tipo avisa que um cliente que renderiza uma alegação de
+        cobertura sem ler `nominal_claim` tem um bug.
+      */
+      coverageTitle: "A faixa cobriu o que promete?",
+      coverageClaim:
+        "Nas {rows} horas com corte da dobra {fold}, a borda inferior cobriu {p10} e a superior {p90}, contra um alvo de {target}.",
+      coverageWithheld:
+        "Esta faixa não pode ser descrita como uma faixa de {target} sobre as horas com corte desta dobra. Os números estão acima; a alegação está retida.",
+      coverageNote:
+        "Medido sobre uma dobra inteira, não sobre um dia. Um dia cai dentro ou fora da faixa; a fração de dias que caem dentro é o que este número é — e é o que a Máquina do tempo nomeia quando se recusa a atribuir nota a um dia só.",
       reliabilityTitle: "Confiabilidade",
       reliabilitySubtitle: "Previsto vs frequência observada",
       reliabilityNote:

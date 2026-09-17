@@ -67,7 +67,9 @@ import type {
 import { useEffect, useState } from "react";
 import { refusalOf } from "@/lib/absence";
 import { api } from "@/lib/api";
+import { API_URL } from "@/lib/config";
 import { type DominantReason, dominantReason } from "@/lib/dominant-reason";
+import { type EvidenceCitation, readEvidence } from "@/lib/evidence";
 import type { CurtailmentHourObservation } from "@/lib/fixtures";
 import { observedHours, observedSplit } from "@/lib/network";
 import { settleWith } from "@/lib/settle";
@@ -104,6 +106,15 @@ export interface ObservedNetwork {
    * `null` and the card simply does not claim a cause.
    */
   readonly dominantReason: DominantReason | null;
+  /**
+   * The ONS passage behind that reason, or `null`.
+   *
+   * Beside the group for the same reason `dominantReason` is, and a step
+   * further: this one is an annotation *on an annotation*. A schedule builds
+   * it, most days have none, and a card that failed because a citation lookup
+   * did would be the tail wagging the screen.
+   */
+  readonly evidence: EvidenceCitation | null;
   readonly now: GridNow;
   /** The selected subsystem's settled day, one series, technologies summed. */
   readonly hours: CurtailmentHourObservation[];
@@ -240,6 +251,9 @@ export function useNetwork(query: NetworkQuery): NetworkState {
       .observedReasons({ subsystem, date: settled }, signal)
       .then((answer) => dominantReason(answer.rows))
       .catch(() => null);
+    const evidence = readEvidence(API_URL, { subsystem, date: settled }, signal).catch(
+      () => null,
+    );
 
     const observed = Promise.all([
       api.gridNow(signal),
@@ -249,6 +263,7 @@ export function useNetwork(query: NetworkQuery): NetworkState {
       async ([now, hours, episodes]): Promise<ObservedNetwork> => ({
         subsystem,
         dominantReason: await reasons,
+        evidence: await evidence,
         now,
         hours: observedHours(hours, settled),
         hoursDate: settled,
