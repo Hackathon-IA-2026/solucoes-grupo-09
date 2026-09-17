@@ -31,10 +31,14 @@
 
 import { config } from "../config.js";
 
+/** The publisher's clock, which is the only one that decides what exists yet. */
+export const RAG_REFRESH_TIME_ZONE = "America/Sao_Paulo";
+
 /** A repeatable job the queue registers, in the shape `runner.schedule` takes. */
 export interface RagRefreshSchedule {
   id: string;
   pattern: string;
+  timeZone: string;
   payload: { kind: "rag_refresh"; payload: RagRefreshPayload };
 }
 
@@ -59,10 +63,26 @@ export interface RagRefreshResult {
   detail: string;
 }
 
-/** Ten past four, Brasília — after the day's bulletin is out and before the gate. */
+/**
+ * Ten past eight, Brasília civil time.
+ *
+ * The first draft read `"10 4 * * *"` with no zone, which a `JobSchedule`
+ * evaluates in UTC — 01:10 in Brasília. Fired by hand at 03:56 UTC it returned
+ * two 404s and nothing else, and the 404s are the answer: ONS had published
+ * neither the previous day's bulletin index nor that morning's IPDO, because at
+ * one in the morning neither exists yet. A schedule that asks before the
+ * publisher has published is a schedule that succeeds every day and fetches
+ * nothing, which is the failure this whole job was written to prevent, arriving
+ * by a different door.
+ *
+ * So: a zone rather than an implicit UTC, and a morning hour rather than an
+ * overnight one. Before the 09:00 gate, so a day the RAG is asked about is a
+ * day it has had a chance to fetch.
+ */
 export const RAG_REFRESH_SCHEDULE: RagRefreshSchedule = {
   id: "rag:refresh",
-  pattern: "10 4 * * *",
+  pattern: "10 8 * * *",
+  timeZone: RAG_REFRESH_TIME_ZONE,
   payload: { kind: "rag_refresh", payload: { days: 2 } },
 };
 
