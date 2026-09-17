@@ -10,7 +10,7 @@
 import { producerLabel } from "@wattsteer/core";
 import { Badge, ClockIcon, radius, space, usePalette } from "@wattsteer/ui";
 import { createContext, type ReactNode, useContext } from "react";
-import { Text, View } from "react-native";
+import { Platform, Text, View } from "react-native";
 import { useServing } from "@/components/app/use-serving";
 import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
@@ -157,15 +157,50 @@ export function HonestyNote({
           gap: 8,
         }}
       >
-        <Text style={{ fontSize: 13, fontWeight: "700", color: colors.ink }}>
+        {/*
+          `flexShrink: 1` and a basis, per ADR-0001: react-native-web defaults
+          `flexShrink` to 0 where CSS defaults it to 1, so this title sat at its
+          content width and pushed the badges beside it past the card. Measured
+          at 320px on the Time Machine — "O que esta reexecução é, e o que ela
+          não é" beside two badges, 294px of content in a 244px box.
+        */}
+        <Text
+          style={{
+            fontSize: 13,
+            fontWeight: "700",
+            color: colors.ink,
+            flexShrink: 1,
+            flexBasis: 180,
+            flexGrow: 1,
+          }}
+        >
           {title}
         </Text>
         {right}
       </View>
       {points.map((point) => (
-        <View key={point} style={{ flexDirection: "row", gap: 8 }}>
-          <Text style={{ fontSize: 12, color: colors.inkFaint }}>—</Text>
-          <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkMuted, flex: 1 }}>
+        // The dash must not shrink and the sentence must; without the pair the
+        // row sits at the sentence's unwrapped width. Same default, same ADR.
+        <View key={point} style={{ flexDirection: "row", gap: 8, flexShrink: 1 }}>
+          <Text style={{ fontSize: 12, color: colors.inkFaint, flexShrink: 0 }}>—</Text>
+          <Text
+            style={{
+              fontSize: 12,
+              lineHeight: 19,
+              color: colors.inkMuted,
+              flex: 1,
+              /*
+                These sentences quote identifiers, and an identifier does not
+                wrap: `dessem_free_v1__gate_late__thr5/2025-10-01T…Z` is one
+                unbreakable 45-character word, ~250px at this size, in a 244px
+                card at 320. `flex: 1` cannot help — there is no space to break
+                at. The browser is told it may break inside the word.
+              */
+              ...(Platform.OS === "web"
+                ? ({ overflowWrap: "anywhere", wordBreak: "break-word" } as object)
+                : null),
+            }}
+          >
             {point}
           </Text>
         </View>

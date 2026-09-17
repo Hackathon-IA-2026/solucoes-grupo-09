@@ -646,6 +646,22 @@ function specExample(file: string): unknown {
 
 const DIAGNOSIS_DAY_AHEAD = specExample("05-diagnosis-day-ahead.json");
 const OPTIMIZATION_RESULT = specExample("11-optimization-result.json");
+/*
+  **The Time Machine's own read, which nothing was stubbing.**
+
+  Without it `/v1/replay` 404s and the screen renders its refusal, so every
+  spec that opened the Time Machine was asserting the *absence* of a replay
+  while believing it had one. The whole `Replayed` branch — the accuracy panel,
+  the floor, the avoidability, the plan against the executed — had no browser
+  coverage at all.
+
+  The spec example is the same one `packages/core` validates the contract
+  against, so its band (402–548–731) and its settlement (612) are the
+  contract's numbers rather than numbers invented here: a day that settled
+  inside its band, which is the case the accuracy panel's `inside` placement
+  is about.
+*/
+const REPLAY = specExample("12-replay.json");
 
 /** The three reads that need no model, by the pathname they are served at. */
 const OBSERVED_BY_PATH: Record<string, unknown> = {
@@ -662,6 +678,7 @@ const FORECAST_BY_PATH: Record<string, unknown> = {
   "/v1/model/card": MODEL_CARD,
   "/v1/diagnosis/day-ahead": DIAGNOSIS_DAY_AHEAD,
   "/v1/optimize": OPTIMIZATION_RESULT,
+  "/v1/replay": REPLAY,
 };
 
 /**

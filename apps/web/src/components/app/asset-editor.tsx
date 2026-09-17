@@ -48,7 +48,10 @@ export function Stepper({
     onChange(round(Math.max(limit.min, Math.min(limit.max, next)), limit.step));
   };
   return (
-    <View style={{ flexGrow: 1, flexBasis: 180, gap: 6 }}>
+    // `flexShrink: 1` beside the basis, per ADR-0001. Without it a 180px basis
+    // is a floor rather than a preference, and two of these in a row at 360px
+    // held 380 — the fleet editor ran 20px past the card on the Time Machine.
+    <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 180, gap: 6 }}>
       <Text style={{ fontSize: 11, color: colors.inkFaint }}>{label}</Text>
       <View
         style={{

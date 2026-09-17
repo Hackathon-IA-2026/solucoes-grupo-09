@@ -268,9 +268,7 @@ describe("the action card says what happened", () => {
     // Names, not keys, and read from two nodes: `sections` for the two that
     // are parts of Visão da rede, `screens` for the two that are destinations.
     expect(screenNameFor(SCREEN_PATHS.explain, pt)).toBe(pt.app.shell.sections.explain);
-    expect(screenNameFor(SCREEN_PATHS.mitigate, pt)).toBe(
-      pt.app.shell.sections.mitigate,
-    );
+    expect(screenNameFor(SCREEN_PATHS.mitigate, pt)).toBe(pt.app.shell.sections.mitigate);
     expect(screenNameFor(SCREEN_PATHS.replay, pt)).toBe(pt.app.shell.screens.replay);
     expect(screenNameFor(SCREEN_PATHS.overview, pt)).toBe(pt.app.shell.screens.overview);
   });

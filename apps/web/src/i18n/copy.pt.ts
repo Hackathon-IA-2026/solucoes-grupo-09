@@ -1010,6 +1010,22 @@ export const pt: Copy = {
     },
 
     replay: {
+      // --- a acurácia da previsão, item 3 do briefing da máquina do tempo ---
+      accuracyTitle: "A previsão se sustentou?",
+      accuracySubtitle: "O que o sistema dizia na véspera, contra o que o ONS liquidou",
+      accuracyForecast: "Previsto (P50)",
+      accuracySettled: "Liquidado",
+      accuracyError: "Erro",
+      accuracyPlacement: {
+        inside:
+          "O dia liquidou dentro da faixa P10–P90 ({p10}–{p90} MWh), que é onde a previsão dizia que cairia.",
+        above:
+          "O dia liquidou acima da P90 ({p90} MWh): cortou mais do que a faixa previa.",
+        below:
+          "O dia liquidou abaixo da P10 ({p10} MWh): cortou menos do que a faixa previa.",
+      },
+      accuracyNote:
+        "Uma faixa P10–P90 é feita para ser ultrapassada em cerca de um dia a cada cinco — uma faixa nunca ultrapassada é larga demais para agir sobre ela. Por isso esta tela diz onde o dia caiu e não atribui nota. A fração de dias que caem dentro é propriedade de muitos dias, não de um: é o trilho `coverage_p10_in_band` do gate, medido sobre uma dobra inteira.",
       metaTitle: "Máquina do tempo — WattSteer",
       title: "E se o WattSteer estivesse rodando?",
       lede: "Um dia passado, reexecutado contra a safra de previsão disponível em D−1 e avaliado contra o que o ONS apurou.",

@@ -1350,6 +1350,22 @@ export const en = {
     },
 
     replay: {
+      // --- forecast accuracy: item 3 of the Time Machine brief ---
+      accuracyTitle: "Did the forecast hold?",
+      accuracySubtitle: "What the system said the day before, against what ONS settled",
+      accuracyForecast: "Forecast (P50)",
+      accuracySettled: "Settled",
+      accuracyError: "Error",
+      accuracyPlacement: {
+        inside:
+          "The day settled inside the P10–P90 band ({p10}–{p90} MWh), which is where the forecast said it would land.",
+        above:
+          "The day settled above P90 ({p90} MWh): it curtailed more than the band allowed for.",
+        below:
+          "The day settled below P10 ({p10} MWh): it curtailed less than the band allowed for.",
+      },
+      accuracyNote:
+        "A P10–P90 band is meant to be exceeded on about one day in five — a band that is never exceeded is too wide to act on. So this screen says where the day fell and does not grade it. The fraction of days that land inside is a property of many days rather than one: it is the gate's `coverage_p10_in_band` rail, measured over a whole fold.",
       metaTitle: "Time Machine — WattSteer",
       title: "What if WattSteer had been running?",
       lede: "A past day, replayed against the forecast vintage available at D−1 and scored against what ONS settled.",

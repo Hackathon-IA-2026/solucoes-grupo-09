@@ -80,6 +80,7 @@ import {
   ProvenanceBadge,
   VintageBadge,
 } from "@/components/app/honesty";
+import { AccuracyPanel } from "@/components/app/replay/accuracy-panel";
 import {
   fixtureBattery,
   fixtureLoad,
@@ -442,10 +443,27 @@ function Replayed({ replay, fleet }: { replay: Replay; fleet: ReactNode }) {
 
   return (
     <>
+      {/*
+        **First, because it is the question a reader came with.**
+
+        Everything below this is about the optimizer — the floor, the
+        avoidability, the plan against the executed. All of it assumes the
+        forecast was worth planning against, and until now the screen never
+        said whether it was. The three figures were already here and were never
+        subtracted.
+      */}
+      <AccuracyPanel band={replay.forecast.dayTotal} settled={replay.actual.totalMwh} />
+
       <HonestyNote
         title={copy.app.replay.honestyTitle}
         right={
-          <View style={{ flexDirection: "row", gap: 6 }}>
+          // Two badges whose words are long — `RETIDO NO FOLD` beside
+          // `OTIMISTA POR REVISÃO` is 294px, and the card is 244 at 320px. The
+          // row wraps rather than the pair clipping.
+          // `flexShrink: 1` as well as the wrap: a flex item that cannot shrink
+          // never reaches the width at which its own wrap would trigger, so the
+          // pair held 294px inside a 244px card and the wrap alone did nothing.
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, flexShrink: 1 }}>
             <ProvenanceBadge provenance={replay.integrity.provenance} />
             <VintageBadge fidelity={replay.vintageFidelity} />
           </View>
@@ -478,8 +496,22 @@ function Replayed({ replay, fleet }: { replay: Replay; fleet: ReactNode }) {
             gap: space.xl,
           }}
         >
-          <View style={{ flexGrow: 1, flexBasis: 300, gap: 6 }}>
-            <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8 }}>
+          {/*
+            `flexBasis: 300` with no shrink is a floor, not a preference: at
+            320px the column has 278 and held 300, so the sentence under the
+            figure ran 22px past the card. ADR-0001 again — react-native-web
+            gives `flexShrink` a 0 default, so a basis wider than the box never
+            gives the difference back.
+          */}
+          <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 300, gap: 6 }}>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "baseline",
+                gap: 8,
+                flexWrap: "wrap",
+              }}
+            >
               <Text
                 selectable={true}
                 style={{
@@ -505,7 +537,7 @@ function Replayed({ replay, fleet }: { replay: Replay; fleet: ReactNode }) {
             </Text>
           </View>
 
-          <View style={{ flexGrow: 1, flexBasis: 260, gap: space.sm }}>
+          <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 260, gap: space.sm }}>
             <Beside
               label={copy.app.replay.floorLabel}
               value={`${f.compact(replay.recoveredFloorMwh)} MWh`}
@@ -534,7 +566,7 @@ function Replayed({ replay, fleet }: { replay: Replay; fleet: ReactNode }) {
         dividing by rather than a numerator that came out at zero.
       */}
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
-        <Panel style={{ flexGrow: 1, flexBasis: 300, gap: space.sm }}>
+        <Panel style={{ flexGrow: 1, flexShrink: 1, flexBasis: 300, gap: space.sm }}>
           <Text style={{ fontSize: 13, color: colors.inkMuted }}>
             {copy.app.replay.headlineAvoided}
           </Text>
@@ -567,7 +599,7 @@ function Replayed({ replay, fleet }: { replay: Replay; fleet: ReactNode }) {
               : copy.app.replay.avoidabilityNote}
           </Text>
         </Panel>
-        <Panel style={{ flexGrow: 1, flexBasis: 300, gap: space.sm }}>
+        <Panel style={{ flexGrow: 1, flexShrink: 1, flexBasis: 300, gap: space.sm }}>
           <Text style={{ fontSize: 13, color: colors.inkMuted }}>
             {copy.app.replay.headlineCurtailed}
           </Text>
@@ -865,7 +897,10 @@ function FleetControls({
   return (
     <>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
-        <Panel style={{ flexGrow: 1, flexBasis: 380 }}>
+        // ADR-0001: a basis without a shrink is a floor. 380 in a 320px box put the //
+        fleet editor 60px past the card, and nothing on the Time Machine caught // it
+        because `/v1/replay` was never stubbed and this branch never rendered.
+        <Panel style={{ flexGrow: 1, flexShrink: 1, flexBasis: 380 }}>
           <PanelHeader
             icon={<ZapIcon size={18} color={colors.inkMuted} />}
             title={copy.app.replay.batteryTitle}
@@ -878,7 +913,10 @@ function FleetControls({
             />
           </View>
         </Panel>
-        <Panel style={{ flexGrow: 1, flexBasis: 380 }}>
+        // ADR-0001: a basis without a shrink is a floor. 380 in a 320px box put the //
+        fleet editor 60px past the card, and nothing on the Time Machine caught // it
+        because `/v1/replay` was never stubbed and this branch never rendered.
+        <Panel style={{ flexGrow: 1, flexShrink: 1, flexBasis: 380 }}>
           <PanelHeader
             icon={<SlidersHorizontalIcon size={18} color={colors.inkMuted} />}
             title={copy.app.replay.loadTitle}
