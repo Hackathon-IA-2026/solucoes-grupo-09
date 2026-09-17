@@ -38,6 +38,7 @@ import { SubsystemMap } from "@/components/charts/subsystem-map";
 import { SplitTracks } from "@/components/charts/technology-split";
 import { useCopy, useFormat, useI18n } from "@/i18n";
 import { fill } from "@/i18n/format";
+import { criticalWindow } from "@/lib/critical-window";
 import type { SubsystemCode } from "@/lib/fixtures";
 import { subsystemMeta } from "@/lib/fixtures";
 import {
@@ -49,7 +50,7 @@ import {
 } from "@/lib/network";
 import { HERO_COPY } from "./hero-copy";
 import { NationalFigureBlock, ObservedNationalPanel } from "./national-panel";
-import { ConsoleRegion, ConsoleStat } from "./region-rail";
+import { HeroStat, RegionRow } from "./region-rail";
 
 /**
  * The width at which the rails move beside the map rather than under it.
@@ -131,9 +132,17 @@ export function OverviewHero({
   const mine = regions.find((row) => row.subsystem === observed.subsystem);
   const selectedRow = forecast === null ? null : forecastRow(forecast.forecast);
 
+  /*
+    The hours to act in. `null` where no hour of the day is more likely to
+    curtail than not, which is an answer and not a gap — the card simply does
+    not claim a window it does not have.
+  */
+  const window =
+    forecast === null ? null : criticalWindow(forecastHours(forecast.forecast));
+
   const headline = (
     <Panel style={{ gap: space.lg }}>
-      <ConsoleStat
+      <HeroStat
         label={text.totalLabel}
         value={selectedRow === null ? day.totalMwh : selectedRow.dailyEnergy.p50}
         unit="MWh"
@@ -169,6 +178,79 @@ export function OverviewHero({
           </Text>
         </>
       ) : null}
+      {/*
+        **Question 4 of the operator brief, said rather than drawn.**
+
+        The fan has carried these hours since the screen was built, and a reader
+        could always find them by seeing where the band lifts off the axis.
+        Reading a shape is work, and it is the same work every morning. This is
+        the sentence.
+
+        Only where there is a forecast: a settled day's window is a fact about
+        yesterday and the question is about tomorrow. The observed state already
+        says its largest hour in the profile beside this.
+      */}
+      {window === null ? null : (
+        <View style={{ gap: 2 }}>
+          <Text style={{ ...type.caption, color: colors.inkFaint }}>
+            {copy.app.overview.windowLabel}
+          </Text>
+          <Text style={{ ...type.h3, color: colors.ink }}>
+            {fill(copy.app.overview.windowRange, {
+              from: String(window.fromHour),
+              to: String(window.toHour),
+            })}
+          </Text>
+          <Text style={{ ...type.caption, color: colors.inkMuted }}>
+            {fill(copy.app.overview.windowPeak, {
+              peak: String(window.peakHour),
+              mwh: f.compact(window.peakMwh),
+            })}
+          </Text>
+          {/*
+            The count, and only when it disagrees with the range. A day whose
+            qualifying hours are exactly the run needs no footnote; a day with
+            nine scattered hours reported as a three-hour window does, or the
+            summary is quietly standing in for the day.
+          */}
+          {window.hoursInDay > window.toHour - window.fromHour + 1 ? (
+            <Text style={{ ...type.caption, color: colors.inkFaint, lineHeight: 17 }}>
+              {fill(copy.app.overview.windowScattered, {
+                hours: String(window.hoursInDay),
+              })}
+            </Text>
+          ) : null}
+        </View>
+      )}
+      {/*
+        **Question 5, and the date is part of the answer.**
+
+        The brief asks for a *likely* cause. There is no such model, so this is
+        the reason ONS settled for the last published day, carrying that day's
+        date. Without the date it would sit beside tomorrow's band and be read
+        as a forecast of cause — which is the one reading the product cannot
+        support and would not survive being asked about.
+      */}
+      {observed.dominantReason === null ? null : (
+        <View style={{ gap: 2 }}>
+          <Text style={{ ...type.caption, color: colors.inkFaint }}>
+            {copy.app.overview.causeLabel}
+          </Text>
+          <Text style={{ ...type.label, color: colors.ink }}>
+            {fill(copy.app.overview.causeSentence, {
+              // The code, untranslated, exactly as Explicar renders it: REL, CNF,
+              // ENE and PAR are ONS's vocabulary and a translated one would
+              // match nothing an operator can look up.
+              reason: observed.dominantReason.reason,
+              share: f.percent(observed.dominantReason.share, 0),
+              date: f.date(observed.hoursDate),
+            })}
+          </Text>
+          <Text style={{ ...type.caption, color: colors.inkFaint, lineHeight: 17 }}>
+            {copy.app.overview.causeNote}
+          </Text>
+        </View>
+      )}
       <View
         style={{
           borderTopWidth: 1,
@@ -250,7 +332,7 @@ export function OverviewHero({
         {forecast === null ? text.windowObserved : text.windowForecast}
       </Text>
       {regions.map((row) => (
-        <ConsoleRegion
+        <RegionRow
           key={row.subsystem}
           code={row.code}
           name={row.name}

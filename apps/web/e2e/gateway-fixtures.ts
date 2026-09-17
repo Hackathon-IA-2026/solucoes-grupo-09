@@ -483,6 +483,51 @@ const CURTAILMENT_REASONS = {
   rows: [],
 };
 
+/**
+ * The same read with a day that *did* have restrictions, for the screens that
+ * summarise them.
+ *
+ * Opt-in rather than the default, because the empty day above is the state the
+ * product is in most of the time and the one the Explain screen most has to
+ * draw. A summary of a settled cause is a different question — it has nothing
+ * to say about an empty day and needs a day with something in it to say
+ * anything at all.
+ *
+ * Two `conjunto` rows and one `self_reporting_plant`, deliberately: the plant
+ * row carries the largest number and must not win, because a plant inside a
+ * conjunto ONS also reported would be counted twice. `dominant-reason.test.ts`
+ * holds that rule as arithmetic; this holds it as a rendered screen.
+ */
+const CURTAILMENT_REASONS_WITH_ROWS = {
+  ...CURTAILMENT_REASONS,
+  rows: [
+    {
+      grain: "conjunto",
+      entity_label: "CJ VENTOS DO ARARIPE",
+      reason: "ENE",
+      origin: "SIS",
+      constrained_off_mwh: 780,
+      description: "Restrição energética por sobreoferta.",
+    },
+    {
+      grain: "conjunto",
+      entity_label: "CJ SERRA DO SELTINHO",
+      reason: "CNF",
+      origin: "LOC",
+      constrained_off_mwh: 220,
+      description: null,
+    },
+    {
+      grain: "self_reporting_plant",
+      entity_label: "UEE ARARIPE III",
+      reason: "REL",
+      origin: "LOC",
+      constrained_off_mwh: 9000,
+      description: null,
+    },
+  ],
+};
+
 /** Every card window in this fixture, so the folds cannot disagree by accident. */
 const CARD_WINDOW = { start: "2024-04-01", end: "2026-08-27" };
 
@@ -702,10 +747,23 @@ const FORECAST_BY_PATH: Record<string, unknown> = {
  */
 export async function routeGateway(
   page: Page,
-  { forecast }: { forecast: boolean },
+  {
+    forecast,
+    /**
+     * Serve a settled day that had restrictions on it.
+     *
+     * Off by default so every existing spec keeps the empty day it was written
+     * against — that is the common state and the one Explain must draw.
+     */
+    reasons = false,
+  }: { forecast: boolean; reasons?: boolean },
 ): Promise<void> {
   await page.route("http://localhost:3000/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (reasons && path === "/v1/curtailment/reasons") {
+      await route.fulfill({ json: CURTAILMENT_REASONS_WITH_ROWS });
+      return;
+    }
     const observed = OBSERVED_BY_PATH[path];
     if (observed !== undefined) {
       await route.fulfill({ json: observed });

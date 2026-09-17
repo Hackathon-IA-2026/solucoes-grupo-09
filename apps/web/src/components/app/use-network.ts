@@ -67,6 +67,7 @@ import type {
 import { useEffect, useState } from "react";
 import { refusalOf } from "@/lib/absence";
 import { api } from "@/lib/api";
+import { type DominantReason, dominantReason } from "@/lib/dominant-reason";
 import type { CurtailmentHourObservation } from "@/lib/fixtures";
 import { observedHours, observedSplit } from "@/lib/network";
 import { settleWith } from "@/lib/settle";
@@ -92,6 +93,17 @@ export interface ObservedNetwork {
    * reader's click and it should answer instantly.
    */
   readonly subsystem: string;
+  /**
+   * The last settled day's dominant restriction reason, or `null`.
+   *
+   * **Outside the group, on purpose.** The three reads above succeed together
+   * or the screen says so, because the observed half is only honest whole. This
+   * one is different: it answers "why?" with a fact about a past day, and a
+   * screen that withheld the map and the rows because ONS's reason table was
+   * slow would be trading the load-bearing half for the annotation. It fails to
+   * `null` and the card simply does not claim a cause.
+   */
+  readonly dominantReason: DominantReason | null;
   readonly now: GridNow;
   /** The selected subsystem's settled day, one series, technologies summed. */
   readonly hours: CurtailmentHourObservation[];
@@ -218,13 +230,25 @@ export function useNetwork(query: NetworkQuery): NetworkState {
     // 200 with real numbers. The lanes' condition is not asked for here — it is
     // one answer for the whole of `/app`, read by `use-serving.ts`, so the
     // chrome badge and this screen's honesty note cannot disagree.
+    /*
+      The reason table, read beside the group rather than inside it — see
+      `ObservedNetwork.dominantReason`. `catch` to `null` is the whole of its
+      error handling, and that is deliberate: there is no refusal to render,
+      because there is nothing on the screen that depends on it.
+    */
+    const reasons = api
+      .observedReasons({ subsystem, date: settled }, signal)
+      .then((answer) => dominantReason(answer.rows))
+      .catch(() => null);
+
     const observed = Promise.all([
       api.gridNow(signal),
       api.curtailmentHours({ subsystem, from: settled, to: hoursTo }, signal),
       api.curtailmentEpisodes({ subsystem, from, to: settled }, signal),
     ]).then(
-      ([now, hours, episodes]): ObservedNetwork => ({
+      async ([now, hours, episodes]): Promise<ObservedNetwork> => ({
         subsystem,
+        dominantReason: await reasons,
         now,
         hours: observedHours(hours, settled),
         hoursDate: settled,

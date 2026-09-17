@@ -1022,6 +1022,24 @@ export const en = {
     },
 
     overview: {
+      /**
+        Question 5 of the operator brief, answered with what is true.
+
+        The brief asks for a "likely cause". There is no such model — the
+        forecaster has one head per subsystem and produces a quantity, not a
+        reason. REL/CNF/ENE are ONS's record of days that have happened, so the
+        sentence carries the date and never sits unlabelled beside a forecast.
+      */
+      causeLabel: "Dominant reason",
+      causeSentence: "{reason} accounted for {share} of the energy curtailed on {date}.",
+      causeNote:
+        "A reason ONS settled for a past day, at the grain it publishes — conjunto and subsystem. Not a forecast of cause: WattSteer forecasts how much will be curtailed, not why.",
+      /** Question 4 of the operator brief: "when?" — said, not drawn. */
+      windowLabel: "Critical window",
+      windowRange: "{from}h–{to}h BRT",
+      windowPeak: "Peak at {peak}h · {mwh} MWh",
+      windowScattered: "{hours} hours of the day expect curtailment; this is the longest run.",
+      windowNone: "No hour of the day is more likely to curtail than not.",
       metaTitle: "Grid Overview — WattSteer",
       title: "Grid Overview",
       lede: "Day-ahead curtailment risk for {date}, by subsystem. Every figure is a P10/P50/P90 interval, not a point.",

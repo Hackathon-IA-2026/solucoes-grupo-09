@@ -29,7 +29,7 @@ import { useFormat } from "@/i18n";
  * settled day has no interval and is told to say so rather than being handed a
  * strip of nothing.
  */
-export function ConsoleStat({
+export function HeroStat({
   label,
   value,
   unit,
@@ -80,7 +80,7 @@ export function ConsoleStat({
  * split sentence, and at rail width it would wrap into four lines. This is the
  * same data at the density a rail can hold, which is the experiment.
  */
-export function ConsoleRegion({
+export function RegionRow({
   code,
   name,
   value,

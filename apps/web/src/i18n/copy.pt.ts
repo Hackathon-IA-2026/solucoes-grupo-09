@@ -766,6 +766,24 @@ export const pt: Copy = {
     },
 
     overview: {
+      /**
+        Pergunta 5 do briefing do operador, respondida com o que é verdade.
+
+        O briefing pede "causa provável". Não existe esse modelo — o previsor
+        tem uma cabeça por subsistema e produz uma quantidade, não um motivo.
+        REL/CNF/ENE são o registro do ONS sobre dias que já aconteceram, então
+        a frase carrega a data e nunca fica solta ao lado de uma previsão.
+      */
+      causeLabel: "Motivo dominante",
+      causeSentence: "{reason} respondeu por {share} da energia cortada em {date}.",
+      causeNote:
+        "Motivo apurado pelo ONS sobre um dia liquidado, no grão em que ele publica — conjunto e subsistema. Não é uma previsão de motivo: o WattSteer prevê quanto será cortado, não por quê.",
+      /** Pergunta 4 do briefing do operador: "quando?" — dito, não desenhado. */
+      windowLabel: "Janela crítica",
+      windowRange: "{from}h–{to}h BRT",
+      windowPeak: "Pico às {peak}h · {mwh} MWh",
+      windowScattered: "{hours} horas no dia esperam corte; esta é a maior sequência.",
+      windowNone: "Nenhuma hora do dia é mais provável cortar do que não cortar.",
       metaTitle: "Visão da rede — WattSteer",
       title: "Visão da rede",
       lede: "Risco de curtailment para o dia seguinte em {date}, por subsistema. Todo número é um intervalo P10/P50/P90, não um ponto.",

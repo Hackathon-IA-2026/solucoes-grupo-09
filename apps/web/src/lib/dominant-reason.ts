@@ -1,0 +1,55 @@
+/**
+ * Which restriction reason accounted for most of a settled day's curtailment.
+ *
+ * ## What this is, and what it is careful not to be
+ *
+ * The operator brief asks question 5 as "causa **provável** (REL/CNF/ENE)" —
+ * a *predicted* cause. WattSteer does not predict one. The forecaster has a
+ * single head per subsystem and produces a quantity, not a reason; REL, CNF and
+ * ENE are codes ONS publishes about days that have already happened.
+ *
+ * So this answers the question with the thing that is true: the reason that
+ * carried most of the energy on the **last settled day**. The screen says which
+ * day, and never lets it sit unlabelled beside a forecast — a reason printed
+ * next to tomorrow's band, with no date on it, is a claim the model cannot
+ * make and would be read as one.
+ *
+ * ## Why energy and not row count
+ *
+ * A day can have forty rows of a code that moved almost nothing and two rows of
+ * one that moved most of the day. Counting rows would make the record look like
+ * whatever ONS happened to itemise most finely.
+ */
+
+import type { ObservedReason } from "@/lib/fixtures";
+
+export interface DominantReason {
+  reason: ObservedReason["reason"];
+  /** Energy attributed to it, MWh. */
+  mwh: number;
+  /** Its share of the day's attributed energy, 0..1. */
+  share: number;
+}
+
+export function dominantReason(rows: readonly ObservedReason[]): DominantReason | null {
+  const byReason = new Map<ObservedReason["reason"], number>();
+  let total = 0;
+  for (const row of rows) {
+    // **`conjunto` rows only.** `self_reporting_plant` rows are a plant's own
+    // account of itself, and mixing the two double-counts a plant that sits
+    // inside a conjunto ONS also reported. `docs/specs` states the grain rule
+    // and this is the one place a screen could quietly break it.
+    if (row.grain !== "conjunto") {
+      continue;
+    }
+    byReason.set(row.reason, (byReason.get(row.reason) ?? 0) + row.constrainedOffMwh);
+    total += row.constrainedOffMwh;
+  }
+  if (total <= 0) {
+    // A day with no attributed energy has no dominant reason, and saying
+    // "REL, 0%" would be worse than saying nothing.
+    return null;
+  }
+  const [reason, mwh] = [...byReason.entries()].reduce((a, b) => (b[1] > a[1] ? b : a));
+  return { reason, mwh, share: mwh / total };
+}
