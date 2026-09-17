@@ -62,7 +62,13 @@ test.describe("question 5 — why", () => {
   test("names the dominant reason, and the day it is about", async ({ page }) => {
     await open(page, { forecast: true, reasons: true });
     const body = (await page.locator("body").textContent()) ?? "";
-    expect(body).toMatch(/Motivo dominante|Dominant reason/);
+    /*
+      The label was "Motivo dominante" on a panel; it is the "Por quê?" card
+      now, and the card can name a second reason where ONS split the day. What
+      the question asks for is unchanged and is asserted below: the code, its
+      share, and the day it is about.
+    */
+    expect(body).toMatch(/Por quê\?|Why\?/);
     // ENE carries 780 of the 1000 attributed MWh in the fixture. The plant row
     // is larger and is not counted, because a plant inside a conjunto ONS also
     // reported would be counted twice.
@@ -87,6 +93,9 @@ test.describe("question 5 — why", () => {
     // most of the time. "REL, 0%" would be worse than silence.
     await open(page, { forecast: true });
     const body = (await page.locator("body").textContent()) ?? "";
-    expect(body).not.toMatch(/Motivo dominante|Dominant reason/);
+    // The card is still on screen — the five are the screen's frame — and it
+    // says it has no record rather than naming a reason at 0 %.
+    expect(body).toMatch(/Sem registro|Not recorded/);
+    expect(body).not.toMatch(/\bENE\b|\bCNF\b|\bREL\b/);
   });
 });

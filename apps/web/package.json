@@ -8,15 +8,16 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "export": "expo export --platform web && bun scripts/localize-export.ts",
+    "export": "bun scripts/vendor-cesium.ts && expo export --platform web && bun scripts/localize-export.ts",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.tools.json --noEmit",
     "test": "bun test test",
-    "test:e2e": "expo export --platform web && playwright test",
+    "test:e2e": "bun scripts/vendor-cesium.ts && expo export --platform web && playwright test",
     "lint": "expo lint"
   },
   "dependencies": {
     "@wattsteer/core": "workspace:*",
     "@wattsteer/ui": "workspace:*",
+    "cesium": "^1.145.0",
     "expo": "~57.0.2",
     "expo-constants": "~57.0.3",
     "expo-font": "~57.0.0",

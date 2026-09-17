@@ -68,7 +68,7 @@ import { useEffect, useState } from "react";
 import { refusalOf } from "@/lib/absence";
 import { api } from "@/lib/api";
 import { API_URL } from "@/lib/config";
-import { type DominantReason, dominantReason } from "@/lib/dominant-reason";
+import { type DominantReason, rankedReasons } from "@/lib/dominant-reason";
 import { type EvidenceCitation, readEvidence } from "@/lib/evidence";
 import type { CurtailmentHourObservation } from "@/lib/fixtures";
 import { observedHours, observedSplit } from "@/lib/network";
@@ -106,6 +106,15 @@ export interface ObservedNetwork {
    * `null` and the card simply does not claim a cause.
    */
   readonly dominantReason: DominantReason | null;
+  /**
+   * Every reason the day attributed energy to, largest first.
+   *
+   * `dominantReason` is this list's head, kept as its own field because most of
+   * the product only ever wants the one. The list is here because "why?" is
+   * often two answers — ONS splits a day between codes — and a card that names
+   * only the first says the day had one cause when it had two.
+   */
+  readonly reasons: readonly DominantReason[];
   /**
    * The ONS passage behind that reason, or `null`.
    *
@@ -249,8 +258,8 @@ export function useNetwork(query: NetworkQuery): NetworkState {
     */
     const reasons = api
       .observedReasons({ subsystem, date: settled }, signal)
-      .then((answer) => dominantReason(answer.rows))
-      .catch(() => null);
+      .then((answer) => rankedReasons(answer.rows))
+      .catch(() => []);
     const evidence = readEvidence(API_URL, { subsystem, date: settled }, signal).catch(
       () => null,
     );
@@ -262,7 +271,8 @@ export function useNetwork(query: NetworkQuery): NetworkState {
     ]).then(
       async ([now, hours, episodes]): Promise<ObservedNetwork> => ({
         subsystem,
-        dominantReason: await reasons,
+        dominantReason: (await reasons)[0] ?? null,
+        reasons: await reasons,
         evidence: await evidence,
         now,
         hours: observedHours(hours, settled),

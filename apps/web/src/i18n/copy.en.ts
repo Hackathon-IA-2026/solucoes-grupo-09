@@ -1029,21 +1029,63 @@ export const en = {
       screen under evaluation — deleting it should be deleting a file, not
       hunting keys scattered through two dictionaries everything else touches.
     */
-    console: {
-      metaTitle: "Console — WattSteer",
-      title: "Grid console",
-      lede: "The settled day, hour by hour, across the four subsystems.",
-      timelineLabel: "Hour of day",
-      play: "Play the day",
-      pause: "Pause",
-      hourLabel: "Selected hour",
-      nationalLabel: "Across the four subsystems",
-      readingTitle: "Reading the day",
-      refusedTitle: "The day did not answer",
-      emptyDay:
-        "No hour of this day recorded curtailment. That is a measurement, not a missing number.",
-      scaleNote:
-        "Colour compares subsystems with each other, on the largest single-subsystem hour — not on the national total.",
+    /**
+     * The map and the figures around it, on every screen that draws them.
+     *
+     * Named `console` while there was a console screen; it is `grid` now
+     * because that screen was a visual prototype and has been removed, and the
+     * scope chips, the layer switch, the five operator questions and the rail
+     * facts it was built with all outlived it on `/app`.
+     */
+    grid: {
+      eyebrow: "Sistema Interligado Nacional · D−1",
+      q1: "Will it curtail?",
+      q1Detail: "Probability of {probability} in {subsystem}",
+      q2: "How much?",
+      q2Detail: "Median of the day energy",
+      q2DetailExpected: "Expected day energy; no national band was published",
+      q3: "When?",
+      q3Detail: "Critical window",
+      q3Peak: "Peak at {hour}",
+      q4: "Why?",
+      q4Detail: "ONS record on {date} · {share} of the energy",
+      q5: "Where?",
+      q5Detail: "Largest day median of the four subsystems",
+      q5DetailMany: "{count} subsystems in the {risk} band",
+      q5DetailRegion: "The region you chose; all five cards are about it",
+      noWindow: "No window",
+      noReason: "Not recorded",
+      noReasonDetail: "ONS published no reason for the last settled day.",
+      bandNote: "P10–P90 band. The median is neither the sum nor the mean of the hours.",
+      criticalWindow: "Critical window",
+      brasilia: "Brasília time",
+      probableCause: "Probable cause",
+      coverageLabel: "P10–P90 coverage",
+      coverageNote: "Measured over {days} settled days · target {target}",
+      coverageAbsent: "Not measured",
+      coverageAbsentNote: "The model card published no coverage for this band.",
+      causeDate: "ONS record on {date}",
+      forecastTitle: "Curtailment forecast",
+      forecastNote: "{subsystem} · day energy",
+      tableTitle: "Risk by subsystem",
+      tableNote: "Day median in MWh and risk class, D−1",
+      tableSubsystem: "Subsystem",
+      tableEnergy: "P50",
+      tableRisk: "Risk",
+      riskLabel: "Risk",
+      zoomIn: "Zoom in",
+      zoomOut: "Zoom out",
+      recentre: "Recentre on Brazil",
+      legendTitle: "Risk class",
+      scopeLabel: "Scope",
+      runLabel: "Run",
+      layer2d: "2D",
+      layer3d: "3D",
+      layer3dUnavailable: "The 3D globe needs a Cesium ion key.",
+      layer3dNeedsForecast: "The 3D globe paints a risk class, which only a forecast has.",
+      scopeSin: "SIN overall",
+      scopeRegion: "By region",
+      attribution: "Cesium ion · Data: ONS",
     },
     overview: {
       /**
@@ -1059,7 +1101,7 @@ export const en = {
       causeLabel: "Dominant reason",
       causeSentence: "{reason} accounted for {share} of the energy curtailed on {date}.",
       causeNote:
-        "A reason ONS settled for a past day, at the grain it publishes — conjunto and subsystem. Not a forecast of cause: WattSteer forecasts how much will be curtailed, not why.",
+        "A reason ONS settled for a past day. Not a forecast of cause: WattSteer forecasts how much will be curtailed, not why.",
       /** Question 4 of the operator brief: "when?" — said, not drawn. */
       windowLabel: "Critical window",
       windowRange: "{from}h–{to}h BRT",
@@ -1069,7 +1111,7 @@ export const en = {
       windowNone: "No hour of the day is more likely to curtail than not.",
       metaTitle: "Grid Overview — WattSteer",
       title: "Grid Overview",
-      lede: "Day-ahead curtailment risk for {date}, by subsystem. Every figure is a P10/P50/P90 interval, not a point.",
+      lede: "Day-ahead curtailment risk for {date}, by subsystem.",
       /*
         The row *selects*; it no longer navigates. The label said "open Explain"
         because pressing it did, which is the defect this screen carried: one

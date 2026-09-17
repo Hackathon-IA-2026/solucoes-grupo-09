@@ -196,6 +196,28 @@ export default function Root({ children }: PropsWithChildren) {
                 }
               }
 
+              /* The app bar: one line at >= 900px, with the screen toggle
+                 centred between the wordmark and the language switch, matching
+                 APPBAR_WIDE in components/app/app-shell.tsx. All three are in
+                 one wrapping row; below the breakpoint the toggle takes a full
+                 basis and drops to its own line, which is the arrangement the
+                 inline styles already produce. This only reorders them. */
+              @media (min-width: 900px) {
+                [data-appbar-left] {
+                  order: 1;
+                  flex-grow: 1 !important;
+                  flex-shrink: 1 !important;
+                  flex-basis: 0% !important;
+                }
+                [data-appbar-nav] {
+                  order: 2;
+                  flex-grow: 0 !important;
+                  flex-shrink: 0 !important;
+                  flex-basis: auto !important;
+                }
+                [data-appbar-right] { order: 3; }
+              }
+
               /* Hero headline: the large variant at >= 900px of the hero's own
                  width, matching HERO_WIDE in components/landing/hero.tsx. */
               [data-hero-root] {

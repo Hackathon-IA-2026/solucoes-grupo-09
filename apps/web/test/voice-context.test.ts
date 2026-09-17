@@ -70,6 +70,15 @@ const PROMOTED: ServingState = {
 const EPISODES = { episodes: [] } as unknown as CurtailmentEpisodes;
 
 const OBSERVED = {
+  // Added when the Overview learned to answer "why?": the subject the figures
+  // belong to, and the two annotations that hang off it. `null` for both is the
+  // ordinary case — most settled days have no dominant reason published and
+  // almost none have a citation — and it is the case the voice context has to
+  // describe without claiming a cause.
+  subsystem: "NE",
+  dominantReason: null,
+  reasons: [],
+  evidence: null,
   now: {} as never,
   hours: [
     { validTime: "2026-09-14T03:00:00Z", hourLocal: 0, constrainedOffMwh: 120 },
@@ -106,12 +115,14 @@ const OBSERVED_ONLY: NetworkState = {
   status: "observedOnly",
   observed: OBSERVED,
   code: "FORECAST_NOT_YET_PUBLISHED",
+  refreshing: false,
 };
 
 const READ: NetworkState = {
   status: "read",
   observed: OBSERVED,
   forecast: { outlook: {} as never, forecast: FORECAST },
+  refreshing: false,
 };
 
 const EXPLAINED: ExplainState = {
@@ -177,7 +188,12 @@ describe("with nothing promoted, the absence is stated", () => {
     expect(contextSentence(input({ network: OBSERVED_ONLY }))).toContain(
       "FORECAST_NOT_YET_PUBLISHED",
     );
-    const unavailable: NetworkState = { ...OBSERVED_ONLY, code: "FORECAST_UNAVAILABLE" };
+    const unavailable: NetworkState = {
+      status: "observedOnly",
+      observed: OBSERVED,
+      code: "FORECAST_UNAVAILABLE",
+      refreshing: false,
+    };
     expect(contextSentence(input({ network: unavailable }))).toContain(
       "FORECAST_UNAVAILABLE",
     );

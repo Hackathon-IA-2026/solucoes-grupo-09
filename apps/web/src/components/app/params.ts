@@ -77,6 +77,26 @@ export function gateProfileOf(run: RunLabel): GateProfile {
 
 export interface AppParams {
   subsystem: SubsystemCode;
+  /**
+   * Whether `subsystem` was named in the URL rather than defaulted.
+   *
+   * The Overview's map opens in the overall scope, where no region is marked —
+   * `SIN Geral` and a lit `NE` chip beside it say two different things. That is
+   * right for a plain visit and wrong for a shared link: `/app?subsystem=S` is
+   * somebody pointing at Sul, and a page that greeted them with nothing
+   * selected would have thrown away the thing the link was for.
+   *
+   * So the flag, rather than a guess. It is deliberately *not* part of what
+   * `sharedParams` and `writeParams` carry: it describes where this value came
+   * from, not what it is, and writing it back into a URL would make it true of
+   * every link thereafter.
+   *
+   * Optional because only the parser can know it. A hand-built fixture is
+   * saying what the params *are*, not where they came from, and forcing it to
+   * answer a question it has no opinion on would be six test files stating a
+   * `false` that means nothing.
+   */
+  subsystemFromUrl?: boolean;
   technology: Technology;
   run: RunLabel;
   date: string;
@@ -149,10 +169,10 @@ export function parseAppParams(
   const technology = first(raw.technology);
   const run = first(raw.run);
   const episode = first(raw.episode);
+  const namedSubsystem = SUBSYSTEM_DISPLAY_ORDER.includes(subsystem as SubsystemCode);
   return {
-    subsystem: SUBSYSTEM_DISPLAY_ORDER.includes(subsystem as SubsystemCode)
-      ? (subsystem as SubsystemCode)
-      : "NE",
+    subsystem: namedSubsystem ? (subsystem as SubsystemCode) : "NE",
+    subsystemFromUrl: namedSubsystem,
     technology: TECHNOLOGY_PARAM[technology ?? ""] ?? "WIND",
     run: RUN_LABELS.includes(run as RunLabel) ? (run as RunLabel) : "12Z",
     date: latestTargetDate(now),

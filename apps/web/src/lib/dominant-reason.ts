@@ -31,14 +31,22 @@ export interface DominantReason {
   share: number;
 }
 
-export function dominantReason(rows: readonly ObservedReason[]): DominantReason | null {
+/**
+ * Every reason the day attributed energy to, largest first.
+ *
+ * The dominant one is this list's head. It exists because "why?" is often not
+ * one answer: ONS frequently splits a day between two codes at, say, 55/40, and
+ * naming only the first tells a reader the day had one cause when it had two.
+ * A card can then decide how many to speak — the rule belongs to the card,
+ * because it is about how much room a sentence has, not about the data.
+ *
+ * Shares are of the day's **attributed** energy, `conjunto` rows only, for the
+ * reason the header gives.
+ */
+export function rankedReasons(rows: readonly ObservedReason[]): DominantReason[] {
   const byReason = new Map<ObservedReason["reason"], number>();
   let total = 0;
   for (const row of rows) {
-    // **`conjunto` rows only.** `self_reporting_plant` rows are a plant's own
-    // account of itself, and mixing the two double-counts a plant that sits
-    // inside a conjunto ONS also reported. `docs/specs` states the grain rule
-    // and this is the one place a screen could quietly break it.
     if (row.grain !== "conjunto") {
       continue;
     }
@@ -46,10 +54,22 @@ export function dominantReason(rows: readonly ObservedReason[]): DominantReason 
     total += row.constrainedOffMwh;
   }
   if (total <= 0) {
-    // A day with no attributed energy has no dominant reason, and saying
+    // A day with no attributed energy has no reason at all, and saying
     // "REL, 0%" would be worse than saying nothing.
-    return null;
+    return [];
   }
-  const [reason, mwh] = [...byReason.entries()].reduce((a, b) => (b[1] > a[1] ? b : a));
-  return { reason, mwh, share: mwh / total };
+  return [...byReason.entries()]
+    .map(([reason, mwh]) => ({ reason, mwh, share: mwh / total }))
+    .sort((a, b) => b.mwh - a.mwh);
+}
+
+export function dominantReason(rows: readonly ObservedReason[]): DominantReason | null {
+  /*
+    **`conjunto` rows only**, and that rule lives in `rankedReasons` now:
+    `self_reporting_plant` rows are a plant's own account of itself, and mixing
+    the two double-counts a plant that sits inside a conjunto ONS also reported.
+    Delegating rather than repeating the loop is what keeps the head of the list
+    and the "dominant" reason from ever disagreeing.
+  */
+  return rankedReasons(rows)[0] ?? null;
 }

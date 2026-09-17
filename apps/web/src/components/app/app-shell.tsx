@@ -15,6 +15,7 @@
  */
 
 import {
+  CalendarDaysIcon,
   focusRing,
   layout,
   Pill,
@@ -37,6 +38,7 @@ import {
   type SubsystemCode,
 } from "@/lib/fixtures";
 import { gateProfileOf, sharedParams, useAppParams } from "./use-app-params";
+import { useRunLanes } from "./use-run-lanes";
 import { useServing } from "./use-serving";
 
 /**
@@ -75,6 +77,28 @@ interface ScreenDef {
   it belonged — the row is for places a reader goes, and these are two more
   things to say about the selection they are already looking at.
 */
+/**
+ * Above this the header is one line: mark, the screen toggle centred, language.
+ *
+ * Below it the toggle drops to its own line, because at phone width the three
+ * do not share one: the badge reserves its width unconditionally and the pills
+ * would be squeezed to a scroll strip between two things that must not clip.
+ *
+ * Exported because `+html.tsx` mirrors it — `test/responsive-css.test.ts`
+ * asserts the pair cannot be edited apart. It is CSS's decision rather than
+ * `onLayout`'s for the reason that file gives at length: a measured switch
+ * paints the narrow branch first and then rearranges, and the rearrangement is
+ * what Lighthouse counts as layout shift.
+ */
+export const APPBAR_WIDE = 900;
+
+/** `dataSet` → `data-*` on web; nothing on native. See `site-footer.tsx`. */
+const marker = (name: string) =>
+  Platform.OS === "web" ? ({ dataSet: { [name]: "" } } as object) : {};
+const APPBAR_LEFT = marker("appbarLeft");
+const APPBAR_RIGHT = marker("appbarRight");
+const APPBAR_NAV = marker("appbarNav");
+
 const SCREENS: ScreenDef[] = [
   { key: "overview", path: "/app" },
   { key: "replay", path: "/app/replay" },
@@ -104,11 +128,35 @@ export function scrollToSection(id: string, attempt = 0): void {
 
 export function AppShell({
   children,
-  showSelection = true,
+  showHeader = true,
   bleed = false,
+  fullWidth = false,
 }: {
   children: ReactNode;
-  showSelection?: boolean;
+  /**
+   * Whether the top chrome — wordmark, screen pills, language switch — is drawn.
+   *
+   * Off for the console, which carries the same three in a side rail. It is a
+   * flag rather than a second shell for the reason `bleed` is: the destinations
+   * and the way out must stay the product's, not a screen's, and a screen that
+   * reinvented them is a screen a reader can get lost on. What moves is where
+   * they sit; what they are is still decided here.
+   */
+  showHeader?: boolean;
+  /**
+   * Let the page use the window's width instead of the reading column.
+   *
+   * `layout.page` exists because a paragraph 2000 px wide is unreadable, and
+   * every screen that is mostly prose keeps it. The Overview is mostly a map and
+   * a table of four rows, and in a 1280 px column on a 2560 px display it was
+   * drawing a 380 px map beside 900 px of empty gutter. Gutters are not
+   * neutral: the space they take is space the figures could have used.
+   *
+   * Distinct from `bleed`, which also drops the padding and hands the screen the
+   * whole viewport for a full-bleed scene. This keeps the gutters and the
+   * rhythm; it only stops capping the width.
+   */
+  fullWidth?: boolean;
   /**
    * Let the body out of the centred column and off the padding.
    *
@@ -129,6 +177,7 @@ export function AppShell({
   const { locale } = useI18n();
   const pathname = usePathname();
   const params = useAppParams();
+  const f = useFormat();
 
   const go = (path: string) => {
     const [route, anchor] = path.split("#");
@@ -184,6 +233,7 @@ export function AppShell({
           : { paddingBottom: 96 }
       }
     >
+      {showHeader ? (
       <View
         style={{
           borderBottomWidth: 1,
@@ -194,10 +244,12 @@ export function AppShell({
         <View
           style={{
             width: "100%",
-            maxWidth: layout.page,
+            maxWidth: fullWidth ? undefined : layout.page,
             alignSelf: "center",
             paddingHorizontal: 20,
-            paddingTop: 18,
+            // Even above and below: the header band is one row now, and the
+            // bottom padding used to come from the nav row that sat under it.
+            paddingVertical: 14,
             gap: space.lg,
           }}
         >
@@ -218,6 +270,32 @@ export function AppShell({
               gap: 12,
             }}
           >
+            {/*
+              **Three children in one wrapping row, in the order narrow wants.**
+
+              Source order is left, right, nav — so with `flex-wrap` on and the
+              nav taking a full basis, a phone gets the mark and the language
+              switch on one line and the toggle under them, which is the layout
+              that already worked. At `APPBAR_WIDE` the stylesheet sets `order`
+              on all three and pulls the nav between the other two, where the
+              design wants it. Reordering is the one thing CSS can do that a
+              second component tree cannot do without duplicating the markup.
+            */}
+            <View
+              {...APPBAR_LEFT}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                // The badge reserves its width unconditionally, so at 320 px the
+                // wordmark and it are wider than the viewport. Wrapping inside
+                // the group keeps the overflow off the page; shrinking lets it
+                // happen at all, since react-native-web defaults shrink to 0.
+                flexWrap: "wrap",
+                flexShrink: 1,
+                minWidth: 0,
+                gap: 12,
+              }}
+            >
             <Pressable
               testID="app-home-link"
               accessibilityRole="link"
@@ -249,8 +327,7 @@ export function AppShell({
               </Text>
             </Pressable>
             <ChromeBadge />
-            {/* Pushes the switch to the far edge of the header row. */}
-            <View style={{ flex: 1 }} />
+            </View>
             {/*
               **The voice control is not here any more, and this is the row it
               kept breaking.**
@@ -268,21 +345,88 @@ export function AppShell({
               and the one that survived is the one that reads as the product
               rather than as chrome.
             */}
-            <LanguageSwitch testID="app-language-switch" />
-          </View>
+            <View
+              {...APPBAR_RIGHT}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "flex-end",
+                // Narrow, this takes the rest of the first line so the switch
+                // sits at the far edge; wide, the stylesheet makes it an equal
+                // third and the same rule still holds.
+                flexGrow: 1,
+                flexShrink: 1,
+                flexBasis: 0,
+                minWidth: 0,
+              }}
+            >
+              {/*
+                **The target day, which used to be the last thing on the
+                selection bar.**
+
+                That bar is gone: the four subsystems and the D−1 run are chips
+                on the map they steer, and repeating them above it was two
+                controls for one thing. The day was the only item left with
+                nowhere else to be, so it sits here — stated rather than
+                selectable, because the forecast horizon is one day and the
+                gateway refuses anything past tomorrow. The Time Machine is
+                where a past day is chosen, and it has its own picker.
+              */}
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 6,
+                  paddingVertical: 5,
+                  paddingHorizontal: 10,
+                  borderRadius: radius.md,
+                  borderCurve: "continuous",
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  backgroundColor: colors.surface,
+                }}
+              >
+                <CalendarDaysIcon size={13} color={colors.inkMuted} />
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontWeight: "600",
+                    color: colors.ink,
+                    fontVariant: ["tabular-nums"],
+                  }}
+                >
+                  {f.date(params.date)}
+                </Text>
+              </View>
+              <LanguageSwitch testID="app-language-switch" />
+            </View>
 
           <ScrollView
+            {...APPBAR_NAV}
             horizontal={true}
             showsHorizontalScrollIndicator={false}
+            style={{ flexGrow: 0, flexShrink: 1, flexBasis: "100%" }}
             // Vertical padding inside the scroller, not margin outside it: the
             // pills carry a border and a focus ring, and a scroll viewport
             // clips at its own edge, so without it the top of each pill reads
             // as tucked under the header rule above.
             contentContainerStyle={{
               flexDirection: "row",
+              alignItems: "center",
               gap: 8,
-              paddingTop: 6,
-              paddingBottom: 16,
+              /*
+                Symmetric, and it was 6/16. That was right while this was its
+                own row above a selection bar; inline between the wordmark and
+                the language switch it put the pills 5 px above both of them —
+                a misalignment you feel before you can name it. The band keeps
+                its height from the container's own padding below.
+              */
+              paddingVertical: 6,
+              // Centred at every width, so the stylesheet below only has to
+              // move the nav between its neighbours and never has to reach
+              // into the scroller's content container to align it.
+              flexGrow: 1,
+              justifyContent: "center",
             }}
           >
             {/*
@@ -327,10 +471,11 @@ export function AppShell({
               })}
             </View>
           </ScrollView>
+          </View>
         </View>
       </View>
+      ) : null}
 
-      {showSelection ? <SelectionBar /> : null}
 
       {/*
         **The page's main landmark, which it did not have.**
@@ -353,7 +498,7 @@ export function AppShell({
             ? { width: "100%", flex: 1 }
             : {
                 width: "100%",
-                maxWidth: layout.page,
+                maxWidth: fullWidth ? undefined : layout.page,
                 alignSelf: "center",
                 paddingHorizontal: 20,
                 paddingTop: space.xl,
@@ -475,176 +620,6 @@ function ChromeBadge() {
 }
 
 /** Subsystem, technology and run — the selection every screen reads. */
-export function SelectionBar() {
-  const colors = usePalette();
-  const copy = useCopy();
-  const f = useFormat();
-  const params = useAppParams();
-  const serving = useServing();
-  /*
-    Only once `/v1/meta` has answered. While it is in flight the pills stay
-    live, for the same reason the chrome badge stays blank: guessing produces a
-    control that dims and then brightens, which is worse than one that was
-    briefly honest about nothing.
-  */
-  /*
-    **Per lane, and it used to be per deployment.**
-
-    This asked `!serving.serving` — is *any* lane promoted? — and dimmed both
-    pills together. That was right while nothing was promoted anywhere and
-    became wrong the moment one lane was: `gate_early` promoted, `gate_late`
-    refused by its serving smoke because an upstream ONS feed went quiet, and
-    both pills went live. Pressing `12Z` then drew exactly the same screen as
-    `00Z`, with nothing saying why, which is how a reader learns that a control
-    is decoration.
-
-    Each label names one gate — `00Z` is `gate_early`, `12Z` is `gate_late`,
-    from the published gate table — so each pill can ask about its own lane.
-    `usable` is tri-state and `undefined` means the modelling service is too old
-    to report it: read as unknown and never rounded down to a refusal, which is
-    the same rule `absence.ts` states where the field is defined.
-
-    Note what this deliberately does *not* dim: a lane that is promoted but has
-    published nothing for the day in question. That pill is live — tomorrow
-    morning's gate will fill it — and the absence of today's forecast is stated
-    by `ForecastAbsent` on the screen, where the reason belongs.
-  */
-  const laneFor = (run: RunLabel) => {
-    if (serving.status !== "known") {
-      return;
-    }
-    const profile = gateProfileOf(run);
-    return serving.lanes.find((lane) => lane.name.includes(profile));
-  };
-  const runInertFor = (run: RunLabel) => {
-    const lane = laneFor(run);
-    return lane !== undefined && (lane.condition !== "promoted" || lane.usable === false);
-  };
-  return (
-    <View
-      style={{
-        borderBottomWidth: 1,
-        borderBottomColor: colors.border,
-        backgroundColor: colors.canvasTint,
-      }}
-    >
-      {/*
-        The tint band spans the viewport, but its contents sit in the same
-        max-width column as the header and the screen body. Without this the
-        selector starts hard against the left edge while everything above and
-        below it is centred, which is what breaks the page's rhythm on a wide
-        display. The inner view is still full width on a narrow one, so the
-        horizontal scroll behaviour on mobile is unchanged.
-      */}
-      <View
-        style={{
-          width: "100%",
-          maxWidth: layout.page,
-          alignSelf: "center",
-        }}
-      >
-        <ScrollView
-          horizontal={true}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: space.xl,
-            paddingHorizontal: 20,
-            paddingVertical: 12,
-          }}
-        >
-          <Group label={copy.app.shell.selection.subsystem}>
-            {SUBSYSTEMS.map((s) => (
-              <MiniPill
-                key={s.code}
-                label={s.short}
-                active={params.subsystem === s.code}
-                onPress={() => params.setParams({ subsystem: s.code as SubsystemCode })}
-              />
-            ))}
-          </Group>
-          {/*
-            **Technology used to be a third group here, and it was feedback with
-            no visible effect.**
-
-            It was never inert — it flips which fleet the "Eólica e solar" panel
-            emphasises, bold and 0.85 opacity against 0.28. The problem was
-            distance: measured at 400px, the pills sat at y=197 and the panel
-            they re-weight at **y=2719**, which is nearly three phone screens
-            below. A reader pressed `Solar`, the page did exactly what it was
-            asked, and nothing they could see changed. A control whose whole
-            feedback is off-screen teaches a reader that the app ignores them.
-
-            Nor was it a filter, which is the other half of why it does not
-            belong in the chrome: both fleets are always drawn, in every panel
-            that draws either. It re-weights; it never selects.
-
-            `params.technology` stays. The voice agent sets it — "destaque a
-            solar" — and `context.ts` reports it, and there the distance problem
-            does not exist because the agent scrolls to what it is talking
-            about. What is gone is the claim that this is one of the two axes a
-            reader steers the whole product by.
-          */}
-          {/*
-            The run is the only selector here that can go inert.
-
-            `subsystem` and `technology` steer the observed panels as well as
-            the forecast ones, so they always move something. The run chooses
-            which D−1 forecast to read, and it is read in exactly two places —
-            the Overview's and Explain's forecast half. With no lane promoted
-            both refuse whatever it is set to, so every choice draws the same
-            screen, on all four tabs.
-
-            `useServing` is the right question to ask and it is already asked
-            once before first paint for the chrome badge. It is also the stable
-            one: a forecast can refuse for the hour as well (the gate not having
-            passed yet), and gating on that would have these pills flicker
-            through the day. "No model is promoted" holds for weeks at a time,
-            which is what a reader can actually act on.
-          */}
-          <Group label={copy.app.shell.selection.run}>
-            {RUN_LABELS.map((run) => (
-              <MiniPill
-                key={run}
-                label={run}
-                active={params.run === run}
-                disabled={runInertFor(run as RunLabel)}
-                disabledHint={copy.app.shell.selection.runUnavailable}
-                onPress={() => params.setParams({ run: run as RunLabel })}
-              />
-            ))}
-          </Group>
-          <View>
-            {/* 11px, the size every other caption on these screens uses. At
-                10px these four were the smallest text in the product and the
-                only 10px on the page, for the labels of its primary controls —
-                a deviation that bought nothing. */}
-            <Text style={{ fontSize: 11, color: colors.inkFaint, marginBottom: 4 }}>
-              {copy.app.shell.selection.targetDay}
-            </Text>
-            <Text style={{ fontSize: 13, fontWeight: "600", color: colors.ink }}>
-              {f.date(params.date)}
-            </Text>
-          </View>
-        </ScrollView>
-      </View>
-    </View>
-  );
-}
-
-function Group({ label, children }: { label: string; children: ReactNode }) {
-  const colors = usePalette();
-  return (
-    <View>
-      <Text style={{ fontSize: 11, color: colors.inkFaint, marginBottom: 4 }}>
-        {label}
-      </Text>
-      <View style={{ flexDirection: "row", gap: 6 }}>{children}</View>
-    </View>
-  );
-}
-
 export function MiniPill({
   label,
   active,
@@ -750,7 +725,17 @@ export function ScreenTitle({
   right,
   level = 1,
 }: {
-  title: string;
+  /**
+   * Omitted where the navigation already names the screen.
+   *
+   * `/app`'s heading said "Visão da rede" directly under a pill that said
+   * "Visão da rede" — the same three words twice, in the tallest type on the
+   * page, above the figures a reader came for. Dropping it costs nothing a
+   * reader can see and a heading the document needs, so the lede takes the
+   * heading role instead: it is a sentence about *this day*, which is what a
+   * screen reader announcing the page should hear anyway.
+   */
+  title?: string;
   lede: string;
   right?: ReactNode;
   /** 1 for the page's own title, 2 for a section under it. */
@@ -762,7 +747,7 @@ export function ScreenTitle({
       style={{
         flexDirection: "row",
         flexWrap: "wrap",
-        alignItems: "flex-end",
+        alignItems: title === undefined ? "center" : "flex-end",
         justifyContent: "space-between",
         gap: space.lg,
       }}
@@ -775,18 +760,26 @@ export function ScreenTitle({
         the same defect `PanelHeader` carried, from the same default.
       */}
       <View style={{ gap: 6, flexGrow: 1, flexShrink: 1, flexBasis: 320 }}>
+        {title === undefined ? null : (
+          <Text
+            accessibilityRole="header"
+            aria-level={level}
+            style={{
+              ...(level === 1 ? typeTokens.h2 : typeTokens.h3),
+              letterSpacing: -0.5,
+              color: colors.ink,
+            }}
+          >
+            {title}
+          </Text>
+        )}
         <Text
-          accessibilityRole="header"
-          aria-level={level}
-          style={{
-            ...(level === 1 ? typeTokens.h2 : typeTokens.h3),
-            letterSpacing: -0.5,
-            color: colors.ink,
-          }}
+          // The heading, where there is no title above it to be one.
+          {...(title === undefined
+            ? ({ accessibilityRole: "header", "aria-level": level } as object)
+            : null)}
+          style={{ fontSize: 14, lineHeight: 22, color: colors.inkMuted }}
         >
-          {title}
-        </Text>
-        <Text style={{ fontSize: 14, lineHeight: 22, color: colors.inkMuted }}>
           {lede}
         </Text>
       </View>

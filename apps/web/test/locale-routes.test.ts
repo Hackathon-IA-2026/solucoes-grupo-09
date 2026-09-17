@@ -187,13 +187,17 @@ describe("every control the app can write parses back to what it meant", () => {
   const AT = new Date("2026-09-15T12:00:00Z");
 
   /*
-    Total over the writable selection by type, so a fifth field added to
+    Total over the writable selection by type, so a new field added to
     `AppParams` is a compile error here before it is a silent hole in
-    `writeParams`. `date` is excluded because it is derived from the clock and
-    no control writes it.
+    `writeParams`.
+
+    Two exclusions, both because no control writes them: `date` is derived from
+    the clock, and `subsystemFromUrl` says where `subsystem` came from rather
+    than what it is — writing it into a URL would make it true of every link
+    made from that page onwards.
   */
   const CONTROLS: {
-    [K in keyof Omit<AppParams, "date">]: readonly AppParams[K][];
+    [K in keyof Omit<AppParams, "date" | "subsystemFromUrl">]: readonly AppParams[K][];
   } = {
     subsystem: SUBSYSTEM_DISPLAY_ORDER,
     technology: ["WIND", "SOLAR"] satisfies readonly Technology[],

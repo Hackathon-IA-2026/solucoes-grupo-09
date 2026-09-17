@@ -773,21 +773,63 @@ export const pt: Copy = {
       apagá-la deve ser apagar um arquivo, não caçar chaves espalhadas por dois
       dicionários que todo o resto também toca.
     */
-    console: {
-      metaTitle: "Console — WattSteer",
-      title: "Console da rede",
-      lede: "O dia liquidado, hora a hora, nos quatro subsistemas.",
-      timelineLabel: "Hora do dia",
-      play: "Rodar o dia",
-      pause: "Pausar",
-      hourLabel: "Hora selecionada",
-      nationalLabel: "Nos quatro subsistemas",
-      readingTitle: "Lendo o dia",
-      refusedTitle: "O dia não respondeu",
-      emptyDay:
-        "Nenhuma hora deste dia registrou corte. É uma medição, não um número faltando.",
-      scaleNote:
-        "A cor compara subsistemas entre si, na maior hora de um único subsistema — não no total nacional.",
+    /**
+     * The map and the figures around it, on every screen that draws them.
+     *
+     * Named `console` while there was a console screen; it is `grid` now
+     * because that screen was a visual prototype and has been removed, and the
+     * scope chips, the layer switch, the five operator questions and the rail
+     * facts it was built with all outlived it on `/app`.
+     */
+    grid: {
+      eyebrow: "Sistema Interligado Nacional · D−1",
+      q1: "Vai cortar?",
+      q1Detail: "Probabilidade de {probability} em {subsystem}",
+      q2: "Quanto?",
+      q2Detail: "Mediana da energia do dia",
+      q2DetailExpected: "Energia esperada do dia; não há faixa nacional publicada",
+      q3: "Quando?",
+      q3Detail: "Janela crítica",
+      q3Peak: "Pico às {hour}",
+      q4: "Por quê?",
+      q4Detail: "Registro do ONS em {date} · {share} da energia",
+      q5: "Onde?",
+      q5Detail: "Maior mediana do dia entre os quatro subsistemas",
+      q5DetailMany: "{count} subsistemas na faixa {risk}",
+      q5DetailRegion: "Região selecionada; os cinco cards são sobre ela",
+      noWindow: "Sem janela",
+      noReason: "Sem registro",
+      noReasonDetail: "O ONS não publicou motivo para o último dia liquidado.",
+      bandNote: "Faixa P10–P90. A mediana não é a soma nem a média das horas.",
+      criticalWindow: "Janela crítica",
+      brasilia: "Horário de Brasília",
+      probableCause: "Causa provável",
+      coverageLabel: "Cobertura P10–P90",
+      coverageNote: "Medida em {days} dias liquidados · alvo {target}",
+      coverageAbsent: "Não medida",
+      coverageAbsentNote: "O cartão do modelo não publicou cobertura para esta faixa.",
+      causeDate: "Registro do ONS em {date}",
+      forecastTitle: "Previsão de curtailment",
+      forecastNote: "{subsystem} · energia do dia",
+      tableTitle: "Risco por subsistema",
+      tableNote: "Mediana do dia em MWh e classe de risco, D−1",
+      tableSubsystem: "Subsistema",
+      tableEnergy: "P50",
+      tableRisk: "Risco",
+      riskLabel: "Risco",
+      zoomIn: "Aproximar",
+      zoomOut: "Afastar",
+      recentre: "Recentralizar no Brasil",
+      legendTitle: "Classe de risco",
+      scopeLabel: "Escopo",
+      runLabel: "Rodada",
+      layer2d: "2D",
+      layer3d: "3D",
+      layer3dUnavailable: "O globo 3D precisa de uma chave do Cesium ion.",
+      layer3dNeedsForecast: "O globo 3D pinta classe de risco, que só uma previsão tem.",
+      scopeSin: "SIN Geral",
+      scopeRegion: "Por Região",
+      attribution: "Cesium ion · Dados: ONS",
     },
     overview: {
       /**
@@ -803,7 +845,7 @@ export const pt: Copy = {
       causeLabel: "Motivo dominante",
       causeSentence: "{reason} respondeu por {share} da energia cortada em {date}.",
       causeNote:
-        "Motivo apurado pelo ONS sobre um dia liquidado, no grão em que ele publica — conjunto e subsistema. Não é uma previsão de motivo: o WattSteer prevê quanto será cortado, não por quê.",
+        "Motivo apurado pelo ONS sobre um dia liquidado. Não é uma previsão de motivo: o WattSteer prevê quanto será cortado, não por quê.",
       /** Pergunta 4 do briefing do operador: "quando?" — dito, não desenhado. */
       windowLabel: "Janela crítica",
       windowRange: "{from}h–{to}h BRT",
@@ -812,7 +854,7 @@ export const pt: Copy = {
       windowNone: "Nenhuma hora do dia é mais provável cortar do que não cortar.",
       metaTitle: "Visão da rede — WattSteer",
       title: "Visão da rede",
-      lede: "Risco de curtailment para o dia seguinte em {date}, por subsistema. Todo número é um intervalo P10/P50/P90, não um ponto.",
+      lede: "Risco de curtailment para o dia seguinte em {date}, por subsistema.",
       /*
         The row *selects*; it no longer navigates. The label said "abrir
         Explicar" because pressing it did, which is the defect this screen

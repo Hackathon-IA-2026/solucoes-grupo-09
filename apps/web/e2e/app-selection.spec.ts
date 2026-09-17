@@ -26,12 +26,24 @@ function _query(page: Page): string {
   return new URL(page.url()).search;
 }
 
+/**
+ * The chips are on the map now, not on a bar above it.
+ *
+ * `/app` stopped rendering the selection bar when the same four subsystems and
+ * the same two runs became chips beside the map they steer. They are buttons
+ * with `aria-pressed` rather than radios with `aria-checked` — a toggle in a
+ * group of toggles, which is what `ScopeBar` draws — so this drives that. What
+ * the file asserts is unchanged: pressing a control writes a URL, and the URL
+ * reads back.
+ *
+ * `/app/replay` still has a bar, and its own spec still drives radios.
+ */
 async function press(page: Page, name: string | RegExp): Promise<void> {
-  await page.getByRole("radio", { name, exact: typeof name === "string" }).click();
+  await page.getByRole("button", { name, exact: typeof name === "string" }).first().click();
 }
 
 /**
- * Asserted rather than returned, so it retries: after a reload the bar renders
+ * Asserted rather than returned, so it retries: after a reload the chips render
  * before the bundle has read the query string, and a one-shot read races it.
  */
 async function expectChecked(
@@ -39,8 +51,10 @@ async function expectChecked(
   name: string | RegExp,
   value: boolean,
 ): Promise<void> {
-  const pill = page.getByRole("radio", { name, exact: typeof name === "string" });
-  await expect(pill).toHaveAttribute("aria-checked", String(value));
+  const pill = page
+    .getByRole("button", { name, exact: typeof name === "string" })
+    .first();
+  await expect(pill).toHaveAttribute("aria-pressed", String(value));
 }
 
 /**
@@ -105,9 +119,13 @@ test.describe("the selection bar writes a URL it can read back", () => {
 
   test("the subsystem and run chips round-trip too", async ({ page }) => {
     // Neither was broken. They are here because the guard is meant to cover
-    // every control on the bar, not the one that failed: the next control added
-    // gets the same assertion for free, which is what the technology chip did
-    // not have.
+    // every control the selection has, not the one that failed: the next control
+    // added gets the same assertion for free, which is what the technology chip
+    // did not have.
+    //
+    // The chips are drawn from the forecast rows, so the gateway has to answer
+    // before they exist — the bar they replaced rendered without data.
+    await routeGateway(page, { forecast: true });
     await page.goto("/app");
 
     await press(page, "S");
@@ -139,22 +157,45 @@ test.describe("a deep link is the selection", () => {
       making the first client render agree with the server, and changing on the
       second, does.
     */
+    /*
+      Narrowed to the selection's own chips by label. The map's controls are all
+      toggles — scope and the 2D/3D layer are pressed too — and this test is
+      about the two parameters the URL carries, not about every button on the
+      screen. The pattern is written inline because `evaluate` runs in the page
+      and cannot close over a constant from this file.
+    */
     const checked = async () =>
       page.evaluate(() =>
-        [...document.querySelectorAll('[role="radio"]')]
-          .filter((el) => el.getAttribute("aria-checked") === "true")
-          .map((el) => el.getAttribute("aria-label"))
-          .filter((label) => label !== null && !/Portugu|English/.test(label)),
+        [...document.querySelectorAll('[role="button"][aria-pressed="true"]')]
+          .map((el) => el.getAttribute("aria-label") ?? el.textContent ?? "")
+          .filter((label) => /^(N|NE|SE\/CO|S|00Z|12Z)$/.test(label)),
       );
 
+    // The chips are drawn from the forecast rows, so the gateway has to answer
+    // before they exist — the bar they replaced rendered without data.
+    await routeGateway(page, { forecast: true });
     await page.goto("/app?subsystem=S&run=00Z&technology=solar");
-    // Two radios, not three: `technology` is still in the URL and still read,
-    // but it no longer has pills in the chrome.
+    /*
+      Two chips, not three: `technology` is still in the URL and still read, but
+      it no longer has a control anywhere in the chrome.
+
+      `S` is marked because the link named it. A link that names a region is
+      somebody pointing at one, so the map opens in its regional scope — which
+      is the only reading under which the mark and the `SIN Geral` chip beside
+      it can both be true.
+    */
     await expect.poll(checked).toEqual(["S", "00Z"]);
 
-    // Non-vacuity: the defaults must still be the defaults, or the assertion
-    // above would hold of a page that simply echoed whatever it was asked for.
+    /*
+      Non-vacuity, and the region is deliberately absent from it.
+
+      A plain visit opens on the whole grid, where marking one of the four would
+      contradict the scope chip saying all of them. So the run keeps its default
+      and no region claims to be chosen — which is also what makes the assertion
+      above mean something: the page is reading the link rather than echoing
+      whatever it is handed.
+    */
     await page.goto("/app");
-    await expect.poll(checked).toEqual(["NE", "12Z"]);
+    await expect.poll(checked).toEqual(["12Z"]);
   });
 });

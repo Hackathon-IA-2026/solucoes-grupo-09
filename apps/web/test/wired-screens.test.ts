@@ -85,6 +85,8 @@ const FORECAST_STACK = code(read("components", "app", "overview", "forecast-pane
 const EXPLAIN_FLAT = flat(read("app", "app", "explain.tsx"));
 const EXPLAIN = code(read("app", "app", "explain.tsx"));
 const SHELL = code(read("components", "app", "app-shell.tsx"));
+const RUN_LANES = code(read("components", "app", "use-run-lanes.ts"));
+const SCOPE_BAR = code(read("components", "app", "map", "scope-bar.tsx"));
 const NETWORK_HOOK = code(read("components", "app", "use-network.ts"));
 const EXPLAIN_HOOK = code(read("components", "app", "use-explain.ts"));
 const SERVING = code(read("components", "app", "use-serving.ts"));
@@ -309,15 +311,26 @@ describe("a selector that cannot move anything says so", () => {
       `gate_early` promoted and `gate_late` refused by its serving smoke left
       both pills live and `12Z` drawing exactly what `00Z` drew.
     */
-    expect(flat(SHELL)).toContain("const profile = gateProfileOf(run);");
-    expect(flat(SHELL)).toContain(
-      "serving.lanes.find((lane) => lane.name.includes(profile))",
+    /*
+      The rule moved to `use-run-lanes.ts` when the console stopped rendering
+      this bar. It had to: the console draws its own run chips, and a rule that
+      lived in the bar would have switched off on the one screen that no longer
+      has one. So this asserts the rule at its new home and the *use* of it here.
+    */
+    expect(flat(RUN_LANES)).toContain("const profile = gateProfileOf(run);");
+    expect(flat(RUN_LANES)).toContain(
+      "serving.lanes.find((entry) => entry.name.includes(profile))",
     );
-    expect(flat(SHELL)).toContain(
+    expect(flat(RUN_LANES)).toContain(
       'lane !== undefined && (lane.condition !== "promoted" || lane.usable === false)',
     );
-    expect(SHELL).toContain("disabled={runInertFor(run as RunLabel)}");
-    expect(SHELL).toContain("disabledHint={copy.app.shell.selection.runUnavailable}");
+    /*
+      The pills moved again, onto the map. `/app` stopped rendering a selection
+      bar when its controls became chips beside the thing they steer, so the
+      *use* of the rule is asserted where the chips are now drawn.
+    */
+    expect(SCOPE_BAR).toContain("disabled={runInert(label as RunLabel)}");
+    expect(SCOPE_BAR).toContain("copy.app.shell.selection.runUnavailable");
   });
 
   it("`undefined` usable is unknown, never rounded down to a refusal", () => {
@@ -325,11 +338,13 @@ describe("a selector that cannot move anything says so", () => {
     // service too old to report `usable` is not a service reporting `false`.
     // `=== false` rather than `!lane.usable` is the whole of it.
     expect(SHELL).not.toMatch(/!lane\.usable\b/);
+    expect(RUN_LANES).not.toMatch(/!lane\.usable\b/);
   });
 
   it("only the run group is gated — the others always move something", () => {
-    // Non-vacuity: `disabled` must not have been sprinkled across the bar.
-    expect(SHELL.match(/disabled=\{runInertFor/g)?.length).toBe(1);
+    // Non-vacuity: `disabled` must not have been sprinkled across the chips.
+    // The region chips are always live — a region always moves the whole page.
+    expect(SCOPE_BAR.match(/disabled=\{runInert/g)?.length).toBe(1);
   });
 
   it("inert is announced, not merely dimmed", () => {

@@ -93,6 +93,7 @@ describe("the shell's stylesheet and the components it steers agree", () => {
       [read("components/site-footer.tsx", "FOOTER_WIDE"), "FOOTER_WIDE"],
       [read("components/landing/hero.tsx", "HERO_WIDE"), "HERO_WIDE"],
       [read("app/pitch.tsx", "PITCH_WIDE"), "PITCH_WIDE"],
+      [read("components/app/app-shell.tsx", "APPBAR_WIDE"), "APPBAR_WIDE"],
     ]);
 
     const unowned = [...new Set(breakpoints)].filter((px) => !owned.has(px));

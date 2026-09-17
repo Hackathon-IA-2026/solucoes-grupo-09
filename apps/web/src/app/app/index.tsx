@@ -229,9 +229,11 @@ export default function GridOverviewScreen() {
             ranking; the pages it links to are. */}
         <meta name="robots" content="noindex,follow" />
       </Head>
-      <AppShell>
+      <AppShell fullWidth={true}>
+        {/* No `title`: the selected pill in the bar above already says
+            "Visão da rede", and this said it again in the largest type on the
+            page. The lede carries the heading — see `ScreenTitle`. */}
         <ScreenTitle
-          title={copy.app.overview.title}
           lede={
             forecastPublished
               ? fill(copy.app.overview.lede, { date: f.date(params.date) })

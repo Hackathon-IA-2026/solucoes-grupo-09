@@ -77,6 +77,12 @@ describe("i18n", () => {
       // translating `P50`, which is not a word.
       "app.band.strip",
       "app.replay.dayLabel",
+      // ONS's own name for the grid, plus the D−1 marker. The product leaves
+      // ONS proper nouns untranslated everywhere — `subsystemMeta` keeps
+      // `NORDESTE` in both locales for the same reason — and "Sistema
+      // Interligado Nacional" is the operator's name for the thing, not a
+      // description of it.
+      "app.grid.eyebrow",
     ]);
     const prose = [...PT].filter(
       ([key, value]) =>

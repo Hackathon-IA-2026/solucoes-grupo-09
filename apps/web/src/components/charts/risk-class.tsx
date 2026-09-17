@@ -88,7 +88,22 @@ export function RiskSteps({ klass, size = 12 }: { klass: RiskClass; size?: numbe
   );
 }
 
-export function RiskChip({ probability }: { probability: number }) {
+export function RiskChip({
+  probability,
+  compact = false,
+}: {
+  probability: number;
+  /**
+   * Drop the probability and keep the class word.
+   *
+   * For the region rail, where the chip has to share 234 px with a figure and a
+   * name. At full width it is 123 px — over half the row — and the four rows
+   * then wrap into four lines each, half of every line empty. The probability
+   * is not lost: the row prints it beside the figure, where it is a number
+   * among numbers rather than a second thing inside a badge.
+   */
+  compact?: boolean;
+}) {
   const copy = useCopy();
   const f = useFormat();
   const klass = riskClass(probability);
@@ -102,8 +117,8 @@ export function RiskChip({ probability }: { probability: number }) {
         gap: 8,
         borderRadius: radius.pill,
         backgroundColor: bg,
-        paddingHorizontal: 12,
-        paddingVertical: 6,
+        paddingHorizontal: compact ? 9 : 12,
+        paddingVertical: compact ? 4 : 6,
       }}
     >
       <RiskSteps klass={klass} />
@@ -124,9 +139,11 @@ export function RiskChip({ probability }: { probability: number }) {
         `700`, on the same hue. Weight was always doing that work; the opacity
         was doing it twice and paying for it in contrast.
       */}
-      <Text style={{ fontSize: 13, fontWeight: "500", color: fg }}>
-        {`≈${f.percentPoints(roundProbability(probability))}`}
-      </Text>
+      {compact ? null : (
+        <Text style={{ fontSize: 13, fontWeight: "500", color: fg }}>
+          {`≈${f.percentPoints(roundProbability(probability))}`}
+        </Text>
+      )}
     </View>
   );
 }

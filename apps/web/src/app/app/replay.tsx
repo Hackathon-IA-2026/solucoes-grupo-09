@@ -282,7 +282,7 @@ export default function TimeMachineScreen() {
         <title>{copy.app.replay.metaTitle}</title>
         <meta name="robots" content="noindex,follow" />
       </Head>
-      <AppShell showSelection={false}>
+      <AppShell>
         <ScreenTitle
           title={copy.app.replay.title}
           lede={scored ? copy.app.replay.lede : copy.app.replay.ledeAbsent}

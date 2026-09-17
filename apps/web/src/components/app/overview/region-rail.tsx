@@ -91,6 +91,7 @@ export function RegionRow({
   onPress,
   onHoverChange,
   trailing,
+  note,
 }: {
   /** The short code — `N`, `NE`, `SE/CO`, `S` — as the map labels it. */
   code: string;
@@ -105,6 +106,8 @@ export function RegionRow({
   onHoverChange: (on: boolean) => void;
   /** A risk chip where there is a forecast; nothing where there is not. */
   trailing?: React.ReactNode;
+  /** Printed beside the figure, where the chip is too narrow to carry it. */
+  note?: string;
 }) {
   const colors = usePalette();
   const f = useFormat();
@@ -146,14 +149,30 @@ export function RegionRow({
         region this row is about, and a reader matching the two should not have
         to translate.
       */}
+      {/*
+        **Three lines, each using the whole width.**
+
+        Measured at 234 px of row: the name line was using 105 of it and the
+        figure line 108, while the risk chip — 123 px on its own — could not fit
+        beside the figure and wrapped to a fourth line. Four half-empty lines per
+        region, sixteen down the rail.
+
+        So the chip moves up beside the name, which is the short half of the row,
+        and the figure keeps a line of its own because it is the largest type
+        here and the thing a reader scans down the column for. The probability
+        the chip used to carry rides beside the figure as `note` — a number among
+        numbers rather than a second thing inside a badge.
+      */}
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
         <Text
           style={{
             ...type.caption,
             color: selected ? colors.accent : colors.inkFaint,
             fontVariant: ["tabular-nums"],
-            minWidth: 34,
+            // `SE/CO` is 36 px and was breaking across two lines at 30.
+            minWidth: 36,
           }}
+          numberOfLines={1}
         >
           {code}
         </Text>
@@ -161,38 +180,48 @@ export function RegionRow({
           style={{
             ...type.label,
             color: selected ? colors.ink : colors.inkMuted,
+            flexGrow: 1,
             flexShrink: 1,
+            minWidth: 0,
           }}
           numberOfLines={1}
         >
           {name}
         </Text>
+        {trailing}
       </View>
 
       <View
         style={{
           flexDirection: "row",
           alignItems: "baseline",
-          justifyContent: "space-between",
-          gap: space.sm,
-          flexWrap: "wrap",
+          gap: 5,
         }}
       >
-        <View style={{ flexDirection: "row", alignItems: "baseline", gap: 5 }}>
+        <Text
+          style={{
+            fontSize: 22,
+            lineHeight: 26,
+            fontWeight: "600",
+            color: colors.ink,
+            fontVariant: ["tabular-nums"],
+          }}
+        >
+          {f.compact(value)}
+        </Text>
+        <Text style={{ ...type.caption, color: colors.inkFaint }}>{unit}</Text>
+        {note === undefined ? null : (
           <Text
             style={{
-              fontSize: 22,
-              lineHeight: 26,
-              fontWeight: "600",
-              color: colors.ink,
+              ...type.caption,
+              color: colors.inkFaint,
               fontVariant: ["tabular-nums"],
+              marginLeft: 4,
             }}
           >
-            {f.compact(value)}
+            {note}
           </Text>
-          <Text style={{ ...type.caption, color: colors.inkFaint }}>{unit}</Text>
-        </View>
-        {trailing}
+        )}
       </View>
 
       <View

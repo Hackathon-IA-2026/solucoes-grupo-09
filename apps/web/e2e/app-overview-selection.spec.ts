@@ -84,8 +84,19 @@ test.describe("a click on the map selects, and does not navigate", () => {
       /NORTE/,
     );
     const after = await screenText(page);
-    // Every one of the four panel headings names the region now.
-    for (const heading of ["Eólica e solar", "Energia cortada, dia inteiro", "Pico"]) {
+    /*
+      Every one of the four panel headings names the region now.
+
+      `"Pico"` on its own used to find this, and stopped when the operator
+      questions moved onto this screen: the "Quando?" card's footnote says
+      "Pico às 2h", which `indexOf` reaches first. The heading is what this
+      assertion is about, so it is named in full.
+    */
+    for (const heading of [
+      "Eólica e solar",
+      "Energia cortada, dia inteiro",
+      "Pico de potência horária",
+    ]) {
       const at = after.indexOf(heading);
       expect(at, `"${heading}" is on the screen`).toBeGreaterThanOrEqual(0);
       expect(after.slice(at, at + 90)).toContain("NORTE");

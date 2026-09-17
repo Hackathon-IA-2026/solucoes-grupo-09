@@ -41,3 +41,7 @@ example
 # generated native folders
 /ios
 /android
+
+# CesiumJS's built distribution, copied from node_modules by
+# scripts/vendor-cesium.ts. 68 MB of a pinned dependency; see that file.
+public/cesium/
