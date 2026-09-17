@@ -1021,6 +1021,30 @@ export const en = {
         "This figure is the four subsystem rows of the same window, added — the gateway says so in a field of its own, `derived: sum_of_four`. It is not the ONS `SIN` line, which WattSteer never uses because it would double-count what the four rows already carry. Measurements add exactly; no forecast quantile does.",
     },
 
+    /**
+      The cinematic screen: the map filling the window with the figures
+      floating over it.
+
+      Its own copy rather than folded into the other sections because it is a
+      screen under evaluation — deleting it should be deleting a file, not
+      hunting keys scattered through two dictionaries everything else touches.
+    */
+    console: {
+      metaTitle: "Console — WattSteer",
+      title: "Grid console",
+      lede: "The settled day, hour by hour, across the four subsystems.",
+      timelineLabel: "Hour of day",
+      play: "Play the day",
+      pause: "Pause",
+      hourLabel: "Selected hour",
+      nationalLabel: "Across the four subsystems",
+      readingTitle: "Reading the day",
+      refusedTitle: "The day did not answer",
+      emptyDay:
+        "No hour of this day recorded curtailment. That is a measurement, not a missing number.",
+      scaleNote:
+        "Colour compares subsystems with each other, on the largest single-subsystem hour — not on the national total.",
+    },
     overview: {
       /**
         Question 5 of the operator brief, answered with what is true.

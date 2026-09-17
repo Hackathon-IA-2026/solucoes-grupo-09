@@ -105,9 +105,24 @@ export function scrollToSection(id: string, attempt = 0): void {
 export function AppShell({
   children,
   showSelection = true,
+  bleed = false,
 }: {
   children: ReactNode;
   showSelection?: boolean;
+  /**
+   * Let the body out of the centred column and off the padding.
+   *
+   * Every screen so far is a document: a measured column with gutters, which is
+   * what makes a page of figures readable. A map is not a document — it wants
+   * the window, and a 1280px column with 20px of gutter on a 2560px display is
+   * a map in a letterbox.
+   *
+   * A flag rather than a second shell, because the chrome above is the same
+   * chrome and must stay so: the nav, the selection bar and the language switch
+   * are how a reader gets *out*, and a full-bleed screen that reinvented them
+   * would be a screen you can get lost on.
+   */
+  bleed?: boolean;
 }) {
   const colors = usePalette();
   const copy = useCopy();
@@ -134,8 +149,40 @@ export function AppShell({
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
-      style={{ backgroundColor: colors.canvas }}
-      contentContainerStyle={{ paddingBottom: 96 }}
+      /*
+        A document scrolls and reserves room under its last line. A screen that
+        owns the viewport does neither — and `flexGrow` is what makes that true
+        rather than merely intended: without it the content container is only as
+        tall as its content, `flex: 1` inside it resolves against nothing, and
+        the map grows until the timeline below it is off the fold.
+      */
+      style={{
+        backgroundColor: colors.canvas,
+        /*
+          `flex: 1` is not enough and the reason is worth writing down: it
+          resolves against the parent, and nothing above this is height-bounded
+          — the router's stack lets the document grow. So on web the viewport is
+          named directly. `100dvh` rather than `100vh` because mobile browsers
+          shrink the visual viewport as their chrome retracts, and `vh` keeps
+          the taller number: the timeline would sit under the address bar on the
+          one device where it is hardest to scroll to.
+        */
+        ...(bleed && Platform.OS === "web" ? ({ height: "100dvh" } as object) : null),
+        ...(bleed ? { flex: 1 } : null),
+      }}
+      contentContainerStyle={
+        bleed
+          ? /*
+              `flexShrink` and `minHeight` beside the grow, and both were
+              missing from the first attempt. A content container defaults to
+              `flex: 1 0 auto` — it grows to its content and never shrinks — so
+              it sized to chrome plus an unbounded map and overflowed the
+              viewport it was told to fit in. Measured: 1 181px inside a 1 000px
+              scroller, which is exactly where the timeline went.
+            */
+            { flexGrow: 1, flexShrink: 1, minHeight: 0 }
+          : { paddingBottom: 96 }
+      }
     >
       <View
         style={{
@@ -301,14 +348,18 @@ export function AppShell({
       */}
       <View
         {...(Platform.OS === "web" ? ({ role: "main" } as object) : null)}
-        style={{
-          width: "100%",
-          maxWidth: layout.page,
-          alignSelf: "center",
-          paddingHorizontal: 20,
-          paddingTop: space.xl,
-          gap: space.xl,
-        }}
+        style={
+          bleed
+            ? { width: "100%", flex: 1 }
+            : {
+                width: "100%",
+                maxWidth: layout.page,
+                alignSelf: "center",
+                paddingHorizontal: 20,
+                paddingTop: space.xl,
+                gap: space.xl,
+              }
+        }
       >
         {children}
       </View>

@@ -145,7 +145,7 @@ export function forecastHours(forecast: ForecastDayAhead): CurtailmentHourForeca
  * direction, that `lib/replay.ts` does to build a `validTime` from a local
  * hour.
  */
-function civilDayOf(validTime: string): string {
+export function civilDayOf(validTime: string): string {
   return new Date(Date.parse(validTime) - 3 * 3_600_000).toISOString().slice(0, 10);
 }
 

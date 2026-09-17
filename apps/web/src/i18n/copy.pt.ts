@@ -765,6 +765,30 @@ export const pt: Copy = {
         "Este número é a soma das quatro linhas de subsistema da mesma janela — o gateway diz isso no próprio campo, `derived: sum_of_four`. Não é a linha SIN do ONS, que o WattSteer nunca usa porque ela contaria em dobro o que já está nas quatro. Medições somam exatamente; nenhum quantil de previsão soma.",
     },
 
+    /**
+      A tela cinematográfica: o mapa ocupando a janela e as informações
+      flutuando sobre ele.
+
+      Copy própria e não nas outras seções porque é uma tela em avaliação —
+      apagá-la deve ser apagar um arquivo, não caçar chaves espalhadas por dois
+      dicionários que todo o resto também toca.
+    */
+    console: {
+      metaTitle: "Console — WattSteer",
+      title: "Console da rede",
+      lede: "O dia liquidado, hora a hora, nos quatro subsistemas.",
+      timelineLabel: "Hora do dia",
+      play: "Rodar o dia",
+      pause: "Pausar",
+      hourLabel: "Hora selecionada",
+      nationalLabel: "Nos quatro subsistemas",
+      readingTitle: "Lendo o dia",
+      refusedTitle: "O dia não respondeu",
+      emptyDay:
+        "Nenhuma hora deste dia registrou corte. É uma medição, não um número faltando.",
+      scaleNote:
+        "A cor compara subsistemas entre si, na maior hora de um único subsistema — não no total nacional.",
+    },
     overview: {
       /**
         Pergunta 5 do briefing do operador, respondida com o que é verdade.
