@@ -52,11 +52,25 @@ COPY apps/web/scripts ./apps/web/scripts
 # args / service variables if the API moves.
 ARG EXPO_PUBLIC_API_URL=https://api.wattsteer.com
 ARG EXPO_PUBLIC_SITE_URL=https://wattsteer.com
+# The CesiumJS ion key, for the console map's 3D layer. Empty by default and
+# that is a supported state, not a broken one: `cesiumAvailable()` is false
+# without it and the 3D control ships disabled with its reason, which is the
+# right thing for a fork or a preview build that has no ion account.
+ARG EXPO_PUBLIC_CESIUM_ION_TOKEN=""
 ENV EXPO_PUBLIC_API_URL=$EXPO_PUBLIC_API_URL \
-    EXPO_PUBLIC_SITE_URL=$EXPO_PUBLIC_SITE_URL
+    EXPO_PUBLIC_SITE_URL=$EXPO_PUBLIC_SITE_URL \
+    EXPO_PUBLIC_CESIUM_ION_TOKEN=$EXPO_PUBLIC_CESIUM_ION_TOKEN
 
 WORKDIR /app/apps/web
-RUN bunx expo export --platform web && bun scripts/localize-export.ts
+# `vendor-cesium.ts` first, and it is not optional tooling: CesiumJS resolves
+# its Web Workers and `Assets/` by URL at runtime, so it is served as static
+# files rather than bundled, and the export only picks them up if they are in
+# `public/` when it runs. This image called `bunx expo export` directly, which
+# is exactly how a step that lives in the package script gets skipped — the
+# page would build, ship, and 404 on `Cesium.js` in production only.
+RUN bun scripts/vendor-cesium.ts \
+ && bunx expo export --platform web \
+ && bun scripts/localize-export.ts
 
 # --- runtime stage: serve dist/ ---
 FROM oven/bun:1.3-slim AS runtime
