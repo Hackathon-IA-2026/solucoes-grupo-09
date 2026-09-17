@@ -4,6 +4,7 @@ import { loggableError } from "./errors.js";
 import { createPayloadArchive, REFRESH_CADENCE } from "./ingest/index.js";
 import { createBullMqRunner } from "./jobs/bullmq.js";
 import { FORECAST_PUBLICATIONS, PUBLICATION_TIME_ZONE } from "./jobs/publication.js";
+import { RAG_EVIDENCE_SCHEDULE } from "./jobs/rag-evidence.js";
 import { RAG_REFRESH_SCHEDULE } from "./jobs/rag-refresh.js";
 import {
   REPLAY_REFRESH_JOB_PREFIX,
@@ -133,6 +134,9 @@ if (config.refreshSchedules) {
   // before somebody asks about a day nobody fetched.
   if (config.ragUrl) {
     await runner.schedule(RAG_REFRESH_SCHEDULE);
+    // Twenty minutes after it, so a lookup cites the documents this morning
+    // fetched rather than yesterday's.
+    await runner.schedule(RAG_EVIDENCE_SCHEDULE);
   } else {
     console.warn(
       "⚠️  rag: WATTSTEER_RAG_URL is unset — the evidence corpus will not be " +

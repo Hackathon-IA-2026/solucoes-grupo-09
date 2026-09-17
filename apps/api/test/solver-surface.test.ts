@@ -257,7 +257,17 @@ function code(absolute: string): string {
  * composition root and mounts the others rather than handling anything itself.
  * `plugins/` is a directory and never matches.
  */
-const NOT_A_ROUTE_MODULE = ["index.ts", "ml-proxy.ts", "params.ts", "scenario-gate.ts"];
+// `rag-proxy.ts` joins `ml-proxy.ts` for the same reason: it is a door, not a
+// route. It serves no path and speaks HTTP to one service on purpose, which is
+// the arrangement this box exists to protect rather than a violation of it.
+// `rag-boundary.test.ts` governs it the way this file governs the model's.
+const NOT_A_ROUTE_MODULE = [
+  "index.ts",
+  "ml-proxy.ts",
+  "params.ts",
+  "rag-proxy.ts",
+  "scenario-gate.ts",
+];
 
 const ROUTE_MODULES: readonly string[] = readdirSync(join(SOURCE, "api"))
   .filter((name) => name.endsWith(".ts") && !NOT_A_ROUTE_MODULE.includes(name))

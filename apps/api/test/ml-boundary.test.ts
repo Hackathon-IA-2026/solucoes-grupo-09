@@ -157,6 +157,24 @@ const SOLVER_CALLERS = ["api/optimize.ts", "api/replay.ts"];
 const PRIVATE_PREFIX = "/internal/";
 
 /**
+ * The **evidence** service's private surface, which shares the prefix and is
+ * not this boundary's business.
+ *
+ * `/internal/` was an unambiguous signal while one service used it. `apps/rag`
+ * adopted the same convention for its own routes, so a prefix match alone
+ * reports a module dialling a different process as a modelling crossing.
+ *
+ * I argued against this narrowing when `jobs/rag-refresh.ts` first tripped it,
+ * on the grounds that a handler reaching the evidence service would be the same
+ * defect and a narrowed detector would read green over it. That was the right
+ * worry and the wrong remedy: the protection against it is a **door**, not a
+ * prefix, and `api/rag-proxy.ts` is now that door with `rag-boundary.test.ts`
+ * holding it. One boundary per test, each with one door, is what this file does
+ * for the model and what that one does for the corpus.
+ */
+const RAG_PREFIX = "/internal/rag/";
+
+/**
  * The modelling service's **deployment address**, discovered from the
  * repository's own compose file rather than written down twice.
  *
@@ -357,7 +375,11 @@ function crossingReasons(modules: ReadonlyMap<string, string>, id: string): stri
   const literals = [...source.matchAll(/["'`]([^"'`]*)["'`]/g)].map(
     (match) => match[1] as string,
   );
-  if (literals.some((literal) => literal.includes(PRIVATE_PREFIX))) {
+  if (
+    literals.some(
+      (literal) => literal.includes(PRIVATE_PREFIX) && !literal.includes(RAG_PREFIX),
+    )
+  ) {
     reasons.push(`dials the modelling service's private ${PRIVATE_PREFIX} surface`);
   }
   if (
@@ -629,25 +651,32 @@ describe("the ml boundary detector is calibrated", () => {
     const spelling = [...MODULES.keys()]
       .filter((id) =>
         [...code(MODULES.get(id) as string).matchAll(/["'`]([^"'`]*)["'`]/g)].some(
-          (match) => (match[1] as string).startsWith(PRIVATE_PREFIX),
+          (match) =>
+            (match[1] as string).startsWith(PRIVATE_PREFIX) &&
+            !(match[1] as string).startsWith(RAG_PREFIX),
         ),
       )
       .sort();
     //
-    // `jobs/rag-refresh.ts` joined the list without reaching the model at all:
+    // The evidence service's modules are deliberately **not** here, and the
+    // narrowing that keeps them out is `RAG_PREFIX`. They dial a different
+    // process; what stops them dialling it from a handler is `rag-proxy.ts`
+    // being the only module that may, which `rag-boundary.test.ts` holds.
+    //
+    // (Superseded note, kept because the reasoning moved:
     // the evidence service adopted the same `/internal/` convention for its own
     // routes, so it spells the prefix while dialling a different process. The
     // narrowing that would tell them apart is deliberately **not** here. A
     // handler that reached the RAG from a request path would be the same defect
     // this boundary is about — a page view doing work a schedule owns — and a
     // detector taught to ignore one service's prefix would read green over it.
-    // Broad and occasionally over-inclusive is the right way round; the last
-    // assertion is what makes the list a claim rather than a listing.
+    // broad-and-over-inclusive was the right instinct and a door is the better
+    // implementation of it.) The last assertion is what makes the list a claim
+    // rather than a listing.
     expect(spelling).toEqual([
       "diagnosis/publish.ts",
       "forecast/publish.ts",
       "jobs/holdout-backfill.ts",
-      "jobs/rag-refresh.ts",
       "jobs/replay-refresh.ts",
       "jobs/retrain.ts",
     ]);

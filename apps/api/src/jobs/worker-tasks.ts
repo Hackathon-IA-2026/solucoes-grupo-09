@@ -26,6 +26,11 @@ import {
   publicationSchedules,
 } from "./publication.js";
 import {
+  type RagEvidencePayload,
+  type RagEvidenceResult,
+  runRagEvidence,
+} from "./rag-evidence.js";
+import {
   type RagRefreshPayload,
   type RagRefreshResult,
   runRagRefresh,
@@ -80,7 +85,13 @@ export type WorkerTask =
    * `ingest/dispatch.ts` it would have been linked into the gateway, and
    * `ml-boundary.test.ts` said so within the minute.
    */
-  | { kind: "rag_refresh"; payload: RagRefreshPayload };
+  | { kind: "rag_refresh"; payload: RagRefreshPayload }
+  /**
+   * The documentary evidence behind a settled day's restrictions, pre-computed.
+   * A model runs to build it, which is precisely why a schedule does it and the
+   * gateway reads a row.
+   */
+  | { kind: "rag_evidence"; payload: RagEvidencePayload };
 
 /** What a worker task produced. */
 export type WorkerTaskResult =
@@ -90,7 +101,8 @@ export type WorkerTaskResult =
   | { kind: "retrain"; result: RetrainResult }
   | { kind: "holdout_backfill"; result: HoldoutBackfillJobResult }
   | { kind: "refresh_replay_caches"; result: ReplayRefreshResult }
-  | { kind: "rag_refresh"; result: RagRefreshResult };
+  | { kind: "rag_refresh"; result: RagRefreshResult }
+  | { kind: "rag_evidence"; result: RagEvidenceResult };
 
 export interface WorkerDispatcherDeps extends IngestDispatcherDeps {
   /**
@@ -166,6 +178,12 @@ export function createWorkerDispatch(
     }
     if (task.kind === "publish_diagnosis") {
       return { kind: "publish_diagnosis", result: await explain(task.payload, report) };
+    }
+    if (task.kind === "rag_evidence") {
+      return {
+        kind: "rag_evidence",
+        result: await runRagEvidence(deps.db, task.payload),
+      };
     }
     if (task.kind === "rag_refresh") {
       return { kind: "rag_refresh", result: await runRagRefresh(task.payload) };
