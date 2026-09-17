@@ -31,6 +31,8 @@ export const pt: Copy = {
   },
 
   footer: {
+    /** AGPL §13: the offer of corresponding source, on the page it is served from. */
+    sourceLink: "Código-fonte",
     rights: "© WattSteer {year}. Todos os direitos reservados.",
   },
 
@@ -480,10 +482,20 @@ export const pt: Copy = {
       /** The accordion control on a collapsed section, and on an open one. */
       expand: "Abrir",
       collapse: "Recolher",
-      screens: {
-        overview: "Visão da rede",
+      /**
+       * The two sections of Visão da rede, named short.
+       *
+       * Not in `screens` any more: that node is the nav row's labels, and the
+       * row names places a reader travels to. These are places on the page the
+       * reader is already on. The voice agent still names them — "Abri
+       * Explicar para você" — which is why they are copy and not a comment.
+       */
+      sections: {
         explain: "Explicar",
         mitigate: "Mitigar",
+      },
+      screens: {
+        overview: "Visão da rede",
         replay: "Máquina do tempo",
       },
       selection: {

@@ -85,11 +85,15 @@ export type ExplainState =
   | { readonly status: "reading" }
   | {
       readonly status: "explained";
+      /** A newer question is in flight; these figures are the previous answer. */
+      readonly refreshing?: boolean;
       readonly observed: ObservedExplain;
       readonly day: DiagnosedDay;
     }
   | {
       readonly status: "observedOnly";
+      /** A newer question is in flight; these figures are the previous answer. */
+      readonly refreshing?: boolean;
       readonly observed: ObservedExplain;
       /** The clause that refused the day, from the closed enum. */
       readonly code: ErrorCode;
@@ -139,12 +143,25 @@ export function useExplain(query: ExplainQuery): ExplainState {
     const controller = new AbortController();
     const settle = settleWith(controller.signal, setState);
     const signal = controller.signal;
-    // The first statement of a fetch effect, not a cascade: the key changed,
-    // so the answer on screen is about a question nobody is asking any more
-    // and saying so is the point. Deriving it before render cannot work —
-    // "reading" is a fact about a request that render did not make.
+    /*
+      **A re-read is not a first read**, which `use-network.ts` argued for the
+      Overview and this hook did not follow.
+
+      Selecting a region collapsed this section from 618px to a 331px skeleton
+      while the Overview above it kept its figures — measured — so 283px of
+      content vanished under a reader who may have been mid-sentence. One
+      gesture, three behaviours on one page, and this is one of the two that
+      disagreed.
+
+      `reading` is honest when there is nothing to show. When there is a
+      previous answer it stays, marked, and the section says it is refreshing.
+    */
     // react-doctor-disable-next-line react-hooks-js/set-state-in-effect
-    setState({ status: "reading" });
+    setState((previous) =>
+      previous.status === "explained" || previous.status === "observedOnly"
+        ? { ...previous, refreshing: true }
+        : { status: "reading" },
+    );
 
     // The most recent local day that can have settled. ONS publishes the
     // restriction detail a day or more behind, so asking about the day being
@@ -188,12 +205,18 @@ export function useExplain(query: ExplainQuery): ExplainState {
         } catch (cause: unknown) {
           settle({
             status: "observedOnly",
+            refreshing: false,
             observed: settledExplain,
             code: refusalOf(cause),
           });
           return;
         }
-        settle({ status: "explained", observed: settledExplain, day: diagnosed });
+        settle({
+          status: "explained",
+          observed: settledExplain,
+          day: diagnosed,
+          refreshing: false,
+        });
       })
       .catch((cause: unknown) => {
         settle({ status: "refused", code: refusalOf(cause) });

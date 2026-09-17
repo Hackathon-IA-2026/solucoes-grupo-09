@@ -58,6 +58,8 @@ export const en = {
   },
 
   footer: {
+    /** AGPL §13: the offer of corresponding source, on the page it is served from. */
+    sourceLink: "Source code",
     rights: "© WattSteer {year}. All rights reserved.",
   },
 
@@ -613,10 +615,20 @@ export const en = {
       /** The accordion control on a collapsed section, and on an open one. */
       expand: "Open",
       collapse: "Collapse",
-      screens: {
-        overview: "Grid Overview",
+      /**
+       * The two sections of the Grid Overview, named short.
+       *
+       * Not in `screens` any more: that node is the nav row's labels, and the
+       * row names places a reader travels to. These are places on the page the
+       * reader is already on. The voice agent still names them — "Opened
+       * Explain for you" — which is why they are copy and not a comment.
+       */
+      sections: {
         explain: "Explain",
         mitigate: "Mitigate",
+      },
+      screens: {
+        overview: "Grid Overview",
         replay: "Time Machine",
       },
       selection: {

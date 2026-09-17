@@ -8,7 +8,7 @@ import {
   intentLines,
   readsLevel,
   ringScale,
-  screenKeyFor,
+  screenNameFor,
   selectionLine,
   statusLabel,
 } from "../src/components/voice/use-voice-agent";
@@ -265,10 +265,14 @@ describe("the action card says what happened", () => {
   it("it names the screen from the copy the tab row already uses", () => {
     // One table of screen names, not two. A second would drift the moment a
     // screen is renamed.
-    expect(screenKeyFor(SCREEN_PATHS.explain)).toBe("explain");
-    expect(screenKeyFor(SCREEN_PATHS.mitigate)).toBe("mitigate");
-    expect(screenKeyFor(SCREEN_PATHS.replay)).toBe("replay");
-    expect(screenKeyFor(SCREEN_PATHS.overview)).toBe("overview");
+    // Names, not keys, and read from two nodes: `sections` for the two that
+    // are parts of Visão da rede, `screens` for the two that are destinations.
+    expect(screenNameFor(SCREEN_PATHS.explain, pt)).toBe(pt.app.shell.sections.explain);
+    expect(screenNameFor(SCREEN_PATHS.mitigate, pt)).toBe(
+      pt.app.shell.sections.mitigate,
+    );
+    expect(screenNameFor(SCREEN_PATHS.replay, pt)).toBe(pt.app.shell.screens.replay);
+    expect(screenNameFor(SCREEN_PATHS.overview, pt)).toBe(pt.app.shell.screens.overview);
   });
 
   it("it states only the fields the intent actually carried", () => {

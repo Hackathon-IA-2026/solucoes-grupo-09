@@ -55,7 +55,7 @@ import {
 } from "@/components/app/app-shell";
 import { ForecastAbsent } from "@/components/app/forecast-absent";
 import { ForecastStamp, HonestyNote, VintageBadge } from "@/components/app/honesty";
-import { ReadingState } from "@/components/app/thinking-orb";
+import { ReadingState, ThinkingOrb } from "@/components/app/thinking-orb";
 import {
   gateProfileOf,
   sharedParams,
@@ -208,13 +208,27 @@ export default function ExplainScreen({ embedded = false }: { embedded?: boolean
 
   const day = state.status === "explained" ? state.day : null;
 
+  /*
+    The re-read's only mark, beside the stamp a reader is already looking at.
+    The figures below are the previous region's until the new ones land, which
+    is the whole point of not collapsing to a skeleton.
+  */
+  const refreshing =
+    (state.status === "explained" || state.status === "observedOnly") &&
+    state.refreshing === true;
+
   return frame(
-    day === null ? null : (
-      <ForecastStamp
-        origin={day.forecast.forecastOrigin}
-        thresholdMw={day.forecast.thresholdMw}
-      />
-    ),
+    <>
+      {day === null ? null : (
+        <ForecastStamp
+          origin={day.forecast.forecastOrigin}
+          thresholdMw={day.forecast.thresholdMw}
+        />
+      )}
+      {refreshing ? (
+        <ThinkingOrb size={18} accessibilityLabel={copy.app.overview.refreshingLabel} />
+      ) : null}
+    </>,
     <>
       {day === null ? null : <DiagnosedPanels day={day} />}
 

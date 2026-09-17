@@ -39,7 +39,12 @@ import { useLatest } from "@/lib/use-latest";
 
 export type OptimizationState =
   | { readonly status: "solving" }
-  | { readonly status: "solved"; readonly steps: MitigationStep[] }
+  | {
+      readonly status: "solved";
+      readonly steps: MitigationStep[];
+      /** A newer scenario is in flight; these steps are the previous solve. */
+      readonly refreshing?: boolean;
+    }
   | { readonly status: "refused"; readonly code: ErrorCode };
 
 /**
@@ -71,7 +76,17 @@ export function useOptimization(scenario: Scenario | null): OptimizationState {
     // The same shape as `use-network.ts`: the solve has just been asked for,
     // and the previous result is about a scenario the reader has left.
     // react-doctor-disable-next-line react-hooks-js/set-state-in-effect
-    setState({ status: "solving" });
+    /*
+      Same rule as `use-explain.ts` and `use-network.ts`: a re-solve keeps the
+      plan on screen rather than replacing it with "Resolvendo". Measured, this
+      section collapsed 314px → 245px on a region change while the Overview
+      above it did not move.
+    */
+    setState((previous) =>
+      previous.status === "solved"
+        ? { ...previous, refreshing: true }
+        : { status: "solving" },
+    );
     Promise.all(
       SOLVED_STEPS.map((step) =>
         api.optimize(stepScenario(asked, step), controller.signal),
@@ -84,6 +99,7 @@ export function useOptimization(scenario: Scenario | null): OptimizationState {
             battery,
             battery_and_load: batteryAndLoad,
           }),
+          refreshing: false,
         });
       })
       .catch((cause: unknown) => {

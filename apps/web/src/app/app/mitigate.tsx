@@ -69,6 +69,7 @@ import {
   withBrlPerMwh,
   withLoad,
 } from "@/components/app/scenario";
+import { ThinkingOrb } from "@/components/app/thinking-orb";
 import { useAppParams } from "@/components/app/use-app-params";
 import { useOptimization } from "@/components/app/use-optimization";
 import { useScenario } from "@/components/app/use-scenario";
@@ -162,13 +163,22 @@ export default function MitigateScreen({ embedded = false }: { embedded?: boolea
     subsystem: meta.onsDisplayName,
     date: f.date(params.date),
   });
-  const right =
-    stamped === null ? null : (
-      <SolveStamp
-        forecastOrigin={stamped.forecastOrigin}
-        thresholdMw={stamped.thresholdMw}
-      />
-    );
+  /* Same mark as Visão da rede and Explicar: a re-solve keeps the plan and
+     says it is being redone, rather than replacing it with a sentence. */
+  const resolving = optimization.status === "solved" && optimization.refreshing === true;
+  const right = (
+    <>
+      {stamped === null ? null : (
+        <SolveStamp
+          forecastOrigin={stamped.forecastOrigin}
+          thresholdMw={stamped.thresholdMw}
+        />
+      )}
+      {resolving ? (
+        <ThinkingOrb size={18} accessibilityLabel={copy.app.overview.refreshingLabel} />
+      ) : null}
+    </>
+  );
 
   /*
     One frame for four returns. This screen wrote the `Head` + `AppShell` +

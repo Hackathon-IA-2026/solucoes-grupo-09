@@ -448,17 +448,25 @@ export function statusLabel(status: VoiceStatus, copy: Copy): string {
   return copy.app.voice.status[status];
 }
 
-/** The route the agent opened, as a key into the screen names copy already has. */
-export function screenKeyFor(pathname: string): keyof Copy["app"]["shell"]["screens"] {
+/**
+ * What the agent just opened, named for the action card.
+ *
+ * Two dictionaries rather than one, because the two halves stopped being the
+ * same kind of thing: `shell.screens` is the nav row, which names the places a
+ * reader travels to, and Explicar and Mitigar are sections of the page they
+ * are already on. Returning a *name* rather than a key is what lets it read
+ * from both without the caller knowing there are two.
+ */
+export function screenNameFor(pathname: string, copy: Copy): string {
   switch (pathname) {
     case SCREEN_PATHS.explain:
-      return "explain";
+      return copy.app.shell.sections.explain;
     case SCREEN_PATHS.mitigate:
-      return "mitigate";
+      return copy.app.shell.sections.mitigate;
     case SCREEN_PATHS.replay:
-      return "replay";
+      return copy.app.shell.screens.replay;
     default:
-      return "overview";
+      return copy.app.shell.screens.overview;
   }
 }
 
@@ -542,7 +550,7 @@ export function intentLines(
     case "navigate":
       return {
         headline: fill(voice.action.navigate, {
-          screen: copy.app.shell.screens[screenKeyFor(intent.pathname)],
+          screen: screenNameFor(intent.pathname, copy),
         }),
         detail: selectionLine(intent.params, copy),
       };

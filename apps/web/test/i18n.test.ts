@@ -367,3 +367,34 @@ describe("the two dictionaries say the same thing about the product", () => {
     expect(pt.app.split.emphasised).toContain("destaque");
   });
 });
+
+describe("a computed read does not excuse an unused sibling", () => {
+  /*
+    **The one hole the guard above cannot see, closed where it opens.**
+
+    `app.shell.screens` is read as `copy.app.shell.screens[screen.key]`, and
+    the rule that lets `copy.provenance.sources.map(…)` vouch for every leaf
+    under it lets that bracket vouch for every screen name — whether or not any
+    row asks for it. It was true twice: `explain` and `mitigate` sat in that
+    node unrendered after the nav row dropped to two, and the suite was green
+    both times.
+
+    So the node states its own contract instead. Every name under `screens` is
+    a row in `SCREENS`, and every row in `SCREENS` has a name — which is the
+    property the bracket read actually depends on, asserted rather than assumed.
+  */
+  it("every nav name is a nav row, and every row is named", () => {
+    const shell = readFileSync(
+      join(import.meta.dir, "..", "src", "components", "app", "app-shell.tsx"),
+      "utf8",
+    );
+    const block = shell.slice(
+      shell.indexOf("const SCREENS: ScreenDef[] = ["),
+      shell.indexOf("];", shell.indexOf("const SCREENS: ScreenDef[] = [")),
+    );
+    const rows = [...block.matchAll(/key: "([a-z]+)"/g)].map((match) => match[1]).sort();
+    expect(rows.length).toBeGreaterThan(0);
+    expect(Object.keys(en.app.shell.screens).sort()).toEqual(rows);
+    expect(Object.keys(pt.app.shell.screens).sort()).toEqual(rows);
+  });
+});

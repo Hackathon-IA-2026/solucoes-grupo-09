@@ -71,6 +71,14 @@ const RIGHTS_MARKER = marker("footerRights");
 const LINKS_MARKER = marker("footerLinks");
 
 /** Legal link (expo-router Link → real <a> on web) with a hit-slop target. */
+/**
+ * Where the corresponding source lives, for AGPL §13.
+ *
+ * A constant rather than copy: a URL is not a translation, and a repository
+ * address that differed between locales would be two claims about one licence.
+ */
+const SOURCE_URL = "https://github.com/vtorres/WattSteer";
+
 function LegalLink({
   href,
   label,
@@ -291,6 +299,34 @@ export function SiteFooter() {
             href={PITCH_PATH}
             label={copy.pitch.footerLink}
             testID="footer-pitch-link"
+          />
+          <View
+            aria-hidden={true}
+            style={{
+              width: space.xs,
+              height: space.xs,
+              borderRadius: space.xs / 2,
+              backgroundColor: colors.inkFaint,
+            }}
+          />
+          {/*
+            **The source, because §13 of the AGPL asks for it here.**
+
+            WattSteer is served over a network under AGPL-3.0, and §13 is the
+            clause that makes that different from the GPL: a user interacting
+            with it remotely must be offered the corresponding source, from the
+            running instance. A repository that exists but is linked from
+            nowhere satisfies the spirit of nothing — the offer has to be where
+            the interaction is, which is this page.
+
+            An absolute URL rather than a locale path, because it leaves the
+            product: `LegalLink` already renders an anchor, and this is the one
+            link in the row that does not point at something we serve.
+          */}
+          <LegalLink
+            href={SOURCE_URL}
+            label={copy.footer.sourceLink}
+            testID="footer-source-link"
           />
         </View>
       </View>
