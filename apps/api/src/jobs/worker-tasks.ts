@@ -26,6 +26,11 @@ import {
   publicationSchedules,
 } from "./publication.js";
 import {
+  type RagRefreshPayload,
+  type RagRefreshResult,
+  runRagRefresh,
+} from "./rag-refresh.js";
+import {
   createReplayRefresher,
   type ReplayRefresherDeps,
   type ReplayRefreshPayload,
@@ -66,7 +71,16 @@ export type WorkerTask =
   | { kind: "publish_diagnosis"; payload: PublishDiagnosisPayload }
   | { kind: "retrain"; payload: RetrainPayload }
   | { kind: "holdout_backfill"; payload: HoldoutBackfillPayload }
-  | { kind: "refresh_replay_caches"; payload: ReplayRefreshPayload };
+  | { kind: "refresh_replay_caches"; payload: ReplayRefreshPayload }
+  /**
+   * The RAG's daily catch-up. Here rather than in `QueueTask` for the same
+   * reason the publication is: it reaches another service, and the property
+   * this file exists to keep is that reaching another service is a *worker*
+   * capability the gateway's request graph cannot resolve to. Routed through
+   * `ingest/dispatch.ts` it would have been linked into the gateway, and
+   * `ml-boundary.test.ts` said so within the minute.
+   */
+  | { kind: "rag_refresh"; payload: RagRefreshPayload };
 
 /** What a worker task produced. */
 export type WorkerTaskResult =
@@ -75,7 +89,8 @@ export type WorkerTaskResult =
   | { kind: "publish_diagnosis"; result: DiagnosisPublicationResult }
   | { kind: "retrain"; result: RetrainResult }
   | { kind: "holdout_backfill"; result: HoldoutBackfillJobResult }
-  | { kind: "refresh_replay_caches"; result: ReplayRefreshResult };
+  | { kind: "refresh_replay_caches"; result: ReplayRefreshResult }
+  | { kind: "rag_refresh"; result: RagRefreshResult };
 
 export interface WorkerDispatcherDeps extends IngestDispatcherDeps {
   /**
@@ -151,6 +166,9 @@ export function createWorkerDispatch(
     }
     if (task.kind === "publish_diagnosis") {
       return { kind: "publish_diagnosis", result: await explain(task.payload, report) };
+    }
+    if (task.kind === "rag_refresh") {
+      return { kind: "rag_refresh", result: await runRagRefresh(task.payload) };
     }
     if (task.kind === "retrain") {
       return { kind: "retrain", result: await retrain(task.payload, report) };

@@ -633,10 +633,21 @@ describe("the ml boundary detector is calibrated", () => {
         ),
       )
       .sort();
+    //
+    // `jobs/rag-refresh.ts` joined the list without reaching the model at all:
+    // the evidence service adopted the same `/internal/` convention for its own
+    // routes, so it spells the prefix while dialling a different process. The
+    // narrowing that would tell them apart is deliberately **not** here. A
+    // handler that reached the RAG from a request path would be the same defect
+    // this boundary is about — a page view doing work a schedule owns — and a
+    // detector taught to ignore one service's prefix would read green over it.
+    // Broad and occasionally over-inclusive is the right way round; the last
+    // assertion is what makes the list a claim rather than a listing.
     expect(spelling).toEqual([
       "diagnosis/publish.ts",
       "forecast/publish.ts",
       "jobs/holdout-backfill.ts",
+      "jobs/rag-refresh.ts",
       "jobs/replay-refresh.ts",
       "jobs/retrain.ts",
     ]);

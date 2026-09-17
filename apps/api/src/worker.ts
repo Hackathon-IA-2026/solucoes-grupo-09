@@ -4,6 +4,7 @@ import { loggableError } from "./errors.js";
 import { createPayloadArchive, REFRESH_CADENCE } from "./ingest/index.js";
 import { createBullMqRunner } from "./jobs/bullmq.js";
 import { FORECAST_PUBLICATIONS, PUBLICATION_TIME_ZONE } from "./jobs/publication.js";
+import { RAG_REFRESH_SCHEDULE } from "./jobs/rag-refresh.js";
 import {
   REPLAY_REFRESH_JOB_PREFIX,
   REPLAY_REFRESH_PATTERN,
@@ -121,6 +122,25 @@ if (config.refreshSchedules) {
     pattern: "0 6 * * 1",
     payload: { kind: "centroid_drift", payload: {} },
   });
+  // The RAG's daily catch-up, ten past four Brasília: after the day's bulletin
+  // is published and well before the morning gate.
+  //
+  // Skipped loudly without a URL, exactly as the publication is without
+  // `mlUrl`, and for a sharper reason: a corpus that stops moving looks
+  // identical to a healthy one from every other signal. `/ready` is green,
+  // `/internal/rag/status` returns numbers, queries answer — and the newest
+  // document quietly ages. A warning at boot is the only place that can say so
+  // before somebody asks about a day nobody fetched.
+  if (config.ragUrl) {
+    await runner.schedule(RAG_REFRESH_SCHEDULE);
+  } else {
+    console.warn(
+      "⚠️  rag: WATTSTEER_RAG_URL is unset — the evidence corpus will not be " +
+        "refreshed, and the date it covers stops moving while every other " +
+        "signal keeps reporting healthy.",
+    );
+  }
+
   // The publication: ten minutes after each gate, in Brasília civil time.
   //
   // Registered here and only here — `docs/specs/api-surface.md`'s boundary

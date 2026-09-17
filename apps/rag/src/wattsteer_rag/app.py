@@ -11,20 +11,26 @@ the model tried to say, and which gate refused it.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import secrets
 from contextlib import asynccontextmanager
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 
+import httpx
+
 from .config import settings
 from .console import page
+from .crawl import Crawler
 from .db import Database
 from .evidence import build_evidence, question_for
 from .gateway.router import Gateway, QuotaExhausted
+from .index import embed_pending
+from .ingest import ingest_document, pending_documents
 from .retrieve import search
 from .runtime import open_runtime
 
@@ -123,6 +129,65 @@ async def status() -> dict:
         "chunks": dict(chunks) if chunks else {},
         "evidence": dict(evidence) if evidence else {},
     }
+
+
+@app.post("/internal/rag/refresh", status_code=202)
+async def refresh(days: int = Query(1, ge=1, le=7)) -> dict:
+    """Fetch yesterday's daily record, index it, and say so.
+
+    **Why this exists at all.** The normative corpus — the operating
+    instructions and the network procedures — changes a few times a year, and a
+    one-off ingest is the right answer for it. The daily record is not like
+    that: BDO and IPDO are published every day, and without something fetching
+    them "the date the corpus covers" stops moving while every other signal
+    keeps saying the service is healthy. A query about last Tuesday would answer
+    `corpus_no_coverage_for_date` and nothing anywhere would explain why.
+
+    **Why an endpoint and not a cron service.** A Railway volume attaches to
+    exactly one service, and the store lives on this one's. A separate scheduler
+    could not write `/data/rag-store`. And `data-platform.md` asks for one
+    scheduler rather than two, which the API's worker already is — so the shape
+    that fits is: the worker owns *when*, this service owns *how*.
+
+    **202, not 200.** A day of BDO is a couple of dozen documents and the
+    embedding step is rate-limited by the provider, so this can outlive any
+    sensible request timeout. The work is started and the caller is told where
+    to look: `corpus_version` in `/internal/rag/status` carries the newest
+    `fetched_at`, so a refresh that did something changes it.
+    """
+    if state.get("refreshing"):
+        return {"started": False, "reason": "a refresh is already running"}
+    state["refreshing"] = True
+    asyncio.create_task(_refresh(days))
+    return {"started": True, "days": days}
+
+
+async def _refresh(days: int) -> None:
+    """Crawl, ingest, embed — and give up on quota rather than waiting for it.
+
+    `embed_pending` stops on `QuotaExhausted` by design: the free tier's ceiling
+    is per minute, and a task that slept through it would hold the runtime open
+    for an hour to save a caller one retry. What is left stays `chunked` and the
+    next run finishes it, which is why this is safe to schedule daily and safe
+    to run twice.
+    """
+    db: Database = state["db"]
+    gateway: Gateway = state["gateway"]
+    try:
+        crawler = Crawler(db)
+        async with httpx.AsyncClient() as client:
+            for back in range(days):
+                await crawler.fetch_bdo(client, date.today() - timedelta(days=back + 1))
+                await crawler.fetch_ipdo(client, date.today() - timedelta(days=back))
+        for row in await pending_documents(db, limit=60):
+            await ingest_document(db, gateway, row)
+        await embed_pending(db, gateway)
+    except QuotaExhausted:
+        log.info("refresh: stopped on provider quota; the next run finishes it")
+    except Exception:
+        log.exception("refresh failed")
+    finally:
+        state["refreshing"] = False
 
 
 @app.get("/internal/rag/search")

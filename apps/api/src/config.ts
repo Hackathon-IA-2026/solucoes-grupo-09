@@ -224,6 +224,25 @@ export const config = {
    */
   voiceSessionTtlSec: int(process.env.WATTSTEER_VOICE_TTL_SEC, 300, 30, 3600),
 
+  // --- the RAG service ---
+  /**
+   * Base URL of the evidence-retrieval service, for the daily refresh only.
+   *
+   * The gateway never reads from it — RAG answers are fetched by whoever wants
+   * evidence, not proxied through here. What this URL buys is the one thing
+   * the RAG cannot do for itself: a schedule. Its corpus lives on a Railway
+   * volume, a volume attaches to exactly one service, and `data-platform.md`
+   * asks for one scheduler rather than two — so the worker owns *when* and the
+   * RAG owns *how*.
+   *
+   * Unset → the schedule is skipped, loudly, exactly as the publication is
+   * without `mlUrl`. A corpus that stops moving is a worse failure when it is
+   * silent.
+   */
+  ragUrl: process.env.WATTSTEER_RAG_URL || undefined,
+  /** The shared secret its middleware checks. Absent is allowed on loopback. */
+  ragToken: process.env.WATTSTEER_RAG_ACCESS_TOKEN || undefined,
+
   // --- the ML service ---
   /**
    * Base URL of the Python service that owns modelling and optimisation.
