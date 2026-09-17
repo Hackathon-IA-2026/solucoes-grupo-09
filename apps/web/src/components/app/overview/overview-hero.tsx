@@ -35,7 +35,7 @@ import { FanChart } from "@/components/charts/fan-chart";
 import { ObservedProfile } from "@/components/charts/observed-profile";
 import { RiskChip } from "@/components/charts/risk-class";
 import { SubsystemMap } from "@/components/charts/subsystem-map";
-import { ObservedSplitPanel } from "@/components/charts/technology-split";
+import { SplitTracks } from "@/components/charts/technology-split";
 import { useCopy, useFormat, useI18n } from "@/i18n";
 import { fill } from "@/i18n/format";
 import type { SubsystemCode } from "@/lib/fixtures";
@@ -143,6 +143,32 @@ export function OverviewHero({
       {selectedRow === null ? (
         <Text style={{ ...type.caption, color: colors.inkFaint }}>{text.noBand}</Text>
       ) : null}
+      {/*
+        **The division, in the card that already states the total.**
+
+        This card and `ObservedSplitPanel` were showing the same figure under
+        the same sentence — 46,3k MWh, "dia liquidado, somando as horas
+        publicadas" — one with a national share under it and one with the two
+        fleet bars. Two cards, one number, and a reader comparing them looking
+        for the difference that is not there.
+
+        So the bars move here, and the standalone panel goes. The note is the
+        one the split panel carried, because it is the sentence that earns the
+        bars: ONS settles the two fleets separately, so these are two
+        measurements and the total is their sum.
+      */}
+      {forecast === null ? (
+        <>
+          <SplitTracks
+            split={observed.daySplit}
+            emphasis={params.technology}
+            total={Math.max(observed.daySplit.windMwh + observed.daySplit.solarMwh, 1e-9)}
+          />
+          <Text style={{ ...type.caption, color: colors.inkFaint, lineHeight: 17 }}>
+            {copy.app.observed.splitNote}
+          </Text>
+        </>
+      ) : null}
       <View
         style={{
           borderTopWidth: 1,
@@ -188,42 +214,6 @@ export function OverviewHero({
     region that the console was not showing. `ObservedSplitPanel` is the
     Overview's own component — two settlements, never a division of one
     modelled expectation — and it fills the column the profile left half empty.
-  */
-  /*
-    The observed split, and only where it is the only one.
-
-    In the `read` state the stack below draws `TechnologySplitPanel` — a
-    division of one modelled expectation — and this is two published
-    settlements. Drawing both puts two wind/solar panels on one screen with
-    nothing between them saying which is which, which is the adjacency
-    `lib/network.ts` refuses in so many words.
-  */
-  const split =
-    forecast === null ? (
-      <ObservedSplitPanel
-        split={observed.daySplit}
-        // The settled day's two settlements, always — `daySplit` is that day's
-        // wind and solar, not the rail's rolling 24 hours. Passing the rail's
-        // window here would have put the wrong one under the right numbers.
-        window={text.totalNoteObserved}
-        emphasis={params.technology}
-      />
-    ) : null;
-
-  /*
-    **What the first cut of this screen was missing, found by comparing it
-    panel by panel against `/app` rather than by eye.**
-
-    The console was built as a map with satellites and stopped when the
-    satellites looked right, which is how a layout experiment quietly becomes a
-    smaller product. Four things the Overview publishes were absent: the
-    national total and its exactness claim, the selected-region strip that
-    carries Explicar, the recent episodes, and — in the forecast state — the
-    P10–P90 hourly fan, the single most important figure a promoted model
-    produces.
-
-    None of them are rebuilt here. They are the Overview's own components, so
-    the console cannot drift from it: a change to the fan changes both.
   */
   const window24h = fill(copy.app.observed.window24h, {
     hour: f.dateTime(observed.now.latestSettledHour),
@@ -308,7 +298,6 @@ export function OverviewHero({
           <View style={{ flexBasis: 300, flexGrow: 1, flexShrink: 1, gap: space.xl }}>
             {headline}
             {profile}
-            {split}
           </View>
         ) : null}
 
@@ -355,7 +344,6 @@ export function OverviewHero({
           {wide ? null : headline}
           {wide ? null : rail}
           {wide ? null : profile}
-          {wide ? null : split}
         </View>
 
         {wide ? (

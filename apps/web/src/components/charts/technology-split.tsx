@@ -207,7 +207,15 @@ export function ObservedSplitPanel({
  * two scalars divide, and re-deriving it would be this component forming an
  * opinion about a quantity it was told.
  */
-function SplitTracks({
+/**
+ * The two fleet bars, without the figure above them.
+ *
+ * Exported because the Overview's hero card states the same total once and then
+ * wants the division under it: a card with the figure and a second card with
+ * the identical figure and the bars is one number said twice, which is what
+ * `ObservedSplitPanel` and the hero headline had become.
+ */
+export function SplitTracks({
   split,
   emphasis,
   /** The denominator. Its meaning belongs to the caller; see above. */
