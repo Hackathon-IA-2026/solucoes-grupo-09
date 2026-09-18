@@ -78,9 +78,11 @@ from .features import (
     read_serving_rows,
     serving_target_date,
 )
+from .canonical_reads import ReadAxes, apply_axes
 from .forecast_reads import served_profile_source
+from .similar_days import BRASILIA
 from .similar_days import FEATURES as SIMILAR_FEATURES
-from .similar_days import day_vectors, nearest
+from .similar_days import OUTCOME_SQL, POOL_SQL, nearest, pool_vectors
 from .lanes import Lane, LaneNameError, is_artifact_id
 from .optimizer import (
     OptimizerBugError,
@@ -1443,23 +1445,25 @@ async def similar_days_route(
 
     connection_pool = await database.connect()
     async with connection_pool.acquire() as conn:
-        # One read covering the pool *and* the day being asked about: the
-        # function's rows are a function of each row's own target date, so a
-        # single range read and a slice agree with two reads and cost one round
-        # trip. `features.py` states that property where the function is wrapped.
-        rows = await read_feature_rows(
-            conn,
-            FeatureRowsQuery(
-                target_from=pool_from,
-                target_to=day,
-                gate_profile=gate_profile,
-                feature_set=feature_set,
-                threshold_mw=parsed.threshold_mw,
-            ),
-        )
+        # The axes, then two aggregate reads. Grouped in Postgres rather than in
+        # Python: the first version of this route read `feature_rows(...)` and
+        # the gateway timed it out at five seconds on a *thirty*-day pool as
+        # surely as on a hundred-and-eighty-day one, because that function
+        # computes sixty-odd lagged and windowed columns per row for a caller
+        # that wants six day-level aggregates. See `similar_days.py`.
+        await apply_axes(conn, ReadAxes(as_of=datetime.now(tz=UTC)))
+        # `datetime.min.time()` rather than `from datetime import time`: this
+        # module imports the stdlib `time` and calls `time.monotonic()`, so that
+        # name is taken and importing over it is how the retrain route's timer
+        # broke.
+        midnight = datetime.min.time()
+        window_from = datetime.combine(pool_from, midnight, tzinfo=BRASILIA)
+        window_to = datetime.combine(day + timedelta(days=1), midnight, tzinfo=BRASILIA)
+        programme = await conn.fetch(POOL_SQL, subsystem, window_from, window_to)
+        settled = await conn.fetch(OUTCOME_SQL, subsystem, window_from, window_to)
 
-    scoped = [row for row in rows if row.get("subsystem") == subsystem]
-    vectors = day_vectors(scoped)
+    outcomes = {row["target_date"]: row["constrained_off_mwh"] for row in settled}
+    vectors = pool_vectors([dict(row) for row in programme], outcomes)
     target = next((vector for vector in vectors if vector.target_date == day), None)
     if target is None:
         # The day itself has no complete programme, so there is nothing to be

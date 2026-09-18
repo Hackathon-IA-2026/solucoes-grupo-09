@@ -8,31 +8,43 @@ import pytest
 
 from wattsteer_ml.similar_days import (
     FEATURES,
-    OUTCOME,
+    MIN_HALF_HOURS,
     DayVector,
     SimilarDaysError,
-    day_vectors,
     nearest,
+    pool_vectors,
 )
 
 
-def hour(day: date, *, residual: float, wind: float, solar: float,
-         surplus: float, utilisation: float, outcome: float | None) -> dict[str, object]:
+def programme_row(
+    value: date,
+    *,
+    demand: float = 1000.0,
+    wind: float = 200.0,
+    solar: float = 100.0,
+    mmgd: float = 50.0,
+    residual_mean: float | None = None,
+    residual_min: float | None = None,
+    half_hours: int = MIN_HALF_HOURS,
+) -> dict[str, object]:
+    """One grouped row, in the shape `POOL_SQL` returns."""
+    base = demand - wind - solar - mmgd
     return {
-        "target_date": day,
-        "dessem_residual_load_mwh": residual,
-        "dessem_wind_mwh": wind,
-        "dessem_solar_mwh": solar,
-        "dessem_vre_surplus_mwh": surplus,
-        "dessem_export_utilisation": utilisation,
-        OUTCOME: outcome,
+        "target_date": value,
+        "demand_mw": demand,
+        "wind_generation_mw": wind,
+        "solar_generation_mw": solar,
+        "mmgd_generation_mw": mmgd,
+        "residual_load_mean_mw": base if residual_mean is None else residual_mean,
+        "residual_load_min_mw": base if residual_min is None else residual_min,
+        "half_hours": half_hours,
     }
 
 
 def day(value: date, *, residual: float, outcome: float | None = 0.0) -> DayVector:
     return DayVector(
         target_date=value,
-        values=(residual, 0.0, 0.0, 0.0, 0.0, residual),
+        values=(0.0, 0.0, 0.0, 0.0, residual, residual),
         outcome_mwh=outcome,
         hours=24,
     )
@@ -41,41 +53,52 @@ def day(value: date, *, residual: float, outcome: float | None = 0.0) -> DayVect
 def test_every_feature_is_known_at_the_gate() -> None:
     # The property that makes the search a question about tomorrow rather than
     # a lookup of days that turned out alike: nothing settled is in the vector.
-    assert all(column.startswith("dessem_") for column, _ in FEATURES)
-
-
-def test_a_day_is_the_sum_of_its_hours_and_the_trough_is_the_minimum() -> None:
-    rows = [
-        hour(date(2026, 5, 1), residual=10, wind=1, solar=2, surplus=3,
-             utilisation=0.5, outcome=4),
-        hour(date(2026, 5, 1), residual=30, wind=1, solar=2, surplus=3,
-             utilisation=0.7, outcome=6),
+    # Every column below is one the day-ahead programme publishes on D−1.
+    assert [column for column, _ in FEATURES] == [
+        "demand_mw",
+        "wind_generation_mw",
+        "solar_generation_mw",
+        "mmgd_generation_mw",
+        "residual_load_mw",
+        "residual_load_mw",
     ]
-    [vector] = day_vectors(rows)
-    assert vector.values[0] == 40.0  # residual, summed
-    assert vector.values[4] == pytest.approx(0.6)  # utilisation, meaned
-    assert vector.values[5] == 10.0  # residual, the trough
-    assert vector.outcome_mwh == 10.0
-    assert vector.hours == 2
+    assert not any("constrained_off" in column for column, _ in FEATURES)
 
 
-def test_a_day_missing_one_coordinate_is_dropped_rather_than_imputed() -> None:
-    # A zero here would move the day in the space by an amount nobody chose,
-    # and the whole claim is that the neighbour is *like* the target.
-    rows = [
-        hour(date(2026, 5, 1), residual=10, wind=1, solar=2, surplus=3,
-             utilisation=0.5, outcome=4),
-    ]
-    rows[0]["dessem_vre_surplus_mwh"] = None
-    assert day_vectors(rows) == []
+def test_every_coordinate_is_a_mean_or_a_minimum_never_a_sum() -> None:
+    # The balance publishes instantaneous MW at a half-hourly grain. Adding MW
+    # across half hours is neither a power nor an energy; a mean of powers is a
+    # power and a minimum of powers is a power.
+    assert {how for _, how in FEATURES} == {"mean", "min"}
 
 
-def test_an_unsettled_day_has_no_outcome_and_is_not_a_neighbour() -> None:
-    rows = [
-        hour(date(2026, 9, 19), residual=10, wind=1, solar=2, surplus=3,
-             utilisation=0.5, outcome=None),
-    ]
-    [vector] = day_vectors(rows)
+def test_a_day_carries_the_programme_s_means_and_its_trough() -> None:
+    rows = [programme_row(date(2026, 5, 1), demand=1000, wind=200, solar=100,
+                          mmgd=50, residual_min=410)]
+    [vector] = pool_vectors(rows, {date(2026, 5, 1): 1234.0})
+    assert vector.values[0] == 1000.0
+    assert vector.values[4] == 650.0  # 1000 − 200 − 100 − 50
+    assert vector.values[5] == 410.0  # the trough, which the day's mean hides
+    assert vector.outcome_mwh == 1234.0
+    assert vector.hours == 24
+
+
+def test_a_half_published_day_is_dropped_rather_than_averaged() -> None:
+    # A mean over four half hours describes the hours ONS happened to publish
+    # and would be read as describing the day.
+    rows = [programme_row(date(2026, 5, 1), half_hours=4)]
+    assert pool_vectors(rows, {}) == []
+
+
+def test_a_day_with_no_curtailment_row_is_not_offered_with_an_invented_zero() -> None:
+    """ONS publishes no row for a day that curtailed nothing.
+
+    So "not settled yet" and "settled at zero" arrive identically here, and this
+    module refuses to guess between them: the day keeps `outcome_mwh = None` and
+    is never offered as a neighbour. Offering it with an outcome of 0 MWh would
+    be asserting a measurement nobody made.
+    """
+    [vector] = pool_vectors([programme_row(date(2026, 9, 19))], {})
     assert vector.outcome_mwh is None
     # Tomorrow cannot be its own evidence.
     assert nearest(vector, [vector]) == []

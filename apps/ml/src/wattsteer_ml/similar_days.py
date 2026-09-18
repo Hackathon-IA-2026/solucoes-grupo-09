@@ -14,38 +14,60 @@ It is therefore deliberately **not** a predictor. Nothing here is fitted,
 nothing is promoted, and the neighbour's outcome is never combined with the
 forecast. The product publishes a band from LightGBM and, beside it, a date.
 
+## Why this reads the balance and not the feature function
+
+The first version built the day vector from `feature_rows(...)`, which was the
+wrong read and the gateway proved it: every call timed out at the 5 s boundary,
+at **thirty days of pool as surely as at a hundred and eighty**, so the cost was
+per-row and not per-range. That function computes sixty-odd columns — 48-hour
+and 168-hour lags, seven-day rolling windows, same-hour exceedances — for a
+caller that wanted six day-level aggregates of the day-ahead programme.
+
+So the pool is read the way `/v1/grid/context` reads its own: two aggregate
+queries over canonical views, grouped in Postgres, one row per day. The day
+vector comes from `canonical_day_ahead_balance` — DESSEM's published programme,
+which is where the `dessem_*` feature columns come from in the first place — and
+the outcome from `canonical_curtailment_by_reporting_entity`, which is the same
+view `/v1/grid/now` sums.
+
+**What that costs, stated plainly.** Two coordinates are gone with the feature
+function: the VRE surplus and the export utilisation, both of which the feature
+builder derives rather than reads. The remaining six are raw programme
+quantities, and a vector of raw quantities is the one a reader can reproduce
+from ONS's own files — which for a panel whose whole purpose is checkable
+evidence is worth more than the two it lost.
+
 ## The features, and why they are six and not sixty
 
-The pool rows carry more than sixty columns. A nearest-neighbour search over all
-of them is dominated by whichever block has the most columns — the weather block
-alone is twenty — and its answer cannot be explained to the reader it exists to
-convince. So the vector is six **day-level** aggregates of the operational
-programme, named here and nowhere else:
+    demand (mean)              the programme's own load
+    wind (mean), solar (mean)  the two fleets that get curtailed
+    MMGD (mean)                behind-the-meter, which displaces the same load
+    residual load (mean)       demand + pumping − wind − solar − MMGD
+    residual load (minimum)    the trough, where the day is tightest
 
-    residual load (sum)       the quantity curtailment is actually about
-    wind (sum), solar (sum)   the two fleets that get curtailed
-    VRE surplus (sum)         the programme's own headroom figure
-    export utilisation (mean) how full the way out of the subsystem is
-    residual load minimum     the trough, where the day is tightest
+All six are **average power over the day**, in MW, which is what the balance
+publishes. Not summed: DESSEM's grain is instantaneous power at half-hourly
+resolution, and adding MW across half hours produces a number that is neither power
+nor energy. A mean is a mean of powers and is a power.
 
 ## Nothing here is available after the gate
 
-Every one is a `dessem_*` column: ONS's day-ahead programme, published D−1 and
-therefore known when the forecast is made. That is the property that makes the
-search honest rather than a lookup of days that turned out similar — a neighbour
-chosen with any settled quantity would be answering "which day *ended* like this
-one", which is a question nobody can ask in advance.
+Every coordinate is from the day-ahead programme, published D−1 and therefore
+known when the forecast is made. That is the property that makes the search
+honest rather than a lookup of days that turned out similar — a neighbour chosen
+with any settled quantity would be answering "which day *ended* like this one",
+a question nobody can ask in advance.
 
 The **outcome** is settled, of course: it is what the analogue is for. It is
-read from the neighbour's own label and never from the target's.
+read from the neighbour's own day and never from the target's.
 
 ## Standardisation, and the degenerate cases
 
 Each feature is z-scored against the pool, so a column in tens of thousands of
-MWh does not swamp a utilisation ratio in [0, 1]. A column with no variance
-across the pool carries no information and is dropped rather than dividing by
-zero. A pool with fewer days than `k` returns what it has; a pool with no
-complete rows returns nothing, which is an absence and is said as one.
+MW does not swamp one in hundreds. A column with no variance across the pool
+carries no information and is dropped rather than dividing by zero. A pool with
+fewer days than `k` returns what it has; a pool with no spread at all returns
+nothing, which is an absence and is said as one.
 """
 
 from __future__ import annotations
@@ -54,6 +76,10 @@ import math
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
+from zoneinfo import ZoneInfo
+
+#: ONS's clock. The pool is grouped by the Brasília civil day, not the UTC one.
+BRASILIA = ZoneInfo("America/Sao_Paulo")
 from typing import Any
 
 #: The day vector, in a fixed order so a distance is reproducible.
@@ -61,16 +87,16 @@ from typing import Any
 #: `(column, how the day aggregates it)`. Every column is `dessem_*`: the
 #: day-ahead programme, published D−1. See the module docstring.
 FEATURES: tuple[tuple[str, str], ...] = (
-    ("dessem_residual_load_mwh", "sum"),
-    ("dessem_wind_mwh", "sum"),
-    ("dessem_solar_mwh", "sum"),
-    ("dessem_vre_surplus_mwh", "sum"),
-    ("dessem_export_utilisation", "mean"),
-    ("dessem_residual_load_mwh", "min"),
+    ("demand_mw", "mean"),
+    ("wind_generation_mw", "mean"),
+    ("solar_generation_mw", "mean"),
+    ("mmgd_generation_mw", "mean"),
+    ("residual_load_mw", "mean"),
+    ("residual_load_mw", "min"),
 )
 
 #: The settled label the analogue is read for.
-OUTCOME = "y_constrained_off_total_mwh"
+OUTCOME = "constrained_off_mwh"
 
 DEFAULT_K = 3
 
@@ -100,58 +126,6 @@ class Neighbour:
     distance: float
     outcome_mwh: float
     hours: int
-
-
-def _aggregate(values: Sequence[float], how: str) -> float:
-    if how == "sum":
-        return math.fsum(values)
-    if how == "mean":
-        return math.fsum(values) / len(values)
-    if how == "min":
-        return min(values)
-    raise SimilarDaysError(f"{how!r} is not an aggregation this module defines")
-
-
-def day_vectors(rows: Iterable[Mapping[str, Any]]) -> list[DayVector]:
-    """Group hourly feature rows into day vectors, dropping incomplete days.
-
-    A day is dropped when any one of the six columns is NULL in any of its
-    hours. Imputing a zero would move the day in the space by an amount nobody
-    chose, and the whole claim of this read is that the neighbour is *like* the
-    target — an imputed coordinate is a claim about likeness that no data
-    supports.
-    """
-    by_day: dict[date, list[Mapping[str, Any]]] = {}
-    for row in rows:
-        day = row["target_date"]
-        by_day.setdefault(day, []).append(row)
-
-    vectors: list[DayVector] = []
-    for day, hours in sorted(by_day.items()):
-        columns: list[float] = []
-        complete = True
-        for column, how in FEATURES:
-            raw = [hour.get(column) for hour in hours]
-            if any(value is None for value in raw):
-                complete = False
-                break
-            columns.append(_aggregate([float(value) for value in raw], how))
-        if not complete:
-            continue
-        settled = [hour.get(OUTCOME) for hour in hours]
-        vectors.append(
-            DayVector(
-                target_date=day,
-                values=tuple(columns),
-                outcome_mwh=(
-                    None
-                    if any(value is None for value in settled)
-                    else math.fsum(float(value) for value in settled)
-                ),
-                hours=len(hours),
-            )
-        )
-    return vectors
 
 
 def _standardise(pool: Sequence[DayVector]) -> tuple[tuple[float, ...], tuple[float, ...]]:
@@ -231,3 +205,93 @@ def nearest(
         key=lambda neighbour: (neighbour.distance, neighbour.target_date),
     )
     return scored[:k]
+
+
+#: One row per civil day of the programme, aggregated in Postgres.
+#:
+#: Grouped by the **Brasília** civil day, not the UTC one: ONS's timestamps are
+#: local civil time and a UTC day would be the wrong day by three hours every
+#: day of the year, which `/v1/curtailment/reasons` states in the same words on
+#: the gateway side.
+#:
+#: `count(*)` travels so the caller can drop a day the programme only half
+#: covers. A mean over four half hours is a mean of four numbers wearing a label
+#: that says "the day", which is the failure this whole module is written
+#: against.
+POOL_SQL = """
+select
+  (valid_time at time zone 'America/Sao_Paulo')::date as target_date,
+  avg(demand_mw) as demand_mw,
+  avg(wind_generation_mw) as wind_generation_mw,
+  avg(solar_generation_mw) as solar_generation_mw,
+  avg(mmgd_generation_mw) as mmgd_generation_mw,
+  avg(demand_mw + pumping_consumption_mw
+      - wind_generation_mw - solar_generation_mw - mmgd_generation_mw)
+    as residual_load_mean_mw,
+  min(demand_mw + pumping_consumption_mw
+      - wind_generation_mw - solar_generation_mw - mmgd_generation_mw)
+    as residual_load_min_mw,
+  count(*)::int as half_hours
+from canonical_day_ahead_balance
+where subsystem = $1
+  and valid_time >= $2
+  and valid_time < $3
+group by 1
+order by 1
+"""
+
+#: The settled outcome, per civil day, from the same view `/v1/grid/now` sums.
+OUTCOME_SQL = """
+select
+  (valid_time at time zone 'America/Sao_Paulo')::date as target_date,
+  sum(constrained_off_mwh) as constrained_off_mwh
+from canonical_curtailment_by_reporting_entity
+where subsystem = $1
+  and valid_time >= $2
+  and valid_time < $3
+group by 1
+"""
+
+#: A civil day of the programme is 48 half hours. Below this the day is a
+#: fragment and is dropped: its mean describes the hours ONS happened to publish
+#: and would be read as describing the day.
+MIN_HALF_HOURS = 48
+
+
+def pool_vectors(
+    programme: Iterable[Mapping[str, Any]],
+    outcomes: Mapping[Any, float],
+) -> list[DayVector]:
+    """Day rows plus settled outcomes, as vectors the search can compare.
+
+    A day with no outcome row keeps `outcome_mwh = None` and is therefore never
+    offered as a neighbour — which covers both "not settled yet" and "settled
+    with nothing curtailed"… except that the second is a *measurement*, and ONS
+    publishes no row for it. That ambiguity is the reason this function does not
+    invent a zero: a day absent from the curtailment view is a day this module
+    has nothing to say about, and offering it as an analogue whose outcome was
+    "0 MWh" would be asserting a measurement nobody made.
+    """
+    vectors: list[DayVector] = []
+    for row in programme:
+        if int(row["half_hours"]) < MIN_HALF_HOURS:
+            continue
+        values = (
+            float(row["demand_mw"]),
+            float(row["wind_generation_mw"]),
+            float(row["solar_generation_mw"]),
+            float(row["mmgd_generation_mw"]),
+            float(row["residual_load_mean_mw"]),
+            float(row["residual_load_min_mw"]),
+        )
+        day = row["target_date"]
+        settled = outcomes.get(day)
+        vectors.append(
+            DayVector(
+                target_date=day,
+                values=values,
+                outcome_mwh=None if settled is None else float(settled),
+                hours=int(row["half_hours"]) // 2,
+            )
+        )
+    return vectors
