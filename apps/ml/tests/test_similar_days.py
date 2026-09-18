@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 
 import pytest
 
@@ -179,3 +180,29 @@ def test_one_settled_day_is_not_an_analogue_because_there_is_no_scale() -> None:
     """
     target = day(date(2026, 9, 19), residual=100, outcome=None)
     assert nearest(target, [day(date(2026, 5, 1), residual=10, outcome=5)], k=9) == []
+
+
+def test_the_route_reads_inside_a_transaction() -> None:
+    """The axes are transaction-local, and the route was not in one.
+
+    `apply_axes` writes every axis with `set_config(..., true)`. On an
+    autocommit connection each statement is its own transaction, so the setting
+    is discarded before the next statement runs and the canonical view raises
+    `canonical read attempted with no as_of`. Production answered exactly that,
+    and nothing in this file could have: every other test here is over pure
+    functions, and the defect lives in how they are called.
+
+    So this is a source-level guard, in the style the gateway's suite uses for
+    the same class of rule: the two reads and the `apply_axes` that arms them
+    must sit inside one `conn.transaction()`.
+    """
+    source = (
+        Path(__file__).resolve().parents[1] / "src" / "wattsteer_ml" / "app.py"
+    ).read_text(encoding="utf-8")
+    route = source[source.index("async def similar_days_route") :]
+    route = route[: route.index("\n@app.")]
+
+    opened = route.index("async with conn.transaction():")
+    assert opened < route.index("await apply_axes(")
+    assert opened < route.index("POOL_SQL")
+    assert opened < route.index("OUTCOME_SQL")

@@ -1451,7 +1451,6 @@ async def similar_days_route(
         # surely as on a hundred-and-eighty-day one, because that function
         # computes sixty-odd lagged and windowed columns per row for a caller
         # that wants six day-level aggregates. See `similar_days.py`.
-        await apply_axes(conn, ReadAxes(as_of=datetime.now(tz=UTC)))
         # `datetime.min.time()` rather than `from datetime import time`: this
         # module imports the stdlib `time` and calls `time.monotonic()`, so that
         # name is taken and importing over it is how the retrain route's timer
@@ -1459,8 +1458,17 @@ async def similar_days_route(
         midnight = datetime.min.time()
         window_from = datetime.combine(pool_from, midnight, tzinfo=BRASILIA)
         window_to = datetime.combine(day + timedelta(days=1), midnight, tzinfo=BRASILIA)
-        programme = await conn.fetch(POOL_SQL, subsystem, window_from, window_to)
-        settled = await conn.fetch(OUTCOME_SQL, subsystem, window_from, window_to)
+        # **Inside a transaction**, which is not decoration. `apply_axes` writes
+        # the axes with `set_config(..., true)` — transaction-local — so on an
+        # autocommit connection each statement is its own transaction and the
+        # axis is gone before the select runs. Production answered exactly that:
+        # `canonical read attempted with no as_of: set wattsteer.as_of first`.
+        # `canonical_reads.py` opens one around every read it does, for this
+        # reason, and this read is no different.
+        async with conn.transaction():
+            await apply_axes(conn, ReadAxes(as_of=datetime.now(tz=UTC)))
+            programme = await conn.fetch(POOL_SQL, subsystem, window_from, window_to)
+            settled = await conn.fetch(OUTCOME_SQL, subsystem, window_from, window_to)
 
     outcomes = {row["target_date"]: row["constrained_off_mwh"] for row in settled}
     vectors = pool_vectors([dict(row) for row in programme], outcomes)
