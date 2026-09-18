@@ -36,9 +36,8 @@ import { type MapPaint, SubsystemMap } from "@/components/charts/subsystem-map";
 import { useCopy } from "@/i18n";
 import type { SubsystemCode } from "@/lib/fixtures";
 import type { RunLabel } from "@/lib/fixtures";
+import { type MapLayer, readLayer, saveLayer } from "@/lib/map-view";
 import { type Scope, ScopeBar } from "./scope-bar";
-
-export type MapLayer = "2d" | "3d";
 
 function LayerButton({
   label,
@@ -126,7 +125,16 @@ export function RegionMap({
 }) {
   const colors = usePalette();
   const copy = useCopy();
-  const [layer, setLayer] = useState<MapLayer>(defaultLayer);
+  /*
+    The layer this browser last chose, falling back to the screen's default.
+    Switching to 3D fetches megabytes and starts a WebGL context — a deliberate
+    act, and one a reader should not have to repeat after every reload.
+  */
+  const [layer, setLayer] = useState<MapLayer>(() => readLayer() ?? defaultLayer);
+  const chooseLayer = (next: MapLayer) => {
+    setLayer(next);
+    saveLayer(next);
+  };
 
   /*
     The globe needs a token, a browser and a forecast. Any of the three missing
@@ -191,7 +199,7 @@ export function RegionMap({
             label={copy.app.grid.layer2d}
             active={!showing3d}
             disabled={false}
-            onPress={() => setLayer("2d")}
+            onPress={() => chooseLayer("2d")}
           />
           <LayerButton
             label={copy.app.grid.layer3d}
@@ -204,7 +212,7 @@ export function RegionMap({
                   ? copy.app.grid.layer3dUnavailable
                   : copy.app.grid.layer3dNeedsForecast
             }
-            onPress={() => setLayer("3d")}
+            onPress={() => chooseLayer("3d")}
           />
         </View>
       </View>
@@ -224,8 +232,29 @@ export function RegionMap({
           flex: stage ? 1 : undefined,
           minHeight: stage ? 0 : undefined,
           height: !stage && showing3d ? (minHeight ?? 420) : undefined,
-          width: showing3d ? "100%" : undefined,
-          alignItems: stage || showing3d ? "stretch" : "center",
+          /*
+            **Always the full column, in both layers.**
+
+            This was `showing3d ? "100%" : undefined`, so in 2D the box
+            shrink-wrapped its content and in 3D it filled — which meant the
+            flat map's measured container, and therefore its drawn size,
+            depended on whether the globe had ever been shown. Measured: 441 px
+            on a fresh load, 760 px after a trip through 3D and back. A figure
+            that changes size according to what you looked at earlier is a
+            figure a reader cannot compare with yesterday's.
+
+            Full width always, centred, and `flatMaxWidth` is what decides how
+            big the map is — which is a decision, in one place.
+          */
+          width: "100%",
+          /*
+            Stretched in both layers, not centred in one of them. `SubsystemMap`
+            centres its own SVG, so stretching costs nothing visually — and
+            centring here made the box shrink-wrap, which is what made the flat
+            map measure its own content instead of the column and come out a
+            different size depending on whether the globe had been shown.
+          */
+          alignItems: "stretch",
           justifyContent: "center",
           ...(stage || showing3d
             ? {

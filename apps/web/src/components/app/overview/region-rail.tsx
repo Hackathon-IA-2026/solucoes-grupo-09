@@ -169,8 +169,8 @@ export function RegionRow({
             ...type.caption,
             color: selected ? colors.accent : colors.inkFaint,
             fontVariant: ["tabular-nums"],
-            // `SE/CO` is 36 px and was breaking across two lines at 30.
-            minWidth: 36,
+            // `SE/CO` is the widest of the four and was still clipping at 36.
+            minWidth: 44,
           }}
           numberOfLines={1}
         >

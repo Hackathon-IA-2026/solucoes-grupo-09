@@ -230,17 +230,36 @@ export default function GridOverviewScreen() {
         <meta name="robots" content="noindex,follow" />
       </Head>
       <AppShell fullWidth={true}>
-        {/* No `title`: the selected pill in the bar above already says
-            "Visão da rede", and this said it again in the largest type on the
-            page. The lede carries the heading — see `ScreenTitle`. */}
-        <ScreenTitle
-          lede={
-            forecastPublished
-              ? fill(copy.app.overview.lede, { date: f.date(params.date) })
-              : copy.app.overview.ledeObserved
-          }
-          right={right}
-        />
+        {/*
+          **The title row, and why it survives only in one state.**
+
+          With a forecast on screen it said nothing new: the lede repeated the
+          selected pill in the bar above it, and the origin stamp repeated a run
+          chip that now sits on the map and a date chip in the header. A row of
+          prose above the answers is a row a reader scrolls past every morning.
+
+          With **no** forecast it is the only thing that says so. `ObservedStamp`
+          carries the `Observado` marker and the settled window, and this screen
+          has no cards in that state to carry them instead — the five questions
+          are about tomorrow and stand down with the forecast. Dropping it there
+          would leave a page of measurements with nothing saying they are
+          measurements, which is the one distinction this product exists to
+          keep.
+
+          The forecast-state version is kept, commented, immediately below: the
+          publication time and the 5 MW threshold now appear only inside
+          Explicar, and if that turns out to be too deep for an operator this is
+          the row to bring back rather than a new one to invent.
+
+          <ScreenTitle
+            lede={fill(copy.app.overview.lede, { date: f.date(params.date) })}
+            right={right}
+          />
+        */}
+        {forecastPublished ? null : (
+          <ScreenTitle lede={copy.app.overview.ledeObserved} right={right} />
+        )}
+
         {body}
 
         {/*

@@ -49,6 +49,7 @@ import { subsystemRingsFlat, unproject } from "@/lib/geo/brazil-lonlat";
 import { SUBSYSTEM_ANCHOR } from "@/lib/geo/brazil-geometry";
 import type { OutlookRow } from "@/lib/network";
 import { type CesiumNamespace, cesiumAvailable, loadCesium } from "./cesium-loader";
+import { clearSavedView, type MapView, readSavedView, saveView } from "@/lib/map-view";
 import { riskColor } from "./risk-color";
 
 /**
@@ -127,7 +128,27 @@ const CALLOUT_OFFSET: Record<SubsystemCode, { x: number; y: number }> = {
  * frame the call installs. Without it the camera stays locked to that point and
  * the reader cannot pan away from it.
  */
-function frameBrazil(viewer: any, Cesium: CesiumNamespace): void {
+function frameBrazil(viewer: any, Cesium: CesiumNamespace, saved?: MapView | null): void {
+  /*
+    A saved camera is restored exactly, not approximated: `lookAt` takes a target
+    and an offset, which cannot express a view a reader panned to. `setView`
+    takes the camera's own position and orientation, which is what was saved.
+  */
+  if (saved) {
+    viewer.camera.setView({
+      destination: Cesium.Cartesian3.fromDegrees(
+        saved.longitude,
+        saved.latitude,
+        saved.height,
+      ),
+      orientation: {
+        heading: Cesium.Math.toRadians(saved.heading),
+        pitch: Cesium.Math.toRadians(saved.pitch),
+        roll: 0,
+      },
+    });
+    return;
+  }
   viewer.camera.lookAt(
     Cesium.Cartesian3.fromDegrees(HOME.longitude, HOME.latitude),
     new Cesium.HeadingPitchRange(
@@ -178,6 +199,12 @@ export function CesiumGlobe({
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
   const [callouts, setCallouts] = useState<Callout[]>([]);
+  /*
+    Whether this map opens on a view the reader chose. Initialised from the URL
+    and from storage, so the control shows the state it is in before anybody
+    touches it.
+  */
+  const [locked, setLocked] = useState(() => readSavedView() !== null);
   /*
     The stage's own size, so a card can be kept inside it.
 
@@ -271,7 +298,7 @@ export function CesiumGlobe({
         // a container the console lays out itself.
         viewer.cesiumWidget.creditContainer.style.display = "none";
 
-        frameBrazil(viewer, Cesium);
+        frameBrazil(viewer, Cesium, readSavedView());
 
         /*
           Terrain after the viewer rather than in its options: the async
@@ -504,8 +531,44 @@ export function CesiumGlobe({
               const viewer = viewerRef.current;
               const Cesium = cesiumRef.current;
               if (viewer && Cesium) {
+                // Deliberately *without* the saved view: this is how a reader
+                // gets back to the framing the screen was composed for, so it
+                // must not restore the one they locked.
                 frameBrazil(viewer, Cesium);
               }
+            }}
+          />
+          {/*
+            **Lock this view.**
+
+            Takes the camera the reader arrived at and makes it the one the map
+            opens on — in this browser, and in a link they can send. Pressing it
+            again clears the lock: a control that can only ever set something is
+            a control nobody can undo.
+          */}
+          <GlobeButton
+            label={locked ? "\u2693" : "\u2691"}
+            hint={locked ? copy.app.grid.unlockView : copy.app.grid.lockView}
+            onPress={() => {
+              const viewer = viewerRef.current;
+              const Cesium = cesiumRef.current;
+              if (!viewer || !Cesium) {
+                return;
+              }
+              if (locked) {
+                clearSavedView();
+                setLocked(false);
+                return;
+              }
+              const carto = viewer.camera.positionCartographic;
+              saveView({
+                longitude: Cesium.Math.toDegrees(carto.longitude),
+                latitude: Cesium.Math.toDegrees(carto.latitude),
+                height: carto.height,
+                heading: Cesium.Math.toDegrees(viewer.camera.heading),
+                pitch: Cesium.Math.toDegrees(viewer.camera.pitch),
+              });
+              setLocked(true);
             }}
           />
         </View>

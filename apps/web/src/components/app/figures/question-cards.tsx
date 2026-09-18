@@ -16,8 +16,90 @@
  */
 
 import type { ReactNode } from "react";
+import { useState } from "react";
 import { radius, space, type, usePalette } from "@wattsteer/ui";
-import { Text, View } from "react-native";
+import { Platform, Pressable, Text, View } from "react-native";
+
+/**
+ * A caveat that is always in the document and only sometimes on the screen.
+ *
+ * The note it carries is load-bearing — the model forecasts how much will be
+ * curtailed and never why — so it cannot be a `title` attribute or a tooltip
+ * that only exists once a pointer arrives: there is no pointer on a phone, and
+ * an attribute is not in the accessibility tree as text.
+ *
+ * So the sentence is rendered, always, and hidden with opacity rather than with
+ * `display`. A screen reader reaches it through `aria-describedby`, the e2e
+ * suite finds it in `body.textContent`, and a reader with a mouse sees it when
+ * they ask. The mark opens on focus as well as on hover, because a control that
+ * only answers a pointer is a control a keyboard cannot use.
+ */
+function HoverNote({ note, id }: { note: string; id: string }) {
+  const colors = usePalette();
+  const [open, setOpen] = useState(false);
+  return (
+    <View
+      style={{
+        ...(Platform.OS === "web" ? ({ position: "absolute" } as object) : null),
+        top: space.sm,
+        right: space.sm,
+        zIndex: 3,
+      }}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={note}
+        aria-describedby={id}
+        aria-expanded={open}
+        onPress={() => setOpen((value) => !value)}
+        onHoverIn={() => setOpen(true)}
+        onHoverOut={() => setOpen(false)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        hitSlop={8}
+        style={{
+          width: 16,
+          height: 16,
+          alignItems: "center",
+          justifyContent: "center",
+          borderRadius: radius.pill,
+          borderWidth: 1,
+          borderColor: colors.border,
+          ...(Platform.OS === "web" ? ({ cursor: "help" } as object) : null),
+        }}
+      >
+        <Text style={{ fontSize: 10, lineHeight: 13, color: colors.inkFaint }}>
+          {"\u2139"}
+        </Text>
+      </Pressable>
+
+      <View
+        nativeID={id}
+        pointerEvents="none"
+        style={{
+          ...(Platform.OS === "web" ? ({ position: "absolute" } as object) : null),
+          top: 22,
+          right: 0,
+          width: 250,
+          padding: space.sm,
+          borderRadius: radius.md,
+          borderCurve: "continuous",
+          borderWidth: 1,
+          borderColor: colors.border,
+          backgroundColor: colors.surfaceSunken,
+          opacity: open ? 1 : 0,
+          ...(Platform.OS === "web"
+            ? ({ boxShadow: "0 10px 30px rgba(0,0,0,0.5)" } as object)
+            : null),
+        }}
+      >
+        <Text style={{ ...type.caption, color: colors.inkMuted, lineHeight: 17 }}>
+          {note}
+        </Text>
+      </View>
+    </View>
+  );
+}
 
 /**
  * One question card.
@@ -34,6 +116,8 @@ export function QuestionCard({
   detail,
   footnote,
   tone,
+  note,
+  noteId,
 }: {
   icon: ReactNode;
   question: string;
@@ -42,6 +126,9 @@ export function QuestionCard({
   detail: string;
   footnote?: string;
   tone?: string;
+  /** A caveat, behind a mark in the corner. See {@link HoverNote}. */
+  note?: string;
+  noteId?: string;
 }) {
   const colors = usePalette();
   return (
@@ -71,6 +158,9 @@ export function QuestionCard({
         backgroundColor: colors.surface,
       }}
     >
+      {note === undefined || noteId === undefined ? null : (
+        <HoverNote note={note} id={noteId} />
+      )}
       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
         {icon}
         <Text

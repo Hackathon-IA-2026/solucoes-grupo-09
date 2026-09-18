@@ -66,7 +66,11 @@ import {
   observedRows,
   outlookRows,
 } from "@/lib/network";
+import { heroFigures } from "./hero-figures";
+import { HeadlinePanel } from "./headline-panel";
+import { RegionRail } from "./region-rail-panel";
 import { HERO_COPY } from "./hero-copy";
+import { QuestionRow } from "./question-row";
 import { NationalFigureBlock, ObservedNationalPanel } from "./national-panel";
 import { HeroStat, RegionRow } from "./region-rail";
 
@@ -135,208 +139,45 @@ export function OverviewHero({
   const wide = width >= RAILS_BESIDE_MAP;
 
   const meta = subsystemMeta(observed.subsystem as SubsystemCode);
-  const day = observedDay(observed.hours);
-
   /*
-    The map's paint and the rail's rows come from the same read, which is what
-    keeps them from disagreeing. `outlookRows` where a forecast exists,
-    `observedRows` where it does not — the same union the Overview draws, and
-    the same reason: a settled megawatt-hour and a modelled risk class are not
-    two renderings of one fact.
+    Everything this screen computes, in one named calculation.
+
+    It was a dozen derivations inline here, each forking on whether a forecast
+    was published and on which scope the map is in — which is what took this
+    component to 82 on Biome's complexity rule and kept it at 37 after three
+    panels had been split out. The panels were never the problem. See
+    `hero-figures.tsx`.
   */
-  const paint = forecast
-    ? ({ kind: "forecast", rows: outlookRows(forecast.outlook) } as const)
-    : ({
-        kind: "observed",
-        rows: observedRows(observed.now.subsystems, SUBSYSTEM_DISPLAY_ORDER),
-      } as const);
+  const {
+    day,
+    paint,
+    regions,
+    largest,
+    selectedRow,
+    leaderRow,
+    atRisk,
+    magnitudeMwh,
+    magnitudeBand,
+    riskRow,
+    spokenReasons,
+    window,
+    worstRisk,
+  } = heroFigures({ observed, forecast, scope, f });
 
-  const regions = forecast
-    ? outlookRows(forecast.outlook).map((row) => ({
-        code: subsystemMeta(row.subsystem).short,
-        subsystem: row.subsystem,
-        name: subsystemMeta(row.subsystem).onsDisplayName,
-        value: row.dayExpectedMwh,
-        chip: <RiskChip probability={row.occurrenceProbability} compact={true} />,
-        note: `≈${f.percentPoints(roundProbability(row.occurrenceProbability))}`,
-      }))
-    : observedRows(observed.now.subsystems, SUBSYSTEM_DISPLAY_ORDER).map((row) => ({
-        code: subsystemMeta(row.subsystem).short,
-        subsystem: row.subsystem,
-        name: row.onsDisplayName,
-        value: row.last24hMwh,
-        chip: undefined,
-        note: undefined,
-      }));
-
-  const largest = Math.max(...regions.map((row) => row.value), 1e-6);
-  const national = regions.reduce((sum, row) => sum + row.value, 0);
-  const mine = regions.find((row) => row.subsystem === observed.subsystem);
-  const selectedRow = forecast === null ? null : forecastRow(forecast.forecast);
-
-  /*
-    The region leading the day — the answer to "where?". Not an average of four
-    and not a national row: there is no national band, because quantiles do not
-    add, and the only thing an operator can act on is the region carrying the
-    day.
-  */
-  const leaderRow =
-    forecast === null
-      ? null
-      : outlookRows(forecast.outlook).reduce((worst, row) =>
-          row.dailyEnergy.p50 > worst.dailyEnergy.p50 ? row : worst,
-        );
-
-  /*
-    **"Onde?" is not always one place.**
-
-    Naming the leader alone is right when one region carries the day and wrong
-    when four are in the same bin — which is most of this week: all four read
-    `Alto`, and a card saying "NORDESTE" tells a reader the other three are
-    quiet. So in the overall scope the card names every region in the worst bin
-    that is on the board, and falls back to the leader only when that bin has
-    one member. With a region chosen, the answer is that region: the reader has
-    already said where they are looking.
-  */
-  const atRisk =
-    forecast === null
-      ? []
-      : outlookRows(forecast.outlook).filter(
-          (row) => row.riskClass === (leaderRow?.riskClass ?? "low"),
-        );
-
-  /*
-    **"Por quê?" is not always one reason either.**
-
-    ONS splits a day between codes often enough that the second one is worth
-    saying when it carries real energy. Below this the card names one: a second
-    reason at 4 % is noise, and a card is 168 px.
-  */
-  /*
-    **What "Quanto?" and "Vai cortar?" are about, which the scope decides.**
-
-    Both cards used the selected region unconditionally, which was fine while a
-    national block sat above them saying so. With one panel following the scope,
-    a card that ignored it would put the region's 226,7k beside the panel's
-    275,3k with nothing saying they are different subjects — the exact confusion
-    the merge was made to remove.
-
-    In the overall scope the magnitude is the national one the gateway
-    publishes, and the risk is the worst bin any subsystem is in: there is no
-    national risk class and adding four probabilities would not make one.
-  */
-  const nationalBand = forecast === null ? null : forecast.outlook.national.band;
-  const magnitudeMwh =
-    forecast === null || selectedRow === null
-      ? null
-      : scope === "sin"
-        ? (nationalBand?.p50 ?? forecast.outlook.national.expectedMwh)
-        : selectedRow.dailyEnergy.p50;
-  const magnitudeBand =
-    scope === "sin" ? nationalBand : (selectedRow?.dailyEnergy ?? null);
-  const riskRow = scope === "sin" ? leaderRow : selectedRow;
-
-  const SECOND_REASON_SHARE = 0.15;
-  const spokenReasons = observed.reasons
-    .slice(0, 2)
-    .filter((entry, index) => index === 0 || entry.share >= SECOND_REASON_SHARE);
-
-  /*
-    The hours to act in. `null` where no hour of the day is more likely to
-    curtail than not, which is an answer and not a gap — the card simply does
-    not claim a window it does not have.
-  */
-  const window =
-    forecast === null ? null : criticalWindow(forecastHours(forecast.forecast));
 
   const headline = (
-    <Panel style={{ gap: space.lg }}>
-      {/*
-        **The three quantiles, named, and the coverage under them.**
-
-        This was one large number with a band strip below it, which says what the
-        median is and leaves the edges to be read off a bar. The interval is the
-        product's claim, so all three are printed — and the fraction of settled
-        days that actually landed inside the band goes with them, because an
-        interval without its measured coverage is a promise with no record.
-      */}
-      {selectedRow === null || forecast === null ? (
-        <>
-          <HeroStat
-            label={text.totalLabel}
-            value={day.totalMwh}
-            unit="MWh"
-            note={text.totalNoteObserved}
-          />
-          <Text style={{ ...type.caption, color: colors.inkFaint }}>{text.noBand}</Text>
-        </>
-      ) : scope === "sin" ? (
-        <NationalFigureBlock national={forecast.outlook.national} />
-      ) : (
-        <>
-          <PanelTitle
-            title={text.totalLabel}
-            note={`${subsystemMeta(selectedRow.subsystem).onsDisplayName} · ${
-              text.totalNoteForecast
-            }`}
-          />
-          <BandTriple band={selectedRow.dailyEnergy} />
-        </>
-      )}
-
-      {/*
-        The coverage is the gate's, measured over a held-out fold for this
-        lane — so it describes the band whichever subject the band is about, and
-        sits outside the branch rather than being repeated inside each one.
-      */}
-      {forecast !== null && coverage.status === "read" ? (
-        <RailFact
-          label={copy.app.grid.coverageLabel}
-          value={f.percent(coverage.coverage.dayTotal, 0)}
-          note={fill(copy.app.grid.coverageNote, {
-            days: f.number(coverage.coverage.days),
-            target: f.percent(coverage.coverage.target, 0),
-          })}
-        />
-      ) : null}
-      {/*
-        **The division, in the card that already states the total.**
-
-        This card and `ObservedSplitPanel` were showing the same figure under
-        the same sentence — 46,3k MWh, "dia liquidado, somando as horas
-        publicadas" — one with a national share under it and one with the two
-        fleet bars. Two cards, one number, and a reader comparing them looking
-        for the difference that is not there.
-
-        So the bars move here, and the standalone panel goes. The note is the
-        one the split panel carried, because it is the sentence that earns the
-        bars: ONS settles the two fleets separately, so these are two
-        measurements and the total is their sum.
-      */}
-      {forecast === null ? (
-        <>
-          <SplitTracks
-            split={observed.daySplit}
-            emphasis={params.technology}
-            total={Math.max(observed.daySplit.windMwh + observed.daySplit.solarMwh, 1e-9)}
-          />
-          <Text style={{ ...type.caption, color: colors.inkFaint, lineHeight: 17 }}>
-            {copy.app.observed.splitNote}
-          </Text>
-        </>
-      ) : null}
-      {/*
-        **The window and the cause are the cards' now, at the top of the screen.**
-
-        They were added here first, and then the operator brief's five questions
-        moved onto this screen as a row of cards — which say the same two things
-        in the same words, above the fold. Two answers to one question is how a
-        reader learns to distrust both, so this panel keeps what the cards
-        summarise (the figure, its band and the fleet split) and stops repeating
-        what they state.
-      */}
-    </Panel>
+    <HeadlinePanel
+      scope={scope}
+      selectedRow={selectedRow}
+      outlook={forecast?.outlook ?? null}
+      observed={observed}
+      observedTotalMwh={day.totalMwh}
+      technology={params.technology}
+      coverage={coverage}
+      text={text}
+    />
   );
+
 
   const profile = (
     <Panel style={{ gap: space.md }}>
@@ -412,42 +253,24 @@ export function OverviewHero({
       <ObservedNationalPanel national={observed.now.national} window={window24h} />
     ) : null;
 
+  /*
+    The four subsystems beside the map, in their own component. Same split as
+    the two panels above it; see `region-rail-panel.tsx`.
+  */
   const rail = (
-    <Panel style={{ gap: space.sm }}>
-      <Text style={{ ...type.caption, color: colors.inkFaint }}>{text.regionsLabel}</Text>
-      {/*
-        **The rail's window, said out loud.**
-
-        The headline above reads the *settled day* and these four read the
-        *last 24 hours* — two different windows, and in the observed state that
-        makes them 0,0 MWh and 1 843 MWh for the same region, a few hundred
-        pixels apart with nothing between them explaining it. Two honest
-        numbers adjacent with no window on either is how a screen manufactures
-        a contradiction out of correct data.
-      */}
-      <Text style={{ ...type.caption, color: colors.inkFaint, paddingBottom: space.xs }}>
-        {forecast === null ? text.windowObserved : text.windowForecast}
-      </Text>
-      {regions.map((row) => (
-        <RegionRow
-          key={row.subsystem}
-          code={row.code}
-          name={row.name}
-          value={row.value}
-          unit="MWh"
-          share={row.value / largest}
-          selected={row.subsystem === params.subsystem}
-          highlighted={row.subsystem === hovered}
-          onPress={() => params.setParams({ subsystem: row.subsystem })}
-          onHoverChange={(on) => setHovered(on ? row.subsystem : null)}
-          trailing={row.chip}
-          note={row.note}
-        />
-      ))}
-      <Text style={{ ...type.caption, color: colors.inkFaint, paddingTop: space.xs }}>
-        {text.pickHint}
-      </Text>
-    </Panel>
+    <RegionRail
+      regions={regions}
+      largest={largest}
+      selected={params.subsystem}
+      hovered={hovered}
+      onSelect={(code) => params.setParams({ subsystem: code })}
+      onHoverChange={setHovered}
+      text={{
+        regionsLabel: text.regionsLabel,
+        windowLabel: forecast === null ? text.windowObserved : text.windowForecast,
+        pickHint: text.pickHint,
+      }}
+    />
   );
 
   /*
@@ -463,170 +286,30 @@ export function OverviewHero({
     settled day cannot answer them; the observed state keeps the panels below,
     which are about the day that happened.
   */
+  /*
+    The five cards, in their own component. The branching inside them — every
+    field switching on the scope, the risk row and how many reasons the day had
+    — had taken this function to a cognitive complexity of 82. It has a name and
+    a boundary now; see `question-row.tsx`.
+  */
   const questions =
-    selectedRow === null ? null : (
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.md }}>
-        <QuestionCard
-          icon={
-            <ZapIcon
-              size={14}
-              color={riskColor(colors, (riskRow ?? selectedRow).riskClass).fg}
-            />
-          }
-          question={copy.app.grid.q1}
-          answer={copy.app.risk[(riskRow ?? selectedRow).riskClass]}
-          detail={fill(copy.app.grid.q1Detail, {
-            probability: f.percent((riskRow ?? selectedRow).occurrenceProbability),
-            subsystem: subsystemMeta((riskRow ?? selectedRow).subsystem).onsDisplayName,
-          })}
-          tone={riskColor(colors, (riskRow ?? selectedRow).riskClass).fg}
-        />
-        <QuestionCard
-          icon={<PieChartIcon size={14} color={colors.violet} />}
-          question={copy.app.grid.q2}
-          answer={f.compact(magnitudeMwh ?? selectedRow.dailyEnergy.p50)}
-          unit="MWh"
-          detail={
-            magnitudeBand === null
-              ? copy.app.grid.q2DetailExpected
-              : copy.app.grid.q2Detail
-          }
-          footnote={
-            magnitudeBand === null
-              ? undefined
-              : `P10 ${f.compact(magnitudeBand.p10)} · P90 ${f.compact(
-                  magnitudeBand.p90,
-                )}`
-          }
-        />
-        {/*
-          The window keeps the Overview's own notation — `0h–5h BRT` — rather
-          than a clock range. It is the form the rest of this screen uses and the
-          one the operator brief was answered in; the card is a new place for the
-          sentence, not a new way of saying it.
-        */}
-        <QuestionCard
-          icon={<ClockIcon size={14} color={colors.info} />}
-          question={copy.app.grid.q3}
-          answer={
-            window === null
-              ? copy.app.grid.noWindow
-              : fill(copy.app.overview.windowRange, {
-                  from: String(window.fromHour),
-                  to: String(window.toHour),
-                })
-          }
-          detail={
-            window === null ? copy.app.overview.windowNone : copy.app.grid.q3Detail
-          }
-          footnote={
-            window === null
-              ? undefined
-              : fill(copy.app.overview.windowPeak, {
-                  peak: String(window.peakHour),
-                  mwh: f.compact(window.peakMwh),
-                })
-          }
-        />
-        <QuestionCard
-          icon={<SearchIcon size={14} color={colors.inkMuted} />}
-          question={copy.app.grid.q4}
-          answer={
-            spokenReasons.length === 0
-              ? copy.app.grid.noReason
-              : spokenReasons.map((entry) => entry.reason).join(" · ")
-          }
-          detail={
-            spokenReasons.length === 0
-              ? copy.app.grid.noReasonDetail
-              : fill(copy.app.grid.q4Detail, {
-                  date: f.date(observed.hoursDate),
-                  share: spokenReasons
-                    .map((entry) => f.percent(entry.share, 0))
-                    .join(" · "),
-                })
-          }
-        />
-        <QuestionCard
-          icon={<MapIcon size={14} color={colors.inkMuted} />}
-          question={copy.app.grid.q5}
-          answer={
-            scope === "region"
-              ? subsystemMeta(params.subsystem).onsDisplayName
-              : atRisk.length === 1 && atRisk[0] !== undefined
-                ? subsystemMeta(atRisk[0].subsystem).onsDisplayName
-                : atRisk.map((row) => subsystemMeta(row.subsystem).short).join(" · ")
-          }
-          detail={
-            scope === "region"
-              ? copy.app.grid.q5DetailRegion
-              : atRisk.length === 1
-                ? copy.app.grid.q5Detail
-                : fill(copy.app.grid.q5DetailMany, {
-                    count: String(atRisk.length),
-                    risk: copy.app.risk[leaderRow?.riskClass ?? "low"],
-                  })
-          }
-        />
-
-        {/*
-          **The caveats travel with the answers.**
-
-          Two sentences the panel these cards replaced was carrying, and neither
-          is decoration. The first says the window is the longest *run* and not
-          the count — a reader acting on `0h–5h` while nine other hours also
-          qualify is acting on a third of the day. The second is the line this
-          product cannot drop: the model forecasts how much will be curtailed and
-          never why, so the reason beside it is ONS's record of a settled day and
-          not a prediction of cause.
-
-          Full width under the row rather than inside a card, because a card is
-          168 px and these are sentences.
-        */}
-        <View style={{ flexBasis: "100%", gap: 4 }}>
-          {window !== null && window.hoursInDay > window.toHour - window.fromHour + 1 ? (
-            <Text style={{ ...type.caption, color: colors.inkFaint, lineHeight: 17 }}>
-              {fill(copy.app.overview.windowScattered, {
-                hours: String(window.hoursInDay),
-              })}
-            </Text>
-          ) : null}
-          {/*
-            The ONS passage behind the reason, where the corpus has one. It is a
-            link and not a quotation: the claim is that a rule exists and says
-            this, and the reader follows it to the document rather than trusting
-            a sentence lifted out of it.
-          */}
-          {observed.evidence === null ? null : (
-            <Link
-              href={observed.evidence.url as never}
-              target="_blank"
-              style={{
-                ...type.caption,
-                color: colors.accent,
-                ...(Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null),
-              }}
-            >
-              {fill(
-                observed.evidence.page === null
-                  ? copy.app.overview.causeEvidenceNoPage
-                  : copy.app.overview.causeEvidence,
-                {
-                  document: observed.evidence.documentCode,
-                  revision: observed.evidence.revision ?? "",
-                  page: String(observed.evidence.page ?? ""),
-                },
-              )}
-            </Link>
-          )}
-          {observed.dominantReason === null ? null : (
-            <Text style={{ ...type.caption, color: colors.inkFaint, lineHeight: 17 }}>
-              {copy.app.overview.causeNote}
-            </Text>
-          )}
-        </View>
-      </View>
+    selectedRow === null || magnitudeMwh === null ? null : (
+      <QuestionRow
+        scope={scope}
+        selectedSubsystem={params.subsystem}
+        risk={riskRow ?? selectedRow}
+        magnitudeMwh={magnitudeMwh}
+        magnitudeBand={magnitudeBand}
+        window={window}
+        reasons={spokenReasons}
+        reasonDate={observed.hoursDate}
+        evidence={observed.evidence}
+        atRisk={atRisk}
+        worstRisk={worstRisk}
+        causeNote={copy.app.overview.causeNote}
+      />
     );
+
 
   return (
     /*
@@ -636,7 +319,13 @@ export function OverviewHero({
     */
     <View
       onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
-      style={{ gap: space.xl }}
+      /*
+        `space.md`, matching the gap between the three columns below. It was
+        `space.xl`: 24 px above and below the card row while the grid it sits on
+        is 12 apart, which read as the cards belonging to a different page from
+        the panels they summarise.
+      */
+      style={{ gap: space.md }}
     >
       {questions}
       {nationalPanel}
@@ -725,7 +414,7 @@ export function OverviewHero({
               // The point of the layout: a map with room to be looked at. 380 is
               // what it takes in a column beside four panels; here it is the
               // subject rather than a figure.
-              flatMaxWidth={wide ? 760 : 440}
+              flatMaxWidth={wide ? 560 : 440}
               minHeight={wide ? 520 : 380}
             />
             {/*
