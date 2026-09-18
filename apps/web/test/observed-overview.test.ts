@@ -620,3 +620,39 @@ describe("the five questions are answered in both states", () => {
     expect(figures).toContain("observed.now.national.last24hConstrainedOffMwh");
   });
 });
+
+describe("a screen names the lane that serves, not the one that was written down", () => {
+  /*
+    Explicar asked `/v1/model/card` for `FIXTURE_LANE` — a hard-coded
+    `dessem_free_v1__gate_late__thr5` — defended on the grounds that no rule
+    says which of two *served* lanes a reader is on. Production has never had
+    two: `gate_early` is promoted and publishing, `gate_late` has four
+    artifacts and the gate has promoted none of them. So the screen asked for
+    the refused lane, got `MODEL_UNAVAILABLE`, and printed "nenhum modelo está
+    promovido para atendimento" over a deployment with one promoted.
+
+    The constant stays as the fallback, where it is honest: with nothing
+    promoted the card is refused and the refusal is true.
+  */
+  const EXPLAIN = code(source("app", "app", "explain.tsx"));
+
+  it("the lane comes from the lane table, with the constant behind it", () => {
+    expect(EXPLAIN).toContain("usePromotedLane(gateProfileOf(params.run))");
+    expect(EXPLAIN).toContain("lane: promoted ?? FIXTURE_LANE");
+  });
+
+  it("the constant is never the first choice", () => {
+    // The shape that regressed: `lane: FIXTURE_LANE` with nothing in front.
+    expect(EXPLAIN).not.toMatch(/lane:\s*FIXTURE_LANE\s*,/);
+  });
+
+  it("a lane is promoted only when the table says both things", () => {
+    // `present_unpromoted` is not promoted, and `usable: false` is a promoted
+    // artifact the hot-swap gate marked invalid against the live feature
+    // contract. Reading either one alone puts this screen back on a lane that
+    // serves nothing, which is the defect above with one more step.
+    const card = code(source("components", "app", "figures", "use-model-card.ts"));
+    expect(card).toContain('entry.condition === "promoted"');
+    expect(card).toContain("entry.usable !== false");
+  });
+});

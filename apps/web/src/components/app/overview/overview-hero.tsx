@@ -374,7 +374,6 @@ export function OverviewHero({
       style={{ gap: space.md }}
     >
       {questions}
-      {nationalPanel}
       {/*
         **Three columns on the five cards' grid.**
 
@@ -496,12 +495,38 @@ export function OverviewHero({
           */}
           {planned}
           {wide ? null : headline}
+          {wide ? null : nationalPanel}
           {wide ? null : rail}
           {wide ? null : profile}
         </View>
 
         {wide ? (
-          <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0 }}>
+          <View
+            style={{
+              flexGrow: 1,
+              flexShrink: 1,
+              flexBasis: 0,
+              minWidth: 0,
+              gap: space.md,
+            }}
+          >
+            {/*
+              **The national total sits on top of the four it is the sum of.**
+
+              It was a full-width band across the page, above the three columns,
+              carrying one number and a paragraph. That is the widest element on
+              the screen spent on a figure that is *literally the rail below it,
+              added up*: `NationalNow.derived` is `sum_of_four`, the rail's four
+              rows are the same `last24hConstrainedOffMwh` per subsystem over
+              the same window, and 1.940 + 181,3k + 43,6k + 1.808 is the 228,6k
+              it printed.
+
+              So it goes where its parts are. A reader can now check the
+              addition by looking down, which is the strongest thing this panel
+              can say about itself — and the page gets its full width back for
+              the three columns that actually need it.
+            */}
+            {nationalPanel}
             {rail}
           </View>
         ) : null}

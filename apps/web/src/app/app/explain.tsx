@@ -55,6 +55,7 @@ import {
   SectionBlock,
 } from "@/components/app/app-shell";
 import { AnaloguePanel } from "@/components/app/figures/analogue-panel";
+import { usePromotedLane } from "@/components/app/figures/use-model-card";
 import { useSimilarDays } from "@/components/app/figures/use-similar-days";
 import { ForecastAbsent } from "@/components/app/forecast-absent";
 import { ForecastStamp, HonestyNote, VintageBadge } from "@/components/app/honesty";
@@ -137,16 +138,39 @@ export default function ExplainScreen({
     gateProfileOf(params.run),
   );
   const meta = subsystemMeta(params.subsystem);
+  /*
+    **The lane whose card this screen reads, and why it is no longer a
+    constant.**
+
+    It was `FIXTURE_LANE` — `dessem_free_v1__gate_late__thr5`, hard-coded —
+    defended on the grounds that no rule says which of *two served lanes* a
+    reader is looking at, and that inventing one here would be the client
+    deciding it. That argument is sound while two lanes serve. It was wrong the
+    whole time only one did.
+
+    Measured on production: `gate_early` is `promoted` and `usable`, serving an
+    artifact; `gate_late` has four artifacts on the volume and the gate has
+    promoted none of them, because a serving smoke found an upstream ONS
+    dataset gone quiet. So this screen asked for the refused lane's card, got
+    `MODEL_UNAVAILABLE`, and printed *"Nenhum modelo está promovido para
+    atendimento"* above a deployment that had one promoted and publishing.
+
+    There is no ambiguity to preserve when exactly one lane serves, so the lane
+    is the promoted one for the gate the reader is on — the same
+    `usePromotedLane` the coverage and the ladder read, so the three cannot
+    disagree about which artifact this screen is describing. `useRunLanes` has
+    already moved `run` off a gate that cannot serve, so this is the gate the
+    rest of the screen's numbers come from.
+
+    The constant remains the fallback, and there it is honest: with nothing
+    promoted anywhere the card is refused and the refusal is true.
+  */
+  const promoted = usePromotedLane(gateProfileOf(params.run));
   const state = useExplain({
     subsystem: params.subsystem,
     targetDate: params.date,
     gateProfile: gateProfileOf(params.run),
-    // The lane the rest of this deployment's numbers come from. It is a
-    // published constant rather than a pick from `/v1/meta`'s list, because no
-    // rule yet says which of two served lanes a reader is looking at — the
-    // gateway refuses to default it for the same reason, and inventing the
-    // rule here would be the client deciding it.
-    lane: FIXTURE_LANE,
+    lane: promoted ?? FIXTURE_LANE,
     locale: languageTag(locale),
   });
 
