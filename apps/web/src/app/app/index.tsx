@@ -73,7 +73,7 @@ import { SUBSYSTEM_DISPLAY_ORDER } from "@wattsteer/core";
 import { usePalette } from "@wattsteer/ui";
 import { router } from "expo-router";
 import Head from "expo-router/head";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { Text } from "react-native";
 import ExplainScreen from "@/app/app/explain";
 import MitigateScreen from "@/app/app/mitigate";
@@ -216,6 +216,23 @@ export default function GridOverviewScreen() {
     scrollToSection("explain");
   };
 
+  /**
+   * Whether Explicar is raised over the page rather than sitting in it.
+   *
+   * Here rather than in the hero or in `ExplainScreen`, because the two halves
+   * of this toggle are in different subtrees: the press is on a card inside
+   * `OverviewHero`, and the sheet is `ExplainScreen`'s own body a few hundred
+   * lines further down this render. The state is the only thing they share, and
+   * this screen is where they meet.
+   *
+   * It is not a URL parameter, which was the first cut. A sheet in the address
+   * bar is a sheet somebody can link to — and a link to `/app?why=1` reopens a
+   * modal over a page the recipient has not read yet, which is not what the
+   * sender meant to share. `/app#explain` is the shareable form of this and
+   * already exists.
+   */
+  const [whyOpen, setWhyOpen] = useState(false);
+
   const frame = (right: ReactNode, body: ReactNode) => (
     <>
       <Head>
@@ -278,7 +295,10 @@ export default function GridOverviewScreen() {
           has any business disappearing because the Overview's forecast half
           refused. Each section says what it knows.
         */}
-        <ExplainScreen embedded />
+        <ExplainScreen
+          embedded
+          sheet={{ open: whyOpen, onClose: () => setWhyOpen(false) }}
+        />
         <MitigateScreen embedded />
       </AppShell>
     </>
@@ -367,6 +387,8 @@ export default function GridOverviewScreen() {
         forecast={forecast}
         params={params}
         onExplain={explain}
+        onWhy={() => setWhyOpen((value) => !value)}
+        whyOpen={whyOpen}
       />
 
       {/*

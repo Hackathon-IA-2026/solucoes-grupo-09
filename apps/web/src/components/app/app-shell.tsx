@@ -808,12 +808,28 @@ export function SectionBlock({
   lede,
   right,
   children,
+  withheld = false,
 }: {
   id: string;
   title: string;
   lede: string;
   right?: ReactNode;
   children: ReactNode;
+  /**
+   * This section's body is on screen somewhere else right now.
+   *
+   * The "Por quê?" card opens Explicar in a sheet over the page, and Explicar
+   * is one component: the same element is either in this accordion or in the
+   * sheet, never both. Rendering it twice would put two copies of every
+   * `nativeID` and `testID` in the diagnosis into one document, which breaks a
+   * strict-mode locator and duplicates the whole section for a screen reader —
+   * and the reader of the *second* copy has no way to tell it is a copy.
+   *
+   * So while the sheet has the body, this collapses and stays collapsed. Not
+   * hidden: the heading is the anchor `/app#explain` lands on and the landmark
+   * a screen reader jumps to, and both survive the sheet being open.
+   */
+  withheld?: boolean;
 }) {
   const colors = usePalette();
   const copy = useCopy();
@@ -836,6 +852,7 @@ export function SectionBlock({
     only an animation is a state change a stopped animation loses.
   */
   const [open, setOpen] = useState(false);
+  const expanded = open && !withheld;
   return (
     <View
       nativeID={id}
@@ -850,7 +867,7 @@ export function SectionBlock({
         ? ({ role: "region", "aria-label": title } as object)
         : { accessibilityLabel: title })}
       style={{
-        gap: open ? space.lg : space.md,
+        gap: expanded ? space.lg : space.md,
         paddingTop: space.xl,
         borderTopWidth: 1,
         borderTopColor: colors.border,
@@ -859,9 +876,9 @@ export function SectionBlock({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={title}
-        aria-expanded={open}
+        aria-expanded={expanded}
         aria-controls={`${id}-body`}
-        onPress={() => setOpen((value) => !value)}
+        onPress={() => setOpen(() => !expanded)}
         style={(state) => {
           const { focused = false } = state as { focused?: boolean };
           return {
@@ -877,9 +894,9 @@ export function SectionBlock({
           level={2}
           right={
             <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-              {open ? right : null}
+              {expanded ? right : null}
               <Text style={{ ...typeTokens.label, color: colors.inkMuted }}>
-                {open ? copy.app.shell.collapse : copy.app.shell.expand}
+                {expanded ? copy.app.shell.collapse : copy.app.shell.expand}
               </Text>
               {/* A caret, drawn rather than imported: one glyph, two rotations,
                   and it is the static cue that survives reduced motion. */}
@@ -888,7 +905,7 @@ export function SectionBlock({
                   fontSize: 13,
                   lineHeight: 18,
                   color: colors.inkMuted,
-                  transform: [{ rotate: open ? "180deg" : "0deg" }],
+                  transform: [{ rotate: expanded ? "180deg" : "0deg" }],
                 }}
               >
                 {"\u25BE"}
@@ -897,7 +914,7 @@ export function SectionBlock({
           }
         />
       </Pressable>
-      {open ? (
+      {expanded ? (
         <View nativeID={`${id}-body`} style={{ gap: space.xl }}>
           {children}
         </View>

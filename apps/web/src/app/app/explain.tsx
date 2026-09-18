@@ -39,6 +39,7 @@ import {
   Panel,
   PanelHeader,
   PieChartIcon,
+  Sheet,
   SparklesIcon,
   space,
   usePalette,
@@ -94,7 +95,28 @@ import { FIXTURE_LANE, subsystemMeta } from "@/lib/fixtures";
  * a panel added here appears in both, and `/app/explain` stays a URL that works
  * for anyone who has one.
  */
-export default function ExplainScreen({ embedded = false }: { embedded?: boolean }) {
+export default function ExplainScreen({
+  embedded = false,
+  sheet,
+}: {
+  embedded?: boolean;
+  /**
+   * A third container for the same body: over the page rather than in it.
+   *
+   * The Overview's "Por quê?" card answers in five words and the long answer
+   * was six hundred pixels below it, behind an accordion a reader had to find.
+   * Pressing the card now raises this screen's body over the page instead —
+   * which is a *container* decision and nothing else, so it is a prop on the
+   * frame and not a second implementation of Explicar. The accordion is
+   * untouched and still opens the same element; `SectionBlock`'s `withheld`
+   * says why only one of the two holds it at a time.
+   *
+   * Owned by the page rather than by this component because the press that
+   * opens it happens in the hero, several components away, and a toggle whose
+   * two halves live in different subtrees needs its state above both.
+   */
+  sheet?: { readonly open: boolean; readonly onClose: () => void };
+}) {
   const colors = usePalette();
   const copy = useCopy();
   const f = useFormat();
@@ -173,11 +195,36 @@ export default function ExplainScreen({ embedded = false }: { embedded?: boolean
     date: f.date(params.date),
   });
 
+  const inSheet = sheet !== undefined && sheet.open;
+
   const frame = (right: ReactNode, body: ReactNode) =>
     embedded ? (
-      <SectionBlock id="explain" title={title} lede={lede} right={right}>
-        {body}
-      </SectionBlock>
+      <>
+        <SectionBlock
+          id="explain"
+          title={title}
+          lede={lede}
+          right={right}
+          withheld={inSheet}
+        >
+          {inSheet ? null : body}
+        </SectionBlock>
+        {sheet === undefined ? null : (
+          <Sheet
+            open={sheet.open}
+            onClose={sheet.onClose}
+            title={title}
+            lede={lede}
+            closeLabel={copy.app.shell.closeSheet}
+          >
+            {/* The stamp and the re-read orb ride along: they say which run and
+                which moment the panels below are from, and a reader who opened
+                the sheet from a card has not seen them anywhere else. */}
+            {right}
+            {body}
+          </Sheet>
+        )}
+      </>
     ) : (
       <>
         <Head>

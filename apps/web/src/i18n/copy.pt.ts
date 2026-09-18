@@ -483,6 +483,15 @@ export const pt: Copy = {
       expand: "Abrir",
       collapse: "Recolher",
       /**
+       * The close control of a sheet raised over the page.
+       *
+       * Named for the sheet rather than for what is in it — the same three
+       * escapes (this button, the backdrop, Escape) close whichever section a
+       * card raised, and a label that named Explicar would be a second string
+       * to keep in step with the first.
+       */
+      closeSheet: "Fechar",
+      /**
        * The two sections of Visão da rede, named short.
        *
        * Not in `screens` any more: that node is the nav row's labels, and the

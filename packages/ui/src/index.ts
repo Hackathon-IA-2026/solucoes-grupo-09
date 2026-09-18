@@ -6,6 +6,7 @@ export * from "./components/legal";
 export * from "./components/panel";
 export * from "./components/pill";
 export * from "./components/risk-bar";
+export * from "./components/sheet";
 export * from "./components/toggle";
 export * from "./hooks/use-container-width";
 export * from "./hooks/use-palette";

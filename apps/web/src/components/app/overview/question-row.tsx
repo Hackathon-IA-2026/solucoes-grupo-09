@@ -57,6 +57,8 @@ export function QuestionRow({
   atRisk,
   worstRisk,
   causeNote,
+  onWhy,
+  whyOpen,
 }: {
   scope: Scope;
   selectedSubsystem: SubsystemCode;
@@ -74,6 +76,16 @@ export function QuestionRow({
   atRisk: readonly QuestionSubject[];
   worstRisk: RiskClass;
   causeNote: string;
+  /**
+   * Opens and closes the long answer to "Por quê?".
+   *
+   * The card states the ONS code and its share, which is the whole answer to
+   * the question as the operator brief asks it and about a tenth of what
+   * Explicar has to say. The screen owns the toggle — see the Overview route —
+   * and this component only says which card carries it.
+   */
+  onWhy?: () => void;
+  whyOpen?: boolean;
 }) {
   const colors = usePalette();
   const copy = useCopy();
@@ -163,6 +175,8 @@ export function QuestionRow({
           }
           note={causeNote}
           noteId="overview-cause-note"
+          onPress={onWhy}
+          expanded={whyOpen}
         />
         <QuestionCard
           icon={<MapIcon size={14} color={colors.inkMuted} />}

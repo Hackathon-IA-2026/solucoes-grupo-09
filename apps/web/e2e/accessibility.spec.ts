@@ -197,3 +197,34 @@ test("the landing page has no WCAG A or AA violations", async ({ page }) => {
     .toBeGreaterThan(2000);
   expect(await violations(page)).toEqual([]);
 });
+
+/**
+ * The same audit with the "Por quê?" sheet open.
+ *
+ * A dialog is the one presentation where the audit above proves nothing: it is
+ * portalled out of the page and does not exist in the document until a reader
+ * presses the card, so every rule this file holds the Overview to was, for the
+ * sheet, unchecked. The two that matter here are the two a modal gets wrong —
+ * `aria-dialog-name`, because a dialog with no accessible name is a dialog a
+ * screen reader announces as nothing, and `nested-interactive`, which is why
+ * the card's caveat mark stayed outside the card's own button.
+ */
+test("the Explain sheet has no WCAG A or AA violations", async ({ page }) => {
+  await routeGateway(page, { forecast: true });
+  await page.goto("/app");
+  await page.locator("[data-region]").first().waitFor({ timeout: 20_000 });
+  await page
+    .getByRole("button")
+    .filter({ hasText: /Por quê\?|Why\?/ })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  // The floor, as above: an empty dialog would pass vacuously, and this one is
+  // the whole Explicar section.
+  await expect
+    .poll(() => dialog.textContent().then((text) => text?.length ?? 0), {
+      timeout: 20_000,
+    })
+    .toBeGreaterThan(300);
+  expect(await violations(page)).toEqual([]);
+});

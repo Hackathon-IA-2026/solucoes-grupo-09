@@ -15,9 +15,17 @@
  * on. Nothing is lost except the false crispness.
  */
 
+import {
+  focusRing,
+  motion,
+  radius,
+  space,
+  type,
+  usePalette,
+  webTransition,
+} from "@wattsteer/ui";
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { radius, space, type, usePalette } from "@wattsteer/ui";
 import { Platform, Pressable, Text, View } from "react-native";
 
 /**
@@ -118,6 +126,8 @@ export function QuestionCard({
   tone,
   note,
   noteId,
+  onPress,
+  expanded,
 }: {
   icon: ReactNode;
   question: string;
@@ -129,38 +139,35 @@ export function QuestionCard({
   /** A caveat, behind a mark in the corner. See {@link HoverNote}. */
   note?: string;
   noteId?: string;
+  /**
+   * Makes the card itself the control that opens its own long answer.
+   *
+   * Only "Por quê?" passes one today. The other four cards *are* their answer —
+   * a probability, a median, a window, a list of regions — and a button that
+   * leads nowhere is worse than no button, so pressability is opt-in rather
+   * than a default the four have to decline.
+   */
+  onPress?: () => void;
+  /** Whether what this card opens is open. Ignored without `onPress`. */
+  expanded?: boolean;
 }) {
   const colors = usePalette();
-  return (
-    <View
-      style={{
-        /*
-          Exact fifths of the row, so the three columns underneath can line up
-          with the card edges — the arithmetic is beside the three columns in
-          `overview/overview-hero.tsx`. `flexBasis: 0` rather than a content width is what makes
-          them exact; `minWidth` is what stops them becoming unreadable rather
-          than merely narrow, and is the point at which the row wraps.
+  /*
+    **The note's mark stays outside the card's own button.**
 
-          The explicit `flexShrink` is not redundant: react-native-web defaults
-          it to 0 where CSS defaults it to 1, so a basis alone is a floor rather
-          than a preference (ADR-0001).
-        */
-        flexGrow: 1,
-        flexShrink: 1,
-        flexBasis: 0,
-        minWidth: 188,
-        gap: 6,
-        padding: space.md,
-        borderRadius: radius.lg,
-        borderCurve: "continuous",
-        borderWidth: 1,
-        borderColor: tone === undefined ? colors.border : tone,
-        backgroundColor: colors.surface,
-      }}
-    >
-      {note === undefined || noteId === undefined ? null : (
-        <HoverNote note={note} id={noteId} />
-      )}
+    Making the whole card pressable would have put the caveat's `<button>`
+    inside the card's `<button>`, which is `nested-interactive` — a WCAG 2.1.1
+    failure that `e2e/accessibility.spec.ts` already caught once on this screen,
+    when the selected map row wrapped the Explicar control. So the card box is
+    still a plain `View`: the mark is one of its children, absolutely placed in
+    the corner as before, and the *content* is the button beside it.
+
+    The cost is that the corner of the card is not part of the press target.
+    That is 16px of a card that is 188px at its narrowest, and it is the corner
+    a reader reaches for when they want the caveat rather than the diagnosis.
+  */
+  const content = (
+    <>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
         {icon}
         <Text
@@ -210,6 +217,92 @@ export function QuestionCard({
         >
           {footnote}
         </Text>
+      )}
+    </>
+  );
+
+  const box = {
+    /*
+      Exact fifths of the row, so the three columns underneath can line up
+      with the card edges — the arithmetic is beside the three columns in
+      `overview/overview-hero.tsx`. `flexBasis: 0` rather than a content width is what makes
+      them exact; `minWidth` is what stops them becoming unreadable rather
+      than merely narrow, and is the point at which the row wraps.
+
+      The explicit `flexShrink` is not redundant: react-native-web defaults
+      it to 0 where CSS defaults it to 1, so a basis alone is a floor rather
+      than a preference (ADR-0001).
+    */
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 188,
+    gap: 6,
+    padding: space.md,
+    borderRadius: radius.lg,
+    borderCurve: "continuous" as const,
+    borderWidth: 1,
+    borderColor: tone === undefined ? colors.border : tone,
+    backgroundColor: colors.surface,
+  };
+
+  return (
+    <View style={box}>
+      {note === undefined || noteId === undefined ? null : (
+        <HoverNote note={note} id={noteId} />
+      )}
+      {onPress === undefined ? (
+        content
+      ) : (
+        <Pressable
+          accessibilityRole="button"
+          /*
+            `aria-expanded` because this is a toggle — the same press closes
+            what it opened — and `aria-haspopup="dialog"` because what it opens
+            is modal rather than a region below the button. No `aria-controls`:
+            the sheet is portalled out of this tree and does not exist in the
+            document while closed, so the attribute would point at nothing for
+            all but a few seconds of the page's life.
+          */
+          aria-expanded={expanded}
+          aria-haspopup="dialog"
+          onPress={onPress}
+          style={(state) => {
+            const { focused = false, hovered = false } = state as {
+              focused?: boolean;
+              hovered?: boolean;
+            };
+            return {
+              /*
+                The card box owns the padding and the border, so this fills it
+                edge to edge — a press target that stops short of the border is
+                a card with a dead 12px frame, which reads as a misfire rather
+                than as a margin. Negative margins rather than moving the
+                padding here, because the note's mark is positioned against the
+                box and would otherwise move with it.
+              */
+              margin: -space.md,
+              padding: space.md,
+              gap: 6,
+              borderRadius: radius.lg,
+              borderCurve: "continuous",
+              // The open state is a fill rather than a border: the border is
+              // already the risk tone on one card in this row, and a second
+              // meaning on the same property is a meaning nobody reads.
+              backgroundColor:
+                expanded === true || hovered ? colors.surfaceSunken : "transparent",
+              ...focusRing(focused, colors.focus, -1),
+              ...(Platform.OS === "web"
+                ? ({
+                    cursor: "pointer",
+                    ...webTransition("background-color", motion.fast, motion.ease.color),
+                  } as object)
+                : null),
+            };
+          }}
+        >
+          {content}
+        </Pressable>
       )}
     </View>
   );

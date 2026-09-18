@@ -615,6 +615,7 @@ export const en = {
       /** The accordion control on a collapsed section, and on an open one. */
       expand: "Open",
       collapse: "Collapse",
+      closeSheet: "Close",
       /**
        * The two sections of the Grid Overview, named short.
        *

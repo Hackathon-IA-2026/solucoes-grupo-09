@@ -89,6 +89,8 @@ export function OverviewHero({
   forecast,
   params,
   onExplain,
+  onWhy,
+  whyOpen,
 }: {
   observed: ObservedNetwork;
   forecast: ForecastNetwork | null;
@@ -102,6 +104,16 @@ export function OverviewHero({
    * screen owns "select **and** go", and always did.
    */
   onExplain: (subsystem: SubsystemCode) => void;
+  /**
+   * The "Por quê?" card's toggle, which raises Explicar over the page.
+   *
+   * A second way into the same section as `onExplain`, and deliberately not a
+   * replacement for it: `onExplain` names a region and travels down the page to
+   * a heading, which is what a control labelled "Explicar NORDESTE" promises.
+   * This one stays where the reader is.
+   */
+  onWhy?: () => void;
+  whyOpen?: boolean;
   /** The live selection, with its writer — the map and the rail set it. */
   params: AppParams & {
     setParams: (next: Partial<Omit<AppParams, "date">>) => void;
@@ -307,6 +319,8 @@ export function OverviewHero({
         atRisk={atRisk}
         worstRisk={worstRisk}
         causeNote={copy.app.overview.causeNote}
+        onWhy={onWhy}
+        whyOpen={whyOpen}
       />
     );
 

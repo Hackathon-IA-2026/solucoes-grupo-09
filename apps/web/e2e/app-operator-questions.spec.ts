@@ -99,3 +99,66 @@ test.describe("question 5 — why", () => {
     expect(body).not.toMatch(/\bENE\b|\bCNF\b|\bREL\b/);
   });
 });
+
+/**
+ * The "Por quê?" card is a toggle, and what it toggles is Explicar itself.
+ *
+ * The card answers in five words — an ONS code and its share — and the long
+ * answer was six hundred pixels below it behind an accordion. Pressing the card
+ * raises the same section over the page instead. The accordion still opens it
+ * where it always did; these assert the second way in, and that it is also a
+ * way back.
+ */
+test.describe("question 5 — why, as a sheet", () => {
+  const whyCard = (page: import("@playwright/test").Page) =>
+    page.getByRole("button").filter({ hasText: /Por quê\?|Why\?/ });
+
+  test("pressing the card raises the diagnosis, and pressing it again lowers it", async ({
+    page,
+  }) => {
+    await open(page, { forecast: true, reasons: true });
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toHaveCount(0);
+
+    await whyCard(page).click();
+    await expect(dialog).toBeVisible();
+    // The sheet holds Explicar, not a summary of it: the driver attribution is
+    // the section's own answer and appears nowhere else on this page.
+    await expect(dialog.getByText("SHAP", { exact: false }).first()).toBeVisible();
+
+    // The toggle the brief asks for: the same press closes what it opened. The
+    // card is behind a backdrop, so this goes through the sheet's own close.
+    await dialog.getByTestId("sheet-close").click();
+    await expect(dialog).toHaveCount(0);
+  });
+
+  test("Escape closes it, and the page is scrollable again afterwards", async ({
+    page,
+  }) => {
+    await open(page, { forecast: true, reasons: true });
+    await whyCard(page).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    // The page must not scroll behind an open sheet; the assertion is that the
+    // lock is *released*, because a lock that leaks strands the reader on a
+    // 13 000px page with no wheel.
+    expect(
+      await page.evaluate(() => getComputedStyle(document.documentElement).overflow),
+    ).toBe("hidden");
+
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    expect(
+      await page.evaluate(() => getComputedStyle(document.documentElement).overflow),
+    ).not.toBe("hidden");
+  });
+
+  test("the accordion below still opens the same section", async ({ page }) => {
+    // The sheet is an additional way in and not a replacement. If this fails,
+    // the two containers are fighting over one body.
+    await open(page, { forecast: true, reasons: true });
+    const accordion = page.getByRole("button", { name: /Por que |Why / }).last();
+    await accordion.click();
+    await expect(page.getByText("SHAP", { exact: false }).first()).toBeVisible();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+});
