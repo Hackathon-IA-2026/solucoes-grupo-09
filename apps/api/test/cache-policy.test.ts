@@ -345,6 +345,11 @@ describe("no validator is built from a clock or a duration", () => {
       "optimize.ts",
       "plants.ts",
       "replay.ts",
+      // The analogue search. Its validator is deliberately **not** an artifact
+      // id: the read touches no artifact — it is feature rows and settled
+      // labels — so a promotion does not change the answer and must not
+      // invalidate it.
+      "similar-days.ts",
     ]);
   });
 

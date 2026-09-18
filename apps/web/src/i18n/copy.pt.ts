@@ -774,6 +774,23 @@ export const pt: Copy = {
         "O gateway não respondeu, então não há o que comparar. As duas séries são do ONS e nenhuma delas depende de modelo.",
       note: "A carga programada é o `carga-energia-programada` do ONS, publicado na véspera; a liquidada é o balanço de energia liquidado. Mesma unidade, mesmo grão — subtrair as duas é a única conta que este painel faz.",
     },
+    /*
+      O dia histórico análogo: a única evidência destas telas que não depende do
+      modelo estar certo. Ver `analogue-panel.tsx` — o resultado do vizinho
+      nunca entra em número nenhum que o produto publica.
+    */
+    analogue: {
+      title: "Dias parecidos",
+      subtitle: "Dias reais com programa diário parecido, e o que liquidou neles.",
+      distance:
+        "Distância {distance} · adimensional, comparável só dentro desta resposta",
+      note: 'Busca sobre {days} dias liquidados desde {from}, em seis agregados do programa do ONS publicado na véspera — nada liquidado entra na comparação, senão a pergunta viraria "que dia terminou parecido".',
+      caveat:
+        "Não é previsão e não é um segundo modelo: nada aqui é ajustado, e o corte que liquidou nestes dias nunca é combinado com a faixa ao lado. São datas para conferir no arquivo do ONS.",
+      reading: "Procurando dias parecidos.",
+      absent:
+        "Sem dias parecidos para mostrar: ou nenhum modelo está promovido, ou o programa deste dia está incompleto, ou o histórico não tem dispersão suficiente para medir distância.",
+    },
     observed: {
       badge: "Observado",
       stamp: "Observado · liquidado até {when} BRT · {lag} h de atraso",

@@ -54,6 +54,8 @@ import {
   ScreenTitle,
   SectionBlock,
 } from "@/components/app/app-shell";
+import { AnaloguePanel } from "@/components/app/figures/analogue-panel";
+import { useSimilarDays } from "@/components/app/figures/use-similar-days";
 import { ForecastAbsent } from "@/components/app/forecast-absent";
 import { ForecastStamp, HonestyNote, VintageBadge } from "@/components/app/honesty";
 import { ReadingState, ThinkingOrb } from "@/components/app/thinking-orb";
@@ -124,6 +126,16 @@ export default function ExplainScreen({
   const { locale } = useI18n();
   const serving = useServing();
   const params = useAppParams();
+  /*
+    The past days whose day-ahead programme most resembled this one. Read here
+    rather than inside the panel so the panel stays a rendering of a state —
+    and keyed on the same three axes every other read on this screen uses.
+  */
+  const analogues = useSimilarDays(
+    params.subsystem,
+    params.date,
+    gateProfileOf(params.run),
+  );
   const meta = subsystemMeta(params.subsystem);
   const state = useExplain({
     subsystem: params.subsystem,
@@ -284,6 +296,18 @@ export default function ExplainScreen({
       {day === null ? null : <DiagnosedPanels day={day} />}
 
       <ReliabilityPanel card={state.observed.card} />
+
+      {/*
+        The analogue, under the reliability curve and above the ONS reasons.
+
+        That order is the argument this screen makes, in the order it makes it:
+        here is what moved the number, here is how well the interval has held,
+        **here are real days that looked like this one**, and here is what ONS
+        recorded as the reason. The third is the only rung that does not need
+        the model to be right, so it belongs where a reader who has stopped
+        believing the first two will still reach it.
+      */}
+      <AnaloguePanel state={analogues} />
 
       <ObservedReasonsPanel
         reasons={state.observed.reasons.rows}

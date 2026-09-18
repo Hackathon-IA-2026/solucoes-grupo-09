@@ -34,6 +34,7 @@ import { rateLimit, tiersFrom } from "./plugins/rate-limit.js";
 import { requestContext } from "./plugins/request-context.js";
 import { securityHeaders } from "./plugins/security.js";
 import { replayRoutes } from "./replay.js";
+import { similarDaysRoutes } from "./similar-days.js";
 import { voiceRoutes } from "./voice.js";
 
 const isProd = config.isProd;
@@ -262,6 +263,7 @@ export const app = new Elysia()
   .use(forecastRoutes)
   .use(plantRoutes)
   .use(optimizeRoutes)
+  .use(similarDaysRoutes)
   .use(replayRoutes)
   .use(modelCardRoutes)
   .use(voiceRoutes)

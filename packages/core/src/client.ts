@@ -49,6 +49,7 @@ import type {
   Replay,
   ReplayObservedOnly,
   Scenario,
+  SimilarDays,
 } from "./types.generated.js";
 import { decodeWire, encodeWire, type WireShapeName } from "./wire.js";
 
@@ -267,6 +268,27 @@ export class ApiClient {
   ): Promise<GridContext> {
     return this.request<GridContext>("GridContext", "/v1/grid/context", {
       query: { subsystem: query.subsystem, date: query.date, as_of: query.asOf },
+      signal,
+    });
+  }
+
+  /**
+   * `GET /v1/similar-days` — the past days that looked most like this one.
+   *
+   * Evidence, not a second forecast: the neighbours' settled totals sit beside
+   * the band and are never combined with it.
+   */
+  similarDays(
+    query: { subsystem: string; lane: string; targetDate?: string; k?: number },
+    signal?: AbortSignal,
+  ): Promise<SimilarDays> {
+    return this.request<SimilarDays>("SimilarDays", "/v1/similar-days", {
+      query: {
+        subsystem: query.subsystem,
+        lane: query.lane,
+        target_date: query.targetDate,
+        k: query.k === undefined ? undefined : String(query.k),
+      },
       signal,
     });
   }

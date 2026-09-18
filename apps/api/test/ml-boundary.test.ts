@@ -136,6 +136,11 @@ const CROSSINGS: Readonly<Record<string, string>> = {
   "api/optimize.ts": "the MILP — a solve over user input cannot be precomputed",
   "api/replay.ts":
     "the replay solve, the replayable-day calendar and the backtest aggregate",
+  "api/similar-days.ts":
+    "the analogue search runs where the feature rows are; the day vector is " +
+    "six aggregates of one lane's feature function, and building it in the " +
+    "gateway would be a second implementation of a feature contract that has " +
+    "exactly one",
 };
 
 /** The two of those four that may carry canonical scenario bytes to a solver. */

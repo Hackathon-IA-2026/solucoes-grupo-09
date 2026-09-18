@@ -437,7 +437,13 @@ describe("solver surface · one request, and no job noun on either route", () =>
  */
 describe("solver surface · the boundary, and who may cross it", () => {
   const SOLVER_CALLERS = ["optimize.ts", "replay.ts"];
-  const BOUNDARY_CROSSERS = ["meta.ts", "model-card.ts", "optimize.ts", "replay.ts"];
+  const BOUNDARY_CROSSERS = [
+    "meta.ts",
+    "model-card.ts",
+    "optimize.ts",
+    "replay.ts",
+    "similar-days.ts",
+  ];
 
   it("has route modules to scan, and reads each of them whole", () => {
     // Two ways this box passed while governing less than it claimed.
@@ -482,12 +488,16 @@ describe("solver surface · the boundary, and who may cross it", () => {
     expect(callers).toEqual(SOLVER_CALLERS);
   });
 
-  it("only four route modules import the proxy at all, and the other two only read", () => {
+  it("only the named route modules import the proxy, and the read-only ones only read", () => {
     const crossers = ROUTE_MODULES.filter((name) =>
       routeSource(name).includes("ml-proxy.js"),
     );
     expect(crossers).toEqual(BOUNDARY_CROSSERS);
-    for (const name of ["meta.ts", "model-card.ts"]) {
+    // The crossings that read and never send: `similar-days.ts` joined them,
+    // and it is the reason this box is named by property rather than by count.
+    // A search over feature rows takes a subsystem, a lane and a date — there
+    // are no scenario bytes for it to carry, and `postMl` is what carries them.
+    for (const name of ["meta.ts", "model-card.ts", "similar-days.ts"]) {
       expect(routeSource(name)).toContain("callMl");
       expect(routeSource(name)).not.toContain("postMl");
     }

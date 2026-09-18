@@ -46,7 +46,7 @@ import time
 from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Any, Literal, cast
 
 from fastapi import Body, Depends, FastAPI, Query
@@ -79,6 +79,8 @@ from .features import (
     serving_target_date,
 )
 from .forecast_reads import served_profile_source
+from .similar_days import FEATURES as SIMILAR_FEATURES
+from .similar_days import day_vectors, nearest
 from .lanes import Lane, LaneNameError, is_artifact_id
 from .optimizer import (
     OptimizerBugError,
@@ -1386,6 +1388,118 @@ def _replay_lane(lane: str) -> Lane | JSONResponse:
         return Lane.parse(lane)
     except LaneNameError as error:
         return _refusal(422, "REQUEST_INVALID", str(error))
+
+
+@app.get("/v1/similar-days", tags=["forecast"])
+async def similar_days_route(
+    subsystem: Annotated[Subsystem, Query(description="ONS subsystem code.")],
+    lane: Annotated[
+        str,
+        Query(
+            description=(
+                "The artifact lane whose feature set and gate the search runs "
+                "in, e.g. dessem_free_v1__gate_late__thr5. Not defaulted: the "
+                "day vector is built from that lane's feature rows."
+            )
+        ),
+    ],
+    target_date: Annotated[
+        date | None,
+        Query(description="The day to find analogues for. Defaults to tomorrow, BRT."),
+    ] = None,
+    days: Annotated[
+        int,
+        Query(ge=30, le=730, description="How far back the pool reaches, in days."),
+    ] = 180,
+    k: Annotated[int, Query(ge=1, le=10, description="How many analogues.")] = 3,
+) -> JSONResponse:
+    """The past days that looked most like this one, and what happened on them.
+
+    **Not a prediction and not a second model.** Nothing here is fitted, nothing
+    is promoted, and a neighbour's outcome is never combined with the forecast.
+    The product publishes a band from LightGBM and, beside it, a real date the
+    grid already lived through — which is evidence anyone can check against
+    ONS's archive without access to the model at all.
+
+    Every coordinate of the day vector is a `dessem_*` column, ONS's day-ahead
+    programme published D−1, so the search asks "which past day *looked* like
+    this one" and never "which past day ended like it". See `similar_days.py`.
+    """
+    if database is None:
+        return _refusal(
+            503,
+            "DATA_UNAVAILABLE",
+            "this instance has no database configured, and an analogue is a "
+            "function of feature rows that only Postgres holds",
+        )
+    parsed = _replay_lane(lane)
+    if isinstance(parsed, JSONResponse):
+        return parsed
+
+    day = target_date or serving_target_date(datetime.now(tz=UTC))
+    gate_profile = cast(GateProfile, parsed.gate_profile)
+    feature_set = cast(FeatureSet, parsed.feature_set)
+    pool_from = day - timedelta(days=days)
+
+    connection_pool = await database.connect()
+    async with connection_pool.acquire() as conn:
+        # One read covering the pool *and* the day being asked about: the
+        # function's rows are a function of each row's own target date, so a
+        # single range read and a slice agree with two reads and cost one round
+        # trip. `features.py` states that property where the function is wrapped.
+        rows = await read_feature_rows(
+            conn,
+            FeatureRowsQuery(
+                target_from=pool_from,
+                target_to=day,
+                gate_profile=gate_profile,
+                feature_set=feature_set,
+                threshold_mw=parsed.threshold_mw,
+            ),
+        )
+
+    scoped = [row for row in rows if row.get("subsystem") == subsystem]
+    vectors = day_vectors(scoped)
+    target = next((vector for vector in vectors if vector.target_date == day), None)
+    if target is None:
+        # The day itself has no complete programme, so there is nothing to be
+        # like. An absence with its reason, never an empty list meaning "no
+        # similar days exist".
+        return _refusal(
+            404,
+            "FORECAST_UNAVAILABLE",
+            f"no complete day-ahead programme for {day.isoformat()} in "
+            f"{parsed.directory_name}, so there is no day vector to compare",
+            {"lane": parsed.directory_name, "target_date": day.isoformat()},
+        )
+
+    neighbours = nearest(target, vectors, k=k)
+    return JSONResponse(
+        content={
+            "subsystem": subsystem,
+            "target_date": day.isoformat(),
+            "lane": parsed.directory_name,
+            "pool_from": pool_from.isoformat(),
+            # How many settled days the scale was built from. A distance is only
+            # as meaningful as the spread behind it, and a reader comparing two
+            # of these responses is entitled to know which had more to go on.
+            "pool_days": sum(
+                1
+                for vector in vectors
+                if vector.outcome_mwh is not None and vector.target_date != day
+            ),
+            "features": [f"{column}:{how}" for column, how in SIMILAR_FEATURES],
+            "neighbours": [
+                {
+                    "target_date": neighbour.target_date.isoformat(),
+                    "distance": neighbour.distance,
+                    "observed_constrained_off_mwh": neighbour.outcome_mwh,
+                    "hours": neighbour.hours,
+                }
+                for neighbour in neighbours
+            ],
+        }
+    )
 
 
 @app.get("/v1/replay/days", tags=["replay"])

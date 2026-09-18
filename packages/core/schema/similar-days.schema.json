@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wattsteer.com/schema/similar-days.schema.json",
+  "title": "SimilarDays",
+  "description": "`GET /v1/similar-days` - the past days whose day-ahead programme most resembled this one, and what actually settled on them. Evidence, not a second forecast: nothing here is fitted, nothing is promoted, and a neighbour's outcome is never combined with the band. Every coordinate of the comparison is a `dessem_*` column published D-1, so the search asks which past day *looked* like this one and never which past day ended like it - a distinction that would otherwise make the whole read a lookup of days that turned out alike.",
+  "type": "object",
+  "properties": {
+    "subsystem": { "$ref": "common.schema.json#/$defs/subsystem" },
+    "target_date": { "$ref": "common.schema.json#/$defs/civil_date" },
+    "lane": { "type": "string" },
+    "pool_from": {
+      "$ref": "common.schema.json#/$defs/civil_date",
+      "description": "The earliest day the pool reaches back to."
+    },
+    "pool_days": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "How many settled days the scale was built from. A distance is only as meaningful as the spread behind it, and two of these responses are not comparable without it."
+    },
+    "features": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "The day vector's coordinates, as `column:aggregation`. Published so a reader can reproduce the distance rather than take it."
+    },
+    "neighbours": {
+      "type": "array",
+      "description": "Nearest first. Empty where the pool has no spread to measure against, which is an absence and not 'no similar days exist'.",
+      "items": { "$ref": "#/$defs/similar_day" }
+    }
+  },
+  "required": [
+    "subsystem",
+    "target_date",
+    "lane",
+    "pool_from",
+    "pool_days",
+    "features",
+    "neighbours"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "similar_day": {
+      "title": "SimilarDay",
+      "type": "object",
+      "properties": {
+        "target_date": { "$ref": "common.schema.json#/$defs/civil_date" },
+        "distance": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Euclidean distance in the standardised day space. Unitless, comparable only within one response - the scale is the pool's."
+        },
+        "observed_constrained_off_mwh": {
+          "type": "number",
+          "minimum": 0,
+          "description": "What settled on that day. A measurement, which is the whole reason the analogue is worth showing."
+        },
+        "hours": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "How many hourly rows the day was built from."
+        }
+      },
+      "required": ["target_date", "distance", "observed_constrained_off_mwh", "hours"],
+      "additionalProperties": false
+    }
+  }
+}

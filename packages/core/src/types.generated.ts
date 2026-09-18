@@ -2416,6 +2416,60 @@ export interface Scenario {
 }
 
 /**
+ * `GET /v1/similar-days` - the past days whose day-ahead programme most
+ * resembled this one, and what actually settled on them. Evidence, not a
+ * second forecast: nothing here is fitted, nothing is promoted, and a
+ * neighbour's outcome is never combined with the band. Every coordinate of the
+ * comparison is a `dessem_*` column published D-1, so the search asks which
+ * past day *looked* like this one and never which past day ended like it - a
+ * distinction that would otherwise make the whole read a lookup of days that
+ * turned out alike.
+ */
+export interface SimilarDays {
+  subsystem: Subsystem;
+  targetDate: CivilDate;
+  lane: string;
+  /**
+   * The earliest day the pool reaches back to.
+   */
+  poolFrom: CivilDate;
+  /**
+   * How many settled days the scale was built from. A distance is only as
+   * meaningful as the spread behind it, and two of these responses are not
+   * comparable without it.
+   */
+  poolDays: number;
+  /**
+   * The day vector's coordinates, as `column:aggregation`. Published so a reader
+   * can reproduce the distance rather than take it.
+   */
+  features: string[];
+  /**
+   * Nearest first. Empty where the pool has no spread to measure against, which
+   * is an absence and not 'no similar days exist'.
+   */
+  neighbours: SimilarDay[];
+}
+
+export interface SimilarDay {
+  targetDate: CivilDate;
+  /**
+   * Euclidean distance in the standardised day space. Unitless, comparable only
+   * within one response - the scale is the pool's.
+   */
+  distance: number;
+  /**
+   * What settled on that day. A measurement, which is the whole reason the
+   * analogue is worth showing.
+   */
+  observedConstrainedOffMwh: number;
+  /**
+   * How many hourly rows the day was built from.
+   */
+  hours: number;
+}
+
+/**
  * A reduced origin: the renderer needs the run's label, its gate and its
  * instant, and has nothing to say about the producer.
  */
@@ -3487,6 +3541,21 @@ export const WIRE_SHAPES = {
       shape: "ScenarioEconomicAssumptions",
       optional: true,
     },
+  },
+  SimilarDays: {
+    subsystem: { wire: "subsystem" },
+    targetDate: { wire: "target_date" },
+    lane: { wire: "lane" },
+    poolFrom: { wire: "pool_from" },
+    poolDays: { wire: "pool_days" },
+    features: { wire: "features" },
+    neighbours: { wire: "neighbours", shape: "SimilarDay", list: true },
+  },
+  SimilarDay: {
+    targetDate: { wire: "target_date" },
+    distance: { wire: "distance" },
+    observedConstrainedOffMwh: { wire: "observed_constrained_off_mwh" },
+    hours: { wire: "hours" },
   },
   DiagnosisNarrationInputForecastOrigin: {
     runLabel: { wire: "run_label" },

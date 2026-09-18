@@ -1018,6 +1018,18 @@ export const en = {
         "The gateway did not answer, so there is nothing to compare. Both series are ONS's and neither needs a model.",
       note: "The programmed load is ONS's `carga-energia-programada`, published the day before; the settled load is the settled energy balance. One unit, one grain — subtracting them is the only arithmetic this panel does.",
     },
+    /* See the note on the Portuguese side. */
+    analogue: {
+      title: "Similar days",
+      subtitle: "Real days with a similar day-ahead programme, and what settled on them.",
+      distance: "Distance {distance} · unitless, comparable only within this answer",
+      note: 'Searched over {days} settled days since {from}, on six aggregates of ONS\'s programme published the day before — nothing settled enters the comparison, or the question would become "which day ended alike".',
+      caveat:
+        "Not a forecast and not a second model: nothing here is fitted, and what settled on these days is never combined with the band beside it. They are dates to check in ONS's archive.",
+      reading: "Looking for similar days.",
+      absent:
+        "No similar days to show: either no model is promoted, or this day's programme is incomplete, or the history has too little spread to measure a distance.",
+    },
     observed: {
       badge: "Observed",
       stamp: "Observed · settled through {when} BRT · {lag} h behind",

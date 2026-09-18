@@ -54,6 +54,18 @@ const CALLS: ReadonlyArray<{
   { name: "meta", path: "/v1/meta", keys: [], invoke: (c) => c.meta() },
   { name: "gridNow", path: "/v1/grid/now", keys: [], invoke: (c) => c.gridNow() },
   {
+    name: "similarDays",
+    path: "/v1/similar-days",
+    keys: ["k", "lane", "subsystem", "target_date"],
+    invoke: (c) =>
+      c.similarDays({
+        subsystem: "NE",
+        lane: "dessem_free_v1__gate_late__thr5",
+        targetDate: "2026-09-19",
+        k: 3,
+      }),
+  },
+  {
     name: "gridContext",
     path: "/v1/grid/context",
     keys: ["date", "subsystem"],
