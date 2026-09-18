@@ -15,7 +15,21 @@ MAX_CHARS = 2600  # around 700 tokens of Portuguese
 MIN_CHARS = 280
 OVERLAP_CHARS = 260
 
-SECTION = re.compile(r"^\s*(?:##\s*)?(\d+(?:\.\d+)*)\.?\s+([^\n]{3,120})$", re.M)
+SECTION = re.compile(r"^\s*(?:#+\s*)*(\d+(?:\.\d+)*)\.?\s+([^\n]{3,250})$", re.M)
+SECTION_MAX_CHARS = 120  # longer only in capitals: "6.2.2 CONTROLE ... PREVENINDO A PERDA DA LT ..."
+
+
+def heading_of(block: str) -> re.Match | None:
+    """A numbered title, however many "#" the parser put in front of it.
+
+    Without the capitals rule a numbered paragraph ("6.1.1. Cabe ao COSR-NE
+    adotar ...") would read as a heading; without the long-title rule 6.2.2 of
+    IO-ON.NE.2NO, 125 characters, did not, and its table went to 6.2.3.
+    """
+    match = SECTION.match(block.strip())
+    if match and (len(match.group(2)) <= SECTION_MAX_CHARS or match.group(2).isupper()):
+        return match
+    return None
 
 
 @dataclass
@@ -41,7 +55,7 @@ def _is_heading(block: str) -> bool:
     stripped = block.strip()
     if "\n" in stripped:
         return False
-    return bool(SECTION.match(stripped.replace("## ", "", 1)))
+    return heading_of(stripped) is not None
 
 
 def _has_table(block: str) -> bool:
@@ -71,6 +85,11 @@ def split_page(markdown: str) -> list[tuple[str | None, str]]:
     out: list[tuple[str | None, str]] = []
     current_section: str | None = None
     buffer: list[str] = []
+    # Headings not yet followed by anything. The vision model reads a page of
+    # IO-ON.NE.2NO as "6.2.2 ..., 6.2.3 ..., table, table": both titles first.
+    # Taken in order, the first table gets the first title; flushing on the
+    # second heading had left 6.2.2 alone and filed its limit under 6.2.3.
+    waiting: list[tuple[str, str]] = []
 
     def flush() -> None:
         text = "\n\n".join(buffer).strip()
@@ -82,11 +101,13 @@ def split_page(markdown: str) -> list[tuple[str | None, str]]:
         block = block.strip()
         if not block:
             continue
-        heading = SECTION.match(block.replace("## ", "", 1))
+        heading = heading_of(block)
         if heading:
             flush()
+            if _parent_waiting(waiting, heading.group(1)):
+                out.append(waiting.pop())
             current_section = f"{heading.group(1)} {heading.group(2).strip()}"
-            buffer.append(block.replace("## ", "", 1))
+            waiting.append((current_section, re.sub(r"^(?:#+\s*)+", "", block)))
             continue
         if _is_table(block):
             # A table that follows its own heading keeps it. Flushing here left
@@ -95,24 +116,86 @@ def split_page(markdown: str) -> list[tuple[str | None, str]]:
             # glued to the end of section 5.3 and the limits of 5.4 became a
             # table nobody could name. The only quotable thing left was the
             # heading, which is not evidence.
-            pending = "\n\n".join(buffer).strip()
-            if pending and _is_heading(pending):
-                buffer.clear()
-                out.append((current_section, f"{pending}\n\n{block}"))
-                continue
             flush()
-            out.append((current_section, block))
+            section, title = waiting.pop(0) if waiting else (current_section, "")
+            for piece in split_steps(block):
+                out.append((section, f"{title}\n\n{piece}" if title else piece))
             continue
+        # Prose belongs to the last heading; any before it had nothing under them.
+        out.extend(waiting[:-1])
+        if waiting:
+            buffer.append(waiting[-1][1])
+            waiting.clear()
         buffer.append(block)
     flush()
+    out.extend(waiting)
     return out
+
+
+def _parent_waiting(waiting: list[tuple[str, str]], number: str) -> bool:
+    """6.2 right above 6.2.1 is the parent's title, not the owner of a table."""
+    return bool(waiting) and number.startswith(waiting[-1][0].split(" ", 1)[0] + ".")
+
+
+STEP = re.compile(r"^\d+$")
+
+
+def split_steps(table: str) -> list[str]:
+    """One piece per step of a procedure table, each under the table's header.
+
+    A step table holds several controls, and a quote from step 2 was drawn from
+    a chunk that also held step 1's limit. Sub-steps (2.1, and the rows of the
+    plants table under it) stay with their step.
+    """
+    lines = table.split("\n")
+    if len(lines) < 4 or "Passo" not in lines[0]:
+        return [table]
+    head, groups = lines[:2], [[]]
+    for row in lines[2:]:
+        first = next((cell.strip() for cell in row.strip().strip("|").split("|") if cell.strip()), "")
+        if STEP.match(first) and groups[-1]:
+            groups.append([])
+        groups[-1].append(row)
+    return ["\n".join(head + group) for group in groups]
+
+
+# The band every page of an ONS document repeats, as the text layer and the
+# vision model return it. A case in the validation of 18/09/2026 quoted
+# "Alterado pela(s) MOP(s): ... Submódulo 5.12" as its evidence, and the page
+# header table of an operating instruction outranked the section it heads.
+# Anchored at the start of a line so that a sentence citing the manual stays.
+FURNITURE_LINE = re.compile(
+    r"^\s*(?:alterado pela\(s\) mop|mop/ons \d|manual de procedimentos da opera|endereço na internet"
+    r"|referência:|instruç(?:ão|ões) de operação\s+código\s+revisão|rap-ons \d+/\d{4} - análise"
+    r"|ons\s+de análise de perturbação - rap|\d+\s*/\s*\d+\s*$"
+    # The whole line and nothing else: a sentence of the Submódulo 4.2 also
+    # starts with "Operador Nacional do Sistema Elétrico – ONS, bem como ...".
+    r"|.{0,6}operad\w* nacional d\w sist\w* el\w*\s*$)",
+    re.IGNORECASE,
+)
+# "S", "E", "O S": the logo, read as letters. Never a digit: "57 MW" and "- 25"
+# on a line of their own are a limit and a sensitivity in a text-layer table.
+STRAY = re.compile(r"^\s*(?:[A-Z]|[A-Z] [A-Z]|OS)\s*$")
+HEADER_TABLE = re.compile(r"^\|\s*Instruç(?:ão|ões) de Operação\s*\|\s*Código", re.IGNORECASE)
+
+
+def strip_furniture(markdown: str) -> str:
+    """The page without its running header and footer."""
+    blocks = [block for block in re.split(r"\n{2,}", markdown) if not HEADER_TABLE.match(block.strip())]
+    kept = [
+        "\n".join(
+            line for line in block.split("\n") if not FURNITURE_LINE.match(line) and not STRAY.match(line)
+        )
+        for block in blocks
+    ]
+    return "\n\n".join(block for block in kept if block.strip())
 
 
 def chunk_pages(pages: list[dict]) -> list[Chunk]:
     """`pages` are dicts with page_no, markdown and the parser's blocks."""
     chunks: list[Chunk] = []
     for page in pages:
-        for section, text in split_page(page["markdown"]):
+        for section, text in split_page(strip_furniture(page["markdown"])):
             for piece in _slice(text):
                 if _absorbed(chunks, piece, page["page_no"]):
                     continue
