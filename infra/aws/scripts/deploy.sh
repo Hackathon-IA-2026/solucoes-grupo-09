@@ -44,6 +44,15 @@ for arg in "$@"; do
 done
 
 SIM="${WATTSTEER_SIM:-0}"
+# The CLI reads AWS_REGION and Terraform reads var.region; one must not drift
+# from the other, or the plan lands in a region the rest of the deploy is not in.
+if [ -n "${AWS_REGION:-}" ]; then
+  if [ -n "${TF_VAR_region:-}" ] && [ "$TF_VAR_region" != "$AWS_REGION" ]; then
+    echo "AWS_REGION=$AWS_REGION but TF_VAR_region=$TF_VAR_region; set only one" >&2
+    exit 2
+  fi
+  export TF_VAR_region="$AWS_REGION"
+fi
 # Each option has its own prefix (the `name` variable's default in its root),
 # so trying ecs and falling back to ec2 in the same account never collides.
 if [ "$OPTION" = "ecs" ]; then NAME=wattsteer; else NAME=wattsteer-ec2; fi
