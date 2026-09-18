@@ -71,6 +71,9 @@ else
 fi
 
 TAG="$(git -C "$REPO" rev-parse --short=12 HEAD)"
+# ecs pins the tag in its task definitions; ec2 passes it to up.sh instead.
+TAG_VARS=()
+if [ "$OPTION" = "ecs" ]; then TAG_VARS=(-var "image_tag=$TAG"); fi
 if [ -n "$(git -C "$REPO" status --porcelain)" ]; then
   echo "warning: the working tree has uncommitted changes; they are in the images but not in the tag $TAG"
 fi
@@ -108,7 +111,7 @@ print(value if isinstance(value, str) else ','.join(value) if isinstance(value, 
 
 if [ "$PLAN_ONLY" = "1" ]; then
   step "plan only (nothing is applied)"
-  apply -var "image_tag=$TAG"
+  apply ${TAG_VARS[@]+"${TAG_VARS[@]}"}
   exit 0
 fi
 
@@ -174,7 +177,7 @@ fi
 step "5/6 release $TAG"
 if [ "$OPTION" = "ecs" ]; then
   # The migration first, on its own task definition, then every service.
-  apply -var "image_tag=$TAG" -target=aws_ecs_task_definition.migrate
+  apply ${TAG_VARS[@]+"${TAG_VARS[@]}"} -target=aws_ecs_task_definition.migrate
   if [ "$SIM" = "1" ]; then
     echo "[sim] migration task skipped (sim/run_task_defs.py runs it in Docker)"
   else
@@ -190,9 +193,9 @@ if [ "$OPTION" = "ecs" ]; then
     [ "$code" = "0" ] || { echo "migration failed (exit $code); logs: /$NAME/migrate in CloudWatch"; exit 1; }
     echo "migration applied"
   fi
-  apply -var "image_tag=$TAG"
+  apply ${TAG_VARS[@]+"${TAG_VARS[@]}"}
 else
-  apply -var "image_tag=$TAG"
+  apply ${TAG_VARS[@]+"${TAG_VARS[@]}"}
   if [ "$SIM" = "1" ]; then
     echo "[sim] instance rollout skipped (sim/smoke.sh runs compose.aws.yml in Docker)"
   else

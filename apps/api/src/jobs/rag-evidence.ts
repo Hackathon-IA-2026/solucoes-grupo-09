@@ -205,7 +205,10 @@ export async function runRagEvidence(
         subsystem,
         from,
         to,
-        limit: 200,
+        // Every entity row of the day, not the largest few: the grouping below
+        // is what picks, and a row cut here never reaches it. One subsystem-day
+        // is bounded, so this cap only guards against a runaway read.
+        limit: 5000,
       });
       const restrictions = pickRestrictions(observation.rows);
       if (restrictions.length === 0) {
@@ -258,7 +261,9 @@ async function storedEvidence(
   const url = new URL("/internal/rag/evidence", ragUrl);
   url.searchParams.set("subsystem", subsystem);
   url.searchParams.set("target_date", targetDate);
-  url.searchParams.set("limit", "50");
+  // The table is append-only and a deferred lookup adds a row per run, so a
+  // small window could push an older answer out of sight and ask again.
+  url.searchParams.set("limit", "1000");
   const response = await fetchImpl(url, {
     headers,
     signal: AbortSignal.timeout(10_000),
