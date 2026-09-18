@@ -34,7 +34,13 @@ printf 'WATTSTEER_RAG_INDEX_ON_BOOT=0\nDATA_DIR=%s/data\nHTTP_PORT=%s\nHTTPS_POR
 export IMAGE_TAG="$TAG"
 compose=(docker compose --project-name wattsteer-ec2-sim --env-file "$WORK/settings.env"
   --env-file "$WORK/secrets.env" -f "$WORK/compose.yml")
-cleanup() { "${compose[@]}" down -v --remove-orphans >/dev/null 2>&1 || true; rm -rf "$WORK"; }
+cleanup() {
+  "${compose[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
+  # The containers wrote the data directories as root; on Linux (CI) only root
+  # can delete them, so a container does.
+  docker run --rm -v "$WORK:/work" alpine:3 rm -rf /work/data >/dev/null 2>&1 || true
+  rm -rf "$WORK"
+}
 [ "${KEEP:-0}" = "1" ] || trap cleanup EXIT
 
 "${compose[@]}" up -d postgres redis >/dev/null 2>&1
