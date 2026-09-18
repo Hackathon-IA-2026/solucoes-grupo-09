@@ -46,7 +46,7 @@ import {
   usePalette,
 } from "@wattsteer/ui";
 import { Text, View } from "react-native";
-import { ObservedBadge } from "@/components/app/honesty";
+import { ObservedBadge, useNoModelPromoted } from "@/components/app/honesty";
 import { RiskChip } from "@/components/charts/risk-class";
 import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
@@ -76,6 +76,8 @@ export function SelectedRegion({
   const copy = useCopy();
   const f = useFormat();
   const meta = subsystemMeta(subsystem);
+  /* Which cause the absence sentence may name. See `useNoModelPromoted`. */
+  const noModelPromoted = useNoModelPromoted();
 
   return (
     <View
@@ -186,7 +188,9 @@ export function SelectedRegion({
             </>
           )}
           <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkMuted }}>
-            {copy.app.overview.selectedAbsent}
+            {noModelPromoted
+              ? copy.app.overview.selectedAbsent
+              : copy.app.overview.selectedUnpublished}
           </Text>
         </>
       ) : (

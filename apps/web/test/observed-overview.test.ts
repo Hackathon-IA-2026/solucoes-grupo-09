@@ -479,3 +479,60 @@ describe("`Observado` marks a contrast, and only where there is one", () => {
     expect(OVERVIEW).toContain("<ForecastPresence present={forecast !== null}>");
   });
 });
+
+describe("the observed screen names a cause only where `/v1/meta` proves it", () => {
+  /*
+    Two facts put this screen in its observed-only state, and they are owed two
+    different sentences: nothing is promoted, or a promoted lane has published
+    nothing for this day yet. The screens said the first one unconditionally,
+    so the morning `gate_early` was promoted `/app` carried "nenhum modelo está
+    promovido" above a lane `/v1/meta` reported as `promoted` and `usable` —
+    measured on production, not hypothesised.
+
+    The screen cannot tell them apart from its own refusal:
+    `apps/api/src/api/forecast.ts` resolves from Postgres, has no view of the
+    artifact volume, and never answers `MODEL_UNAVAILABLE`. So the cause is
+    read from the one `/v1/meta` copy, and the fallback claims only what the
+    refusal itself proves.
+  */
+  const HONESTY = code(source("components", "app", "honesty.tsx"));
+  const OVERVIEW = code(source("app", "app", "index.tsx"));
+  const SELECTED = code(source("components", "app", "selected-region.tsx"));
+
+  const PROMOTION = { pt: "promovido", en: "promoted" } as const;
+
+  it("the fallback sentence blames nothing it has not read", () => {
+    expect(pt.app.overview.ledeUnpublished.toLowerCase()).not.toContain(PROMOTION.pt);
+    expect(en.app.overview.ledeUnpublished.toLowerCase()).not.toContain(PROMOTION.en);
+    expect(pt.app.overview.selectedUnpublished.toLowerCase()).not.toContain(PROMOTION.pt);
+    expect(en.app.overview.selectedUnpublished.toLowerCase()).not.toContain(PROMOTION.en);
+  });
+
+  it("the sentence that does blame the gate is still the one for that state", () => {
+    // Kept, not softened: with nothing promoted it is the more useful answer,
+    // and it is the state production ran in for weeks.
+    expect(pt.app.overview.ledeObserved.toLowerCase()).toContain(PROMOTION.pt);
+    expect(en.app.overview.ledeObserved.toLowerCase()).toContain(PROMOTION.en);
+    expect(pt.app.overview.selectedAbsent.toLowerCase()).toContain(PROMOTION.pt);
+    expect(en.app.overview.selectedAbsent.toLowerCase()).toContain(PROMOTION.en);
+  });
+
+  it("an unknown lane table is not a claim that nothing is promoted", () => {
+    const body = functionBody(HONESTY, "useNoModelPromoted");
+    expect(body).toContain('serving.status === "known" && !serving.serving');
+  });
+
+  for (const [name, text] of [
+    ["the lede", OVERVIEW],
+    ["the selected region", SELECTED],
+  ] as const) {
+    it(`${name} reaches the promotion sentence only behind that read`, () => {
+      expect(text).toContain("useNoModelPromoted()");
+      // Both keys appear, and the blaming one is on the true branch of the
+      // ternary — so no edit can reach it without the lane table.
+      expect(text).toMatch(
+        /noModelPromoted\s*\n?\s*\?\s*copy\.app\.overview\.(ledeObserved|selectedAbsent)/,
+      );
+    });
+  }
+});

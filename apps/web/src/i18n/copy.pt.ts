@@ -862,8 +862,27 @@ export const pt: Copy = {
         carried: one gesture, two plausible meanings, and it silently did the
         one that takes the reader off the screen.
       */
+      /*
+        The pair above and below state the *same absence* with two different
+        causes, and the screen must not pick the wrong one.
+
+        `ledeObserved` names the cause it can only name when `/v1/meta` says so:
+        no lane is promoted, so no day has a forecast. It was rendered
+        unconditionally, and the morning `gate_early` was promoted it became a
+        false sentence on production — a promoted, usable lane sitting above a
+        line saying no model was. `apps/api/src/api/forecast.ts` does not know
+        why a day is missing and never answers `MODEL_UNAVAILABLE`, so the
+        screen cannot infer the cause from its own refusal either.
+
+        `ledeUnpublished` claims only what the refusal itself proves: nothing is
+        published for this day. True in every observed-only state, including the
+        ordinary one — before the gate strikes, tomorrow has no forecast yet and
+        nothing is wrong.
+      */
       ledeObserved:
         "O que a rede já liquidou, por subsistema. Todo número aqui é medido; nenhum é previsão, porque nenhum modelo está promovido.",
+      ledeUnpublished:
+        "O que a rede já liquidou, por subsistema. Todo número aqui é medido; nenhuma previsão foi publicada para {date}.",
       rowFigure: "{subsystem}: selecionar",
       rowExplain: "Explicar",
       rowExplainLabel: "Explicar {subsystem}",
@@ -873,6 +892,8 @@ export const pt: Copy = {
         "Os quatro painéis abaixo — perfil de 24 horas, eólica e solar, energia do dia e pico — são todos sobre esta região. Escolher outra troca os quatro no lugar, sem sair da tela.",
       selectedAbsent:
         "Nenhum número de previsão para esta região hoje, porque nenhum modelo está promovido. O que vem abaixo é observado e vale igual.",
+      selectedUnpublished:
+        "Nenhum número de previsão para esta região hoje — nada foi publicado para este dia. O que vem abaixo é observado e vale igual.",
       rowEnergy: "Energia cortada esperada",
       rowPeak: "pico {low}–{high} MW",
       profileSubtitle: "Perfil de 24 horas, P10–P90",

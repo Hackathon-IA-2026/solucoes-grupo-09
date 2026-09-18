@@ -1112,8 +1112,27 @@ export const en = {
         gesture, two plausible meanings, and it silently did the one that takes
         the reader off the screen.
       */
+      /*
+        The pair above and below state the *same absence* with two different
+        causes, and the screen must not pick the wrong one.
+
+        `ledeObserved` names the cause it can only name when `/v1/meta` says so:
+        no lane is promoted, so no day has a forecast. It was rendered
+        unconditionally, and the morning `gate_early` was promoted it became a
+        false sentence on production — a promoted, usable lane sitting above a
+        line saying no model was. `apps/api/src/api/forecast.ts` does not know
+        why a day is missing and never answers `MODEL_UNAVAILABLE`, so the
+        screen cannot infer the cause from its own refusal either.
+
+        `ledeUnpublished` claims only what the refusal itself proves: nothing is
+        published for this day. True in every observed-only state, including the
+        ordinary one — before the gate strikes, tomorrow has no forecast yet and
+        nothing is wrong.
+      */
       ledeObserved:
         "What the grid has already settled, by subsystem. Every figure here is measured; none is a forecast, because no model is promoted.",
+      ledeUnpublished:
+        "What the grid has already settled, by subsystem. Every figure here is measured; no forecast has been published for {date}.",
       rowFigure: "{subsystem}: select",
       rowExplain: "Explain",
       rowExplainLabel: "Explain {subsystem}",
@@ -1123,6 +1142,8 @@ export const en = {
         "The four panels below — 24-hour profile, wind and solar, day energy and peak — are all about this region. Picking another swaps all four in place, without leaving the screen.",
       selectedAbsent:
         "No forecast figures for this region today, because no model is promoted. What follows is observed and holds either way.",
+      selectedUnpublished:
+        "No forecast figures for this region today — nothing has been published for this day. What follows is observed and holds either way.",
       rowEnergy: "Expected curtailed energy",
       rowPeak: "peak {low}–{high} MW",
       profileSubtitle: "24-hour profile, P10–P90",

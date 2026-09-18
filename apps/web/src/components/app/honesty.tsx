@@ -323,6 +323,35 @@ export function ForecastPresence({
   );
 }
 
+/**
+ * Whether this deployment can say *"because no model is promoted"*.
+ *
+ * Two different facts make a screen observed-only, and they are owed two
+ * different sentences. A deployment with nothing promoted has no forecast for
+ * any day, and that is the state production ran in for weeks. A deployment that
+ * is serving still has no forecast for a day whose gate has not struck —
+ * `FORECAST_NOT_YET_PUBLISHED`, which is the ordinary state of tomorrow every
+ * evening, and nothing is wrong with it.
+ *
+ * The screens hard-coded the first sentence. The morning `gate_early` was
+ * promoted, `/app` carried "nenhum modelo está promovido" above a lane that
+ * was promoted and usable — measured on production, with `/v1/meta` saying
+ * `state: promoted, usable: true` while the line said otherwise.
+ *
+ * Nothing on the screen can infer this from its own refusal:
+ * `apps/api/src/api/forecast.ts` resolves from Postgres, has no view of the
+ * artifact volume, and `apps/api/test/forecast-day-ahead.test.ts` asserts it
+ * never answers `MODEL_UNAVAILABLE`. `/v1/meta` is the only read that knows,
+ * and {@link useServing} is the one copy of it.
+ *
+ * `false` while that read is in flight or failed, which is the safe direction:
+ * the fallback sentence claims only what the refusal itself proves.
+ */
+export function useNoModelPromoted(): boolean {
+  const serving = useServing();
+  return serving.status === "known" && !serving.serving;
+}
+
 export function ObservedBadge() {
   const copy = useCopy();
   const serving = useServing();

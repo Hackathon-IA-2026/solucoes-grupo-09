@@ -84,6 +84,7 @@ import {
   ForecastStamp,
   HonestyNote,
   ObservedStamp,
+  useNoModelPromoted,
 } from "@/components/app/honesty";
 import { ForecastPanels } from "@/components/app/overview/forecast-panels";
 import { ObservedPanels } from "@/components/app/overview/observed-panels";
@@ -170,6 +171,13 @@ export default function GridOverviewScreen() {
   });
 
   const forecastPublished = state.status === "read";
+
+  /*
+    Which sentence the observed-only lede is allowed to say. See
+    `useNoModelPromoted` — the screen cannot tell the two causes apart from its
+    own refusal, and it said the wrong one on a serving deployment.
+  */
+  const noModelPromoted = useNoModelPromoted();
 
   /**
    * **Selecting and navigating are two actions now, and they were one.**
@@ -342,7 +350,14 @@ export default function GridOverviewScreen() {
             lede={fill(copy.app.overview.lede, { date: f.date(params.date) })}
           />
         ) : (
-          <ScreenTitle lede={copy.app.overview.ledeObserved} right={right} />
+          <ScreenTitle
+            lede={
+              noModelPromoted
+                ? copy.app.overview.ledeObserved
+                : fill(copy.app.overview.ledeUnpublished, { date: f.date(params.date) })
+            }
+            right={right}
+          />
         )}
 
         {body}
