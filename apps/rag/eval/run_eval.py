@@ -8,6 +8,14 @@ Three numbers, and only the third is a quality claim:
   refusal_rate    how often the honest answer was "insufficient"
 
 A high refusal rate with a small corpus is correct behaviour, not failure.
+
+A case with a `question` is a free question instead of a record, from
+`eval/questions.jsonl`: each one carries the document and page that answer it
+and the numbers the published text states, checked by hand against the official
+file. It scores as correct, refused or wrong, and wrong is the number to drive
+to zero:
+
+    python eval/run_eval.py --goldset eval/questions.jsonl --ids B,O
 """
 
 from __future__ import annotations
@@ -21,7 +29,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from wattsteer_rag.db import Database
-from wattsteer_rag.evidence import build_evidence
+from wattsteer_rag.evidence import _number_key, build_evidence, numbers_in
 from wattsteer_rag.gateway.router import Gateway
 from wattsteer_rag.runtime import open_runtime
 
@@ -61,6 +69,8 @@ async def _evaluate_patiently(db: Database, gateway: Gateway, case: dict, patien
 
 
 async def _evaluate(db: Database, gateway: Gateway, case: dict) -> dict:
+    if case.get("question"):
+        return await _evaluate_question(db, gateway, case)
     # D-1 19:00 in Brasilia, the late gate, expressed in UTC.
     day = datetime.fromisoformat(case["date"]).replace(tzinfo=UTC)
     document = await build_evidence(
@@ -94,7 +104,84 @@ async def _evaluate(db: Database, gateway: Gateway, case: dict) -> dict:
     }
 
 
+async def _evaluate_question(db: Database, gateway: Gateway, case: dict) -> dict:
+    """A question asked after the fact, so every document published by now counts."""
+    document = await build_evidence(
+        db,
+        gateway,
+        subsystem=case["subsystem"],
+        target_date=case["date"],
+        gate_at=datetime.now(UTC),
+        question=case["question"],
+    )
+    generation = document["trace"]["generation"]
+    return {
+        "id": case["id"],
+        "verdict": document["verdict"],
+        "verdict_reason": document.get("reason"),
+        **_score(case, document),
+        "provider": generation.get("provider"),
+        "gate_failures": generation.get("gate_failures") or [],
+        "claims": len(document["items"]),
+        "claim_texts": [item["claim"] for item in document["items"]],
+        "rejected": len(generation.get("rejected") or []),
+        "retry_at": document["trace"].get("retry_at"),
+    }
+
+
+def _score(case: dict, document: dict) -> dict:
+    """Right document, and every number the published text states for the question."""
+    citations = _citations(document)
+    expected = _expected_documents(case)
+    on_document = [citation for citation in citations if citation.get("external_id") in expected]
+    missing = _number_keys(case.get("expect_numbers") or []) - _number_keys(
+        item["claim"] for item in document["items"]
+    )
+    return {
+        "grade": _grade(
+            case.get("expect", "answer"), document["verdict"] == "found", bool(on_document) and not missing
+        ),
+        "expected": ", ".join(sorted(expected)) or None,
+        "cited": sorted({citation.get("external_id") or "" for citation in citations} - {""}),
+        "cited_expected": bool(on_document),
+        "page_expected": any(
+            citation["locator"].get("page") == case.get("expect_page") for citation in on_document
+        ),
+        "numbers_missing": sorted(missing),
+    }
+
+
+def _citations(document: dict) -> list[dict]:
+    return [citation for item in document["items"] for citation in item["citations"]]
+
+
+def _expected_documents(case: dict) -> set[str]:
+    expected = case.get("expect_document") or []
+    return set(expected if isinstance(expected, list) else [expected])
+
+
+def _number_keys(texts) -> set[str]:
+    """1.851,79 in the file and 1851,79 in the answer are the same number."""
+    return {_number_key(number) for text in texts for number in numbers_in(text)}
+
+
+def _grade(expect: str, answered: bool, right: bool) -> str:
+    """Refusing is honest; answering with the wrong document or number is not."""
+    if not answered:
+        return "refused" if expect == "answer" else "correct"
+    if expect == "refuse":
+        return "wrong"
+    return "correct" if right else "wrong"
+
+
 def _line(row: dict, case: dict) -> str:
+    if "grade" in row:
+        page = "page ok" if row["page_expected"] else "page -"
+        return (
+            f"{row['grade']:<8} {row['id']:<4} {row['verdict']:<12} {page:<7} "
+            f"expected={row['expected'] or '-'} cited={row['cited'] or '-'} "
+            f"missing={row['numbers_missing'] or '-'} | {case['question'][:60]}"
+        )
     return (
         f"{row['verdict']:<12} {case['reason']:<4} {(row['verdict_reason'] or ''):<26} "
         f"expected={row['expected'] or '-':<14} cited={row['cited'] or '-'} | {case['description'][:46]}"
@@ -116,6 +203,24 @@ def _summary(results: list[dict]) -> dict:
         "rejected_total": sum(row["rejected"] for row in results),
         "quota_exhausted": reasons["quota_exhausted_partial"] + reasons["quota_exhausted_before_answer"],
         "no_coverage": reasons["corpus_no_coverage_for_date"],
+        **_question_summary(results),
+    }
+
+
+def _question_summary(results: list[dict]) -> dict:
+    rows = [row for row in results if "grade" in row]
+    if not rows:
+        return {}
+    grades = Counter(row["grade"] for row in rows)
+    by_family: dict[str, Counter] = {}
+    for row in rows:
+        by_family.setdefault(row["id"][0], Counter())[row["grade"]] += 1
+    return {
+        "correct": grades["correct"],
+        "refused": grades["refused"],
+        "wrong": grades["wrong"],
+        "page_expected": sum(1 for row in rows if row["page_expected"]),
+        "by_family": {family: dict(counter) for family, counter in sorted(by_family.items())},
     }
 
 
@@ -123,6 +228,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--goldset", default="eval/goldset.jsonl")
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--ids", default=None, help="only cases whose id starts with one of these, e.g. B,O")
     parser.add_argument("--out", default="eval/last-run.json")
     parser.add_argument(
         "--patience",
@@ -133,6 +239,8 @@ def main() -> int:
     args = parser.parse_args()
 
     cases = [json.loads(line) for line in Path(args.goldset).read_text().splitlines() if line.strip()]
+    if args.ids:
+        cases = [case for case in cases if case.get("id", "").startswith(tuple(args.ids.split(",")))]
     report = asyncio.run(run(cases, args.limit, args.patience))
     Path(args.out).write_text(json.dumps(report, indent=2, ensure_ascii=False))
     print("\n" + json.dumps(report["summary"], indent=2))
