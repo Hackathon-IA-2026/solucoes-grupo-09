@@ -483,24 +483,26 @@ export function OverviewHero({
               onExplain={() => onExplain(params.subsystem)}
             />
           </Panel>
+          {/*
+            **Plan against outcome sits in the centre column, under the map.**
+
+            The three columns are an alert, a context and a decision — the left
+            rail is what *we* forecast, the right is the four regions, and the
+            middle is what the grid is. ONS's programme against ONS's
+            settlement is the most context-shaped thing on the screen: it is the
+            only panel where neither series is ours, and it is about the same
+            day the map is painted for. It sat in the right rail, beside the
+            regions, where it read as a fourth region.
+          */}
+          {planned}
           {wide ? null : headline}
           {wide ? null : rail}
-          {wide ? null : planned}
           {wide ? null : profile}
         </View>
 
         {wide ? (
-          <View
-            style={{
-              flexGrow: 1,
-              flexShrink: 1,
-              flexBasis: 0,
-              minWidth: 0,
-              gap: space.md,
-            }}
-          >
+          <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0 }}>
             {rail}
-            {planned}
           </View>
         ) : null}
       </View>
