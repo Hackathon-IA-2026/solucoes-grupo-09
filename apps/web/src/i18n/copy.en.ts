@@ -1458,6 +1458,7 @@ export const en = {
     },
 
     replay: {
+      noDays: "No day on this list has a recorded forecast the gateway can replay today.",
       // --- forecast accuracy: item 3 of the Time Machine brief ---
       accuracyTitle: "Did the forecast hold?",
       accuracySubtitle: "What the system said the day before, against what ONS settled",

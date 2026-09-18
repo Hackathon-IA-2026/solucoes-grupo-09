@@ -136,19 +136,22 @@ test.describe("a click on the map selects, and does not navigate", () => {
     );
 
     /*
-      **It used to push `/app/explain`, and Explicar is a section of this page
-      now.** The distinction this file is about is unchanged and is the reason
-      the control still exists: a click on the map *selects*, and only a control
-      with "Explicar" written on it takes the reader to the explanation. What
-      changed is that the explanation is six hundred pixels down rather than one
-      document away, so the control scrolls instead of navigating — and the
-      reader keeps the map that raised the question.
+      **It pushed `/app/explain`, then scrolled to a section of this page, and
+      now it raises a sheet over the map.** The distinction this file is about
+      has survived all three and is the reason the control exists: a click on
+      the map *selects*, and only a control with "Explicar" written on it takes
+      the reader to the explanation. What keeps changing is where the
+      explanation is — one document away, then six hundred pixels down, now
+      over the map that raised the question — and in every version the reader
+      keeps the map and the selection travels with them.
     */
     await page.locator('[data-testid="selected-region-explain"]').click();
     await expect(page).toHaveURL(/\/app(\?|$)/);
     // The selection still travels with it, which was always the point.
     await expect(page).toHaveURL(/[?&]subsystem=SE(&|$)/);
-    await expect(page.locator("#explain")).toBeVisible();
+    // And it is Explicar that arrived, for this region: the sheet's own heading.
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(page.getByRole("dialog")).toContainText(/SUDESTE/);
   });
 
   test("arrow keys walk the four regions and move the selection live", async ({
@@ -233,6 +236,9 @@ test.describe("with nothing promoted, a reader can still say which region", () =
     await page.locator('[data-testid="selected-region-explain"]').click();
     await expect(page).toHaveURL(/\/app(\?|$)/);
     await expect(page).toHaveURL(/[?&]subsystem=NE(&|$)/);
-    await expect(page.locator("#explain")).toBeVisible();
+    // Explicar arrives as a sheet over the map rather than as a section under
+    // it — see the note in the forecast case above. With nothing promoted it
+    // still opens and still says which region it is about.
+    await expect(page.getByRole("dialog")).toBeVisible();
   });
 });

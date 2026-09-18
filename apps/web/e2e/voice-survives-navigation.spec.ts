@@ -175,14 +175,19 @@ test.describe("the voice session outlives a tool-call navigation", () => {
 
     /*
       **`explain` no longer leaves `/app`, and that is the change, not a
-      regression.** Explicar is a section of this page, so the agent sets the
-      selection and scrolls to it — the reader keeps the map that raised the
-      question. The agent's vocabulary is untouched: it still calls `explain`
-      and `SCREEN_PATHS.explain` is still what it names.
+      regression.** Explicar is a sheet over this page, so the agent sets the
+      selection and asks to reach the section; the screen raises it. The reader
+      keeps the map that raised the question.
+
+      The agent's vocabulary is untouched: it still calls `explain`, and
+      `SCREEN_PATHS.explain` is still what it names. What it asks for went from
+      "navigate" to "scroll" to "reach", and `requestSection` is the one call it
+      makes — precisely so that the next change of presentation is not a change
+      to the agent.
     */
     await expect(page).toHaveURL(/\/app(\?|$)/);
     await expect(page).toHaveURL(/subsystem=NE/);
-    await expect(page.locator("#explain")).toBeVisible();
+    await expect(page.getByRole("dialog")).toBeVisible();
 
     const after = await page.evaluate(() => ({ ...globalThis.__voiceStats }));
     expect(after.opened).toBe(1);

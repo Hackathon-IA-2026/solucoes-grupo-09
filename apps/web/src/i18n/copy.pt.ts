@@ -1125,6 +1125,7 @@ export const pt: Copy = {
     },
 
     replay: {
+      noDays: "Nenhum dia desta lista tem previsão gravada que o gateway possa reproduzir hoje.",
       // --- a acurácia da previsão, item 3 do briefing da máquina do tempo ---
       accuracyTitle: "A previsão se sustentou?",
       accuracySubtitle: "O que o sistema dizia na véspera, contra o que o ONS liquidou",

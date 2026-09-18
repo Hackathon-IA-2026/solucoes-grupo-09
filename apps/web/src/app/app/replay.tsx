@@ -70,7 +70,7 @@ import {
   ZapIcon,
 } from "@wattsteer/ui";
 import Head from "expo-router/head";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import { Text, View } from "react-native";
 import { AppShell, MiniPill, ScreenTitle } from "@/components/app/app-shell";
 import { BatteryEditor, LoadEditor } from "@/components/app/asset-editor";
@@ -92,6 +92,7 @@ import {
 import { ReadingState } from "@/components/app/thinking-orb";
 import { useAppParams } from "@/components/app/use-app-params";
 import { useReplay } from "@/components/app/use-replay";
+import { useReplayDays } from "@/components/app/use-replay-days";
 import { useScenario } from "@/components/app/use-scenario";
 import { useServing } from "@/components/app/use-serving";
 import { NO_BRIEFING_DATA } from "@/components/briefing/briefing-data";
@@ -217,12 +218,14 @@ function vintageNote(
 }
 
 export default function TimeMachineScreen() {
+  const palette = usePalette();
   const copy = useCopy();
   const f = useFormat();
   const { locale } = useI18n();
   const serving = useServing();
   const params = useAppParams();
   const day = replayDay(params.episode);
+  const days = useReplayDays();
   // The replayed day is the selection, so the scenario in the address bar
   // follows it — and it is validated under the replay's own `target_date`
   // clause, which is the shape and then somebody else's judgement. The window
@@ -252,9 +255,44 @@ export default function TimeMachineScreen() {
     counterfactual: undefined,
   });
 
+  /*
+    **Do not sit on a day that cannot answer.**
+
+    The same rule `use-run-lanes.ts` applies to the D−1 gates, for the same
+    reason: a link or a default can name a day the deployment has no forecast
+    for, and the honest response is to move to one it does rather than render a
+    refusal the reader cannot act on. Only ever *towards* a day that answers; if
+    none do, the refusal is the truth and the screen says so.
+  */
+  useEffect(() => {
+    if (days.status !== "known" || days.viewable.length === 0) {
+      return;
+    }
+    if (!days.viewable.some((candidate) => candidate.id === day.id)) {
+      params.setParams({ episode: days.viewable[0]?.id });
+    }
+  }, [days, day.id]);
+
+  /*
+    **Only the days the deployment can actually show.**
+
+    The picker listed all four candidates and three of them were dead ends —
+    press, wait, read `REPLAY_FORECAST_UNAVAILABLE`. `useReplayDays` asks the
+    gateway which ones answer; see its header for the measurement and for why
+    this is probed rather than a shorter list.
+
+    While probing, the selected day is the only pill: a picker that grows from
+    one to four as requests land is worse than one that starts honest, and the
+    reader can already see the day they are on.
+  */
+  const offered =
+    days.status === "known"
+      ? days.viewable
+      : REPLAY_DAYS.filter((candidate) => candidate.id === day.id);
+
   const picker = (
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-      {REPLAY_DAYS.map((candidate) => (
+      {offered.map((candidate) => (
         <MiniPill
           key={candidate.id}
           label={dayLabel(candidate, copy, f)}
@@ -262,6 +300,11 @@ export default function TimeMachineScreen() {
           onPress={() => params.setParams({ episode: candidate.id })}
         />
       ))}
+      {days.status === "known" && days.viewable.length === 0 ? (
+        <Text style={{ fontSize: 13, color: palette.inkMuted }}>
+          {copy.app.replay.noDays}
+        </Text>
+      ) : null}
     </View>
   );
 

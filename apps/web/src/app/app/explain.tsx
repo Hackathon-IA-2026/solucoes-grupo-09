@@ -200,15 +200,19 @@ export default function ExplainScreen({
   const frame = (right: ReactNode, body: ReactNode) =>
     embedded ? (
       <>
-        <SectionBlock
-          id="explain"
-          title={title}
-          lede={lede}
-          right={right}
-          withheld={inSheet}
-        >
-          {inSheet ? null : body}
-        </SectionBlock>
+        {/*
+          **No accordion here any more.**
+
+          Embedded, Explicar is the sheet the "Por quê?" card opens and nothing
+          else: a disclosure in the page flow was a second way to the same
+          content, three thousand pixels below the card that asks for it, and a
+          reader who found one never needed the other.
+
+          The section's *id* has not gone anywhere, because two things asked to
+          reach it — the Explicar control under the map and the voice agent — and
+          `/app` answers both by opening this sheet. See `requestSection` in
+          `app-shell.tsx`.
+        */}
         {sheet === undefined ? null : (
           <Sheet
             open={sheet.open}

@@ -49,7 +49,7 @@
 import type { SubsystemCode } from "@wattsteer/core";
 import { router, useGlobalSearchParams, usePathname } from "expo-router";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
-import { scrollToSection } from "@/components/app/app-shell";
+import { requestSection } from "@/components/app/app-shell";
 import { parseAppParams } from "@/components/app/params";
 import { defaultScenario, readScenario, SCENARIO_PARAM } from "@/components/app/scenario";
 import { useServing } from "@/components/app/use-serving";
@@ -166,7 +166,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
         const section = SECTION_OF[pathname_];
         if (section !== undefined) {
           router.setParams({ ...next });
-          scrollToSection(section);
+          requestSection(section);
           // The highlight survives, unlike below: the map is still on this page,
           // a few thousand pixels up, and the region the agent lit is still the
           // region it is talking about.

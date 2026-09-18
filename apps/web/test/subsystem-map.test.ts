@@ -648,7 +648,17 @@ describe("the region responds to a pointer, and so does its row", () => {
       code.indexOf("const frame ="),
     );
     expect(explain).toContain("params.setParams({ subsystem })");
-    expect(explain).toContain('scrollToSection("explain")');
+    /*
+      **It raises Explicar rather than scrolling to it, and the claim is the
+      same.**
+
+      The assertion was `scrollToSection("explain")` while Explicar was an
+      accordion three thousand pixels down this page. It is a sheet over the map
+      now, so the destination is no longer a place — but what this test is about
+      has not moved: the named control carries the selection *and then* reaches
+      Explicar, and nothing in the click path leaves the page.
+    */
+    expect(explain).toContain("setWhyOpen(true)");
     // And both affordances are wired to the selector, not to the navigator.
     expect(code).toContain("onSelect={onSelect}");
     expect(code).toContain("onPress={() => onSelect(row.subsystem)}");

@@ -73,11 +73,16 @@ import { SUBSYSTEM_DISPLAY_ORDER } from "@wattsteer/core";
 import { usePalette } from "@wattsteer/ui";
 import { router } from "expo-router";
 import Head from "expo-router/head";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Text } from "react-native";
 import ExplainScreen from "@/app/app/explain";
 import MitigateScreen from "@/app/app/mitigate";
-import { AppShell, ScreenTitle, scrollToSection } from "@/components/app/app-shell";
+import {
+  AppShell,
+  onSectionRequest,
+  ScreenTitle,
+  scrollToSection,
+} from "@/components/app/app-shell";
 import { ForecastAbsent } from "@/components/app/forecast-absent";
 import {
   ForecastPresence,
@@ -213,7 +218,9 @@ export default function GridOverviewScreen() {
    */
   const explain = (subsystem: SubsystemCode) => {
     params.setParams({ subsystem });
-    scrollToSection("explain");
+    // Raised rather than scrolled to. The accordion it used to travel the
+    // length of the page to reach is gone; Explicar is the sheet now.
+    setWhyOpen(true);
   };
 
   /**
@@ -232,6 +239,27 @@ export default function GridOverviewScreen() {
    * already exists.
    */
   const [whyOpen, setWhyOpen] = useState(false);
+
+  /*
+    **This screen decides what reaching a section means.**
+
+    Two callers ask — the Explicar control under the map, and the voice agent
+    performing an intent — and neither should have to know that one of the two
+    sections became a sheet. `explain` raises it; everything else is still a
+    place on the page and still scrolls. Released on unmount so a handler never
+    points into a tree that has gone.
+  */
+  useEffect(
+    () =>
+      onSectionRequest((id) => {
+        if (id === "explain") {
+          setWhyOpen(true);
+          return;
+        }
+        scrollToSection(id);
+      }),
+    [],
+  );
 
   const frame = (right: ReactNode, body: ReactNode) => (
     <>

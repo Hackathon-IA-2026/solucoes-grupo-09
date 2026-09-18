@@ -152,13 +152,15 @@ test.describe("question 5 — why, as a sheet", () => {
     ).not.toBe("hidden");
   });
 
-  test("the accordion below still opens the same section", async ({ page }) => {
-    // The sheet is an additional way in and not a replacement. If this fails,
-    // the two containers are fighting over one body.
-    await open(page, { forecast: true, reasons: true });
-    const accordion = page.getByRole("button", { name: /Por que |Why / }).last();
-    await accordion.click();
-    await expect(page.getByText("SHAP", { exact: false }).first()).toBeVisible();
-    await expect(page.getByRole("dialog")).toHaveCount(0);
-  });
+  /*
+    **There is no accordion under the page any more, so there is no case here
+    for it.**
+
+    It asserted that the disclosure and the sheet opened the same element, which
+    was the right guard while both existed. Explicar is the sheet now: a second
+    way to the same content, three thousand pixels below the card that asks for
+    it, was a way a reader who found one never needed. What replaced the claim is
+    in `app-overview-selection.spec.ts` — the named Explicar control and the
+    voice agent both reach it, and both are asserted there.
+  */
 });

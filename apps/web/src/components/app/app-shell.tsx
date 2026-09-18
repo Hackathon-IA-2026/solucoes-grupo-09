@@ -112,6 +112,44 @@ const SCREENS: ScreenDef[] = [
  * honest version of a `setTimeout` guess, and it gives up rather than
  * scrolling to whatever has appeared by the time it runs out.
  */
+/**
+ * Whoever currently decides what "go to section `id`" means on screen.
+ *
+ * `null` until a screen claims it, and then that screen's business. It exists
+ * because a section is not always a place on the page: `/app` shows Explicar in
+ * a sheet over the map now, and the two things that used to scroll to it — the
+ * Explicar control under the map, and the voice agent performing an intent —
+ * must open that sheet instead.
+ *
+ * One mechanism rather than two. The alternative was a second module-level call
+ * beside `scrollToSection`, one per presentation, and then every caller has to
+ * know which sections are sheets. Callers ask to *reach* a section; the screen
+ * that owns the section decides how.
+ */
+let sectionHandler: ((id: string) => void) | null = null;
+
+/**
+ * Claim the handler for the life of a screen. Returns the undo, so a screen
+ * that unmounts does not leave a handler pointing into a dead tree.
+ */
+export function onSectionRequest(handler: (id: string) => void): () => void {
+  sectionHandler = handler;
+  return () => {
+    if (sectionHandler === handler) {
+      sectionHandler = null;
+    }
+  };
+}
+
+/** Reach a section, however the screen showing it chooses to. */
+export function requestSection(id: string): void {
+  if (sectionHandler !== null) {
+    sectionHandler(id);
+    return;
+  }
+  scrollToSection(id);
+}
+
 export function scrollToSection(id: string, attempt = 0): void {
   if (Platform.OS !== "web" || typeof document === "undefined") {
     return;
