@@ -251,6 +251,25 @@ def test_the_citation_has_to_be_about_the_record():
     assert _relevance_failure(hit("RAP", "RAP 2023-08-15", old_event), flow)
 
 
+def test_the_daily_bulletin_html_is_read_as_the_utf8_it_declares(tmp_path):
+    """ONS serves the BDO tables as UTF-8 with a BOM and charset=utf-8. Read as
+    latin-1 they were indexed as "ProduÃ§Ã£o", which no Portuguese question
+    matches (measured on 2026-09-18 over the stored bulletins)."""
+    from wattsteer_rag.parse import parse_html_tables
+
+    page = "<table><tr><td>Produção</td><td>Intercâmbio</td></tr><tr><td>1</td><td>2</td></tr></table>"
+    utf8 = tmp_path / "bdo.html"
+    utf8.write_bytes(b"\xef\xbb\xbf" + page.encode("utf-8"))
+    text = parse_html_tables(utf8)[0].markdown
+    assert "Produção" in text and "Intercâmbio" in text
+    assert "Ã" not in text
+
+    # A file that is not valid UTF-8 still reads, as latin-1.
+    legacy = tmp_path / "old.html"
+    legacy.write_bytes(page.encode("latin-1"))
+    assert "Produção" in parse_html_tables(legacy)[0].markdown
+
+
 def test_a_bdo_speaks_for_its_day_and_an_ipdo_also_for_the_day_before():
     """Measured on 2026-09-18: a record of 13/12/2025 naming IO-ON.NE.2SO, whose
     revision in force then is not in the corpus, came back `found` citing the
