@@ -24,9 +24,7 @@
  */
 
 import type { GateProfile } from "@wattsteer/core/api";
-import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
-import { useServing } from "../use-serving";
+import { useModelCard } from "./use-model-card";
 
 export interface Coverage {
   /** Fraction of settled days whose total fell inside the band, 0..1. */
@@ -44,63 +42,26 @@ export type CoverageState =
   | { readonly status: "read"; readonly coverage: Coverage };
 
 export function useCoverage(gateProfile: GateProfile): CoverageState {
-  const serving = useServing();
-  const [state, setState] = useState<CoverageState>({ status: "reading" });
-
   /*
-    The lane is found rather than composed. Lane names carry the model family,
-    the gate and the threshold — `dessem_free_v1__gate_early__thr5` — and only
-    `/v1/meta` knows which families and thresholds are deployed. Building the
-    string here would be a second, silently drifting source of it.
+    The card is read through `use-model-card.ts`, memoised per lane, so this
+    hook and `useLadder` — which are mounted on the same screen and measured on
+    the same document — cost one request between them rather than one each. The
+    lane-finding and the refusal handling moved there with it; what is left here
+    is the one thing this hook is about, which is the day-grain group.
   */
-  const lane =
-    serving.status === "known"
-      ? serving.lanes.find(
-          (entry) =>
-            entry.name.includes(gateProfile) &&
-            entry.condition === "promoted" &&
-            entry.usable !== false,
-        )?.name
-      : undefined;
-
-  useEffect(() => {
-    if (serving.status !== "known") {
-      return;
-    }
-    if (lane === undefined) {
-      setState({ status: "absent" });
-      return;
-    }
-    const controller = new AbortController();
-    api
-      .modelCard({ lane }, controller.signal)
-      .then((card) => {
-        if (controller.signal.aborted) {
-          return;
-        }
-        const grain = card.ensemble.dayGrain;
-        setState(
-          grain === null
-            ? { status: "absent" }
-            : {
-                status: "read",
-                coverage: {
-                  dayTotal: grain.dayTotalCoverage,
-                  target: grain.target,
-                  days: grain.days,
-                },
-              },
-        );
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) {
-          // A card that will not answer is an absent measurement, not a broken
-          // screen: nothing else on the console depends on it.
-          setState({ status: "absent" });
-        }
-      });
-    return () => controller.abort();
-  }, [lane, serving.status]);
-
-  return state;
+  const card = useModelCard(gateProfile);
+  if (card.status !== "read") {
+    return card.status === "reading" ? { status: "reading" } : { status: "absent" };
+  }
+  const grain = card.card.ensemble.dayGrain;
+  return grain === null
+    ? { status: "absent" }
+    : {
+        status: "read",
+        coverage: {
+          dayTotal: grain.dayTotalCoverage,
+          target: grain.target,
+          days: grain.days,
+        },
+      };
 }

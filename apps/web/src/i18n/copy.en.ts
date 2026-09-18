@@ -1099,6 +1099,10 @@ export const en = {
       noReasonDetail: "ONS published no reason for the last settled day.",
       bandNote: "P10–P90 band. The median is neither the sum nor the mean of the hours.",
       coverageLabel: "P10–P90 coverage",
+      /* See the note on the Portuguese side. */
+      ladderLabel: "Gain over the baseline",
+      ladderNote: "PR-AUC {model} against {baseline} · fold {fold}, {rows} rows",
+      ladderMae: "Mean error on curtailing hours: {mae} MWh",
       coverageNote: "Measured over {days} settled days · target {target}",
       tableSubsystem: "Subsystem",
       tableEnergy: "P50",

@@ -42,6 +42,7 @@ import { Platform, Text, View } from "react-native";
 import { QuestionCard } from "@/components/app/figures/question-cards";
 import { BandTriple, PanelTitle, RailFact } from "@/components/app/figures/rail-panels";
 import { useCoverage } from "@/components/app/figures/use-coverage";
+import { useLadder } from "@/components/app/figures/use-ladder";
 import { RegionMap } from "@/components/app/map/region-map";
 import type { Scope } from "@/components/app/map/scope-bar";
 import type { AppParams } from "@/components/app/params";
@@ -160,6 +161,11 @@ export function OverviewHero({
   */
   const coverage = useCoverage(gateProfileOf(params.run));
   /*
+    The measured gain over the baseline an operator would use without the model.
+    Same card as the coverage above — read once, see `use-model-card.ts`.
+  */
+  const ladder = useLadder(gateProfileOf(params.run));
+  /*
     Keyed on the selection, like every other read on this screen: the programme
     and the settlement are both per subsystem-day, so changing either axis is a
     different question and not a filter over one answer.
@@ -212,6 +218,7 @@ export function OverviewHero({
       observedTotalMwh={day.totalMwh}
       technology={params.technology}
       coverage={coverage}
+      ladder={ladder}
       text={text}
     />
   );

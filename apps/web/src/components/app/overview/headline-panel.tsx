@@ -18,6 +18,7 @@ import { Panel, space, type, usePalette } from "@wattsteer/ui";
 import { Text, View } from "react-native";
 import { BandTriple, PanelTitle, RailFact } from "@/components/app/figures/rail-panels";
 import type { CoverageState } from "@/components/app/figures/use-coverage";
+import type { LadderState } from "@/components/app/figures/use-ladder";
 import type { Scope } from "@/components/app/map/scope-bar";
 import type { ObservedNetwork } from "@/components/app/use-network";
 import { SplitTracks } from "@/components/charts/technology-split";
@@ -37,6 +38,7 @@ export function HeadlinePanel({
   observedTotalMwh,
   technology,
   coverage,
+  ladder,
   text,
 }: {
   scope: Scope;
@@ -47,6 +49,8 @@ export function HeadlinePanel({
   observedTotalMwh: number;
   technology: Technology;
   coverage: CoverageState;
+  /** The measured gain over the mandatory baseline, on one fold. */
+  ladder: LadderState;
   /** The Overview's own locale strings, already chosen. */
   text: {
     totalLabel: string;
@@ -107,6 +111,34 @@ export function HeadlinePanel({
             days: f.number(coverage.coverage.days),
             target: f.percent(coverage.coverage.target, 0),
           })}
+        />
+      ) : null}
+      {/*
+        The other half of the same claim, from the same card: what the served
+        rung adds over the baseline an operator would use without it. Coverage
+        says the interval is honest; this says the model is worth having. Both
+        are `absent` rather than zero where the card withheld them — see
+        `use-ladder.ts` — and both are gated on there being a forecast on the
+        screen at all, because neither describes a settled day.
+      */}
+      {outlook !== null && ladder.status === "read" ? (
+        <RailFact
+          label={copy.app.grid.ladderLabel}
+          value={`${ladder.ladder.delta > 0 ? "+" : ""}${f.percentPoints(
+            ladder.ladder.delta,
+          )}`}
+          note={`${fill(copy.app.grid.ladderNote, {
+            model: f.percent(ladder.ladder.model, 0),
+            baseline: f.percent(ladder.ladder.baseline, 0),
+            fold: ladder.ladder.foldId,
+            rows: f.number(ladder.ladder.rows),
+          })}${
+            ladder.ladder.maeMwh === null
+              ? ""
+              : ` · ${fill(copy.app.grid.ladderMae, {
+                  mae: f.compact(ladder.ladder.maeMwh),
+                })}`
+          }`}
         />
       ) : null}
       {/*

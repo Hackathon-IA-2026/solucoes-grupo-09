@@ -865,6 +865,16 @@ export const pt: Copy = {
       noReasonDetail: "O ONS não publicou motivo para o último dia liquidado.",
       bandNote: "Faixa P10–P90. A mediana não é a soma nem a média das horas.",
       coverageLabel: "Cobertura P10–P90",
+      /*
+        A aderência que o produto pode afirmar: a distância medida entre o que
+        ele serve e a baseline que um operador usaria sem ele — a frequência de
+        excedência na mesma hora nos últimos sete dias. Medida no mesmo fold e
+        na mesma vintage; ver `use-ladder.ts`. Não é acurácia de um dia, que
+        `replay-accuracy.test.ts` proíbe.
+      */
+      ladderLabel: "Ganho sobre a baseline",
+      ladderNote: "PR-AUC {model} contra {baseline} · fold {fold}, {rows} linhas",
+      ladderMae: "Erro médio nas horas com corte: {mae} MWh",
       coverageNote: "Medida em {days} dias liquidados · alvo {target}",
       tableSubsystem: "Subsistema",
       tableEnergy: "P50",
