@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { dominantReason } from "../src/lib/dominant-reason";
+import { dominantReason, rankedReasons } from "../src/lib/dominant-reason";
 import type { ObservedReason } from "../src/lib/fixtures";
 
 function row(
@@ -78,5 +78,63 @@ describe("days with nothing to attribute", () => {
     // "REL, 0%" is worse than saying nothing: it names a cause for a day that
     // had no curtailment to explain.
     expect(dominantReason([row("REL", 0), row("ENE", 0)])).toBeNull();
+  });
+});
+
+describe("the ranked list, which is what the card reads", () => {
+  /*
+    `dominantReason` is the head of this list and the only thing the older tests
+    above exercise — but production reads `rankedReasons`, because "Por quê?"
+    names a second reason where ONS split the day. The sort and the shares were
+    shipping untested.
+  */
+  const rows = (
+    entries: [string, number, "conjunto" | "self_reporting_plant"][],
+  ): ObservedReason[] =>
+    entries.map(([reason, mwh, grain]) => ({
+      reason,
+      constrainedOffMwh: mwh,
+      grain,
+    })) as unknown as ObservedReason[];
+
+  it("is largest first, and the shares are of the attributed total", () => {
+    const ranked = rankedReasons(
+      rows([
+        ["CNF", 200, "conjunto"],
+        ["ENE", 700, "conjunto"],
+        ["REL", 100, "conjunto"],
+      ]),
+    );
+    expect(ranked.map((entry) => entry.reason)).toEqual(["ENE", "CNF", "REL"]);
+    expect(ranked.map((entry) => entry.share)).toEqual([0.7, 0.2, 0.1]);
+  });
+
+  it("sums a reason that ONS itemised more than once", () => {
+    // The record is a list of rows, not a list of reasons: a code can appear
+    // several times in one day and the share is of the energy, not the rows.
+    const ranked = rankedReasons(
+      rows([
+        ["ENE", 300, "conjunto"],
+        ["CNF", 500, "conjunto"],
+        ["ENE", 400, "conjunto"],
+      ]),
+    );
+    expect(ranked[0]).toMatchObject({ reason: "ENE", mwh: 700 });
+  });
+
+  it("counts `conjunto` rows only, and the head agrees with `dominantReason`", () => {
+    // A plant inside a conjunto ONS also reported would be counted twice, so a
+    // larger plant row must not win.
+    const input = rows([
+      ["ENE", 400, "conjunto"],
+      ["CNF", 900, "self_reporting_plant"],
+    ]);
+    expect(rankedReasons(input).map((entry) => entry.reason)).toEqual(["ENE"]);
+    expect(dominantReason(input)?.reason).toBe("ENE");
+  });
+
+  it("a day with no attributed energy has no reasons at all", () => {
+    expect(rankedReasons(rows([["ENE", 0, "conjunto"]]))).toEqual([]);
+    expect(rankedReasons(rows([["ENE", 900, "self_reporting_plant"]]))).toEqual([]);
   });
 });

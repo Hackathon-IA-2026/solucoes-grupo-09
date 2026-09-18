@@ -94,9 +94,7 @@ export function readSavedView(): MapView | null {
   if (typeof window === "undefined") {
     return null;
   }
-  const fromUrl = parseView(
-    new URLSearchParams(window.location.search).get(VIEW_PARAM),
-  );
+  const fromUrl = parseView(new URLSearchParams(window.location.search).get(VIEW_PARAM));
   if (fromUrl !== null) {
     return fromUrl;
   }
@@ -115,6 +113,19 @@ export function readSavedView(): MapView | null {
  * `replaceState` rather than a router navigation: the camera is not a screen and
  * pushing it would put a history entry between the reader and the back button
  * every time they framed a shot.
+ *
+ * **`history.state` is passed through, not dropped.** `replaceState(null, …)`
+ * replaces react-navigation's state object with `null` — measured: `history.state`
+ * goes from `{"id":"…"}` to `null` — and the router reads that object to know
+ * where it is. Writing the URL behind the router is already a liberty; wiping
+ * its bookkeeping while doing it is a bug.
+ *
+ * **What the address bar does not promise.** `cam` is written here rather than
+ * through `router.setParams`, so the router never learns about it, and its next
+ * navigation — any chip press — rebuilds the query without it. The link is
+ * therefore good at the moment it is made, which is why the control copies it
+ * to the clipboard rather than leaving the reader to notice it in the address
+ * bar. Local storage is the durable half and survives every navigation.
  */
 export function saveView(view: MapView): string {
   const encoded = formatView(view);
@@ -125,7 +136,7 @@ export function saveView(view: MapView): string {
   }
   const url = new URL(window.location.href);
   url.searchParams.set(VIEW_PARAM, encoded);
-  window.history.replaceState(null, "", url.toString());
+  window.history.replaceState(window.history.state, "", url.toString());
   return url.toString();
 }
 
@@ -138,7 +149,7 @@ export function clearSavedView(): void {
   }
   const url = new URL(window.location.href);
   url.searchParams.delete(VIEW_PARAM);
-  window.history.replaceState(null, "", url.toString());
+  window.history.replaceState(window.history.state, "", url.toString());
 }
 
 /** Which layer the map was last showing: the flat SVG, or the globe. */

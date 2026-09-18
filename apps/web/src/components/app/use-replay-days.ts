@@ -34,12 +34,21 @@
  * the modelling service does not reply in time. When it does, this hook should
  * be replaced by that one call, and the table above becomes its test.
  *
- * ## What it costs
+ * ## What it costs, honestly
  *
- * One request per candidate, in parallel, on mount — four today. Each is the
- * same call the screen makes, so a day that probes clean is a day already warm
- * in the HTTP cache. A pre-holdout day costs a second request, because the
- * refusal *is* the route to its observed-only view.
+ * One request per candidate, in parallel, on mount — four today, and up to
+ * eight, because a pre-holdout day needs a second call: its refusal *is* the
+ * route to its observed-only view.
+ *
+ * It is **not** free and it does not warm anything. The probe sends
+ * `defaultScenario(...)` while the screen sends the reader's scenario from the
+ * URL — different bodies, different cache keys — so a reader who has edited a
+ * battery pays for both. And `use-replay.ts` records that the MILP and the
+ * simulator run per request, so these are optimizer runs whose results are
+ * discarded.
+ *
+ * That is the price of not lying about which days exist, and it is only worth
+ * paying until `GET /v1/replay/days` answers: one call, no scenario, no solver.
  */
 
 import { canonicalScenarioJson, type ErrorCode, encodeScenario } from "@wattsteer/core";
@@ -69,10 +78,7 @@ export type ReplayDaysState =
     };
 
 /** Whether the gateway can show this day, either way round. */
-async function viewable(
-  day: ReplayCandidateDay,
-  signal: AbortSignal,
-): Promise<boolean> {
+async function viewable(day: ReplayCandidateDay, signal: AbortSignal): Promise<boolean> {
   const scenario = defaultScenario(day.subsystem, day.date);
   try {
     await api.replay(
@@ -117,15 +123,20 @@ export function useReplayDays(): ReplayDaysState {
         });
       })
       .catch(() => {
-        if (!controller.signal.aborted) {
-          /*
-            An aborted probe is not an empty answer. `Promise.all` here can only
-            reject if `viewable` throws outside its own catches, which means the
-            request was torn down — and reporting "no days" then would empty a
-            picker because the reader navigated away and came back.
-          */
-          setState({ status: "probing" });
+        if (controller.signal.aborted) {
+          // Torn down by a navigation. Reporting anything would be reporting
+          // about a screen nobody is looking at.
+          return;
         }
+        /*
+          `viewable` catches its own rejections, so reaching here means something
+          outside it threw — and the honest answer to that is the same as the
+          answer to "none of them work": an empty list, which the picker states
+          in words. Leaving the state on `probing` was worse: the picker showed
+          one pill forever and never said why, which is a blank standing in for
+          a refusal.
+        */
+        setState({ status: "known", viewable: [] });
       });
     return () => controller.abort();
   }, []);

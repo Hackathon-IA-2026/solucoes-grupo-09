@@ -39,20 +39,20 @@ import {
 import { Link } from "expo-router";
 import { useState } from "react";
 import { Platform, Text, View } from "react-native";
-import type { AppParams } from "@/components/app/params";
-import { gateProfileOf } from "@/components/app/use-app-params";
-import { useRunLanes } from "@/components/app/use-run-lanes";
-import { SelectedRegion } from "@/components/app/selected-region";
-import type { ForecastNetwork, ObservedNetwork } from "@/components/app/use-network";
-import { FanChart } from "@/components/charts/fan-chart";
-import { ObservedProfile } from "@/components/charts/observed-profile";
-import { riskColor } from "@/components/charts/risk-color";
-import { RiskChip } from "@/components/charts/risk-class";
 import { QuestionCard } from "@/components/app/figures/question-cards";
 import { BandTriple, PanelTitle, RailFact } from "@/components/app/figures/rail-panels";
 import { useCoverage } from "@/components/app/figures/use-coverage";
 import { RegionMap } from "@/components/app/map/region-map";
 import type { Scope } from "@/components/app/map/scope-bar";
+import type { AppParams } from "@/components/app/params";
+import { SelectedRegion } from "@/components/app/selected-region";
+import { gateProfileOf } from "@/components/app/use-app-params";
+import type { ForecastNetwork, ObservedNetwork } from "@/components/app/use-network";
+import { useRunLanes } from "@/components/app/use-run-lanes";
+import { FanChart } from "@/components/charts/fan-chart";
+import { ObservedProfile } from "@/components/charts/observed-profile";
+import { RiskChip } from "@/components/charts/risk-class";
+import { riskColor } from "@/components/charts/risk-color";
 import { SplitTracks } from "@/components/charts/technology-split";
 import { useCopy, useFormat, useI18n } from "@/i18n";
 import { fill } from "@/i18n/format";
@@ -66,13 +66,13 @@ import {
   observedRows,
   outlookRows,
 } from "@/lib/network";
-import { heroFigures } from "./hero-figures";
 import { HeadlinePanel } from "./headline-panel";
-import { RegionRail } from "./region-rail-panel";
 import { HERO_COPY } from "./hero-copy";
-import { QuestionRow } from "./question-row";
+import { heroFigures } from "./hero-figures";
 import { NationalFigureBlock, ObservedNationalPanel } from "./national-panel";
+import { QuestionRow } from "./question-row";
 import { HeroStat, RegionRow } from "./region-rail";
+import { RegionRail } from "./region-rail-panel";
 
 /**
  * The width at which the rails move beside the map rather than under it.
@@ -131,8 +131,18 @@ export function OverviewHero({
     scope only says whether this map is currently narrowed to it.
   */
   const [scope, setScope] = useState<Scope>(
-    // A link that named a region is somebody pointing at it, and the screen
-    // opens where they pointed. A plain visit opens on the whole grid.
+    /*
+      A link that named a region is somebody pointing at it, and the screen opens
+      where they pointed. A plain visit opens on the whole grid.
+
+      **This reads a value `use-app-params.ts` withholds on the first client
+      render**, and gets away with it only because the hero mounts after the
+      gateway has answered — by then the params have been re-read from the real
+      URL. Anything that makes this component mount earlier (a warm cache, a
+      suspense boundary above it) would silently drop deep links into the wrong
+      scope with nothing failing. If that changes, this has to become an effect
+      that corrects once, not a mount-time read.
+    */
     params.subsystemFromUrl === true ? "region" : "sin",
   );
   /*
@@ -176,7 +186,6 @@ export function OverviewHero({
     worstRisk,
   } = heroFigures({ observed, forecast, scope, f });
 
-
   const headline = (
     <HeadlinePanel
       scope={scope}
@@ -189,7 +198,6 @@ export function OverviewHero({
       text={text}
     />
   );
-
 
   const profile = (
     <Panel style={{ gap: space.md }}>
@@ -217,28 +225,6 @@ export function OverviewHero({
     hour: f.dateTime(observed.now.latestSettledHour),
   });
 
-  /*
-    The national total, across the top. The one figure on the screen that is
-    about the whole country rather than the selection, and the sentence under it
-    — "a sum of four measurements, and it is exact" — is a claim the product
-    makes on purpose: observations sum, quantiles do not, which is why there is
-    no national *band* beside it in the forecast state either.
-  */
-  /*
-    **The headline follows the scope, and there is only ever one of it.**
-
-    This used to be the national figure unconditionally, sitting above a rail
-    that showed the selected region's — two large numbers with two bands, a few
-    hundred pixels apart, differing because they are about different things and
-    saying so only in their labels. A reader comparing them looks for the
-    difference and finds a subject change.
-
-    So the scope decides: `SIN Geral` is the four subsystems summed, `Por Região`
-    is the region chosen. Both are figures the gateway publishes; neither is
-    derived here. What the scope never does is *invent* a national band — the
-    outlook publishes one or states why it cannot, and `NationalFigureBlock`
-    already draws that distinction.
-  */
   /*
     **One headline panel, and the scope says whose day it is about.**
 
@@ -323,7 +309,6 @@ export function OverviewHero({
         whyOpen={whyOpen}
       />
     );
-
 
   return (
     /*

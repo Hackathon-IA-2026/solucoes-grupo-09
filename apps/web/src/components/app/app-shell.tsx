@@ -37,8 +37,8 @@ import {
   SUBSYSTEMS,
   type SubsystemCode,
 } from "@/lib/fixtures";
-import { gateProfileOf, sharedParams, useAppParams } from "./use-app-params";
 import { setSectionFallback } from "./section-request";
+import { gateProfileOf, sharedParams, useAppParams } from "./use-app-params";
 import { useRunLanes } from "./use-run-lanes";
 import { useServing } from "./use-serving";
 
@@ -242,26 +242,26 @@ export function AppShell({
       }
     >
       {showHeader ? (
-      <View
-        style={{
-          borderBottomWidth: 1,
-          borderBottomColor: colors.border,
-          backgroundColor: colors.canvas,
-        }}
-      >
         <View
           style={{
-            width: "100%",
-            maxWidth: fullWidth ? undefined : layout.page,
-            alignSelf: "center",
-            paddingHorizontal: 20,
-            // Even above and below: the header band is one row now, and the
-            // bottom padding used to come from the nav row that sat under it.
-            paddingVertical: 14,
-            gap: space.lg,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border,
+            backgroundColor: colors.canvas,
           }}
         >
-          {/*
+          <View
+            style={{
+              width: "100%",
+              maxWidth: fullWidth ? undefined : layout.page,
+              alignSelf: "center",
+              paddingHorizontal: 20,
+              // Even above and below: the header band is one row now, and the
+              // bottom padding used to come from the nav row that sat under it.
+              paddingVertical: 14,
+              gap: space.lg,
+            }}
+          >
+            {/*
             Wraps, since the badge stopped being one fixed-width pill.
             `NO MODEL PROMOTED` beside `PROTOTYPE` and the language switch does
             not fit a 400 px header, and measured in a browser at that width the
@@ -270,15 +270,15 @@ export function AppShell({
             word. The brand keeps the left of the first line and the switch is
             pushed to the far edge of whatever line it lands on.
           */}
-          <View
-            style={{
-              flexDirection: "row",
-              flexWrap: "wrap",
-              alignItems: "center",
-              gap: 12,
-            }}
-          >
-            {/*
+            <View
+              style={{
+                flexDirection: "row",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: 12,
+              }}
+            >
+              {/*
               **Three children in one wrapping row, in the order narrow wants.**
 
               Source order is left, right, nav — so with `flex-wrap` on and the
@@ -289,54 +289,56 @@ export function AppShell({
               design wants it. Reordering is the one thing CSS can do that a
               second component tree cannot do without duplicating the markup.
             */}
-            <View
-              {...APPBAR_LEFT}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                // The badge reserves its width unconditionally, so at 320 px the
-                // wordmark and it are wider than the viewport. Wrapping inside
-                // the group keeps the overflow off the page; shrinking lets it
-                // happen at all, since react-native-web defaults shrink to 0.
-                flexWrap: "wrap",
-                flexShrink: 1,
-                minWidth: 0,
-                gap: 12,
-              }}
-            >
-            <Pressable
-              testID="app-home-link"
-              accessibilityRole="link"
-              accessibilityLabel={copy.app.shell.backToLanding}
-              // This locale's landing page, not `/`. `/app` carries no locale
-              // in its URL, so the one here comes from the stored choice the
-              // language switch wrote; going via `/` would re-resolve it and
-              // hand an English reader Portuguese whenever storage is blocked.
-              // `dismissTo`, not `push`: pop back to the landing screen that
-              // is already in the stack rather than mount a second copy of it.
-              // See `localePath`.
-              onPress={() => router.dismissTo(localePath(locale) as never)}
-              style={(state) => {
-                const { focused = false } = state as { focused?: boolean };
-                return {
+              <View
+                {...APPBAR_LEFT}
+                style={{
                   flexDirection: "row",
                   alignItems: "center",
-                  gap: 10,
-                  borderRadius: radius.md,
-                  padding: 4,
-                  ...focusRing(focused, colors.focus),
-                  ...(Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null),
-                };
-              }}
-            >
-              <WattSteerMark size={22} tint={colors.accent} />
-              <Text style={{ fontSize: 15, fontWeight: "700", color: colors.ink }}>
-                WattSteer
-              </Text>
-            </Pressable>
-            <ChromeBadge />
-            </View>
-            {/*
+                  // The badge reserves its width unconditionally, so at 320 px the
+                  // wordmark and it are wider than the viewport. Wrapping inside
+                  // the group keeps the overflow off the page; shrinking lets it
+                  // happen at all, since react-native-web defaults shrink to 0.
+                  flexWrap: "wrap",
+                  flexShrink: 1,
+                  minWidth: 0,
+                  gap: 12,
+                }}
+              >
+                <Pressable
+                  testID="app-home-link"
+                  accessibilityRole="link"
+                  accessibilityLabel={copy.app.shell.backToLanding}
+                  // This locale's landing page, not `/`. `/app` carries no locale
+                  // in its URL, so the one here comes from the stored choice the
+                  // language switch wrote; going via `/` would re-resolve it and
+                  // hand an English reader Portuguese whenever storage is blocked.
+                  // `dismissTo`, not `push`: pop back to the landing screen that
+                  // is already in the stack rather than mount a second copy of it.
+                  // See `localePath`.
+                  onPress={() => router.dismissTo(localePath(locale) as never)}
+                  style={(state) => {
+                    const { focused = false } = state as { focused?: boolean };
+                    return {
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 10,
+                      borderRadius: radius.md,
+                      padding: 4,
+                      ...focusRing(focused, colors.focus),
+                      ...(Platform.OS === "web"
+                        ? ({ cursor: "pointer" } as object)
+                        : null),
+                    };
+                  }}
+                >
+                  <WattSteerMark size={22} tint={colors.accent} />
+                  <Text style={{ fontSize: 15, fontWeight: "700", color: colors.ink }}>
+                    WattSteer
+                  </Text>
+                </Pressable>
+                <ChromeBadge />
+              </View>
+              {/*
               **The voice control is not here any more, and this is the row it
               kept breaking.**
 
@@ -353,22 +355,22 @@ export function AppShell({
               and the one that survived is the one that reads as the product
               rather than as chrome.
             */}
-            <View
-              {...APPBAR_RIGHT}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "flex-end",
-                // Narrow, this takes the rest of the first line so the switch
-                // sits at the far edge; wide, the stylesheet makes it an equal
-                // third and the same rule still holds.
-                flexGrow: 1,
-                flexShrink: 1,
-                flexBasis: 0,
-                minWidth: 0,
-              }}
-            >
-              {/*
+              <View
+                {...APPBAR_RIGHT}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "flex-end",
+                  // Narrow, this takes the rest of the first line so the switch
+                  // sits at the far edge; wide, the stylesheet makes it an equal
+                  // third and the same rule still holds.
+                  flexGrow: 1,
+                  flexShrink: 1,
+                  flexBasis: 0,
+                  minWidth: 0,
+                }}
+              >
+                {/*
                 **The target day, which used to be the last thing on the
                 selection bar.**
 
@@ -380,64 +382,64 @@ export function AppShell({
                 gateway refuses anything past tomorrow. The Time Machine is
                 where a past day is chosen, and it has its own picker.
               */}
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 6,
-                  paddingVertical: 5,
-                  paddingHorizontal: 10,
-                  borderRadius: radius.md,
-                  borderCurve: "continuous",
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  backgroundColor: colors.surface,
-                }}
-              >
-                <CalendarDaysIcon size={13} color={colors.inkMuted} />
-                <Text
+                <View
                   style={{
-                    fontSize: 13,
-                    fontWeight: "600",
-                    color: colors.ink,
-                    fontVariant: ["tabular-nums"],
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                    paddingVertical: 5,
+                    paddingHorizontal: 10,
+                    borderRadius: radius.md,
+                    borderCurve: "continuous",
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    backgroundColor: colors.surface,
                   }}
                 >
-                  {f.date(params.date)}
-                </Text>
+                  <CalendarDaysIcon size={13} color={colors.inkMuted} />
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      fontWeight: "600",
+                      color: colors.ink,
+                      fontVariant: ["tabular-nums"],
+                    }}
+                  >
+                    {f.date(params.date)}
+                  </Text>
+                </View>
+                <LanguageSwitch testID="app-language-switch" />
               </View>
-              <LanguageSwitch testID="app-language-switch" />
-            </View>
 
-          <ScrollView
-            {...APPBAR_NAV}
-            horizontal={true}
-            showsHorizontalScrollIndicator={false}
-            style={{ flexGrow: 0, flexShrink: 1, flexBasis: "100%" }}
-            // Vertical padding inside the scroller, not margin outside it: the
-            // pills carry a border and a focus ring, and a scroll viewport
-            // clips at its own edge, so without it the top of each pill reads
-            // as tucked under the header rule above.
-            contentContainerStyle={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 8,
-              /*
+              <ScrollView
+                {...APPBAR_NAV}
+                horizontal={true}
+                showsHorizontalScrollIndicator={false}
+                style={{ flexGrow: 0, flexShrink: 1, flexBasis: "100%" }}
+                // Vertical padding inside the scroller, not margin outside it: the
+                // pills carry a border and a focus ring, and a scroll viewport
+                // clips at its own edge, so without it the top of each pill reads
+                // as tucked under the header rule above.
+                contentContainerStyle={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 8,
+                  /*
                 Symmetric, and it was 6/16. That was right while this was its
                 own row above a selection bar; inline between the wordmark and
                 the language switch it put the pills 5 px above both of them —
                 a misalignment you feel before you can name it. The band keeps
                 its height from the container's own padding below.
               */
-              paddingVertical: 6,
-              // Centred at every width, so the stylesheet below only has to
-              // move the nav between its neighbours and never has to reach
-              // into the scroller's content container to align it.
-              flexGrow: 1,
-              justifyContent: "center",
-            }}
-          >
-            {/*
+                  paddingVertical: 6,
+                  // Centred at every width, so the stylesheet below only has to
+                  // move the nav between its neighbours and never has to reach
+                  // into the scroller's content container to align it.
+                  flexGrow: 1,
+                  justifyContent: "center",
+                }}
+              >
+                {/*
               **Links, not tabs, and the `tablist` around them is gone.**
 
               A tab promises a panel in the same document that it controls. Two
@@ -459,31 +461,30 @@ export function AppShell({
               to carry, and carries it correctly: it marks the document the
               reader is on, and an anchor into the current page is not one.
             */}
-            <View style={{ flexDirection: "row", gap: 8 }}>
-              {SCREENS.map((screen) => {
-                const current =
-                  screen.path === "/app"
-                    ? pathname === "/app" || pathname === "/app/"
-                    : !screen.path.includes("#") && pathname.startsWith(screen.path);
-                return (
-                  <Pill
-                    key={screen.key}
-                    accessibilityRole="link"
-                    ariaCurrent={current ? "page" : undefined}
-                    label={copy.app.shell.screens[screen.key]}
-                    tone="secondary"
-                    active={current}
-                    onPress={() => go(screen.path)}
-                  />
-                );
-              })}
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  {SCREENS.map((screen) => {
+                    const current =
+                      screen.path === "/app"
+                        ? pathname === "/app" || pathname === "/app/"
+                        : !screen.path.includes("#") && pathname.startsWith(screen.path);
+                    return (
+                      <Pill
+                        key={screen.key}
+                        accessibilityRole="link"
+                        ariaCurrent={current ? "page" : undefined}
+                        label={copy.app.shell.screens[screen.key]}
+                        tone="secondary"
+                        active={current}
+                        onPress={() => go(screen.path)}
+                      />
+                    );
+                  })}
+                </View>
+              </ScrollView>
             </View>
-          </ScrollView>
           </View>
         </View>
-      </View>
       ) : null}
-
 
       {/*
         **The page's main landmark, which it did not have.**
@@ -806,7 +807,7 @@ export function ScreenTitle({
  * the reader had already framed. Máquina do tempo is genuinely a different
  * mode and keeps its own route; these three do not.
  *
- * `nativeID` gives each section an anchor, so `/app#explain` still lands where
+ * `nativeID` gives each section an anchor, so `/app#mitigate` still lands where
  * `/app/explain` used to and the voice agent's `explain` tool has somewhere to
  * send a reader without leaving the page.
  */
@@ -816,28 +817,12 @@ export function SectionBlock({
   lede,
   right,
   children,
-  withheld = false,
 }: {
   id: string;
   title: string;
   lede: string;
   right?: ReactNode;
   children: ReactNode;
-  /**
-   * This section's body is on screen somewhere else right now.
-   *
-   * The "Por quê?" card opens Explicar in a sheet over the page, and Explicar
-   * is one component: the same element is either in this accordion or in the
-   * sheet, never both. Rendering it twice would put two copies of every
-   * `nativeID` and `testID` in the diagnosis into one document, which breaks a
-   * strict-mode locator and duplicates the whole section for a screen reader —
-   * and the reader of the *second* copy has no way to tell it is a copy.
-   *
-   * So while the sheet has the body, this collapses and stays collapsed. Not
-   * hidden: the heading is the anchor `/app#explain` lands on and the landmark
-   * a screen reader jumps to, and both survive the sheet being open.
-   */
-  withheld?: boolean;
 }) {
   const colors = usePalette();
   const copy = useCopy();
@@ -860,7 +845,13 @@ export function SectionBlock({
     only an animation is a state change a stopped animation loses.
   */
   const [open, setOpen] = useState(false);
-  const expanded = open && !withheld;
+  /*
+    `withheld` used to live here: while the sheet held Explicar's body, the
+    accordion rendered header-only so one element could not be mounted twice.
+    The accordion is gone, nothing passed it, and a prop nobody sets is a
+    promise the next reader has to check.
+  */
+  const expanded = open;
   return (
     <View
       nativeID={id}

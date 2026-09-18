@@ -34,8 +34,7 @@ import { CesiumGlobe } from "@/components/charts/cesium-globe";
 import { cesiumAvailable } from "@/components/charts/cesium-loader";
 import { type MapPaint, SubsystemMap } from "@/components/charts/subsystem-map";
 import { useCopy } from "@/i18n";
-import type { SubsystemCode } from "@/lib/fixtures";
-import type { RunLabel } from "@/lib/fixtures";
+import type { RunLabel, SubsystemCode } from "@/lib/fixtures";
 import { type MapLayer, readLayer, saveLayer } from "@/lib/map-view";
 import { type Scope, ScopeBar } from "./scope-bar";
 
@@ -131,6 +130,13 @@ export function RegionMap({
     act, and one a reader should not have to repeat after every reload.
   */
   const [layer, setLayer] = useState<MapLayer>(() => readLayer() ?? defaultLayer);
+  /*
+    The globe failed to load — its distribution 404'd, its script was blocked,
+    the browser has no WebGL. Held here rather than inside `CesiumGlobe`,
+    because the answer is to draw the other layer and say so, and only this
+    component can do either.
+  */
+  const [globeFailed, setGlobeFailed] = useState(false);
   const chooseLayer = (next: MapLayer) => {
     setLayer(next);
     saveLayer(next);
@@ -144,10 +150,16 @@ export function RegionMap({
   const forecast = paint.kind === "forecast";
   const globeReady = Platform.OS === "web" && cesiumAvailable();
   const canBe3d = forecast && globeReady;
-  const showing3d = layer === "3d" && canBe3d;
+  const showing3d = layer === "3d" && canBe3d && !globeFailed;
 
   return (
-    <View style={{ flex: stage ? 1 : undefined, minHeight: minHeight ?? undefined, gap: stage ? 0 : space.md }}>
+    <View
+      style={{
+        flex: stage ? 1 : undefined,
+        minHeight: minHeight ?? undefined,
+        gap: stage ? 0 : space.md,
+      }}
+    >
       {/*
         The controls sit over the stage on the console and above the figure on
         the Overview. Same controls, same order; what differs is whether there
@@ -204,13 +216,15 @@ export function RegionMap({
           <LayerButton
             label={copy.app.grid.layer3d}
             active={showing3d}
-            disabled={!canBe3d}
+            disabled={!canBe3d || globeFailed}
             hint={
-              canBe3d
-                ? copy.app.grid.layer3d
-                : forecast
-                  ? copy.app.grid.layer3dUnavailable
-                  : copy.app.grid.layer3dNeedsForecast
+              globeFailed
+                ? copy.app.grid.layer3dFailed
+                : canBe3d
+                  ? copy.app.grid.layer3d
+                  : forecast
+                    ? copy.app.grid.layer3dUnavailable
+                    : copy.app.grid.layer3dNeedsForecast
             }
             onPress={() => chooseLayer("3d")}
           />
@@ -275,6 +289,7 @@ export function RegionMap({
             hovered={hovered}
             onHoverChange={onHoverChange}
             onSelect={onSelect}
+            onFailed={() => setGlobeFailed(true)}
           />
         ) : (
           <SubsystemMap
@@ -287,6 +302,26 @@ export function RegionMap({
           />
         )}
 
+        {/*
+          The failure, stated. A reader who had chosen 3D and now sees the flat
+          map is owed the reason — otherwise the control silently disagrees with
+          what is drawn, and the remembered choice makes that permanent.
+        */}
+        {globeFailed ? (
+          <Text
+            style={{
+              ...(Platform.OS === "web" ? ({ position: "absolute" } as object) : null),
+              top: space.md,
+              alignSelf: "center",
+              maxWidth: 320,
+              textAlign: "center",
+              ...type.caption,
+              color: colors.inkMuted,
+            }}
+          >
+            {copy.app.grid.layer3dFailed}
+          </Text>
+        ) : null}
         {/* ion's terms require the attribution to be visible wherever its
             imagery is drawn; Cesium's own credit bar is hidden because it
             lands under a callout. */}

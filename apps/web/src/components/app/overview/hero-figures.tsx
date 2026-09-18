@@ -23,28 +23,24 @@
  * screen states the absence rather than substituting the observed value.
  */
 
-import type { Band, RiskClass } from "@wattsteer/core/api";
-import type { Formatters } from "@/i18n/format";
 import { SUBSYSTEM_DISPLAY_ORDER } from "@wattsteer/core";
+import type { Band, RiskClass } from "@wattsteer/core/api";
 import type { ReactNode } from "react";
+import type { Scope } from "@/components/app/map/scope-bar";
+import type { ForecastNetwork, ObservedNetwork } from "@/components/app/use-network";
 import { RiskChip } from "@/components/charts/risk-class";
 import type { MapPaint } from "@/components/charts/subsystem-map";
-import type { ForecastNetwork, ObservedNetwork } from "@/components/app/use-network";
-import type { Scope } from "@/components/app/map/scope-bar";
+import type { Formatters } from "@/i18n/format";
 import { type CriticalWindow, criticalWindow } from "@/lib/critical-window";
 import type { DominantReason } from "@/lib/dominant-reason";
-import {
-  roundProbability,
-  type SubsystemCode,
-  subsystemMeta,
-} from "@/lib/fixtures";
+import { roundProbability, type SubsystemCode, subsystemMeta } from "@/lib/fixtures";
 import {
   forecastHours,
   forecastRow,
+  type OutlookRow,
   observedDay,
   observedRows,
   outlookRows,
-  type OutlookRow,
 } from "@/lib/network";
 
 /** One row of the region rail, reduced to what it draws. */
@@ -126,8 +122,6 @@ export function heroFigures({
       }));
 
   const largest = Math.max(...regions.map((row) => row.value), 1e-6);
-  const national = regions.reduce((sum, row) => sum + row.value, 0);
-  const mine = regions.find((row) => row.subsystem === observed.subsystem);
   const selectedRow = forecast === null ? null : forecastRow(forecast.forecast);
 
   /*
@@ -144,22 +138,29 @@ export function heroFigures({
         );
 
   /*
-    **"Onde?" is not always one place.**
+    **"Onde?" is not always one place, and the worst place is not the biggest.**
 
-    Naming the leader alone is right when one region carries the day and wrong
-    when four are in the same bin — which is most of this week: all four read
-    `Alto`, and a card saying "NORDESTE" tells a reader the other three are
-    quiet. So in the overall scope the card names every region in the worst bin
-    that is on the board, and falls back to the leader only when that bin has
-    one member. With a region chosen, the answer is that region: the reader has
-    already said where they are looking.
+    This derived the day's risk from `leaderRow`, which is the region with the
+    largest `dailyEnergy.p50`. Those are two different axes: `riskClass` comes
+    from `dayOccurrenceProbability` and the energy band from the magnitude head,
+    and `SubsystemOutlook` carries them as independent fields. So on any day
+    where the region carrying the most energy is not the region most likely to
+    curtail, the headline card understated the grid — `Elevado` over a day with
+    a `Alto` subsystem on it, and an "Onde?" that named the elevated regions and
+    omitted the one at highest risk. A card that reports less risk than the
+    gateway published is the worst failure this screen can have.
+
+    So the worst bin is found by *rank*, and `atRisk` is every region in it.
+    `leaderRow` keeps its own job — the largest median, which is what "Quanto?"
+    is about — and the two are no longer allowed to stand in for each other.
   */
-  const atRisk =
-    forecast === null
-      ? []
-      : outlookRows(forecast.outlook).filter(
-          (row) => row.riskClass === (leaderRow?.riskClass ?? "low"),
-        );
+  const RISK_RANK: Record<RiskClass, number> = { low: 0, elevated: 1, high: 2 };
+  const rows = forecast === null ? [] : outlookRows(forecast.outlook);
+  const worstRisk: RiskClass = rows.reduce<RiskClass>(
+    (worst, row) => (RISK_RANK[row.riskClass] > RISK_RANK[worst] ? row.riskClass : worst),
+    "low",
+  );
+  const atRisk = rows.filter((row) => row.riskClass === worstRisk);
 
   /*
     **"Por quê?" is not always one reason either.**
@@ -190,7 +191,15 @@ export function heroFigures({
         : selectedRow.dailyEnergy.p50;
   const magnitudeBand =
     scope === "sin" ? nationalBand : (selectedRow?.dailyEnergy ?? null);
-  const riskRow = scope === "sin" ? leaderRow : selectedRow;
+  /*
+    Whose risk the first card states. In the overall scope that is a region
+    *at* the worst risk, not the one carrying the most energy — the two come
+    apart, and reading the leader's class there is what let the headline report
+    `Elevado` on a day with a `Alto` subsystem on the board. `atRisk` is sorted
+    by `SUBSYSTEM_DISPLAY_ORDER` because `outlookRows` is, so this is stable
+    rather than whichever the gateway happened to send first.
+  */
+  const riskRow = scope === "sin" ? (atRisk[0] ?? leaderRow) : selectedRow;
 
   const SECOND_REASON_SHARE = 0.15;
   const spokenReasons = observed.reasons
@@ -223,6 +232,6 @@ export function heroFigures({
     riskRow,
     spokenReasons,
     window,
-    worstRisk: leaderRow?.riskClass ?? "low",
+    worstRisk,
   };
 }

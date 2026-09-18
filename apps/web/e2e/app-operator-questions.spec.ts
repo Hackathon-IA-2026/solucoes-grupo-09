@@ -11,6 +11,7 @@
  */
 
 import { expect, test } from "@playwright/test";
+import { latestTargetDate } from "@wattsteer/core";
 import { routeGateway } from "./gateway-fixtures";
 
 async function open(
@@ -79,21 +80,33 @@ test.describe("question 5 — why", () => {
 
       Without a date the sentence sits beside tomorrow's band and reads as a
       forecast of cause, which is the one thing the model cannot do. So the
-      claim is that a settled date is printed beside the reason — but which date
-      that is moves every midnight: the target day is `latestTargetDate(now)`
-      and the settled day is two before it, so this asserted
-      `16 de set. de 2026` and began failing the moment the clock rolled past
-      it. A test that is only true on one day is a test that will fail for a
+      claim is that the settled day is printed beside the reason — but which day
+      that is moves every midnight, and this asserted `16 de set. de 2026` until
+      the clock rolled past it. A test that is only true on one day fails for a
       reason it is not about.
 
-      Computed the same way the screen computes it, so it stays true tomorrow.
+      Computed the product's own way rather than from `Date.now()`:
+      `latestTargetDate` is the Brasília civil day plus one, and the settled day
+      is two before that. Reading `getDate()` off a local `Date` instead would
+      be wrong for three hours of every day on a runner outside
+      `America/Sao_Paulo`, which is most CI.
+
+      The month is asserted, not wildcarded: a screen printing the right
+      day-of-month in the wrong month is exactly the kind of off-by-a-window bug
+      this is here to catch. Both locales, because the screen has two.
     */
-    const settled = new Date(Date.now() - 86_400_000);
-    // Loose on separators and on the trailing period `short` adds in pt-BR:
-    // the claim is that the settled day is named, not the punctuation round it.
-    expect(body).toMatch(
-      new RegExp(`${settled.getDate()} de \\w+\\.? de ${settled.getFullYear()}`),
-    );
+    const target = latestTargetDate(new Date());
+    const settled = new Date(`${target}T00:00:00Z`);
+    settled.setUTCDate(settled.getUTCDate() - 2);
+    const options = {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      timeZone: "UTC",
+    } as const;
+    const pt = settled.toLocaleDateString("pt-BR", options);
+    const en = settled.toLocaleDateString("en-US", options);
+    expect([pt, en].some((formatted) => body.includes(formatted))).toBe(true);
   });
 
   test("says it is a settled record and not a forecast of cause", async ({ page }) => {
@@ -179,4 +192,39 @@ test.describe("question 5 — why, as a sheet", () => {
     in `app-overview-selection.spec.ts` — the named Explicar control and the
     voice agent both reach it, and both are asserted there.
   */
+});
+
+test.describe("the 3D globe, when it cannot load", () => {
+  test("falls back to the flat map and says why", async ({ page }) => {
+    /*
+      **A blank is not an answer.**
+
+      `CesiumGlobe` returned `null` on a load failure and the map kept rendering
+      the 3D branch: a near-black box of the stage's minimum height, with the ion
+      credit in the corner and nothing else in it. No map, no stated reason —
+      which is the one thing `CONTEXT.md` says this product never does — and
+      because the layer choice is remembered in local storage, a reader who had
+      chosen 3D met that blank on every reload.
+
+      Driven the only way it can be: the distribution never arrives, and 3D is
+      already the remembered choice when the page opens.
+    */
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem("wattsteer.mapLayer", "3d");
+      } catch {
+        // A browser with storage off simply starts on the default layer.
+      }
+    });
+    await page.route("**/cesium/Cesium.js", (route) => route.abort());
+    await open(page, { forecast: true });
+
+    // The flat map is drawn — the four regions are there to be clicked.
+    await expect(page.locator("svg[viewBox='0 0 1000 972']")).toHaveCount(1);
+    // And the swap is explained rather than silent.
+    await expect(page.getByText(/não carregou|did not load/)).toBeVisible();
+    // The control agrees with what is drawn.
+    const globe = page.getByRole("button", { name: /não carregou|did not load/ });
+    await expect(globe).toHaveAttribute("aria-disabled", "true");
+  });
 });

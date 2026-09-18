@@ -348,10 +348,20 @@ describe("a selector that cannot move anything says so", () => {
   });
 
   it("inert is announced, not merely dimmed", () => {
-    // Opacity alone says nothing to a screen reader, and `aria-disabled`
-    // without a reason says only "no". The hint carries the why.
-    expect(SHELL).toContain("aria-disabled={disabled || undefined}");
-    expect(SHELL).toContain("accessibilityHint={disabled ? disabledHint : undefined}");
+    /*
+      Opacity alone says nothing to a screen reader, and `aria-disabled` without
+      a reason says only "no". The hint carries the why.
+
+      Asserted on **both** surfaces that draw run pills. It was on `SHELL`
+      alone, and `/app` stopped rendering that bar — so the guard went on
+      passing while the chips that replaced it shipped with no `aria-disabled`
+      and with the refusal sentence overwriting the run's name. A guard pointed
+      at the file a feature used to live in is a guard that is not watching.
+    */
+    for (const source of [SHELL, SCOPE_BAR]) {
+      expect(source).toContain("aria-disabled={disabled || undefined}");
+      expect(source).toMatch(/accessibilityHint=\{disabled \? \w+ : undefined\}/);
+    }
   });
 
   it("both dictionaries explain it, and differently", () => {

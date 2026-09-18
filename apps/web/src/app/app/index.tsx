@@ -78,7 +78,6 @@ import { Text } from "react-native";
 import ExplainScreen from "@/app/app/explain";
 import MitigateScreen from "@/app/app/mitigate";
 import { AppShell, ScreenTitle, scrollToSection } from "@/components/app/app-shell";
-import { onSectionRequest } from "@/components/app/section-request";
 import { ForecastAbsent } from "@/components/app/forecast-absent";
 import {
   ForecastPresence,
@@ -90,6 +89,7 @@ import { ForecastPanels } from "@/components/app/overview/forecast-panels";
 import { ObservedPanels } from "@/components/app/overview/observed-panels";
 import { OverviewHero } from "@/components/app/overview/overview-hero";
 import { SettledPanels } from "@/components/app/overview/settled-panels";
+import { onSectionRequest } from "@/components/app/section-request";
 import { ReadingState, ThinkingOrb } from "@/components/app/thinking-orb";
 import {
   gateProfileOf,
@@ -231,8 +231,9 @@ export default function GridOverviewScreen() {
    * It is not a URL parameter, which was the first cut. A sheet in the address
    * bar is a sheet somebody can link to — and a link to `/app?why=1` reopens a
    * modal over a page the recipient has not read yet, which is not what the
-   * sender meant to share. `/app#explain` is the shareable form of this and
-   * already exists.
+   * sender meant to share. `/app#explain` is the shareable form, and the
+   * effect below is what makes it one — it used to be the accordion's anchor
+   * and that element is gone.
    */
   const [whyOpen, setWhyOpen] = useState(false);
 
@@ -256,6 +257,29 @@ export default function GridOverviewScreen() {
       }),
     [],
   );
+
+  /*
+    **`/app#explain` opens the sheet.**
+
+    It used to land on the accordion's `nativeID`. That element is gone, so
+    without this the link scrolls to nothing: `scrollToSection` polls forty
+    frames for an id that will never exist and then gives up, silently. A link
+    that used to work and now does nothing is worse than one that never did.
+
+    Read once, on mount, and the hash is cleared so a reader who closes the
+    sheet and reloads is not put straight back into it.
+  */
+  useEffect(() => {
+    if (typeof window === "undefined" || window.location.hash !== "#explain") {
+      return;
+    }
+    setWhyOpen(true);
+    window.history.replaceState(
+      window.history.state,
+      "",
+      window.location.pathname + window.location.search,
+    );
+  }, []);
 
   const frame = (right: ReactNode, body: ReactNode) => (
     <>
@@ -297,7 +321,27 @@ export default function GridOverviewScreen() {
             right={right}
           />
         */}
-        {forecastPublished ? null : (
+        {/*
+          **The page keeps a level-one heading in both states.**
+
+          Hiding the whole row with a forecast left `/app` with no `h1` at all —
+          measured: zero `[aria-level="1"]`, and the first headings on the page
+          were three `L3`s, so the outline was inverted as well. `axe` did not
+          catch it because `page-has-heading-one` and `heading-order` are
+          best-practice rules and the suite runs `wcag2a`/`wcag2aa` only.
+
+          What the row carried that was redundant was the *origin stamp* beside
+          a run chip and a date chip, and the lede repeating the selected pill.
+          A heading is neither: it is how a screen reader and the document
+          outline learn what this page is. So the observed state keeps the full
+          row — it is the only thing saying the figures are settled — and the
+          forecast state keeps the heading alone.
+        */}
+        {forecastPublished ? (
+          <ScreenTitle
+            lede={fill(copy.app.overview.lede, { date: f.date(params.date) })}
+          />
+        ) : (
           <ScreenTitle lede={copy.app.overview.ledeObserved} right={right} />
         )}
 

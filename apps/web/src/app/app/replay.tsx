@@ -264,6 +264,13 @@ export default function TimeMachineScreen() {
     refusal the reader cannot act on. Only ever *towards* a day that answers; if
     none do, the refusal is the truth and the screen says so.
   */
+  /*
+    `params.setParams` is a new function on every render of `useAppParams`, and
+    this effect calls it — listing it would re-run the effect each render and
+    loop. What decides the answer is the probe's result and the selected day,
+    and both are listed.
+  */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see the note above
   useEffect(() => {
     if (days.status !== "known" || days.viewable.length === 0) {
       return;
@@ -1042,7 +1049,10 @@ function Beside({ label, value }: { label: string; value: string }) {
 function Scalar({ label, value }: { label: string; value: string }) {
   const colors = usePalette();
   return (
-    <View style={{ flexGrow: 1, flexBasis: 200, gap: 4 }}>
+    // `flexShrink` explicitly: react-native-web defaults it to 0, so a
+    // `flexBasis` alone is a 200px *floor* rather than a preference, and this
+    // pair sits in a wrapping row that has to give way at 320px (ADR-0001).
+    <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 200, minWidth: 0, gap: 4 }}>
       <Text style={{ fontSize: 12, color: colors.inkMuted }}>{label}</Text>
       <Text
         style={{

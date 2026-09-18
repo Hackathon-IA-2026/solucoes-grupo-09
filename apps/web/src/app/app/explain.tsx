@@ -107,9 +107,10 @@ export default function ExplainScreen({
    * was six hundred pixels below it, behind an accordion a reader had to find.
    * Pressing the card now raises this screen's body over the page instead —
    * which is a *container* decision and nothing else, so it is a prop on the
-   * frame and not a second implementation of Explicar. The accordion is
-   * untouched and still opens the same element; `SectionBlock`'s `withheld`
-   * says why only one of the two holds it at a time.
+   * frame and not a second implementation of Explicar. The accordion that used
+   * to hold the same body on this page is gone — the sheet replaced it rather
+   * than joining it, because two ways to the same content three thousand pixels
+   * apart is one way a reader who found the other never needed.
    *
    * Owned by the page rather than by this component because the press that
    * opens it happens in the hero, several components away, and a toggle whose
@@ -208,10 +209,9 @@ export default function ExplainScreen({
           content, three thousand pixels below the card that asks for it, and a
           reader who found one never needed the other.
 
-          The section's *id* has not gone anywhere, because two things asked to
-          reach it — the Explicar control under the map and the voice agent — and
-          `/app` answers both by opening this sheet. See `requestSection` in
-          `app-shell.tsx`.
+          Two things still ask to *reach* Explicar — the control under the map
+          and the voice agent — and `/app` answers both by opening this sheet.
+          `/app#explain` opens it too. See `section-request.ts`.
         */}
         {sheet === undefined ? null : (
           <Sheet

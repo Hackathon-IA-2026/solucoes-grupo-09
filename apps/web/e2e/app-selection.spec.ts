@@ -39,7 +39,10 @@ function _query(page: Page): string {
  * `/app/replay` still has a bar, and its own spec still drives radios.
  */
 async function press(page: Page, name: string | RegExp): Promise<void> {
-  await page.getByRole("button", { name, exact: typeof name === "string" }).first().click();
+  await page
+    .getByRole("button", { name, exact: typeof name === "string" })
+    .first()
+    .click();
 }
 
 /**

@@ -55,7 +55,17 @@ function Chip({
       onPress={disabled ? undefined : onPress}
       disabled={disabled}
       accessibilityRole="button"
-      accessibilityLabel={hint}
+      /*
+        The label stays the label and the reason is a *hint*. Passing the
+        refusal sentence as `accessibilityLabel` replaced the name, so a screen
+        reader on an inert `12Z` heard why it could not be used and never which
+        run it was. `aria-disabled` rather than only `disabled` for the same
+        reason the shell's pills carry it: a control removed from the tab order
+        with no announced state is a control that silently is not there.
+      */
+      accessibilityLabel={label}
+      accessibilityHint={disabled ? hint : undefined}
+      aria-disabled={disabled || undefined}
       aria-pressed={active}
       style={{
         opacity: disabled ? 0.38 : 1,

@@ -19,15 +19,15 @@ import { Text, View } from "react-native";
 import { BandTriple, PanelTitle, RailFact } from "@/components/app/figures/rail-panels";
 import type { CoverageState } from "@/components/app/figures/use-coverage";
 import type { Scope } from "@/components/app/map/scope-bar";
-import { SplitTracks } from "@/components/charts/technology-split";
 import type { ObservedNetwork } from "@/components/app/use-network";
+import { SplitTracks } from "@/components/charts/technology-split";
 import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
-import type { OutlookRow } from "@/lib/network";
 import type { Technology } from "@/lib/fixtures";
 import { subsystemMeta } from "@/lib/fixtures";
-import { HeroStat } from "./region-rail";
+import type { OutlookRow } from "@/lib/network";
 import { NationalFigureBlock } from "./national-panel";
+import { HeroStat } from "./region-rail";
 
 export function HeadlinePanel({
   scope,
@@ -48,7 +48,12 @@ export function HeadlinePanel({
   technology: Technology;
   coverage: CoverageState;
   /** The Overview's own locale strings, already chosen. */
-  text: { totalLabel: string; totalNoteObserved: string; totalNoteForecast: string; noBand: string };
+  text: {
+    totalLabel: string;
+    totalNoteObserved: string;
+    totalNoteForecast: string;
+    noBand: string;
+  };
 }) {
   const colors = usePalette();
   const copy = useCopy();

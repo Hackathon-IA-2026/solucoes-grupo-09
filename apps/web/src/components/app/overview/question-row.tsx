@@ -92,96 +92,83 @@ export function QuestionRow({
   const f = useFormat();
 
   return (
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.md }}>
-        <QuestionCard
-          icon={
-            <ZapIcon
-              size={14}
-              color={riskColor(colors, risk.riskClass).fg}
-            />
-          }
-          question={copy.app.grid.q1}
-          answer={copy.app.risk[risk.riskClass]}
-          detail={fill(copy.app.grid.q1Detail, {
-            probability: f.percent(risk.occurrenceProbability),
-            subsystem: subsystemMeta(risk.subsystem).onsDisplayName,
-          })}
-          tone={riskColor(colors, risk.riskClass).fg}
-        />
-        <QuestionCard
-          icon={<PieChartIcon size={14} color={colors.violet} />}
-          question={copy.app.grid.q2}
-          answer={f.compact(magnitudeMwh)}
-          unit="MWh"
-          detail={
-            magnitudeBand === null
-              ? copy.app.grid.q2DetailExpected
-              : copy.app.grid.q2Detail
-          }
-          footnote={
-            magnitudeBand === null
-              ? undefined
-              : `P10 ${f.compact(magnitudeBand.p10)} · P90 ${f.compact(
-                  magnitudeBand.p90,
-                )}`
-          }
-        />
-        {/*
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.md }}>
+      <QuestionCard
+        icon={<ZapIcon size={14} color={riskColor(colors, risk.riskClass).fg} />}
+        question={copy.app.grid.q1}
+        answer={copy.app.risk[risk.riskClass]}
+        detail={fill(copy.app.grid.q1Detail, {
+          probability: f.percent(risk.occurrenceProbability),
+          subsystem: subsystemMeta(risk.subsystem).onsDisplayName,
+        })}
+        tone={riskColor(colors, risk.riskClass).fg}
+      />
+      <QuestionCard
+        icon={<PieChartIcon size={14} color={colors.violet} />}
+        question={copy.app.grid.q2}
+        answer={f.compact(magnitudeMwh)}
+        unit="MWh"
+        detail={
+          magnitudeBand === null ? copy.app.grid.q2DetailExpected : copy.app.grid.q2Detail
+        }
+        footnote={
+          magnitudeBand === null
+            ? undefined
+            : `P10 ${f.compact(magnitudeBand.p10)} · P90 ${f.compact(magnitudeBand.p90)}`
+        }
+      />
+      {/*
           The window keeps the Overview's own notation — `0h–5h BRT` — rather
           than a clock range. It is the form the rest of this screen uses and the
           one the operator brief was answered in; the card is a new place for the
           sentence, not a new way of saying it.
         */}
-        <QuestionCard
-          icon={<ClockIcon size={14} color={colors.info} />}
-          question={copy.app.grid.q3}
-          answer={
-            window === null
-              ? copy.app.grid.noWindow
-              : fill(copy.app.overview.windowRange, {
-                  from: String(window.fromHour),
-                  to: String(window.toHour),
-                })
-          }
-          detail={
-            window === null ? copy.app.overview.windowNone : copy.app.grid.q3Detail
-          }
-          footnote={
-            window === null
-              ? undefined
-              : fill(copy.app.overview.windowPeak, {
-                  peak: String(window.peakHour),
-                  mwh: f.compact(window.peakMwh),
-                })
-          }
-        />
-        <QuestionCard
-          icon={<SearchIcon size={14} color={colors.inkMuted} />}
-          question={copy.app.grid.q4}
-          answer={
-            reasons.length === 0
-              ? copy.app.grid.noReason
-              : reasons.map((entry) => entry.reason).join(" · ")
-          }
-          detail={
-            reasons.length === 0
-              ? copy.app.grid.noReasonDetail
-              : fill(copy.app.grid.q4Detail, {
-                  date: f.date(reasonDate),
-                  share: reasons
-                    .map((entry) => f.percent(entry.share, 0))
-                    .join(" · "),
-                })
-          }
-          note={causeNote}
-          noteId="overview-cause-note"
-          onPress={onWhy}
-          expanded={whyOpen}
-        />
-        <QuestionCard
-          icon={<MapIcon size={14} color={colors.inkMuted} />}
-          question={copy.app.grid.q5}
-          /*
+      <QuestionCard
+        icon={<ClockIcon size={14} color={colors.info} />}
+        question={copy.app.grid.q3}
+        answer={
+          window === null
+            ? copy.app.grid.noWindow
+            : fill(copy.app.overview.windowRange, {
+                from: String(window.fromHour),
+                to: String(window.toHour),
+              })
+        }
+        detail={window === null ? copy.app.overview.windowNone : copy.app.grid.q3Detail}
+        footnote={
+          window === null
+            ? undefined
+            : fill(copy.app.overview.windowPeak, {
+                peak: String(window.peakHour),
+                mwh: f.compact(window.peakMwh),
+              })
+        }
+      />
+      <QuestionCard
+        icon={<SearchIcon size={14} color={colors.inkMuted} />}
+        question={copy.app.grid.q4}
+        answer={
+          reasons.length === 0
+            ? copy.app.grid.noReason
+            : reasons.map((entry) => entry.reason).join(" · ")
+        }
+        detail={
+          reasons.length === 0
+            ? copy.app.grid.noReasonDetail
+            : fill(copy.app.grid.q4Detail, {
+                date: f.date(reasonDate),
+                share: reasons.map((entry) => f.percent(entry.share, 0)).join(" · "),
+              })
+        }
+        note={causeNote}
+        noteId="overview-cause-note"
+        onPress={onWhy}
+        expanded={whyOpen}
+      />
+      <QuestionCard
+        icon={<MapIcon size={14} color={colors.inkMuted} />}
+        question={copy.app.grid.q5}
+        /*
             **Short codes, always.**
 
             The answer line is the card's largest type, and
@@ -191,28 +178,29 @@ export function QuestionRow({
             the chips beside it say, so a reader matching the three has nothing
             to translate. The full name goes in the detail, which wraps.
           */
-          answer={
-            scope === "region"
-              ? subsystemMeta(selectedSubsystem).short
-              : atRisk.map((row) => subsystemMeta(row.subsystem).short).join(" · ")
-          }
-          detail={
-            scope === "region"
-              ? fill(copy.app.grid.q5DetailRegion, {
-                  subsystem: subsystemMeta(selectedSubsystem).onsDisplayName,
+        answer={
+          scope === "region"
+            ? subsystemMeta(selectedSubsystem).short
+            : atRisk.map((row) => subsystemMeta(row.subsystem).short).join(" · ")
+        }
+        detail={
+          scope === "region"
+            ? fill(copy.app.grid.q5DetailRegion, {
+                subsystem: subsystemMeta(selectedSubsystem).onsDisplayName,
+              })
+            : atRisk.length === 1 && atRisk[0] !== undefined
+              ? fill(copy.app.grid.q5DetailOne, {
+                  subsystem: subsystemMeta(atRisk[0].subsystem).onsDisplayName,
+                  risk: copy.app.risk[worstRisk],
                 })
-              : atRisk.length === 1 && atRisk[0] !== undefined
-                ? fill(copy.app.grid.q5DetailOne, {
-                    subsystem: subsystemMeta(atRisk[0].subsystem).onsDisplayName,
-                  })
-                : fill(copy.app.grid.q5DetailMany, {
-                    count: String(atRisk.length),
-                    risk: copy.app.risk[worstRisk],
-                  })
-          }
-        />
+              : fill(copy.app.grid.q5DetailMany, {
+                  count: String(atRisk.length),
+                  risk: copy.app.risk[worstRisk],
+                })
+        }
+      />
 
-        {/*
+      {/*
           **What is left under the row, and what moved onto a card.**
 
           The window's scatter stays here: `0h–23h` is the longest *run*, and a
@@ -226,37 +214,37 @@ export function QuestionRow({
           standing truth rather than news, and a standing truth printed across
           the page every morning is read once and then never again.
         */}
-        <View style={{ flexBasis: "100%", gap: 4 }}>
-          {window !== null && window.hoursInDay > window.toHour - window.fromHour + 1 ? (
-            <Text style={{ ...type.caption, color: colors.inkFaint, lineHeight: 17 }}>
-              {fill(copy.app.overview.windowScattered, {
-                hours: String(window.hoursInDay),
-              })}
-            </Text>
-          ) : null}
-          {evidence === null ? null : (
-            <Link
-              href={evidence.url as never}
-              target="_blank"
-              style={{
-                ...type.caption,
-                color: colors.accent,
-                ...(Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null),
-              }}
-            >
-              {fill(
-                evidence.page === null
-                  ? copy.app.overview.causeEvidenceNoPage
-                  : copy.app.overview.causeEvidence,
-                {
-                  document: evidence.documentCode,
-                  revision: evidence.revision ?? "",
-                  page: String(evidence.page ?? ""),
-                },
-              )}
-            </Link>
-          )}
-        </View>
+      <View style={{ flexBasis: "100%", gap: 4 }}>
+        {window !== null && window.hoursInDay > window.toHour - window.fromHour + 1 ? (
+          <Text style={{ ...type.caption, color: colors.inkFaint, lineHeight: 17 }}>
+            {fill(copy.app.overview.windowScattered, {
+              hours: String(window.hoursInDay),
+            })}
+          </Text>
+        ) : null}
+        {evidence === null ? null : (
+          <Link
+            href={evidence.url as never}
+            target="_blank"
+            style={{
+              ...type.caption,
+              color: colors.accent,
+              ...(Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null),
+            }}
+          >
+            {fill(
+              evidence.page === null
+                ? copy.app.overview.causeEvidenceNoPage
+                : copy.app.overview.causeEvidence,
+              {
+                document: evidence.documentCode,
+                revision: evidence.revision ?? "",
+                page: String(evidence.page ?? ""),
+              },
+            )}
+          </Link>
+        )}
       </View>
+    </View>
   );
 }

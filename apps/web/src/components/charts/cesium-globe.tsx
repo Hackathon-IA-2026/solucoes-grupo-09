@@ -44,12 +44,16 @@ import { radius, space, type, usePalette } from "@wattsteer/ui";
 import { useEffect, useRef, useState } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
 import { useCopy, useFormat } from "@/i18n";
-import { SUBSYSTEM_DISPLAY_ORDER, type SubsystemCode, subsystemMeta } from "@/lib/fixtures";
-import { subsystemRingsFlat, unproject } from "@/lib/geo/brazil-lonlat";
+import {
+  SUBSYSTEM_DISPLAY_ORDER,
+  type SubsystemCode,
+  subsystemMeta,
+} from "@/lib/fixtures";
 import { SUBSYSTEM_ANCHOR } from "@/lib/geo/brazil-geometry";
+import { subsystemRingsFlat, unproject } from "@/lib/geo/brazil-lonlat";
+import { clearSavedView, type MapView, readSavedView, saveView } from "@/lib/map-view";
 import type { OutlookRow } from "@/lib/network";
 import { type CesiumNamespace, cesiumAvailable, loadCesium } from "./cesium-loader";
-import { clearSavedView, type MapView, readSavedView, saveView } from "@/lib/map-view";
 import { riskColor } from "./risk-color";
 
 /**
@@ -174,6 +178,7 @@ export function CesiumGlobe({
   hovered = null,
   onHoverChange,
   onSelect,
+  onFailed,
 }: {
   /**
    * The forecast rows, which is the only paint this globe takes.
@@ -189,6 +194,17 @@ export function CesiumGlobe({
   hovered?: SubsystemCode | null;
   onHoverChange?: (subsystem: SubsystemCode | null) => void;
   onSelect: (subsystem: SubsystemCode) => void;
+  /**
+   * The globe could not load at all — a 404 on the distribution, a blocked
+   * script, a browser with no WebGL.
+   *
+   * Reported rather than absorbed. Returning `null` on failure left the caller
+   * drawing a black box of the stage's minimum height with the ion credit in
+   * the corner and nothing in it: a blank where a map should be, with no stated
+   * reason, which is the one thing `CONTEXT.md` says this product never does.
+   * And because the layer choice is remembered, that blank survived a reload.
+   */
+  onFailed?: () => void;
 }) {
   const colors = usePalette();
   const copy = useCopy();
@@ -221,8 +237,8 @@ export function CesiumGlobe({
     directly would pin the first render's `onSelect`, and the selection would
     stop working the moment the parent re-rendered with a new one.
   */
-  const handlers = useRef({ onSelect, onHoverChange });
-  handlers.current = { onSelect, onHoverChange };
+  const handlers = useRef({ onSelect, onHoverChange, onFailed });
+  handlers.current = { onSelect, onHoverChange, onFailed };
 
   // ---------------------------------------------------------------- the viewer
 
@@ -397,6 +413,7 @@ export function CesiumGlobe({
       .catch(() => {
         if (!disposed) {
           setFailed(true);
+          handlers.current.onFailed?.();
         }
       });
 
@@ -419,7 +436,7 @@ export function CesiumGlobe({
   useEffect(() => {
     const viewer = viewerRef.current;
     const Cesium = cesiumRef.current;
-    if (!viewer || !Cesium || !ready) {
+    if (!(viewer && Cesium && ready)) {
       return;
     }
     viewer.entities.removeAll();
@@ -474,7 +491,9 @@ export function CesiumGlobe({
 
   /** Keep a card fully inside the stage, once the stage has been measured. */
   const clamp = (value: number, size: number, extent: number) =>
-    extent === 0 ? value : Math.max(CARD_INSET, Math.min(value, extent - size - CARD_INSET));
+    extent === 0
+      ? value
+      : Math.max(CARD_INSET, Math.min(value, extent - size - CARD_INSET));
 
   return (
     <View
@@ -552,7 +571,7 @@ export function CesiumGlobe({
             onPress={() => {
               const viewer = viewerRef.current;
               const Cesium = cesiumRef.current;
-              if (!viewer || !Cesium) {
+              if (!(viewer && Cesium)) {
                 return;
               }
               if (locked) {
@@ -561,13 +580,22 @@ export function CesiumGlobe({
                 return;
               }
               const carto = viewer.camera.positionCartographic;
-              saveView({
+              const link = saveView({
                 longitude: Cesium.Math.toDegrees(carto.longitude),
                 latitude: Cesium.Math.toDegrees(carto.latitude),
                 height: carto.height,
                 heading: Cesium.Math.toDegrees(viewer.camera.heading),
                 pitch: Cesium.Math.toDegrees(viewer.camera.pitch),
               });
+              /*
+                Copied at the moment it is made, because that is the moment it
+                is good: `cam` is written straight to the address bar rather
+                than through the router, so the router's next navigation — any
+                chip press — rebuilds the query without it. Local storage is the
+                half that survives; the clipboard is how the link gets out of
+                the browser before the next press.
+              */
+              void navigator.clipboard?.writeText(link).catch(() => undefined);
               setLocked(true);
             }}
           />

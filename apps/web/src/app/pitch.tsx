@@ -1,4 +1,17 @@
-import { focusRing, layout, motion, Panel, radius, space, type, useContainerWidth, usePalette, usePressScale, WattSteerWordmark, webTransition } from "@wattsteer/ui";
+import {
+  focusRing,
+  layout,
+  motion,
+  Panel,
+  radius,
+  space,
+  type,
+  useContainerWidth,
+  usePalette,
+  usePressScale,
+  WattSteerWordmark,
+  webTransition,
+} from "@wattsteer/ui";
 import { Link } from "expo-router";
 import Head from "expo-router/head";
 import { Linking, Platform, Pressable, ScrollView, Text, View } from "react-native";

@@ -65,6 +65,14 @@ export function useRunLanes(): RunLanes {
     return lane !== undefined && (lane.condition !== "promoted" || lane.usable === false);
   };
 
+  /*
+    `inertFor` closes over `serving` and is rebuilt on every render, and
+    `params.setParams` is a new function each time `useAppParams` runs. Listing
+    either would re-run this on every render — and since the body calls
+    `setParams`, that is a loop. What decides the answer is the lane table and
+    the current run, and both are listed.
+  */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see the note above
   useEffect(() => {
     if (serving.status !== "known" || !inertFor(params.run)) {
       return;

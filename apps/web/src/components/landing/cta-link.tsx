@@ -1,4 +1,12 @@
-import { focusRing, motion, radius, usePalette, usePressScale, useReducedMotion, webTransition } from "@wattsteer/ui";
+import {
+  focusRing,
+  motion,
+  radius,
+  usePalette,
+  usePressScale,
+  useReducedMotion,
+  webTransition,
+} from "@wattsteer/ui";
 import { Link } from "expo-router";
 import type { ReactNode } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
