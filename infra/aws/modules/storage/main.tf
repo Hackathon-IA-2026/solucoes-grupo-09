@@ -72,11 +72,20 @@ resource "aws_iam_user_policy" "archive" {
   user = aws_iam_user.archive.name
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket"]
-      Resource = [aws_s3_bucket.archive.arn, "${aws_s3_bucket.archive.arn}/*"]
-    }]
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket"]
+        Resource = [aws_s3_bucket.archive.arn, "${aws_s3_bucket.archive.arn}/*"]
+      },
+      {
+        # deploy/ holds what the ec2 option's instance runs as root (up.sh, the
+        # compose file). The API's key pair must never be able to rewrite it.
+        Effect   = "Deny"
+        Action   = ["s3:PutObject", "s3:DeleteObject"]
+        Resource = "${aws_s3_bucket.archive.arn}/deploy/*"
+      },
+    ]
   })
 }
 

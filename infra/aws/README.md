@@ -56,10 +56,16 @@ Docker (with `buildx`, which Docker Desktop has), `git`, `python3` and `curl`.
 - **Image repositories refuse deletion while they hold images.**
 - **There is no destroy script.** Tearing down is a deliberate, manual job
   (see "Tearing down" below).
-- **Secrets stay out of the Terraform state and out of git.** You put them in
-  SSM with `scripts/set-secrets.sh`; Terraform only creates placeholders and
-  never overwrites them. The deploy refuses to continue while a required one is
-  unset.
+- **Your keys stay out of git and out of the Terraform state.** You put the
+  provider keys in SSM with `scripts/set-secrets.sh`; Terraform only creates
+  placeholders and never reads or overwrites them. The deploy refuses to
+  continue while a required one is unset.
+- **The credentials Terraform generates are in its state**: the database
+  password, the archive key pair and the RAG access token. So the state is a
+  secret: it lives only in the private, encrypted, versioned state bucket, and
+  only people allowed to deploy should be able to read that bucket.
+- **The API's archive key pair cannot rewrite `deploy/`**, the files the `ec2`
+  instance runs as root.
 - **The deploy asks you to type `deploy`** after showing the account and region
   it is about to touch.
 - **The state is locked** (S3 lock file), so two people cannot apply at once.
@@ -83,8 +89,8 @@ export AWS_PROFILE=hackathon AWS_REGION=us-east-1
 infra/aws/scripts/aws.sh sts get-caller-identity   # must print the event's account
 ```
 
-If the event requires a region other than `us-east-1`, also
-`export TF_VAR_region=<that region>`.
+`deploy.sh` passes `AWS_REGION` on to Terraform, so the region is set in one
+place. Run `bootstrap/` with the same region (`export TF_VAR_region=$AWS_REGION`).
 
 ### 2. State bucket (once per account)
 
