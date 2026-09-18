@@ -515,10 +515,13 @@ describe("nothing below is asserted over an empty ledger", () => {
     // The corpus extension is the point of check 5, so its reach is asserted
     // rather than assumed: the guard that missed the stale name had a corpus
     // of `docs/specs/`, and a walk that quietly stopped there again would
-    // report the tickets clean by never reading them.
+    // report the rest clean by never reading it.
+    //
+    // The `.scratch/` half of that assertion is gone with the directory. What
+    // it was buying — that the walk does not stop at `docs/specs/` — is bought
+    // by the README line below, which is outside `docs/` and still asserted.
     expect(TEXTS.size).toBeGreaterThan(20);
     expect([...TEXTS.keys()].some((file) => file.startsWith("docs/specs/"))).toBe(true);
-    expect([...TEXTS.keys()].some((file) => file.startsWith(".scratch/"))).toBe(true);
     expect(TEXTS.has("apps/api/README.md")).toBe(true);
   });
 
@@ -527,12 +530,11 @@ describe("nothing below is asserted over an empty ledger", () => {
     expect(new Set(REFERENCES.map((reference) => reference.file)).size).toBeGreaterThan(
       5,
     );
-    // Both halves of the corpus actually carry references. If either stopped
-    // matching, the census below would be a claim about the other one.
+    // The corpus actually carries references outside one directory. The
+    // `.scratch/` half of this pair went with that directory; the spread
+    // assertion above — more than five distinct files — is what now stops the
+    // census being a claim about a single document.
     expect(REFERENCES.some((reference) => reference.file.startsWith("docs/specs/"))).toBe(
-      true,
-    );
-    expect(REFERENCES.some((reference) => reference.file.startsWith(".scratch/"))).toBe(
       true,
     );
   });

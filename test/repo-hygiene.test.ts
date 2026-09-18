@@ -33,15 +33,15 @@ const FORBIDDEN = [
 /**
  * Paths where the old name is legitimate and must survive:
  * - `IDEA.md`         the historical source document
- * - `.wayfinder/`     the map, which records Zalytix as the thing removed
- * - `.scratch/`       implementation tickets that reference the same history
  * - `docs/research/`  primary-source findings, quoted verbatim
  * - `docs/specs/`     the spec for this very removal
+ *
+ * `.wayfinder/` and `.scratch/` were on this list and are gone from the
+ * repository: the map and the implementation tickets carried the old name as
+ * history, and deleting them took the exemption's subject with it.
  */
 const EXEMPT = new Set([
   "IDEA.md",
-  ".wayfinder",
-  ".scratch",
   join("docs", "research"),
   join("docs", "specs"),
   // This file necessarily contains the token it forbids.

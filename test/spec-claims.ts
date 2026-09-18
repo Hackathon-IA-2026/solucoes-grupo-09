@@ -77,10 +77,10 @@ const SKIP_DIRS = new Set([
 /**
  * Every file in the working tree, as a repo-relative POSIX path.
  *
- * The working tree and not `git ls-files`, deliberately: `.github/` and
- * `.wayfinder/` are referenced by the specs and are not always in the index a
- * worktree sees, and a guard that called a file that is plainly there "missing"
- * would be the kind of guard somebody deletes.
+ * The working tree and not `git ls-files`, deliberately: `.github/` is
+ * referenced by the specs and is not always in the index a worktree sees, and a
+ * guard that called a file that is plainly there "missing" would be the kind of
+ * guard somebody deletes.
  */
 export function treeFiles(): string[] {
   const found: string[] = [];
@@ -591,13 +591,46 @@ export interface Reference {
  * exists somewhere" is true of almost any name and proves nothing about the
  * one the spec meant. References containing `...` are elisions, not paths.
  */
+/**
+ * Directories the repository has removed, whose citations the specs keep.
+ *
+ * `.wayfinder/` held the ticket map and `.scratch/` the implementation tickets,
+ * and forty-one references across twelve documents cite one or the other —
+ * almost always as the *provenance of a decision*: "forecaster 44 decided this",
+ * with the ticket named. Deleting the directories does not make those sentences
+ * false; it makes the file they point at gone.
+ *
+ * The alternative was editing forty-one paragraphs to say so, which would have
+ * cost the specs the one thing those citations are for. So the reference is
+ * treated as resolved by this list instead, and the list is short, closed and
+ * named — a reader who wonders why `.scratch/replay/issues/07` resolves against
+ * a tree that does not contain it finds the answer here rather than in a silent
+ * `catch`.
+ *
+ * Nothing else is exempt: a path into a directory that still exists is still
+ * checked, and the marker vocabulary below is still the only other way out.
+ */
+const RETIRED = [".wayfinder/", ".scratch/"];
+
 export function pathReferences(
   texts: Map<string, string> = specTexts(),
   files: string[] = treeFiles(),
 ): Reference[] {
   const set = new Set(files);
+  /*
+    The retired-directory exemption is conditional on there being a tree at all.
+
+    Written unconditionally it short-circuited before `files` was consulted, so
+    a walk that returned nothing still reported these references as resolved —
+    and "an empty file listing makes every reference unresolved, not resolved"
+    is a guard in this suite precisely because the opposite polarity is what
+    read green while being blind. An empty listing means the tree could not be
+    read, and nothing may resolve against it, exemption included.
+  */
   const resolvesIn = (ref: string): boolean =>
-    set.has(ref) || files.some((file) => file.endsWith(`/${ref}`));
+    (files.length > 0 && RETIRED.some((dir) => ref.startsWith(dir))) ||
+    set.has(ref) ||
+    files.some((file) => file.endsWith(`/${ref}`));
   const found: Reference[] = [];
   for (const [spec, text] of texts) {
     const paragraphs = text.split(/\n\s*\n/);
