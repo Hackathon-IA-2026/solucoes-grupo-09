@@ -1379,6 +1379,10 @@ export const en = {
     },
 
     mitigate: {
+      /* See the note on the Portuguese side. */
+      conformityBadge: "Cut order I–IV · {rule}",
+      conformityNote:
+        "The plan acts only on renewable curtailment — category IV of the cut order, the last one ONS applies. Nothing here schedules a generator, so categories I to III are never touched, and the optimizer checks hour by hour that the absorption fits inside the renewable curtailment before publishing the plan. A plan that fails is refused, not captioned.",
       metaTitle: "Mitigate — WattSteer",
       title: "What can we do?",
       lede: "{subsystem}, {date}. Storage and flexible demand sized against the day-ahead forecast.",

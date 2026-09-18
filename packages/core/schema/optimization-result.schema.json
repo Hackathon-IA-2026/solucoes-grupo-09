@@ -48,7 +48,28 @@
     "stored_at_horizon_end_mwh": { "type": "number", "minimum": 0 },
     "round_trip_loss_mwh": { "type": "number", "minimum": 0 },
     "economic_scenario": { "$ref": "common.schema.json#/$defs/economic_scenario" },
-    "solver": { "$ref": "common.schema.json#/$defs/solver" }
+    "solver": { "$ref": "common.schema.json#/$defs/solver" },
+    "conformity": {
+      "type": "object",
+      "description": "NT DOP 0022 \u00a75.1.2's ordem de corte, checked on the solved schedule. WattSteer schedules no generator, so the claim is narrow and therefore checkable: the plan absorbs renewable constrained-off and never acts on categories I-III. `holds` is always true in a served response - a plan that fails the check is refused - and it is published because a check a reviewer cannot see is worth nothing.",
+      "properties": {
+        "rule": { "type": "string", "const": "NT DOP 0022 \u00a75.1.2" },
+        "order": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/cut_category" },
+          "description": "The four categories in the order the note fixes them."
+        },
+        "acts_on": { "$ref": "common.schema.json#/$defs/cut_category" },
+        "holds": { "type": "boolean" },
+        "hours_checked": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "A statement over zero hours is not a pass, and saying so is cheaper than a reviewer having to ask."
+        }
+      },
+      "required": ["rule", "order", "acts_on", "holds", "hours_checked"],
+      "additionalProperties": false
+    }
   },
   "required": [
     "scenario_hash",
@@ -67,7 +88,8 @@
     "stored_at_horizon_end_mwh",
     "round_trip_loss_mwh",
     "economic_scenario",
-    "solver"
+    "solver",
+    "conformity"
   ],
   "additionalProperties": false
 }

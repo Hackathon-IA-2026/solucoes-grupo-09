@@ -725,7 +725,14 @@ these; the contract below is fixed.
 
   "solver": { "backend": "SCIP", "status": "OPTIMAL", "wall_time_ms": 3.2,
               "objective": 251.7, "ortools_version": "9.15.6755",
-              "scip_version": "9.x" }
+              "scip_version": "9.x" },
+  // NT DOP 0022 §5.1.2's ordem de corte, checked on the solved schedule.
+  // `holds` is always true in a served response: a plan that absorbs more than
+  // the renewable constrained-off in any hour is refused, not captioned.
+  "conformity": { "rule": "NT DOP 0022 §5.1.2",
+                  "order": ["hydro_without_spill", "thermal_outside_merit",
+                            "hydro_with_spill", "renewable"],
+                  "acts_on": "renewable", "holds": true, "hours_checked": 24 }
 }
 ```
 

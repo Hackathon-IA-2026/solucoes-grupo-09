@@ -14,7 +14,12 @@ import { Platform, Text, View } from "react-native";
 import { useServing } from "@/components/app/use-serving";
 import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
-import type { ForecastOrigin, ReplayIntegrity, VintageFidelity } from "@/lib/fixtures";
+import type {
+  ForecastOrigin,
+  MitigationStep,
+  ReplayIntegrity,
+  VintageFidelity,
+} from "@/lib/fixtures";
 
 /**
  * Every surface that shows a forecast must name its `ForecastOrigin`. This is
@@ -350,6 +355,40 @@ export function ForecastPresence({
 export function useNoModelPromoted(): boolean {
   const serving = useServing();
   return serving.status === "known" && !serving.serving;
+}
+
+/**
+ * The ordem de corte, marked as checked rather than asserted in prose.
+ *
+ * A specialist review asked the prescriptive plan to respect NT DOP 0022
+ * §5.1.2's cut order — hydro without spill, thermal outside merit, hydro with
+ * spill, renewables — and the honest answer is that WattSteer schedules no
+ * generator and so never touches the first three. That answer is worth nothing
+ * to a reviewer who cannot see it checked, which is why the optimizer publishes
+ * the check on every plan (`conformity` on `OptimizationResult`) and this badge
+ * carries it onto the screen.
+ *
+ * It states the rule and the rung acted on, not a passing grade: the service
+ * refuses a plan that fails, so a rendered plan is a passing one by
+ * construction and a green tick would be decoration. `null` renders nothing —
+ * "no action" schedules nothing and has nothing to check, and a mark over an
+ * empty plan would be the same misreading as an avoidability of zero over one.
+ */
+export function ConformityBadge({
+  conformity,
+}: {
+  conformity: MitigationStep["conformity"];
+}) {
+  const copy = useCopy();
+  if (conformity === null || conformity.hoursChecked === 0) {
+    return null;
+  }
+  return (
+    <Badge
+      label={fill(copy.app.mitigate.conformityBadge, { rule: conformity.rule })}
+      tone="violet"
+    />
+  );
 }
 
 export function ObservedBadge() {

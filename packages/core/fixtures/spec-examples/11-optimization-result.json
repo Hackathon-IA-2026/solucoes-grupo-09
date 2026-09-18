@@ -55,5 +55,17 @@
     "objective": 251.7,
     "ortools_version": "9.15.6755",
     "scip_version": "9.x"
+  },
+  "conformity": {
+    "rule": "NT DOP 0022 §5.1.2",
+    "order": [
+      "hydro_without_spill",
+      "thermal_outside_merit",
+      "hydro_with_spill",
+      "renewable"
+    ],
+    "acts_on": "renewable",
+    "holds": true,
+    "hours_checked": 24
   }
 }

@@ -51,7 +51,7 @@ import {
   SectionBlock,
 } from "@/components/app/app-shell";
 import { Stepper } from "@/components/app/asset-editor";
-import { HonestyNote, SolveStamp } from "@/components/app/honesty";
+import { ConformityBadge, HonestyNote, SolveStamp } from "@/components/app/honesty";
 import {
   Beside,
   DeliveredPanel,
@@ -174,6 +174,15 @@ export default function MitigateScreen({ embedded = false }: { embedded?: boolea
           thresholdMw={stamped.thresholdMw}
         />
       )}
+      {/*
+        The ordem de corte, beside the origin stamp rather than under the plan:
+        both are statements about *where this plan came from*, and a reader
+        auditing one is auditing the other in the same glance. Read off the
+        step on screen, not off the first solve, so switching to "sem ação" —
+        which schedules nothing and checks nothing — drops the mark instead of
+        leaving a rule marked as applied to an empty plan.
+      */}
+      <ConformityBadge conformity={lastStep?.conformity ?? null} />
       {resolving ? (
         <ThinkingOrb size={18} accessibilityLabel={copy.app.overview.refreshingLabel} />
       ) : null}
@@ -375,6 +384,17 @@ export default function MitigateScreen({ embedded = false }: { embedded?: boolea
 
       <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkFaint }}>
         {copy.app.mitigate.footnote}
+      </Text>
+
+      {/*
+        What the badge in the header stands for, in one sentence, at the bottom
+        where a footnote belongs. The badge says the rule was applied; this says
+        what applying it means, and it is here rather than beside the badge
+        because it is a standing truth and not news — the same reason the
+        cause caveat moved off the Overview and into a card's corner.
+      */}
+      <Text style={{ fontSize: 12, lineHeight: 19, color: colors.inkFaint }}>
+        {copy.app.mitigate.conformityNote}
       </Text>
     </>,
   );

@@ -57,6 +57,18 @@ function result(over: Partial<OptimizationResult> = {}): OptimizationResult {
     roundTripLossMwh: 12,
     economicScenario: { brlPerMwh: 180, brl: 54_000 },
     solver: { backend: "SCIP", status: "OPTIMAL", wallTimeMs: 3 },
+    conformity: {
+      rule: "NT DOP 0022 §5.1.2",
+      order: [
+        "hydro_without_spill",
+        "thermal_outside_merit",
+        "hydro_with_spill",
+        "renewable",
+      ],
+      actsOn: "renewable",
+      holds: true,
+      hoursChecked: 24,
+    },
     ...over,
   };
 }
@@ -283,4 +295,43 @@ describe("the screen computes nothing", () => {
     expect(steps[1].recovered.p50).toBe(300);
     expect(steps[0].recovered.p50).toBe(0);
   });
+});
+
+describe("the ordem de corte travels to the screen", () => {
+  /*
+    NT DOP 0022 §5.1.2 is checked in `apps/ml/src/wattsteer_ml/optimizer/
+    conformity.py`, where the schedule is, and `test_conformity.py` holds the
+    rule itself. What is asserted here is the same thing the rest of this file
+    asserts: the mapping, and that "no action" does not inherit a pass it never
+    earned.
+  */
+  it("a solved step carries the check the service published", () => {
+    const steps = mitigationSteps({ battery: result(), battery_and_load: result() });
+    expect(steps[1]?.conformity?.actsOn).toBe("renewable");
+    expect(steps[1]?.conformity?.holds).toBe(true);
+    // Renewables last is the whole reason absorbing them displaces nothing.
+    expect(steps[1]?.conformity?.order.at(-1)).toBe("renewable");
+  });
+
+  it("no action schedules nothing, so it claims nothing", () => {
+    // `null`, never a pass: a rule reported as satisfied over an empty plan is
+    // the same misreading as an avoidability of 0 over one, which the step
+    // above it states as `null` for exactly the same reason.
+    const steps = mitigationSteps({ battery: result(), battery_and_load: result() });
+    expect(steps[0]?.key).toBe("no_action");
+    expect(steps[0]?.conformity).toBeNull();
+  });
+
+  for (const [locale, dict] of [
+    ["pt", PT as unknown as typeof EN],
+    ["en", EN],
+  ] as const) {
+    it(`${locale}: the note says the plan touches only the last rung`, () => {
+      const note = dict.app.mitigate.conformityNote.toLowerCase();
+      expect(note).toContain(locale === "pt" ? "categoria iv" : "category iv");
+      // The badge names the rule rather than grading it: a served plan passed
+      // by construction, so a tick would be decoration.
+      expect(dict.app.mitigate.conformityBadge).toContain("{rule}");
+    });
+  }
 });

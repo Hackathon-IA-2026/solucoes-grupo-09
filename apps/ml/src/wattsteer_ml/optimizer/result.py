@@ -45,6 +45,7 @@ from .. import __version__
 from ..constants import BRL_PER_MWH, SUBSYSTEM_THRESHOLD_MW
 from ..scenario_validation import forecast_unavailable
 from .basis import PlanningBasis, PlanningEnvelope
+from .conformity import check as conformity_check
 from .horizon import local_day
 from .milp import DispatchPlan, HourlyDispatch, solve
 from .scenario_fleet import fleet_from_scenario
@@ -269,6 +270,14 @@ def optimization_result(
     # realisation, which is why its contract names the realisation on the object
     # and this one names the basis instead.
     planned = band.p50
+    # NT DOP 0022 §5.1.2's ordem de corte, checked on the solved schedule rather
+    # than trusted from the build. See `conformity.py`: it restates (C4) on the
+    # values that came back, so a plan that would act outside category IV is a
+    # refusal and never a rendered caveat.
+    statement = conformity_check(
+        absorbed_mwh=[hour.absorbed_mwh for hour in plan.hours],
+        curtailment_mwh=list(profile.p50_mwh),
+    )
     return {
         "scenario_hash": scenario_hash,
         "forecast_origin": profile.forecast_origin.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -305,4 +314,5 @@ def optimization_result(
             "brl": planned.recovered_mwh * brl_per_mwh(wire),
         },
         "solver": solver_receipt(plan),
+        "conformity": statement.as_dict(),
     }

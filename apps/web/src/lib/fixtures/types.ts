@@ -63,6 +63,8 @@ export {
  */
 export type { ReplayIntegrity, ReplayIntegrityHeldOutBy } from "@wattsteer/core/api";
 
+import type { OptimizationResult } from "@wattsteer/core/api";
+
 /** `CurtailmentHour`, forecast side: the atom the model predicts. */
 export interface CurtailmentHourForecast {
   /** `valid_time`, UTC, start-labelled. */
@@ -322,6 +324,16 @@ export interface MitigationStep {
   storedAtHorizonEndMwh: number;
   /** What did not survive the round trip, on the planning envelope. */
   roundTripLossMwh: number;
+  /**
+   * NT DOP 0022 §5.1.2's ordem de corte, as the optimizer checked it.
+   *
+   * `null` on `no_action`, which schedules nothing and therefore has nothing to
+   * check — an absence, not a failure, and the screen says which. Everywhere
+   * else `holds` is `true`, because the service refuses a plan that fails
+   * rather than publishing one with a caveat; it is carried so the screen can
+   * show the rule was applied rather than asserting it in prose.
+   */
+  conformity: OptimizationResult["conformity"] | null;
   /**
    * The **scheduled** dispatch, on the planning envelope, as the solver
    * returned it. Empty for `no_action`, which is the day and not a plan.

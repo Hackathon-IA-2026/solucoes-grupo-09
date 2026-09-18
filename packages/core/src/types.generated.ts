@@ -15,6 +15,19 @@
  */
 
 /**
+ * One rung of NT DOP 0022 §5.1.2's ordem de corte: hydro that can be held back
+ * without spilling, thermal outside merit order, hydro that can only be held
+ * back by spilling, and renewables. A rule about ONS's dispatch decision,
+ * which WattSteer does not take - it is here so a plan can say which rung it
+ * acts on.
+ */
+export type CutCategory =
+  | "hydro_without_spill"
+  | "thermal_outside_merit"
+  | "hydro_with_spill"
+  | "renewable";
+
+/**
  * An enum with exactly four members. `SIN` is ONS's national aggregate row,
  * filtered at the ingest boundary, and is deliberately NOT a member: a
  * national figure lives under a `national` key with its derivation named
@@ -1904,6 +1917,15 @@ export interface OptimizationResult {
   roundTripLossMwh: number;
   economicScenario: EconomicScenario;
   solver: SolverReceipt;
+  /**
+   * NT DOP 0022 §5.1.2's ordem de corte, checked on the solved schedule.
+   * WattSteer schedules no generator, so the claim is narrow and therefore
+   * checkable: the plan absorbs renewable constrained-off and never acts on
+   * categories I-III. `holds` is always true in a served response - a plan that
+   * fails the check is refused - and it is published because a check a reviewer
+   * cannot see is worth nothing.
+   */
+  conformity: OptimizationResultConformity;
 }
 
 /**
@@ -2483,6 +2505,29 @@ export interface OptimizationResultScored {
   p10: ScoredRealisation;
   p50: ScoredRealisation;
   p90: ScoredRealisation;
+}
+
+/**
+ * NT DOP 0022 §5.1.2's ordem de corte, checked on the solved schedule.
+ * WattSteer schedules no generator, so the claim is narrow and therefore
+ * checkable: the plan absorbs renewable constrained-off and never acts on
+ * categories I-III. `holds` is always true in a served response - a plan that
+ * fails the check is refused - and it is published because a check a reviewer
+ * cannot see is worth nothing.
+ */
+export interface OptimizationResultConformity {
+  rule: "NT DOP 0022 §5.1.2";
+  /**
+   * The four categories in the order the note fixes them.
+   */
+  order: CutCategory[];
+  actsOn: CutCategory;
+  holds: boolean;
+  /**
+   * A statement over zero hours is not a pass, and saying so is cheaper than a
+   * reviewer having to ask.
+   */
+  hoursChecked: number;
 }
 
 export interface ReplayScored {
@@ -3174,6 +3219,7 @@ export const WIRE_SHAPES = {
     roundTripLossMwh: { wire: "round_trip_loss_mwh" },
     economicScenario: { wire: "economic_scenario", shape: "EconomicScenario" },
     solver: { wire: "solver", shape: "SolverReceipt" },
+    conformity: { wire: "conformity", shape: "OptimizationResultConformity" },
   },
   PlantRegistry: {
     asOf: { wire: "as_of" },
@@ -3383,6 +3429,13 @@ export const WIRE_SHAPES = {
     p10: { wire: "p10", shape: "ScoredRealisation" },
     p50: { wire: "p50", shape: "ScoredRealisation" },
     p90: { wire: "p90", shape: "ScoredRealisation" },
+  },
+  OptimizationResultConformity: {
+    rule: { wire: "rule", const: "NT DOP 0022 §5.1.2" },
+    order: { wire: "order" },
+    actsOn: { wire: "acts_on" },
+    holds: { wire: "holds" },
+    hoursChecked: { wire: "hours_checked" },
   },
   ReplayScored: {
     p10: { wire: "p10", shape: "ScoredRealisation" },

@@ -131,6 +131,10 @@ export function mitigationSteps(
     storedAtHorizonEndMwh: 0,
     roundTripLossMwh: 0,
     dispatch: [],
+    // Nothing is scheduled, so there is no schedule to check against the ordem
+    // de corte. `null` rather than a pass: a rule reported as satisfied over an
+    // empty plan is the same misreading as an avoidability of 0 over one.
+    conformity: null,
     brl: null,
     thresholdMw: day.thresholdMw,
     forecastOrigin: day.forecastOrigin,
@@ -151,6 +155,7 @@ export function mitigationSteps(
         recoveredFloorMwh: result.recoveredFloorMwh,
         storedAtHorizonEndMwh: result.storedAtHorizonEndMwh,
         roundTripLossMwh: result.roundTripLossMwh,
+        conformity: result.conformity,
         dispatch: dispatchOf(result),
         brl: result.economicScenario.brl,
         thresholdMw: result.thresholdMw,

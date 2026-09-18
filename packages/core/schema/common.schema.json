@@ -4,6 +4,16 @@
   "title": "Shared wire vocabulary",
   "description": "Every name a WattSteer response uses more than once, defined exactly once. `docs/domain-model.md` is the naming authority; `docs/specs/api-surface.md` fixes the casing (snake_case on the wire) and the nine vocabulary rules these definitions exist to make structural. A grep for `common.schema.json#/$defs/band` finds every band on the surface, which is rule 1.",
   "$defs": {
+    "cut_category": {
+      "type": "string",
+      "enum": [
+        "hydro_without_spill",
+        "thermal_outside_merit",
+        "hydro_with_spill",
+        "renewable"
+      ],
+      "description": "One rung of NT DOP 0022 \u00a75.1.2's ordem de corte: hydro that can be held back without spilling, thermal outside merit order, hydro that can only be held back by spilling, and renewables. A rule about ONS's dispatch decision, which WattSteer does not take - it is here so a plan can say which rung it acts on."
+    },
     "subsystem": {
       "title": "Subsystem",
       "description": "An enum with exactly four members. `SIN` is ONS's national aggregate row, filtered at the ingest boundary, and is deliberately NOT a member: a national figure lives under a `national` key with its derivation named (vocabulary rule 6).",

@@ -1064,6 +1064,14 @@ export const pt: Copy = {
     },
 
     mitigate: {
+      /*
+        A ordem de corte, marcada como conferida e não afirmada em prosa. Ver
+        `ConformityBadge`: o otimizador publica a checagem em todo plano, e um
+        plano que não passa é recusado antes de chegar aqui.
+      */
+      conformityBadge: "Ordem de corte I–IV · {rule}",
+      conformityNote:
+        "O plano só atua sobre corte de renovável — categoria IV da ordem de corte, a última que o ONS aplica. Nada aqui despacha gerador, então as categorias I a III não são tocadas, e o otimizador confere hora a hora se a absorção cabe dentro do corte renovável antes de publicar o plano. Um plano que não passa é recusado, não legendado.",
       metaTitle: "Mitigar — WattSteer",
       title: "O que dá para fazer?",
       lede: "{subsystem}, {date}. Armazenamento e demanda flexível dimensionados contra a previsão do dia seguinte.",
