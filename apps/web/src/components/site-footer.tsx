@@ -15,7 +15,6 @@ import { DEFAULT_LOCALE, localePath } from "@/i18n/locale";
 import { PITCH_PATH } from "@/lib/pitch";
 import { APP_HREF, CtaLink } from "./landing/cta-link";
 import { PAGE_MAX } from "./landing/layout";
-import { RegulatoryNote } from "./regulatory-note";
 
 const styles = StyleSheet.create({
   wrap: {
@@ -123,7 +122,7 @@ export function SiteFooter() {
   // The legal pages live under the locale prefix; `/app` does not, and its
   // footer links out to the default locale's copies rather than to a path
   // that would 404.
-  const legalHref = (path: "/privacy" | "/terms") =>
+  const legalHref = (path: "/privacy" | "/terms" | "/references") =>
     localePath(routeLocale ?? DEFAULT_LOCALE, path);
   const year = new Date().getFullYear();
   const [width, onLayout] = useContainerWidth();
@@ -208,8 +207,6 @@ export function SiteFooter() {
         />
       </View>
 
-      <RegulatoryNote />
-
       {/* Copyright and the legal links — two cells, the outer edges of the
           page (desktop); stacked on mobile.
 
@@ -277,6 +274,32 @@ export function SiteFooter() {
             href={legalHref("/terms")}
             label={copy.legal.termsLink}
             testID="footer-terms-link"
+          />
+          <View
+            aria-hidden={true}
+            style={{
+              width: space.xs,
+              height: space.xs,
+              borderRadius: space.xs / 2,
+              backgroundColor: colors.inkFaint,
+            }}
+          />
+          {/*
+            The norms page, as a label rather than the paragraph that used to
+            sit above this row.
+
+            The paragraph stated the regulatory basis on every page and was
+            removed on request: it read as a separate section between the
+            centred mark and this row, and it was the heaviest thing in a
+            footer of short labels. The link stays here because the page it
+            points at must not become reachable only to someone who already
+            knows the URL — which is the reason `/pitch` is in this row too,
+            three entries along.
+          */}
+          <LegalLink
+            href={legalHref("/references")}
+            label={copy.regulatory.link}
+            testID="footer-references-link"
           />
           <View
             aria-hidden={true}

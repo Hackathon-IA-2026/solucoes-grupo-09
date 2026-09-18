@@ -126,24 +126,7 @@ test.describe("question 5 — why", () => {
     // says it has no record rather than naming a reason at 0 %.
     expect(body).toMatch(/Sem registro|Not recorded/);
 
-    /*
-      The regulatory note is subtracted before the codes are looked for, and
-      the subtraction is the point rather than a loophole.
-
-      This guard is about what the product claims **about this day**: naming a
-      reason on a day ONS registered none. The note added in #8 names REL, CNF
-      and ENE as the three codes REN ANEEL 1.030/2022 defines — a fixed
-      statement of the regulation, in the footer, on every page and every day,
-      which asserts nothing about the day on screen. Matching it made the guard
-      red while the property it governs still held.
-
-      Everything else on the page is still checked, which is why this subtracts
-      one element rather than narrowing to the card: a reason code leaking into
-      a panel, a stamp or a tooltip is exactly what this must still catch.
-    */
-    const note = (await page.getByTestId("regulatory-note").textContent()) ?? "";
-    expect(note).not.toBe("");
-    expect(body.replace(note, "")).not.toMatch(/\bENE\b|\bCNF\b|\bREL\b/);
+    expect(body).not.toMatch(/\bENE\b|\bCNF\b|\bREL\b/);
   });
 });
 

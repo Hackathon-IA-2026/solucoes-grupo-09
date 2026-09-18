@@ -77,21 +77,12 @@ test.describe("mounting the host does not disturb the screens under it", () => {
       asserted.
     */
     await expect(page.getByRole("tablist")).toHaveCount(0);
-    /*
-      Two destinations. Explicar and Mitigar are collapsed accordions on this
-      page now, not places to go, so the row names only what a reader travels
-      to: this screen and Máquina do tempo.
-
-      The regulatory note's own link is excluded rather than counted. This box
-      is about the **navigation row** — what the shell offers as a place to go —
-      and #8 added a footer link to the norms page, which is a citation and not
-      a destination the chrome names. Counting it would have turned the
-      assertion into "however many links happen to exist", which is the thing
-      it exists not to be, so the two are counted separately and subtracted.
-    */
-    const travelled = page.getByRole("link").filter({ hasNotText: "WattSteer" });
-    const cited = page.getByTestId("regulatory-note").getByRole("link");
-    expect((await travelled.count()) - (await cited.count())).toBe(2);
+    // Two destinations. Explicar and Mitigar are collapsed accordions on this
+    // page now, not places to go, so the row names only what a reader travels
+    // to: this screen and Máquina do tempo.
+    await expect(page.getByRole("link").filter({ hasNotText: "WattSteer" })).toHaveCount(
+      2,
+    );
   });
 });
 

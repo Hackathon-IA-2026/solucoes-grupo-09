@@ -64,7 +64,6 @@ export const en = {
   },
 
   regulatory: {
-    note: "Curtailment reasons REL, CNF and ENE as classified under REN ANEEL 1.030/2022. Mitigate's plans are checked against the I–IV curtailment order of NT-ONS DOP 0022/2025.",
     link: "Norms, licences and glossary",
   },
 
@@ -396,8 +395,8 @@ export const en = {
         // inside the product, where a driver group has no transmission
         // feature to read; this is the public half of the same sentence.
         {
-          label: "No transmission maintenance is read",
-          body: "ONS publishes planned maintenance and outages as prose rather than as a dataset, and WattSteer ingests none of it. So a day whose curtailment was driven by a line out of service has no feature carrying that fact, and the model reads around it. Nothing on this site is derived from maintenance data.",
+          label: "The forecaster does not read transmission maintenance",
+          body: "ONS publishes planned maintenance and outages as prose rather than as a dataset, and no feature of the model carries that fact. So a day whose curtailment was driven by a line out of service is read around. The evidence layer cites the daily bulletins where that prose appears, but only transcribes what ONS published: nothing there becomes a variable or a number.",
         },
       ],
     },
