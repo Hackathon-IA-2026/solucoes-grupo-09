@@ -15,6 +15,10 @@ Two options, because we do not know yet what the event's AWS account allows:
 | Entry point | Application Load Balancer | Caddy on the instance (automatic HTTPS with a domain) |
 | Needs these services | ECS, ECR, RDS, ElastiCache, EFS, ELB, EC2 (VPC), IAM, SSM, S3, CloudWatch Logs, Cloud Map | EC2, EBS, ECR, IAM, SSM, S3 |
 
+Each option has its own name prefix (`wattsteer` and `wattsteer-ec2`), so
+falling back from one to the other in the same account creates a second set
+of resources instead of colliding with the first.
+
 Both route the same way: `/v1/*`, `/ready`, `/ingest/*` and `/docs` go to the
 API, everything else to the site. They share the network, registry and storage
 modules. Choose on the day by trying `ecs` first; if the account refuses a
@@ -101,7 +105,8 @@ infra/aws/scripts/deploy.sh ecs        # or ec2
 ```
 
 It creates the network, the image registry, the archive bucket and the secret
-placeholders, then stops with `still unset: /wattsteer/NVIDIA_API_KEYS ...`.
+placeholders, then stops with `still unset: /wattsteer/NVIDIA_API_KEYS ...`
+(`/wattsteer-ec2/...` for `ec2`).
 
 ### 4. Secrets
 
@@ -115,7 +120,7 @@ EXPO_PUBLIC_CESIUM_ION_TOKEN=...      # optional: the 3D map's imagery
 ```
 
 ```bash
-infra/aws/scripts/set-secrets.sh ~/wattsteer-secrets.env
+infra/aws/scripts/set-secrets.sh ecs ~/wattsteer-secrets.env   # or ec2
 ```
 
 Only those four names are read; a copy of a larger `.env` is safe to pass.

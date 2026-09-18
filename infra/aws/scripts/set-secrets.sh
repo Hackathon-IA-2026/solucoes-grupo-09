@@ -2,7 +2,7 @@
 # Put the provider keys into SSM, from a local env file that never leaves the
 # laptop and is never committed.
 #
-#   infra/aws/scripts/set-secrets.sh path/to/secrets.env
+#   infra/aws/scripts/set-secrets.sh <ecs|ec2> path/to/secrets.env
 #
 # The file holds lines like NVIDIA_API_KEYS=nvapi-...,nvapi-... . Only the
 # names Terraform created a parameter for are written (see
@@ -11,8 +11,14 @@
 # printed.
 set -euo pipefail
 
-FILE="${1:?usage: set-secrets.sh <env file>}"
-NAME="${WATTSTEER_NAME:-wattsteer}"
+OPTION="${1:?usage: set-secrets.sh <ecs|ec2> <env file>}"
+FILE="${2:?usage: set-secrets.sh <ecs|ec2> <env file>}"
+# The same prefixes as deploy.sh.
+case "$OPTION" in
+  ecs) NAME=wattsteer ;;
+  ec2) NAME=wattsteer-ec2 ;;
+  *) echo "option must be ecs or ec2" >&2; exit 2 ;;
+esac
 AWS="$(dirname "$0")/aws.sh"
 ALLOWED="NVIDIA_API_KEYS GROQ_API_KEYS XAI_API_KEY EXPO_PUBLIC_CESIUM_ION_TOKEN"
 

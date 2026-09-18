@@ -44,7 +44,9 @@ for arg in "$@"; do
 done
 
 SIM="${WATTSTEER_SIM:-0}"
-NAME="${WATTSTEER_NAME:-wattsteer}"
+# Each option has its own prefix (the `name` variable's default in its root),
+# so trying ecs and falling back to ec2 in the same account never collides.
+if [ "$OPTION" = "ecs" ]; then NAME=wattsteer; else NAME=wattsteer-ec2; fi
 step() { printf '\n==> %s\n' "$*"; }
 
 # --- 1. preflight ----------------------------------------------------------
@@ -126,7 +128,7 @@ unset_secrets="$("$AWS" ssm get-parameters --with-decryption \
   --query 'Parameters[?Value==`unset`].Name' --output text)"
 if [ -n "$unset_secrets" ] && [ "$unset_secrets" != "None" ]; then
   echo "still unset: $unset_secrets"
-  echo "run: infra/aws/scripts/set-secrets.sh <your env file>   (README, step 4), then deploy again"
+  echo "run: infra/aws/scripts/set-secrets.sh $OPTION <your env file>   (README, step 4), then deploy again"
   exit 1
 fi
 cesium_token="$("$AWS" ssm get-parameter --with-decryption --name "/$NAME/EXPO_PUBLIC_CESIUM_ION_TOKEN" \

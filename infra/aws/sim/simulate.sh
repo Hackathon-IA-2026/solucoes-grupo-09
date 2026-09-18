@@ -66,7 +66,7 @@ for option in "${OPTIONS[@]}"; do
   echo "ok: stopped and asked for the secrets"
 
   step "$option: set secrets, deploy again"
-  "$INFRA/scripts/set-secrets.sh" "$secrets"
+  "$INFRA/scripts/set-secrets.sh" "$option" "$secrets"
   "$INFRA/scripts/deploy.sh" "$option" | tee "$HERE/.state/$option-deploy.log" | grep -E "^==>|plan check|Apply complete|built|\[sim\]"
 
   tag="$(git -C "$INFRA" rev-parse --short=12 HEAD)"

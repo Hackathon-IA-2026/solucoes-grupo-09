@@ -16,13 +16,13 @@ AWS="$HERE/../scripts/aws.sh"
 TAG="${1:?usage: smoke.sh <image tag>}"
 WORK="$(mktemp -d)"
 PORT="${SMOKE_PORT:-18080}"
-bucket="wattsteer-archive-123456789012"
+bucket="wattsteer-ec2-archive-123456789012"
 
 for file in compose.yml Caddyfile settings.env; do
   "$AWS" s3 cp "s3://$bucket/deploy/$file" - > "$WORK/$file"
 done
 
-"$AWS" ssm get-parameters-by-path --path /wattsteer/ --with-decryption \
+"$AWS" ssm get-parameters-by-path --path /wattsteer-ec2/ --with-decryption \
   --query 'Parameters[].[Name,Value]' --output text |
   while IFS=$'\t' read -r name value; do
     [ "$value" = "unset" ] && continue

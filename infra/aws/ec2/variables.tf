@@ -5,9 +5,9 @@ variable "region" {
 }
 
 variable "name" {
-  description = "Prefix for every resource name."
+  description = "Prefix for every resource name. Not the ecs option's, so both can live in one account."
   type        = string
-  default     = "wattsteer"
+  default     = "wattsteer-ec2"
 }
 
 variable "image_tag" {
