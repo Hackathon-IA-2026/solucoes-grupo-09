@@ -63,6 +63,11 @@ export const en = {
     rights: "© WattSteer {year}. All rights reserved.",
   },
 
+  regulatory: {
+    note: "Curtailment reasons REL, CNF and ENE as classified under REN ANEEL 1.030/2022. Mitigate's plans are checked against the I–IV curtailment order of NT-ONS DOP 0022/2025.",
+    link: "Norms, licences and glossary",
+  },
+
   notFound: {
     metaTitle: "Page not found — WattSteer",
     title: "Page not found",
@@ -430,6 +435,11 @@ export const en = {
       description:
         "WattSteer is a public, read-only analysis of openly published Brazilian grid data. These terms govern your use of it.",
     },
+    references: {
+      title: "Norms, licences and glossary — WattSteer",
+      description:
+        "The Brazilian grid rules WattSteer follows, the licences of the data it uses, and the terms on its screens in operator's language.",
+    },
   },
 
   /**
@@ -471,6 +481,121 @@ export const en = {
     homeLink: "WattSteer — home",
     privacyLink: "Privacy",
     termsLink: "Terms",
+
+    /*
+      The page a specialist review asked for (Relatório de Conformidade,
+      15/09/2026): the norms the product follows, stated rather than only
+      practised. Every sentence about a norm was checked against the norm's own
+      text on 2026-09-18 — see `lib/regulatory.ts` for the addresses.
+    */
+    references: {
+      badge: "References",
+      updated: "Last updated: 18 September 2026",
+      title: "Norms, licences and glossary",
+      intro:
+        "The Brazilian grid rules WattSteer follows, the licences of the data it uses, and the terms that appear on its screens, in operator's language.",
+      norms: {
+        title: "Regulatory basis",
+        body: "WattSteer neither classifies curtailment nor computes compensation. It shows what ONS published and forecasts how much will be curtailed; the norms below define the terms in which that is said.",
+        whereLabel: "In WattSteer",
+        rows: [
+          [
+            "REN ANEEL 1.030/2022",
+            "ONS classifies every wind and solar curtailment under one reason: REL (external unavailability), CNF (electrical reliability), ENE (energy surplus) or PAR (access opinion). Under the general rule only REL is compensated.",
+            "The reason shown is the one ONS published, per conjunto. WattSteer does not reclassify and does not assign a reason to individual plants.",
+          ],
+          [
+            "NT-ONS DOP 0022/2025, §5.1.2",
+            "In an energy surplus, generation is reduced in this order: I. hydro without spilling; II. thermal dispatched out of merit order; III. hydro with spilling; IV. wind and solar, in proportion to availability.",
+            "Mitigate checks every plan against this order and refuses a plan that would act outside category IV.",
+          ],
+          [
+            "Lei 15.269/2025, art. 1º-B",
+            "Provides compensation to wind and solar plants for external unavailability and for electrical reliability, from 1 September 2023 until the provision came into force.",
+            "Regulatory context. WattSteer does not compute this compensation.",
+          ],
+          [
+            "Procedimentos de Rede (ONS)",
+            "The grid operation procedures in force, published by ONS.",
+            "Reference for the operating instructions the evidence layer cites.",
+          ],
+        ],
+        linksTitle: "Official texts",
+      },
+      traceability: {
+        title: "Traceability",
+        body: "Every published forecast states the model artifact that produced it, the weather run it used, when it was published and the 5 MW per-subsystem threshold. On the Explain screen, the “Full JSON” link opens the API response the screen is showing, so any figure can be checked at its source.",
+      },
+      licences: {
+        title: "Data licences",
+        items: [
+          "ONS Dados Abertos: operation, balance and constrained-off series, used under the terms of the dados.ons.org.br portal.",
+          "ANEEL SIGA: the derived plant registry is offered under the Open Database License (ODbL) v1.0.",
+          "Open-Meteo: data under Creative Commons Attribution 4.0 (CC BY 4.0); the free API is for non-commercial use, under Open-Meteo's terms.",
+        ],
+      },
+      glossary: {
+        title: "Glossary",
+        body: "The terms that appear on the screens, with the name the control room uses.",
+        headers: ["Term", "Meaning"],
+        rows: [
+          ["Constrained-off", "Wind or solar generation curtailed by order of ONS."],
+          [
+            "REL",
+            "Curtailment due to an installation outside the plant being unavailable (a line or equipment out of service).",
+          ],
+          [
+            "CNF",
+            "Curtailment due to an electrical reliability limit of the grid, with nothing unavailable.",
+          ],
+          ["ENE", "Curtailment for energy reasons: more generation than load."],
+          ["PAR", "Restriction under an access opinion."],
+          [
+            "Subsystem",
+            "One of the four electrical regions of the SIN: North, Northeast, Southeast/Centre-West and South.",
+          ],
+          ["MWh and MWmed", "Energy over the period, and average power over the period."],
+          [
+            "5 MW threshold",
+            "An hour only counts as curtailed above 5 MW in the subsystem.",
+          ],
+          [
+            "P10, P50, P90",
+            "The energy band: a 10% chance of falling below P10, even odds below P50, 90% below P90.",
+          ],
+          [
+            "Expected value",
+            "The forecast's mean. It is the figure that adds up across subsystems; bands do not.",
+          ],
+          [
+            "Single number",
+            "A value with no band around it, such as the wind and solar division.",
+          ],
+          ["Artifact", "The exact version of the model that published the forecast."],
+          [
+            "Weather run",
+            "The weather forecast used as input, identified by the time it was run.",
+          ],
+          ["DESSEM", "ONS's daily scheduling model: the plan for the next day."],
+          [
+            "BDO and IPDO",
+            "ONS's daily operation bulletin and its preliminary daily report.",
+          ],
+          [
+            "Similar days",
+            "Past days whose conditions resembled the forecast day, and what was curtailed on them.",
+          ],
+          [
+            "Influence factors",
+            "What weighed most in the model's figure. They show how the model read the day, not the reason for the curtailment.",
+          ],
+          [
+            "Withholding",
+            "When data or confidence is missing, WattSteer does not publish, and says why.",
+          ],
+        ],
+      },
+    },
 
     privacy: {
       badge: "Privacy Policy",
@@ -796,7 +921,7 @@ export const en = {
       hint: "Tap an hour to read its interval",
       hourLabel: "Hour",
       exceedance: "P(above threshold)",
-      expected: "Expected E[Y]",
+      expected: "Expected value",
       splitReadout: "{wind} wind · {solar} solar",
       hourFigure: "Hour {hour}: P50 {p50} MWh, P10 to P90 {p10} to {p90}",
     },
@@ -1303,10 +1428,10 @@ export const en = {
       title: "Wind and solar",
       /** Named. A panel that does not say whose numbers it holds cannot show
           a reader that the numbers changed under it. */
-      subtitle: "{subsystem} · two scalars, no band",
+      subtitle: "{subsystem} · two single numbers, no band",
       expected: "Expected curtailed energy, whole day",
       expectedNote:
-        "E[Y], published beside the band rather than inside it. It is not the middle of the interval: with mass sitting on “no curtailment at all”, the expectation runs above the median, and on a quiet day the median is flatly zero while the expectation is not.",
+        "The expected value, published beside the band rather than inside it. It is not the middle of the interval: with mass sitting on “no curtailment at all”, the expectation runs above the median, and on a quiet day the median is flatly zero while the expectation is not.",
       note: "The forecaster has one head per subsystem, so wind and solar are a division of that expectation and nothing more. There is no wind band and no solar band to draw, which is why picking a technology above emphasises one of these two numbers instead of filtering the forecast.",
       // "shown" made the badge read "Wind · shown", which says the other number
       // is not — a filter, which is precisely the misreading `note` above
@@ -1319,6 +1444,8 @@ export const en = {
 
     explain: {
       metaTitle: "Explain — WattSteer",
+      /** The API response this screen draws, for a reader who wants the source. */
+      jsonLink: "Full JSON",
       title: "Why {subsystem}?",
       lede: "What the model is reading on {date}, and how much of it to believe.",
       /*

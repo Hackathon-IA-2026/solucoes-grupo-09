@@ -58,6 +58,7 @@ import { AnaloguePanel } from "@/components/app/figures/analogue-panel";
 import { usePromotedLane } from "@/components/app/figures/use-model-card";
 import { useSimilarDays } from "@/components/app/figures/use-similar-days";
 import { ForecastAbsent } from "@/components/app/forecast-absent";
+import { ForecastJsonLink } from "@/components/app/forecast-json-link";
 import { ForecastStamp, HonestyNote, VintageBadge } from "@/components/app/honesty";
 import { ReadingState, ThinkingOrb } from "@/components/app/thinking-orb";
 import {
@@ -310,6 +311,13 @@ export default function ExplainScreen({
         <ForecastStamp
           origin={day.forecast.forecastOrigin}
           thresholdMw={day.forecast.thresholdMw}
+        />
+      )}
+      {day === null ? null : (
+        <ForecastJsonLink
+          subsystem={params.subsystem}
+          targetDate={params.date}
+          gateProfile={gateProfileOf(params.run)}
         />
       )}
       {refreshing ? (

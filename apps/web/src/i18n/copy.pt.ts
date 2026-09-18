@@ -36,6 +36,11 @@ export const pt: Copy = {
     rights: "© WattSteer {year}. Todos os direitos reservados.",
   },
 
+  regulatory: {
+    note: "Razões de corte REL, CNF e ENE conforme a REN ANEEL 1.030/2022. Os planos do Mitigar são conferidos contra a ordem de corte I–IV da NT-ONS DOP 0022/2025.",
+    link: "Normas, licenças e glossário",
+  },
+
   notFound: {
     metaTitle: "Página não encontrada — WattSteer",
     title: "Página não encontrada",
@@ -344,6 +349,11 @@ export const pt: Copy = {
       description:
         "O WattSteer é uma análise pública e somente leitura de dados abertos da rede brasileira. Estes termos regem o seu uso.",
     },
+    references: {
+      title: "Normas, licenças e glossário — WattSteer",
+      description:
+        "As normas do setor elétrico que o WattSteer segue, as licenças dos dados que usa e os termos das telas em linguagem de operação.",
+    },
   },
 
   pitch: {
@@ -371,6 +381,121 @@ export const pt: Copy = {
     homeLink: "WattSteer — início",
     privacyLink: "Privacidade",
     termsLink: "Termos",
+
+    /*
+      The page a specialist review asked for (Relatório de Conformidade,
+      15/09/2026): the norms the product follows, stated rather than only
+      practised. Every sentence about a norm was checked against the norm's own
+      text on 2026-09-18 — see `lib/regulatory.ts` for the addresses.
+    */
+    references: {
+      badge: "Referências",
+      updated: "Última atualização: 18 de setembro de 2026",
+      title: "Normas, licenças e glossário",
+      intro:
+        "As normas do setor elétrico que o WattSteer segue, as licenças dos dados que ele usa e os termos que aparecem nas telas, em linguagem de operação.",
+      norms: {
+        title: "Base regulatória",
+        body: "O WattSteer não classifica cortes nem calcula ressarcimento. Ele mostra o que o ONS publicou e prevê quanto será cortado; as normas abaixo definem os termos em que isso é dito.",
+        whereLabel: "No WattSteer",
+        rows: [
+          [
+            "REN ANEEL 1.030/2022",
+            "O ONS classifica cada corte de geração eólica e solar em uma razão: REL (indisponibilidade externa), CNF (confiabilidade elétrica), ENE (razão energética) ou PAR (parecer de acesso). Pela regra geral, só a razão REL é ressarcida.",
+            "A razão exibida é a que o ONS publicou, por conjunto. O WattSteer não reclassifica e não atribui razão a usinas.",
+          ],
+          [
+            "NT-ONS DOP 0022/2025, §5.1.2",
+            "Em excedente energético, a redução segue a ordem: I. hidrelétrica sem vertimento; II. térmica fora da ordem de mérito; III. hidrelétrica com vertimento; IV. eólica e solar, proporcional à disponibilidade.",
+            "O Mitigar confere todo plano contra essa ordem e recusa um plano que atuaria fora da categoria IV.",
+          ],
+          [
+            "Lei 15.269/2025, art. 1º-B",
+            "Prevê compensação para eólicas e solares por indisponibilidade externa e por confiabilidade elétrica, desde 1º de setembro de 2023 até a entrada em vigor do dispositivo.",
+            "Contexto regulatório. O WattSteer não calcula essa compensação.",
+          ],
+          [
+            "Procedimentos de Rede (ONS)",
+            "Os procedimentos vigentes da operação do SIN, publicados pelo ONS.",
+            "Referência para as instruções de operação que a camada de evidência cita.",
+          ],
+        ],
+        linksTitle: "Textos oficiais",
+      },
+      traceability: {
+        title: "Rastreabilidade",
+        body: "Toda previsão publicada diz o artefato do modelo que a gerou, a rodada meteorológica usada, o horário de publicação e o limiar de 5 MW por subsistema. Na tela Explicar, o link “JSON completo” abre a resposta da API que a tela está mostrando, para que qualquer número possa ser conferido na fonte.",
+      },
+      licences: {
+        title: "Licenças dos dados",
+        items: [
+          "ONS Dados Abertos: séries de operação, balanço e constrained-off, usadas conforme os termos do portal dados.ons.org.br.",
+          "ANEEL SIGA: o registro de usinas derivado é oferecido sob a Open Database License (ODbL) v1.0.",
+          "Open-Meteo: dados sob a licença Creative Commons Attribution 4.0 (CC BY 4.0); a API gratuita é para uso não comercial, conforme os termos do Open-Meteo.",
+        ],
+      },
+      glossary: {
+        title: "Glossário",
+        body: "Os termos que aparecem nas telas, com o nome que a operação usa.",
+        headers: ["Termo", "Significado"],
+        rows: [
+          ["Constrained-off", "Corte de geração eólica ou solar determinado pelo ONS."],
+          [
+            "REL",
+            "Corte por indisponibilidade de instalação externa à usina (linha ou equipamento fora de operação).",
+          ],
+          [
+            "CNF",
+            "Corte por limite de confiabilidade elétrica da rede, sem indisponibilidade.",
+          ],
+          ["ENE", "Corte por razão energética: sobra de geração em relação à carga."],
+          ["PAR", "Restrição por parecer de acesso."],
+          [
+            "Subsistema",
+            "Uma das quatro regiões elétricas do SIN: Norte, Nordeste, Sudeste/Centro-Oeste e Sul.",
+          ],
+          ["MWh e MWmed", "Energia no período e potência média no período."],
+          [
+            "Limiar de 5 MW",
+            "Uma hora só conta como cortada acima de 5 MW no subsistema.",
+          ],
+          [
+            "P10, P50, P90",
+            "Faixa de energia: 10% de chance de ficar abaixo da P10, metade de chance abaixo da P50, 90% abaixo da P90.",
+          ],
+          [
+            "Valor esperado",
+            "A média da previsão. É o número que soma entre subsistemas; as faixas não somam.",
+          ],
+          [
+            "Número único",
+            "Um valor sem faixa ao redor, como a divisão entre eólica e solar.",
+          ],
+          ["Artefato", "A versão exata do modelo que publicou a previsão."],
+          [
+            "Rodada meteorológica",
+            "A previsão do tempo usada como entrada, identificada pelo horário em que foi rodada.",
+          ],
+          ["DESSEM", "O modelo de programação diária do ONS: o plano do dia seguinte."],
+          [
+            "BDO e IPDO",
+            "Boletim Diário da Operação e Informativo Preliminar Diário da Operação, publicados pelo ONS.",
+          ],
+          [
+            "Dias parecidos",
+            "Dias passados com condições semelhantes às do dia previsto, e o que foi cortado neles.",
+          ],
+          [
+            "Fatores de influência",
+            "O que mais pesou no número do modelo. Mostram como o modelo leu o dia, não a razão do corte.",
+          ],
+          [
+            "Retenção",
+            "Quando falta dado ou confiança, o WattSteer não publica e diz por quê.",
+          ],
+        ],
+      },
+    },
 
     privacy: {
       badge: "Política de Privacidade",
@@ -640,7 +765,7 @@ export const pt: Copy = {
       hint: "Toque em uma hora para ler o intervalo",
       hourLabel: "Hora",
       exceedance: "P(acima do limiar)",
-      expected: "Esperada E[Y]",
+      expected: "Valor esperado",
       splitReadout: "{wind} eólica · {solar} solar",
       hourFigure: "Hora {hour}: P50 {p50} MWh, P10 a P90 {p10} a {p90}",
     },
@@ -1048,16 +1173,18 @@ export const pt: Copy = {
       title: "Eólica e solar",
       /** Named. A panel that does not say whose numbers it holds cannot show
           a reader that the numbers changed under it. */
-      subtitle: "{subsystem} · dois escalares, sem faixa",
+      subtitle: "{subsystem} · dois números únicos, sem faixa",
       expected: "Energia cortada esperada, dia inteiro",
       expectedNote:
-        "E[Y], publicada ao lado da faixa e não dentro dela. Não é o meio do intervalo: com massa parada em “nenhum corte”, a expectativa fica acima da mediana, e num dia calmo a mediana é zero cravado enquanto a expectativa não é.",
+        "O valor esperado, publicado ao lado da faixa e não dentro dela. Não é o meio do intervalo: com massa parada em “nenhum corte”, a expectativa fica acima da mediana, e num dia calmo a mediana é zero cravado enquanto a expectativa não é.",
       note: "O previsor tem uma cabeça por subsistema, então eólica e solar são uma divisão dessa expectativa e nada além disso. Não existe faixa eólica nem faixa solar para desenhar, e é por isso que escolher uma tecnologia ali em cima destaca um destes dois números em vez de filtrar a previsão.",
       emphasised: "em destaque",
     },
 
     explain: {
       metaTitle: "Explicar — WattSteer",
+      /** The API response this screen draws, for a reader who wants the source. */
+      jsonLink: "JSON completo",
       title: "Por que {subsystem}?",
       lede: "O que o modelo está lendo em {date}, e quanto disso vale acreditar.",
       ledeAbsent:

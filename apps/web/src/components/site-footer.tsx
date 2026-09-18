@@ -15,6 +15,7 @@ import { DEFAULT_LOCALE, localePath } from "@/i18n/locale";
 import { PITCH_PATH } from "@/lib/pitch";
 import { APP_HREF, CtaLink } from "./landing/cta-link";
 import { PAGE_MAX } from "./landing/layout";
+import { RegulatoryNote } from "./regulatory-note";
 
 const styles = StyleSheet.create({
   wrap: {
@@ -206,6 +207,8 @@ export function SiteFooter() {
           accessibilityLabel="WattSteer"
         />
       </View>
+
+      <RegulatoryNote />
 
       {/* Copyright and the legal links — two cells, the outer edges of the
           page (desktop); stacked on mobile.

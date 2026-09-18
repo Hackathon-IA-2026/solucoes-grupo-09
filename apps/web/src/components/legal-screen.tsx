@@ -59,7 +59,7 @@ const SIDE_MARKER = marker("legalSidebarSide");
 const INLINE_MARKER = marker("legalSidebarInline");
 
 /**
- * Shared legal-page shell (terms / privacy): a home-linking header, a
+ * Shared legal-page shell (terms / privacy / references): a home-linking header, a
  * scroll-tracked TOC sidebar (beside the content on desktop, inline on
  * mobile), the hero, the measured sections, and the site footer — all in the
  * WattSteer design system.
@@ -77,7 +77,7 @@ export function LegalScreen({
 }: {
   headTitle: string;
   description: string;
-  path: "/terms" | "/privacy";
+  path: "/terms" | "/privacy" | "/references";
   badge: string;
   updated: string;
   title: string;
