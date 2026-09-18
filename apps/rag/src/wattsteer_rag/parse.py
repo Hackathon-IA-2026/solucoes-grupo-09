@@ -131,10 +131,17 @@ def parse_html_tables(path: Path) -> list[ParsedPage]:
     """The daily bulletin, which publishes the same numbers as plain HTML.
 
     No model is involved and none is needed: the tables are already structured,
-    and reading them costs nothing. The files are latin-1, which is why decoding
-    is explicit.
+    and reading them costs nothing. Decoding is explicit: the files are UTF-8
+    with a byte-order mark and say so in their `charset`. They were read as
+    latin-1, which stored every accented word garbled ("ProduÃ§Ã£o") and kept
+    the table headings from matching a Portuguese question. latin-1 stays as
+    the fallback for a file that is not valid UTF-8.
     """
-    raw = path.read_text("latin-1", errors="ignore")
+    data = path.read_bytes()
+    try:
+        raw = data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raw = data.decode("latin-1")
     tables = []
     for table in re.findall(r"<table[^>]*>(.*?)</table>", raw, re.S | re.I):
         rows = [
