@@ -1,0 +1,6 @@
+# Copy to infra/aws/backend.hcl (git-ignored) after running bootstrap/, and put
+# the bucket name `bootstrap` printed. The state key is added per option by
+# scripts/deploy.sh (ecs/terraform.tfstate, ec2/terraform.tfstate).
+bucket       = "wattsteer-tfstate-<account id>"
+region       = "us-east-1"
+use_lockfile = true
