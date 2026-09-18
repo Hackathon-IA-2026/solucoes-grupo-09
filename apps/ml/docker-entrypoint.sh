@@ -20,6 +20,12 @@ set -eu
 
 if [ "$(id -u)" = "0" ]; then
     chown -R wattsteer:wattsteer "${WATTSTEER_ML_ARTIFACT_DIR:-/data/models}"
+    # `setpriv` changes the uid and nothing else, so HOME would stay /root.
+    # asyncpg looks for a client key under $HOME/.postgresql and raises
+    # PermissionError on /root instead of going on without one: on the EC2
+    # compose stack (18/09/2026) every POST /v1/optimize failed with it.
+    # apps/rag/docker-entrypoint.sh met the same thing first.
+    export HOME=/home/wattsteer
     exec setpriv --reuid=wattsteer --regid=wattsteer --init-groups --inh-caps=-all -- "$@"
 fi
 
