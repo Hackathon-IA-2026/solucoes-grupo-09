@@ -132,11 +132,11 @@ async def _evaluate_question(db: Database, gateway: Gateway, case: dict) -> dict
 def _score(case: dict, document: dict) -> dict:
     """Right document, and every number the published text states for the question."""
     citations = _citations(document)
-    expected = _expected_documents(case)
+    claimed = _number_keys(item["claim"] for item in document["items"])
+    cited = {citation.get("external_id") for citation in citations}
+    expected, wanted = _reading(case, cited, claimed)
     on_document = [citation for citation in citations if citation.get("external_id") in expected]
-    missing = _number_keys(case.get("expect_numbers") or []) - _number_keys(
-        item["claim"] for item in document["items"]
-    )
+    missing = _number_keys(wanted) - claimed
     return {
         "grade": _grade(
             case.get("expect", "answer"), document["verdict"] == "found", bool(on_document) and not missing
@@ -149,6 +149,17 @@ def _score(case: dict, document: dict) -> dict:
         ),
         "numbers_missing": sorted(missing),
     }
+
+
+def _reading(case: dict, cited: set, claimed: set[str]) -> tuple[set[str], list[str]]:
+    """The primary answer, or another official table that states the same fact
+    ("also"), each with its own document and its own printed numbers."""
+    readings = [(_expected_documents(case), case.get("expect_numbers") or [])]
+    readings += [({alt["document"]}, alt["numbers"]) for alt in case.get("also") or []]
+    for documents, numbers in readings:
+        if documents & cited and not _number_keys(numbers) - claimed:
+            return documents, numbers
+    return readings[0]
 
 
 def _citations(document: dict) -> list[dict]:
