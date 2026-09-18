@@ -28,13 +28,21 @@ WORKDIR /app
 # service is ever recreated, this id goes stale and the only consequence is a
 # cold cache on the next dependency change. Locally the id is arbitrary, so the
 # same line builds under plain BuildKit and docker-compose.
+#
+# **This comment described the fix and the line below never carried it.** The id
+# read `wattsteer-ml-uv` — a plain name, the second of the two shapes the
+# paragraph above says the builder rejects — so every `railway up` of this
+# service failed validation before a single layer was built, with the exact
+# error quoted three lines up. Whoever hit it wrote down the answer and then
+# left the wrong value in place, which is the one way a comment can make a
+# defect harder to see rather than easier.
 COPY pyproject.toml uv.lock ./
-RUN --mount=type=cache,id=wattsteer-ml-uv,target=/root/.cache/uv \
+RUN --mount=type=cache,id=s/f94e0b64-4a8a-4f2f-9b75-7d1af25cc10f-/root/.cache/uv,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev
 
 COPY src ./src
 COPY README.md ./
-RUN --mount=type=cache,id=wattsteer-ml-uv,target=/root/.cache/uv \
+RUN --mount=type=cache,id=s/f94e0b64-4a8a-4f2f-9b75-7d1af25cc10f-/root/.cache/uv,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
 
