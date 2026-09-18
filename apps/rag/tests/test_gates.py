@@ -251,7 +251,7 @@ def test_the_citation_has_to_be_about_the_record():
     assert _relevance_failure(hit("RAP", "RAP 2023-08-15", old_event), flow)
 
 
-def test_a_daily_bulletin_only_speaks_for_its_own_day():
+def test_a_bdo_speaks_for_its_day_and_an_ipdo_also_for_the_day_before():
     """Measured on 2026-09-18: a record of 13/12/2025 naming IO-ON.NE.2SO, whose
     revision in force then is not in the corpus, came back `found` citing the
     IPDO of 07/09/2025 about another transformer. The bulletin was literal and
@@ -282,6 +282,9 @@ def test_a_daily_bulletin_only_speaks_for_its_own_day():
     failure = _relevance_failure(bulletin("IPDO", "2025-09-07"), record)
     assert failure is not None and failure.code == "citation_from_another_day"
     assert _relevance_failure(bulletin("BDO", "2025-12-12"), record)
-    # The day itself, and the preliminary report of the next morning, still count.
+    # A BDO counts only on its own day; the next day's is about another day.
     assert _relevance_failure(bulletin("BDO", "2025-12-13"), record) is None
+    assert _relevance_failure(bulletin("BDO", "2025-12-14"), record)
+    # The preliminary IPDO is published the next morning, so that one counts too.
+    assert _relevance_failure(bulletin("IPDO", "2025-12-13"), record) is None
     assert _relevance_failure(bulletin("IPDO", "2025-12-14"), record) is None

@@ -225,8 +225,10 @@ class Record:
         )
 
 
-# The bulletins published every day. Each one reports a single day.
-DAILY_REPORTS = frozenset({"BDO", "IPDO"})
+# The bulletins published every day, and which days after the reported one
+# each may carry: the BDO is dated the day it reports; the preliminary IPDO is
+# published the morning after.
+DAILY_REPORTS = {"BDO": (0,), "IPDO": (0, 1)}
 
 
 def _relevance_failure(hit: Hit, record: Record) -> GateFailure | None:
@@ -246,9 +248,8 @@ def _relevance_failure(hit: Hit, record: Record) -> GateFailure | None:
     The same holds for the daily bulletins, and it was measured: with the
     record's own instruction out of the corpus, a restriction of 13/12/2025 was
     "explained" by the IPDO of 07/09/2025 about another transformer, with high
-    confidence. A BDO or IPDO speaks for the day it reports, which is its own
-    date or, for the preliminary report published the next morning, the day
-    before it.
+    confidence. A BDO speaks for its own date only; an IPDO, published the next
+    morning, also for the day before it.
     """
     if (
         hit.source == "INSTRUCAO_OPERACAO"
@@ -267,7 +268,7 @@ def _relevance_failure(hit: Hit, record: Record) -> GateFailure | None:
             )
     if hit.source in DAILY_REPORTS and record.target_date and hit.published_at:
         days_after = (hit.published_at.date() - date.fromisoformat(record.target_date)).days
-        if days_after not in (0, 1):
+        if days_after not in DAILY_REPORTS[hit.source]:
             return GateFailure(
                 "citation_from_another_day",
                 f"{hit.external_id} reports {hit.published_at.date()}, record is {record.target_date}",
