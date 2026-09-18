@@ -68,8 +68,31 @@ WORKDIR /app/apps/web
 # `public/` when it runs. This image called `bunx expo export` directly, which
 # is exactly how a step that lives in the package script gets skipped — the
 # page would build, ship, and 404 on `Cesium.js` in production only.
+#
+# **The exporter is bounded, and its exit status is deliberately ignored.**
+#
+# Measured on 2026-09-18: two consecutive Railway builds printed `Exported:
+# dist` — Expo's final line, with every route written, `/pt/references` and
+# `/en/references` among them — and then never returned. Both were killed by
+# the sixty-minute build timeout, and `localize-export.ts` never ran, which is
+# why neither log carries a line from it. The same commit, Dockerfile and
+# command build in 35 s in Docker here, with the layer uncached, so the process
+# that will not exit is the exporter on that builder and not this repository.
+#
+# Ignoring an exit status is normally how a broken build ships. It is safe here
+# for one reason, and only while that reason holds: **the next line is a
+# verification, not a formatting pass.** `localize-export.ts` exits 1 when any
+# required page is missing from `dist/`, when a required static asset is empty,
+# and when the markup it finds disagrees with the markup it would have
+# produced. A partial or absent export therefore fails the build at the next
+# command rather than reaching production — so what is being discarded is the
+# exporter's opinion about its own exit, not the question of whether the export
+# is good.
+#
+# `timeout` rather than waiting for the platform's: sixty minutes of a hung
+# process is an hour of builder time and an hour before anyone is told.
 RUN bun scripts/vendor-cesium.ts \
- && bunx expo export --platform web \
+ && { timeout 900 bunx expo export --platform web || true; } \
  && bun scripts/localize-export.ts
 
 # --- runtime stage: serve dist/ ---
