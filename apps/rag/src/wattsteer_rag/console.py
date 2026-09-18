@@ -189,7 +189,7 @@ PAGE = """<!doctype html>
     </div>
 
     <div id="question-fields" class="hidden">
-      <label for="free">Your question, in Portuguese (the documents are)</label>
+      <label for="free">Your question, in Portuguese (the documents are in Portuguese)</label>
       <textarea id="free" placeholder="Ex.: Qual foi a demanda máxima do SIN em 06/09/2026?"></textarea>
     </div>
 
@@ -218,7 +218,7 @@ PAGE = """<!doctype html>
     provider's quota is spent it says so and when to try again; that is not an error.</p>
   </div>
 
-  <div id="out"></div>
+  <div id="out" role="status" aria-live="polite"></div>
 
   <div class="card"><div class="code" id="status">…</div></div>
 </main>
@@ -237,7 +237,7 @@ const mode = () => document.querySelector("input[name=mode]:checked").value;
 // to it, so anyone can find the rule in the source.
 const CHECKS = [
   { codes: ["quote_not_in_chunk"], text: "The quote appears word for word in the document" },
-  { codes: ["number_not_in_quote"], text: "Every number in the answer is inside the quote" },
+  { codes: ["number_not_in_quote"], text: "Every number in the answer is in the quote, or was already in the question" },
   { codes: ["quote_without_substance"], text: "The quote states something (it is not just a heading)" },
   { codes: ["citation_not_the_named_document", "citation_from_another_day", "citation_from_another_event"],
     text: "The document is about this case (the instruction the record names; a bulletin or report of that day)" },
@@ -288,6 +288,8 @@ function gateAt() {
 async function preview() {
   $("record-fields").classList.toggle("hidden", mode() !== "record");
   $("question-fields").classList.toggle("hidden", mode() !== "question");
+  // Stored answers are kept per record (subsystem and day), not per question.
+  $("stored").classList.toggle("hidden", mode() !== "record");
   if (mode() === "question") { $("question").textContent = $("free").value.trim() || "…"; return; }
   try {
     const r = await fetch(url("/internal/rag/question?" + params()));
@@ -306,7 +308,9 @@ function pageLink(c) {
 
 function citation(c) {
   const name = [c.external_id || c.source, c.revision ? "rev. " + c.revision : null].filter(Boolean).join(", ");
-  const where = [c.locator?.page ? "page " + c.locator.page : null, c.locator?.section, c.locator?.table]
+  // HTML bulletins get a synthetic page 1 from the parser; only a PDF has pages.
+  const isPdf = /\\.pdf($|[?#])/i.test(c.url || "");
+  const where = [isPdf && c.locator?.page ? "page " + c.locator.page : null, c.locator?.section, c.locator?.table]
     .filter(Boolean).join(" · ");
   const when = c.published_at ? c.published_at.slice(0, 10) : "date not declared";
   return `<blockquote>${esc(c.quote)}</blockquote>
@@ -441,8 +445,15 @@ async function call(target, options, button) {
   }
 }
 
-$("build").onclick = (e) =>
+$("build").onclick = (e) => {
+  // An empty free question would fall back to a record-style question built
+  // from the hidden fields, and answer something the reader did not ask.
+  if (mode() === "question" && !$("free").value.trim()) {
+    $("out").innerHTML = `<div class="card"><div class="banner wait"><div class="title">Type a question first</div></div></div>`;
+    return;
+  }
   call(url("/internal/rag/evidence?" + params() + "&gate_at=" + encodeURIComponent(gateAt())), { method: "POST" }, e.target);
+};
 $("look").onclick = (e) => {
   const q = mode() === "question" ? $("free").value.trim() : $("description").value.trim();
   call(url("/internal/rag/search?q=" + encodeURIComponent(q || "limitação")
