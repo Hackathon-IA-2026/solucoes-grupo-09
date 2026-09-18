@@ -170,6 +170,20 @@ describe("no observed label claims a forecast", () => {
     "observed.splitTitle": dict.app.observed.splitTitle,
     "observed.splitSubtitle": dict.app.observed.splitSubtitle,
     "observed.splitTotal": dict.app.observed.splitTotal,
+    "observed.q1": dict.app.observed.q1,
+    "observed.q1Yes": dict.app.observed.q1Yes,
+    "observed.q1No": dict.app.observed.q1No,
+    "observed.q1DetailNational": dict.app.observed.q1DetailNational,
+    "observed.q1DetailRegion": dict.app.observed.q1DetailRegion,
+    "observed.q2DetailNational": dict.app.observed.q2DetailNational,
+    "observed.q2DetailRegion": dict.app.observed.q2DetailRegion,
+    "observed.q3Detail": dict.app.observed.q3Detail,
+    "observed.q3None": dict.app.observed.q3None,
+    "observed.q3NoneDetail": dict.app.observed.q3NoneDetail,
+    "observed.q5None": dict.app.observed.q5None,
+    "observed.q5DetailNone": dict.app.observed.q5DetailNone,
+    "observed.q5DetailOne": dict.app.observed.q5DetailOne,
+    "observed.q5DetailMany": dict.app.observed.q5DetailMany,
     "map.subtitleObserved": dict.app.overview.map.subtitleObserved,
     "map.figureObserved": dict.app.overview.map.figureObserved,
     "map.regionObserved": dict.app.overview.map.regionObserved,
@@ -210,6 +224,15 @@ describe("no observed label claims a forecast", () => {
         dict.app.observed.peakHour,
         dict.app.observed.splitSubtitle,
         dict.app.observed.splitTotal,
+        dict.app.observed.q1DetailNational,
+        dict.app.observed.q1DetailRegion,
+        dict.app.observed.q2DetailNational,
+        dict.app.observed.q2DetailRegion,
+        dict.app.observed.q3Detail,
+        dict.app.observed.q3NoneDetail,
+        dict.app.observed.q5DetailNone,
+        dict.app.observed.q5DetailOne,
+        dict.app.observed.q5DetailMany,
         dict.app.overview.map.subtitleObserved,
         dict.app.overview.map.figureObserved,
         dict.app.overview.map.regionObserved,
@@ -535,4 +558,56 @@ describe("the observed screen names a cause only where `/v1/meta` proves it", ()
       );
     });
   }
+});
+
+describe("the five questions are answered in both states", () => {
+  /*
+    The row was gated on a published forecast, with a comment saying four of the
+    five questions are about tomorrow. Three of them are not: how much was
+    curtailed, in which hour and where are measurements, and this screen already
+    draws all three in the panels below. So on every day before its gate strikes
+    — every evening, and most of the day on a deployment whose gate is at 09:00
+    — the page lost the five cards it is laid out around and showed a column of
+    supporting panels with nothing at their head.
+
+    `SettledQuestionRow` answers them from settled data. What must not travel
+    across is the vocabulary, which is what the rest of this file is about and
+    what the checks below extend to the cards.
+  */
+  const ROW = code(source("components", "app", "overview", "question-row.tsx"));
+  const settled = ROW.slice(ROW.indexOf("export function SettledQuestionRow"));
+
+  it("the settled cards read no forecast quantity", () => {
+    for (const forbidden of [
+      "riskColor",
+      "riskClass",
+      "dailyEnergy",
+      "magnitudeBand",
+      "occurrenceProbability",
+      "criticalWindow",
+    ]) {
+      expect(settled).not.toContain(forbidden);
+    }
+  });
+
+  it("the settled cards state no interval", () => {
+    // The forecast row prints `P10 … · P90 …` in a footnote. A measurement has
+    // no quantiles, so there is no expression here that could produce one.
+    expect(settled).not.toContain("P10");
+    expect(settled).not.toContain("p90");
+  });
+
+  it("the hero reaches the settled row whenever there is no forecast", () => {
+    const hero = code(source("components", "app", "overview", "overview-hero.tsx"));
+    expect(hero).toContain("settled !== null ? (");
+    expect(hero).toContain("<SettledQuestionRow");
+  });
+
+  it("the derivation is null exactly where a forecast was published", () => {
+    const figures = code(source("components", "app", "overview", "hero-figures.tsx"));
+    expect(figures).toContain("forecast !== null\n      ? null");
+    // The overall scope reads the national row the gateway publishes rather
+    // than adding four bands, which is the rule the whole product turns on.
+    expect(figures).toContain("observed.now.national.last24hConstrainedOffMwh");
+  });
 });

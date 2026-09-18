@@ -70,7 +70,7 @@ import { HeadlinePanel } from "./headline-panel";
 import { HERO_COPY } from "./hero-copy";
 import { heroFigures } from "./hero-figures";
 import { NationalFigureBlock, ObservedNationalPanel } from "./national-panel";
-import { QuestionRow } from "./question-row";
+import { QuestionRow, SettledQuestionRow } from "./question-row";
 import { HeroStat, RegionRow } from "./region-rail";
 import { RegionRail } from "./region-rail-panel";
 
@@ -184,6 +184,7 @@ export function OverviewHero({
     spokenReasons,
     window,
     worstRisk,
+    settled,
   } = heroFigures({ observed, forecast, scope, f });
 
   const headline = (
@@ -290,8 +291,29 @@ export function OverviewHero({
     — had taken this function to a cognitive complexity of 82. It has a name and
     a boundary now; see `question-row.tsx`.
   */
+  /*
+    **The row answers in both states, and it used to answer in one.**
+
+    It was gated on `selectedRow`, so every day before its gate struck — which
+    is every evening, and fifteen hours out of twenty-four on production — the
+    five cards vanished and the screen lost the thing it is laid out around.
+    The comment that stood here said four of the five are about tomorrow. That
+    was wrong about three of them: how much was curtailed, in which hour and
+    where are measurements, and this page already draws all three in the panels
+    below. `settled` is the same five answers in the observed vocabulary.
+  */
   const questions =
-    selectedRow === null || magnitudeMwh === null ? null : (
+    settled !== null ? (
+      <SettledQuestionRow
+        settled={settled}
+        reasons={spokenReasons}
+        reasonDate={observed.hoursDate}
+        evidence={observed.evidence}
+        causeNote={copy.app.overview.causeNote}
+        onWhy={onWhy}
+        whyOpen={whyOpen}
+      />
+    ) : selectedRow === null || magnitudeMwh === null ? null : (
       <QuestionRow
         scope={scope}
         selectedSubsystem={params.subsystem}

@@ -53,6 +53,45 @@ export interface HeroRegion {
   readonly note: string | undefined;
 }
 
+/**
+ * The five operator questions, answered from settled data.
+ *
+ * The cards were built against a forecast and rendered only where one existed,
+ * so on every day before its gate strikes — which is every evening, and which
+ * is the state production sits in for fifteen hours a day — the row vanished
+ * and the screen lost its spine.
+ *
+ * Four of the five never needed a model. How much was curtailed, in which hour,
+ * where, and for which ONS reason are all *measurements*, and this screen
+ * already draws every one of them in the panels below. Only "vai cortar?" is a
+ * claim about the future, and settled data answers the question it becomes:
+ * **cortou?**
+ *
+ * What does not carry over is the vocabulary. There is no risk class here, no
+ * probability and no band, because a measurement has none — `observed-overview`
+ * holds that line, and every field below is a number ONS published or a count
+ * of them.
+ */
+export interface SettledAnswers {
+  /** Whether the subject curtailed at all. Measured, not estimated. */
+  readonly cut: boolean;
+  readonly totalMwh: number;
+  /**
+   * Whose figure `totalMwh` is: the four subsystems over the last 24 hours, or
+   * the selected region's settled day.
+   *
+   * The scope decides, exactly as it decides the headline panel's subject — so
+   * the card and the panel above it can never show two numbers for one label.
+   */
+  readonly national: boolean;
+  /** The day's largest settled hour, for the selected region. */
+  readonly peakHour: ReturnType<typeof observedDay>["peakHour"];
+  /** Named on the card, because the hour is one region's even in the overall scope. */
+  readonly peakSubsystem: SubsystemCode;
+  /** Every region that settled any curtailment — the answer to "onde?". */
+  readonly where: readonly SubsystemCode[];
+}
+
 export interface HeroFigures {
   readonly day: ReturnType<typeof observedDay>;
   readonly paint: MapPaint;
@@ -67,6 +106,8 @@ export interface HeroFigures {
   readonly spokenReasons: DominantReason[];
   readonly window: CriticalWindow | null;
   readonly worstRisk: RiskClass;
+  /** `null` where a forecast was published and the cards answer from it. */
+  readonly settled: SettledAnswers | null;
 }
 
 export function heroFigures({
@@ -219,8 +260,41 @@ export function heroFigures({
     the four subsystems, one region — each with its own figure, note and split;
     see `headline-panel.tsx`.
   */
+  /*
+    The same five questions, answered from what settled. `null` where a
+    forecast exists, because then the cards read it and this would be a second
+    answer to one question.
+
+    The subject follows the scope the way `HeadlinePanel` does: `SIN Geral` is
+    the national row the gateway publishes — `derived: sum_of_four`, a sum of
+    measurements and not a quantile — and `Por Região` is the selected region's
+    settled day. The largest hour is the region's either way and the card says
+    so, because `observed.hours` is one subsystem's and inventing a national
+    peak from four would be inventing it.
+  */
+  const settled: SettledAnswers | null =
+    forecast !== null
+      ? null
+      : (() => {
+          const totalMwh =
+            scope === "sin"
+              ? observed.now.national.last24hConstrainedOffMwh
+              : day.totalMwh;
+          return {
+            cut: totalMwh > 0,
+            totalMwh,
+            national: scope === "sin",
+            peakHour: day.peakHour,
+            peakSubsystem: observed.subsystem as SubsystemCode,
+            where: observedRows(observed.now.subsystems, SUBSYSTEM_DISPLAY_ORDER)
+              .filter((row) => row.last24hMwh > 0)
+              .map((row) => row.subsystem),
+          };
+        })();
+
   return {
     day,
+    settled,
     paint,
     regions,
     largest,

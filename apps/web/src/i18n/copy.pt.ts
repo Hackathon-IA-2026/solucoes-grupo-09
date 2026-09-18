@@ -770,6 +770,31 @@ export const pt: Copy = {
       nationalTitle: "As últimas 24 horas, nos quatro subsistemas",
       nationalSubtitle: "Uma soma de quatro medições, e ela é exata",
       nationalLabel: "Energia liquidada em constrained-off, os quatro subsistemas",
+      /*
+        As cinco perguntas do brief, respondidas pelo que liquidou.
+
+        Só a primeira muda de pergunta: "vai cortar?" é uma afirmação sobre o
+        futuro e uma medição responde a versão dela que existe — "cortou?". As
+        outras quatro são a mesma pergunta nos dois estados, então reusam
+        `grid.q2..q5` em vez de duplicar o rótulo.
+
+        Nenhum destes textos diz faixa, probabilidade ou classe de risco. Uma
+        medição não tem nenhuma das três.
+      */
+      q1: "Cortou?",
+      q1Yes: "Sim",
+      q1No: "Não",
+      q1DetailNational: "Os quatro subsistemas · últimas 24 h liquidadas.",
+      q1DetailRegion: "{subsystem} · dia liquidado até a última hora publicada.",
+      q2DetailNational: "Soma das quatro linhas liquidadas, últimas 24 h.",
+      q2DetailRegion: "Horas liquidadas do dia, somadas · {subsystem}.",
+      q3Detail: "Maior hora liquidada · {subsystem} · {date}.",
+      q3None: "Nenhuma hora",
+      q3NoneDetail: "Nenhuma hora liquidou corte em {subsystem} no dia {date}.",
+      q5None: "Nenhum",
+      q5DetailNone: "Nenhum subsistema liquidou corte nas últimas 24 h.",
+      q5DetailOne: "{subsystem} liquidou corte nas últimas 24 h.",
+      q5DetailMany: "{count} subsistemas liquidaram corte nas últimas 24 h.",
       nationalNote:
         "Este número é a soma das quatro linhas de subsistema da mesma janela — o gateway diz isso no próprio campo, `derived: sum_of_four`. Não é a linha SIN do ONS, que o WattSteer nunca usa porque ela contaria em dobro o que já está nas quatro. Medições somam exatamente; nenhum quantil de previsão soma.",
     },

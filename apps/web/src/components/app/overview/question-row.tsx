@@ -36,6 +36,7 @@ import type { DominantReason } from "@/lib/dominant-reason";
 import type { EvidenceCitation } from "@/lib/evidence";
 import type { SubsystemCode } from "@/lib/fixtures";
 import { subsystemMeta } from "@/lib/fixtures";
+import type { SettledAnswers } from "./hero-figures";
 
 /** One region's row, reduced to what the cards read off it. */
 export interface QuestionSubject {
@@ -245,6 +246,174 @@ export function QuestionRow({
           </Link>
         )}
       </View>
+    </View>
+  );
+}
+
+/**
+ * The same five cards, answered from settled data.
+ *
+ * Beside its forecast sibling on purpose — the two are read together, and this
+ * file is where a reviewer can see in one screenful that they never share a
+ * word. {@link QuestionRow} states a risk class, a probability and a band;
+ * this one states megawatt-hours ONS published and counts of them, and there is
+ * no expression in it that could produce a quantile.
+ *
+ * Why it exists: the row used to render only where a forecast did, so the
+ * screen lost its five answers every day until the gate struck — on a page that
+ * was in fact full of settled megawatt-hours, four of the five questions
+ * answerable from them, and one of them ("por quê?") already reading nothing
+ * else.
+ */
+export function SettledQuestionRow({
+  settled,
+  reasons,
+  reasonDate,
+  evidence,
+  causeNote,
+  onWhy,
+  whyOpen,
+}: {
+  settled: SettledAnswers;
+  /** One or two, already filtered by share. Observed either way — see the hero. */
+  reasons: readonly DominantReason[];
+  reasonDate: string;
+  evidence: EvidenceCitation | null;
+  causeNote: string;
+  onWhy?: () => void;
+  whyOpen?: boolean;
+}) {
+  const colors = usePalette();
+  const copy = useCopy();
+  const f = useFormat();
+  const observed = copy.app.observed;
+  const peakName = subsystemMeta(settled.peakSubsystem).onsDisplayName;
+
+  return (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.md }}>
+      {/*
+        `info` — the cyan the observed map is painted in and that the risk
+        palette cannot produce. The forecast card tints this icon by risk class;
+        there is no class here, so it takes the colour that means measured.
+      */}
+      <QuestionCard
+        icon={<ZapIcon size={14} color={colors.info} />}
+        question={observed.q1}
+        answer={settled.cut ? observed.q1Yes : observed.q1No}
+        detail={
+          settled.national
+            ? observed.q1DetailNational
+            : fill(observed.q1DetailRegion, { subsystem: peakName })
+        }
+        tone={colors.info}
+      />
+      <QuestionCard
+        icon={<PieChartIcon size={14} color={colors.violet} />}
+        question={copy.app.grid.q2}
+        answer={f.compact(settled.totalMwh)}
+        unit="MWh"
+        detail={
+          settled.national
+            ? observed.q2DetailNational
+            : fill(observed.q2DetailRegion, { subsystem: peakName })
+        }
+      />
+      {/*
+        No critical window: that is a run of hours a model called more likely to
+        curtail than not, and there is no model. The settled counterpart is the
+        hour that actually curtailed most, which the profile panel below already
+        names — one figure, two places, and they read it from the same `day`.
+      */}
+      <QuestionCard
+        icon={<ClockIcon size={14} color={colors.info} />}
+        question={copy.app.grid.q3}
+        answer={
+          settled.peakHour === null ? observed.q3None : f.hour(settled.peakHour.hourLocal)
+        }
+        detail={
+          settled.peakHour === null
+            ? fill(observed.q3NoneDetail, {
+                subsystem: peakName,
+                date: f.date(reasonDate),
+              })
+            : fill(observed.q3Detail, { subsystem: peakName, date: f.date(reasonDate) })
+        }
+        footnote={
+          settled.peakHour === null
+            ? undefined
+            : `${f.compact(settled.peakHour.constrainedOffMwh)} MWh`
+        }
+      />
+      {/*
+        Unchanged from the forecast row, because it was never a forecast card:
+        the ONS reason and its share are read off the settled day in both
+        states. It is the one question this screen could always answer.
+      */}
+      <QuestionCard
+        icon={<SearchIcon size={14} color={colors.inkMuted} />}
+        question={copy.app.grid.q4}
+        answer={
+          reasons.length === 0
+            ? copy.app.grid.noReason
+            : reasons.map((entry) => entry.reason).join(" · ")
+        }
+        detail={
+          reasons.length === 0
+            ? copy.app.grid.noReasonDetail
+            : fill(copy.app.grid.q4Detail, {
+                date: f.date(reasonDate),
+                share: reasons.map((entry) => f.percent(entry.share, 0)).join(" · "),
+              })
+        }
+        note={causeNote}
+        noteId="overview-cause-note"
+        onPress={onWhy}
+        expanded={whyOpen}
+      />
+      {/* Short codes, for the reason the forecast card gives above. */}
+      <QuestionCard
+        icon={<MapIcon size={14} color={colors.inkMuted} />}
+        question={copy.app.grid.q5}
+        answer={
+          settled.where.length === 0
+            ? observed.q5None
+            : settled.where.map((code) => subsystemMeta(code).short).join(" · ")
+        }
+        detail={
+          settled.where.length === 0
+            ? observed.q5DetailNone
+            : settled.where.length === 1 && settled.where[0] !== undefined
+              ? fill(observed.q5DetailOne, {
+                  subsystem: subsystemMeta(settled.where[0]).onsDisplayName,
+                })
+              : fill(observed.q5DetailMany, { count: String(settled.where.length) })
+        }
+      />
+
+      {evidence === null ? null : (
+        <View style={{ flexBasis: "100%" }}>
+          <Link
+            href={evidence.url as never}
+            target="_blank"
+            style={{
+              ...type.caption,
+              color: colors.accent,
+              ...(Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null),
+            }}
+          >
+            {fill(
+              evidence.page === null
+                ? copy.app.overview.causeEvidenceNoPage
+                : copy.app.overview.causeEvidence,
+              {
+                document: evidence.documentCode,
+                revision: evidence.revision ?? "",
+                page: String(evidence.page ?? ""),
+              },
+            )}
+          </Link>
+        </View>
+      )}
     </View>
   );
 }
