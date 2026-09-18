@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 
 from .config import settings
 from .db import Database
@@ -113,6 +113,7 @@ async def search(
     published_before: datetime | None = None,
     sources: list[str] | None = None,
     named_documents: list[str] | None = None,
+    target_date: str | None = None,
     limit: int | None = None,
 ) -> list[Hit]:
     pool = await db.connect()
@@ -143,6 +144,18 @@ async def search(
         # the general rules are never named by a record and are still evidence.
         params.append(named_documents)
         filters.append(f"(d.source <> 'INSTRUCAO_OPERACAO' OR d.external_id = ANY(${len(params)}))")
+    if target_date:
+        # A daily bulletin of another day is refused by the relevance gate
+        # (evidence.DAILY_REPORTS), so it must not take a slot here either.
+        # Measured on 18/09/2026: once the BDO was indexed row by row, a
+        # question about the IPDO of 01/09/2025 retrieved four BDO rows dated
+        # "01/09/2026" and the right IPDO was not among the eight passages.
+        params.append(date.fromisoformat(target_date))
+        filters.append(
+            "(d.source NOT IN ('BDO','IPDO') OR d.published_at IS NULL"
+            f" OR (d.published_at AT TIME ZONE 'UTC')::date - ${len(params)}::date"
+            " BETWEEN 0 AND CASE d.source WHEN 'IPDO' THEN 1 ELSE 0 END)"
+        )
     where = " AND ".join(filters)
 
     text_query = to_or_tsquery(question)

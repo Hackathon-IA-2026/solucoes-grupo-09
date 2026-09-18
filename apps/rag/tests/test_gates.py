@@ -307,3 +307,23 @@ def test_a_bdo_speaks_for_its_day_and_an_ipdo_also_for_the_day_before():
     # The preliminary IPDO is published the next morning, so that one counts too.
     assert _relevance_failure(bulletin("IPDO", "2025-12-13"), record) is None
     assert _relevance_failure(bulletin("IPDO", "2025-12-14"), record) is None
+
+
+def test_retrieval_leaves_out_the_daily_bulletins_the_gate_would_refuse():
+    """Measured on 18/09/2026: with the BDO indexed one row per chunk, a question
+    about the IPDO of 01/09/2025 filled its eight passages with BDO rows of
+    September 2026 and never saw the IPDO; every draft was then refused as
+    citation_from_another_day. The search must apply the gate's day window,
+    and the builder must hand it the record's date. There is no database in
+    this suite, so the property is held at the source (see testing.md)."""
+    import inspect
+
+    from wattsteer_rag import evidence, retrieve
+
+    source = inspect.getsource(retrieve.search)
+    assert "target_date" in inspect.signature(retrieve.search).parameters
+    for bulletin, days in evidence.DAILY_REPORTS.items():
+        assert f"'{bulletin}'" in source
+        assert f"WHEN 'IPDO' THEN {max(evidence.DAILY_REPORTS['IPDO'])}" in source
+        assert max(days) in (0, 1)
+    assert "target_date=target_date" in inspect.getsource(evidence.build_evidence)
