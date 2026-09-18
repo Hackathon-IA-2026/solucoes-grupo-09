@@ -12,11 +12,15 @@ quote does not, and the validation of 18/09/2026 found three shapes of it:
 - An operating instruction with nothing to do with the record, quoted because a
   restriction with no document named in it matched it on vocabulary.
 
-Each needs reading, not matching, so a smaller model is asked the one question
-a reviewer would ask: does this passage, on its own, state this claim about
-this thing? It sees only the question, the claim and the quoted spans with
-their document and section, not the other passages, so it cannot borrow
-support from them.
+Each needs reading, not matching. A smaller model first answers the question
+from the quoted spans alone, as if the claim did not exist, and only then
+compares. Asked the plain yes-or-no ("does this passage state this claim?"),
+both gpt-oss sizes said yes to LAPA's 11,802 on 18/09/2026; answering first,
+they refused it, and scored 7 of 9 labelled cases. The two they still accept:
+an hourly forecast read as the day's scheduled load, and a step's preamble
+given for the value its table holds. The reader sees only the question, the
+claim and the quoted spans with their document and section, so it cannot
+borrow support from the other passages.
 
 When the reader is not available the claim is refused, not waved through: the
 failure mode of this service is silence (see `evidence.py`).
@@ -29,19 +33,24 @@ from typing import Any
 from .gateway.adapters import ProviderError
 from .gateway.router import Gateway, ProviderRefused, QuotaExhausted
 
-VERIFY_PROMPT = """You review evidence from the ONS, the Brazilian power system operator.
-You get a question, a claim written to answer it, and the passages the claim
-quotes, with the document and section each came from. All in Portuguese.
+VERIFY_PROMPT = """You review evidence from the ONS, the Brazilian power system operator. All
+texts are in Portuguese.
 
-Decide whether the quoted passages, read on their own, state what the claim
-says, about the same thing the question asks: the same plant, line, substation,
-subsystem, date, item and column. A value from another row, another subsystem,
-another column (scheduled instead of verified), another item of the same
-document, or another piece of equipment is not support. A document about a
-different area of the grid than the question is not support. A claim that adds
-anything the passages do not say is not supported.
+You get a question, the passages a claim quotes (with document and section),
+and the claim. Work in this order:
 
-Answer only with JSON: {"supported": true or false, "reason": "one short sentence in Portuguese"}"""
+1. Read only the quoted passages, and answer the question from them alone, as
+   if the claim did not exist. Be literal about scope: a value of one hour is
+   not the value of the day, a value of one row, agent or area is not a total,
+   a forecast or scheduled figure is not a verified one, and a table row whose
+   label names something else is not about the thing asked. If the passages do
+   not contain the answer, say so.
+2. Compare your answer with the claim.
+
+Answer only with JSON:
+{"answer_from_passages": "<your answer, or null>",
+ "supported": <true only if the passages answer the question and the claim says the same>,
+ "reason": "<one short sentence in Portuguese>"}"""
 
 
 def _passages(claim: dict) -> str:
@@ -55,7 +64,7 @@ def _passages(claim: dict) -> str:
 
 async def review(gateway: Gateway, question: str, claim: dict) -> tuple[bool, str]:
     """(supported, reason). Unavailable counts as not supported, with that reason."""
-    asked = f"Question: {question}\n\nClaim: {claim['claim']}\n\nQuoted passages:\n{_passages(claim)}"
+    asked = f"Question: {question}\n\nQuoted passages:\n{_passages(claim)}\n\nClaim: {claim['claim']}"
     messages = [{"role": "system", "content": VERIFY_PROMPT}, {"role": "user", "content": asked}]
     try:
         result = await gateway.run("verify", tokens=len(messages[1]["content"]) // 4, messages=messages)
