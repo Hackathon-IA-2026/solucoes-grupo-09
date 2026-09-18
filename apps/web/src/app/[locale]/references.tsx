@@ -65,7 +65,10 @@ export default function References() {
                 target="_blank"
                 style={{
                   fontSize: 15,
+                  lineHeight: 22,
                   color: colors.accent,
+                  // Not colour alone: the underline says "link" on every platform.
+                  textDecorationLine: "underline",
                   ...(Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null),
                 }}
               >
