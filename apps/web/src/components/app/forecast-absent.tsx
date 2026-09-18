@@ -32,7 +32,7 @@
 
 import type { ErrorCode } from "@wattsteer/core";
 import { Badge, space, usePalette } from "@wattsteer/ui";
-import { Text, View } from "react-native";
+import { Platform, Text, View } from "react-native";
 import { useCopy } from "@/i18n";
 import { fill } from "@/i18n/format";
 import { HonestyNote } from "./honesty";
@@ -107,6 +107,13 @@ export function ForecastAbsent({
                 style={{
                   flexDirection: "row",
                   alignItems: "center",
+                  // The row must be allowed to give way: at 320 px this pair —
+                  // a 31-character lane directory and its badge — ran 37 px past
+                  // the viewport. react-native-web defaults `flexShrink` to 0,
+                  // so without this the row keeps its content width whatever the
+                  // box is (ADR-0001).
+                  flexShrink: 1,
+                  minWidth: 0,
                   gap: 6,
                 }}
               >
@@ -120,6 +127,18 @@ export function ForecastAbsent({
                     fontSize: 11,
                     color: colors.inkFaint,
                     fontVariant: ["tabular-nums"],
+                    flexShrink: 1,
+                    /*
+                      `dessem_free_v1__gate_late__thr5` has no space in it, so a
+                      narrow box cannot wrap it and it overflows instead. This is
+                      the one place in the product where that is true, and the
+                      name must stay whole: it is the identifier an operator
+                      greps for on the volume, so it breaks across lines rather
+                      than being cut.
+                    */
+                    ...(Platform.OS === "web"
+                      ? ({ overflowWrap: "anywhere" } as object)
+                      : null),
                   }}
                 >
                   {lane.name}

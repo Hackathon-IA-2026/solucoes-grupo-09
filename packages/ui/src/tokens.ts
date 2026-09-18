@@ -203,6 +203,25 @@ export const motion = {
     inOut: "cubic-bezier(0.77, 0, 0.175, 1)",
     color: "ease",
   },
+
+  /**
+   * How far a control gives under a press.
+   *
+   * One number, because the product had four: `0.97` on the pitch deck's link,
+   * `0.95` on the landing CTA and on `Pill`, and `0.92` on `IconCircleButton`.
+   * Four presses that feel like four products, and the last one is past the
+   * point where a press stops reading as tactile and starts reading as the
+   * button flinching.
+   *
+   * `0.96` is the value, not a range: below `0.95` the movement is large enough
+   * to be read as an animation rather than as feedback, and above `0.98` there
+   * is nothing to feel.
+   *
+   * Stand it down under `prefers-reduced-motion` — `usePressScale` does — and
+   * remember that the scale is never the only cue: every control here also
+   * changes its background or its border.
+   */
+  pressScale: 0.96,
 } as const;
 
 export const layout = {

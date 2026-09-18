@@ -1,16 +1,4 @@
-import {
-  focusRing,
-  layout,
-  motion,
-  Panel,
-  radius,
-  space,
-  type,
-  useContainerWidth,
-  usePalette,
-  WattSteerWordmark,
-  webTransition,
-} from "@wattsteer/ui";
+import { focusRing, layout, motion, Panel, radius, space, type, useContainerWidth, usePalette, usePressScale, WattSteerWordmark, webTransition } from "@wattsteer/ui";
 import { Link } from "expo-router";
 import Head from "expo-router/head";
 import { Linking, Platform, Pressable, ScrollView, Text, View } from "react-native";
@@ -301,6 +289,7 @@ function PitchEmbed({ wide, title }: { wide: boolean; title: string }) {
  */
 function PitchPdfLink({ label }: { label: string }) {
   const colors = usePalette();
+  const pressScale = usePressScale();
   const button = (
     <Pressable
       testID="pitch-pdf-link"
@@ -328,7 +317,7 @@ function PitchPdfLink({ label }: { label: string }) {
           backgroundColor: hovered ? colors.surfaceSunken : colors.surface,
           paddingHorizontal: space.lg,
           paddingVertical: space.sm,
-          transform: [{ scale: pressed ? 0.97 : 1 }],
+          transform: [{ scale: pressed ? pressScale : 1 }],
           ...focusRing(focused, colors.focus),
           ...(Platform.OS === "web"
             ? ({

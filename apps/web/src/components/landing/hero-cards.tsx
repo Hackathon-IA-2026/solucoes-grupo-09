@@ -184,8 +184,13 @@ function BandCard() {
   const figure = outlook.energy;
   return (
     <Panel style={styles.card}>
+      {/*
+        Two lines: `SUDESTE/CENTRO-OESTE` needs 168 px and had 133 at 320 px, so
+        one line rendered `SUDESTE/CENTRO-O…`. ONS's own name for a subsystem is
+        either printed or it is not printed; a cut one names nothing.
+      */}
       <Text
-        numberOfLines={1}
+        numberOfLines={2}
         style={{ fontSize: 12, fontWeight: "600", color: colors.ink }}
       >
         {outlook.displayName}

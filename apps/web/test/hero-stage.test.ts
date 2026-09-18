@@ -189,8 +189,15 @@ describe("motion in the hero is optional", () => {
     // The scale is decoration: the focus ring and the pointer cursor carry
     // the affordance without it, so it comes off rather than being animated
     // faster.
-    expect(CTA).toContain("useReducedMotion");
-    expect(CTA).toContain("scale: pressed && !reducedMotion ? 0.95 : 1");
+    /*
+      The check moved into `usePressScale`, which returns `1` under
+      `prefers-reduced-motion` — so a call site cannot take the scale and forget
+      the reduced-motion half of it, which is what three of the product's four
+      press scales had done. The claim is unchanged: no press movement for a
+      reader who asked for none.
+    */
+    expect(CTA).toContain("usePressScale");
+    expect(CTA).toContain("scale: pressed ? pressScale : 1");
   });
 });
 
@@ -236,9 +243,14 @@ describe("the primary CTA keeps the pill geometry it shares with PillButton", ()
       expect([property, line.test(CTA)]).toEqual([property, true]);
       expect([property, line.test(PILL)]).toEqual([property, true]);
     }
-    // The press scale, which is the pill's only motion.
-    expect(CTA).toMatch(/transform: \[\{ scale: pressed[^\]]*0\.95/);
-    expect(PILL).toMatch(/transform: \[\{ scale: pressed[^\]]*0\.95/);
+    /*
+      The press scale, which is the pill's only motion — and the two now read
+      the *same token* rather than both spelling the same number. That is the
+      stronger version of this test's claim: `0.95` in two files can drift, and
+      `motion.pressScale` cannot.
+    */
+    expect(CTA).toMatch(/transform: \[\{ scale: pressed \? pressScale/);
+    expect(PILL).toMatch(/transform: \[\{ scale: pressed \? pressScale/);
   });
 
   it("keeps the label on one line", () => {

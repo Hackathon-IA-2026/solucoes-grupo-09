@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
 import { usePalette } from "../hooks/use-palette";
+import { usePressScale } from "../hooks/use-press-scale";
 import { focusRing, webTransition } from "../lib/focus-ring";
 import { motion, radius } from "../tokens";
 
@@ -132,6 +133,7 @@ export function PillButton({
   testID?: string;
 }) {
   const colors = usePalette();
+  const pressScale = usePressScale();
   return (
     <Pressable
       testID={testID}
@@ -169,7 +171,7 @@ export function PillButton({
               : colors.surface,
           paddingHorizontal: 16,
           paddingVertical: 10,
-          transform: [{ scale: pressed ? 0.95 : 1 }],
+          transform: [{ scale: pressed ? pressScale : 1 }],
           ...focusRing(focused, colors.focus),
           ...(Platform.OS === "web"
             ? ({
@@ -248,6 +250,7 @@ export function IconCircleButton({
   testID?: string;
 }) {
   const colors = usePalette();
+  const pressScale = usePressScale();
   return (
     <Pressable
       testID={testID}
@@ -279,7 +282,7 @@ export function IconCircleButton({
                   : "transparent"),
           borderWidth: tone === "outline" ? 1 : 0,
           borderColor: colors.border,
-          transform: [{ scale: pressed ? 0.92 : hovered && onPress ? 1.05 : 1 }],
+          transform: [{ scale: pressed ? pressScale : hovered && onPress ? 1.05 : 1 }],
           ...focusRing(focused, colors.focus),
           ...(Platform.OS === "web" && onPress
             ? ({

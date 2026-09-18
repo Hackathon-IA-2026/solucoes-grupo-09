@@ -10,6 +10,7 @@ export * from "./components/sheet";
 export * from "./components/toggle";
 export * from "./hooks/use-container-width";
 export * from "./hooks/use-palette";
+export * from "./hooks/use-press-scale";
 export * from "./hooks/use-reduced-motion";
 export * from "./lib/focus-ring";
 export * from "./lib/gradient";

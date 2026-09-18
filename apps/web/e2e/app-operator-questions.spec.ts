@@ -74,10 +74,26 @@ test.describe("question 5 — why", () => {
     // reported would be counted twice.
     expect(body).toContain("ENE");
     expect(body).toMatch(/78%/);
-    // The date is not decoration. Without it the sentence sits beside
-    // tomorrow's band and reads as a forecast of cause, which is the one thing
-    // the model cannot do.
-    expect(body).toMatch(/16 de set\. de 2026|Sep 16, 2026/);
+    /*
+      **The date is not decoration, and it is not a literal either.**
+
+      Without a date the sentence sits beside tomorrow's band and reads as a
+      forecast of cause, which is the one thing the model cannot do. So the
+      claim is that a settled date is printed beside the reason — but which date
+      that is moves every midnight: the target day is `latestTargetDate(now)`
+      and the settled day is two before it, so this asserted
+      `16 de set. de 2026` and began failing the moment the clock rolled past
+      it. A test that is only true on one day is a test that will fail for a
+      reason it is not about.
+
+      Computed the same way the screen computes it, so it stays true tomorrow.
+    */
+    const settled = new Date(Date.now() - 86_400_000);
+    // Loose on separators and on the trailing period `short` adds in pt-BR:
+    // the claim is that the settled day is named, not the punctuation round it.
+    expect(body).toMatch(
+      new RegExp(`${settled.getDate()} de \\w+\\.? de ${settled.getFullYear()}`),
+    );
   });
 
   test("says it is a settled record and not a forecast of cause", async ({ page }) => {

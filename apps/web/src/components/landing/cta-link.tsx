@@ -1,11 +1,4 @@
-import {
-  focusRing,
-  motion,
-  radius,
-  usePalette,
-  useReducedMotion,
-  webTransition,
-} from "@wattsteer/ui";
+import { focusRing, motion, radius, usePalette, usePressScale, useReducedMotion, webTransition } from "@wattsteer/ui";
 import { Link } from "expo-router";
 import type { ReactNode } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
@@ -52,8 +45,9 @@ import { Platform, Pressable, Text, View } from "react-native";
  *
  * Every number is the reference pill's, read off `PillButton` rather than
  * guessed: pill radius, a 1px border in the fill colour, 16/10 padding, a 6px
- * gap to the icon, a 14px/600 label in `onAccent`, and a 0.95 press scale over
- * a 150ms transition. A solid primary has no hover state, in the reference
+ * gap to the icon, a 14px/600 label in `onAccent`, and `motion.pressScale` over
+ * a 150ms transition — the same token `PillButton` reads, so the two cannot
+ * drift by a hundredth the way they did when each spelled its own number. A solid primary has no hover state, in the reference
  * either. `PillButton` carries the identical set and the two must not drift —
  * the primary CTA and the secondary pill sit on one line in the hero, so a
  * 1px difference in either padding reads as a step in the row.
@@ -77,6 +71,7 @@ export function CtaLink({
   testID?: string;
 }) {
   const colors = usePalette();
+  const pressScale = usePressScale();
   // The press scale is decoration, not feedback of last resort — the focus
   // ring and the pointer cursor both survive without it — so it comes off
   // entirely under `prefers-reduced-motion` rather than being animated
@@ -126,7 +121,7 @@ export function CtaLink({
                     : colors.surface,
                 paddingHorizontal: 16,
                 paddingVertical: 10,
-                transform: [{ scale: pressed && !reducedMotion ? 0.95 : 1 }],
+                transform: [{ scale: pressed ? pressScale : 1 }],
                 // The ring is on the pill, not the anchor: the anchor has no
                 // shape of its own, so a ring there would be a rectangle
                 // around a pill.

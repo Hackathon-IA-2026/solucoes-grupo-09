@@ -61,8 +61,15 @@ export function DriverBars() {
               with the Explain screen, so a renamed group cannot leave the
               landing page describing the old one.
             */}
+            {/*
+              Two lines, because one truncated the longest three groups.
+              Measured at 320, 360 and 1024 px: `Estresse de exportação` needs
+              142 px and had 84, 124 and 116 — so it read `Estresse de exp…`,
+              which is a different group's name as far as a reader can tell. A
+              driver label that cannot be trusted is worse than a taller row.
+            */}
             <Text
-              numberOfLines={1}
+              numberOfLines={2}
               style={{ flex: 1, fontSize: 13, color: colors.inkMuted }}
             >
               {driver.code === "other"

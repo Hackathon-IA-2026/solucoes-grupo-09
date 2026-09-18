@@ -499,9 +499,17 @@ function SubsystemRow({ outlook, max }: { outlook: SubsystemOutlook; max: number
           style={{ flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1 }}
         >
           <Badge label={outlook.code} tone="neutral" />
+          {/* Two lines, and `flexShrink` so the box can give way at all: at
+              320 px this had 133 px for a 168 px name and printed
+              `SUDESTE/CENTRO-O…`. See the same fix in `hero-cards.tsx`. */}
           <Text
-            numberOfLines={1}
-            style={{ fontSize: 13, fontWeight: "600", color: colors.ink }}
+            numberOfLines={2}
+            style={{
+              fontSize: 13,
+              fontWeight: "600",
+              color: colors.ink,
+              flexShrink: 1,
+            }}
           >
             {outlook.displayName}
           </Text>
