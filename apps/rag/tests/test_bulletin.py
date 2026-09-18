@@ -77,3 +77,25 @@ def test_each_bulletin_row_is_its_own_chunk(tmp_path):
     lapa = [chunk for chunk in chunks if "LAPA" in chunk.text]
     assert len(lapa) == 1 and "ALEX" not in lapa[0].text
     assert "07/09/2026" in lapa[0].text
+
+
+RESERVE = """<table><tr><th>Área de Operação</th><th>Disponibilidade Sincronizada (a)</th>
+<th>Geração Verificada (b)</th><th>Reserva Girante (c = a - b)</th><th>Hora</th></tr>
+<tr><td>COSR-NE</td><td>28.843</td><td>28.622</td><td>221</td><td rowspan=5>19:14:00</td></tr>
+<tr><td>SIN</td><td>101.479</td><td>95.645</td><td>5.834</td></tr>
+<tr><td>- Geração Disponível Sincronizada = Potência instalada - Perda de potência.</td></tr></table>"""
+
+
+def test_a_row_shortened_on_the_right_is_not_shifted_to_the_right():
+    """Measured on 2026-09-08: the SIN row of the spinning reserve lacks the
+    hour (a rowspan on the right). Borrowing the first cell from the row above
+    stored "Disponibilidade Sincronizada (a): SIN | Geração Verificada (b):
+    101.479 | Reserva Girante: 95.645", and the answer quoted 95.645 as the
+    reserve. The reservoirs, short on the left, still borrow the basin."""
+    from wattsteer_rag.bulletin import bulletin_lines
+
+    sin = next(line for line in bulletin_lines(RESERVE) if "SIN" in line)
+    assert "Área de Operação: SIN | Disponibilidade Sincronizada (a): 101.479" in sin
+    assert "Reserva Girante (c = a - b): 5.834" in sin
+    note = bulletin_lines(RESERVE)[-1]
+    assert "Área de Operação:" not in note and "Potência instalada" in note

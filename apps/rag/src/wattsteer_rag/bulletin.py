@@ -184,7 +184,7 @@ class _Table:
     def __init__(self) -> None:
         self.title = ""
         self.header: list[str] = []
-        self.previous: list[str] = []
+        self.full: list[str] = []  # the last row with every column
         self.spanned: list[int] = []  # header positions under a cell with colspan > 1
         self.header_just_set = False
 
@@ -212,20 +212,49 @@ class _Table:
         return False
 
     def pair(self, texts: list[str]) -> list[str]:
-        """Each value next to its column, filling a row shortened by a rowspan."""
+        """Each value next to its column, in a row a rowspan may have shortened."""
         self.header_just_set = False
-        if self.header and len(texts) < len(self.header) and len(self.previous) == len(self.header):
-            texts = self.previous[: len(self.header) - len(texts)] + texts
-        self.previous = texts
+        if len(texts) == 1:
+            return texts  # a note or a sentence under the table, not a value of its first column
+        if self.header and len(texts) < len(self.header) and len(self.full) == len(self.header):
+            return self._pair_short(texts)
+        if len(texts) == len(self.header):
+            self.full = texts
         if len(texts) != len(self.header):
             # Numbers with no name to pair with (the balance's exchange arrows
             # are drawn in the image) answer nothing and would borrow the title
             # of whatever table came before.
             return [] if all(_is_number(text) for text in texts) else texts
-        return [
-            f"{name}: {value}" if name and name != value else value
-            for name, value in zip(self.header, texts, strict=True)
-        ]
+        return _named(self.header, texts)
+
+    def _pair_short(self, texts: list[str]) -> list[str]:
+        """A rowspan removes a cell from either side, and only the shape says which.
+
+        The reservoirs drop the basin on the left ("SEGREDO | 605,52 | ..."
+        under "IGUACU"); the spinning reserve drops the hour on the right
+        ("COSR-N | 20.283 | 17.567 | 2.716"). Borrowing from the left in both
+        cases stored "Disponibilidade Sincronizada (a): SIN | Geração
+        Verificada (b): 101.479 | Reserva Girante: 95.645", and the answer quoted
+        it faithfully. The side kept is the one whose text-or-number pattern
+        matches the last complete row; the cell borrowed on the left is the one
+        the rowspan repeats, and nothing is invented on the right.
+        """
+        missing = len(self.header) - len(texts)
+        borrowed = self.full[:missing] + texts
+        if _shape(borrowed) == _shape(self.full):
+            return _named(self.header, borrowed)
+        return _named(self.header[: len(texts)], texts)
+
+
+def _shape(texts: list[str]) -> list[bool]:
+    return [_is_number(text) for text in texts]
+
+
+def _named(names: list[str], texts: list[str]) -> list[str]:
+    return [
+        f"{name}: {value}" if name and name != value else value
+        for name, value in zip(names, texts, strict=True)
+    ]
 
 
 def bulletin_lines(raw: str, heading: str = "") -> list[str]:
