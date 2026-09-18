@@ -40,10 +40,24 @@ class IngestReport:
         return line
 
 
-async def pending_documents(db: Database, limit: int) -> list:
-    """Fetched or parsed, oldest first: what `ingest` still has to do."""
+async def pending_documents(db: Database, limit: int, again: str | None = None) -> list:
+    """Fetched or parsed, oldest first: what `ingest` still has to do.
+
+    `again` names a source (BDO) or a document (RAP 2023-08-15) to read again
+    whatever its status: a reader that changed, or a document that an earlier
+    run cut at --max-pages, is otherwise never revisited, because it is already
+    marked indexed.
+    """
     pool = await db.connect()
     async with pool.acquire() as conn:
+        if again:
+            return await conn.fetch(
+                "SELECT id, sha256, title, external_id, mime FROM rag.document"
+                " WHERE (source = $2 OR external_id = $2) AND status <> 'superseded'"
+                " ORDER BY fetched_at LIMIT $1",
+                limit,
+                again,
+            )
         return await conn.fetch(
             "SELECT id, sha256, title, external_id, mime FROM rag.document"
             " WHERE status IN ('fetched','parsed') ORDER BY fetched_at LIMIT $1",

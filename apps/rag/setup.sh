@@ -97,7 +97,10 @@ else
   fi
 
   say "Reading and indexing (resumable: interrupt it and run again)"
-  $RAG ingest --limit 400 --max-pages 60
+  # No page cap: the disturbance report has 572 pages, and a cap of 60 left
+  # its actions and deadlines (from page 396) out of the index. Most of its
+  # pages have a text layer; about 220 go to the vision model, once.
+  $RAG ingest --limit 400
   # Embedding is rate limited, not slow: keep asking until nothing is pending.
   for _ in $(seq 1 20); do
     out=$($RAG embed | tr -d '\n ')
