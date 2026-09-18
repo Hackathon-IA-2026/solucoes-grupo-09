@@ -881,6 +881,13 @@ export interface ContextHour {
    * sits on.
    */
   observedNetExchangeMwh: number | null;
+  /**
+   * ONS's `val_disponibilidade` for the hour, added across the subsystem's
+   * reporting entities. A **power**, so it adds across entities at one instant
+   * and never across hours - a sum over a day would be twenty-four times a
+   * megawatt figure with no meaning. `null` where no entity reported it.
+   */
+  availableCapacityMw: number | null;
 }
 
 /**
@@ -3070,6 +3077,7 @@ export const WIRE_SHAPES = {
     observedHydroMwh: { wire: "observed_hydro_mwh" },
     observedThermalMwh: { wire: "observed_thermal_mwh" },
     observedNetExchangeMwh: { wire: "observed_net_exchange_mwh" },
+    availableCapacityMw: { wire: "available_capacity_mw" },
   },
   ContextDay: {
     programmedLoadMwh: { wire: "programmed_load_mwh" },

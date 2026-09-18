@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  canonicalCurtailmentByReportingEntity,
   canonicalProgrammedLoad,
   canonicalSystemContext,
   canonicalSystemExchange,
@@ -57,6 +58,17 @@ export interface ContextHourRow {
   observedHydroMwh: number | null;
   observedThermalMwh: number | null;
   observedNetExchangeMwh: number | null;
+  /**
+   * ONS's `val_disponibilidade`, added across the subsystem's reporting
+   * entities for this hour.
+   *
+   * A **power**. It adds across entities at one instant, which is what this is,
+   * and never across hours — a day's "total availability" in MW is twenty-four
+   * times a number with no meaning, which is why there is no day figure for it
+   * below and why `canonical-views.ts` says the same thing where the column is
+   * declared.
+   */
+  availableCapacityMw: number | null;
 }
 
 export type DeviationUnavailableReason =
@@ -104,6 +116,7 @@ interface HourRow {
   observed_hydro_mwh: number | string | null;
   observed_thermal_mwh: number | string | null;
   observed_net_exchange_mwh: number | string | null;
+  available_capacity_mw: number | string | null;
   latest_ingested_at: string | null;
 }
 
@@ -186,6 +199,7 @@ export async function readGridContext(
         settled.hydro_generation_mwh as observed_hydro_mwh,
         settled.thermal_generation_mwh as observed_thermal_mwh,
         settled.net_exchange_mwh as observed_net_exchange_mwh,
+        capacity.available_capacity_mw as available_capacity_mw,
         greatest(programme.ingested_at, settled.ingested_at) as latest_ingested_at
       from (
         select valid_time, programmed_load_mwh, ingested_at
@@ -203,6 +217,24 @@ export async function readGridContext(
           and valid_time >= ${query.from.toISOString()}::timestamptz
           and valid_time < ${query.to.toISOString()}::timestamptz
       ) as settled on settled.valid_time = programme.valid_time
+      -- Availability is reported per entity and per technology; the
+      -- subsystem's is their sum WITHIN an hour, because a power adds at an
+      -- instant. A sum over a column that is NULL for every entity returns
+      -- NULL, which is the answer wanted: "nobody reported it" and "zero
+      -- megawatts available" are different facts and only one is ever true.
+      --
+      -- Left-joined rather than part of the full outer join above: an hour with
+      -- an availability report and neither a programme nor a settlement is not
+      -- an hour this read has anything to say about.
+      left join (
+        select valid_time, sum(available_capacity_mw) as available_capacity_mw
+        from ${canonicalCurtailmentByReportingEntity}
+        where subsystem = ${query.subsystem}
+          and valid_time >= ${query.from.toISOString()}::timestamptz
+          and valid_time < ${query.to.toISOString()}::timestamptz
+        group by valid_time
+      ) as capacity
+        on capacity.valid_time = coalesce(programme.valid_time, settled.valid_time)
       order by 1
     `);
 
@@ -246,6 +278,7 @@ export async function readGridContext(
         observedHydroMwh: numeric(row.observed_hydro_mwh),
         observedThermalMwh: numeric(row.observed_thermal_mwh),
         observedNetExchangeMwh: numeric(row.observed_net_exchange_mwh),
+        availableCapacityMw: numeric(row.available_capacity_mw),
       };
     });
 

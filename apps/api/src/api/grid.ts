@@ -291,6 +291,7 @@ function toGridContext(observation: GridContextObservation, date: string): GridC
       observedHydroMwh: hour.observedHydroMwh,
       observedThermalMwh: hour.observedThermalMwh,
       observedNetExchangeMwh: hour.observedNetExchangeMwh,
+      availableCapacityMw: hour.availableCapacityMw,
     })),
     day: {
       programmedLoadMwh: observation.day.programmedLoadMwh,

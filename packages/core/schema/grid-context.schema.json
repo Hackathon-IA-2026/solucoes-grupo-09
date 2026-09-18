@@ -50,6 +50,10 @@
         "observed_net_exchange_mwh": {
           "type": ["number", "null"],
           "description": "Positive is export. The subsystem's net position across every corridor it sits on."
+        },
+        "available_capacity_mw": {
+          "type": ["number", "null"],
+          "description": "ONS's `val_disponibilidade` for the hour, added across the subsystem's reporting entities. A **power**, so it adds across entities at one instant and never across hours - a sum over a day would be twenty-four times a megawatt figure with no meaning. `null` where no entity reported it."
         }
       },
       "required": [
@@ -60,7 +64,8 @@
         "observed_solar_mwh",
         "observed_hydro_mwh",
         "observed_thermal_mwh",
-        "observed_net_exchange_mwh"
+        "observed_net_exchange_mwh",
+        "available_capacity_mw"
       ],
       "additionalProperties": false
     },

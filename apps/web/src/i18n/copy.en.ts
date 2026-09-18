@@ -1009,6 +1009,9 @@ export const en = {
         partial_overlap:
           "No deviation: both series exist and they do not cover the same hours. A deviation over the overlap would read as the day's.",
       },
+      availability: "Availability, at its peak hour",
+      availabilityNote:
+        "The most capacity declared available on the day, at {hour} — a power, so it does not add across the day.",
       corridorsTitle: "Interchange, over the day",
       corridor: "Interchange with {other}",
       corridorProgrammed: "Programmed {mwh} MWh",

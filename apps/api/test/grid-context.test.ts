@@ -37,6 +37,7 @@ function hour(index: number, over: Partial<ContextHourRow> = {}): ContextHourRow
     observedHydroMwh: null,
     observedThermalMwh: null,
     observedNetExchangeMwh: null,
+    availableCapacityMw: null,
     ...over,
   };
 }
@@ -168,5 +169,78 @@ describe("the shape the wire promises", () => {
       corridors: [],
     };
     expect(validate("grid-context.schema.json", body).valid).toBe(false);
+  });
+});
+
+describe("availability is a power and is never summed over a day", () => {
+  /*
+    `val_disponibilidade` is MW. It adds across the reporting entities of one
+    hour — powers add at an instant — and adding it across hours would produce
+    twenty-four times a megawatt figure, which is not a quantity. The read
+    therefore carries it per hour and the day block has no availability field
+    at all, which is the version of this rule a schema can enforce.
+  */
+  it("the day block has nowhere to put an availability total", () => {
+    const day = summariseDay([]);
+    expect(Object.keys(day).sort()).toEqual([
+      "deviationMwh",
+      "deviationUnavailableReason",
+      "hoursCompared",
+      "observedLoadMwh",
+      "programmedLoadMwh",
+    ]);
+  });
+
+  it("the wire refuses one too", () => {
+    const body = {
+      subsystem: "NE",
+      date: "2026-09-17",
+      as_of: "2026-09-18T04:00:00Z",
+      hours: [],
+      day: {
+        programmed_load_mwh: null,
+        observed_load_mwh: null,
+        deviation_mwh: null,
+        deviation_unavailable_reason: "day_not_settled",
+        hours_compared: 0,
+        // The field somebody will reach for. `additionalProperties: false` is
+        // what stops it becoming a number on a screen.
+        available_capacity_mw: 4200,
+      },
+      corridors: [],
+    };
+    expect(validate("grid-context.schema.json", body).valid).toBe(false);
+  });
+
+  it("an hour with no entity reporting it is null, not zero", () => {
+    // "Nobody reported availability" and "zero megawatts were available" are
+    // different facts, and only the first is ever true here.
+    const empty = {
+      subsystem: "NE",
+      date: "2026-09-17",
+      as_of: "2026-09-18T04:00:00Z",
+      hours: [
+        {
+          valid_time: "2026-09-17T03:00:00Z",
+          programmed_load_mwh: 100,
+          observed_load_mwh: null,
+          observed_wind_mwh: null,
+          observed_solar_mwh: null,
+          observed_hydro_mwh: null,
+          observed_thermal_mwh: null,
+          observed_net_exchange_mwh: null,
+          available_capacity_mw: null,
+        },
+      ],
+      day: {
+        programmed_load_mwh: 100,
+        observed_load_mwh: null,
+        deviation_mwh: null,
+        deviation_unavailable_reason: "day_not_settled",
+        hours_compared: 0,
+      },
+      corridors: [],
+    };
+    expect(validate("grid-context.schema.json", empty).valid).toBe(true);
   });
 });

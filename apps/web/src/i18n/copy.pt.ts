@@ -765,6 +765,9 @@ export const pt: Copy = {
         partial_overlap:
           "Sem desvio: as duas séries existem e não cobrem as mesmas horas. Um desvio sobre a interseção seria lido como desvio do dia.",
       },
+      availability: "Disponibilidade, na hora de pico",
+      availabilityNote:
+        "Maior potência declarada disponível no dia, às {hour} — é uma potência, então não se soma ao longo do dia.",
       corridorsTitle: "Interconexão, no dia",
       corridor: "Intercâmbio com {other}",
       corridorProgrammed: "Programado {mwh} MWh",

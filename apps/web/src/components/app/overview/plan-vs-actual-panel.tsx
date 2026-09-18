@@ -79,6 +79,22 @@ export function PlanVsActualPanel({
 
   const { day, corridors } = state.context;
   const deviation = day.deviationMwh;
+  /*
+    The hour that had the most available, not a sum and not a mean. A mean over
+    a day with four reported hours and twenty silent ones is a mean of four
+    numbers wearing a label that says "the day".
+  */
+  const peak = state.context.hours.reduce<{
+    available: number;
+    hourLocal: string;
+  } | null>((highest, hour) => {
+    if (hour.availableCapacityMw === null) {
+      return highest;
+    }
+    return highest !== null && highest.available >= hour.availableCapacityMw
+      ? highest
+      : { available: hour.availableCapacityMw, hourLocal: hour.validTime };
+  }, null);
 
   return (
     <Panel style={{ gap: space.md }}>
@@ -115,6 +131,24 @@ export function PlanVsActualPanel({
             : fill(text.deviationNote, { hours: String(day.hoursCompared) })
         }
       />
+
+      {/*
+        Availability, as a peak and not a total.
+
+        `val_disponibilidade` is a **power**: it adds across the subsystem's
+        reporting entities within one hour, which is what the gateway sends, and
+        adding it across hours would be twenty-four times a megawatt figure with
+        no meaning. The day's largest hour is a real quantity — the most the
+        subsystem had available at any one time — and the label says which hour
+        it was so nobody reads it as "the day's capacity".
+      */}
+      {peak === null ? null : (
+        <RailFact
+          label={text.availability}
+          value={`${f.compact(peak.available)} MW`}
+          note={fill(text.availabilityNote, { hour: f.dateTime(peak.hourLocal) })}
+        />
+      )}
 
       {corridors.length === 0 ? null : (
         <View style={{ gap: space.sm }}>
