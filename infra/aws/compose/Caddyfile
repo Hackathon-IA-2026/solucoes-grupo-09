@@ -1,0 +1,7 @@
+# The same split as the ECS option's load balancer (ecs/alb.tf): the
+# gateway's paths to the API, everything else to the site.
+{$SITE_ADDRESS} {
+	@api path /v1/* /ready /ingest/* /docs /docs/*
+	reverse_proxy @api api:3000
+	reverse_proxy web:8080
+}

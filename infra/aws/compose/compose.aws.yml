@@ -1,0 +1,153 @@
+# The EC2 option's stack: the same five services as Railway and as the ECS
+# option, next to a Postgres and a Redis container, behind Caddy.
+#
+# Run by /opt/wattsteer/up.sh on the instance, and by infra/aws/sim/smoke.sh on
+# a laptop. Interpolated from two env files: settings.env (non-secret, written
+# by Terraform) and secrets.env (from SSM). Everything stateful is a directory
+# under ${DATA_DIR}, the instance's separate data volume.
+
+x-gateway-env: &gateway-env
+  NODE_ENV: production
+  DATABASE_URL: postgres://wattsteer:${POSTGRES_PASSWORD}@postgres:5432/wattsteer
+  REDIS_URL: redis://redis:6379
+  WATTSTEER_ML_URL: http://ml:8000
+  WATTSTEER_RAG_URL: http://rag:8082
+  WATTSTEER_RAG_ACCESS_TOKEN: ${WATTSTEER_RAG_ACCESS_TOKEN}
+  WATTSTEER_ARCHIVE_BUCKET: ${WATTSTEER_ARCHIVE_BUCKET:-}
+  WATTSTEER_ARCHIVE_REGION: ${WATTSTEER_ARCHIVE_REGION:-}
+  WATTSTEER_ARCHIVE_ENDPOINT: ${WATTSTEER_ARCHIVE_ENDPOINT:-}
+  WATTSTEER_ARCHIVE_ACCESS_KEY_ID: ${WATTSTEER_ARCHIVE_ACCESS_KEY_ID:-}
+  WATTSTEER_ARCHIVE_SECRET_ACCESS_KEY: ${WATTSTEER_ARCHIVE_SECRET_ACCESS_KEY:-}
+  WATTSTEER_ARCHIVE_RETENTION_DAYS: "90"
+  XAI_API_KEY: ${XAI_API_KEY:-}
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  postgres:
+    <<: *restart
+    # pgvector on 16: the same major version as Railway's Postgres, with the
+    # extension apps/rag needs, so both use one database as on RDS.
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: wattsteer
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: wattsteer
+    volumes:
+      - ${DATA_DIR:-/data}/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wattsteer -d wattsteer"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    <<: *restart
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ${DATA_DIR:-/data}/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  # One-off, run by up.sh before the services move: `drizzle-kit migrate`.
+  migrate:
+    image: ${REGISTRY}/${NAME}/migrate:${IMAGE_TAG}
+    profiles: ["tools"]
+    environment:
+      DATABASE_URL: postgres://wattsteer:${POSTGRES_PASSWORD}@postgres:5432/wattsteer
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *restart
+    image: ${REGISTRY}/${NAME}/api:${IMAGE_TAG}
+    environment:
+      <<: *gateway-env
+      PORT: "3000"
+      WATTSTEER_ROLE: api
+      WATTSTEER_CORS_ORIGINS: ${PUBLIC_URL}
+      WATTSTEER_PUBLIC_URL: ${PUBLIC_URL}
+      WATTSTEER_TRUSTED_PROXY_DEPTH: "1"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    <<: *restart
+    image: ${REGISTRY}/${NAME}/api:${IMAGE_TAG}
+    command: ["bun", "run", "src/worker.ts"]
+    environment:
+      <<: *gateway-env
+      WATTSTEER_ROLE: worker
+    # The image's HEALTHCHECK probes the API port, which the worker never opens.
+    healthcheck:
+      disable: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  ml:
+    <<: *restart
+    image: ${REGISTRY}/${NAME}/ml:${IMAGE_TAG}
+    command: ["wattsteer-ml"]
+    environment:
+      PORT: "8000"
+      WATTSTEER_ML_ENV: production
+      WATTSTEER_ML_ARTIFACT_DIR: /data/models
+      DATABASE_URL: postgres://wattsteer:${POSTGRES_PASSWORD}@postgres:5432/wattsteer
+    volumes:
+      - ${DATA_DIR:-/data}/ml-models:/data/models
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  rag:
+    <<: *restart
+    image: ${REGISTRY}/${NAME}/rag:${IMAGE_TAG}
+    environment:
+      WATTSTEER_RAG_DATABASE_URL: postgres://wattsteer:${POSTGRES_PASSWORD}@postgres:5432/wattsteer
+      WATTSTEER_RAG_ACCESS_TOKEN: ${WATTSTEER_RAG_ACCESS_TOKEN}
+      WATTSTEER_RAG_STORE_DIR: /data/rag-store
+      WATTSTEER_RAG_MIGRATE_ON_BOOT: "1"
+      WATTSTEER_RAG_INDEX_ON_BOOT: ${WATTSTEER_RAG_INDEX_ON_BOOT:-1}
+      NVIDIA_API_KEYS: ${NVIDIA_API_KEYS:-}
+      GROQ_API_KEYS: ${GROQ_API_KEYS:-}
+    volumes:
+      - ${DATA_DIR:-/data}/rag-store:/data/rag-store
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    <<: *restart
+    image: ${REGISTRY}/${NAME}/web:${IMAGE_TAG}
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+
+  # The load balancer's job on this option: /v1 and the gateway's paths to the
+  # API, everything else to the site, and HTTPS when SITE_ADDRESS is a domain.
+  caddy:
+    <<: *restart
+    image: caddy:2-alpine
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${DATA_DIR:-/data}/caddy:/data
+    depends_on:
+      - api
+      - web
