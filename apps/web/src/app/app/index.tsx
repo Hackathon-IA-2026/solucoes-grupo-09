@@ -77,12 +77,8 @@ import { type ReactNode, useEffect, useState } from "react";
 import { Text } from "react-native";
 import ExplainScreen from "@/app/app/explain";
 import MitigateScreen from "@/app/app/mitigate";
-import {
-  AppShell,
-  onSectionRequest,
-  ScreenTitle,
-  scrollToSection,
-} from "@/components/app/app-shell";
+import { AppShell, ScreenTitle, scrollToSection } from "@/components/app/app-shell";
+import { onSectionRequest } from "@/components/app/section-request";
 import { ForecastAbsent } from "@/components/app/forecast-absent";
 import {
   ForecastPresence,

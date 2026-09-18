@@ -49,7 +49,7 @@
 import type { SubsystemCode } from "@wattsteer/core";
 import { router, useGlobalSearchParams, usePathname } from "expo-router";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
-import { requestSection } from "@/components/app/app-shell";
+import { requestSection } from "@/components/app/section-request";
 import { parseAppParams } from "@/components/app/params";
 import { defaultScenario, readScenario, SCENARIO_PARAM } from "@/components/app/scenario";
 import { useServing } from "@/components/app/use-serving";
