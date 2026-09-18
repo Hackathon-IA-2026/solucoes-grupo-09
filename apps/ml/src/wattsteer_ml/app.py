@@ -1476,13 +1476,31 @@ async def similar_days_route(
     if target is None:
         # The day itself has no complete programme, so there is nothing to be
         # like. An absence with its reason, never an empty list meaning "no
-        # similar days exist".
+        # similar days exist" — and the reason carries *how far behind the
+        # programme is*, because "tomorrow is not published yet" and "ONS has
+        # published nothing for four days" are different states and only the
+        # second is anybody's to chase.
+        latest = max((vector.target_date for vector in vectors), default=None)
         return _refusal(
             404,
             "FORECAST_UNAVAILABLE",
             f"no complete day-ahead programme for {day.isoformat()} in "
-            f"{parsed.directory_name}, so there is no day vector to compare",
-            {"lane": parsed.directory_name, "target_date": day.isoformat()},
+            f"{parsed.directory_name}, so there is no day vector to compare"
+            + (
+                ""
+                if latest is None
+                else f"; the newest programme in the pool is {latest.isoformat()}"
+            ),
+            {
+                "lane": parsed.directory_name,
+                "target_date": day.isoformat(),
+                # The fact that turns "no analogue" into something an operator
+                # can act on: whether the day is simply ahead of the programme,
+                # or the programme itself has stopped arriving. On 2026-09-18
+                # ONS's own catalogue had not published since the 14th, and this
+                # route answered a bare 404 that said nothing about it.
+                "latest_programmed_day": None if latest is None else latest.isoformat(),
+            },
         )
 
     neighbours = nearest(target, vectors, k=k)

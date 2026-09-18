@@ -163,6 +163,7 @@ from wattsteer_ml.features import (
     serving_target_date,
 )
 from wattsteer_ml.lanes import Lane, format_instant
+from wattsteer_ml.training.calibration import RiskBinDecision, RiskBins
 from wattsteer_ml.promotions import PROMOTION_LOG_FILENAME, PromotionLog
 from wattsteer_ml.training import (
     CalibrationError,
@@ -793,8 +794,24 @@ def _record_planning_arms(
     record_planning_arms(report, root=request.root, artifact_id=request.run_id)
 
 
-def _incumbent_risk_bins(inputs: LaneInputs, request: RetrainRequest) -> Any:
-    """The live artifact's published risk edges, held unless the pool moves them."""
+def _incumbent_risk_bins(inputs: LaneInputs, request: RetrainRequest) -> RiskBins | None:
+    """The live artifact's published risk edges, held unless the pool moves them.
+
+    **`.bins`, not the decision.** `calibration.risk_bins` is a
+    `RiskBinDecision` — the edges *plus* whether they moved, why, the incumbent
+    they were held against and the check that decided it — and
+    `derive_risk_bins` takes the edges. Returning the whole decision type-checked
+    only because this function was annotated `Any`, and every weekly retrain of a
+    lane with a promoted artifact died on it:
+
+        AttributeError: 'RiskBinDecision' object has no attribute 'classify'
+
+    raised inside `_check`, which calls `bins.classify(...)`. `publication.py`
+    reaches for `.bins` in the same situation and was right to.
+
+    The return type is the real one now, so the next version of this mistake is
+    a type error rather than a Monday morning.
+    """
     try:
         loaded = load_artifact(
             root=request.root,
@@ -803,7 +820,8 @@ def _incumbent_risk_bins(inputs: LaneInputs, request: RetrainRequest) -> Any:
         )
     except Exception:
         return None
-    return loaded.bundle.calibration.risk_bins
+    decision: RiskBinDecision = loaded.bundle.calibration.risk_bins
+    return decision.bins
 
 
 def _promoted(root: Path, lane: Lane) -> str | None:
