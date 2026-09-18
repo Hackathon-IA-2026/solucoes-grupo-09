@@ -45,7 +45,7 @@ export function isLocale(value: unknown): value is Locale {
  * prefix. `""` is the locale root. This is the single list that the route
  * tree, `sitemap.xml` and the hreflang alternates all have to agree on.
  */
-export const LOCALIZED_PATHS = ["", "/privacy", "/terms"] as const;
+export const LOCALIZED_PATHS = ["", "/privacy", "/terms", "/references"] as const;
 export type LocalizedPath = (typeof LOCALIZED_PATHS)[number];
 
 /**

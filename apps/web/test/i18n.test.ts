@@ -83,6 +83,11 @@ describe("i18n", () => {
       // Interligado Nacional" is the operator's name for the thing, not a
       // description of it.
       "app.grid.eyebrow",
+      // The names of Brazilian norms on the references page. A norm is cited
+      // by its official title in any language, as ONS proper nouns are above.
+      "legal.references.norms.rows.1.0",
+      "legal.references.norms.rows.2.0",
+      "legal.references.norms.rows.3.0",
     ]);
     const prose = [...PT].filter(
       ([key, value]) =>

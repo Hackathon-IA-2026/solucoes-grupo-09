@@ -70,7 +70,7 @@ describe("static SEO artifacts agree with the route tree", () => {
     LOCALIZED_PATHS.map((path) => `https://wattsteer.com${localePath(locale, path)}`),
   );
 
-  it("sitemap lists exactly the six real pages", () => {
+  it("sitemap lists exactly the real pages", () => {
     const locs = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
     expect(locs.sort()).toEqual([...expected].sort());
   });

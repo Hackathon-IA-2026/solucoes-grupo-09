@@ -29,6 +29,7 @@ import { router, usePathname } from "expo-router";
 import { type ReactNode, useState } from "react";
 import { Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { LanguageSwitch } from "@/components/language-switch";
+import { RegulatoryNote } from "@/components/regulatory-note";
 import { type Copy, useCopy, useFormat, useI18n } from "@/i18n";
 import { localePath } from "@/i18n/locale";
 import {
@@ -516,6 +517,7 @@ export function AppShell({
         }
       >
         {children}
+        {bleed ? null : <RegulatoryNote />}
       </View>
     </ScrollView>
   );
