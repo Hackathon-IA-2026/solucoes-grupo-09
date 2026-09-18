@@ -82,6 +82,11 @@ async def index_document(
                 for chunk in chunks
             ],
         )
+        # A re-parse that yields fewer chunks than before would otherwise leave
+        # the old tail in the index, quoting text the document no longer has.
+        await conn.execute(
+            "DELETE FROM rag.chunk WHERE document_id = $1 AND ordinal > $2", document_id, len(chunks)
+        )
         await conn.execute("UPDATE rag.document SET status = 'chunked' WHERE id = $1", document_id)
     return await embed_pending(db, gateway, document_id=document_id, limit=batch_limit)
 
