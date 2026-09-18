@@ -10,12 +10,6 @@ variable "name" {
   default     = "wattsteer-ec2"
 }
 
-variable "image_tag" {
-  description = "Tag of the images to run. scripts/deploy.sh sets it to the git commit."
-  type        = string
-  default     = "latest"
-}
-
 variable "instance_type" {
   description = "Graviton (arm64), like the images. t4g.xlarge is 4 vCPU and 16 GB."
   type        = string
