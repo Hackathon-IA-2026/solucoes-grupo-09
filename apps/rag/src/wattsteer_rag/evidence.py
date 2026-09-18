@@ -225,6 +225,12 @@ class Record:
         )
 
 
+# The bulletins published every day, and which days after the reported one
+# each may carry: the BDO is dated the day it reports; the preliminary IPDO is
+# published the morning after.
+DAILY_REPORTS = {"BDO": (0,), "IPDO": (0, 1)}
+
+
 def _relevance_failure(hit: Hit, record: Record) -> GateFailure | None:
     """Is this document about the record at all?
 
@@ -238,6 +244,12 @@ def _relevance_failure(hit: Hit, record: Record) -> GateFailure | None:
     The answer quotes the disturbance report of 15/08/2023 to explain a flow
     control of August 2026. A report analyses one event on one date, and outside
     that date it supports nothing.
+
+    The same holds for the daily bulletins, and it was measured: with the
+    record's own instruction out of the corpus, a restriction of 13/12/2025 was
+    "explained" by the IPDO of 07/09/2025 about another transformer, with high
+    confidence. A BDO speaks for its own date only; an IPDO, published the next
+    morning, also for the day before it.
     """
     if (
         hit.source == "INSTRUCAO_OPERACAO"
@@ -253,6 +265,13 @@ def _relevance_failure(hit: Hit, record: Record) -> GateFailure | None:
             return GateFailure(
                 "citation_from_another_event",
                 f"{hit.external_id} analyses {hit.published_at.date()}, record is {record.target_date}",
+            )
+    if hit.source in DAILY_REPORTS and record.target_date and hit.published_at:
+        days_after = (hit.published_at.date() - date.fromisoformat(record.target_date)).days
+        if days_after not in DAILY_REPORTS[hit.source]:
+            return GateFailure(
+                "citation_from_another_day",
+                f"{hit.external_id} reports {hit.published_at.date()}, record is {record.target_date}",
             )
     return None
 

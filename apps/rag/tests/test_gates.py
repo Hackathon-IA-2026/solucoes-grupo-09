@@ -268,3 +268,42 @@ def test_the_daily_bulletin_html_is_read_as_the_utf8_it_declares(tmp_path):
     legacy = tmp_path / "old.html"
     legacy.write_bytes(page.encode("latin-1"))
     assert "Produção" in parse_html_tables(legacy)[0].markdown
+
+
+def test_a_bdo_speaks_for_its_day_and_an_ipdo_also_for_the_day_before():
+    """Measured on 2026-09-18: a record of 13/12/2025 naming IO-ON.NE.2SO, whose
+    revision in force then is not in the corpus, came back `found` citing the
+    IPDO of 07/09/2025 about another transformer. The bulletin was literal and
+    located, and three months away from the record."""
+    from datetime import UTC, datetime
+
+    from wattsteer_rag.evidence import Record, _relevance_failure
+    from wattsteer_rag.retrieve import Hit
+
+    def bulletin(source, day):
+        return Hit(
+            chunk_id="c",
+            document_id="d",
+            text="",
+            locator={},
+            section_path=None,
+            source=source,
+            title="",
+            url="",
+            external_id=f"{source} {day}",
+            revision=None,
+            published_at=datetime.fromisoformat(day).replace(tzinfo=UTC),
+            sha256="",
+            score=0.0,
+        )
+
+    record = Record.of("pergunta", "Controle de inequação: ... - IO-ON.NE.2SO", "2025-12-13")
+    failure = _relevance_failure(bulletin("IPDO", "2025-09-07"), record)
+    assert failure is not None and failure.code == "citation_from_another_day"
+    assert _relevance_failure(bulletin("BDO", "2025-12-12"), record)
+    # A BDO counts only on its own day; the next day's is about another day.
+    assert _relevance_failure(bulletin("BDO", "2025-12-13"), record) is None
+    assert _relevance_failure(bulletin("BDO", "2025-12-14"), record)
+    # The preliminary IPDO is published the next morning, so that one counts too.
+    assert _relevance_failure(bulletin("IPDO", "2025-12-13"), record) is None
+    assert _relevance_failure(bulletin("IPDO", "2025-12-14"), record) is None
