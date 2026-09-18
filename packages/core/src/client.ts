@@ -39,6 +39,7 @@ import type {
   CurtailmentHours,
   DiagnosisDayAhead,
   ForecastDayAhead,
+  GridContext,
   GridNow,
   GridOutlook,
   Meta,
@@ -249,6 +250,23 @@ export class ApiClient {
   ): Promise<GridOutlook> {
     return this.request<GridOutlook>("GridOutlook", "/v1/grid/outlook", {
       query: { target_date: query.targetDate, gate_profile: query.gateProfile },
+      signal,
+    });
+  }
+
+  /**
+   * `GET /v1/grid/context` — ONS's plan for a day beside what the grid did.
+   *
+   * Neither series is a WattSteer number, which is the point of having it: it
+   * is the official comparison a reviewer can hold the product's own forecast
+   * up against.
+   */
+  gridContext(
+    query: { subsystem: string; date: string; asOf?: string },
+    signal?: AbortSignal,
+  ): Promise<GridContext> {
+    return this.request<GridContext>("GridContext", "/v1/grid/context", {
+      query: { subsystem: query.subsystem, date: query.date, as_of: query.asOf },
       signal,
     });
   }

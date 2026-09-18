@@ -273,9 +273,8 @@ export function heroFigures({
     peak from four would be inventing it.
   */
   const settled: SettledAnswers | null =
-    forecast !== null
-      ? null
-      : (() => {
+    forecast === null
+      ? (() => {
           const totalMwh =
             scope === "sin"
               ? observed.now.national.last24hConstrainedOffMwh
@@ -290,7 +289,8 @@ export function heroFigures({
               .filter((row) => row.last24hMwh > 0)
               .map((row) => row.subsystem),
           };
-        })();
+        })()
+      : null;
 
   return {
     day,

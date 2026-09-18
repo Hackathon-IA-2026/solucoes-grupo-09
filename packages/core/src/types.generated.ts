@@ -825,6 +825,107 @@ export interface CurtailmentHourForecast {
 }
 
 /**
+ * `GET /v1/grid/context` - what ONS **planned** for a day beside what the
+ * grid **did**, hour by hour, for one subsystem. Neither half is a WattSteer
+ * number: the programme is ONS's `carga-energia-programada` and the programmed
+ * interchange is ONS's, the realisation is the settled energy balance, and the
+ * only arithmetic here is a subtraction between two ONS series of the same
+ * unit and the same grain. It exists so that the product's own forecast can be
+ * read against the two official series rather than beside them, which is the
+ * distinction a reviewer is entitled to see drawn. Every field is nullable
+ * with a stated reason, because a programme not yet published and a load of
+ * zero are different facts.
+ */
+export interface GridContext {
+  subsystem: Subsystem;
+  /**
+   * The local civil day these hours belong to, America/Sao_Paulo.
+   */
+  date: CivilDate;
+  /**
+   * The vintage cut: what WattSteer had learned by this instant.
+   */
+  asOf: UtcInstant;
+  /**
+   * In `valid_time` order. A day is 24 hours except across a DST change, which
+   * Brazil no longer observes but the grain still permits.
+   */
+  hours: ContextHour[];
+  day: ContextDay;
+  /**
+   * The interchange links this subsystem sits on, summed over the day.
+   * Orientation is canonical (`from < to`), so a positive verified figure is a
+   * flow from `from_subsystem` to `to_subsystem` whichever end asked.
+   */
+  corridors: CorridorDay[];
+}
+
+export interface ContextHour {
+  validTime: UtcInstant;
+  /**
+   * ONS's day-ahead load programme for this hour. `null` where no programme was
+   * published for it, which is the ordinary state of a day whose D-1 has not
+   * arrived - not a zero.
+   */
+  programmedLoadMwh: number | null;
+  /**
+   * The settled load. `null` where the hour is not settled yet.
+   */
+  observedLoadMwh: number | null;
+  observedWindMwh: number | null;
+  observedSolarMwh: number | null;
+  observedHydroMwh: number | null;
+  observedThermalMwh: number | null;
+  /**
+   * Positive is export. The subsystem's net position across every corridor it
+   * sits on.
+   */
+  observedNetExchangeMwh: number | null;
+}
+
+/**
+ * The day's three figures. `deviation_mwh` is `observed - programmed` and is
+ * `null` unless **both** sides cover the same hours, because a deviation
+ * computed over a partial overlap is a measurement of the overlap and reads as
+ * a measurement of the day.
+ */
+export interface ContextDay {
+  programmedLoadMwh: number | null;
+  observedLoadMwh: number | null;
+  deviationMwh: number | null;
+  /**
+   * Why there is no deviation. `partial_overlap` is the one worth naming: both
+   * series exist and they do not describe the same hours.
+   */
+  deviationUnavailableReason:
+    | "no_programme_published"
+    | "day_not_settled"
+    | "partial_overlap"
+    | null;
+  /**
+   * How many hours carry both a programme and a settlement. A deviation over few
+   * hours is a different claim from one over 24.
+   */
+  hoursCompared: number;
+}
+
+export interface CorridorDay {
+  fromSubsystem: Subsystem;
+  toSubsystem: Subsystem;
+  /**
+   * Summed over the hours that settled. `null` where none did.
+   */
+  verifiedMwh: number | null;
+  /**
+   * ONS's programmed interchange, summed over the same hours it was published
+   * for. `null` where the corridor has no programme - the column is nullable at
+   * source.
+   */
+  programmedMwh: number | null;
+  hoursSettled: number;
+}
+
+/**
  * `GET /v1/grid/now` - observed, not forecast. It needs no model, which is
  * what makes it the honest thing to show on a landing page when no artifact is
  * promoted. Its national total *is* legitimate where the forecast's is not:
@@ -2897,6 +2998,38 @@ export const WIRE_SHAPES = {
     expectedMwh: { wire: "expected_mwh" },
     occurrenceProbability: { wire: "occurrence_probability" },
     split: { wire: "split", shape: "TechnologySplit" },
+  },
+  GridContext: {
+    subsystem: { wire: "subsystem" },
+    date: { wire: "date" },
+    asOf: { wire: "as_of" },
+    hours: { wire: "hours", shape: "ContextHour", list: true },
+    day: { wire: "day", shape: "ContextDay" },
+    corridors: { wire: "corridors", shape: "CorridorDay", list: true },
+  },
+  ContextHour: {
+    validTime: { wire: "valid_time" },
+    programmedLoadMwh: { wire: "programmed_load_mwh" },
+    observedLoadMwh: { wire: "observed_load_mwh" },
+    observedWindMwh: { wire: "observed_wind_mwh" },
+    observedSolarMwh: { wire: "observed_solar_mwh" },
+    observedHydroMwh: { wire: "observed_hydro_mwh" },
+    observedThermalMwh: { wire: "observed_thermal_mwh" },
+    observedNetExchangeMwh: { wire: "observed_net_exchange_mwh" },
+  },
+  ContextDay: {
+    programmedLoadMwh: { wire: "programmed_load_mwh" },
+    observedLoadMwh: { wire: "observed_load_mwh" },
+    deviationMwh: { wire: "deviation_mwh" },
+    deviationUnavailableReason: { wire: "deviation_unavailable_reason" },
+    hoursCompared: { wire: "hours_compared" },
+  },
+  CorridorDay: {
+    fromSubsystem: { wire: "from_subsystem" },
+    toSubsystem: { wire: "to_subsystem" },
+    verifiedMwh: { wire: "verified_mwh" },
+    programmedMwh: { wire: "programmed_mwh" },
+    hoursSettled: { wire: "hours_settled" },
   },
   GridNow: {
     asOf: { wire: "as_of" },

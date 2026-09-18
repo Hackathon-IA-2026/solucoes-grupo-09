@@ -47,6 +47,7 @@ import type { Scope } from "@/components/app/map/scope-bar";
 import type { AppParams } from "@/components/app/params";
 import { SelectedRegion } from "@/components/app/selected-region";
 import { gateProfileOf } from "@/components/app/use-app-params";
+import { useGridContext } from "@/components/app/use-grid-context";
 import type { ForecastNetwork, ObservedNetwork } from "@/components/app/use-network";
 import { useRunLanes } from "@/components/app/use-run-lanes";
 import { FanChart } from "@/components/charts/fan-chart";
@@ -70,6 +71,7 @@ import { HeadlinePanel } from "./headline-panel";
 import { HERO_COPY } from "./hero-copy";
 import { heroFigures } from "./hero-figures";
 import { NationalFigureBlock, ObservedNationalPanel } from "./national-panel";
+import { PlanVsActualPanel } from "./plan-vs-actual-panel";
 import { QuestionRow, SettledQuestionRow } from "./question-row";
 import { HeroStat, RegionRow } from "./region-rail";
 import { RegionRail } from "./region-rail-panel";
@@ -157,6 +159,12 @@ export function OverviewHero({
     why it is coverage and not a per-day score.
   */
   const coverage = useCoverage(gateProfileOf(params.run));
+  /*
+    Keyed on the selection, like every other read on this screen: the programme
+    and the settlement are both per subsystem-day, so changing either axis is a
+    different question and not a filter over one answer.
+  */
+  const gridContext = useGridContext(params.subsystem, params.date);
   const [width, setWidth] = useState(0);
   const wide = width >= RAILS_BESIDE_MAP;
 
@@ -186,6 +194,14 @@ export function OverviewHero({
     worstRisk,
     settled,
   } = heroFigures({ observed, forecast, scope, f });
+
+  /*
+    ONS's plan for the day against what the grid did. The one panel here whose
+    two series are both ONS's — see `plan-vs-actual-panel.tsx` for why that is
+    worth a panel of its own, and `use-grid-context.ts` for why an empty answer
+    is the ordinary case rather than a refusal.
+  */
+  const planned = <PlanVsActualPanel state={gridContext} subsystem={params.subsystem} />;
 
   const headline = (
     <HeadlinePanel
@@ -303,29 +319,31 @@ export function OverviewHero({
     below. `settled` is the same five answers in the observed vocabulary.
   */
   const questions =
-    settled !== null ? (
+    settled === null ? (
+      selectedRow === null || magnitudeMwh === null ? null : (
+        <QuestionRow
+          scope={scope}
+          selectedSubsystem={params.subsystem}
+          risk={riskRow ?? selectedRow}
+          magnitudeMwh={magnitudeMwh}
+          magnitudeBand={magnitudeBand}
+          window={window}
+          reasons={spokenReasons}
+          reasonDate={observed.hoursDate}
+          evidence={observed.evidence}
+          atRisk={atRisk}
+          worstRisk={worstRisk}
+          causeNote={copy.app.overview.causeNote}
+          onWhy={onWhy}
+          whyOpen={whyOpen}
+        />
+      )
+    ) : (
       <SettledQuestionRow
         settled={settled}
         reasons={spokenReasons}
         reasonDate={observed.hoursDate}
         evidence={observed.evidence}
-        causeNote={copy.app.overview.causeNote}
-        onWhy={onWhy}
-        whyOpen={whyOpen}
-      />
-    ) : selectedRow === null || magnitudeMwh === null ? null : (
-      <QuestionRow
-        scope={scope}
-        selectedSubsystem={params.subsystem}
-        risk={riskRow ?? selectedRow}
-        magnitudeMwh={magnitudeMwh}
-        magnitudeBand={magnitudeBand}
-        window={window}
-        reasons={spokenReasons}
-        reasonDate={observed.hoursDate}
-        evidence={observed.evidence}
-        atRisk={atRisk}
-        worstRisk={worstRisk}
         causeNote={copy.app.overview.causeNote}
         onWhy={onWhy}
         whyOpen={whyOpen}
@@ -460,12 +478,22 @@ export function OverviewHero({
           </Panel>
           {wide ? null : headline}
           {wide ? null : rail}
+          {wide ? null : planned}
           {wide ? null : profile}
         </View>
 
         {wide ? (
-          <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0 }}>
+          <View
+            style={{
+              flexGrow: 1,
+              flexShrink: 1,
+              flexBasis: 0,
+              minWidth: 0,
+              gap: space.md,
+            }}
+          >
             {rail}
+            {planned}
           </View>
         ) : null}
       </View>

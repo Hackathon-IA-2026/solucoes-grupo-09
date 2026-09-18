@@ -992,6 +992,32 @@ export const en = {
      * measurement, and where the forecast copy names one, the observed copy
      * says why there is none.
      */
+    /* See the note on the Portuguese side. */
+    planned: {
+      title: "Planned vs actual",
+      subtitle: "Two ONS series. No figure here is a WattSteer number.",
+      programmed: "Programmed load",
+      programmedAbsent: "ONS has not published this day's programme yet.",
+      observed: "Settled load",
+      observedAbsent: "The day has not settled yet.",
+      deviation: "Deviation from plan",
+      deviationNote: "Settled minus programmed, over the {hours} h both series cover.",
+      deviationAbsent: {
+        no_programme_published:
+          "No deviation: there is no published programme to compare against.",
+        day_not_settled: "No deviation: the day has not settled yet.",
+        partial_overlap:
+          "No deviation: both series exist and they do not cover the same hours. A deviation over the overlap would read as the day's.",
+      },
+      corridorsTitle: "Interchange, over the day",
+      corridor: "Interchange with {other}",
+      corridorProgrammed: "Programmed {mwh} MWh",
+      corridorNoProgramme: "No programmed interchange published for this corridor.",
+      reading: "Reading the ONS series.",
+      refused:
+        "The gateway did not answer, so there is nothing to compare. Both series are ONS's and neither needs a model.",
+      note: "The programmed load is ONS's `carga-energia-programada`, published the day before; the settled load is the settled energy balance. One unit, one grain — subtracting them is the only arithmetic this panel does.",
+    },
     observed: {
       badge: "Observed",
       stamp: "Observed · settled through {when} BRT · {lag} h behind",

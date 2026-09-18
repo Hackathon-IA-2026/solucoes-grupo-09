@@ -10,6 +10,15 @@
  */
 
 export {
+  type ContextDayRow,
+  type ContextHourRow,
+  type CorridorDayRow,
+  type DeviationUnavailableReason,
+  type GridContextObservation,
+  readGridContext,
+  summariseDay,
+} from "./grid-context.js";
+export {
   type GridNowObservation,
   type NationalNowObservation,
   readGridNow,

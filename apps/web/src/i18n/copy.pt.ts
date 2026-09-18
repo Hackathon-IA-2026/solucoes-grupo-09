@@ -744,6 +744,36 @@ export const pt: Copy = {
       note: "Pontos abaixo da linha de identidade tracejada são excessivamente confiantes: menos horas ultrapassaram o limiar do que a probabilidade prevista daquela faixa prometia. A área do ponto é o número de horas na faixa.",
     },
 
+    /*
+      ONS contra ONS: o programa diário publicado na véspera contra o balanço
+      liquidado. O único painel do produto em que nenhuma das duas séries é
+      nossa — ver `plan-vs-actual-panel.tsx`.
+    */
+    planned: {
+      title: "Planejado × Realizado",
+      subtitle: "Duas séries do ONS. Nenhum número aqui é do WattSteer.",
+      programmed: "Carga programada",
+      programmedAbsent: "O ONS ainda não publicou o programa deste dia.",
+      observed: "Carga liquidada",
+      observedAbsent: "O dia ainda não liquidou.",
+      deviation: "Desvio do planejado",
+      deviationNote:
+        "Liquidado menos programado, sobre as {hours} h que as duas séries cobrem.",
+      deviationAbsent: {
+        no_programme_published: "Sem desvio: não há programa publicado para comparar.",
+        day_not_settled: "Sem desvio: o dia ainda não liquidou.",
+        partial_overlap:
+          "Sem desvio: as duas séries existem e não cobrem as mesmas horas. Um desvio sobre a interseção seria lido como desvio do dia.",
+      },
+      corridorsTitle: "Interconexão, no dia",
+      corridor: "Intercâmbio com {other}",
+      corridorProgrammed: "Programado {mwh} MWh",
+      corridorNoProgramme: "Sem intercâmbio programado publicado para este corredor.",
+      reading: "Lendo as séries do ONS.",
+      refused:
+        "O gateway não respondeu, então não há o que comparar. As duas séries são do ONS e nenhuma delas depende de modelo.",
+      note: "A carga programada é o `carga-energia-programada` do ONS, publicado na véspera; a liquidada é o balanço de energia liquidado. Mesma unidade, mesmo grão — subtrair as duas é a única conta que este painel faz.",
+    },
     observed: {
       badge: "Observado",
       stamp: "Observado · liquidado até {when} BRT · {lag} h de atraso",

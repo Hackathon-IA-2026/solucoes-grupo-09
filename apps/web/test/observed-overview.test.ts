@@ -598,14 +598,23 @@ describe("the five questions are answered in both states", () => {
   });
 
   it("the hero reaches the settled row whenever there is no forecast", () => {
+    /*
+      Asserted on the branch, not on its spelling. Biome inverts a ternary whose
+      test is a `!==` against `null`, so `settled !== null ? A : B` is formatted
+      as `settled === null ? B : A` — and a check written against the source I
+      typed failed on the source the formatter keeps.
+    */
     const hero = code(source("components", "app", "overview", "overview-hero.tsx"));
-    expect(hero).toContain("settled !== null ? (");
+    expect(hero).toMatch(/const questions =\s*\n?\s*settled [!=]== null \?/);
     expect(hero).toContain("<SettledQuestionRow");
   });
 
   it("the derivation is null exactly where a forecast was published", () => {
     const figures = code(source("components", "app", "overview", "hero-figures.tsx"));
-    expect(figures).toContain("forecast !== null\n      ? null");
+    // Same rule as above: the branch, whichever way round it is written.
+    expect(figures).toMatch(
+      /const settled: SettledAnswers \| null =\s*\n?\s*forecast [!=]== null/,
+    );
     // The overall scope reads the national row the gateway publishes rather
     // than adding four bands, which is the rule the whole product turns on.
     expect(figures).toContain("observed.now.national.last24hConstrainedOffMwh");

@@ -1,4 +1,5 @@
 import type {
+  GridContext,
   GridNow,
   GridOutlook,
   RiskClass,
@@ -8,6 +9,8 @@ import { SUBSYSTEMS, subsystemMeta } from "@wattsteer/core/constants";
 import { weatherRunLabel } from "@wattsteer/core/schedule";
 import { encodeWire } from "@wattsteer/core/wire";
 import { Elysia, t } from "elysia";
+import type { GridContextObservation } from "../contract/grid-context.js";
+import { readGridContext } from "../contract/grid-context.js";
 import type { GridNowObservation } from "../contract/grid-now.js";
 import { readGridNow } from "../contract/grid-now.js";
 import type { Database } from "../database/connection.js";
@@ -18,6 +21,7 @@ import type { ForecastDayRow, ForecastNationalDayRow } from "../forecast/reads.j
 import { readGridOutlook } from "../forecast/reads.js";
 import { riskClass } from "../forecast/risk-class.js";
 import {
+  civilDayWindow,
   instant,
   gateProfile as parseGateProfile,
   targetDate as parseTargetDate,
@@ -265,6 +269,46 @@ export function toGridOutlook(
   };
 }
 
+/**
+ * The wire body for `/v1/grid/context`, field by field.
+ *
+ * Field by field for the reason `toGridNow` is: the schema is
+ * `additionalProperties: false`, and the read carries two things the contract
+ * does not — the ingestion instant, which is the ETag's business, and the
+ * `Date` objects, which the wire spells as ISO-8601.
+ */
+function toGridContext(observation: GridContextObservation, date: string): GridContext {
+  return {
+    subsystem: observation.subsystem,
+    date,
+    asOf: observation.asOf.toISOString(),
+    hours: observation.hours.map((hour) => ({
+      validTime: hour.validTime.toISOString(),
+      programmedLoadMwh: hour.programmedLoadMwh,
+      observedLoadMwh: hour.observedLoadMwh,
+      observedWindMwh: hour.observedWindMwh,
+      observedSolarMwh: hour.observedSolarMwh,
+      observedHydroMwh: hour.observedHydroMwh,
+      observedThermalMwh: hour.observedThermalMwh,
+      observedNetExchangeMwh: hour.observedNetExchangeMwh,
+    })),
+    day: {
+      programmedLoadMwh: observation.day.programmedLoadMwh,
+      observedLoadMwh: observation.day.observedLoadMwh,
+      deviationMwh: observation.day.deviationMwh,
+      deviationUnavailableReason: observation.day.deviationUnavailableReason,
+      hoursCompared: observation.day.hoursCompared,
+    },
+    corridors: observation.corridors.map((link) => ({
+      fromSubsystem: link.fromSubsystem,
+      toSubsystem: link.toSubsystem,
+      verifiedMwh: link.verifiedMwh,
+      programmedMwh: link.programmedMwh,
+      hoursSettled: link.hoursSettled,
+    })),
+  };
+}
+
 const HOUR_MS = 3_600_000;
 
 export function createGridRoutes(deps: { db: Database | undefined; now?: () => Date }) {
@@ -333,6 +377,81 @@ export function createGridRoutes(deps: { db: Database | undefined; now?: () => D
             "their scalar technology splits, and the national total with its " +
             "derivation named. Observed, not forecast: it needs no model and is " +
             "served with the modelling service unreachable.",
+        },
+      },
+    )
+    .get(
+      "/v1/grid/context",
+      async ({ query, set, request }) => {
+        /*
+          The axes are parsed **before** the database is reached for, which is
+          the property `/v1/grid/outlook` states in the same words. A malformed
+          date answered 503 while this stood the other way round, so a caller
+          holding a bad request was told the service was down — two different
+          sentences, and only one of them is theirs to act on.
+
+          A **civil** date, through the helper `/v1/curtailment/reasons` uses:
+          ONS's timestamps are Brasília local time, so a UTC day would be the
+          wrong day by three hours every day of the year.
+        */
+        const day = civilDayWindow("date", query.date);
+        const asOf =
+          query.as_of === undefined ? new Date() : instant("as_of", query.as_of);
+        if (!deps.db) {
+          throw new CodedError("DATA_UNAVAILABLE", "Persistence is not configured");
+        }
+
+        const observation = await readGridContext(deps.db, {
+          asOf,
+          subsystem: query.subsystem,
+          from: day.from,
+          to: day.to,
+        });
+
+        /*
+          No `DATA_UNAVAILABLE` on an empty answer, and this is the one route
+          where that is right. "Neither ONS series covers this day yet" is the
+          *ordinary* state of tomorrow and of the last few hours, and it is
+          exactly what the response says: every field null, with the day's
+          reason naming which side is missing. A refusal here would turn a
+          normal morning into an error on a screen.
+        */
+        if (
+          applyCachePolicy({ set, request }, CACHE_POLICIES.now, [
+            observation.latestIngestedAt ?? "empty",
+            query.subsystem,
+            query.date,
+          ])
+        ) {
+          return null;
+        }
+
+        return encodeWire("GridContext", toGridContext(observation, query.date));
+      },
+      {
+        query: t.Object({
+          subsystem: t.Union(SUBSYSTEMS.map(({ code }) => t.Literal(code))),
+          date: t.String({
+            description: "Civil date (YYYY-MM-DD) in America/Sao_Paulo.",
+          }),
+          as_of: t.Optional(
+            t.String({
+              description:
+                "Vintage cut (ISO-8601). Defaults to now — the cut is echoed " +
+                "on the response.",
+            }),
+          ),
+        }),
+        detail: {
+          summary: "What ONS planned for a day, beside what the grid did",
+          description:
+            "ONS's day-ahead load programme against the settled energy " +
+            "balance, hour by hour, plus the interchange corridors this " +
+            "subsystem sits on with their programmed and verified flows. " +
+            "Neither series is a WattSteer number and the only arithmetic is " +
+            "a subtraction between two ONS series of one unit and one grain. " +
+            "Every field is nullable with a stated reason: a programme not " +
+            "yet published and a load of zero are different facts.",
         },
       },
     )

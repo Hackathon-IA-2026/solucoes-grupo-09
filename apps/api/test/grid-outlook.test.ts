@@ -137,7 +137,24 @@ describe("the outlook route refuses rather than inventing", () => {
   });
 
   it("takes no subsystem parameter — four subsystems is the whole point", () => {
-    expect(SOURCE("api/grid.ts")).not.toContain("query.subsystem");
+    /*
+      Scoped to this route's own source, not to the file.
+
+      It read the whole of `api/grid.ts`, which held that a subsystem parameter
+      anywhere in the file was this route growing one. `/v1/grid/context` then
+      landed in the same file and legitimately takes a subsystem — it is one
+      day of one subsystem's programme against its settlement — and the guard
+      failed for a route it was never about.
+
+      The slice runs from this route's path literal to the end of the factory,
+      which is where its handler and its `t.Object` both are. A subsystem
+      parameter added to the outlook still fails; one added to a sibling no
+      longer does.
+    */
+    const file = SOURCE("api/grid.ts");
+    const outlook = file.slice(file.indexOf('"/v1/grid/outlook"'));
+    expect(outlook).not.toContain("query.subsystem");
+    expect(outlook.length).toBeGreaterThan(0);
   });
 });
 

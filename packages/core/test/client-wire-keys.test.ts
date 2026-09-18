@@ -54,6 +54,12 @@ const CALLS: ReadonlyArray<{
   { name: "meta", path: "/v1/meta", keys: [], invoke: (c) => c.meta() },
   { name: "gridNow", path: "/v1/grid/now", keys: [], invoke: (c) => c.gridNow() },
   {
+    name: "gridContext",
+    path: "/v1/grid/context",
+    keys: ["date", "subsystem"],
+    invoke: (c) => c.gridContext({ subsystem: "NE", date: "2026-09-17" }),
+  },
+  {
     name: "gridOutlook",
     path: "/v1/grid/outlook",
     keys: ["gate_profile", "target_date"],
