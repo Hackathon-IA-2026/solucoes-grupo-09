@@ -11,6 +11,11 @@ Three of them, and all three are mechanical:
    registered. It never says what caused what: that reading belongs to the rule
    and to SHAP, not to a retrieved paragraph.
 
+A claim that passes all three is then read by a second, smaller model, which
+only answers whether the quotes state the claim about the thing asked
+(`verify.py`). That is the one check here that is not mechanical, and it can
+only take claims away.
+
 When nothing survives, the answer is a refusal with a reason, never a softer
 claim. The failure mode of this service is silence.
 """
@@ -28,6 +33,7 @@ from typing import Any
 from .db import Database
 from .gateway.router import Gateway, QuotaExhausted
 from .retrieve import Hit, codes_in, search
+from .verify import review
 
 SCHEMA_VERSION = "1.0"
 
@@ -630,11 +636,33 @@ async def _draft(gateway: Gateway, document: dict, record: Record, hits: list[Hi
             {"provider": result.provider, "model": result.model, "attempts": attempt, "source": "model"}
         )
         accepted, failures = _gate_answer(result.value, by_chunk, attempt, generation, record)
+        accepted = await _reviewed(gateway, record, accepted, attempt, generation, failures)
         if accepted:
             break
         complaint = _complaint(guidance, failures)
     generation["gate_failures"] = sorted({failure.code for failure in failures})
     _settle(document, accepted, record.question)
+
+
+async def _reviewed(
+    gateway: Gateway,
+    record: Record,
+    accepted: list[dict],
+    attempt: int,
+    generation: dict,
+    failures: list[GateFailure],
+) -> list[dict]:
+    """The claims a second reader agrees the quotes state. See `verify.py`."""
+    kept: list[dict] = []
+    for claim in accepted:
+        supported, reason = await review(gateway, record.question, claim)
+        if supported:
+            kept.append(claim)
+            continue
+        failure = GateFailure("quote_does_not_state_claim", reason)
+        failures.append(failure)
+        generation.setdefault("rejected", []).append(_rejected(claim, [failure], attempt))
+    return kept
 
 
 def _gate_answer(
