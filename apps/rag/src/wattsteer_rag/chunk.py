@@ -19,6 +19,14 @@ SECTION = re.compile(r"^\s*(?:#+\s*)*(\d+(?:\.\d+)*)\.?\s+([^\n]{3,250})$", re.M
 SECTION_MAX_CHARS = 120  # longer only in capitals: "6.2.2 CONTROLE ... PREVENINDO A PERDA DA LT ..."
 
 
+# The daily report's highlights run "Submercado Sul:" as a line of its own and
+# then the paragraphs about it, with no number in front. Read as prose, the
+# submarket was lost to every paragraph but the first, and a reduction quoted
+# from the second was refused, rightly, as not saying which submarket it was.
+SUBMARKET = re.compile(r"^[ \t#]*(Submercado [^:\n]{2,40}:)[ \t]*$", re.M)
+SUBMARKET_HEADING = re.compile(r"^(Submercado)\s+([^:\n]{2,40}):$")
+
+
 def heading_of(block: str) -> re.Match | None:
     """A numbered title, however many "#" the parser put in front of it.
 
@@ -26,6 +34,8 @@ def heading_of(block: str) -> re.Match | None:
     adotar ...") would read as a heading; without the long-title rule 6.2.2 of
     IO-ON.NE.2NO, 125 characters, did not, and its table went to 6.2.3.
     """
+    if submarket := SUBMARKET_HEADING.match(block.strip()):
+        return submarket
     match = SECTION.match(block.strip())
     if match and (len(match.group(2)) <= SECTION_MAX_CHARS or match.group(2).isupper()):
         return match
@@ -80,10 +90,16 @@ def is_table_of_contents(text: str) -> bool:
     return "índice" in lowered[:120] and len(LEADER.findall(text)) >= 1
 
 
-def split_page(markdown: str) -> list[tuple[str | None, str]]:
-    """Break a page into (section, text) pairs, keeping tables whole."""
+def split_page(markdown: str, section: str | None = None) -> list[tuple[str | None, str]]:
+    """Break a page into (section, text) pairs, keeping tables whole.
+
+    `section` is where the previous page ended: text above the first heading of
+    a page continues it (the Northeast highlights of an IPDO run onto the next
+    page, and so do the tables of an operating instruction's section).
+    """
+    markdown = SUBMARKET.sub(r"\n\n\1\n\n", markdown)
     out: list[tuple[str | None, str]] = []
-    current_section: str | None = None
+    current_section: str | None = section
     buffer: list[str] = []
     # Headings not yet followed by anything. The vision model reads a page of
     # IO-ON.NE.2NO as "6.2.2 ..., 6.2.3 ..., table, table": both titles first.
@@ -203,10 +219,12 @@ def strip_furniture(markdown: str) -> str:
 def chunk_pages(pages: list[dict]) -> list[Chunk]:
     """`pages` are dicts with page_no, markdown and the parser's blocks."""
     chunks: list[Chunk] = []
+    carried: str | None = None
     for page in pages:
-        for section, text in split_page(strip_furniture(page["markdown"])):
+        for section, text in split_page(strip_furniture(page["markdown"]), carried):
+            carried = section
             for piece in _slice(text):
-                if _absorbed(chunks, piece, page["page_no"]):
+                if _absorbed(chunks, piece, page["page_no"], section):
                     continue
                 chunks.append(_chunk(len(chunks) + 1, page, section, piece))
     _mark_page_furniture(chunks)
@@ -248,7 +266,16 @@ def _furniture_key(text: str) -> str:
     return re.sub(r"[\s|-]+", " ", text).strip().lower()[:160]
 
 
-def _absorbed(chunks: list[Chunk], piece: str, page_no: int) -> bool:
+def _can_join(previous: Chunk, piece: str, page_no: int, section: str | None) -> bool:
+    """Same page, room left, and the same section: a short "Submercado Norte"
+    paragraph glued to the Sul chunk above it would be quoted as the Sul's, and
+    one glued to a chunk with no section would lose its own."""
+    if previous.page_end != page_no or len(previous.text) + len(piece) >= MAX_CHARS:
+        return False
+    return section == previous.section_path
+
+
+def _absorbed(chunks: list[Chunk], piece: str, page_no: int, section: str | None = None) -> bool:
     """Too small to stand alone: attach to the previous chunk of the same page
     rather than emit a citation nobody can use."""
     # A heading opens a section, so it never joins the one before it, and a short
@@ -257,7 +284,7 @@ def _absorbed(chunks: list[Chunk], piece: str, page_no: int) -> bool:
     if len(piece) >= MIN_CHARS or not chunks or _has_table(piece) or _is_heading(piece):
         return False
     previous = chunks[-1]
-    if previous.page_end != page_no or len(previous.text) + len(piece) >= MAX_CHARS:
+    if not _can_join(previous, piece, page_no, section):
         return False
     previous.text = f"{previous.text}\n\n{piece}"
     # An index page arrives one entry at a time, and a single entry carries one
