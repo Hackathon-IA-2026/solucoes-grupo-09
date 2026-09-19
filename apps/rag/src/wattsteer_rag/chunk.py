@@ -161,18 +161,27 @@ def split_steps(table: str) -> list[str]:
 
     A step table holds several controls, and a quote from step 2 was drawn from
     a chunk that also held step 1's limit. Sub-steps (2.1, and the rows of the
-    plants table under it) stay with their step.
+    plants table under it) stay with their step. The step number is read in the
+    "Passo" column only, found in the header: the vision model sometimes puts
+    an empty column before it, and a number in any other column is a value.
     """
     lines = table.split("\n")
-    if len(lines) < 4 or "Passo" not in lines[0]:
+    column = _step_column(lines[0]) if lines else None
+    if len(lines) < 4 or column is None:
         return [table]
     head, groups = lines[:2], [[]]
     for row in lines[2:]:
-        first = next((cell.strip() for cell in row.strip().strip("|").split("|") if cell.strip()), "")
-        if STEP.match(first) and groups[-1]:
+        cells = [cell.strip() for cell in row.strip().strip("|").split("|")]
+        step = cells[column] if column < len(cells) else ""
+        if STEP.match(step) and groups[-1]:
             groups.append([])
         groups[-1].append(row)
     return ["\n".join(head + group) for group in groups]
+
+
+def _step_column(header: str) -> int | None:
+    cells = [cell.strip() for cell in header.strip().strip("|").split("|")]
+    return next((index for index, cell in enumerate(cells) if cell.startswith("Passo")), None)
 
 
 # The band every page of an ONS document repeats, as the text layer and the

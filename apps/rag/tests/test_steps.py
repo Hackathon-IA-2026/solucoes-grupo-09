@@ -57,3 +57,19 @@ def test_the_running_header_and_footer_are_not_evidence():
     )
     assert "57 MW" in kept and "- 25" in kept and "bem como as diretrizes" in kept
     assert "5/23" not in kept
+
+
+def test_a_number_in_another_column_is_not_a_new_step():
+    """Review of #21: the first non-empty cell was read as the step, so a
+    continuation row with a value in a later column split the step."""
+    from wattsteer_rag.chunk import split_steps
+
+    table = (
+        "|  | Passo | Procedimento | MW |\n| --- | --- | --- | --- |\n"
+        "|  | 1 | Remanejar a geração, considerando uma redução de 100 MW. |  |\n"
+        "|  |  |  | 75 |\n"
+        "|  | 2 | Monitorar a inequação. |  |"
+    )
+    pieces = split_steps(table)
+    assert len(pieces) == 2
+    assert "75" in pieces[0] and "Monitorar" in pieces[1]

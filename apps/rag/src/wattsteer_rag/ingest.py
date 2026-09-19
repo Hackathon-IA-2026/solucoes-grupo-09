@@ -29,6 +29,7 @@ class IngestReport:
     embedded: int = 0
     waiting_quota_until: float | None = None
     skipped: str | None = None
+    unread: int = 0
 
     def line(self) -> str:
         if self.skipped:
@@ -37,13 +38,29 @@ class IngestReport:
         line += f"{self.embedded} embedded"
         if self.waiting_quota_until:
             line += f", waiting quota until {self.waiting_quota_until}"
+        if self.unread:
+            line += f", {self.unread} pages owed to the vision quota (left pending)"
         return line
 
 
-async def pending_documents(db: Database, limit: int) -> list:
-    """Fetched or parsed, oldest first: what `ingest` still has to do."""
+async def pending_documents(db: Database, limit: int, again: str | None = None) -> list:
+    """Fetched or parsed, oldest first: what `ingest` still has to do.
+
+    `again` names a source (BDO) or a document (RAP 2023-08-15) to read again
+    whatever its status: a reader that changed, or a document that an earlier
+    run cut at --max-pages, is otherwise never revisited, because it is already
+    marked indexed.
+    """
     pool = await db.connect()
     async with pool.acquire() as conn:
+        if again:
+            return await conn.fetch(
+                "SELECT id, sha256, title, external_id, mime FROM rag.document"
+                " WHERE (source = $2 OR external_id = $2) AND status <> 'superseded'"
+                " ORDER BY fetched_at LIMIT $1",
+                limit,
+                again,
+            )
         return await conn.fetch(
             "SELECT id, sha256, title, external_id, mime FROM rag.document"
             " WHERE status IN ('fetched','parsed') ORDER BY fetched_at LIMIT $1",
@@ -60,11 +77,21 @@ async def ingest_document(
     path = settings().store_dir / f"{row['sha256']}{'.html' if is_html else '.pdf'}"
     if not path.exists():
         return IngestReport(label, skipped="file missing, skipping")
-    pages = parse_html_tables(path) if is_html else await parse_pdf(gateway, path, max_pages=max_pages)
-    await _store_pages(db, row["id"], pages)
+    unread: list[int] = []
+    pages = (
+        parse_html_tables(path, row["title"])
+        if is_html
+        else await parse_pdf(gateway, path, max_pages=max_pages, unread=unread)
+    )
+    await _store_pages(db, row["id"], pages, keep=unread)
     report = await _index(db, gateway, str(row["id"]), [_as_dict(page) for page in pages])
     report.document = label
     report.parsers = tuple(sorted({page.parser for page in pages}))
+    if unread:
+        # Pages owed to the vision quota: back in the queue, so the next
+        # `ingest` reads the document again instead of calling it done.
+        await _mark_pending(db, row["id"])
+        report.unread = len(unread)
     return report
 
 
@@ -102,9 +129,17 @@ async def rechunk_document(db: Database, gateway: Gateway, document) -> IngestRe
     return report
 
 
-async def _store_pages(db: Database, document_id, pages: list[ParsedPage]) -> None:
+async def _store_pages(db: Database, document_id, pages: list[ParsedPage], keep: list[int] = ()) -> None:
+    """The pages of this read replace the stored ones: a page the new read did
+    not return is deleted (unless it is owed to the quota), so a reader fix
+    leaves no stale page for a later rechunk to pick up."""
     pool = await db.connect()
     async with pool.acquire() as conn:
+        await conn.execute(
+            "DELETE FROM rag.page WHERE document_id = $1 AND NOT (page_no = ANY($2::int[]))",
+            document_id,
+            [p.page_no for p in pages] + list(keep),
+        )
         await conn.executemany(
             "INSERT INTO rag.page (document_id, page_no, markdown, blocks, has_tables, parser)"
             " VALUES ($1,$2,$3,$4::jsonb,$5,$6) ON CONFLICT (document_id, page_no) DO UPDATE"
@@ -114,6 +149,12 @@ async def _store_pages(db: Database, document_id, pages: list[ParsedPage]) -> No
         await conn.execute(
             "UPDATE rag.document SET status = 'parsed', pages = $2 WHERE id = $1", document_id, len(pages)
         )
+
+
+async def _mark_pending(db: Database, document_id) -> None:
+    pool = await db.connect()
+    async with pool.acquire() as conn:
+        await conn.execute("UPDATE rag.document SET status = 'fetched' WHERE id = $1", document_id)
 
 
 async def _index(db: Database, gateway: Gateway, document_id: str, pages: list[dict]) -> IngestReport:
