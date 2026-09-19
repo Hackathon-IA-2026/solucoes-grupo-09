@@ -16,6 +16,18 @@ DIR=/opt/wattsteer
 TOKEN="$(curl -fsS -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60')"
 REGION="$(curl -fsS -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/region)"
 
+# Swap, once: the worker's hourly ingestion peaks at 4.7 GB (measured
+# 19/09/2026), and on an 8 GB instance that sits too close to the edge
+# without somewhere to page to. The compose file caps each service; this is
+# the margin under the caps. Created only when the host has no swap at all.
+if [ -z "$(swapon --show --noheadings)" ]; then
+  fallocate -l "${SWAP_SIZE:-4G}" /swapfile
+  chmod 600 /swapfile
+  mkswap /swapfile >/dev/null
+  swapon /swapfile
+  grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+fi
+
 cd "$DIR"
 # Not up.sh itself: bash reads a script as it runs, and overwriting the file
 # mid-run corrupts it. scripts/deploy.sh fetches up.sh before calling it.
