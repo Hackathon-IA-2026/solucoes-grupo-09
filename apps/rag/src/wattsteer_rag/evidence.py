@@ -11,6 +11,11 @@ Three of them, and all three are mechanical:
    registered. It never says what caused what: that reading belongs to the rule
    and to SHAP, not to a retrieved paragraph.
 
+A claim that passes all three is then read by a second, smaller model, which
+only answers whether the quotes state the claim about the thing asked
+(`verify.py`). That is the one check here that is not mechanical, and it can
+only take claims away.
+
 When nothing survives, the answer is a refusal with a reason, never a softer
 claim. The failure mode of this service is silence.
 """
@@ -28,8 +33,11 @@ from typing import Any
 from .db import Database
 from .gateway.router import Gateway, QuotaExhausted
 from .retrieve import Hit, codes_in, search
+from .verify import ReaderUnavailable, review
 
 SCHEMA_VERSION = "1.0"
+MAX_QUOTE_CHARS = 600
+SECTION_MAX = 120  # docs/rag/rag-evidence.schema.json, citation.locator.section
 
 # Ported from packages/core/src/causality.ts so both sides ban the same words.
 CAUSALITY_BANNED_LEMMAS = (
@@ -63,7 +71,9 @@ claim in Portuguese.
 Absolute rules:
 - Use only the passages provided. Do not use your own knowledge.
 - Every claim needs at least one citation, and the citation must be a span
-  copied literally from the document, between 20 and 300 characters.
+  copied literally from the document, between 20 and 600 characters. In a
+  paragraph, copy the whole sentence that states the value, from its subject
+  to its number.
 - Do not write any number that does not appear in the quoted span.
 - Describe what the document records or establishes. Never write that something
   caused, provoked or explained something else.
@@ -71,6 +81,13 @@ Absolute rules:
 
 Prefer the span that states the procedure, the limit or the condition, with its
 values and quantities. A section title on its own is not evidence.
+
+Each claim answers the question. When the passages give the value the question
+asks for, the claim states that value; the preamble of a procedure step ("remanejar
+a geração nas usinas definidas na tabela abaixo") without the value from its table
+is not an answer. Names in tables may be misspelled by the scan (Tucaratu for
+Tacaratu): a row is about the place the question names when the rest of the row
+and its section say so.
 
 Many passages are tables. There, every citation must be a contiguous piece: a
 whole row, or a run of neighbouring rows, copied in the order they appear. Do
@@ -188,6 +205,45 @@ def has_substance(quote: str) -> bool:
     return words >= 8 or bool(re.search(r"\d", stripped))
 
 
+POINTER = re.compile(r"\btabela (?:abaixo|a seguir)\b", re.IGNORECASE)
+
+
+def _claim_failures(claim: str, accepted: list[dict], record: Record) -> list[GateFailure]:
+    """The checks on the claim as a whole, once its citations are known to exist."""
+    if all(_points_to_table(citation["quote"]) for citation in accepted):
+        return [
+            GateFailure(
+                "quote_points_to_table",
+                "the quote sends the reader to the table below; quote the table's row that answers too",
+            )
+        ]
+    missing = _numbers_not_quoted(claim, accepted, record.question)
+    if missing:
+        return missing
+    causal = causal_hits(claim)
+    return [GateFailure("causal_vocabulary", ", ".join(causal))] if causal else []
+
+
+def _points_to_table(quote: str) -> bool:
+    """A step's preamble, "remanejar a geração nas usinas definidas na tabela
+    abaixo", states what to do and not how much: the amount is in the table. In
+    the measured runs, asked how much the plants of one substation must vary,
+    three answers quoted only the preamble and gave the step's total. Such a
+    quote counts only next to a row of the table it points to: a value in a
+    part of the quote other than the pointing sentence and the step number,
+    whether the quote kept the table's pipes or not."""
+    if not POINTER.search(quote):
+        return False
+    parts = [part.strip() for part in QUOTE_PARTS.split(quote) if part.strip()]
+    return not any(
+        re.search(r"\d", part) and not POINTER.search(part) and not STEP_NUMBER.match(part) for part in parts
+    )
+
+
+QUOTE_PARTS = re.compile(r"[|\n]|(?<=\.)\s")
+STEP_NUMBER = re.compile(r"^\d+(?:\.\d+)*\.?$")
+
+
 def causal_hits(text: str) -> list[str]:
     haystack = f" {WORD_BOUNDARY.sub(' ', normalise(text))} "
     return [lemma for lemma in CAUSALITY_BANNED_LEMMAS if f" {lemma} " in haystack]
@@ -276,6 +332,30 @@ def _relevance_failure(hit: Hit, record: Record) -> GateFailure | None:
     return None
 
 
+def _off_topic(hit: Hit, record: Record) -> GateFailure | None:
+    return _relevance_failure(hit, record) or _month_to_date_failure(hit, record)
+
+
+MONTH_TO_DATE = "Acumulado no Mês"
+ASKS_FOR_MONTH = re.compile(r"acumulad|no mês|mensal|até o dia", re.IGNORECASE)
+
+
+def _month_to_date_failure(hit: Hit, record: Record) -> GateFailure | None:
+    """The bulletin's month-to-date balance is not the day's.
+
+    Both pages carry the same rows ("Carga(*) | Sul verificado: ..."), and in
+    the sixth measured run three questions about a day were answered from the
+    month-to-date page (14.452 for the Sul's load where the day's is 14.611),
+    with its title in the chunk and the claim reader told the difference. The
+    regional daily table ("Dados Diários Acumulados") is by day and stays.
+    """
+    if hit.source != "BDO" or MONTH_TO_DATE not in hit.text or ASKS_FOR_MONTH.search(record.question):
+        return None
+    return GateFailure(
+        "citation_month_to_date", f"{hit.external_id} is the month to date, the question asks a day"
+    )
+
+
 def _is_table(hit: Hit) -> bool:
     return bool((hit.locator or {}).get("table")) or hit.text.lstrip().startswith("|")
 
@@ -290,7 +370,7 @@ def _check_citation(
     hit = by_chunk.get(chunk_id)
     if hit is None:
         return None, GateFailure("quote_not_in_chunk", f"unknown chunk {chunk_id[:8]}")
-    off_topic = _relevance_failure(hit, record)
+    off_topic = _off_topic(hit, record)
     if off_topic:
         return None, off_topic
     if len(quote) < 20:
@@ -331,11 +411,18 @@ def _accepted_citation(hit: Hit, chunk_id: str, quote: str, assembled: bool, loc
         "published_at": hit.published_at.isoformat() if hit.published_at else None,
         "locator": {
             "page": locator.get("page"),
-            "section": locator.get("section") or hit.section_path,
+            # The contract bounds a section at 120 characters; some IO titles
+            # run to 125 in capitals.
+            "section": (locator.get("section") or hit.section_path or "")[:SECTION_MAX] or None,
             "table": locator.get("table"),
             "row": locator.get("row"),
         },
-        "quote": quote[:300],
+        # The gates below read this copy, so it is the whole span the model
+        # quoted, up to the prompt's own limit, with the page layout's runs of
+        # spaces collapsed so they do not spend it. Cutting it at 300 dropped the
+        # "Prazo: 31/12/2023" that closes an action of the RAP, and a claim
+        # about the deadline was refused as a number not in its quote.
+        "quote": re.sub(r"\s+", " ", quote).strip()[:MAX_QUOTE_CHARS],
         "assembled": assembled,
         "url": hit.url,
         "sha256": hit.sha256,
@@ -358,6 +445,13 @@ def _numbers_not_quoted(claim: str, citations: list[dict], restated: str = "") -
     number that appears in neither the record nor the quoted text is refused.
     """
     quoted = {_number_key(number) for citation in citations for number in numbers_in(citation["quote"])}
+    # The item a citation points at ("6.2.1") is printed with it, so naming it
+    # in the claim invents nothing.
+    quoted |= {
+        _number_key(number)
+        for citation in citations
+        for number in numbers_in((citation.get("locator") or {}).get("section") or "")
+    }
     quoted |= {_number_key(number) for number in numbers_in(restated)}
     return [
         GateFailure("number_not_in_quote", number)
@@ -417,12 +511,9 @@ def check_claim(
     if not accepted:
         return None, failures or [GateFailure("quote_not_in_chunk", "no citation survived")]
 
-    missing = _numbers_not_quoted(claim, accepted, record.question)
-    if missing:
-        return None, [*failures, *missing]
-    causal = causal_hits(claim)
-    if causal:
-        return None, [*failures, GateFailure("causal_vocabulary", ", ".join(causal))]
+    refused = _claim_failures(claim, accepted, record)
+    if refused:
+        return None, [*failures, *refused]
 
     supports, confidence = _support_and_confidence(item)
     claim_document = {
@@ -499,6 +590,7 @@ async def build_evidence(
         question,
         published_before=gate_at,
         named_documents=list(record.named_documents) or None,
+        target_date=target_date,
     )
     document = _empty_document(subsystem, target_date, gate_at, question, trace_id, hits)
     document["corpus_version"] = await db.corpus_version()
@@ -563,7 +655,14 @@ def _candidate(hit: Hit) -> dict:
 def _passage(hit: Hit) -> str:
     document = f"{hit.external_id or hit.source} {hit.revision or ''}".strip()
     published = hit.published_at.date().isoformat() if hit.published_at else "on an undeclared date"
-    where = f"page {hit.locator['page']}" if hit.locator.get("page") else hit.section_path or ""
+    # Both: a daily report names its submarket only in the section heading
+    # ("Submercado Sul:"), lines above the sentence that states the reduction,
+    # and a header with the page alone hid which submarket the passage is about.
+    where = ", ".join(
+        part
+        for part in (f"page {hit.locator['page']}" if hit.locator.get("page") else "", hit.section_path or "")
+        if part
+    )
     header = f"Document: {hit.title} ({document}), published {published}, {where}"
     return f"[chunk_id: {hit.chunk_id}]\n{header}\n{hit.text[:2200]}"
 
@@ -601,40 +700,78 @@ async def _draft(gateway: Gateway, document: dict, record: Record, hits: list[Hi
     accepted: list[dict] = []
     failures: list[GateFailure] = []
     for attempt in (1, 2, 3):
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": f"Question: {record.question}\n\nAvailable passages:\n\n{passages}{complaint}",
-            },
-        ]
-        try:
-            result = await gateway.run(
-                "generate_strong", tokens=max(1, len(passages) // 4), messages=messages, want_json=True
-            )
-        except QuotaExhausted as exc:
-            document["verdict"] = "insufficient"
-            # Running out on the first attempt and running out after the gates
-            # refused two drafts are different problems, and only the first is
-            # solved by waiting. Saying "no quota" about a run that was actually
-            # refused sends the reader to the provider's dashboard instead of to
-            # the gate that rejected the claim.
-            document["reason"] = (
-                "quota_exhausted_before_answer" if attempt == 1 else "quota_exhausted_partial"
-            )
-            generation["attempts"] = attempt - 1
-            generation["gate_failures"] = sorted({failure.code for failure in failures})
-            document["trace"]["retry_at"] = exc.retry_at
+        result = await _generate(gateway, document, record, passages + complaint, attempt, failures)
+        if result is None:
             return
-        generation.update(
-            {"provider": result.provider, "model": result.model, "attempts": attempt, "source": "model"}
-        )
         accepted, failures = _gate_answer(result.value, by_chunk, attempt, generation, record)
+        try:
+            accepted = await _reviewed(gateway, record, accepted, attempt, generation, failures)
+        except ReaderUnavailable as exc:
+            # Every retry would be refused the same way; stop spending drafts.
+            _stop(document, failures, "claim_reader_unavailable")
+            generation["claim_reader"] = f"unavailable: {exc}"
+            return
         if accepted:
             break
         complaint = _complaint(guidance, failures)
     generation["gate_failures"] = sorted({failure.code for failure in failures})
     _settle(document, accepted, record.question)
+
+
+async def _generate(
+    gateway: Gateway, document: dict, record: Record, passages: str, attempt: int, failures: list[GateFailure]
+):
+    """One draft from the model, or None once the quota has settled the document."""
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": f"Question: {record.question}\n\nAvailable passages:\n\n{passages}"},
+    ]
+    try:
+        result = await gateway.run(
+            "generate_strong", tokens=max(1, len(passages) // 4), messages=messages, want_json=True
+        )
+    except QuotaExhausted as exc:
+        # Running out on the first attempt and running out after the gates
+        # refused two drafts are different problems, and only the first is
+        # solved by waiting. Saying "no quota" about a run that was actually
+        # refused sends the reader to the provider's dashboard instead of to
+        # the gate that rejected the claim.
+        _stop(
+            document, failures, "quota_exhausted_before_answer" if attempt == 1 else "quota_exhausted_partial"
+        )
+        document["trace"]["generation"]["attempts"] = attempt - 1
+        document["trace"]["retry_at"] = exc.retry_at
+        return None
+    document["trace"]["generation"].update(
+        {"provider": result.provider, "model": result.model, "attempts": attempt, "source": "model"}
+    )
+    return result
+
+
+def _stop(document: dict, failures: list[GateFailure], reason: str) -> None:
+    document["verdict"], document["reason"] = "insufficient", reason
+    document["trace"]["generation"]["gate_failures"] = sorted({failure.code for failure in failures})
+
+
+async def _reviewed(
+    gateway: Gateway,
+    record: Record,
+    accepted: list[dict],
+    attempt: int,
+    generation: dict,
+    failures: list[GateFailure],
+) -> list[dict]:
+    """The claims a second reader agrees the quotes state. See `verify.py`."""
+    kept: list[dict] = []
+    for claim in accepted:
+        supported, reason = await review(gateway, record.question, claim)
+        if supported:
+            kept.append(claim)
+            continue
+        failure = GateFailure("quote_does_not_state_claim", reason)
+        failures.append(failure)
+        generation.setdefault("rejected", []).append(_rejected(claim, [failure], attempt))
+    return kept
 
 
 def _gate_answer(
@@ -682,14 +819,14 @@ def _settle(document: dict, accepted: list[dict], restated: str = "") -> None:
     document["items"] = accepted
     document["verdict"] = "found"
     # The same rule the gate applies, so that whoever narrates this downstream
-    # refuses exactly what was refused here: numbers from the quoted text, plus
-    # the ones the record itself already stated.
+    # refuses exactly what was refused here: numbers from the quoted text and
+    # from the cited item ("6.2.1"), plus the ones the record itself stated.
     document["numbers_whitelist"] = sorted(
         {
             number
             for claim in accepted
             for citation in claim["citations"]
-            for number in numbers_in(citation["quote"])
+            for number in numbers_in(f"{citation['quote']} {citation['locator'].get('section') or ''}")
         }
         | set(numbers_in(restated))
     )

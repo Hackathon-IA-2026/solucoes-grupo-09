@@ -6,8 +6,8 @@
  * the interesting part is which records produce no line at all.
  */
 
-import { describe, expect, it } from "bun:test";
-import { firstCitation } from "../src/lib/evidence";
+import { afterEach, describe, expect, it } from "bun:test";
+import { firstCitation, readEvidence } from "../src/lib/evidence";
 
 const CITATION = {
   external_id: "IO-ON.NE.5NE",
@@ -110,5 +110,29 @@ describe("shapes that are not the shape", () => {
     ]);
     expect(citation?.page).toBeNull();
     expect(citation?.documentCode).toBe("IO-ON.NE.5NE");
+  });
+});
+
+describe("where the read goes", () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  // Measured on 19/09/2026 behind the event's proxy: with the API at
+  // https://host/app/8081 the read went to https://host/v1/… and got a 403,
+  // because a leading slash resolves against the origin and drops the path.
+  it("keeps the path of an API origin served under a prefix", async () => {
+    const asked: string[] = [];
+    globalThis.fetch = ((input: URL | RequestInfo) => {
+      asked.push(String(input));
+      return Promise.resolve(new Response("{}", { status: 404 }));
+    }) as typeof fetch;
+    await readEvidence("https://host/app/8081", { subsystem: "NE", date: "2026-09-18" });
+    await readEvidence("https://host/app/8081/", { subsystem: "NE", date: "2026-09-18" });
+    expect(asked.map((url) => new URL(url).pathname)).toEqual([
+      "/app/8081/v1/curtailment/evidence",
+      "/app/8081/v1/curtailment/evidence",
+    ]);
   });
 });

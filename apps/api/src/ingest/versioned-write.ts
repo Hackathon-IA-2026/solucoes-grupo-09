@@ -180,6 +180,32 @@ async function loadLatest<TRow, TInsert>(
 }
 
 /**
+ * The earliest and latest valid time of a batch, in one pass.
+ *
+ * Not `Math.min(...times)`: spreading passes every element as an argument, and
+ * a month of the plant-level wind detail (August 2026, a 244 MB file) is enough
+ * rows to overflow the call stack — `RangeError: Maximum call stack size
+ * exceeded` here, measured on 19/09/2026, and the month never ingested.
+ */
+export function validTimeBounds<TRow>(
+  rows: readonly TRow[],
+  validTime: (row: TRow) => Date,
+): { from: Date; to: Date } {
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  for (const row of rows) {
+    const time = validTime(row).getTime();
+    if (time < min) {
+      min = time;
+    }
+    if (time > max) {
+      max = time;
+    }
+  }
+  return { from: new Date(min), to: new Date(max) };
+}
+
+/**
  * Append the rows whose values actually changed.
  *
  * Idempotent by construction: running it twice over the same parse writes
@@ -197,29 +223,8 @@ export async function writeVersioned<TRow, TInsert>(
     return result;
   }
 
-  // Do not spread a large batch into Math.min/Math.max. Detail files can carry
-  // hundreds of thousands of rows, which exceeds the runtime's argument limit
-  // and fails before the version lookup even reaches Postgres.
-  const times = rows.map((row) => spec.validTime(row).getTime());
-  const firstTime = times[0];
-  if (firstTime === undefined) {
-    return result;
-  }
-  let earliest = firstTime;
-  let latestTime = firstTime;
-  for (let index = 1; index < times.length; index += 1) {
-    const time = times[index];
-    if (time === undefined) {
-      continue;
-    }
-    if (time < earliest) {
-      earliest = time;
-    }
-    if (time > latestTime) {
-      latestTime = time;
-    }
-  }
-  const latest = await loadLatest(db, spec, new Date(earliest), new Date(latestTime));
+  const { from, to } = validTimeBounds(rows, spec.validTime);
+  const latest = await loadLatest(db, spec, from, to);
   const stamped = { ...vintage, ingestedAt: vintage.ingestedAt ?? new Date() };
 
   const pending: TInsert[] = [];

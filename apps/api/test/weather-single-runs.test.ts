@@ -356,6 +356,35 @@ describe("single runs · a missing run is a named fact, not a hole", () => {
     };
     expect(fetchModelRun(request)).rejects.toThrow(ModelRunUnavailableError);
   });
+
+  it("names it when the multi-point stream reports it with a 200", async () => {
+    // Captured on 19/09/2026 at 15:30 UTC for `run=2026-09-19T12:00`, not yet
+    // published, asked for all nineteen centroids: HTTP 200, a JSON content
+    // type, and this text. A single point gets the 400 above; the streamed
+    // multi-point response has already sent its status when it finds out. It
+    // reached JSON.parse, and every hourly weather task failed until the run
+    // appeared instead of falling back to the 00Z one.
+    const asked: string[] = [];
+    const streamed = stubFetch(
+      "Unexpected error while streaming data: modelRunUnavailable(model: " +
+        "App.DomainRegistry.ecmwf_ifs, run: OmTime.Timestamp(timeIntervalSince1970: 1789819200))",
+      200,
+    );
+    const request = {
+      runInit: new Date("2026-09-19T12:00:00.000Z"),
+      // The whole centroid set, as the ingestor asks: the streamed shape is a
+      // property of the multi-point request.
+      points: resolveCentroids(),
+      fetch: ((input: URL | RequestInfo, init?: RequestInit) => {
+        asked.push(String(input));
+        return streamed(input, init);
+      }) as typeof fetch,
+    };
+    await expect(fetchModelRun(request)).rejects.toThrow(ModelRunUnavailableError);
+    const latitudes = new URL(asked[0] ?? "").searchParams.get("latitude") ?? "";
+    expect(latitudes.split(",")).toHaveLength(resolveCentroids().length);
+    expect(resolveCentroids().length).toBeGreaterThan(1);
+  });
 });
 
 describe("single runs · backoff is driven by the status alone", () => {

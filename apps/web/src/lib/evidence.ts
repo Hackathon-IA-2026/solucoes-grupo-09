@@ -20,6 +20,8 @@
  * showing the passages a rule had just decided do not support the claim.
  */
 
+import { apiUrl } from "./api-url";
+
 /** One citation, as a card states it. */
 export interface EvidenceCitation {
   /** `IO-ON.NE.5NE` — ONS's own identifier, never translated. */
@@ -107,7 +109,7 @@ export async function readEvidence(
   query: { subsystem: string; date: string },
   signal?: AbortSignal,
 ): Promise<EvidenceCitation | null> {
-  const url = new URL("/v1/curtailment/evidence", baseUrl);
+  const url = apiUrl(baseUrl, "/v1/curtailment/evidence");
   url.searchParams.set("subsystem", query.subsystem);
   url.searchParams.set("date", query.date);
   const response = await fetch(url, { signal }).catch(() => null);

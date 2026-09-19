@@ -18,5 +18,12 @@ export const API_URL =
   process.env.EXPO_PUBLIC_API_URL ??
   "http://localhost:3000";
 
+/**
+ * The path the export is served under, `""` at a domain's root. Inlined at
+ * build time with `experiments.baseUrl` (see `app.config.ts`), for the URLs
+ * written by hand that expo-router cannot prefix.
+ */
+export const BASE_PATH = process.env.EXPO_PUBLIC_BASE_PATH ?? "";
+
 /** Canonical site origin for SEO tags. */
 export const SITE_URL = process.env.EXPO_PUBLIC_SITE_URL ?? "https://wattsteer.com";

@@ -33,7 +33,7 @@ COPY packages/ui/src ./packages/ui/src
 # `Unable to resolve module ./causality.js` — which is exactly how this image
 # failed before the file was copied. `test/metro-resolves-core.test.ts` guards
 # the config's *contents*; it did not guard that the image receives it.
-COPY apps/web/metro.config.js apps/web/app.json apps/web/tsconfig.json ./apps/web/
+COPY apps/web/metro.config.js apps/web/app.json apps/web/app.config.ts apps/web/tsconfig.json ./apps/web/
 COPY apps/web/src ./apps/web/src
 COPY apps/web/assets ./apps/web/assets
 COPY apps/web/public ./apps/web/public
@@ -57,9 +57,14 @@ ARG EXPO_PUBLIC_SITE_URL=https://wattsteer.com
 # without it and the 3D control ships disabled with its reason, which is the
 # right thing for a fork or a preview build that has no ion account.
 ARG EXPO_PUBLIC_CESIUM_ION_TOKEN=""
+# The path prefix the site is served under, empty at a domain's root. The
+# event's AWS instance proxies each port under `/app/<port>/`; see
+# `app.config.ts`.
+ARG EXPO_PUBLIC_BASE_PATH=""
 ENV EXPO_PUBLIC_API_URL=$EXPO_PUBLIC_API_URL \
     EXPO_PUBLIC_SITE_URL=$EXPO_PUBLIC_SITE_URL \
-    EXPO_PUBLIC_CESIUM_ION_TOKEN=$EXPO_PUBLIC_CESIUM_ION_TOKEN
+    EXPO_PUBLIC_CESIUM_ION_TOKEN=$EXPO_PUBLIC_CESIUM_ION_TOKEN \
+    EXPO_PUBLIC_BASE_PATH=$EXPO_PUBLIC_BASE_PATH
 
 WORKDIR /app/apps/web
 # `vendor-cesium.ts` first, and it is not optional tooling: CesiumJS resolves

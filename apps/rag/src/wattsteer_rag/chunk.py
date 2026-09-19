@@ -15,7 +15,31 @@ MAX_CHARS = 2600  # around 700 tokens of Portuguese
 MIN_CHARS = 280
 OVERLAP_CHARS = 260
 
-SECTION = re.compile(r"^\s*(?:##\s*)?(\d+(?:\.\d+)*)\.?\s+([^\n]{3,120})$", re.M)
+SECTION = re.compile(r"^\s*(?:#+\s*)*(\d+(?:\.\d+)*)\.?\s+([^\n]{3,250})$", re.M)
+SECTION_MAX_CHARS = 120  # longer only in capitals: "6.2.2 CONTROLE ... PREVENINDO A PERDA DA LT ..."
+
+
+# The daily report's highlights run "Submercado Sul:" as a line of its own and
+# then the paragraphs about it, with no number in front. Read as prose, the
+# submarket was lost to every paragraph but the first, and a reduction quoted
+# from the second was refused, rightly, as not saying which submarket it was.
+SUBMARKET = re.compile(r"^[ \t#]*(Submercado [^:\n]{2,40}:)[ \t]*$", re.M)
+SUBMARKET_HEADING = re.compile(r"^(Submercado)\s+([^:\n]{2,40}):$")
+
+
+def heading_of(block: str) -> re.Match | None:
+    """A numbered title, however many "#" the parser put in front of it.
+
+    Without the capitals rule a numbered paragraph ("6.1.1. Cabe ao COSR-NE
+    adotar ...") would read as a heading; without the long-title rule 6.2.2 of
+    IO-ON.NE.2NO, 125 characters, did not, and its table went to 6.2.3.
+    """
+    if submarket := SUBMARKET_HEADING.match(block.strip()):
+        return submarket
+    match = SECTION.match(block.strip())
+    if match and (len(match.group(2)) <= SECTION_MAX_CHARS or match.group(2).isupper()):
+        return match
+    return None
 
 
 @dataclass
@@ -41,7 +65,7 @@ def _is_heading(block: str) -> bool:
     stripped = block.strip()
     if "\n" in stripped:
         return False
-    return bool(SECTION.match(stripped.replace("## ", "", 1)))
+    return heading_of(stripped) is not None
 
 
 def _has_table(block: str) -> bool:
@@ -66,11 +90,22 @@ def is_table_of_contents(text: str) -> bool:
     return "índice" in lowered[:120] and len(LEADER.findall(text)) >= 1
 
 
-def split_page(markdown: str) -> list[tuple[str | None, str]]:
-    """Break a page into (section, text) pairs, keeping tables whole."""
+def split_page(markdown: str, section: str | None = None) -> list[tuple[str | None, str]]:
+    """Break a page into (section, text) pairs, keeping tables whole.
+
+    `section` is where the previous page ended: text above the first heading of
+    a page continues it (the Northeast highlights of an IPDO run onto the next
+    page, and so do the tables of an operating instruction's section).
+    """
+    markdown = SUBMARKET.sub(r"\n\n\1\n\n", markdown)
     out: list[tuple[str | None, str]] = []
-    current_section: str | None = None
+    current_section: str | None = section
     buffer: list[str] = []
+    # Headings not yet followed by anything. The vision model reads a page of
+    # IO-ON.NE.2NO as "6.2.2 ..., 6.2.3 ..., table, table": both titles first.
+    # Taken in order, the first table gets the first title; flushing on the
+    # second heading had left 6.2.2 alone and filed its limit under 6.2.3.
+    waiting: list[tuple[str, str]] = []
 
     def flush() -> None:
         text = "\n\n".join(buffer).strip()
@@ -82,11 +117,13 @@ def split_page(markdown: str) -> list[tuple[str | None, str]]:
         block = block.strip()
         if not block:
             continue
-        heading = SECTION.match(block.replace("## ", "", 1))
+        heading = heading_of(block)
         if heading:
             flush()
+            if _parent_waiting(waiting, heading.group(1)):
+                out.append(waiting.pop())
             current_section = f"{heading.group(1)} {heading.group(2).strip()}"
-            buffer.append(block.replace("## ", "", 1))
+            waiting.append((current_section, re.sub(r"^(?:#+\s*)+", "", block)))
             continue
         if _is_table(block):
             # A table that follows its own heading keeps it. Flushing here left
@@ -95,26 +132,99 @@ def split_page(markdown: str) -> list[tuple[str | None, str]]:
             # glued to the end of section 5.3 and the limits of 5.4 became a
             # table nobody could name. The only quotable thing left was the
             # heading, which is not evidence.
-            pending = "\n\n".join(buffer).strip()
-            if pending and _is_heading(pending):
-                buffer.clear()
-                out.append((current_section, f"{pending}\n\n{block}"))
-                continue
             flush()
-            out.append((current_section, block))
+            section, title = waiting.pop(0) if waiting else (current_section, "")
+            for piece in split_steps(block):
+                out.append((section, f"{title}\n\n{piece}" if title else piece))
             continue
+        # Prose belongs to the last heading; any before it had nothing under them.
+        out.extend(waiting[:-1])
+        if waiting:
+            buffer.append(waiting[-1][1])
+            waiting.clear()
         buffer.append(block)
     flush()
+    out.extend(waiting)
     return out
+
+
+def _parent_waiting(waiting: list[tuple[str, str]], number: str) -> bool:
+    """6.2 right above 6.2.1 is the parent's title, not the owner of a table."""
+    return bool(waiting) and number.startswith(waiting[-1][0].split(" ", 1)[0] + ".")
+
+
+STEP = re.compile(r"^\d+$")
+
+
+def split_steps(table: str) -> list[str]:
+    """One piece per step of a procedure table, each under the table's header.
+
+    A step table holds several controls, and a quote from step 2 was drawn from
+    a chunk that also held step 1's limit. Sub-steps (2.1, and the rows of the
+    plants table under it) stay with their step. The step number is read in the
+    "Passo" column only, found in the header: the vision model sometimes puts
+    an empty column before it, and a number in any other column is a value.
+    """
+    lines = table.split("\n")
+    column = _step_column(lines[0]) if lines else None
+    if len(lines) < 4 or column is None:
+        return [table]
+    head, groups = lines[:2], [[]]
+    for row in lines[2:]:
+        cells = [cell.strip() for cell in row.strip().strip("|").split("|")]
+        step = cells[column] if column < len(cells) else ""
+        if STEP.match(step) and groups[-1]:
+            groups.append([])
+        groups[-1].append(row)
+    return ["\n".join(head + group) for group in groups]
+
+
+def _step_column(header: str) -> int | None:
+    cells = [cell.strip() for cell in header.strip().strip("|").split("|")]
+    return next((index for index, cell in enumerate(cells) if cell.startswith("Passo")), None)
+
+
+# The band every page of an ONS document repeats, as the text layer and the
+# vision model return it. A case in the validation of 18/09/2026 quoted
+# "Alterado pela(s) MOP(s): ... Submódulo 5.12" as its evidence, and the page
+# header table of an operating instruction outranked the section it heads.
+# Anchored at the start of a line so that a sentence citing the manual stays.
+FURNITURE_LINE = re.compile(
+    r"^\s*(?:alterado pela\(s\) mop|mop/ons \d|manual de procedimentos da opera|endereço na internet"
+    r"|referência:|instruç(?:ão|ões) de operação\s+código\s+revisão|rap-ons \d+/\d{4} - análise"
+    r"|ons\s+de análise de perturbação - rap|\d+\s*/\s*\d+\s*$"
+    # The whole line and nothing else: a sentence of the Submódulo 4.2 also
+    # starts with "Operador Nacional do Sistema Elétrico – ONS, bem como ...".
+    r"|.{0,6}operad\w* nacional d\w sist\w* el\w*\s*$)",
+    re.IGNORECASE,
+)
+# "S", "E", "O S": the logo, read as letters. Never a digit: "57 MW" and "- 25"
+# on a line of their own are a limit and a sensitivity in a text-layer table.
+STRAY = re.compile(r"^\s*(?:[A-Z]|[A-Z] [A-Z]|OS)\s*$")
+HEADER_TABLE = re.compile(r"^\|\s*Instruç(?:ão|ões) de Operação\s*\|\s*Código", re.IGNORECASE)
+
+
+def strip_furniture(markdown: str) -> str:
+    """The page without its running header and footer."""
+    blocks = [block for block in re.split(r"\n{2,}", markdown) if not HEADER_TABLE.match(block.strip())]
+    kept = [
+        "\n".join(
+            line for line in block.split("\n") if not FURNITURE_LINE.match(line) and not STRAY.match(line)
+        )
+        for block in blocks
+    ]
+    return "\n\n".join(block for block in kept if block.strip())
 
 
 def chunk_pages(pages: list[dict]) -> list[Chunk]:
     """`pages` are dicts with page_no, markdown and the parser's blocks."""
     chunks: list[Chunk] = []
+    carried: str | None = None
     for page in pages:
-        for section, text in split_page(page["markdown"]):
+        for section, text in split_page(strip_furniture(page["markdown"]), carried):
+            carried = section
             for piece in _slice(text):
-                if _absorbed(chunks, piece, page["page_no"]):
+                if _absorbed(chunks, piece, page["page_no"], section):
                     continue
                 chunks.append(_chunk(len(chunks) + 1, page, section, piece))
     _mark_page_furniture(chunks)
@@ -156,7 +266,16 @@ def _furniture_key(text: str) -> str:
     return re.sub(r"[\s|-]+", " ", text).strip().lower()[:160]
 
 
-def _absorbed(chunks: list[Chunk], piece: str, page_no: int) -> bool:
+def _can_join(previous: Chunk, piece: str, page_no: int, section: str | None) -> bool:
+    """Same page, room left, and the same section: a short "Submercado Norte"
+    paragraph glued to the Sul chunk above it would be quoted as the Sul's, and
+    one glued to a chunk with no section would lose its own."""
+    if previous.page_end != page_no or len(previous.text) + len(piece) >= MAX_CHARS:
+        return False
+    return section == previous.section_path
+
+
+def _absorbed(chunks: list[Chunk], piece: str, page_no: int, section: str | None = None) -> bool:
     """Too small to stand alone: attach to the previous chunk of the same page
     rather than emit a citation nobody can use."""
     # A heading opens a section, so it never joins the one before it, and a short
@@ -165,7 +284,7 @@ def _absorbed(chunks: list[Chunk], piece: str, page_no: int) -> bool:
     if len(piece) >= MIN_CHARS or not chunks or _has_table(piece) or _is_heading(piece):
         return False
     previous = chunks[-1]
-    if previous.page_end != page_no or len(previous.text) + len(piece) >= MAX_CHARS:
+    if not _can_join(previous, piece, page_no, section):
         return False
     previous.text = f"{previous.text}\n\n{piece}"
     # An index page arrives one entry at a time, and a single entry carries one
