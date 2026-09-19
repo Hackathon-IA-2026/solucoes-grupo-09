@@ -9,13 +9,13 @@ and a text layer that contains only the running header.
 
 from __future__ import annotations
 
-import html
 import re
 import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from .bulletin import bulletin_lines
 from .gateway.adapters import Block, ProviderError
 from .gateway.router import Gateway, QuotaExhausted
 
@@ -118,16 +118,7 @@ def _latex_row(raw: str) -> list[str]:
     return cells if any(cells) else []
 
 
-def _html_row(row: str) -> list[str]:
-    cells = [
-        html.unescape(re.sub(r"<[^>]+>", " ", cell)).strip()
-        for cell in re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", row, re.S | re.I)
-    ]
-    cells = [re.sub(r"\s+", " ", cell) for cell in cells]
-    return cells if any(cells) else []
-
-
-def parse_html_tables(path: Path) -> list[ParsedPage]:
+def parse_html_tables(path: Path, heading: str = "") -> list[ParsedPage]:
     """The daily bulletin, which publishes the same numbers as plain HTML.
 
     No model is involved and none is needed: the tables are already structured,
@@ -135,21 +126,15 @@ def parse_html_tables(path: Path) -> list[ParsedPage]:
     with a byte-order mark and say so in their `charset`. They were read as
     latin-1, which stored every accented word garbled ("ProduÃ§Ã£o") and kept
     the table headings from matching a Portuguese question. latin-1 stays as
-    the fallback for a file that is not valid UTF-8.
+    the fallback for a file that is not valid UTF-8. `bulletin.py` says why each
+    row is its own line.
     """
     data = path.read_bytes()
     try:
         raw = data.decode("utf-8-sig")
     except UnicodeDecodeError:
         raw = data.decode("latin-1")
-    tables = []
-    for table in re.findall(r"<table[^>]*>(.*?)</table>", raw, re.S | re.I):
-        rows = [
-            cells for cells in map(_html_row, re.findall(r"<tr[^>]*>(.*?)</tr>", table, re.S | re.I)) if cells
-        ]
-        if rows:
-            tables.append(rows_to_markdown(rows))
-    markdown = "\n\n".join(tables).strip()
+    markdown = "\n\n".join(bulletin_lines(raw, heading)).strip()
     if not markdown:
         return []
     return [ParsedPage(page_no=1, markdown=markdown, blocks=[], has_tables=True, parser="local:html")]

@@ -276,6 +276,30 @@ def _relevance_failure(hit: Hit, record: Record) -> GateFailure | None:
     return None
 
 
+def _off_topic(hit: Hit, record: Record) -> GateFailure | None:
+    return _relevance_failure(hit, record) or _month_to_date_failure(hit, record)
+
+
+MONTH_TO_DATE = "Acumulado no Mês"
+ASKS_FOR_MONTH = re.compile(r"acumulad|no mês|mensal|até o dia", re.IGNORECASE)
+
+
+def _month_to_date_failure(hit: Hit, record: Record) -> GateFailure | None:
+    """The bulletin's month-to-date balance is not the day's.
+
+    Both pages carry the same rows ("Carga(*) | Sul verificado: ..."), and in
+    the sixth measured run three questions about a day were answered from the
+    month-to-date page (14.452 for the Sul's load where the day's is 14.611),
+    with its title in the chunk and the claim reader told the difference. The
+    regional daily table ("Dados Diários Acumulados") is by day and stays.
+    """
+    if hit.source != "BDO" or MONTH_TO_DATE not in hit.text or ASKS_FOR_MONTH.search(record.question):
+        return None
+    return GateFailure(
+        "citation_month_to_date", f"{hit.external_id} is the month to date, the question asks a day"
+    )
+
+
 def _is_table(hit: Hit) -> bool:
     return bool((hit.locator or {}).get("table")) or hit.text.lstrip().startswith("|")
 
@@ -290,7 +314,7 @@ def _check_citation(
     hit = by_chunk.get(chunk_id)
     if hit is None:
         return None, GateFailure("quote_not_in_chunk", f"unknown chunk {chunk_id[:8]}")
-    off_topic = _relevance_failure(hit, record)
+    off_topic = _off_topic(hit, record)
     if off_topic:
         return None, off_topic
     if len(quote) < 20:

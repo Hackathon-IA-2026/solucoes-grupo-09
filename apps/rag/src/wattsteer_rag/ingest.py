@@ -74,7 +74,11 @@ async def ingest_document(
     path = settings().store_dir / f"{row['sha256']}{'.html' if is_html else '.pdf'}"
     if not path.exists():
         return IngestReport(label, skipped="file missing, skipping")
-    pages = parse_html_tables(path) if is_html else await parse_pdf(gateway, path, max_pages=max_pages)
+    pages = (
+        parse_html_tables(path, row["title"])
+        if is_html
+        else await parse_pdf(gateway, path, max_pages=max_pages)
+    )
     await _store_pages(db, row["id"], pages)
     report = await _index(db, gateway, str(row["id"]), [_as_dict(page) for page in pages])
     report.document = label
