@@ -5,6 +5,7 @@ import { clientSafeMessage } from "../errors.js";
 import type { Execute, ReportProgress } from "../jobs/index.js";
 import { DEFAULT_AREA_CODES } from "./load-job.js";
 import { DESSEM_COVERAGE_START } from "./ons/dessem-balance.js";
+import { DESSEM_GENERAL_COVERAGE_START } from "./ons/dessem-general.js";
 import type { RefreshTier } from "./resource-version.js";
 import {
   type IngestTask,
@@ -268,6 +269,14 @@ export function planRefresh(options: RefreshPlanOptions): IngestTask[] {
       kind: "dessem_balance",
       payload: { from: daysAgo(now, LIVE_DAYS), to: isoDay(now) },
     });
+    // The geral file is a separate package with its own publication and its own
+    // repairs, so it is planned as its own task over the same window rather
+    // than folded into the detalhe one: "the geral file stopped" has to be able
+    // to fail on its own.
+    tasks.push({
+      kind: "dessem_general",
+      payload: { from: daysAgo(now, LIVE_DAYS), to: isoDay(now) },
+    });
     carga(daysAgo(now, CARGA_LIVE_DAYS), isoDay(now));
     // The registry is overwritten in place twice a day and yesterday's cut is
     // unrecoverable, so it belongs in the tier that runs every cycle even
@@ -295,6 +304,10 @@ export function planRefresh(options: RefreshPlanOptions): IngestTask[] {
       kind: "dessem_balance",
       payload: { from: daysAgo(now, RECENT_DAYS), to: daysAgo(now, LIVE_DAYS) },
     });
+    tasks.push({
+      kind: "dessem_general",
+      payload: { from: daysAgo(now, RECENT_DAYS), to: daysAgo(now, LIVE_DAYS) },
+    });
     carga(daysAgo(now, CARGA_RECENT_DAYS), daysAgo(now, CARGA_LIVE_DAYS));
     // Repair: re-ask the fortnight where a fallback or a late publication is
     // most likely to have left a slot answered by an older run than the one
@@ -319,6 +332,10 @@ export function planRefresh(options: RefreshPlanOptions): IngestTask[] {
   tasks.push({
     kind: "dessem_balance",
     payload: { from: DESSEM_COVERAGE_START, to: daysAgo(now, RECENT_DAYS) },
+  });
+  tasks.push({
+    kind: "dessem_general",
+    payload: { from: DESSEM_GENERAL_COVERAGE_START, to: daysAgo(now, RECENT_DAYS) },
   });
 
   // Carga history: one year per pass, cycling. Re-fetching 10 years of

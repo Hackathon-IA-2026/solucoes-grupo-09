@@ -115,6 +115,12 @@ const SOURCES: SourceHealthSpec[] = [
     toleranceHours: 36,
   },
   {
+    source: "dessem_general",
+    table: "dessem_general_half_hour",
+    basis: "ingested_at",
+    toleranceHours: 36,
+  },
+  {
     source: "verified_load",
     table: "verified_load_half_hour",
     basis: "valid_time",

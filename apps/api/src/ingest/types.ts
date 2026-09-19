@@ -555,6 +555,49 @@ export interface DessemBalanceParse {
 }
 
 /**
+ * One half hour of the DESSEM day-ahead balance in its subsystem-grain
+ * vocabulary — `balanco_dessem_geral`. A `Forecast`, MW not MWh, `validTime` the
+ * START of the half hour in UTC, all three exactly as `DessemBalanceHalfHour`.
+ *
+ * **What differs is what the file cannot say.** Wind, solar and MMGD arrive as
+ * one `renewableGenerationMw`, and there is no small-hydro or small-thermal
+ * split, so this is not a lossy copy of the detalhe row but a coarser
+ * publication of the same run. It carries no coverage pair: a reference day is
+ * either the whole civil day in every subsystem or it is refused.
+ */
+export interface DessemGeneralHalfHour {
+  subsystem: SubsystemCode;
+  /** Start of the half hour the forecast is about, UTC. */
+  validTime: Date;
+  /** `din_programacaodia`, `YYYY-MM-DD`. The `ForecastOrigin` run label. */
+  referenceDay: string;
+  /** `val_demanda`. */
+  demandMw: number;
+  /** `val_geracao_renovavel` — wind, solar and MMGD together. */
+  renewableGenerationMw: number;
+  /** `val_geracao_hidraulica`. */
+  hydroGenerationMw: number;
+  /** `val_geracao_termica`. */
+  thermalGenerationMw: number;
+  /** `val_cons_elevatoria` — pumping load, a consumption not a generation. */
+  pumpingConsumptionMw: number;
+}
+
+/** What the DESSEM geral adapter produces from one reference day's file. */
+export interface DessemGeneralParse {
+  rows: DessemGeneralHalfHour[];
+  rejected: RejectedRow[];
+  /** The header actually present in this file, read fresh on every ingest. */
+  columns: string[];
+  /** `din_programacaodia`, which must be one single day for the whole file. */
+  referenceDay: string;
+  /** Half hours per subsystem — always the civil day's own length. */
+  halfHoursInCivilDay: number;
+  /** `SIN` rows removed at the boundary. */
+  aggregateRowsFiltered: number;
+}
+
+/**
  * One canonical hour of directed exchange over one inter-subsystem link.
  *
  * **The pair is stated in one canonical orientation and the direction is the

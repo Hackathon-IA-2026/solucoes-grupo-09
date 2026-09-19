@@ -381,6 +381,60 @@ export const canonicalDayAheadBalance = pgView("canonical_day_ahead_balance", {
 `);
 
 /**
+ * The DESSEM day-ahead balance in its **subsystem-grain** vocabulary —
+ * `balanco_dessem_geral`, one row per subsystem per half hour, `AsOf` and gated
+ * exactly as `canonical_day_ahead_balance` is.
+ *
+ * **Nothing in `feature_rows` reads this view, on purpose.** It is the cheap
+ * cross-check on the plant-grain file: `demand_mw` must agree with
+ * `canonical_day_ahead_balance.demand_mw` for the same `(subsystem, valid_time)`,
+ * and `renewable_generation_mw` with the sum of that view's wind, solar and MMGD.
+ * A feature built here would be a second estimate of quantities the class-`D`
+ * block already holds from the finer source.
+ *
+ * No partial-day predicate, because there are no partial days to filter: the
+ * adapter refuses a short reference day outright — this file has no
+ * photovoltaic-only column, so nothing pins `num_patamar` to wall-clock time and
+ * a truncated run cannot be shown to mean what it says.
+ */
+export const canonicalDayAheadGeneral = pgView("canonical_day_ahead_general", {
+  subsystem: subsystemCode().notNull(),
+  /** Start of the half hour, UTC. */
+  validTime: timestamp({ withTimezone: true }).notNull(),
+  /** `ForecastOrigin.producer`. */
+  forecastProducer: forecastProducer().notNull(),
+  /** `ForecastOrigin.run_label` — the DESSEM reference day. */
+  runLabel: text().notNull(),
+  /** Power, not energy: DESSEM publishes instantaneous MW. */
+  demandMw: doublePrecision().notNull(),
+  /** Wind, solar and MMGD together. */
+  renewableGenerationMw: doublePrecision().notNull(),
+  hydroGenerationMw: doublePrecision().notNull(),
+  thermalGenerationMw: doublePrecision().notNull(),
+  pumpingConsumptionMw: doublePrecision().notNull(),
+  ...rowVintage,
+}).as(sql`
+  select distinct on (subsystem, valid_time)
+    subsystem,
+    valid_time,
+    forecast_producer,
+    run_label,
+    demand_mw,
+    renewable_generation_mw,
+    hydro_generation_mw,
+    thermal_generation_mw,
+    pumping_consumption_mw,
+    data_version,
+    published_at,
+    ingested_at
+  from dessem_general_half_hour
+  where ingested_at <= canonical_as_of()
+    and (canonical_published_at_or_before() is null
+         or published_at <= canonical_published_at_or_before())
+  order by subsystem, valid_time, ingested_at desc, data_version desc
+`);
+
+/**
  * ONS's day-ahead load programme per subsystem-hour — `carga-energia-programada`,
  * dataset 7, and `dessem_free_v1`'s spine.
  *

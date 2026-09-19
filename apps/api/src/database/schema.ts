@@ -1012,6 +1012,70 @@ export const dessemBalanceHalfHour = pgTable(
   ],
 );
 /**
+ * Balanço DESSEM geral — the same ONS day-ahead run as `dessem_balance_half_hour`,
+ * published a second time in a coarser vocabulary. `balanco_dessem_geral`.
+ *
+ * **It is a cross-check, and no feature reads it.** Its renewables arrive as one
+ * aggregated `val_geracao_renovavel`, where the detalhe file splits wind, solar
+ * and MMGD — which is what `dessem_wind_mwh`, `dessem_solar_mwh` and
+ * `dessem_mmgd_mwh` are built from. A feature block over this table would be a
+ * second, disagreeing estimate of quantities the augmented set already holds,
+ * which `docs/specs/feature-engineering.md` refuses for the same reason
+ * `dessem_export_utilisation` lives beside the estimate it divides by. What the
+ * table is *for* is the comparison: `demand_mw` here should equal the detalhe
+ * file's `demand_mw` for the same subsystem and half hour, and
+ * `renewable_generation_mw` should equal the sum of wind, solar and MMGD there.
+ *
+ * **Whole days only, and that is a decision rather than a shortcut.** The
+ * detalhe adapter admits a reference day ONS published short, and it can only do
+ * so because the solar profile pins `num_patamar` to wall-clock time absolutely:
+ * a contiguous run that reaches midday is readable, one that does not is not.
+ * This file has no photovoltaic column to pin anything with — `val_geracao_renovavel`
+ * is nonzero at night because wind is — so no short day can be shown to mean what
+ * it says, and the adapter refuses one rather than guess. There is accordingly
+ * no `reference_day_patamares` here: every stored day is 48 of 48 in every
+ * subsystem.
+ *
+ * Same three time axes, same forecast shape, same MW-not-MWh storage as the
+ * detalhe table, for the same reasons.
+ */
+export const dessemGeneralHalfHour = pgTable(
+  "dessem_general_half_hour",
+  {
+    subsystem: subsystemCode().notNull(),
+    /** Start of the half hour the forecast is about, UTC. */
+    validTime: timestamp({ withTimezone: true }).notNull(),
+
+    /** `ForecastOrigin.producer`. Always `ons_dessem` in this table. */
+    forecastProducer: forecastProducer().notNull(),
+    /** `ForecastOrigin.run_label` — `din_programacaodia`, `YYYY-MM-DD`. */
+    runLabel: text().notNull(),
+
+    /** `val_demanda`. */
+    demandMw: doublePrecision().notNull(),
+    /** `val_geracao_renovavel` — wind, solar and MMGD together, not separable here. */
+    renewableGenerationMw: doublePrecision().notNull(),
+    /** `val_geracao_hidraulica`. */
+    hydroGenerationMw: doublePrecision().notNull(),
+    /** `val_geracao_termica`. */
+    thermalGenerationMw: doublePrecision().notNull(),
+    /** `val_cons_elevatoria` — pumping load, a consumption not a generation. */
+    pumpingConsumptionMw: doublePrecision().notNull(),
+
+    ...vintageColumns(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.subsystem, t.validTime, t.dataVersion] }),
+    index("dessem_general_half_hour_as_of").on(t.validTime, t.subsystem, t.ingestedAt),
+    index("dessem_general_half_hour_published").on(t.publishedAt, t.validTime),
+    // The structural discriminator, as on the detalhe table: a row whose
+    // publication does not precede the instant it describes is an observation,
+    // and this table holds nothing else.
+    check("dessem_general_is_a_forecast", sql`${t.publishedAt} < ${t.validTime}`),
+  ],
+);
+
+/**
  * Which definition of "load" a `subsystem_load_day` row was measured under.
  *
  * An enum on the fact table rather than a lookup table or a derived view,
@@ -1703,6 +1767,14 @@ export const ingestionSource = pgEnum("ingestion_source", [
   "interchange",
   "daily_load",
   "dessem_balance",
+  /**
+   * `balanco_dessem_geral` — the subsystem-grain twin of `dessem_balance`. A
+   * separate member because the two files are separate packages that ONS
+   * publishes and repairs independently, and "the geral file stopped while the
+   * detalhe file kept publishing" is the sentence an operator needs the health
+   * view to be able to say.
+   */
+  "dessem_general",
   "verified_load",
   "programmed_load",
   "plant_registry",

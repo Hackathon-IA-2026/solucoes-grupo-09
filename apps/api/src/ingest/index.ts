@@ -110,6 +110,20 @@ export {
   type SubsystemLoadDayWriteResult,
   writeSubsystemLoadDays,
 } from "./daily-load-repository.js";
+// `balanco_dessem_geral` — the same run in its subsystem-grain vocabulary, a
+// cross-check on the block above that no feature reads.
+export {
+  createDessemGeneralIngestor,
+  type DessemGeneralDayResult,
+  type IngestDessemGeneralPayload,
+  type IngestDessemGeneralResult,
+} from "./dessem-general-job.js";
+export {
+  type DessemGeneralWrite,
+  type DessemGeneralWriteResult,
+  dessemGeneralDigest,
+  writeDessemGeneral,
+} from "./dessem-general-repository.js";
 // The DESSEM day-ahead balance (ONS dataset 11) — the platform's first
 // bulk-file forecast, and its only daily-split source. Appended rather than
 // merged into the blocks above so that two adapters landing at once cannot
@@ -274,6 +288,11 @@ export {
   referenceDayAnchor,
 } from "./ons/dessem-balance.js";
 export {
+  DESSEM_GENERAL_COVERAGE_START,
+  DESSEM_GENERAL_DATASET_SLUG,
+  parseDessemGeneralCsv,
+} from "./ons/dessem-general.js";
+export {
   DATASET_SLUG,
   parseEnergyBalance,
   parseEnergyBalanceCsv,
@@ -416,6 +435,8 @@ export type {
   CurtailmentReportHour,
   DessemBalanceHalfHour,
   DessemBalanceParse,
+  DessemGeneralHalfHour,
+  DessemGeneralParse,
   EnergyBalanceHour,
   EnergyBalanceParse,
   LoadParse,

@@ -9,6 +9,7 @@ import {
   type RetentionResult,
 } from "./custody.js";
 import { createDailyLoadIngestor } from "./daily-load-job.js";
+import { createDessemGeneralIngestor } from "./dessem-general-job.js";
 import { createDessemIngestor } from "./dessem-job.js";
 import { createInterchangeIngestor } from "./interchange-job.js";
 import { createEnergyBalanceIngestor } from "./job.js";
@@ -95,6 +96,7 @@ export function createIngestDispatcher(
   const interchange = createInterchangeIngestor(shared);
   const dailyLoad = createDailyLoadIngestor(shared);
   const dessem = createDessemIngestor(shared);
+  const dessemGeneral = createDessemGeneralIngestor(shared);
   const load = createLoadIngestor(shared);
   const registry = createPlantRegistryIngestor(shared);
   const siga = createSigaIngestor(shared);
@@ -121,6 +123,8 @@ export function createIngestDispatcher(
         return { kind: task.kind, result: await dailyLoad(task.payload, report) };
       case "dessem_balance":
         return { kind: task.kind, result: await dessem(task.payload, report) };
+      case "dessem_general":
+        return { kind: task.kind, result: await dessemGeneral(task.payload, report) };
       case "load":
         return { kind: task.kind, result: await load(task.payload, report) };
       case "siga":
