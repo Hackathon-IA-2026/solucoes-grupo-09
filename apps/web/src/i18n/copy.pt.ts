@@ -37,7 +37,6 @@ export const pt: Copy = {
   },
 
   regulatory: {
-    note: "Razões de corte REL, CNF e ENE conforme a REN ANEEL 1.030/2022. Os planos do Mitigar são conferidos contra a ordem de corte I–IV da NT-ONS DOP 0022/2025.",
     link: "Normas, licenças e glossário",
   },
 
@@ -315,8 +314,8 @@ export const pt: Copy = {
           body: "Toda previsão nomeia a rodada que a produziu, e todo backtest diz se sua janela era de fato conhecível na época ou é a reafirmação posterior do ONS.",
         },
         {
-          label: "Nenhuma manutenção de transmissão é lida",
-          body: "O ONS publica manutenções programadas e indisponibilidades como texto corrido, não como conjunto de dados, e o WattSteer não ingere nada disso. Então um dia cujo curtailment veio de uma linha fora de serviço não tem nenhuma variável carregando esse fato, e o modelo lê ao redor dele. Nada neste site deriva de dados de manutenção.",
+          label: "O previsor não lê manutenção de transmissão",
+          body: "O ONS publica manutenções programadas e indisponibilidades como texto corrido, não como conjunto de dados, e nenhuma variável do modelo carrega esse fato. Então um dia cujo curtailment veio de uma linha fora de serviço é lido ao redor dele. A camada de evidência cita os boletins diários onde essa prosa aparece, mas só transcreve o que o ONS publicou: nada ali vira variável nem número.",
         },
       ],
     },
