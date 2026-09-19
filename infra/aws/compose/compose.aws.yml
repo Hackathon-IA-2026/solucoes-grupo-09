@@ -70,6 +70,8 @@ services:
 
   # One-off, run by up.sh before the services move: `drizzle-kit migrate`.
   migrate:
+    <<: *small
+    mem_limit: ${MIGRATE_MEM_LIMIT:-512m}
     image: ${REGISTRY}/${NAME}/migrate:${IMAGE_TAG}
     profiles: ["tools"]
     environment:
