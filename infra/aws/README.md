@@ -19,6 +19,12 @@ Each option has its own name prefix (`wattsteer` and `wattsteer-ec2`), so
 falling back from one to the other in the same account creates a second set
 of resources instead of colliding with the first.
 
+**The event's account allows neither.** Measured on 18/09/2026: no RDS,
+ElastiCache, ALB, VPC or new instances. What runs there is the `ec2` option's
+Compose stack on the Code Editor instance the event provides, deployed with
+`event/deploy.sh` — see [`event/README.md`](event/README.md). That is the one
+to use during the event.
+
 Both route the same way: `/v1/*`, `/ready`, `/ingest/*` and `/docs` go to the
 API, everything else to the site. They share the network, registry and storage
 modules. Choose on the day by trying `ecs` first; if the account refuses a
@@ -33,6 +39,7 @@ infra/aws/
   ecs/              option 1: ECS Fargate + RDS + ElastiCache + EFS + ALB
   ec2/              option 2: one instance + Compose
   compose/          the EC2 stack (compose.aws.yml, Caddyfile, up.sh)
+  event/            the event's Code Editor instance: deploy.sh, remote.sh, Caddyfile
   docker/           migrate.Dockerfile: the database migration as an image
   scripts/          deploy.sh (the one command), set-secrets.sh, guard_plan.py,
                     tf.sh and aws.sh (Terraform and the AWS CLI, in Docker)

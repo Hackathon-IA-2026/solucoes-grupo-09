@@ -1,0 +1,17 @@
+# The event instance's front door. Only reachable through the instance's own
+# proxy (nginx serves this port under /app/<port>/ behind CloudFront), and the
+# whole site is behind a password because the address is shared.
+#
+# __SITE_USER__ and __SITE_HASH__ are filled in by remote.sh on the instance;
+# the hash is bcrypt, the password itself never leaves /opt/wsdemo.
+:80 {
+	basic_auth {
+		__SITE_USER__ __SITE_HASH__
+	}
+	# What only the worker and the operators may call.
+	@closed path /ingest/* /internal/* /docs /docs/*
+	respond @closed 404
+	@api path /v1/* /ready
+	reverse_proxy @api api:3000
+	reverse_proxy web:8080
+}

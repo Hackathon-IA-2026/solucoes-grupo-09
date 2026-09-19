@@ -90,7 +90,7 @@ services:
       WATTSTEER_ROLE: api
       WATTSTEER_CORS_ORIGINS: ${PUBLIC_URL}
       WATTSTEER_PUBLIC_URL: ${PUBLIC_URL}
-      WATTSTEER_TRUSTED_PROXY_DEPTH: "1"
+      WATTSTEER_TRUSTED_PROXY_DEPTH: "${TRUSTED_PROXY_DEPTH:-1}"
     depends_on:
       postgres:
         condition: service_healthy
