@@ -28,7 +28,10 @@ from dataclasses import dataclass, field
 from html.parser import HTMLParser
 
 NUMERIC = re.compile(r"[-+]?[\d.,]+%?|\d{2}/\d{2}/\d{4}|\d{2}:\d{2}(:\d{2})?")
-MARKER = re.compile(r"\s*-->\s*")  # "--> CONJUNTO EOLICO ARIZONA -->": an arrow image's alt text
+# "--> CONJUNTO EOLICO ARIZONA -->": the plant cells wrap their <SPAN> in a
+# commented-out <div> ("<!--<div align=\"left\">-->"), and the parser hands back
+# the comment's tail as text. The name itself is the SPAN's text, not an image.
+MARKER = re.compile(r"\s*-->\s*")
 TITLE_MAX_CHARS = 90
 SKIPPED = {"script", "style", "title"}
 TABLE_TAGS = {"table", "tr", "td", "th"}
