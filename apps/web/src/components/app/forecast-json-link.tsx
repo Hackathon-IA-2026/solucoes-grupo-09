@@ -2,6 +2,7 @@ import { usePalette } from "@wattsteer/ui";
 import { Link } from "expo-router";
 import { Platform } from "react-native";
 import { useCopy } from "@/i18n";
+import { apiUrl } from "@/lib/api-url";
 import { API_URL } from "@/lib/config";
 
 /**
@@ -24,7 +25,7 @@ export function ForecastJsonLink({
 }) {
   const colors = usePalette();
   const copy = useCopy();
-  const url = new URL("/v1/forecast/day-ahead", API_URL);
+  const url = apiUrl(API_URL, "/v1/forecast/day-ahead");
   url.searchParams.set("subsystem", subsystem);
   url.searchParams.set("target_date", targetDate);
   url.searchParams.set("gate_profile", gateProfile);

@@ -20,7 +20,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { useI18n } from "@/i18n";
 import { localePath } from "@/i18n/locale";
 import { SITE_URL } from "@/lib/config";
-import { PITCH_PDF_PATH } from "@/lib/pitch";
+import { PITCH_PDF_HREF, PITCH_PDF_PATH } from "@/lib/pitch";
 
 /**
  * The pitch deck, at `/pitch`.
@@ -279,7 +279,7 @@ function PitchEmbed({ wide, title }: { wide: boolean; title: string }) {
       {/* biome-ignore lint/nursery/useIframeSandbox: measured above — any sandbox value blanks Chrome's PDF viewer, and the framed content is our own static asset */}
       <iframe
         title={title}
-        src={`${PITCH_PDF_PATH}#view=FitH`}
+        src={`${PITCH_PDF_HREF}#view=FitH`}
         // `FitH` in the fragment, not a viewer parameter this app controls:
         // PDF fragment directives are honoured by Chrome's and Firefox's
         // built-in viewers and ignored everywhere else, which is the right
@@ -357,7 +357,7 @@ function PitchPdfLink({ label }: { label: string }) {
   // window through `opener`.
   return (
     <a
-      href={PITCH_PDF_PATH}
+      href={PITCH_PDF_HREF}
       target="_blank"
       rel="noreferrer"
       // biome-ignore lint/nursery/noInlineStyles: a raw DOM anchor; a react-native-web StyleSheet does not reach it

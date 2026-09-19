@@ -1,5 +1,6 @@
 import { ScrollViewStyleReset } from "expo-router/html";
 import type { PropsWithChildren } from "react";
+import { BASE_PATH } from "@/lib/config";
 
 /**
  * Static-render HTML shell (web only). Everything here ships in the initial
@@ -29,9 +30,9 @@ export default function Root({ children }: PropsWithChildren) {
             separate store that survives hard refreshes — localhost ports are
             shared across every locally-run app, so bust with a query param
             (bump ?v= when the mark changes). */}
-        <link rel="icon" href="/favicon.ico?v=4" sizes="32x32" />
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-        <link rel="manifest" href="/manifest.webmanifest" />
+        <link rel="icon" href={`${BASE_PATH}/favicon.ico?v=4`} sizes="32x32" />
+        <link rel="apple-touch-icon" href={`${BASE_PATH}/apple-touch-icon.png`} />
+        <link rel="manifest" href={`${BASE_PATH}/manifest.webmanifest`} />
         <meta
           name="theme-color"
           media="(prefers-color-scheme: light)"
@@ -65,11 +66,11 @@ export default function Root({ children }: PropsWithChildren) {
           // biome-ignore lint/security/noDangerouslySetInnerHtml: inline pre-hydration redirect
           dangerouslySetInnerHTML={{
             __html: `(function(){try{
-  var p=location.pathname;
-  if(p!=="/"&&p!=="/index.html")return;
+  var b=${JSON.stringify(BASE_PATH)},p=location.pathname;
+  if(p!==b+"/"&&p!==b+"/index.html")return;
   var s=null;try{s=localStorage.getItem("wattsteer.locale");}catch(e){}
   var l=(s==="pt"||s==="en")?s:"pt";
-  setTimeout(function(){location.replace("/"+l+"/");},900);
+  setTimeout(function(){location.replace(b+"/"+l+"/");},900);
 }catch(e){}})();`,
           }}
         />
