@@ -151,8 +151,11 @@ async def search(
         # question about the IPDO of 01/09/2025 retrieved four BDO rows dated
         # "01/09/2026" and the right IPDO was not among the eight passages.
         params.append(date.fromisoformat(target_date))
+        # The disturbance report follows the same rule as the gate: it counts
+        # for the day it analyses. With all 572 pages of the 2023 report
+        # indexed, its pages took slots from questions about other years.
         filters.append(
-            "(d.source NOT IN ('BDO','IPDO') OR d.published_at IS NULL"
+            "(d.source NOT IN ('BDO','IPDO','RAP') OR d.published_at IS NULL"
             f" OR (d.published_at AT TIME ZONE 'UTC')::date - ${len(params)}::date"
             " BETWEEN 0 AND CASE d.source WHEN 'IPDO' THEN 1 ELSE 0 END)"
         )

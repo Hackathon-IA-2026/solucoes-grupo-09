@@ -322,6 +322,7 @@ def test_retrieval_leaves_out_the_daily_bulletins_the_gate_would_refuse():
 
     source = inspect.getsource(retrieve.search)
     assert "target_date" in inspect.signature(retrieve.search).parameters
+    assert "'RAP'" in source  # the gate's citation_from_another_event
     for bulletin, days in evidence.DAILY_REPORTS.items():
         assert f"'{bulletin}'" in source
         assert f"WHEN 'IPDO' THEN {max(evidence.DAILY_REPORTS['IPDO'])}" in source
