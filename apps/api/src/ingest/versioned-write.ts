@@ -197,13 +197,29 @@ export async function writeVersioned<TRow, TInsert>(
     return result;
   }
 
+  // Do not spread a large batch into Math.min/Math.max. Detail files can carry
+  // hundreds of thousands of rows, which exceeds the runtime's argument limit
+  // and fails before the version lookup even reaches Postgres.
   const times = rows.map((row) => spec.validTime(row).getTime());
-  const latest = await loadLatest(
-    db,
-    spec,
-    new Date(Math.min(...times)),
-    new Date(Math.max(...times)),
-  );
+  const firstTime = times[0];
+  if (firstTime === undefined) {
+    return result;
+  }
+  let earliest = firstTime;
+  let latestTime = firstTime;
+  for (let index = 1; index < times.length; index += 1) {
+    const time = times[index];
+    if (time === undefined) {
+      continue;
+    }
+    if (time < earliest) {
+      earliest = time;
+    }
+    if (time > latestTime) {
+      latestTime = time;
+    }
+  }
+  const latest = await loadLatest(db, spec, new Date(earliest), new Date(latestTime));
   const stamped = { ...vintage, ingestedAt: vintage.ingestedAt ?? new Date() };
 
   const pending: TInsert[] = [];
