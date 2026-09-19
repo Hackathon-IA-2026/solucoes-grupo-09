@@ -152,6 +152,31 @@ A retrieval failure is invisible unless the service is built to show its work.
 Every evidence document carries its own trace: the candidates with both ranks,
 the provider and model that answered, the attempts, and the gate failures.
 
+## Measuring it
+
+Two sets, one runner. A change to parsing, chunking, retrieval or the gates is
+measured on both before it is merged.
+
+- `eval/goldset.jsonl`: real curtailment records, built from the ONS open data
+  by `eval/build_goldset.py`. The expected document is the one the record names.
+- `eval/questions.jsonl`: 80 free questions, each with the document, the page
+  and the numbers that answer it, read by hand from the official file. Families
+  by id: `P` the first fifteen checked on 18/09/2026, `B` daily bulletin tables,
+  `I` daily reports, `O` operating instructions, `S` grid procedures, `A` the
+  disturbance report of 15/08/2023, `R` questions the corpus cannot answer.
+
+```
+python eval/run_eval.py --goldset eval/questions.jsonl          # all of it
+python eval/run_eval.py --goldset eval/questions.jsonl --ids B,O  # one family
+```
+
+A question scores `correct`, `refused` or `wrong`. Correct means the answer
+cites the expected document and states every expected number; for an `R`
+question, correct is a refusal. **Wrong is the number to drive to zero**: a
+refusal is an honest gap in the corpus, a wrong answer is a reader misled. To
+add a case, read the value in the published file, not in the index: a question
+written from an indexed chunk inherits whatever the parser got wrong.
+
 ## Layout
 
 ```
