@@ -23,13 +23,14 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import re
 import time
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from wattsteer_rag.db import Database
-from wattsteer_rag.evidence import _number_key, build_evidence, numbers_in
+from wattsteer_rag.evidence import _number_key, build_evidence
 from wattsteer_rag.gateway.router import Gateway
 from wattsteer_rag.runtime import open_runtime
 
@@ -130,13 +131,12 @@ async def _evaluate_question(db: Database, gateway: Gateway, case: dict) -> dict
 
 
 def _score(case: dict, document: dict) -> dict:
-    """Right document, and every number the published text states for the question."""
+    """Right document, and every number the published text states for the
+    question, stated by a claim that cites that document."""
     citations = _citations(document)
-    claimed = _number_keys(item["claim"] for item in document["items"])
-    cited = {citation.get("external_id") for citation in citations}
-    expected, wanted = _reading(case, cited, claimed)
+    expected, wanted, stated = _reading(case, document["items"])
     on_document = [citation for citation in citations if citation.get("external_id") in expected]
-    missing = _number_keys(wanted) - claimed
+    missing = _missing(wanted, stated)
     return {
         "grade": _grade(
             case.get("expect", "answer"), document["verdict"] == "found", bool(on_document) and not missing
@@ -151,15 +151,70 @@ def _score(case: dict, document: dict) -> dict:
     }
 
 
-def _reading(case: dict, cited: set, claimed: set[str]) -> tuple[set[str], list[str]]:
+def _reading(case: dict, items: list[dict]) -> tuple[set[str], list[str], list[str]]:
     """The primary answer, or another official table that states the same fact
-    ("also"), each with its own document and its own printed numbers."""
+    ("also"), each with its own document and its own printed numbers, and the
+    claims that cite that document: a number stated under another citation
+    does not count for this one."""
     readings = [(_expected_documents(case), case.get("expect_numbers") or [])]
     readings += [({alt["document"]}, alt["numbers"]) for alt in case.get("also") or []]
     for documents, numbers in readings:
-        if documents & cited and not _number_keys(numbers) - claimed:
-            return documents, numbers
-    return readings[0]
+        stated = _claims_citing(items, documents)
+        if stated and not _missing(numbers, stated):
+            return documents, numbers, stated
+    documents, numbers = readings[0]
+    return documents, numbers, _claims_citing(items, documents)
+
+
+def _claims_citing(items: list[dict], documents: set[str]) -> list[str]:
+    return [
+        item["claim"]
+        for item in items
+        if any(citation.get("external_id") in documents for citation in item["citations"])
+    ]
+
+
+NUMBER_TOKEN = re.compile(r"\d(?:[\d.,]*\d)?")
+MINUS = "-\u2212\u2013"
+
+
+def _signed(texts) -> set[tuple[str, str]]:
+    """(sign, magnitude) of every number. A minus belongs to the number it
+    precedes ("- 75", "-75") unless it follows an operand: after ")" or a digit
+    it is an operation ("P(L7) – 0,51", the range "1.720–4.260"). A plus is
+    kept as such: it answers an unsigned value ("um incremento de + 30 MW"
+    answers 30) and never a negative one."""
+    return {
+        (_sign_before(text, match.start()), _number_key(match.group()))
+        for text in texts
+        for match in NUMBER_TOKEN.finditer(text)
+    }
+
+
+def _sign_before(text: str, start: int) -> str:
+    head = text[:start].rstrip()
+    if not head or head[-1] not in MINUS + "+" or (start - len(head) > 1):
+        return ""
+    operand = head[:-1].rstrip()[-1:]
+    if operand and (operand.isdigit() or operand in ")]"):
+        return ""
+    return "+" if head[-1] == "+" else "-"
+
+
+def _missing(wanted: list[str], stated: list[str]) -> list[str]:
+    """Expected numbers no claim states. An unsigned number in the claim stands
+    for its magnitude ("uma redução de 75 MW" answers -75); the opposite sign
+    stated outright does not."""
+    said = _signed(stated)
+    return [
+        f"{sign}{key}"
+        for sign, key in _signed(wanted)
+        if not any(key == other and _agrees(sign, other_sign) for other_sign, other in said)
+    ]
+
+
+def _agrees(wanted: str, stated: str) -> bool:
+    return stated in (wanted, "") or (wanted == "" and stated == "+")
 
 
 def _citations(document: dict) -> list[dict]:
@@ -169,11 +224,6 @@ def _citations(document: dict) -> list[dict]:
 def _expected_documents(case: dict) -> set[str]:
     expected = case.get("expect_document") or []
     return set(expected if isinstance(expected, list) else [expected])
-
-
-def _number_keys(texts) -> set[str]:
-    """1.851,79 in the file and 1851,79 in the answer are the same number."""
-    return {_number_key(number) for text in texts for number in numbers_in(text)}
 
 
 def _grade(expect: str, answered: bool, right: bool) -> str:
