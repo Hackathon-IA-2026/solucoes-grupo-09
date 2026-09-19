@@ -437,6 +437,16 @@ export async function fetchModelRun(request: ModelRunRequest): Promise<ModelRunR
       );
     }
 
+    // A multi-point request streams: when the run turns out not to exist, the
+    // 200 has already gone out and the body is this plain text instead of the
+    // 400 a single point gets (captured 19/09/2026, run=2026-09-19T12:00).
+    if (/modelRunUnavailable/.test(body)) {
+      throw new ModelRunUnavailableError(
+        `Model run ${runParam(request.runInit)} (${WEATHER_MODEL}) is not in the ` +
+          `archive: ${body.slice(0, 200)}`,
+      );
+    }
+
     return {
       locations: locationsOf(JSON.parse(body)),
       url: redact(url),
