@@ -44,3 +44,16 @@ def test_a_bare_line_two_labels_could_claim_is_left_alone():
     assert label_columns("Passo   Coordenação   Procedimento\n1   COSR-NE   Monitorar") == (
         "Passo   Coordenação   Procedimento\n1   COSR-NE   Monitorar"
     )
+
+
+def test_rechunk_labels_the_stored_text_layer_pages():
+    """Review of #25: rechunk reused a text-layer page's stored markdown, so
+    the corpus already indexed kept its unlabelled tables until each PDF was
+    read again. The stored text is the text layer, so the rule applies to it."""
+    from wattsteer_rag.ingest import _rebuilt_markdown
+
+    stored = HEADER + "    Armazenamento ao final do dia (%)   52,7%   90,9%   47,1%   79,3%   51,8%\n"
+    markdown, _ = _rebuilt_markdown({"blocks": [], "parser": "local:pdftotext", "markdown": stored})
+    assert "NE: 51,8%" in markdown
+    vision, _ = _rebuilt_markdown({"blocks": [], "parser": "nvidia:nemotron-parse", "markdown": stored})
+    assert vision == stored
