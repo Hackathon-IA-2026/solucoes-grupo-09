@@ -78,3 +78,35 @@ def test_naming_the_cited_item_invents_no_number():
     }
     assert _numbers_not_quoted("O item 6.2.1 fixa 0,70 e 301 MW.", [citation]) == []
     assert _numbers_not_quoted("O item 6.2.1 fixa 302 MW.", [citation])
+
+
+def test_a_quote_that_points_to_the_table_needs_the_row_it_points_to():
+    """Measured on 19/09/2026: asked how much the plants of SE Mauriti II must
+    vary, the answer quoted only the preamble and gave the step's 100 MW total;
+    the row ("Mauriti II | - 75") was in the same chunk."""
+    from wattsteer_rag.evidence import check_claim
+
+    step = (
+        "| Passo | Procedimento |\n| --- | --- |\n"
+        "| 1 | Para controlar o carregamento da LT 230 KV Mauriti II / Milagres – C1(L3), "
+        "remanejar a geração nas usinas definidas na tabela abaixo, considerando uma redução de 100 MW. |\n"
+        "| 1.1 | Usinas derivadas das SEs | MW |\n|  | Mauriti II | - 75 |"
+    )
+    preamble = (
+        "Para controlar o carregamento da LT 230 KV Mauriti II / Milagres – C1(L3), remanejar a geração "
+        "nas usinas definidas na tabela abaixo, considerando uma redução de 100 MW."
+    )
+    by_chunk = {"c1": _hit(step, "6.2.3 CONTROLE")}
+    only = {"claim": "Reduzir 100 MW.", "citations": [{"chunk_id": "c1", "quote": preamble}]}
+    claim, failures = check_claim(only, by_chunk)
+    assert claim is None and failures[-1].code == "quote_points_to_table"
+
+    with_row = {
+        "claim": "As usinas da SE Mauriti II variam - 75 MW numa redução de 100 MW.",
+        "citations": [
+            {"chunk_id": "c1", "quote": preamble},
+            {"chunk_id": "c1", "quote": "| Mauriti II | - 75 |"},
+        ],
+    }
+    claim, _ = check_claim(with_row, by_chunk)
+    assert claim is not None

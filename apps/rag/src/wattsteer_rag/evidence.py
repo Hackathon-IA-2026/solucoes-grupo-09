@@ -198,6 +198,34 @@ def has_substance(quote: str) -> bool:
     return words >= 8 or bool(re.search(r"\d", stripped))
 
 
+POINTER = re.compile(r"\btabela (?:abaixo|a seguir)\b", re.IGNORECASE)
+
+
+def _claim_failures(claim: str, accepted: list[dict], record: Record) -> list[GateFailure]:
+    """The checks on the claim as a whole, once its citations are known to exist."""
+    if all(_points_to_table(citation["quote"]) for citation in accepted):
+        return [
+            GateFailure(
+                "quote_points_to_table",
+                "the quote sends the reader to the table below; quote the table's row that answers too",
+            )
+        ]
+    missing = _numbers_not_quoted(claim, accepted, record.question)
+    if missing:
+        return missing
+    causal = causal_hits(claim)
+    return [GateFailure("causal_vocabulary", ", ".join(causal))] if causal else []
+
+
+def _points_to_table(quote: str) -> bool:
+    """A step's preamble, "remanejar a geração nas usinas definidas na tabela
+    abaixo", states what to do and not how much: the amount is in the table. In
+    the measured runs, asked how much the plants of one substation must vary,
+    three answers quoted only the preamble and gave the step's total. Such a
+    quote counts only next to a row of the table it points to."""
+    return bool(POINTER.search(quote)) and "|" not in quote
+
+
 def causal_hits(text: str) -> list[str]:
     haystack = f" {WORD_BOUNDARY.sub(' ', normalise(text))} "
     return [lemma for lemma in CAUSALITY_BANNED_LEMMAS if f" {lemma} " in haystack]
@@ -439,12 +467,9 @@ def check_claim(
     if not accepted:
         return None, failures or [GateFailure("quote_not_in_chunk", "no citation survived")]
 
-    missing = _numbers_not_quoted(claim, accepted, record.question)
-    if missing:
-        return None, [*failures, *missing]
-    causal = causal_hits(claim)
-    if causal:
-        return None, [*failures, GateFailure("causal_vocabulary", ", ".join(causal))]
+    refused = _claim_failures(claim, accepted, record)
+    if refused:
+        return None, [*failures, *refused]
 
     supports, confidence = _support_and_confidence(item)
     claim_document = {
