@@ -42,7 +42,8 @@ and the claim. Work in this order:
 1. Read only the quoted passages, and answer the question from them alone, as
    if the claim did not exist. Be literal about scope: a value of one hour is
    not the value of the day, a value of one row, agent or area is not a total,
-   a forecast or scheduled figure is not a verified one, and a table row whose
+   a forecast or scheduled figure is not a verified one, a figure accumulated
+   over the month to date is not the figure of the day, and a table row whose
    label names something else is not about the thing asked. If the passages do
    not contain the answer, say so.
 2. Compare your answer with the claim.
@@ -54,12 +55,18 @@ Answer only with JSON:
 
 
 def _passages(claim: dict) -> str:
+    """Each quote under its document's title and section. The title is what
+    tells a bulletin's day ("Rel Balanco Energetico Diario") from its month to
+    date ("Balanco Energetico Acumulo Dia"), which the quoted row alone does not."""
     return "\n\n".join(
-        f"[{citation.get('external_id') or citation.get('title')}"
-        f"{', ' + str(citation['locator'].get('section')) if citation['locator'].get('section') else ''}]\n"
-        f"{citation['quote']}"
+        f"[{' | '.join(part for part in _label(citation) if part)}]\n{citation['quote']}"
         for citation in claim["citations"]
     )
+
+
+def _label(citation: dict) -> tuple[str, ...]:
+    section = (citation.get("locator") or {}).get("section")
+    return (citation.get("external_id") or "", citation.get("title") or "", str(section) if section else "")
 
 
 async def review(gateway: Gateway, question: str, claim: dict) -> tuple[bool, str]:
