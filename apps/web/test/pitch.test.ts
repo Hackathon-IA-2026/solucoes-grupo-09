@@ -118,7 +118,7 @@ describe("the /pitch route", () => {
   it("the way to the file is a plain anchor, not a router Link", () => {
     // The deck is a static asset, not a route. `Link` would resolve
     // `/wattsteer-pitch.pdf` against the route tree and land on the 404.
-    expect(screen).toMatch(/<a\s+href=\{PITCH_PDF_PATH\}/);
+    expect(screen).toMatch(/<a\s+href=\{PITCH_PDF_HREF\}/);
     expect(screen).toContain('rel="noreferrer"');
     // `<Link …>` specifically, not the substring: `Linking.openURL` on the
     // native branch legitimately carries the same constant.

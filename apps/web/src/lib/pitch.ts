@@ -27,8 +27,13 @@
  * around, for a file that changes about as often as the logo does.
  */
 
+import { BASE_PATH } from "./config";
+
 /** The deck's URL path. Served from `public/` at the site root. */
 export const PITCH_PDF_PATH = "/wattsteer-pitch.pdf";
+
+/** The same file as this page links it: under the export's path prefix, if any. */
+export const PITCH_PDF_HREF = `${BASE_PATH}${PITCH_PDF_PATH}`;
 
 /** The route that frames it. */
 export const PITCH_PATH = "/pitch";

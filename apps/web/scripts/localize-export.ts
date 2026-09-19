@@ -177,6 +177,25 @@ for (const file of htmlFiles(DIST)) {
   }
 }
 
+// Under a path prefix (EXPO_PUBLIC_BASE_PATH, see app.config.ts) the
+// manifests' root-relative start_url, scope and icons would send an installed
+// app to the host's root. The files in public/ stay as they are; the export's
+// copies are rewritten.
+const basePath = process.env.EXPO_PUBLIC_BASE_PATH ?? "";
+const prefixed = (path: string) => (path.startsWith("/") ? `${basePath}${path}` : path);
+if (basePath) {
+  for (const name of readdirSync(DIST).filter((file) => file.endsWith(".webmanifest"))) {
+    const file = join(DIST, name);
+    const manifest = JSON.parse(readFileSync(file, "utf8"));
+    manifest.start_url = prefixed(manifest.start_url);
+    manifest.scope = prefixed(manifest.scope);
+    for (const icon of manifest.icons ?? []) {
+      icon.src = prefixed(icon.src);
+    }
+    writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);
+  }
+}
+
 console.log(
   `localize-export: ${REQUIRED.length} required pages and ${REQUIRED_ASSETS.length} static asset(s) present; rewrote ${rewritten} file(s).`,
 );
