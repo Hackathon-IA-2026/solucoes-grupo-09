@@ -102,3 +102,23 @@ def test_a_row_shortened_on_the_right_is_not_shifted_to_the_right():
     assert "Reserva Girante (c = a - b): 5.834" in sin
     note = bulletin_lines(RESERVE)[-1]
     assert "Área de Operação:" not in note and "Potência instalada" in note
+
+
+def test_the_month_to_date_balance_does_not_answer_for_a_day():
+    """Sixth measured run: asked for the Sul's verified load on 10/09/2026, the
+    answer quoted the month-to-date page (14.452) instead of the day's (14.611)."""
+    from wattsteer_rag.evidence import Record, _month_to_date_failure
+    from wattsteer_rag.retrieve import Hit
+
+    def bdo(text: str) -> Hit:
+        return Hit(
+            "c1", "d1", text, {"page": 1}, None, "BDO", "BDO", "u", "BDO 2026-09-10 02", None, None, "x", 1.0
+        )
+
+    month = bdo("| BDO - Balanço de Energia Acumulado no Mês Até o Dia | Carga(*) | Sul verificado: 14.452 |")
+    day = bdo("| BDO - Balanço de Energia Diário | Carga(*) | Sul verificado: 14.611 |")
+    asks_day = Record(question="Qual foi a carga verificada do Sul em 10/09/2026?")
+    asks_month = Record(question="Qual a carga acumulada no mês do Sul até 10/09/2026?")
+    assert _month_to_date_failure(month, asks_day).code == "citation_month_to_date"
+    assert _month_to_date_failure(day, asks_day) is None
+    assert _month_to_date_failure(month, asks_month) is None
