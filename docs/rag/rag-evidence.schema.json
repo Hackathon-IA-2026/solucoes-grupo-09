@@ -54,6 +54,7 @@
         "quota_exhausted_before_answer",
         "quota_exhausted_partial",
         "rag_not_configured",
+        "claim_reader_unavailable",
         null
       ],
       "description": "Required when verdict != found."
@@ -316,7 +317,11 @@
                   "locator_missing",
                   "quote_without_substance",
                   "citation_not_the_named_document",
-                  "citation_from_another_event"
+                  "citation_from_another_event",
+                  "citation_from_another_day",
+                  "citation_month_to_date",
+                  "quote_points_to_table",
+                  "quote_does_not_state_claim"
                 ]
               }
             },

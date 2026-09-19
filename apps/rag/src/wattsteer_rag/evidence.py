@@ -33,7 +33,7 @@ from typing import Any
 from .db import Database
 from .gateway.router import Gateway, QuotaExhausted
 from .retrieve import Hit, codes_in, search
-from .verify import review
+from .verify import ReaderUnavailable, review
 
 SCHEMA_VERSION = "1.0"
 MAX_QUOTE_CHARS = 600
@@ -700,41 +700,57 @@ async def _draft(gateway: Gateway, document: dict, record: Record, hits: list[Hi
     accepted: list[dict] = []
     failures: list[GateFailure] = []
     for attempt in (1, 2, 3):
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": f"Question: {record.question}\n\nAvailable passages:\n\n{passages}{complaint}",
-            },
-        ]
-        try:
-            result = await gateway.run(
-                "generate_strong", tokens=max(1, len(passages) // 4), messages=messages, want_json=True
-            )
-        except QuotaExhausted as exc:
-            document["verdict"] = "insufficient"
-            # Running out on the first attempt and running out after the gates
-            # refused two drafts are different problems, and only the first is
-            # solved by waiting. Saying "no quota" about a run that was actually
-            # refused sends the reader to the provider's dashboard instead of to
-            # the gate that rejected the claim.
-            document["reason"] = (
-                "quota_exhausted_before_answer" if attempt == 1 else "quota_exhausted_partial"
-            )
-            generation["attempts"] = attempt - 1
-            generation["gate_failures"] = sorted({failure.code for failure in failures})
-            document["trace"]["retry_at"] = exc.retry_at
+        result = await _generate(gateway, document, record, passages + complaint, attempt, failures)
+        if result is None:
             return
-        generation.update(
-            {"provider": result.provider, "model": result.model, "attempts": attempt, "source": "model"}
-        )
         accepted, failures = _gate_answer(result.value, by_chunk, attempt, generation, record)
-        accepted = await _reviewed(gateway, record, accepted, attempt, generation, failures)
+        try:
+            accepted = await _reviewed(gateway, record, accepted, attempt, generation, failures)
+        except ReaderUnavailable as exc:
+            # Every retry would be refused the same way; stop spending drafts.
+            _stop(document, failures, "claim_reader_unavailable")
+            generation["claim_reader"] = f"unavailable: {exc}"
+            return
         if accepted:
             break
         complaint = _complaint(guidance, failures)
     generation["gate_failures"] = sorted({failure.code for failure in failures})
     _settle(document, accepted, record.question)
+
+
+async def _generate(
+    gateway: Gateway, document: dict, record: Record, passages: str, attempt: int, failures: list[GateFailure]
+):
+    """One draft from the model, or None once the quota has settled the document."""
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": f"Question: {record.question}\n\nAvailable passages:\n\n{passages}"},
+    ]
+    try:
+        result = await gateway.run(
+            "generate_strong", tokens=max(1, len(passages) // 4), messages=messages, want_json=True
+        )
+    except QuotaExhausted as exc:
+        # Running out on the first attempt and running out after the gates
+        # refused two drafts are different problems, and only the first is
+        # solved by waiting. Saying "no quota" about a run that was actually
+        # refused sends the reader to the provider's dashboard instead of to
+        # the gate that rejected the claim.
+        _stop(
+            document, failures, "quota_exhausted_before_answer" if attempt == 1 else "quota_exhausted_partial"
+        )
+        document["trace"]["generation"]["attempts"] = attempt - 1
+        document["trace"]["retry_at"] = exc.retry_at
+        return None
+    document["trace"]["generation"].update(
+        {"provider": result.provider, "model": result.model, "attempts": attempt, "source": "model"}
+    )
+    return result
+
+
+def _stop(document: dict, failures: list[GateFailure], reason: str) -> None:
+    document["verdict"], document["reason"] = "insufficient", reason
+    document["trace"]["generation"]["gate_failures"] = sorted({failure.code for failure in failures})
 
 
 async def _reviewed(

@@ -22,8 +22,8 @@ given for the value its table holds. The reader sees only the question, the
 claim and the quoted spans with their document and section, so it cannot
 borrow support from the other passages.
 
-When the reader is not available the claim is refused, not waved through: the
-failure mode of this service is silence (see `evidence.py`).
+When the reader is not available no claim is published and the builder stops
+generating: the failure mode of this service is silence (see `evidence.py`).
 """
 
 from __future__ import annotations
@@ -69,18 +69,32 @@ def _label(citation: dict) -> tuple[str, ...]:
     return (citation.get("external_id") or "", citation.get("title") or "", str(section) if section else "")
 
 
+class ReaderUnavailable(Exception):
+    """No link of the `verify` task could answer: no key, no quota, a refusal.
+
+    Not the same thing as a "no". A "no" refuses one claim and the drafter may
+    try again; an absent reader would refuse every claim of every retry, so the
+    caller stops generating instead of spending the generation quota on drafts
+    nobody can read."""
+
+
 async def review(gateway: Gateway, question: str, claim: dict) -> tuple[bool, str]:
-    """(supported, reason). Unavailable counts as not supported, with that reason."""
+    """(supported, reason); raises ReaderUnavailable when no reader answered."""
     asked = f"Question: {question}\n\nQuoted passages:\n{_passages(claim)}\n\nClaim: {claim['claim']}"
     messages = [{"role": "system", "content": VERIFY_PROMPT}, {"role": "user", "content": asked}]
     try:
         result = await gateway.run("verify", tokens=len(messages[1]["content"]) // 4, messages=messages)
     except (QuotaExhausted, ProviderRefused, ProviderError) as exc:
-        return False, f"reviewer unavailable: {type(exc).__name__}"
+        raise ReaderUnavailable(type(exc).__name__) from exc
     return _verdict(result.value)
 
 
 def _verdict(value: Any) -> tuple[bool, str]:
+    """All three fields, or a "no": a bare {"supported": true} skipped the
+    independent answer this reader exists to give."""
     if not isinstance(value, dict) or not isinstance(value.get("supported"), bool):
-        return False, "reviewer answered out of shape"
-    return value["supported"], str(value.get("reason") or "")[:200]
+        return False, "reader answered out of shape"
+    answer, reason = value.get("answer_from_passages", ...), value.get("reason")
+    if not (answer is None or isinstance(answer, str)) or not isinstance(reason, str) or not reason.strip():
+        return False, "reader answered without its own answer or reason"
+    return value["supported"], reason[:200]
