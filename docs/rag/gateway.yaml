@@ -36,6 +36,7 @@ providers:
     timeout_s: 45
     limits_per_model: # official free tier table, 15/09/2026, per organisation
       openai/gpt-oss-120b: { rpm: 30, rpd: 1000, tpm: 8000, tpd: 200000 }
+      openai/gpt-oss-20b: { rpm: 30, rpd: 1000, tpm: 8000, tpd: 200000 } # same table, 18/09/2026
 
 tasks:
   # Open models only. NIM ids confirmed on 15/09/2026 via GET /v1/models.
@@ -51,6 +52,22 @@ tasks:
     require: { json_schema: true }
     temperature: 0
     max_output_tokens: 1500
+  verify: # a second reader for each accepted claim: does the quote state it? (verify.py)
+    chain:
+      # Groq first, the one exception to "NVIDIA does the work", and measured:
+      # on 18/09/2026, four labelled cases (LAPA read from the SIN's row, a
+      # Submódulo quoted for another item, and two true claims), gpt-oss-20b
+      # got 4/4 in 0.5 s each. NVIDIA's small models answered 404
+      # (nemotron-nano-3, gemma-3-12b), timed out (deepseek-v4-flash,
+      # mistral-nemotron) or broke the JSON (glm-5.3-flash). A call is about
+      # 1,000 tokens with the reasoning, so the 8k TPM holds some 7 claims a minute.
+      - { provider: groq, model: openai/gpt-oss-20b, max_input_tokens: 6000 }
+      - { provider: nvidia, model: nvidia/nemotron-3-super-120b-a12b, max_input_tokens: 24000 }
+    require: { json_schema: true }
+    temperature: 0
+    # gpt-oss reasons before it answers: at 300 it spent 298 tokens reasoning
+    # and returned nothing. About 700 were used on the LAPA case.
+    max_output_tokens: 1200
   embed: # NEVER changes model at runtime: one vector space per index.
     # bge-m3, llama-nemotron-embed-1b-v2 and nv-embedqa-e5-v5 were retired by NIM
     # on 25/08/2026 (410 Gone). nemotron-3-embed-1b: 2048 dims, sliced to 1024 and
