@@ -584,6 +584,7 @@ async def build_evidence(
         question,
         published_before=gate_at,
         named_documents=list(record.named_documents) or None,
+        target_date=target_date,
     )
     document = _empty_document(subsystem, target_date, gate_at, question, trace_id, hits)
     document["corpus_version"] = await db.corpus_version()
