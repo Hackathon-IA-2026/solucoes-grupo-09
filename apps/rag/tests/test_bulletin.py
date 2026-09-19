@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-BALANCE = """<table><tr><td><table>
+BALANCE = """<table><tr><th>Balanço de Energia Acumulado no Mês Até o Dia</th></tr>
+<tr><td><table>
 <tr><td colspan=4>SISTEMA INTERLIGADO NACIONAL - SIN - MWmed</td></tr>
 <tr><td>Solar</td><td><span id=lbl_sin_solar_p>11.576</span></td>
 <td><span id=lbl_sin_solar_v>11.802</span></td><td><span id=lbl_sin_solar_perc>16,61%</span></td></tr>
@@ -31,7 +32,9 @@ def test_the_balance_names_the_subsystem_and_the_column_its_image_draws():
     )
     assert "Nordeste verificado: 13.431 | Nordeste programado: 13.678" in lines[1]
     assert "Norte verificado: 2.710 | Norte programado: 2.424" in lines[2]
-    assert all(line.startswith("| BDO 07/09/2026") for line in lines)
+    assert all(
+        line.startswith("| BDO 07/09/2026 - Balanço de Energia Acumulado no Mês") for line in lines[:3]
+    )
     # The exchange total is also a "Total", but its ids are not the balance's.
     assert not any("Norte verificado: 0" in line for line in lines)
 

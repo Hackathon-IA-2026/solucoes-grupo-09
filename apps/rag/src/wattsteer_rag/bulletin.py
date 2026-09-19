@@ -185,8 +185,18 @@ class _Table:
         self.title = ""
         self.header: list[str] = []
         self.full: list[str] = []  # the last row with every column
+        # The page's first title names the balance: "Balanço de Energia Diário"
+        # or "... Acumulado no Mês Até o Dia". A fixed "Balanço de Energia" made
+        # the two read alike, and the month's 276 was given as the day's 271.
+        self.page_title = "Balanço de Energia"
+        self._titled = False
         self.spanned: list[int] = []  # header positions under a cell with colspan > 1
         self.header_just_set = False
+
+    def set_title(self, title: str) -> None:
+        self.title, self.header = title, []
+        if not self._titled:
+            self.page_title, self._titled = title, True
 
     def take_header(self, cells: list[Cell]) -> None:
         names = [name for cell in cells for name in [cell.text] * cell.colspan]
@@ -264,9 +274,9 @@ def bulletin_lines(raw: str, heading: str = "") -> list[str]:
     for cells in read_rows(raw):
         texts = [cell.text for cell in cells]
         if balance := _balance_values(cells):
-            lines.append(_line(heading, "Balanço de Energia", balance))
+            lines.append(_line(heading, table.page_title, balance))
         elif _is_title(texts):
-            table.title, table.header = texts[0], []
+            table.set_title(texts[0])
         elif len(texts) > 1 and not any(_is_number(text) for text in texts):
             table.take_header(cells)
         elif values := table.pair(texts):
