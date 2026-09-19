@@ -166,10 +166,13 @@ def _text_layer_page(page_no: int, text: str) -> ParsedPage:
 
 
 async def _vision_page(gateway: Gateway, pdf: Path, page_no: int) -> ParsedPage | None:
-    """The page as the vision model read it, or None when no link could."""
+    """The page as the vision model read it, or None when no link could.
+
+    Out of quota is raised, not swallowed: it is the one failure that means
+    "read this page later", and the caller has to know the page is owed."""
     try:
         result = await gateway.run("parse", tokens=1, image=rasterize(pdf, page_no))
-    except (QuotaExhausted, ProviderError):
+    except ProviderError:
         return None
     blocks: list[Block] = result.value
     markdown, has_tables = blocks_to_markdown(blocks)
@@ -185,7 +188,12 @@ async def _vision_page(gateway: Gateway, pdf: Path, page_no: int) -> ParsedPage 
 
 
 async def parse_pdf(
-    gateway: Gateway, pdf: Path, *, max_pages: int | None = None, force_vision: bool = False
+    gateway: Gateway,
+    pdf: Path,
+    *,
+    max_pages: int | None = None,
+    force_vision: bool = False,
+    unread: list[int] | None = None,
 ) -> list[ParsedPage]:
     """Parse every page, and spend the vision model only where it is needed.
 
@@ -196,18 +204,31 @@ async def parse_pdf(
     table. So the rule is not "text layer first": it is "text layer when the text
     layer is good enough". When the vision model cannot read a page, the text
     layer is taken anyway, and the page says so, rather than being dropped.
+    A page with no text layer that ran out of vision quota goes in `unread`:
+    the document is not done, and ingestion must come back to it.
     """
     total = min(page_count(pdf), max_pages) if max_pages else page_count(pdf)
     pages: list[ParsedPage] = []
     for page_no in range(1, total + 1):
-        text = "" if force_vision else pdf_text(pdf, page_no, page_no)
-        if len(text) >= TEXT_LAYER_MIN_CHARS and not looks_tabular(text):
-            pages.append(_text_layer_page(page_no, text))
-            continue
-        page = await _vision_page(gateway, pdf, page_no)
-        if page is None:
-            text = text or pdf_text(pdf, page_no, page_no)
-            page = _text_layer_page(page_no, text) if text else None
+        page = await _read_page(gateway, pdf, page_no, force_vision, unread)
         if page is not None:
             pages.append(page)
     return pages
+
+
+async def _read_page(
+    gateway: Gateway, pdf: Path, page_no: int, force_vision: bool, unread: list[int] | None
+) -> ParsedPage | None:
+    text = "" if force_vision else pdf_text(pdf, page_no, page_no)
+    if len(text) >= TEXT_LAYER_MIN_CHARS and not looks_tabular(text):
+        return _text_layer_page(page_no, text)
+    try:
+        page = await _vision_page(gateway, pdf, page_no)
+    except QuotaExhausted:
+        page = None
+        if not text and unread is not None:
+            unread.append(page_no)
+    if page is None:
+        text = text or pdf_text(pdf, page_no, page_no)
+        page = _text_layer_page(page_no, text) if text else None
+    return page
