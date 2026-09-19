@@ -75,6 +75,13 @@ Absolute rules:
 Prefer the span that states the procedure, the limit or the condition, with its
 values and quantities. A section title on its own is not evidence.
 
+Each claim answers the question. When the passages give the value the question
+asks for, the claim states that value; the preamble of a procedure step ("remanejar
+a geração nas usinas definidas na tabela abaixo") without the value from its table
+is not an answer. Names in tables may be misspelled by the scan (Tucaratu for
+Tacaratu): a row is about the place the question names when the rest of the row
+and its section say so.
+
 Many passages are tables. There, every citation must be a contiguous piece: a
 whole row, or a run of neighbouring rows, copied in the order they appear. Do
 not join a cell from the beginning with one from the end. If you need two
