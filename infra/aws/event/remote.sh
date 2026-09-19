@@ -91,10 +91,14 @@ sed -e "s|__SITE_USER__|wattsteer|" -e "s|__SITE_HASH__|$HASH|" Caddyfile.templa
 C="docker compose --project-name wsdemo --env-file $DIR/.env -f $DIR/compose.yml"
 $C up -d postgres redis
 $C --profile tools run --rm migrate 2>&1 | tail -1
-# --wait fails the deploy when a service does not become healthy (or exits),
-# rather than reporting success over a stack that is not answering.
+# Fail the deploy when a service does not become healthy, rather than report
+# success over a stack that is not answering. The worker is left out of
+# --wait because compose counts "no healthcheck" as a failure and the worker
+# has none on purpose (it opens no port); it only has to be running.
 status=0
-$C up -d --remove-orphans --wait --wait-timeout 300 || status=$?
+$C up -d --remove-orphans
+$C up -d --wait --wait-timeout 300 postgres redis api ml rag web caddy || status=$?
+[ "$(docker inspect -f '{{.State.Running}}' wsdemo-worker-1 2>/dev/null)" = true ] || status=1
 $C ps --format '{{.Service}} {{.Image}} {{.Status}}'
 
 # The RAG corpus is not in the images: a fresh instance starts with none.
