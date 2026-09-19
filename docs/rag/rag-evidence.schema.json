@@ -54,6 +54,7 @@
         "quota_exhausted_before_answer",
         "quota_exhausted_partial",
         "rag_not_configured",
+        "claim_reader_unavailable",
         null
       ],
       "description": "Required when verdict != found."
@@ -180,8 +181,8 @@
                 "quote": {
                   "type": "string",
                   "minLength": 20,
-                  "maxLength": 300,
-                  "description": "Literal span of the chunk. Gate 1: it must exist in the indexed chunk."
+                  "maxLength": 600,
+                  "description": "Literal span of the chunk, whitespace collapsed. Gate 1: it must exist in the indexed chunk."
                 },
                 "url": {
                   "type": "string",
@@ -316,7 +317,11 @@
                   "locator_missing",
                   "quote_without_substance",
                   "citation_not_the_named_document",
-                  "citation_from_another_event"
+                  "citation_from_another_event",
+                  "citation_from_another_day",
+                  "citation_month_to_date",
+                  "quote_points_to_table",
+                  "quote_does_not_state_claim"
                 ]
               }
             },

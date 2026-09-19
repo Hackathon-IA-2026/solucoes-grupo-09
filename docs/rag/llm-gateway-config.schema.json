@@ -62,7 +62,7 @@
     },
     "tasks": {
       "type": "object",
-      "required": ["generate_strong", "embed", "parse"],
+      "required": ["generate_strong", "embed", "parse", "verify"],
       "additionalProperties": {
         "type": "object",
         "additionalProperties": false,

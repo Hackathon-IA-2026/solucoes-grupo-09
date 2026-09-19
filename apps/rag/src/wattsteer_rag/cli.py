@@ -96,7 +96,7 @@ async def cmd_crawl(args) -> int:
 async def cmd_ingest(args) -> int:
     """Parse, chunk and embed everything that is fetched but not yet indexed."""
     async with open_runtime(migrate=True) as rt:
-        rows = await pending_documents(rt.db, args.limit)
+        rows = await pending_documents(rt.db, args.limit, args.again)
         if not rows:
             print("nothing pending")
         for row in rows:
@@ -259,6 +259,9 @@ def main() -> int:
     ingest = sub.add_parser("ingest", help="parse, chunk and embed pending documents")
     ingest.add_argument("--limit", type=int, default=5)
     ingest.add_argument("--max-pages", type=int, default=None)
+    ingest.add_argument(
+        "--again", default=None, help="a source (BDO) or external id (RAP 2023-08-15) to read again"
+    )
     ingest.set_defaults(run=cmd_ingest)
 
     seed = sub.add_parser("seed", help="load the packed corpus, or pack the current one")
