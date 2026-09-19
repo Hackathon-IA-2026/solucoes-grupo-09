@@ -16,6 +16,7 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from .columns import label_columns
 from .gateway.adapters import Block, ProviderError
 from .gateway.router import Gateway, QuotaExhausted
 
@@ -177,7 +178,9 @@ def blocks_to_markdown(blocks: list[Block]) -> tuple[str, bool]:
 
 
 def _text_layer_page(page_no: int, text: str) -> ParsedPage:
-    return ParsedPage(page_no=page_no, markdown=text, blocks=[], has_tables=False, parser=TEXT_LAYER_PARSER)
+    return ParsedPage(
+        page_no=page_no, markdown=label_columns(text), blocks=[], has_tables=False, parser=TEXT_LAYER_PARSER
+    )
 
 
 async def _vision_page(gateway: Gateway, pdf: Path, page_no: int) -> ParsedPage | None:
