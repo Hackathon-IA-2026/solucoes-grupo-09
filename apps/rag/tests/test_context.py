@@ -110,3 +110,36 @@ def test_a_quote_that_points_to_the_table_needs_the_row_it_points_to():
     }
     claim, _ = check_claim(with_row, by_chunk)
     assert claim is not None
+
+
+def test_the_pointer_rule_reads_values_not_pipes():
+    """Review of #22: pipes do not prove a row is there. The preamble quoted as
+    a Markdown row is still only a pointer; a row assembled without pipes
+    still carries the value."""
+    from wattsteer_rag.evidence import _points_to_table
+
+    preamble = (
+        "remanejar a geração nas usinas definidas na tabela abaixo, considerando uma redução de 100 MW."
+    )
+    assert _points_to_table(f"| 1 | Para controlar o carregamento, {preamble} |")
+    assert not _points_to_table(f"Para controlar o carregamento, {preamble} Mauriti II - 75")
+    assert not _points_to_table(f"| 1 | {preamble} |\n| 1.1 | Mauriti II | - 75 |")
+
+
+def test_a_long_section_is_bounded_and_its_number_reaches_the_whitelist():
+    """Review of #22: a 125-character IO title overran the contract's 120 for
+    locator.section, and the cited item's number was allowed by the gate but
+    missing from the narration's whitelist."""
+    from wattsteer_rag.evidence import _accepted_citation, _settle
+
+    title = (
+        "6.2.2 CONTROLE DE CARREGAMENTO DA LT 230 KV MILAGRES / COREMAS – C1(M6) E C2(M5) "
+        "PREVENINDO A PERDA DA LT"
+    )
+    citation = _accepted_citation(
+        _hit("P(MLG/CMA M6) + P(MLG/CMA M5) ≤ 275 MW", title * 2), "c1", "≤ 275 MW", False, {}
+    )
+    assert len(citation["locator"]["section"]) <= 120
+    document = {}
+    _settle(document, [{"supports": "CNF", "evidence_weight": 1.0, "citations": [citation], "claim": "x"}])
+    assert "6.2.2" in document["numbers_whitelist"] and "275" in document["numbers_whitelist"]

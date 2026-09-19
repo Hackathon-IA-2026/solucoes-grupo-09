@@ -31,6 +31,7 @@ from .retrieve import Hit, codes_in, search
 
 SCHEMA_VERSION = "1.0"
 MAX_QUOTE_CHARS = 600
+SECTION_MAX = 120  # docs/rag/rag-evidence.schema.json, citation.locator.section
 
 # Ported from packages/core/src/causality.ts so both sides ban the same words.
 CAUSALITY_BANNED_LEMMAS = (
@@ -222,8 +223,19 @@ def _points_to_table(quote: str) -> bool:
     abaixo", states what to do and not how much: the amount is in the table. In
     the measured runs, asked how much the plants of one substation must vary,
     three answers quoted only the preamble and gave the step's total. Such a
-    quote counts only next to a row of the table it points to."""
-    return bool(POINTER.search(quote)) and "|" not in quote
+    quote counts only next to a row of the table it points to: a value in a
+    part of the quote other than the pointing sentence and the step number,
+    whether the quote kept the table's pipes or not."""
+    if not POINTER.search(quote):
+        return False
+    parts = [part.strip() for part in QUOTE_PARTS.split(quote) if part.strip()]
+    return not any(
+        re.search(r"\d", part) and not POINTER.search(part) and not STEP_NUMBER.match(part) for part in parts
+    )
+
+
+QUOTE_PARTS = re.compile(r"[|\n]|(?<=\.)\s")
+STEP_NUMBER = re.compile(r"^\d+(?:\.\d+)*\.?$")
 
 
 def causal_hits(text: str) -> list[str]:
@@ -393,7 +405,9 @@ def _accepted_citation(hit: Hit, chunk_id: str, quote: str, assembled: bool, loc
         "published_at": hit.published_at.isoformat() if hit.published_at else None,
         "locator": {
             "page": locator.get("page"),
-            "section": locator.get("section") or hit.section_path,
+            # The contract bounds a section at 120 characters; some IO titles
+            # run to 125 in capitals.
+            "section": (locator.get("section") or hit.section_path or "")[:SECTION_MAX] or None,
             "table": locator.get("table"),
             "row": locator.get("row"),
         },
@@ -760,14 +774,14 @@ def _settle(document: dict, accepted: list[dict], restated: str = "") -> None:
     document["items"] = accepted
     document["verdict"] = "found"
     # The same rule the gate applies, so that whoever narrates this downstream
-    # refuses exactly what was refused here: numbers from the quoted text, plus
-    # the ones the record itself already stated.
+    # refuses exactly what was refused here: numbers from the quoted text and
+    # from the cited item ("6.2.1"), plus the ones the record itself stated.
     document["numbers_whitelist"] = sorted(
         {
             number
             for claim in accepted
             for citation in claim["citations"]
-            for number in numbers_in(citation["quote"])
+            for number in numbers_in(f"{citation['quote']} {citation['locator'].get('section') or ''}")
         }
         | set(numbers_in(restated))
     )

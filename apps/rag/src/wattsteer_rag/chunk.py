@@ -268,10 +268,11 @@ def _furniture_key(text: str) -> str:
 
 def _can_join(previous: Chunk, piece: str, page_no: int, section: str | None) -> bool:
     """Same page, room left, and the same section: a short "Submercado Norte"
-    paragraph glued to the Sul chunk above it would be quoted as the Sul's."""
+    paragraph glued to the Sul chunk above it would be quoted as the Sul's, and
+    one glued to a chunk with no section would lose its own."""
     if previous.page_end != page_no or len(previous.text) + len(piece) >= MAX_CHARS:
         return False
-    return not (section and previous.section_path and section != previous.section_path)
+    return section == previous.section_path
 
 
 def _absorbed(chunks: list[Chunk], piece: str, page_no: int, section: str | None = None) -> bool:

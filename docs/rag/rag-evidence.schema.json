@@ -180,8 +180,8 @@
                 "quote": {
                   "type": "string",
                   "minLength": 20,
-                  "maxLength": 300,
-                  "description": "Literal span of the chunk. Gate 1: it must exist in the indexed chunk."
+                  "maxLength": 600,
+                  "description": "Literal span of the chunk, whitespace collapsed. Gate 1: it must exist in the indexed chunk."
                 },
                 "url": {
                   "type": "string",
