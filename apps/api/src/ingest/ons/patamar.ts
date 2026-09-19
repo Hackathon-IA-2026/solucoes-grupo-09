@@ -23,10 +23,17 @@ import { PATAMAR_MINUTES } from "./dessem-balance.js";
  * independent series, not the file agreeing with itself. It remains an inference
  * from one day, not something ONS states.
  *
- * **`programacao_x_previsao` is deliberately `unverified`.** Its `num_patamar`
- * has not been counted: the only rows read were all patamar 1, so neither its
- * range nor its resolution is established, and a half-hour reading must not be
- * carried over from a different dataset because the column has the same name.
+ * **The three programme datasets** — `programacao_diaria`,
+ * `programacao_x_previsao`, `programacao_fluxo_controlado` — were `unverified`
+ * until counted, on the argument that a half-hour reading must not be carried
+ * over from a different dataset because the column has the same name. They have
+ * now been counted, on 2026-09-18: each carries exactly patamares 1..48 (628
+ * PDP entities × 48 = 30,144 rows; 40 flow elements × 48 = 1,920), and
+ * `programacao_diaria` summed over wind and solar agrees with
+ * `balanco_dessem_geral`'s `val_geracao_renovavel` best at **lag 0** in all four
+ * subsystems (r = 0.930 / 0.997 / 0.99991 / 0.99989, against 0.77–0.985 at ±1).
+ * That is one day and one neighbouring series, exactly the standing of the DESSEM
+ * entries above, and is recorded as the same kind of claim.
  */
 export type PatamarResolution =
   | { kind: "half_hour"; patamaresPerDay: 48 }
@@ -35,12 +42,9 @@ export type PatamarResolution =
 export const PATAMAR_RESOLUTION = {
   dessem_balance: { kind: "half_hour", patamaresPerDay: 48 },
   dessem_general: { kind: "half_hour", patamaresPerDay: 48 },
-  programacao_x_previsao: {
-    kind: "unverified",
-    reason:
-      "num_patamar has not been counted for this dataset; the rows read were all " +
-      "patamar 1, so its range and resolution are not established",
-  },
+  programacao_diaria: { kind: "half_hour", patamaresPerDay: 48 },
+  programacao_x_previsao: { kind: "half_hour", patamaresPerDay: 48 },
+  programacao_fluxo_controlado: { kind: "half_hour", patamaresPerDay: 48 },
 } as const satisfies Record<string, PatamarResolution>;
 
 /** One row of the dictionary: a patamar and the local half hour it denotes. */

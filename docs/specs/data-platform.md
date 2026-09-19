@@ -288,8 +288,9 @@ decisively, the domain model does not describe facts narrowly:
 `RestrictionCause` is a value object spanning three columns that are populated
 and blank together, and a narrow store cannot express that at all. The migration
 cost the narrow shape buys off is small and knowable: the ONS catalogue is
-enumerated at 15 datasets, so the number of future fact tables is a known finite
-number, not an open set.
+enumerated at 15 datasets when this was written and at 18 since the day-ahead
+programme datasets were added (see *Further Notes*), so the number of future
+fact tables is a known finite number, not an open set.
 
 *`data_version` from a value digest.* It is a monotonic integer per business
 key, bumped only when a sha256 over the stored values (and nothing else) differs
@@ -552,9 +553,11 @@ consistent with what the research measured.
   deferred; settled in Implementation Decisions above by the tracer ticket.
 - **The weather variable list and centroid set** — deferred to **Feature
   engineering spec**.
-- **CMO prices, `programacao_diaria`, and the geoelectric-area load grain.** All
-  three were catalogued as available and useful; none is needed for day-ahead
-  subsystem curtailment. Recorded rather than ingested.
+- **CMO prices and the geoelectric-area load grain.** Both were catalogued as
+  available and useful; neither is needed for day-ahead subsystem curtailment.
+  Recorded rather than ingested. (`programacao_diaria` was listed here and is no
+  longer: what this bullet rejected was its *plant grain*, and it is now ingested
+  aggregated to (subsystem, technology) — see *Further Notes*.)
 - **Thermal plant registry coverage.** SIGA covers thermal at only ~68%. It is
   irrelevant to VRE curtailment and is not solved here.
 - **Pre-2019 history and its DST hazard.** The window opens 2024-04, entirely
@@ -614,6 +617,41 @@ file.
    `S` row as a real zero hour. The adapter therefore detects the gap from the
    IANA zone — the local time did not exist — rather than from the values, which
    catches all four rows and needs no per-dataset rule.
+
+**Three day-ahead programme datasets were added after the tracer** —
+`programacao_diaria`, `programacao_x_previsao` and `programacao_fluxo_controlado`
+(migration `0053_the_day_ahead_programme`; `docs/research/ons-datasets.md` §16–18
+for the evidence). All three are daily-split `Forecast` tables, and five decisions
+in them were measured rather than assumed:
+
+1. **`programacao_diaria` is aggregated at the adapter**, from ~204,000 plant rows
+   (~39 MB) a day to 768. The exclusion above rejected the plant grain, and this
+   honours it.
+2. **`published_at` is stamped 23:00 on D−1 Brasília, not read from the file.**
+   `Last-Modified` was measured on 21 files across the history: the first day's
+   file is stamped after the day it programmes has begun, which the
+   `published_at < valid_time` constraint forbids, and one `programacao_x_previsao`
+   file was rewritten seven weeks after its day. The stamp is later than every
+   ordinary day observed (18:16–22:47 BRT), so it claims less availability than
+   the alternative rather than more.
+3. **`cod_usinapdp` has no published crosswalk** and overlaps nothing in the
+   registry, so the PDP → subsystem mapping is *derived*, by matching each
+   entity's 48-half-hour programmed vector against `programacao_diaria`'s plant
+   vectors of the same day, and held as a versioned belief (`pdp_crosswalk`) in
+   candidate *sets* that later days can only narrow. Every total built on it
+   carries the share of programmed energy it covers.
+4. **`val_ordemmerito` is not stored.** It reads `999.00` on 612 rows across 22
+   thermal plants, and on 595 of them exceeds the plant's entire programmed
+   generation, so it cannot be a megawatt component of it; ONS's own components
+   also reconcile to the programmed value on only about half of thermal rows. A
+   sum of it would be fabricated megawatts.
+5. **`programacao_fluxo_controlado` is kept at element grain with no aggregate**,
+   because its value is signed and different elements are different corridors.
+   Its `cod_submercado` includes `RR`, which is stored as what it is.
+
+No feature reads any of the three. A feature block over them changes
+`feature_hash`, invalidates promoted artifacts against the live feature contract
+and forces a retrain, and is a separate decision.
 
 **One caveat is not yet closed.** The measured train/serve weather gap is
 per-point, but the feature is a capacity-weighted aggregate. Aggregation will

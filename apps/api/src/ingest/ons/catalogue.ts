@@ -155,6 +155,22 @@ export function selectResourceForMonth(
 const DAY_SUFFIX = /_(\d{4})_(\d{2})_(\d{2})\.(csv|parquet)$/;
 
 /**
+ * Whether a resource's file name begins with `prefix`, case-insensitively; true
+ * when no prefix is asked for.
+ *
+ * A package's resource list is not guaranteed to hold only its own files.
+ * `programacao_fluxo_controlado` lists `PROGRAMACAO_DIARIA_2026_07_21.parquet`,
+ * pointing into the `programacao_diaria` folder, among its own 700-odd days —
+ * and a selector that matches on the date suffix alone would offer that file as
+ * the flow dataset's 2026-07-21, or count the day as available on the strength
+ * of it. The prefix is the file's own name for what it is, so it is asked for by
+ * the datasets that have been seen to need it rather than defended everywhere.
+ */
+function hasPrefix(url: string, prefix: string | undefined): boolean {
+  return prefix === undefined || basename(url).startsWith(prefix.toLowerCase());
+}
+
+/**
  * Pick the resource for one reference day, for the datasets ONS splits daily.
  *
  * The DESSEM balances are the only daily split in scope — ~460 resources per
@@ -169,12 +185,14 @@ export function selectResourceForDay(
   month: number,
   day: number,
   formats: readonly ResourceFormat[] = PREFERRED_FORMATS,
+  filePrefix?: string,
 ): CatalogueResource {
   const suffix = `_${year}_${String(month).padStart(2, "0")}_${String(day).padStart(2, "0")}`;
   for (const format of formats) {
     const match = resources.find(
       (resource) =>
         resource.format === format &&
+        hasPrefix(resource.url, filePrefix) &&
         basename(resource.url).endsWith(`${suffix}.${format.toLowerCase()}`),
     );
     if (match) {
@@ -198,10 +216,11 @@ export function selectResourceForDay(
 export function availableResourceDays(
   resources: CatalogueResource[],
   formats: readonly ResourceFormat[] = PREFERRED_FORMATS,
+  filePrefix?: string,
 ): string[] {
   const days = new Set<string>();
   for (const resource of resources) {
-    if (!formats.includes(resource.format)) {
+    if (!(formats.includes(resource.format) && hasPrefix(resource.url, filePrefix))) {
       continue;
     }
     const match = DAY_SUFFIX.exec(basename(resource.url));

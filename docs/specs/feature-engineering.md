@@ -1642,8 +1642,12 @@ arithmetic above.
 - **Programmed exchange (`val_intercambioprogmwmed`).** Serve-time-only from
   2026-01, not backfilled. Excluded from both sets; a candidate third set once it
   has history.
-- **`programacao_diaria`** (per-plant programmed generation) and all plant-grain
-  features. The forecast grain is the subsystem.
+- **`programacao_diaria` at plant grain**, and all plant-grain features. The
+  forecast grain is the subsystem. The dataset itself is now ingested, summed to
+  (subsystem, technology) — `canonical_programmed_generation` and
+  `canonical_subsystem_programme_hour` — but **no feature reads it**: a block over
+  it would change `feature_hash` and force a retrain, and nothing here has decided
+  that it should.
 - **Per-plant reason attribution.** Ruled out upstream as an allocation presented
   as an observation; nothing here reverses the direction.
 - **MMGD as a separate modelled quantity.** It enters only inside

@@ -15,6 +15,11 @@ import { createInterchangeIngestor } from "./interchange-job.js";
 import { createEnergyBalanceIngestor } from "./job.js";
 import { createLoadIngestor } from "./load-job.js";
 import {
+  createControlledFlowIngestor,
+  createProgrammedGenerationIngestor,
+  createProgrammedVsForecastIngestor,
+} from "./programme-job.js";
+import {
   createRefreshSweep,
   type RefreshSweepPayload,
   type RefreshSweepResult,
@@ -97,6 +102,9 @@ export function createIngestDispatcher(
   const dailyLoad = createDailyLoadIngestor(shared);
   const dessem = createDessemIngestor(shared);
   const dessemGeneral = createDessemGeneralIngestor(shared);
+  const programmedGeneration = createProgrammedGenerationIngestor(shared);
+  const programmedVsForecast = createProgrammedVsForecastIngestor(shared);
+  const controlledFlow = createControlledFlowIngestor(shared);
   const load = createLoadIngestor(shared);
   const registry = createPlantRegistryIngestor(shared);
   const siga = createSigaIngestor(shared);
@@ -125,6 +133,18 @@ export function createIngestDispatcher(
         return { kind: task.kind, result: await dessem(task.payload, report) };
       case "dessem_general":
         return { kind: task.kind, result: await dessemGeneral(task.payload, report) };
+      case "programmed_generation":
+        return {
+          kind: task.kind,
+          result: await programmedGeneration(task.payload, report),
+        };
+      case "programmed_vs_forecast":
+        return {
+          kind: task.kind,
+          result: await programmedVsForecast(task.payload, report),
+        };
+      case "controlled_flow":
+        return { kind: task.kind, result: await controlledFlow(task.payload, report) };
       case "load":
         return { kind: task.kind, result: await load(task.payload, report) };
       case "siga":

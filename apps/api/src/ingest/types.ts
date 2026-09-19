@@ -39,6 +39,8 @@ export type RejectionReason =
   | "empty_value"
   /** A required column held something that is not a number. */
   | "unparsable_value"
+  /** `cod_submercado` was not one of the submarkets ONS publishes. */
+  | "unknown_submarket"
   /**
    * Reason and origin were not both present. They are one value object and are
    * populated together on every file scanned, so half-populated is an illegal
@@ -595,6 +597,141 @@ export interface DessemGeneralParse {
   halfHoursInCivilDay: number;
   /** `SIN` rows removed at the boundary. */
   aggregateRowsFiltered: number;
+}
+
+/** The four kinds of generation `programacao_diaria` distinguishes, in WattSteer's vocabulary. */
+export type ProgrammeTechnology = "WIND" | "SOLAR" | "HYDRO" | "THERMAL";
+
+/**
+ * One half hour of ONS's day-ahead programme, summed over every plant of one
+ * technology in one subsystem — `programacao_diaria` after aggregation.
+ *
+ * **Aggregated at the adapter and nowhere else.** The file is ~204,000 plant
+ * rows a day (~39 MB), and `docs/specs/feature-engineering.md` refuses the plant
+ * grain because the forecast grain is the subsystem. Summing here means nothing
+ * downstream can meet a plant row, which is the same guarantee the other
+ * adapters give about a padded subsystem code.
+ *
+ * MW, not MWh: ONS publishes MWmed over the half hour, and the half-hour → hour
+ * step of a canonical view **averages** it. Every component below `programmedMw`
+ * is `null` — never zero — when no plant in the group reported one: only thermal
+ * plants carry them, so a null on a wind row says "not a quantity this
+ * technology has", which a zero would not.
+ */
+export interface ProgrammedGenerationHalfHour {
+  subsystem: SubsystemCode;
+  technology: ProgrammeTechnology;
+  /** Start of the half hour the programme is about, UTC. */
+  validTime: Date;
+  /** `din_programacaodia`, `YYYY-MM-DD`. The `ForecastOrigin` run label. */
+  referenceDay: string;
+  /** How many plants the sums are over. A change in it explains a step in the totals. */
+  plantCount: number;
+  /** `val_geracaoprogramada`. */
+  programmedMw: number;
+  /**
+   * Plants of the group that reported `val_disponibilidade` and the components
+   * below — the same set, on the day measured: 14 thermal plants publish none of
+   * them. A sum over reporters understates a group that has non-reporters, so
+   * the count travels with it, and a reader compares it to `plantCount`.
+   */
+  reportingPlantCount: number;
+  /**
+   * `val_disponibilidade` — net availability for the settlement calculation.
+   * Null when no plant of the group reported one, never zero.
+   */
+  availabilityMw: number | null;
+  /** `val_inflexibilidade`. */
+  inflexibilityMw: number | null;
+  /** `val_uc` — unit commitment. */
+  unitCommitmentMw: number | null;
+  /** `val_razaoeletrica` — dispatched for electrical reasons. */
+  electricalReasonMw: number | null;
+  /** `val_geracaoenergetica` — energy guarantee. */
+  energyGuaranteeMw: number | null;
+  /** `val_exportacao`. */
+  exportMw: number | null;
+}
+
+/**
+ * One plant-grain 48-half-hour programme vector, kept for the PDP crosswalk and
+ * **never stored**. Only wind and solar are kept: those are the only two
+ * technologies `programacao_x_previsao` covers.
+ */
+export interface ProgrammePlantVector {
+  plantCode: string;
+  subsystem: SubsystemCode;
+  technology: Technology;
+  /** `val_geracaoprogramada` by patamar, index 0 = patamar 1. Null where a patamar is missing. */
+  programmedMw: (number | null)[];
+}
+
+/** What the `programacao_diaria` adapter produces from one reference day's file. */
+export interface ProgrammedGenerationParse {
+  rows: ProgrammedGenerationHalfHour[];
+  rejected: RejectedRow[];
+  columns: string[];
+  referenceDay: string;
+  halfHoursInCivilDay: number;
+  /** Plant rows read, before aggregation — the number the aggregation collapses. */
+  plantRowsRead: number;
+  plantVectors: ProgrammePlantVector[];
+}
+
+/**
+ * One half hour of one PDP entity — `programacao_x_previsao`. ONS's forecast of
+ * a wind or solar entity's output against what it then programmed for it.
+ *
+ * **Keyed by PDP code and carrying no subsystem.** The file has none, and the
+ * mapping to one is a separate, revisable belief (`PdpCrosswalkRow`), not a
+ * property of this fact.
+ */
+export interface ProgrammedVsForecastHalfHour {
+  pdpCode: string;
+  pdpName: string;
+  validTime: Date;
+  referenceDay: string;
+  /** `val_previsao` — ONS's own forecast of the entity's output, MW. */
+  forecastMw: number;
+  /** `val_programado` — what was programmed for it, MW. */
+  programmedMw: number;
+}
+
+export interface ProgrammedVsForecastParse {
+  rows: ProgrammedVsForecastHalfHour[];
+  rejected: RejectedRow[];
+  columns: string[];
+  referenceDay: string;
+  halfHoursInCivilDay: number;
+}
+
+/** The submarkets ONS uses on `cod_submercado`: the four subsystems, plus Roraima. */
+export type ControlledFlowSubmarket = SubsystemCode | "RR";
+
+/**
+ * One half hour of one controlled-flow element — `programacao_fluxo_controlado`.
+ *
+ * `loadMw` is **signed** (−1500…1500 MW on the day measured): the sign is the
+ * direction across the element, and the elements are different corridors, so
+ * no sum across them is a quantity. The adapter therefore publishes none.
+ */
+export interface ControlledFlowHalfHour {
+  element: string;
+  description: string;
+  /** `tip_terminal` — 1 or 2, the end of the element the value is read at. */
+  terminal: number;
+  submarket: ControlledFlowSubmarket;
+  validTime: Date;
+  referenceDay: string;
+  loadMw: number;
+}
+
+export interface ControlledFlowParse {
+  rows: ControlledFlowHalfHour[];
+  rejected: RejectedRow[];
+  columns: string[];
+  referenceDay: string;
+  halfHoursInCivilDay: number;
 }
 
 /**

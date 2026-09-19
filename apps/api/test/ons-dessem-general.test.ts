@@ -75,9 +75,23 @@ describe("the num_patamar dictionary", () => {
     }
   });
 
-  it("does not claim a resolution for programacao_x_previsao", () => {
+  // `programacao_x_previsao` was pinned `unverified` here until its patamares were
+  // counted — 628 entities x 48 = 30,144 rows on 2026-09-18 — and its two siblings
+  // were added with the same count. The guard's point stands: a resolution is
+  // claimed only for a dataset someone has counted, and the entry's header in
+  // `patamar.ts` says where the count is.
+  it("claims a half-hour resolution for the programme datasets only because they were counted", () => {
     expect(PATAMAR_RESOLUTION.dessem_general.kind).toBe("half_hour");
-    expect(PATAMAR_RESOLUTION.programacao_x_previsao.kind).toBe("unverified");
+    for (const dataset of [
+      "programacao_diaria",
+      "programacao_x_previsao",
+      "programacao_fluxo_controlado",
+    ] as const) {
+      expect(PATAMAR_RESOLUTION[dataset]).toEqual({
+        kind: "half_hour",
+        patamaresPerDay: 48,
+      });
+    }
   });
 });
 

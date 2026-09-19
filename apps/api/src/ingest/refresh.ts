@@ -6,6 +6,7 @@ import type { Execute, ReportProgress } from "../jobs/index.js";
 import { DEFAULT_AREA_CODES } from "./load-job.js";
 import { DESSEM_COVERAGE_START } from "./ons/dessem-balance.js";
 import { DESSEM_GENERAL_COVERAGE_START } from "./ons/dessem-general.js";
+import { PROGRAMME_COVERAGE_START } from "./ons/programme-daily.js";
 import type { RefreshTier } from "./resource-version.js";
 import {
   type IngestTask,
@@ -107,6 +108,21 @@ const WEATHER_COVERAGE_START_DAY = isoDay(
 const LIVE_MONTHS = 2;
 const LIVE_YEARS = 2;
 const LIVE_DAYS = 3;
+
+/**
+ * The three day-ahead programme ingestors, over one window.
+ *
+ * Each kind is spelled out here rather than looped over from a constant, and
+ * that is on purpose: `test/reachability.test.ts` asks whether every kind in the
+ * task union appears as a literal `kind: "…"` in this file, so that a source
+ * added to the union and never planned is red. A loop over an array of names
+ * plans the same three tasks and is invisible to that guard.
+ */
+const programmeTasks = (from: string, to: string): IngestTask[] => [
+  { kind: "programmed_generation", payload: { from, to } },
+  { kind: "programmed_vs_forecast", payload: { from, to } },
+  { kind: "controlled_flow", payload: { from, to } },
+];
 /** Periods closed recently enough to still move, swept weekly. */
 const RECENT_MONTHS = 3;
 const RECENT_YEARS = 2;
@@ -277,6 +293,10 @@ export function planRefresh(options: RefreshPlanOptions): IngestTask[] {
       kind: "dessem_general",
       payload: { from: daysAgo(now, LIVE_DAYS), to: isoDay(now) },
     });
+    // The three day-ahead programme datasets, each its own task for the reason
+    // the geral file is: they are separate ONS packages published and repaired
+    // independently, and "the flow file stopped" has to be able to fail alone.
+    tasks.push(...programmeTasks(daysAgo(now, LIVE_DAYS), isoDay(now)));
     carga(daysAgo(now, CARGA_LIVE_DAYS), isoDay(now));
     // The registry is overwritten in place twice a day and yesterday's cut is
     // unrecoverable, so it belongs in the tier that runs every cycle even
@@ -308,6 +328,10 @@ export function planRefresh(options: RefreshPlanOptions): IngestTask[] {
       kind: "dessem_general",
       payload: { from: daysAgo(now, RECENT_DAYS), to: daysAgo(now, LIVE_DAYS) },
     });
+    // The three day-ahead programme datasets, each its own task for the reason
+    // the geral file is: they are separate ONS packages published and repaired
+    // independently, and "the flow file stopped" has to be able to fail alone.
+    tasks.push(...programmeTasks(daysAgo(now, RECENT_DAYS), daysAgo(now, LIVE_DAYS)));
     carga(daysAgo(now, CARGA_RECENT_DAYS), daysAgo(now, CARGA_LIVE_DAYS));
     // Repair: re-ask the fortnight where a fallback or a late publication is
     // most likely to have left a slot answered by an older run than the one
@@ -337,6 +361,12 @@ export function planRefresh(options: RefreshPlanOptions): IngestTask[] {
     kind: "dessem_general",
     payload: { from: DESSEM_GENERAL_COVERAGE_START, to: daysAgo(now, RECENT_DAYS) },
   });
+  // Whole history in one task per dataset, as the DESSEM pair above: a settled
+  // day costs one `HEAD`, which is what makes the monthly pass a re-publication
+  // detector. The *first* pass is not cheap — `programacao_diaria` is ~39 MB a
+  // day — so an initial backfill is run by hand in monthly `from`/`to` slices
+  // rather than left to this task.
+  tasks.push(...programmeTasks(PROGRAMME_COVERAGE_START, daysAgo(now, RECENT_DAYS)));
 
   // Carga history: one year per pass, cycling. Re-fetching 10 years of
   // half-hourly load every month to find out that nothing moved is the one
