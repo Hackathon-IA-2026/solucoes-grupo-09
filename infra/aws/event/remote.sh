@@ -2,7 +2,7 @@
 # Runs on the event's Code Editor instance, as root, through SSM: bring the
 # stack to one image tag. deploy.sh uploads this file and calls it.
 #
-#   remote.sh <image tag> <transfer bucket>
+#   remote.sh <image tag> <transfer bucket> [region]
 #
 # Everything lives in /opt/wsdemo (compose project "wsdemo"): the data under
 # data/, the generated secrets in .env, the site password in .site-password.
@@ -14,7 +14,7 @@ exec 2>&1
 TAG="${1:?usage: remote.sh <image tag> <bucket>}"
 BUCKET="${2:?usage: remote.sh <image tag> <bucket>}"
 DIR=/opt/wsdemo
-REGION=us-east-1
+REGION="${3:-us-east-1}"
 
 # Swap, once: the stack's limits leave the host its memory, and the swap is the
 # margin under them (see compose.aws.yml and ../compose/up.sh).
@@ -91,10 +91,19 @@ sed -e "s|__SITE_USER__|wattsteer|" -e "s|__SITE_HASH__|$HASH|" Caddyfile.templa
 C="docker compose --project-name wsdemo --env-file $DIR/.env -f $DIR/compose.yml"
 $C up -d postgres redis
 $C --profile tools run --rm migrate 2>&1 | tail -1
-$C up -d --remove-orphans
-sleep 30
+# --wait fails the deploy when a service does not become healthy (or exits),
+# rather than reporting success over a stack that is not answering.
+status=0
+$C up -d --remove-orphans --wait --wait-timeout 300 || status=$?
 $C ps --format '{{.Service}} {{.Image}} {{.Status}}'
+
+# The RAG corpus is not in the images: a fresh instance starts with none.
+chunks="$($C exec -T postgres psql -U wattsteer -d wattsteer -Atc \
+  "select count(*) from rag.chunk" 2>/dev/null || echo 0)"
+echo "RAG corpus: ${chunks:-0} chunks"
+[ "${chunks:-0}" -gt 0 ] || echo "WARNING: the RAG has no corpus here; restore it (README: The RAG corpus)."
 
 # Keep only the images this tag runs.
 docker images --format '{{.Repository}}:{{.Tag}}' | grep '^local/wattsteer/' | grep -v ":$TAG\$" \
   | xargs -r docker image rm >/dev/null 2>&1 || true
+exit "$status"

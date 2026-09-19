@@ -51,6 +51,37 @@ Only `NVIDIA_API_KEYS`, `GROQ_API_KEYS` (the RAG) and `XAI_API_KEY` (the voice
 agent) are read; an empty or missing line leaves the instance's value as it
 was. Delete the file afterwards.
 
+## The RAG corpus
+
+The corpus (documents, pages, chunks with their embeddings) is not in the
+images, and indexing on this host would take hours of its one CPU and the
+provider quota. It is built locally and restored here once; later deploys keep
+it, and `remote.sh` prints the chunk count at the end of every deploy (a
+warning when it is zero).
+
+To restore it, from the local RAG database (`apps/rag`'s Postgres):
+
+```sh
+# 1. Plain SQL, not -Fc: the instance runs Postgres 16 and a newer pg_dump's
+#    archive format does not restore there. Past answers are left out.
+docker exec <local-pg-container> pg_dump -U wattsteer -d <rag-db> -Fp --no-owner -n rag -n public \
+  --exclude-table-data=rag.evidence --exclude-table-data=rag.llm_call \
+  --exclude-table-data=rag.retrieval_log --exclude-table-data=rag.job \
+  | grep -v -E '^SET transaction_timeout|^CREATE SCHEMA public;|^COMMENT ON SCHEMA public|^\\(un)?restrict ' \
+  | gzip -1 > rag.sql.gz
+
+# 2. Through a private bucket, then replace the instance's rag schema.
+A=infra/aws/scripts/aws.sh
+B=wattsteer-rag-$(openssl rand -hex 4)
+$A s3 mb s3://$B && $A s3 cp - s3://$B/rag.sql.gz < rag.sql.gz
+# run on the instance (SSM, as below):
+#   cd /opt/wsdemo && aws s3 cp s3://$B/rag.sql.gz - | gunzip | \
+#   docker compose --project-name wsdemo --env-file .env -f compose.yml exec -T postgres \
+#     psql -U wattsteer -d wattsteer -v ON_ERROR_STOP=1 -q \
+#     -c 'DROP SCHEMA IF EXISTS rag CASCADE; DROP TABLE IF EXISTS public.rag_migration;' -f -
+$A s3 rb --force s3://$B
+```
+
 ## The site password
 
 The whole site is behind basic auth (user `wattsteer`). The password is

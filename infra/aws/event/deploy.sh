@@ -78,11 +78,13 @@ put "$HERE/remote.sh" remote.sh
 printf 'https://%s' "$(cut -d/ -f3 <<<"$URL")" > "$WORK/out/public-url"
 put "$WORK/out/public-url" public-url
 if [ -n "${EVENT_KEYS_FILE:-}" ]; then
-  put "$EVENT_KEYS_FILE" keys.env
+  # Filtered here, so nothing else in the file reaches the bucket.
+  grep -E '^(NVIDIA_API_KEYS|GROQ_API_KEYS|XAI_API_KEY)=.' "$EVENT_KEYS_FILE" > "$WORK/out/keys.env" || true
+  put "$WORK/out/keys.env" keys.env
 fi
 
 echo "== deploying on $INSTANCE"
-command="aws s3 cp --quiet s3://$BUCKET/remote.sh /tmp/wattsteer-remote.sh --region $AWS_DEFAULT_REGION && bash /tmp/wattsteer-remote.sh $TAG $BUCKET; status=\$?; rm -f /tmp/wattsteer-remote.sh; exit \$status"
+command="aws s3 cp --quiet s3://$BUCKET/remote.sh /tmp/wattsteer-remote.sh --region $AWS_DEFAULT_REGION && bash /tmp/wattsteer-remote.sh $TAG $BUCKET $AWS_DEFAULT_REGION; status=\$?; rm -f /tmp/wattsteer-remote.sh; exit \$status"
 params="$(python3 -c 'import json,sys; print(json.dumps({"commands": [sys.argv[1]], "executionTimeout": ["1800"]}))' "$command")"
 id="$("$AWS" ssm send-command --instance-ids "$INSTANCE" --document-name AWS-RunShellScript \
   --parameters "$params" --query Command.CommandId --output text)"
