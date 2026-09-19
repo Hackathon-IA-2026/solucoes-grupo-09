@@ -30,6 +30,7 @@ from .gateway.router import Gateway, QuotaExhausted
 from .retrieve import Hit, codes_in, search
 
 SCHEMA_VERSION = "1.0"
+MAX_QUOTE_CHARS = 600
 
 # Ported from packages/core/src/causality.ts so both sides ban the same words.
 CAUSALITY_BANNED_LEMMAS = (
@@ -63,7 +64,9 @@ claim in Portuguese.
 Absolute rules:
 - Use only the passages provided. Do not use your own knowledge.
 - Every claim needs at least one citation, and the citation must be a span
-  copied literally from the document, between 20 and 300 characters.
+  copied literally from the document, between 20 and 600 characters. In a
+  paragraph, copy the whole sentence that states the value, from its subject
+  to its number.
 - Do not write any number that does not appear in the quoted span.
 - Describe what the document records or establishes. Never write that something
   caused, provoked or explained something else.
@@ -335,7 +338,12 @@ def _accepted_citation(hit: Hit, chunk_id: str, quote: str, assembled: bool, loc
             "table": locator.get("table"),
             "row": locator.get("row"),
         },
-        "quote": quote[:300],
+        # The gates below read this copy, so it is the whole span the model
+        # quoted, up to the prompt's own limit, with the page layout's runs of
+        # spaces collapsed so they do not spend it. Cutting it at 300 dropped the
+        # "Prazo: 31/12/2023" that closes an action of the RAP, and a claim
+        # about the deadline was refused as a number not in its quote.
+        "quote": re.sub(r"\s+", " ", quote).strip()[:MAX_QUOTE_CHARS],
         "assembled": assembled,
         "url": hit.url,
         "sha256": hit.sha256,
@@ -358,6 +366,13 @@ def _numbers_not_quoted(claim: str, citations: list[dict], restated: str = "") -
     number that appears in neither the record nor the quoted text is refused.
     """
     quoted = {_number_key(number) for citation in citations for number in numbers_in(citation["quote"])}
+    # The item a citation points at ("6.2.1") is printed with it, so naming it
+    # in the claim invents nothing.
+    quoted |= {
+        _number_key(number)
+        for citation in citations
+        for number in numbers_in((citation.get("locator") or {}).get("section") or "")
+    }
     quoted |= {_number_key(number) for number in numbers_in(restated)}
     return [
         GateFailure("number_not_in_quote", number)
@@ -563,7 +578,14 @@ def _candidate(hit: Hit) -> dict:
 def _passage(hit: Hit) -> str:
     document = f"{hit.external_id or hit.source} {hit.revision or ''}".strip()
     published = hit.published_at.date().isoformat() if hit.published_at else "on an undeclared date"
-    where = f"page {hit.locator['page']}" if hit.locator.get("page") else hit.section_path or ""
+    # Both: a daily report names its submarket only in the section heading
+    # ("Submercado Sul:"), lines above the sentence that states the reduction,
+    # and a header with the page alone hid which submarket the passage is about.
+    where = ", ".join(
+        part
+        for part in (f"page {hit.locator['page']}" if hit.locator.get("page") else "", hit.section_path or "")
+        if part
+    )
     header = f"Document: {hit.title} ({document}), published {published}, {where}"
     return f"[chunk_id: {hit.chunk_id}]\n{header}\n{hit.text[:2200]}"
 
