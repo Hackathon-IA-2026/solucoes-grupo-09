@@ -107,7 +107,9 @@ export async function readEvidence(
   query: { subsystem: string; date: string },
   signal?: AbortSignal,
 ): Promise<EvidenceCitation | null> {
-  const url = new URL("/v1/curtailment/evidence", baseUrl);
+  // Relative, as in `packages/core`'s client: an absolute path would drop an
+  // origin's own path, and the API can be served under one (`/app/8081`).
+  const url = new URL("v1/curtailment/evidence", `${baseUrl.replace(/\/$/, "")}/`);
   url.searchParams.set("subsystem", query.subsystem);
   url.searchParams.set("date", query.date);
   const response = await fetch(url, { signal }).catch(() => null);

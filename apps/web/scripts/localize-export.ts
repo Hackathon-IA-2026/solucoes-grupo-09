@@ -156,7 +156,7 @@ for (const file of htmlFiles(DIST)) {
   // file the shell already links.
   if (tree) {
     after = after.replace(
-      /(<link[^>]*rel="manifest"[^>]*href=")\/manifest\.webmanifest(")/,
+      /(<link[^>]*rel="manifest"[^>]*href="[^"]*)\/manifest\.webmanifest(")/,
       `$1/manifest.${tree}.webmanifest$2`,
     );
   }

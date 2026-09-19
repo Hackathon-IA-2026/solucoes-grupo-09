@@ -22,8 +22,10 @@
  * two `window.Cesium` objects whose classes fail each other's `instanceof`.
  */
 
+import { BASE_PATH } from "@/lib/config";
+
 /** Where `vendor-cesium.ts` puts the distribution, as the export serves it. */
-const BASE_URL = "/cesium/";
+const BASE_URL = `${BASE_PATH}/cesium/`;
 
 /**
  * The typing is deliberately thin.
