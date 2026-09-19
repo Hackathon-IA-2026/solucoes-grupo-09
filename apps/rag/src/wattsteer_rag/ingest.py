@@ -12,12 +12,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .chunk import chunk_pages
+from .columns import label_columns
 from .config import settings
 from .db import Database
 from .gateway.adapters import Block
 from .gateway.router import Gateway
 from .index import index_document
-from .parse import ParsedPage, blocks_to_markdown, parse_html_tables, parse_pdf
+from .parse import TEXT_LAYER_PARSER, ParsedPage, blocks_to_markdown, parse_html_tables, parse_pdf
 
 
 @dataclass
@@ -106,14 +107,8 @@ async def rechunk_document(db: Database, gateway: Gateway, document) -> IngestRe
         await conn.execute("DELETE FROM rag.chunk WHERE document_id = $1", document["id"])
         rebuilt = []
         for page in pages:
-            # Rebuilt from the blocks the parser returned, so a change in how
-            # tables are rendered does not require paying for the pages again.
-            blocks = [
-                Block(b.get("type", "Text"), b.get("text", ""), b.get("bbox")) for b in page["blocks"] or []
-            ]
-            markdown = page["markdown"]
-            if blocks:
-                markdown, has_tables = blocks_to_markdown(blocks)
+            markdown, has_tables = _rebuilt_markdown(page)
+            if markdown != page["markdown"]:
                 await conn.execute(
                     "UPDATE rag.page SET markdown = $3, has_tables = $4"
                     " WHERE document_id = $1 AND page_no = $2",
@@ -127,6 +122,23 @@ async def rechunk_document(db: Database, gateway: Gateway, document) -> IngestRe
     report.document = document["external_id"] or document["title"][:28]
     report.parsers = tuple(sorted({page["parser"] for page in pages}))
     return report
+
+
+def _rebuilt_markdown(page) -> tuple[str, bool]:
+    """A stored page as the current readers would render it, at no parsing cost.
+
+    Vision pages are rebuilt from the blocks the parser returned, so a change in
+    how tables are rendered does not require paying for the pages again.
+    Text-layer pages keep no blocks; their stored text is the text layer
+    itself, so the text-layer rules (column names, columns.py) are applied to
+    it again. Without this a stored IPDO kept its unlabelled storage table
+    until the whole PDF was read again."""
+    blocks = [Block(b.get("type", "Text"), b.get("text", ""), b.get("bbox")) for b in page["blocks"] or []]
+    if blocks:
+        return blocks_to_markdown(blocks)
+    if page["parser"] == TEXT_LAYER_PARSER:
+        return label_columns(page["markdown"]), False
+    return page["markdown"], False
 
 
 async def _store_pages(db: Database, document_id, pages: list[ParsedPage], keep: list[int] = ()) -> None:
