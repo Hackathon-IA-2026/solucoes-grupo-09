@@ -62,6 +62,7 @@ async def index_document(
             " text, tokens) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8)"
             " ON CONFLICT (document_id, ordinal) DO UPDATE SET text = excluded.text,"
             " locator = excluded.locator, section_path = excluded.section_path,"
+            " page_start = excluded.page_start, page_end = excluded.page_end, tokens = excluded.tokens,"
             # A vector describes the text it was made from. When the text changes
             # the old vector is not stale, it is wrong, so it goes back in the queue.
             " embedding = CASE WHEN rag.chunk.text IS DISTINCT FROM excluded.text"
