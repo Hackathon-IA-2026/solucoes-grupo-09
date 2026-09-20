@@ -19,8 +19,9 @@
 # ## What it does not do
 #
 # It does not touch `main`, it does not restart a service, and it writes no
-# table other than the three forecast tables it names. The RAG corpus has its
-# own recipe (`infra/aws/event/README.md`) and is not state this script owns.
+# table other than the three forecast tables it names. The RAG corpus is state
+# too, but a different decision — a target that indexes on its own may hold a
+# newer one — so it has its own script, `ship-rag.sh`.
 set -euo pipefail
 
 # `--from-release <tag>` fetches the bundle from the repository's own releases
