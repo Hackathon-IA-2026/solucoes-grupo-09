@@ -26,6 +26,7 @@ import {
 } from "@wattsteer/ui";
 import { Link } from "expo-router";
 import { Platform, Text, View } from "react-native";
+import { AnswerFeedback } from "@/components/app/answer-feedback";
 import { QuestionCard } from "@/components/app/figures/question-cards";
 import type { Scope } from "@/components/app/map/scope-bar";
 import { riskColor } from "@/components/charts/risk-color";
@@ -412,6 +413,21 @@ export function SettledQuestionRow({
               },
             )}
           </Link>
+          {/*
+            Under the citation, not under the card: the verdict is about the
+            passage the corpus chose, which is the answer a reader can be wrong
+            about. The figures above it are measurements, and there is nothing
+            to disagree with in a measurement.
+          */}
+          <AnswerFeedback
+            surface="evidence"
+            subject={{
+              documentCode: evidence.documentCode,
+              ...(evidence.page === null ? {} : { documentPage: evidence.page }),
+              targetDate: reasonDate,
+            }}
+            testID="evidence-feedback"
+          />
         </View>
       )}
     </View>

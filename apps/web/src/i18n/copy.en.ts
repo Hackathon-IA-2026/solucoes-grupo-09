@@ -816,6 +816,28 @@ export const en = {
      * and `unknown_run` with "there are two runs" — and writing them in the
      * third person would spend that separation on nothing.
      */
+    /**
+     * The two answers a reader leaves about one answer of ours.
+     *
+     * Written as filing and never as a promise: what the reader marks here
+     * changes nothing on screen, enters no calculation and does not correct the
+     * figure they just read. It is kept for the next retrain, and the sentence
+     * says so — a button that looks like it acts and does not is worse than no
+     * button at all.
+     */
+    feedback: {
+      question: "Did this answer help?",
+      up: "Yes, it helped",
+      down: "It did not help",
+      reasonLabel: "What was wrong with it?",
+      reasonPlaceholder: "A sentence or two. It is kept for the next retrain.",
+      send: "Send",
+      cancel: "Cancel",
+      sending: "Sending…",
+      filed: "Filed. It goes to the next retrain; this screen does not change.",
+      failed: "It could not be recorded. Nothing was saved; try again.",
+      tooLong: "That is over the 400-character limit.",
+    },
     voice: {
       /** The header control. Short, because it sits beside `PT / EN`. */
       /** The IDLE pill — the invitation, written out in full exactly once. */

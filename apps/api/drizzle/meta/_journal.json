@@ -365,6 +365,13 @@
       "when": 1789520321993,
       "tag": "0051_the_latest_settled_hour_is_a_read",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1789905438698,
+      "tag": "0052_an_opinion_about_an_answer",
+      "breakpoints": true
     }
   ]
 }

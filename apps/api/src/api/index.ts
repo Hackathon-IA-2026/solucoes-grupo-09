@@ -14,6 +14,7 @@ import { curtailmentRoutes } from "./curtailment.js";
 import { dashboardAuthorized, dashboardDecision } from "./dashboard-guard.js";
 import { diagnosisRoutes } from "./diagnosis.js";
 import { evidenceRoutes } from "./evidence.js";
+import { createFeedbackRoutes } from "./feedback.js";
 import { forecastRoutes } from "./forecast.js";
 import { gridRoutes } from "./grid.js";
 import { ingestHealth } from "./ingest-health.js";
@@ -260,6 +261,7 @@ export const app = new Elysia()
   .use(gridRoutes)
   .use(curtailmentRoutes)
   .use(evidenceRoutes)
+  .use(createFeedbackRoutes({ db: database?.db }))
   .use(forecastRoutes)
   .use(plantRoutes)
   .use(optimizeRoutes)

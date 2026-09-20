@@ -669,6 +669,28 @@ export const pt: Copy = {
      * relatando. `execute.ts` separa os códigos pelo que quem ouve precisa
      * ouvir, e escrevê-los na terceira pessoa gastaria essa separação à toa.
      */
+    /**
+     * As duas respostas que o time deixa sobre uma resposta do produto.
+     *
+     * Escritas como um arquivamento e nunca como uma promessa: o que o leitor
+     * marca aqui não muda nada na tela, não entra em nenhuma conta e não
+     * corrige o número que ele acabou de ver. Fica guardado para o próximo
+     * treino, e a frase diz isso, porque um botão que parece agir e não age é
+     * pior do que botão nenhum.
+     */
+    feedback: {
+      question: "Esta resposta ajudou?",
+      up: "Sim, ajudou",
+      down: "Não ajudou",
+      reasonLabel: "O que estava errado?",
+      reasonPlaceholder: "Escreva em uma ou duas frases. Fica guardado para o próximo treino.",
+      send: "Enviar",
+      cancel: "Cancelar",
+      sending: "Enviando…",
+      filed: "Anotado. Isso vai para o próximo treino, não muda esta tela.",
+      failed: "Não deu para registrar. Nada foi salvo; tente de novo.",
+      tooLong: "Passou do limite de 400 caracteres.",
+    },
     voice: {
       idle: "Pergunte ao WattSteer",
       panelTitle: "WATTSTEER AI",
