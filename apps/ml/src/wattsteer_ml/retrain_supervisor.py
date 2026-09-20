@@ -193,7 +193,13 @@ async def _supervise_retrain(run: RetrainRun, argv: list[str]) -> None:
         )
         returncode = await child.wait()
         if returncode != 0:
-            logger.error("retrain %s exited %s: %s", run.run_id, returncode, stderr_tail)
+            logger.error(
+                "retrain %s exited %s: %s | stdout: %s",
+                run.run_id,
+                returncode,
+                stderr_tail,
+                out[-2_000:],
+            )
             run.failure = (
                 "RETRAIN_FAILED",
                 f"the retrain process exited {returncode}",
@@ -203,6 +209,10 @@ async def _supervise_retrain(run: RetrainRun, argv: list[str]) -> None:
                     # The tail, not the whole of it: a LightGBM traceback is long
                     # and this body is read by a job log, not by a debugger.
                     "stderr": stderr_tail.decode("utf-8", "replace")[-2_000:],
+                    # The report is on stdout, and a run that decided no lane
+                    # exits 1 with every lane's reason in it and nothing on
+                    # stderr. Without this the body said "exited 1" and no more.
+                    "stdout": out.decode("utf-8", "replace")[-2_000:],
                 },
             )
             run.status = "failed"
