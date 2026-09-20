@@ -1107,7 +1107,11 @@ async def backfill_holdout(
         _BACKFILLING.discard(key)
     if child.returncode != 0:
         logger.error(
-            "holdout backfill %s exited %s: %s", key or "latest", child.returncode, err
+            "holdout backfill %s exited %s: %s | stdout: %s",
+            key or "latest",
+            child.returncode,
+            err,
+            out[-2_000:],
         )
         return _refusal(
             500,
@@ -1116,6 +1120,9 @@ async def backfill_holdout(
             {
                 "fold_id": request.fold_id,
                 "stderr": err.decode("utf-8", "replace")[-2_000:],
+                # Each lane's reason is in the report, which is on stdout: a
+                # run that reconstructed no lane exits 1 with stderr empty.
+                "stdout": out.decode("utf-8", "replace")[-2_000:],
             },
         )
     try:
