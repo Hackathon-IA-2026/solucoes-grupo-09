@@ -68,7 +68,48 @@ export const REPLAY_DAYS: readonly ReplayCandidateDay[] = [
   { id: "2026-08-11-ne", date: "2026-08-11", subsystem: "NE" },
 ] as const;
 
-/** The selected day, or the first one. Never a throw on a hand-edited URL. */
+/**
+ * An `episode` id: a civil date and a subsystem, `2026-08-11-ne`.
+ *
+ * The picker's days come from the gateway now (`use-replay-days.ts`), so the
+ * id has to round-trip any date the deployment can answer rather than the four
+ * this file names. The four remain what the screen lands on and what the tests
+ * pin; they are no longer the set of ids that exist.
+ */
+const REPLAY_DAY_ID = /^(\d{4}-\d{2}-\d{2})-(n|ne|s|se)$/;
+
+/**
+ * Whether the URL's `episode` is an id at all — a real date and a subsystem.
+ *
+ * The calendar is checked, not just the shape: `2026-13-99-ne` matches the
+ * pattern and is not a day, and a screen that forwarded it would spend a
+ * request to be told so. Never a verdict about whether that day can be shown,
+ * which is the gateway's to give.
+ */
+export function isReplayDayId(id: string): boolean {
+  const parsed = REPLAY_DAY_ID.exec(id);
+  if (parsed === null) {
+    return false;
+  }
+  // Round-tripped, because `new Date("2026-02-30")` is the 2nd of March.
+  const date = new Date(`${parsed[1]}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === parsed[1];
+}
+
+/** The day an id names, or the first fixture. Never a throw on a hand-edited URL. */
 export function replayDay(id: string): ReplayCandidateDay {
-  return REPLAY_DAYS.find((day) => day.id === id) ?? REPLAY_DAYS[0];
+  const named = REPLAY_DAYS.find((day) => day.id === id);
+  if (named !== undefined) {
+    return named;
+  }
+  if (!isReplayDayId(id)) {
+    return REPLAY_DAYS[0];
+  }
+  const parsed = REPLAY_DAY_ID.exec(id) as RegExpExecArray;
+  return { id, date: parsed[1], subsystem: parsed[2].toUpperCase() as SubsystemCode };
+}
+
+/** The id for a day the gateway named. The one spelling, written once. */
+export function replayDayId(date: string, subsystem: SubsystemCode): string {
+  return `${date}-${subsystem.toLowerCase()}`;
 }

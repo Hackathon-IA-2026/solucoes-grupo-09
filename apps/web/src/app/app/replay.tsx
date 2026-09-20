@@ -225,7 +225,7 @@ export default function TimeMachineScreen() {
   const serving = useServing();
   const params = useAppParams();
   const day = replayDay(params.episode);
-  const days = useReplayDays();
+  const days = useReplayDays(day.subsystem);
   // The replayed day is the selection, so the scenario in the address bar
   // follows it — and it is validated under the replay's own `target_date`
   // clause, which is the shape and then somebody else's judgement. The window
@@ -293,9 +293,7 @@ export default function TimeMachineScreen() {
     reader can already see the day they are on.
   */
   const offered =
-    days.status === "known"
-      ? days.viewable
-      : REPLAY_DAYS.filter((candidate) => candidate.id === day.id);
+    days.status === "known" ? days.viewable : [day];
 
   const picker = (
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
