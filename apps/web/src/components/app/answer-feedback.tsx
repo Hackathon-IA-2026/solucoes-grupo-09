@@ -81,9 +81,35 @@ export function AnswerFeedback({
   );
 
   return (
-    <View testID={testID ?? "answer-feedback"} style={{ gap: space.sm }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-        <Text style={{ ...type$.bodySmall, color: colors.inkMuted }}>
+    /*
+      `flexShrink: 1` and `minWidth: 0`, because this lands in a flex row on
+      three screens and react-native-web defaults the shrink to 0 (ADR-0001):
+      without them the block sizes to its max-content — 343px beside the Explain
+      heading, in a 280px box at 320px width — and wrapping the row inside it
+      changes nothing, since the parent never asks for less.
+    */
+    <View
+      testID={testID ?? "answer-feedback"}
+      style={{ gap: space.sm, flexShrink: 1, minWidth: 0 }}
+    >
+      {/*
+        Wraps, and the question shrinks with it. The row is a sentence and two
+        pills — 343px of it in a 280px box at 320px width, where it clipped the
+        second thumb and was the page's only horizontal overflow
+        (`no-horizontal-overflow.spec.ts` names the element). react-native-web
+        defaults `flexShrink` to 0 (ADR-0001), so the row sized to its content
+        and never gave any back; wrapping alone is not enough, because the
+        question is one long inline that has to be allowed to break first.
+      */}
+      <View
+        style={{
+          flexDirection: "row",
+          flexWrap: "wrap",
+          alignItems: "center",
+          gap: space.sm,
+        }}
+      >
+        <Text style={{ ...type$.bodySmall, color: colors.inkMuted, flexShrink: 1 }}>
           {copy.question}
         </Text>
         {thumb(
