@@ -768,6 +768,32 @@ const OPTIMIZATION_RESULT = specExample("11-optimization-result.json");
 */
 const REPLAY = specExample("12-replay.json");
 
+/**
+ * `GET /v1/meta` with **nothing promoted on either lane** — the deployment's
+ * state today, and the one that makes the chrome badge say so.
+ *
+ * Opt-in rather than always served, because the specs written before it were
+ * written against a refused `/v1/meta`, and a badge appearing in all of them at
+ * once would be changing what they measure while claiming to fix a header.
+ *
+ * It exists because a layout defect hid behind that refusal: with no lanes read
+ * the badge is short, and `appbar-stays-inside-itself.spec.ts` needs it at its
+ * longest. The body is the spec's own example with the lane state replaced, so
+ * the shape stays the contract's.
+ */
+const META_NOTHING_PROMOTED = (() => {
+  const meta = specExample("01-meta.json") as {
+    model: { lanes: { lane: string; state: string; artifact_id: string }[] };
+  };
+  return {
+    ...meta,
+    model: {
+      ...meta.model,
+      lanes: meta.model.lanes.map((lane) => ({ ...lane, state: "present_unpromoted" })),
+    },
+  };
+})();
+
 /** The three reads that need no model, by the pathname they are served at. */
 const OBSERVED_BY_PATH: Record<string, unknown> = {
   "/v1/grid/now": GRID_NOW,
@@ -816,10 +842,26 @@ export async function routeGateway(
      * against — that is the common state and the one Explain must draw.
      */
     reasons = false,
-  }: { forecast: boolean; reasons?: boolean },
+    /**
+     * What `/v1/meta` answers.
+     *
+     * `"unstubbed"` leaves it to the catch-all refusal, which is what every
+     * spec written before this option saw. `"nothingPromoted"` serves the
+     * deployment's real state, which is what puts the badge on the chrome.
+     */
+    serving = "unstubbed",
+  }: {
+    forecast: boolean;
+    reasons?: boolean;
+    serving?: "unstubbed" | "nothingPromoted";
+  },
 ): Promise<void> {
   await page.route("http://localhost:3000/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (serving === "nothingPromoted" && path === "/v1/meta") {
+      await route.fulfill({ json: META_NOTHING_PROMOTED });
+      return;
+    }
     if (reasons && path === "/v1/curtailment/reasons") {
       await route.fulfill({ json: CURTAILMENT_REASONS_WITH_ROWS });
       return;

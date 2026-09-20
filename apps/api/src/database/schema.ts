@@ -3615,7 +3615,6 @@ export const diagnosisPublicationRefusal = pgTable(
   ],
 );
 
-
 /**
  * What a reader thought of one answer, and where that answer was.
  *

@@ -21,29 +21,17 @@
       "$ref": "#/$defs/feedback_verdict"
     }
   },
-  "required": [
-    "id",
-    "recorded_at",
-    "surface",
-    "verdict"
-  ],
+  "required": ["id", "recorded_at", "surface", "verdict"],
   "additionalProperties": false,
   "$defs": {
     "feedback_surface": {
       "type": "string",
-      "enum": [
-        "forecast",
-        "replay",
-        "evidence"
-      ],
+      "enum": ["forecast", "replay", "evidence"],
       "description": "Which kind of answer was judged. Closed, because a fourth surface is a fourth thing to retrain on and arrives with its own subject fields rather than as a free string nobody can group by."
     },
     "feedback_verdict": {
       "type": "string",
-      "enum": [
-        "up",
-        "down"
-      ],
+      "enum": ["up", "down"],
       "description": "Two values and no middle: a three-point scale collects a middle that means nothing to a retrain, and a star rating collects a number whose units nobody agrees on."
     },
     "feedback_subject": {
@@ -99,18 +87,11 @@
         },
         "locale": {
           "type": "string",
-          "enum": [
-            "pt",
-            "en"
-          ],
+          "enum": ["pt", "en"],
           "description": "Which dictionary the reader was reading, so the sentence can be read back in the register it was written in."
         }
       },
-      "required": [
-        "surface",
-        "verdict",
-        "locale"
-      ],
+      "required": ["surface", "verdict", "locale"],
       "additionalProperties": false
     }
   }

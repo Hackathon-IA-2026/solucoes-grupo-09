@@ -34,7 +34,11 @@ describe("the days the picker offers", () => {
       "2026-07-02",
       "2024-11-05",
     ]);
-    expect(offered[0]).toEqual({ id: "2026-09-19-ne", date: "2026-09-19", subsystem: "NE" });
+    expect(offered[0]).toEqual({
+      id: "2026-09-19-ne",
+      date: "2026-09-19",
+      subsystem: "NE",
+    });
   });
 
   it("leaves out the dead ends, which is the point of asking", () => {
@@ -42,8 +46,16 @@ describe("the days the picker offers", () => {
     // was written by hand.
     const offered = offeredDays(
       calendar(
-        { date: "2026-09-20", replayable: false, refusal: { code: "REPLAY_FORECAST_UNAVAILABLE" } },
-        { date: "2026-09-21", replayable: false, refusal: { code: "REPLAY_DAY_NOT_SETTLED" } },
+        {
+          date: "2026-09-20",
+          replayable: false,
+          refusal: { code: "REPLAY_FORECAST_UNAVAILABLE" },
+        },
+        {
+          date: "2026-09-21",
+          replayable: false,
+          refusal: { code: "REPLAY_DAY_NOT_SETTLED" },
+        },
         { date: "2026-09-18", replayable: true },
       ),
       "S",
@@ -52,7 +64,13 @@ describe("the days the picker offers", () => {
   });
 
   it("reads a shape it did not expect as no days at all", () => {
-    for (const body of [null, undefined, {}, { days: "soon" }, { days: [{}, { date: 7 }] }]) {
+    for (const body of [
+      null,
+      undefined,
+      {},
+      { days: "soon" },
+      { days: [{}, { date: 7 }] },
+    ]) {
       expect(offeredDays(body, "NE")).toEqual([]);
     }
   });
@@ -77,7 +95,13 @@ describe("an episode id", () => {
   });
 
   it("falls back to the first fixture on anything that is not an id", () => {
-    for (const bad of ["", "yesterday", "2026-08-05", "2026-08-05-sin", "2026-13-99-ne"]) {
+    for (const bad of [
+      "",
+      "yesterday",
+      "2026-08-05",
+      "2026-08-05-sin",
+      "2026-13-99-ne",
+    ]) {
       expect(isReplayDayId(bad)).toBe(false);
       expect(replayDay(bad).id).toBe("2024-11-05-ne");
     }

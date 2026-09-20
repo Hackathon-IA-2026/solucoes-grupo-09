@@ -216,7 +216,18 @@ export default function Root({ children }: PropsWithChildren) {
                   flex-shrink: 0 !important;
                   flex-basis: auto !important;
                 }
-                [data-appbar-right] { order: 3; }
+                /* The zero basis the inline style no longer carries: at
+                   this width the three are equal thirds, which is what centres
+                   the toggle. Below it the group keeps its content's basis, so
+                   the row breaks before it rather than laying the day and the
+                   language switch over the badge — the defect the note in
+                   app-shell.tsx records. */
+                [data-appbar-right] {
+                  order: 3;
+                  flex-grow: 1 !important;
+                  flex-shrink: 1 !important;
+                  flex-basis: 0% !important;
+                }
               }
 
               /* Hero headline: the large variant at >= 900px of the hero's own
