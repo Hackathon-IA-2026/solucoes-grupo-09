@@ -60,6 +60,9 @@ export function AnswerFeedback({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      // The selection is a colour and a border, which a screen reader cannot
+      // see: without this, both thumbs keep reading the same after a press.
+      accessibilityState={{ selected: active, disabled: state.status === "sending" }}
       disabled={state.status === "sending"}
       onPress={onPress}
       style={{
@@ -135,11 +138,17 @@ export function AnswerFeedback({
             {thumb(
               copy.send,
               () => {
-                // The verdict is already filed; this files the sentence beside
-                // it as a second row, which is why leaving without writing
-                // costs the reader nothing.
-                void file("down", reason);
+                /*
+                  The verdict is already filed, so this row exists only to carry
+                  the sentence. Pressing Send with an empty box used to file a
+                  second, reasonless "down" — two rows for one press, and a
+                  retrain counting verdicts would have read the thumb twice.
+                */
+                if (reason.trim() !== "") {
+                  void file("down", reason);
+                }
                 setAsking(false);
+                setReason("");
               },
               false,
             )}
@@ -158,6 +167,11 @@ export function AnswerFeedback({
       {said === null ? null : (
         <Text
           testID="answer-feedback-said"
+          // Announced, because it appears after the request rather than with
+          // the press: a reader whose focus is still on the thumb is otherwise
+          // never told whether their verdict was filed or refused.
+          accessibilityLiveRegion="polite"
+          role="status"
           style={{
             ...type$.bodySmall,
             color: state.status === "failed" ? colors.warning : colors.inkMuted,

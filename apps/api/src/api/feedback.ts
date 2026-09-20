@@ -49,13 +49,27 @@ export interface FeedbackRoutesDeps {
   db: Database | undefined;
 }
 
-/** The body, as the contract's `FeedbackSubject` spells it. */
+/**
+ * The body, as the contract's `FeedbackSubject` spells it — **including its
+ * enums and its date pattern**.
+ *
+ * Declared as plain strings first, and Copilot was right to refuse that:
+ * `{ subsystem: "SIN", gate_profile: "other" }` would have been stored, and a
+ * retrain grouping by subsystem would have found a fifth one. The point of the
+ * closed vocabulary is that the pile can be grouped six weeks later, and a
+ * validator that admits anything is the same as having no vocabulary.
+ *
+ * `SIN` in particular is not a typo anyone would catch by eye: it is a real ONS
+ * row this product deliberately never uses, because it double-counts the four.
+ */
 const subject = t.Object(
   {
-    subsystem: t.Optional(t.String()),
-    target_date: t.Optional(t.String()),
+    subsystem: t.Optional(
+      t.Union([t.Literal("N"), t.Literal("NE"), t.Literal("S"), t.Literal("SE")]),
+    ),
+    target_date: t.Optional(t.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" })),
     lane: t.Optional(t.String()),
-    gate_profile: t.Optional(t.String()),
+    gate_profile: t.Optional(t.Union([t.Literal("gate_early"), t.Literal("gate_late")])),
     artifact_id: t.Optional(t.String()),
     document_code: t.Optional(t.String()),
     document_page: t.Optional(t.Integer({ minimum: 1 })),

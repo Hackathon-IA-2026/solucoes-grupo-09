@@ -131,6 +131,32 @@ describe("filing a verdict about one answer", () => {
     expect(written[0].reason).toBeNull();
   });
 
+  it("refuses a subsystem the product does not have", async () => {
+    /*
+      `SIN` is the case that matters: a real ONS row this product deliberately
+      never uses, because it double-counts the four. Stored here it would have
+      become a fifth subsystem in anything grouping the pile — which is the
+      whole reason `FeedbackSubject`'s vocabulary is closed.
+    */
+    const response = await post({ ...verdict, subject: { subsystem: "SIN" } });
+    expect(response.status).toBe(422);
+  });
+
+  it("refuses a gate nobody publishes, and a date that is not one", async () => {
+    expect((await post({ ...verdict, subject: { gate_profile: "other" } })).status).toBe(
+      422,
+    );
+    expect(
+      (await post({ ...verdict, subject: { target_date: "tomorrow" } })).status,
+    ).toBe(422);
+    // And takes the two that are real.
+    const ok = await post({
+      ...verdict,
+      subject: { subsystem: "NE", gate_profile: "gate_late", target_date: "2026-09-19" },
+    });
+    expect(ok.status).toBe(503);
+  });
+
   it("refuses a reason longer than the limit rather than truncating it", async () => {
     /*
       A sentence cut in half says something its writer did not. The refusal
