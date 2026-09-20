@@ -977,8 +977,10 @@ async def retrain_status(run_id: str) -> JSONResponse:
       which is the same repair forecaster 45 made to the worker's failure line.
     - **decided**: 200 carrying the child's report verbatim — the body the POST
       used to return, so nothing downstream had to learn a second shape.
-    - **failed**: 500 `RETRAIN_FAILED` with the child's exit code and the tail of
-      its stderr, exactly as the POST used to answer.
+    - **failed**: 500 `RETRAIN_FAILED` with the child's exit code and the tails
+      of its stderr and its stdout. Both, because the report is on stdout: a run
+      that decided no lane exits 1 with each lane's reason there and an empty
+      stderr.
 
     A run id this instance has never started, or has forgotten, is a 404
     `RETRAIN_UNKNOWN` — which is what the worker sees when this service was
@@ -1061,7 +1063,8 @@ async def backfill_holdout(
       409, checked before the database because it is a fact about this instance;
     - no database — ``DATA_UNAVAILABLE``, 503;
     - a child that failed — ``HOLDOUT_BACKFILL_FAILED``, 500, carrying its exit
-      code and the tail of its stderr. A run that reconstructed no lane at all
+      code and the tails of its stderr and its stdout (each lane's reason is in
+      the report, on stdout). A run that reconstructed no lane at all
       is a failed run; a run whose second lane failed is not, and comes back 200
       with that lane named in ``failures``.
     """
