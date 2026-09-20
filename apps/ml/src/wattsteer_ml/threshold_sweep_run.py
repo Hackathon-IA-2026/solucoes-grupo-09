@@ -125,6 +125,7 @@ from wattsteer_ml.evaluation.threshold_sweep import (
     run_threshold_sweep,
     sweep_lane,
 )
+from wattsteer_ml.experiment_reports import save_report
 from wattsteer_ml.lanes import Lane, format_instant
 from wattsteer_ml.promotions import PROMOTION_LOG_FILENAME, PromotionLog
 from wattsteer_ml.retrain import (
@@ -633,7 +634,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (ThresholdSweepRunError, ThresholdSweepError) as refusal:
         print(json.dumps({"error": str(refusal)}), file=sys.stderr)
         return 2
-    print(json.dumps(report.as_dict()))
+    payload = report.as_dict()
+    save_report(Path(args.root), "threshold_sweep", as_of, payload)
+    print(json.dumps(payload))
     return 0 if report.is_measurement else 1
 
 

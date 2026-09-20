@@ -436,6 +436,10 @@ def test_a_run_that_scored_nothing_exits_non_zero(tmp_path: Path) -> None:
     )
 
     assert code == 1
+    # The run that recorded an absence is still a run, and its report is kept.
+    kept = tmp_path / "experiments" / "dessem_ab" / "2026-09-09T00:00:00Z.json"
+    assert kept.is_file()
+    assert json.loads(kept.read_text())
 
 
 def test_no_database_url_is_a_configuration_complaint(tmp_path: Path) -> None:
