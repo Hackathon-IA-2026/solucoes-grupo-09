@@ -1555,7 +1555,9 @@ rung.
   `model_config_version`.
 - **Model registries (MLflow and friends), online learning, GPU, feature
   stores.** The volume plus `promotions.jsonl` is the registry; the feature
-  function is the store.
+  function is the store. Each retrain also keeps the ladder on the card
+  (`fold_metrics`) and rewrites `experiments/report.html`, a record for humans
+  that no gate or serving path reads.
 - **CMO price features.** Excluded upstream by the feature spec, with the open
   question about whether the published series is DESSEM's own output. If that
   question resolves the wrong way, this spec's A/B matrix changes shape too.
