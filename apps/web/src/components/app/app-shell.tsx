@@ -635,6 +635,7 @@ export function MiniPill({
   onPress,
   disabled = false,
   disabledHint,
+  role = "radio",
 }: {
   label: string;
   active: boolean;
@@ -651,12 +652,22 @@ export function MiniPill({
   disabled?: boolean;
   /** Why, in the reader's locale. Announced, and shown on hover. */
   disabledHint?: string;
+  /**
+   * `radio` for one of a set the reader is choosing between, `button` for a
+   * pill that does something. The default is the selection, which is what
+   * this control was built for.
+   */
+  role?: "radio" | "button";
 }) {
   const colors = usePalette();
   return (
     <Pressable
-      accessibilityRole="radio"
-      aria-checked={active}
+      accessibilityRole={role}
+      // Only a member of a group has a checked state. The day picker's
+      // expand and collapse pills are the same shape and are *actions*: a
+      // reader hearing "radio, not checked" on "10 more days" is being told
+      // it is a choice they have not made, which it is not.
+      aria-checked={role === "radio" ? active : undefined}
       accessibilityLabel={label}
       // The hint rides on the label rather than replacing it: a screen reader
       // should still hear which run this pill is, then why it cannot be taken.

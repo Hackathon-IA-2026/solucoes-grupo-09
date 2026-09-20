@@ -1681,6 +1681,9 @@ export const en = {
     },
 
     replay: {
+      moreDay: "1 more day",
+      moreDays: "{count} more days",
+      fewerDays: "Show fewer",
       noDays: "No day on this list has a recorded forecast the gateway can replay today.",
       // --- forecast accuracy: item 3 of the Time Machine brief ---
       accuracyTitle: "Did the forecast hold?",

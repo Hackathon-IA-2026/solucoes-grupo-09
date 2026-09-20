@@ -683,7 +683,8 @@ export const pt: Copy = {
       up: "Sim, ajudou",
       down: "Não ajudou",
       reasonLabel: "O que estava errado?",
-      reasonPlaceholder: "Escreva em uma ou duas frases. Fica guardado para o próximo treino.",
+      reasonPlaceholder:
+        "Escreva em uma ou duas frases. Fica guardado para o próximo treino.",
       send: "Enviar",
       cancel: "Cancelar",
       sending: "Enviando…",
@@ -1376,6 +1377,9 @@ export const pt: Copy = {
     },
 
     replay: {
+      moreDay: "mais 1 dia",
+      moreDays: "mais {count} dias",
+      fewerDays: "Mostrar menos",
       noDays:
         "Nenhum dia desta lista tem previsão gravada que o gateway possa reproduzir hoje.",
       // --- a acurácia da previsão, item 3 do briefing da máquina do tempo ---

@@ -70,7 +70,7 @@ import {
   ZapIcon,
 } from "@wattsteer/ui";
 import Head from "expo-router/head";
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import { AnswerFeedback } from "@/components/app/answer-feedback";
 import { AppShell, MiniPill, ScreenTitle } from "@/components/app/app-shell";
@@ -226,6 +226,7 @@ export default function TimeMachineScreen() {
   const params = useAppParams();
   const day = replayDay(params.episode);
   const days = useReplayDays(day.subsystem);
+  const [showAllDays, setShowAllDays] = useState(false);
   // The replayed day is the selection, so the scenario in the address bar
   // follows it — and it is validated under the replay's own `target_date`
   // clause, which is the shape and then somebody else's judgement. The window
@@ -294,9 +295,33 @@ export default function TimeMachineScreen() {
   */
   const offered = days.status === "known" ? days.viewable : [day];
 
+  /*
+    **Folded, because the honest list is long.**
+
+    Asking the gateway instead of naming four dates took the picker from four
+    pills to eighty-one on the event's instance — seventeen rows of chips above
+    the screen's own headline, which is a wall rather than a control. The fold
+    shows the newest two rows and says how many more there are; the selected
+    day is always among them, so a link to an older day never opens onto a
+    picker that appears not to contain it.
+
+    A scroll box was the other option and is worse here: it hides the count,
+    and the count is the interesting part — it is how a reader learns the
+    deployment can replay a quarter rather than a handful.
+  */
+  const FOLDED_DAYS = 10;
+  const folded = showAllDays
+    ? offered
+    : offered.slice(0, FOLDED_DAYS).some((candidate) => candidate.id === day.id)
+      ? offered.slice(0, FOLDED_DAYS)
+      : [day, ...offered.slice(0, FOLDED_DAYS - 1)];
+  const hidden = offered.length - folded.length;
+
   const picker = (
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-      {offered.map((candidate) => (
+    <View
+      style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "center" }}
+    >
+      {folded.map((candidate) => (
         <MiniPill
           key={candidate.id}
           label={dayLabel(candidate, copy, f)}
@@ -304,6 +329,24 @@ export default function TimeMachineScreen() {
           onPress={() => params.setParams({ episode: candidate.id })}
         />
       ))}
+      {hidden > 0 ? (
+        <MiniPill
+          label={fill(hidden === 1 ? copy.app.replay.moreDay : copy.app.replay.moreDays, {
+            count: String(hidden),
+          })}
+          active={false}
+          role="button"
+          onPress={() => setShowAllDays(true)}
+        />
+      ) : null}
+      {showAllDays && offered.length > FOLDED_DAYS ? (
+        <MiniPill
+          label={copy.app.replay.fewerDays}
+          active={false}
+          role="button"
+          onPress={() => setShowAllDays(false)}
+        />
+      ) : null}
       {days.status === "known" && days.viewable.length === 0 ? (
         <Text style={{ fontSize: 13, color: palette.inkMuted }}>
           {copy.app.replay.noDays}
