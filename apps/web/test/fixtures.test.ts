@@ -194,12 +194,31 @@ describe("the replay day catalogue", () => {
   it("every day the picker offers is one a link can address", () => {
     // `parseAppParams` falls back rather than crashing, so a catalogue entry
     // whose id the parser rejects would silently redirect the reader to the
-    // first day. Asserted both ways: the ids round-trip, and an unknown one
-    // does not.
+    // first day.
     for (const day of REPLAY_DAYS) {
       expect(parseAppParams({ episode: day.id }).episode).toBe(day.id);
     }
-    expect(parseAppParams({ episode: "1999-01-01-ne" }).episode).toBe(REPLAY_DAYS[0].id);
+  });
+
+  it("addresses any real day, because the picker's days are the gateway's", () => {
+    /*
+      This used to assert the opposite — that an id outside `REPLAY_DAYS` fell
+      back — and that was right while the catalogue *was* the picker. It is not
+      any more: `use-replay-days.ts` asks `GET /v1/replay/days`, which offered
+      81 days on the event's instance against the four named here, so a link to
+      any of them has to survive a reload.
+
+      What the parser still refuses is a string that is not a day: the gateway
+      decides whether a day can be shown, and this decides whether the URL
+      named one at all.
+    */
+    expect(parseAppParams({ episode: "2026-08-05-se" }).episode).toBe("2026-08-05-se");
+    // Before the data window opens. Addressable, and the screen renders the
+    // gateway's refusal for it rather than redirecting the reader elsewhere.
+    expect(parseAppParams({ episode: "1999-01-01-ne" }).episode).toBe("1999-01-01-ne");
+    for (const bad of ["yesterday", "2026-13-99-ne", "2026-02-30-ne", "2026-08-05-sin"]) {
+      expect(parseAppParams({ episode: bad }).episode).toBe(REPLAY_DAYS[0].id);
+    }
   });
 
   it("the forecast origin names two artifacts, in two fields", () => {

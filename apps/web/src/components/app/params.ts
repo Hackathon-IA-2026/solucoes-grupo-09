@@ -49,6 +49,7 @@
 import { GATES, latestTargetDate } from "@wattsteer/core";
 import type { GateProfile } from "@wattsteer/core/api";
 import {
+  isReplayDayId,
   REPLAY_DAYS,
   RUN_LABELS,
   type RunLabel,
@@ -177,9 +178,9 @@ export function parseAppParams(
     run: RUN_LABELS.includes(run as RunLabel) ? (run as RunLabel) : "12Z",
     date: latestTargetDate(now),
     episode:
-      episode !== undefined && REPLAY_DAYS.some((day) => day.id === episode)
-        ? episode
-        : REPLAY_DAYS[0].id,
+      // Shape, not membership: the picker's days come from the gateway now, so
+      // a link to any day it can answer has to survive a reload.
+      episode !== undefined && isReplayDayId(episode) ? episode : REPLAY_DAYS[0].id,
   };
 }
 
