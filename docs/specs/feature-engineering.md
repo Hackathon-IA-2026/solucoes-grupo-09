@@ -443,7 +443,7 @@ So:
 > weakest-link stamp still binds at the last go-live among the sources a row
 > actually reads — over a set that is complete rather than seven eighths of one.
 > **`feature_hash` moved**: the seven lookups inside `feature_rows` became one,
-> so `pg_get_functiondef` changed while all 112 attributes stayed in place. The
+> so `pg_get_functiondef` changed while all 111 attributes stayed in place. The
 > tree was already carrying `0039`'s retrain debt; every artifact that owed a
 > retrain for `0039` still owes exactly one.
 >
@@ -660,7 +660,7 @@ could not be kept for the occurrence head with no column to read. Note it is not
 across seven days rather than the seven observations of one local hour.
 
 > **Built by ticket 14, `drizzle/0036_the_same_hour_exceedance.sql`.**
-> `feature_row` has **112** attributes and this is the last of them; the class-`K`
+> `feature_row` has **111** attributes; this was the last one added, and the class-`K`
 > block computes it from the seven same-local-hour observations it already
 > aggregates the mean over. It landed in the ticket that retired
 > `apps/ml`'s hand-transcribed `ordered_features.yaml`, and it had to: that file
@@ -906,7 +906,6 @@ cutoff — an offset that does not clear it yields NULL rather than sliding.
 | `observed_actual_lag_hours` | `valid_time − actuals_cutoff(gate)` — how stale the actuals are | **K** | derived |
 | `observed_constrained_off_lag_168h` | total, same local hour, D−7 | **K** | ONS 1, 3 |
 | `observed_constrained_off_wind_lag_168h` / `_solar_lag_168h` | per technology | **K** | ONS 1, 3 |
-| `observed_constrained_off_lag_48h` | same local hour, D−2; NULL if cutoff excludes it | **K** | ONS 1, 3 |
 | `observed_constrained_off_same_hour_mean_7d` | mean at the same local hour over the 7 available days ending at the cutoff day | **K** | ONS 1, 3 |
 | `observed_constrained_off_hours_above_threshold_7d` | count over the trailing 7 available days | **K** | ONS 1, 3 |
 | `observed_constrained_off_same_hour_exceedance_7d` | share of the 7 same-local-hour observations **above** `threshold_mw`, in 1/7 steps | **K** | ONS 1, 3 |
@@ -921,6 +920,8 @@ cutoff — an offset that does not clear it yields NULL rather than sliding.
 | `observed_corridor_flow_n_ne_lag_168h` | directed N→NE flow, D−7 same hour | **K** | ONS 9 |
 | `observed_export_utilisation_mean_24h_to_cutoff` | mean of `flow / capability` over the last 24 available hours | **K** | ONS 9 |
 | `observed_corridor_utilisation_ne_se_max_7d` | max over the trailing 7 available days | **K** | ONS 9 |
+
+> `observed_constrained_off_lag_48h` was dropped: at the `gate_late` cutoff (D−2 03:00 BRT) it cleared for 4 of 24 target hours, so it was 83.3% NULL in training by construction and could not pass `serving_smoke`'s 5% ceiling. See `docs/feature-alternatives-constrained-off-lag.md`.
 | `observed_reason_share_ene_7d` | share of restricted entity-hours in the subsystem with reason `ENE`, trailing 7 available days | **K** | ONS 1, 3 |
 | `observed_reason_share_cnf_7d` / `_rel_7d` | as above | **K** | ONS 1, 3 |
 
@@ -940,7 +941,7 @@ observed zero times; its first appearance is a monitoring signal, not a class.
 | `residual_load` at t (§5) | actuals | `proxy_residual_load_mwh` (A), `dessem_residual_load_mwh` (B) |
 | `renewable_load_ratio` at t (§4) | actuals | `proxy_renewable_load_ratio` / `dessem_renewable_load_ratio` |
 | `solar_ramp_1h`, `wind_ramp_1h`, `load_ramp_1h` on actuals (§6) | a **local difference**; LKV would broadcast one number over 24 hours | forecast-side ramps (W, P, D) |
-| `solar_t-1 … t-3`, `wind_t-1 … t-6`, `load_t-1`, `load_t-24` (§7) | do not clear `actuals_cutoff` | `*_lag_168h`, `*_lag_48h`, and the day-grain 7-day aggregates |
+| `solar_t-1 … t-3`, `wind_t-1 … t-6`, `load_t-1`, `load_t-24` (§7) | do not clear `actuals_cutoff` | `*_lag_168h` and the day-grain 7-day aggregates |
 | `solar_mean_3h`, `wind_mean_3h`, `load_mean_3h`, `renewable_max_6h`, `load_std_6h`, `wind_std_6h` centred on t (§8) | windows straddle the cutoff | forecast-side centred windows; actuals-side windows ending at the cutoff |
 | `exchange_NE_SE`, `exchange_N_NE` at t (§9) | actuals | `dessem_implied_net_export_mwh` (B); `observed_corridor_*` lags (A) |
 | `val_intercambioprogmwmed` (programmed exchange) | present only from 2026-01 and **not backfilled** — would create the mirror-image skew: a feature richer at serve time than in training | excluded from both sets; recorded as a candidate third set |
@@ -1336,7 +1337,7 @@ worth** — and that trade is a product decision, not a metric.
 >   because `apps/ml` was another agent's tree during this ticket. **Ticket 14
 >   retired it**, and found that the agreement above was the problem rather than
 >   the reassurance: both lists were one name short of this document's own
->   class-`K` table. The counts are now 78 and 100 over 112 attributes.
+>   class-`K` table. The counts are now 77 and 99 over 111 attributes.
 >
 >   **What replaced it, and why that shape.** A *generated artifact*,
 >   `apps/ml/src/wattsteer_ml/diagnosis/model_inputs.json`, written by

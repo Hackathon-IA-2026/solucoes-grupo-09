@@ -2158,7 +2158,6 @@ suite("the gate, end to end (real Postgres)", () => {
 
     const rows = await readServingRows(db, { targetDate: TARGET, ...query });
     const values = rows.flatMap((row) => [
-      row.observed_constrained_off_lag_48h,
       row.observed_constrained_off_lag_168h,
       row.observed_constrained_off_same_hour_mean_7d,
       row.observed_constrained_off_total_7d_mwh,
@@ -2295,37 +2294,25 @@ suite("the gate, end to end (real Postgres)", () => {
     ).toBe(0);
   });
 
-  it("yields NULL for a lag that does not clear the cutoff, and never slides", async () => {
-    // The fixture test the spec asks for by name. At `gate_late` the cutoff is
-    // 2026-08-18 03:00 BRT, so t-48 h clears it only for the first local hour
-    // of the day and is NULL for the other twenty-three - and the NULL is a
-    // NULL, not the nearest available hour wearing a 48-hour label.
+  it("carries no 48-hour lag: a column that could clear the cutoff for 4 hours in 24 is not a feature", async () => {
+    // It was the fixture test for "a lag that does not clear the cutoff is NULL
+    // and never slides", and it passed for the right reason: at `gate_late` the
+    // cutoff is D-2 03:00 BRT, so t-48 h cleared it for the first four local
+    // hours only and was NULL for the other twenty - 83.3% NULL in training by
+    // construction, which `serving_smoke` then refused against a 5% ceiling.
+    // The property that mattered survives without the column: nothing in the
+    // row is a lag that can be read past the cutoff, so the row simply does not
+    // carry one.
     const rows = await readServingRows(db, { targetDate: TARGET, ...query });
-    const ne = rows.filter((row) => row.subsystem === "NE");
-
-    const first = ne.find(
-      (row) => new Date(row.valid_time).getTime() === HOUR_FIRST.getTime(),
-    );
-    expect(Number(first?.observed_constrained_off_lag_48h)).toBe(3);
-
-    const noon = ne.find(
-      (row) => new Date(row.valid_time).getTime() === HOUR_CURTAILED.getTime(),
-    );
-    expect(noon?.observed_constrained_off_lag_48h).toBeNull();
-
-    const cleared = ne.filter((row) => row.observed_constrained_off_lag_48h !== null);
-    expect(cleared).toHaveLength(1);
-
-    // At the early gate the cutoff is ten hours earlier still, so no hour of the
-    // day can reach a t-48 h at all.
-    const early = await readServingRows(db, {
-      targetDate: TARGET,
-      ...query,
-      gateProfile: "gate_early",
-    });
-    for (const row of early) {
-      expect(row.observed_constrained_off_lag_48h).toBeNull();
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(Object.keys(row)).not.toContain("observed_constrained_off_lag_48h");
     }
+    // What replaces it is inside the window at every hour of the day.
+    const ne = rows.filter((row) => row.subsystem === "NE");
+    expect(
+      ne.filter((row) => row.observed_constrained_off_lag_168h !== null).length,
+    ).toBeGreaterThan(0);
   });
 
   it("tells the model how stale its own backward view is", async () => {
@@ -3530,7 +3517,7 @@ suite("the gate, end to end (real Postgres)", () => {
 
     // Names, order and types all come from `pg_attribute`, so this is the
     // catalogue's own list compared against TypeScript's copy of it.
-    expect(dictionary).toHaveLength(112);
+    expect(dictionary).toHaveLength(111);
     expect(dictionary.map((entry) => entry.column_name)).toEqual([
       ...FEATURE_ROW_COLUMNS,
     ]);
@@ -3617,7 +3604,7 @@ suite("the gate, end to end (real Postgres)", () => {
     expect(failures).toEqual([]);
     // And outside the transaction it answers again, so the refusals were about
     // the edits and not about the dictionary.
-    expect(await readFeatureDictionary(db)).toHaveLength(112);
+    expect(await readFeatureDictionary(db)).toHaveLength(111);
   });
 
   it("binds the TypeScript grain marking to the dictionary's, rather than trusting it", async () => {
@@ -3648,7 +3635,7 @@ suite("the gate, end to end (real Postgres)", () => {
     }
     // Non-vacuous in both directions.
     expect(dictionary.filter((entry) => entry.grain === "day")).toHaveLength(17);
-    expect(dictionary.filter((entry) => entry.role === "feature")).toHaveLength(99);
+    expect(dictionary.filter((entry) => entry.role === "feature")).toHaveLength(98);
   });
 
   it("enumerates the augmented set's twenty-two names, and the four that would justify the trade", async () => {
@@ -3678,8 +3665,8 @@ suite("the gate, end to end (real Postgres)", () => {
     // And the ordered model inputs of the two sets differ by exactly those 22.
     const inputsA = await readFeatureSetModelInputs(db, "dessem_free_v1");
     const inputsB = await readFeatureSetModelInputs(db, "dessem_augmented_v1");
-    expect(inputsA).toHaveLength(78);
-    expect(inputsB).toHaveLength(100);
+    expect(inputsA).toHaveLength(77);
+    expect(inputsB).toHaveLength(99);
     expect(inputsB.map((input) => input.column_name)).toEqual(
       expect.arrayContaining(inputsA.map((input) => input.column_name)),
     );
@@ -3799,7 +3786,7 @@ suite("the gate, end to end (real Postgres)", () => {
 
   it("names a replacement for every dropped feature, and every replacement is a column", async () => {
     const dropped = await readDroppedFeatures(db);
-    expect(dropped).toHaveLength(11);
+    expect(dropped).toHaveLength(12);
 
     for (const entry of dropped) {
       expect({ feature: entry.idea_feature, reason: entry.reason.length > 0 }).toEqual({

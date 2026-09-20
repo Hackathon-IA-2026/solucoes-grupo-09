@@ -190,6 +190,13 @@ export function featureDictionary(): DictionaryEntry[] {
         modelInput: match[8] === "true",
       });
     }
+    // A later migration can delete an entry when it drops the attribute; the
+    // tree is applied in order, so the census is of what the ledger leaves.
+    for (const deleted of sql.matchAll(
+      /DELETE FROM feature_dictionary_entry WHERE column_name = '(\w+)'/g,
+    )) {
+      byColumn.delete(deleted[1] as string);
+    }
   }
   return [...byColumn.values()];
 }

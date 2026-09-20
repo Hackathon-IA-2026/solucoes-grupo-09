@@ -482,7 +482,17 @@ describe("the gate, structurally", () => {
       (match) => match[1] as string,
     );
 
-    expect([...created, ...added]).toEqual([...FEATURE_ROW_COLUMNS]);
+    // A column can also leave: `DROP ATTRIBUTE` is applied in tree order, the
+    // way `ADD ATTRIBUTE` is, so the check reads the type as the whole ledger
+    // leaves it and not as its first declaration.
+    const dropped = new Set(
+      [...SQL.matchAll(/ALTER TYPE feature_row DROP ATTRIBUTE\s+(\w+)/g)].map(
+        (match) => match[1] as string,
+      ),
+    );
+    expect([...created, ...added].filter((name) => !dropped.has(name))).toEqual([
+      ...FEATURE_ROW_COLUMNS,
+    ]);
     // Non-vacuous: later tickets really did append to ticket 01's declaration
     // rather than restating the shape.
     expect(added.length).toBeGreaterThan(0);
@@ -1264,7 +1274,6 @@ describe("the feature/label partition", () => {
       "observed_constrained_off_lag_168h",
       "observed_constrained_off_wind_lag_168h",
       "observed_constrained_off_solar_lag_168h",
-      "observed_constrained_off_lag_48h",
       "observed_constrained_off_same_hour_mean_7d",
       "observed_constrained_off_hours_above_threshold_7d",
       "observed_constrained_off_total_7d_mwh",
@@ -1469,11 +1478,20 @@ describe("the feature dictionary, structurally", () => {
   /** The `column_name` of every seeded entry, in the order the tree writes it. */
   const seededEntries = (): string[] => {
     expect(DICTIONARY_SEEDS.length).toBeGreaterThan(0);
+    // An entry a later migration deletes is no longer classified, in the same
+    // way an attribute it drops is no longer declared.
+    const deleted = new Set(
+      [
+        ...SQL.matchAll(
+          /DELETE FROM feature_dictionary_entry WHERE column_name = '(\w+)'/g,
+        ),
+      ].map((match) => match[1] as string),
+    );
     return DICTIONARY_SEEDS.flatMap((text) =>
       [...seedStatement(text).matchAll(/^ {2}\('(\w+)',/gm)].map(
         (match) => match[1] as string,
       ),
-    );
+    ).filter((name) => !deleted.has(name));
   };
 
   it("takes the columns from the type and never from a list of its own", () => {
@@ -1512,7 +1530,7 @@ describe("the feature dictionary, structurally", () => {
     // against itself. A ticket that appends an attribute and forgets the entry
     // fails here without a database, and fails again at the function with one.
     expect(seededEntries()).toEqual([...FEATURE_ROW_COLUMNS]);
-    expect(seededEntries()).toHaveLength(112);
+    expect(seededEntries()).toHaveLength(111);
   });
 
   it("refuses the whole answer rather than returning a gap in it", () => {
@@ -1570,8 +1588,19 @@ describe("the feature dictionary, structurally", () => {
       ),
     );
     expect(replacements.size).toBeGreaterThan(0);
+    // This seed is the original one; a column a later migration drops is edited
+    // out of these rows by that migration (its `UPDATE`), which the runtime
+    // function enforces against the live type. Here it is allowed to be named.
+    const droppedLater = new Set(
+      [...SQL.matchAll(/ALTER TYPE feature_row DROP ATTRIBUTE\s+(\w+)/g)].map(
+        (match) => match[1] as string,
+      ),
+    );
     for (const column of replacements) {
-      expect({ column, exists: FEATURE_ROW_COLUMNS.includes(column) }).toEqual({
+      expect({
+        column,
+        exists: FEATURE_ROW_COLUMNS.includes(column) || droppedLater.has(column),
+      }).toEqual({
         column,
         exists: true,
       });

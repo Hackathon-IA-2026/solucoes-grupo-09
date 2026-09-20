@@ -144,15 +144,6 @@ export interface FeatureRow {
   observed_constrained_off_wind_lag_168h: number | null;
   observed_constrained_off_solar_lag_168h: number | null;
   /**
-   * t−48 h, and **NULL rather than slid** where the cutoff excludes it.
-   *
-   * At `gate_late` the cutoff falls at D−2 03:00 BRT, so this clears only for
-   * the first four local hours of the day; at `gate_early` it never clears. A
-   * lag that slid to the nearest available hour would mean "48 hours" in one row
-   * and something else in the next, with nothing in the row to say which.
-   */
-  observed_constrained_off_lag_48h: number | null;
-  /**
    * Mean at the same local hour over the seven days ending at the cutoff.
    *
    * **The mandatory baseline's definition** (`docs/specs/forecaster.md` rung 1),
@@ -601,7 +592,6 @@ export const FEATURE_ROW_COLUMNS: readonly (keyof FeatureRow)[] = [
   "observed_constrained_off_lag_168h",
   "observed_constrained_off_wind_lag_168h",
   "observed_constrained_off_solar_lag_168h",
-  "observed_constrained_off_lag_48h",
   "observed_constrained_off_same_hour_mean_7d",
   "observed_constrained_off_hours_above_threshold_7d",
   "observed_constrained_off_total_7d_mwh",

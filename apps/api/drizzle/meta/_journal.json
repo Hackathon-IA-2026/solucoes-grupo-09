@@ -379,6 +379,13 @@
       "when": 1789830266390,
       "tag": "0053_the_day_ahead_programme",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1789915107540,
+      "tag": "0054_drop_the_48h_constrained_off_lag",
+      "breakpoints": true
     }
   ]
 }

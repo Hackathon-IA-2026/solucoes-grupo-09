@@ -220,7 +220,6 @@ def _row(
         "observed_constrained_off_wind_lag_168h": recent_off * _wind_fraction(hour),
         "observed_constrained_off_solar_lag_168h": recent_off
         * (1.0 - _wind_fraction(hour)),
-        "observed_constrained_off_lag_48h": 0.95 * recent_off,
         "observed_constrained_off_same_hour_mean_7d": 0.9 * recent_off,
         "observed_constrained_off_hours_above_threshold_7d": round(
             7.0 * intensity * shape
