@@ -15,6 +15,94 @@
  */
 
 /**
+ * `POST /v1/feedback` - what a reader thought of one answer the product gave,
+ * and where that answer was. An opinion, never a measurement: nothing here
+ * reaches a canonical view, a band or a metric, and the screens that collect
+ * it state that it is filed for a later retrain rather than acted on now. The
+ * three surfaces are the three kinds of answer the product makes - a day's
+ * forecast, a replay of a past day, and the ONS passage the corpus cited - and
+ * `subject` pins which one was on screen so a reason can be read back beside
+ * the thing it was about.
+ */
+export interface AnswerFeedback {
+  /**
+   * The row, so a client can say which submission it is retracting or amending.
+   * Server-assigned; a client that invents one is writing somebody else's row.
+   */
+  id: string;
+  /**
+   * When the gateway stored it, not when the reader pressed: the second is
+   * unknowable and the first is the one a later retrain can order by.
+   */
+  recordedAt: string;
+  surface: FeedbackSurface;
+  verdict: FeedbackVerdict;
+}
+
+/**
+ * Which kind of answer was judged. Closed, because a fourth surface is a
+ * fourth thing to retrain on and arrives with its own subject fields rather
+ * than as a free string nobody can group by.
+ */
+export type FeedbackSurface = "forecast" | "replay" | "evidence";
+
+/**
+ * Two values and no middle: a three-point scale collects a middle that means
+ * nothing to a retrain, and a star rating collects a number whose units nobody
+ * agrees on.
+ */
+export type FeedbackVerdict = "up" | "down";
+
+/**
+ * What was on screen, as the keys a later retrain would group by. Every field
+ * is optional because the surfaces do not share a coordinate: a replay has a
+ * day and a lane, an evidence card has a document and a page, and a forecast
+ * has both a lane and a gate.
+ */
+export interface FeedbackSubject {
+  subsystem?: Subsystem;
+  targetDate?: CivilDate;
+  /**
+   * The lane directory name, when the answer came from an artifact.
+   */
+  lane?: string;
+  gateProfile?: GateProfile;
+  /**
+   * The artifact that produced the answer, when the screen named one. A verdict
+   * about a forecast is a verdict about the artifact that made it.
+   */
+  artifactId?: string;
+  /**
+   * The ONS document the corpus cited, for the evidence surface.
+   */
+  documentCode?: string;
+  documentPage?: number;
+}
+
+/**
+ * The body of `POST /v1/feedback`. Named in the contract rather than assembled
+ * in a component, so the camelCase the app writes is translated to the wire's
+ * casing by the generated table - the same path every other body takes, and
+ * the reason `subject`'s keys cannot drift between the two sides.
+ */
+export interface AnswerFeedbackRequest {
+  surface: FeedbackSurface;
+  verdict: FeedbackVerdict;
+  subject?: FeedbackSubject;
+  /**
+   * The reader's own words, and only ever theirs. The gateway refuses a longer
+   * one rather than truncating it: a sentence cut in half says something its
+   * writer did not.
+   */
+  reason?: string;
+  /**
+   * Which dictionary the reader was reading, so the sentence can be read back in
+   * the register it was written in.
+   */
+  locale: "pt" | "en";
+}
+
+/**
  * One rung of NT DOP 0022 §5.1.2's ordem de corte: hydro that can be held back
  * without spilling, thermal outside merit order, hydro that can only be held
  * back by spilling, and renewables. A rule about ONS's dispatch decision,
@@ -2767,6 +2855,28 @@ export type WireShape = Readonly<Record<string, WireField>>;
  * is what makes the rename a compile error in the web app.
  */
 export const WIRE_SHAPES = {
+  AnswerFeedback: {
+    id: { wire: "id" },
+    recordedAt: { wire: "recorded_at" },
+    surface: { wire: "surface" },
+    verdict: { wire: "verdict" },
+  },
+  FeedbackSubject: {
+    subsystem: { wire: "subsystem", optional: true },
+    targetDate: { wire: "target_date", optional: true },
+    lane: { wire: "lane", optional: true },
+    gateProfile: { wire: "gate_profile", optional: true },
+    artifactId: { wire: "artifact_id", optional: true },
+    documentCode: { wire: "document_code", optional: true },
+    documentPage: { wire: "document_page", optional: true },
+  },
+  AnswerFeedbackRequest: {
+    surface: { wire: "surface" },
+    verdict: { wire: "verdict" },
+    subject: { wire: "subject", shape: "FeedbackSubject", optional: true },
+    reason: { wire: "reason", optional: true },
+    locale: { wire: "locale" },
+  },
   Band: {
     p10: { wire: "p10" },
     p50: { wire: "p50" },

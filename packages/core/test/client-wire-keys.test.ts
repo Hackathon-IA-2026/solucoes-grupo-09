@@ -217,7 +217,15 @@ describe("the general form of the bug, for methods added after this file", () =>
       POST bodies are excluded: they leave in the wire's casing as whole
       documents and `client.test.ts` already holds that, byte for byte.
     */
-    const posts = new Set(["optimize", "replay", "replayObservedOnly", "voiceSession"]);
+    const posts = new Set([
+      "optimize",
+      "replay",
+      "replayObservedOnly",
+      "voiceSession",
+      // A write, and the one call here that is not a read at all: the body
+      // leaves in the wire's casing and the answer is about the submission.
+      "fileFeedback",
+    ]);
     const client = createClient({ baseUrl: BASE, fetch: recorder().doFetch });
     const exposed = Object.getOwnPropertyNames(Object.getPrototypeOf(client))
       .filter((name) => name !== "constructor" && !name.startsWith("request"))

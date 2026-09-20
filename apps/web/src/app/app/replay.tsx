@@ -72,6 +72,7 @@ import {
 import Head from "expo-router/head";
 import { type ReactNode, useEffect } from "react";
 import { Text, View } from "react-native";
+import { AnswerFeedback } from "@/components/app/answer-feedback";
 import { AppShell, MiniPill, ScreenTitle } from "@/components/app/app-shell";
 import { BatteryEditor, LoadEditor } from "@/components/app/asset-editor";
 import {
@@ -106,13 +107,12 @@ import { fill } from "@/i18n/format";
 import {
   type BatteryAsset,
   INGESTION_GO_LIVE,
-  REPLAY_DAYS,
   type ReplayCandidateDay,
   replayDay,
   type ShiftableLoadAsset,
   subsystemMeta,
 } from "@/lib/fixtures";
-import { dispatchSeries, forecastHours, observedHours } from "@/lib/replay";
+import { dispatchSeries, forecastHours, observedHours, REPLAY_LANE } from "@/lib/replay";
 
 /** The parts the caveat's two lists are drawn from, as the copy map spells them. */
 type VintagePart = keyof Copy["app"]["replay"]["vintagePart"];
@@ -292,8 +292,7 @@ export default function TimeMachineScreen() {
     one to four as requests land is worse than one that starts honest, and the
     reader can already see the day they are on.
   */
-  const offered =
-    days.status === "known" ? days.viewable : [day];
+  const offered = days.status === "known" ? days.viewable : [day];
 
   const picker = (
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
@@ -413,7 +412,24 @@ export default function TimeMachineScreen() {
       origin={state.replay.forecastOrigin}
       thresholdMw={state.replay.thresholdMw}
     />,
-    <Replayed replay={state.replay} fleet={fleet} />,
+    <>
+      <Replayed replay={state.replay} fleet={fleet} />
+      {/*
+        Under the replay, and only when there is one: the observed-only branch
+        above offers no answer of ours to judge, and a control under it would
+        be asking the reader what they thought of ONS's record.
+      */}
+      <AnswerFeedback
+        surface="replay"
+        subject={{
+          subsystem: day.subsystem,
+          targetDate: day.date,
+          lane: REPLAY_LANE,
+          artifactId: state.replay.forecastOrigin.runLabel,
+        }}
+        testID="replay-feedback"
+      />
+    </>,
   );
 }
 

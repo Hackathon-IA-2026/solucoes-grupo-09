@@ -48,6 +48,7 @@ import { router } from "expo-router";
 import Head from "expo-router/head";
 import type { ReactNode } from "react";
 import { Text, View } from "react-native";
+import { AnswerFeedback } from "@/components/app/answer-feedback";
 import {
   AppShell,
   MiniPill,
@@ -318,6 +319,23 @@ export default function ExplainScreen({
           subsystem={params.subsystem}
           targetDate={params.date}
           gateProfile={gateProfileOf(params.run)}
+        />
+      )}
+      {/*
+        Beside the stamp that names the artifact, because that is what the
+        verdict is about: this day's forecast, from this lane, at this gate.
+        Filed for a later retrain and never a correction to the figure above.
+      */}
+      {day === null ? null : (
+        <AnswerFeedback
+          surface="forecast"
+          subject={{
+            subsystem: params.subsystem,
+            targetDate: params.date,
+            gateProfile: gateProfileOf(params.run),
+            artifactId: day.forecast.forecastOrigin.runLabel,
+          }}
+          testID="forecast-feedback"
         />
       )}
       {refreshing ? (
