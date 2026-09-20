@@ -194,7 +194,10 @@ select
   max(data_version)::bigint as data_version
 from canonical_curtailment_by_reporting_entity
 where subsystem = $1::subsystem_code
-  and (valid_time at time zone 'America/Sao_Paulo')::date = $2::date
+  -- The civil day as a range over valid_time, so the index is used: see
+  -- OBSERVED_HOURS_SQL in reads.py for the measurement.
+  and valid_time >= ($2::date::timestamp at time zone 'America/Sao_Paulo')
+  and valid_time < (($2::date + 1)::timestamp at time zone 'America/Sao_Paulo')
 group by 1
 order by 1
 """

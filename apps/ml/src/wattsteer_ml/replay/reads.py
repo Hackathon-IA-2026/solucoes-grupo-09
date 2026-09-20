@@ -93,14 +93,22 @@ order by target_date, feature_set, gate_profile, threshold_mw,
 #: than ``count(*)`` because the view is at reporting-entity grain: a
 #: subsystem-hour is settled when an entity reported it, and counting rows would
 #: count one hour once per conjunto and call an eight-hour day complete.
+#: The window is written as a range over ``valid_time`` — the two Brasília civil
+#: midnights as instants — and not as a predicate on the civil date. They select
+#: the same rows; only the range can use an index, because the civil date is an
+#: expression over the column. Measured on 20/09/2026 over 5.2 million rows on
+#: the event's instance: 10.5 s for the date predicate, which read the whole
+#: table and discarded what fell outside, against 1.7 s for the range, with the
+#: two results compared and identical. At 10.5 s the gateway had already
+#: answered `OPTIMIZER_TIMEOUT`.
 OBSERVED_HOURS_SQL = """
 select
   (valid_time at time zone 'America/Sao_Paulo')::date as target_date,
   count(distinct valid_time)::int as observed_hours
 from canonical_curtailment_by_reporting_entity
 where subsystem = $1::subsystem_code
-  and (valid_time at time zone 'America/Sao_Paulo')::date
-      between $2::date and $3::date
+  and valid_time >= ($2::date::timestamp at time zone 'America/Sao_Paulo')
+  and valid_time < (($3::date + 1)::timestamp at time zone 'America/Sao_Paulo')
 group by 1
 """
 
