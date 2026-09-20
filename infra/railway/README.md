@@ -10,6 +10,27 @@ from the repository, because they were produced by a run on somebody's machine:
 | `models.tgz` | the retrain's artifacts — a `.joblib` and a `.card.json` per lane | the `ml-models` volume, mounted at `/data/models` | the Time Machine cannot check a replay's windows, and no lane can be promoted |
 | `forecasts.sql.gz` | the forecast rows a holdout backfill scored | `curtailment_forecast_{hour,day,national_day}` | the Time Machine has no day to replay and says so |
 
+## The short version, if somebody else already trained
+
+The bundle from 20/09/2026 is a release asset on this repository, which is
+private — so it is already scoped to the people who can read the code, and no
+file has to be sent to anyone. Two commands, and the second is the work:
+
+```sh
+railway link            # the wattsteer project, environment production
+infra/railway/ship-state.sh --from-release state-2026-09-20
+```
+
+That fetches `models.tgz` and `forecasts.sql.gz` with `gh`, puts the artifacts
+on the volume and the rows in Postgres, and prints what is there afterwards.
+
+**Code is separate and may need nothing**: if the project deploys from GitHub,
+`main` is already live. If it deploys from the CLI, it is
+`railway up --service ml`, then `api`, then `web` — the order and the reasons
+are in `.claude/rules/deploy.md`.
+
+## Making a bundle yourself
+
 Two scripts, deliberately separate — the machine that trains need not be the one
 that deploys, and a bundle is worth keeping as what a later run is compared to:
 

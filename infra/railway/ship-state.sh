@@ -3,6 +3,7 @@
 # service reads, and the forecast rows the Time Machine replays.
 #
 #   infra/railway/ship-state.sh <bundle directory>
+#   infra/railway/ship-state.sh --from-release state-2026-09-20
 #
 # The bundle is what `make-state-bundle.sh` writes: `models.tgz` and
 # `forecasts.sql.gz`. Both are *state*, not code — the code goes to Railway with
@@ -22,7 +23,20 @@
 # own recipe (`infra/aws/event/README.md`) and is not state this script owns.
 set -euo pipefail
 
-BUNDLE="${1:?usage: ship-state.sh <bundle directory>}"
+# `--from-release <tag>` fetches the bundle from the repository's own releases
+# rather than asking somebody to have the files: the repository is private, so
+# a release asset is already scoped to the people who can read the code, and
+# `gh` is already how everyone here talks to it.
+if [ "${1:-}" = "--from-release" ]; then
+  TAG="${2:?usage: ship-state.sh --from-release <tag> [directory]}"
+  BUNDLE="${3:-$(mktemp -d)}"
+  mkdir -p "$BUNDLE"
+  echo "== fetching $TAG into $BUNDLE"
+  gh release download "$TAG" --repo vtorres/WattSteer --clobber \
+    --pattern 'models.tgz' --pattern 'forecasts.sql.gz' --dir "$BUNDLE"
+fi
+
+BUNDLE="${BUNDLE:-${1:?usage: ship-state.sh <bundle directory> | --from-release <tag>}}"
 SERVICE_ML="${RAILWAY_ML_SERVICE:-ml}"
 ENVIRONMENT="${RAILWAY_ENVIRONMENT:-production}"
 
