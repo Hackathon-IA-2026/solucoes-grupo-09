@@ -15,6 +15,8 @@
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { en as copyEn } from "../src/i18n/copy.en";
+import { pt as copyPt } from "../src/i18n/copy.pt";
 
 const source = readFileSync(join(import.meta.dir, "../src/app/app/replay.tsx"), "utf8");
 
@@ -56,6 +58,22 @@ describe("the day picker's fold", () => {
 
   it("shows everything once the reader asks", () => {
     expect(folded(days, days[40], true)).toHaveLength(81);
+  });
+
+  it("counts one hidden day in the singular", () => {
+    // `mais 1 dias` is wrong in Portuguese and `1 more days` in English, and
+    // the gateway can return eleven days as easily as eighty-one.
+    for (const dictionary of [copyPt, copyEn]) {
+      expect(dictionary.app.replay.moreDay).not.toContain("{count}");
+      expect(dictionary.app.replay.moreDays).toContain("{count}");
+    }
+    expect(source).toContain("hidden === 1 ? copy.app.replay.moreDay");
+  });
+
+  it("announces the expand pill as an action, not as a choice", () => {
+    // `MiniPill` is a radio by default, which is right for the day it selects
+    // and wrong for "10 more days": a reader would hear an unchosen option.
+    expect(source).toContain('role="button"');
   });
 
   it("is the arithmetic the screen runs", () => {

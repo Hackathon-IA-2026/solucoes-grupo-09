@@ -1377,6 +1377,7 @@ export const pt: Copy = {
     },
 
     replay: {
+      moreDay: "mais 1 dia",
       moreDays: "mais {count} dias",
       fewerDays: "Mostrar menos",
       noDays:

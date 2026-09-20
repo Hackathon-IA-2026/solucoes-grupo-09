@@ -331,8 +331,11 @@ export default function TimeMachineScreen() {
       ))}
       {hidden > 0 ? (
         <MiniPill
-          label={fill(copy.app.replay.moreDays, { count: String(hidden) })}
+          label={fill(hidden === 1 ? copy.app.replay.moreDay : copy.app.replay.moreDays, {
+            count: String(hidden),
+          })}
           active={false}
+          role="button"
           onPress={() => setShowAllDays(true)}
         />
       ) : null}
@@ -340,6 +343,7 @@ export default function TimeMachineScreen() {
         <MiniPill
           label={copy.app.replay.fewerDays}
           active={false}
+          role="button"
           onPress={() => setShowAllDays(false)}
         />
       ) : null}
