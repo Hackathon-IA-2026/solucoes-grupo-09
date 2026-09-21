@@ -157,6 +157,34 @@ is above 90%, and the number only counts on a fresh set.
       transparency and reproducibility, his 16/09 reply calls it the operation
       procedures manual.
 
+### 5b. Check the observed magnitude before it goes on a slide
+
+Noticed 21/09 and **not resolved**. `/v1/grid/now` reads Nordeste at
+**181,263 MWh** of constrained-off over 24 hours — about 7.5 GW sustained — with
+Sudeste at 43,621 and the other two under 2,000. The forecast agrees with it
+(201,819 for the same subsystem), so the two sides are consistent and this is
+not a model fault.
+
+What was checked and is **correct**: the adapter converts ONS's MWmed to MWh as
+`mwmed × interval/60` (`normalise.ts`), the source rows are half-hourly, and the
+rollup is the documented one. So nothing here is the arithmetic bug it looks
+like at first.
+
+What is unchecked: whether 181 GWh in a day is what ONS actually settled for
+that subsystem. Published Brazilian constrained-off is of the order of single-
+digit TWh a *year*, which would put a day an order of magnitude below this. The
+possibilities are that the figure is real (a genuinely extreme day), that rows
+are counted twice somewhere between `restricao-coff` and
+`restricao-coff-detalhe`, or that the prior above is simply wrong.
+
+- [ ] Compare one settled day against ONS's own published total for that day,
+      by hand. This is a twenty-minute question for somebody who knows the
+      dataset and an afternoon for somebody who does not — Bisogno is the
+      shorter path.
+- [ ] Until then, **no absolute MWh figure for Nordeste goes in the deck.** The
+      percentage and the avoided-energy share are unaffected, since both are
+      ratios over the same denominator.
+
 ### 6. Deck for the on-site presentation
 
 - [ ] Replace every figure in the deck with one measured in this repository.
@@ -171,11 +199,9 @@ is above 90%, and the number only counts on a fresh set.
 
 - [ ] RAG job surface: `rag.job` and `rag-job-status.schema.json` exist as the
       contract, nothing serves them (`docs/rag/decisions.md`).
-- [ ] `/internal/rag/search` does not pass `target_date`, so the day filter the
-      real path applies is missing and the endpoint ranks other days' bulletins
-      into the answer. It is the tool used to ask "why did retrieval do that",
-      and it answers about a different retrieval. Pass the axis through, or say
-      on the response that it was not applied (`docs/rag/decisions.md`).
+- [x] `/internal/rag/search` now takes `target_date` and passes it through, and
+      says `day_window_applied` on every response so an axis that did not run
+      cannot be mistaken for one that did. Guarded in `test_gates.py`.
 - [x] Local reranker **now running on Railway**: the image installs the extra
       and bakes the cross-encoder in (`apps/rag/Dockerfile`), confirmed in the
       build log and by the first query after deploy paying the model load.

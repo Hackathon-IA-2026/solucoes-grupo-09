@@ -193,12 +193,33 @@ async def _refresh(days: int) -> None:
 async def debug_search(
     q: str = Query(..., min_length=3),
     published_before: str | None = None,
+    target_date: str | None = None,
     limit: int = 8,
 ) -> Any:
-    """What the retrieval saw, with both ranks and the fused score."""
+    """What the retrieval saw, with both ranks and the fused score.
+
+    `target_date` is the axis the real path always passes and this route used to
+    drop. Without it the day window in `search` never runs, so a bulletin of
+    another day competes for a slot the drafter would never have seen it take:
+    asked about the perturbação of 15/08/2023 on 21/09/2026, this endpoint
+    ranked a *Boletim Diário de 12/09/2026* second, and a reader comparing that
+    against a refusal would be comparing two different retrievals.
+
+    It stays optional, because a question about the general rules is not about a
+    day. When it is absent the answer says so — `day_window_applied: false` —
+    rather than leaving the reader to know that a missing parameter changed what
+    they are looking at.
+    """
     before = _parse_instant(published_before) or datetime.now(UTC)
     try:
-        hits = await search(state["db"], state["gateway"], q, published_before=before, limit=limit)
+        hits = await search(
+            state["db"],
+            state["gateway"],
+            q,
+            published_before=before,
+            target_date=target_date,
+            limit=limit,
+        )
     except QuotaExhausted as exc:
         return error(
             "RAG_QUOTA_EXHAUSTED",
@@ -209,6 +230,11 @@ async def debug_search(
     return {
         "question": q,
         "published_before": before.isoformat(),
+        "target_date": target_date,
+        # Stated rather than implied: this endpoint exists to explain a
+        # retrieval, and a filter that silently did not run is the one thing it
+        # must not hide.
+        "day_window_applied": target_date is not None,
         "hits": [
             {
                 "chunk_id": hit.chunk_id,

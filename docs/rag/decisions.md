@@ -91,9 +91,10 @@ which the real path would have excluded outright
 Nothing is wrong with the service; the endpoint is answering the question it
 was given. But it is the tool anybody reaches for to ask "why did retrieval do
 that", and the answer it gives is from a different retrieval than the one the
-drafter saw. Either it should take `target_date` and pass it through, or it
-should say in its own response that it did not — the second is cheaper and is
-the honest shape, since the endpoint's purpose is to show what retrieval saw.
+drafter saw. **Fixed the same day**: it takes `target_date` and passes it through, and it
+answers `day_window_applied` either way, so an axis that did not run cannot be
+mistaken for one that did. It stays optional, because a question about the
+general rules is not about a day.
 
 ## What was planned and deliberately not built
 

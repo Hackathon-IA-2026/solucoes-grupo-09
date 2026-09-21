@@ -328,3 +328,30 @@ def test_retrieval_leaves_out_the_daily_bulletins_the_gate_would_refuse():
         assert f"WHEN 'IPDO' THEN {max(gate.DAILY_REPORTS['IPDO'])}" in source
         assert max(days) in (0, 1)
     assert "target_date=target_date" in inspect.getsource(evidence.build_evidence)
+
+
+def test_the_debug_search_endpoint_passes_the_day_axis():
+    """The route exists to explain a retrieval, so it has to run the one the
+    drafter ran.
+
+    Measured on 21/09/2026 while verifying a deploy: `/internal/rag/search`
+    called `search()` without `target_date`, so the day window never ran and a
+    *Boletim Diário de 12/09/2026* came second for a question about the
+    perturbação of 15/08/2023 — a document the real path excludes outright. I
+    read that output as evidence the reranker was not working, which it was not
+    evidence of either way.
+
+    Asserted on the source because the property is *which arguments a call
+    makes*, and there is no database in this suite to run the route against
+    (see `.claude/rules/testing.md` on source-level guards).
+    """
+    import inspect
+
+    from wattsteer_rag import app
+
+    source = inspect.getsource(app.debug_search)
+    assert "target_date=target_date" in source
+    # And the absence is stated, because an optional axis that quietly did not
+    # run is exactly what made the output misleading.
+    assert "day_window_applied" in source
+    assert "target_date" in inspect.signature(app.debug_search).parameters
