@@ -46,7 +46,7 @@ from .lanes import format_instant
 #: The one directory under the artifact root that is not a lane.
 EXPERIMENTS_DIRNAME = "experiments"
 
-ExperimentKind = Literal["dessem_ab", "threshold_sweep"]
+ExperimentKind = Literal["dessem_ab", "threshold_sweep", "p50_bias"]
 
 
 def report_path(root: Path, kind: ExperimentKind, as_of: datetime) -> Path:
