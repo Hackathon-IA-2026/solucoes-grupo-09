@@ -1209,8 +1209,6 @@ export const pt: Copy = {
         figure:
           "Mapa do Brasil dividido nos quatro subsistemas do ONS, cada um sombreado pela sua classe de risco de curtailment. As quatro regiões também aparecem como linhas logo abaixo.",
         region: "{subsystem}: risco {risk}, cerca de {probability}. Selecionar.",
-        keyboardNote:
-          "As setas percorrem as quatro regiões e trocam a seleção; Enter seleciona a região em foco.",
         boundaryNote:
           "Fronteiras elétricas, não regiões geográficas: o Maranhão está no subsistema Norte, o Acre e Rondônia estão no Sudeste/Centro-Oeste, e Mato Grosso, Mato Grosso do Sul, Goiás e o Distrito Federal também.",
         titleObserved: "Os quatro subsistemas",

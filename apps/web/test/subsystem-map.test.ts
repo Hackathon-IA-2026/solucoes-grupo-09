@@ -725,7 +725,5 @@ describe("the region responds to a pointer, and so does its row", () => {
     // the country — and arrow keys make focus far more reachable than before.
     expect(stripped).not.toContain("focusRing(");
     expect(stripped).toContain('outlineStyle: "none"');
-    // The keyboard affordance is written down where a reader can find it.
-    expect(stripped).toContain("copy.app.overview.map.keyboardNote");
   });
 });

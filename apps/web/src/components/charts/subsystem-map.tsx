@@ -380,22 +380,6 @@ export function SubsystemMap({
       <MapLegend paint={paint} observedMax={observedMax} />
 
       {/*
-        The arrow keys are a real affordance now, so they are written down.
-        Undiscoverable keyboard behaviour is behaviour a sighted keyboard user
-        finds by accident and a mouse user never finds at all.
-      */}
-      <Text
-        style={{
-          fontSize: 10,
-          color: colors.inkFaint,
-          marginTop: space.sm,
-          textAlign: "center",
-        }}
-      >
-        {copy.app.overview.map.keyboardNote}
-      </Text>
-
-      {/*
         Attribution, on the figure rather than only in a comment. IBGE's data
         is open, and open data still has a publisher.
       */}

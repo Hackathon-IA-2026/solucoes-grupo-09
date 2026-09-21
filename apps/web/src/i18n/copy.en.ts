@@ -1437,9 +1437,6 @@ export const en = {
           "Map of Brazil divided into the four ONS subsystems, each shaded by its curtailment risk class. The four regions are also listed as rows below.",
         /** One region. `{risk}` is the binned class, never a bare number. */
         region: "{subsystem}: {risk} risk, about {probability}. Select.",
-        /** Arrow keys move the selection, so the map has to say so. */
-        keyboardNote:
-          "Arrow keys move across the four regions and change the selection; Enter selects the focused region.",
         /**
          * Maranhão is in the Norte subsystem and in the Nordeste geographic
          * region, and a reader who knows the map but not the grid will read
