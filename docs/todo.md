@@ -51,23 +51,43 @@ corpus is the part that was shipped, not the state.
 - [x] **The reranker**, which was measured and running nowhere: the image now
       installs the `[rerank]` extra and bakes the cross-encoder in, confirmed in
       the build log and by the first query after deploy paying the model load.
-- [ ] **`models.tgz` and `forecasts.sql.gz` — still not shipped.** These are the
-      other two thirds of the trained state: the artifact files the modelling
-      service reads out of its volume, and the forecast rows the Time Machine
-      replays. `infra/railway/ship-state.sh --from-release state-2026-09-20`
-      does both. Worth knowing before assuming this fixes item 2: shipping
-      artifacts is not the same as promoting a lane, and the gate refuses both
-      lanes for reasons that travel with the artifacts.
-- [ ] Open the Time Machine and press a day. A 200 from `curl` is not a check
-      (`.claude/rules/deploy.md`). Blocked on the forecast rows above — the
-      screen has nothing to replay until they land.
+- [x] **`models.tgz` and `forecasts.sql.gz` — deliberately NOT shipped.**
+      Checked before writing, on 21/09, and shipping them would be a
+      regression:
+
+      Railway's volume already holds an artifact the gate **promoted**
+      (`gate_early`, 2026-09-16T20:00:00Z), and `/v1/meta` on production reads
+      `state=promoted, usable=true` for that lane. The release bundle's
+      `promotions.jsonl` carries only refusals — `gate_early` on
+      `p10_calibration_excess +0.0509` against `0 ± 0.0193`, `gate_late` on
+      `serving_smoke`. Untarring it over the volume replaces the one serving
+      artifact with two refused ones, and `forecasts.sql.gz` opens with
+      `TRUNCATE ... CASCADE` on all three forecast tables, replacing rows the
+      promoted artifact published with rows from a machine that has none.
+
+      `state-2026-09-20` is newer by date and **worse by state**. Ship it only
+      onto a target that has nothing, which is what `ship-rag.sh`'s header says
+      about the corpus and what `ship-state.sh` does not say about artifacts.
 
 Details: `infra/railway/README.md`.
 
 ### 2. Get a forecast lane promoted
 
-No lane is promoted, so every forecast screen states an absence. The gate
-refuses both lanes for two different reasons (`docs/environments.md`):
+**This is a statement about the laptop, not about Railway.** Measured on
+21/09: production has `dessem_free_v1__gate_early__thr5` at
+`state=promoted, usable=true`, and `/v1/grid/outlook?gate_profile=gate_early`
+returns a complete four-subsystem outlook for today and tomorrow from artifact
+`2026-09-16T20:00:00Z`. The forecast screens are not stating an absence there.
+
+What is still true is that the **latest** retrains refuse both lanes, so the
+serving artifact is ageing and `gate_late` has never promoted. The gate refuses
+them for two different reasons (`docs/environments.md`), and both carry a
+measured margin over the baseline while being refused — 319.5 against 475.2
+quantile-loss MWh for `gate_early`, 324.2 against 476.2 for `gate_late`, each
+with `P(candidate better) = 1.0`. A gate that refuses a model which beats its
+baseline by a third is the product working, and it is worth a slide.
+
+The two reasons:
 
 - [ ] **`gate_late`**: ONS publishes curtailment about three days late, so
       `observed_constrained_off_lag_48h` is empty at serving time. The scheduled
