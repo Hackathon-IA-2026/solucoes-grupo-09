@@ -30,6 +30,7 @@ import {
   MapIcon,
   Panel,
   PieChartIcon,
+  radius,
   SearchIcon,
   space,
   type,
@@ -459,6 +460,51 @@ export function OverviewHero({
               // subject rather than a figure.
               flatMaxWidth={wide ? 560 : 440}
               minHeight={wide ? 520 : 380}
+              /*
+                The 24-hour profile, in the map's free corner.
+
+                **Only where it fits.** At `wide` the card has 520px of map to
+                sit over and the fan gets 300 of the card's width; below that
+                the map is 380 tall in a column barely wider than the card
+                would be, so the overlay would *be* the map. The narrow layout
+                keeps the full-width panel underneath, which is where this
+                lived for both until now.
+
+                The width is the known cost, stated where it is paid: the panel
+                below gives the same 24 hours the whole page, and the comment
+                on it calls an hourly series in a 300px rail a smear. This is
+                that trade, taken deliberately — the fan here is the map's
+                caption, and the reader who wants to read an hour still taps it.
+              */
+              overlay={
+                wide && forecast !== null ? (
+                  <View
+                    style={{
+                      width: 300,
+                      gap: 4,
+                      padding: space.sm,
+                      borderRadius: radius.lg,
+                      borderCurve: "continuous",
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      // Translucent over both layers: the flat map is on the
+                      // page's surface and the globe is near-black, so a solid
+                      // fill would be wrong against one of them.
+                      backgroundColor: colors.surface,
+                      opacity: 0.96,
+                    }}
+                  >
+                    <Text style={{ ...type.caption, color: colors.inkFaint }}>
+                      {`${meta.onsDisplayName} · ${copy.app.overview.profileSubtitle}`}
+                    </Text>
+                    <FanChart
+                      hours={forecastHours(forecast.forecast)}
+                      thresholdMw={forecast.forecast.thresholdMw}
+                      height={150}
+                    />
+                  </View>
+                ) : undefined
+              }
             />
             {/*
               The selection, named under the map that changes it. `/app` puts it
@@ -535,8 +581,13 @@ export function OverviewHero({
         and an hourly series in a 300px rail is a smear. Absent rather than
         empty where nothing was published — the rule every other forecast panel
         follows.
+
+        **Narrow only, since 21/09.** On a wide screen the same fan is drawn in
+        the map's bottom-right corner instead — see the `overlay` handed to
+        `RegionMap` above, which also records what that costs. Rendering both
+        would put one chart on the page twice.
       */}
-      {forecast === null ? null : (
+      {forecast === null || wide ? null : (
         <Panel style={{ gap: space.md }}>
           <Text style={{ ...type.caption, color: colors.inkFaint }}>
             {`${meta.onsDisplayName} · ${copy.app.overview.profileSubtitle}`}

@@ -28,6 +28,7 @@
  */
 
 import { radius, space, type, usePalette } from "@wattsteer/ui";
+import type { ReactNode } from "react";
 import { useState } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
 import { CesiumGlobe } from "@/components/charts/cesium-globe";
@@ -105,6 +106,7 @@ export function RegionMap({
   minHeight,
   /** `true` on the console, where the map is the screen rather than a figure. */
   stage = false,
+  overlay,
 }: {
   paint: MapPaint;
   scope: Scope;
@@ -121,6 +123,20 @@ export function RegionMap({
   flatMaxWidth?: number;
   minHeight?: number;
   stage?: boolean;
+  /**
+   * Drawn in the map's bottom-right corner, over whichever layer is showing.
+   *
+   * A slot rather than a fixed child, because the two callers put different
+   * things there and only this component knows where "over the map" is: the
+   * flat layer and the globe are siblings inside one box, and an overlay
+   * positioned outside it would follow the column rather than the scene.
+   *
+   * **Bottom-right, and not by preference.** ion's terms require Cesium's
+   * attribution to stay visible wherever its imagery is drawn, and it is
+   * pinned bottom-*left* a few lines below. The other corner is the one that
+   * is free.
+   */
+  overlay?: ReactNode;
 }) {
   const colors = usePalette();
   const copy = useCopy();
@@ -322,6 +338,25 @@ export function RegionMap({
             {copy.app.grid.layer3dFailed}
           </Text>
         ) : null}
+        {overlay === undefined ? null : (
+          <View
+            // `box-none` so the map keeps every pixel the card does not cover:
+            // panning the globe and hovering a region still work around it,
+            // and the card's own children stay tappable.
+            pointerEvents="box-none"
+            style={{
+              ...(Platform.OS === "web" ? ({ position: "absolute" } as object) : null),
+              right: space.md,
+              bottom: space.md,
+              // Above the flat SVG and above Cesium's canvas, which paints
+              // without regard to document order.
+              zIndex: 3,
+            }}
+          >
+            {overlay}
+          </View>
+        )}
+
         {/* ion's terms require the attribution to be visible wherever its
             imagery is drawn; Cesium's own credit bar is hidden because it
             lands under a callout. */}
