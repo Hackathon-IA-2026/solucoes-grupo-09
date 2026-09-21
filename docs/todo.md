@@ -20,9 +20,13 @@ deployment left until the organisation reopens AWS on site. The trained state
 
 - [ ] Whoever owns the Railway project adds the `RAILWAY_TOKEN` secret
       (Railway → project → Settings → Tokens). This is the only manual step.
+- [ ] Before choosing `with_rag`, read Railway's corpus size **first**:
+      `railway run -- sh -c 'psql "$DATABASE_URL" -At -c "select count(*) from rag.chunk"'`.
+      `ship-rag.sh` replaces the whole `rag` schema and only prints its count
+      afterwards, so turn `with_rag` on only if Railway has fewer than the
+      release's 18,063 chunks.
 - [ ] Run `deploy-railway.yml` from Actions with `ship_state` on and
-      `state_tag = state-2026-09-20`. Decide `with_rag` after reading
-      Railway's chunk count (the script prints it).
+      `state_tag = state-2026-09-20`.
 - [ ] Open the Time Machine and press a day. A 200 from `curl` is not a check
       (`.claude/rules/deploy.md`).
 
@@ -66,14 +70,15 @@ is above 90%, and the number only counts on a fresh set.
 
 - [ ] Write about 30 new questions with a published answer, never used while
       tuning, and run `apps/rag/eval/run_eval.py` on both sets.
-- [ ] Open gaps found in validation, each a separate `fix/rag-*` branch:
-  - no semantic check that the claim is what the quote says (a claim can pass
-    every gate and still be wrong);
-  - numbers are not tied to their row and column (LAPA answered 11,802 where
-    the table says 9,39);
-  - the bulletin's balance table only carries the subsystem in its HTML id;
-  - the solar table is about 8,000 characters with no date in the chunk;
-  - the corpus holds only the current revision of each operating instruction.
+- [ ] Open gaps, each a separate `fix/rag-*` branch:
+  - the three wrong answers of the last run (I06, A01, A02);
+  - the second reader (`apps/rag/src/*/verify.py`) already checks every claim
+    the gates accept and refuses 7 of 9 labelled cases. **Tighten it, do not
+    add another one**: it still accepts an hourly forecast read as the day's
+    scheduled load, and a step's preamble given for the value its table holds;
+  - older revisions of an operating instruction are not in the corpus (the
+    listing is rendered by JavaScript), so a record from before a revision is
+    checked against the current text.
 - [ ] Try Groq as the first provider if it measures better (the gateway allows
       it; decide by the number).
 
