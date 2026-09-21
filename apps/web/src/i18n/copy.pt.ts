@@ -1120,7 +1120,6 @@ export const pt: Copy = {
       windowNone: "Nenhuma hora do dia é mais provável cortar do que não cortar.",
       metaTitle: "Visão da rede — WattSteer",
       title: "Visão da rede",
-      lede: "Risco de curtailment para o dia seguinte em {date}, por subsistema.",
       /*
         The row *selects*; it no longer navigates. The label said "abrir
         Explicar" because pressing it did, which is the defect this screen

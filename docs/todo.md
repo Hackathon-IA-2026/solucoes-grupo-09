@@ -89,16 +89,49 @@ baseline by a third is the product working, and it is worth a slide.
 
 The two reasons:
 
-- [ ] **`gate_late`**: ONS publishes curtailment about three days late, so
-      `observed_constrained_off_lag_48h` is empty at serving time. The scheduled
-      `publication-lag-conformance` job fails on exactly this, and its message
-      says the fix is **a migration raising the configured lag**, not an edit to
-      the test. Then retrain.
+- [x] **`gate_late`** — **addressed in code, merged in `#40`, not yet proven.**
+      The fix written here was wrong and `docs/feature-alternatives-constrained-off-lag.md`
+      shows why: the lag is measured from the *target hour*, so raising the
+      configured lag only moves the cut further from the cutoff. The feature was
+      dropped instead (migration `0055`), because it was NULL by construction —
+      the block reads `(cutoff − 168 h, cutoff]` and only hours 00–03 of D−2
+      fall inside, which is 20 of 24 hours, the 83.3% `serving_smoke` compared
+      against. Needs a retrain to show a promotion.
 - [ ] **`gate_early`**: fails the P10 calibration guardrail. Needs an ML
-      decision (features, calibration window), not a gate change.
-- [ ] Done when the local `/v1/meta` shows a promoted lane and a forecast
-      screen draws a band. Then ship the new artifacts with
-      `infra/railway/make-state-bundle.sh` and item 1.
+      decision (features, calibration window), not a gate change. Unchanged
+      by `#40`.
+
+### 2a. ⚠️ Applying `0055` will take the serving lane down until a retrain
+
+**Read this before deploying anything to Railway.** Found 21/09, after `#40`
+merged.
+
+Railway is serving forecasts from artifact `2026-09-16T20:00:00Z`, which was
+fitted **with** `observed_constrained_off_lag_48h`. Migration `0055` redefines
+`feature_rows`, and the hot-swap gate's third check marks an artifact invalid
+when the live definition stops producing the hash it was fitted against —
+`artifacts.contract_fault`, which says in as many words that the incumbent is
+then "invalid rather than stale ... every number it would serve was measured in
+a feature space the database no longer produces". The recovery it names is a
+retrain; a rollback cannot help, because after a contract change there is no
+earlier artifact to name.
+
+So the order is not "migrate, then deploy". It is:
+
+- [ ] Apply `0053`, `0054`, `0055` **and** mint an artifact on the new contract
+      in the same window, by triggering a retrain rather than waiting for
+      Friday 03:10 UTC.
+- [ ] Until that lands, `/v1/meta` reads `usable: false`, every forecast screen
+      states an absence, and the Time Machine has no band to draw. That is the
+      product behaving correctly and it is still a dark demo.
+- [ ] The upside worth trying deliberately, not discovering on the day:
+      dropping the feature removes the exact `serving_smoke` blocker that has
+      refused `gate_late` every week. A retrain on the new contract is the first
+      one that could promote it.
+- [ ] Do **not** deploy `api`/`worker` from `main` while the old schema is
+      live — `0053`/`0054` add the tables the new ingestion reads.
+- [ ] Done when `/v1/meta` on Railway shows a promoted **and** usable lane on
+      the new contract, and `/v1/grid/outlook` draws a band.
 
 ### 3. RAG accuracy above 90%, measured on questions it was not tuned on
 

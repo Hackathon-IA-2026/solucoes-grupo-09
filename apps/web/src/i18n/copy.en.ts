@@ -1333,7 +1333,6 @@ export const en = {
       windowNone: "No hour of the day is more likely to curtail than not.",
       metaTitle: "Grid Overview — WattSteer",
       title: "Grid Overview",
-      lede: "Day-ahead curtailment risk for {date}, by subsystem.",
       /*
         The row *selects*; it no longer navigates. The label said "open Explain"
         because pressing it did, which is the defect this screen carried: one

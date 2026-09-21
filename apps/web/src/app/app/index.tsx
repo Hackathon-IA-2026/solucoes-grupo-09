@@ -324,6 +324,10 @@ export default function GridOverviewScreen() {
           Explicar, and if that turns out to be too deep for an operator this is
           the row to bring back rather than a new one to invent.
 
+          `copy.app.overview.lede` no longer exists — it was removed on 21/09
+          with the row below it — so restoring this block means restoring that
+          key in both dictionaries first.
+
           <ScreenTitle
             lede={fill(copy.app.overview.lede, { date: f.date(params.date) })}
             right={right}
@@ -345,11 +349,23 @@ export default function GridOverviewScreen() {
           row — it is the only thing saying the figures are settled — and the
           forecast state keeps the heading alone.
         */}
-        {forecastPublished ? (
-          <ScreenTitle
-            lede={fill(copy.app.overview.lede, { date: f.date(params.date) })}
-          />
-        ) : (
+        {/*
+          **The forecast state now renders no title row at all.**
+
+          Asked for on 21/09: the lede read "Risco de curtailment para o dia
+          seguinte em <date>, por subsistema", and the date is already on a chip
+          and the subsystems are already the pills below it, so it said nothing
+          the page was not showing.
+
+          The cost is stated rather than discovered. `ScreenTitle` puts
+          `accessibilityRole="header"` and `aria-level={1}` on the lede when
+          there is no title above it, so this row carried `/app`'s only
+          level-one heading — and the note below records the last time that went
+          missing. With the forecast published the page now has no `h1`, and its
+          first headings are the panels' own. That is a deliberate trade, taken
+          with the measurement in hand, not an oversight to be re-fixed.
+        */}
+        {forecastPublished ? null : (
           <ScreenTitle
             lede={
               noModelPromoted
