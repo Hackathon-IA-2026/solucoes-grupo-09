@@ -1,8 +1,7 @@
 import type { Database } from "../database/connection.js";
-import { UpstreamError } from "../errors.js";
 import type { Execute } from "../jobs/index.js";
 import type { PayloadArchive } from "./archive.js";
-import { acquireBulkResource, BULK_STEPS } from "./bulk-resource.js";
+import { createBulkCsvIngestor } from "./bulk-csv-ingestor.js";
 import { writeSubsystemLoadDays } from "./daily-load-repository.js";
 import { selectResourceForYear } from "./ons/catalogue.js";
 import {
@@ -61,65 +60,41 @@ export interface DailyLoadIngestorDeps {
   archive?: PayloadArchive;
 }
 
-/** Build the job handler. */
+/**
+ * Build the job handler.
+ *
+ * A spec, not a body: the acquisition, the non-CSV refusal, the decode and the
+ * `markIngested()`-after-write ordering are `bulk-csv-ingestor.ts`'s, shared
+ * with every other bulk source. What is here is what makes this one the daily
+ * load: which resource answers for a year, how its CSV parses, where its rows
+ * go, and the two counters it reports beyond the shared four.
+ */
 export function createDailyLoadIngestor(
   deps: DailyLoadIngestorDeps,
 ): Execute<IngestDailyLoadPayload, IngestDailyLoadResult> {
-  const fetchImpl = deps.fetch ?? fetch;
-
-  return async (payload, report) => {
-    const acquired = await acquireBulkResource({
-      db: deps.db,
-      fetch: fetchImpl,
+  return createBulkCsvIngestor<
+    IngestDailyLoadPayload,
+    ReturnType<typeof parseDailyLoadCsv>,
+    { irregularDays: number; regimes: LoadMethodologyRegime[] }
+  >(
+    {
       slug: DAILY_LOAD_DATASET_SLUG,
-      select: (resources) =>
+      source: "carga-energia",
+      select: (resources, payload) =>
         selectResourceForYear(resources, payload.year, DAILY_LOAD_FORMATS),
-      force: payload.force,
-      archive: deps.archive,
-      context: payload.context,
-      report,
-    });
-
-    const base = {
-      resourceName: acquired.resource.name,
-      format: acquired.format,
-      changed: acquired.changed,
-      rowsParsed: 0,
-      rowsRejected: 0,
-      irregularDays: 0,
-      regimes: [] as LoadMethodologyRegime[],
-      inserted: 0,
-      revised: 0,
-      unchanged: 0,
-    };
-
-    if (!acquired.bytes) {
-      return { ...base, downloaded: false };
-    }
-    if (acquired.format !== "CSV") {
-      throw new UpstreamError(
-        `carga-energia returned ${acquired.format}; only CSV is ingested`,
-      );
-    }
-
-    const parsed = parseDailyLoadCsv(new TextDecoder("utf-8").decode(acquired.bytes));
-    const written = await writeSubsystemLoadDays(deps.db, {
-      rows: parsed.rows,
-      publishedAt: acquired.publishedAt,
-      publishedAtPrecision: acquired.publishedAtPrecision,
-      sourceVersionId: acquired.versionId,
-    });
-    await acquired.markIngested();
-    report({ done: BULK_STEPS, total: BULK_STEPS });
-
-    return {
-      ...base,
-      downloaded: true,
-      rowsParsed: parsed.rows.length,
-      rowsRejected: parsed.rejected.length,
-      irregularDays: parsed.irregularDays,
-      regimes: [...new Set(parsed.rows.map((row) => row.methodologyRegime))],
-      ...written,
-    };
-  };
+      parse: parseDailyLoadCsv,
+      write: (db, parsed, version) =>
+        writeSubsystemLoadDays(db, { rows: parsed.rows, ...version }),
+      counted: (parsed) => ({
+        parsed: parsed.rows.length,
+        rejected: parsed.rejected.length,
+      }),
+      empty: { irregularDays: 0, regimes: [] },
+      extra: (parsed) => ({
+        irregularDays: parsed.irregularDays,
+        regimes: [...new Set(parsed.rows.map((row) => row.methodologyRegime))],
+      }),
+    },
+    deps,
+  );
 }
