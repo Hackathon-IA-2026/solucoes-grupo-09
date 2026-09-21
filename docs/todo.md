@@ -101,6 +101,24 @@ The two reasons:
       decision (features, calibration window), not a gate change. Unchanged
       by `#40`.
 
+### 0. 🔴 `/internal/*` on `ml` is reachable from the public internet
+
+Verified 21/09: `ml-production-f9cb.up.railway.app` still exists, and
+`GET /internal/retrain` answers **405 Method Not Allowed** — the route is there,
+publicly routable, with no auth challenge. A `POST` starts a forty-minute
+training run. `architecture.md` says the prefix *is* the marker for what only
+the worker may call.
+
+Nothing depends on the hostname: `worker` and `api` both hold
+`WATTSTEER_ML_URL=http://ml.railway.internal:8000`, so deleting it breaks
+nothing. The domain was created by accident by `railway domain --service ml`
+with no subcommand, which *creates* rather than lists — `deploy.md` records that
+trap.
+
+- [ ] `railway domain delete ml-production-f9cb.up.railway.app --service ml --environment production`
+      (agent attempts are refused by the DNS/domain guard, so this is a human
+      command.)
+
 ### 2a. ⚠️ Applying `0055` will take the serving lane down until a retrain
 
 **Read this before deploying anything to Railway.** Found 21/09, after `#40`
@@ -118,9 +136,18 @@ earlier artifact to name.
 
 So the order is not "migrate, then deploy". It is:
 
+**No data is lost by migrating.** Checked statement by statement: `0053` and
+`0054` are purely additive, and `0055`'s only `DELETE` removes one row from
+`feature_dictionary_entry` — the metadata describing the dropped column. Every
+other statement is `CREATE OR REPLACE FUNCTION`. No table is dropped, no column
+is dropped, nothing is truncated. What the migration costs is the *artifact*,
+not the data.
+
 - [ ] Apply `0053`, `0054`, `0055` **and** mint an artifact on the new contract
       in the same window, by triggering a retrain rather than waiting for
-      Friday 03:10 UTC.
+      Friday 03:10 UTC. The trigger is `POST /internal/retrain` on the `ml`
+      service, from inside the private network once item 0 is closed:
+      `railway ssh --service worker -- curl -XPOST http://ml.railway.internal:8000/internal/retrain`
 - [ ] Until that lands, `/v1/meta` reads `usable: false`, every forecast screen
       states an absence, and the Time Machine has no band to draw. That is the
       product behaving correctly and it is still a dark demo.
