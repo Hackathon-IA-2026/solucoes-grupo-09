@@ -330,7 +330,6 @@ def test_the_day_band_is_the_ensembles_and_not_the_sum_of_the_hours(
     hours_by_subsystem: dict[str, list[Any]] = {}
     for hour in published.hours:
         hours_by_subsystem.setdefault(hour.subsystem, []).append(hour)
-    quiet_days = 0
     for day in published.days:
         hours = hours_by_subsystem[day.subsystem]
         summed = {
@@ -351,14 +350,27 @@ def test_the_day_band_is_the_ensembles_and_not_the_sum_of_the_hours(
         # inequality in one direction would be a claim about this fixture.
         assert band["p90"] != pytest.approx(summed["p90"])
         if summed["p90"] == 0.0:
-            quiet_days += 1
             # The sharpest case, and the reason a sum cannot stand in: every
             # hour's P90 is zero because p is below 0.10 all day, and the day
             # still has a real chance of a curtailed hour. A summed band would
             # publish "no curtailment, at any quantile"; the ensemble does not.
             assert band["p90"] > 0.0
             assert row["day_occurrence_probability"] > 0.0
-    assert quiet_days >= 1
+    # No `assert quiet_days >= 1` here, and no tautological count in its place.
+    #
+    # This asserted `quiet_days >= 1`, which made an invariant of the
+    # composition depend on a booster staying unconfident about the quiet
+    # subsystem. Dropping `observed_constrained_off_lag_48h` moved exactly
+    # that: `N`'s minimum summed P90 over the same seven test days went from
+    # 0.0 to 163.5, no day was degenerate any more, and the assertion failed
+    # without anything about the arithmetic having changed.
+    #
+    # `test_path_ensemble.py::test_where_every_hourly_p90_is_zero_the_day_p90_is_not`
+    # now builds the degenerate day at `p = 0.08` and asserts the property
+    # unconditionally, for every subsystem. That is where the guarantee lives;
+    # here it is an opportunistic extra check on a real publication, and the
+    # property this test is named for — that the day band is the ensemble's and
+    # not the sum — is asserted on every day above, quiet or not.
 
 
 def test_the_peak_is_a_band_and_the_day_probability_is_not_one_minus_a_product(
