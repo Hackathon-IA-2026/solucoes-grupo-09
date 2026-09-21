@@ -127,6 +127,14 @@ is above 90%, and the number only counts on a fresh set.
 
 - [ ] RAG job surface: `rag.job` and `rag-job-status.schema.json` exist as the
       contract, nothing serves them (`docs/rag/decisions.md`).
+- [ ] `/internal/rag/search` does not pass `target_date`, so the day filter the
+      real path applies is missing and the endpoint ranks other days' bulletins
+      into the answer. It is the tool used to ask "why did retrieval do that",
+      and it answers about a different retrieval. Pass the axis through, or say
+      on the response that it was not applied (`docs/rag/decisions.md`).
+- [x] Local reranker **now running on Railway**: the image installs the extra
+      and bakes the cross-encoder in (`apps/rag/Dockerfile`), confirmed in the
+      build log and by the first query after deploy paying the model load.
 - [x] Local reranker for the RAG — **built and measured** (`rerank.py`,
       `eval/measure_rerank.py`). Over the 67 goldset questions that name the
       numbers their document states, a passage stating one reaches the drafter

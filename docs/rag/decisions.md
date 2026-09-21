@@ -78,6 +78,23 @@ the code, so that nobody reverses one without knowing why it was taken.
   information for the rule, not a decision. REL is never `high`: the
   intervention schedule is not public.
 
+## `/internal/rag/search` is not the pipeline, and reads like it is
+
+Measured on 21/09/2026 while verifying a deploy. The debug endpoint calls
+`search()` with `published_before` and a limit, and **not** with `target_date`
+— so the filter that keeps a bulletin of another day out of the candidates
+never runs. Asked "quanta carga foi interrompida no SIN na perturbação de
+15/08/2023", the deployed service put a *Boletim Diário de 12/09/2026* second,
+which the real path would have excluded outright
+(`gate.DAILY_REPORTS`, and the matching clause in `retrieve.search`).
+
+Nothing is wrong with the service; the endpoint is answering the question it
+was given. But it is the tool anybody reaches for to ask "why did retrieval do
+that", and the answer it gives is from a different retrieval than the one the
+drafter saw. Either it should take `target_date` and pass it through, or it
+should say in its own response that it did not — the second is cheaper and is
+the honest shape, since the endpoint's purpose is to show what retrieval saw.
+
 ## What was planned and deliberately not built
 
 - Redis counters, an `arq` worker and durable jobs in `rag.job`: the commands
