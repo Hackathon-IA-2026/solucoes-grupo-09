@@ -19,9 +19,12 @@ before adding to it.
 
 `bun run check` runs typecheck + lint + the TS suites. `check:all` adds `:ml`.
 
-**`test:hygiene` has 5 known failures** predating 2026-09-18 (`57ffbda`).
-Compare against that baseline. Do not "fix" them by weakening a guard, and never
-add a sixth without saying so.
+**`test:hygiene` is green, and so is everything else.** Do not fix a red guard
+by weakening it — but do not leave it red either. When one fires, the first
+question is whether it has caught something: of the five failures that stood
+here for weeks as a "baseline", one was a real finding (copy outside the
+dictionaries), two were a guard scanning its own explanatory comments, and two
+were mutation proofs that had gone vacuous when a union grew under them.
 
 ## Do not test a fixture
 

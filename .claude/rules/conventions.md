@@ -22,8 +22,10 @@ or the incident behind it.
 repository-wide; do not "fix" complexity by splitting a function whose branches
 are one decision.
 
-The baseline is **2 errors** (both `noCommentText` in `apps/web/src/app/app/
-replay.tsx`). Compare against it. `bunx biome check --write` fixes formatting;
+`biome check` is clean. The two `noCommentText` errors that used to be called a
+baseline were JSX children written as `//` comments without braces, which React
+renders — three lines of developer prose on the Time Machine screen, twice.
+`bunx biome check --write` fixes formatting;
 run it before you commit, because the formatter reflows ternaries and a
 source-level test asserting exact spelling will break.
 

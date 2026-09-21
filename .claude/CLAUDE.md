@@ -33,9 +33,14 @@ corpus) · `packages/core` (wire types, generated from JSON Schema) ·
 | `bun run web:export` | build the static site into `apps/web/dist` |
 | `bun run typecheck` · `bun run lint` | `lint` is `biome check` |
 
-`test:hygiene` has **5 known failures** predating 2026-09-18 (`57ffbda`). Treat
-that as the baseline: compare against it rather than expecting green, and never
-add a sixth.
+**Everything is green.** `bun run check` exits 0 — typecheck, `biome check` and
+all four suites. There is no tolerated-failure baseline any more: the five
+hygiene failures and the two lint errors that used to be called one were four
+unfixed defects, one already-fixed count nobody updated, and two lines of
+developer prose being rendered on the Time Machine. A red suite is a bug now,
+including a red guard — three of those four were a guard firing on itself or on
+its own stale fixture, and every one of them had been read past for weeks
+because the number said to read past it.
 
 ## Rules — read the one matching your task
 
@@ -63,7 +68,7 @@ add a sixth.
 ## Before you finish
 
 1. `bun run check` (and `check:ml` if Python moved).
-2. Compare `test:hygiene` against its 5-failure baseline, not against zero.
+2. `bun run check` exits 0, and `test:hygiene` is part of it. Green means green.
 3. Commit in **English**, describing *why*. See
    [`conventions.md`](rules/conventions.md).
 4. State what you verified and what you did not. A claim of "tests pass" that
