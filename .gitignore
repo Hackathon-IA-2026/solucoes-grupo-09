@@ -29,6 +29,9 @@ playwright-report/
 # apps/rag: raw corpus and evaluation output, both reproducible
 .rag-store/
 apps/rag/eval/last-run.json
+# Same convention: an eval run's output is evidence for a decision, and the
+# decision records the numbers. `docs/rag/decisions.md` carries the 52 -> 59.
+apps/rag/eval/rerank-measurement.json
 
 # The packed corpus is built where it is installed, not carried in git.
 apps/rag/seed/*.jsonl.gz

@@ -107,6 +107,11 @@ async def build_evidence(
     question = question or question_for(subsystem, target_date, reason, description)
     trace_id = trace_id or hashlib.sha256(f"{subsystem}{target_date}{question}".encode()).hexdigest()[:12]
     record = Record.of(question, description, target_date)
+    # `retrieval` is filled by `search` and then carried into the document, so
+    # the trace states which reranker ordered the passages rather than assuming
+    # the configured one ran: an uninstalled extra or a model that failed to
+    # load keeps the RRF order and must say `null`.
+    retrieval: dict = {}
     hits = await search(
         db,
         gateway,
@@ -114,8 +119,10 @@ async def build_evidence(
         published_before=gate_at,
         named_documents=list(record.named_documents) or None,
         target_date=target_date,
+        report=retrieval,
     )
     document = _empty_document(subsystem, target_date, gate_at, question, trace_id, hits)
+    document["trace"]["retrieval"]["rerank_provider"] = retrieval.get("rerank_provider")
     document["corpus_version"] = await db.corpus_version()
     if hits:
         await _draft(gateway, document, record, hits)

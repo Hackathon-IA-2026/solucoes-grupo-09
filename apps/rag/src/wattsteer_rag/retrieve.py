@@ -20,6 +20,7 @@ from .config import settings
 from .db import Database
 from .gateway.router import Gateway, QuotaExhausted
 from .index import embed_texts, to_pgvector
+from .rerank import rerank
 
 RRF_K = 60
 
@@ -115,7 +116,16 @@ async def search(
     named_documents: list[str] | None = None,
     target_date: str | None = None,
     limit: int | None = None,
+    report: dict | None = None,
 ) -> list[Hit]:
+    """The fused candidates, reranked if a reranker is configured, cut to `limit`.
+
+    `report`, when given, is where this writes what it did — today only
+    `rerank_provider`, which the evidence trace publishes and which is `None`
+    whenever the RRF order was kept. It is an argument rather than a second
+    return value because both callers already hold the dict it belongs in, and
+    a tuple would have been unpacked and discarded at one of them.
+    """
     pool = await db.connect()
     conf = settings()
     limit = limit or conf.top_hits
@@ -215,7 +225,15 @@ async def search(
             fused[key] = hit
 
     ranked = sorted(fused.values(), key=lambda hit: hit.score, reverse=True)
-    return ranked[:limit]
+    # Reranked **before** the cut, which is the only order in which it can help:
+    # the measured miss is a passage the fusion ranked 11th with the cut at 8,
+    # and reordering what already survived the cut could never reach it. The
+    # filters above are correctness rules and have already run, so this reorders
+    # strictly inside what they allowed.
+    reranking = rerank(question, ranked, limit, model=settings().rerank_model)
+    if report is not None:
+        report["rerank_provider"] = reranking.provider
+    return reranking.hits
 
 
 def _to_hit(row, k: int, rank: int) -> Hit:

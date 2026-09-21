@@ -54,15 +54,31 @@ tasks:
     max_output_tokens: 1500
   verify: # a second reader for each accepted claim: does the quote state it? (verify.py)
     chain:
-      # Groq first, the one exception to "NVIDIA does the work", and measured:
-      # on 18/09/2026, four labelled cases (LAPA read from the SIN's row, a
-      # Submódulo quoted for another item, and two true claims), gpt-oss-20b
-      # got 4/4 in 0.5 s each. NVIDIA's small models answered 404
-      # (nemotron-nano-3, gemma-3-12b), timed out (deepseek-v4-flash,
-      # mistral-nemotron) or broke the JSON (glm-5.3-flash). A call is about
-      # 1,000 tokens with the reasoning, so the 8k TPM holds some 7 claims a minute.
-      - { provider: groq, model: openai/gpt-oss-20b, max_input_tokens: 6000 }
+      # NVIDIA does the work here too, and Groq is the fallback. This chain read
+      # the other way round until 21/09/2026 and it cost the reader entirely:
+      # `GROQ_API_KEYS` is empty, so every verify call fell through the first
+      # link to the second, and on a morning when nemotron answered 503 the
+      # whole chain had no working link. A missing reader refuses the document
+      # (`verify.py`), so A02 of the goldset came back
+      # `claim_reader_unavailable` — not wrong, just silent, with no claim to
+      # read. Leading with the provider the deployment actually has a key for
+      # makes the fallback a fallback instead of the only link that runs.
+      #
+      # The earlier order was measured and the measurement still stands on its
+      # own terms: on 18/09/2026 gpt-oss-20b got 4/4 of the labelled cases in
+      # 0.5 s each, while NVIDIA's *small* models answered 404 (nemotron-nano-3,
+      # gemma-3-12b), timed out (deepseek-v4-flash, mistral-nemotron) or broke
+      # the JSON (glm-5.3-flash). None of that is about nemotron-3-super, which
+      # is the large model and answers this task.
+      #
+      # kimi-k3 sits between them because one 503 should not reach Groq at all:
+      # both NVIDIA models answered 200 when this was written, and it is the
+      # same second link `generate_strong` already falls back to.
       - { provider: nvidia, model: nvidia/nemotron-3-super-120b-a12b, max_input_tokens: 24000 }
+      - { provider: nvidia, model: moonshotai/kimi-k3, max_input_tokens: 24000 }
+      # A call is about 1,000 tokens with the reasoning, so the 8k TPM holds
+      # some 7 claims a minute when it is reached.
+      - { provider: groq, model: openai/gpt-oss-20b, max_input_tokens: 6000 }
     require: { json_schema: true }
     temperature: 0
     # gpt-oss reasons before it answers: at 300 it spent 298 tokens reasoning

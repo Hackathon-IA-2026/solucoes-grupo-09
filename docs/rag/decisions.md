@@ -84,8 +84,28 @@ the code, so that nobody reverses one without knowing why it was taken.
   are resumable and idempotent, which covered the hackathon's needs without a
   queue. The table and `rag-job-status.schema.json` remain as the contract for
   when a job surface is added.
-- A reranker: NIM retired its rerankers (410) and a local one is optional
-  (`pip install -e ".[rerank]"`); the RRF order is used and the trace says so.
+- ~~A reranker~~ — **built on 21/09/2026, measured, and still off by default.**
+  NIM retired its rerankers (410), so this is the local one the extra installs
+  (`pip install -e ".[rerank]"`). It was deferred until it measured better than
+  the RRF order, and it does: over the 67 goldset questions that name the
+  numbers their document states, a passage stating one of them is among the
+  eight the drafter receives in **52** cases under RRF and **59** under
+  reranking — seven rescued, none lost. Scored on retrieval rather than
+  end-to-end so the two arms see identical candidates and no generation quota
+  is spent (`eval/measure_rerank.py`).
+
+  What it fixed, end to end on the three wrong answers of the 19/09 run: A01
+  went from a true-but-unasked percentage to the sentence that answers it
+  ("aproximadamente 23.368 MW de cargas do SIN", page 15 of a 572-page report,
+  which the fused order never surfaced). A02 did not move — its answering
+  chunk sits at fused rank 11 and the cross-encoder still ranks eight others
+  above it.
+
+  Off by default (`WATTSTEER_RAG_RERANK_MODEL` empty) because the extra is a
+  few hundred megabytes and a deployment without it must run the retrieval that
+  was measured rather than a quietly different one. `rerank.py` falls back to
+  the RRF order whenever the model is absent or fails, and the trace's
+  `rerank_provider` is `null` exactly then.
 - Docling, Playwright and the CKAN client: poppler and plain HTTP were enough
   for every source that ended up in the corpus.
 - OpenRouter, SambaNova and Bedrock as extra links: two free providers cover

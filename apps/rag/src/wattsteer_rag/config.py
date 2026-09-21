@@ -48,6 +48,13 @@ class Settings(BaseSettings):
     hybrid_vector_k: int = 40
     hybrid_text_k: int = 40
     top_hits: int = 8
+    # The cross-encoder that reorders the fused candidates, or empty for the RRF
+    # order. Empty by default and deliberately: `docs/rag/decisions.md` asks for
+    # a reranker to be measured before it is turned on, and a deployment that
+    # has not installed the `[rerank]` extra must run the retrieval that was
+    # measured rather than a quietly different one. See `rerank.py`.
+    rerank_model: str = ""
+
     embedding_dimensions: int = 1024
 
     user_agent: str = "WattSteer-RAG/0.1 (+https://www.wattsteer.com)"
