@@ -524,8 +524,21 @@ export function AppShell({
                 maxWidth: fullWidth ? undefined : layout.page,
                 alignSelf: "center",
                 paddingHorizontal: 20,
-                paddingTop: space.xl,
-                gap: space.xl,
+                /*
+                  `space.md`, the same 12 the cards are spaced by.
+
+                  This was `space.xl`, so the page put **24** above the first
+                  row of cards and between every block, while the grid inside
+                  them is 12 apart — measured on production: 24 above the
+                  question row, 12 below it. A row with twice the space above it
+                  as below reads as belonging to something else, and the
+                  question cards are the page's answer to its own title.
+
+                  One number for the page and the grid it holds, rather than two
+                  that have to be remembered together.
+                */
+                paddingTop: space.md,
+                gap: space.md,
               }
         }
       >
@@ -939,7 +952,10 @@ export function SectionBlock({
         />
       </Pressable>
       {expanded ? (
-        <View nativeID={`${id}-body`} style={{ gap: space.xl }}>
+        // The same 12 the page and the card grid use — see the note on the
+        // `main` stack above. An accordion that opened on a wider rhythm than
+        // the page it opens inside looked like a different screen.
+        <View nativeID={`${id}-body`} style={{ gap: space.md }}>
           {children}
         </View>
       ) : null}

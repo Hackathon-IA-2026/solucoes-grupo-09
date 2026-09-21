@@ -493,22 +493,23 @@ export function OverviewHero({
                 wide && forecast !== null ? (
                   <View
                     /*
-                      `none`, not `box-none`. The wrapper in `region-map.tsx` is
-                      `box-none`, which lets clicks through the *wrapper* — but
-                      the card and the chart's own `<Svg>` are real boxes and
-                      still hit-test, so the overlay ate clicks meant for the
-                      map underneath it. `app-overview-selection.spec.ts` caught
-                      it as "subtree intercepts pointer events" on a click that
-                      should have selected Sul: a reader unable to pick a
-                      subsystem, which is worse than a chart nobody can tap.
+                      Pressable again, in the corner that leaves the map alone.
 
-                      The chart is a caption here, so it gives its gesture up
-                      rather than the map giving up its clicks — see
-                      `interactive={false}` below, which also drops the "tap an
-                      hour" hint so the legend does not promise what this copy
-                      of the chart cannot do.
+                      This was `pointerEvents="none"` for one evening, because
+                      at bottom-**right** the card sat over Sul and ate the
+                      click that selects it — `app-overview-selection.spec.ts`
+                      caught it as "subtree intercepts pointer events", and
+                      giving the chart's gesture up was the quick way to give
+                      the map its clicks back. It also took away the hour
+                      readout, which is the thing the card is *for*.
+
+                      Bottom-left costs nothing: measured at the 1280 viewport
+                      the suite uses, the right corner overlapped Sul by 64px
+                      across its centre, and this corner is over the map's
+                      empty south-west. So the chart keeps its press strip and
+                      the map keeps every region — the trade was a position,
+                      not a feature.
                     */
-                    pointerEvents="none"
                     style={{
                       width: 340,
                       gap: 4,
@@ -530,7 +531,6 @@ export function OverviewHero({
                     <FanChart
                       hours={forecastHours(forecast.forecast)}
                       thresholdMw={forecast.forecast.thresholdMw}
-                      interactive={false}
                     />
                   </View>
                 ) : undefined

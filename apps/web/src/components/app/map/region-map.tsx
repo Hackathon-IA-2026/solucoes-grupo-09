@@ -131,10 +131,11 @@ export function RegionMap({
    * flat layer and the globe are siblings inside one box, and an overlay
    * positioned outside it would follow the column rather than the scene.
    *
-   * **Bottom-right, and not by preference.** ion's terms require Cesium's
-   * attribution to stay visible wherever its imagery is drawn, and it is
-   * pinned bottom-*left* a few lines below. The other corner is the one that
-   * is free.
+   * **Bottom-left, with the attribution moved to make room.** ion's terms
+   * require Cesium's credit to be *visible* wherever its imagery is drawn;
+   * they do not say which corner. It sat bottom-left, so the two swapped
+   * rather than the overlay being denied the corner that was asked for — the
+   * credit is still on the scene, the same size, in the opposite corner.
    */
   overlay?: ReactNode;
 }) {
@@ -346,7 +347,7 @@ export function RegionMap({
             pointerEvents="box-none"
             style={{
               ...(Platform.OS === "web" ? ({ position: "absolute" } as object) : null),
-              right: space.md,
+              left: space.md,
               bottom: space.md,
               // Above the flat SVG and above Cesium's canvas, which paints
               // without regard to document order.
@@ -359,13 +360,15 @@ export function RegionMap({
 
         {/* ion's terms require the attribution to be visible wherever its
             imagery is drawn; Cesium's own credit bar is hidden because it
-            lands under a callout. */}
+            lands under a callout. Bottom-**right** since 21/09: the overlay
+            took the left corner, and the terms ask for the credit to be seen
+            rather than for it to be in any particular place. */}
         {showing3d ? (
           <Text
             style={{
               ...(Platform.OS === "web" ? ({ position: "absolute" } as object) : null),
               bottom: space.sm,
-              left: space.md,
+              right: space.md,
               ...type.caption,
               color: "rgba(255,255,255,0.45)",
             }}
