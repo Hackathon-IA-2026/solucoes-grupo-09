@@ -13,6 +13,7 @@ import {
   replayRefreshTargets,
 } from "./jobs/replay-refresh.js";
 import { RETRAIN_TIME_ZONE } from "./jobs/retrain.js";
+import type { JobSchedule } from "./jobs/types.js";
 import {
   createWorkerDispatch,
   forecastPublicationSchedules,
@@ -145,95 +146,106 @@ if (config.refreshSchedules) {
     );
   }
 
-  // The publication: ten minutes after each gate, in Brasília civil time.
-  //
-  // Registered here and only here — `docs/specs/api-surface.md`'s boundary
-  // decision is that the forecast is a row this schedule wrote, so the API
-  // process (WATTSTEER_ROLE=api) has no path to the modelling service for a
-  // forecast and needs none.
-  //
-  // Skipped, loudly, without a modelling service to ask: a schedule that fires
-  // twice a day into an unconfigured `mlUrl` is two guaranteed job failures a
-  // day, and `ml-proxy` is right to call that a misconfiguration rather than an
-  // outage. What the reader sees either way is the last published origin with
-  // its real age.
-  if (config.mlUrl) {
-    for (const publication of forecastPublicationSchedules()) {
-      await runner.schedule(publication);
-    }
-  } else {
-    console.warn(
-      "⚠️  publication: WATTSTEER_ML_URL is unset — the day-ahead forecast will " +
+  /*
+    The four schedules that need a modelling service, and the sentence each
+    owes an operator when there is none.
+
+    Written as a table because the *shape* was written four times and the
+    **sentences** are the only part that differs. Each block was
+    `if (config.mlUrl) { for (…) await runner.schedule(…) } else { warn(…) }`,
+    and the fifth producer would have been a fifth copy — which is how
+    `refresh_replay_caches` came to be a schedule nobody registered until
+    replay 08 (`test/reachability.ts` records that incident at length).
+
+    The sentences stay four, deliberately, and none is generated from a name.
+    They are not the same absence: without a modelling service the publications
+    keep serving the last origin with its real age, the retrain leaves whatever
+    is promoted serving indefinitely, the backfill makes `/v1/replay` refuse
+    every walk-forward test day with a product refusal rather than a stale
+    model, and the refresh leaves `/v1/replay/days` and `/v1/backtest` on a
+    stated `pending`. An operator reading the log needs to be told which of
+    those they are looking at, so a single "ml is unset" warning would be four
+    different diagnoses collapsed into one.
+
+    Each entry calls its producer rather than holding a reference to it, which
+    is also what `test/reachability.ts` reads as the registration: a producer
+    nobody calls from outside the module declaring it is a function that
+    manufactures schedules nobody registers.
+  */
+  const MODEL_BACKED: readonly {
+    readonly schedules: () => JobSchedule<WorkerTask>[];
+    readonly absence: string;
+  }[] = [
+    {
+      // The publication: ten minutes after each gate, in Brasília civil time.
+      //
+      // Registered here and only here — `docs/specs/api-surface.md`'s boundary
+      // decision is that the forecast is a row this schedule wrote, so the API
+      // process (WATTSTEER_ROLE=api) has no path to the modelling service for a
+      // forecast and needs none.
+      //
+      // Skipped, loudly: a schedule that fires twice a day into an unconfigured
+      // `mlUrl` is two guaranteed job failures a day, and `ml-proxy` is right
+      // to call that a misconfiguration rather than an outage.
+      schedules: () => forecastPublicationSchedules(),
+      absence:
+        "⚠️  publication: WATTSTEER_ML_URL is unset — the day-ahead forecast will " +
         "not be published, and /v1/forecast/day-ahead will keep serving the last " +
         "origin with its real age.",
-    );
-  }
-  // The weekly retrain: Fridays at 03:10 UTC, `docs/specs/forecaster.md`'s
-  // seam 11. Forecaster 19 gated both lanes in one pass and left nothing
-  // calling it; this is the cron entry, and it is the only one.
-  //
-  // Registered here and only here, beside the publications and for the same
-  // reason: one queue, one scheduler. It is a separate `if` from theirs because
-  // the two need the modelling service for different things — they ask it for
-  // a day, this asks it to spend forty minutes fitting — and a deployment
-  // without `WATTSTEER_ML_URL` should be told about each in its own sentence.
-  //
-  // Skipped, loudly, without one: a schedule firing weekly into an unconfigured
-  // `mlUrl` is a guaranteed job failure every Friday. What an operator sees
-  // instead is the incumbent going on serving, ageing, with no new decision
-  // line — which is exactly what the promotion log is for.
-  if (config.mlUrl) {
-    for (const schedule of retrainScheduleForQueue()) {
-      await runner.schedule(schedule);
-    }
-  } else {
-    console.warn(
-      "⚠️  retrain: WATTSTEER_ML_URL is unset — no lane will be retrained or " +
+    },
+    {
+      // The weekly retrain: Fridays at 03:10 UTC, `docs/specs/forecaster.md`'s
+      // seam 11. Forecaster 19 gated both lanes in one pass and left nothing
+      // calling it; this is the cron entry, and it is the only one.
+      //
+      // Its own sentence because it needs the modelling service for a different
+      // thing than the publications do — they ask it for a day, this asks it to
+      // spend forty minutes fitting.
+      schedules: () => retrainScheduleForQueue(),
+      absence:
+        "⚠️  retrain: WATTSTEER_ML_URL is unset — no lane will be retrained or " +
         "gated, and whatever is promoted today goes on serving indefinitely.",
-    );
-  }
-  // The holdout backfill: Fridays at 03:40 UTC, half an hour behind the
-  // retrain, `docs/specs/replay.md`'s one storage requirement. The retrain is
-  // what mints the fold artifacts; this is what stops their out-of-fold
-  // predictions being thrown away.
-  //
-  // Its own `if` for the reason the retrain has one: without it the Time
-  // Machine keeps refusing `REPLAY_FORECAST_UNAVAILABLE` on the walk-forward
-  // test days, which is a *product* absence rather than a stale model, and an
-  // operator should be told that in its own sentence.
-  if (config.mlUrl) {
-    for (const schedule of holdoutBackfillScheduleForQueue()) {
-      await runner.schedule(schedule);
-    }
-  } else {
-    console.warn(
-      "⚠️  holdout backfill: WATTSTEER_ML_URL is unset — no fold's out-of-fold " +
+    },
+    {
+      // The holdout backfill: Fridays at 03:40 UTC, half an hour behind the
+      // retrain, `docs/specs/replay.md`'s one storage requirement. The retrain
+      // is what mints the fold artifacts; this is what stops their out-of-fold
+      // predictions being thrown away.
+      //
+      // Its own sentence because what is lost is a *product* absence rather
+      // than a stale model.
+      schedules: () => holdoutBackfillScheduleForQueue(),
+      absence:
+        "⚠️  holdout backfill: WATTSTEER_ML_URL is unset — no fold's out-of-fold " +
         "forecasts will be persisted, and /v1/replay will refuse every " +
         "walk-forward test day with REPLAY_FORECAST_UNAVAILABLE.",
-    );
-  }
-  // The Replay caches: 03:30 in Brasília, nightly, one schedule per (subsystem,
-  // served lane). `docs/specs/api-surface.md`'s scheduled-jobs table has listed
-  // `refresh-featured-days | 30 3 * * *` since replay 07 landed the endpoint,
-  // and until this loop existed that row described a cron in no file: the
-  // shortlist and the Backtest aggregate were computed by tests and by nothing
-  // else, so `/v1/replay/days` and `/v1/backtest` served their `pending`
-  // payloads on every deployed instance.
-  //
-  // Its own `if` for the reason the three above have one: without a modelling
-  // service there is nothing to recompute *in*, and the absence a reader then
-  // meets is a stated `pending` rather than a stale number — which is a
-  // different sentence from the retrain's and deserves its own.
-  if (config.mlUrl) {
-    for (const schedule of replayRefreshSchedulesForQueue()) {
-      await runner.schedule(schedule);
-    }
-  } else {
-    console.warn(
-      "⚠️  replay refresh: WATTSTEER_ML_URL is unset — the featured-days " +
+    },
+    {
+      // The Replay caches: 03:30 in Brasília, nightly, one schedule per
+      // (subsystem, served lane). `docs/specs/api-surface.md`'s scheduled-jobs
+      // table has listed `refresh-featured-days | 30 3 * * *` since replay 07
+      // landed the endpoint, and until this entry existed that row described a
+      // cron in no file: the shortlist and the Backtest aggregate were computed
+      // by tests and by nothing else.
+      //
+      // Its own sentence because the absence a reader then meets is a stated
+      // `pending` rather than a stale number.
+      schedules: () => replayRefreshSchedulesForQueue(),
+      absence:
+        "⚠️  replay refresh: WATTSTEER_ML_URL is unset — the featured-days " +
         "shortlist and the Backtest aggregate will not be computed, and " +
         "/v1/replay/days and /v1/backtest will keep serving pending.",
-    );
+    },
+  ];
+
+  for (const entry of MODEL_BACKED) {
+    if (config.mlUrl) {
+      for (const schedule of entry.schedules()) {
+        await runner.schedule(schedule);
+      }
+    } else {
+      console.warn(entry.absence);
+    }
   }
 }
 
