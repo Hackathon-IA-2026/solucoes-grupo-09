@@ -190,33 +190,47 @@ is above 90%, and the number only counts on a fresh set.
       transparency and reproducibility, his 16/09 reply calls it the operation
       procedures manual.
 
-### 5b. Check the observed magnitude before it goes on a slide
+### 5b. The observed curtailment is too high by roughly 2–3×
 
-Noticed 21/09 and **not resolved**. `/v1/grid/now` reads Nordeste at
-**181,263 MWh** of constrained-off over 24 hours — about 7.5 GW sustained — with
-Sudeste at 43,621 and the other two under 2,000. The forecast agrees with it
-(201,819 for the same subsystem), so the two sides are consistent and this is
-not a model fault.
+Measured 21/09 against production, and **it is systematic rather than one
+extreme day**. Every day of 01–16/09 reads 150–220 GWh for Nordeste.
 
-What was checked and is **correct**: the adapter converts ONS's MWmed to MWh as
-`mwmed × interval/60` (`normalise.ts`), the source rows are half-hourly, and the
-rollup is the documented one. So nothing here is the arithmetic bug it looks
-like at first.
+Read out of the same database, for 2026-09-16:
 
-What is unchecked: whether 181 GWh in a day is what ONS actually settled for
-that subsystem. Published Brazilian constrained-off is of the order of single-
-digit TWh a *year*, which would put a day an order of magnitude below this. The
-possibilities are that the figure is real (a genuinely extreme day), that rows
-are counted twice somewhere between `restricao-coff` and
-`restricao-coff-detalhe`, or that the prior above is simply wrong.
+| | |
+|---|---|
+| NE installed (949 wind plants, 308 solar) | **42,449 MW** |
+| Verified generation | 400,964 MWh — 16,707 MW average |
+| Constrained off | 181,382 MWh — **7,558 MW average** |
+| Implied "would have been" | **24,265 MW average — 57 % CF over 24 h, night included** |
+| Largest single hour | **21,940 MW curtailed against 30,828 MW of wind installed — 71 % of the fleet, in one hour, while generating** |
 
-- [ ] Compare one settled day against ONS's own published total for that day,
-      by hand. This is a twenty-minute question for somebody who knows the
-      dataset and an afternoon for somebody who does not — Bisogno is the
-      shorter path.
-- [ ] Until then, **no absolute MWh figure for Nordeste goes in the deck.** The
-      percentage and the avoided-energy share are unaffected, since both are
-      ratios over the same denominator.
+The last row is the one that settles it. A fleet cannot be 71 % curtailed and
+generating at the same time.
+
+**What was ruled out**, so nobody re-derives it:
+
+- *The adapter's unit conversion.* `mwmedToMwh` is `mwmed × interval/60` over
+  half-hourly rows, which is right.
+- *A cross-grain double count.* `conjunto` (178,668 MWh) and
+  `self_reporting_plant` (2,596 MWh) are disjoint and sum to exactly the
+  181,263 the readout shows.
+- *Forecast contamination.* The forecast agrees with the observation, so both
+  sides read the same number; this is upstream of the model.
+
+**The live lead**: `constrained_off` (181,382) does not equal
+`reference_generation − verified_generation` (533,659 − 400,964 = 132,695) — a
+37 % gap. Those three come from the same ONS row, so one of them is not the
+quantity it is being read as. That is where to look next, and it is a question
+about ONS's own field definitions rather than about this code.
+
+- [ ] Settle what `val_geracaolimitada` means against `val_geracaoreferencia`
+      and `val_geracao`, and whether the hourly rollup may sum what ONS
+      already totalled. Bisogno is the short path.
+- [ ] **No absolute MWh figure for observed curtailment goes in the deck** —
+      not Nordeste's and not the national total, which is `sum_of_four` over the
+      same rows. Ratios over a shared denominator (avoidability, % avoided) are
+      unaffected and remain safe.
 
 ### 6. Deck for the on-site presentation
 
