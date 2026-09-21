@@ -22,8 +22,14 @@ The event's AWS account **ended on 21/09 12:21 UTC**, so Railway is the only
 deployment left until the organisation reopens AWS on site. The trained state
 (model artifacts, forecast rows, RAG corpus) is the release `state-2026-09-20`.
 
-- [ ] Whoever owns the Railway project adds the `RAILWAY_TOKEN` secret
-      (Railway → project → Settings → Tokens). This is the only manual step.
+**Status on 21/09: one of the three parts is shipped.** The corpus is on
+Railway; the model artifacts and the forecast rows are not. "Bring Railway up
+to the trained state" is not done, and was briefly reported as done — the
+corpus is the part that was shipped, not the state.
+
+- [x] ~~`RAILWAY_TOKEN` secret~~ — not needed for the corpus, which went up
+      with the local `railway` CLI rather than through Actions. Still needed if
+      `deploy-railway.yml` is to run the rest from CI.
 - [x] Before choosing `with_rag`, read Railway's corpus size **first**.
       **Read on 21/09: Railway holds 1,508 chunks over 240 documents, with no
       RAP at all and one IPDO** — against the release's 18,063 over 293. So
@@ -33,10 +39,28 @@ deployment left until the organisation reopens AWS on site. The trained state
       cannot answer the goldset's disturbance or IPDO questions at all, so any
       RAG figure quoted from Railway today is about a different corpus from the
       one measured below.
-- [ ] Run `deploy-railway.yml` from Actions with `ship_state` on and
-      `state_tag = state-2026-09-20`.
+- [x] **The RAG corpus**, shipped 21/09: Railway went from 1,508 chunks over
+      240 documents to **18,063 over 293**, with the HNSW and GIN indexes, both
+      foreign keys and the `public.rag_migration` ledger. The previous schema is
+      kept as `rag_pre_20260921` for rollback
+      (`ALTER SCHEMA rag_pre_20260921 RENAME TO rag`) and should be dropped once
+      the demo is proven. `public.rag_migration` lost its primary key in the
+      swap — the renamed table still holds the constraint name — which does not
+      affect boot, because the migration runner does a `SELECT` then a plain
+      `INSERT` with no `ON CONFLICT`.
+- [x] **The reranker**, which was measured and running nowhere: the image now
+      installs the `[rerank]` extra and bakes the cross-encoder in, confirmed in
+      the build log and by the first query after deploy paying the model load.
+- [ ] **`models.tgz` and `forecasts.sql.gz` — still not shipped.** These are the
+      other two thirds of the trained state: the artifact files the modelling
+      service reads out of its volume, and the forecast rows the Time Machine
+      replays. `infra/railway/ship-state.sh --from-release state-2026-09-20`
+      does both. Worth knowing before assuming this fixes item 2: shipping
+      artifacts is not the same as promoting a lane, and the gate refuses both
+      lanes for reasons that travel with the artifacts.
 - [ ] Open the Time Machine and press a day. A 200 from `curl` is not a check
-      (`.claude/rules/deploy.md`).
+      (`.claude/rules/deploy.md`). Blocked on the forecast rows above — the
+      screen has nothing to replay until they land.
 
 Details: `infra/railway/README.md`.
 
