@@ -29,6 +29,7 @@
 
 import { useEffect } from "react";
 import { RUN_LABELS, type RunLabel } from "@/lib/fixtures";
+import { gateIsInert } from "@/lib/lanes";
 import { gateProfileOf, useAppParams } from "./use-app-params";
 import { useServing } from "./use-serving";
 
@@ -60,9 +61,7 @@ export function useRunLanes(): RunLanes {
       // nothing.
       return false;
     }
-    const profile = gateProfileOf(run);
-    const lane = serving.lanes.find((entry) => entry.name.includes(profile));
-    return lane !== undefined && (lane.condition !== "promoted" || lane.usable === false);
+    return gateIsInert(serving.lanes, gateProfileOf(run));
   };
 
   /*

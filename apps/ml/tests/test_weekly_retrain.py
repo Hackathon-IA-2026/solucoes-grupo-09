@@ -648,6 +648,57 @@ def test_a_child_that_fails_is_reported_by_the_status_route(
     assert "LightGBMError" in final["error"]["details"]["stderr"]
 
 
+def test_a_child_that_states_its_reason_on_stdout_is_not_reported_as_silent(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The report is on stdout, and a barren run exits 1 with nothing on stderr.
+
+    Measured on 20/09/2026: every lane failed with ``PermissionError: [Errno 13]
+    Permission denied: '/root/.postgresql/postgresql.key'``, the child printed
+    that in its report and exited 1, and the failure body carried an empty
+    ``stderr`` and nothing else. The reason existed and was thrown away, so the
+    job log read "exited 1" for hours. The tail of stdout travels with it now.
+    """
+    _startable(monkeypatch, tmp_path)
+    _stub_child(
+        monkeypatch,
+        'print(\'{"failures": [{"reason": "PermissionError: postgresql.key"}]}\')',
+        exit_code=1,
+    )
+    with TestClient(ml_app) as client:
+        assert (
+            client.post("/internal/retrain", json={"run_id": RUN_ID}).status_code == 202
+        )
+        final = _poll_until(client, RUN_ID, deadline=time.monotonic() + 30)
+    assert final["error"]["code"] == "RETRAIN_FAILED"
+    assert final["error"]["details"]["stderr"] == ""
+    assert "PermissionError: postgresql.key" in final["error"]["details"]["stdout"]
+
+
+def test_a_failed_holdout_backfill_carries_the_reason_its_child_printed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The same loss, on the other route that spawns a reporting child.
+
+    ``/internal/backfill/holdout`` answers synchronously, so the body under test
+    is the POST's own: a child that reconstructed no lane exits 1 with its
+    report on stdout and nothing on stderr, and the refusal must carry it.
+    """
+    _startable(monkeypatch, tmp_path)
+    _stub_child(
+        monkeypatch,
+        'print(\'{"failures": [{"reason": "PermissionError: postgresql.key"}]}\')',
+        exit_code=1,
+    )
+    with TestClient(ml_app) as client:
+        response = client.post("/internal/backfill/holdout", json={"fold_id": "F6"})
+    assert response.status_code == 500
+    error = response.json()["error"]
+    assert error["code"] == "HOLDOUT_BACKFILL_FAILED"
+    assert error["details"]["stderr"] == ""
+    assert "PermissionError: postgresql.key" in error["details"]["stdout"]
+
+
 def test_a_run_this_instance_never_started_is_unknown_rather_than_running() -> None:
     """404 `RETRAIN_UNKNOWN` — which is what a replaced container looks like.
 

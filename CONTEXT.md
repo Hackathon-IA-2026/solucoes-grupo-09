@@ -34,6 +34,9 @@ stating here because they are the ones newcomers re-litigate:
   schema. Hand-editing it is always wrong.
 - `apps/api/src/database/canonical-views.ts` — the canonical reads. Product code
   reads these; it never touches an ingest table. See ADR-0005.
+- `docs/environments.md` — the two deployments, and what the machine under each
+  one cannot do. Read it before explaining a timeout or a missing forecast: the
+  ceilings, the measured query times and the two stated absences are there.
 
 ## The decisions
 

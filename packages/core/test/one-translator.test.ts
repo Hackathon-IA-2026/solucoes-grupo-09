@@ -43,6 +43,26 @@ const SANCTIONED = new Set([
   // identifier that declares it, inside a test that asserts the two agree.
   // No field on any wire passes through it.
   join("apps", "api", "test", "contract.test.ts"),
+  /*
+    A second translator, sanctioned, and the reason is the shape of the rows it
+    serves rather than an exception to the rule.
+
+    `GET /v1/canonical/*` publishes the canonical reads to the Python modelling
+    side. Those rows have **no generated shape**: they are composed in
+    `src/contract/reads.ts` from the repositories and named there, so
+    `WIRE_SHAPES` has no entry to look them up in and `encodeWire(name, …)`
+    cannot be called for them. The table this package ships is not applicable,
+    so `apps/api/src/contract/wire.ts` does the one conversion it can — the
+    forward, lossy one — and `apps/api/test/canonical-casing.test.ts` proves it
+    agrees with the generated table on every field where both have an opinion,
+    and that the five where they *cannot* agree are unreachable from that
+    route.
+
+    It was found by widening the patterns below rather than by review: it hoists
+    its regular expression into `const UPPER = /[A-Z]/g`, and every pattern here
+    looked for the regex inside the `.replace(` call.
+  */
+  join("apps", "api", "src", "contract", "wire.ts"),
 ]);
 
 /**
@@ -55,8 +75,18 @@ const SANCTIONED = new Set([
  * makes writing one visible.
  */
 const PATTERNS: [RegExp, string][] = [
-  [/replace\(\s*\/_\(\[a-z\]\)/, "a snake→camel regular expression"],
-  [/replace\(\s*\/\[A-Z\]\/g/, "a camel→snake regular expression"],
+  /*
+    The regular expression, wherever it is written.
+
+    These two used to require the literal to sit inside the `.replace(` call,
+    and `apps/api/src/contract/wire.ts` passed the guard for as long as it
+    existed by writing `const UPPER = /[A-Z]/g` one line above the call — which
+    is the ordinary way to hoist a global regex, not an evasion. A pattern that
+    a normal refactor walks out of is a pattern that was watching the wrong
+    thing.
+  */
+  [/\/_\(\[a-z\]\)/, "a snake→camel regular expression"],
+  [/\/\[A-Z\]\/g/, "a camel→snake regular expression"],
   [
     /\b(toCamelCase|snakeToCamel|camelToSnake|camelize|decamelize|snakeCase|camelCase)\s*\(/,
     "a casing helper",
@@ -107,6 +137,44 @@ describe("exactly one module translates between the wire and the app", () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+
+  it("the widened patterns catch a hoisted regular expression", () => {
+    /*
+      The mutation that was live. `apps/api/src/contract/wire.ts` writes
+
+          const UPPER = /[A-Z]/g;
+          key.replace(UPPER, (letter) => `_${letter.toLowerCase()}`)
+
+      and every pattern here used to require the literal to sit inside the
+      `.replace(` call, so the file was invisible to this guard for as long as
+      it existed. Hoisting a global regex out of a hot call is the ordinary
+      thing to do, not an evasion — which is exactly why a guard that a normal
+      refactor walks out of is the wrong guard.
+    */
+    const hoisted = [
+      "const UPPER = /[A-Z]/g;",
+      "const FROM_SNAKE = /_([a-z])/g;",
+      "key.replace(UPPER, (letter) => letter)",
+    ].join("\n");
+    const caught = PATTERNS.filter(([pattern]) => pattern.test(hoisted)).map(
+      ([, what]) => what,
+    );
+    expect(caught.sort()).toEqual([
+      "a camel→snake regular expression",
+      "a snake→camel regular expression",
+    ]);
+  });
+
+  it("the sanctioned camel→snake module is one the patterns would otherwise flag", () => {
+    // The exemption has to be excusing something. A sanctioned file that no
+    // pattern matches is an entry nobody can remove, and a list of those is a
+    // list that stops meaning anything.
+    const source = readFileSync(
+      join(ROOT, "apps", "api", "src", "contract", "wire.ts"),
+      "utf8",
+    );
+    expect(PATTERNS.some(([pattern]) => pattern.test(source))).toBe(true);
   });
 
   it("the one that does is the one that ships the table", () => {

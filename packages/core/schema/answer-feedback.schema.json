@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wattsteer.com/schema/answer-feedback.schema.json",
+  "title": "AnswerFeedback",
+  "description": "`POST /v1/feedback` - what a reader thought of one answer the product gave, and where that answer was. An opinion, never a measurement: nothing here reaches a canonical view, a band or a metric, and the screens that collect it state that it is filed for a later retrain rather than acted on now. The three surfaces are the three kinds of answer the product makes - a day's forecast, a replay of a past day, and the ONS passage the corpus cited - and `subject` pins which one was on screen so a reason can be read back beside the thing it was about.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "The row, so a client can say which submission it is retracting or amending. Server-assigned; a client that invents one is writing somebody else's row."
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the gateway stored it, not when the reader pressed: the second is unknowable and the first is the one a later retrain can order by."
+    },
+    "surface": {
+      "$ref": "#/$defs/feedback_surface"
+    },
+    "verdict": {
+      "$ref": "#/$defs/feedback_verdict"
+    }
+  },
+  "required": ["id", "recorded_at", "surface", "verdict"],
+  "additionalProperties": false,
+  "$defs": {
+    "feedback_surface": {
+      "type": "string",
+      "enum": ["forecast", "replay", "evidence"],
+      "description": "Which kind of answer was judged. Closed, because a fourth surface is a fourth thing to retrain on and arrives with its own subject fields rather than as a free string nobody can group by."
+    },
+    "feedback_verdict": {
+      "type": "string",
+      "enum": ["up", "down"],
+      "description": "Two values and no middle: a three-point scale collects a middle that means nothing to a retrain, and a star rating collects a number whose units nobody agrees on."
+    },
+    "feedback_subject": {
+      "type": "object",
+      "description": "What was on screen, as the keys a later retrain would group by. Every field is optional because the surfaces do not share a coordinate: a replay has a day and a lane, an evidence card has a document and a page, and a forecast has both a lane and a gate.",
+      "properties": {
+        "subsystem": {
+          "$ref": "common.schema.json#/$defs/subsystem"
+        },
+        "target_date": {
+          "$ref": "common.schema.json#/$defs/civil_date"
+        },
+        "lane": {
+          "type": "string",
+          "description": "The lane directory name, when the answer came from an artifact."
+        },
+        "gate_profile": {
+          "$ref": "common.schema.json#/$defs/gate_profile"
+        },
+        "artifact_id": {
+          "type": "string",
+          "description": "The artifact that produced the answer, when the screen named one. A verdict about a forecast is a verdict about the artifact that made it."
+        },
+        "document_code": {
+          "type": "string",
+          "description": "The ONS document the corpus cited, for the evidence surface."
+        },
+        "document_page": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "answer_feedback_request": {
+      "title": "AnswerFeedbackRequest",
+      "type": "object",
+      "description": "The body of `POST /v1/feedback`. Named in the contract rather than assembled in a component, so the camelCase the app writes is translated to the wire's casing by the generated table - the same path every other body takes, and the reason `subject`'s keys cannot drift between the two sides.",
+      "properties": {
+        "surface": {
+          "$ref": "#/$defs/feedback_surface"
+        },
+        "verdict": {
+          "$ref": "#/$defs/feedback_verdict"
+        },
+        "subject": {
+          "$ref": "#/$defs/feedback_subject"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 400,
+          "description": "The reader's own words, and only ever theirs. The gateway refuses a longer one rather than truncating it: a sentence cut in half says something its writer did not."
+        },
+        "locale": {
+          "type": "string",
+          "enum": ["pt", "en"],
+          "description": "Which dictionary the reader was reading, so the sentence can be read back in the register it was written in."
+        }
+      },
+      "required": ["surface", "verdict", "locale"],
+      "additionalProperties": false
+    }
+  }
+}

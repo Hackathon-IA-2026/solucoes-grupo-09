@@ -30,7 +30,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from wattsteer_rag.db import Database
-from wattsteer_rag.evidence import _number_key, build_evidence
+from wattsteer_rag.evidence import build_evidence
+from wattsteer_rag.gate import _number_key
 from wattsteer_rag.gateway.router import Gateway
 from wattsteer_rag.runtime import open_runtime
 

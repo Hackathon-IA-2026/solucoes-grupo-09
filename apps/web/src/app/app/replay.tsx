@@ -70,8 +70,9 @@ import {
   ZapIcon,
 } from "@wattsteer/ui";
 import Head from "expo-router/head";
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Text, View } from "react-native";
+import { AnswerFeedback } from "@/components/app/answer-feedback";
 import { AppShell, MiniPill, ScreenTitle } from "@/components/app/app-shell";
 import { BatteryEditor, LoadEditor } from "@/components/app/asset-editor";
 import {
@@ -97,125 +98,21 @@ import { useScenario } from "@/components/app/use-scenario";
 import { useServing } from "@/components/app/use-serving";
 import { NO_BRIEFING_DATA } from "@/components/briefing/briefing-data";
 import { usePublishBriefingSubject } from "@/components/briefing/briefing-subject";
-import { CompareBars, type CompareRow } from "@/components/charts/compare-bars";
+import { CompareBars } from "@/components/charts/compare-bars";
 import { EpisodeList } from "@/components/charts/episode-list";
 import { FanChart } from "@/components/charts/fan-chart";
 import { PlanVsExecuted } from "@/components/charts/plan-vs-executed";
-import { type Copy, type Formatters, useCopy, useFormat, useI18n } from "@/i18n";
+import { useCopy, useFormat, useI18n } from "@/i18n";
 import { fill } from "@/i18n/format";
 import {
-  type BatteryAsset,
-  INGESTION_GO_LIVE,
-  REPLAY_DAYS,
-  type ReplayCandidateDay,
-  replayDay,
-  type ShiftableLoadAsset,
-  subsystemMeta,
-} from "@/lib/fixtures";
-import { dispatchSeries, forecastHours, observedHours } from "@/lib/replay";
-
-/** The parts the caveat's two lists are drawn from, as the copy map spells them. */
-type VintagePart = keyof Copy["app"]["replay"]["vintagePart"];
-
-/**
- * A replayed day's name: the date in the reader's convention, then the ONS
- * subsystem.
- *
- * No technology. The picker offers a date and a subsystem, and the forecast
- * behind a replayed day has one head per subsystem — a technology in this label
- * would be a division the model does not make, printed as if it did.
- */
-function dayLabel(day: ReplayCandidateDay, copy: Copy, f: Formatters): string {
-  return fill(copy.app.replay.dayLabel, {
-    date: f.date(day.date),
-    subsystem: subsystemMeta(day.subsystem).onsDisplayName,
-  });
-}
-
-/**
- * The provenance sentence: which artifact produced this forecast, and what it
- * was fitted on.
- *
- * Two branches, and neither is a warning. A `served` day's forecast was
- * published before the day began, which is the strongest statement available
- * and needs no fold to make it — `held_out_by` is `null` there, and that is the
- * contract's own shape rather than a missing value. A `fold_holdout` day names
- * its fold, the fold's artifact and **both** recorded windows: the training
- * block and the calibration window, because the calibration window is where
- * the isotonic fit and the two conformal scalars were fitted, so a day inside
- * it would have shaped the interval this screen promises a floor from.
- *
- * There is no third branch. The prototype had one — `IN-SAMPLE` — and it is
- * gone rather than disabled: under `docs/specs/replay.md` a day no artifact
- * held out is refused, so the branch is unreachable by construction and dead
- * code that says otherwise is a claim the product does not make.
- */
-function provenanceNote(replay: Replay, copy: Copy, f: Formatters): string {
-  const heldOut = replay.integrity.heldOutBy;
-  if (heldOut === null) {
-    return fill(copy.app.replay.provenanceServedNote, {
-      published: f.dateTime(replay.forecastOrigin.publishedAt),
-    });
-  }
-  return fill(copy.app.replay.provenanceFoldHoldoutNote, {
-    fold: heldOut.fold,
-    artifact: heldOut.artifactId,
-    trainFrom: f.date(heldOut.trainWindow[0]),
-    trainTo: f.date(heldOut.trainWindow[1]),
-    calibrationFrom: f.date(heldOut.calibrationWindow[0]),
-    calibrationTo: f.date(heldOut.calibrationWindow[1]),
-  });
-}
-
-/**
- * The two sentences a `revision_optimistic` day owes a reader: *what* the
- * caveat touches, and *how big* it is.
- *
- * Both are read off the response rather than written here. The parts come from
- * `integrity.vintage_affects` / `vintage_exempt` and this function only spells
- * them, so a part the service stops claiming stops being named on screen; and
- * the size is `revision_premium_recovered_mwh`, which is `null` until ONS has
- * restated days held in both vintages. `null` renders as the word
- * **unmeasured** — never as a zero, and never as silence, because a caveat
- * whose size is not stated reads as a caveat that is small.
- *
- * Nothing is emitted for a `point_in_time` day: there is no restatement to
- * bound, and a sentence saying so would make the honest case look qualified.
- */
-function vintageExtent(integrity: Replay["integrity"], copy: Copy): string[] {
-  if (integrity.vintageFidelity !== "revision_optimistic") {
-    return [];
-  }
-  const spell = (parts: readonly string[]): string =>
-    parts
-      .map((part) => copy.app.replay.vintagePart[part as VintagePart] ?? part)
-      .join(", ");
-  return [
-    fill(copy.app.replay.vintageExtentNote, {
-      affects: spell(integrity.vintageAffects),
-      exempt: spell(integrity.vintageExempt),
-    }),
-    integrity.revisionPremiumRecoveredMwh === null
-      ? copy.app.replay.revisionPremiumUnmeasured
-      : fill(copy.app.replay.revisionPremiumMeasured, {
-          mwh: integrity.revisionPremiumRecoveredMwh,
-        }),
-  ];
-}
-
-/** The vintage sentence proper, on either side of go-live. */
-function vintageNote(
-  fidelity: Replay["vintageFidelity"],
-  copy: Copy,
-  f: Formatters,
-): string {
-  return fill(
-    fidelity === "revision_optimistic"
-      ? copy.app.replay.revisionOptimisticNote
-      : copy.app.replay.pointInTimeNote,
-    { goLive: f.date(INGESTION_GO_LIVE) },
-  );
-}
+  compareRows,
+  dayLabel,
+  provenanceNote,
+  vintageExtent,
+  vintageNote,
+} from "@/i18n/replay";
+import { type BatteryAsset, replayDay, type ShiftableLoadAsset } from "@/lib/fixtures";
+import { dispatchSeries, forecastHours, observedHours, REPLAY_LANE } from "@/lib/replay";
 
 export default function TimeMachineScreen() {
   const palette = usePalette();
@@ -225,7 +122,8 @@ export default function TimeMachineScreen() {
   const serving = useServing();
   const params = useAppParams();
   const day = replayDay(params.episode);
-  const days = useReplayDays();
+  const days = useReplayDays(day.subsystem);
+  const [showAllDays, setShowAllDays] = useState(false);
   // The replayed day is the selection, so the scenario in the address bar
   // follows it — and it is validated under the replay's own `target_date`
   // clause, which is the shape and then somebody else's judgement. The window
@@ -292,14 +190,35 @@ export default function TimeMachineScreen() {
     one to four as requests land is worse than one that starts honest, and the
     reader can already see the day they are on.
   */
-  const offered =
-    days.status === "known"
-      ? days.viewable
-      : REPLAY_DAYS.filter((candidate) => candidate.id === day.id);
+  const offered = days.status === "known" ? days.viewable : [day];
+
+  /*
+    **Folded, because the honest list is long.**
+
+    Asking the gateway instead of naming four dates took the picker from four
+    pills to eighty-one on the event's instance — seventeen rows of chips above
+    the screen's own headline, which is a wall rather than a control. The fold
+    shows the newest two rows and says how many more there are; the selected
+    day is always among them, so a link to an older day never opens onto a
+    picker that appears not to contain it.
+
+    A scroll box was the other option and is worse here: it hides the count,
+    and the count is the interesting part — it is how a reader learns the
+    deployment can replay a quarter rather than a handful.
+  */
+  const FOLDED_DAYS = 10;
+  const folded = showAllDays
+    ? offered
+    : offered.slice(0, FOLDED_DAYS).some((candidate) => candidate.id === day.id)
+      ? offered.slice(0, FOLDED_DAYS)
+      : [day, ...offered.slice(0, FOLDED_DAYS - 1)];
+  const hidden = offered.length - folded.length;
 
   const picker = (
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-      {offered.map((candidate) => (
+    <View
+      style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "center" }}
+    >
+      {folded.map((candidate) => (
         <MiniPill
           key={candidate.id}
           label={dayLabel(candidate, copy, f)}
@@ -307,6 +226,24 @@ export default function TimeMachineScreen() {
           onPress={() => params.setParams({ episode: candidate.id })}
         />
       ))}
+      {hidden > 0 ? (
+        <MiniPill
+          label={fill(hidden === 1 ? copy.app.replay.moreDay : copy.app.replay.moreDays, {
+            count: String(hidden),
+          })}
+          active={false}
+          role="button"
+          onPress={() => setShowAllDays(true)}
+        />
+      ) : null}
+      {showAllDays && offered.length > FOLDED_DAYS ? (
+        <MiniPill
+          label={copy.app.replay.fewerDays}
+          active={false}
+          role="button"
+          onPress={() => setShowAllDays(false)}
+        />
+      ) : null}
       {days.status === "known" && days.viewable.length === 0 ? (
         <Text style={{ fontSize: 13, color: palette.inkMuted }}>
           {copy.app.replay.noDays}
@@ -415,7 +352,24 @@ export default function TimeMachineScreen() {
       origin={state.replay.forecastOrigin}
       thresholdMw={state.replay.thresholdMw}
     />,
-    <Replayed replay={state.replay} fleet={fleet} />,
+    <>
+      <Replayed replay={state.replay} fleet={fleet} />
+      {/*
+        Under the replay, and only when there is one: the observed-only branch
+        above offers no answer of ours to judge, and a control under it would
+        be asking the reader what they thought of ONS's record.
+      */}
+      <AnswerFeedback
+        surface="replay"
+        subject={{
+          subsystem: day.subsystem,
+          targetDate: day.date,
+          lane: REPLAY_LANE,
+          artifactId: state.replay.forecastOrigin.runLabel,
+        }}
+        testID="replay-feedback"
+      />
+    </>,
   );
 }
 
@@ -427,63 +381,9 @@ export default function TimeMachineScreen() {
  * the two profiles, then the fenced upper bound, then the episodes, then the
  * fleet. Nothing above the honesty block, and nothing collapsible in it.
  *
- * The comparison rows are built by `compareRows` above, so this screen and any
- * briefing over it quote the same three figures.
+ * The comparison rows are built by `compareRows` in `@/i18n/replay`, so this
+ * screen and any briefing over it quote the same three figures.
  */
-/**
- * What was forecast, what happened and what a plan would have left — one list,
- * built once.
- *
- * Extracted so the screen and the briefing read the *same* rows. Two builders
- * for one comparison is two things to drift, and a briefing quoting different
- * figures from the screen it overlays is the worst version of that.
- */
-function compareRows(replay: Replay, copy: Copy, f: Formatters): CompareRow[] {
-  const episode = replay.episodes[0];
-  const rows: CompareRow[] = [
-    {
-      key: "actual",
-      label: copy.app.replay.rowActual,
-      // `actual.total_mwh`: the whole local day. An episode is the run of hours
-      // above the threshold, so using it here would make the headline share
-      // move when the threshold moves — the reduction would look better simply
-      // for having drawn the episode more tightly.
-      value: replay.actual.totalMwh,
-      tone: "actual",
-      note:
-        episode === undefined
-          ? undefined
-          : fill(copy.app.replay.rowActualNote, {
-              hours: f.number(episode.durationHours),
-              mw: f.number(episode.thresholdMw),
-              peak: f.number(replay.actual.peakMw),
-            }),
-    },
-    {
-      key: "forecast",
-      label: copy.app.replay.rowForecast,
-      // `forecast.day_total` off the payload, not the componentwise sum of the
-      // hourly ones. Quantiles are not additive: adding 24 P90s assumes every
-      // hour lands at its 90th percentile together, which describes a day far
-      // worse than a 90th-percentile day. The forecaster emits a path ensemble
-      // precisely so the joint total exists on the contract, and
-      // `test/no-summed-bands.test.ts` is the standing guard that no web code
-      // path rebuilds it.
-      band: replay.forecast.dayTotal,
-      tone: "forecast",
-      note: copy.app.replay.rowForecastNote,
-    },
-    {
-      key: "remaining",
-      label: copy.app.replay.rowRemaining,
-      value: replay.optimizedCurtailmentMwh,
-      tone: "recovered",
-      note: copy.app.replay.rowRemainingNote,
-    },
-  ];
-  return rows;
-}
-
 function Replayed({ replay, fleet }: { replay: Replay; fleet: ReactNode }) {
   const colors = usePalette();
   const copy = useCopy();
@@ -947,9 +847,12 @@ function FleetControls({
   return (
     <>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.lg }}>
-        // ADR-0001: a basis without a shrink is a floor. 380 in a 320px box put the //
-        fleet editor 60px past the card, and nothing on the Time Machine caught // it
-        because `/v1/replay` was never stubbed and this branch never rendered.
+        {/*
+          ADR-0001: a basis without a shrink is a floor. 380 in a 320px box put
+          the fleet editor 60px past the card, and nothing on the Time Machine
+          caught it because `/v1/replay` was never stubbed and this branch
+          never rendered.
+        */}
         <Panel style={{ flexGrow: 1, flexShrink: 1, flexBasis: 380 }}>
           <PanelHeader
             icon={<ZapIcon size={18} color={colors.inkMuted} />}
@@ -963,9 +866,12 @@ function FleetControls({
             />
           </View>
         </Panel>
-        // ADR-0001: a basis without a shrink is a floor. 380 in a 320px box put the //
-        fleet editor 60px past the card, and nothing on the Time Machine caught // it
-        because `/v1/replay` was never stubbed and this branch never rendered.
+        {/*
+          ADR-0001: a basis without a shrink is a floor. 380 in a 320px box put
+          the fleet editor 60px past the card, and nothing on the Time Machine
+          caught it because `/v1/replay` was never stubbed and this branch
+          never rendered.
+        */}
         <Panel style={{ flexGrow: 1, flexShrink: 1, flexBasis: 380 }}>
           <PanelHeader
             icon={<SlidersHorizontalIcon size={18} color={colors.inkMuted} />}

@@ -1,6 +1,6 @@
 # Spec — WattSteer Public API Surface
 
-> One gateway, twenty-two routes, and a boundary drawn so that the ML service
+> One gateway, twenty-three routes, and a boundary drawn so that the ML service
 > being down is a stale timestamp rather than an outage.
 >
 > **Upstream specs.** [`forecaster.md`](forecaster.md) fixes the content of a
@@ -486,6 +486,7 @@ Four unversioned probes survive unchanged: `GET /`, `/health`, `/ready`,
 | 20 | `GET /v1/curtailment/evidence` | the ONS document behind a settled reason | Explain's citation |
 | 21 | `GET /v1/grid/context` | ONS's day-ahead programme against the settled balance, plus corridors and availability | Overview's plan-against-outcome panel |
 | 22 | `GET /v1/similar-days` | the past days whose day-ahead programme most resembled this one | Explain's analogue |
+| 23 | `POST /v1/feedback` | nothing — it **files** a reader's verdict about one answer, for a later retrain | the thumbs on Overview, Explain and Time Machine |
 
 > **Corrected in api-surface 27: this list was fourteen rows over seventeen
 > served paths.** The three added above are all in `apps/api/src/api`, mounted,
@@ -2197,8 +2198,8 @@ validates against the schema.
   v1 and the whole caching and rate-limiting posture above depends on their
   absence. Adding them later is additive: a `Vary: Authorization` and a per-key
   budget tier.
-- **GraphQL, tRPC, gRPC.** The surface is twenty-two routes — twenty-one of them read-shaped, plus row 19, which mints a credential rather than reading anything — with
-  three fixed-by-spec POST contracts and a static-exported client. REST plus a
+- **GraphQL, tRPC, gRPC.** The surface is twenty-three routes — twenty-one of them read-shaped, plus row 19, which mints a credential rather than reading anything, and row 23, which files one — with
+  four fixed-by-spec POST contracts and a static-exported client. REST plus a
   generated typed client is the shape with the least machinery.
 - **Webhooks, subscriptions, SSE, WebSockets.** Nothing *this gateway serves*
   is push-shaped: the data changes twice a day at known instants, which is what

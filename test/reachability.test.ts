@@ -416,12 +416,26 @@ describe("every WorkerTask kind is dispatched and enqueued", () => {
     }
   });
 
+  /**
+   * One member of the `WorkerTask` union, spelled as the source spells it.
+   *
+   * The mutations below add and remove a union member, and they need a foothold
+   * that survives the union growing. `payload:` rather than `result:` is what
+   * makes this unique to `WorkerTask` — `WorkerTaskResult` carries the same
+   * kinds under the other key.
+   */
+  const REPLAY_MEMBER =
+    '  | { kind: "refresh_replay_caches"; payload: ReplayRefreshPayload }';
+
   it("replay 07/08, mutation 1: the union member removed while the wiring stays", () => {
-    const drifted = WORKER_TASKS.code.replace(
-      '  | { kind: "holdout_backfill"; payload: HoldoutBackfillPayload }\n' +
-        '  | { kind: "refresh_replay_caches"; payload: ReplayRefreshPayload };',
-      '  | { kind: "holdout_backfill"; payload: HoldoutBackfillPayload };',
-    );
+    // Anchored on the member's own line, never on what follows it. Both
+    // mutations here used to anchor on `refresh_replay_caches` being the
+    // **last** member, matching a two-line block that ended in `;` — and when
+    // `rag_refresh` and `rag_evidence` were appended, the `;` moved, the
+    // replacement matched nothing, and both proofs went vacuous. The
+    // `not.toBe` below is what said so, which is the guard-on-the-guard doing
+    // exactly its job; this is the anchor that cannot drift that way again.
+    const drifted = WORKER_TASKS.code.replace(`${REPLAY_MEMBER}\n`, "");
     expect(drifted).not.toBe(WORKER_TASKS.code);
     const mutatedKinds = workerTaskKinds(drifted);
     expect(mutatedKinds).not.toContain("refresh_replay_caches");
@@ -467,10 +481,10 @@ describe("every WorkerTask kind is dispatched and enqueued", () => {
   });
 
   it("a kind added to the union and to nothing else is red on both halves", () => {
+    // Inserted after the member rather than before the `;` — see mutation 1.
     const drifted = WORKER_TASKS.code.replace(
-      '  | { kind: "refresh_replay_caches"; payload: ReplayRefreshPayload };',
-      '  | { kind: "refresh_replay_caches"; payload: ReplayRefreshPayload }\n' +
-        '  | { kind: "recompute_something"; payload: ReplayRefreshPayload };',
+      REPLAY_MEMBER,
+      `${REPLAY_MEMBER}\n  | { kind: "recompute_something"; payload: ReplayRefreshPayload }`,
     );
     expect(drifted).not.toBe(WORKER_TASKS.code);
     expect(unreachedWorkerKinds(workerTaskKinds(drifted), dispatched, enqueued)).toEqual([

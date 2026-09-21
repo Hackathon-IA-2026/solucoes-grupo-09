@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from wattsteer_rag.chunk import chunk_pages
-from wattsteer_rag.evidence import _accepted_citation, _numbers_not_quoted
+from wattsteer_rag.gate import _accepted_citation, _numbers_not_quoted
 from wattsteer_rag.retrieve import Hit
 
 IPDO_P3 = (
@@ -84,7 +84,7 @@ def test_a_quote_that_points_to_the_table_needs_the_row_it_points_to():
     """Measured on 19/09/2026: asked how much the plants of SE Mauriti II must
     vary, the answer quoted only the preamble and gave the step's 100 MW total;
     the row ("Mauriti II | - 75") was in the same chunk."""
-    from wattsteer_rag.evidence import check_claim
+    from wattsteer_rag.gate import check_claim
 
     step = (
         "| Passo | Procedimento |\n| --- | --- |\n"
@@ -116,7 +116,7 @@ def test_the_pointer_rule_reads_values_not_pipes():
     """Review of #22: pipes do not prove a row is there. The preamble quoted as
     a Markdown row is still only a pointer; a row assembled without pipes
     still carries the value."""
-    from wattsteer_rag.evidence import _points_to_table
+    from wattsteer_rag.gate import _points_to_table
 
     preamble = (
         "remanejar a geração nas usinas definidas na tabela abaixo, considerando uma redução de 100 MW."
@@ -130,7 +130,8 @@ def test_a_long_section_is_bounded_and_its_number_reaches_the_whitelist():
     """Review of #22: a 125-character IO title overran the contract's 120 for
     locator.section, and the cited item's number was allowed by the gate but
     missing from the narration's whitelist."""
-    from wattsteer_rag.evidence import _accepted_citation, _settle
+    from wattsteer_rag.evidence import _settle
+    from wattsteer_rag.gate import _accepted_citation
 
     title = (
         "6.2.2 CONTROLE DE CARREGAMENTO DA LT 230 KV MILAGRES / COREMAS – C1(M6) E C2(M5) "

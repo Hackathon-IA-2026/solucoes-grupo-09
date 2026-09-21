@@ -35,6 +35,8 @@ import {
   isErrorCode,
 } from "./errors.js";
 import type {
+  AnswerFeedback,
+  AnswerFeedbackRequest,
   CurtailmentEpisodes,
   CurtailmentHours,
   DiagnosisDayAhead,
@@ -528,6 +530,35 @@ export class ApiClient {
    * whose bytes the answer is hashed over. A body re-serialised on the way out
    * would be a different document answering under the same hash.
    */
+  /**
+   * `POST /v1/feedback` — file what a reader thought of one answer.
+   *
+   * An opinion and never a measurement: it reaches no canonical view and no
+   * metric, and the screens that collect it say so. It is here rather than in a
+   * component because the shape is the contract's — `FeedbackSurface` is closed
+   * so that a fourth kind of answer is a decision somebody makes rather than a
+   * string a screen invents.
+   *
+   * The refusals are worth handling rather than swallowing: a deployment with
+   * no database answers `DATA_UNAVAILABLE`, and a reason over the gateway's
+   * limit answers `REQUEST_INVALID`. A thumbs-down that quietly vanished is the
+   * one failure this surface cannot absorb — the reader believes they told us.
+   */
+  fileFeedback(
+    body: AnswerFeedbackRequest,
+    signal?: AbortSignal,
+  ): Promise<AnswerFeedback> {
+    return this.request<AnswerFeedback>("AnswerFeedback", "/v1/feedback", {
+      method: "POST",
+      // Through the generated table, as `optimize` sends a Scenario: the app
+      // writes camelCase and the wire is snake_case, and a body serialised here
+      // would be a second, hand-written copy of that mapping.
+      body,
+      bodyShape: "AnswerFeedbackRequest",
+      signal,
+    });
+  }
+
   replayObservedOnly(
     canonicalScenario: string,
     query: { lane: string },

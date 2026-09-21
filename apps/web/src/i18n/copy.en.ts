@@ -816,6 +816,28 @@ export const en = {
      * and `unknown_run` with "there are two runs" — and writing them in the
      * third person would spend that separation on nothing.
      */
+    /**
+     * The two answers a reader leaves about one answer of ours.
+     *
+     * Written as filing and never as a promise: what the reader marks here
+     * changes nothing on screen, enters no calculation and does not correct the
+     * figure they just read. It is kept for the next retrain, and the sentence
+     * says so — a button that looks like it acts and does not is worse than no
+     * button at all.
+     */
+    feedback: {
+      question: "Did this answer help?",
+      up: "Yes, it helped",
+      down: "It did not help",
+      reasonLabel: "What was wrong with it?",
+      reasonPlaceholder: "A sentence or two. It is kept for the next retrain.",
+      send: "Send",
+      cancel: "Cancel",
+      sending: "Sending…",
+      filed: "Filed. It goes to the next retrain; this screen does not change.",
+      failed: "It could not be recorded. Nothing was saved; try again.",
+      tooLong: "That is over the 400-character limit.",
+    },
     voice: {
       /** The header control. Short, because it sits beside `PT / EN`. */
       /** The IDLE pill — the invitation, written out in full exactly once. */
@@ -1219,6 +1241,28 @@ export const en = {
      * facts it was built with all outlived it on `/app`.
      */
     grid: {
+      /* The Overview's hero. See the note in `copy.pt.ts`. */
+      hero: {
+        title: "Grid console",
+        ledeForecast:
+          "The four subsystems, with tomorrow's forecast around the map. Every figure is a P10–P50–P90 interval, never a point.",
+        ledeObserved:
+          "The four subsystems, with what ONS has already settled around the map. Everything here is measured; none of it is forecast.",
+        totalLabel: "Curtailed energy, whole day",
+        totalNoteForecast: "Tomorrow's joint band.",
+        totalNoteObserved: "The settled day, summed over the published hours.",
+        regionsLabel: "The four subsystems",
+        profileLabel: "Hour by hour",
+        splitLabel: "Wind and solar",
+        peakLabel: "Largest hour",
+        refusedTitle: "The grid did not answer",
+        pickHint: "Tap a region on the map to re-point everything around it.",
+        ofNational: "of the national total",
+        noBand: "A settlement is a number, not an interval.",
+        nationalLabel: "Brazil",
+        windowForecast: "Expected tomorrow, per subsystem.",
+        windowObserved: "The last settled 24 h, per subsystem.",
+      },
       eyebrow: "Sistema Interligado Nacional · D−1",
       q1: "Will it curtail?",
       q1Detail: "Probability of {probability} in {subsystem}",
@@ -1659,6 +1703,9 @@ export const en = {
     },
 
     replay: {
+      moreDay: "1 more day",
+      moreDays: "{count} more days",
+      fewerDays: "Show fewer",
       noDays: "No day on this list has a recorded forecast the gateway can replay today.",
       // --- forecast accuracy: item 3 of the Time Machine brief ---
       accuracyTitle: "Did the forecast hold?",

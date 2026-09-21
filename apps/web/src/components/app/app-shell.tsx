@@ -361,12 +361,26 @@ export function AppShell({
                   flexDirection: "row",
                   alignItems: "center",
                   justifyContent: "flex-end",
-                  // Narrow, this takes the rest of the first line so the switch
-                  // sits at the far edge; wide, the stylesheet makes it an equal
-                  // third and the same rule still holds.
+                  // Narrow, this takes the rest of whatever line it lands on so
+                  // the switch sits at the far edge; wide, the stylesheet makes
+                  // it an equal third and the same rule still holds.
                   flexGrow: 1,
                   flexShrink: 1,
-                  flexBasis: 0,
+                  // **`auto`, not `0`, and the difference is a defect that
+                  // shipped.** With a basis of zero this group claimed no width
+                  // of its own, so the wrapping row never saw a reason to break
+                  // before it: at 390px it was allotted 14.9px beside a 323px
+                  // left group, and the day chip and the language switch — 253px
+                  // that do not shrink, react-native-web defaulting `flexShrink`
+                  // to 0 (ADR-0001) — were drawn *over* the badge that says no
+                  // model is promoted. Measured on a phone, in the deployed
+                  // build. A basis of `auto` puts this group's own content into
+                  // the line-breaking arithmetic, so the row wraps before it
+                  // instead and it lands on its own line, still flush right.
+                  // 320 and 360 already wrapped and are unchanged; 900 and 1440
+                  // are unchanged because the stylesheet restores the zero basis
+                  // there. `e2e/appbar-stays-inside-itself.spec.ts` holds it.
+                  flexBasis: "auto",
                   minWidth: 0,
                 }}
               >
@@ -635,6 +649,7 @@ export function MiniPill({
   onPress,
   disabled = false,
   disabledHint,
+  role = "radio",
 }: {
   label: string;
   active: boolean;
@@ -651,12 +666,22 @@ export function MiniPill({
   disabled?: boolean;
   /** Why, in the reader's locale. Announced, and shown on hover. */
   disabledHint?: string;
+  /**
+   * `radio` for one of a set the reader is choosing between, `button` for a
+   * pill that does something. The default is the selection, which is what
+   * this control was built for.
+   */
+  role?: "radio" | "button";
 }) {
   const colors = usePalette();
   return (
     <Pressable
-      accessibilityRole="radio"
-      aria-checked={active}
+      accessibilityRole={role}
+      // Only a member of a group has a checked state. The day picker's
+      // expand and collapse pills are the same shape and are *actions*: a
+      // reader hearing "radio, not checked" on "10 more days" is being told
+      // it is a choice they have not made, which it is not.
+      aria-checked={role === "radio" ? active : undefined}
       accessibilityLabel={label}
       // The hint rides on the label rather than replacing it: a screen reader
       // should still hear which run this pill is, then why it cannot be taken.

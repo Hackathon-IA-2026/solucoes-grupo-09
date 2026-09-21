@@ -1,6 +1,6 @@
 {
-  "id": "f8036f26-0aab-45c0-bbc6-1f40582c145c",
-  "prevId": "78b55173-2af7-46ec-9687-9e4023e54455",
+  "id": "78b55173-2af7-46ec-9687-9e4023e54455",
+  "prevId": "7b557ade-ce68-4782-b682-3ea6c58791c5",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -663,187 +663,6 @@
         "conjunto_membership_ordered": {
           "name": "conjunto_membership_ordered",
           "value": "\"conjunto_membership\".\"member_to\" is null or \"conjunto_membership\".\"member_to\" >= \"conjunto_membership\".\"member_from\""
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.controlled_flow_half_hour": {
-      "name": "controlled_flow_half_hour",
-      "schema": "",
-      "columns": {
-        "element": {
-          "name": "element",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "terminal": {
-          "name": "terminal",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "valid_time": {
-          "name": "valid_time",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "run_label": {
-          "name": "run_label",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "submarket": {
-          "name": "submarket",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "load_mw": {
-          "name": "load_mw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "data_version": {
-          "name": "data_version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "published_at": {
-          "name": "published_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "published_at_precision": {
-          "name": "published_at_precision",
-          "type": "published_at_precision",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ingested_at": {
-          "name": "ingested_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "value_digest": {
-          "name": "value_digest",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_version_id": {
-          "name": "source_version_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "controlled_flow_half_hour_as_of": {
-          "name": "controlled_flow_half_hour_as_of",
-          "columns": [
-            {
-              "expression": "valid_time",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "element",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "terminal",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "ingested_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "controlled_flow_half_hour_published": {
-          "name": "controlled_flow_half_hour_published",
-          "columns": [
-            {
-              "expression": "published_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "valid_time",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "controlled_flow_half_hour_source_version_id_ons_resource_version_id_fk": {
-          "name": "controlled_flow_half_hour_source_version_id_ons_resource_version_id_fk",
-          "tableFrom": "controlled_flow_half_hour",
-          "tableTo": "ons_resource_version",
-          "columnsFrom": [
-            "source_version_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "controlled_flow_half_hour_element_terminal_valid_time_data_version_pk": {
-          "name": "controlled_flow_half_hour_element_terminal_valid_time_data_version_pk",
-          "columns": [
-            "element",
-            "terminal",
-            "valid_time",
-            "data_version"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "controlled_flow_is_a_forecast": {
-          "name": "controlled_flow_is_a_forecast",
-          "value": "\"controlled_flow_half_hour\".\"published_at\" < \"controlled_flow_half_hour\".\"valid_time\""
-        },
-        "controlled_flow_submarket_is_known": {
-          "name": "controlled_flow_submarket_is_known",
-          "value": "\"controlled_flow_half_hour\".\"submarket\" in ('N', 'NE', 'S', 'SE', 'RR')"
         }
       },
       "isRLSEnabled": false
@@ -4337,125 +4156,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.pdp_crosswalk": {
-      "name": "pdp_crosswalk",
-      "schema": "",
-      "columns": {
-        "pdp_code": {
-          "name": "pdp_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "subsystem_candidates": {
-          "name": "subsystem_candidates",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "technology_candidates": {
-          "name": "technology_candidates",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "determined_on": {
-          "name": "determined_on",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "data_version": {
-          "name": "data_version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "published_at": {
-          "name": "published_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "published_at_precision": {
-          "name": "published_at_precision",
-          "type": "published_at_precision",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ingested_at": {
-          "name": "ingested_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "value_digest": {
-          "name": "value_digest",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_version_id": {
-          "name": "source_version_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "pdp_crosswalk_as_of": {
-          "name": "pdp_crosswalk_as_of",
-          "columns": [
-            {
-              "expression": "pdp_code",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "ingested_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "pdp_crosswalk_source_version_id_ons_resource_version_id_fk": {
-          "name": "pdp_crosswalk_source_version_id_ons_resource_version_id_fk",
-          "tableFrom": "pdp_crosswalk",
-          "tableTo": "ons_resource_version",
-          "columnsFrom": [
-            "source_version_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "pdp_crosswalk_pdp_code_data_version_pk": {
-          "name": "pdp_crosswalk_pdp_code_data_version_pk",
-          "columns": [
-            "pdp_code",
-            "data_version"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.plant": {
       "name": "plant",
       "schema": "",
@@ -5016,225 +4716,6 @@
       },
       "isRLSEnabled": false
     },
-    "public.programmed_generation_half_hour": {
-      "name": "programmed_generation_half_hour",
-      "schema": "",
-      "columns": {
-        "subsystem": {
-          "name": "subsystem",
-          "type": "subsystem_code",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "technology": {
-          "name": "technology",
-          "type": "programme_technology",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "valid_time": {
-          "name": "valid_time",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "run_label": {
-          "name": "run_label",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "plant_count": {
-          "name": "plant_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reporting_plant_count": {
-          "name": "reporting_plant_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "programmed_mw": {
-          "name": "programmed_mw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "availability_mw": {
-          "name": "availability_mw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "inflexibility_mw": {
-          "name": "inflexibility_mw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "unit_commitment_mw": {
-          "name": "unit_commitment_mw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "electrical_reason_mw": {
-          "name": "electrical_reason_mw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "energy_guarantee_mw": {
-          "name": "energy_guarantee_mw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "export_mw": {
-          "name": "export_mw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "data_version": {
-          "name": "data_version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "published_at": {
-          "name": "published_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "published_at_precision": {
-          "name": "published_at_precision",
-          "type": "published_at_precision",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ingested_at": {
-          "name": "ingested_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "value_digest": {
-          "name": "value_digest",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_version_id": {
-          "name": "source_version_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "programmed_generation_half_hour_as_of": {
-          "name": "programmed_generation_half_hour_as_of",
-          "columns": [
-            {
-              "expression": "valid_time",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "subsystem",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "technology",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "ingested_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "programmed_generation_half_hour_published": {
-          "name": "programmed_generation_half_hour_published",
-          "columns": [
-            {
-              "expression": "published_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "valid_time",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "programmed_generation_half_hour_source_version_id_ons_resource_version_id_fk": {
-          "name": "programmed_generation_half_hour_source_version_id_ons_resource_version_id_fk",
-          "tableFrom": "programmed_generation_half_hour",
-          "tableTo": "ons_resource_version",
-          "columnsFrom": [
-            "source_version_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "programmed_generation_half_hour_subsystem_technology_valid_time_data_version_pk": {
-          "name": "programmed_generation_half_hour_subsystem_technology_valid_time_data_version_pk",
-          "columns": [
-            "subsystem",
-            "technology",
-            "valid_time",
-            "data_version"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "programmed_generation_is_a_forecast": {
-          "name": "programmed_generation_is_a_forecast",
-          "value": "\"programmed_generation_half_hour\".\"published_at\" < \"programmed_generation_half_hour\".\"valid_time\""
-        },
-        "programmed_generation_reporters_within_plants": {
-          "name": "programmed_generation_reporters_within_plants",
-          "value": "\"programmed_generation_half_hour\".\"reporting_plant_count\" between 0 and \"programmed_generation_half_hour\".\"plant_count\""
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.programmed_load_half_hour": {
       "name": "programmed_load_half_hour",
       "schema": "",
@@ -5375,170 +4856,6 @@
         "programmed_load_is_a_forecast": {
           "name": "programmed_load_is_a_forecast",
           "value": "\"programmed_load_half_hour\".\"published_at\" < \"programmed_load_half_hour\".\"valid_time\""
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.programmed_vs_forecast_half_hour": {
-      "name": "programmed_vs_forecast_half_hour",
-      "schema": "",
-      "columns": {
-        "pdp_code": {
-          "name": "pdp_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "valid_time": {
-          "name": "valid_time",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "run_label": {
-          "name": "run_label",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "pdp_name": {
-          "name": "pdp_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "forecast_mw": {
-          "name": "forecast_mw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "programmed_mw": {
-          "name": "programmed_mw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "data_version": {
-          "name": "data_version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "published_at": {
-          "name": "published_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "published_at_precision": {
-          "name": "published_at_precision",
-          "type": "published_at_precision",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ingested_at": {
-          "name": "ingested_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "value_digest": {
-          "name": "value_digest",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_version_id": {
-          "name": "source_version_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "programmed_vs_forecast_half_hour_as_of": {
-          "name": "programmed_vs_forecast_half_hour_as_of",
-          "columns": [
-            {
-              "expression": "valid_time",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "pdp_code",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "ingested_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "programmed_vs_forecast_half_hour_published": {
-          "name": "programmed_vs_forecast_half_hour_published",
-          "columns": [
-            {
-              "expression": "published_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "valid_time",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "programmed_vs_forecast_half_hour_source_version_id_ons_resource_version_id_fk": {
-          "name": "programmed_vs_forecast_half_hour_source_version_id_ons_resource_version_id_fk",
-          "tableFrom": "programmed_vs_forecast_half_hour",
-          "tableTo": "ons_resource_version",
-          "columnsFrom": [
-            "source_version_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "programmed_vs_forecast_half_hour_pdp_code_valid_time_data_version_pk": {
-          "name": "programmed_vs_forecast_half_hour_pdp_code_valid_time_data_version_pk",
-          "columns": [
-            "pdp_code",
-            "valid_time",
-            "data_version"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "programmed_vs_forecast_is_a_forecast": {
-          "name": "programmed_vs_forecast_is_a_forecast",
-          "value": "\"programmed_vs_forecast_half_hour\".\"published_at\" < \"programmed_vs_forecast_half_hour\".\"valid_time\""
         }
       },
       "isRLSEnabled": false
@@ -6974,6 +6291,92 @@
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
+    },
+    "public.answer_feedback": {
+      "name": "answer_feedback",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "surface": {
+          "name": "surface",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "verdict": {
+          "name": "verdict",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subject": {
+          "name": "subject",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "locale": {
+          "name": "locale",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "answer_feedback_recorded_at": {
+          "name": "answer_feedback_recorded_at",
+          "columns": [
+            {
+              "expression": "recorded_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "answer_feedback_surface": {
+          "name": "answer_feedback_surface",
+          "value": "\"answer_feedback\".\"surface\" in ('forecast', 'replay', 'evidence')"
+        },
+        "answer_feedback_verdict": {
+          "name": "answer_feedback_verdict",
+          "value": "\"answer_feedback\".\"verdict\" in ('up', 'down')"
+        },
+        "answer_feedback_locale": {
+          "name": "answer_feedback_locale",
+          "value": "\"answer_feedback\".\"locale\" in ('pt', 'en')"
+        }
+      },
+      "isRLSEnabled": false
     }
   },
   "enums": {
@@ -7108,9 +6511,6 @@
         "daily_load",
         "dessem_balance",
         "dessem_general",
-        "programmed_generation",
-        "programmed_vs_forecast",
-        "controlled_flow",
         "verified_load",
         "programmed_load",
         "plant_registry",
@@ -7200,16 +6600,6 @@
         "siga_coordinate",
         "siga_municipality_centroid",
         "unlocated"
-      ]
-    },
-    "public.programme_technology": {
-      "name": "programme_technology",
-      "schema": "public",
-      "values": [
-        "WIND",
-        "SOLAR",
-        "HYDRO",
-        "THERMAL"
       ]
     },
     "public.published_at_precision": {
@@ -7421,75 +6811,6 @@
       },
       "definition": "\n  with latest as (\n    select distinct on (plant_ons_code, conjunto_code, member_from)\n      plant_ons_code, plant_ceg_core, conjunto_code, member_from, member_to,\n      data_version, published_at, ingested_at\n    from conjunto_membership\n    where ingested_at <= canonical_as_of()\n    order by plant_ons_code, conjunto_code, member_from,\n             ingested_at desc, data_version desc\n  )\n  select\n    plant_ons_code,\n    conjunto_code,\n    plant_ceg_core,\n    member_from,\n    member_to,\n    data_version,\n    published_at,\n    ingested_at\n  from latest\n  where member_from <= canonical_fleet_date()\n    and (member_to is null or member_to >= canonical_fleet_date())\n",
       "name": "canonical_conjunto_membership",
-      "schema": "public",
-      "isExisting": false,
-      "materialized": false
-    },
-    "public.canonical_controlled_flow": {
-      "columns": {
-        "element": {
-          "name": "element",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "terminal": {
-          "name": "terminal",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "validTime": {
-          "name": "validTime",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "runLabel": {
-          "name": "runLabel",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "submarket": {
-          "name": "submarket",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "loadMw": {
-          "name": "loadMw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "dataVersion": {
-          "name": "dataVersion",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "publishedAt": {
-          "name": "publishedAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ingestedAt": {
-          "name": "ingestedAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "definition": "\n  select distinct on (element, terminal, valid_time)\n    element,\n    terminal,\n    valid_time,\n    run_label,\n    description,\n    submarket,\n    load_mw,\n    data_version,\n    published_at,\n    ingested_at\n  from controlled_flow_half_hour\n  where ingested_at <= canonical_as_of()\n    and (canonical_published_at_or_before() is null\n         or published_at <= canonical_published_at_or_before())\n  order by element, terminal, valid_time, ingested_at desc, data_version desc\n",
-      "name": "canonical_controlled_flow",
       "schema": "public",
       "isExisting": false,
       "materialized": false
@@ -8856,71 +8177,6 @@
       "isExisting": false,
       "materialized": false
     },
-    "public.canonical_pdp_crosswalk": {
-      "columns": {
-        "pdpCode": {
-          "name": "pdpCode",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "subsystem": {
-          "name": "subsystem",
-          "type": "subsystem_code",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "subsystemUnavailableReason": {
-          "name": "subsystemUnavailableReason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "technology": {
-          "name": "technology",
-          "type": "technology",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "technologyUnavailableReason": {
-          "name": "technologyUnavailableReason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "determinedOn": {
-          "name": "determinedOn",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "dataVersion": {
-          "name": "dataVersion",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "publishedAt": {
-          "name": "publishedAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ingestedAt": {
-          "name": "ingestedAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "definition": "\n  select distinct on (pdp_code)\n    pdp_code,\n    case when cardinality(subsystem_candidates) = 1\n         then subsystem_candidates[1]::subsystem_code end as subsystem,\n    case cardinality(subsystem_candidates)\n         when 1 then null when 0 then 'no_match' else 'ambiguous' end\n      as subsystem_unavailable_reason,\n    case when cardinality(technology_candidates) = 1\n         then technology_candidates[1]::technology end as technology,\n    case cardinality(technology_candidates)\n         when 1 then null when 0 then 'no_match' else 'ambiguous' end\n      as technology_unavailable_reason,\n    determined_on,\n    data_version,\n    published_at,\n    ingested_at\n  from pdp_crosswalk\n  where ingested_at <= canonical_as_of()\n    and (canonical_published_at_or_before() is null\n         or published_at <= canonical_published_at_or_before())\n  order by pdp_code, ingested_at desc, data_version desc\n",
-      "name": "canonical_pdp_crosswalk",
-      "schema": "public",
-      "isExisting": false,
-      "materialized": false
-    },
     "public.canonical_plant_registry": {
       "columns": {
         "cegCore": {
@@ -9042,113 +8298,6 @@
       "isExisting": false,
       "materialized": false
     },
-    "public.canonical_programmed_generation": {
-      "columns": {
-        "subsystem": {
-          "name": "subsystem",
-          "type": "subsystem_code",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "technology": {
-          "name": "technology",
-          "type": "programme_technology",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "validTime": {
-          "name": "validTime",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "runLabel": {
-          "name": "runLabel",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "plantCount": {
-          "name": "plantCount",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reportingPlantCount": {
-          "name": "reportingPlantCount",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "programmedMw": {
-          "name": "programmedMw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "availabilityMw": {
-          "name": "availabilityMw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "inflexibilityMw": {
-          "name": "inflexibilityMw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "unitCommitmentMw": {
-          "name": "unitCommitmentMw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "electricalReasonMw": {
-          "name": "electricalReasonMw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "energyGuaranteeMw": {
-          "name": "energyGuaranteeMw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "exportMw": {
-          "name": "exportMw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "dataVersion": {
-          "name": "dataVersion",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "publishedAt": {
-          "name": "publishedAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ingestedAt": {
-          "name": "ingestedAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "definition": "\n  select distinct on (subsystem, technology, valid_time)\n    subsystem,\n    technology,\n    valid_time,\n    run_label,\n    plant_count,\n    reporting_plant_count,\n    programmed_mw,\n    availability_mw,\n    inflexibility_mw,\n    unit_commitment_mw,\n    electrical_reason_mw,\n    energy_guarantee_mw,\n    export_mw,\n    data_version,\n    published_at,\n    ingested_at\n  from programmed_generation_half_hour\n  where ingested_at <= canonical_as_of()\n    and (canonical_published_at_or_before() is null\n         or published_at <= canonical_published_at_or_before())\n  order by subsystem, technology, valid_time, ingested_at desc, data_version desc\n",
-      "name": "canonical_programmed_generation",
-      "schema": "public",
-      "isExisting": false,
-      "materialized": false
-    },
     "public.canonical_programmed_load": {
       "columns": {
         "subsystem": {
@@ -9191,89 +8340,6 @@
       },
       "definition": "\n  with half_hours as (\n    select distinct on (area_code, valid_time)\n      subsystem,\n      valid_time,\n      programmed_load_mwh,\n      data_version,\n      published_at,\n      ingested_at\n    from programmed_load_half_hour\n    where subsystem is not null\n      and ingested_at <= canonical_as_of()\n      and (canonical_published_at_or_before() is null\n           or published_at <= canonical_published_at_or_before())\n    order by area_code, valid_time, ingested_at desc, data_version desc\n  )\n  select\n    subsystem,\n    date_trunc('hour', valid_time) as valid_time,\n    sum(programmed_load_mwh) as programmed_load_mwh,\n    max(data_version) as data_version,\n    max(published_at) as published_at,\n    max(ingested_at) as ingested_at\n  from half_hours\n  group by subsystem, date_trunc('hour', valid_time)\n  having count(*) = 2\n",
       "name": "canonical_programmed_load",
-      "schema": "public",
-      "isExisting": false,
-      "materialized": false
-    },
-    "public.canonical_programmed_vre": {
-      "columns": {
-        "subsystem": {
-          "name": "subsystem",
-          "type": "subsystem_code",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "technology": {
-          "name": "technology",
-          "type": "technology",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "validTime": {
-          "name": "validTime",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "forecastMw": {
-          "name": "forecastMw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "programmedMw": {
-          "name": "programmedMw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "entityCount": {
-          "name": "entityCount",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "mappedProgrammedShare": {
-          "name": "mappedProgrammedShare",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "mappedShareUnavailableReason": {
-          "name": "mappedShareUnavailableReason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "unmappedProgrammedMw": {
-          "name": "unmappedProgrammedMw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "dataVersion": {
-          "name": "dataVersion",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "publishedAt": {
-          "name": "publishedAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ingestedAt": {
-          "name": "ingestedAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "definition": "\n  select\n    subsystem::subsystem_code as subsystem,\n    technology::technology as technology,\n    valid_time,\n    sum(forecast_mw) as forecast_mw,\n    sum(programmed_mw) as programmed_mw,\n    count(*)::int as entity_count,\n    case when max(total_programmed_mw) > 0\n         then max(mapped_programmed_mw) / max(total_programmed_mw) end\n      as mapped_programmed_share,\n    case when max(total_programmed_mw) > 0 then null\n         else 'nothing_programmed' end as mapped_share_unavailable_reason,\n    max(total_programmed_mw) - max(mapped_programmed_mw) as unmapped_programmed_mw,\n    max(data_version) as data_version,\n    max(published_at) as published_at,\n    max(ingested_at) as ingested_at\n  from (\n    select\n      j.*,\n      sum(j.programmed_mw) over (partition by j.valid_time) as total_programmed_mw,\n      sum(case when j.subsystem is not null and j.technology is not null\n               then j.programmed_mw else 0 end)\n        over (partition by j.valid_time) as mapped_programmed_mw\n    from (\n      select\n        f.valid_time, f.forecast_mw, f.programmed_mw,\n        f.data_version, f.published_at, f.ingested_at,\n        case when cardinality(b.subsystem_candidates) = 1\n             then b.subsystem_candidates[1] end as subsystem,\n        case when cardinality(b.technology_candidates) = 1\n             then b.technology_candidates[1] end as technology\n      from (\n        select distinct on (pdp_code, valid_time)\n          pdp_code, valid_time, forecast_mw, programmed_mw,\n          data_version, published_at, ingested_at\n        from programmed_vs_forecast_half_hour\n        where ingested_at <= canonical_as_of()\n          and (canonical_published_at_or_before() is null\n               or published_at <= canonical_published_at_or_before())\n        order by pdp_code, valid_time, ingested_at desc, data_version desc\n      ) f\n      left join (\n        select distinct on (pdp_code)\n          pdp_code, subsystem_candidates, technology_candidates\n        from pdp_crosswalk\n        where ingested_at <= canonical_as_of()\n          and (canonical_published_at_or_before() is null\n               or published_at <= canonical_published_at_or_before())\n        order by pdp_code, ingested_at desc, data_version desc\n      ) b on b.pdp_code = f.pdp_code\n    ) j\n  ) x\n  where subsystem is not null and technology is not null\n  group by subsystem, technology, valid_time\n",
-      "name": "canonical_programmed_vre",
       "schema": "public",
       "isExisting": false,
       "materialized": false
@@ -9334,118 +8400,6 @@
       },
       "definition": "\n  select\n    set_version,\n    sum(latitude * represented_mw) / nullif(sum(represented_mw), 0) as latitude,\n    sum(longitude * represented_mw) / nullif(sum(represented_mw), 0) as longitude,\n    sum(represented_mw) as represented_mw,\n    count(*)::int as centroids\n  from centroid_point\n  where technology = 'SOLAR'\n  group by set_version\n",
       "name": "canonical_solar_centroid",
-      "schema": "public",
-      "isExisting": false,
-      "materialized": false
-    },
-    "public.canonical_subsystem_programme_hour": {
-      "columns": {
-        "subsystem": {
-          "name": "subsystem",
-          "type": "subsystem_code",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "validTime": {
-          "name": "validTime",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "programmedWindMw": {
-          "name": "programmedWindMw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "programmedSolarMw": {
-          "name": "programmedSolarMw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "programmedHydroMw": {
-          "name": "programmedHydroMw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "programmedThermalMw": {
-          "name": "programmedThermalMw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "thermalInflexibilityMw": {
-          "name": "thermalInflexibilityMw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "thermalUnitCommitmentMw": {
-          "name": "thermalUnitCommitmentMw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "thermalElectricalReasonMw": {
-          "name": "thermalElectricalReasonMw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "pdpWindForecastMw": {
-          "name": "pdpWindForecastMw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "pdpWindProgrammedMw": {
-          "name": "pdpWindProgrammedMw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "pdpSolarForecastMw": {
-          "name": "pdpSolarForecastMw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "pdpSolarProgrammedMw": {
-          "name": "pdpSolarProgrammedMw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "pdpMappedProgrammedShare": {
-          "name": "pdpMappedProgrammedShare",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "dataVersion": {
-          "name": "dataVersion",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "publishedAt": {
-          "name": "publishedAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ingestedAt": {
-          "name": "ingestedAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "definition": "\n  select\n    g.subsystem,\n    g.hour as valid_time,\n    g.programmed_wind_mw,\n    g.programmed_solar_mw,\n    g.programmed_hydro_mw,\n    g.programmed_thermal_mw,\n    g.thermal_inflexibility_mw,\n    g.thermal_unit_commitment_mw,\n    g.thermal_electrical_reason_mw,\n    v.pdp_wind_forecast_mw,\n    v.pdp_wind_programmed_mw,\n    v.pdp_solar_forecast_mw,\n    v.pdp_solar_programmed_mw,\n    v.pdp_mapped_programmed_share,\n    greatest(g.data_version, coalesce(v.data_version, 0)) as data_version,\n    greatest(g.published_at, coalesce(v.published_at, g.published_at)) as published_at,\n    greatest(g.ingested_at, coalesce(v.ingested_at, g.ingested_at)) as ingested_at\n  from (\n    select\n      subsystem,\n      date_trunc('hour', valid_time) as hour,\n      case when count(*) filter (where technology = 'WIND') = 2\n           then avg(programmed_mw) filter (where technology = 'WIND') end\n        as programmed_wind_mw,\n      case when count(*) filter (where technology = 'SOLAR') = 2\n           then avg(programmed_mw) filter (where technology = 'SOLAR') end\n        as programmed_solar_mw,\n      case when count(*) filter (where technology = 'HYDRO') = 2\n           then avg(programmed_mw) filter (where technology = 'HYDRO') end\n        as programmed_hydro_mw,\n      case when count(*) filter (where technology = 'THERMAL') = 2\n           then avg(programmed_mw) filter (where technology = 'THERMAL') end\n        as programmed_thermal_mw,\n      case when count(*) filter (where technology = 'THERMAL'\n                                   and inflexibility_mw is not null) = 2\n           then avg(inflexibility_mw) filter (where technology = 'THERMAL') end\n        as thermal_inflexibility_mw,\n      case when count(*) filter (where technology = 'THERMAL'\n                                   and unit_commitment_mw is not null) = 2\n           then avg(unit_commitment_mw) filter (where technology = 'THERMAL') end\n        as thermal_unit_commitment_mw,\n      case when count(*) filter (where technology = 'THERMAL'\n                                   and electrical_reason_mw is not null) = 2\n           then avg(electrical_reason_mw) filter (where technology = 'THERMAL') end\n        as thermal_electrical_reason_mw,\n      max(data_version) as data_version,\n      max(published_at) as published_at,\n      max(ingested_at) as ingested_at\n    from canonical_programmed_generation\n    group by subsystem, date_trunc('hour', valid_time)\n  ) g\n  left join (\n    select\n      subsystem,\n      date_trunc('hour', valid_time) as hour,\n      case when count(*) filter (where technology = 'WIND') = 2\n           then avg(forecast_mw) filter (where technology = 'WIND') end\n        as pdp_wind_forecast_mw,\n      case when count(*) filter (where technology = 'WIND') = 2\n           then avg(programmed_mw) filter (where technology = 'WIND') end\n        as pdp_wind_programmed_mw,\n      case when count(*) filter (where technology = 'SOLAR') = 2\n           then avg(forecast_mw) filter (where technology = 'SOLAR') end\n        as pdp_solar_forecast_mw,\n      case when count(*) filter (where technology = 'SOLAR') = 2\n           then avg(programmed_mw) filter (where technology = 'SOLAR') end\n        as pdp_solar_programmed_mw,\n      min(mapped_programmed_share) as pdp_mapped_programmed_share,\n      max(data_version) as data_version,\n      max(published_at) as published_at,\n      max(ingested_at) as ingested_at\n    from canonical_programmed_vre\n    group by subsystem, date_trunc('hour', valid_time)\n  ) v on v.subsystem = g.subsystem and v.hour = g.hour\n",
-      "name": "canonical_subsystem_programme_hour",
       "schema": "public",
       "isExisting": false,
       "materialized": false

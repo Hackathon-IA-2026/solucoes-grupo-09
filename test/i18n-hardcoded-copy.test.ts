@@ -231,6 +231,47 @@ function strip(source: string): string {
     .replace(/^import[\s\S]*?from\s+"[^"]*";$/gm, "");
 }
 
+/**
+ * A template's `${…}` holes, removed — brace-balanced, because they nest.
+ *
+ * An interpolation is a *value*, and the words inside it are the code that
+ * computes one. `note={`${fill(copy.app.grid.ladderNote, { model: … })}`}` is
+ * the dictionary being used correctly and read as a leak: the placeholder
+ * strip below handles `{date}` but stops at the first `}`, so the inner object
+ * literal ended the match early and `fill` survived as a word.
+ *
+ * What is left is the prose the template writes *itself*, which is the only
+ * part that could be monolingual — so ``Total: ${x}`` is still caught, and
+ * ``${a} ${b}`` correctly is not.
+ */
+function withoutInterpolations(text: string): string {
+  let out = "";
+  let index = 0;
+  while (index < text.length) {
+    const open = text.indexOf("${", index);
+    if (open === -1) {
+      return out + text.slice(index);
+    }
+    out += text.slice(index, open);
+    let depth = 0;
+    let cursor = open + 1;
+    for (; cursor < text.length; cursor += 1) {
+      if (text[cursor] === "{") {
+        depth += 1;
+      } else if (text[cursor] === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          break;
+        }
+      }
+    }
+    // An unclosed hole means the literal was cut by the regex that found it;
+    // dropping the rest is the safe reading, since none of it is prose either.
+    index = cursor >= text.length ? text.length : cursor + 1;
+  }
+  return out;
+}
+
 const WORD = /[A-Za-zÀ-ÿ]{3,}/;
 
 /**
@@ -242,7 +283,7 @@ const WORD = /[A-Za-zÀ-ÿ]{3,}/;
  * notation all along.
  */
 function residue(text: string): string {
-  let rest = text;
+  let rest = withoutInterpolations(text);
   for (const term of DOMAIN_TERMS) {
     rest = rest.replace(new RegExp(`\\b${term}\\b`, "gi"), " ");
   }
@@ -298,7 +339,14 @@ function findOffenders(file: string, source: string): Offender[] {
   // B. A JSX text node: words sitting directly between two tags. Anything
   // containing an operator, a brace or a quote is expression territory, not a
   // text node, and is left alone rather than guessed at.
-  for (const match of stripped.matchAll(/>([^<>{}"'`=;()]+)</g)) {
+  /*
+    `(?<![=-])` because `=>` and `->` are not opening tags. A function typed
+    `(v: Verdict) => Promise<void>` matched as a text node of " Promise" —
+    one capitalised word, which this check reads as a sentence fragment. The
+    lookbehind is the whole fix: a real JSX text node is never preceded by an
+    operator's tail.
+  */
+  for (const match of stripped.matchAll(/(?<![=-])>([^<>{}"'`=;()]+)</g)) {
     const text = match[1].trim();
     // Two words, or one capitalised one: enough to be a sentence fragment,
     // little enough that `</Text>\n  <View` and stray operators do not qualify.
@@ -542,5 +590,51 @@ describe("i18n hygiene", () => {
       ].join("\n"),
     );
     expect(clean).toEqual([]);
+  });
+
+  it("an arrow's return type is not a JSX text node, but a real one still is", () => {
+    /*
+      `(v: FeedbackVerdict) => Promise<void>` was read as a text node of
+      " Promise" — one capitalised word, which the heuristic takes for a
+      sentence fragment. The lookbehind that fixes it must not cost the check
+      anything, so both halves are asserted: the type is clean and the same
+      words between two real tags are still caught.
+    */
+    expect(
+      findOffenders(
+        "fake.ts",
+        "  readonly file: (verdict: FeedbackVerdict) => Promise<void>;",
+      ),
+    ).toEqual([]);
+    expect(
+      findOffenders("fake.tsx", "<Text>Promise of a corrected forecast</Text>"),
+    ).toHaveLength(1);
+  });
+
+  it("a template built only from the dictionary is composition, not copy", () => {
+    /*
+      The other false positive, and the more dangerous one to get wrong in
+      either direction. `fill(copy.…, { … })` inside a template is the
+      dictionary being used *correctly*; the placeholder strip stopped at the
+      first `}` of the nested object literal, so `fill` survived as a word and
+      the correct call was reported as a leak.
+
+      Brace-balanced now — and prose the template writes itself is still
+      caught, which is the half that matters.
+    */
+    expect(
+      findOffenders(
+        "fake.tsx",
+        "<Panel note={`${fill(copy.app.grid.ladderNote, { rows: f.number(n) })}`} />",
+      ),
+    ).toEqual([]);
+    expect(
+      findOffenders("fake.tsx", "<Panel note={`Measured over ${f.number(n)} days`} />"),
+    ).toHaveLength(1);
+    // And an unbalanced hole — a literal the finding regex cut short — is not
+    // a crash and not a silent pass of everything after it.
+    expect(findOffenders("fake.tsx", "<Panel note={`Total geral: ${x`} />")).toHaveLength(
+      1,
+    );
   });
 });

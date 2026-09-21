@@ -64,9 +64,17 @@ describe("retrain · the banner reports the schedule it registered", () => {
   it("the banner's source is the same function the queue is fed from", () => {
     const source = readFileSync(join(ROOT, "src/worker.ts"), "utf8");
     // `retrainScheduleForQueue` is what `runner.schedule` is called with, so
-    // the printed cadence and the registered one cannot drift.
-    expect(source).toContain("for (const schedule of retrainScheduleForQueue())");
+    // the printed cadence and the registered one cannot drift. Asserted as
+    // "the producer is named in the registration table and the banner reads
+    // the same producer" rather than as one literal loop: the four
+    // model-backed schedules are registered from one table now, and a check
+    // pinned to `for (const schedule of retrainScheduleForQueue())` was about
+    // the shape of the loop rather than about where the banner's number comes
+    // from.
+    expect(source).toContain("schedules: () => retrainScheduleForQueue()");
     expect(source).toContain("await runner.schedule(schedule)");
+    // The banner's own read, which is the half this test is named for.
+    expect(source).toContain("for (const schedule of retrainScheduleForQueue())");
   });
 });
 

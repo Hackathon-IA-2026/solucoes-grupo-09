@@ -1,7 +1,7 @@
 import type { Database } from "../database/connection.js";
 import type { Execute } from "../jobs/index.js";
 import type { PayloadArchive } from "./archive.js";
-import { acquireBulkResource, BULK_STEPS } from "./bulk-resource.js";
+import { createBulkCsvIngestor } from "./bulk-csv-ingestor.js";
 import { type CatalogueResource, selectResourceForMonth } from "./ons/catalogue.js";
 import {
   parseConstrainedOffDetailCsv,
@@ -93,74 +93,67 @@ const FORMATS = ["CSV"] as const;
 const slugFor = (technology: Technology): string =>
   technology === "WIND" ? WIND_DETAIL_DATASET_SLUG : SOLAR_DETAIL_DATASET_SLUG;
 
+/**
+ * Build the job handler.
+ *
+ * A spec, not a body — see `bulk-csv-ingestor.ts`. Three things stay here
+ * because they are what makes this the plant-detail source: the dataset is
+ * chosen by technology, and `write` owns both an ordering and a consequence —
+ * plants before facts, because of the foreign key, and the identity
+ * reconciliation afterwards, because this is the only dataset that names a
+ * plant by both identifiers and so is the only place that can do it.
+ */
 export function createConstrainedOffDetailIngestor(
   deps: ConstrainedOffDetailIngestorDeps,
 ): Execute<IngestConstrainedOffDetailPayload, IngestConstrainedOffDetailResult> {
-  const fetchImpl = deps.fetch ?? fetch;
-
-  return async (payload, report) => {
-    const acquired = await acquireBulkResource({
-      db: deps.db,
-      fetch: fetchImpl,
-      slug: slugFor(payload.technology),
-      select: (resources: CatalogueResource[]) =>
-        selectResourceForMonth(resources, payload.year, payload.month, FORMATS),
-      force: payload.force,
-      archive: deps.archive,
-      context: payload.context,
-      report,
-    });
-
-    const base = {
-      resourceName: acquired.resource.name,
-      changed: acquired.changed,
-      rowsParsed: 0,
-      rowsRejected: 0,
-      plantsSeen: 0,
-      modalityConjuntoMismatches: 0,
-      inserted: 0,
-      revised: 0,
-      unchanged: 0,
-      linkedRegistryPlants: 0,
-      identityConflicts: 0,
-    };
-
-    if (!acquired.bytes) {
-      return { ...base, downloaded: false };
+  return createBulkCsvIngestor<
+    IngestConstrainedOffDetailPayload,
+    ReturnType<typeof parseConstrainedOffDetailCsv>,
+    {
+      plantsSeen: number;
+      modalityConjuntoMismatches: number;
+      linkedRegistryPlants: number;
+      identityConflicts: number;
     }
-
-    const parsed = parseConstrainedOffDetailCsv(
-      new TextDecoder("utf-8").decode(acquired.bytes),
-      payload.technology,
-    );
-
-    // Plants first: the fact table has a foreign key to them, and a month can
-    // introduce a plant that has never been measured before.
-    await upsertObservedPlants(deps.db, parsed.plants);
-
-    const written = await writePlantDetail(deps.db, {
-      rows: parsed.rows,
-      publishedAt: acquired.publishedAt,
-      publishedAtPrecision: acquired.publishedAtPrecision,
-      sourceVersionId: acquired.versionId,
-    });
-
-    // This dataset is the only one that names a plant by both identifiers, so
-    // reconciliation belongs to its ingest rather than to a later batch job.
-    const identity = await reconcilePlantIdentity(deps.db);
-    await acquired.markIngested();
-    report({ done: BULK_STEPS, total: BULK_STEPS });
-
-    return {
-      ...base,
-      downloaded: true,
-      rowsParsed: parsed.rows.length,
-      rowsRejected: parsed.rejected.length,
-      plantsSeen: parsed.plants.length,
-      modalityConjuntoMismatches: parsed.modalityConjuntoMismatches,
-      ...written,
-      linkedRegistryPlants: identity.linkedRegistryPlants,
-      identityConflicts: identity.conflicts.length,
-    };
-  };
+  >(
+    {
+      slug: (payload) => slugFor(payload.technology),
+      source: "restricao-coff-detail",
+      select: (resources, payload) =>
+        selectResourceForMonth(resources, payload.year, payload.month, FORMATS),
+      parse: (text, payload) => parseConstrainedOffDetailCsv(text, payload.technology),
+      write: async (db, parsed, version) => {
+        // Plants first: the fact table has a foreign key to them, and a month
+        // can introduce a plant that has never been measured before.
+        await upsertObservedPlants(db, parsed.plants);
+        const written = await writePlantDetail(db, { rows: parsed.rows, ...version });
+        // This dataset is the only one that names a plant by both identifiers,
+        // so reconciliation belongs to its ingest rather than to a later batch
+        // job — and it happens before the resource is settled, as it did.
+        const identity = await reconcilePlantIdentity(db);
+        return {
+          ...written,
+          linkedRegistryPlants: identity.linkedRegistryPlants,
+          identityConflicts: identity.conflicts.length,
+        };
+      },
+      counted: (parsed) => ({
+        parsed: parsed.rows.length,
+        rejected: parsed.rejected.length,
+      }),
+      empty: {
+        plantsSeen: 0,
+        modalityConjuntoMismatches: 0,
+        linkedRegistryPlants: 0,
+        identityConflicts: 0,
+      },
+      extra: (parsed) => ({
+        plantsSeen: parsed.plants.length,
+        modalityConjuntoMismatches: parsed.modalityConjuntoMismatches,
+        linkedRegistryPlants: 0,
+        identityConflicts: 0,
+      }),
+    },
+    deps,
+  );
 }

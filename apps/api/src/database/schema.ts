@@ -3894,3 +3894,62 @@ export const diagnosisPublicationRefusal = pgTable(
     ),
   ],
 );
+
+/**
+ * What a reader thought of one answer, and where that answer was.
+ *
+ * **An opinion, and never a measurement.** Nothing here reaches a canonical
+ * view, a band, a metric or the gate: `docs/domain-model.md` §4's axes are
+ * about when a fact was true and when WattSteer learned it, and a verdict is
+ * neither. It is collected so a later retrain has somewhere to start — which
+ * is why the row keeps *what was on screen* rather than a page URL, and why
+ * the screens that collect it say it is filed rather than acted on.
+ *
+ * **Why `subject` is JSON and the surface is not.** The three surfaces answer
+ * different questions and share no coordinate: a replay has a day and a lane,
+ * an evidence card has a document and a page. A column per field would be
+ * mostly NULL and would grow one more every time a screen learns to ask, so
+ * the shape a retrain groups by is `packages/core`'s `FeedbackSubject` and the
+ * database holds it whole. The *surface* is a CHECK, because a fourth kind of
+ * answer is a decision somebody makes rather than a string a client invents.
+ *
+ * **No reader identity.** There is no account here to attach one to, and a
+ * free-text reason plus a timestamp is already enough to identify a colleague
+ * who wrote a sentence in their own voice. The row says what was judged and
+ * what was wrong with it; who pressed it is not a fact this product needs.
+ */
+export const answerFeedback = pgTable(
+  "answer_feedback",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    /** When the gateway stored it. The press instant is unknowable. */
+    recordedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    /** `forecast`, `replay` or `evidence` — `FeedbackSurface` in the contract. */
+    surface: text().notNull(),
+    /** `up` or `down` — `FeedbackVerdict`. Two values and no middle. */
+    verdict: text().notNull(),
+    /** `FeedbackSubject`: what was on screen, as the keys a retrain groups by. */
+    subject: jsonb().notNull(),
+    /**
+     * Why, in the reader's words, and only ever their words.
+     *
+     * Nullable because a thumb up needs no sentence, and length-capped at the
+     * gateway rather than here: a 401st character is a request to refuse with
+     * a reason, not a row to truncate silently.
+     */
+    reason: text(),
+    /** Which dictionary the reader was reading, so the sentence can be read back. */
+    locale: text().notNull(),
+  },
+  (t) => [
+    check(
+      "answer_feedback_surface",
+      sql`${t.surface} in ('forecast', 'replay', 'evidence')`,
+    ),
+    check("answer_feedback_verdict", sql`${t.verdict} in ('up', 'down')`),
+    check("answer_feedback_locale", sql`${t.locale} in ('pt', 'en')`),
+    // A thumb up with a paragraph attached is fine; a thumb down without one
+    // is the common case and must stay cheap to leave.
+    index("answer_feedback_recorded_at").on(t.recordedAt),
+  ],
+);

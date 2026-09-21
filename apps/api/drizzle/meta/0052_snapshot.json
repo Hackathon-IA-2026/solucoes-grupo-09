@@ -1,9 +1,95 @@
 {
-  "id": "78b55173-2af7-46ec-9687-9e4023e54455",
+  "id": "7b557ade-ce68-4782-b682-3ea6c58791c5",
   "prevId": "5a91ee9a-5b87-45f7-8eb1-225a9f746c14",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
+    "public.answer_feedback": {
+      "name": "answer_feedback",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "surface": {
+          "name": "surface",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "verdict": {
+          "name": "verdict",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subject": {
+          "name": "subject",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "locale": {
+          "name": "locale",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "answer_feedback_recorded_at": {
+          "name": "answer_feedback_recorded_at",
+          "columns": [
+            {
+              "expression": "recorded_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "answer_feedback_surface": {
+          "name": "answer_feedback_surface",
+          "value": "\"answer_feedback\".\"surface\" in ('forecast', 'replay', 'evidence')"
+        },
+        "answer_feedback_verdict": {
+          "name": "answer_feedback_verdict",
+          "value": "\"answer_feedback\".\"verdict\" in ('up', 'down')"
+        },
+        "answer_feedback_locale": {
+          "name": "answer_feedback_locale",
+          "value": "\"answer_feedback\".\"locale\" in ('pt', 'en')"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.centroid_drift_check": {
       "name": "centroid_drift_check",
       "schema": "",
@@ -1922,190 +2008,6 @@
         "dessem_balance_reference_day_coverage": {
           "name": "dessem_balance_reference_day_coverage",
           "value": "\"dessem_balance_half_hour\".\"reference_day_patamares\" between 1 and \"dessem_balance_half_hour\".\"reference_day_half_hours\""
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.dessem_general_half_hour": {
-      "name": "dessem_general_half_hour",
-      "schema": "",
-      "columns": {
-        "subsystem": {
-          "name": "subsystem",
-          "type": "subsystem_code",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "valid_time": {
-          "name": "valid_time",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "forecast_producer": {
-          "name": "forecast_producer",
-          "type": "forecast_producer",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "run_label": {
-          "name": "run_label",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "demand_mw": {
-          "name": "demand_mw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "renewable_generation_mw": {
-          "name": "renewable_generation_mw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "hydro_generation_mw": {
-          "name": "hydro_generation_mw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "thermal_generation_mw": {
-          "name": "thermal_generation_mw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "pumping_consumption_mw": {
-          "name": "pumping_consumption_mw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "data_version": {
-          "name": "data_version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "published_at": {
-          "name": "published_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "published_at_precision": {
-          "name": "published_at_precision",
-          "type": "published_at_precision",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ingested_at": {
-          "name": "ingested_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "value_digest": {
-          "name": "value_digest",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_version_id": {
-          "name": "source_version_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "dessem_general_half_hour_as_of": {
-          "name": "dessem_general_half_hour_as_of",
-          "columns": [
-            {
-              "expression": "valid_time",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "subsystem",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "ingested_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "dessem_general_half_hour_published": {
-          "name": "dessem_general_half_hour_published",
-          "columns": [
-            {
-              "expression": "published_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "valid_time",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "dessem_general_half_hour_source_version_id_ons_resource_version_id_fk": {
-          "name": "dessem_general_half_hour_source_version_id_ons_resource_version_id_fk",
-          "tableFrom": "dessem_general_half_hour",
-          "tableTo": "ons_resource_version",
-          "columnsFrom": [
-            "source_version_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "dessem_general_half_hour_subsystem_valid_time_data_version_pk": {
-          "name": "dessem_general_half_hour_subsystem_valid_time_data_version_pk",
-          "columns": [
-            "subsystem",
-            "valid_time",
-            "data_version"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "dessem_general_is_a_forecast": {
-          "name": "dessem_general_is_a_forecast",
-          "value": "\"dessem_general_half_hour\".\"published_at\" < \"dessem_general_half_hour\".\"valid_time\""
         }
       },
       "isRLSEnabled": false
@@ -6424,7 +6326,6 @@
         "interchange",
         "daily_load",
         "dessem_balance",
-        "dessem_general",
         "verified_load",
         "programmed_load",
         "plant_registry",
@@ -7054,89 +6955,6 @@
       },
       "definition": "\n  select distinct on (subsystem, valid_time)\n    subsystem,\n    valid_time,\n    forecast_producer,\n    run_label,\n    demand_mw,\n    hydro_generation_mw,\n    small_hydro_generation_mw,\n    thermal_generation_mw,\n    small_thermal_generation_mw,\n    wind_generation_mw,\n    solar_generation_mw,\n    mmgd_generation_mw,\n    pumping_consumption_mw,\n    data_version,\n    published_at,\n    ingested_at,\n    reference_day_patamares,\n    reference_day_half_hours\n  from dessem_balance_half_hour\n  where ingested_at <= canonical_as_of()\n    and (canonical_published_at_or_before() is null\n         or published_at <= canonical_published_at_or_before())\n    and (canonical_partial_reference_days()\n         or reference_day_patamares = reference_day_half_hours)\n  order by subsystem, valid_time, ingested_at desc, data_version desc\n",
       "name": "canonical_day_ahead_balance",
-      "schema": "public",
-      "isExisting": false,
-      "materialized": false
-    },
-    "public.canonical_day_ahead_general": {
-      "columns": {
-        "subsystem": {
-          "name": "subsystem",
-          "type": "subsystem_code",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "validTime": {
-          "name": "validTime",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "forecastProducer": {
-          "name": "forecastProducer",
-          "type": "forecast_producer",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "runLabel": {
-          "name": "runLabel",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "demandMw": {
-          "name": "demandMw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "renewableGenerationMw": {
-          "name": "renewableGenerationMw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "hydroGenerationMw": {
-          "name": "hydroGenerationMw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "thermalGenerationMw": {
-          "name": "thermalGenerationMw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "pumpingConsumptionMw": {
-          "name": "pumpingConsumptionMw",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "dataVersion": {
-          "name": "dataVersion",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "publishedAt": {
-          "name": "publishedAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ingestedAt": {
-          "name": "ingestedAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "definition": "\n  select distinct on (subsystem, valid_time)\n    subsystem,\n    valid_time,\n    forecast_producer,\n    run_label,\n    demand_mw,\n    renewable_generation_mw,\n    hydro_generation_mw,\n    thermal_generation_mw,\n    pumping_consumption_mw,\n    data_version,\n    published_at,\n    ingested_at\n  from dessem_general_half_hour\n  where ingested_at <= canonical_as_of()\n    and (canonical_published_at_or_before() is null\n         or published_at <= canonical_published_at_or_before())\n  order by subsystem, valid_time, ingested_at desc, data_version desc\n",
-      "name": "canonical_day_ahead_general",
       "schema": "public",
       "isExisting": false,
       "materialized": false

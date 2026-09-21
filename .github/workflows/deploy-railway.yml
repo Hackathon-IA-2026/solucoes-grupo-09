@@ -1,0 +1,106 @@
+# Deploy to Railway from GitHub, and hand it the state a laptop trained.
+#
+# Two jobs, because they are two decisions. `deploy` pushes the code Railway is
+# already able to build; `state` puts the retrain's artifacts on the volume and
+# the scored forecast rows in Postgres — the pair no build can produce, because
+# they came out of a run on somebody's machine.
+#
+# It never runs on a push, for the reason `deploy-aws.yml` gives: a deploy is a
+# decision, and the `railway` environment can require a reviewer before the job
+# starts (Settings → Environments → railway → Required reviewers).
+#
+# ## What it needs, once
+#
+#   secrets: RAILWAY_TOKEN — a *project* token (Railway → wattsteer → Settings →
+#            Tokens), scoped to the environment below. Revocable, and not tied
+#            to a person, which is the point: whoever holds the project can add
+#            it and nobody has to run anything locally afterwards.
+#
+# If the project already deploys from GitHub, run this with `services: none` and
+# `ship_state: true` — the integration builds the code and this brings the part
+# it cannot know about.
+#
+# `with_rag` is off by default and is the one input worth thinking about: it
+# replaces the whole evidence corpus, and a Railway that has been indexing on
+# its own may hold a newer one than the release does.
+name: deploy-railway
+
+on:
+  workflow_dispatch:
+    inputs:
+      services:
+        description: "Which services to push, in the order deploy.md gives"
+        type: choice
+        options: [none, all, ml, api, web]
+        default: none
+      ship_state:
+        description: "Also ship the artifacts and forecast rows"
+        type: boolean
+        default: true
+      state_tag:
+        description: "Release holding models.tgz and forecasts.sql.gz"
+        type: string
+        default: state-2026-09-20
+      with_rag:
+        description: "Also replace the RAG corpus (only if Railway's is empty or stale)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  # One at a time: two runs restoring the same three tables would interleave a
+  # truncate with an insert, and the loser would leave a half-filled table.
+  group: deploy-railway
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: inputs.services != 'none'
+    runs-on: ubuntu-latest
+    environment: railway
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the Railway CLI
+        run: npm install -g @railway/cli
+      - name: Push the services
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          set -euo pipefail
+          # ml → api → web: the gateway proxies to the modelling service and the
+          # site calls the gateway, so the other order ships a client asking for
+          # routes nothing serves yet.
+          for service in ml api web; do
+            if [ "${{ inputs.services }}" = "all" ] || [ "${{ inputs.services }}" = "$service" ]; then
+              echo "== $service"
+              railway up --service "$service" --detach
+            fi
+          done
+
+  state:
+    # `always()` so state can be shipped without a deploy — the common case is a
+    # project that already builds from GitHub — while still waiting for one when
+    # it was asked for.
+    needs: [deploy]
+    if: ${{ always() && inputs.ship_state && !cancelled() }}
+    runs-on: ubuntu-latest
+    environment: railway
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the Railway CLI and psql
+        run: |
+          npm install -g @railway/cli
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+      - name: Ship the artifacts and the forecast rows
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: infra/railway/ship-state.sh --from-release "${{ inputs.state_tag }}"
+      - name: Ship the RAG corpus, when the release carries one
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        if: ${{ inputs.with_rag }}
+        run: infra/railway/ship-rag.sh --from-release "${{ inputs.state_tag }}"

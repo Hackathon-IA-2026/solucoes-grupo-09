@@ -40,7 +40,8 @@ async def test_a_claim_the_second_reader_does_not_find_in_its_quote_is_refused()
     """Measured on 2026-09-18: LAPA's solar output was answered with the SIN's
     11,802, and every mechanical gate passed, because the number was in the
     quote. Only reading the row tells them apart."""
-    from wattsteer_rag.evidence import Record, _reviewed
+    from wattsteer_rag.evidence import _reviewed
+    from wattsteer_rag.gate import Record
 
     reader = _Reader(
         [
@@ -75,7 +76,8 @@ async def test_no_reader_means_no_claim():
     could read). An answer missing its own reading is refused."""
     import pytest
 
-    from wattsteer_rag.evidence import Record, _reviewed
+    from wattsteer_rag.evidence import _reviewed
+    from wattsteer_rag.gate import Record
     from wattsteer_rag.verify import ReaderUnavailable
 
     with pytest.raises(ReaderUnavailable):

@@ -1,6 +1,6 @@
 {
-  "id": "cf301e6e-edd2-4a61-b262-73c0ad187a93",
-  "prevId": "f8036f26-0aab-45c0-bbc6-1f40582c145c",
+  "id": "f8036f26-0aab-45c0-bbc6-1f40582c145c",
+  "prevId": "78b55173-2af7-46ec-9687-9e4023e54455",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -102,24 +102,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "centroid_drift_check_set_version_centroid_set_version_fk": {
           "name": "centroid_drift_check_set_version_centroid_set_version_fk",
           "tableFrom": "centroid_drift_check",
+          "tableTo": "centroid_set",
           "columnsFrom": [
             "set_version"
           ],
-          "tableTo": "centroid_set",
           "columnsTo": [
             "version"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -237,9 +237,9 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "centroid_point_technology": {
           "name": "centroid_point_technology",
@@ -258,24 +258,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "centroid_point_set_version_centroid_set_version_fk": {
           "name": "centroid_point_set_version_centroid_set_version_fk",
           "tableFrom": "centroid_point",
+          "tableTo": "centroid_set",
           "columnsFrom": [
             "set_version"
           ],
-          "tableTo": "centroid_set",
           "columnsTo": [
             "version"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -396,9 +396,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -483,9 +483,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -592,9 +592,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "conjunto_membership_conjunto": {
           "name": "conjunto_membership_conjunto",
@@ -613,37 +613,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "conjunto_membership_conjunto_code_conjunto_ons_conjunto_code_fk": {
           "name": "conjunto_membership_conjunto_code_conjunto_ons_conjunto_code_fk",
           "tableFrom": "conjunto_membership",
+          "tableTo": "conjunto",
           "columnsFrom": [
             "conjunto_code"
           ],
-          "tableTo": "conjunto",
           "columnsTo": [
             "ons_conjunto_code"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "conjunto_membership_source_version_id_ons_resource_version_id_fk": {
           "name": "conjunto_membership_source_version_id_ons_resource_version_id_fk",
           "tableFrom": "conjunto_membership",
+          "tableTo": "ons_resource_version",
           "columnsFrom": [
             "source_version_id"
           ],
-          "tableTo": "ons_resource_version",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -782,9 +782,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "controlled_flow_half_hour_published": {
           "name": "controlled_flow_half_hour_published",
@@ -803,24 +803,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "controlled_flow_half_hour_source_version_id_ons_resource_version_id_fk": {
           "name": "controlled_flow_half_hour_source_version_id_ons_resource_version_id_fk",
           "tableFrom": "controlled_flow_half_hour",
+          "tableTo": "ons_resource_version",
           "columnsFrom": [
             "source_version_id"
           ],
-          "tableTo": "ons_resource_version",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -1068,9 +1068,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -1312,9 +1312,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "curtailment_forecast_hour_day": {
           "name": "curtailment_forecast_hour_day",
@@ -1345,9 +1345,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -1589,9 +1589,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -1808,9 +1808,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "curtailment_report_hour_time": {
           "name": "curtailment_report_hour_time",
@@ -1829,37 +1829,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "curtailment_report_hour_reporting_entity_code_reporting_entity_ons_code_fk": {
           "name": "curtailment_report_hour_reporting_entity_code_reporting_entity_ons_code_fk",
           "tableFrom": "curtailment_report_hour",
+          "tableTo": "reporting_entity",
           "columnsFrom": [
             "reporting_entity_code"
           ],
-          "tableTo": "reporting_entity",
           "columnsTo": [
             "ons_code"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "curtailment_report_hour_source_version_id_ons_resource_version_id_fk": {
           "name": "curtailment_report_hour_source_version_id_ons_resource_version_id_fk",
           "tableFrom": "curtailment_report_hour",
+          "tableTo": "ons_resource_version",
           "columnsFrom": [
             "source_version_id"
           ],
-          "tableTo": "ons_resource_version",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -2042,9 +2042,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "dessem_balance_half_hour_published": {
           "name": "dessem_balance_half_hour_published",
@@ -2063,24 +2063,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "dessem_balance_half_hour_source_version_id_ons_resource_version_id_fk": {
           "name": "dessem_balance_half_hour_source_version_id_ons_resource_version_id_fk",
           "tableFrom": "dessem_balance_half_hour",
+          "tableTo": "ons_resource_version",
           "columnsFrom": [
             "source_version_id"
           ],
-          "tableTo": "ons_resource_version",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -2230,9 +2230,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "dessem_general_half_hour_published": {
           "name": "dessem_general_half_hour_published",
@@ -2251,24 +2251,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "dessem_general_half_hour_source_version_id_ons_resource_version_id_fk": {
           "name": "dessem_general_half_hour_source_version_id_ons_resource_version_id_fk",
           "tableFrom": "dessem_general_half_hour",
+          "tableTo": "ons_resource_version",
           "columnsFrom": [
             "source_version_id"
           ],
-          "tableTo": "ons_resource_version",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -2555,9 +2555,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -2792,15 +2792,16 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "diagnosis_attribution_driver_publication": {
           "name": "diagnosis_attribution_driver_publication",
           "tableFrom": "diagnosis_attribution_driver",
+          "tableTo": "diagnosis_attribution",
           "columnsFrom": [
             "subsystem",
             "target_date",
@@ -2808,7 +2809,6 @@
             "gate_profile",
             "data_version"
           ],
-          "tableTo": "diagnosis_attribution",
           "columnsTo": [
             "subsystem",
             "target_date",
@@ -2816,8 +2816,8 @@
             "gate_profile",
             "data_version"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -2929,9 +2929,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -3003,15 +3003,15 @@
         "feature_ab_configuration_feature_set_feature_set_definition_feature_set_fk": {
           "name": "feature_ab_configuration_feature_set_feature_set_definition_feature_set_fk",
           "tableFrom": "feature_ab_configuration",
+          "tableTo": "feature_set_definition",
           "columnsFrom": [
             "feature_set"
           ],
-          "tableTo": "feature_set_definition",
           "columnsTo": [
             "feature_set"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3085,24 +3085,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "feature_calendar_day_calendar_version_feature_calendar_generation_version_fk": {
           "name": "feature_calendar_day_calendar_version_feature_calendar_generation_version_fk",
           "tableFrom": "feature_calendar_day",
+          "tableTo": "feature_calendar_generation",
           "columnsFrom": [
             "calendar_version"
           ],
-          "tableTo": "feature_calendar_generation",
           "columnsTo": [
             "version"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -3544,9 +3544,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "generating_unit_interval": {
           "name": "generating_unit_interval",
@@ -3565,37 +3565,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "generating_unit_plant_ceg_core_plant_ceg_core_fk": {
           "name": "generating_unit_plant_ceg_core_plant_ceg_core_fk",
           "tableFrom": "generating_unit",
+          "tableTo": "plant",
           "columnsFrom": [
             "plant_ceg_core"
           ],
-          "tableTo": "plant",
           "columnsTo": [
             "ceg_core"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "generating_unit_source_version_id_ons_resource_version_id_fk": {
           "name": "generating_unit_source_version_id_ons_resource_version_id_fk",
           "tableFrom": "generating_unit",
+          "tableTo": "ons_resource_version",
           "columnsFrom": [
             "source_version_id"
           ],
-          "tableTo": "ons_resource_version",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -3738,9 +3738,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "ingestion_run_status_time": {
           "name": "ingestion_run_status_time",
@@ -3759,9 +3759,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -3883,9 +3883,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "load_api_request_fetched": {
           "name": "load_api_request_fetched",
@@ -3898,9 +3898,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -3992,9 +3992,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "observed_plant_subsystem_technology": {
           "name": "observed_plant_subsystem_technology",
@@ -4013,9 +4013,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -4165,9 +4165,9 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "ons_resource_version_dataset": {
           "name": "ons_resource_version_dataset",
@@ -4186,9 +4186,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -4289,9 +4289,9 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "payload_custody_retention": {
           "name": "payload_custody_retention",
@@ -4310,9 +4310,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "payload_custody_uri": {
           "name": "payload_custody_uri",
@@ -4325,9 +4325,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -4422,24 +4422,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "pdp_crosswalk_source_version_id_ons_resource_version_id_fk": {
           "name": "pdp_crosswalk_source_version_id_ons_resource_version_id_fk",
           "tableFrom": "pdp_crosswalk",
+          "tableTo": "ons_resource_version",
           "columnsFrom": [
             "source_version_id"
           ],
-          "tableTo": "ons_resource_version",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -4556,9 +4556,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "plant_ons_code": {
           "name": "plant_ons_code",
@@ -4571,9 +4571,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -4711,9 +4711,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "plant_detail_hour_time": {
           "name": "plant_detail_hour_time",
@@ -4732,37 +4732,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "plant_detail_hour_plant_ons_code_observed_plant_ons_code_fk": {
           "name": "plant_detail_hour_plant_ons_code_observed_plant_ons_code_fk",
           "tableFrom": "plant_detail_hour",
+          "tableTo": "observed_plant",
           "columnsFrom": [
             "plant_ons_code"
           ],
-          "tableTo": "observed_plant",
           "columnsTo": [
             "ons_code"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "plant_detail_hour_source_version_id_ons_resource_version_id_fk": {
           "name": "plant_detail_hour_source_version_id_ons_resource_version_id_fk",
           "tableFrom": "plant_detail_hour",
+          "tableTo": "ons_resource_version",
           "columnsFrom": [
             "source_version_id"
           ],
-          "tableTo": "ons_resource_version",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -4935,9 +4935,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "plant_geo_municipality": {
           "name": "plant_geo_municipality",
@@ -4956,37 +4956,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "plant_geo_plant_ceg_core_plant_ceg_core_fk": {
           "name": "plant_geo_plant_ceg_core_plant_ceg_core_fk",
           "tableFrom": "plant_geo",
+          "tableTo": "plant",
           "columnsFrom": [
             "plant_ceg_core"
           ],
-          "tableTo": "plant",
           "columnsTo": [
             "ceg_core"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "plant_geo_source_version_id_ons_resource_version_id_fk": {
           "name": "plant_geo_source_version_id_ons_resource_version_id_fk",
           "tableFrom": "plant_geo",
+          "tableTo": "ons_resource_version",
           "columnsFrom": [
             "source_version_id"
           ],
-          "tableTo": "ons_resource_version",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -5169,9 +5169,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "programmed_generation_half_hour_published": {
           "name": "programmed_generation_half_hour_published",
@@ -5190,24 +5190,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "programmed_generation_half_hour_source_version_id_ons_resource_version_id_fk": {
           "name": "programmed_generation_half_hour_source_version_id_ons_resource_version_id_fk",
           "tableFrom": "programmed_generation_half_hour",
+          "tableTo": "ons_resource_version",
           "columnsFrom": [
             "source_version_id"
           ],
-          "tableTo": "ons_resource_version",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -5335,24 +5335,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "programmed_load_half_hour_source_request_id_load_api_request_id_fk": {
           "name": "programmed_load_half_hour_source_request_id_load_api_request_id_fk",
           "tableFrom": "programmed_load_half_hour",
+          "tableTo": "load_api_request",
           "columnsFrom": [
             "source_request_id"
           ],
-          "tableTo": "load_api_request",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -5482,9 +5482,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "programmed_vs_forecast_half_hour_published": {
           "name": "programmed_vs_forecast_half_hour_published",
@@ -5503,24 +5503,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "programmed_vs_forecast_half_hour_source_version_id_ons_resource_version_id_fk": {
           "name": "programmed_vs_forecast_half_hour_source_version_id_ons_resource_version_id_fk",
           "tableFrom": "programmed_vs_forecast_half_hour",
+          "tableTo": "ons_resource_version",
           "columnsFrom": [
             "source_version_id"
           ],
-          "tableTo": "ons_resource_version",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -5618,9 +5618,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -5722,9 +5722,9 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "resource_republication_detected": {
           "name": "resource_republication_detected",
@@ -5737,9 +5737,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "resource_republication_dataset": {
           "name": "resource_republication_dataset",
@@ -5758,37 +5758,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "resource_republication_prior_version_id_ons_resource_version_id_fk": {
           "name": "resource_republication_prior_version_id_ons_resource_version_id_fk",
           "tableFrom": "resource_republication",
+          "tableTo": "ons_resource_version",
           "columnsFrom": [
             "prior_version_id"
           ],
-          "tableTo": "ons_resource_version",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "resource_republication_version_id_ons_resource_version_id_fk": {
           "name": "resource_republication_version_id_ons_resource_version_id_fk",
           "tableFrom": "resource_republication",
+          "tableTo": "ons_resource_version",
           "columnsFrom": [
             "version_id"
           ],
-          "tableTo": "ons_resource_version",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -5912,24 +5912,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "siga_snapshot_source_version_id_ons_resource_version_id_fk": {
           "name": "siga_snapshot_source_version_id_ons_resource_version_id_fk",
           "tableFrom": "siga_snapshot",
+          "tableTo": "ons_resource_version",
           "columnsFrom": [
             "source_version_id"
           ],
-          "tableTo": "ons_resource_version",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -6054,24 +6054,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "subsystem_energy_balance_hour_source_version_id_ons_resource_version_id_fk": {
           "name": "subsystem_energy_balance_hour_source_version_id_ons_resource_version_id_fk",
           "tableFrom": "subsystem_energy_balance_hour",
+          "tableTo": "ons_resource_version",
           "columnsFrom": [
             "source_version_id"
           ],
-          "tableTo": "ons_resource_version",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -6194,24 +6194,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "subsystem_exchange_hour_source_version_id_ons_resource_version_id_fk": {
           "name": "subsystem_exchange_hour_source_version_id_ons_resource_version_id_fk",
           "tableFrom": "subsystem_exchange_hour",
+          "tableTo": "ons_resource_version",
           "columnsFrom": [
             "source_version_id"
           ],
-          "tableTo": "ons_resource_version",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -6334,24 +6334,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "subsystem_load_day_source_version_id_ons_resource_version_id_fk": {
           "name": "subsystem_load_day_source_version_id_ons_resource_version_id_fk",
           "tableFrom": "subsystem_load_day",
+          "tableTo": "ons_resource_version",
           "columnsFrom": [
             "source_version_id"
           ],
-          "tableTo": "ons_resource_version",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -6510,9 +6510,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "verified_load_half_hour_subsystem": {
           "name": "verified_load_half_hour_subsystem",
@@ -6531,24 +6531,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "verified_load_half_hour_source_request_id_load_api_request_id_fk": {
           "name": "verified_load_half_hour_source_request_id_load_api_request_id_fk",
           "tableFrom": "verified_load_half_hour",
+          "tableTo": "load_api_request",
           "columnsFrom": [
             "source_request_id"
           ],
-          "tableTo": "load_api_request",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -6753,9 +6753,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "weather_forecast_hour_run": {
           "name": "weather_forecast_hour_run",
@@ -6774,24 +6774,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "weather_forecast_hour_source_request_id_weather_run_request_id_fk": {
           "name": "weather_forecast_hour_source_request_id_weather_run_request_id_fk",
           "tableFrom": "weather_forecast_hour",
+          "tableTo": "weather_run_request",
           "columnsFrom": [
             "source_request_id"
           ],
-          "tableTo": "weather_run_request",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -6948,9 +6948,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "weather_run_request_fetched": {
           "name": "weather_run_request_fetched",
@@ -6963,9 +6963,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -6973,6 +6973,92 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.answer_feedback": {
+      "name": "answer_feedback",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "surface": {
+          "name": "surface",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "verdict": {
+          "name": "verdict",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subject": {
+          "name": "subject",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "locale": {
+          "name": "locale",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "answer_feedback_recorded_at": {
+          "name": "answer_feedback_recorded_at",
+          "columns": [
+            {
+              "expression": "recorded_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "answer_feedback_surface": {
+          "name": "answer_feedback_surface",
+          "value": "\"answer_feedback\".\"surface\" in ('forecast', 'replay', 'evidence')"
+        },
+        "answer_feedback_verdict": {
+          "name": "answer_feedback_verdict",
+          "value": "\"answer_feedback\".\"verdict\" in ('up', 'down')"
+        },
+        "answer_feedback_locale": {
+          "name": "answer_feedback_locale",
+          "value": "\"answer_feedback\".\"locale\" in ('pt', 'en')"
+        }
+      },
       "isRLSEnabled": false
     }
   },
@@ -7299,10 +7385,11 @@
     }
   },
   "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
   "views": {
     "public.canonical_capacity_weight": {
-      "name": "canonical_capacity_weight",
-      "schema": "public",
       "columns": {
         "setVersion": {
           "name": "setVersion",
@@ -7362,12 +7449,12 @@
         }
       },
       "definition": "\n  with fleet as (\n    select subsystem, technology, installed_capacity_mw, latitude, longitude\n    from canonical_plant_registry\n    where installed_capacity_mw > 0\n  ),\n  scope_totals as (\n    select\n      subsystem,\n      technology,\n      sum(installed_capacity_mw) as scope_capacity_mw,\n      coalesce(sum(installed_capacity_mw)\n                 filter (where latitude is not null), 0) as located_mw,\n      coalesce(sum(installed_capacity_mw)\n                 filter (where latitude is null), 0) as unlocated_mw\n    from fleet\n    group by subsystem, technology\n  ),\n  assigned as (\n    select\n      fleet.subsystem,\n      fleet.technology,\n      fleet.installed_capacity_mw,\n      nearest.centroid_id,\n      nearest.distance_km\n    from fleet\n    cross join lateral (\n      select\n        c.centroid_id,\n        great_circle_km(fleet.latitude, fleet.longitude,\n                        c.latitude, c.longitude) as distance_km\n      from centroid_point c\n      where c.set_version = 'centroid_set_v1'\n        and c.technology = fleet.technology\n      order by distance_km\n      limit 1\n    ) nearest\n    where fleet.latitude is not null and fleet.longitude is not null\n  ),\n  by_centroid as (\n    select\n      subsystem,\n      technology,\n      centroid_id,\n      sum(installed_capacity_mw) as centroid_mw,\n      sum(distance_km * installed_capacity_mw) as distance_mw_km\n    from assigned\n    group by subsystem, technology, centroid_id\n  )\n  select\n    'centroid_set_v1' as set_version,\n    by_centroid.subsystem,\n    by_centroid.technology,\n    by_centroid.centroid_id,\n    by_centroid.centroid_mw / scope_totals.located_mw as weight,\n    (by_centroid.centroid_mw / scope_totals.located_mw)\n      * (scope_totals.located_mw + scope_totals.unlocated_mw) as capacity_mw,\n    by_centroid.distance_mw_km / by_centroid.centroid_mw as distance_km,\n    scope_totals.scope_capacity_mw,\n    scope_totals.located_mw + scope_totals.unlocated_mw as scope_placed_mw\n  from by_centroid\n  join scope_totals\n    on scope_totals.subsystem = by_centroid.subsystem\n   and scope_totals.technology = by_centroid.technology\n  where scope_totals.located_mw > 0\n",
-      "materialized": false,
-      "isExisting": false
+      "name": "canonical_capacity_weight",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
     },
     "public.canonical_conjunto_membership": {
-      "name": "canonical_conjunto_membership",
-      "schema": "public",
       "columns": {
         "plantOnsCode": {
           "name": "plantOnsCode",
@@ -7419,12 +7506,12 @@
         }
       },
       "definition": "\n  with latest as (\n    select distinct on (plant_ons_code, conjunto_code, member_from)\n      plant_ons_code, plant_ceg_core, conjunto_code, member_from, member_to,\n      data_version, published_at, ingested_at\n    from conjunto_membership\n    where ingested_at <= canonical_as_of()\n    order by plant_ons_code, conjunto_code, member_from,\n             ingested_at desc, data_version desc\n  )\n  select\n    plant_ons_code,\n    conjunto_code,\n    plant_ceg_core,\n    member_from,\n    member_to,\n    data_version,\n    published_at,\n    ingested_at\n  from latest\n  where member_from <= canonical_fleet_date()\n    and (member_to is null or member_to >= canonical_fleet_date())\n",
-      "materialized": false,
-      "isExisting": false
+      "name": "canonical_conjunto_membership",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
     },
     "public.canonical_controlled_flow": {
-      "name": "canonical_controlled_flow",
-      "schema": "public",
       "columns": {
         "element": {
           "name": "element",
@@ -7488,12 +7575,12 @@
         }
       },
       "definition": "\n  select distinct on (element, terminal, valid_time)\n    element,\n    terminal,\n    valid_time,\n    run_label,\n    description,\n    submarket,\n    load_mw,\n    data_version,\n    published_at,\n    ingested_at\n  from controlled_flow_half_hour\n  where ingested_at <= canonical_as_of()\n    and (canonical_published_at_or_before() is null\n         or published_at <= canonical_published_at_or_before())\n  order by element, terminal, valid_time, ingested_at desc, data_version desc\n",
-      "materialized": false,
-      "isExisting": false
+      "name": "canonical_controlled_flow",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
     },
     "public.canonical_curtailment_by_plant": {
-      "name": "canonical_curtailment_by_plant",
-      "schema": "public",
       "columns": {
         "plantOnsCode": {
           "name": "plantOnsCode",
@@ -7570,12 +7657,12 @@
         }
       },
       "definition": "\n  select distinct on (plant_ons_code, technology, valid_time)\n    plant_ons_code,\n    technology,\n    valid_time,\n    estimated_generation_mwh,\n    verified_generation_mwh,\n    case technology when 'WIND' then 'wind_speed_ms' else 'irradiance_wm2' end\n      as measured_quantity,\n    case technology\n      when 'WIND' then measured_wind_speed_ms\n      else measured_irradiance_wm2\n    end as measurement_value,\n    (measurement_invalid = 1) as measurement_invalid,\n    half_hours_observed,\n    data_version,\n    published_at,\n    ingested_at\n  from plant_detail_hour\n  where ingested_at <= canonical_as_of()\n  order by plant_ons_code, technology, valid_time,\n           ingested_at desc, data_version desc\n",
-      "materialized": false,
-      "isExisting": false
+      "name": "canonical_curtailment_by_plant",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
     },
     "public.canonical_curtailment_by_reporting_entity": {
-      "name": "canonical_curtailment_by_reporting_entity",
-      "schema": "public",
       "columns": {
         "reportingEntityCode": {
           "name": "reportingEntityCode",
@@ -7698,12 +7785,12 @@
         }
       },
       "definition": "\n  select distinct on (c.reporting_entity_code, c.technology, c.valid_time)\n    c.reporting_entity_code,\n    e.kind as reporting_entity_kind,\n    e.name as reporting_entity_name,\n    e.subsystem,\n    c.technology,\n    c.valid_time,\n    c.constrained_off_mwh,\n    c.verified_generation_mwh,\n    c.reference_generation_mwh,\n    c.final_reference_generation_mwh,\n    c.available_capacity_mw,\n    c.half_hours_observed,\n    c.reason as restriction_reason,\n    c.origin as restriction_origin,\n    c.restriction_description,\n    (c.cause_mixed = 1) as restriction_cause_mixed,\n    c.data_version,\n    c.published_at,\n    c.ingested_at\n  from curtailment_report_hour c\n  join reporting_entity e on e.ons_code = c.reporting_entity_code\n  where c.ingested_at <= canonical_as_of()\n  order by c.reporting_entity_code, c.technology, c.valid_time,\n           c.ingested_at desc, c.data_version desc\n",
-      "materialized": false,
-      "isExisting": false
+      "name": "canonical_curtailment_by_reporting_entity",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
     },
     "public.canonical_day_ahead_balance": {
-      "name": "canonical_day_ahead_balance",
-      "schema": "public",
       "columns": {
         "subsystem": {
           "name": "subsystem",
@@ -7817,12 +7904,12 @@
         }
       },
       "definition": "\n  select distinct on (subsystem, valid_time)\n    subsystem,\n    valid_time,\n    forecast_producer,\n    run_label,\n    demand_mw,\n    hydro_generation_mw,\n    small_hydro_generation_mw,\n    thermal_generation_mw,\n    small_thermal_generation_mw,\n    wind_generation_mw,\n    solar_generation_mw,\n    mmgd_generation_mw,\n    pumping_consumption_mw,\n    data_version,\n    published_at,\n    ingested_at,\n    reference_day_patamares,\n    reference_day_half_hours\n  from dessem_balance_half_hour\n  where ingested_at <= canonical_as_of()\n    and (canonical_published_at_or_before() is null\n         or published_at <= canonical_published_at_or_before())\n    and (canonical_partial_reference_days()\n         or reference_day_patamares = reference_day_half_hours)\n  order by subsystem, valid_time, ingested_at desc, data_version desc\n",
-      "materialized": false,
-      "isExisting": false
+      "name": "canonical_day_ahead_balance",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
     },
     "public.canonical_day_ahead_general": {
-      "name": "canonical_day_ahead_general",
-      "schema": "public",
       "columns": {
         "subsystem": {
           "name": "subsystem",
@@ -7900,12 +7987,12 @@
         }
       },
       "definition": "\n  select distinct on (subsystem, valid_time)\n    subsystem,\n    valid_time,\n    forecast_producer,\n    run_label,\n    demand_mw,\n    renewable_generation_mw,\n    hydro_generation_mw,\n    thermal_generation_mw,\n    pumping_consumption_mw,\n    data_version,\n    published_at,\n    ingested_at\n  from dessem_general_half_hour\n  where ingested_at <= canonical_as_of()\n    and (canonical_published_at_or_before() is null\n         or published_at <= canonical_published_at_or_before())\n  order by subsystem, valid_time, ingested_at desc, data_version desc\n",
-      "materialized": false,
-      "isExisting": false
+      "name": "canonical_day_ahead_general",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
     },
     "public.canonical_diagnosis_attribution": {
-      "name": "canonical_diagnosis_attribution",
-      "schema": "public",
       "columns": {
         "subsystem": {
           "name": "subsystem",
@@ -8136,12 +8223,12 @@
         }
       },
       "definition": "\n  select distinct on (subsystem, target_date, origin_kind, gate_profile)\n    subsystem,\n    target_date,\n    origin_kind,\n    gate_profile,\n    forecast_producer,\n    run_label,\n    feature_set,\n    correction_regime,\n    threshold_mw,\n    target,\n    explains,\n    hours_attributed,\n    baseline_expected_mwh,\n    day_expected_mwh,\n    total_attributed_mwh,\n    sum_abs_attributed_mwh,\n    local_accuracy_residual_mwh,\n    top_two_share,\n    attribution_stderr_mwh,\n    baseline_stderr_mwh,\n    stderr_resamples,\n    stderr_seed,\n    peak_hour_local,\n    peak_hour_expected_mwh,\n    peak_hour_baseline_expected_mwh,\n    driver_group_version,\n    driver_group_hash,\n    background_source,\n    background_seed,\n    background_rows,\n    coalitions,\n    rule_flags,\n    rules_evaluated,\n    governing_rule_action,\n    data_version,\n    published_at,\n    ingested_at\n  from diagnosis_attribution\n  where ingested_at <= canonical_as_of()\n  order by subsystem, target_date, origin_kind, gate_profile,\n           ingested_at desc, data_version desc\n",
-      "materialized": false,
-      "isExisting": false
+      "name": "canonical_diagnosis_attribution",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
     },
     "public.canonical_diagnosis_driver": {
-      "name": "canonical_diagnosis_driver",
-      "schema": "public",
       "columns": {
         "subsystem": {
           "name": "subsystem",
@@ -8270,12 +8357,12 @@
         }
       },
       "definition": "\n  select\n    d.subsystem,\n    d.target_date,\n    d.origin_kind,\n    d.gate_profile,\n    d.data_version,\n    d.grain,\n    d.driver_group,\n    d.label_code,\n    d.rank,\n    d.phi_mwh,\n    d.share,\n    d.direction,\n    d.hour_disagreement,\n    d.headline_feature,\n    d.observed,\n    d.typical,\n    d.observed_absent_reason,\n    d.typical_absent_reason,\n    d.unit,\n    d.demoted\n  from diagnosis_attribution_driver d\n  join canonical_diagnosis_attribution a\n    on a.subsystem = d.subsystem\n   and a.target_date = d.target_date\n   and a.origin_kind = d.origin_kind\n   and a.gate_profile = d.gate_profile\n   and a.data_version = d.data_version\n",
-      "materialized": false,
-      "isExisting": false
+      "name": "canonical_diagnosis_driver",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
     },
     "public.canonical_forecast_day": {
-      "name": "canonical_forecast_day",
-      "schema": "public",
       "columns": {
         "subsystem": {
           "name": "subsystem",
@@ -8463,12 +8550,12 @@
         }
       },
       "definition": "\n  select distinct on (subsystem, target_date, origin_kind, gate_profile)\n    subsystem,\n    target_date,\n    origin_kind,\n    gate_profile,\n    forecast_producer,\n    run_label,\n    feature_set,\n    correction_regime,\n    threshold_mw,\n    day_total_p10_mwh,\n    day_total_p50_mwh,\n    day_total_p90_mwh,\n    peak_power_p10_mw,\n    peak_power_p50_mw,\n    peak_power_p90_mw,\n    day_occurrence_probability,\n    expected_mwh,\n    expected_wind_mwh,\n    expected_solar_mwh,\n    hours_p50_nonzero,\n    derivation,\n    ensemble_draws,\n    ensemble_seed,\n    ensemble_calibration_days,\n    trained_through,\n    risk_bin_elevated_from,\n    risk_bin_high_from,\n    data_version,\n    published_at,\n    ingested_at\n  from curtailment_forecast_day\n  where ingested_at <= canonical_as_of()\n  order by subsystem, target_date, origin_kind, gate_profile,\n           ingested_at desc, data_version desc\n",
-      "materialized": false,
-      "isExisting": false
+      "name": "canonical_forecast_day",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
     },
     "public.canonical_forecast_hour": {
-      "name": "canonical_forecast_hour",
-      "schema": "public",
       "columns": {
         "subsystem": {
           "name": "subsystem",
@@ -8620,12 +8707,12 @@
         }
       },
       "definition": "\n  select distinct on (subsystem, valid_time, origin_kind, gate_profile)\n    subsystem,\n    valid_time,\n    origin_kind,\n    gate_profile,\n    target_date,\n    local_hour,\n    forecast_producer,\n    run_label,\n    feature_set,\n    correction_regime,\n    threshold_mw,\n    occurrence_probability,\n    p10_mwh,\n    p50_mwh,\n    p90_mwh,\n    expected_mwh,\n    p50_wind_mwh,\n    p50_solar_mwh,\n    expected_wind_mwh,\n    expected_solar_mwh,\n    crossed,\n    data_version,\n    published_at,\n    ingested_at\n  from curtailment_forecast_hour\n  where ingested_at <= canonical_as_of()\n  order by subsystem, valid_time, origin_kind, gate_profile,\n           ingested_at desc, data_version desc\n",
-      "materialized": false,
-      "isExisting": false
+      "name": "canonical_forecast_hour",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
     },
     "public.canonical_forecast_national_day": {
-      "name": "canonical_forecast_national_day",
-      "schema": "public",
       "columns": {
         "targetDate": {
           "name": "targetDate",
@@ -8794,12 +8881,12 @@
         }
       },
       "definition": "\n  select distinct on (target_date, origin_kind, gate_profile, threshold_mw)\n    target_date,\n    origin_kind,\n    gate_profile,\n    threshold_mw,\n    forecast_producer,\n    run_label,\n    feature_set,\n    correction_regime,\n    subsystems,\n    day_total_p10_mwh,\n    day_total_p50_mwh,\n    day_total_p90_mwh,\n    peak_power_p10_mw,\n    peak_power_p50_mw,\n    peak_power_p90_mw,\n    day_occurrence_probability,\n    expected_mwh,\n    derivation,\n    ensemble_draws,\n    ensemble_seed,\n    ensemble_calibration_days,\n    trained_through,\n    risk_bin_elevated_from,\n    risk_bin_high_from,\n    data_version,\n    published_at,\n    ingested_at\n  from curtailment_forecast_national_day\n  where ingested_at <= canonical_as_of()\n  order by target_date, origin_kind, gate_profile, threshold_mw,\n           ingested_at desc, data_version desc\n",
-      "materialized": false,
-      "isExisting": false
+      "name": "canonical_forecast_national_day",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
     },
     "public.canonical_installed_capacity": {
-      "name": "canonical_installed_capacity",
-      "schema": "public",
       "columns": {
         "subsystem": {
           "name": "subsystem",
@@ -8835,12 +8922,12 @@
         }
       },
       "definition": "\n  with live_units as (\n    select distinct on (plant_ceg_core, equipment_code)\n      plant_ceg_core, equipment_code, rated_power_mw,\n      commissioned_on, decommissioned_on\n    from generating_unit\n    where ingested_at <= canonical_as_of()\n    order by plant_ceg_core, equipment_code, ingested_at desc, data_version desc\n  )\n  select\n    p.subsystem,\n    p.technology,\n    count(distinct live_units.plant_ceg_core)::int as plants,\n    count(*)::int as units,\n    sum(live_units.rated_power_mw) as capacity_mw\n  from live_units\n  join plant p on p.ceg_core = live_units.plant_ceg_core\n  where live_units.commissioned_on <= canonical_fleet_date()\n    and (live_units.decommissioned_on is null\n         or live_units.decommissioned_on > canonical_fleet_date())\n  group by p.subsystem, p.technology\n",
-      "materialized": false,
-      "isExisting": false
+      "name": "canonical_installed_capacity",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
     },
     "public.canonical_latest_complete_settled_hour": {
-      "name": "canonical_latest_complete_settled_hour",
-      "schema": "public",
       "columns": {
         "validTime": {
           "name": "validTime",
@@ -8850,12 +8937,12 @@
         }
       },
       "definition": "\n  select c.valid_time\n  from curtailment_report_hour c\n  join reporting_entity e on e.ons_code = c.reporting_entity_code\n  where c.ingested_at <= canonical_as_of()\n  group by c.valid_time\n  having count(distinct e.subsystem)\n       = (select count(*) from unnest(enum_range(null::subsystem_code)))\n  order by c.valid_time desc\n  limit 1\n",
-      "materialized": false,
-      "isExisting": false
+      "name": "canonical_latest_complete_settled_hour",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
     },
     "public.canonical_pdp_crosswalk": {
-      "name": "canonical_pdp_crosswalk",
-      "schema": "public",
       "columns": {
         "pdpCode": {
           "name": "pdpCode",
@@ -8915,12 +9002,12 @@
         }
       },
       "definition": "\n  select distinct on (pdp_code)\n    pdp_code,\n    case when cardinality(subsystem_candidates) = 1\n         then subsystem_candidates[1]::subsystem_code end as subsystem,\n    case cardinality(subsystem_candidates)\n         when 1 then null when 0 then 'no_match' else 'ambiguous' end\n      as subsystem_unavailable_reason,\n    case when cardinality(technology_candidates) = 1\n         then technology_candidates[1]::technology end as technology,\n    case cardinality(technology_candidates)\n         when 1 then null when 0 then 'no_match' else 'ambiguous' end\n      as technology_unavailable_reason,\n    determined_on,\n    data_version,\n    published_at,\n    ingested_at\n  from pdp_crosswalk\n  where ingested_at <= canonical_as_of()\n    and (canonical_published_at_or_before() is null\n         or published_at <= canonical_published_at_or_before())\n  order by pdp_code, ingested_at desc, data_version desc\n",
-      "materialized": false,
-      "isExisting": false
+      "name": "canonical_pdp_crosswalk",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
     },
     "public.canonical_plant_registry": {
-      "name": "canonical_plant_registry",
-      "schema": "public",
       "columns": {
         "cegCore": {
           "name": "cegCore",
@@ -9036,12 +9123,12 @@
         }
       },
       "definition": "\n  with live_units as (\n    select distinct on (plant_ceg_core, equipment_code)\n      plant_ceg_core, equipment_code, rated_power_mw,\n      commissioned_on, decommissioned_on, ingested_at\n    from generating_unit\n    where ingested_at <= canonical_as_of()\n    order by plant_ceg_core, equipment_code, ingested_at desc, data_version desc\n  ),\n  capacity as (\n    select plant_ceg_core,\n           sum(rated_power_mw) as installed_capacity_mw,\n           count(*)::int as generating_units,\n           max(ingested_at) as ingested_at\n    from live_units\n    where commissioned_on <= canonical_fleet_date()\n      and (decommissioned_on is null\n           or decommissioned_on > canonical_fleet_date())\n    group by plant_ceg_core\n  ),\n  location as (\n    select distinct on (plant_ceg_core)\n      plant_ceg_core, latitude, longitude, location_source,\n      municipality_name, municipality_uf, withdrawn_on, ingested_at\n    from plant_geo\n    where ingested_at <= canonical_as_of()\n    order by plant_ceg_core, ingested_at desc, data_version desc\n  )\n  select\n    p.ceg_core,\n    p.ceg_raw,\n    p.ons_plant_code,\n    p.name,\n    p.subsystem,\n    p.state_code,\n    p.technology,\n    p.operation_modality,\n    p.owner_name,\n    p.operator_name,\n    capacity.installed_capacity_mw,\n    capacity.generating_units,\n    l.latitude,\n    l.longitude,\n    coalesce(l.location_source, 'unlocated') as location_source,\n    l.municipality_name,\n    l.municipality_uf,\n    greatest(capacity.ingested_at,\n             coalesce(l.ingested_at, capacity.ingested_at)) as ingested_at\n  from capacity\n  join plant p on p.ceg_core = capacity.plant_ceg_core\n  left join location l\n    on l.plant_ceg_core = p.ceg_core and l.withdrawn_on is null\n",
-      "materialized": false,
-      "isExisting": false
+      "name": "canonical_plant_registry",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
     },
     "public.canonical_programmed_generation": {
-      "name": "canonical_programmed_generation",
-      "schema": "public",
       "columns": {
         "subsystem": {
           "name": "subsystem",
@@ -9143,12 +9230,12 @@
         }
       },
       "definition": "\n  select distinct on (subsystem, technology, valid_time)\n    subsystem,\n    technology,\n    valid_time,\n    run_label,\n    plant_count,\n    reporting_plant_count,\n    programmed_mw,\n    availability_mw,\n    inflexibility_mw,\n    unit_commitment_mw,\n    electrical_reason_mw,\n    energy_guarantee_mw,\n    export_mw,\n    data_version,\n    published_at,\n    ingested_at\n  from programmed_generation_half_hour\n  where ingested_at <= canonical_as_of()\n    and (canonical_published_at_or_before() is null\n         or published_at <= canonical_published_at_or_before())\n  order by subsystem, technology, valid_time, ingested_at desc, data_version desc\n",
-      "materialized": false,
-      "isExisting": false
+      "name": "canonical_programmed_generation",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
     },
     "public.canonical_programmed_load": {
-      "name": "canonical_programmed_load",
-      "schema": "public",
       "columns": {
         "subsystem": {
           "name": "subsystem",
@@ -9189,12 +9276,12 @@
         }
       },
       "definition": "\n  with half_hours as (\n    select distinct on (area_code, valid_time)\n      subsystem,\n      valid_time,\n      programmed_load_mwh,\n      data_version,\n      published_at,\n      ingested_at\n    from programmed_load_half_hour\n    where subsystem is not null\n      and ingested_at <= canonical_as_of()\n      and (canonical_published_at_or_before() is null\n           or published_at <= canonical_published_at_or_before())\n    order by area_code, valid_time, ingested_at desc, data_version desc\n  )\n  select\n    subsystem,\n    date_trunc('hour', valid_time) as valid_time,\n    sum(programmed_load_mwh) as programmed_load_mwh,\n    max(data_version) as data_version,\n    max(published_at) as published_at,\n    max(ingested_at) as ingested_at\n  from half_hours\n  group by subsystem, date_trunc('hour', valid_time)\n  having count(*) = 2\n",
-      "materialized": false,
-      "isExisting": false
+      "name": "canonical_programmed_load",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
     },
     "public.canonical_programmed_vre": {
-      "name": "canonical_programmed_vre",
-      "schema": "public",
       "columns": {
         "subsystem": {
           "name": "subsystem",
@@ -9272,12 +9359,12 @@
         }
       },
       "definition": "\n  select\n    subsystem::subsystem_code as subsystem,\n    technology::technology as technology,\n    valid_time,\n    sum(forecast_mw) as forecast_mw,\n    sum(programmed_mw) as programmed_mw,\n    count(*)::int as entity_count,\n    case when max(total_programmed_mw) > 0\n         then max(mapped_programmed_mw) / max(total_programmed_mw) end\n      as mapped_programmed_share,\n    case when max(total_programmed_mw) > 0 then null\n         else 'nothing_programmed' end as mapped_share_unavailable_reason,\n    max(total_programmed_mw) - max(mapped_programmed_mw) as unmapped_programmed_mw,\n    max(data_version) as data_version,\n    max(published_at) as published_at,\n    max(ingested_at) as ingested_at\n  from (\n    select\n      j.*,\n      sum(j.programmed_mw) over (partition by j.valid_time) as total_programmed_mw,\n      sum(case when j.subsystem is not null and j.technology is not null\n               then j.programmed_mw else 0 end)\n        over (partition by j.valid_time) as mapped_programmed_mw\n    from (\n      select\n        f.valid_time, f.forecast_mw, f.programmed_mw,\n        f.data_version, f.published_at, f.ingested_at,\n        case when cardinality(b.subsystem_candidates) = 1\n             then b.subsystem_candidates[1] end as subsystem,\n        case when cardinality(b.technology_candidates) = 1\n             then b.technology_candidates[1] end as technology\n      from (\n        select distinct on (pdp_code, valid_time)\n          pdp_code, valid_time, forecast_mw, programmed_mw,\n          data_version, published_at, ingested_at\n        from programmed_vs_forecast_half_hour\n        where ingested_at <= canonical_as_of()\n          and (canonical_published_at_or_before() is null\n               or published_at <= canonical_published_at_or_before())\n        order by pdp_code, valid_time, ingested_at desc, data_version desc\n      ) f\n      left join (\n        select distinct on (pdp_code)\n          pdp_code, subsystem_candidates, technology_candidates\n        from pdp_crosswalk\n        where ingested_at <= canonical_as_of()\n          and (canonical_published_at_or_before() is null\n               or published_at <= canonical_published_at_or_before())\n        order by pdp_code, ingested_at desc, data_version desc\n      ) b on b.pdp_code = f.pdp_code\n    ) j\n  ) x\n  where subsystem is not null and technology is not null\n  group by subsystem, technology, valid_time\n",
-      "materialized": false,
-      "isExisting": false
+      "name": "canonical_programmed_vre",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
     },
     "public.canonical_read_go_live": {
-      "name": "canonical_read_go_live",
-      "schema": "public",
       "columns": {
         "read": {
           "name": "read",
@@ -9293,12 +9380,12 @@
         }
       },
       "definition": "\n  select\n    s.read,\n    case\n      when count(*) filter (where g.go_live_at is null) > 0 then null\n      else max(g.go_live_at)\n    end as go_live_at\n  from (select distinct read, source_table from canonical_read_source()) s\n  cross join lateral (\n    select canonical_source_go_live(s.source_table) as go_live_at\n  ) g\n  group by s.read\n",
-      "materialized": false,
-      "isExisting": false
+      "name": "canonical_read_go_live",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
     },
     "public.canonical_solar_centroid": {
-      "name": "canonical_solar_centroid",
-      "schema": "public",
       "columns": {
         "setVersion": {
           "name": "setVersion",
@@ -9332,12 +9419,12 @@
         }
       },
       "definition": "\n  select\n    set_version,\n    sum(latitude * represented_mw) / nullif(sum(represented_mw), 0) as latitude,\n    sum(longitude * represented_mw) / nullif(sum(represented_mw), 0) as longitude,\n    sum(represented_mw) as represented_mw,\n    count(*)::int as centroids\n  from centroid_point\n  where technology = 'SOLAR'\n  group by set_version\n",
-      "materialized": false,
-      "isExisting": false
+      "name": "canonical_solar_centroid",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
     },
     "public.canonical_subsystem_programme_hour": {
-      "name": "canonical_subsystem_programme_hour",
-      "schema": "public",
       "columns": {
         "subsystem": {
           "name": "subsystem",
@@ -9444,12 +9531,12 @@
         }
       },
       "definition": "\n  select\n    g.subsystem,\n    g.hour as valid_time,\n    g.programmed_wind_mw,\n    g.programmed_solar_mw,\n    g.programmed_hydro_mw,\n    g.programmed_thermal_mw,\n    g.thermal_inflexibility_mw,\n    g.thermal_unit_commitment_mw,\n    g.thermal_electrical_reason_mw,\n    v.pdp_wind_forecast_mw,\n    v.pdp_wind_programmed_mw,\n    v.pdp_solar_forecast_mw,\n    v.pdp_solar_programmed_mw,\n    v.pdp_mapped_programmed_share,\n    greatest(g.data_version, coalesce(v.data_version, 0)) as data_version,\n    greatest(g.published_at, coalesce(v.published_at, g.published_at)) as published_at,\n    greatest(g.ingested_at, coalesce(v.ingested_at, g.ingested_at)) as ingested_at\n  from (\n    select\n      subsystem,\n      date_trunc('hour', valid_time) as hour,\n      case when count(*) filter (where technology = 'WIND') = 2\n           then avg(programmed_mw) filter (where technology = 'WIND') end\n        as programmed_wind_mw,\n      case when count(*) filter (where technology = 'SOLAR') = 2\n           then avg(programmed_mw) filter (where technology = 'SOLAR') end\n        as programmed_solar_mw,\n      case when count(*) filter (where technology = 'HYDRO') = 2\n           then avg(programmed_mw) filter (where technology = 'HYDRO') end\n        as programmed_hydro_mw,\n      case when count(*) filter (where technology = 'THERMAL') = 2\n           then avg(programmed_mw) filter (where technology = 'THERMAL') end\n        as programmed_thermal_mw,\n      case when count(*) filter (where technology = 'THERMAL'\n                                   and inflexibility_mw is not null) = 2\n           then avg(inflexibility_mw) filter (where technology = 'THERMAL') end\n        as thermal_inflexibility_mw,\n      case when count(*) filter (where technology = 'THERMAL'\n                                   and unit_commitment_mw is not null) = 2\n           then avg(unit_commitment_mw) filter (where technology = 'THERMAL') end\n        as thermal_unit_commitment_mw,\n      case when count(*) filter (where technology = 'THERMAL'\n                                   and electrical_reason_mw is not null) = 2\n           then avg(electrical_reason_mw) filter (where technology = 'THERMAL') end\n        as thermal_electrical_reason_mw,\n      max(data_version) as data_version,\n      max(published_at) as published_at,\n      max(ingested_at) as ingested_at\n    from canonical_programmed_generation\n    group by subsystem, date_trunc('hour', valid_time)\n  ) g\n  left join (\n    select\n      subsystem,\n      date_trunc('hour', valid_time) as hour,\n      case when count(*) filter (where technology = 'WIND') = 2\n           then avg(forecast_mw) filter (where technology = 'WIND') end\n        as pdp_wind_forecast_mw,\n      case when count(*) filter (where technology = 'WIND') = 2\n           then avg(programmed_mw) filter (where technology = 'WIND') end\n        as pdp_wind_programmed_mw,\n      case when count(*) filter (where technology = 'SOLAR') = 2\n           then avg(forecast_mw) filter (where technology = 'SOLAR') end\n        as pdp_solar_forecast_mw,\n      case when count(*) filter (where technology = 'SOLAR') = 2\n           then avg(programmed_mw) filter (where technology = 'SOLAR') end\n        as pdp_solar_programmed_mw,\n      min(mapped_programmed_share) as pdp_mapped_programmed_share,\n      max(data_version) as data_version,\n      max(published_at) as published_at,\n      max(ingested_at) as ingested_at\n    from canonical_programmed_vre\n    group by subsystem, date_trunc('hour', valid_time)\n  ) v on v.subsystem = g.subsystem and v.hour = g.hour\n",
-      "materialized": false,
-      "isExisting": false
+      "name": "canonical_subsystem_programme_hour",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
     },
     "public.canonical_subsystem_state": {
-      "name": "canonical_subsystem_state",
-      "schema": "public",
       "columns": {
         "subsystem": {
           "name": "subsystem",
@@ -9472,12 +9559,12 @@
         }
       },
       "definition": "\n  select subsystem, state_code as uf, count(*)::int as plants\n  from plant\n  group by subsystem, state_code\n",
-      "materialized": false,
-      "isExisting": false
+      "name": "canonical_subsystem_state",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
     },
     "public.canonical_system_context": {
-      "name": "canonical_system_context",
-      "schema": "public",
       "columns": {
         "subsystem": {
           "name": "subsystem",
@@ -9548,12 +9635,12 @@
         }
       },
       "definition": "\n  select distinct on (subsystem, valid_time)\n    subsystem,\n    valid_time,\n    load_mwh,\n    wind_generation_mwh,\n    solar_generation_mwh,\n    hydro_generation_mwh,\n    thermal_generation_mwh,\n    net_exchange_mwh,\n    data_version,\n    published_at,\n    ingested_at\n  from subsystem_energy_balance_hour\n  where ingested_at <= canonical_as_of()\n  order by subsystem, valid_time, ingested_at desc, data_version desc\n",
-      "materialized": false,
-      "isExisting": false
+      "name": "canonical_system_context",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
     },
     "public.canonical_system_exchange": {
-      "name": "canonical_system_exchange",
-      "schema": "public",
       "columns": {
         "fromSubsystem": {
           "name": "fromSubsystem",
@@ -9607,12 +9694,12 @@
         }
       },
       "definition": "\n  select distinct on (from_subsystem, to_subsystem, valid_time)\n    from_subsystem,\n    to_subsystem,\n    valid_time,\n    verified_exchange_mwh,\n    programmed_exchange_mwh,\n    data_version,\n    published_at,\n    ingested_at\n  from subsystem_exchange_hour\n  where ingested_at <= canonical_as_of()\n  order by from_subsystem, to_subsystem, valid_time,\n           ingested_at desc, data_version desc\n",
-      "materialized": false,
-      "isExisting": false
+      "name": "canonical_system_exchange",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
     },
     "public.canonical_weather_forecast": {
-      "name": "canonical_weather_forecast",
-      "schema": "public",
       "columns": {
         "centroidId": {
           "name": "centroidId",
@@ -9749,13 +9836,12 @@
         }
       },
       "definition": "\n  select distinct on (centroid_id, valid_time)\n    centroid_id,\n    valid_time,\n    run_cycle,\n    grid_latitude,\n    grid_longitude,\n    grid_elevation_m,\n    run_age_hours,\n    wind_speed100m_kmh,\n    wind_speed120m_kmh,\n    wind_direction120m_deg,\n    wind_gusts10m_kmh,\n    temperature2m_c,\n    surface_pressure_hpa,\n    relative_humidity2m_pct,\n    precipitation_mm,\n    shortwave_radiation_wm2,\n    direct_normal_irradiance_wm2,\n    diffuse_radiation_wm2,\n    cloud_cover_pct,\n    data_version,\n    published_at,\n    ingested_at\n  from weather_forecast_hour\n  where ingested_at <= canonical_as_of()\n    and (canonical_published_at_or_before() is null\n         or published_at <= canonical_published_at_or_before())\n    and (canonical_weather_run_cycle() is null\n         or run_cycle::text = canonical_weather_run_cycle())\n  order by centroid_id, valid_time, ingested_at desc, data_version desc\n",
-      "materialized": false,
-      "isExisting": false
+      "name": "canonical_weather_forecast",
+      "schema": "public",
+      "isExisting": false,
+      "materialized": false
     }
   },
-  "sequences": {},
-  "roles": {},
-  "policies": {},
   "_meta": {
     "columns": {},
     "schemas": {},

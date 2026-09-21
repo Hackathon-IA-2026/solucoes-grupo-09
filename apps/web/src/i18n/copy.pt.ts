@@ -669,6 +669,29 @@ export const pt: Copy = {
      * relatando. `execute.ts` separa os códigos pelo que quem ouve precisa
      * ouvir, e escrevê-los na terceira pessoa gastaria essa separação à toa.
      */
+    /**
+     * As duas respostas que o time deixa sobre uma resposta do produto.
+     *
+     * Escritas como um arquivamento e nunca como uma promessa: o que o leitor
+     * marca aqui não muda nada na tela, não entra em nenhuma conta e não
+     * corrige o número que ele acabou de ver. Fica guardado para o próximo
+     * treino, e a frase diz isso, porque um botão que parece agir e não age é
+     * pior do que botão nenhum.
+     */
+    feedback: {
+      question: "Esta resposta ajudou?",
+      up: "Sim, ajudou",
+      down: "Não ajudou",
+      reasonLabel: "O que estava errado?",
+      reasonPlaceholder:
+        "Escreva em uma ou duas frases. Fica guardado para o próximo treino.",
+      send: "Enviar",
+      cancel: "Cancelar",
+      sending: "Enviando…",
+      filed: "Anotado. Isso vai para o próximo treino, não muda esta tela.",
+      failed: "Não deu para registrar. Nada foi salvo; tente de novo.",
+      tooLong: "Passou do limite de 400 caracteres.",
+    },
     voice: {
       idle: "Pergunte ao WattSteer",
       panelTitle: "WATTSTEER AI",
@@ -990,6 +1013,39 @@ export const pt: Copy = {
      * facts it was built with all outlived it on `/app`.
      */
     grid: {
+      /*
+        The Overview's hero — the console, once it stopped being a mockup.
+
+        These lived in `components/app/overview/hero-copy.ts`, whose header
+        argued the exception and named its own expiry: the console was "a
+        mockup on its own branch, meant to be read, argued with and then either
+        adopted or deleted whole", and "if it is adopted, these move into the
+        dictionaries in the commit that adopts it". It was adopted — `4b3e8a4`,
+        "Promote the console to be the Overview" — and they did not move, so
+        the exception outlived the argument for it and the screen that leads
+        `/app` was the one screen not reading from here.
+      */
+      hero: {
+        title: "Console da rede",
+        ledeForecast:
+          "Os quatro subsistemas, com a previsão do dia seguinte em volta do mapa. Cada número é um intervalo P10–P50–P90, nunca um ponto.",
+        ledeObserved:
+          "Os quatro subsistemas, com o que o ONS já liquidou em volta do mapa. Tudo aqui é medido; nada é previsão.",
+        totalLabel: "Energia cortada no dia",
+        totalNoteForecast: "Banda conjunta do dia seguinte.",
+        totalNoteObserved: "Dia liquidado, somando as horas publicadas.",
+        regionsLabel: "Os quatro subsistemas",
+        profileLabel: "Hora a hora",
+        splitLabel: "Eólica e solar",
+        peakLabel: "Maior hora",
+        refusedTitle: "A rede não respondeu",
+        pickHint: "Toque numa região do mapa para re-apontar tudo em volta.",
+        ofNational: "do total nacional",
+        noBand: "Uma liquidação é um número, não um intervalo.",
+        nationalLabel: "Brasil",
+        windowForecast: "Esperado no dia seguinte, por subsistema.",
+        windowObserved: "Últimas 24 h liquidadas, por subsistema.",
+      },
       eyebrow: "Sistema Interligado Nacional · D−1",
       q1: "Vai cortar?",
       q1Detail: "Probabilidade de {probability} em {subsystem}",
@@ -1354,6 +1410,9 @@ export const pt: Copy = {
     },
 
     replay: {
+      moreDay: "mais 1 dia",
+      moreDays: "mais {count} dias",
+      fewerDays: "Mostrar menos",
       noDays:
         "Nenhum dia desta lista tem previsão gravada que o gateway possa reproduzir hoje.",
       // --- a acurácia da previsão, item 3 do briefing da máquina do tempo ---

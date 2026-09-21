@@ -1,7 +1,7 @@
 import type { Database } from "../database/connection.js";
 import type { Execute } from "../jobs/index.js";
 import type { PayloadArchive } from "./archive.js";
-import { acquireBulkResource, BULK_STEPS } from "./bulk-resource.js";
+import { createBulkCsvIngestor } from "./bulk-csv-ingestor.js";
 import { upsertReportingEntities, writeCurtailment } from "./curtailment-repository.js";
 import { type CatalogueResource, selectResourceForMonth } from "./ons/catalogue.js";
 import {
@@ -76,67 +76,46 @@ const FORMATS = ["CSV"] as const;
 const slugFor = (technology: Technology): string =>
   technology === "WIND" ? WIND_DATASET_SLUG : SOLAR_DATASET_SLUG;
 
+/**
+ * Build the job handler.
+ *
+ * A spec, not a body — see `bulk-csv-ingestor.ts`. Two things here are this
+ * source's own and are why the spec takes them as functions: the dataset is
+ * chosen **by technology** (wind and solar are two slugs answering one job),
+ * and `write` owns its own ordering, because the fact table has a foreign key
+ * to the reporting entities and a month can introduce a conjunto that has never
+ * been settled against before.
+ */
 export function createConstrainedOffIngestor(
   deps: ConstrainedOffIngestorDeps,
 ): Execute<IngestConstrainedOffPayload, IngestConstrainedOffResult> {
-  const fetchImpl = deps.fetch ?? fetch;
-
-  return async (payload, report) => {
-    const slug = slugFor(payload.technology);
-    const acquired = await acquireBulkResource({
-      db: deps.db,
-      fetch: fetchImpl,
-      slug,
-      select: (resources: CatalogueResource[]) =>
+  return createBulkCsvIngestor<
+    IngestConstrainedOffPayload,
+    ReturnType<typeof parseConstrainedOffCsv>,
+    { entitiesSeen: number; hasDescriptionColumn: boolean }
+  >(
+    {
+      slug: (payload) => slugFor(payload.technology),
+      source: "restricao-coff",
+      select: (resources, payload) =>
         selectResourceForMonth(resources, payload.year, payload.month, FORMATS),
-      force: payload.force,
-      archive: deps.archive,
-      context: payload.context,
-      report,
-    });
-
-    const base = {
-      resourceName: acquired.resource.name,
-      changed: acquired.changed,
-      rowsParsed: 0,
-      rowsRejected: 0,
-      entitiesSeen: 0,
-      hasDescriptionColumn: false,
-      inserted: 0,
-      revised: 0,
-      unchanged: 0,
-    };
-
-    if (!acquired.bytes) {
-      return { ...base, downloaded: false };
-    }
-
-    const parsed = parseConstrainedOffCsv(
-      new TextDecoder("utf-8").decode(acquired.bytes),
-      payload.technology,
-    );
-
-    // Entities first: the fact table has a foreign key to them, and a month can
-    // introduce a conjunto that has never been settled against before.
-    await upsertReportingEntities(deps.db, parsed.entities);
-
-    const written = await writeCurtailment(deps.db, {
-      rows: parsed.rows,
-      publishedAt: acquired.publishedAt,
-      publishedAtPrecision: acquired.publishedAtPrecision,
-      sourceVersionId: acquired.versionId,
-    });
-    await acquired.markIngested();
-    report({ done: BULK_STEPS, total: BULK_STEPS });
-
-    return {
-      ...base,
-      downloaded: true,
-      rowsParsed: parsed.rows.length,
-      rowsRejected: parsed.rejected.length,
-      entitiesSeen: parsed.entities.length,
-      hasDescriptionColumn: parsed.hasDescriptionColumn,
-      ...written,
-    };
-  };
+      parse: (text, payload) => parseConstrainedOffCsv(text, payload.technology),
+      write: async (db, parsed, version) => {
+        // Entities first: the fact table has a foreign key to them, and a month
+        // can introduce a conjunto that has never been settled against before.
+        await upsertReportingEntities(db, parsed.entities);
+        return writeCurtailment(db, { rows: parsed.rows, ...version });
+      },
+      counted: (parsed) => ({
+        parsed: parsed.rows.length,
+        rejected: parsed.rejected.length,
+      }),
+      empty: { entitiesSeen: 0, hasDescriptionColumn: false },
+      extra: (parsed) => ({
+        entitiesSeen: parsed.entities.length,
+        hasDescriptionColumn: parsed.hasDescriptionColumn,
+      }),
+    },
+    deps,
+  );
 }

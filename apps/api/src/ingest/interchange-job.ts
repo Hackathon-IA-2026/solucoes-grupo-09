@@ -1,8 +1,7 @@
 import type { Database } from "../database/connection.js";
-import { UpstreamError } from "../errors.js";
 import type { Execute } from "../jobs/index.js";
 import type { PayloadArchive } from "./archive.js";
-import { acquireBulkResource, BULK_STEPS } from "./bulk-resource.js";
+import { createBulkCsvIngestor } from "./bulk-csv-ingestor.js";
 import { writeSubsystemExchange } from "./interchange-repository.js";
 import { selectResourceForYear } from "./ons/catalogue.js";
 import {
@@ -66,69 +65,39 @@ export interface InterchangeIngestorDeps {
   archive?: PayloadArchive;
 }
 
-/** Build the job handler. */
+/**
+ * Build the job handler.
+ *
+ * A spec, not a body — see `bulk-csv-ingestor.ts`. What is here is what makes
+ * this one the interchange: the year's resource, the CSV, the exchange rows,
+ * and the two facts it reports that no other source has.
+ */
 export function createInterchangeIngestor(
   deps: InterchangeIngestorDeps,
 ): Execute<IngestInterchangePayload, IngestInterchangeResult> {
-  const fetchImpl = deps.fetch ?? fetch;
-
-  return async (payload, report) => {
-    const acquired = await acquireBulkResource({
-      db: deps.db,
-      fetch: fetchImpl,
+  return createBulkCsvIngestor<
+    IngestInterchangePayload,
+    ReturnType<typeof parseInterchangeCsv>,
+    { hasProgrammedColumn: boolean; reorientedRows: number }
+  >(
+    {
       slug: INTERCHANGE_DATASET_SLUG,
-      select: (resources) =>
+      source: "intercambio-nacional",
+      select: (resources, payload) =>
         selectResourceForYear(resources, payload.year, INTERCHANGE_FORMATS),
-      force: payload.force,
-      archive: deps.archive,
-      context: payload.context,
-      report,
-    });
-
-    const base = {
-      resourceName: acquired.resource.name,
-      format: acquired.format,
-      changed: acquired.changed,
-      rowsParsed: 0,
-      rowsRejected: 0,
-      hasProgrammedColumn: false,
-      reorientedRows: 0,
-      inserted: 0,
-      revised: 0,
-      unchanged: 0,
-    };
-
-    if (!acquired.bytes) {
-      // The whole point of the HEAD: an unchanged file costs one request.
-      return { ...base, downloaded: false };
-    }
-    if (acquired.format !== "CSV") {
-      // `INTERCHANGE_FORMATS` asks for CSV only, so this is unreachable unless
-      // the catalogue starts answering something else — in which case failing
-      // beats parsing Parquet bytes as text.
-      throw new UpstreamError(
-        `intercambio-nacional returned ${acquired.format}; only CSV is ingested`,
-      );
-    }
-
-    const parsed = parseInterchangeCsv(new TextDecoder("utf-8").decode(acquired.bytes));
-    const written = await writeSubsystemExchange(deps.db, {
-      rows: parsed.rows,
-      publishedAt: acquired.publishedAt,
-      publishedAtPrecision: acquired.publishedAtPrecision,
-      sourceVersionId: acquired.versionId,
-    });
-    await acquired.markIngested();
-    report({ done: BULK_STEPS, total: BULK_STEPS });
-
-    return {
-      ...base,
-      downloaded: true,
-      rowsParsed: parsed.rows.length,
-      rowsRejected: parsed.rejected.length,
-      hasProgrammedColumn: parsed.hasProgrammedColumn,
-      reorientedRows: parsed.reorientedRows,
-      ...written,
-    };
-  };
+      parse: parseInterchangeCsv,
+      write: (db, parsed, version) =>
+        writeSubsystemExchange(db, { rows: parsed.rows, ...version }),
+      counted: (parsed) => ({
+        parsed: parsed.rows.length,
+        rejected: parsed.rejected.length,
+      }),
+      empty: { hasProgrammedColumn: false, reorientedRows: 0 },
+      extra: (parsed) => ({
+        hasProgrammedColumn: parsed.hasProgrammedColumn,
+        reorientedRows: parsed.reorientedRows,
+      }),
+    },
+    deps,
+  );
 }
