@@ -1012,6 +1012,269 @@ export const dessemBalanceHalfHour = pgTable(
   ],
 );
 /**
+ * Balanço DESSEM geral — the same ONS day-ahead run as `dessem_balance_half_hour`,
+ * published a second time in a coarser vocabulary. `balanco_dessem_geral`.
+ *
+ * **It is a cross-check, and no feature reads it.** Its renewables arrive as one
+ * aggregated `val_geracao_renovavel`, where the detalhe file splits wind, solar
+ * and MMGD — which is what `dessem_wind_mwh`, `dessem_solar_mwh` and
+ * `dessem_mmgd_mwh` are built from. A feature block over this table would be a
+ * second, disagreeing estimate of quantities the augmented set already holds,
+ * which `docs/specs/feature-engineering.md` refuses for the same reason
+ * `dessem_export_utilisation` lives beside the estimate it divides by. What the
+ * table is *for* is the comparison: `demand_mw` here should equal the detalhe
+ * file's `demand_mw` for the same subsystem and half hour, and
+ * `renewable_generation_mw` should equal the sum of wind, solar and MMGD there.
+ *
+ * **Whole days only, and that is a decision rather than a shortcut.** The
+ * detalhe adapter admits a reference day ONS published short, and it can only do
+ * so because the solar profile pins `num_patamar` to wall-clock time absolutely:
+ * a contiguous run that reaches midday is readable, one that does not is not.
+ * This file has no photovoltaic column to pin anything with — `val_geracao_renovavel`
+ * is nonzero at night because wind is — so no short day can be shown to mean what
+ * it says, and the adapter refuses one rather than guess. There is accordingly
+ * no `reference_day_patamares` here: every stored day is 48 of 48 in every
+ * subsystem.
+ *
+ * Same three time axes, same forecast shape, same MW-not-MWh storage as the
+ * detalhe table, for the same reasons.
+ */
+export const dessemGeneralHalfHour = pgTable(
+  "dessem_general_half_hour",
+  {
+    subsystem: subsystemCode().notNull(),
+    /** Start of the half hour the forecast is about, UTC. */
+    validTime: timestamp({ withTimezone: true }).notNull(),
+
+    /** `ForecastOrigin.producer`. Always `ons_dessem` in this table. */
+    forecastProducer: forecastProducer().notNull(),
+    /** `ForecastOrigin.run_label` — `din_programacaodia`, `YYYY-MM-DD`. */
+    runLabel: text().notNull(),
+
+    /** `val_demanda`. */
+    demandMw: doublePrecision().notNull(),
+    /** `val_geracao_renovavel` — wind, solar and MMGD together, not separable here. */
+    renewableGenerationMw: doublePrecision().notNull(),
+    /** `val_geracao_hidraulica`. */
+    hydroGenerationMw: doublePrecision().notNull(),
+    /** `val_geracao_termica`. */
+    thermalGenerationMw: doublePrecision().notNull(),
+    /** `val_cons_elevatoria` — pumping load, a consumption not a generation. */
+    pumpingConsumptionMw: doublePrecision().notNull(),
+
+    ...vintageColumns(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.subsystem, t.validTime, t.dataVersion] }),
+    index("dessem_general_half_hour_as_of").on(t.validTime, t.subsystem, t.ingestedAt),
+    index("dessem_general_half_hour_published").on(t.publishedAt, t.validTime),
+    // The structural discriminator, as on the detalhe table: a row whose
+    // publication does not precede the instant it describes is an observation,
+    // and this table holds nothing else.
+    check("dessem_general_is_a_forecast", sql`${t.publishedAt} < ${t.validTime}`),
+  ],
+);
+
+/**
+ * The kinds of generation `programacao_diaria` distinguishes. A separate enum
+ * from `technology` — which is the two curtailed fleets and nothing else —
+ * because the programme also covers the fleets that are *not* curtailed, and
+ * widening `technology` would make hydro a legal value of a column that means
+ * "a plant ONS can constrain off".
+ */
+export const programmeTechnology = pgEnum("programme_technology", [
+  "WIND",
+  "SOLAR",
+  "HYDRO",
+  "THERMAL",
+]);
+
+/**
+ * ONS's day-ahead generation programme, **summed per (subsystem, technology)**
+ * at the adapter. `programacao_diaria`.
+ *
+ * A `Forecast`: `published_at < valid_time`, stamped at 23:00 on D−1 by
+ * `programmeFilePublishedAt` rather than from the file, whose `Last-Modified`
+ * was measured to fall after the day it describes on the first day of the
+ * history. No plant row is stored: the forecast grain is the subsystem, and
+ * ~204,000 rows a day become 768.
+ *
+ * **No `forecast_producer` column, unlike `dessem_general_half_hour`.** That enum
+ * is part of the wire contract (`packages/core`), and this is PDP output rather
+ * than the DESSEM run the enum names; extending a wire vocabulary to label an
+ * ingest table is a contract change, and `run_label` already carries the
+ * reference day.
+ *
+ * Every component past `programmed_mw` is nullable and means "no plant of the
+ * group reported one" — only thermal plants do — so a null is never a zero.
+ * `reporting_plant_count` against `plant_count` is what says a sum was taken over
+ * fewer plants than the group has. `val_ordemmerito` is not stored: see
+ * `ons/programme-daily.ts`.
+ */
+export const programmedGenerationHalfHour = pgTable(
+  "programmed_generation_half_hour",
+  {
+    subsystem: subsystemCode().notNull(),
+    technology: programmeTechnology().notNull(),
+    /** Start of the half hour the programme is about, UTC. */
+    validTime: timestamp({ withTimezone: true }).notNull(),
+    /** `din_programacaodia`, `YYYY-MM-DD`. */
+    runLabel: text().notNull(),
+
+    /** Plants summed into this row. */
+    plantCount: integer().notNull(),
+    /** Plants that reported availability and the components — see the file header. */
+    reportingPlantCount: integer().notNull(),
+    /** `val_geracaoprogramada`, MW. */
+    programmedMw: doublePrecision().notNull(),
+    /** `val_disponibilidade`. */
+    availabilityMw: doublePrecision(),
+    /** `val_inflexibilidade`. */
+    inflexibilityMw: doublePrecision(),
+    /** `val_uc` — unit commitment. */
+    unitCommitmentMw: doublePrecision(),
+    /** `val_razaoeletrica`. */
+    electricalReasonMw: doublePrecision(),
+    /** `val_geracaoenergetica` — energy guarantee. */
+    energyGuaranteeMw: doublePrecision(),
+    /** `val_exportacao`. */
+    exportMw: doublePrecision(),
+
+    ...vintageColumns(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.subsystem, t.technology, t.validTime, t.dataVersion] }),
+    index("programmed_generation_half_hour_as_of").on(
+      t.validTime,
+      t.subsystem,
+      t.technology,
+      t.ingestedAt,
+    ),
+    index("programmed_generation_half_hour_published").on(t.publishedAt, t.validTime),
+    check("programmed_generation_is_a_forecast", sql`${t.publishedAt} < ${t.validTime}`),
+    // A sum over reporters cannot have more reporters than plants.
+    check(
+      "programmed_generation_reporters_within_plants",
+      sql`${t.reportingPlantCount} between 0 and ${t.plantCount}`,
+    ),
+  ],
+);
+
+/**
+ * ONS's forecast of each wind and solar PDP entity beside what it programmed
+ * for it, per half hour. `programacao_x_previsao`.
+ *
+ * Keyed by `pdp_code` and **carrying no subsystem**, because the file has none:
+ * the mapping to one is `pdp_crosswalk`, a separate belief with its own vintage.
+ * `forecast_mw` is ONS's own forecast of the entity's output and
+ * `programmed_mw` what it then scheduled; where the second is smaller, the
+ * operator decided in advance to leave energy unused. That is intent published
+ * the evening before, and it is not the settled constrained-off.
+ */
+export const programmedVsForecastHalfHour = pgTable(
+  "programmed_vs_forecast_half_hour",
+  {
+    pdpCode: text().notNull(),
+    /** Start of the half hour, UTC. */
+    validTime: timestamp({ withTimezone: true }).notNull(),
+    runLabel: text().notNull(),
+
+    pdpName: text().notNull(),
+    /** `val_previsao`, MW. */
+    forecastMw: doublePrecision().notNull(),
+    /** `val_programado`, MW. */
+    programmedMw: doublePrecision().notNull(),
+
+    ...vintageColumns(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.pdpCode, t.validTime, t.dataVersion] }),
+    index("programmed_vs_forecast_half_hour_as_of").on(
+      t.validTime,
+      t.pdpCode,
+      t.ingestedAt,
+    ),
+    index("programmed_vs_forecast_half_hour_published").on(t.publishedAt, t.validTime),
+    check("programmed_vs_forecast_is_a_forecast", sql`${t.publishedAt} < ${t.validTime}`),
+  ],
+);
+
+/**
+ * Which subsystem and technology each PDP code belongs to — a **belief**, held
+ * as candidate sets and versioned like a fact.
+ *
+ * Derived by `ons/pdp-fingerprint.ts` from `programacao_diaria`, because ONS
+ * publishes no crosswalk and the code overlaps nothing in the registry. Stored
+ * as *sets*, not answers: an entity flat at zero all day matches every plant flat
+ * at zero, and a later informative day narrows the set. A set of exactly one is
+ * a determination; the canonical view says `null` with a reason for anything
+ * else, and never picks a member.
+ *
+ * `determined_on` is the most recent reference day that changed the belief. It
+ * is deliberately not in the value digest: a day that agrees writes nothing.
+ */
+export const pdpCrosswalk = pgTable(
+  "pdp_crosswalk",
+  {
+    pdpCode: text().notNull(),
+    /** Sorted `subsystem_code` values, `{}` when no plant has ever matched. */
+    subsystemCandidates: text().array().notNull(),
+    /** Sorted `WIND` / `SOLAR` values, `{}` when no plant has ever matched. */
+    technologyCandidates: text().array().notNull(),
+    determinedOn: timestamp({ withTimezone: true }).notNull(),
+
+    ...vintageColumns(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.pdpCode, t.dataVersion] }),
+    index("pdp_crosswalk_as_of").on(t.pdpCode, t.ingestedAt),
+  ],
+);
+
+/**
+ * ONS's programmed flow through each controlled-flow element, per half hour.
+ * `programacao_fluxo_controlado`. The input to the `CNF` cause.
+ *
+ * Element grain, and no aggregate: `load_mw` is signed and the elements are
+ * different corridors. `submarket` is text with a closed check because ONS
+ * publishes `RR` (Roraima) here, which is not one of the four subsystems and
+ * is a real corridor, so it is kept rather than dropped or forced into one.
+ */
+export const controlledFlowHalfHour = pgTable(
+  "controlled_flow_half_hour",
+  {
+    element: text().notNull(),
+    /** `tip_terminal` — 1 or 2. */
+    terminal: integer().notNull(),
+    /** Start of the half hour, UTC. */
+    validTime: timestamp({ withTimezone: true }).notNull(),
+    runLabel: text().notNull(),
+
+    description: text().notNull(),
+    submarket: text().notNull(),
+    /** `val_carga`, MW, signed. */
+    loadMw: doublePrecision().notNull(),
+
+    ...vintageColumns(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.element, t.terminal, t.validTime, t.dataVersion] }),
+    index("controlled_flow_half_hour_as_of").on(
+      t.validTime,
+      t.element,
+      t.terminal,
+      t.ingestedAt,
+    ),
+    index("controlled_flow_half_hour_published").on(t.publishedAt, t.validTime),
+    check("controlled_flow_is_a_forecast", sql`${t.publishedAt} < ${t.validTime}`),
+    check(
+      "controlled_flow_submarket_is_known",
+      sql`${t.submarket} in ('N', 'NE', 'S', 'SE', 'RR')`,
+    ),
+  ],
+);
+
+/**
  * Which definition of "load" a `subsystem_load_day` row was measured under.
  *
  * An enum on the fact table rather than a lookup table or a derived view,
@@ -1703,6 +1966,23 @@ export const ingestionSource = pgEnum("ingestion_source", [
   "interchange",
   "daily_load",
   "dessem_balance",
+  /**
+   * `balanco_dessem_geral` — the subsystem-grain twin of `dessem_balance`. A
+   * separate member because the two files are separate packages that ONS
+   * publishes and repairs independently, and "the geral file stopped while the
+   * detalhe file kept publishing" is the sentence an operator needs the health
+   * view to be able to say.
+   */
+  "dessem_general",
+  /**
+   * The three day-ahead **programme** datasets, one member each because each is
+   * its own ONS package that ONS publishes and repairs independently:
+   * `programacao_diaria`, `programacao_x_previsao` (which also derives the PDP
+   * crosswalk) and `programacao_fluxo_controlado`.
+   */
+  "programmed_generation",
+  "programmed_vs_forecast",
+  "controlled_flow",
   "verified_load",
   "programmed_load",
   "plant_registry",

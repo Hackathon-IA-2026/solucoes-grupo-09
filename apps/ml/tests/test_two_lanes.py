@@ -317,8 +317,8 @@ def test_an_outcome_carries_exactly_the_evidence_its_status_names() -> None:
 def test_the_early_gate_withholds_the_programme_and_its_proxies() -> None:
     """Twelve of set A's seventy-eight inputs, and they are these twelve."""
     early = vector_for(feature_set="dessem_free_v1", gate_profile="gate_early")
-    assert early.input_count == 78
-    assert len(early.admitted) == 66
+    assert early.input_count == 77
+    assert len(early.admitted) == 65
     assert early.withheld_names == (
         "programmed_load_mwh",
         "programmed_load_ramp_1h",
@@ -393,8 +393,8 @@ def test_the_census_says_the_morning_lane_is_a_different_experiment() -> None:
     assert "different experiment" in early.headline
     assert "worse-tuned" in early.headline
     fields = early.card_fields()
-    assert fields["admitted"] == 66
-    assert fields["model_inputs"] == 78
+    assert fields["admitted"] == 65
+    assert fields["model_inputs"] == 77
     assert set(fields["withheld_reasons"]) == {"publication_lag"}
 
 
@@ -402,7 +402,7 @@ def test_the_late_lanes_census_claims_no_handicap() -> None:
     late = lane_vector(LATE_LANE)
     assert late.card_fields()["withheld"] == []
     assert late.card_fields()["withheld_reasons"] == {}
-    assert "all 78 model inputs are available" in late.headline
+    assert "all 77 model inputs are available" in late.headline
 
 
 def test_a_contrast_is_between_two_gates_and_never_one() -> None:
@@ -433,7 +433,7 @@ def test_the_report_cannot_hand_over_both_lanes_without_the_contrast() -> None:
     payload = run_serving_lanes(gate_one, at=NOW).as_dict()
     assert payload["contrast"]["same_experiment"] is False
     assert len(payload["contrast"]["withheld_from_early"]) == 12
-    assert [entry["experiment"]["admitted"] for entry in payload["lanes"]] == [66, 78]
+    assert [entry["experiment"]["admitted"] for entry in payload["lanes"]] == [65, 77]
 
 
 def test_a_one_lane_report_refuses_to_produce_a_contrast() -> None:
@@ -495,7 +495,7 @@ def test_rung_ones_occurrence_feature_is_now_a_model_input() -> None:
     model-input artifact now carries it for both feature sets and at both gates.
     The cold start is therefore re-checkable — against a migrated database.
     """
-    assert MODEL_INPUTS.feature_row_attributes == 112
+    assert MODEL_INPUTS.feature_row_attributes == 111
     for feature_set in ("dessem_free_v1", "dessem_augmented_v1"):
         entry = next(
             item
@@ -617,8 +617,8 @@ def test_the_two_artifacts_are_two_lanes_and_two_cards(
     assert isinstance(early, dict) and isinstance(late, dict)
     assert early["directory"] == EARLY_LANE.directory_name
     assert late["directory"] == LATE_LANE.directory_name
-    assert early["experiment"]["admitted"] == 66
-    assert late["experiment"]["admitted"] == 78
+    assert early["experiment"]["admitted"] == 65
+    assert late["experiment"]["admitted"] == 77
     assert "different experiment" in early["experiment"]["headline"]
     assert late["experiment"]["withheld"] == []
 
@@ -685,7 +685,7 @@ def test_a_morning_and_an_evening_answer_can_never_be_confused(
 def test_the_census_agrees_with_the_live_feature_dictionary() -> None:
     """The artifact is `feature_set_model_inputs(set)` serialised — so say so.
 
-    Every number this module publishes — 78 inputs, 66 admitted at the early
+    Every number this module publishes — 77 inputs, 65 admitted at the early
     gate, 12 withheld — comes from a file on disk. This is the test that binds
     the file to the catalogue it claims to be a copy of, name by name and flag
     by flag, so a regenerated artifact that lost the gate column fails here

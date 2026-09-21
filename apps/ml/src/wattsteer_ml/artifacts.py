@@ -85,6 +85,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from .config import settings
+from .experiment_reports import EXPERIMENTS_DIRNAME
 from .lanes import Lane, is_artifact_id
 from .promotions import (
     PROMOTION_LOG_FILENAME,
@@ -505,6 +506,9 @@ def inspect() -> ArtifactStore:
     unrecognised: list[str] = []
     for entry in sorted(path.iterdir(), key=lambda item: item.name):
         if entry.is_dir():
+            if entry.name == EXPERIMENTS_DIRNAME:
+                # Experiment reports live beside the lanes and are not one.
+                continue
             lane = Lane.try_parse(entry.name)
             if lane is None:
                 unrecognised.append(entry.name)

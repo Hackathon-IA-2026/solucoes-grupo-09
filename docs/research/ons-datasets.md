@@ -37,8 +37,12 @@ under the **same filename with no version marker**, so revision detection has to
 | 13 | Relacionamento conjunto ↔ usina | `usina_conjunto` | `usina_conjunto` | usina × relationship period | single file | daily | CSV, XLSX, PARQUET | SCD2 dates |
 | 14 | Modalidade de operação de usinas | `modalidade-usina` | `modalidade_usina` | usina (snapshot) | single file | daily | CSV, XLSX, PARQUET | snapshot only |
 | 15 | CMO semi-horário (DESSEM shadow price) | `cmo-semi-horario` | `cmo_tm` | 30 min × subsistema | yearly | daily | CSV, XLSX, PARQUET | 2020 → |
+| 16 | Programação diária (per plant) | `programacao_diaria` | `programacao_diaria` | 30 min × plant | **daily** | daily, D-1 evening | CSV, XLSX, PARQUET | 2024-10-01 → |
+| 17 | Programado × previsão (wind, solar) | `programacao_x_previsao` | `programacao_x_previsao` | 30 min × PDP entity | **daily** | daily, D-1 evening | CSV, XLSX, PARQUET | 2024-10-01 → |
+| 18 | Programação de fluxo controlado | `programacao_fluxo_controlado` | `programacao_fluxo_controlado` | 30 min × element × terminal | **daily** | daily, D-1 evening | CSV, XLSX, PARQUET | 2024-10-01 → |
 
-Datasets 13–15 are not in the brief's stated scope but are load-bearing: 13 and 14 are required to
+Datasets 16–18 were added after the tracer, for the day-ahead programme; see
+[§ 16–18](#1618-day-ahead-programme). Datasets 13–15 are not in the brief's stated scope but are load-bearing: 13 and 14 are required to
 make dataset 1/3 joinable to 2/4 at all (see [Cross-dataset join concerns](#cross-dataset-join-concerns)),
 and 15 is the DESSEM price signal that pairs with 10/11.
 
@@ -708,6 +712,182 @@ membership time-resolvable.
 nom_modalidadeoperacao; val_potenciaautorizada; sgl_centrooperacao; nom_pontoconexao; id_estado;
 nom_estado; sts_aneel; id_ons`, where `sts_aneel` ∈ `A` (ativo), `I` (inativo), `P` (previsto),
 `C` (cancelado), `O` (outros). Includes Tipo III plants, unlike `capacidade-geracao`.
+
+---
+
+## 16–18. Day-ahead programme
+
+`programacao_diaria`, `programacao_x_previsao` and `programacao_fluxo_controlado` are three
+daily-split datasets that ONS writes together on the evening before the day they programme. They
+are all `Forecast`s (`published_at < valid_time`), all `;`-delimited, and all counted by
+`num_patamar` 1..48. Everything below was read from the real files and the CKAN listings on
+**2026-09-19**, and the adapters were then run against 21 days sampled across the whole history
+(see *Verified against the real sources*).
+
+### What each file is
+
+| # | File | Columns (as published) | Rows a day |
+|---|---|---|---|
+| 16 | `PROGRAMACAO_DIARIA_YYYY_MM_DD` | `din_programacaodia`, `num_patamar`, `cod_exibicaousina`, `nom_usina`, `tip_geracao`, `nom_modalidadeoperacao`, `id_subsistema`, `nom_subsistema`, `id_estado`, `nom_estado`, `val_geracaoprogramada`, `val_disponibilidade`, `val_ordemmerito`, `val_inflexibilidade`, `val_uc`, `val_razaoeletrica`, `val_geracaoenergetica`, `val_gesubgsub`, `val_exportacao`, `val_reposicaoexportacao`, `val_faltacombustivel` (21) | 204,192 (4,254 plants × 48) |
+| 17 | `PROGRAMACAO_X_PREVISAO_YYYY_MM_DD` | `dat_programacao`, `num_patamar`, `cod_usinapdp`, `nom_usinapdp`, `val_previsao`, `val_programado` (6) | 30,144 (628 entities × 48) |
+| 18 | `PROGRAMACAO_FLUXO_CONTROLADO_YYYY_MM_DD` | `din_programacaodia`, `num_patamar`, `nom_elementofluxocontrolado`, `dsc_elementofluxocontrolado`, `tip_terminal`, `cod_submercado`, `val_carga` (7) | 1,920 (40 elements × 48) |
+
+All values are MWmed (16) or MW (17, 18). The brief listed 13 columns for 16; the file has 21.
+`programacao_diaria`'s `tip_geracao` is `EÓLICA` / `SOLAR` / `HIDRÁULICA` / `TÉRMICA`, and on
+2026-09-18 its plants were 10,704 wind, 116,304 solar, 49,872 hydro and 27,312 thermal rows.
+
+### Traps found by reading the files
+
+- **`cod_usinapdp` is a third code namespace.** Zero overlap with `id_ons`, `ceg`, or
+  `cod_exibicaousina` on any of the 628 codes (`usina_conjunto`, all 14 columns tried), and a
+  normalised-name join reaches 76 of 628 at best. There is no published crosswalk. The mapping is
+  *derived* — see the next section.
+- **`dat_programacao` is `20260918`** in 17 and `2026-09-18` in 16 and 18.
+- **Padding.** `id_subsistema`, `cod_usinapdp`, `nom_usinapdp`, `cod_submercado` and the `nom_*`
+  columns are right-padded with spaces.
+- **`val_ordemmerito` is `999.00` on 612 rows across 22 thermal plants**, and on 595 of them exceeds
+  the plant's entire programmed generation, so it cannot be a megawatt component of it. It is not
+  stored. ONS's own components (`val_ordemmerito`, `val_inflexibilidade`, `val_uc`,
+  `val_razaoeletrica`, `val_geracaoenergetica`, `val_gesubgsub`, `val_exportacao`,
+  `val_reposicaoexportacao`) sum to `val_geracaoprogramada` on 13,575 of 26,640 thermal rows, so
+  what is stored is never to be presented as a breakdown of it.
+- **Every measure past `val_disponibilidade` is empty on all wind, solar and hydro rows** and
+  populated only for thermal; and **14 thermal plants (672 rows) publish an empty
+  `val_disponibilidade`** while their programmed value is present. An empty is "not reported", not
+  zero.
+- **`programacao_fluxo_controlado`'s resource list contains a file from another package**,
+  `PROGRAMACAO_DIARIA_2026_07_21.parquet`, pointing into the `programacao_diaria` folder.
+  Selecting by the `PROGRAMACAO_FLUXO_CONTROLADO_` prefix keeps it out.
+- **`cod_submercado` includes `RR`** (Roraima), which is not one of the four subsystems. Its
+  `val_carga` is **signed** (−1500…1500 MW on the day measured).
+- **Some days exist only as Parquet.** Seven of 17, three of 16 and eight of 18 — 18 days that a
+  CSV-only reader never sees. The Parquet rendition carries the same string cells as the CSV
+  (padding included) except `num_patamar` and `tip_terminal`, which are numbers, and 16's
+  `din_programacaodia`, which is a `Date` at UTC midnight. Real Parquet and real CSV were parsed for
+  the same days and are identical for all three datasets (2026-09-18 and 2025-08-15).
+
+### The patamar convention
+
+Not documented by ONS. `programacao_diaria` summed over wind and solar correlates with
+`balanco_dessem_geral`'s `val_geracao_renovavel` best at **lag 0** in all four subsystems on
+2026-09-18 (r = 0.930 NE / 0.997 SE / 0.99991 S / 0.99989 N, against 0.77–0.985 at ±1), and 17 agrees
+with 16 patamar for patamar. So the three share DESSEM's convention: patamar *k* labels the half hour
+that **ends** at 00:00 + k×30 min Brasília. One day and one neighbouring series — an inference,
+recorded as one.
+
+### Publication time
+
+`Last-Modified` was read for 21 files (seven dates × three datasets) across the history. It is
+usually the evening before (between 18:16 and 22:47 BRT), but:
+
+| Reference day | Dataset | `Last-Modified` (BRT) | Problem |
+|---|---|---|---|
+| 2024-10-01 | all three | 01:06–01:08 on **D** | after the first half hour it programmes began |
+| 2024-12-25 | 17 | 2025-02-13 18:20 | rewritten seven weeks after its day |
+
+A stamp taken from the file therefore breaks `published_at < valid_time` on the first day of the
+history and misdates a restatement. The adapters stamp **23:00 on D−1 Brasília** instead
+(`programmeFilePublishedAt`), later than every ordinary day, and keep `Last-Modified` in
+`ons_resource_version.change_key` where it detects a rewrite. The one known exception is 2024-10-01
+itself. `publication-lag.md` measured 20:50–22:20 BRT for 16 alone.
+
+### The PDP crosswalk
+
+17 identifies an entity only by `cod_usinapdp`. What it shares with 16 is a number: 17's
+`val_programado` and 16's `val_geracaoprogramada` for the same entity, over the same 48 patamares of
+the same day. Matching those vectors exactly (two decimals), on 2026-09-18, 626 entities against
+2,646 wind and solar plants: the subsystem is determined for 319 entities carrying **99.64% of
+programmed energy**, ambiguous for 307 carrying 0.19%, unmatched for 2 at 0.17%; the technology is
+never ambiguous where the subsystem is determined. The ambiguity is a collision between flat
+series, which is why the belief is held as candidate sets that later days can only narrow, and why a
+conflicting day is reported and never written over it.
+
+That last property was exercised by real data: PDP entity `I1SOLR`, *Solar Salgueiro II*
+(Pernambuco, so `NE`), is stored `NE`/`SOLAR`, and on 2026-04-10 and 2026-05-01 its low, flat
+programme (18–19 MW) matched **one** small `SE` plant exactly — a unique match, and wrong. The
+stored belief stood and the run result named the code. A unique single-day match is therefore not
+proof, and a wrong *first* determination would not be caught this way; the rate observed is two
+collisions in 21 days × ~630 entities.
+
+### Verified against the real sources
+
+The three ingestors were run against the real catalogue for **21 sampled days** from 2024-10-01 to
+2026-09-19, including the first day, the restamped 2024-12-25, the flow dataset's stray-file day
+2026-07-21, and Carnival: **63 of 63 runs ingested, none refused, none threw, no row rejected.**
+A further four days published only as Parquet (2025-04-30, 2026-02-25, 2026-03-07, 2026-05-23) were
+loaded through the Parquet path, also with no refusal. Rows per day were constant: 768
+(`programmed_generation`), 1,920 (`controlled_flow`, 1,824 on the first two days), and
+`programmed_vs_forecast` growing from 23,904 (2024-10) to 30,144 (2026-09) as ONS added entities.
+The determined share of programmed energy after the crosswalk merge was 99.89–100% every day.
+
+### Temporal coverage (CKAN, 2026-09-19)
+
+| Dataset | First → last day | As CSV | Parquet only | In neither | Calendar days in span |
+|---|---|---|---|---|---|
+| `programacao_diaria` | 2024-10-01 → 2026-09-19 | 700 | 3 | 16 | 719 |
+| `programacao_x_previsao` | 2024-10-01 → 2026-09-19 | 706 | 7 | 6 | 719 |
+| `programacao_fluxo_controlado` | 2024-10-01 → 2026-09-19 | 708 | 8 | 3 | 719 |
+| `balanco_dessem_geral` | 2025-05-23 → 2026-09-19 | 481 | 0 | 4 | 485 |
+| `balanco_energia_subsistema` | 2000 → 2026 | 27 yearly files, none missing | — | — | — |
+
+Days ONS published in **neither** format, and which are therefore not recoverable from upstream:
+
+- `programacao_diaria`: 2025-03-26, 2025-08-13, 2025-11-01, 2025-11-02, 2026-01-09, 2026-01-28,
+  2026-02-05, 2026-02-09, 2026-02-10, 2026-02-12, 2026-02-15, 2026-02-16, 2026-03-01, 2026-03-06,
+  2026-04-21, 2026-05-28
+- `programacao_x_previsao`: 2025-02-14, 2025-03-26, 2025-07-11, 2026-04-16, 2026-05-27, 2026-05-28
+- `programacao_fluxo_controlado`: 2025-03-26, 2026-03-04, 2026-04-16
+- `balanco_dessem_geral`: 2026-01-21, 2026-08-09, 2026-09-05, 2026-09-10 — and no history before
+  2025-05-23, the shortest series in scope.
+
+Only 2025-03-26 is absent from all three programme datasets at once, so a day missing from one is
+usually still available from the others. The first ingest of a day ONS has not yet published is
+simply not seen: the sweep discovers days from the catalogue and never iterates a date range.
+
+### Timestamp conventions, per dataset
+
+Every adapter resolves these at the boundary; canonical storage is **UTC, start-labelled**
+(`docs/domain-model.md` §1). What ONS publishes:
+
+| Dataset | Time column | What it is |
+|---|---|---|
+| `programacao_diaria`, `programacao_x_previsao`, `programacao_fluxo_controlado` | `num_patamar` 1..48 + a civil date | Brasília civil day; patamar *k* is the half hour **ending** at k×30 min (inferred, above) |
+| `balanco_dessem_geral` | `num_patamar` 1..48 + `din_programacaodia` | same convention, verified against `/cargaprogramada` |
+| `balanco_energia_subsistema` | `din_instante` | Brasília **local civil** time, hour-**start**; DST-aware before 2019-02-17. Parquet stores it as INT96 |
+| Carga API (`cargaprogramada`, `cargaverificada`) | `din_referenciautc` | **UTC**, half-hour-**end** (documented: "final do intervalo da semi-hora") |
+| Constrained-off (1–4) | `din_instante` | Brasília local civil, interval-**start** |
+
+### The unified (subsystem, hour) read
+
+`canonical_subsystem_programme_hour` joins 16 and 17 at hour grain, UTC, start-labelled, by
+**averaging** the two half hours (both are power) and holding an hour only where both are present.
+These are day-ahead **forecasts**, usable at the gate for the day they describe, so the view
+carries no availability lag.
+
+The brief asked for the realised `balanco_energia_subsistema` to be marked as usable only with a lag
+(D−2 or earlier). Nothing marks a row, and a row marker would not work: a backfilled observation
+carries a `published_at` taken from an S3 `Last-Modified` that may be 2026, so no filter on either
+vintage axis stops it entering a 2024 hour's feature. The repository enforces it instead as a second
+axis, `actuals_cutoff(gate, dataset) = gate − publication_lag_hours[dataset]`, configured per dataset
+in `feature_publication_lag` and applied by every class `K` feature
+(`apps/api/drizzle/0021_lagged_actuals_behind_the_cutoff.sql`, which argues it in full). The realised
+balanço is joined only there; this view holds none.
+
+### Where the brief and the data disagreed
+
+Recorded because the data won each time:
+
+- The load API's parameter is `dat_inicio` (Swagger spec), not `dat_início`; `cod_areacarga=SE`
+  returns `[]` with HTTP 200 and the subsystem code is `SECO`. `dat_inicio`/`dat_fim` accept at most
+  three months per call. Nothing is pending on this API — `carga-energia-programada` and
+  `carga-energia-verificada` were already ingested.
+- The verified-load field is `val_cargaglobalsmmgd` (the brief wrote `smmg`), and the response also
+  carries `din_atualizacao`, `val_cargasupervisionada`, `val_carganaosupervisionada` and
+  `val_consistencia`.
+- All three programme files use `;`, not only 17.
+- 16 has 21 columns, not 13.
+- `balanco_energia_subsistema`, `balanco_dessem_geral` and the two carga series were already
+  ingested; only 16, 17 and 18 were new.
 
 ---
 

@@ -8,6 +8,10 @@ import type {
   IngestConstrainedOffResult,
 } from "./constrained-off-job.js";
 import type { IngestDailyLoadPayload, IngestDailyLoadResult } from "./daily-load-job.js";
+import type {
+  IngestDessemGeneralPayload,
+  IngestDessemGeneralResult,
+} from "./dessem-general-job.js";
 import type { IngestDessemPayload, IngestDessemResult } from "./dessem-job.js";
 import type {
   IngestInterchangePayload,
@@ -15,6 +19,14 @@ import type {
 } from "./interchange-job.js";
 import type { IngestEnergyBalancePayload, IngestEnergyBalanceResult } from "./job.js";
 import type { IngestLoadPayload, IngestLoadResult } from "./load-job.js";
+import type {
+  IngestControlledFlowPayload,
+  IngestControlledFlowResult,
+  IngestProgrammedGenerationPayload,
+  IngestProgrammedGenerationResult,
+  IngestProgrammedVsForecastPayload,
+  IngestProgrammedVsForecastResult,
+} from "./programme-job.js";
 import type {
   IngestPlantRegistryPayload,
   IngestPlantRegistryResult,
@@ -45,6 +57,10 @@ export type IngestTask =
   | { kind: "interchange"; payload: IngestInterchangePayload }
   | { kind: "daily_load"; payload: IngestDailyLoadPayload }
   | { kind: "dessem_balance"; payload: IngestDessemPayload }
+  | { kind: "dessem_general"; payload: IngestDessemGeneralPayload }
+  | { kind: "programmed_generation"; payload: IngestProgrammedGenerationPayload }
+  | { kind: "programmed_vs_forecast"; payload: IngestProgrammedVsForecastPayload }
+  | { kind: "controlled_flow"; payload: IngestControlledFlowPayload }
   | { kind: "load"; payload: IngestLoadPayload }
   | { kind: "plant_registry"; payload: IngestPlantRegistryPayload }
   | { kind: "siga"; payload: IngestSigaPayload }
@@ -58,6 +74,10 @@ export type IngestTaskResult =
   | { kind: "interchange"; result: IngestInterchangeResult }
   | { kind: "daily_load"; result: IngestDailyLoadResult }
   | { kind: "dessem_balance"; result: IngestDessemResult }
+  | { kind: "dessem_general"; result: IngestDessemGeneralResult }
+  | { kind: "programmed_generation"; result: IngestProgrammedGenerationResult }
+  | { kind: "programmed_vs_forecast"; result: IngestProgrammedVsForecastResult }
+  | { kind: "controlled_flow"; result: IngestControlledFlowResult }
   | { kind: "load"; result: IngestLoadResult }
   | { kind: "plant_registry"; result: IngestPlantRegistryResult }
   | { kind: "siga"; result: IngestSigaResult }
@@ -99,6 +119,10 @@ export function periodLabelOf(task: IngestTask): string | null {
     case "constrained_off_detail":
       return `${task.payload.year}-${String(task.payload.month).padStart(2, "0")}`;
     case "dessem_balance":
+    case "dessem_general":
+    case "programmed_generation":
+    case "programmed_vs_forecast":
+    case "controlled_flow":
       return `${task.payload.from ?? "start"}..${task.payload.to ?? "latest"}`;
     case "load":
       return `${task.payload.from}..${task.payload.to}`;
@@ -158,7 +182,13 @@ export function rowsOf(task: IngestTaskResult): {
       probed: task.result.runsScheduled,
     };
   }
-  if (task.kind === "dessem_balance") {
+  if (
+    task.kind === "dessem_balance" ||
+    task.kind === "dessem_general" ||
+    task.kind === "programmed_generation" ||
+    task.kind === "programmed_vs_forecast" ||
+    task.kind === "controlled_flow"
+  ) {
     return {
       parsed: task.result.rowsParsed,
       inserted: task.result.inserted,

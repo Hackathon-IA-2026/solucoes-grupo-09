@@ -148,7 +148,7 @@ export type DessemBalanceWriteResult = VersionedWriteResult;
  * had a day-ahead vintage, and neither kind can be loaded from the bytes in
  * hand, which is why this changes the sentence and not the verdict.
  */
-function upstreamCause(
+export function upstreamCause(
   validTime: Date,
   firstPublishedAt: Date | null | undefined,
 ): string {

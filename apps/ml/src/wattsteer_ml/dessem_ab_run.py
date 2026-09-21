@@ -180,6 +180,7 @@ from wattsteer_ml.evaluation.dessem_ab import (
 )
 from wattsteer_ml.evaluation.ladder import FoldRows
 from wattsteer_ml.evaluation.matrix import MatrixRun
+from wattsteer_ml.experiment_reports import save_report
 from wattsteer_ml.features import FeatureRowsQuery, MaterialisedFeatureRows
 from wattsteer_ml.lanes import Lane, format_instant
 from wattsteer_ml.promotions import PROMOTION_LOG_FILENAME, PromotionLog
@@ -866,7 +867,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     except DessemAbRunError as refusal:
         print(json.dumps({"error": str(refusal)}), file=sys.stderr)
         return 2
-    print(json.dumps(report.as_dict()))
+    payload = report.as_dict()
+    save_report(Path(args.root), "dessem_ab", as_of, payload)
+    print(json.dumps(payload))
     return 0 if report.is_measurement else 1
 
 

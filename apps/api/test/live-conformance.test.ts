@@ -6,6 +6,8 @@ import {
   type CatalogueResource,
   CENTROIDS,
   CONJUNTO_DATASET_SLUG,
+  CONTROLLED_FLOW_DATASET_SLUG,
+  CONTROLLED_FLOW_FILE_PREFIX,
   DAILY_LOAD_DATASET_SLUG,
   DESSEM_DETAIL_DATASET_SLUG,
   DATASET_SLUG as ENERGY_BALANCE_DATASET_SLUG,
@@ -16,6 +18,10 @@ import {
   INTERCHANGE_DATASET_SLUG,
   locationsOf,
   measureMatchRate,
+  PROGRAMME_DAILY_DATASET_SLUG,
+  PROGRAMME_DAILY_FILE_PREFIX,
+  PROGRAMME_VS_FORECAST_DATASET_SLUG,
+  PROGRAMME_VS_FORECAST_FILE_PREFIX,
   parseCapacityRegistryCsv,
   parseSigaCsv,
   runParam,
@@ -131,6 +137,40 @@ function latestMonthly(
     "\n\nSOURCE MOVED — neither the current nor the previous month is published\n" +
       "  as a CSV resource in this ONS package. The monthly split itself is the\n" +
       "  assumption that expired; see docs/research/ons-datasets.md § 1-4.\n",
+  );
+}
+
+/**
+ * The newest reference day of a daily-split programme dataset that exists as a
+ * **CSV**, selected by the file prefix its adapter uses — so a stray resource
+ * from another package cannot stand in for it.
+ *
+ * CSV only because this suite reads a *header*, which a Parquet file does not
+ * have as text; the adapters read Parquet too, for the 18 days that exist in no
+ * other form, and that path is held by `ons-programme-parquet.test.ts`.
+ */
+function latestProgrammeDay(
+  resources: CatalogueResource[],
+  prefix: string,
+  label: string,
+): CatalogueResource {
+  const days = availableResourceDays(resources, ["CSV"], prefix);
+  const latest = days.at(-1);
+  if (!latest) {
+    throw new AssumptionExpiredError(
+      `\n\nSOURCE MOVED — the ${label} package publishes no daily CSV named ${prefix}*.\n` +
+        "  The daily split is itself the assumption that expired; see\n" +
+        "  docs/research/ons-datasets.md § 16-18.\n",
+    );
+  }
+  const [year, month, day] = latest.split("-").map(Number);
+  return selectResourceForDay(
+    resources,
+    year as number,
+    month as number,
+    day as number,
+    ["CSV"],
+    prefix,
   );
 }
 
@@ -451,6 +491,94 @@ const ONS_COLUMN_CLAIMS: {
         "DESSEM is the D-1 dispatch signal: the platform's only forward view of " +
         "what the operator intends to do with renewable generation.",
       code: "apps/api/src/ingest/ons/dessem-balance.ts",
+    },
+  },
+  {
+    slug: PROGRAMME_DAILY_DATASET_SLUG,
+    label: "day-ahead programme, per plant",
+    select: (resources) =>
+      latestProgrammeDay(
+        resources,
+        PROGRAMME_DAILY_FILE_PREFIX,
+        "day-ahead programme, per plant",
+      ),
+    required: [
+      "din_programacaodia",
+      "num_patamar",
+      "cod_exibicaousina",
+      "tip_geracao",
+      "id_subsistema",
+      "val_geracaoprogramada",
+      "val_disponibilidade",
+      "val_inflexibilidade",
+      "val_uc",
+      "val_razaoeletrica",
+      "val_geracaoenergetica",
+      "val_exportacao",
+    ],
+    claim: {
+      note: "docs/research/ons-datasets.md",
+      section: "16. Programação diária",
+      claim:
+        "programacao_diaria is one file per reference day, one row per plant per half hour, with the programmed value and the thermal dispatch components as val_* columns in MWmed; id_subsistema and the names are space-padded.",
+      breaks:
+        "The adapter sums this to (subsystem, technology) and refuses a day whose programmed value cannot be read. A renamed column refuses every day from the rename on, and the plant vectors the PDP crosswalk is fingerprinted from come from the same file.",
+      code: "apps/api/src/ingest/ons/programme-daily.ts",
+    },
+  },
+  {
+    slug: PROGRAMME_VS_FORECAST_DATASET_SLUG,
+    label: "day-ahead programme vs forecast, per PDP entity",
+    select: (resources) =>
+      latestProgrammeDay(
+        resources,
+        PROGRAMME_VS_FORECAST_FILE_PREFIX,
+        "day-ahead programme vs forecast, per PDP entity",
+      ),
+    required: [
+      "dat_programacao",
+      "num_patamar",
+      "cod_usinapdp",
+      "nom_usinapdp",
+      "val_previsao",
+      "val_programado",
+    ],
+    claim: {
+      note: "docs/research/ons-datasets.md",
+      section: "17. Programado x previsão",
+      claim:
+        "programacao_x_previsao carries ONS's forecast beside its programmed value for each wind and solar PDP entity, with dat_programacao written YYYYMMDD and no subsystem or technology column.",
+      breaks:
+        "The mapping to a subsystem is derived by fingerprint, not read. A file that grew a subsystem column would make the crosswalk redundant, and one that lost val_programado would leave nothing to fingerprint.",
+      code: "apps/api/src/ingest/ons/programme-vs-forecast.ts",
+    },
+  },
+  {
+    slug: CONTROLLED_FLOW_DATASET_SLUG,
+    label: "day-ahead controlled-flow programme",
+    select: (resources) =>
+      latestProgrammeDay(
+        resources,
+        CONTROLLED_FLOW_FILE_PREFIX,
+        "day-ahead controlled-flow programme",
+      ),
+    required: [
+      "din_programacaodia",
+      "num_patamar",
+      "nom_elementofluxocontrolado",
+      "dsc_elementofluxocontrolado",
+      "tip_terminal",
+      "cod_submercado",
+      "val_carga",
+    ],
+    claim: {
+      note: "docs/research/ons-datasets.md",
+      section: "18. Programação de fluxo controlado",
+      claim:
+        "programacao_fluxo_controlado is one file per reference day, keyed by (element, terminal, num_patamar), with a signed val_carga in MW and cod_submercado that includes RR.",
+      breaks:
+        "This is the input to the CNF cause. A renamed column refuses every day from the rename on.",
+      code: "apps/api/src/ingest/ons/controlled-flow.ts",
     },
   },
 ];

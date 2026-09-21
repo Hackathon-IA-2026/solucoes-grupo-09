@@ -163,7 +163,7 @@ from wattsteer_ml.features import (
     serving_target_date,
 )
 from wattsteer_ml.lanes import Lane, format_instant
-from wattsteer_ml.training.calibration import RiskBinDecision, RiskBins
+from wattsteer_ml.model_report import write_report_or_warn
 from wattsteer_ml.promotions import PROMOTION_LOG_FILENAME, PromotionLog
 from wattsteer_ml.training import (
     CalibrationError,
@@ -181,6 +181,7 @@ from wattsteer_ml.training import (
     train_fold,
     write_card,
 )
+from wattsteer_ml.training.calibration import RiskBinDecision, RiskBins
 from wattsteer_ml.training.design import TOTAL_COLUMN
 
 #: The card group this module owns. The gate appends its own under ``gate``;
@@ -188,6 +189,36 @@ from wattsteer_ml.training.design import TOTAL_COLUMN
 #: :func:`~wattsteer_ml.evaluation.gate.record_decision` rewrites the card by
 #: spreading it rather than by rebuilding it.
 RETRAIN_BLOCK_KEY = "retrain"
+
+#: The card key holding the ladder table, one slim row per
+#: ``(rung, fold segment)``. Read by :mod:`wattsteer_ml.model_report` and by
+#: nothing that decides: :func:`run_gate` is handed the in-memory table.
+FOLD_METRICS_KEY = "fold_metrics"
+
+#: The columns of a published row a comparison needs. The full row also carries
+#: the collapse block and per-subsystem cells, which multiply the card by the
+#: number of rungs and folds for a figure no comparison reads.
+_FOLD_METRIC_COLUMNS = (
+    "run",
+    "rung",
+    "rung_number",
+    "fold_id",
+    "vintage_fidelity",
+    "rows",
+    "prevalence",
+    "pr_auc",
+    "brier",
+    "ece",
+    "pinball_10",
+    "pinball_50",
+    "pinball_90",
+    "qloss_mwh",
+    "interval_width_mean_mwh",
+    "crossing_rate",
+    "coverage_p10",
+    "coverage_p90",
+    "day_total_coverage",
+)
 
 #: Which matrix arm each served lane *is*. Not a parallel naming scheme: the
 #: morning view is ``A-full-early`` and the evening view is ``A-full`` in
@@ -691,6 +722,7 @@ def retrain_lane(
     _record_planning_arms(request, lane=lane, segments=inputs.segments)
 
     table = MetricsTable(rows=rows)
+    _record_fold_metrics(request, lane=lane, table=table)
     deciding = inputs.deciding
     hours = scored_hours(
         forecast_rows(trained.bundle, settled_rows(fold_rows.segment_rows(deciding))),
@@ -792,6 +824,31 @@ def _record_planning_arms(
             ),
         )
     record_planning_arms(report, root=request.root, artifact_id=request.run_id)
+
+
+def _record_fold_metrics(
+    request: RetrainRequest, *, lane: Lane, table: MetricsTable
+) -> None:
+    """Keep the ladder on the card, which the gate used to be the only reader of.
+
+    Every retrain scored rungs 0–4 on identical folds and then kept only the
+    gate's verdict, so "what did the model add over the 7-day baseline" was
+    computed weekly and unanswerable afterwards. The grain is the table's own —
+    one row per ``(rung, fold, vintage_fidelity)`` — and nothing is averaged
+    here, for the reason :class:`MetricsTable` refuses to.
+
+    **A row's absent column is written as ``null``**, never left out and never
+    zeroed: ``coverage_p10`` is ``None`` on a segment with no row that could
+    falsify it, and the report renders that as an absence.
+    """
+    path = request.root / lane.directory_name / f"{request.run_id}{CARD_SUFFIX}"
+    if not path.is_file():
+        return
+    entries = []
+    for row in table.rows:
+        full = row.as_card_entry()
+        entries.append({key: full.get(key) for key in _FOLD_METRIC_COLUMNS})
+    write_card(path, {**read_card(path), FOLD_METRICS_KEY: entries})
 
 
 def _incumbent_risk_bins(inputs: LaneInputs, request: RetrainRequest) -> RiskBins | None:
@@ -1121,6 +1178,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
 
     report = run_retrain(request, on_lane=announce)
+    # After every decision is on the volume and before the exit code is read: the
+    # page is a record of them, and its failure is a warning of its own.
+    write_report_or_warn(request.root)
     payload = {
         **report.as_dict(),
         "run_id": request.run_id,

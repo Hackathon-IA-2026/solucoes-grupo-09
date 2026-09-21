@@ -21,6 +21,7 @@ import {
   forecastProducer,
   operationModality,
   plantLocationSource,
+  programmeTechnology,
   reasonCode,
   reportingEntityKind,
   restrictionOrigin,
@@ -378,6 +379,413 @@ export const canonicalDayAheadBalance = pgView("canonical_day_ahead_balance", {
     and (canonical_partial_reference_days()
          or reference_day_patamares = reference_day_half_hours)
   order by subsystem, valid_time, ingested_at desc, data_version desc
+`);
+
+/**
+ * The DESSEM day-ahead balance in its **subsystem-grain** vocabulary —
+ * `balanco_dessem_geral`, one row per subsystem per half hour, `AsOf` and gated
+ * exactly as `canonical_day_ahead_balance` is.
+ *
+ * **Nothing in `feature_rows` reads this view, on purpose.** It is the cheap
+ * cross-check on the plant-grain file: `demand_mw` must agree with
+ * `canonical_day_ahead_balance.demand_mw` for the same `(subsystem, valid_time)`,
+ * and `renewable_generation_mw` with the sum of that view's wind, solar and MMGD.
+ * A feature built here would be a second estimate of quantities the class-`D`
+ * block already holds from the finer source.
+ *
+ * No partial-day predicate, because there are no partial days to filter: the
+ * adapter refuses a short reference day outright — this file has no
+ * photovoltaic-only column, so nothing pins `num_patamar` to wall-clock time and
+ * a truncated run cannot be shown to mean what it says.
+ */
+export const canonicalDayAheadGeneral = pgView("canonical_day_ahead_general", {
+  subsystem: subsystemCode().notNull(),
+  /** Start of the half hour, UTC. */
+  validTime: timestamp({ withTimezone: true }).notNull(),
+  /** `ForecastOrigin.producer`. */
+  forecastProducer: forecastProducer().notNull(),
+  /** `ForecastOrigin.run_label` — the DESSEM reference day. */
+  runLabel: text().notNull(),
+  /** Power, not energy: DESSEM publishes instantaneous MW. */
+  demandMw: doublePrecision().notNull(),
+  /** Wind, solar and MMGD together. */
+  renewableGenerationMw: doublePrecision().notNull(),
+  hydroGenerationMw: doublePrecision().notNull(),
+  thermalGenerationMw: doublePrecision().notNull(),
+  pumpingConsumptionMw: doublePrecision().notNull(),
+  ...rowVintage,
+}).as(sql`
+  select distinct on (subsystem, valid_time)
+    subsystem,
+    valid_time,
+    forecast_producer,
+    run_label,
+    demand_mw,
+    renewable_generation_mw,
+    hydro_generation_mw,
+    thermal_generation_mw,
+    pumping_consumption_mw,
+    data_version,
+    published_at,
+    ingested_at
+  from dessem_general_half_hour
+  where ingested_at <= canonical_as_of()
+    and (canonical_published_at_or_before() is null
+         or published_at <= canonical_published_at_or_before())
+  order by subsystem, valid_time, ingested_at desc, data_version desc
+`);
+
+/**
+ * ONS's day-ahead generation programme per (subsystem, technology, half hour) —
+ * `programacao_diaria`, aggregated at the adapter.
+ *
+ * A `Forecast`, cut on `published_at <= gate` like its siblings. The rows are
+ * already at the grain the forecast lives at: ~204,000 plant rows a day were
+ * summed into 768 before storage, so this view can never expose a plant.
+ *
+ * Power, not energy — MWmed over the half hour — and every component past
+ * `programmed_mw` is `null` where no plant of the group reported one (only
+ * thermal plants do), never zero. `reporting_plant_count` beside `plant_count`
+ * is how a reader sees that a sum was taken over fewer plants than the group
+ * has, and the components are **not** a breakdown of `programmed_mw`: ONS's own
+ * components reconcile to it on about half of thermal rows (`ons/programme-daily.ts`).
+ */
+export const canonicalProgrammedGeneration = pgView("canonical_programmed_generation", {
+  subsystem: subsystemCode().notNull(),
+  technology: programmeTechnology().notNull(),
+  /** Start of the half hour, UTC. */
+  validTime: timestamp({ withTimezone: true }).notNull(),
+  /** `ForecastOrigin.run_label` — the programme's reference day. */
+  runLabel: text().notNull(),
+  plantCount: integer().notNull(),
+  reportingPlantCount: integer().notNull(),
+  programmedMw: doublePrecision().notNull(),
+  availabilityMw: doublePrecision(),
+  inflexibilityMw: doublePrecision(),
+  unitCommitmentMw: doublePrecision(),
+  electricalReasonMw: doublePrecision(),
+  energyGuaranteeMw: doublePrecision(),
+  exportMw: doublePrecision(),
+  ...rowVintage,
+}).as(sql`
+  select distinct on (subsystem, technology, valid_time)
+    subsystem,
+    technology,
+    valid_time,
+    run_label,
+    plant_count,
+    reporting_plant_count,
+    programmed_mw,
+    availability_mw,
+    inflexibility_mw,
+    unit_commitment_mw,
+    electrical_reason_mw,
+    energy_guarantee_mw,
+    export_mw,
+    data_version,
+    published_at,
+    ingested_at
+  from programmed_generation_half_hour
+  where ingested_at <= canonical_as_of()
+    and (canonical_published_at_or_before() is null
+         or published_at <= canonical_published_at_or_before())
+  order by subsystem, technology, valid_time, ingested_at desc, data_version desc
+`);
+
+/**
+ * ONS's programmed flow through each controlled-flow element —
+ * `programacao_fluxo_controlado`, the input to the `CNF` cause.
+ *
+ * Element grain and **no aggregate**: `load_mw` is signed (its sign is the
+ * direction across the element) and different elements are different corridors,
+ * so a sum across them is not a quantity. `submarket` is ONS's own code and
+ * includes `RR`, which is not one of the four subsystems.
+ */
+export const canonicalControlledFlow = pgView("canonical_controlled_flow", {
+  element: text().notNull(),
+  terminal: integer().notNull(),
+  /** Start of the half hour, UTC. */
+  validTime: timestamp({ withTimezone: true }).notNull(),
+  runLabel: text().notNull(),
+  description: text().notNull(),
+  submarket: text().notNull(),
+  /** Signed MW: the direction across the element is the sign. */
+  loadMw: doublePrecision().notNull(),
+  ...rowVintage,
+}).as(sql`
+  select distinct on (element, terminal, valid_time)
+    element,
+    terminal,
+    valid_time,
+    run_label,
+    description,
+    submarket,
+    load_mw,
+    data_version,
+    published_at,
+    ingested_at
+  from controlled_flow_half_hour
+  where ingested_at <= canonical_as_of()
+    and (canonical_published_at_or_before() is null
+         or published_at <= canonical_published_at_or_before())
+  order by element, terminal, valid_time, ingested_at desc, data_version desc
+`);
+
+/**
+ * Which subsystem and technology each PDP code belongs to — WattSteer's belief,
+ * as of the read's axes, with the absence stated.
+ *
+ * `subsystem` is set only where the candidate set has **exactly one** member,
+ * and otherwise `null` beside `subsystem_unavailable_reason`: `no_match` (no
+ * plant has ever carried this entity's programme) or `ambiguous` (more than one
+ * subsystem still fits). The view never picks a member of a larger set. The
+ * pair is the wire shape `docs/domain-model.md` §10 uses for every absence, so
+ * a null without a reason is unrepresentable here too.
+ */
+export const canonicalPdpCrosswalk = pgView("canonical_pdp_crosswalk", {
+  pdpCode: text().notNull(),
+  subsystem: subsystemCode(),
+  subsystemUnavailableReason: text(),
+  technology: technology(),
+  technologyUnavailableReason: text(),
+  /** The most recent reference day that changed the belief, UTC midnight. */
+  determinedOn: timestamp({ withTimezone: true }).notNull(),
+  ...rowVintage,
+}).as(sql`
+  select distinct on (pdp_code)
+    pdp_code,
+    case when cardinality(subsystem_candidates) = 1
+         then subsystem_candidates[1]::subsystem_code end as subsystem,
+    case cardinality(subsystem_candidates)
+         when 1 then null when 0 then 'no_match' else 'ambiguous' end
+      as subsystem_unavailable_reason,
+    case when cardinality(technology_candidates) = 1
+         then technology_candidates[1]::technology end as technology,
+    case cardinality(technology_candidates)
+         when 1 then null when 0 then 'no_match' else 'ambiguous' end
+      as technology_unavailable_reason,
+    determined_on,
+    data_version,
+    published_at,
+    ingested_at
+  from pdp_crosswalk
+  where ingested_at <= canonical_as_of()
+    and (canonical_published_at_or_before() is null
+         or published_at <= canonical_published_at_or_before())
+  order by pdp_code, ingested_at desc, data_version desc
+`);
+
+/**
+ * ONS's forecast of wind and solar output against what it programmed, per
+ * (subsystem, technology, half hour) — `programacao_x_previsao` carried to a
+ * subsystem through `canonical_pdp_crosswalk`.
+ *
+ * **The share of the total this covers travels with it.** An entity whose
+ * subsystem or technology is not determined cannot be placed in any row here, so
+ * every total below is a sum over *mapped* entities, and a total that silently
+ * left the rest out would be the omission `.claude/rules/honesty.md` forbids.
+ * `mapped_programmed_share` is the part of the whole half hour's programmed VRE
+ * these rows account for and `unmapped_programmed_mw` the megawatts they do not,
+ * both repeated on every row of the half hour — the denominator is the national
+ * half hour, not the subsystem. It is `null` beside a reason when nothing was
+ * programmed at all, where a share would be 0/0.
+ *
+ * Point programme values, not quantiles, so summing them is exact ("expectations
+ * add exactly"). Written as one pass with window functions rather than CTEs that
+ * are read twice: a CTE read twice is materialised, and a `valid_time` predicate
+ * cannot cross it, which is the 8-second `GROUP BY` ADR-0005 records.
+ */
+export const canonicalProgrammedVre = pgView("canonical_programmed_vre", {
+  subsystem: subsystemCode().notNull(),
+  technology: technology().notNull(),
+  /** Start of the half hour, UTC. */
+  validTime: timestamp({ withTimezone: true }).notNull(),
+  /** `val_previsao`, summed over the mapped entities — ONS's own forecast, MW. */
+  forecastMw: doublePrecision().notNull(),
+  /** `val_programado`, summed over the mapped entities, MW. */
+  programmedMw: doublePrecision().notNull(),
+  entityCount: integer().notNull(),
+  mappedProgrammedShare: doublePrecision(),
+  mappedShareUnavailableReason: text(),
+  unmappedProgrammedMw: doublePrecision().notNull(),
+  ...rowVintage,
+}).as(sql`
+  select
+    subsystem::subsystem_code as subsystem,
+    technology::technology as technology,
+    valid_time,
+    sum(forecast_mw) as forecast_mw,
+    sum(programmed_mw) as programmed_mw,
+    count(*)::int as entity_count,
+    case when max(total_programmed_mw) > 0
+         then max(mapped_programmed_mw) / max(total_programmed_mw) end
+      as mapped_programmed_share,
+    case when max(total_programmed_mw) > 0 then null
+         else 'nothing_programmed' end as mapped_share_unavailable_reason,
+    max(total_programmed_mw) - max(mapped_programmed_mw) as unmapped_programmed_mw,
+    max(data_version) as data_version,
+    max(published_at) as published_at,
+    max(ingested_at) as ingested_at
+  from (
+    select
+      j.*,
+      sum(j.programmed_mw) over (partition by j.valid_time) as total_programmed_mw,
+      sum(case when j.subsystem is not null and j.technology is not null
+               then j.programmed_mw else 0 end)
+        over (partition by j.valid_time) as mapped_programmed_mw
+    from (
+      select
+        f.valid_time, f.forecast_mw, f.programmed_mw,
+        f.data_version, f.published_at, f.ingested_at,
+        case when cardinality(b.subsystem_candidates) = 1
+             then b.subsystem_candidates[1] end as subsystem,
+        case when cardinality(b.technology_candidates) = 1
+             then b.technology_candidates[1] end as technology
+      from (
+        select distinct on (pdp_code, valid_time)
+          pdp_code, valid_time, forecast_mw, programmed_mw,
+          data_version, published_at, ingested_at
+        from programmed_vs_forecast_half_hour
+        where ingested_at <= canonical_as_of()
+          and (canonical_published_at_or_before() is null
+               or published_at <= canonical_published_at_or_before())
+        order by pdp_code, valid_time, ingested_at desc, data_version desc
+      ) f
+      left join (
+        select distinct on (pdp_code)
+          pdp_code, subsystem_candidates, technology_candidates
+        from pdp_crosswalk
+        where ingested_at <= canonical_as_of()
+          and (canonical_published_at_or_before() is null
+               or published_at <= canonical_published_at_or_before())
+        order by pdp_code, ingested_at desc, data_version desc
+      ) b on b.pdp_code = f.pdp_code
+    ) j
+  ) x
+  where subsystem is not null and technology is not null
+  group by subsystem, technology, valid_time
+`);
+
+/**
+ * The unified (subsystem, hour) read of the day-ahead programme — the hour-grain
+ * join of `canonical_programmed_generation` and `canonical_programmed_vre`, UTC,
+ * start-labelled, as every hour in this layer is.
+ *
+ * **Forecasts, so no availability lag applies.** These are ONS's plan for the
+ * day, published the evening before, and are usable at the gate for the day they
+ * describe. That is the opposite of `subsystem_energy_balance_hour`, which is
+ * *realised* and may be read only with a lag; the two must not be joined as if
+ * they were one kind of column.
+ *
+ * Half hours become hours by **averaging**, because both series are power (MWmed
+ * or MW), and an hour is held only where both of its half hours are: **a
+ * half-empty hour is a hole, not a half-sized one**, exactly as in
+ * `canonical_programmed_load` — with one half hour the mean would be of half the
+ * hour and would read as a full one. A technology absent from a subsystem
+ * (`N` has one wind plant) is a `null` column, not a zero.
+ *
+ * The vintage columns are the latest across everything the hour was built from.
+ * The unmapped-programme share is carried as the *lowest* seen across the hour's
+ * half hours, so an hour never claims better coverage than its worst half.
+ */
+export const canonicalSubsystemProgrammeHour = pgView(
+  "canonical_subsystem_programme_hour",
+  {
+    subsystem: subsystemCode().notNull(),
+    /** Start of the hour, UTC. */
+    validTime: timestamp({ withTimezone: true }).notNull(),
+    programmedWindMw: doublePrecision(),
+    programmedSolarMw: doublePrecision(),
+    programmedHydroMw: doublePrecision(),
+    programmedThermalMw: doublePrecision(),
+    thermalInflexibilityMw: doublePrecision(),
+    thermalUnitCommitmentMw: doublePrecision(),
+    thermalElectricalReasonMw: doublePrecision(),
+    /** ONS's own forecast of PDP wind output in this subsystem — mapped entities only. */
+    pdpWindForecastMw: doublePrecision(),
+    pdpWindProgrammedMw: doublePrecision(),
+    pdpSolarForecastMw: doublePrecision(),
+    pdpSolarProgrammedMw: doublePrecision(),
+    /** Lowest `mapped_programmed_share` across the hour's half hours; null when unknown. */
+    pdpMappedProgrammedShare: doublePrecision(),
+    ...rowVintage,
+  },
+).as(sql`
+  select
+    g.subsystem,
+    g.hour as valid_time,
+    g.programmed_wind_mw,
+    g.programmed_solar_mw,
+    g.programmed_hydro_mw,
+    g.programmed_thermal_mw,
+    g.thermal_inflexibility_mw,
+    g.thermal_unit_commitment_mw,
+    g.thermal_electrical_reason_mw,
+    v.pdp_wind_forecast_mw,
+    v.pdp_wind_programmed_mw,
+    v.pdp_solar_forecast_mw,
+    v.pdp_solar_programmed_mw,
+    v.pdp_mapped_programmed_share,
+    greatest(g.data_version, coalesce(v.data_version, 0)) as data_version,
+    greatest(g.published_at, coalesce(v.published_at, g.published_at)) as published_at,
+    greatest(g.ingested_at, coalesce(v.ingested_at, g.ingested_at)) as ingested_at
+  from (
+    select
+      subsystem,
+      date_trunc('hour', valid_time) as hour,
+      case when count(*) filter (where technology = 'WIND') = 2
+           then avg(programmed_mw) filter (where technology = 'WIND') end
+        as programmed_wind_mw,
+      case when count(*) filter (where technology = 'SOLAR') = 2
+           then avg(programmed_mw) filter (where technology = 'SOLAR') end
+        as programmed_solar_mw,
+      case when count(*) filter (where technology = 'HYDRO') = 2
+           then avg(programmed_mw) filter (where technology = 'HYDRO') end
+        as programmed_hydro_mw,
+      case when count(*) filter (where technology = 'THERMAL') = 2
+           then avg(programmed_mw) filter (where technology = 'THERMAL') end
+        as programmed_thermal_mw,
+      case when count(*) filter (where technology = 'THERMAL'
+                                   and inflexibility_mw is not null) = 2
+           then avg(inflexibility_mw) filter (where technology = 'THERMAL') end
+        as thermal_inflexibility_mw,
+      case when count(*) filter (where technology = 'THERMAL'
+                                   and unit_commitment_mw is not null) = 2
+           then avg(unit_commitment_mw) filter (where technology = 'THERMAL') end
+        as thermal_unit_commitment_mw,
+      case when count(*) filter (where technology = 'THERMAL'
+                                   and electrical_reason_mw is not null) = 2
+           then avg(electrical_reason_mw) filter (where technology = 'THERMAL') end
+        as thermal_electrical_reason_mw,
+      max(data_version) as data_version,
+      max(published_at) as published_at,
+      max(ingested_at) as ingested_at
+    from canonical_programmed_generation
+    group by subsystem, date_trunc('hour', valid_time)
+  ) g
+  left join (
+    select
+      subsystem,
+      date_trunc('hour', valid_time) as hour,
+      case when count(*) filter (where technology = 'WIND') = 2
+           then avg(forecast_mw) filter (where technology = 'WIND') end
+        as pdp_wind_forecast_mw,
+      case when count(*) filter (where technology = 'WIND') = 2
+           then avg(programmed_mw) filter (where technology = 'WIND') end
+        as pdp_wind_programmed_mw,
+      case when count(*) filter (where technology = 'SOLAR') = 2
+           then avg(forecast_mw) filter (where technology = 'SOLAR') end
+        as pdp_solar_forecast_mw,
+      case when count(*) filter (where technology = 'SOLAR') = 2
+           then avg(programmed_mw) filter (where technology = 'SOLAR') end
+        as pdp_solar_programmed_mw,
+      min(mapped_programmed_share) as pdp_mapped_programmed_share,
+      max(data_version) as data_version,
+      max(published_at) as published_at,
+      max(ingested_at) as ingested_at
+    from canonical_programmed_vre
+    group by subsystem, date_trunc('hour', valid_time)
+  ) v on v.subsystem = g.subsystem and v.hour = g.hour
 `);
 
 /**

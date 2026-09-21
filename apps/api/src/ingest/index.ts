@@ -110,6 +110,20 @@ export {
   type SubsystemLoadDayWriteResult,
   writeSubsystemLoadDays,
 } from "./daily-load-repository.js";
+// `balanco_dessem_geral` — the same run in its subsystem-grain vocabulary, a
+// cross-check on the block above that no feature reads.
+export {
+  createDessemGeneralIngestor,
+  type DessemGeneralDayResult,
+  type IngestDessemGeneralPayload,
+  type IngestDessemGeneralResult,
+} from "./dessem-general-job.js";
+export {
+  type DessemGeneralWrite,
+  type DessemGeneralWriteResult,
+  dessemGeneralDigest,
+  writeDessemGeneral,
+} from "./dessem-general-repository.js";
 // The DESSEM day-ahead balance (ONS dataset 11) — the platform's first
 // bulk-file forecast, and its only daily-split source. Appended rather than
 // merged into the blocks above so that two adapters landing at once cannot
@@ -258,6 +272,12 @@ export {
   WIND_DETAIL_DATASET_SLUG,
 } from "./ons/constrained-off-detail.js";
 export {
+  CONTROLLED_FLOW_DATASET_SLUG,
+  CONTROLLED_FLOW_FILE_PREFIX,
+  parseControlledFlowCsv,
+  parseControlledFlowTable,
+} from "./ons/controlled-flow.js";
+export {
   DAILY_LOAD_DATASET_SLUG,
   DAILY_LOAD_FORMATS,
   LOAD_METHODOLOGY_REGIMES,
@@ -273,6 +293,11 @@ export {
   patamarStart,
   referenceDayAnchor,
 } from "./ons/dessem-balance.js";
+export {
+  DESSEM_GENERAL_COVERAGE_START,
+  DESSEM_GENERAL_DATASET_SLUG,
+  parseDessemGeneralCsv,
+} from "./ons/dessem-general.js";
 export {
   DATASET_SLUG,
   parseEnergyBalance,
@@ -291,6 +316,16 @@ export {
   parseVerifiedLoad,
 } from "./ons/load.js";
 export {
+  type DayCandidates,
+  dayCandidates,
+  type Merge,
+  mergeCandidates,
+  type PdpVector,
+  pdpVectors,
+  type StoredCandidates,
+  vectorKey,
+} from "./ons/pdp-fingerprint.js";
+export {
   CAPACITY_DATASET_SLUG,
   findRenewableDeactivations,
   type ParsePlantRegistryOptions,
@@ -299,6 +334,34 @@ export {
   type RenewableDeactivation,
   WINDOW_OPENS_ON,
 } from "./ons/plant-registry.js";
+export {
+  PROGRAMME_PUBLICATION_HOUR_BRT,
+  programmeFilePublishedAt,
+} from "./ons/programme.js";
+export {
+  PROGRAMME_COVERAGE_START,
+  PROGRAMME_DAILY_DATASET_SLUG,
+  PROGRAMME_DAILY_FILE_PREFIX,
+  parseProgrammeDailyCsv,
+  parseProgrammeDailyTable,
+} from "./ons/programme-daily.js";
+export {
+  cellOf,
+  readProgrammeParquet,
+  tableFromObjects,
+} from "./ons/programme-parquet.js";
+export {
+  PROGRAMME_VS_FORECAST_DATASET_SLUG,
+  PROGRAMME_VS_FORECAST_FILE_PREFIX,
+  parseProgrammeVsForecastCsv,
+  parseProgrammeVsForecastTable,
+} from "./ons/programme-vs-forecast.js";
+export {
+  type PdpCrosswalkRow,
+  pdpCrosswalkDigest,
+  readPdpCrosswalk,
+  writePdpCrosswalk,
+} from "./pdp-crosswalk-repository.js";
 export {
   type PlantDetailAsOfQuery,
   type PlantDetailAsOfResult,
@@ -313,6 +376,30 @@ export {
   upsertObservedPlants,
   writePlantDetail,
 } from "./plant-detail-repository.js";
+// The day-ahead programme datasets — `programacao_diaria`, `programacao_x_previsao`
+// and `programacao_fluxo_controlado` — and the PDP crosswalk one of them derives.
+export {
+  createControlledFlowIngestor,
+  createProgrammedGenerationIngestor,
+  createProgrammedVsForecastIngestor,
+  type IngestControlledFlowPayload,
+  type IngestControlledFlowResult,
+  type IngestProgrammedGenerationPayload,
+  type IngestProgrammedGenerationResult,
+  type IngestProgrammedVsForecastPayload,
+  type IngestProgrammedVsForecastResult,
+} from "./programme-job.js";
+export {
+  type ControlledFlowWrite,
+  controlledFlowDigest,
+  type ProgrammedGenerationWrite,
+  type ProgrammedVsForecastWrite,
+  programmedGenerationDigest,
+  programmedVsForecastDigest,
+  writeControlledFlow,
+  writeProgrammedGeneration,
+  writeProgrammedVsForecast,
+} from "./programme-repository.js";
 export {
   CAMPAIGN_MIN_RESOURCES,
   CAMPAIGN_MIN_SETTLED_DAYS,
@@ -412,10 +499,15 @@ export {
 } from "./tasks.js";
 export { ONS_TIME_ZONE, zonedWallClockToUtc } from "./time.js";
 export type {
+  ControlledFlowHalfHour,
+  ControlledFlowParse,
+  ControlledFlowSubmarket,
   CurtailmentParse,
   CurtailmentReportHour,
   DessemBalanceHalfHour,
   DessemBalanceParse,
+  DessemGeneralHalfHour,
+  DessemGeneralParse,
   EnergyBalanceHour,
   EnergyBalanceParse,
   LoadParse,
@@ -423,7 +515,13 @@ export type {
   ObservedReportingEntity,
   PlantDetailHour,
   PlantDetailParse,
+  ProgrammedGenerationHalfHour,
+  ProgrammedGenerationParse,
   ProgrammedLoadHalfHour,
+  ProgrammedVsForecastHalfHour,
+  ProgrammedVsForecastParse,
+  ProgrammePlantVector,
+  ProgrammeTechnology,
   ReasonCode,
   RejectedRow,
   RejectionReason,

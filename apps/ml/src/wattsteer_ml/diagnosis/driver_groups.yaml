@@ -193,7 +193,6 @@ groups:
       - observed_constrained_off_lag_168h
       - observed_constrained_off_wind_lag_168h
       - observed_constrained_off_solar_lag_168h
-      - observed_constrained_off_lag_48h
       - observed_constrained_off_same_hour_mean_7d
       # The occurrence twin of the mean above it. Added by feature-engineering
       # ticket 14, which shipped the column ticket 05 owed — the name the spec's

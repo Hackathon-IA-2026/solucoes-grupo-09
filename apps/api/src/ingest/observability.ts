@@ -115,6 +115,33 @@ const SOURCES: SourceHealthSpec[] = [
     toleranceHours: 36,
   },
   {
+    source: "dessem_general",
+    table: "dessem_general_half_hour",
+    basis: "ingested_at",
+    toleranceHours: 36,
+  },
+  {
+    // The three day-ahead programme datasets: forecasts, so freshness is judged
+    // on the ingest clock, at the DESSEM tolerance for the same reason — one
+    // file a day, published the evening before.
+    source: "programmed_generation",
+    table: "programmed_generation_half_hour",
+    basis: "ingested_at",
+    toleranceHours: 36,
+  },
+  {
+    source: "programmed_vs_forecast",
+    table: "programmed_vs_forecast_half_hour",
+    basis: "ingested_at",
+    toleranceHours: 36,
+  },
+  {
+    source: "controlled_flow",
+    table: "controlled_flow_half_hour",
+    basis: "ingested_at",
+    toleranceHours: 36,
+  },
+  {
     source: "verified_load",
     table: "verified_load_half_hour",
     basis: "valid_time",

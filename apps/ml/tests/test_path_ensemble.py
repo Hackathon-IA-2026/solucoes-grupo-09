@@ -69,6 +69,7 @@ from wattsteer_ml.training import (
     PitMatrix,
     TrainedFold,
     day_grain_rows,
+    draw_day_grain,
     ensemble_quantile,
     fit_pit_matrix,
     forecast_rows,
@@ -474,9 +475,7 @@ def test_the_day_band_is_strictly_inside_the_summed_band_where_the_band_is_real(
         assert day.day_total.p10 > summed_p10
 
 
-def test_where_every_hourly_p90_is_zero_the_day_p90_is_not(
-    trained: TrainedFold, test_rows: list[dict[str, Any]]
-) -> None:
+def test_where_every_hourly_p90_is_zero_the_day_p90_is_not() -> None:
     """The half of the ticket's inequality that is false, and why that is right.
 
     A subsystem whose ``p`` never exceeds 0.10 has a composed P90 of zero in
@@ -484,16 +483,45 @@ def test_where_every_hourly_p90_is_zero_the_day_p90_is_not(
     of a curtailed hour. Quantiles are not subadditive; a hurdle with a large
     point mass at zero is precisely where that bites, and a day band clamped to
     the summed one would be the lie, not the fix.
+
+    **Built rather than found.** This asserted the property over the shared
+    trained fold, by filtering its test days for one whose summed P90 happened
+    to be zero. That made a statement about the arithmetic depend on a booster
+    staying unconfident, and `feat/new-datasets` showed what that costs:
+    dropping ``observed_constrained_off_lag_48h`` left the model less certain
+    about the quiet subsystem, its composed P90 rose off the floor — ``N``'s
+    minimum summed P90 went from 0.0 to 163.5 over the same seven test days —
+    and the filter returned nothing. The guard fired correctly, on a fixture
+    assumption rather than on the invariant, and the invariant went untested.
+
+    Lowering the synthetic intensity to make ``N`` quiet again is not the
+    repair either: at 0.02 the fold no longer has the thirty complete days
+    ``fit_pit_matrix`` needs, so the fixture stops being fittable before it
+    starts being degenerate.
+
+    So the twenty-four mixtures are constructed at ``p = 0.08``, which is what
+    the docstring was describing all along. The claim is about
+    :func:`draw_day_grain` over a hurdle with a large point mass at zero, and
+    it is now tested on exactly that, for every subsystem rather than for
+    whichever one the fit happened to leave quiet.
     """
-    quiet = [
-        day
-        for day in day_grain_rows(trained.bundle, test_rows)
-        if _summed(_hours_of(trained, test_rows, (day.target_date, day.subsystem)), "p90")
-        == 0.0
-    ]
-    assert quiet, "the fixture must contain a subsystem-day with a degenerate band"
-    assert any(day.day_total.p90 > 0.0 for day in quiet)
-    assert all(0.0 <= day.day_occurrence_probability <= 1.0 for day in quiet)
+    quiet_hours = [a_mixture(p=0.08) for _ in range(HOURS_PER_DAY)]
+    # `Σ_t P90_t = 0`, stated on the mixtures themselves: 0.90 is below
+    # 1 − 0.08, so every hour's P90 falls inside the point mass at zero.
+    assert sum(mixture.quantile(0.90) for mixture in quiet_hours) == 0.0
+
+    days = draw_day_grain(
+        {(WINDOW[0], subsystem): quiet_hours for subsystem in SUBSYSTEM_CODES},
+        matrix=a_uniform_grid(MIN_ENSEMBLE_DAYS),
+        threshold_mw=THRESHOLD_MW,
+    )
+    assert len(days) == len(SUBSYSTEM_CODES)
+    for day in days:
+        # The whole point: twenty-four hours that each read zero at 0.90 still
+        # make a day with a real chance of a curtailed hour.
+        assert day.day_total.p90 > 0.0, day.subsystem
+        assert 0.0 <= day.day_occurrence_probability <= 1.0
+        assert day.day_occurrence_probability > 0.0
 
 
 def test_whole_day_draws_are_wider_than_independent_hourly_draws() -> None:

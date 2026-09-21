@@ -55,7 +55,7 @@ ALL_FEATURES: tuple[str, ...] = tuple(
 #: A change here is a product-visible event: it re-ranks the Explain screen and
 #: invalidates every cached narration.
 EXPECTED_VERSION = 2
-EXPECTED_HASH = "sha256:aab7c87c5cfa0cbd34718b0b8fb8bb3ef74fdec6c97d59655fd692962fb9d1eb"
+EXPECTED_HASH = "sha256:92245d84e233e19b4a31aecf8f115d8360059c3972ace6a4dd21fbd7d2f51f86"
 
 
 def _map_with(
@@ -387,7 +387,7 @@ def test_the_artifact_says_it_was_generated_and_by_what() -> None:
     assert "Do not edit by hand" in document["do_not_edit"]
     # The attribute count `feature_hash` moves with, carried so that a stale
     # artifact is legible as one rather than merely wrong.
-    assert document["feature_row_attributes"] == 112
+    assert document["feature_row_attributes"] == 111
 
 
 def test_the_loader_refuses_an_artifact_that_does_not_name_its_generator(
@@ -401,7 +401,7 @@ def test_the_loader_refuses_an_artifact_that_does_not_name_its_generator(
                 "generated_by": "somebody's editor",
                 "source": "the spec's feature table",
                 "do_not_edit": "",
-                "feature_row_attributes": 112,
+                "feature_row_attributes": 111,
                 "sets": {"dessem_free_v1": [{"column_name": "subsystem"}]},
             }
         ),
