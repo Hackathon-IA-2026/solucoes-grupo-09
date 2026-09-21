@@ -119,46 +119,46 @@ trap.
       (agent attempts are refused by the DNS/domain guard, so this is a human
       command.)
 
-### 2a. ⚠️ Applying `0055` will take the serving lane down until a retrain
+### 2a. The migration went ahead of the services, and that is the whole story
 
-**Read this before deploying anything to Railway.** Found 21/09, after `#40`
-merged.
+Done 21/09, and the sequence cost more than this item predicted. It said the
+window was "the retrain's ~40 minutes". That was wrong.
 
-Railway is serving forecasts from artifact `2026-09-16T20:00:00Z`, which was
-fitted **with** `observed_constrained_off_lag_48h`. Migration `0055` redefines
-`feature_rows`, and the hot-swap gate's third check marks an artifact invalid
-when the live definition stops producing the hash it was fitted against —
-`artifacts.contract_fault`, which says in as many words that the incumbent is
-then "invalid rather than stale ... every number it would serve was measured in
-a feature space the database no longer produces". The recovery it names is a
-retrain; a rollback cannot help, because after a contract change there is no
-earlier artifact to name.
+**What was applied**: `0053`, `0054`, `0055` on Railway, no data lost. **What
+was not**: `ml`, `worker` and `api` were left on pre-`#40` code, so the schema
+moved ahead of every service that reads it.
 
-So the order is not "migrate, then deploy". It is:
+The retrain triggered straight afterwards failed on both lanes, and neither
+failure was about modelling:
 
-**No data is lost by migrating.** Checked statement by statement: `0053` and
-`0054` are purely additive, and `0055`'s only `DELETE` removes one row from
-`feature_dictionary_entry` — the metadata describing the dropped column. Every
-other statement is `CREATE OR REPLACE FUNCTION`. No table is dropped, no column
-is dropped, nothing is truncated. What the migration costs is the *artifact*,
-not the data.
+- `gate_early` — **`FeatureContractError`**. The deployed `ml` cannot parse the
+  row the new `feature_rows` returns.
+- `gate_late` — **`serving_smoke`**, but on new columns:
+  `programmed_load_daily_min_mwh` and `proxy_vre_surplus_mwh` are 100 % NULL,
+  because they come from `#40`'s day-ahead-programme ingestion and the worker
+  that fills them is not deployed.
 
-- [ ] Apply `0053`, `0054`, `0055` **and** mint an artifact on the new contract
-      in the same window, by triggering a retrain rather than waiting for
-      Friday 03:10 UTC. The trigger is `POST /internal/retrain` on the `ml`
-      service, from inside the private network once item 0 is closed:
-      `railway ssh --service worker -- curl -XPOST http://ml.railway.internal:8000/internal/retrain`
-- [ ] Until that lands, `/v1/meta` reads `usable: false`, every forecast screen
-      states an absence, and the Time Machine has no band to draw. That is the
-      product behaving correctly and it is still a dark demo.
-- [ ] The upside worth trying deliberately, not discovering on the day:
-      dropping the feature removes the exact `serving_smoke` blocker that has
-      refused `gate_late` every week. A retrain on the new contract is the first
-      one that could promote it.
-- [ ] Do **not** deploy `api`/`worker` from `main` while the old schema is
-      live — `0053`/`0054` add the tables the new ingestion reads.
-- [ ] Done when `/v1/meta` on Railway shows a promoted **and** usable lane on
-      the new contract, and `/v1/grid/outlook` draws a band.
+**Why freezing was not the safe option**, which is the thing worth remembering:
+`publication.py` reads `feature_rows` too. Forecasts were published through
+22/09 before the migration, and the next `gate_early` publication — 09:00 BRT —
+would have hit the same contract error. Freezing would have meant no forecast at
+all on 25–27/09, the days being judged. The serving artifact looked safe only
+because `ml` had not restarted since the migration.
+
+So the chain is: **deploy `ml` → `worker` → `api`, let the programme ingestion
+backfill, retrain, and only then is a lane promotable.** The forecast is dark
+from the first `ml` restart until a retrain succeeds.
+
+- [ ] Confirm `/v1/meta` shows a promoted **and usable** lane on the new
+      contract, and `/v1/grid/outlook` draws a band, before the 25th.
+- [ ] If the retrain still refuses after the backfill, that is a real modelling
+      decision and not skew — `gate_early`'s P10 calibration guardrail is
+      unchanged by `#40`.
+
+**The lesson for the next migration**: a migration that redefines `feature_rows`
+is not an out-of-band database step. It is a deploy of the database *and* every
+service that reads it, in one window, and `deploy.md`'s `ml → api → web` order
+is about exactly this.
 
 ### 3. RAG accuracy above 90%, measured on questions it was not tuned on
 
