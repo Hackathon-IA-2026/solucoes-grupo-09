@@ -110,3 +110,111 @@ def test_the_gateway_config_must_declare_the_claim_reader():
     del without["tasks"]["verify"]
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(without, schema)
+
+
+# ── The reader's own account of what it read, checked in code ──────────────
+#
+# Both shapes below were already forbidden in `VERIFY_PROMPT`'s step 1 and were
+# accepted anyway (7 of 9 labelled cases, 18/09/2026). `supported` is one bit
+# and arrives with no account of what was read, so a model that believed the
+# programmed column answered a question about the verified one produced a
+# `true` indistinguishable from a correct one. It now names the grain and the
+# regime, and the disagreement is refused mechanically.
+
+
+def _read(grain: str, regime: str, *, supported: bool = True) -> dict:
+    return {
+        "answer_from_passages": "13.107 MWmed",
+        "reading": {"grain": grain, "regime": regime},
+        "supported": supported,
+        "reason": "A tabela traz o valor.",
+    }
+
+
+# I06 of `eval/questions.jsonl`, which the run of 19/09 got wrong: the IPDO
+# states both columns on the same page and the answer gave the programmed one.
+I06 = "Segundo o IPDO de 12/09/2023, qual foi a geração eólica verificada no Nordeste?"
+# A02, which names a date and asks for a time of day rather than a day figure.
+A02 = "A que horas o ONS autorizou o restabelecimento total das cargas na perturbação de 15/08/2023?"
+
+
+def test_a_scheduled_figure_does_not_answer_a_question_about_a_verified_one():
+    from wattsteer_rag.verify import _verdict
+
+    supported, reason = _verdict(_read("day", "scheduled"), I06)
+    assert supported is False
+    assert "programado" in reason
+    # The forecast regime is the same refusal: neither is a settled value.
+    assert _verdict(_read("day", "forecast"), I06)[0] is False
+    # And the right reading of the same question is untouched.
+    assert _verdict(_read("day", "verified"), I06)[0] is True
+
+
+def test_an_hourly_figure_does_not_answer_a_question_about_a_day():
+    from wattsteer_rag.verify import _verdict
+
+    supported, reason = _verdict(_read("hour", "verified"), I06)
+    assert supported is False
+    assert "uma hora" in reason
+
+
+def test_the_grain_check_runs_in_one_direction_only():
+    """A day's table stating the hour of its peak is a legitimate reading, and a
+    symmetric rule would refuse it. Asserted rather than described, because the
+    tempting edit is to make the rule symmetric."""
+    from wattsteer_rag.verify import _verdict
+
+    hourly = "Qual foi a geração eólica verificada na hora de maior carga de 12/09/2023?"
+    assert _verdict(_read("day", "verified"), hourly)[0] is True
+
+
+def test_a_question_that_names_no_regime_disables_that_half():
+    """An unstated axis is not a default. Much of the corpus is about what was
+    programmed, so assuming "verified" would refuse correct answers to questions
+    that never asked for one."""
+    from wattsteer_rag.verify import _verdict
+
+    neutral = "Qual foi a geração eólica no Nordeste em 12/09/2023?"
+    for regime in ("verified", "scheduled", "forecast", "none"):
+        assert _verdict(_read("day", regime), neutral)[0] is True
+
+
+def test_a_date_with_an_hour_cue_is_not_a_question_about_the_day():
+    """A02 names a date and asks for a time of day. Reading it as a day question
+    would refuse the one answer it has."""
+    from wattsteer_rag.verify import asked_reading
+
+    assert asked_reading(A02)[0] is None
+    assert asked_reading(I06)[0] == "day"
+
+
+def test_a_reader_that_reports_no_reading_is_exactly_as_strict_as_before():
+    """The property that lets this ship without a measured run behind it: the
+    new field can only take claims away. A model too old or too small to report
+    it leaves every existing verdict unchanged."""
+    from wattsteer_rag.verify import _verdict
+
+    without = {"answer_from_passages": "x", "supported": True, "reason": "ok"}
+    assert _verdict(without, I06) == (True, "ok")
+    assert _verdict({**without, "reading": None}, I06)[0] is True
+    assert _verdict({**without, "reading": "day"}, I06)[0] is True
+    assert _verdict({**without, "reading": {}}, I06)[0] is True
+    # A refusal is still a refusal, and keeps the reader's own reason rather
+    # than being restated as a mismatch.
+    refused = {**without, "supported": False, "reading": {"grain": "hour", "regime": "scheduled"}}
+    assert _verdict(refused, I06) == (False, "ok")
+
+
+def test_the_prompt_asks_for_the_reading_it_is_checked_on():
+    """The two halves have to agree: a check on a field the prompt never asks
+    for would be a check that never fires."""
+    from wattsteer_rag.verify import VERIFY_PROMPT
+
+    assert '"reading"' in VERIFY_PROMPT
+    for token in ("hour", "day", "month", "period", "verified", "scheduled", "forecast"):
+        assert token in VERIFY_PROMPT
+    # And it must ask for what the passage says, not for what the question
+    # wanted — a reader that echoes the question cannot disagree with it.
+    # Whitespace-insensitive: the instruction wraps, and a test pinned to where
+    # it wraps would break on a reflow rather than on a changed rule.
+    assert "not what the question asked for" in " ".join(VERIFY_PROMPT.split())

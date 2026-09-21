@@ -144,3 +144,42 @@ def test_a_long_section_is_bounded_and_its_number_reaches_the_whitelist():
     document = {}
     _settle(document, [{"supports": "CNF", "evidence_weight": 1.0, "citations": [citation], "claim": "x"}])
     assert "6.2.2" in document["numbers_whitelist"] and "275" in document["numbers_whitelist"]
+
+
+def test_the_pointer_knows_the_spellings_the_instructions_use():
+    """Review of the 19/09 run: the rule knew `tabela abaixo` and `tabela a
+    seguir` and nothing else, so the same preamble was refused in one operating
+    instruction and accepted in the next. `quadro`, a numbered table and
+    `seguinte` are the same sentence doing the same thing."""
+    from wattsteer_rag.gate import _points_to_table
+
+    for pointer in (
+        "remanejar a geração nas usinas definidas na tabela abaixo, considerando 100 MW.",
+        "remanejar a geração nas usinas definidas na tabela a seguir, considerando 100 MW.",
+        "remanejar a geração nas usinas definidas na tabela seguinte, considerando 100 MW.",
+        "remanejar a geração nas usinas definidas na tabela 1, considerando 100 MW.",
+        "remanejar a geração nas usinas definidas no quadro abaixo, considerando 100 MW.",
+        "remanejar a geração conforme o quadro 6.2, considerando 100 MW.",
+    ):
+        assert _points_to_table(pointer), pointer
+
+
+def test_a_bare_table_word_is_not_a_pointer():
+    """The word appears in rows and in titles. Refusing on it would refuse the
+    row the pointer rule exists to ask for."""
+    from wattsteer_rag.gate import _points_to_table
+
+    assert not _points_to_table("| Tabela de usinas | Mauriti II | - 75 |")
+    assert not _points_to_table("A tabela apresenta as usinas derivadas, com 302 MW no total.")
+
+
+def test_a_widened_pointer_still_accepts_the_quote_that_brings_the_row():
+    """The half that must not be lost: widening what counts as a pointer may not
+    refuse a citation that actually carries the value."""
+    from wattsteer_rag.gate import _points_to_table
+
+    preamble = (
+        "remanejar a geração nas usinas definidas no quadro abaixo, considerando uma redução de 100 MW."
+    )
+    assert not _points_to_table(f"| 1 | {preamble} |\n| 1.1 | Mauriti II | - 75 |")
+    assert not _points_to_table(f"Para controlar o carregamento, {preamble} Mauriti II - 75")

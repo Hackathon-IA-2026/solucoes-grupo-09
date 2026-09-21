@@ -171,7 +171,19 @@ def has_substance(quote: str) -> bool:
     return words >= 8 or bool(re.search(r"\d", stripped))
 
 
-POINTER = re.compile(r"\btabela (?:abaixo|a seguir)\b", re.IGNORECASE)
+# A sentence that sends the reader somewhere else for the value.
+#
+# `tabela abaixo` and `tabela a seguir` were the two the measured run produced;
+# the operating instructions also write `quadro`, number their tables, and say
+# `seguinte`. Each of those is the same sentence doing the same thing, and a
+# rule that only knew two spellings refused the preamble in one instruction and
+# accepted it in the next.
+#
+# Deliberately not a bare `tabela`: the word appears inside rows and titles
+# ("Tabela 1 - Usinas"), and the reading below only refuses when **no** part of
+# the quote carries a value outside the pointing sentence, so a quote that did
+# bring the row through is unaffected either way.
+POINTER = re.compile(r"\b(?:tabela|quadro)s?\s+(?:abaixo|a seguir|seguintes?|\d+(?:\.\d+)*)\b", re.IGNORECASE)
 
 
 def _claim_failures(claim: str, accepted: list[dict], record: Record) -> list[GateFailure]:
