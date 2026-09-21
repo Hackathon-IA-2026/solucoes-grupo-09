@@ -906,20 +906,35 @@ def _incumbent(
       measured against rung 1, which it still has to beat, rather than against a
       model nothing may serve. Without this the lane would be stuck — refusing
       every week against an incumbent it cannot read.
+
+    **Scoring is inside the guard, not after it**, and that is the fix for the
+    deadlock the third case describes but did not cover. A migration that drops
+    a feature column invalidates the incumbent immediately, while the fault is
+    only stamped on its card by a gate that has to *finish* to write it. So the
+    artifact still loaded, `forecast_rows` then raised `FeatureContractError` on
+    the column the database had stopped returning, and the run died before any
+    gate could record anything — every retrain failing the same way, for ever.
+    Measured on 21/09/2026 after `0055` dropped
+    `observed_constrained_off_lag_48h`: the rows carried 99 columns and the
+    incumbent's contract wanted 100.
+
+    An incumbent that cannot be *scored* is exactly as unusable as one that
+    cannot be loaded, so it is treated the same way — cold, and the candidate
+    measured against rung 1.
     """
     artifact_id = _promoted(request.root, inputs.lane)
     if artifact_id is None:
         return None, None
+    settled = settled_rows(fold_rows.segment_rows(inputs.deciding))
     try:
         loaded = load_artifact(
             root=request.root, lane=inputs.lane, artifact_id=artifact_id
         )
+        if not settled:
+            return artifact_id, None
+        hours = scored_hours(forecast_rows(loaded.bundle, settled), settled)
     except Exception:
         return artifact_id, None
-    settled = settled_rows(fold_rows.segment_rows(inputs.deciding))
-    if not settled:
-        return artifact_id, None
-    hours = scored_hours(forecast_rows(loaded.bundle, settled), settled)
     return artifact_id, Comparator.incumbent(
         artifact_id=artifact_id,
         lane=inputs.lane,

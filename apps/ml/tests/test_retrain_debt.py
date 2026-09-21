@@ -661,3 +661,59 @@ def test_recording_a_decision_alone_leaves_no_debt(volume: Path) -> None:
     view = artifacts.inspect().view(LANE)
     assert not view.retrain_owed
     assert view.contract_fault is None
+
+
+def test_an_incumbent_that_loads_but_cannot_be_scored_is_also_cold(
+    incumbent_volume: tuple[Path, LaneInputs, FoldRows],
+) -> None:
+    """The deadlock a dropped feature column produces, and the reason the guard
+    covers scoring rather than loading alone.
+
+    The third case above — "the promoted artifact refuses to load" — assumes the
+    gate has already stamped a contract fault on its card. But the fault is only
+    written by a gate that *finishes*, and a migration that drops a feature
+    column invalidates the incumbent the moment it is applied. So on the first
+    run after such a migration the artifact still loads cleanly, and
+    `forecast_rows` raises `FeatureContractError` instead — outside the old
+    guard, killing the run before any gate could record anything. Every retrain
+    then failed identically, for ever, which is precisely the stuck lane the
+    docstring says this must not become.
+
+    Measured on 21/09/2026, after `0055` dropped
+    `observed_constrained_off_lag_48h` on the deployed database: the rows came
+    back with 99 columns and the incumbent's contract wanted 100, and two
+    consecutive weekly-shaped runs died on it.
+
+    Here the rows are handed to `_incumbent` with one feature column removed,
+    which is what the database now does. An incumbent that cannot be scored is
+    exactly as unusable as one that cannot be loaded, so the answer is the same:
+    the artifact is named, the comparator is `None`, and the candidate is
+    measured against rung 1.
+    """
+    root, inputs, fold_rows = incumbent_volume
+    dropped = "observed_constrained_off_lag_168h"
+    thinned = [
+        {key: value for key, value in row.items() if key != dropped}
+        for row in fold_rows.rows
+    ]
+    assert dropped in fold_rows.rows[0], "the fixture must carry the column being dropped"
+    short = FoldRows.of(
+        thinned,
+        fold=inputs.fold,
+        blocks=inputs.blocks,
+        function_definition=FUNCTION_DEFINITION,
+    )
+    request = RetrainRequest(
+        run_id="2026-06-01T03:00:00Z",
+        as_of=NOW,
+        root=root,
+        database_url="postgres://unused",
+    )
+
+    artifact_id, comparator = _incumbent(inputs, request=request, fold_rows=short)
+
+    # Named, so the run can still say which artifact it could not read...
+    assert artifact_id is not None
+    # ...and cold, so the candidate is measured against rung 1 rather than the
+    # run dying where it used to.
+    assert comparator is None
