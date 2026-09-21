@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from wattsteer_rag.evidence import (
+from wattsteer_rag.evidence import question_for
+from wattsteer_rag.gate import (
     causal_hits,
     check_claim,
     flatten_for_match,
     has_substance,
     numbers_in,
-    question_for,
 )
 from wattsteer_rag.retrieve import Hit, codes_in, to_or_tsquery
 
@@ -203,7 +203,7 @@ def test_a_stack_of_section_titles_is_not_a_statement():
     """Two headings quoted together read like an answer and state nothing. A
     numbered clause starts the same way and is evidence, so the gate has to tell
     them apart."""
-    from wattsteer_rag.evidence import has_substance
+    from wattsteer_rag.gate import has_substance
 
     assert not has_substance(
         "5. LIMITACOES DA TRANSMISSAO E/OU DA GERACAO E PROCEDIMENTOS ASSOCIADOS\n"
@@ -219,7 +219,7 @@ def test_the_citation_has_to_be_about_the_record():
     """A quote can be literal, located and still be about somewhere else."""
     from datetime import UTC, datetime
 
-    from wattsteer_rag.evidence import Record, _relevance_failure
+    from wattsteer_rag.gate import Record, _relevance_failure
     from wattsteer_rag.retrieve import Hit
 
     def hit(source, external_id, published):
@@ -277,7 +277,7 @@ def test_a_bdo_speaks_for_its_day_and_an_ipdo_also_for_the_day_before():
     located, and three months away from the record."""
     from datetime import UTC, datetime
 
-    from wattsteer_rag.evidence import Record, _relevance_failure
+    from wattsteer_rag.gate import Record, _relevance_failure
     from wattsteer_rag.retrieve import Hit
 
     def bulletin(source, day):
@@ -318,13 +318,13 @@ def test_retrieval_leaves_out_the_daily_bulletins_the_gate_would_refuse():
     this suite, so the property is held at the source (see testing.md)."""
     import inspect
 
-    from wattsteer_rag import evidence, retrieve
+    from wattsteer_rag import evidence, gate, retrieve
 
     source = inspect.getsource(retrieve.search)
     assert "target_date" in inspect.signature(retrieve.search).parameters
     assert "'RAP'" in source  # the gate's citation_from_another_event
-    for bulletin, days in evidence.DAILY_REPORTS.items():
+    for bulletin, days in gate.DAILY_REPORTS.items():
         assert f"'{bulletin}'" in source
-        assert f"WHEN 'IPDO' THEN {max(evidence.DAILY_REPORTS['IPDO'])}" in source
+        assert f"WHEN 'IPDO' THEN {max(gate.DAILY_REPORTS['IPDO'])}" in source
         assert max(days) in (0, 1)
     assert "target_date=target_date" in inspect.getsource(evidence.build_evidence)

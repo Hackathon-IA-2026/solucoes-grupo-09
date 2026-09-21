@@ -107,7 +107,7 @@ def test_a_row_shortened_on_the_right_is_not_shifted_to_the_right():
 def test_the_month_to_date_balance_does_not_answer_for_a_day():
     """Sixth measured run: asked for the Sul's verified load on 10/09/2026, the
     answer quoted the month-to-date page (14.452) instead of the day's (14.611)."""
-    from wattsteer_rag.evidence import Record, _month_to_date_failure
+    from wattsteer_rag.gate import Record, _month_to_date_failure
     from wattsteer_rag.retrieve import Hit
 
     def bdo(text: str) -> Hit:
