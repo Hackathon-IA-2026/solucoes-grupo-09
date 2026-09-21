@@ -25,6 +25,7 @@ import type { GateProfile, ModelCard } from "@wattsteer/core/api";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { servingLaneFor } from "@/lib/lanes";
+import { settleWith } from "@/lib/settle";
 import { useServing } from "../use-serving";
 
 export type ModelCardState =
@@ -81,13 +82,11 @@ export function useModelCard(gateProfile: GateProfile): ModelCardState {
       return;
     }
     const controller = new AbortController();
+    const settle = settleWith(controller.signal, setState);
     read(lane).then((card) => {
-      if (controller.signal.aborted) {
-        return;
-      }
       // A card that will not answer is an absent measurement, not a broken
       // screen: nothing on these screens depends on it.
-      setState(card === null ? { status: "absent" } : { status: "read", card });
+      settle(card === null ? { status: "absent" } : { status: "read", card });
     });
     return () => controller.abort();
   }, [lane, serving.status]);

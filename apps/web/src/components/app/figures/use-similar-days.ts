@@ -25,6 +25,7 @@ import type { GateProfile, SimilarDays } from "@wattsteer/core/api";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { SubsystemCode } from "@/lib/fixtures";
+import { settleWith } from "@/lib/settle";
 import { useServing } from "../use-serving";
 import { usePromotedLane } from "./use-model-card";
 
@@ -59,22 +60,18 @@ export function useSimilarDays(
       return;
     }
     const controller = new AbortController();
+    const settle = settleWith(controller.signal, setState);
     api
       .similarDays({ subsystem, lane, targetDate: date, k: 3 }, controller.signal)
       .then((days) => {
-        if (controller.signal.aborted) {
-          return;
-        }
         // An empty list is an absence with a reason the panel states, not a
         // finding that no day was similar.
-        setState(
+        settle(
           days.neighbours.length === 0 ? { status: "absent" } : { status: "read", days },
         );
       })
       .catch(() => {
-        if (!controller.signal.aborted) {
-          setState({ status: "absent" });
-        }
+        settle({ status: "absent" });
       });
     return () => controller.abort();
   }, [subsystem, date, lane, serving.status]);

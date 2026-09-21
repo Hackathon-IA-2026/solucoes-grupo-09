@@ -1,20 +1,26 @@
 /**
  * A `setState` that stops mattering once its request has been abandoned.
  *
- * Four hooks read the gateway — `use-network`, `use-explain`, `use-replay`,
- * `use-optimization` — and between them they carried **fourteen** copies of the
- * same two lines: check `signal.aborted`, then set state. Every one of them is
- * load-bearing and every one of them is invisible when missing. A forgotten
- * guard does not throw; it writes an answer about a question the reader has
- * already navigated away from, and the symptom is a screen that flickers back
- * to a previous subsystem a second after you left it.
+ * Nine hooks read the gateway, and between them they carried **twenty-three**
+ * copies of the same two lines: check `signal.aborted`, then set state. Every
+ * one of them is load-bearing and every one of them is invisible when missing.
+ * A forgotten guard does not throw; it writes an answer about a question the
+ * reader has already navigated away from, and the symptom is a screen that
+ * flickers back to a previous subsystem a second after you left it.
+ *
+ * This module first took the fourteen in `use-network`, `use-explain`,
+ * `use-replay` and `use-optimization`, and left nine in five other hooks —
+ * which is the failure mode of making something structural in half a codebase:
+ * `use-grid-context` and `use-serving` went on hand-rolling the guard, and a
+ * reader of either would have concluded that hand-rolling it is how this is
+ * done here. `test/settle.test.ts` is what stops that happening again.
  *
  * `settleWith` makes the guard structural. A hook builds one of these per
  * effect and then calls it exactly as it used to call `setState`, with no
  * condition around it — so a *missing* guard is not something you can write.
  *
- * **Deliberately not a hook, and deliberately not a fetch wrapper.** The four
- * hooks' state unions differ on purpose — `observedOnly` means something
+ * **Deliberately not a hook, and deliberately not a fetch wrapper.** The hooks'
+ * state unions differ on purpose — `observedOnly` means something
  * different on the Overview than in Replay, and `use-explain` has a fifth arm —
  * and `use-replay` runs a second request when the first refuses with one
  * specific code. A `useGatewayRead<T>` that owned the request and the states

@@ -27,6 +27,7 @@ import { useEffect, useState } from "react";
 import { refusalOf } from "@/lib/absence";
 import { api } from "@/lib/api";
 import type { SubsystemCode } from "@/lib/fixtures";
+import { settleWith } from "@/lib/settle";
 
 export type GridContextState =
   | { readonly status: "reading" }
@@ -38,17 +39,14 @@ export function useGridContext(subsystem: SubsystemCode, date: string): GridCont
 
   useEffect(() => {
     const controller = new AbortController();
+    const settle = settleWith(controller.signal, setState);
     api
       .gridContext({ subsystem, date }, controller.signal)
       .then((context) => {
-        if (!controller.signal.aborted) {
-          setState({ status: "read", context });
-        }
+        settle({ status: "read", context });
       })
       .catch((cause: unknown) => {
-        if (!controller.signal.aborted) {
-          setState({ status: "refused", code: refusalOf(cause) });
-        }
+        settle({ status: "refused", code: refusalOf(cause) });
       });
     return () => controller.abort();
   }, [subsystem, date]);

@@ -32,6 +32,7 @@ import { useEffect, useState } from "react";
 import type { ReplayCandidateDay } from "@/lib/fixtures";
 import { REPLAY_LANE } from "@/lib/replay";
 import { readReplayDays, windowStart } from "@/lib/replay-days";
+import { settleWith } from "@/lib/settle";
 
 export type ReplayDaysState =
   | { readonly status: "probing" }
@@ -46,14 +47,12 @@ export function useReplayDays(subsystem: SubsystemCode): ReplayDaysState {
 
   useEffect(() => {
     const controller = new AbortController();
+    const settle = settleWith(controller.signal, setState);
     readReplayDays(
       { subsystem, lane: REPLAY_LANE, from: windowStart(new Date()) },
       controller.signal,
     )
       .then((days) => {
-        if (controller.signal.aborted) {
-          return;
-        }
         /*
           A refusal and an empty calendar are the same answer here, and the
           answer is a list the picker states in words: "no day in this window
@@ -61,15 +60,12 @@ export function useReplayDays(subsystem: SubsystemCode): ReplayDaysState {
           showed one pill forever and never said why, which is a blank standing
           in for a refusal.
         */
-        setState({ status: "known", viewable: days ?? [] });
+        settle({ status: "known", viewable: days ?? [] });
       })
       .catch(() => {
-        if (controller.signal.aborted) {
-          // Torn down by a navigation. Reporting anything would be reporting
-          // about a screen nobody is looking at.
-          return;
-        }
-        setState({ status: "known", viewable: [] });
+        // A torn-down read reports nothing: `settle` is what makes that
+        // structural, so there is no guard here to forget.
+        settle({ status: "known", viewable: [] });
       });
     return () => controller.abort();
   }, [subsystem]);

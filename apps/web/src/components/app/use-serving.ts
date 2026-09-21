@@ -45,6 +45,7 @@ import {
 } from "react";
 import { api } from "@/lib/api";
 import { anyServing, type Lane, lanesOf } from "@/lib/lanes";
+import { settleWith } from "@/lib/settle";
 
 export type ServingState =
   | { readonly status: "reading" }
@@ -82,12 +83,10 @@ function useServingRead(): ServingState {
 
   useEffect(() => {
     const controller = new AbortController();
+    const settle = settleWith(controller.signal, setState);
     api
       .meta(controller.signal)
       .then((meta) => {
-        if (controller.signal.aborted) {
-          return;
-        }
         const lanes = lanesOf(meta);
         setState({
           status: "known",
@@ -98,9 +97,7 @@ function useServingRead(): ServingState {
         });
       })
       .catch(() => {
-        if (!controller.signal.aborted) {
-          setState({ status: "unknown" });
-        }
+        settle({ status: "unknown" });
       });
     return () => controller.abort();
   }, []);
