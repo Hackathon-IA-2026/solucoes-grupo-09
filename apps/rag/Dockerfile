@@ -9,7 +9,29 @@ RUN apt-get update \
 WORKDIR /app
 COPY apps/rag/pyproject.toml apps/rag/README.md ./
 COPY apps/rag/src ./src
-RUN pip install --no-cache-dir . && useradd --create-home --uid 10001 wattsteer
+
+# Torch from the CPU index **before** the package, so `sentence-transformers`
+# finds it already satisfied. The default index serves the CUDA build, which is
+# some two gigabytes of driver nobody here can use: this service ranks a few
+# dozen passages per question on a CPU.
+RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch \
+ && pip install --no-cache-dir ".[rerank]" \
+ && useradd --create-home --uid 10001 wattsteer
+
+# The cross-encoder, baked in rather than fetched on first use.
+#
+# `rerank.py` loads it lazily and falls back to the RRF order if it cannot, so a
+# missing model is a quiet loss of quality rather than an error — which is
+# exactly the failure that would go unnoticed. Downloading at build time also
+# keeps the first question after a deploy from paying for it, and keeps the
+# container from needing egress to huggingface.co at run time.
+#
+# `HF_HOME` is under /app so the unprivileged user can read the cache it did not
+# create.
+ENV HF_HOME=/app/.hf
+RUN python -c "from sentence_transformers import CrossEncoder; \
+    CrossEncoder('cross-encoder/mmarco-mMiniLMv2-L12-H384-v1')" \
+ && chmod -R a+rX /app/.hf
 
 # The evaluation set travels with the image. It is the list of real curtailment
 # records the console offers, so leaving it out is what makes a perfectly healthy
@@ -20,8 +42,15 @@ COPY apps/rag/eval ./eval
 
 # The store holds the raw documents, addressed by hash. A volume keeps them
 # across deploys so a re-ingest does not re-download the corpus.
+# The reranker is named here rather than left to the config's empty default,
+# because this image is the one that has it: `config.py` stays empty so a
+# checkout without the extra runs the retrieval it can, and the image that
+# carries the model uses it. Measured before being turned on, as
+# `docs/rag/decisions.md` asks — 52 of 67 goldset questions put the answering
+# passage in front of the drafter under RRF, 59 under this model, none lost.
 ENV WATTSTEER_RAG_STORE_DIR=/data/rag-store \
     WATTSTEER_RAG_GATEWAY_CONFIG=/app/gateway.yaml \
+    WATTSTEER_RAG_RERANK_MODEL=cross-encoder/mmarco-mMiniLMv2-L12-H384-v1 \
     WATTSTEER_RAG_PORT=8082
 COPY docs/rag/gateway.yaml /app/gateway.yaml
 
