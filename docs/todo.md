@@ -1,14 +1,18 @@
 # What is left to do
 
-**Status:** open. Written 21/09/2026 from `main` at `b1f6474`, for whoever picks
+**Status:** open. Written 21/09/2026, last worked 21/09/2026, for whoever picks
 the work up before the on-site hackathon (25–27/09). The organisation's rule for
 that event is the yardstick: *what is standing and working on the 27th* is what
 gets judged. Tick a box in the same PR that does the work, and delete an item
 rather than leave it stale.
 
 Every item says where the evidence is, so it can be checked instead of trusted.
-There are no open pull requests or issues and every remote branch is merged, so
-this file is the whole backlog.
+
+`bun run check` exits 0 — typecheck, `biome check` and all four TypeScript
+suites, 5,159 tests passing across the six suites. The five hygiene failures and
+two lint errors that were once called a baseline are closed; one of them was a
+real defect (the Overview's copy never moved into the dictionaries) and two were
+developer prose being rendered on the Time Machine screen.
 
 ## P0 — the demo does not stand without these
 
@@ -20,11 +24,15 @@ deployment left until the organisation reopens AWS on site. The trained state
 
 - [ ] Whoever owns the Railway project adds the `RAILWAY_TOKEN` secret
       (Railway → project → Settings → Tokens). This is the only manual step.
-- [ ] Before choosing `with_rag`, read Railway's corpus size **first**:
-      `railway run -- sh -c 'psql "$DATABASE_URL" -At -c "select count(*) from rag.chunk"'`.
-      `ship-rag.sh` replaces the whole `rag` schema and only prints its count
-      afterwards, so turn `with_rag` on only if Railway has fewer than the
-      release's 18,063 chunks.
+- [x] Before choosing `with_rag`, read Railway's corpus size **first**.
+      **Read on 21/09: Railway holds 1,508 chunks over 240 documents, with no
+      RAP at all and one IPDO** — against the release's 18,063 over 293. So
+      `with_rag` is **yes**. Measured through a temporary TCP proxy on the
+      Postgres service, which was deleted immediately afterwards.
+      Consequence worth knowing before the demo: the deployed evidence service
+      cannot answer the goldset's disturbance or IPDO questions at all, so any
+      RAG figure quoted from Railway today is about a different corpus from the
+      one measured below.
 - [ ] Run `deploy-railway.yml` from Actions with `ship_state` on and
       `state_tag = state-2026-09-20`.
 - [ ] Open the Time Machine and press a day. A 200 from `curl` is not a check
@@ -56,17 +64,36 @@ is above 90%, and the number only counts on a fresh set.
 
 - [ ] Write about 30 new questions with a published answer, never used while
       tuning, and run `apps/rag/eval/run_eval.py` on both sets.
-- [ ] Open gaps, each a separate `fix/rag-*` branch:
-  - the three wrong answers of the last run (I06, A01, A02);
-  - the second reader (`apps/rag/src/*/verify.py`) already checks every claim
-    the gates accept and refuses 7 of 9 labelled cases. **Tighten it, do not
-    add another one**: it still accepts an hourly forecast read as the day's
-    scheduled load, and a step's preamble given for the value its table holds;
-  - older revisions of an operating instruction are not in the corpus (the
-    listing is rendered by JavaScript), so a record from before a revision is
-    checked against the current text.
-- [ ] Try Groq as the first provider if it measures better (the gateway allows
-      it; decide by the number).
+- [x] **The three wrong answers (I06, A01, A02): 0 correct → 2 correct**,
+      measured end to end on 21/09 against the restored corpus. None of the
+      three had the cause the list assumed:
+  - **I06** quoted an instantaneous MW peak from the SIN table on page 13
+    instead of the Northeast's daily 12.197 MWmed on page 1. The cause was the
+    `verify` chain leading with Groq while `GROQ_API_KEYS` is empty, with a
+    fallback that was answering 503 — so the claim reader had **no working
+    link**, and a missing reader refuses the document. NVIDIA leads now, with
+    kimi-k3 between it and Groq. Correct.
+  - **A01** answered "34,5 % da carga": true, cited, and not what was asked.
+    The sentence that answers it is on page 15 of a 572-page report and was in
+    **none** of the 80 retrieved candidates. Fixed by the reranker below.
+    Correct.
+  - **A02** is still wrong, and now precisely: its chunk is at fused rank 11
+    with the cut at 8, the cross-encoder still ranks eight above it, and the
+    report holds several restoration timestamps — it answers 09h44 (LIGHT's
+    ERAC) where 14h49 (the ONS authorising total restoration) is asked.
+- [x] The second reader is tightened, not duplicated. Both shapes it still
+      accepted were **already forbidden in its prompt**, so more prose was not
+      the fix: it now names the grain and the regime it read and `_mismatch`
+      refuses the disagreement in code. Checked-when-present, so a model that
+      does not report it leaves the reader exactly as strict as before. The
+      pointer gate learned `quadro`, `seguinte` and numbered tables for the
+      other half.
+- [ ] Older revisions of an operating instruction are not in the corpus (the
+      listing is rendered by JavaScript), so a record from before a revision is
+      checked against the current text. **Not started.**
+- [x] Groq as first provider: **decided against, by the number.** It was
+      already first for `verify` and that is what broke the reader — the
+      deployment has no Groq key. NVIDIA leads, Groq is the fallback.
 
 ## P1 — needed before the 27th, not blocking the screens
 
@@ -88,16 +115,26 @@ is above 90%, and the number only counts on a fresh set.
 
 ### 6. Deck for the on-site presentation
 
-- [ ] Replace every figure in the deck with one measured in this repository
-      (RAG accuracy from item 4, Time Machine scores, forecast only if item 2
-      lands). No number that is not verifiable.
+- [ ] Replace every figure in the deck with one measured in this repository.
+      **`docs/deck-figures.md` is that list**, written 21/09 with each number
+      labelled *measured*, *published contract* or *not available*. Two traps it
+      names: the Time Machine's 612 / 281 / 45.9 % is the published **contract
+      example**, not a replay measured today, and the RAG accuracy figure is on
+      the set the system was tuned on until the ~30 fresh questions exist. The
+      deck still has to be edited.
 
 ## P2 — only if there is time
 
 - [ ] RAG job surface: `rag.job` and `rag-job-status.schema.json` exist as the
       contract, nothing serves them (`docs/rag/decisions.md`).
-- [ ] Local reranker for the RAG (`pip install -e ".[rerank]"`), measured
-      against the RRF order before it is turned on.
+- [x] Local reranker for the RAG — **built and measured** (`rerank.py`,
+      `eval/measure_rerank.py`). Over the 67 goldset questions that name the
+      numbers their document states, a passage stating one reaches the drafter
+      in **52/67 under RRF and 59/67 reranked** — seven rescued, none lost.
+      Left **off by default** (`WATTSTEER_RAG_RERANK_MODEL` empty): the extra is
+      a few hundred megabytes, and a deployment without it must run the
+      retrieval that was measured. Turning it on in production is a decision
+      with a number behind it now.
 - [ ] Read `answer_feedback` out of every database before it is torn down
       (command in `docs/environments.md`). The event instance's copy went with
       the account.
