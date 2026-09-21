@@ -165,6 +165,22 @@ function first(value: string | string[] | undefined): string | undefined {
 export function parseAppParams(
   raw: Record<string, string | string[] | undefined>,
   now: Date = new Date(),
+  /**
+   * The run to use when the address bar names none.
+   *
+   * An argument rather than the constant it used to be. `12Z` is `gate_late`,
+   * which has never promoted on this deployment, so the page opened on four
+   * stated absences with a complete forecast one pill away — and
+   * `honesty.md` forbids stating the deployment's condition from a constant.
+   * The caller reads the lane table and passes what can actually answer; this
+   * module stays free of React and of the network, which is what keeps it
+   * unit-testable.
+   *
+   * Still `12Z` when nothing is passed, so a caller that knows nothing about
+   * lanes — every test of this module, and the prerender — behaves exactly as
+   * before.
+   */
+  fallbackRun: RunLabel = "12Z",
 ): AppParams {
   const subsystem = first(raw.subsystem);
   const technology = first(raw.technology);
@@ -175,7 +191,7 @@ export function parseAppParams(
     subsystem: namedSubsystem ? (subsystem as SubsystemCode) : "NE",
     subsystemFromUrl: namedSubsystem,
     technology: TECHNOLOGY_PARAM[technology ?? ""] ?? "WIND",
-    run: RUN_LABELS.includes(run as RunLabel) ? (run as RunLabel) : "12Z",
+    run: RUN_LABELS.includes(run as RunLabel) ? (run as RunLabel) : fallbackRun,
     date: latestTargetDate(now),
     episode:
       // Shape, not membership: the picker's days come from the gateway now, so

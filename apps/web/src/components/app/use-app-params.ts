@@ -4,10 +4,13 @@
  * pulling in expo-router and, through it, all of React Native.
  */
 
+import { latestTargetDate } from "@wattsteer/core";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { Platform } from "react-native";
+import { runOf, servingGate } from "@/lib/serving-run";
 import { type AppParams, parseAppParams, writeParams } from "./params";
+import { useServing } from "./use-serving";
 
 /**
  * What the address bar says, for the keys the router did not hand us.
@@ -89,8 +92,35 @@ export function useAppParams(): AppParams & {
     // react-doctor-disable-next-line react-doctor/no-initialize-state, react-hooks-js/set-state-in-effect
     setHydrated(true);
   }, []);
+  const raw_ = hydrated ? { ...fromAddressBar(), ...withoutEmpty(raw) } : {};
+  const serving = useServing();
+  const now = new Date();
+  /*
+    The default run follows the lane table, and only the default.
+
+    `params.ts` defaults to `12Z` — `gate_late` — which has never promoted on
+    this deployment, so a visitor met four stated absences while a complete
+    forecast sat one pill away on `00Z`. `honesty.md` forbids exactly that
+    shape: never state the deployment's condition from a constant. See
+    `lib/serving-run.ts` for why "promoted and usable" needs the gate's own
+    schedule beside it, and why the later gate wins a tie.
+
+    **A URL that names a run still wins.** This replaces a fallback, never a
+    choice: a shared link, a pill press and the Time Machine's own deep links
+    all put `run` in the address bar, and none of them is overridden here.
+
+    Serving arrives after hydration, so this can only change a later render —
+    which is the same rule the address bar follows above, and for the same
+    reason.
+  */
+  const answering =
+    serving.status === "known"
+      ? servingGate(serving.lanes, latestTargetDate(now), now)
+      : undefined;
   const params = parseAppParams(
-    hydrated ? { ...fromAddressBar(), ...withoutEmpty(raw) } : {},
+    raw_,
+    now,
+    answering === undefined ? undefined : runOf(answering),
   );
   /*
     `writeParams`, not a cast. This used to be `next as Record<string, string>`,

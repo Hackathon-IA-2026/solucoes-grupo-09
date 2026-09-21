@@ -1,6 +1,3 @@
-import { GATES, localWallClock } from "@wattsteer/core/schedule";
-import type { ForecastGateProfile } from "./publication.js";
-
 /**
  * `gate_at(target_date, gate_profile)`, on this side of the wire.
  *
@@ -25,20 +22,4 @@ import type { ForecastGateProfile } from "./publication.js";
  * and a fixed offset would be wrong in every year before it and in any year
  * after a reinstatement.
  */
-export function gateAt(targetDate: string, profile: ForecastGateProfile): Date {
-  const gate = GATES.find((candidate) => candidate.profile === profile);
-  if (gate === undefined) {
-    // Unreachable while the parameter is validated against the same table it is
-    // looked up in. Thrown rather than defaulted, because a gate this function
-    // invented would decide which of two refusals a caller sees.
-    throw new RangeError(`${profile} is not a published gate profile`);
-  }
-  return localWallClock(previousDay(targetDate), gate.publishesAtLocal);
-}
-
-/** The civil date one day before `date`. ISO dates compare lexicographically. */
-function previousDay(date: string): string {
-  return new Date(Date.parse(`${date}T00:00:00Z`) - 86_400_000)
-    .toISOString()
-    .slice(0, 10);
-}
+export { gateAt } from "@wattsteer/core/schedule";

@@ -198,3 +198,40 @@ export function nextPublication(now: Date): Publication {
   }
   return next;
 }
+
+/**
+ * The instant the gate for `targetDate` publishes.
+ *
+ * A question about time rather than a stored value: *has the gate for this
+ * target date passed yet?* That is what separates `FORECAST_NOT_YET_PUBLISHED`
+ * from `FORECAST_UNAVAILABLE` on the gateway — "come back at seven" against
+ * "something broke" — and it is what lets the web app open on a lane that can
+ * actually answer instead of one that merely exists.
+ *
+ * It lives here, beside {@link GATES}, because both sides of the wire ask it.
+ * It was in `apps/api/src/forecast/gate.ts` while only the gateway needed it;
+ * the client needing the same answer is not a reason to have two of them, and
+ * a second copy would be a second opinion about when seven o'clock is.
+ *
+ * Reads `GATES` rather than restating an hour, and {@link localWallClock}
+ * rather than subtracting three: Brazil has observed no summer time since 2019,
+ * and a fixed offset would be wrong in every year before that and in any year
+ * after a reinstatement.
+ */
+export function gateAt(targetDate: string, profile: GateProfile): Date {
+  const gate = GATES.find((candidate) => candidate.profile === profile);
+  if (gate === undefined) {
+    // Unreachable while the parameter is validated against the same table it is
+    // looked up in. Thrown rather than defaulted, because a gate this function
+    // invented would decide which of two refusals a caller sees.
+    throw new RangeError(`${profile} is not a published gate profile`);
+  }
+  return localWallClock(previousDay(targetDate), gate.publishesAtLocal);
+}
+
+/** The civil date one day before `date`. ISO dates compare lexicographically. */
+function previousDay(date: string): string {
+  return new Date(Date.parse(`${date}T00:00:00Z`) - 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+}
