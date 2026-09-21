@@ -22,6 +22,17 @@
 import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { anyServing, gateIsInert, type Lane } from "../src/lib/lanes";
+
+/** One lane, with the two fields these boxes are about and sane defaults. */
+function lane(over: Partial<Lane> = {}): Lane {
+  return {
+    name: "dessem_free_v1__gate_late__thr5",
+    condition: "promoted",
+    usable: undefined,
+    ...over,
+  };
+}
 
 const SRC = join(import.meta.dir, "..", "src");
 
@@ -187,7 +198,7 @@ describe("the chrome badge is a fact, not a label", () => {
     expect(SHELL).toContain("useServing()");
     expect(SHELL).toContain('serving.status === "known" && !serving.serving');
     expect(SERVING).toContain("api\n      .meta(controller.signal)");
-    expect(SERVING).toContain("serving: anyLaneServing(lanes)");
+    expect(SERVING).toContain("serving: anyServing(lanes)");
   });
 
   it("the badge reserves its width in every state, and shows in only one", () => {
@@ -213,10 +224,18 @@ describe("the chrome badge is a fact, not a label", () => {
   });
 
   it("a lane counts as serving only when promoted and not reported unusable", () => {
-    const absence = code(read("lib", "absence.ts"));
-    expect(absence).toContain(
-      'lanes.some((lane) => lane.condition === "promoted" && lane.usable !== false)',
-    );
+    /*
+      Asserted as a value, not as source text.
+
+      This quoted the `.some(...)` expression verbatim out of `absence.ts`, so
+      renaming the loop variable broke the suite while changing the rule in one
+      of the three places it was written broke nothing. The rule lives in
+      `lib/lanes.ts` now and is a pure function of a lane table, so it is
+      reachable — see `lanes.test.ts` for the table this is the summary of.
+    */
+    expect(anyServing([lane({ condition: "promoted" })])).toBe(true);
+    expect(anyServing([lane({ condition: "promoted", usable: false })])).toBe(false);
+    expect(anyServing([lane({ condition: "present_unpromoted" })])).toBe(false);
   });
 });
 
@@ -317,13 +336,18 @@ describe("a selector that cannot move anything says so", () => {
       lived in the bar would have switched off on the one screen that no longer
       has one. So this asserts the rule at its new home and the *use* of it here.
     */
-    expect(flat(RUN_LANES)).toContain("const profile = gateProfileOf(run);");
-    expect(flat(RUN_LANES)).toContain(
-      "serving.lanes.find((entry) => entry.name.includes(profile))",
-    );
-    expect(flat(RUN_LANES)).toContain(
-      'lane !== undefined && (lane.condition !== "promoted" || lane.usable === false)',
-    );
+    /*
+      The rule itself is asserted as a value below; what stays a source check is
+      that this hook *reaches for it* rather than spelling it again, which is a
+      statement about a call and is what a source guard is for.
+    */
+    expect(flat(RUN_LANES)).toContain("gateIsInert(serving.lanes, gateProfileOf(run))");
+    // A gate whose lane is refused is inert; one with no lane at all is not —
+    // unknown is not a reason to dim a control.
+    expect(
+      gateIsInert([lane({ name: "x__gate_late__thr5", usable: false })], "gate_late"),
+    ).toBe(true);
+    expect(gateIsInert([lane({ name: "x__gate_early__thr5" })], "gate_late")).toBe(false);
     /*
       The pills moved again, onto the map. `/app` stopped rendering a selection
       bar when its controls became chips beside the thing they steer, so the

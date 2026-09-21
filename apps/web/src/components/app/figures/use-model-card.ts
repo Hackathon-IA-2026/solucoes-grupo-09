@@ -24,6 +24,7 @@
 import type { GateProfile, ModelCard } from "@wattsteer/core/api";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { servingLaneFor } from "@/lib/lanes";
 import { useServing } from "../use-serving";
 
 export type ModelCardState =
@@ -62,12 +63,7 @@ function read(lane: string): Promise<ModelCard | null> {
 export function usePromotedLane(gateProfile: GateProfile): string | undefined {
   const serving = useServing();
   return serving.status === "known"
-    ? serving.lanes.find(
-        (entry) =>
-          entry.name.includes(gateProfile) &&
-          entry.condition === "promoted" &&
-          entry.usable !== false,
-      )?.name
+    ? servingLaneFor(serving.lanes, gateProfile)?.name
     : undefined;
 }
 

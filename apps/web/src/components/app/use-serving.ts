@@ -43,8 +43,8 @@ import {
   useEffect,
   useState,
 } from "react";
-import { anyLaneServing, type Lane, lanesOf } from "@/lib/absence";
 import { api } from "@/lib/api";
+import { anyServing, type Lane, lanesOf } from "@/lib/lanes";
 
 export type ServingState =
   | { readonly status: "reading" }
@@ -94,7 +94,7 @@ function useServingRead(): ServingState {
           lanes,
           modelReachable: meta.model.reachable,
           voiceConfigured: meta.voice.configured,
-          serving: anyLaneServing(lanes),
+          serving: anyServing(lanes),
         });
       })
       .catch(() => {

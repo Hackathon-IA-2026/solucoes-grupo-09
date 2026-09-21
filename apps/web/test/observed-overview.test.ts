@@ -647,12 +647,19 @@ describe("a screen names the lane that serves, not the one that was written down
   });
 
   it("a lane is promoted only when the table says both things", () => {
-    // `present_unpromoted` is not promoted, and `usable: false` is a promoted
-    // artifact the hot-swap gate marked invalid against the live feature
-    // contract. Reading either one alone puts this screen back on a lane that
-    // serves nothing, which is the defect above with one more step.
+    /*
+      `present_unpromoted` is not promoted, and `usable: false` is a promoted
+      artifact the hot-swap gate marked invalid against the live feature
+      contract. Reading either one alone puts this screen back on a lane that
+      serves nothing, which is the defect above with one more step.
+
+      This used to quote both fragments out of `use-model-card.ts`. The rule is
+      in `lib/lanes.ts` now and `lanes.test.ts` holds it against a table, so
+      what is left here is the *call*: this screen must reach for the shared
+      lookup rather than spell the conjunction a fourth time.
+    */
     const card = code(source("components", "app", "figures", "use-model-card.ts"));
-    expect(card).toContain('entry.condition === "promoted"');
-    expect(card).toContain("entry.usable !== false");
+    expect(card).toContain("servingLaneFor(serving.lanes, gateProfile)");
+    expect(card).not.toContain('condition === "promoted"');
   });
 });
