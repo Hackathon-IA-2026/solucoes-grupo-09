@@ -125,18 +125,22 @@ describe("the denominator is the day, not the episode", () => {
     expect(avoidability).not.toBeCloseTo(EXAMPLE.avoidedEnergyMwh / episode.totalMwh, 3);
   });
 
-  it("the screen never reads an episode total as the actual", () => {
+  it("the comparison rows read the day total, not the episode's", () => {
+    // Asserted on the rows rather than on the file. This was a slice of the
+    // screen between two `function` keywords, and it moved with a function
+    // rather than with a denominator; `compareRows` is a value now, and
+    // `replay-notes.test.ts` runs it against the published example, where the
+    // day total and the episode total genuinely differ.
+    //
+    // What stays here is the absence: an episode's `total_mwh` is rendered on
+    // the episode row it belongs to, which is the one honest use of it, and no
+    // headline may reach for it.
     const screen = sourceWithoutComments(SCREEN);
-    expect(screen).toContain("replay.actual.totalMwh");
-    // Scoped to the replayed day's own body. An episode's `total_mwh` is
-    // rendered further down, on the episode row it belongs to, and that is the
-    // one honest use of it — the defect is reading it as *the* actual.
     const replayed = screen.slice(
       screen.indexOf("function Replayed("),
       screen.indexOf("function ObservedOnly("),
     );
     expect(replayed).not.toContain("episode.totalMwh");
-    expect(replayed).toContain("replay.actual.totalMwh");
   });
 });
 
@@ -171,8 +175,12 @@ describe("the honesty block is above the numbers, and cannot be put away", () =>
     // Two axes, neither derived from the other. They coincide today, which is
     // exactly the argument for keeping them apart: `fold_holdout` +
     // `point_in_time` becomes populated the moment F6 freezes.
-    expect(screen).toContain("provenanceNote");
-    expect(screen).toContain("vintageNote");
+    //
+    // That both badges are on the screen is structural and stays here. That the
+    // two sentences under them are genuinely two is a property of the strings,
+    // and `replay-notes.test.ts` asserts it by rendering both — this file used
+    // to assert it with `toContain("provenanceNote")`, which passed equally if
+    // the two notes returned the same sentence.
   });
 
   it("the IN-SAMPLE branch is deleted, not left unreachable", () => {
