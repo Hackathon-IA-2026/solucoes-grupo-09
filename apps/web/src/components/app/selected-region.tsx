@@ -59,6 +59,7 @@ export function SelectedRegion({
   observed = null,
   observedWindow,
   onExplain,
+  onWhatToDo,
 }: {
   subsystem: SubsystemCode;
   /** The selected subsystem's forecast row, or `null` when none was published. */
@@ -71,6 +72,14 @@ export function SelectedRegion({
   /** The window `observed` covers, named. Required whenever `observed` is. */
   observedWindow?: string;
   onExplain: () => void;
+  /**
+   * Raises Mitigar over the page, the way `onExplain` raises Explicar.
+   *
+   * Optional, and the button is absent without it: this strip is also rendered
+   * where no page owns that sheet's state, and a control that opens nothing is
+   * worse than no control.
+   */
+  onWhatToDo?: () => void;
 }) {
   const colors = usePalette();
   const copy = useCopy();
@@ -147,15 +156,35 @@ export function SelectedRegion({
           `explain` does — so after this the mouse and the voice agree on what
           selecting a region means, which they did not before.
         */}
-        <PillButton
-          testID="selected-region-explain"
-          label={fill(copy.app.overview.rowExplainLabel, {
-            subsystem: meta.onsDisplayName,
-          })}
-          onPress={onExplain}
-          primary={true}
-          icon={<ArrowRightIcon size={16} color={colors.onAccent} />}
-        />
+        {/*
+          A column, so the second control sits *under* the first rather than
+          beside it: the row above already wraps, and a second pill in it would
+          drop to a new line only at the widths where the strip is narrow — so
+          the pair would be stacked on a phone and side by side on a laptop,
+          which is two layouts to reason about for one decision.
+
+          `alignItems: "stretch"` rather than the pills' own widths, because
+          two pills of different label lengths left-aligned under each other
+          read as a ragged list; stretched, they are one control group.
+        */}
+        <View style={{ alignItems: "stretch", gap: space.sm }}>
+          <PillButton
+            testID="selected-region-explain"
+            label={fill(copy.app.overview.rowExplainLabel, {
+              subsystem: meta.onsDisplayName,
+            })}
+            onPress={onExplain}
+            primary={true}
+            icon={<ArrowRightIcon size={16} color={colors.onAccent} />}
+          />
+          {onWhatToDo === undefined ? null : (
+            <PillButton
+              testID="selected-region-mitigate"
+              label={copy.app.overview.selectedMitigateLabel}
+              onPress={onWhatToDo}
+            />
+          )}
+        </View>
       </View>
 
       {row === null ? (

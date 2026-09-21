@@ -40,7 +40,7 @@
  *     code's sentence rather than a plausible plan.
  */
 
-import { Panel, Pill, radius, space, usePalette } from "@wattsteer/ui";
+import { Panel, Pill, radius, Sheet, space, usePalette } from "@wattsteer/ui";
 import Head from "expo-router/head";
 import { type ReactNode, useState } from "react";
 import { Text, View } from "react-native";
@@ -96,7 +96,27 @@ function percentBand(band: Band): Band {
  * Mitigar, as a route and as a section of `/app`. See `explain.tsx` for what
  * `embedded` buys and why the section does not publish its own briefing.
  */
-export default function MitigateScreen({ embedded = false }: { embedded?: boolean }) {
+export default function MitigateScreen({
+  embedded = false,
+  sheet,
+}: {
+  embedded?: boolean;
+  /**
+   * A third container for the same body: over the page rather than in it.
+   *
+   * The same prop, for the same reason, as `explain.tsx`'s — see its docstring.
+   * The difference is that here the accordion **stays**: this is an experiment
+   * in whether "O que fazer?" under the map reads better than a disclosure
+   * three thousand pixels down, and removing the section before the answer is
+   * in would leave nothing to compare it against. Drop the prop and the two
+   * call sites and the page is exactly as it was.
+   *
+   * Owned by `/app` because the press that opens it is in the hero, several
+   * components away, and a toggle whose two halves live in different subtrees
+   * needs its state above both.
+   */
+  sheet?: { readonly open: boolean; readonly onClose: () => void };
+}) {
   const colors = usePalette();
   const copy = useCopy();
   const f = useFormat();
@@ -194,11 +214,37 @@ export default function MitigateScreen({ embedded = false }: { embedded?: boolea
     header preamble out four times — once per branch — which is four places to
     forget the same line, and adding the embedded form would have made it eight.
   */
-  const frame = (body: ReactNode) =>
-    embedded ? (
-      <SectionBlock id="mitigate" title={title} lede={lede} right={right}>
-        {body}
-      </SectionBlock>
+  const frame = (body: ReactNode) => {
+    /* Out of the JSX because `noLeakedRender` reads a ternary whose alternate
+       is a variable as a value that might render itself. */
+    const inSection = sheet?.open === true ? null : body;
+    return embedded ? (
+      <>
+        {/*
+          The accordion keeps its body unless the sheet is holding it. Two live
+          copies of these panels would be two sets of steppers writing the same
+          scenario, and `app-shell.tsx` records the same rule from the last time
+          one element was nearly mounted twice.
+        */}
+        <SectionBlock id="mitigate" title={title} lede={lede} right={right}>
+          {inSection}
+        </SectionBlock>
+        {sheet === undefined ? null : (
+          <Sheet
+            open={sheet.open}
+            onClose={sheet.onClose}
+            title={title}
+            lede={lede}
+            closeLabel={copy.app.shell.closeSheet}
+          >
+            {/* The solve stamp and the ordem de corte ride along: they say what
+                the plan was optimised against, and a reader who opened the
+                sheet from under the map has not seen them anywhere else. */}
+            {right}
+            {body}
+          </Sheet>
+        )}
+      </>
     ) : (
       <>
         <Head>
@@ -211,6 +257,7 @@ export default function MitigateScreen({ embedded = false }: { embedded?: boolea
         </AppShell>
       </>
     );
+  };
 
   // A scenario the refusal table would not let near a solver never gets a plan
   // drawn for it. The code is rendered from the dictionaries; the gateway's own

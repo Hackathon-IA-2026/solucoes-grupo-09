@@ -1363,6 +1363,9 @@ export const en = {
       rowFigure: "{subsystem}: select",
       rowExplain: "Explain",
       rowExplainLabel: "Explain {subsystem}",
+      /* Raises Mitigate over the page. See the pt-BR note on why the region is
+         not repeated in this label. */
+      selectedMitigateLabel: "What to do?",
       selectedBadge: "Selected",
       selectedTitle: "Selected region",
       selectedNote:

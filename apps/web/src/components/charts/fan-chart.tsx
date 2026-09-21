@@ -39,7 +39,18 @@ import { useCopy, useFormat } from "@/i18n";
 import { fill } from "@/i18n/format";
 import type { CurtailmentHourForecast, CurtailmentHourObservation } from "@/lib/fixtures";
 
-/** The viewBox the geometry module lays out inside. */
+/**
+ * The viewBox the geometry module lays out inside — and the only aspect this
+ * chart can be drawn at.
+ *
+ * The `<Svg>` keeps `preserveAspectRatio`'s default, so a box whose height is
+ * not `containerWidth * H / W` is letterboxed by the browser rather than
+ * filled. The Overview's map overlay asked for `height={150}` in a 300px card
+ * and got the fan drawn 164px wide inside 284 — ~60px dead on each side — with
+ * the press strip, which is positioned from the *width* scale, offset from the
+ * plot it is meant to hit. Height is bought with the container's width here,
+ * never with a prop.
+ */
 const W = 640;
 const H = 260;
 
@@ -48,14 +59,28 @@ export function FanChart({
   observed,
   thresholdMw,
   observedLabel,
-  height = H,
+  interactive = true,
 }: {
   hours: CurtailmentHourForecast[];
   observed?: CurtailmentHourObservation[];
   thresholdMw: number;
   /** Overrides the generic "Observed" — Replay calls it the settled actual. */
   observedLabel?: string;
-  height?: number;
+  /**
+   * Whether an hour can be pressed to read its interval.
+   *
+   * One switch for one concept, and it governs **both** halves: the press strip
+   * over the plot and the legend's "tap an hour" hint. Splitting them would let
+   * the chart promise a gesture it does not answer.
+   *
+   * `false` where the chart is a caption rather than a control — the Overview's
+   * map overlay. That card is drawn over the map, and an SVG that captures
+   * pointer events there is an SVG that eats clicks meant for a region:
+   * `app-overview-selection.spec.ts` caught this as "subtree intercepts pointer
+   * events" on a click that should have selected Sul, which is a reader unable
+   * to pick a subsystem rather than a chart with a missing feature.
+   */
+  interactive?: boolean;
 }) {
   const colors = usePalette();
   const copy = useCopy();
@@ -83,7 +108,7 @@ export function FanChart({
       <Svg
         viewBox={`0 0 ${W} ${H}`}
         width="100%"
-        height={scale > 0 ? scale * height : height}
+        height={scale > 0 ? scale * H : H}
         accessibilityLabel={copy.app.fan.figure}
       >
         <Defs>
@@ -223,8 +248,10 @@ export function FanChart({
         )}
       </Svg>
 
-      {scale > 0 ? (
+      {interactive && scale > 0 ? (
         <View
+          // Absent, not merely disabled: `pointerEvents="none"` on a strip of
+          // 24 `Pressable`s still leaves 24 nodes hit-testing on web.
           style={{
             position: "absolute",
             left: PAD.left * scale,
@@ -262,7 +289,11 @@ export function FanChart({
           observedLabel={observedText}
         />
       ) : (
-        <Legend hasObserved={observed !== undefined} observedLabel={observedText} />
+        <Legend
+          hasObserved={observed !== undefined}
+          observedLabel={observedText}
+          interactive={interactive}
+        />
       )}
     </View>
   );
@@ -271,9 +302,12 @@ export function FanChart({
 function Legend({
   hasObserved,
   observedLabel,
+  interactive,
 }: {
   hasObserved: boolean;
   observedLabel: string;
+  /** Whether to print the "tap an hour" hint. See `FanChart`'s own prop. */
+  interactive: boolean;
 }) {
   const colors = usePalette();
   const copy = useCopy();
@@ -290,9 +324,11 @@ function Legend({
       <Swatch color={colors.accent} label={copy.app.fan.medianLegend} />
       <Swatch color={colors.violet} label={copy.app.fan.bandLegend} faded={true} />
       {hasObserved ? <Swatch color={colors.ink} label={observedLabel} /> : null}
-      <RnText style={{ fontSize: 11, color: colors.inkFaint }}>
-        {copy.app.fan.hint}
-      </RnText>
+      {interactive ? (
+        <RnText style={{ fontSize: 11, color: colors.inkFaint }}>
+          {copy.app.fan.hint}
+        </RnText>
+      ) : null}
     </View>
   );
 }

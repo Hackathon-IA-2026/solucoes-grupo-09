@@ -94,6 +94,7 @@ export function OverviewHero({
   onExplain,
   onWhy,
   whyOpen,
+  onWhatToDo,
 }: {
   observed: ObservedNetwork;
   forecast: ForecastNetwork | null;
@@ -117,6 +118,12 @@ export function OverviewHero({
    */
   onWhy?: () => void;
   whyOpen?: boolean;
+  /**
+   * Raises Mitigar over the page from the strip under the map — the same
+   * container decision `onWhy` makes for Explicar, passed straight through to
+   * `SelectedRegion`, which is where the control is.
+   */
+  onWhatToDo?: () => void;
   /** The live selection, with its writer — the map and the rail set it. */
   params: AppParams & {
     setParams: (next: Partial<Omit<AppParams, "date">>) => void;
@@ -464,7 +471,7 @@ export function OverviewHero({
                 The 24-hour profile, in the map's free corner.
 
                 **Only where it fits.** At `wide` the card has 520px of map to
-                sit over and the fan gets 300 of the card's width; below that
+                sit over and the fan gets 340 of the card's width; below that
                 the map is 380 tall in a column barely wider than the card
                 would be, so the overlay would *be* the map. The narrow layout
                 keeps the full-width panel underneath, which is where this
@@ -475,12 +482,35 @@ export function OverviewHero({
                 on it calls an hourly series in a 300px rail a smear. This is
                 that trade, taken deliberately — the fan here is the map's
                 caption, and the reader who wants to read an hour still taps it.
+
+                340 rather than 300 because width is what buys height here: the
+                fan is drawn at its viewBox's aspect, so 324px of card interior
+                is 132px of chart. Asking for the height instead — this passed
+                `height={150}` — letterboxed it to 164px wide inside 284, with
+                ~60px dead on either side.
               */
               overlay={
                 wide && forecast !== null ? (
                   <View
+                    /*
+                      `none`, not `box-none`. The wrapper in `region-map.tsx` is
+                      `box-none`, which lets clicks through the *wrapper* — but
+                      the card and the chart's own `<Svg>` are real boxes and
+                      still hit-test, so the overlay ate clicks meant for the
+                      map underneath it. `app-overview-selection.spec.ts` caught
+                      it as "subtree intercepts pointer events" on a click that
+                      should have selected Sul: a reader unable to pick a
+                      subsystem, which is worse than a chart nobody can tap.
+
+                      The chart is a caption here, so it gives its gesture up
+                      rather than the map giving up its clicks — see
+                      `interactive={false}` below, which also drops the "tap an
+                      hour" hint so the legend does not promise what this copy
+                      of the chart cannot do.
+                    */
+                    pointerEvents="none"
                     style={{
-                      width: 300,
+                      width: 340,
                       gap: 4,
                       padding: space.sm,
                       borderRadius: radius.lg,
@@ -500,7 +530,7 @@ export function OverviewHero({
                     <FanChart
                       hours={forecastHours(forecast.forecast)}
                       thresholdMw={forecast.forecast.thresholdMw}
-                      height={150}
+                      interactive={false}
                     />
                   </View>
                 ) : undefined
@@ -524,6 +554,7 @@ export function OverviewHero({
               }
               observedWindow={window24h}
               onExplain={() => onExplain(params.subsystem)}
+              onWhatToDo={onWhatToDo}
             />
           </Panel>
           {/*

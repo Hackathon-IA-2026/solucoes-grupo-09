@@ -245,6 +245,20 @@ export default function GridOverviewScreen() {
    */
   const [whyOpen, setWhyOpen] = useState(false);
 
+  /**
+   * Whether Mitigar is raised over the page as well as sitting in it.
+   *
+   * An experiment: "O que fazer?" under the map, next to "Explicar", against
+   * the accordion at the bottom of the page — which stays, so the two can be
+   * compared. Here for the same reason `whyOpen` is: the press is in the hero
+   * and the sheet is `MitigateScreen`'s body, and this screen is where the two
+   * subtrees meet.
+   *
+   * Not a URL parameter, for the reason `whyOpen` gives: a link to a modal
+   * over a page the recipient has not read is not what the sender shared.
+   */
+  const [planOpen, setPlanOpen] = useState(false);
+
   /*
     **This screen decides what reaching a section means.**
 
@@ -398,7 +412,10 @@ export default function GridOverviewScreen() {
           embedded
           sheet={{ open: whyOpen, onClose: () => setWhyOpen(false) }}
         />
-        <MitigateScreen embedded />
+        <MitigateScreen
+          embedded
+          sheet={{ open: planOpen, onClose: () => setPlanOpen(false) }}
+        />
       </AppShell>
     </>
   );
@@ -488,6 +505,7 @@ export default function GridOverviewScreen() {
         onExplain={explain}
         onWhy={() => setWhyOpen((value) => !value)}
         whyOpen={whyOpen}
+        onWhatToDo={() => setPlanOpen(true)}
       />
 
       {/*

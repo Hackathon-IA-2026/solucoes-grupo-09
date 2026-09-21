@@ -1150,6 +1150,12 @@ export const pt: Copy = {
       rowFigure: "{subsystem}: selecionar",
       rowExplain: "Explicar",
       rowExplainLabel: "Explicar {subsystem}",
+      /*
+        Abre Mitigar sobre a página. Curto e sem a região no rótulo — o controle
+        está dentro da tarja que acaba de nomear o subsistema, e repeti-lo em
+        dois botões empilhados faria o par ler como duas regiões.
+      */
+      selectedMitigateLabel: "O que fazer?",
       selectedBadge: "Selecionado",
       selectedTitle: "Região selecionada",
       selectedNote:
