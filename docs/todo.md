@@ -213,8 +213,20 @@ are counted twice somewhere between `restricao-coff` and
       a few hundred megabytes, and a deployment without it must run the
       retrieval that was measured. Turning it on in production is a decision
       with a number behind it now.
-- [ ] Read `answer_feedback` out of every database before it is torn down
-      (command in `docs/environments.md`). The event instance's copy went with
-      the account.
+- [x] Read `answer_feedback` out before it is torn down — done 21/09, and the
+      honest result is that **there was nothing to save**. Railway holds
+      exactly one row, and it is our own smoke test
+      (`surface=forecast, verdict=up, subject={"subsystem":"NE"}`, recorded
+      14:34 that day while verifying `POST /v1/feedback` returns 201). The
+      real feedback was on the event instance and went with the AWS account,
+      as this item warned; this closes because the window had already shut, not
+      because it was caught in time.
+
+      The export is in the session scratchpad rather than the repository: one
+      synthetic row is not evidence of anything and does not belong in git.
+      Whoever runs a demo that collects feedback should drain it the same day —
+      `psql "$DATABASE_URL" -c "\copy (select * from answer_feedback) to
+      'feedback.csv' csv header"` through a temporary TCP proxy on the Postgres
+      service, deleted afterwards.
 - [ ] When AWS reopens on site: `infra/aws/event/deploy.sh`, keeping the
       memory ceilings in `compose.aws.yml`. The CloudFront address will change.
